@@ -1,7 +1,7 @@
-﻿namespace Chrysalis.Cbor;
+namespace Chrysalis.Cbor;
 
-public class CborIndex(CborRepresentation type, object value)
+public class CborIndex(CborType type, object value)
 {
-    public CborRepresentation Type { get; } = type;
+    public CborType Type { get; } = type;
     public object Value { get; } = value;
 }
