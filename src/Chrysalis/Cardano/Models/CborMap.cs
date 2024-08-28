@@ -1,4 +1,3 @@
-
 using Chrysalis.Cbor;
 
 namespace Chrysalis.Cardano.Models;
