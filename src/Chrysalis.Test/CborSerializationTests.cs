@@ -1,95 +1,43 @@
-using System;
-using System.Collections.Generic;
 using System.Formats.Cbor;
+using System.Reflection;
+using Chrysalis.Cardano.Models;
+using Chrysalis.Cbor;
 using Xunit;
 
-namespace Chrysalis.Cbor.Tests
+namespace Chrysalis.Test
 {
     public class CborSerializerTests
     {
-        [Fact]
-        public void SerializeAndDeserializePrimitives()
+        [Theory]
+        [InlineData("1834", typeof(CborInt))] // Example hex for CBOR int 52
+        [InlineData("4101", typeof(CborBytes))] // Example hex for CBOR bytes {0x01)]
+        [InlineData("1a000f4240", typeof(CborUlong))] // Example hex for CBOR ulong 1_000_000
+        [InlineData("43414243", typeof(CborBytes))] // Example hex for CBOR bytes of `ABC` string
+        [InlineData("a141614541696b656e", typeof(CborMap<CborBytes, CborBytes>))]
+        [InlineData("9f0102030405ff", typeof(CborList<CborInt>))] // [_ 1, 2, 3, 4, 5]
+        [InlineData("1834", typeof(SampleDatum))] // Union Type test (CardanoInt, CardanoBytes)
+        [InlineData("d8799f182aff", typeof(Option<CborInt>))] // Serialized CBOR for Option::Some(42):
+        [InlineData("d87a80", typeof(Option<CborInt>))] // Serialized CBOR for Option::None:
+        public void SerializeAndDeserializePrimitives(string cborHex, Type type)
         {
             // Arrange
-            var testData = new
-            {
-                ByteArray = new byte[] { 0x01, 0x02, 0x03 },
-                ByteArrayAsHex = "010203",
-                Int = 42,
-                Long = (long)int.MaxValue + 1,
-                ULong = (ulong)long.MaxValue + 1
-            };
+            byte[] cborBytes = Convert.FromHexString(cborHex);
 
             // Act
-            var serializedByteArray = CborSerializer.Serialize(testData.ByteArray);
-            var serializedByteArrayAsHex = CborSerializer.Serialize(testData.ByteArrayAsHex);
-            var serializedInt = CborSerializer.Serialize(testData.Int);
-            var serializedLong = CborSerializer.Serialize(testData.Long);
-            var serializedULong = CborSerializer.Serialize(testData.ULong);
+            MethodInfo? deserializeMethod = typeof(CborSerializer).GetMethod(nameof(CborSerializer.Deserialize));
+            Assert.NotNull(deserializeMethod);
 
-            var deserializedByteArray = (byte[])CborSerializer.Deserialize(serializedByteArray, typeof(byte[]));
-            var deserializedByteArrayAsHex = (string)CborSerializer.Deserialize(serializedByteArrayAsHex, typeof(string));
-            var deserializedInt = (int)CborSerializer.Deserialize(serializedInt, typeof(int));
-            var deserializedLong = (long)CborSerializer.Deserialize(serializedLong, typeof(long));
-            var deserializedULong = (ulong)CborSerializer.Deserialize(serializedULong, typeof(ulong));
+            MethodInfo? genericDeserializeMethod = deserializeMethod?.MakeGenericMethod(type);
+            Assert.NotNull(genericDeserializeMethod);
+
+            object? cborObject = genericDeserializeMethod?.Invoke(null, [cborBytes, null]);
+            Assert.NotNull(cborObject);
+            
+            var serializedBytes = CborSerializer.Serialize((ICbor)cborObject);
+            string serializedHex = Convert.ToHexString(serializedBytes).ToLowerInvariant();
 
             // Assert
-            Assert.Equal(testData.ByteArray, deserializedByteArray);
-            Assert.Equal(testData.ByteArrayAsHex, deserializedByteArrayAsHex);
-            Assert.Equal(testData.Int, deserializedInt);
-            Assert.Equal(testData.Long, deserializedLong);
-            Assert.Equal(testData.ULong, deserializedULong);
+            Assert.Equal(cborHex, serializedHex);
         }
-
-    //     [Fact]
-    //     public void SerializeAndDeserializeArray()
-    //     {
-    //         // Arrange
-    //         int[] testArray = [1, 2, 3, 4, 5];
-
-    //         // Act
-    //         var serialized = CborSerializer.SerializeList(testArray);
-    //         var deserialized = (int[])CborSerializer.DeserializeList(serialized, typeof(int[]));
-
-    //         // Assert
-    //         Assert.Equal(testArray, deserialized);
-    //     }
-
-    //     [Fact]
-    //     public void SerializeAndDeserializeMap()
-    //     {
-    //         // Arrange
-    //         var testMap = new Dictionary<string, int>
-    //         {
-    //             { "one", 1 },
-    //             { "two", 2 },
-    //             { "three", 3 }
-    //         };
-
-    //         using (var ms = new MemoryStream(serialized))
-    //         using (CborReader reader = new(ms))
-
-    //         // Act
-    //         var serialized = CborSerializer.DeserializeMap(CborReader reader, testMap);
-    //         var deserialized = (Dictionary<string, int>)CborSerializer.Deserialize(serialized, typeof(Dictionary<string, int>));
-
-    //         // Assert
-    //         Assert.Equal(testMap, deserialized);
-    //     }
-
-    //     [Fact]
-    //     public void SerializeAndDeserializeUnion()
-    //     {
-    //         // Arrange
-    //         var unionTypes = new[] { typeof(int), typeof(string), typeof(byte[]) };
-    //         var testUnion = (object)42;
-
-    //         // Act
-    //         var serialized = CborSerializer.SerializeUnion(testUnion, unionTypes);
-    //         var deserialized = CborSerializer.DeserializeUnion(serialized, unionTypes, typeof(object));
-
-    //         // Assert
-    //         Assert.Equal(testUnion, deserialized);
-    //     }
     }
 }
