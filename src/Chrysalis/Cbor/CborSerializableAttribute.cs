@@ -1,20 +1,14 @@
 using Chrysalis.Cbor;
 
+namespace Chrysalis.Cbor;
 [AttributeUsage(AttributeTargets.Class | AttributeTargets.Struct)]
-public class CborSerializableAttribute : Attribute
+public class CborSerializableAttribute(CborType type) : Attribute
 {
-    public CborType Type { get; }
-    public int Index { get; set; }
+    public CborType Type { get; } = type;
+    public int Index { get; set; } = -1;
 
-    public CborSerializableAttribute(CborType Type)
+    public CborSerializableAttribute(CborType type, int index) : this(type)
     {
-        this.Type = Type;
-        Index = 0;
-    }
-
-    public CborSerializableAttribute(CborType Type, int Index)
-    {
-        this.Type = Type;
-        this.Index = Index;
+        Index = index;
     }
 }

@@ -1,12 +1,7 @@
 namespace Chrysalis.Cbor;
 
 [AttributeUsage(AttributeTargets.Class | AttributeTargets.Struct, AllowMultiple = false)]
-public class CborUnionTypesAttribute : Attribute
+public class CborUnionTypesAttribute(params Type[] unionTypes) : Attribute
 {
-    public Type[] UnionTypes { get; }
-
-    public CborUnionTypesAttribute(params Type[] unionTypes)
-    {
-        UnionTypes = unionTypes;
-    }
+    public Type[] UnionTypes { get; } = unionTypes;
 }

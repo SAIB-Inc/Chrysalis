@@ -1,344 +1,565 @@
-using System;
 using System.Collections;
-using System.Collections.Generic;
 using System.Formats.Cbor;
-using System.Linq;
 using System.Reflection;
-using System.Threading.Tasks;
+using System.Text;
+using Chrysalis.Cardano.Models;
 
 namespace Chrysalis.Cbor;
 public static class CborSerializer
 {
-    public static byte[] Serialize(object obj)
+    public static byte[] Serialize(ICbor cbor)
     {
-        CborWriter writer = new();
-        {
-            return SerializePrimitive(writer, obj, obj.GetType());
-        }
+        CborWriter writer = new(CborConformanceMode.Strict);
+        SerializeCbor(writer, cbor, cbor.GetType());
+        return writer.Encode();
     }
 
-    public static object Deserialize(byte[] data, Type targetType)
+    public static T? Deserialize<T>(byte[] cborData, Type? type = null)
     {
-        CborReader reader = new(data);
-        {
-            return DeserializePrimitive(reader, targetType, null)!;
-        }
-    }
-    public static void SerializePrimitive(CborWriter writer, object obj, Type objType, CborType? overrideType = null)
-    {
-        CborType cborType = overrideType ?? DetermineCborType(objType);
-
-        switch (cborType)
-        {
-            case CborType.ByteString:
-                switch (obj)
-                {
-                    case byte[] byteArray:
-                        writer.WriteByteString(byteArray);
-                        break;
-                    case string hexString:
-                        writer.WriteByteString(Convert.FromHexString(hexString));
-                        break;
-                    default:
-                        throw new InvalidOperationException("Expected a byte array or hex string for ByteString type.");
-                }
-                break;
-
-            case CborType.Int:
-                switch (obj)
-                {
-                    case int intValue:
-                        writer.WriteInt32(intValue);
-                        break;
-                    case long longValue:
-                        writer.WriteInt64(longValue);
-                        break;
-                    default:
-                        throw new InvalidOperationException("Expected an integer for Int type.");
-                }
-                break;
-
-            case CborType.Ulong:
-                if (obj is ulong ulongValue)
-                {
-                    writer.WriteUInt64(ulongValue);
-                }
-                else
-                {
-                    throw new InvalidOperationException("Expected an unsigned long for Ulong type.");
-                }
-                break;
-
-            case CborType.List:
-                if (obj is IEnumerable<object> enumerable)
-                {
-                    Type elementType = obj.GetType().GetGenericArguments().FirstOrDefault() ?? typeof(object);
-                    SerializeList(writer, enumerable, elementType);
-                }
-                else
-                {
-                    throw new InvalidOperationException("Expected an enumerable for List type.");
-                }
-                break;
-
-            case CborType.Map:
-                SerializeMap(writer, obj, objType);
-                break;
-
-            case CborType.Union:
-                SerializeUnion(writer, obj);
-                break;
-
-            default:
-                throw new NotSupportedException($"CBOR type {cborType} is not supported in this context.");
-        }
+        CborReader reader = new(cborData, CborConformanceMode.Strict);
+        Type targetType = type ?? typeof(T);
+        return (T?)DeserializeCbor(reader, targetType);
     }
 
-    public static void SerializeList(CborWriter writer, object obj, Type elementType, bool indefinite = false)
+    private static void SerializeCbor(CborWriter writer, ICbor cbor, Type objType, CborType? overrideType = null)
     {
-        if (!typeof(IEnumerable).IsAssignableFrom(elementType))
-            throw new ArgumentException("Type must be an enumerable to be deserialized as a CBOR array");
-
-        if (obj is IEnumerable<object> enumerable)
+        CborType? cborType = null;
+        if (objType != typeof(ICbor))
+            cborType = overrideType ?? DetermineCborType(objType);
+        else
         {
-            if (indefinite)
+            switch (cbor)
             {
-                writer.WriteStartArray(0);
-                foreach (var element in enumerable)
-                {
-                    SerializePrimitive(writer, element, elementType);
-                }
-                writer.WriteEndArray();
+                case CborBytes cborBytes:
+                    SerializeCborBytes(writer, cbor, objType);
+                    break;
+                case CborInt cborInt:
+                    SerializeCborInt(writer, cbor, objType);
+                    break;
+                case CborUlong cborUlong:
+                    SerializeCborUlong(writer, cbor, objType);
+                    break;
+                default:
+                    break;
             }
-            else
-            {
-                writer.WriteStartArray(enumerable.Count());
-                foreach (var element in enumerable)
-                {
-                    SerializePrimitive(writer, element, elementType);
-                }
-                writer.WriteEndArray();
-            }
+            return;
         }
-    }
 
-    public static void SerializeMap(CborWriter writer, object obj, Type objType)
-    {
-        if (objType == typeof(Dictionary<ICbor, ICbor>))
+        if (cborType is not null)
         {
-            if (obj is Dictionary<ICbor, ICbor> map)
+            switch (cborType)
             {
-                writer.WriteStartMap(map.Count);
-                foreach (var kvp in map)
-                {
-                    SerializePrimitive(writer, kvp.Key, kvp.Key.GetType());
-                    SerializePrimitive(writer, kvp.Value, kvp.Value.GetType());
-                }
-                writer.WriteEndMap();
-            }
-            else
-            {
-                throw new InvalidOperationException("Expected a Dictionary<ICbor, ICbor> for Map type.");
+                case CborType.Bytes:
+                    SerializeCborBytes(writer, cbor, objType);
+                    break;
+                case CborType.Int:
+                    SerializeCborInt(writer, cbor, objType);
+                    break;
+                case CborType.Ulong:
+                    SerializeCborUlong(writer, cbor, objType);
+                    break;
+                case CborType.List:
+                    MethodInfo? method = typeof(CborSerializer).GetMethod(nameof(SerializeList), BindingFlags.NonPublic | BindingFlags.Static);
+                    MethodInfo genericMethod = method!.MakeGenericMethod(cbor.GetType().GetGenericArguments());
+                    genericMethod.Invoke(null, [writer, cbor, false]);
+                    break;
+                case CborType.Map:
+                    SerializeMap(writer, cbor, objType);
+                    break;
+                case CborType.Union:
+                    SerializeUnion(writer, cbor);
+                    break;
+                default:
+                    throw new NotSupportedException($"CBOR type {cborType} is not supported in this context.");
             }
         }
         else
         {
-            Type genericMapType = objType.GetGenericTypeDefinition();
-            if (genericMapType == typeof(Dictionary<,>))
+            switch (objType)
             {
-                Type keyType = objType.GetGenericArguments()[0];
-                Type valueType = objType.GetGenericArguments()[1];
-                if (obj is IDictionary dictionary)
-                {
-                    writer.WriteStartMap(dictionary.Count);
-                    foreach (DictionaryEntry entry in dictionary)
-                    {
-                        SerializePrimitive(writer, entry.Key, keyType);
-                        SerializePrimitive(writer, entry.Value ?? string.Empty, valueType);
-                    }
-                    writer.WriteEndMap();
-                }
-                else
-                {
-                    throw new InvalidOperationException("Expected a dictionary for Map type.");
-                }
-            }
-            else
-            {
-                throw new InvalidOperationException("Unsupported map type.");
+                case Type t when t == typeof(CborInt):
+                    SerializeCborInt(writer, cbor, objType);
+                    break;
+                case Type t when t == typeof(CborBytes):
+                    SerializeCborBytes(writer, cbor, objType);
+                    break;
+                case Type t when t == typeof(CborUlong):
+                    SerializeCborUlong(writer, cbor, objType);
+                    break;
+                case Type t when t.IsGenericType && t.GetGenericTypeDefinition() == typeof(CborList<>):
+                    MethodInfo? method = typeof(CborSerializer).GetMethod(nameof(SerializeList), BindingFlags.NonPublic | BindingFlags.Static);
+                    MethodInfo genericMethod = method!.MakeGenericMethod(cbor.GetType().GetGenericArguments()[0]);
+                    genericMethod.Invoke(null, [writer, cbor, false]);
+                    break;
+                case Type t when t == typeof(CborMap) || (t.IsGenericType && t.GetGenericTypeDefinition() == typeof(CborMap<,>)):
+                    SerializeMap(writer, cbor, objType);
+                    break;
+                default:
+                    throw new NotImplementedException($"Type not supported {objType}");
             }
         }
     }
 
-    public static void SerializeUnion(CborWriter writer, object obj)
+    private static void SerializeList<T>(CborWriter writer, CborList<T> cborList, bool indefinite = false) where T : ICbor
     {
-        if (obj == null) throw new ArgumentNullException(nameof(obj));
-
-        Type objType = obj.GetType();
-        var unionAttribute = objType.GetCustomAttribute<CborUnionTypesAttribute>();
-
-        if (unionAttribute != null)
+        if (!indefinite)
         {
-            SerializeUnionType(writer, obj, objType, unionAttribute.UnionTypes);
+            writer.WriteStartArray(null);
+            foreach (var element in cborList.Value)
+            {
+                SerializeCbor(writer, element, typeof(T));
+            }
+            writer.WriteEndArray();
+        }
+        else
+        {
+            writer.WriteStartArray(cborList.Value.Length);
+            foreach (var element in cborList.Value)
+            {
+                SerializeCbor(writer, element, typeof(T));
+            }
+            writer.WriteEndArray();
+        }
+    }
+
+    private static void SerializeCborUlong(CborWriter writer, ICbor cbor, Type targetType)
+    {
+        if (cbor is CborUlong cborUlong)
+        {
+            writer.WriteUInt64(cborUlong.Value);
             return;
-        }
-
-        SerializePrimitive(writer, obj, objType);
-    }
-
-    public static void SerializeUnionType(CborWriter writer, object obj, Type objType, Type[] unionTypes)
-    {
-        foreach (var unionType in unionTypes)
-        {
-            if (unionType.IsInstanceOfType(obj))
-            {
-                writer.WriteStartMap(2);
-                writer.WriteInt32(Array.IndexOf(unionTypes, unionType));
-                SerializePrimitive(writer, obj, objType);
-                writer.WriteEndMap();
-                return;
-            }
-        }
-    }
-
-    public static object? DeserializePrimitive(CborReader reader, Type targetType, CborType? cborType)
-    {
-        cborType ??= DetermineCborType(targetType);
-
-        return cborType switch
-        {
-            CborType.ByteString => DeserializeByteString(reader, targetType),
-            CborType.Int => DeserializeInt(reader, targetType),
-            CborType.Ulong => DeserializeUlong(reader, targetType),
-            CborType.List => DeserializeList(reader, targetType),
-            CborType.Map => DeserializeMap(reader, targetType),
-            CborType.Union => DeserializeUnion(reader, targetType),
-            _ => throw new NotSupportedException($"CBOR type {cborType} is not supported for deserialization.")
-        };
-    }
-
-    public static object? DeserializeByteString(CborReader reader, Type targetType)
-    {
-        if (targetType == typeof(byte[]))
-        {
-            return reader.ReadByteString();
-        }
-        if (targetType == typeof(string))
-        {
-            var byteArray = reader.ReadByteString();
-            return BitConverter.ToString(byteArray).Replace("-", "").ToLower();
-        }
-        throw new InvalidOperationException($"Unsupported target type for ByteString: {targetType.Name}");
-    }
-
-    public static object? DeserializeInt(CborReader reader, Type targetType)
-    {
-        if (targetType == typeof(int))
-        {
-            return reader.ReadInt32();
-        }
-        if (targetType == typeof(long))
-        {
-            return reader.ReadInt64();
-        }
-        throw new InvalidOperationException($"Unsupported target type for Int: {targetType.Name}");
-    }
-
-    public static object? DeserializeUlong(CborReader reader, Type targetType)
-    {
-        if (targetType == typeof(ulong))
-        {
-            return reader.ReadUInt64();
         }
         throw new InvalidOperationException($"Unsupported target type for Ulong: {targetType.Name}");
     }
 
-    public static object? DeserializeList(CborReader reader, Type targetType)
+    private static void SerializeCborInt(CborWriter writer, ICbor cbor, Type elementType)
     {
-        if (!typeof(IEnumerable).IsAssignableFrom(targetType) || !targetType.IsGenericType)
-            throw new InvalidOperationException("Target type must be an enumerable for List deserialization.");
+        if (cbor is CborInt cborInt)
+        {
+            writer.WriteInt32(cborInt.Value);
+            return;
+        }
+        throw new InvalidOperationException($"Expected an object of type {typeof(CborInt).Name}, but received {cbor.GetType().Name}.");
+    }
 
-        Type elementType = targetType.GetGenericArguments().FirstOrDefault() ?? typeof(object);
-        IList list = (IList)Activator.CreateInstance(typeof(List<>).MakeGenericType(elementType))!;
+    private static void SerializeCborBytes(CborWriter writer, ICbor cbor, Type elementType)
+    {
+        if (cbor is CborBytes cborBytes)
+        {
+            writer.WriteByteString(cborBytes.Value);
+            return;
+        }
+        throw new InvalidOperationException($"Expected an object of type {nameof(CborBytes)}, but received {cbor.GetType().Name}.");
+    }
+
+    private static void SerializeMap(CborWriter writer, ICbor obj, Type objType)
+    {
+        try
+        {
+            if (obj is CborMap cborMap)
+            {
+                writer.WriteStartMap(cborMap.Value.Count);
+                foreach (var kvp in cborMap.Value)
+                {
+                    SerializeCbor(writer, kvp.Key, kvp.Key.GetType());
+                    SerializeCbor(writer, kvp.Value, kvp.Value.GetType());
+                }
+                writer.WriteEndMap();
+            }
+            else if (obj is not null && objType.IsGenericType && objType.GetGenericTypeDefinition() == typeof(CborMap<,>))
+            {
+                var method = typeof(CborSerializer).GetMethod(nameof(SerializeGenericMap), BindingFlags.NonPublic | BindingFlags.Static);
+                var genericMethod = method!.MakeGenericMethod(objType.GetGenericArguments());
+                genericMethod.Invoke(null, [writer, obj]);
+            }
+            else if (obj is not null && objType.GetCustomAttribute<CborSerializableAttribute>()?.Type == CborType.Map)
+            {
+                // SerializeRecordAsMap(writer, obj, objType);
+                throw new InvalidOperationException($"Unsupported map type for serialization: {objType.Name}");
+            }
+            else
+            {
+                throw new InvalidOperationException($"Unsupported map type for serialization: {objType.Name}");
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error during serialization of type {objType.Name}: {ex.Message}");
+        }
+    }
+
+    private static void SerializeConstructor(CborWriter writer, ICbor cbor, Type objType)
+    {
+        var attr = objType.GetCustomAttribute<CborSerializableAttribute>();
+        if (attr == null || attr.Index is -1)
+        {
+            throw new InvalidOperationException($"Type {objType.Name} is not properly attributed for Constructor serialization");
+        }
+
+        writer.WriteStartArray(2);
+        writer.WriteInt32(attr!.Index);
+
+        if (cbor is Some<ICbor> some)
+        {
+            SerializeCbor(writer, some.Value, some.Value.GetType());
+        }
+        else if (cbor is None)
+        {
+            // None has no additional data
+        }
+        else
+        {
+            throw new NotSupportedException($"Unsupported Constructor type: {cbor.GetType().Name}");
+        }
+
+        writer.WriteEndArray();
+    }
+
+    private static void SerializeRecordAsMap(CborWriter writer, ICbor obj, Type objType)
+    {
+        var properties = objType.GetProperties(BindingFlags.Public | BindingFlags.Instance);
+
+        writer.WriteStartMap(properties.Length);
+
+        foreach (var property in properties)
+        {
+            var attr = property.GetType();
+            if (attr != null)
+            {
+                // if (attr.Name != null)
+                // {
+                    
+                // }
+                // else if (attr.Index.HasValue)
+                // {
+                //     writer.WriteUInt64((ulong)attr.Index.Value);
+                // }
+                // else
+                // {
+                //     throw new InvalidOperationException("CborPropertyAttribute requires a Name or Index.");
+                // }
+
+                // var value = property.GetValue(obj);
+
+                // if (value is ICbor cborValue)
+                // {
+                //     SerializeCbor(writer, cborValue, value.GetType());
+                // }
+                // else
+                // {
+                //     throw new InvalidOperationException($"Property value of type {value?.GetType().Name} is not a valid ICbor.");
+                // }
+            }
+        }
+
+        writer.WriteEndMap();
+    }
+
+    private static void SerializeGenericMap<TKey, TValue>(CborWriter writer, CborMap<TKey, TValue> map)
+        where TKey : ICbor
+        where TValue : ICbor
+    {
+        writer.WriteStartMap(map.Value.Count);
+        foreach (var kvp in map.Value)
+        {
+            SerializeCbor(writer, kvp.Key, typeof(TKey));
+            SerializeCbor(writer, kvp.Value, typeof(TValue));
+        }
+        writer.WriteEndMap();
+    }
+
+    private static void SerializeUnion(CborWriter writer, ICbor obj)
+    {
+        var objType = obj.GetType();
+        var unionAttr = objType.GetCustomAttribute<CborUnionTypesAttribute>() ??
+            throw new InvalidOperationException($"Type {objType.Name} is not marked with CborUnionTypesAttribute");
+
+        var matchedType = unionAttr.UnionTypes.FirstOrDefault(t => t == objType) ??
+            throw new InvalidOperationException($"Object of type {objType.Name} does not match any type in the union");
+        var index = Array.IndexOf(unionAttr.UnionTypes, matchedType);
+
+        writer.WriteStartMap(2);
+        writer.WriteInt32(index);
+        SerializeCbor(writer, obj, matchedType);
+        writer.WriteEndMap();
+    }
+
+    private static ICbor? DeserializeCbor(CborReader reader, Type targetType, CborType? cborType = null)
+    {
+        if (reader.PeekState() == CborReaderState.Null)
+        {
+            reader.ReadNull();
+            return null;
+        }
+
+        cborType ??= DetermineCborType(targetType);
+
+        if (targetType.IsGenericType && targetType.GetGenericTypeDefinition() == typeof(CborList<>))
+        {
+            var method = typeof(CborSerializer).GetMethod(nameof(DeserializeList), BindingFlags.NonPublic | BindingFlags.Static);
+            var genericMethod = method!.MakeGenericMethod(targetType.GetGenericArguments()[0]);
+            return (ICbor?)genericMethod.Invoke(null, [reader, targetType]);
+        }
+
+        if (cborType != null)
+        {
+            return cborType switch
+            {
+                CborType.Map => DeserializeMap(reader, targetType),
+                CborType.Int => DeserializeCborInt(reader, targetType),
+                CborType.Ulong => DeserializeCborUlong(reader, targetType),
+                CborType.Union => DeserializeUnion(reader, targetType),
+                CborType.Bytes => DeserializeCborBytes(reader, targetType),
+                CborType.Constr => DeserializeConstructor(reader, targetType),
+                _ => throw new NotImplementedException("Unknown CborRepresentation"),
+            };
+        }
+
+        return targetType switch
+        {
+            Type t when t == typeof(CborInt) => DeserializeCborInt(reader, targetType),
+            Type t when t == typeof(CborBytes) => DeserializeCborBytes(reader, targetType),
+            Type t when t == typeof(CborUlong) => DeserializeCborUlong(reader, targetType),
+            Type t when t == typeof(CborMap) => DeserializeMap(reader, targetType),
+            Type t when t == typeof(CborMap) || (t.IsGenericType && t.GetGenericTypeDefinition() == typeof(CborMap<,>)) => DeserializeMap(reader, targetType),
+            _ => throw new NotImplementedException($"Deserialization not implemented for target type {targetType.Name}"),
+        };
+    }
+
+    private static CborBytes DeserializeCborBytes(CborReader reader, Type targetType)
+    {
+        if (targetType != typeof(CborBytes))
+        {
+            throw new InvalidOperationException($"Expected a target type of {typeof(CborBytes).Name}, but received {targetType.Name}.");
+        }
+
+        return new CborBytes(reader.ReadByteString());
+    }
+
+    private static CborInt DeserializeCborInt(CborReader reader, Type targetType)
+    {
+        if (targetType == typeof(CborInt))
+        {
+            int value = reader.ReadInt32();
+            return new CborInt(value);
+        }
+        throw new InvalidOperationException($"Expected an integer type, but received {targetType.Name}.");
+    }
+
+    private static CborUlong DeserializeCborUlong(CborReader reader, Type targetType)
+    {
+        if (targetType == typeof(CborUlong))
+        {
+            ulong value = reader.ReadUInt64();
+            return new CborUlong(value);
+        }
+        throw new InvalidOperationException($"Expected a target type of {typeof(CborUlong).Name}, but received {targetType.Name}.");
+    }
+
+    private static CborList<T> DeserializeList<T>(CborReader reader, Type targetType) where T : ICbor
+    {
+        if (reader.PeekState() != CborReaderState.StartArray)
+            throw new InvalidOperationException("Expected start of array in CBOR data");
+
+        var itemType = targetType.GetGenericArguments()[0];
+        IList<T> list = (IList<T>)Activator.CreateInstance(typeof(List<>).MakeGenericType(itemType))!;
 
         reader.ReadStartArray();
         while (reader.PeekState() != CborReaderState.EndArray)
         {
-            var element = DeserializePrimitive(reader, elementType, null);
-            list.Add(element);
+            var item = (T)DeserializeCbor(reader, itemType)!;
+            list.Add(item);
         }
         reader.ReadEndArray();
 
-        return list;
+        return new CborList<T>([.. list]);
     }
-    public static object? DeserializeMap(CborReader reader, Type targetType)
+
+    private static ICbor? DeserializeConstructor(CborReader reader, Type targetType)
     {
-        if (typeof(IDictionary).IsAssignableFrom(targetType) && targetType.IsGenericType)
+        reader.ReadStartArray();
+        int index = reader.ReadInt32();
+
+        if (targetType.IsGenericType && targetType.GetGenericTypeDefinition() == typeof(Option<>))
         {
-            var keyType = targetType.GetGenericArguments()[0];
-            var valueType = targetType.GetGenericArguments()[1];
-            var dictionary = (IDictionary)Activator.CreateInstance(typeof(Dictionary<,>).MakeGenericType(keyType, valueType))!;
-
-            reader.ReadStartMap();
-            while (reader.PeekState() != CborReaderState.EndArray)
+            var genericArg = targetType.GetGenericArguments()[0];
+            if (index == 0)
             {
-                var key = DeserializePrimitive(reader, keyType, null);
-                var value = DeserializePrimitive(reader, valueType, null);
-                dictionary.Add(key!, value);
+                var value = DeserializeCbor(reader, genericArg);
+                var someType = typeof(Some<>).MakeGenericType(genericArg);
+                reader.ReadEndArray();
+                return (ICbor?)Activator.CreateInstance(someType, value);
             }
-            reader.ReadEndMap();
-
-            return dictionary;
+            else if (index == 1)
+            {
+                reader.ReadEndArray();
+                return new None();
+            }
         }
 
-        throw new InvalidOperationException($"Unsupported target type for Map: {targetType.Name}");
+        reader.ReadEndArray();
+        throw new NotSupportedException($"Unsupported Constructor index: {index} for type {targetType.Name}");
     }
 
-    public static object? DeserializeUnion(CborReader reader, Type targetType)
+    private static ICbor DeserializeMap(CborReader reader, Type targetType)
     {
-        var unionAttribute = targetType.GetCustomAttribute<CborUnionTypesAttribute>() ?? throw new InvalidOperationException("Union type must have a CborUnionTypesAttribute.");
-        
+        if (targetType == typeof(CborMap))
+        {
+            return DeserializeCborMap(reader);
+        }
+        else if (targetType.IsGenericType && targetType.GetGenericTypeDefinition() == typeof(CborMap<,>))
+        {
+            var method = typeof(CborSerializer).GetMethod(nameof(DeserializeGenericMap), BindingFlags.NonPublic | BindingFlags.Static);
+            var genericMethod = method!.MakeGenericMethod(targetType.GetGenericArguments());
+            return (ICbor)genericMethod.Invoke(null, [reader])!;
+        }
+        else
+        {
+            throw new InvalidOperationException($"Unsupported map type for deserialization: {targetType.Name}");
+        }
+    }
+
+    private static CborMap DeserializeCborMap(CborReader reader)
+    {
         reader.ReadStartMap();
-        var unionTypeIndex = reader.ReadInt32();
-        var unionType = unionAttribute.UnionTypes[unionTypeIndex];
+        var dictionary = new Dictionary<ICbor, ICbor>();
 
-        var value = DeserializePrimitive(reader, unionType, null);
+        while (reader.PeekState() != CborReaderState.EndMap)
+        {
+            var key = DeserializeCbor(reader, typeof(ICbor))!;
+            var value = DeserializeCbor(reader, typeof(ICbor))!;
+            dictionary.Add(key, value);
+        }
+
         reader.ReadEndMap();
+        return new CborMap(dictionary);
+    }
 
-        return value;
+    private static ICbor? DeserializeUnion(CborReader reader, Type targetType)
+    {
+        var unionAttr = targetType.GetCustomAttribute<CborUnionTypesAttribute>() ??
+            throw new InvalidOperationException($"Type {targetType.Name} is not marked with CborUnionTypesAttribute");
+
+        foreach (var type in unionAttr.UnionTypes)
+        {
+            try
+            {
+                var result = DeserializeCbor(reader, type);
+                return result;
+            }
+            catch
+            {
+                continue;
+            }
+        }
+
+        throw new InvalidOperationException("No matching type found in the union");
+    }
+
+    private static CborMap<TKey, TValue> DeserializeGenericMap<TKey, TValue>(CborReader reader)
+        where TKey : ICbor
+        where TValue : ICbor
+    {
+        reader.ReadStartMap();
+        var dictionary = new Dictionary<TKey, TValue>();
+
+        while (reader.PeekState() != CborReaderState.EndMap)
+        {
+            var key = (TKey)DeserializeCbor(reader, typeof(TKey))!;
+            var value = (TValue)DeserializeCbor(reader, typeof(TValue))!;
+            dictionary.Add(key, value);
+        }
+
+        reader.ReadEndMap();
+        return new CborMap<TKey, TValue>(dictionary);
     }
 
     private static CborType DetermineCborType(Type objType)
     {
-        CborUnionTypesAttribute? unionAttribute = objType.GetCustomAttribute<CborUnionTypesAttribute>();
-        if (unionAttribute != null)
+        if (typeof(ICbor).IsAssignableFrom(objType))
+        {
+            var attr = objType.GetCustomAttribute<CborSerializableAttribute>();
+            if (attr != null)
+            {
+                return attr.Type;
+            }
+
+            if (objType == typeof(CborBytes)) return CborType.Bytes;
+            if (objType == typeof(CborInt)) return CborType.Int;
+            if (objType == typeof(CborUlong)) return CborType.Ulong;
+
+            if (objType.IsGenericType && objType.GetGenericTypeDefinition() == typeof(CborList<>))
+            {
+                return CborType.List;
+            }
+
+            throw new NotSupportedException($"The ICbor type {objType.Name} is not supported for serialization.");
+        }
+
+        // Check for union types
+        if (objType.GetCustomAttribute<CborUnionTypesAttribute>() != null)
         {
             return CborType.Union;
         }
 
-        if (objType == typeof(byte[]))
-            return CborType.ByteString;
-            
-        if (objType == typeof(int) || objType == typeof(long))
-            return CborType.Int;
-
-        if (objType == typeof(uint) || objType == typeof(ulong))
-            return CborType.Ulong;
-
+        // Check for collections
         if (typeof(IEnumerable).IsAssignableFrom(objType) && objType.IsGenericType)
         {
             Type genericType = objType.GetGenericTypeDefinition();
             if (genericType == typeof(List<>) || genericType == typeof(IEnumerable<>))
+            {
                 return CborType.List;
+            }
+
+            if (genericType == typeof(CborList<>))
+            {
+                return CborType.List;
+            }
         }
 
+        // Check for dictionaries
         if (typeof(IDictionary).IsAssignableFrom(objType) && objType.IsGenericType)
         {
-            Type genericType = objType.GetGenericTypeDefinition();
-            if (genericType == typeof(Dictionary<,>))
+            if (objType.GetGenericTypeDefinition() == typeof(Dictionary<,>))
+            {
                 return CborType.Map;
+            }
+
         }
 
+        // Check specific types
+        if (objType == typeof(CborMap)) return CborType.Map;
+        if (objType == typeof(CborInt)) return CborType.Int;
+        if (objType == typeof(CborBytes)) return CborType.Bytes;
+        if (objType == typeof(CborUlong)) return CborType.Ulong;
+
         throw new NotSupportedException($"The object type {objType.Name} is not supported for serialization.");
+    }
+
+    private static ICbor? TryMatchType(CborReader reader, Type type)
+    {
+        try
+        {
+            var result = DeserializeCbor(reader, type);
+            return result;
+        }
+        catch
+        {
+            reader.SkipValue();
+            return null;
+        }
+    }
+
+
+    public static string ToHex(ICbor cbor)
+    {
+        byte[] cborData = Serialize(cbor);
+        return Convert.ToHexString(cborData).ToLowerInvariant();
+    }
+
+    public static T? FromHex<T>(string hexString)
+    {
+        byte[] cborData = Convert.FromHexString(hexString);
+        return Deserialize<T>(cborData);
     }
 }

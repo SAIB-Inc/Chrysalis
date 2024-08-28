@@ -1,13 +1,12 @@
 namespace Chrysalis.Cbor;
 public enum CborType
 {
-    ByteString,
-    Map,
-    List,
+    Constr,
     Bytes,
     Int,
     Ulong,
-    Constr,
+    Map,
+    List,
     Union,
     PlutusData
 }
