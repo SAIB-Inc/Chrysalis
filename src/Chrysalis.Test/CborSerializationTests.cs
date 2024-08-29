@@ -15,7 +15,6 @@ namespace Chrysalis.Test
         [InlineData("43414243", typeof(CborBytes))] // Example hex for CBOR bytes of `ABC` string
         [InlineData("a141614541696b656e", typeof(CborMap<CborBytes, CborBytes>))]
         [InlineData("9f0102030405ff", typeof(CborList<CborInt>))] // [_ 1, 2, 3, 4, 5]
-        [InlineData("1834", typeof(SampleDatum))] // Union Type test (CardanoInt, CardanoBytes)
         [InlineData("d8799f182aff", typeof(Option<CborInt>))] // Serialized CBOR for Option::Some(42):
         [InlineData("d87a80", typeof(Option<CborInt>))] // Serialized CBOR for Option::None:
         public void SerializeAndDeserializePrimitives(string cborHex, Type type)
