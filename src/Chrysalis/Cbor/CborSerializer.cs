@@ -101,7 +101,6 @@ public static class CborSerializer
         }
     }
 
-    // Todo: Implement indefinite and definite maps
     private static void SerializeMap(CborWriter writer, ICbor obj, Type objType, bool indefinite = false)
     {
         try
