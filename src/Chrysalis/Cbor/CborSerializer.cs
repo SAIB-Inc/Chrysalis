@@ -138,6 +138,30 @@ public static class CborSerializer
         }
     }
 
+    // Todo
+    private static void SerializeRecordAsMap(CborWriter writer, ICbor obj, Type objType)
+    {
+        PropertyInfo[] properties = objType.GetProperties(BindingFlags.Public | BindingFlags.Instance);
+
+        writer.WriteStartMap(properties.Length);
+
+        foreach (PropertyInfo property in properties)
+        {
+            Type attr = property.GetType();
+            if (attr != null)
+            {
+                CborPropertyAttribute? cborPropertyAttr = property.GetCustomAttribute<CborPropertyAttribute>();
+                string key = cborPropertyAttr?.Key ?? property.Name;
+                object? value = property.GetValue(obj);
+
+                writer.WriteTextString(key);
+                SerializeCbor(writer, (ICbor)value!, property.PropertyType);
+            }
+        }
+
+        writer.WriteEndMap();
+    }
+
     private static void SerializeConstructor(CborWriter writer, ICbor cbor, Type objType)
     {
         CborSerializableAttribute? cborSerializableAttr = objType.GetCustomAttribute<CborSerializableAttribute>();
@@ -172,30 +196,6 @@ public static class CborSerializer
         }
 
         writer.WriteEndArray();
-    }
-
-    // Todo
-    private static void SerializeRecordAsMap(CborWriter writer, ICbor obj, Type objType)
-    {
-        PropertyInfo[] properties = objType.GetProperties(BindingFlags.Public | BindingFlags.Instance);
-
-        writer.WriteStartMap(properties.Length);
-
-        foreach (PropertyInfo property in properties)
-        {
-            Type attr = property.GetType();
-            if (attr != null)
-            {
-                CborPropertyAttribute? cborPropertyAttr = property.GetCustomAttribute<CborPropertyAttribute>();
-                string key = cborPropertyAttr?.Key ?? property.Name;
-                object? value = property.GetValue(obj);
-
-                writer.WriteTextString(key);
-                SerializeCbor(writer, (ICbor)value!, property.PropertyType);
-            }
-        }
-
-        writer.WriteEndMap();
     }
 
     private static void SerializeGenericMap<TKey, TValue>(CborWriter writer, CborMap<TKey, TValue> map)
