@@ -138,11 +138,11 @@ public static class CborSerializer
     }
 
     // Todo
-    private static void SerializeRecordAsMap(CborWriter writer, ICbor obj, Type objType)
+    private static void SerializeRecordAsMap(CborWriter writer, ICbor obj, Type objType, bool indefinite = false)
     {
         PropertyInfo[] properties = objType.GetProperties(BindingFlags.Public | BindingFlags.Instance);
 
-        writer.WriteStartMap(properties.Length);
+        writer.WriteStartMap(indefinite ? null : properties.Length);
 
         foreach (PropertyInfo property in properties)
         {
