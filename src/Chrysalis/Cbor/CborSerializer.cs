@@ -44,7 +44,7 @@ public static class CborSerializer
                     genericMethod.Invoke(null, [writer, cbor, attr?.IsIndefinite]);
                     break;
                 case CborType.Map:
-                    SerializeMap(writer, cbor, objType);
+                    SerializeMap(writer, cbor, objType, attr!.IsIndefinite);
                     break;
                 case CborType.Constr:
                     SerializeConstructor(writer, cbor, objType);
@@ -108,7 +108,7 @@ public static class CborSerializer
         {
             if (obj is CborMap cborMap)
             {
-                writer.WriteStartMap(cborMap.Value.Count);
+                writer.WriteStartMap(indefinite ? null : cborMap.Value.Count);
                 foreach (KeyValuePair<ICbor, ICbor> kvp in cborMap.Value)
                 {
                     SerializeCbor(writer, kvp.Key, kvp.Key.GetType());
@@ -198,11 +198,11 @@ public static class CborSerializer
         writer.WriteEndArray();
     }
 
-    private static void SerializeGenericMap<TKey, TValue>(CborWriter writer, CborMap<TKey, TValue> map)
+    private static void SerializeGenericMap<TKey, TValue>(CborWriter writer, CborMap<TKey, TValue> map, bool indefinite = false)
         where TKey : ICbor
         where TValue : ICbor
     {
-        writer.WriteStartMap(map.Value.Count);
+        writer.WriteStartMap(indefinite ? null : map.Value.Count);
         foreach (KeyValuePair<TKey, TValue> kvp in map.Value)
         {
             SerializeCbor(writer, kvp.Key, typeof(TKey));
@@ -263,7 +263,7 @@ public static class CborSerializer
         return (CborUlong)Activator.CreateInstance(targetType, value)!;
     }
 
-    private static CborList<T> DeserializeList<T>(CborReader reader, Type targetType, bool indefinite = false) where T : ICbor
+    private static CborList<T> DeserializeList<T>(CborReader reader, Type targetType) where T : ICbor
     {
         if (reader.PeekState() != CborReaderState.StartArray)
             throw new InvalidOperationException("Expected start of array in CBOR data");
