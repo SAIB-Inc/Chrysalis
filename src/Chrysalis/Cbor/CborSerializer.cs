@@ -71,7 +71,6 @@ public static class CborSerializer
         writer.WriteEndArray();
     }
 
-
     private static void SerializeCborUlong(CborWriter writer, ICbor cbor, Type targetType)
     {
         writer.WriteUInt64((ulong)cbor.GetValue(targetType));
@@ -102,7 +101,8 @@ public static class CborSerializer
         }
     }
 
-    private static void SerializeMap(CborWriter writer, ICbor obj, Type objType)
+    // Todo: Implement indefinite and definite maps
+    private static void SerializeMap(CborWriter writer, ICbor obj, Type objType, bool indefinite = false)
     {
         try
         {
