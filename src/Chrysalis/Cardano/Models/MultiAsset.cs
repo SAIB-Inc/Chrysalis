@@ -2,5 +2,4 @@ using Chrysalis.Cbor;
 
 namespace Chrysalis.Cardano.Models;
 
-[CborSerializable(CborType.Map)]
-public record MultiAsset(CborMap<CborBytes, TokenBundle> Value) : ICbor;
+public record MultiAsset(Dictionary<CborBytes, TokenBundle> Value) : CborMap<CborBytes, TokenBundle>(Value);
