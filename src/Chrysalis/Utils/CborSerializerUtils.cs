@@ -22,11 +22,11 @@ public static class CborSerializerUtils
         if (objType == null)
             throw new ArgumentNullException(nameof(objType), "The target type cannot be null.");
 
-        PropertyInfo? valueProperty = objType.GetProperty("Value") 
-            ?? throw new InvalidOperationException($"Type {objType.Name} does not have a 'Value' property.");
+        PropertyInfo? valueProperty = objType.GetProperty("Value") ?? 
+            throw new InvalidOperationException($"Type {objType.Name} does not have a 'Value' property.");
 
-        object? value = valueProperty.GetValue(cbor) 
-            ?? throw new InvalidOperationException($"The 'Value' property of type {objType.Name} is null.");
+        object? value = valueProperty.GetValue(cbor) ?? 
+            throw new InvalidOperationException($"The 'Value' property of type {objType.Name} is null.");
 
         return value;
     }
@@ -40,5 +40,15 @@ public static class CborSerializerUtils
                 return attr.Type;
         }
         return null;
+    }
+
+    public static IEnumerable<Type> GetBaseTypes(Type type)
+    {
+        var baseType = type.BaseType;
+        while (baseType != null)
+        {
+            yield return baseType;
+            baseType = baseType.BaseType;
+        }
     }
 }
