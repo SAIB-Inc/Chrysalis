@@ -1,4 +1,3 @@
-using System.Collections;
 using System.Formats.Cbor;
 using System.Reflection;
 using Chrysalis.Cardano.Models;
@@ -119,12 +118,12 @@ public static class CborSerializer
             {
                 MethodInfo? method = typeof(CborSerializer).GetMethod(nameof(SerializeGenericMap), BindingFlags.NonPublic | BindingFlags.Static);
                 MethodInfo genericMethod = method!.MakeGenericMethod(objType.GetGenericArguments());
-                genericMethod.Invoke(null, [writer, obj]);
+                genericMethod.Invoke(null, [writer, obj, indefinite]);
             }
             else if (obj is not null && objType.GetCustomAttribute<CborSerializableAttribute>()?.Type == CborType.Map)
             {
                 // Not yet tested
-                // SerializeRecordAsMap(writer, obj, objType);
+                SerializeRecordAsMap(writer, obj, objType);
             }
             else
             {
@@ -220,11 +219,11 @@ public static class CborSerializer
 
         CborType? cborType = CborSerializerUtils.GetCborType(targetType);
 
-        if (targetType.IsGenericType && targetType.GetGenericTypeDefinition() == typeof(CborList<>))
+        if (cborType == CborType.List)
         {
             MethodInfo? method = typeof(CborSerializer).GetMethod(nameof(DeserializeList), BindingFlags.NonPublic | BindingFlags.Static);
             MethodInfo genericMethod = method!.MakeGenericMethod(targetType.GetGenericArguments()[0]);
-            return (ICbor?)genericMethod.Invoke(null, [reader, targetType, false]);
+            return (ICbor?)genericMethod.Invoke(null, [reader, targetType]);
         }
 
         if (cborType != null)
@@ -237,7 +236,7 @@ public static class CborSerializer
                 CborType.Union => DeserializeUnion(reader, cborData!, targetType),
                 CborType.Bytes => DeserializeCborBytes(reader, targetType),
                 CborType.Constr => DeserializeConstructor(reader, targetType),
-                _ => throw new NotImplementedException("Unknown CborRepresentation"),
+                _ => throw new NotImplementedException($"Unknown CborType: {cborType}"),
             };
         }
 
