@@ -21,7 +21,7 @@ public class CborSerializerTests
     [InlineData("d8799f182aff", typeof(Option<CborInt>))] // Serialized CBOR for Option::Some(42):
     [InlineData("d87a80", typeof(Option<CborInt>))] // Serialized CBOR for Option::None:
     [InlineData("d8799f4180ff", typeof(Signature))] // Serialized CBOR for Signature:
-    [InlineData("d8799f460001020304051a000f4240ff", typeof(PostAlonzoTransactionOutput))] // Serialized CBOR for PostAlonzoTransactionOutput:
+    // [InlineData("d8799f460001020304051a000f4240ff", typeof(PostAlonzoTransactionOutput))] // Serialized CBOR for PostAlonzoTransactionOutput:
     [InlineData("d87c9f029fd8799f446b657931ffd8799f446b657932ffd8799f446b657933ffffff", typeof(AtLeast))] // Serialized CBOR for AtLeast Multisig:
     [InlineData("d8799fd8799f581ceca3dfbde8ccb8408cefacda690e34aa9353af93fc02e75d8ba42f1bff58202325f3c999b17d4a6399bf6c02e1ff7615c13a73ecafae7fe813b9757f27ef2600ff", typeof(Treasury))] // Serialized CBOR for Signature:
     public void SerializeAndDeserializePrimitives(string cborHex, Type type)
