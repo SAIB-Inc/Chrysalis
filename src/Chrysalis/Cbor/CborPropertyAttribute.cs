@@ -1,10 +1,18 @@
-﻿namespace Chrysalis.Cbor;
+namespace Chrysalis.Cbor;
 
-[AttributeUsage(AttributeTargets.Property, Inherited = false, AllowMultiple = true)]
-public sealed class CborPropertyAttribute(CborRepresentation indexType, object indexValue, CborRepresentation valueType, bool isBasicType = false) : Attribute
+[AttributeUsage(AttributeTargets.Property | AttributeTargets.Parameter, AllowMultiple = false)]
+public class CborPropertyAttribute : Attribute
 {
-    public CborRepresentation IndexType { get; } = indexType;
-    public object IndexValue { get; } = indexValue;
-    public CborRepresentation ValueType { get; } = valueType;
-    public bool IsBasicType { get; set; } = isBasicType;
+    public string? Key { get; } = default!;
+    public int? Index { get; } = default!;
+
+    public CborPropertyAttribute(string key)
+    {
+        Key = key;
+    }
+
+    public CborPropertyAttribute(int index)
+    {
+        Index = index;
+    }
 }
