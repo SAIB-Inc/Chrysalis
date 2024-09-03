@@ -4,10 +4,10 @@
     <TargetFramework>net8.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <Version>0.0.7</Version>
+    <Version>0.1.0</Version>
     <PackageId>Chrysalis</PackageId>
-    <Authors>0xAccretion</Authors>
-    <Company>AccretionLabs</Company>
+    <Authors>clark@saib.dev</Authors>
+    <Company>SAIB Inc</Company>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageLicenseFile>LICENSE.md</PackageLicenseFile>
   </PropertyGroup>
