@@ -1,4 +1,4 @@
-using System.Formats.Cbor;
+﻿using System.Formats.Cbor;
 using System.Reflection;
 using Chrysalis.Cardano.Models;
 using Chrysalis.Utils;
@@ -86,7 +86,7 @@ public static class CborSerializer
 
     }
 
-    private static void SerializeGenericList<T>(CborWriter writer, CborList<T> cborList, bool indefinite = false) where T : ICbor
+    private static void SerializeGenericList<T>(CborWriter writer, CborIndefiniteList<T> cborList, bool indefinite = false) where T : ICbor
     {
         writer.WriteStartArray(indefinite ? null : cborList.Value.Length);
 
@@ -284,7 +284,7 @@ public static class CborSerializer
 
     private static ICbor? DeserializeList(CborReader reader, Type targetType)
     {
-        if (targetType.IsGenericType && targetType.GetGenericTypeDefinition() == typeof(CborList<>))
+        if (targetType.IsGenericType && targetType.GetGenericTypeDefinition() == typeof(CborIndefiniteList<>))
         {
             MethodInfo? method = typeof(CborSerializer).GetMethod(nameof(DeserializeGenericList), BindingFlags.NonPublic | BindingFlags.Static);
             MethodInfo genericMethod = method!.MakeGenericMethod(targetType.GetGenericArguments());
@@ -308,7 +308,7 @@ public static class CborSerializer
         return (ICbor?)Activator.CreateInstance(targetType, values);
     }
 
-    private static CborList<T> DeserializeGenericList<T>(CborReader reader, Type targetType) where T : ICbor
+    private static CborIndefiniteList<T> DeserializeGenericList<T>(CborReader reader, Type targetType) where T : ICbor
     {
         if (reader.PeekState() != CborReaderState.StartArray)
             throw new InvalidOperationException("Expected start of array in CBOR data");
@@ -324,7 +324,7 @@ public static class CborSerializer
         }
         reader.ReadEndArray();
 
-        return new CborList<T>([.. list]);
+        return new CborIndefiniteList<T>([.. list]);
     }
 
     private static ICbor? DeserializeConstructor(CborReader reader, Type targetType)

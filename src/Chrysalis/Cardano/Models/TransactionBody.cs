@@ -4,6 +4,6 @@ namespace Chrysalis.Cardano.Models;
 
 [CborSerializable(CborType.Map)]
 public record TransactionBody(
-    [CborProperty("inputs")] CborList<TransactionInput> Inputs,
-    [CborProperty("outputs")] CborList<TransactionOutput> Outputs
+    [CborProperty("inputs")] CborIndefiniteList<TransactionInput> Inputs,
+    [CborProperty("outputs")] CborIndefiniteList<TransactionOutput> Outputs
 );

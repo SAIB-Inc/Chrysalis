@@ -16,8 +16,8 @@ public class CborSerializerTests
     [InlineData("43414243", typeof(CborBytes))] // Example hex for CBOR bytes of `ABC` string
     [InlineData("a141614541696b656e", typeof(CborMap<CborBytes, CborBytes>))] // {h'61': h'41696b656e'}
     [InlineData("a1450001020304a1450001020304182a", typeof(MultiAsset))] // {h'61': h'41696b656e'}
-    [InlineData("9f0102030405ff", typeof(CborList<CborInt>))] // [_ 1, 2, 3, 4, 5]
-    [InlineData("9f824401020304182a824405060708182bff", typeof(CborList<TransactionInput>))] // [_ [h'01020304', 42_0], [h'05060708', 43_0]]
+    [InlineData("9f0102030405ff", typeof(CborIndefiniteList<CborInt>))] // [_ 1, 2, 3, 4, 5]
+    [InlineData("9f824401020304182a824405060708182bff", typeof(CborIndefiniteList<TransactionInput>))] // [_ [h'01020304', 42_0], [h'05060708', 43_0]]
     [InlineData("d8799f182aff", typeof(Option<CborInt>))] // Serialized CBOR for Option::Some(42):
     [InlineData("d87a80", typeof(Option<CborInt>))] // Serialized CBOR for Option::None:
     [InlineData("d8799f4180ff", typeof(Signature))] // Serialized CBOR for Signature:

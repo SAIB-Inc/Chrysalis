@@ -10,13 +10,13 @@ public record MultisigScript : ICbor;
 public record Signature(CborBytes KeyHash) : MultisigScript;
 
 [CborSerializable(CborType.Constr, Index = 1)]
-public record AllOf(CborList<MultisigScript> Scripts) : MultisigScript;
+public record AllOf(CborIndefiniteList<MultisigScript> Scripts) : MultisigScript;
 
 [CborSerializable(CborType.Constr, Index = 2)]
-public record AnyOf(CborList<MultisigScript> Scripts) : MultisigScript;
+public record AnyOf(CborIndefiniteList<MultisigScript> Scripts) : MultisigScript;
 
 [CborSerializable(CborType.Constr, Index = 3)]
-public record AtLeast(CborUlong Required, CborList<MultisigScript> Scripts) : MultisigScript;
+public record AtLeast(CborUlong Required, CborIndefiniteList<MultisigScript> Scripts) : MultisigScript;
 
 [CborSerializable(CborType.Constr, Index = 4)]
 public record Before(PosixTime Time) : MultisigScript;
