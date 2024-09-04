@@ -1,6 +1,6 @@
 using Chrysalis.Cbor;
 
-namespace Chrysalis.Cardano.Models;
+namespace Chrysalis.Cardano.Models.Cbor;
 
 [CborSerializable(CborType.List, IsIndefinite = false)]
 public record CborDefiniteList<T>(T[] Value) : ICbor where T : ICbor;

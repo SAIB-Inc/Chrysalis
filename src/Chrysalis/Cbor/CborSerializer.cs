@@ -1,6 +1,7 @@
 ﻿using System.Formats.Cbor;
 using System.Reflection;
-using Chrysalis.Cardano.Models;
+using Chrysalis.Cardano.Models.Cbor;
+using Chrysalis.Cardano.Models.Core;
 using Chrysalis.Utils;
 
 namespace Chrysalis.Cbor;
@@ -46,6 +47,9 @@ public static class CborSerializer
                 case CborType.Constr:
                     SerializeConstructor(writer, cbor, objType);
                     break;
+                case CborType.EncodedValue:
+                    SerializeEncodedValue(writer, cbor, objType);
+                    break;
                 default:
                     throw new NotSupportedException($"CBOR type {cborType} is not supported in this context.");
             }
@@ -55,6 +59,7 @@ public static class CborSerializer
             throw new NotImplementedException($"Type not supported {objType}");
         }
     }
+
 
     private static void SerializeList(CborWriter writer, ICbor cbor, bool indefinite = false)
     {
@@ -236,6 +241,15 @@ public static class CborSerializer
         writer.WriteEndArray();
     }
 
+    private static void SerializeEncodedValue(CborWriter writer, ICbor cbor, Type objType)
+    {
+        CborTag tag = CborTag.EncodedCborDataItem;
+        writer.WriteTag(tag);
+
+        byte[] value = (byte[])cbor.GetValue(objType);
+        writer.WriteByteString(Convert.FromHexString("d81842ffff"));
+    }
+
     private static ICbor? DeserializeCbor(CborReader reader, Type targetType, byte[]? cborData = null)
     {
         if (reader.PeekState() == CborReaderState.Null)
@@ -257,6 +271,7 @@ public static class CborSerializer
                 CborType.Bytes => DeserializeCborBytes(reader, targetType),
                 CborType.Constr => DeserializeConstructor(reader, targetType),
                 CborType.List => DeserializeList(reader, targetType),
+                CborType.EncodedValue => DeserializeEncodedValue(reader, targetType),
                 _ => throw new NotImplementedException($"Unknown CborType: {cborType}"),
             };
         }
@@ -490,5 +505,19 @@ public static class CborSerializer
         }
 
         throw new InvalidOperationException("No matching type found in the union");
+    }
+
+    private static ICbor? DeserializeEncodedValue(CborReader reader, Type targetType)
+    {
+        CborTag tag = reader.ReadTag();
+
+        if (tag == CborTag.EncodedCborDataItem)
+        {
+            ReadOnlyMemory<byte> encodedReadonlyValue = reader.ReadByteString();
+            byte[] value = encodedReadonlyValue.ToArray();
+            return (ICbor)Activator.CreateInstance(targetType, value)!;
+        }
+
+        throw new InvalidOperationException("Invalid Encoded Value");
     }
 }

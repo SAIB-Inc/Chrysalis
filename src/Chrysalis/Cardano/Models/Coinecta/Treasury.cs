@@ -1,4 +1,6 @@
 using Chrysalis.Cbor;
+using Chrysalis.Cardano.Models.Sundae;
+using Chrysalis.Cardano.Models.Cbor;
 
 namespace Chrysalis.Cardano.Models.Coinecta;
 
@@ -8,3 +10,5 @@ public record Treasury(
     CborBytes TreasuryRootHash,
     PosixTime UnlockTime
 ) : ICbor;
+
+

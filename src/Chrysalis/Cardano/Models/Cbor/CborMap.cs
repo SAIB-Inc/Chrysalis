@@ -1,6 +1,6 @@
 using Chrysalis.Cbor;
 
-namespace Chrysalis.Cardano.Models;
+namespace Chrysalis.Cardano.Models.Core;
 
 [CborSerializable(CborType.Map)]
 public record CborMap(Dictionary<ICbor, ICbor> Value) : ICbor;

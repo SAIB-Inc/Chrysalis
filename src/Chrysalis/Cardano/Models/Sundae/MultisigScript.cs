@@ -1,6 +1,7 @@
+using Chrysalis.Cardano.Models.Cbor;
 using Chrysalis.Cbor;
 
-namespace Chrysalis.Cardano.Models;
+namespace Chrysalis.Cardano.Models.Sundae;
 
 [CborSerializable(CborType.Union)]
 [CborUnionTypes([typeof(Signature)])]

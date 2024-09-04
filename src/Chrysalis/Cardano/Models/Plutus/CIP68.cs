@@ -1,6 +1,8 @@
+using Chrysalis.Cardano.Models.Cbor;
+using Chrysalis.Cardano.Models.Core;
 using Chrysalis.Cbor;
 
-namespace Chrysalis.Cardano.Models;
+namespace Chrysalis.Cardano.Models.Plutus;
 
 [CborSerializable(CborType.Constr, Index = 0)]
 public record CIP68<T>() : ICbor where T : ICbor
