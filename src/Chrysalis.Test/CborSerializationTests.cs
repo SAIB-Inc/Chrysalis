@@ -28,7 +28,7 @@ public class CborSerializerTests
     // [InlineData("d8799f460001020304051a000f4240ff", typeof(PostAlonzoTransactionOutput))] // Serialized CBOR for PostAlonzoTransactionOutput:
     [InlineData("d87c9f029fd8799f446b657931ffd8799f446b657932ffd8799f446b657933ffffff", typeof(AtLeast))] // Serialized CBOR for AtLeast Multisig:
     [InlineData("d8799fd8799f581ceca3dfbde8ccb8408cefacda690e34aa9353af93fc02e75d8ba42f1bff58202325f3c999b17d4a6399bf6c02e1ff7615c13a73ecafae7fe813b9757f27ef2600ff", typeof(Treasury))] // Serialized CBOR for Signature:
-    [InlineData("825839011ba3b5e5a3920c8756b9f4731395121663621606a74554ae9343a5b40e3ef28f8254481d403eb5d26f118d7ba0c09eaf36f0fd1a0ac624a8821b00000017010c2e6da1581cd5e6bf0500378d4f0da4e8dde6becec7621cd8cbf5cbb9b87013d4cca14c53706163654275643834363501", typeof(TransactionOutput))] // Serialized CBOR for TransactionOutput:
+    [InlineData("8201d818587ed8799fd8799fd87a9f581c1eae96baf29e27682ea3f815aba361a0c6059d45e4bfbe95bbd2f44affffd8799f4040ffd8799f581caf65a4734e8a22f43128913567566d2dde30d3b3298306d6317570f64e0014df104d494e20496e7465726eff1a2a2597de1a009896801b0000000ba43b740018641864d87a80d87980ff", typeof(DatumOption))] // Serialized CBOR for Inline Datum:
     [InlineData("d81842ffff", typeof(CborEncodedValue))] // Serialized CBOR for CIP68:
     public void SerializeAndDeserializePrimitives(string cborHex, Type type)
     {

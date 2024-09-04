@@ -247,7 +247,7 @@ public static class CborSerializer
         writer.WriteTag(tag);
 
         byte[] value = (byte[])cbor.GetValue(objType);
-        writer.WriteByteString(Convert.FromHexString("d81842ffff"));
+        writer.WriteByteString(value);
     }
 
     private static ICbor? DeserializeCbor(CborReader reader, Type targetType, byte[]? cborData = null)
@@ -299,6 +299,7 @@ public static class CborSerializer
 
     private static ICbor? DeserializeList(CborReader reader, Type targetType)
     {
+        // @TODO use CborType enum to detect Definite, Indefinite, ListStructure and use IsDefinite flag
         if (targetType.IsGenericType && targetType.GetGenericTypeDefinition() == typeof(CborIndefiniteList<>))
         {
             MethodInfo? method = typeof(CborSerializer).GetMethod(nameof(DeserializeGenericList), BindingFlags.NonPublic | BindingFlags.Static);
