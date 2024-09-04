@@ -6,21 +6,21 @@ public class CborSerializableAttribute(CborType type) : Attribute
 {
     public CborType Type { get; } = type;
     public int Index { get; set; } = -1;
-    public bool IsIndefinite { get; set; } = false;
+    public bool IsDefinite { get; set; } = true;
 
     public CborSerializableAttribute(CborType type, int index) : this(type)
     {
         Index = index;
     }
 
-    public CborSerializableAttribute(CborType type, bool isIndefinite) : this(type)
+    public CborSerializableAttribute(CborType type, bool isDefinite) : this(type)
     {
-        IsIndefinite = isIndefinite;
+        IsDefinite = isDefinite;
     }
 
-    public CborSerializableAttribute(CborType type, int index, bool isIndefinite) : this(type)
+    public CborSerializableAttribute(CborType type, int index, bool isDefinite) : this(type)
     {
         Index = index;
-        IsIndefinite = isIndefinite;
+        IsDefinite = isDefinite;
     }
 }
