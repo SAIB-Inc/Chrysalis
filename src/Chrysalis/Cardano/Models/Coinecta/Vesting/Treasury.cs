@@ -13,7 +13,6 @@ public record Treasury(
     PosixTime UnlockTime
 ) : ICbor;
 
-
 [CborSerializable(CborType.Union)]
 [CborUnionTypes([typeof(TreasuryClaimRedeemer), typeof(TreasuryWithdrawRedeemer)])]
 public record TreasuryRedeemer : ICbor;
@@ -21,7 +20,7 @@ public record TreasuryRedeemer : ICbor;
 [CborSerializable(CborType.Constr, Index = 0)]
 public record TreasuryClaimRedeemer(
     [CborProperty(0)]
-    CborIndefiniteList<ProofStep> Proof,
+    Proof Proof,
 
     [CborProperty(1)]
     ClaimEntry ClaimEntry

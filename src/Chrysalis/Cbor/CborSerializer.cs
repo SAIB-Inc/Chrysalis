@@ -38,7 +38,7 @@ public static class CborSerializer
                     SerializeCborUlong(writer, cbor, objType);
                     break;
                 case CborType.List:
-                    SerializeList(writer, cbor);
+                    SerializeList(writer, cbor, objType);
                     break;
                 case CborType.Map:
                     SerializeMap(writer, cbor, objType);
@@ -59,34 +59,24 @@ public static class CborSerializer
         }
     }
 
-    private static void SerializeList(CborWriter writer, ICbor cbor)
+    private static void SerializeList(CborWriter writer, ICbor cbor, Type objType)
     {
-        CborSerializableAttribute? cborSerializableAttr = cbor.GetType().GetCustomAttribute<CborSerializableAttribute>();
-        if (cbor.GetType().IsGenericType)
+        if (objType.IsGenericType)
         {
+            CborSerializableAttribute? cborSerializableAttr = objType.GetCustomAttribute<CborSerializableAttribute>();
             MethodInfo? method = typeof(CborSerializer).GetMethod(nameof(SerializeGenericList), BindingFlags.NonPublic | BindingFlags.Static);
-            MethodInfo genericMethod = method!.MakeGenericMethod(cbor.GetType().GetGenericArguments());
+            MethodInfo genericMethod = method!.MakeGenericMethod(objType.GetGenericArguments());
             genericMethod.Invoke(null, [writer, cbor, cborSerializableAttr!.IsDefinite]);
             return;
         }
-
-        PropertyInfo[] properties = cbor.GetType().GetProperties(BindingFlags.Public | BindingFlags.Instance);
-        writer.WriteStartArray(cborSerializableAttr!.IsDefinite ? properties.Length : null);
-
-        foreach (PropertyInfo property in properties)
+        else if (objType.GetCustomAttribute<CborSerializableAttribute>()?.Type == CborType.List)
         {
-            object? value = property.GetValue(cbor);
-            if (value is ICbor cborValue)
-            {
-                SerializeCbor(writer, cborValue, property.PropertyType);
-            }
-            else
-            {
-                throw new InvalidOperationException($"Property {property.Name} in {cbor.GetType().Name} does not implement ICbor.");
-            }
+            SerializeListStructure(writer, cbor, objType);
         }
-
-        writer.WriteEndArray();
+        else
+        {
+            throw new InvalidOperationException($"Unsupported list type for deserialization: {cbor.GetType().Name}");
+        }
     }
 
     private static void SerializeGenericList<T>(CborWriter writer, ICbor cborList, bool definite = false) where T : ICbor
@@ -102,34 +92,71 @@ public static class CborSerializer
         writer.WriteEndArray();
     }
 
-    private static void SerializeCborUlong(CborWriter writer, ICbor cbor, Type targetType)
+    private static void SerializeListStructure(CborWriter writer, ICbor cbor, Type objType)
     {
-        writer.WriteUInt64((ulong)cbor.GetValue(targetType));
+        Type? baseType = objType.BaseType;
+        CborSerializableAttribute? cborSerializableAttr = objType.GetCustomAttribute<CborSerializableAttribute>();
+        bool IsDefinite = cborSerializableAttr?.IsDefinite ?? true;
+
+        if (cbor is null)
+            return;
+
+        if (baseType != null && baseType.IsGenericType)
+        {
+            MethodInfo? method = typeof(CborSerializer).GetMethod(nameof(SerializeGenericList), BindingFlags.NonPublic | BindingFlags.Static);
+            MethodInfo genericMethod = method!.MakeGenericMethod(baseType.GetGenericArguments());
+            genericMethod.Invoke(null, [writer, cbor, IsDefinite]);
+        }
+        else
+        {
+            PropertyInfo[] properties = cbor.GetType().GetProperties(BindingFlags.Public | BindingFlags.Instance);
+            writer.WriteStartArray(IsDefinite ? properties.Length : null);
+
+            foreach (PropertyInfo property in properties)
+            {
+                object? value = property.GetValue(cbor);
+                if (value is ICbor cborValue)
+                {
+                    SerializeCbor(writer, cborValue, property.PropertyType);
+                }
+                else
+                {
+                    throw new InvalidOperationException($"Property {property.Name} in {baseType?.Name} does not implement ICbor.");
+                }
+            }
+
+            writer.WriteEndArray();
+        }
     }
 
-    private static void SerializeCborInt(CborWriter writer, ICbor cbor, Type elementType)
+    private static void SerializeCborUlong(CborWriter writer, ICbor cbor, Type objType)
     {
-        writer.WriteInt32((int)cbor.GetValue(elementType));
+        writer.WriteUInt64((ulong)cbor.GetValue(objType));
     }
 
-    private static void SerializeCborBytes(CborWriter writer, ICbor cbor, Type elementType)
+    private static void SerializeCborInt(CborWriter writer, ICbor cbor, Type objType)
     {
-        CborSerializableAttribute? cborSerializableAttr = elementType.GetCustomAttribute<CborSerializableAttribute>();
+        writer.WriteInt32((int)cbor.GetValue(objType));
+    }
+
+    private static void SerializeCborBytes(CborWriter writer, ICbor cbor, Type objType)
+    {
+        CborSerializableAttribute? cborSerializableAttr = objType.GetCustomAttribute<CborSerializableAttribute>();
         if (!cborSerializableAttr!.IsDefinite)
         {
             writer.WriteStartIndefiniteLengthByteString();
-            byte[] bytesValue = (byte[])cbor.GetValue(elementType);
+            byte[] bytesValue = (byte[])cbor.GetValue(objType);
             const int chunkSize = 1024;
             for (int i = 0; i < bytesValue.Length; i += chunkSize)
             {
                 int length = Math.Min(chunkSize, bytesValue.Length - i);
-                writer.WriteByteString(((byte[])cbor.GetValue(elementType)).AsSpan(i, length));
+                writer.WriteByteString(((byte[])cbor.GetValue(objType)).AsSpan(i, length));
             }
             writer.WriteEndIndefiniteLengthByteString();
         }
         else
         {
-            writer.WriteByteString((byte[])cbor.GetValue(elementType));
+            writer.WriteByteString((byte[])cbor.GetValue(objType));
         }
     }
 
@@ -353,22 +380,14 @@ public static class CborSerializer
             MethodInfo genericMethod = method!.MakeGenericMethod(itemType, targetType);
             return (ICbor?)genericMethod.Invoke(null, [reader, targetType]);
         }
-
-        reader.ReadStartArray();
-
-        List<PropertyInfo> properties = [.. targetType.GetProperties()];
-
-        object[] values = new object[properties.Count];
-
-        for (int i = 0; i < properties.Count; i++)
+        else if(targetType.GetCustomAttribute<CborSerializableAttribute>()?.Type == CborType.List)
         {
-            Type propType = properties[i].PropertyType;
-            values[i] = DeserializeCbor(reader, propType)!;
+            return DeserializeListStructure(reader, targetType);
         }
-
-        reader.ReadEndArray();
-
-        return (ICbor?)Activator.CreateInstance(targetType, values);
+        else
+        {
+            throw new InvalidOperationException($"Unsupported list type for deserialization: {targetType.Name}");
+        }
     }
 
     private static TList? DeserializeGenericList<T, TList>(CborReader reader, Type targetType)
@@ -378,18 +397,59 @@ public static class CborSerializer
         if (reader.PeekState() != CborReaderState.StartArray)
             throw new InvalidOperationException("Expected start of array in CBOR data");
 
-        Type itemType = targetType.GetGenericArguments()[0];
+        Type? itemType = targetType.GetGenericArguments()[0];
         List<T> list = [];
 
         reader.ReadStartArray();
         while (reader.PeekState() != CborReaderState.EndArray)
         {
-            T item = (T)DeserializeCbor(reader, itemType)!;
+            T? item = (T)DeserializeCbor(reader, itemType!)!;
             list.Add(item);
         }
         reader.ReadEndArray();
 
         return (TList?)Activator.CreateInstance(typeof(TList), [list.ToArray()]);
+    }
+
+    private static ICbor? DeserializeListStructure(CborReader reader, Type targetType)
+    {
+        Type? baseType = targetType.BaseType;
+
+        if (baseType != null && baseType.IsGenericType)
+        {
+            Type genericArg = baseType.GetGenericArguments()[0];
+
+            MethodInfo? method = typeof(CborSerializer).GetMethod(nameof(DeserializeGenericList), BindingFlags.NonPublic | BindingFlags.Static);
+            MethodInfo genericMethod = method!.MakeGenericMethod(genericArg, baseType);
+
+            ICbor list = (ICbor)genericMethod.Invoke(null, [reader, baseType])!;
+
+            ConstructorInfo? ctor = targetType.GetConstructors()[0];
+            if (ctor != null)
+            {
+                return (ICbor?)ctor.Invoke([list.GetValue(list.GetType())]);
+            }
+        }
+        else
+        {
+            reader.ReadStartArray();
+
+            List<PropertyInfo> properties = [.. targetType.GetProperties()];
+
+            object[] values = new object[properties.Count];
+
+            for (int i = 0; i < properties.Count; i++)
+            {
+                Type propType = properties[i].PropertyType;
+                values[i] = DeserializeCbor(reader, propType)!;
+            }
+
+            reader.ReadEndArray();
+
+            return (ICbor?)Activator.CreateInstance(targetType, values);
+        }
+
+        throw new InvalidOperationException($"No suitable constructor found for type: {targetType.Name}");
     }
 
     private static ICbor? DeserializeConstructor(CborReader reader, Type targetType)
@@ -430,20 +490,23 @@ public static class CborSerializer
                 throw new InvalidOperationException($"Unhandled generic type: {genericTypeDef.Name}");
             }
         }
-        else
+        else if(targetType.GetCustomAttribute<CborSerializableAttribute>()?.Type == CborType.Constr)
         {
             ParameterInfo[] constructorParams = targetType.GetConstructors().First().GetParameters();
             object?[] args = new object?[constructorParams.Length];
-
-            for (int i = 0; i < constructorParams.Length; i++)
+            if (constructorParams is not null && constructorParams.Length != 0)
             {
-                Type paramType = constructorParams[i].ParameterType;
-                args[i] = DeserializeCbor(reader, paramType);
+                for (int i = 0; i < constructorParams.Length; i++)
+                {
+                    Type paramType = constructorParams[i].ParameterType;
+                    args[i] = DeserializeCbor(reader, paramType);
+                }
+                reader.ReadEndArray();
+                return (ICbor?)Activator.CreateInstance(targetType, args);
             }
-
-            reader.ReadEndArray();
-            return (ICbor?)Activator.CreateInstance(targetType, args);
         }
+
+        throw new InvalidOperationException($"Unhandled generic type: {targetType.Name}");
     }
 
     private static ICbor? DeserializeMap(CborReader reader, Type targetType)
@@ -575,6 +638,7 @@ public static class CborSerializer
         
         ReadOnlyMemory<byte> unionByte = reader.ReadEncodedValue();
         CborReader cborReader = new(unionByte);
+
         foreach (Type type in unionAttr.UnionTypes)
         {
             try
@@ -582,8 +646,9 @@ public static class CborSerializer
                 Type? unionType = type.IsGenericTypeDefinition ? type.MakeGenericType(targetType.GetGenericArguments()) : type;
                 return DeserializeCbor(cborReader, unionType);
             }
-            catch
+            catch(Exception ex)
             {
+                Console.WriteLine(ex.Message);
                 cborReader.Reset(unionByte);
                 continue;
             }
