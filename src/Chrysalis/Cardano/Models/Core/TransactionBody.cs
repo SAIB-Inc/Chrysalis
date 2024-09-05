@@ -7,4 +7,4 @@ namespace Chrysalis.Cardano.Models.Core;
 public record TransactionBody(
     [CborProperty("inputs")] CborIndefiniteList<TransactionInput> Inputs,
     [CborProperty("outputs")] CborIndefiniteList<TransactionOutput> Outputs
-);
+) : ICbor;
