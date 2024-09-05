@@ -1,6 +1,6 @@
 using Chrysalis.Cbor;
 
-namespace Chrysalis.Cardano.Models;
+namespace Chrysalis.Cardano.Models.Cbor;
 
 [CborSerializable(CborType.Ulong)]
 public record CborUlong(ulong Value) : ICbor;

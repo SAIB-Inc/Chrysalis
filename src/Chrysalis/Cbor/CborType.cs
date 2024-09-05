@@ -8,5 +8,5 @@ public enum CborType
     Map,
     List,
     Union,
-    PlutusData
+    EncodedValue
 }
