@@ -4,7 +4,6 @@ using Chrysalis.Cbor;
 
 namespace Chrysalis.Cardano.Models.Mpf;
 
-
 [CborSerializable(CborType.Union)]
 [CborUnionTypes([
     typeof(Branch),
@@ -42,3 +41,5 @@ public record Leaf(
     [CborProperty(2)]
     CborBytes Value
 ) : ProofStep;
+
+public record Proof(ProofStep[] ProofSteps) : CborIndefiniteList<ProofStep>(ProofSteps);
