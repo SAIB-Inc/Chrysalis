@@ -78,7 +78,14 @@ public static class CborSerializer
             object? value = property.GetValue(cbor);
             if (value is ICbor cborValue)
             {
-                SerializeCbor(writer, cborValue, property.PropertyType);
+                if(CborSerializerUtils.GetCborType(property.PropertyType) == CborType.Union)
+                {
+                    SerializeCbor(writer, cborValue, value.GetType());
+                }
+                else
+                {
+                    SerializeCbor(writer, cborValue, property.PropertyType);
+                }
             }
             else
             {
