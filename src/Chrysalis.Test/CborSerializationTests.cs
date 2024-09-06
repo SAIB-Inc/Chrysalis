@@ -2,6 +2,7 @@ using System.Reflection;
 using Chrysalis.Cardano.Models.Cbor;
 using Chrysalis.Cardano.Models.Coinecta.Vesting;
 using Chrysalis.Cardano.Models.Core;
+using Chrysalis.Cardano.Models.Mpf;
 using Chrysalis.Cardano.Models.Plutus;
 using Chrysalis.Cardano.Models.Sundae;
 using Chrysalis.Cbor;
@@ -32,6 +33,8 @@ public class CborSerializerTests
     [InlineData("d81842ffff", typeof(CborEncodedValue))] // Serialized CBOR for CIP68:
     [InlineData("a300583911ea07b733d932129c378af627436e7cbc2ef0bf96e0036bb51b3bde6b52563c5410bff6a0d43ccebb7c37e1f69f5eb260552521adff33b9c201821a00dd40a0a2581caf65a4734e8a22f43128913567566d2dde30d3b3298306d6317570f6a14e0014df104d494e20496e7465726e1b0000000ba43b7400581cf5808c2c990d86da54bfc97d89cee6efa20cd8461616359478d96b4ca2434d5350015820e08460587b08cca542bd2856b8d5e1d23bf3f63f9916fb81f6d95fda0910bf691b7fffffffd5da682b028201d818587ed8799fd8799fd87a9f581c1eae96baf29e27682ea3f815aba361a0c6059d45e4bfbe95bbd2f44affffd8799f4040ffd8799f581caf65a4734e8a22f43128913567566d2dde30d3b3298306d6317570f64e0014df104d494e20496e7465726eff1a2a2597de1a009896801b0000000ba43b740018641864d87a80d87980ff", typeof(TransactionOutput))] // Serialized CBOR for TransactionOutput:
     [InlineData("D8799F9FD87B9F005820567463495E4DC4FB67268D9A6E92836A68A18A317D2F0CA6CC6D695EE7733889582023B4DA2A35E86C585A6F5FCCFF3B53F7660D73536C79FF486BCAB719B518C58FFFFFD8799FD8799F581CA7E1D2E57B1F9AA851B08C8934A315FFD97397FA997BB3851C626D3BFFA0A140A1401A05F5E10041004100FFFF", typeof(TreasuryRedeemer))] // Serialized CBOR for TreasuryRedeemer:
+    [InlineData("D8799FD8799F581CA7E1D2E57B1F9AA851B08C8934A315FFD97397FA997BB3851C626D3BFFA0A041004100FF", typeof(ClaimEntry))] // Serialized CBOR for ClaimEntry:
+    [InlineData("9fd87a9f00d8799f0e405820907a68a571ed8634e16b1abac5a9765fce7a27b3cb11f0059f4755699be1702bffffff", typeof(Proof))]
     public void SerializeAndDeserializePrimitives(string cborHex, Type type)
     {
         // Arrange
