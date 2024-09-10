@@ -22,10 +22,12 @@ public record ConwayBlock(
 
 [CborSerializable(CborType.List)]
 public record BabbageBlock(
-    [CborProperty(0)] BlockHeader Header
+    [CborProperty(0)] BlockHeader Header,
+    [CborProperty(1)] CborIndefiniteList<TransactionBody> TransactionBodies
 ) : Block;
 
 [CborSerializable(CborType.List)]
 public record AlonzoBlock(
-    [CborProperty(0)] BlockHeader Header
+    [CborProperty(0)] BlockHeader Header,
+    [CborProperty(1)] CborIndefiniteList<TransactionBody> TransactionBodies
 ) : Block;

@@ -8,5 +8,7 @@ public enum CborType
     Map,
     List,
     Union,
-    EncodedValue
+    EncodedValue,
+    RationalNumber,
+    Text
 }

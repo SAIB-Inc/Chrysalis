@@ -49,6 +49,12 @@ public static class CborSerializer
                 case CborType.EncodedValue:
                     SerializeEncodedValue(writer, cbor, objType);
                     break;
+                case CborType.RationalNumber:
+                    SerializeRationalNumber(writer, cbor, objType);
+                    break;
+                case CborType.Text:
+                    SerializeText(writer, cbor, objType);
+                    break;
                 default:
                     throw new NotSupportedException($"CBOR type {cborType} is not supported in this context.");
             }
@@ -78,14 +84,8 @@ public static class CborSerializer
             object? value = property.GetValue(cbor);
             if (value is ICbor cborValue)
             {
-                if(CborSerializerUtils.GetCborType(property.PropertyType) == CborType.Union)
-                {
-                    SerializeCbor(writer, cborValue, value.GetType());
-                }
-                else
-                {
-                    SerializeCbor(writer, cborValue, property.PropertyType);
-                }
+                Type concreteType = CborSerializerUtils.GetCborType(property.PropertyType) == CborType.Union ? value.GetType() : property.PropertyType;
+                SerializeCbor(writer, cborValue, concreteType);
             }
             else
             {
@@ -193,7 +193,7 @@ public static class CborSerializer
                        .Select(p => p.PropertyType)
                        .ToArray();
             ConstructorInfo? constructor = objType.GetConstructor(types);
-            ParameterInfo[]? parameters = (constructor?.GetParameters()) ?? 
+            ParameterInfo[]? parameters = (constructor?.GetParameters()) ??
                 throw new InvalidOperationException($"No suitable constructor found for type: {objType.Name}");
 
             int mapSize = parameters.Count(p =>
@@ -222,7 +222,7 @@ public static class CborSerializer
                     {
                         continue;
                     }
-                    
+
                     if (cborPropertyAttr.Key != null)
                     {
                         writer.WriteTextString(cborPropertyAttr.Key);
@@ -232,7 +232,7 @@ public static class CborSerializer
                         writer.WriteInt32((int)cborPropertyAttr.Index);
                     }
 
-                    
+
                     if (value is ICbor cborValue)
                     {
                         SerializeCbor(writer, cborValue, value.GetType());
@@ -304,6 +304,33 @@ public static class CborSerializer
         writer.WriteByteString(value);
     }
 
+    private static void SerializeRationalNumber(CborWriter writer, ICbor cbor, Type objType)
+    {
+        writer.WriteTag((CborTag)30);
+
+        object? numeratorValue = objType.GetProperty("Numerator")?.GetValue(cbor) ??
+            throw new InvalidOperationException($"Type {objType.Name} does not have a 'Numerator' property or value.");
+
+        object? denominatorValue = objType.GetProperty("Denominator")?.GetValue(cbor) ??
+            throw new InvalidOperationException($"Type {objType.Name} does not have a 'Denominator' property or value.");
+
+        if ((numeratorValue is not null) && (denominatorValue is not null))
+        {
+            ulong numerator = (ulong)numeratorValue;
+            ulong denominator = (ulong)denominatorValue;
+
+            writer.WriteStartArray(2);
+            writer.WriteUInt64(numerator);
+            writer.WriteUInt64(denominator);
+            writer.WriteEndArray();
+        }
+    }
+
+    private static void SerializeText(CborWriter writer, ICbor cbor, Type targetType)
+    {
+        writer.WriteTextString((string)cbor.GetValue(targetType));
+    }
+
     private static ICbor? DeserializeCbor(CborReader reader, Type targetType)
     {
         if (reader.PeekState() == CborReaderState.Null)
@@ -326,6 +353,8 @@ public static class CborSerializer
                 CborType.Constr => DeserializeConstructor(reader, targetType),
                 CborType.List => DeserializeList(reader, targetType),
                 CborType.EncodedValue => DeserializeEncodedValue(reader, targetType),
+                CborType.RationalNumber => DeserializeRationalNumber(reader, targetType),
+                CborType.Text => DeserializeText(reader, targetType),
                 _ => throw new NotImplementedException($"Unknown CborType: {cborType}"),
             };
         }
@@ -579,7 +608,7 @@ public static class CborSerializer
     {
         CborUnionTypesAttribute unionAttr = targetType.GetCustomAttribute<CborUnionTypesAttribute>() ??
             throw new InvalidOperationException($"Type {targetType.Name} is not marked with CborUnionTypesAttribute");
-        
+
         ReadOnlyMemory<byte> unionByte = reader.ReadEncodedValue();
         CborReader cborReader = new(unionByte);
         foreach (Type type in unionAttr.UnionTypes)
@@ -611,5 +640,27 @@ public static class CborSerializer
         }
 
         throw new InvalidOperationException("Invalid Encoded Value");
+    }
+
+    private static ICbor? DeserializeRationalNumber(CborReader reader, Type targetType)
+    {
+        CborTag tag = reader.ReadTag();
+
+        if ((int)tag == 30)
+        {
+            reader.ReadStartArray();
+            ulong numerator = reader.ReadUInt64();
+            ulong denominator = reader.ReadUInt64();
+            reader.ReadEndArray();
+            return (ICbor)Activator.CreateInstance(targetType, numerator, denominator)!;
+        }
+
+        throw new InvalidOperationException($"Invalid CBOR tag for Rational Number in type {targetType.Name}.");
+    }
+
+    private static CborText DeserializeText(CborReader reader, Type targetType)
+    {
+        string value = reader.ReadTextString();
+        return (CborText)Activator.CreateInstance(targetType, value)!;
     }
 }
