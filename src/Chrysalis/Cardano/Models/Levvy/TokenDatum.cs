@@ -18,6 +18,7 @@ public record BorrowTokenDatum(BorrowTokenDetails BorrowTokenDetails) : TokenDat
 [CborSerializable(CborType.Constr, Index = 2)]
 public record RepayTokenDatum(RepayTokenDetails RepayTokenDetails) : TokenDatum;
 
+[CborSerializable(CborType.Constr, Index = 0)]
 public record LendTokenDetails(
     [CborProperty(0)]
     Address AdaOwner,
@@ -44,7 +45,7 @@ public record LendTokenDetails(
     OutputReference OutputReference
 ) : ICbor;
 
-
+[CborSerializable(CborType.Constr, Index = 0)]
 public record BorrowTokenDetails(
     [CborProperty(0)]
     Address AdaOwner,
@@ -74,6 +75,7 @@ public record BorrowTokenDetails(
     OutputReference OutputReference
 ) : ICbor;
 
+[CborSerializable(CborType.Constr, Index = 0)]
 public record RepayTokenDetails(
     [CborProperty(0)]
     Address AdaOwner,
