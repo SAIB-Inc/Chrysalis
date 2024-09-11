@@ -162,8 +162,6 @@ public static class CborSerializer
 
     private static void SerializeMap(CborWriter writer, ICbor obj, Type objType)
     {
-        try
-        {
             CborSerializableAttribute? cborSerializableAttr = objType.GetCustomAttribute<CborSerializableAttribute>();
             if (obj is CborMap cborMap)
             {
@@ -189,11 +187,6 @@ public static class CborSerializer
             {
                 throw new InvalidOperationException($"Unsupported map type for serialization: {objType.Name}");
             }
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"Error during serialization of type {objType.Name}: {ex.Message}");
-        }
     }
 
     private static void SerializeCustomMap(CborWriter writer, ICbor obj, Type objType, bool definite = false)
@@ -648,7 +641,6 @@ public static class CborSerializer
             }
             catch (Exception ex)
             {
-                Console.WriteLine(ex.Message);
                 cborReader.Reset(unionByte);
                 continue;
             }
