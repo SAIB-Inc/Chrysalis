@@ -1,7 +1,7 @@
 using Chrysalis.Cardano.Models.Cbor;
 using Chrysalis.Cbor;
 
-namespace Chrysalis.Cardano.Models.Core;
+namespace Chrysalis.Cardano.Models.Plutus;
 
 [CborSerializable(CborType.Constr, Index = 0)]
 public record OutputReference(

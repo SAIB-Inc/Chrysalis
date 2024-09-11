@@ -1,5 +1,5 @@
 using Chrysalis.Cardano.Models.Cbor;
-using Chrysalis.Cardano.Models.Core;
+using Chrysalis.Cardano.Models.Plutus;
 using Chrysalis.Cbor;
 using Address = Chrysalis.Cardano.Models.Plutus.Address;
 
