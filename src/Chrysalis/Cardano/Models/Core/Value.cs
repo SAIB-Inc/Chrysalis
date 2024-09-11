@@ -7,7 +7,9 @@ namespace Chrysalis.Cardano.Models.Core;
 [CborUnionTypes([typeof(Lovelace), typeof(LovelaceWithMultiAsset)])]
 public record Value : ICbor;
 
-public record Lovelace(ulong Value): CborUlong(Value);
+[CborSerializable(CborType.Ulong)]
+public record Lovelace(ulong Value): Value;
+// @TODO: think about how to support not recreating multiple base types
 
 [CborSerializable(CborType.List)]
 public record LovelaceWithMultiAsset(

@@ -346,22 +346,22 @@ public static class CborSerializer
         throw new NotImplementedException($"Deserialization not implemented for target type {targetType.Name}");
     }
 
-    private static CborBytes DeserializeCborBytes(CborReader reader, Type targetType)
+    private static ICbor DeserializeCborBytes(CborReader reader, Type targetType)
     {
         byte[] value = reader.ReadByteString();
         return (CborBytes)Activator.CreateInstance(targetType, value)!;
     }
 
-    private static CborInt DeserializeCborInt(CborReader reader, Type targetType)
+    private static ICbor DeserializeCborInt(CborReader reader, Type targetType)
     {
         int value = reader.ReadInt32();
         return (CborInt)Activator.CreateInstance(targetType, value)!;
     }
 
-    private static CborUlong DeserializeCborUlong(CborReader reader, Type targetType)
+    private static ICbor DeserializeCborUlong(CborReader reader, Type targetType)
     {
         ulong value = reader.ReadUInt64();
-        return (CborUlong)Activator.CreateInstance(targetType, value)!;
+        return (ICbor)Activator.CreateInstance(targetType, value)!;
     }
 
     private static ICbor? DeserializeList(CborReader reader, Type targetType)
