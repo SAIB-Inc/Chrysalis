@@ -1,0 +1,46 @@
+using Chrysalis.Cardano.Models.Cbor;
+using Chrysalis.Cbor;
+
+namespace Chrysalis.Cardano.Models.Plutus;
+
+[CborSerializable(CborType.Constr, Index = 0)]
+public record Address(
+    [CborProperty(0)]
+    Credential PaymentCredential,
+
+    [CborProperty(1)]
+    Option<Inline<Credential>> StakeCredential
+) : ICbor;
+
+
+
+[CborSerializable(CborType.Union)]
+[CborUnionTypes([typeof(VerificationKey), typeof(Script)])]
+public record Credential() : ICbor;
+
+[CborSerializable(CborType.Constr, Index = 0)]
+public record VerificationKey([CborProperty(0)] CborBytes VerificationKeyHash) : Credential;
+
+[CborSerializable(CborType.Constr, Index = 1)]
+public record Script([CborProperty(0)] CborBytes ScriptHash) : Credential;
+
+
+
+[CborSerializable(CborType.Union)]
+[CborUnionTypes([typeof(Inline<>), typeof(Pointer)])]
+public record Referenced() : ICbor;
+
+[CborSerializable(CborType.Constr, Index = 0)]
+public record Inline<T>(T Value) : Referenced;
+
+[CborSerializable(CborType.Constr, Index = 1)]
+public record Pointer(
+    [CborProperty(0)]
+    CborUlong SlotNumber,
+
+    [CborProperty(1)]
+    CborUlong TransactionIndex,
+
+    [CborProperty(2)]
+    CborUlong CertificateIndex
+) : Referenced;
