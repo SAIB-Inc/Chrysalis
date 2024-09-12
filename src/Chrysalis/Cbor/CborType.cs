@@ -10,5 +10,6 @@ public enum CborType
     Union,
     EncodedValue,
     RationalNumber,
-    Text
+    Text,
+    Nullable
 }

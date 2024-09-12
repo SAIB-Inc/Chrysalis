@@ -35,6 +35,6 @@ public record AlonzoTransactionOutput(
 public record BabbageTransactionOutput(
     [CborProperty(0)] Address Address,
     [CborProperty(1)] Value Amount,
-    [CborProperty(2)] DatumOption Datum,
-    [CborProperty(3)] CborEncodedValue ScriptRef
+    [CborProperty(2)] DatumOption? Datum,
+    [CborProperty(3)] CborEncodedValue? ScriptRef
 ) : TransactionOutput;

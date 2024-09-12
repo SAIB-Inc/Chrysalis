@@ -8,6 +8,20 @@ namespace Chrysalis.Cardano.Models.Core;
     typeof(StakeRegistration),
     typeof(StakeDeregistration),
     typeof(StakeDelegation),
+    typeof(PoolRegistration),
+    typeof(PoolRetirement),
+    typeof(RegCert),
+    typeof(UnRegCert),
+    typeof(VoteDelegCert),
+    typeof(StakeVoteDelegCert),
+    typeof(StakeRegDelegCert),
+    typeof(VoteRegDelegCert),
+    typeof(StakeVoteRegDelegCert),
+    typeof(AuthCommitteeHotCert),
+    typeof(ResignCommitteeColdCert),
+    typeof(RegDrepCert),
+    typeof(UnRegDrepCert),
+    typeof(UpdateDrepCert)
 ])]
 public record Certificate : ICbor;
 
@@ -33,7 +47,15 @@ public record StakeDelegation(
 [CborSerializable(CborType.List)]
 public record PoolRegistration(
     [CborProperty(0)] CborInt Tag,
-    [CborProperty(1)] PoolParams PoolParams
+    [CborProperty(1)] CborBytes Operator,
+    [CborProperty(2)] CborBytes VrfKeyHash,
+    [CborProperty(3)] CborUlong Pledge,
+    [CborProperty(4)] CborUlong Cost,
+    [CborProperty(5)] CborRationalNumber Margin,
+    [CborProperty(6)] RewardAccount RewardAccount,
+    [CborProperty(7)] CborDefiniteList<CborBytes> PoolOwners,
+    [CborProperty(8)] CborDefiniteList<Relay> Relay,
+    [CborProperty(9)] PoolMetadata? PoolMetadata
 ) : Certificate;
 
 [CborSerializable(CborType.List)]
@@ -44,14 +66,14 @@ public record PoolRetirement(
 ) : Certificate;
 
 [CborSerializable(CborType.List)]
-public record RegCert(
+public record RegCert( //@TODO: Not Tested
     [CborProperty(0)] CborInt Tag,
     [CborProperty(1)] Credential StakeCredential,
     [CborProperty(2)] CborUlong Coin
 ) : Certificate;
 
 [CborSerializable(CborType.List)]
-public record UnRegCert(
+public record UnRegCert( //@TODO: Not Tested
     [CborProperty(0)] CborInt Tag,
     [CborProperty(1)] Credential StakeCredential,
     [CborProperty(2)] CborUlong Coin
@@ -61,19 +83,19 @@ public record UnRegCert(
 public record VoteDelegCert(
     [CborProperty(0)] CborInt Tag,
     [CborProperty(1)] Credential StakeCredential,
-    [CborProperty(2)] DRep Drep
+    [CborProperty(2)] DRep DRep
 ) : Certificate;
 
 [CborSerializable(CborType.List)]
-public record StakeVoteDelegCert(
+public record StakeVoteDelegCert( //@TODO: Not Tested
     [CborProperty(0)] CborInt Tag,
     [CborProperty(1)] Credential StakeCredential,
     [CborProperty(2)] CborBytes PoolKeyHash,
-    [CborProperty(3)] DRep Drep
+    [CborProperty(3)] DRep DRep
 ) : Certificate;
 
 [CborSerializable(CborType.List)]
-public record StakeRegDelegCert(
+public record StakeRegDelegCert( //@TODO: Not Tested
     [CborProperty(0)] CborInt Tag,
     [CborProperty(1)] Credential StakeCredential,
     [CborProperty(2)] CborBytes PoolKeyHash,
@@ -81,15 +103,15 @@ public record StakeRegDelegCert(
 ) : Certificate;
 
 [CborSerializable(CborType.List)]
-public record VoteRegDelegCert(
+public record VoteRegDelegCert( //@TODO: Not Tested
     [CborProperty(0)] CborInt Tag,
     [CborProperty(1)] Credential StakeCredential,
-    [CborProperty(2)] DRep Drep,
+    [CborProperty(2)] DRep DRep,
     [CborProperty(3)] CborUlong Coin
 ) : Certificate;
 
 [CborSerializable(CborType.List)]
-public record StakeVoteRegDelegCert(
+public record StakeVoteRegDelegCert( //@TODO: Not Tested
     [CborProperty(0)] CborInt Tag,
     [CborProperty(1)] Credential StakeCredential,
     [CborProperty(2)] CborBytes PoolKeyHash,
@@ -105,18 +127,18 @@ public record AuthCommitteeHotCert(
 ) : Certificate;
 
 [CborSerializable(CborType.List)]
-public record ResignCommitteeColdCert(
+public record ResignCommitteeColdCert( //@TODO: Not Tested
     [CborProperty(0)] CborInt Tag,
     [CborProperty(1)] CborBytes CommitteeColdCredential,
-    [CborProperty(2)] Anchor Anchor
+    [CborProperty(2)] Anchor? Anchor
 ) : Certificate;
 
 [CborSerializable(CborType.List)]
 public record RegDrepCert(
     [CborProperty(0)] CborInt Tag,
-    [CborProperty(1)] Credential DrepCredential,
+    [CborProperty(1)] Credential DRepCredential,
     [CborProperty(2)] CborUlong Coin,
-    [CborProperty(3)] Anchor Anchor
+    [CborProperty(3)] CborNullable<Anchor> Anchor
 ) : Certificate;
 
 [CborSerializable(CborType.List)]
