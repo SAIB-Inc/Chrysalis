@@ -134,7 +134,7 @@ public record ResignCommitteeColdCert( //@TODO: Not Tested
 ) : Certificate;
 
 [CborSerializable(CborType.List)]
-public record RegDrepCert( //@TODO: Test Failed
+public record RegDrepCert(
     [CborProperty(0)] CborInt Tag,
     [CborProperty(1)] Credential DRepCredential,
     [CborProperty(2)] CborUlong Coin,
@@ -149,8 +149,22 @@ public record UnRegDrepCert(
 ) : Certificate;
 
 [CborSerializable(CborType.List)]
-public record UpdateDrepCert( //@TODO: Test Failed
+public record UpdateDrepCert(
     [CborProperty(0)] CborInt Tag,
     [CborProperty(1)] Credential DrepCredential,
     [CborProperty(2)] CborNullable<Anchor> Anchor
+) : Certificate;
+
+[CborSerializable(CborType.List)]
+public record GenesisKeyDelegation( //@TODO: Not Tested
+    [CborProperty(0)] CborInt Tag,
+    [CborProperty(1)] CborBytes GenesisHash,
+    [CborProperty(2)] CborBytes GenesisDelegateHash,
+    [CborProperty(3)] CborBytes VrfKeyHash
+) : Certificate;
+
+[CborSerializable(CborType.List)]
+public record MoveInstantaneousRewardsCert( //@TODO: Not Tested
+    [CborProperty(0)] CborInt Tag,
+    [CborProperty(1)] MoveInstantaneousReward MoveInstantaneousReward
 ) : Certificate;
