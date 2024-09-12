@@ -134,7 +134,7 @@ public record ResignCommitteeColdCert( //@TODO: Not Tested
 ) : Certificate;
 
 [CborSerializable(CborType.List)]
-public record RegDrepCert(
+public record RegDrepCert( //@TODO: Test Failed
     [CborProperty(0)] CborInt Tag,
     [CborProperty(1)] Credential DRepCredential,
     [CborProperty(2)] CborUlong Coin,
@@ -149,8 +149,8 @@ public record UnRegDrepCert(
 ) : Certificate;
 
 [CborSerializable(CborType.List)]
-public record UpdateDrepCert(
+public record UpdateDrepCert( //@TODO: Test Failed
     [CborProperty(0)] CborInt Tag,
     [CborProperty(1)] Credential DrepCredential,
-    [CborProperty(2)] Anchor Anchor
+    [CborProperty(2)] CborNullable<Anchor> Anchor
 ) : Certificate;

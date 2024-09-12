@@ -9,11 +9,11 @@ public record TransactionBody(
     [CborProperty("outputs")] CborIndefiniteList<TransactionOutput> Outputs,
     [CborProperty("fee")] CborUlong Fee,
     [CborProperty("timeToLive")] CborUlong? TimeToLive,
-    [CborProperty("certificates")] CborIndefiniteList<Certificate>? Certificates,
+    [CborProperty("certificates")] CborIndefiniteList<Certificate>? Certificates, //@TODO
     [CborProperty("withdrawals")] CborMap<RewardAccount,CborUlong>? Withdrawals,
     [CborProperty("auxiliaryDataHash")] CborBytes? AuxiliaryDataHash,
     [CborProperty("validityIntervalStart")] CborUlong? ValidityIntervalStart,
-    [CborProperty("mint")] CborBytes? Mint, //@TODO
+    [CborProperty("mint")] MultiAsset? Mint,
     [CborProperty("scriptDataHash")] CborBytes? ScriptDataHash,
     [CborProperty("collateralInputs")] CborIndefiniteList<TransactionInput>? Collateral,
     [CborProperty("requiredSigners")] CborIndefiniteList<TransactionInput>? RequiredSigners, //@TODO

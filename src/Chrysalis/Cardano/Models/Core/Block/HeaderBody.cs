@@ -14,7 +14,7 @@ public record BlockHeaderBody : ICbor;
 public record BabbageHeaderBody(
     [CborProperty(0)] CborUlong BlockNumber,
     [CborProperty(1)] CborUlong Slot,
-    [CborProperty(2)] CborBytes? PrevHash,
+    [CborProperty(2)] CborNullable<CborBytes> PrevHash,
     [CborProperty(3)] CborBytes IssuerVKey,
     [CborProperty(4)] CborBytes VrfVKey,
     [CborProperty(5)] VrfCert VrfResult,
@@ -28,7 +28,7 @@ public record BabbageHeaderBody(
 public record AlonzoHeaderBody(
     [CborProperty(0)] CborUlong BlockNumber,
     [CborProperty(1)] CborUlong Slot,
-    [CborProperty(2)] CborBytes? PrevHash,
+    [CborProperty(2)] CborNullable<CborBytes> PrevHash,
     [CborProperty(3)] CborBytes IssuerVKey,
     [CborProperty(4)] CborBytes VrfVKey,
     [CborProperty(5)] VrfCert NonceVrf,

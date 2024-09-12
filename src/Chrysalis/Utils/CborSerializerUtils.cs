@@ -14,7 +14,7 @@ public static class CborSerializerUtils
         return (CborTag)(BaseTagValue + actualIndex);
     }
 
-    public static object GetValue(this ICbor cbor, Type objType)
+    public static object? GetValue(this ICbor cbor, Type objType)
     {
         if (cbor == null)
             throw new ArgumentNullException(nameof(cbor), "The CBOR object cannot be null.");
@@ -25,8 +25,7 @@ public static class CborSerializerUtils
         PropertyInfo? valueProperty = objType.GetProperty("Value") ?? 
             throw new InvalidOperationException($"Type {objType.Name} does not have a 'Value' property.");
 
-        object? value = valueProperty.GetValue(cbor) ?? 
-            throw new InvalidOperationException($"The 'Value' property of type {objType.Name} is null.");
+        object? value = valueProperty.GetValue(cbor);
 
         return value;
     }

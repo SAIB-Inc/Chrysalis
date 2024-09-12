@@ -49,6 +49,12 @@ public static class CborSerializer
                 case CborType.EncodedValue:
                     SerializeEncodedValue(writer, cbor, objType);
                     break;
+                case CborType.RationalNumber:
+                    SerializeRationalNumber(writer, cbor, objType);
+                    break;
+                case CborType.Text:
+                    SerializeText(writer, cbor, objType);
+                    break;
                 default:
                     throw new NotSupportedException($"CBOR type {cborType} is not supported in this context.");
             }
@@ -115,13 +121,19 @@ public static class CborSerializer
             foreach (PropertyInfo property in properties)
             {
                 object? value = property.GetValue(cbor);
-                if (value is ICbor cborValue)
+
+                if (value is null)
                 {
-                    SerializeCbor(writer, cborValue, property.PropertyType);
+                    writer.WriteNull();
+                }
+                else if (value is ICbor cborValue)
+                {
+                    Type concreteType = CborSerializerUtils.GetCborType(property.PropertyType) == CborType.Union ? value.GetType() : property.PropertyType;
+                    SerializeCbor(writer, cborValue, concreteType);
                 }
                 else
                 {
-                    throw new InvalidOperationException($"Property {property.Name} in {baseType?.Name} does not implement ICbor.");
+                    throw new InvalidOperationException($"Property {property.Name} in {cbor.GetType().Name} is neither ICbor nor CborNullable<T>.");
                 }
             }
 
@@ -162,31 +174,31 @@ public static class CborSerializer
 
     private static void SerializeMap(CborWriter writer, ICbor obj, Type objType)
     {
-            CborSerializableAttribute? cborSerializableAttr = objType.GetCustomAttribute<CborSerializableAttribute>();
-            if (obj is CborMap cborMap)
+        CborSerializableAttribute? cborSerializableAttr = objType.GetCustomAttribute<CborSerializableAttribute>();
+        if (obj is CborMap cborMap)
+        {
+            writer.WriteStartMap(cborSerializableAttr!.IsDefinite ? cborMap.Value.Count : null);
+            foreach (KeyValuePair<ICbor, ICbor> kvp in cborMap.Value)
             {
-                writer.WriteStartMap(cborSerializableAttr!.IsDefinite ? cborMap.Value.Count : null);
-                foreach (KeyValuePair<ICbor, ICbor> kvp in cborMap.Value)
-                {
-                    SerializeCbor(writer, kvp.Key, kvp.Key.GetType());
-                    SerializeCbor(writer, kvp.Value, kvp.Value.GetType());
-                }
-                writer.WriteEndMap();
+                SerializeCbor(writer, kvp.Key, kvp.Key.GetType());
+                SerializeCbor(writer, kvp.Value, kvp.Value.GetType());
             }
-            else if (obj is not null && objType.IsGenericType && objType.GetGenericTypeDefinition() == typeof(CborMap<,>))
-            {
-                MethodInfo? method = typeof(CborSerializer).GetMethod(nameof(SerializeGenericMap), BindingFlags.NonPublic | BindingFlags.Static);
-                MethodInfo genericMethod = method!.MakeGenericMethod(objType.GetGenericArguments());
-                genericMethod.Invoke(null, [writer, obj, cborSerializableAttr!.IsDefinite]);
-            }
-            else if (obj is not null && objType.GetCustomAttribute<CborSerializableAttribute>()?.Type == CborType.Map)
-            {
-                SerializeCustomMap(writer, obj, objType, cborSerializableAttr!.IsDefinite);
-            }
-            else
-            {
-                throw new InvalidOperationException($"Unsupported map type for serialization: {objType.Name}");
-            }
+            writer.WriteEndMap();
+        }
+        else if (obj is not null && objType.IsGenericType && objType.GetGenericTypeDefinition() == typeof(CborMap<,>))
+        {
+            MethodInfo? method = typeof(CborSerializer).GetMethod(nameof(SerializeGenericMap), BindingFlags.NonPublic | BindingFlags.Static);
+            MethodInfo genericMethod = method!.MakeGenericMethod(objType.GetGenericArguments());
+            genericMethod.Invoke(null, [writer, obj, cborSerializableAttr!.IsDefinite]);
+        }
+        else if (obj is not null && objType.GetCustomAttribute<CborSerializableAttribute>()?.Type == CborType.Map)
+        {
+            SerializeCustomMap(writer, obj, objType, cborSerializableAttr!.IsDefinite);
+        }
+        else
+        {
+            throw new InvalidOperationException($"Unsupported map type for serialization: {objType.Name}");
+        }
     }
 
     private static void SerializeCustomMap(CborWriter writer, ICbor obj, Type objType, bool definite = false)
@@ -317,6 +329,33 @@ public static class CborSerializer
         writer.WriteByteString(value);
     }
 
+    private static void SerializeRationalNumber(CborWriter writer, ICbor cbor, Type objType)
+    {
+        writer.WriteTag((CborTag)30);
+
+        object? numeratorValue = objType.GetProperty("Numerator")?.GetValue(cbor) ??
+            throw new InvalidOperationException($"Type {objType.Name} does not have a 'Numerator' property or value.");
+
+        object? denominatorValue = objType.GetProperty("Denominator")?.GetValue(cbor) ??
+            throw new InvalidOperationException($"Type {objType.Name} does not have a 'Denominator' property or value.");
+
+        if ((numeratorValue is not null) && (denominatorValue is not null))
+        {
+            ulong numerator = (ulong)numeratorValue;
+            ulong denominator = (ulong)denominatorValue;
+
+            writer.WriteStartArray(2);
+            writer.WriteUInt64(numerator);
+            writer.WriteUInt64(denominator);
+            writer.WriteEndArray();
+        }
+    }
+
+    private static void SerializeText(CborWriter writer, ICbor cbor, Type targetType)
+    {
+        writer.WriteTextString((string)cbor.GetValue(targetType));
+    }
+
     private static ICbor? DeserializeCbor(CborReader reader, Type targetType)
     {
         if (reader.PeekState() == CborReaderState.Null)
@@ -339,6 +378,9 @@ public static class CborSerializer
                 CborType.Constr => DeserializeConstructor(reader, targetType),
                 CborType.List => DeserializeList(reader, targetType),
                 CborType.EncodedValue => DeserializeEncodedValue(reader, targetType),
+                CborType.RationalNumber => DeserializeRationalNumber(reader, targetType),
+                CborType.Text => DeserializeText(reader, targetType),
+                CborType.Nullable => DeserializeNullable(reader, targetType),
                 _ => throw new NotImplementedException($"Unknown CborType: {cborType}"),
             };
         }
@@ -438,6 +480,14 @@ public static class CborSerializer
             }
 
             reader.ReadEndArray();
+
+            // ConstructorInfo? ctor = targetType.GetConstructors()
+            //     .FirstOrDefault(c => c.GetParameters().Length == properties.Count);
+
+            // if (ctor != null)
+            // {
+            //     return (ICbor?)ctor.Invoke(values);
+            // }
 
             return (ICbor?)Activator.CreateInstance(targetType, values);
         }
@@ -639,7 +689,7 @@ public static class CborSerializer
                 Type? unionType = type.IsGenericTypeDefinition ? type.MakeGenericType(targetType.GetGenericArguments()) : type;
                 return DeserializeCbor(cborReader, unionType);
             }
-            catch (Exception ex)
+            catch
             {
                 cborReader.Reset(unionByte);
                 continue;
@@ -661,5 +711,43 @@ public static class CborSerializer
         }
 
         throw new InvalidOperationException("Invalid Encoded Value");
+    }
+
+    private static ICbor? DeserializeRationalNumber(CborReader reader, Type targetType)
+    {
+        CborTag tag = reader.ReadTag();
+
+        if ((int)tag == 30)
+        {
+            reader.ReadStartArray();
+            ulong numerator = reader.ReadUInt64();
+            ulong denominator = reader.ReadUInt64();
+            reader.ReadEndArray();
+            return (ICbor)Activator.CreateInstance(targetType, numerator, denominator)!;
+        }
+
+        throw new InvalidOperationException($"Invalid CBOR tag for Rational Number in type {targetType.Name}.");
+    }
+
+    private static ICbor? DeserializeText(CborReader reader, Type targetType)
+    {
+        string value = reader.ReadTextString();
+        return (ICbor)Activator.CreateInstance(targetType, value)!;
+    }
+
+    private static ICbor? DeserializeNullable(CborReader reader, Type targetType)
+    {
+        if (reader.PeekState() == CborReaderState.Null)
+        {
+            reader.ReadNull();
+            return null;
+        }
+        else if (targetType.IsGenericType)
+        {
+            Type itemType = targetType.GetGenericArguments()[0];
+            return DeserializeCbor(reader, itemType)!;
+        }
+
+        throw new InvalidOperationException($"Invalid Nullable Type.");
     }
 }
