@@ -3,7 +3,7 @@ using Chrysalis.Cardano.Models.Plutus;
 using Chrysalis.Cbor;
 using Address = Chrysalis.Cardano.Models.Plutus.Address;
 
-namespace Chrysalis.Cardano.Models.Levvy;
+namespace Chrysalis.Cardano.Models.Levvy.TokenV2;
 
 [CborSerializable(CborType.Union)]
 [CborUnionTypes([typeof(LendTokenDatum), typeof(BorrowTokenDatum), typeof(RepayTokenDatum)])]
