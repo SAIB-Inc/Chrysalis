@@ -1,6 +1,7 @@
 using Chrysalis.Cbor;
 using Chrysalis.Cardano.Models.Cbor;
 using Chrysalis.Cardano.Models.Core.Protocol;
+using Chrysalis.Cardano.Models.Core.Script;
 
 namespace Chrysalis.Cardano.Models.Core.Transaction;
 
@@ -25,7 +26,7 @@ public record RedeemerMap(
 public record RedeemerEntry(
     [CborProperty(0)] CborInt Tag,
     [CborProperty(1)] CborUlong Index,
-    [CborProperty(2)] CborBytes Data, //@TODO: Add PlutusData 
+    [CborProperty(2)] PlutusData Data,
     [CborProperty(3)] ExUnits ExUnits
 ) : ICbor;
 
@@ -37,6 +38,6 @@ public record RedeemerKey(
 
 [CborSerializable(CborType.List)]
 public record RedeemerValue(
-    [CborProperty(0)] CborBytes Data, //@TODO: Add PlutusData 
+    [CborProperty(0)] PlutusData Data,
     [CborProperty(1)] ExUnits ExUnits
 ) : ICbor;

@@ -25,4 +25,5 @@ public record PlutusList(
 ): PlutusData;
 
 public record PlutusBigInt(CborUlong DataInt): PlutusData;
+
 public record PlutusBytes(CborBytes DataBytes): PlutusData;

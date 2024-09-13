@@ -56,7 +56,7 @@ public record PoolRegistration(
     [CborProperty(6)] RewardAccount RewardAccount,
     [CborProperty(7)] CborDefiniteList<CborBytes> PoolOwners,
     [CborProperty(8)] CborDefiniteList<Relay> Relay,
-    [CborProperty(9)] PoolMetadata? PoolMetadata
+    [CborProperty(9)] CborNullable<PoolMetadata> PoolMetadata
 ) : Certificate;
 
 [CborSerializable(CborType.List)]

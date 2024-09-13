@@ -5,7 +5,7 @@ using Chrysalis.Cardano.Models.Core.Governance;
 namespace Chrysalis.Cardano.Models.Core.Protocol;
 
 [CborSerializable(CborType.Map)]
-public record ProtocolParamUpdate( //@TODO: TEST
+public record ProtocolParamUpdate(
     [CborProperty(0)] CborUlong? MinFeeA,
     [CborProperty(1)] CborUlong? MinFeeB,
     [CborProperty(2)] CborUlong? MaxBlockBodySize,

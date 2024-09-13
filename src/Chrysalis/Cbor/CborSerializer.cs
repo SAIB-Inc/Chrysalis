@@ -502,7 +502,7 @@ public static class CborSerializer
             {
                 Type propType = properties[i].PropertyType;
 
-                if (propType.IsGenericType)
+                if (propType.IsGenericType && propType.GetGenericTypeDefinition() == typeof(CborNullable<>))
                 {
                     Type innerType = propType.GetGenericArguments()[0];
                     object? innerValue = DeserializeCbor(reader, innerType);
