@@ -1,5 +1,5 @@
-using Chrysalis.Cardano.Models.Cbor;
 using Chrysalis.Cbor;
+using Chrysalis.Cardano.Models.Core.Transaction;
 
 namespace Chrysalis.Cardano.Models.Core;
 

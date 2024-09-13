@@ -1,7 +1,8 @@
-using Chrysalis.Cardano.Models.Cbor;
 using Chrysalis.Cbor;
+using Chrysalis.Cardano.Models.Cbor;
+using Chrysalis.Cardano.Models.Core.Governance;
 
-namespace Chrysalis.Cardano.Models.Core;
+namespace Chrysalis.Cardano.Models.Core.Certificates;
 
 [CborSerializable(CborType.Union)]
 [CborUnionTypes([

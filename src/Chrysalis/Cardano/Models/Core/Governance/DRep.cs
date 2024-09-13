@@ -1,14 +1,14 @@
 using Chrysalis.Cardano.Models.Cbor;
 using Chrysalis.Cbor;
 
-namespace Chrysalis.Cardano.Models.Core;
+namespace Chrysalis.Cardano.Models.Core.Governance;
 
 [CborSerializable(CborType.Union)]
 [CborUnionTypes([
     typeof(DRepAddrKeyHash),
     typeof(DRepScriptHash),
     typeof(Abstain),
-    typeof(NoConfidence),
+    typeof(DRepNoConfidence),
 ])]
 public record DRep : ICbor;
 
@@ -28,4 +28,4 @@ public record DRepScriptHash(
 public record Abstain(CborInt Tag) : DRep;
 
 [CborSerializable(CborType.List)]
-public record NoConfidence(CborInt Tag) : DRep;
+public record DRepNoConfidence(CborInt Tag) : DRep;

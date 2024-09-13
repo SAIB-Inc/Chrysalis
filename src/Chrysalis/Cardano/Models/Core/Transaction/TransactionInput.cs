@@ -1,10 +1,10 @@
 using Chrysalis.Cardano.Models.Cbor;
 using Chrysalis.Cbor;
 
-namespace Chrysalis.Cardano.Models.Core;
+namespace Chrysalis.Cardano.Models.Core.Transaction;
 
 [CborSerializable(CborType.List)]
-public record GovActionId( 
+public record TransactionInput(
     [CborProperty(0)] CborBytes TransactionId,
-    [CborProperty(1)] CborInt GovActionIndex
+    [CborProperty(1)] CborInt Index
 ) : ICbor;

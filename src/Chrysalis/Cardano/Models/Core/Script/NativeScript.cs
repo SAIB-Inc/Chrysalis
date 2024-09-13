@@ -1,7 +1,7 @@
 using Chrysalis.Cardano.Models.Cbor;
 using Chrysalis.Cbor;
 
-namespace Chrysalis.Cardano.Models.Core;
+namespace Chrysalis.Cardano.Models.Core.Script;
 
 [CborSerializable(CborType.Union)]
 [CborUnionTypes([
@@ -14,7 +14,6 @@ namespace Chrysalis.Cardano.Models.Core;
 ])]
 public record NativeScript : ICbor;
 
-//@TODO: To clarify NativeScript
 [CborSerializable(CborType.List)]
 public record ScriptPubKey(
     [CborProperty(0)] CborInt Tag,
@@ -24,20 +23,20 @@ public record ScriptPubKey(
 [CborSerializable(CborType.List)]
 public record ScriptAll(
     [CborProperty(0)] CborInt Tag,
-    [CborProperty(1)] CborIndefiniteList<NativeScript> Scripts
+    [CborProperty(1)] CborDefiniteList<NativeScript> Scripts
 ) : NativeScript;
 
 [CborSerializable(CborType.List)]
 public record ScriptAny(
     [CborProperty(0)] CborInt Tag,
-    [CborProperty(1)] CborIndefiniteList<NativeScript> Scripts
+    [CborProperty(1)] CborDefiniteList<NativeScript> Scripts
 ) : NativeScript;
 
 [CborSerializable(CborType.List)]
 public record ScriptNOfK(
     [CborProperty(0)] CborInt Tag,
     [CborProperty(1)] CborInt N,
-    [CborProperty(2)] CborIndefiniteList<NativeScript> Scripts
+    [CborProperty(2)] CborDefiniteList<NativeScript> Scripts
 ) : NativeScript;
 
 [CborSerializable(CborType.List)]

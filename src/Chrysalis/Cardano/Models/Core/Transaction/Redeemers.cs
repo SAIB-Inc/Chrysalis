@@ -1,7 +1,8 @@
-using Chrysalis.Cardano.Models.Cbor;
 using Chrysalis.Cbor;
+using Chrysalis.Cardano.Models.Cbor;
+using Chrysalis.Cardano.Models.Core.Protocol;
 
-namespace Chrysalis.Cardano.Models.Core;
+namespace Chrysalis.Cardano.Models.Core.Transaction;
 
 [CborSerializable(CborType.Union)]
 [CborUnionTypes([
@@ -12,12 +13,12 @@ public record Redeemers : ICbor;
 
 [CborSerializable(CborType.List)]
 public record RedeemerList(
-    CborIndefiniteList<RedeemerEntry> Entries
+    CborDefiniteList<RedeemerEntry> Entries
 ) : Redeemers;
 
 [CborSerializable(CborType.Map)]
 public record RedeemerMap(
-    Dictionary<RedeemerKey, RedeemerValue> Value
+    CborMap<RedeemerKey, RedeemerValue> Value
 ) : Redeemers;
 
 [CborSerializable(CborType.List)]

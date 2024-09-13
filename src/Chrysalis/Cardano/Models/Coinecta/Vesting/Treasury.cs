@@ -1,7 +1,7 @@
 using Chrysalis.Cbor;
 using Chrysalis.Cardano.Models.Sundae;
 using Chrysalis.Cardano.Models.Cbor;
-using Chrysalis.Cardano.Models.Core;
+using Chrysalis.Cardano.Models.Core.Transaction;
 using Chrysalis.Cardano.Models.Mpf;
 
 namespace Chrysalis.Cardano.Models.Coinecta.Vesting;
