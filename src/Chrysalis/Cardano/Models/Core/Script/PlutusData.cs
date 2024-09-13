@@ -24,8 +24,5 @@ public record PlutusList(
     [CborProperty(0)] PlutusData DataList
 ): PlutusData;
 
-[CborSerializable(CborType.Ulong)]
-public record PlutusBigInt(ulong DataInt): PlutusData;
-
-[CborSerializable(CborType.Bytes)]
+public record PlutusBigInt(CborUlong DataInt): PlutusData;
 public record PlutusBytes(CborBytes DataBytes): PlutusData;
