@@ -5,29 +5,25 @@ namespace Chrysalis.Cardano.Models.Core.Transaction;
 
 [CborSerializable(CborType.Union)]
 [CborUnionTypes([
-    typeof(Map),
-    typeof(Array),
-    typeof(Int),
-    typeof(Bytes),
-    typeof(Text),
+    typeof(MetadatumMap),
+    typeof(MetadatumList),
+    typeof(MetadatumInt),
+    typeof(MetadatumBytes),
+    typeof(MetadataText)
 ])]
+public interface TransactionMetadatum : ICbor;
 
-public record TransactionMetadatum: ICbor;
+public record MetadatumMap(Dictionary<TransactionMetadatum, TransactionMetadatum> Value)
+    : CborMap<TransactionMetadatum, TransactionMetadatum>(Value), TransactionMetadatum;
 
-public record Map(
-    CborMap<TransactionMetadatum, TransactionMetadatum> TransactionMetadatum
-) : TransactionMetadatum;
+public record MetadatumList(TransactionMetadatum[] Value)
+    : CborDefiniteList<TransactionMetadatum>(Value), TransactionMetadatum;
 
-[CborSerializable(CborType.List)]
-public record Array(
-    [CborProperty(0)] TransactionMetadatum TransactionMetadatum
-): TransactionMetadatum;
+public record MetadatumInt(ulong Value)
+    : CborUlong(Value), TransactionMetadatum;
 
-[CborSerializable(CborType.Int)]
-public record Int(CborInt Value): TransactionMetadatum;
+public record MetadatumBytes(byte[] Value)
+    : CborBytes(Value), TransactionMetadatum;
 
-[CborSerializable(CborType.Bytes)]
-public record Bytes(CborBytes Value): TransactionMetadatum;
-
-[CborSerializable(CborType.Text)]
-public record Text(CborText Value): TransactionMetadatum;
+public record MetadataText(string Value)
+    : CborText(Value), TransactionMetadatum;

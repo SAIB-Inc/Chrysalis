@@ -1,12 +1,12 @@
-using Chrysalis.Cbor;
-
 namespace Chrysalis.Cbor;
-[AttributeUsage(AttributeTargets.Class | AttributeTargets.Struct)]
+
+[AttributeUsage(AttributeTargets.Class | AttributeTargets.Struct | AttributeTargets.Interface)]
 public class CborSerializableAttribute(CborType type) : Attribute
 {
     public CborType Type { get; } = type;
     public int Index { get; set; } = -1;
     public bool IsDefinite { get; set; } = true;
+    public bool IsCustom { get; set; } = false;
 
     public CborSerializableAttribute(CborType type, int index) : this(type)
     {

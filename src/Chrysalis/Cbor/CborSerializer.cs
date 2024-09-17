@@ -1,5 +1,6 @@
 ﻿using System.Formats.Cbor;
 using System.Reflection;
+using System.Collections;
 using Chrysalis.Cardano.Models.Cbor;
 using Chrysalis.Cardano.Models.Core;
 using Chrysalis.Utils;
@@ -178,6 +179,7 @@ public static class CborSerializer
     private static void SerializeMap(CborWriter writer, ICbor obj, Type objType)
     {
         CborSerializableAttribute? cborSerializableAttr = objType.GetCustomAttribute<CborSerializableAttribute>();
+        // @TODO: Don't hardcoded types use the attributes in this cose use CborTypes.Map instead of CborMap
         if (obj is CborMap cborMap)
         {
             writer.WriteStartMap(cborSerializableAttr!.IsDefinite ? cborMap.Value.Count : null);
@@ -188,11 +190,16 @@ public static class CborSerializer
             }
             writer.WriteEndMap();
         }
-        else if (obj is not null && objType.IsGenericType && objType.GetGenericTypeDefinition() == typeof(CborMap<,>))
+        else if (obj is not null && objType.IsGenericType)
         {
             MethodInfo? method = typeof(CborSerializer).GetMethod(nameof(SerializeGenericMap), BindingFlags.NonPublic | BindingFlags.Static);
             MethodInfo genericMethod = method!.MakeGenericMethod(objType.GetGenericArguments());
             genericMethod.Invoke(null, [writer, obj, cborSerializableAttr!.IsDefinite]);
+        }
+        else if(obj is not null && objType.BaseType is not null && objType.BaseType.IsGenericType) // Support Mutiple Levels of Inheritance
+        {
+            IDictionary data = (IDictionary)objType.GetProperty("Value")?.GetValue(obj)!;
+            SerializeGenericMap(writer, data, cborSerializableAttr!.IsDefinite);
         }
         else if (obj is not null && objType.GetCustomAttribute<CborSerializableAttribute>()?.Type == CborType.Map)
         {
@@ -206,11 +213,11 @@ public static class CborSerializer
 
     private static void SerializeCustomMap(CborWriter writer, ICbor obj, Type objType, bool definite = false)
     {
-        Type? baseType = objType.BaseType;
+        Type? currentType = objType;
 
-        if (baseType != null && baseType.IsGenericType)
+        if (currentType != null && currentType.IsGenericType)
         {
-            Type[] genericArgs = baseType.GetGenericArguments();
+            Type[] genericArgs = currentType.GetGenericArguments();
             MethodInfo? method = typeof(CborSerializer).GetMethod(nameof(SerializeGenericMap), BindingFlags.NonPublic | BindingFlags.Static);
             MethodInfo genericMethod = method!.MakeGenericMethod(genericArgs);
             genericMethod.Invoke(null, [writer, obj, definite]);
@@ -276,16 +283,16 @@ public static class CborSerializer
         }
     }
 
-    private static void SerializeGenericMap<TKey, TValue>(CborWriter writer, CborMap<TKey, TValue> map, bool definite = false)
-        where TKey : ICbor
-        where TValue : ICbor
+    private static void SerializeGenericMap(CborWriter writer, IDictionary data, bool definite = false)
     {
-        writer.WriteStartMap(definite ? map.Value.Count : null);
-        foreach (KeyValuePair<TKey, TValue> kvp in map.Value)
+        writer.WriteStartMap(definite ? data.Count : null);
+
+        foreach (DictionaryEntry kvp in data)
         {
-            SerializeCbor(writer, kvp.Key, typeof(TKey));
-            SerializeCbor(writer, kvp.Value, typeof(TValue));
+            SerializeCbor(writer, (kvp.Key as ICbor)!, kvp.Key.GetType());
+            SerializeCbor(writer, (kvp.Value as ICbor)!, kvp.Value!.GetType());
         }
+
         writer.WriteEndMap();
     }
 
@@ -722,7 +729,7 @@ public static class CborSerializer
         {
             try
             {
-                Type? unionType = type.IsGenericTypeDefinition ? type.MakeGenericType(targetType.GetGenericArguments()) : type;
+                Type? unionType = type.IsGenericTypeDefinition ? type.MakeGenericType(type.GetGenericArguments()) : type;
                 return DeserializeCbor(cborReader, unionType);
             }
             catch
