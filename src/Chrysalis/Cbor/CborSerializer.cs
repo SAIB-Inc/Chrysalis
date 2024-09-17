@@ -524,9 +524,14 @@ public static class CborSerializer
 
     private static ICbor? DeserializeConstructor(CborReader reader, Type targetType)
     {
-        reader.ReadTag();
-        reader.ReadStartArray();
+        CborTag tag = reader.ReadTag();
+        CborSerializableAttribute? targetTypeSerializable = targetType.GetCustomAttribute<CborSerializableAttribute>();
 
+        if (121 + targetTypeSerializable?.Index != (int)tag)
+            throw new InvalidOperationException($"Invalid tag for type {targetType.Name}");
+            
+        reader.ReadStartArray();
+        // @TODO: IMPROVE THIS PLEASE
         if (targetType.IsGenericType)
         {
             Type genericTypeDef = targetType.GetGenericTypeDefinition();
@@ -556,7 +561,11 @@ public static class CborSerializer
                     reader.ReadEndArray();
                     return (ICbor?)Activator.CreateInstance(targetType, value);
                 }
-
+                else
+                {
+                    reader.ReadEndArray();
+                    return (ICbor?)Activator.CreateInstance(targetType);
+                }
                 throw new InvalidOperationException($"Unhandled generic type: {genericTypeDef.Name}");
             }
         }
@@ -572,8 +581,8 @@ public static class CborSerializer
                     args[i] = DeserializeCbor(reader, paramType);
                 }
                 reader.ReadEndArray();
-                return (ICbor?)Activator.CreateInstance(targetType, args);
             }
+            return (ICbor?)Activator.CreateInstance(targetType, args);
         }
 
         throw new InvalidOperationException($"Unhandled generic type: {targetType.Name}");
