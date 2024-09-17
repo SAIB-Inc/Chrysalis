@@ -132,7 +132,7 @@ public record AuthCommitteeHotCert(
 public record ResignCommitteeColdCert(
     [CborProperty(0)] CborInt Tag,
     [CborProperty(1)] CborBytes CommitteeColdCredential,
-    [CborProperty(2)] Option<Anchor> Anchor
+    [CborProperty(2)] Anchor? Anchor
 ) : Certificate;
 
 [CborSerializable(CborType.List)]

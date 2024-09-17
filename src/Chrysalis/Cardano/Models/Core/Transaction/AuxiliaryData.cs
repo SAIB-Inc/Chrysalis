@@ -24,9 +24,9 @@ public record ShellyMaAuxiliaryData(
 
 [CborSerializable(CborType.Map)]
 public record PostAlonzoAuxiliaryData(
-    [CborProperty(0)] Option<Metadata> Metadata,
-    [CborProperty(1)] Option<CborDefiniteList<NativeScript>> NativeScriptSet,
-    [CborProperty(2)] Option<CborDefiniteList<CborBytes>> PlutusV1ScriptSet,
-    [CborProperty(3)] Option<CborDefiniteList<CborBytes>> PlutusV2ScriptSet,
-    [CborProperty(4)] Option<CborDefiniteList<CborBytes>> PlutusV3ScriptSet
+    [CborProperty(0)] Metadata? Metadata,
+    [CborProperty(1)] CborDefiniteList<NativeScript>? NativeScriptSet,
+    [CborProperty(2)] CborDefiniteList<CborBytes>? PlutusV1ScriptSet,
+    [CborProperty(3)] CborDefiniteList<CborBytes>? PlutusV2ScriptSet,
+    [CborProperty(4)] CborDefiniteList<CborBytes>? PlutusV3ScriptSet
 ): AuxiliaryData;

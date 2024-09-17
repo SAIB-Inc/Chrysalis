@@ -7,12 +7,12 @@ namespace Chrysalis.Cardano.Models.Core.Transaction;
 
 [CborSerializable(CborType.Map)]
 public record TransactionWitnessSet(
-    [CborProperty(0)] Option<CborDefiniteList<VKeyWitness>> VKeyWitnessSet,
-    [CborProperty(1)] Option<CborDefiniteList<NativeScript>> NativeScriptSet,
-    [CborProperty(2)] Option<CborDefiniteList<BootstrapWitness>> BootstrapWitnessSet,
-    [CborProperty(3)] Option<CborDefiniteList<CborBytes>> PlutusV1ScriptSet,   
-    [CborProperty(4)] Option<CborIndefiniteList<PlutusData>> PlutusDataSet,
-    [CborProperty(5)] Option<Redeemers> Redeemers,
-    [CborProperty(6)] Option<CborDefiniteList<CborBytes>> PlutusV2ScriptSet,
-    [CborProperty(7)] Option<CborDefiniteList<CborBytes>> PlutusV3ScriptSet
+    [CborProperty(0)] CborDefiniteList<VKeyWitness>? VKeyWitnessSet,
+    [CborProperty(1)] CborDefiniteList<NativeScript>? NativeScriptSet,
+    [CborProperty(2)] CborDefiniteList<BootstrapWitness>? BootstrapWitnessSet,
+    [CborProperty(3)] CborDefiniteList<CborBytes>? PlutusV1ScriptSet,   
+    [CborProperty(4)] CborIndefiniteList<PlutusData>? PlutusDataSet,
+    [CborProperty(5)] Redeemers? Redeemers,
+    [CborProperty(6)] CborDefiniteList<CborBytes>? PlutusV2ScriptSet,
+    [CborProperty(7)] CborDefiniteList<CborBytes>? PlutusV3ScriptSet
 ) : ICbor;

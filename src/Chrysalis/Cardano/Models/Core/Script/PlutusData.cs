@@ -14,8 +14,7 @@ namespace Chrysalis.Cardano.Models.Core.Script;
 ])]
 public interface PlutusData: ICbor;
 
-[CborSerializable(CborType.Constr)]
-public record PlutusConstr(PlutusData DataConstr): PlutusData;
+public record PlutusConstr(Option<PlutusData> DataConstr): PlutusData;
 
 public record PlutusMap(Dictionary<PlutusData, PlutusData> Value)
     : CborMap<PlutusData, PlutusData>(Value), PlutusData;
