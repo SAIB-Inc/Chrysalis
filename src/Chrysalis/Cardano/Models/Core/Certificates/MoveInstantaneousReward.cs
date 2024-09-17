@@ -12,10 +12,12 @@ public record MoveInstantaneousReward(
 [CborSerializable(CborType.Union)]
 [CborUnionTypes([
     typeof(StakeCredentials),
-    typeof(CborUlong),
+    typeof(OtherAccountingPot),
 ])]
-public record Target : ICbor;
+public interface Target : ICbor;
 
-public record StakeCredentials(
-    CborMap<Credential, CborInt> Value
-) : Target;
+public record StakeCredentials(Dictionary<Credential, CborInt> Value)
+    : CborMap<Credential, CborInt>(Value), Target;
+
+public record OtherAccountingPot(ulong Value)
+    : CborUlong(Value), Target;

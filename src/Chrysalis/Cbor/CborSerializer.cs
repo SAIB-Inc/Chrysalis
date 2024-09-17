@@ -3,6 +3,7 @@ using System.Reflection;
 using System.Collections;
 using Chrysalis.Cardano.Models.Cbor;
 using Chrysalis.Cardano.Models.Core;
+using Chrysalis.Cardano.Models.Core.Script;
 using Chrysalis.Utils;
 
 namespace Chrysalis.Cbor;
@@ -542,7 +543,7 @@ public static class CborSerializer
         if (targetType.IsGenericType)
         {
             Type genericTypeDef = targetType.GetGenericTypeDefinition();
-            Type[] genericArgs = targetType.GetGenericArguments();
+            Type[] genericArgs = genericTypeDef.GetGenericArguments();
 
             CborSerializableAttribute? cborSerializableAttr = genericTypeDef.GetCustomAttribute<CborSerializableAttribute>();
             if (cborSerializableAttr != null)
@@ -729,7 +730,7 @@ public static class CborSerializer
         {
             try
             {
-                Type? unionType = type.IsGenericTypeDefinition ? type.MakeGenericType(type.GetGenericArguments()) : type;
+                Type? unionType = type.IsGenericTypeDefinition ? type.MakeGenericType(targetType.GetGenericArguments()) : type;
                 return DeserializeCbor(cborReader, unionType);
             }
             catch

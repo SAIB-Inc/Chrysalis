@@ -10,17 +10,18 @@ namespace Chrysalis.Cardano.Models.Core.Transaction;
     typeof(RedeemerList),
     typeof(RedeemerMap)
 ])]
-public record Redeemers : ICbor;
+public interface Redeemers : ICbor;
 
-[CborSerializable(CborType.List)]
-public record RedeemerList(
-    CborDefiniteList<RedeemerEntry> Entries
-) : Redeemers;
+// [CborSerializable(CborType.List)]
+// public record RedeemerList(
+//     RedeemerEntry Entries
+// ) : Redeemers;
 
-[CborSerializable(CborType.Map)]
-public record RedeemerMap(
-    CborMap<RedeemerKey, RedeemerValue> Value
-) : Redeemers;
+public record RedeemerList(RedeemerEntry[] Value)
+    : CborDefiniteList<RedeemerEntry>(Value), Redeemers;
+
+public record RedeemerMap(Dictionary<RedeemerKey, RedeemerValue> Value)
+    : CborMap<RedeemerKey, RedeemerValue>(Value), Redeemers;
 
 [CborSerializable(CborType.List)]
 public record RedeemerEntry(

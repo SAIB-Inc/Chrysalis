@@ -1,6 +1,7 @@
 using Chrysalis.Cbor;
 using Chrysalis.Cardano.Models.Cbor;
 using Chrysalis.Cardano.Models.Core.Governance;
+using Chrysalis.Cardano.Models.Plutus;
 
 namespace Chrysalis.Cardano.Models.Core.Certificates;
 
@@ -67,14 +68,14 @@ public record PoolRetirement(
 ) : Certificate;
 
 [CborSerializable(CborType.List)]
-public record RegCert( //@TODO: Not Tested
+public record RegCert(
     [CborProperty(0)] CborInt Tag,
     [CborProperty(1)] Credential StakeCredential,
     [CborProperty(2)] CborUlong Coin
 ) : Certificate;
 
 [CborSerializable(CborType.List)]
-public record UnRegCert( //@TODO: Not Tested
+public record UnRegCert(
     [CborProperty(0)] CborInt Tag,
     [CborProperty(1)] Credential StakeCredential,
     [CborProperty(2)] CborUlong Coin
@@ -88,7 +89,7 @@ public record VoteDelegCert(
 ) : Certificate;
 
 [CborSerializable(CborType.List)]
-public record StakeVoteDelegCert( //@TODO: Not Tested
+public record StakeVoteDelegCert(
     [CborProperty(0)] CborInt Tag,
     [CborProperty(1)] Credential StakeCredential,
     [CborProperty(2)] CborBytes PoolKeyHash,
@@ -96,7 +97,7 @@ public record StakeVoteDelegCert( //@TODO: Not Tested
 ) : Certificate;
 
 [CborSerializable(CborType.List)]
-public record StakeRegDelegCert( //@TODO: Not Tested
+public record StakeRegDelegCert(
     [CborProperty(0)] CborInt Tag,
     [CborProperty(1)] Credential StakeCredential,
     [CborProperty(2)] CborBytes PoolKeyHash,
@@ -104,7 +105,7 @@ public record StakeRegDelegCert( //@TODO: Not Tested
 ) : Certificate;
 
 [CborSerializable(CborType.List)]
-public record VoteRegDelegCert( //@TODO: Not Tested
+public record VoteRegDelegCert(
     [CborProperty(0)] CborInt Tag,
     [CborProperty(1)] Credential StakeCredential,
     [CborProperty(2)] DRep DRep,
@@ -112,7 +113,7 @@ public record VoteRegDelegCert( //@TODO: Not Tested
 ) : Certificate;
 
 [CborSerializable(CborType.List)]
-public record StakeVoteRegDelegCert( //@TODO: Not Tested
+public record StakeVoteRegDelegCert(
     [CborProperty(0)] CborInt Tag,
     [CborProperty(1)] Credential StakeCredential,
     [CborProperty(2)] CborBytes PoolKeyHash,
@@ -128,10 +129,10 @@ public record AuthCommitteeHotCert(
 ) : Certificate;
 
 [CborSerializable(CborType.List)]
-public record ResignCommitteeColdCert( //@TODO: Not Tested
+public record ResignCommitteeColdCert(
     [CborProperty(0)] CborInt Tag,
     [CborProperty(1)] CborBytes CommitteeColdCredential,
-    [CborProperty(2)] Anchor? Anchor
+    [CborProperty(2)] Option<Anchor> Anchor
 ) : Certificate;
 
 [CborSerializable(CborType.List)]
@@ -157,7 +158,7 @@ public record UpdateDrepCert(
 ) : Certificate;
 
 [CborSerializable(CborType.List)]
-public record GenesisKeyDelegation( //@TODO: Not Tested
+public record GenesisKeyDelegation(
     [CborProperty(0)] CborInt Tag,
     [CborProperty(1)] CborBytes GenesisHash,
     [CborProperty(2)] CborBytes GenesisDelegateHash,
@@ -165,7 +166,7 @@ public record GenesisKeyDelegation( //@TODO: Not Tested
 ) : Certificate;
 
 [CborSerializable(CborType.List)]
-public record MoveInstantaneousRewardsCert( //@TODO: Not Tested
+public record MoveInstantaneousRewardsCert(
     [CborProperty(0)] CborInt Tag,
     [CborProperty(1)] MoveInstantaneousReward MoveInstantaneousReward
 ) : Certificate;

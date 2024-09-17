@@ -2,6 +2,7 @@ using Chrysalis.Cardano.Models.Core.Block;
 using Chrysalis.Cardano.Models.Core.Protocol;
 using Chrysalis.Cardano.Models.Cbor;
 using Chrysalis.Cbor;
+using Chrysalis.Cardano.Models.Core.Transaction;
 
 namespace Chrysalis.Cardano.Models.Core.Governance;
 
@@ -35,7 +36,7 @@ public record HardForkInitiationAction(
 [CborSerializable(CborType.List)]
 public record TreasuryWithdrawalsAction(
     [CborProperty(0)] CborInt ActionType,
-    [CborProperty(1)] CborMap<RewardAccount, CborUlong> Withdrawals,
+    [CborProperty(1)] Withdrawals Withdrawals,
     [CborProperty(2)] CborNullable<CborBytes> PolicyHash
 ) : GovAction;
 
@@ -50,7 +51,7 @@ public record UpdateCommittee(
     [CborProperty(0)] CborInt ActionType,
     [CborProperty(1)] CborNullable<GovActionId> GovActionId,
     [CborProperty(2)] CborDefiniteList<Credential> NewMembers,
-    [CborProperty(3)] CborMap<Credential, CborUlong> MemberTermLimits,
+    [CborProperty(3)] MemberTermLimits MemberTermLimits,
     [CborProperty(4)] CborRationalNumber QuorumThreshold
 ) : GovAction;
 

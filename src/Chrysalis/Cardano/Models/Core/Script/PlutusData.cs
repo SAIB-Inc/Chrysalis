@@ -1,4 +1,5 @@
 using Chrysalis.Cardano.Models.Cbor;
+using Chrysalis.Cardano.Models.Plutus;
 using Chrysalis.Cbor;
 
 namespace Chrysalis.Cardano.Models.Core.Script;
@@ -11,19 +12,29 @@ namespace Chrysalis.Cardano.Models.Core.Script;
     typeof(PlutusBigInt),
     typeof(PlutusBytes)
 ])]
-
-public record PlutusData: ICbor;
+public interface PlutusData: ICbor;
 
 [CborSerializable(CborType.Constr)]
 public record PlutusConstr(PlutusData DataConstr): PlutusData;
 
-public record PlutusMap(CborMap<PlutusData, PlutusData> DataMap): PlutusData;
+public record PlutusMap(Dictionary<PlutusData, PlutusData> Value)
+    : CborMap<PlutusData, PlutusData>(Value), PlutusData;
 
-[CborSerializable(CborType.List)]
-public record PlutusList(
-    [CborProperty(0)] PlutusData DataList
-): PlutusData;
+public record PlutusBigInt(ulong Value)
+    : CborUlong(Value), PlutusData;
 
-public record PlutusBigInt(CborUlong DataInt): PlutusData;
+public record PlutusBytes(byte[] Value)
+    : CborBytes(Value), PlutusData;
 
-public record PlutusBytes(CborBytes DataBytes): PlutusData;
+[CborSerializable(CborType.Union)]
+[CborUnionTypes([
+    typeof(PlutusIndefiniteList),
+    typeof(PlutusDefiniteList),
+])]
+public interface PlutusList: PlutusData;
+
+public record PlutusIndefiniteList(PlutusData[] Value)
+    : CborIndefiniteList<PlutusData>(Value), PlutusList;
+
+public record PlutusDefiniteList(PlutusData[] Value)
+    : CborIndefiniteList<PlutusData>(Value), PlutusList;
