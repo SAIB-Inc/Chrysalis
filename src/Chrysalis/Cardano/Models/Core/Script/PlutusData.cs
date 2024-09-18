@@ -1,5 +1,4 @@
 using Chrysalis.Cardano.Models.Cbor;
-using Chrysalis.Cardano.Models.Plutus;
 using Chrysalis.Cbor;
 
 namespace Chrysalis.Cardano.Models.Core.Script;
@@ -14,7 +13,8 @@ namespace Chrysalis.Cardano.Models.Core.Script;
 ])]
 public interface PlutusData: ICbor;
 
-public record PlutusConstr(Option<PlutusData> DataConstr): PlutusData;
+[CborSerializable(CborType.Constr)]
+public record PlutusConstr(int Index, PlutusData[] Value): PlutusData;
 
 public record PlutusMap(Dictionary<PlutusData, PlutusData> Value)
     : CborMap<PlutusData, PlutusData>(Value), PlutusData;

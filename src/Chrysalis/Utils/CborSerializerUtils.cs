@@ -7,11 +7,13 @@ namespace Chrysalis.Utils;
 public static class CborSerializerUtils
 {
     private const int BaseTagValue = 121;
+    private const int ExtendedTagValue = 1280;
 
     public static CborTag GetCborTag(int? index = null)
     {
         int actualIndex = index ?? 0;
-        return (CborTag)(BaseTagValue + actualIndex);
+        int baseTagValue = actualIndex > 6 ? ExtendedTagValue - 7 : BaseTagValue;
+        return (CborTag)(baseTagValue + actualIndex);
     }
 
     public static object? GetValue(this ICbor cbor, Type objType)
