@@ -499,10 +499,18 @@ public static class CborSerializer
         if (reader.PeekState() != CborReaderState.StartArray)
             throw new InvalidOperationException("Expected start of array in CBOR data");
 
+        CborSerializableAttribute? cborSerializableAttr = targetType.GetCustomAttribute<CborSerializableAttribute>();
+        bool isDefinite = cborSerializableAttr?.IsDefinite ?? false;
+
         Type? itemType = targetType.GetGenericArguments()[0];
         List<T> list = [];
 
-        reader.ReadStartArray();
+        int? length = reader.ReadStartArray();
+        bool isDefiniteDetected = length is not null;
+
+        if (isDefiniteDetected != isDefinite)
+            throw new InvalidOperationException("Invalid length definition for list");
+
         while (reader.PeekState() != CborReaderState.EndArray)
         {
             T? item = (T)DeserializeCbor(reader, itemType!)!;
@@ -534,7 +542,15 @@ public static class CborSerializer
         }
         else
         {
-            reader.ReadStartArray();
+            CborSerializableAttribute? cborSerializableAttr = targetType.GetCustomAttribute<CborSerializableAttribute>();
+            bool isDefinite = cborSerializableAttr?.IsDefinite ?? false;
+
+            int? length = reader.ReadStartArray();
+            
+            bool isDefiniteDetected = length is not null;
+
+            if (isDefiniteDetected != isDefinite)
+                throw new InvalidOperationException("Invalid length definition for list");
 
             List<PropertyInfo> properties = [.. targetType.GetProperties()];
 
