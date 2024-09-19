@@ -1,7 +1,9 @@
 ﻿using System.Formats.Cbor;
 using System.Reflection;
+using System.Collections;
 using Chrysalis.Cardano.Models.Cbor;
 using Chrysalis.Cardano.Models.Core;
+using Chrysalis.Cardano.Models.Core.Script;
 using Chrysalis.Utils;
 
 namespace Chrysalis.Cbor;
@@ -49,6 +51,15 @@ public static class CborSerializer
                 case CborType.EncodedValue:
                     SerializeEncodedValue(writer, cbor, objType);
                     break;
+                case CborType.RationalNumber:
+                    SerializeRationalNumber(writer, cbor, objType);
+                    break;
+                case CborType.Text:
+                    SerializeText(writer, cbor, objType);
+                    break;
+                case CborType.Nullable:
+                    SerializeNullable(writer, cbor, objType);
+                    break;
                 default:
                     throw new NotSupportedException($"CBOR type {cborType} is not supported in this context.");
             }
@@ -81,7 +92,7 @@ public static class CborSerializer
 
     private static void SerializeGenericList<T>(CborWriter writer, ICbor cborList, bool definite = false) where T : ICbor
     {
-        T[] elements = (T[])cborList.GetValue(cborList.GetType());
+        T[] elements = (T[])cborList.GetValue(cborList.GetType())!;
         writer.WriteStartArray(definite ? elements.Length : null);
 
         foreach (T element in elements)
@@ -115,13 +126,19 @@ public static class CborSerializer
             foreach (PropertyInfo property in properties)
             {
                 object? value = property.GetValue(cbor);
-                if (value is ICbor cborValue)
+
+                if (value is null)
                 {
-                    SerializeCbor(writer, cborValue, property.PropertyType);
+                    continue;
+                }
+                else if (value is ICbor cborValue)
+                {
+                    Type concreteType = CborSerializerUtils.GetCborType(property.PropertyType) == CborType.Union ? value.GetType() : property.PropertyType;
+                    SerializeCbor(writer, cborValue, concreteType);
                 }
                 else
                 {
-                    throw new InvalidOperationException($"Property {property.Name} in {baseType?.Name} does not implement ICbor.");
+                    throw new InvalidOperationException($"Property {property.Name} in {cbor.GetType().Name} is neither ICbor nor CborNullable<T>.");
                 }
             }
 
@@ -131,12 +148,12 @@ public static class CborSerializer
 
     private static void SerializeCborUlong(CborWriter writer, ICbor cbor, Type objType)
     {
-        writer.WriteUInt64((ulong)cbor.GetValue(objType));
+        writer.WriteUInt64((ulong)cbor.GetValue(objType)!);
     }
 
     private static void SerializeCborInt(CborWriter writer, ICbor cbor, Type objType)
     {
-        writer.WriteInt32((int)cbor.GetValue(objType));
+        writer.WriteInt32((int)cbor.GetValue(objType)!);
     }
 
     private static void SerializeCborBytes(CborWriter writer, ICbor cbor, Type objType)
@@ -145,24 +162,25 @@ public static class CborSerializer
         if (!cborSerializableAttr!.IsDefinite)
         {
             writer.WriteStartIndefiniteLengthByteString();
-            byte[] bytesValue = (byte[])cbor.GetValue(objType);
+            byte[] bytesValue = (byte[])cbor.GetValue(objType)!;
             const int chunkSize = 1024;
             for (int i = 0; i < bytesValue.Length; i += chunkSize)
             {
                 int length = Math.Min(chunkSize, bytesValue.Length - i);
-                writer.WriteByteString(((byte[])cbor.GetValue(objType)).AsSpan(i, length));
+                writer.WriteByteString(((byte[])cbor.GetValue(objType)!).AsSpan(i, length));
             }
             writer.WriteEndIndefiniteLengthByteString();
         }
         else
         {
-            writer.WriteByteString((byte[])cbor.GetValue(objType));
+            writer.WriteByteString((byte[])cbor.GetValue(objType)!);
         }
     }
 
     private static void SerializeMap(CborWriter writer, ICbor obj, Type objType)
     {
         CborSerializableAttribute? cborSerializableAttr = objType.GetCustomAttribute<CborSerializableAttribute>();
+        // @TODO: Don't hardcoded types use the attributes in this cose use CborTypes.Map instead of CborMap
         if (obj is CborMap cborMap)
         {
             writer.WriteStartMap(cborSerializableAttr!.IsDefinite ? cborMap.Value.Count : null);
@@ -173,11 +191,16 @@ public static class CborSerializer
             }
             writer.WriteEndMap();
         }
-        else if (obj is not null && objType.IsGenericType && objType.GetGenericTypeDefinition() == typeof(CborMap<,>))
+        else if (obj is not null && objType.IsGenericType)
         {
             MethodInfo? method = typeof(CborSerializer).GetMethod(nameof(SerializeGenericMap), BindingFlags.NonPublic | BindingFlags.Static);
             MethodInfo genericMethod = method!.MakeGenericMethod(objType.GetGenericArguments());
             genericMethod.Invoke(null, [writer, obj, cborSerializableAttr!.IsDefinite]);
+        }
+        else if (obj is not null && objType.BaseType is not null && objType.BaseType.IsGenericType) // Support Mutiple Levels of Inheritance
+        {
+            IDictionary data = (IDictionary)objType.GetProperty("Value")?.GetValue(obj)!;
+            SerializeGenericMap(writer, data, cborSerializableAttr!.IsDefinite);
         }
         else if (obj is not null && objType.GetCustomAttribute<CborSerializableAttribute>()?.Type == CborType.Map)
         {
@@ -191,11 +214,11 @@ public static class CborSerializer
 
     private static void SerializeCustomMap(CborWriter writer, ICbor obj, Type objType, bool definite = false)
     {
-        Type? baseType = objType.BaseType;
+        Type? currentType = objType;
 
-        if (baseType != null && baseType.IsGenericType)
+        if (currentType != null && currentType.IsGenericType)
         {
-            Type[] genericArgs = baseType.GetGenericArguments();
+            Type[] genericArgs = currentType.GetGenericArguments();
             MethodInfo? method = typeof(CborSerializer).GetMethod(nameof(SerializeGenericMap), BindingFlags.NonPublic | BindingFlags.Static);
             MethodInfo genericMethod = method!.MakeGenericMethod(genericArgs);
             genericMethod.Invoke(null, [writer, obj, definite]);
@@ -261,16 +284,16 @@ public static class CborSerializer
         }
     }
 
-    private static void SerializeGenericMap<TKey, TValue>(CborWriter writer, CborMap<TKey, TValue> map, bool definite = false)
-        where TKey : ICbor
-        where TValue : ICbor
+    private static void SerializeGenericMap(CborWriter writer, IDictionary data, bool definite = false)
     {
-        writer.WriteStartMap(definite ? map.Value.Count : null);
-        foreach (KeyValuePair<TKey, TValue> kvp in map.Value)
+        writer.WriteStartMap(definite ? data.Count : null);
+
+        foreach (DictionaryEntry kvp in data)
         {
-            SerializeCbor(writer, kvp.Key, typeof(TKey));
-            SerializeCbor(writer, kvp.Value, typeof(TValue));
+            SerializeCbor(writer, (kvp.Key as ICbor)!, kvp.Key.GetType());
+            SerializeCbor(writer, (kvp.Value as ICbor)!, kvp.Value!.GetType());
         }
+
         writer.WriteEndMap();
     }
 
@@ -285,27 +308,61 @@ public static class CborSerializer
 
         ParameterInfo[] parameters = constructor.GetParameters();
 
-        writer.WriteTag(CborSerializerUtils.GetCborTag(cborSerializableAttr.Index));
-        if (parameters.Length == 0)
+        if (cborSerializableAttr.Index == -1) // Dynamic Constructor
         {
-            writer.WriteStartArray(0);
+            PropertyInfo? indexProperty = objType.GetProperty("Index") ??
+                throw new InvalidOperationException($"Property 'Index' not found in {objType.Name}");
+
+            PropertyInfo? valueProperty = objType.GetProperty("Value") ??
+                throw new InvalidOperationException($"Property 'Value' not found in {objType.Name}");
+
+            int index = (int)indexProperty.GetValue(cbor)!;
+            IList? value = (IList?)valueProperty.GetValue(cbor);
+
+            writer.WriteTag(CborSerializerUtils.GetCborTag(index));
+
+            if (value is null || value!.Count == 0)
+            {
+                writer.WriteStartArray(0);
+                writer.WriteEndArray();
+                return;
+            }
+            else
+            {
+                writer.WriteStartArray(null);
+
+                foreach (ICbor item in value)
+                {
+                    SerializeCbor(writer, item, item.GetType());
+                }
+
+                writer.WriteEndArray();
+            }
+        }
+        else // Static Constructor
+        {
+            writer.WriteTag(CborSerializerUtils.GetCborTag(cborSerializableAttr.Index));
+            if (parameters.Length == 0)
+            {
+                writer.WriteStartArray(0);
+                writer.WriteEndArray();
+                return;
+            }
+            writer.WriteStartArray(null);
+
+            foreach (ParameterInfo parameter in parameters)
+            {
+                PropertyInfo? property = objType.GetProperty(parameter.Name!, BindingFlags.Public | BindingFlags.Instance) ??
+                    throw new InvalidOperationException($"Property {parameter.Name} not found in {objType.Name}");
+
+                object? value = property.GetValue(cbor) ??
+                    throw new InvalidOperationException($"Value for property {property.Name} in {objType.Name} is null");
+
+                SerializeCbor(writer, (ICbor)value, value.GetType());
+            }
+
             writer.WriteEndArray();
-            return;
         }
-        writer.WriteStartArray(null);
-
-        foreach (ParameterInfo parameter in parameters)
-        {
-            PropertyInfo? property = objType.GetProperty(parameter.Name!, BindingFlags.Public | BindingFlags.Instance) ??
-                throw new InvalidOperationException($"Property {parameter.Name} not found in {objType.Name}");
-
-            object? value = property.GetValue(cbor) ??
-                throw new InvalidOperationException($"Value for property {property.Name} in {objType.Name} is null");
-
-            SerializeCbor(writer, (ICbor)value, value.GetType());
-        }
-
-        writer.WriteEndArray();
     }
 
     private static void SerializeEncodedValue(CborWriter writer, ICbor cbor, Type objType)
@@ -313,8 +370,57 @@ public static class CborSerializer
         CborTag tag = CborTag.EncodedCborDataItem;
         writer.WriteTag(tag);
 
-        byte[] value = (byte[])cbor.GetValue(objType);
+        byte[] value = (byte[])cbor.GetValue(objType)!;
         writer.WriteByteString(value);
+    }
+
+    private static void SerializeRationalNumber(CborWriter writer, ICbor cbor, Type objType)
+    {
+        writer.WriteTag((CborTag)30);
+
+        object? numeratorValue = objType.GetProperty("Numerator")?.GetValue(cbor) ??
+            throw new InvalidOperationException($"Type {objType.Name} does not have a 'Numerator' property or value.");
+
+        object? denominatorValue = objType.GetProperty("Denominator")?.GetValue(cbor) ??
+            throw new InvalidOperationException($"Type {objType.Name} does not have a 'Denominator' property or value.");
+
+        if ((numeratorValue is not null) && (denominatorValue is not null))
+        {
+            ulong numerator = (ulong)numeratorValue;
+            ulong denominator = (ulong)denominatorValue;
+
+            writer.WriteStartArray(2);
+            writer.WriteUInt64(numerator);
+            writer.WriteUInt64(denominator);
+            writer.WriteEndArray();
+        }
+    }
+
+    private static void SerializeText(CborWriter writer, ICbor cbor, Type targetType)
+    {
+        writer.WriteTextString((string)cbor.GetValue(targetType)!);
+    }
+
+    private static void SerializeNullable(CborWriter writer, ICbor cbor, Type objType)
+    {
+        Type itemType = objType.GetGenericArguments()[0];
+        PropertyInfo? valueProperty = objType.GetProperty("Value") ??
+            throw new InvalidOperationException($"Type {objType.Name} does not have a 'Value' property.");
+
+        object? value = valueProperty.GetValue(cbor);
+
+        if (value is null)
+        {
+            writer.WriteNull();
+        }
+        else if (value is ICbor cborValue)
+        {
+            SerializeCbor(writer, cborValue, itemType);
+        }
+        else
+        {
+            throw new InvalidOperationException($"Value in {objType.Name} is not null but does not implement ICbor.");
+        }
     }
 
     private static ICbor? DeserializeCbor(CborReader reader, Type targetType)
@@ -339,6 +445,9 @@ public static class CborSerializer
                 CborType.Constr => DeserializeConstructor(reader, targetType),
                 CborType.List => DeserializeList(reader, targetType),
                 CborType.EncodedValue => DeserializeEncodedValue(reader, targetType),
+                CborType.RationalNumber => DeserializeRationalNumber(reader, targetType),
+                CborType.Text => DeserializeText(reader, targetType),
+                CborType.Nullable => DeserializeNullable(reader, targetType),
                 _ => throw new NotImplementedException($"Unknown CborType: {cborType}"),
             };
         }
@@ -390,10 +499,18 @@ public static class CborSerializer
         if (reader.PeekState() != CborReaderState.StartArray)
             throw new InvalidOperationException("Expected start of array in CBOR data");
 
+        CborSerializableAttribute? cborSerializableAttr = targetType.GetCustomAttribute<CborSerializableAttribute>();
+        bool isDefinite = cborSerializableAttr?.IsDefinite ?? false;
+
         Type? itemType = targetType.GetGenericArguments()[0];
         List<T> list = [];
 
-        reader.ReadStartArray();
+        int? length = reader.ReadStartArray();
+        bool isDefiniteDetected = length is not null;
+
+        if (isDefiniteDetected != isDefinite)
+            throw new InvalidOperationException("Invalid length definition for list");
+
         while (reader.PeekState() != CborReaderState.EndArray)
         {
             T? item = (T)DeserializeCbor(reader, itemType!)!;
@@ -425,7 +542,15 @@ public static class CborSerializer
         }
         else
         {
-            reader.ReadStartArray();
+            CborSerializableAttribute? cborSerializableAttr = targetType.GetCustomAttribute<CborSerializableAttribute>();
+            bool isDefinite = cborSerializableAttr?.IsDefinite ?? false;
+
+            int? length = reader.ReadStartArray();
+            
+            bool isDefiniteDetected = length is not null;
+
+            if (isDefiniteDetected != isDefinite)
+                throw new InvalidOperationException("Invalid length definition for list");
 
             List<PropertyInfo> properties = [.. targetType.GetProperties()];
 
@@ -434,7 +559,17 @@ public static class CborSerializer
             for (int i = 0; i < properties.Count; i++)
             {
                 Type propType = properties[i].PropertyType;
-                values[i] = DeserializeCbor(reader, propType)!;
+
+                if (propType.IsGenericType && propType.GetGenericTypeDefinition() == typeof(CborNullable<>))
+                {
+                    Type innerType = propType.GetGenericArguments()[0];
+                    object? innerValue = DeserializeCbor(reader, innerType);
+                    values[i] = Activator.CreateInstance(propType, innerValue)!;
+                }
+                else
+                {
+                    values[i] = DeserializeCbor(reader, propType)!;
+                }
             }
 
             reader.ReadEndArray();
@@ -450,21 +585,36 @@ public static class CborSerializer
         CborTag tag = reader.ReadTag();
         CborSerializableAttribute? targetTypeSerializable = targetType.GetCustomAttribute<CborSerializableAttribute>();
 
-        if (121 + targetTypeSerializable?.Index != (int)tag)
-            throw new InvalidOperationException($"Invalid tag for type {targetType.Name}");
-            
-        reader.ReadStartArray();
-        // @TODO: IMPROVE THIS PLEASE
+        int constrIndex = targetTypeSerializable?.Index ?? -1;
+        bool is121To127 = (int)tag >= 121 && (int)tag <= 127;
+        bool isAbove127 = (int)tag > 127;
+        // bool is102 = (int)tag == 102;
+        bool isDyanmic = targetTypeSerializable?.Index == -1;
+
+        if (is121To127 && targetTypeSerializable != null)
+        {
+            int index = (int)tag - 121;
+            constrIndex = index;
+        }
+
+        if (isAbove127)
+        {
+            int index = (int)tag + 7 - 1280;
+            constrIndex = index;
+        }
+
         if (targetType.IsGenericType)
         {
             Type genericTypeDef = targetType.GetGenericTypeDefinition();
-            Type[] genericArgs = targetType.GetGenericArguments();
+            Type[] genericArgs = genericTypeDef.GetGenericArguments();
 
             CborSerializableAttribute? cborSerializableAttr = genericTypeDef.GetCustomAttribute<CborSerializableAttribute>();
             if (cborSerializableAttr != null)
             {
                 ParameterInfo[] constructorParams = targetType.GetConstructors().First().GetParameters();
                 object?[] args = new object?[constructorParams.Length];
+
+                reader.ReadStartArray();
 
                 for (int i = 0; i < constructorParams.Length; i++)
                 {
@@ -479,6 +629,7 @@ public static class CborSerializer
             {
                 if (genericArgs.Length == 1)
                 {
+                    reader.ReadStartArray();
                     Type genericArg = genericArgs[0];
                     ICbor? value = DeserializeCbor(reader, genericArg);
                     reader.ReadEndArray();
@@ -486,6 +637,7 @@ public static class CborSerializer
                 }
                 else
                 {
+                    reader.ReadStartArray();
                     reader.ReadEndArray();
                     return (ICbor?)Activator.CreateInstance(targetType);
                 }
@@ -495,20 +647,46 @@ public static class CborSerializer
         else if (targetType.GetCustomAttribute<CborSerializableAttribute>()?.Type == CborType.Constr)
         {
             ParameterInfo[] constructorParams = targetType.GetConstructors().First().GetParameters();
-            object?[] args = new object?[constructorParams.Length];
-            if (constructorParams is not null && constructorParams.Length != 0)
+            if (isDyanmic)
             {
-                for (int i = 0; i < constructorParams.Length; i++)
+                Type firstParamType = constructorParams[1].ParameterType;
+                Type elementType = firstParamType.GetElementType()!;
+
+                var listType = typeof(List<>).MakeGenericType(elementType);
+                var args = (IList)Activator.CreateInstance(listType)!;
+
+                reader.ReadStartArray();
+
+                while (reader.PeekState() != CborReaderState.EndArray)
                 {
-                    Type paramType = constructorParams[i].ParameterType;
-                    args[i] = DeserializeCbor(reader, paramType);
+                    args.Add(DeserializeCbor(reader, elementType)!);
                 }
+
                 reader.ReadEndArray();
+
+                var toArrayMethod = args.GetType().GetMethod("ToArray");
+                var array = toArrayMethod!.Invoke(args, null);
+
+                return (ICbor?)Activator.CreateInstance(targetType, constrIndex, array);
             }
-            return (ICbor?)Activator.CreateInstance(targetType, args);
+            else
+            {
+                object?[] args = new object?[constructorParams.Length];
+                if (constructorParams is not null && constructorParams.Length != 0)
+                {
+                    reader.ReadStartArray();
+                    for (int i = 0; i < constructorParams.Length; i++)
+                    {
+                        Type paramType = constructorParams[i].ParameterType;
+                        args[i] = DeserializeCbor(reader, paramType);
+                    }
+                    reader.ReadEndArray();
+                }
+                return (ICbor?)Activator.CreateInstance(targetType, args);
+            }
         }
 
-        throw new InvalidOperationException($"Unhandled generic type: {targetType.Name}");
+        throw new InvalidOperationException($"Unhandled Constr type: {targetType.Name}");
     }
 
     private static ICbor? DeserializeMap(CborReader reader, Type targetType)
@@ -670,5 +848,43 @@ public static class CborSerializer
         }
 
         throw new InvalidOperationException("Invalid Encoded Value");
+    }
+
+    private static ICbor? DeserializeRationalNumber(CborReader reader, Type targetType)
+    {
+        CborTag tag = reader.ReadTag();
+
+        if ((int)tag == 30)
+        {
+            reader.ReadStartArray();
+            ulong numerator = reader.ReadUInt64();
+            ulong denominator = reader.ReadUInt64();
+            reader.ReadEndArray();
+            return (ICbor)Activator.CreateInstance(targetType, numerator, denominator)!;
+        }
+
+        throw new InvalidOperationException($"Invalid CBOR tag for Rational Number in type {targetType.Name}.");
+    }
+
+    private static ICbor? DeserializeText(CborReader reader, Type targetType)
+    {
+        string value = reader.ReadTextString();
+        return (ICbor)Activator.CreateInstance(targetType, value)!;
+    }
+
+    private static ICbor? DeserializeNullable(CborReader reader, Type targetType)
+    {
+        if (reader.PeekState() == CborReaderState.Null)
+        {
+            reader.ReadNull();
+            return null;
+        }
+        else if (targetType.IsGenericType)
+        {
+            Type itemType = targetType.GetGenericArguments()[0];
+            return DeserializeCbor(reader, itemType)!;
+        }
+
+        throw new InvalidOperationException($"Invalid Nullable Type.");
     }
 }

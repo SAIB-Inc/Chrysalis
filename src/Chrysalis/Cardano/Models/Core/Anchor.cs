@@ -4,7 +4,7 @@ using Chrysalis.Cbor;
 namespace Chrysalis.Cardano.Models.Core;
 
 [CborSerializable(CborType.List)]
-public record TransactionInput(
-    [CborProperty(0)] CborBytes TransactionId,
-    [CborProperty(1)] CborInt Index
+public record Anchor(
+    [CborProperty(0)] CborText AnchorUrl, 
+    [CborProperty(1)] CborBytes AnchorDataHash
 ) : ICbor;

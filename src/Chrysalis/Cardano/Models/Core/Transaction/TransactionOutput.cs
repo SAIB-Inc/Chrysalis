@@ -1,7 +1,8 @@
 using Chrysalis.Cardano.Models.Cbor;
+using Chrysalis.Cardano.Models.Plutus;
 using Chrysalis.Cbor;
 
-namespace Chrysalis.Cardano.Models.Core;
+namespace Chrysalis.Cardano.Models.Core.Transaction;
 
 [CborSerializable(CborType.Union)]
 [CborUnionTypes([
