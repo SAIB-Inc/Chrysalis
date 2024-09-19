@@ -15,12 +15,12 @@ public record AlonzoBlockHeader(
     [CborProperty(1)] CborBytes BodySignature
 ) : BlockHeader;
 
-// [CborSerializable(CborType.List)]
-// public record EbbHead(
-//     [CborProperty(0)] CborUlong ProtocolMagic,
-//     [CborProperty(1)] CborBytes PrevBlock,
-//     [CborProperty(2)] CborBytes BodyProof,    
-//     [CborProperty(3)] EbbCons ConsensusData, 
-//     [CborProperty(4)] CborDefiniteList<CborMap<ICbor,ICbor>> ExtraData //@TODO: To be modified -> attributes = {* any => any}
-// ) : BlockHeader;
+[CborSerializable(CborType.List)]
+public record EbbHead(
+    [CborProperty(0)] CborUlong ProtocolMagic,
+    [CborProperty(1)] CborBytes PrevBlock,
+    [CborProperty(2)] CborBytes BodyProof,    
+    [CborProperty(3)] EbbCons ConsensusData, 
+    [CborProperty(4)] CborDefiniteList<CborMap<ICbor,ICbor>> ExtraData //@TODO: To be modified -> attributes = {* any => any}
+) : BlockHeader;
 

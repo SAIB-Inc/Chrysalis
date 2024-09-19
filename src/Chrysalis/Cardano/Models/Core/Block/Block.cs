@@ -13,18 +13,20 @@ public record Block : ICbor;
 [CborSerializable(CborType.List)]
 public record AlonzoBlock(
     [CborProperty(0)] BlockHeader Header,
-    [CborProperty(1)] CborDefiniteList<TransactionBody> TransactionBodies,
-    [CborProperty(2)] CborDefiniteList<TransactionWitnessSet> TransactionWitnessSets,
+    [CborProperty(1)] CborMaybeIndefList<TransactionBody> TransactionBodies,
+    [CborProperty(2)] CborMaybeIndefList<TransactionWitnessSet> TransactionWitnessSets,
     [CborProperty(3)] AuxiliaryDataSet AuxiliaryDataSet,
-    [CborProperty(4)] CborDefiniteList<CborInt> InvalidTransactions
+    [CborProperty(4)] CborMaybeIndefList<CborInt> InvalidTransactions
 ) : Block;
 
-// [CborSerializable(CborType.List)]
-// public record EbBlock(
-//     [CborProperty(0)] BlockHeader Header,
-//     [CborProperty(1)] CborIndefiniteList<CborBytes> Body,
-//     [CborProperty(2)] CborIndefiniteList<CborMap<ICbor,ICbor>> Attributes //@TODO: To be modified
-// ) : Block;
+[CborSerializable(CborType.List)]
+public record EbBlock(
+    [CborProperty(0)] BlockHeader Header,
+    [CborProperty(1)] CborIndefiniteList<CborBytes> Body,
+    [CborProperty(2)] CborIndefiniteList<CborMap> Attributes //@TODO: To be modified
+) : Block;
+
+
 
 // Attributes
 // quote from the CDDL file: at the moment we do not bother deserialising these,
