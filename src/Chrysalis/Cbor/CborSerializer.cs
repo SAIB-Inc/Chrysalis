@@ -60,6 +60,9 @@ public static class CborSerializer
                 case CborType.Nullable:
                     SerializeNullable(writer, cbor, objType);
                     break;
+                case CborType.Tag:
+                    SerializeTag(writer, cbor, objType);
+                    break;
                 default:
                     throw new NotSupportedException($"CBOR type {cborType} is not supported in this context.");
             }
@@ -423,6 +426,27 @@ public static class CborSerializer
         }
     }
 
+    private static void SerializeTag(CborWriter writer, ICbor cbor, Type objType)
+    {
+        CborSerializableAttribute? cborSerializableAttr = objType.GetCustomAttribute<CborSerializableAttribute>();
+        PropertyInfo? value = objType.GetProperty("Value") ??
+            throw new InvalidOperationException($"Type {objType.Name} does not have a 'Value' property.");
+
+        CborTag tagValue = (CborTag)cborSerializableAttr!.Index;
+        object? tagContent = value.GetValue(cbor);
+
+        writer.WriteTag(tagValue);
+
+        if (tagContent is ICbor cborContent)
+        {
+            SerializeCbor(writer, cborContent, tagContent.GetType());
+        }
+        else
+        {
+            throw new InvalidOperationException($"Value in {objType.Name} does not implement ICbor.");
+        }
+    }
+
     private static ICbor? DeserializeCbor(CborReader reader, Type targetType)
     {
         if (reader.PeekState() == CborReaderState.Null)
@@ -448,6 +472,7 @@ public static class CborSerializer
                 CborType.RationalNumber => DeserializeRationalNumber(reader, targetType),
                 CborType.Text => DeserializeText(reader, targetType),
                 CborType.Nullable => DeserializeNullable(reader, targetType),
+                CborType.Tag => DeserializeTag(reader, targetType),
                 _ => throw new NotImplementedException($"Unknown CborType: {cborType}"),
             };
         }
@@ -546,7 +571,7 @@ public static class CborSerializer
             bool isDefinite = cborSerializableAttr?.IsDefinite ?? false;
 
             int? length = reader.ReadStartArray();
-            
+
             bool isDefiniteDetected = length is not null;
 
             if (isDefiniteDetected != isDefinite)
@@ -588,7 +613,8 @@ public static class CborSerializer
         int constrIndex = targetTypeSerializable?.Index ?? -1;
         bool is121To127 = (int)tag >= 121 && (int)tag <= 127;
         bool isAbove127 = (int)tag > 127;
-        // bool is102 = (int)tag == 102;
+        bool is102 = (int)tag == 102;
+
         bool isDyanmic = targetTypeSerializable?.Index == -1;
 
         if (is121To127 && targetTypeSerializable != null)
@@ -886,5 +912,14 @@ public static class CborSerializer
         }
 
         throw new InvalidOperationException($"Invalid Nullable Type.");
+    }
+
+    private static ICbor? DeserializeTag(CborReader reader, Type targetType)
+    {
+        reader.ReadTag();
+        var valueProperty = targetType.GetProperty("Value");
+        Type valueType = valueProperty?.PropertyType ?? targetType;
+        ICbor? content = DeserializeCbor(reader, valueType);
+        return (ICbor)Activator.CreateInstance(targetType, content!)!;
     }
 }

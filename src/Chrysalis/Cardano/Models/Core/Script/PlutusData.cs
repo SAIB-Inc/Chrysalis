@@ -36,4 +36,4 @@ public record PlutusIndefiniteList(PlutusData[] Value)
     : CborIndefiniteList<PlutusData>(Value), PlutusList;
 
 public record PlutusDefiniteList(PlutusData[] Value)
-    : CborIndefiniteList<PlutusData>(Value), PlutusList;
+    : CborDefiniteList<PlutusData>(Value), PlutusList;
