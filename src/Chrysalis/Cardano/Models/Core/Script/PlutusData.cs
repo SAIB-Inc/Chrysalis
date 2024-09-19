@@ -11,10 +11,10 @@ namespace Chrysalis.Cardano.Models.Core.Script;
     typeof(PlutusBigInt),
     typeof(PlutusBytes)
 ])]
-public interface PlutusData: ICbor;
+public interface PlutusData : ICbor;
 
 [CborSerializable(CborType.Constr)]
-public record PlutusConstr(int Index, PlutusData[] Value): PlutusData;
+public record PlutusConstr(int Index, bool IsInfinite, PlutusData[] Value) : PlutusData;
 
 public record PlutusMap(Dictionary<PlutusData, PlutusData> Value)
     : CborMap<PlutusData, PlutusData>(Value), PlutusData;
@@ -30,10 +30,10 @@ public record PlutusBytes(byte[] Value)
     typeof(PlutusIndefiniteList),
     typeof(PlutusDefiniteList),
 ])]
-public interface PlutusList: PlutusData;
+public interface PlutusList : PlutusData;
 
 public record PlutusIndefiniteList(PlutusData[] Value)
     : CborIndefiniteList<PlutusData>(Value), PlutusList;
 
 public record PlutusDefiniteList(PlutusData[] Value)
-    : CborIndefiniteList<PlutusData>(Value), PlutusList;
+    : CborDefiniteList<PlutusData>(Value), PlutusList;

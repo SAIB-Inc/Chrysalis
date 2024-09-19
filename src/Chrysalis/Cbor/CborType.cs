@@ -11,5 +11,6 @@ public enum CborType
     EncodedValue,
     RationalNumber,
     Text,
-    Nullable
+    Nullable,
+    Tag
 }
