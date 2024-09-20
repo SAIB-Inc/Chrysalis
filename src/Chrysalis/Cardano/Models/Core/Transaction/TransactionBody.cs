@@ -7,7 +7,7 @@ namespace Chrysalis.Cardano.Models.Core.Transaction;
 
 [CborSerializable(CborType.Map)]
 public record TransactionBody(
-    [CborProperty(0)] CborDefiniteList<TransactionInput> Inputs,
+    [CborProperty(0)] TransactionInputs Inputs,
     [CborProperty(1)] CborDefiniteList<TransactionOutput> Outputs,
     [CborProperty(2)] CborUlong Fee,
     [CborProperty(3)] CborUlong? TimeToLive,
@@ -15,7 +15,7 @@ public record TransactionBody(
     [CborProperty(5)] Withdrawals? Withdrawals,
     [CborProperty(7)] CborBytes? AuxiliaryDataHash,
     [CborProperty(8)] CborUlong? ValidityIntervalStart,
-    [CborProperty(9)] MultiAsset? Mint,
+    [CborProperty(9)] MultiAssetMint? Mint,
     [CborProperty(11)] CborBytes? ScriptDataHash,
     [CborProperty(13)] CborDefiniteList<TransactionInput>? Collateral,
     [CborProperty(14)] CborDefiniteList<CborBytes>? RequiredSigners,

@@ -35,10 +35,10 @@ public record ClaimEntry(
     MultisigScript Claimant,
 
     [CborProperty(1)]
-    MultiAsset VestingValue,
+    MultiAssetOutput VestingValue,
 
     [CborProperty(2)]
-    MultiAsset DirectValue,
+    MultiAssetOutput DirectValue,
 
     [CborProperty(3)]
     CborBytes VestingParameters,

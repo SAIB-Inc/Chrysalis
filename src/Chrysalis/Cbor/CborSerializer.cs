@@ -38,6 +38,9 @@ public static class CborSerializer
                 case CborType.Ulong:
                     SerializeCborUlong(writer, cbor, objType);
                     break;
+                case CborType.Long:
+                    SerializeCborLong(writer, cbor, objType);
+                    break;
                 case CborType.List:
                     SerializeList(writer, cbor, objType);
                     break;
@@ -151,6 +154,11 @@ public static class CborSerializer
     private static void SerializeCborUlong(CborWriter writer, ICbor cbor, Type objType)
     {
         writer.WriteUInt64((ulong)cbor.GetValue(objType)!);
+    }
+
+    private static void SerializeCborLong(CborWriter writer, ICbor cbor, Type objType)
+    {
+        writer.WriteInt64((long)cbor.GetValue(objType)!);
     }
 
     private static void SerializeCborInt(CborWriter writer, ICbor cbor, Type objType)
@@ -483,6 +491,7 @@ public static class CborSerializer
                 CborType.Map => DeserializeMap(reader, targetType),
                 CborType.Int => DeserializeCborInt(reader, targetType),
                 CborType.Ulong => DeserializeCborUlong(reader, targetType),
+                CborType.Long => DeserializeCborLong(reader, targetType),
                 CborType.Union => DeserializeUnion(reader, targetType),
                 CborType.Bytes => DeserializeCborBytes(reader, targetType),
                 CborType.Constr => DeserializeConstructor(reader, targetType),
@@ -514,6 +523,12 @@ public static class CborSerializer
     private static ICbor DeserializeCborUlong(CborReader reader, Type targetType)
     {
         ulong value = reader.ReadUInt64();
+        return (ICbor)Activator.CreateInstance(targetType, value)!;
+    }
+
+    private static ICbor DeserializeCborLong(CborReader reader, Type targetType)
+    {
+        long value = reader.ReadInt64();
         return (ICbor)Activator.CreateInstance(targetType, value)!;
     }
 
@@ -724,7 +739,7 @@ public static class CborSerializer
                 }
                 else
                 {
-                    Type firstParamType = constructorParams[1].ParameterType;
+                    Type firstParamType = constructorParams[2].ParameterType;
                     Type elementType = firstParamType.GetElementType()!;
 
                     var listType = typeof(List<>).MakeGenericType(elementType);

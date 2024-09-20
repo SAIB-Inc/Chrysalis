@@ -14,5 +14,5 @@ public record Lovelace(ulong Value): Value;
 [CborSerializable(CborType.List)]
 public record LovelaceWithMultiAsset(
     Lovelace Lovelace,
-    MultiAsset MultiAsset
+    MultiAssetOutput MultiAsset
 ): Value;

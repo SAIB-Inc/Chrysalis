@@ -5,6 +5,7 @@ public enum CborType
     Bytes,
     Int,
     Ulong,
+    Long,
     Map,
     List,
     Union,
