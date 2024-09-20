@@ -7,11 +7,11 @@ namespace Chrysalis.Cardano.Models.Core.Transaction;
 
 [CborSerializable(CborType.Map)]
 public record TransactionBody(
-    [CborProperty(0)] TransactionInputs Inputs,
+    [CborProperty(0)] CborMaybeIndefList<TransactionInput> Inputs,
     [CborProperty(1)] CborDefiniteList<TransactionOutput> Outputs,
     [CborProperty(2)] CborUlong Fee,
     [CborProperty(3)] CborUlong? TimeToLive,
-    [CborProperty(4)] CborDefiniteList<Certificate>? Certificates,
+    [CborProperty(4)] CborMaybeIndefList<Certificate>? Certificates,
     [CborProperty(5)] Withdrawals? Withdrawals,
     [CborProperty(7)] CborBytes? AuxiliaryDataHash,
     [CborProperty(8)] CborUlong? ValidityIntervalStart,
