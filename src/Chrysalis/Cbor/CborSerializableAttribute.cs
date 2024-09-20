@@ -7,6 +7,7 @@ public class CborSerializableAttribute(CborType type) : Attribute
     public int Index { get; set; } = -1;
     public bool IsDefinite { get; set; } = true;
     public bool IsCustom { get; set; } = false;
+    public int Size { get; set; } = -1;
 
     public CborSerializableAttribute(CborType type, int index) : this(type)
     {

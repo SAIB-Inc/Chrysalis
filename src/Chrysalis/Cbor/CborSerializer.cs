@@ -173,11 +173,11 @@ public static class CborSerializer
         {
             writer.WriteStartIndefiniteLengthByteString();
             byte[] bytesValue = (byte[])cbor.GetValue(objType)!;
-            const int chunkSize = 1024;
+            int chunkSize = cborSerializableAttr.Size;
             for (int i = 0; i < bytesValue.Length; i += chunkSize)
             {
                 int length = Math.Min(chunkSize, bytesValue.Length - i);
-                writer.WriteByteString(((byte[])cbor.GetValue(objType)!).AsSpan(i, length));
+                writer.WriteByteString((bytesValue).AsSpan(i, length));
             }
             writer.WriteEndIndefiniteLengthByteString();
         }
@@ -511,7 +511,7 @@ public static class CborSerializer
     private static ICbor DeserializeCborBytes(CborReader reader, Type targetType)
     {
         byte[] value = reader.ReadByteString();
-        return (CborBytes)Activator.CreateInstance(targetType, value)!;
+        return (ICbor)Activator.CreateInstance(targetType, value)!;
     }
 
     private static ICbor DeserializeCborInt(CborReader reader, Type targetType)

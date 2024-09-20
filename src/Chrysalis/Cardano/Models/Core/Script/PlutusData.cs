@@ -23,7 +23,7 @@ public record PlutusBigInt(ulong Value)
     : CborUlong(Value), PlutusData;
 
 public record PlutusBytes(byte[] Value)
-    : CborBytes(Value), PlutusData;
+    : CborBoundedBytes(Value), PlutusData;
 
 [CborSerializable(CborType.Union)]
 [CborUnionTypes([
