@@ -924,7 +924,7 @@ public static class CborSerializer
             }
         }
 
-        throw new InvalidOperationException("No matching type found in the union");
+        throw new InvalidOperationException($"Type {targetType.Name} No matching type found in the union, CBOR: {Convert.ToHexString(unionByte.ToArray())}");
     }
 
     private static ICbor? DeserializeEncodedValue(CborReader reader, Type targetType)
