@@ -476,12 +476,6 @@ public static class CborSerializer
 
     private static ICbor? DeserializeCbor(CborReader reader, Type targetType)
     {
-        if (reader.PeekState() == CborReaderState.Null)
-        {
-            reader.ReadNull();
-            return null;
-        }
-
         CborType? cborType = CborSerializerUtils.GetCborType(targetType);
 
         if (cborType != null)
@@ -510,7 +504,7 @@ public static class CborSerializer
 
     private static ICbor DeserializeCborBytes(CborReader reader, Type targetType)
     {
-        byte[] value = reader.ReadByteString();
+        byte[] value = reader.ReadByteString() ?? throw new InvalidOperationException("Expected byte string in CBOR data");
         return (ICbor)Activator.CreateInstance(targetType, value)!;
     }
 
