@@ -54,8 +54,8 @@ public record PoolRegistration(
     [CborProperty(4)] CborUlong Cost,
     [CborProperty(5)] CborRationalNumber Margin,
     [CborProperty(6)] RewardAccount RewardAccount,
-    [CborProperty(7)] CborDefiniteList<CborBytes> PoolOwners,
-    [CborProperty(8)] CborDefiniteList<Relay> Relay,
+    [CborProperty(7)] CborMaybeIndefList<CborBytes> PoolOwners,
+    [CborProperty(8)] CborMaybeIndefList<Relay> Relay,
     [CborProperty(9)] CborNullable<PoolMetadata> PoolMetadata
 ) : Certificate;
 
