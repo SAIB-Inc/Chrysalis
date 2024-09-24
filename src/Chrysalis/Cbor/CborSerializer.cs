@@ -132,14 +132,10 @@ public static class CborSerializer
             {
                 object? value = property.GetValue(cbor);
 
-                if (value is null)
+                if (value is null || value is ICbor)
                 {
-                    continue;
-                }
-                else if (value is ICbor cborValue)
-                {
-                    Type concreteType = CborSerializerUtils.GetCborType(property.PropertyType) == CborType.Union ? value.GetType() : property.PropertyType;
-                    SerializeCbor(writer, cborValue, concreteType);
+                    Type concreteType = value is not null && CborSerializerUtils.GetCborType(property.PropertyType) == CborType.Union ? value.GetType() : property.PropertyType;
+                    SerializeCbor(writer, (ICbor)value!, concreteType);
                 }
                 else
                 {
@@ -433,23 +429,22 @@ public static class CborSerializer
 
     private static void SerializeNullable(CborWriter writer, ICbor cbor, Type objType)
     {
-        Type itemType = objType.GetGenericArguments()[0];
-        PropertyInfo? valueProperty = objType.GetProperty("Value") ??
-            throw new InvalidOperationException($"Type {objType.Name} does not have a 'Value' property.");
-
-        object? value = valueProperty.GetValue(cbor);
-
-        if (value is null)
+        if (cbor is null)
         {
             writer.WriteNull();
         }
-        else if (value is ICbor cborValue)
-        {
-            SerializeCbor(writer, cborValue, itemType);
-        }
         else
         {
-            throw new InvalidOperationException($"Value in {objType.Name} is not null but does not implement ICbor.");
+            object? value = objType.GetProperty("Value")?.GetValue(cbor);
+            if (value is ICbor cborValue)
+            {
+                Type itemType = objType.GetGenericArguments()[0];
+                SerializeCbor(writer, cborValue, itemType);
+            }
+            else
+            {
+                throw new InvalidOperationException($"Value in {objType.Name} is not null but does not implement ICbor.");
+            }
         }
     }
 
@@ -612,17 +607,7 @@ public static class CborSerializer
             for (int i = 0; i < properties.Count; i++)
             {
                 Type propType = properties[i].PropertyType;
-
-                if (propType.IsGenericType && propType.GetGenericTypeDefinition() == typeof(CborNullable<>))
-                {
-                    Type innerType = propType.GetGenericArguments()[0];
-                    object? innerValue = DeserializeCbor(reader, innerType);
-                    values[i] = Activator.CreateInstance(propType, innerValue)!;
-                }
-                else
-                {
-                    values[i] = DeserializeCbor(reader, propType)!;
-                }
+                values[i] = DeserializeCbor(reader, propType)!;
             }
 
             reader.ReadEndArray();
@@ -967,7 +952,8 @@ public static class CborSerializer
         else if (targetType.IsGenericType)
         {
             Type itemType = targetType.GetGenericArguments()[0];
-            return DeserializeCbor(reader, itemType)!;
+            object? innerValue = DeserializeCbor(reader, itemType);
+            return (ICbor)Activator.CreateInstance(targetType, innerValue)!;
         }
 
         throw new InvalidOperationException($"Invalid Nullable Type.");

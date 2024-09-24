@@ -1,7 +1,6 @@
 using Chrysalis.Cbor;
 using Chrysalis.Cardano.Models.Cbor;
 using Chrysalis.Cardano.Models.Core.Governance;
-using Chrysalis.Cardano.Models.Plutus;
 
 namespace Chrysalis.Cardano.Models.Core.Certificates;
 
