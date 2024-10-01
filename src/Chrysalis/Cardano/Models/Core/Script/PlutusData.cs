@@ -20,11 +20,31 @@ public record PlutusConstr(int Index, bool IsInfinite, PlutusData[] Value) : Plu
 public record PlutusMap(Dictionary<PlutusData, PlutusData> Value)
     : CborMap<PlutusData, PlutusData>(Value), PlutusData;
 
-public record PlutusBigInt(long Value)
-    : CborLong(Value), PlutusData;
+[CborSerializable(CborType.Union)]
+[CborUnionTypes([
+    typeof(PlutusBoundedBytes),
+    typeof(PlutusDefiniteBytes),
+])]
+public interface PlutusBytes : PlutusData;
 
-public record PlutusBytes(byte[] Value)
-    : CborBoundedBytes(Value), PlutusData;
+[CborSerializable(CborType.Union)]
+[CborUnionTypes([
+    typeof(PlutusBigUInt),
+    typeof(PlutusBigNInt),
+])]
+public interface PlutusBigInt : PlutusData;
+
+public record PlutusBigUInt(ulong Value)
+    : CborUlong(Value), PlutusBigInt;
+
+public record PlutusBigNInt(long Value)
+    : CborLong(Value), PlutusBigInt;
+
+public record PlutusBoundedBytes(byte[] Value)
+    : CborBoundedBytes(Value), PlutusBytes;
+
+public record PlutusDefiniteBytes(byte[] Value)
+    : CborBytes(Value), PlutusBytes;
 
 [CborSerializable(CborType.Tag, Index = 2)]
 public record PlutusBytesWithTag(PlutusBytes Value) : PlutusData;
