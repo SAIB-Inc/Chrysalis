@@ -15,18 +15,19 @@ public record Relay : ICbor;
 [CborSerializable(CborType.List)]
 public record SingleHostAddr(
     [CborProperty(0)] CborInt Tag,
-    [CborProperty(1)] CborUlong? Port,
-    [CborProperty(2)] CborBytes? IPv4, 
-    [CborProperty(3)] CborBytes? IPv6   
+    [CborProperty(1)] CborNullable<CborUlong> Port,
+    [CborProperty(2)] CborNullable<CborBytes> IPv4, 
+    [CborProperty(3)] CborNullable<CborBytes> IPv6   
 ) : Relay;
 
 [CborSerializable(CborType.List)]
 public record SingleHostName(
     [CborProperty(0)] CborInt Tag,
-    [CborProperty(1)] CborUlong? Port,
+    [CborProperty(1)] CborNullable<CborUlong> Port,
     [CborProperty(2)] CborText DNSName
 ) : Relay;
 
+[CborSerializable(CborType.List)]
 public record MultiHostName(
     [CborProperty(0)] CborInt Tag,
     [CborProperty(1)] CborText DNSName

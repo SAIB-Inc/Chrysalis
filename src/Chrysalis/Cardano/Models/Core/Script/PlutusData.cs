@@ -22,13 +22,6 @@ public record PlutusMap(Dictionary<PlutusData, PlutusData> Value)
 
 [CborSerializable(CborType.Union)]
 [CborUnionTypes([
-    typeof(PlutusBoundedBytes),
-    typeof(PlutusDefiniteBytes),
-])]
-public interface PlutusBytes : PlutusData;
-
-[CborSerializable(CborType.Union)]
-[CborUnionTypes([
     typeof(PlutusBigUInt),
     typeof(PlutusBigNInt),
 ])]
@@ -39,6 +32,13 @@ public record PlutusBigUInt(ulong Value)
 
 public record PlutusBigNInt(long Value)
     : CborLong(Value), PlutusBigInt;
+
+[CborSerializable(CborType.Union)]
+[CborUnionTypes([
+    typeof(PlutusBoundedBytes),
+    typeof(PlutusDefiniteBytes),
+])]
+public interface PlutusBytes : PlutusData;
 
 public record PlutusBoundedBytes(byte[] Value)
     : CborBoundedBytes(Value), PlutusBytes;
