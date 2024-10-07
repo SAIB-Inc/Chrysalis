@@ -19,8 +19,8 @@ public record MetadatumMap(Dictionary<TransactionMetadatum, TransactionMetadatum
 public record MetadatumList(TransactionMetadatum[] Value)
     : CborDefiniteList<TransactionMetadatum>(Value), TransactionMetadatum;
 
-public record MetadatumInt(ulong Value)
-    : CborUlong(Value), TransactionMetadatum;
+public record MetadatumInt(long Value)
+    : CborLong(Value), TransactionMetadatum;
 
 public record MetadatumBytes(byte[] Value)
     : CborBytes(Value), TransactionMetadatum;
