@@ -5,26 +5,73 @@ using Chrysalis.Cardano.Models.Core.Certificates;
 
 namespace Chrysalis.Cardano.Models.Core.Transaction;
 
+[CborSerializable(CborType.Union)]
+[CborUnionTypes([
+    typeof(ConwayTransactionBody),
+    typeof(BabbageTransactionBody),
+    typeof(AlonzoTransactionBody)
+])]
+public interface TransactionBody : ICbor;
+
 [CborSerializable(CborType.Map)]
-public record TransactionBody(
-    [CborProperty(0)] CborDefiniteList<TransactionInput> Inputs,
-    [CborProperty(1)] CborDefiniteList<TransactionOutput> Outputs,
+public record ConwayTransactionBody(
+    [CborProperty(0)] CborMaybeIndefList<TransactionInput> Inputs,
+    [CborProperty(1)] CborMaybeIndefList<TransactionOutput> Outputs,
     [CborProperty(2)] CborUlong Fee,
     [CborProperty(3)] CborUlong? TimeToLive,
-    [CborProperty(4)] CborDefiniteList<Certificate>? Certificates,
+    [CborProperty(4)] CborMaybeIndefList<Certificate>? Certificates,
     [CborProperty(5)] Withdrawals? Withdrawals,
     [CborProperty(7)] CborBytes? AuxiliaryDataHash,
     [CborProperty(8)] CborUlong? ValidityIntervalStart,
-    [CborProperty(9)] MultiAsset? Mint,
+    [CborProperty(9)] MultiAssetMint? Mint,
     [CborProperty(11)] CborBytes? ScriptDataHash,
-    [CborProperty(13)] CborDefiniteList<TransactionInput>? Collateral,
-    [CborProperty(14)] CborDefiniteList<CborBytes>? RequiredSigners,
+    [CborProperty(13)] CborMaybeIndefList<TransactionInput>? Collateral,
+    [CborProperty(14)] CborMaybeIndefList<CborBytes>? RequiredSigners,
     [CborProperty(15)] CborInt? NetworkId,
     [CborProperty(16)] TransactionOutput? CollateralReturn,
     [CborProperty(17)] CborUlong? TotalCollateral,    
-    [CborProperty(18)] CborDefiniteList<TransactionInput>? ReferenceInputs,
+    [CborProperty(18)] CborMaybeIndefList<TransactionInput>? ReferenceInputs,
     [CborProperty(19)] VotingProcedures? VotingProcedures, 
-    [CborProperty(20)] CborDefiniteList<ProposalProcedure>? ProposalProcedures,
+    [CborProperty(20)] CborMaybeIndefList<ProposalProcedure>? ProposalProcedures,
     [CborProperty(21)] CborUlong? TreasuryValue,
     [CborProperty(22)] CborUlong? Donation 
-) : ICbor;
+) : TransactionBody;
+
+[CborSerializable(CborType.Map)]
+public record BabbageTransactionBody(
+    [CborProperty(0)] CborMaybeIndefList<TransactionInput> Inputs,
+    [CborProperty(1)] CborMaybeIndefList<TransactionOutput> Outputs,
+    [CborProperty(2)] CborUlong Fee,
+    [CborProperty(3)] CborUlong? TimeToLive,
+    [CborProperty(4)] CborMaybeIndefList<Certificate>? Certificates,
+    [CborProperty(5)] Withdrawals? Withdrawals,
+    [CborProperty(6)] Update? Update,
+    [CborProperty(7)] CborBytes? AuxiliaryDataHash,
+    [CborProperty(8)] CborUlong? ValidityIntervalStart,
+    [CborProperty(9)] MultiAssetMint? Mint,
+    [CborProperty(11)] CborBytes? ScriptDataHash,
+    [CborProperty(13)] CborMaybeIndefList<TransactionInput>? Collateral,
+    [CborProperty(14)] CborMaybeIndefList<CborBytes>? RequiredSigners,
+    [CborProperty(15)] CborInt? NetworkId,
+    [CborProperty(16)] TransactionOutput? CollateralReturn,
+    [CborProperty(17)] CborUlong? TotalCollateral,    
+    [CborProperty(18)] CborMaybeIndefList<TransactionInput>? ReferenceInputs
+) : TransactionBody;
+
+[CborSerializable(CborType.Map)]
+public record AlonzoTransactionBody(
+    [CborProperty(0)] CborMaybeIndefList<TransactionInput> Inputs,
+    [CborProperty(1)] CborMaybeIndefList<TransactionOutput> Outputs,
+    [CborProperty(2)] CborUlong Fee,
+    [CborProperty(3)] CborUlong? TimeToLive,
+    [CborProperty(4)] CborMaybeIndefList<Certificate>? Certificates,
+    [CborProperty(5)] Withdrawals? Withdrawals,
+    [CborProperty(6)] Update? Update,
+    [CborProperty(7)] CborBytes? AuxiliaryDataHash,
+    [CborProperty(8)] CborUlong? ValidityIntervalStart,
+    [CborProperty(9)] MultiAssetMint? Mint,
+    [CborProperty(11)] CborBytes? ScriptDataHash,
+    [CborProperty(13)] CborMaybeIndefList<TransactionInput>? Collateral,
+    [CborProperty(14)] CborMaybeIndefList<CborBytes>? RequiredSigners,
+    [CborProperty(15)] CborInt? NetworkId
+) : TransactionBody;

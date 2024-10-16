@@ -4,7 +4,7 @@ using Chrysalis.Cbor;
 namespace Chrysalis.Cardano.Models.Core.Block;
 
 [CborSerializable(CborType.List)]
-public record MultiEraBlock(
+public record BlockWithEra(
     [CborProperty(0)] CborInt EraNumber,
     [CborProperty(1)] Block Block
 ) : ICbor;
