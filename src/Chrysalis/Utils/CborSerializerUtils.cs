@@ -15,6 +15,19 @@ public static class CborSerializerUtils
         int baseTagValue = actualIndex > 6 ? ExtendedTagValue - 7 : BaseTagValue;
         return (CborTag)(baseTagValue + actualIndex);
     }
+    
+    public static void ValidateTag(CborTag tag, Type targetType)
+    {
+        CborSerializableAttribute? cborSerializableAttribute = targetType.GetCustomAttribute<CborSerializableAttribute>();
+        
+        if (cborSerializableAttribute == null)
+            throw new InvalidOperationException($"Target type {targetType.Name} does not have a CborSerializableAttribute.");
+
+        int expectedTagValue = cborSerializableAttribute.Index >= 0 ? (int)GetCborTag(cborSerializableAttribute.Index) : (int)GetCborTag();
+    
+        if ((int)tag != expectedTagValue)
+            throw new InvalidOperationException($"Invalid tag {tag} for {targetType.Name}. Expected tag: {expectedTagValue}");
+    }
 
     public static object? GetValue(this ICbor cbor, Type objType)
     {

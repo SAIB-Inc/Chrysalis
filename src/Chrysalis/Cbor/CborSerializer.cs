@@ -23,7 +23,7 @@ public static class CborSerializer
 
     private static void SerializeCbor(CborWriter writer, ICbor cbor, Type objType)
     {
-        CborType? cborType = CborSerializerUtils.GetCborType(objType);
+        CborType? cborType = objType.GetCborType();
 
         if (cborType is not null)
         {
@@ -112,7 +112,7 @@ public static class CborSerializer
     {
         Type? baseType = objType.BaseType;
         CborSerializableAttribute? cborSerializableAttr = objType.GetCustomAttribute<CborSerializableAttribute>();
-        bool IsDefinite = cborSerializableAttr?.IsDefinite ?? true;
+        bool isDefinite = cborSerializableAttr?.IsDefinite ?? true;
 
         if (cbor is null)
             return;
@@ -121,12 +121,12 @@ public static class CborSerializer
         {
             MethodInfo? method = typeof(CborSerializer).GetMethod(nameof(SerializeGenericList), BindingFlags.NonPublic | BindingFlags.Static);
             MethodInfo genericMethod = method!.MakeGenericMethod(baseType.GetGenericArguments());
-            genericMethod.Invoke(null, [writer, cbor, IsDefinite]);
+            genericMethod.Invoke(null, [writer, cbor, isDefinite]);
         }
         else
         {
             PropertyInfo[] properties = cbor.GetType().GetProperties(BindingFlags.Public | BindingFlags.Instance);
-            writer.WriteStartArray(IsDefinite ? properties.Length : null);
+            writer.WriteStartArray(isDefinite ? properties.Length : null);
 
             foreach (PropertyInfo property in properties)
             {
@@ -197,18 +197,12 @@ public static class CborSerializer
             }
             writer.WriteEndMap();
         }
-        else if (obj is not null && objType.IsGenericType)
-        {
-            MethodInfo? method = typeof(CborSerializer).GetMethod(nameof(SerializeGenericMap), BindingFlags.NonPublic | BindingFlags.Static);
-            MethodInfo genericMethod = method!.MakeGenericMethod(objType.GetGenericArguments());
-            genericMethod.Invoke(null, [writer, obj, cborSerializableAttr!.IsDefinite]);
-        }
-        else if (obj is not null && objType.BaseType is not null && objType.BaseType.IsGenericType) // Support Mutiple Levels of Inheritance
+        else if (objType.IsGenericType || (objType.BaseType?.IsGenericType ?? false))
         {
             IDictionary data = (IDictionary)objType.GetProperty("Value")?.GetValue(obj)!;
             SerializeGenericMap(writer, data, cborSerializableAttr!.IsDefinite);
         }
-        else if (obj is not null && objType.GetCustomAttribute<CborSerializableAttribute>()?.Type == CborType.Map)
+        else if (objType.GetCustomAttribute<CborSerializableAttribute>()?.Type == CborType.Map)
         {
             SerializeCustomMap(writer, obj, objType, cborSerializableAttr!.IsDefinite);
         }
@@ -222,7 +216,7 @@ public static class CborSerializer
     {
         Type? currentType = objType;
 
-        if (currentType != null && currentType.IsGenericType)
+        if (currentType.IsGenericType)
         {
             Type[] genericArgs = currentType.GetGenericArguments();
             MethodInfo? method = typeof(CborSerializer).GetMethod(nameof(SerializeGenericMap), BindingFlags.NonPublic | BindingFlags.Static);
@@ -471,7 +465,7 @@ public static class CborSerializer
 
     private static ICbor? DeserializeCbor(CborReader reader, Type targetType)
     {
-        CborType? cborType = CborSerializerUtils.GetCborType(targetType);
+        CborType? cborType = targetType.GetCborType();
 
         if (cborType != null)
         {
@@ -643,12 +637,15 @@ public static class CborSerializer
         CborTag tag = reader.ReadTag();
         CborSerializableAttribute? targetTypeSerializable = targetType.GetCustomAttribute<CborSerializableAttribute>();
 
-        int constrIndex = targetTypeSerializable?.Index ?? -1;
         bool is121To127 = (int)tag >= 121 && (int)tag <= 127;
         bool isAbove127 = (int)tag > 127;
         bool is102 = (int)tag == 102;
 
-        bool isDyanmic = targetTypeSerializable?.Index == -1;
+        int constrIndex = targetTypeSerializable?.Index ?? -1;
+        bool isDynamic = constrIndex == -1;
+        
+        if (!isDynamic)
+            CborSerializerUtils.ValidateTag(tag, targetType);
 
         if (is121To127 && targetTypeSerializable != null)
         {
@@ -700,13 +697,12 @@ public static class CborSerializer
                     reader.ReadEndArray();
                     return (ICbor?)Activator.CreateInstance(targetType);
                 }
-                throw new InvalidOperationException($"Unhandled generic type: {genericTypeDef.Name}");
             }
         }
         else if (targetType.GetCustomAttribute<CborSerializableAttribute>()?.Type == CborType.Constr)
         {
             ParameterInfo[] constructorParams = targetType.GetConstructors().First().GetParameters();
-            if (isDyanmic)
+            if (isDynamic)
             {
                 if (is102)
                 {
@@ -717,8 +713,8 @@ public static class CborSerializer
                     Type valueParamType = constructorParams[2].ParameterType;
                     Type elementType = valueParamType.GetElementType()!;
 
-                    var listType = typeof(List<>).MakeGenericType(elementType);
-                    var args = (IList)Activator.CreateInstance(listType)!;
+                    Type listType = typeof(List<>).MakeGenericType(elementType);
+                    IList args = (IList)Activator.CreateInstance(listType)!;
 
                     reader.ReadStartArray();
 
@@ -729,8 +725,8 @@ public static class CborSerializer
 
                     reader.ReadEndArray();
 
-                    var toArrayMethod = args.GetType().GetMethod("ToArray");
-                    var array = toArrayMethod!.Invoke(args, null);
+                    MethodInfo? toArrayMethod = args.GetType().GetMethod("ToArray");
+                    object? array = toArrayMethod!.Invoke(args, null);
 
                     reader.ReadEndArray();
 
@@ -741,8 +737,8 @@ public static class CborSerializer
                     Type firstParamType = constructorParams[2].ParameterType;
                     Type elementType = firstParamType.GetElementType()!;
 
-                    var listType = typeof(List<>).MakeGenericType(elementType);
-                    var args = (IList)Activator.CreateInstance(listType)!;
+                    Type listType = typeof(List<>).MakeGenericType(elementType);
+                    IList args = (IList)Activator.CreateInstance(listType)!;
 
                     reader.ReadStartArray();
 
@@ -753,8 +749,8 @@ public static class CborSerializer
 
                     reader.ReadEndArray();
 
-                    var toArrayMethod = args.GetType().GetMethod("ToArray");
-                    var array = toArrayMethod!.Invoke(args, null);
+                    MethodInfo? toArrayMethod = args.GetType().GetMethod("ToArray");
+                    object? array = toArrayMethod!.Invoke(args, null);
 
                     return (ICbor?)Activator.CreateInstance(targetType, constrIndex, false, array);
                 }
@@ -762,7 +758,7 @@ public static class CborSerializer
             else
             {
                 object?[] args = new object?[constructorParams.Length];
-                if (constructorParams is not null && constructorParams.Length != 0)
+                if (constructorParams.Length != 0)
                 {
                     reader.ReadStartArray();
                     for (int i = 0; i < constructorParams.Length; i++)
@@ -838,11 +834,10 @@ public static class CborSerializer
     private static ICbor? DeserializeCustomMap(CborReader reader, Type targetType)
     {
         Type? baseType = targetType.BaseType;
-        Type[] genericArgs;
 
         if (baseType != null && baseType.IsGenericType)
         {
-            genericArgs = baseType.GetGenericArguments();
+            Type[] genericArgs = baseType.GetGenericArguments();
 
             MethodInfo? method = typeof(CborSerializer).GetMethod(nameof(DeserializeGenericMap), BindingFlags.NonPublic | BindingFlags.Static);
             MethodInfo genericMethod = method!.MakeGenericMethod(genericArgs);
