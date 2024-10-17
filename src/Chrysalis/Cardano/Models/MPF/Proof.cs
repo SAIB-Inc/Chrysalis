@@ -18,7 +18,7 @@ public record Branch(
     CborUlong Skip,
 
     [CborProperty(1)]
-    CborBytes Neighbors
+    CborBoundedBytes Neighbors
 ) : ProofStep;
 
 [CborSerializable(CborType.Constr, Index = 1)]
@@ -36,10 +36,10 @@ public record Leaf(
     CborUlong Skip,
 
     [CborProperty(1)]
-    CborBytes Key,
+    CborBoundedBytes Key,
 
     [CborProperty(2)]
-    CborBytes Value
+    CborBoundedBytes Value
 ) : ProofStep;
 
 [CborSerializable(CborType.Constr, Index = 0)]
@@ -48,10 +48,10 @@ public record Neighbor(
     CborUlong Nibble,
 
     [CborProperty(1)]
-    CborBytes Prefix,
+    CborBoundedBytes Prefix,
 
     [CborProperty(2)]
-    CborBytes Root
+    CborBoundedBytes Root
 ) : ProofStep;
 
 public record Proof(ProofStep[] ProofSteps) : CborIndefiniteList<ProofStep>(ProofSteps);
