@@ -4,7 +4,7 @@ using Chrysalis.Cbor;
 namespace Chrysalis.Cardano.Models.Sundae;
 
 [CborSerializable(CborType.Union)]
-[CborUnionTypes([typeof(Signature)])]
+[CborUnionTypes([typeof(Signature), typeof(AllOf), typeof(AnyOf), typeof(AtLeast), typeof(Before), typeof(After), typeof(Script)])]
 public record MultisigScript : ICbor;
 
 [CborSerializable(CborType.Constr, Index = 0)]
