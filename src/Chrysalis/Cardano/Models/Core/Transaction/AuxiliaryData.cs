@@ -13,7 +13,11 @@ namespace Chrysalis.Cardano.Models.Core.Transaction;
 public interface AuxiliaryData : ICbor;
 
 [CborSerializable(CborType.Tag, Index = 259)]
-public record PostAlonzoAuxiliaryData(PostAlonzoAuxiliaryDataMap Value): AuxiliaryData;
+public record PostAlonzoAuxiliaryData(PostAlonzoAuxiliaryDataMap Value) : AuxiliaryData
+{
+    public byte[]? Raw { get; set; }
+}
+
 
 [CborSerializable(CborType.Map)]
 public record PostAlonzoAuxiliaryDataMap(
@@ -22,7 +26,7 @@ public record PostAlonzoAuxiliaryDataMap(
     [CborProperty(2)] CborDefiniteList<CborBytes>? PlutusV1ScriptSet,
     [CborProperty(3)] CborDefiniteList<CborBytes>? PlutusV2ScriptSet,
     [CborProperty(4)] CborDefiniteList<CborBytes>? PlutusV3ScriptSet
-): ICbor;
+) : RawCbor;
 
 public record Metadata(Dictionary<CborUlong, TransactionMetadatum> Value)
     : CborMap<CborUlong, TransactionMetadatum>(Value), AuxiliaryData;
@@ -31,4 +35,7 @@ public record Metadata(Dictionary<CborUlong, TransactionMetadatum> Value)
 public record ShellyMaAuxiliaryData(
     [CborProperty(0)] Metadata TransactionMetadata,
     [CborProperty(1)] CborDefiniteList<NativeScript> AuxiliaryScripts
-): AuxiliaryData;
+) : AuxiliaryData
+{
+    public byte[]? Raw { get; set; }
+}

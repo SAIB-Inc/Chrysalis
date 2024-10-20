@@ -7,4 +7,4 @@ namespace Chrysalis.Cardano.Models.Core.Governance;
 public record GovActionId( 
     [CborProperty(0)] CborBytes TransactionId,
     [CborProperty(1)] CborInt GovActionIndex
-) : ICbor;
+) : RawCbor;

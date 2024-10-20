@@ -10,7 +10,7 @@ namespace Chrysalis.Cardano.Models.Core.Transaction;
     typeof(MaryTransactionOutput),
     typeof(ShellyTransactionOutput)
 ])]
-public record TransactionOutput : ICbor;
+public record TransactionOutput : RawCbor;
 
 [CborSerializable(CborType.List)]
 public record ShellyTransactionOutput(

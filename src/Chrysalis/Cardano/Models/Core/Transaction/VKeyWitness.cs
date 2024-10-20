@@ -5,6 +5,6 @@ namespace Chrysalis.Cardano.Models.Core.Transaction;
 
 [CborSerializable(CborType.List)]
 public record VKeyWitness(
-    CborBytes VKey,
-    CborBytes Signature
-) : ICbor;
+    [CborProperty(0)] CborBytes VKey,
+    [CborProperty(1)] CborBytes Signature
+) : RawCbor;

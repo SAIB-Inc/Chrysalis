@@ -8,7 +8,7 @@ namespace Chrysalis.Cardano.Models.Core.Block;
     typeof(BabbageHeaderBody),
     typeof(AlonzoHeaderBody),
 ])]
-public record BlockHeaderBody : ICbor;
+public record BlockHeaderBody : RawCbor;
 
 [CborSerializable(CborType.List)]
 public record BabbageHeaderBody(

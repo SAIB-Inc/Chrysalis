@@ -11,7 +11,7 @@ public record Listing(
 
     [CborProperty(1)]
     CborBytes OwnerPkh
-) : ICbor;
+) : RawCbor;
 
 [CborSerializable(CborType.Constr, Index = 0)]
 public record ListingPayout(
@@ -20,4 +20,4 @@ public record ListingPayout(
 
     [CborProperty(1)]
     CborUlong Amount
-) : ICbor;
+) : RawCbor;

@@ -1,6 +1,6 @@
 namespace Chrysalis.Cbor;
 
-[AttributeUsage(AttributeTargets.Property | AttributeTargets.Parameter, AllowMultiple = false)]
+[AttributeUsage(AttributeTargets.Property | AttributeTargets.Parameter, Inherited = true, AllowMultiple = false)]
 public class CborPropertyAttribute : Attribute
 {
     public string? Key { get; } = default!;

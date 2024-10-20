@@ -7,4 +7,4 @@ namespace Chrysalis.Cardano.Models.Core.Governance;
 public record Constitution(
     [CborProperty(0)] Anchor Anchor,
     [CborProperty(1)] CborNullable<CborBytes> ScriptHash
-) : ICbor;
+) : RawCbor;

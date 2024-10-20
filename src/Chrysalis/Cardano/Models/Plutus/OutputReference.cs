@@ -10,7 +10,7 @@ public record OutputReference(
 
     [CborProperty(1)]
     CborUlong Index
-) : ICbor;
+) : RawCbor;
 
 [CborSerializable(CborType.Constr, Index = 0)]
-public record TransactionId(CborBytes Hash) : ICbor;
+public record TransactionId(CborBytes Hash) : RawCbor;

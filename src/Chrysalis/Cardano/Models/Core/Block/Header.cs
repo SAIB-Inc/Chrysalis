@@ -7,4 +7,4 @@ namespace Chrysalis.Cardano.Models.Core.Block;
 public record BlockHeader(
     [CborProperty(0)] BlockHeaderBody HeaderBody,
     [CborProperty(1)] CborBytes BodySignature
-) : ICbor;
+) : RawCbor;

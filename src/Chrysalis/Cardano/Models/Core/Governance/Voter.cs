@@ -7,4 +7,4 @@ namespace Chrysalis.Cardano.Models.Core.Governance;
 public record Voter( 
     [CborProperty(0)] CborInt Tag,
     [CborProperty(1)] CborBytes Hash
-) : ICbor;
+) : RawCbor;

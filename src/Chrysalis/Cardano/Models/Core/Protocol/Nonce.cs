@@ -7,4 +7,4 @@ namespace Chrysalis.Cardano.Models.Core.Protocol;
 public record Nonce(
     [CborProperty(0)] CborUlong Variant,
     [CborProperty(1)] CborBytes? Hash
-) : ICbor;
+) : RawCbor;

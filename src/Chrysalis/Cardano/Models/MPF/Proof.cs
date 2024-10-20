@@ -10,7 +10,7 @@ namespace Chrysalis.Cardano.Models.Mpf;
     typeof(Fork),
     typeof(Leaf)
 ])]
-public record ProofStep : ICbor;
+public record ProofStep : RawCbor;
 
 [CborSerializable(CborType.Constr, Index = 0)]
 public record Branch(

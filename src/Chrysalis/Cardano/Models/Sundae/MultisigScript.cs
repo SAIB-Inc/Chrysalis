@@ -5,7 +5,7 @@ namespace Chrysalis.Cardano.Models.Sundae;
 
 [CborSerializable(CborType.Union)]
 [CborUnionTypes([typeof(Signature), typeof(AllOf), typeof(AnyOf), typeof(AtLeast), typeof(Before), typeof(After), typeof(Script)])]
-public record MultisigScript : ICbor;
+public record MultisigScript : RawCbor;
 
 [CborSerializable(CborType.Constr, Index = 0)]
 public record Signature(CborBytes KeyHash) : MultisigScript;

@@ -7,4 +7,4 @@ namespace Chrysalis.Cardano.Models.Core.Block;
 public record BlockWithEra(
     [CborProperty(0)] CborInt EraNumber,
     [CborProperty(1)] Block Block
-) : ICbor;
+) : RawCbor;

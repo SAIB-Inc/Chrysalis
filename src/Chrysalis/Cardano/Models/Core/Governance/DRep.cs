@@ -10,7 +10,7 @@ namespace Chrysalis.Cardano.Models.Core.Governance;
     typeof(Abstain),
     typeof(DRepNoConfidence),
 ])]
-public record DRep : ICbor;
+public record DRep : RawCbor;
 
 [CborSerializable(CborType.List)]
 public record DRepAddrKeyHash(

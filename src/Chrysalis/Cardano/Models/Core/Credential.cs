@@ -7,4 +7,4 @@ namespace Chrysalis.Cardano.Models.Core;
 public record Credential( 
     [CborProperty(0)] CborInt CredentialType,
     [CborProperty(1)] CborBytes Hash
-) : ICbor;
+) : RawCbor;

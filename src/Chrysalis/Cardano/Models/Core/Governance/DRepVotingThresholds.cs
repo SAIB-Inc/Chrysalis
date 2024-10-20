@@ -15,4 +15,4 @@ public record DRepVotingThresholds(
     [CborProperty(8)] CborRationalNumber PpTechnicalGroup,
     [CborProperty(9)] CborRationalNumber PpGovernanceGroup,
     [CborProperty(10)] CborRationalNumber TreasuryWithdrawal
-) : ICbor;
+) : RawCbor;

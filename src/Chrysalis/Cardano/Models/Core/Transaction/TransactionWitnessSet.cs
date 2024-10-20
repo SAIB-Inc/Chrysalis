@@ -13,4 +13,4 @@ public record TransactionWitnessSet(
     [CborProperty(5)] Redeemers? Redeemers,
     [CborProperty(6)] CborMaybeIndefList<CborBytes>? PlutusV2ScriptSet,
     [CborProperty(7)] CborMaybeIndefList<CborBytes>? PlutusV3ScriptSet
-) : ICbor;
+) : RawCbor;

@@ -9,4 +9,4 @@ public record ProposalProcedure(
     [CborProperty(1)] RewardAccount RewardAccount,
     [CborProperty(2)] GovAction GovAction, 
     [CborProperty(3)] Anchor Anchor
-) : ICbor;
+) : RawCbor;

@@ -7,7 +7,7 @@ namespace Chrysalis.Cardano.Models.Core.Certificates;
 public record MoveInstantaneousReward(
     [CborProperty(0)] CborInt InstantaneousRewardSource,
     [CborProperty(1)] Target InstantaneousRewardTarget
-) : ICbor;
+) : RawCbor;
 
 [CborSerializable(CborType.Union)]
 [CborUnionTypes([

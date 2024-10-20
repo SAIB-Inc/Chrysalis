@@ -7,4 +7,4 @@ namespace Chrysalis.Cardano.Models.Core;
 public record Anchor(
     [CborProperty(0)] CborText AnchorUrl, 
     [CborProperty(1)] CborBytes AnchorDataHash
-) : ICbor;
+) : RawCbor;

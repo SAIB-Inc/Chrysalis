@@ -5,7 +5,7 @@ namespace Chrysalis.Cardano.Models.Core;
 
 [CborSerializable(CborType.Union)]
 [CborUnionTypes([typeof(Lovelace), typeof(LovelaceWithMultiAsset)])]
-public record Value : ICbor;
+public record Value : RawCbor;
 
 [CborSerializable(CborType.Ulong)]
 public record Lovelace(ulong Value): Value;
@@ -13,6 +13,6 @@ public record Lovelace(ulong Value): Value;
 
 [CborSerializable(CborType.List)]
 public record LovelaceWithMultiAsset(
-    Lovelace Lovelace,
-    MultiAssetOutput MultiAsset
+    [CborProperty(0)] Lovelace Lovelace,
+    [CborProperty(1)] MultiAssetOutput MultiAsset
 ): Value;

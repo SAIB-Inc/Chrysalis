@@ -7,4 +7,4 @@ namespace Chrysalis.Cardano.Models.Core.Transaction;
 public record TransactionInput(
     [CborProperty(0)] CborBytes TransactionId,
     [CborProperty(1)] CborInt Index
-) : ICbor;
+) : RawCbor;

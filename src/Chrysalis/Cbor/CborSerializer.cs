@@ -11,8 +11,15 @@ public static class CborSerializer
     public static byte[] Serialize(ICbor cbor)
     {
         CborWriter writer = new(CborConformanceMode.Strict);
-        SerializeCbor(writer, cbor, cbor.GetType());
-        return writer.Encode();
+        if (cbor.Raw is not null)
+        {
+            return cbor.Raw;
+        }
+        else
+        {
+            SerializeCbor(writer, cbor, cbor.GetType());
+            return writer.Encode();
+        }
     }
 
     public static T? Deserialize<T>(byte[] cborData)
@@ -466,28 +473,32 @@ public static class CborSerializer
     private static ICbor? DeserializeCbor(CborReader reader, Type targetType)
     {
         CborType? cborType = targetType.GetCborType();
-
+        ReadOnlyMemory<byte> originalBytes = reader.ReadEncodedValue();
+        CborReader subReader = new(originalBytes);
+        ICbor? result;
         if (cborType != null)
         {
-            return cborType switch
+            result = cborType switch
             {
-                CborType.Map => DeserializeMap(reader, targetType),
-                CborType.Int => DeserializeCborInt(reader, targetType),
-                CborType.Ulong => DeserializeCborUlong(reader, targetType),
-                CborType.Long => DeserializeCborLong(reader, targetType),
-                CborType.Union => DeserializeUnion(reader, targetType),
-                CborType.Bytes => DeserializeCborBytes(reader, targetType),
-                CborType.Constr => DeserializeConstructor(reader, targetType),
-                CborType.List => DeserializeList(reader, targetType),
-                CborType.EncodedValue => DeserializeEncodedValue(reader, targetType),
-                CborType.RationalNumber => DeserializeRationalNumber(reader, targetType),
-                CborType.Text => DeserializeText(reader, targetType),
-                CborType.Nullable => DeserializeNullable(reader, targetType),
-                CborType.Tag => DeserializeTag(reader, targetType),
+                CborType.Map => DeserializeMap(subReader, targetType),
+                CborType.Int => DeserializeCborInt(subReader, targetType),
+                CborType.Ulong => DeserializeCborUlong(subReader, targetType),
+                CborType.Long => DeserializeCborLong(subReader, targetType),
+                CborType.Union => DeserializeUnion(subReader, targetType),
+                CborType.Bytes => DeserializeCborBytes(subReader, targetType),
+                CborType.Constr => DeserializeConstructor(subReader, targetType),
+                CborType.List => DeserializeList(subReader, targetType),
+                CborType.EncodedValue => DeserializeEncodedValue(subReader, targetType),
+                CborType.RationalNumber => DeserializeRationalNumber(subReader, targetType),
+                CborType.Text => DeserializeText(subReader, targetType),
+                CborType.Nullable => DeserializeNullable(subReader, targetType),
+                CborType.Tag => DeserializeTag(subReader, targetType),
                 _ => throw new NotImplementedException($"Unknown CborType: {cborType}"),
             };
+            if (result is null) throw new InvalidOperationException($"Deserialization failed for target type {targetType.Name}");
+            result.Raw = originalBytes.ToArray();
+            return result;
         }
-
         throw new NotImplementedException($"Deserialization not implemented for target type {targetType.Name}");
     }
 
@@ -614,13 +625,19 @@ public static class CborSerializer
             if (isDefiniteDetected != isDefinite)
                 throw new InvalidOperationException("Invalid length definition for list");
 
-            List<PropertyInfo> properties = [.. targetType.GetProperties()];
-
+            var properties = targetType.GetConstructors()
+                .First()
+                .GetParameters()
+                .Where(p => p.GetCustomAttributes(typeof(CborPropertyAttribute), true).Any())
+                .Select(p => targetType.GetProperty(p.Name ?? throw new InvalidOperationException("Property name not found")))
+                .Where(p => p != null)
+                .ToList() ?? throw new InvalidOperationException($"No properties found for type: {targetType.Name}");
             object[] values = new object[properties.Count];
 
             for (int i = 0; i < properties.Count; i++)
             {
-                Type propType = properties[i].PropertyType;
+                PropertyInfo? propertyInfo = properties[i] ?? throw new InvalidOperationException($"Property not found for index {i}");
+                Type propType = propertyInfo.PropertyType;
                 values[i] = DeserializeCbor(reader, propType)!;
             }
 
@@ -643,7 +660,7 @@ public static class CborSerializer
 
         int constrIndex = targetTypeSerializable?.Index ?? -1;
         bool isDynamic = constrIndex == -1;
-        
+
         if (!isDynamic)
             CborSerializerUtils.ValidateTag(tag, targetType);
 
@@ -854,16 +871,13 @@ public static class CborSerializer
         {
             reader.ReadStartMap();
 
-            Type[] types = targetType.GetProperties()
-                       .Select(p => p.PropertyType)
-                       .ToArray();
-            ConstructorInfo? constructor = targetType.GetConstructor(types);
-            ParameterInfo[]? parameters = constructor?.GetParameters();
+            var parameters = targetType.GetConstructors()
+                .First()
+                .GetParameters()
+                .Where(p => p.GetCustomAttributes(typeof(CborPropertyAttribute), true).Any())
+                .ToList();
 
-            if (parameters is null || parameters.Length == 0)
-                return null;
-
-            object?[] values = new object?[parameters.Length];
+            object?[] values = new object?[parameters.Count];
 
             while (reader.PeekState() != CborReaderState.EndMap)
             {
@@ -871,7 +885,7 @@ public static class CborSerializer
                     ? reader.ReadTextString()
                     : reader.ReadInt32();
 
-                for (int i = 0; i < parameters.Length; i++)
+                for (int i = 0; i < parameters.Count; i++)
                 {
                     CborPropertyAttribute? cborPropertyAttribute = parameters[i].GetCustomAttribute<CborPropertyAttribute>();
                     if (cborPropertyAttribute != null)
