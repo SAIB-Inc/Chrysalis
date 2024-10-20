@@ -11,11 +11,11 @@ public record Treasury(
     MultisigScript Owner,
     CborBytes TreasuryRootHash,
     PosixTime UnlockTime
-) : ICbor;
+) : RawCbor;
 
 [CborSerializable(CborType.Union)]
 [CborUnionTypes([typeof(TreasuryClaimRedeemer), typeof(TreasuryWithdrawRedeemer)])]
-public record TreasuryRedeemer : ICbor;
+public record TreasuryRedeemer : RawCbor;
 
 [CborSerializable(CborType.Constr, Index = 0)]
 public record TreasuryClaimRedeemer(
@@ -45,4 +45,4 @@ public record ClaimEntry(
 
     [CborProperty(4)]
     CborBytes VestingProgram
-) : ICbor;
+) : RawCbor;

@@ -4,7 +4,7 @@ namespace Chrysalis.Cardano.Models.Plutus;
 
 [CborSerializable(CborType.Union)]
 [CborUnionTypes([typeof(Some<>), typeof(None<>)])]
-public record Option<T> : ICbor;
+public record Option<T> : RawCbor;
 
 [CborSerializable(CborType.Constr, Index = 0)]
 public record Some<T>([CborProperty(0)] T Value) : Option<T>;

@@ -7,4 +7,4 @@ namespace Chrysalis.Cardano.Models.Core.Block;
 public record VrfCert(
     [CborProperty(0)] CborBytes Proof,
     [CborProperty(1)] CborBytes Output
-) : ICbor;
+) : RawCbor;

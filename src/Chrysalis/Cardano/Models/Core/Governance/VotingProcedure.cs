@@ -7,4 +7,4 @@ namespace Chrysalis.Cardano.Models.Core.Governance;
 public record VotingProcedure( 
     [CborProperty(0)] CborInt Vote,
     [CborProperty(1)] CborNullable<Anchor> Anchor
-) : ICbor;
+) : RawCbor;

@@ -12,7 +12,7 @@ public record Offer(
 
     [CborProperty(1)]
     CborIndefiniteList<OfferPayout> Payouts
-) : ICbor;
+) : RawCbor;
 
 [CborSerializable(CborType.Constr, Index = 0)]
 public record OfferPayout(
@@ -21,7 +21,7 @@ public record OfferPayout(
 
     [CborProperty(1)]
     PayoutValue PayoutValue
-) : ICbor;
+) : RawCbor;
 
 public record PayoutValue(Dictionary<CborBytes, Token> Value) :
     CborMap<CborBytes, Token>(Value), ICbor;

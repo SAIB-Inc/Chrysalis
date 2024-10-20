@@ -5,7 +5,7 @@ namespace Chrysalis.Cardano.Models.Core.Transaction;
 
 [CborSerializable(CborType.Union)]
 [CborUnionTypes([typeof(DatumHashOption), typeof(InlineDatumOption)])]
-public record DatumOption : ICbor;
+public record DatumOption : RawCbor;
 
 [CborSerializable(CborType.List)]
 public record DatumHashOption(

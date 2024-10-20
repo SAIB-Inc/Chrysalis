@@ -7,4 +7,4 @@ namespace Chrysalis.Cardano.Models.Core.Protocol;
 public record ExUnitPrices(
     [CborProperty(0)] CborRationalNumber MemPrice,
     [CborProperty(1)] CborRationalNumber StepPrice
-) : ICbor;
+) : RawCbor;

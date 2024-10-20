@@ -6,7 +6,7 @@ namespace Chrysalis.Cardano.Models.Levvy.TokenV2;
 
 [CborSerializable(CborType.Union)]
 [CborUnionTypes([typeof(LendNftDatum), typeof(BorrowNftDatum), typeof(RepayNftDatum)])]
-public record NftDatum() : ICbor;
+public record NftDatum() : RawCbor;
 
 
 [CborSerializable(CborType.Constr, Index = 0)]
@@ -35,7 +35,7 @@ public record LendNftDetails(
 
     [CborProperty(4)]
     CborUlong LoanDuration
-) : ICbor;
+) : RawCbor;
 
 [CborSerializable(CborType.Constr, Index = 0)]
 public record BorrowNftDetails(
@@ -62,7 +62,7 @@ public record BorrowNftDetails(
 
     [CborProperty(7)]
     OutputReference OutputReference
-) : ICbor;
+) : RawCbor;
 
 [CborSerializable(CborType.Constr, Index = 0)]
 public record RepayNftDetails(
@@ -77,4 +77,4 @@ public record RepayNftDetails(
 
     [CborProperty(3)]
     OutputReference OutputReference
-) : ICbor;
+) : RawCbor;

@@ -24,7 +24,7 @@ namespace Chrysalis.Cardano.Models.Core.Certificates;
     typeof(UnRegDrepCert),
     typeof(UpdateDrepCert)
 ])]
-public record Certificate : ICbor;
+public record Certificate : RawCbor;
 
 [CborSerializable(CborType.List)]
 public record StakeRegistration(

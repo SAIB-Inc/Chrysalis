@@ -7,4 +7,4 @@ namespace Chrysalis.Cardano.Models.Core.Certificates;
 public record PoolMetadata(
     [CborProperty(0)] CborText Url, 
     [CborProperty(1)] CborBytes PoolMetadataHash
-) : ICbor;
+) : RawCbor;

@@ -7,7 +7,7 @@ namespace Chrysalis.Cardano.Models.Levvy.TokenV2;
 
 [CborSerializable(CborType.Union)]
 [CborUnionTypes([typeof(LendTokenDatum), typeof(BorrowTokenDatum), typeof(RepayTokenDatum)])]
-public record TokenDatum() : ICbor;
+public record TokenDatum() : RawCbor;
 
 [CborSerializable(CborType.Constr, Index = 0)]
 public record LendTokenDatum(LendTokenDetails LendTokenDetails) : TokenDatum;
@@ -43,7 +43,7 @@ public record LendTokenDetails(
 
     [CborProperty(7)]
     OutputReference OutputReference
-) : ICbor;
+) : RawCbor;
 
 [CborSerializable(CborType.Constr, Index = 0)]
 public record BorrowTokenDetails(
@@ -73,7 +73,7 @@ public record BorrowTokenDetails(
 
     [CborProperty(8)]
     OutputReference OutputReference
-) : ICbor;
+) : RawCbor;
 
 [CborSerializable(CborType.Constr, Index = 0)]
 public record RepayTokenDetails(
@@ -91,4 +91,4 @@ public record RepayTokenDetails(
 
     [CborProperty(4)]
     OutputReference OutputReference
-) : ICbor;
+) : RawCbor;

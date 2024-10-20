@@ -11,4 +11,4 @@ public record Token(
 
     [CborProperty(1)]
     CborMap<CborBytes, CborUlong> Amount
-) : ICbor;
+) : RawCbor;

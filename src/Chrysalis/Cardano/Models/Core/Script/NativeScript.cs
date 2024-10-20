@@ -12,7 +12,7 @@ namespace Chrysalis.Cardano.Models.Core.Script;
     typeof(InvalidBefore),
     typeof(InvalidHereafter)
 ])]
-public record NativeScript : ICbor;
+public record NativeScript : RawCbor;
 
 [CborSerializable(CborType.List)]
 public record ScriptPubKey(

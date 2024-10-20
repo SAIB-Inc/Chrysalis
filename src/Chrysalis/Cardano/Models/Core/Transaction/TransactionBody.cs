@@ -11,7 +11,7 @@ namespace Chrysalis.Cardano.Models.Core.Transaction;
     typeof(BabbageTransactionBody),
     typeof(AlonzoTransactionBody)
 ])]
-public interface TransactionBody : ICbor;
+public record TransactionBody : RawCbor;
 
 [CborSerializable(CborType.Map)]
 public record ConwayTransactionBody(

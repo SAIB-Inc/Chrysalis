@@ -1,5 +1,4 @@
 using Chrysalis.Cardano.Models.Cbor;
-using Chrysalis.Cardano.Models.Plutus;
 using Chrysalis.Cbor;
 
 namespace Chrysalis.Cardano.Models.Core.Certificates;
@@ -10,7 +9,7 @@ namespace Chrysalis.Cardano.Models.Core.Certificates;
     typeof(SingleHostName),
     typeof(MultiHostName),
 ])]
-public record Relay : ICbor;
+public record Relay : RawCbor;
 
 [CborSerializable(CborType.List)]
 public record SingleHostAddr(

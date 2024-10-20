@@ -10,7 +10,7 @@ namespace Chrysalis.Cardano.Models.Levvy.TokenV2;
     typeof(ForecloseTokenAction),
     typeof(CancelTokenAction),
 ])]
-public record TokenRedeemer() : ICbor;
+public record TokenRedeemer() : RawCbor;
 
 [CborSerializable(CborType.Constr, Index = 0)]
 public record BorrowTokenAction() : TokenRedeemer;

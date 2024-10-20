@@ -29,16 +29,16 @@ public record RedeemerEntry(
     [CborProperty(1)] CborUlong Index,
     [CborProperty(2)] PlutusData Data,
     [CborProperty(3)] ExUnits ExUnits
-) : ICbor;
+) : RawCbor;
 
 [CborSerializable(CborType.List)]
 public record RedeemerKey(
     [CborProperty(0)] CborInt Tag,
     [CborProperty(1)] CborUlong Index
-) : ICbor;
+) : RawCbor;
 
 [CborSerializable(CborType.List)]
 public record RedeemerValue(
     [CborProperty(0)] PlutusData Data,
     [CborProperty(1)] ExUnits ExUnits
-) : ICbor;
+) : RawCbor;

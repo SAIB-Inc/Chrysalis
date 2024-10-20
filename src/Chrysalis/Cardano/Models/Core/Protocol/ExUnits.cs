@@ -7,4 +7,4 @@ namespace Chrysalis.Cardano.Models.Core.Protocol;
 public record ExUnits(
     [CborProperty(0)] CborUlong Mem,
     [CborProperty(1)] CborUlong Steps
-) : ICbor;
+) : RawCbor;

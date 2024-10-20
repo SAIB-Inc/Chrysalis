@@ -7,4 +7,4 @@ namespace Chrysalis.Cardano.Models.Jpeg;
 public record BuyRedeemer(
     [CborProperty(0)]
     CborInt Offset
-) : ICbor;
+) : RawCbor;

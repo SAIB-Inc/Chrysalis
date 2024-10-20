@@ -11,7 +11,7 @@ namespace Chrysalis.Cardano.Models.Core.Protocol;
     typeof(BabbageProtocolParamUpdate),
     typeof(AlonzoProtocolParamUpdate)
 ])]
-public interface ProtocolParamUpdate : ICbor;
+public record ProtocolParamUpdate : RawCbor;
 
 [CborSerializable(CborType.Map)]
 public record ConwayProtocolParamUpdate(

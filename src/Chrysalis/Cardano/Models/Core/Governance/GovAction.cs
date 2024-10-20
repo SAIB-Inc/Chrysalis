@@ -16,7 +16,7 @@ namespace Chrysalis.Cardano.Models.Core.Governance;
     typeof(NewConstitution),
     typeof(InfoAction),    
 ])]
-public record GovAction : ICbor;
+public record GovAction : RawCbor;
 
 [CborSerializable(CborType.List)]
 public record ParameterChangeAction(

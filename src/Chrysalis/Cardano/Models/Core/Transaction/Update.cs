@@ -8,4 +8,4 @@ namespace Chrysalis.Cardano.Models.Core.Transaction;
 public record Update(
     [CborProperty(0)] ProposedProtocolParameterUpdates ProposedProtocolParameterUpdates,
     [CborProperty(1)] CborUlong Epoch
-) : ICbor;
+) : RawCbor;

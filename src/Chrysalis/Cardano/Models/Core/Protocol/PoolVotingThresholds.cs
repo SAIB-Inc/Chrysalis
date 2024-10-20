@@ -10,4 +10,4 @@ public record PoolVotingThresholds(
     [CborProperty(2)] CborRationalNumber CommitteeNoConfidence,
     [CborProperty(3)] CborRationalNumber HardForkInitiation,
     [CborProperty(4)] CborRationalNumber SecurityVotingThreshold
-) : ICbor;
+) : RawCbor;

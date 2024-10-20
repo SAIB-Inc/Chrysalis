@@ -5,7 +5,7 @@ using Chrysalis.Cbor;
 namespace Chrysalis.Cardano.Models.Plutus;
 
 [CborSerializable(CborType.Constr, Index = 0)]
-public record CIP68<T>() : ICbor where T : ICbor
+public record CIP68<T>() : RawCbor where T : ICbor
 {
     [CborProperty(0)]
     public required CborMap Metadata { get; init; }
