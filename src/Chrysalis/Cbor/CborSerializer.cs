@@ -495,8 +495,10 @@ public static class CborSerializer
                 CborType.Tag => DeserializeTag(subReader, targetType),
                 _ => throw new NotImplementedException($"Unknown CborType: {cborType}"),
             };
-            if (result is null) throw new InvalidOperationException($"Deserialization failed for target type {targetType.Name}");
-            result.Raw = originalBytes.ToArray();
+            
+            if (result is null && cborType != CborType.Nullable) throw new InvalidOperationException($"Deserialization failed for target type {targetType.Name}");
+            else if (result is not null) result.Raw = originalBytes.ToArray();
+            
             return result;
         }
         throw new NotImplementedException($"Deserialization not implemented for target type {targetType.Name}");
@@ -802,7 +804,7 @@ public static class CborSerializer
         {
             MethodInfo? method = typeof(CborSerializer).GetMethod(nameof(DeserializeGenericMap), BindingFlags.NonPublic | BindingFlags.Static);
             MethodInfo? genericMethod = method?.MakeGenericMethod(targetType.GetGenericArguments());
-            return (ICbor?)genericMethod?.Invoke(null, [reader]);
+            return (ICbor?)genericMethod?.Invoke(null, [reader, targetType]);
         }
         else if (targetType.GetCustomAttribute<CborSerializableAttribute>()?.Type == CborType.Map)
         {
@@ -830,7 +832,7 @@ public static class CborSerializer
         return new CborMap(dictionary);
     }
 
-    private static CborMap<TKey, TValue> DeserializeGenericMap<TKey, TValue>(CborReader reader)
+    private static ICbor DeserializeGenericMap<TKey, TValue>(CborReader reader, Type targetType)
         where TKey : ICbor
         where TValue : ICbor
     {
@@ -845,7 +847,7 @@ public static class CborSerializer
         }
 
         reader.ReadEndMap();
-        return new CborMap<TKey, TValue>(dictionary);
+        return (ICbor)Activator.CreateInstance(targetType, dictionary)!;
     }
 
     private static ICbor? DeserializeCustomMap(CborReader reader, Type targetType)
@@ -859,7 +861,7 @@ public static class CborSerializer
             MethodInfo? method = typeof(CborSerializer).GetMethod(nameof(DeserializeGenericMap), BindingFlags.NonPublic | BindingFlags.Static);
             MethodInfo genericMethod = method!.MakeGenericMethod(genericArgs);
 
-            ICbor map = (ICbor)genericMethod.Invoke(null, [reader])!;
+            ICbor map = (ICbor)genericMethod.Invoke(null, [reader, targetType])!;
 
             ConstructorInfo? ctor = targetType.GetConstructor([typeof(Dictionary<,>).MakeGenericType(genericArgs)]);
             if (ctor != null)

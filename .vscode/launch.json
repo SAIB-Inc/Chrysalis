@@ -14,9 +14,9 @@
             "args": [],
             "cwd": "${workspaceFolder}/src/Chrysalis.Test",
             // For more information about the 'console' field, see https://aka.ms/VSCode-CS-LaunchJson-Console
-            "console": "internalConsole",
+            "console": "integratedTerminal",
             "stopAtEntry": false,
-            "justMyCode": false,
+            "justMyCode": true,
             "suppressJITOptimizations": true
         },
         {
