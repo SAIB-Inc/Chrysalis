@@ -31,7 +31,7 @@ public record ConwayTransactionBody(
     [CborProperty(16)] TransactionOutput? CollateralReturn,
     [CborProperty(17)] CborUlong? TotalCollateral,    
     [CborProperty(18)] CborMaybeIndefList<TransactionInput>? ReferenceInputs,
-    [CborProperty(19)] VotingProcedures? VotingProcedures, 
+    [CborProperty(19)] VotingProcedures<Voter, VoterChoices<GovActionId, VotingProcedure>>? VotingProcedures, 
     [CborProperty(20)] CborMaybeIndefList<ProposalProcedure>? ProposalProcedures,
     [CborProperty(21)] CborUlong? TreasuryValue,
     [CborProperty(22)] CborUlong? Donation 
