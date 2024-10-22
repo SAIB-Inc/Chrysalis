@@ -8,8 +8,8 @@ Chrysalis is an open-source .NET library designed to facilitate the serializatio
 
 ## Features
 
-- **Cardano Serialization**: Convert Cardano data structures to and from CBOR (Concise Binary Object Representation).
-- **Bech32 Address Encoding/Decoding**: Handle Cardano addresses seamlessly.
+- **Cardano Serialization**: Convert Cardano blockchain data structures to and from CBOR (Concise Binary Object Representation), allowing seamless and efficient data exchanges.
+- **Bech32 Address Encoding/Decoding**: Simplifies the encoding and decoding of Cardano addresses, ensuring compatibility with widely used formats.This allows you to handle Cardano addresses seamlessly.
 - **Extensive Data Model Support**: Work with a wide range of Cardano data types, including Transactions, Assets, MultiAssets, and more.
 - **Smart Contract Interaction**: Interact with Cardano smart contracts.
 - **Cross-Platform Compatibility**: Use Chrysalis in any .NET project, including .NET Core, .NET Framework, Xamarin, and more.
@@ -25,16 +25,62 @@ Chrysalis is an open-source .NET library designed to facilitate the serializatio
 
 To use Chrysalis in your .NET project:
 
-1. `dotnet add package Chrysalis`
+1. You can install Chrysalis via NuGet:
+    `dotnet add package Chrysalis`
+
 2. Example Usage
     
     CBOR (De)serialization
     ```csharp
-    var originalTransaction = CborSerializerV2.FromHex<Transaction>(originalTransactionCborHex)!;
+    var originalTransaction = CborSerializer.FromHex<Transaction>(originalTransactionCborHex)!;
 
-    var serializedTransaction = CborSerializerV2.Serialize(originalTransaction);
+    var serializedTransaction = CborSerializer.Serialize(originalTransaction);
 
-    var deserializedTransaction = CborSerializerV2.Deserialize<Transaction>(serializedTransaction);
+    var deserializedTransaction = CborSerializer.Deserialize<Transaction>(serializedTransaction);
+    ```
+
+    Block Deserialization and Serialization
+    ```csharp
+        byte[] serializedBlock = CborSerializer.Serialize(originalBlock);
+        Chrysalis.Cardano.Models.Core.Block.Block deserializedBlock = CborSerializer.Deserialize(serializedBlock);
+    ```
+
+    Access Deserialized Transactions, Transaction Inputs, and Transaction Outputs from a Deserialized Block
+    ```csharp
+        IEnumerable<TransactionBody> transactions = originalBlock.TransactionBodies();
+        foreach (TransactionBody tx in transactions)
+        {
+            IEnumerable<TransactionInput> inputs = tx.Inputs();
+            IEnumerable<TransactionOutput> outputs = tx.Outputs();    
+        }
+    ```
+
+    Access a Transaction Input's Transaction Id and Index
+    ```csharp
+        foreach (TransactionInput input in tx.Inputs())
+        {
+            string id = input.TransacationId();
+            ulong index = input.Index();
+        }
+    ```
+
+    Access a Transaction Output's Address and Balance
+    ```csharp
+        foreach (TransactionOutput output in tx.Outputs())
+        {
+            string addr = output.Address().Value.ToBech32();
+            Value balance = output.Amount();
+            Value multiasset = balance.MultiAsset();
+            ulong lovelace = balance.LoveLace();
+        }
+    ```
+
+    Serialize Transactions in a Block
+    ```csharp
+        for (uint x = 0; x < transactions.Count(); x++)
+        {
+            CborSerializer.Serialize(transactions.ElementAt((int)x))
+        }
     ```
 
     Bech32 Address Encoding/Decoding
