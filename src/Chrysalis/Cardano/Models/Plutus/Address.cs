@@ -12,8 +12,6 @@ public record Address(
     Option<Inline<Credential>> StakeCredential
 ) : RawCbor;
 
-
-
 [CborSerializable(CborType.Union)]
 [CborUnionTypes([typeof(VerificationKey), typeof(Script)])]
 public record Credential() : RawCbor;
@@ -24,14 +22,12 @@ public record VerificationKey([CborProperty(0)] CborBytes VerificationKeyHash) :
 [CborSerializable(CborType.Constr, Index = 1)]
 public record Script([CborProperty(0)] CborBytes ScriptHash) : Credential;
 
-
-
 [CborSerializable(CborType.Union)]
 [CborUnionTypes([typeof(Inline<>), typeof(Pointer)])]
-public record Referenced() : RawCbor;
+public record Referenced<T>() : RawCbor;
 
 [CborSerializable(CborType.Constr, Index = 0)]
-public record Inline<T>(T Value) : Referenced;
+public record Inline<T>(T Value) : Referenced<T>;
 
 [CborSerializable(CborType.Constr, Index = 1)]
 public record Pointer(
@@ -43,4 +39,4 @@ public record Pointer(
 
     [CborProperty(2)]
     CborUlong CertificateIndex
-) : Referenced;
+) : Referenced<RawCbor>;

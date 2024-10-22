@@ -1,6 +1,5 @@
 using Chrysalis.Cardano.Models.Cbor;
 using Chrysalis.Cardano.Models.Core;
-using Chrysalis.Cardano.Models.Core.Block;
 using Chrysalis.Cardano.Models.Jpeg;
 
 namespace Chrysalis.Test;
@@ -14,20 +13,20 @@ public class CborTestData
             "d8799f581cf28c591a54750cb052f31d1f555a4a73bd4dc1024d0db09f2dbb85b29fd8799fd8799fd87a9f581c84cc25ea4c29951d40b443b95bbc5676bc425470f96376d1984af9abffd8799fd8799fd87a9f581c2c967f4bd28944b06462e13c5e3f5d5fa6e03f8567569438cd833e6dffffffffa140d8799f00a1401a00325aa0ffffd8799fd8799fd8799f581c54eb723c08f858e0baa992a7673dbef25f77f017f844d7ba47edd4e2ffd8799fd8799fd8799f581cfef7dca3149e0f49706ecbc7219af18c3c859336c9d77aab8ad89b22ffffffffa140d8799f00a1401a007de290ffffd8799fd8799fd8799f581cf28c591a54750cb052f31d1f555a4a73bd4dc1024d0db09f2dbb85b2ffd8799fd8799fd8799f581c78ccd5d261c1603a16e87d8927542f841b03ceb84e2cb71c83ee7dd8ffffffffa1581c9cce4bbd9f6e06ef9d67b95ad8511532b4569d290d1575fcbac48732d8799f01a0ffffffff", typeof(Offer)
         ];
     }
-    
+
     public static IEnumerable<object[]> PrimitiveTestData()
     {
-        yield return["1834", typeof(CborInt)];
-        yield return["4101", typeof(CborBytes)];
-        yield return["5F58404117843C7994EBF875EFEEB2AC276D2BB051C6A4486ED4A0C5171E8D788AC4A51727B3FA8BD0989049377503D0B5163C9D716A1A94D21802215B74D692C763DA5840BBF246F3362F0357B54758DD7E55B4A4612F1C69358151B1CA4FC2F2527408BADABDA547D81B0DF92699FD924BE4A3D144B727B2BF86F3C9E55AB2875EBF7793FF", typeof(CborBoundedBytes)];
-        yield return["1a000f4240", typeof(CborUlong)];
-        yield return["1a000f4240", typeof(PosixTime)];
-        yield return["43414243", typeof(CborBytes)];
-        yield return["a141614541696b656e", typeof(CborMap<CborBytes, CborBytes>)];
-        yield return["9f0102030405ff", typeof(CborIndefiniteList<CborInt>)];
-        yield return["850102030405", typeof(CborDefiniteList<CborInt>)];
+        yield return ["1834", typeof(CborInt)];
+        yield return ["4101", typeof(CborBytes)];
+        yield return ["5F58404117843C7994EBF875EFEEB2AC276D2BB051C6A4486ED4A0C5171E8D788AC4A51727B3FA8BD0989049377503D0B5163C9D716A1A94D21802215B74D692C763DA5840BBF246F3362F0357B54758DD7E55B4A4612F1C69358151B1CA4FC2F2527408BADABDA547D81B0DF92699FD924BE4A3D144B727B2BF86F3C9E55AB2875EBF7793FF", typeof(CborBoundedBytes)];
+        yield return ["1a000f4240", typeof(CborUlong)];
+        yield return ["1a000f4240", typeof(PosixTime)];
+        yield return ["43414243", typeof(CborBytes)];
+        yield return ["a141614541696b656e", typeof(CborMap<CborBytes, CborBytes>)];
+        yield return ["9f0102030405ff", typeof(CborIndefiniteList<CborInt>)];
+        yield return ["850102030405", typeof(CborDefiniteList<CborInt>)];
     }
-    
+
     public static IEnumerable<object[]> BlockWithEraTestData()
     {
         yield return
