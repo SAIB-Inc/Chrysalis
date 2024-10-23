@@ -1,13 +1,14 @@
 <div align="center">
     <h1 style="font-size: 3em;">Chrysalis: Cardano Serialization Library for .NET 🦋</h1>
+    <h4>A .NET Serialization Library for Cardano</h4>
 </div>
 
 <div align="center">
 
-![License](https://img.shields.io/badge/License-MIT-blue.svg)
-![C#](https://img.shields.io/badge/C%23-purple.svg)
 ![Forks](https://img.shields.io/github/forks/utxorpc/dotnet-sdk.svg?style=social) 
 ![Stars](https://img.shields.io/github/stars/utxorpc/dotnet-sdk.svg?style=social) 
+![License](https://img.shields.io/badge/License-MIT-blue.svg)
+![C#](https://img.shields.io/badge/C%23-purple.svg)
 ![Contributors](https://img.shields.io/github/contributors/utxorpc/dotnet-sdk.svg) 
 ![Issues](https://img.shields.io/github/issues/utxorpc/dotnet-sdk.svg) 
 ![Issues Closed](https://img.shields.io/github/issues-closed/utxorpc/dotnet-sdk.svg) 
@@ -19,7 +20,7 @@ Chrysalis is an open-source .NET library designed to help you create, build, and
 
 🚧 **NOTE:** This library is currently a work in progress. Feedback and contributions are welcome!
 
-## Features
+## Features ✨
 
 - **Cardano Serialization**: Convert Cardano blockchain data structures to and from CBOR (Concise Binary Object Representation), allowing seamless and efficient data exchanges while reducing manual handling. 
 - **Utility functions**: Use provided functions to intuitively interact with the Cardano data types and serialization formats.
@@ -36,14 +37,14 @@ Chrysalis is an open-source .NET library designed to help you create, build, and
 2. **Transaction Handling**: Introduce capabilities for building and signing Cardano transactions.
 3. **Advanced Address Management**: Implement address generation, derivation, and other associated functionalities.
 
-## Getting Started
+## Getting Started 📦
 
 To use Chrysalis in your .NET project:
 
 1. You can install Chrysalis via NuGet:
     `dotnet add package Chrysalis`
 
-2. Example Usage
+2. Example Usage 🧑‍💻
     
     CBOR (De)serialization
     ```csharp
@@ -104,7 +105,7 @@ To use Chrysalis in your .NET project:
         var stakeKeyHash = addressObject.GetStakeKeyHash();
     ```
 
-## Smart Contract Datums
+## Smart Contract Datums 📝
 Cbor Types
 ![Example Image](ChrysalisCborTypes.png)
 
@@ -141,7 +142,7 @@ Datum Example
     ) : RawCbor;
 ```
 
-## How to Contribute
+## How to Contribute 🤝
 
 Interested in contributing to Chrysalis? Great! We appreciate any help, be it in the form of code contributions, documentation, or even bug reports.
 
@@ -150,7 +151,7 @@ Interested in contributing to Chrysalis? Great! We appreciate any help, be it in
 - **Pull Request**: Submit a pull request once you're ready. Ensure you describe your changes clearly.
 - **Feedback**: Wait for feedback and address any comments or suggestions.
 
-## License
+## License ⚖️
 
 MIT License
 
