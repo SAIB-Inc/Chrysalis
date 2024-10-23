@@ -6,17 +6,18 @@
 
 
 
-Chrysalis is an open-source .NET library designed to facilitate the serialization and deserialization of Cardano blockchain data structures. With a strong focus on adhering to the Cardano standards and enhancing the .NET Cardano developer ecosystem, Chrysalis aims to provide developers with a reliable and consistent toolkit for working with Cardano.
+Chrysalis is an open-source .NET library designed to help you create, build, and sign Cardano transactions. As a C# serializatino library, Chrysalis facilitates the serialization and deserialization of Cardano blockchain data structures. With a strong focus on adhering to the Cardano standards and enhancing the .NET Cardano developer ecosystem, Chrysalis aims to provide developers with a reliable and consistent toolkit for working with Cardano. 
 
 🚧 **NOTE:** This library is currently a work in progress. Feedback and contributions are welcome!
 
 ## Features
 
-- **Cardano Serialization**: Convert Cardano blockchain data structures to and from CBOR (Concise Binary Object Representation), allowing seamless and efficient data exchanges.
-- **Bech32 Address Encoding/Decoding**: Simplifies the encoding and decoding of Cardano addresses, ensuring compatibility with widely used formats.This allows you to handle Cardano addresses seamlessly.
-- **Extensive Data Model Support**: Work with a wide range of Cardano data types, including Transactions, Assets, MultiAssets, and more.
+- **Cardano Serialization**: Convert Cardano blockchain data structures to and from CBOR (Concise Binary Object Representation), allowing seamless and efficient data exchanges while reducing manual handling. 
+- **Utility functions**: Use provided functions to intuitively interact with the Cardano data types and serialization formats.
+    - **Bech32 Address Encoding/Decoding**: Simplifies the encoding and decoding of Cardano addresses, ensuring compatibility with widely used formats. This allows you to handle Cardano addresses seamlessly.
+- **Extensive Data Model Support**: Use a wide range of pre-built Cardano data types, including Transactions, Assets, MultiAssets, and more.
 - **Smart Contract Interaction**: Utilize Chrysalis' Cbor types in Datum creation and interact with Cardano smart contracts.
-- **Cross-Platform Compatibility**: Use Chrysalis in any .NET project, including .NET Core, .NET Framework, Xamarin, and more.
+- **Cross-Platform Compatibility**: Use Chrysalis in any .NET project, including .NET Core, .NET Framework, Xamarin, and more. This not only allows you to assemble Cardano data through C# but other .NEt languages such as F# or VB.NET.
 
 
 ## Roadmap 🚀
