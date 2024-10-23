@@ -1,7 +1,8 @@
 # Chrysalis: Cardano Serialization Library for .NET 🦋
 
 [![.NET](https://github.com/0xAccretion/Chrysalis/actions/workflows/dotnet.yml/badge.svg)](https://github.com/0xAccretion/Chrysalis/actions/workflows/dotnet.yml)
-![License](https://img.shields.io/badge/license-MIT-blue.svg)
+![License](https://img.shields.io/badge/License-MIT-blue.svg)
+![C#](https://img.shields.io/badge/C%23-purple.svg)
 ![Language](https://img.shields.io/github/languages/top/0xAccretion/Chrysalis.svg)
 
 
