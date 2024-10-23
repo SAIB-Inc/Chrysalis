@@ -3,7 +3,7 @@
 [![.NET](https://github.com/0xAccretion/Chrysalis/actions/workflows/dotnet.yml/badge.svg)](https://github.com/0xAccretion/Chrysalis/actions/workflows/dotnet.yml)
 ![License](https://img.shields.io/badge/License-MIT-blue.svg)
 ![C#](https://img.shields.io/badge/C%23-purple.svg)
-![Language](https://img.shields.io/github/languages/top/0xAccretion/Chrysalis.svg)
+
 
 
 Chrysalis is an open-source .NET library designed to facilitate the serialization and deserialization of Cardano blockchain data structures. With a strong focus on adhering to the Cardano standards and enhancing the .NET Cardano developer ecosystem, Chrysalis aims to provide developers with a reliable and consistent toolkit for working with Cardano.
@@ -15,7 +15,7 @@ Chrysalis is an open-source .NET library designed to facilitate the serializatio
 - **Cardano Serialization**: Convert Cardano blockchain data structures to and from CBOR (Concise Binary Object Representation), allowing seamless and efficient data exchanges.
 - **Bech32 Address Encoding/Decoding**: Simplifies the encoding and decoding of Cardano addresses, ensuring compatibility with widely used formats.This allows you to handle Cardano addresses seamlessly.
 - **Extensive Data Model Support**: Work with a wide range of Cardano data types, including Transactions, Assets, MultiAssets, and more.
-- **Smart Contract Interaction**: Interact with Cardano smart contracts.
+- **Smart Contract Interaction**: Utilize Chrysalis' Cbor types in Datum creation and interact with Cardano smart contracts.
 - **Cross-Platform Compatibility**: Use Chrysalis in any .NET project, including .NET Core, .NET Framework, Xamarin, and more.
 
 
@@ -96,6 +96,39 @@ To use Chrysalis in your .NET project:
     var stakeKeyHash = addressObject.GetStakeKeyHash();
     ```
 
+## Smart Contract Datums
+Cbor Types
+![Example Image](ChrysalisCborTypes.png)
+
+Datum Example
+```csharp
+[CborSerializable(CborType.Constr, Index = 0)]
+public record SundaeSwapLiquidityPool(
+    [CborProperty(0)]
+    CborBytes Identifier,
+    
+    [CborProperty(1)]
+    AssetClassTuple Assets,
+    
+    [CborProperty(2)]
+    CborUlong CirculatingLp,
+    
+    [CborProperty(3)]
+    CborUlong BidFeesPer10Thousand,
+    
+    [CborProperty(4)]
+    CborUlong AskFeesPer10Thousand,
+    
+    [CborProperty(5)]
+    Option<MultisigScript> FeeManager,
+    
+    [CborProperty(6)]
+    CborUlong MarketOpen,
+    
+    [CborProperty(7)]
+    CborUlong ProtocolFees
+) : RawCbor;
+```
 
 ## How to Contribute
 
