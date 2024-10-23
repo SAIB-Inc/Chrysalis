@@ -1,9 +1,18 @@
-# Chrysalis: Cardano Serialization Library for .NET 🦋
+<div align="center">
+    <h1 style="font-size: 3em;">Chrysalis: Cardano Serialization Library for .NET 🦋</h1>
+</div>
 
-[![.NET](https://github.com/0xAccretion/Chrysalis/actions/workflows/dotnet.yml/badge.svg)](https://github.com/0xAccretion/Chrysalis/actions/workflows/dotnet.yml)
+<div align="center">
+
 ![License](https://img.shields.io/badge/License-MIT-blue.svg)
 ![C#](https://img.shields.io/badge/C%23-purple.svg)
+![Forks](https://img.shields.io/github/forks/utxorpc/dotnet-sdk.svg?style=social) 
+![Stars](https://img.shields.io/github/stars/utxorpc/dotnet-sdk.svg?style=social) 
+![Contributors](https://img.shields.io/github/contributors/utxorpc/dotnet-sdk.svg) 
+![Issues](https://img.shields.io/github/issues/utxorpc/dotnet-sdk.svg) 
+![Issues Closed](https://img.shields.io/github/issues-closed/utxorpc/dotnet-sdk.svg) 
 
+</div>
 
 
 Chrysalis is an open-source .NET library designed to help you create, build, and sign Cardano transactions. As a C# serialization library, Chrysalis facilitates the serialization and deserialization of Cardano blockchain data structures. With a strong focus on adhering to the Cardano standards and enhancing the .NET Cardano developer ecosystem, Chrysalis aims to provide developers with a reliable and consistent toolkit for working with Cardano. 
@@ -15,6 +24,7 @@ Chrysalis is an open-source .NET library designed to help you create, build, and
 - **Cardano Serialization**: Convert Cardano blockchain data structures to and from CBOR (Concise Binary Object Representation), allowing seamless and efficient data exchanges while reducing manual handling. 
 - **Utility functions**: Use provided functions to intuitively interact with the Cardano data types and serialization formats.
     - **Bech32 Address Encoding/Decoding**: Simplifies the encoding and decoding of Cardano addresses, ensuring compatibility with widely used formats. This allows you to handle Cardano addresses seamlessly.
+- **Extension Functions**: Simplifies the retrieval of values from Cardano data types by providing functions to access various variables within the data structures.
 - **Extensive Data Model Support**: Use a wide range of pre-built Cardano data types, including Transactions, Assets, MultiAssets, and more.
 - **Smart Contract Interaction**: Utilize Chrysalis' Cbor types in Datum creation and interact with Cardano smart contracts.
 - **Cross-Platform Compatibility**: Use Chrysalis in any .NET project, including .NET Core, .NET Framework, Xamarin, and more. This not only allows you to assemble Cardano data through C# but other .NEt languages such as F# or VB.NET.
@@ -22,7 +32,7 @@ Chrysalis is an open-source .NET library designed to help you create, build, and
 
 ## Roadmap 🚀
 
-1. **(De)serialization Support**: Achieve complete serialization and deserialization for any Cardano data type described in CDDL https://github.com/input-output-hk/cardano-ledger/blob/master/eras/alonzo/test-suite/cddl-files/alonzo.cddl.
+1. **(De)serialization Support**: Achieve complete serialization and deserialization for any Cardano data type described in CDDL https://github.com/IntersectMBO/cardano-ledger/blob/master/eras/conway/impl/cddl-files/conway.cddl.
 2. **Transaction Handling**: Introduce capabilities for building and signing Cardano transactions.
 3. **Advanced Address Management**: Implement address generation, derivation, and other associated functionalities.
 
@@ -37,17 +47,14 @@ To use Chrysalis in your .NET project:
     
     CBOR (De)serialization
     ```csharp
-    var originalTransaction = CborSerializer.FromHex<Transaction>(originalTransactionCborHex)!;
-
-    var serializedTransaction = CborSerializer.Serialize(originalTransaction);
-
-    var deserializedTransaction = CborSerializer.Deserialize<Transaction>(serializedTransaction);
+        var serializedTransaction = CborSerializer.Serialize(originalTransaction);
+        var deserializedTransaction = CborSerializer.Deserialize<TransactionBody>(serializedTransaction);
     ```
 
     Block Deserialization and Serialization
     ```csharp
         byte[] serializedBlock = CborSerializer.Serialize(originalBlock);
-        Chrysalis.Cardano.Models.Core.Block.Block deserializedBlock = CborSerializer.Deserialize(serializedBlock);
+        BlockEntity deserializedBlock = CborSerializer.Deserialize<BlockEntity>(serializedBlock);
     ```
 
     Access Deserialized Transactions, Transaction Inputs, and Transaction Outputs from a Deserialized Block
@@ -75,8 +82,8 @@ To use Chrysalis in your .NET project:
         {
             string addr = output.Address().Value.ToBech32();
             Value balance = output.Amount();
-            Value multiasset = balance.MultiAsset();
-            ulong lovelace = balance.LoveLace();
+            ulong lovelace = balance.Lovelace();
+            MultiAssetOutput multiasset = balance.MultiAsset();
         }
     ```
 
@@ -88,13 +95,13 @@ To use Chrysalis in your .NET project:
         }
     ```
 
-    Bech32 Address Encoding/Decoding
+    Bech32 Address Encoding or Decoding
     ```csharp
-    var addressBech32 = "addr...";
-    var addressObject = Address.FromBech32(addressBech32);
-    var addressBech32Again = addressObject.ToBech32();
-    var paymentKeyHash = addressObject.GetPaymentKeyHash();
-    var stakeKeyHash = addressObject.GetStakeKeyHash();
+        var addressBech32 = "addr...";
+        var addressObject = Address.FromBech32(addressBech32);
+        var addressBech32Again = addressObject.ToBech32();
+        var paymentKeyHash = addressObject.GetPaymentKeyHash();
+        var stakeKeyHash = addressObject.GetStakeKeyHash();
     ```
 
 ## Smart Contract Datums
@@ -103,35 +110,35 @@ Cbor Types
 
 Datum Example
 ```csharp
-public record AssetClass(CborBytes[] Value) : CborIndefiniteList<CborBytes>(Value);
-public record AssetClassTuple(AssetClass[] Value) : CborIndefiniteList<AssetClass>(Value);
+    public record AssetClass(CborBytes[] Value) : CborIndefiniteList<CborBytes>(Value);
+    public record AssetClassTuple(AssetClass[] Value) : CborIndefiniteList<AssetClass>(Value);
 
-[CborSerializable(CborType.Constr, Index = 0)]
-public record SundaeSwapLiquidityPool(
-    [CborProperty(0)]
-    CborBytes Identifier,
-    
-    [CborProperty(1)]
-    AssetClassTuple Assets,
-    
-    [CborProperty(2)]
-    CborUlong CirculatingLp,
-    
-    [CborProperty(3)]
-    CborUlong BidFeesPer10Thousand,
-    
-    [CborProperty(4)]
-    CborUlong AskFeesPer10Thousand,
-    
-    [CborProperty(5)]
-    Option<MultisigScript> FeeManager,
-    
-    [CborProperty(6)]
-    CborUlong MarketOpen,
-    
-    [CborProperty(7)]
-    CborUlong ProtocolFees
-) : RawCbor;
+    [CborSerializable(CborType.Constr, Index = 0)]
+    public record SundaeSwapLiquidityPool(
+        [CborProperty(0)]
+        CborBytes Identifier,
+        
+        [CborProperty(1)]
+        AssetClassTuple Assets,
+        
+        [CborProperty(2)]
+        CborUlong CirculatingLp,
+        
+        [CborProperty(3)]
+        CborUlong BidFeesPer10Thousand,
+        
+        [CborProperty(4)]
+        CborUlong AskFeesPer10Thousand,
+        
+        [CborProperty(5)]
+        Option<MultisigScript> FeeManager,
+        
+        [CborProperty(6)]
+        CborUlong MarketOpen,
+        
+        [CborProperty(7)]
+        CborUlong ProtocolFees
+    ) : RawCbor;
 ```
 
 ## How to Contribute
