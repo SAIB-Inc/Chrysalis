@@ -13,7 +13,7 @@
 ![Issues Closed](https://img.shields.io/github/issues-closed/SAIB-Inc/Chrysalis.svg?label=Closed%20Issues)
 
 <a href="https://www.nuget.org/packages/Chrysalis">
-    <img src="https://img.shields.io/Nuget/v/Chrysalis.svg" alt="NuGet">
+    <img src="https://img.shields.io/nuget/v/Chrysalis.svg" alt="NuGet">
 </a>
 
 ![C#](https://img.shields.io/badge/C%23-purple.svg)
