@@ -8,10 +8,14 @@
 ![Forks](https://img.shields.io/github/forks/utxorpc/dotnet-sdk.svg?style=social) 
 ![Stars](https://img.shields.io/github/stars/utxorpc/dotnet-sdk.svg?style=social) 
 ![License](https://img.shields.io/badge/License-MIT-blue.svg)
-![C#](https://img.shields.io/badge/C%23-purple.svg)
 ![Contributors](https://img.shields.io/github/contributors/utxorpc/dotnet-sdk.svg) 
 ![Issues](https://img.shields.io/github/issues/utxorpc/dotnet-sdk.svg) 
 ![Issues Closed](https://img.shields.io/github/issues-closed/utxorpc/dotnet-sdk.svg) 
+<a href="https://www.nuget.org/packages/Chrysalis">
+    <img src="https://img.shields.io/nuget/v/Chrysalis.svg" alt="NuGet">
+</a>
+
+![C#](https://img.shields.io/badge/C%23-purple.svg)
 
 </div>
 
