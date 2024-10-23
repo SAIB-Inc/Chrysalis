@@ -6,7 +6,7 @@
 
 
 
-Chrysalis is an open-source .NET library designed to help you create, build, and sign Cardano transactions. As a C# serializatino library, Chrysalis facilitates the serialization and deserialization of Cardano blockchain data structures. With a strong focus on adhering to the Cardano standards and enhancing the .NET Cardano developer ecosystem, Chrysalis aims to provide developers with a reliable and consistent toolkit for working with Cardano. 
+Chrysalis is an open-source .NET library designed to help you create, build, and sign Cardano transactions. As a C# serialization library, Chrysalis facilitates the serialization and deserialization of Cardano blockchain data structures. With a strong focus on adhering to the Cardano standards and enhancing the .NET Cardano developer ecosystem, Chrysalis aims to provide developers with a reliable and consistent toolkit for working with Cardano. 
 
 🚧 **NOTE:** This library is currently a work in progress. Feedback and contributions are welcome!
 
@@ -103,6 +103,9 @@ Cbor Types
 
 Datum Example
 ```csharp
+public record AssetClass(CborBytes[] Value) : CborIndefiniteList<CborBytes>(Value);
+public record AssetClassTuple(AssetClass[] Value) : CborIndefiniteList<AssetClass>(Value);
+
 [CborSerializable(CborType.Constr, Index = 0)]
 public record SundaeSwapLiquidityPool(
     [CborProperty(0)]
