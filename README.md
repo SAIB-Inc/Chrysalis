@@ -5,12 +5,13 @@
 
 <div align="center">
 
-![Forks](https://img.shields.io/github/forks/utxorpc/dotnet-sdk.svg?style=social) 
-![Stars](https://img.shields.io/github/stars/utxorpc/dotnet-sdk.svg?style=social) 
+![Forks](https://img.shields.io/github/forks/SAIB-Inc/Chrysalis.svg?style=social) 
+![Stars](https://img.shields.io/github/stars/SAIB-Inc/Chrysalis.svg?style=social) 
 ![License](https://img.shields.io/badge/License-MIT-blue.svg)
 ![Contributors](https://img.shields.io/github/contributors/SAIB-Inc/Chrysalis.svg?label=Contributors)
 ![Issues](https://img.shields.io/github/issues/SAIB-Inc/Chrysalis.svg?label=Open%20Issues)
 ![Issues Closed](https://img.shields.io/github/issues-closed/SAIB-Inc/Chrysalis.svg?label=Closed%20Issues)
+
 
 <a href="https://www.nuget.org/packages/Chrysalis">
     <img src="https://img.shields.io/nuget/v/Chrysalis.svg" alt="NuGet">
