@@ -1,6 +1,8 @@
-using Chrysalis.Cardano.Models.Cbor;
-using Chrysalis.Cardano.Models.Core;
-using Chrysalis.Cardano.Models.Jpeg;
+
+
+using Chrysalis.Cardano.Cbor;
+using Chrysalis.Cardano.Core;
+using Chrysalis.Cardano.Jpeg;
 
 namespace Chrysalis.Test;
 
