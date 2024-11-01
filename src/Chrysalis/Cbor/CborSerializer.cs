@@ -4,6 +4,9 @@ using System.Collections;
 using Chrysalis.Cardano.Models.Cbor;
 using Chrysalis.Cardano.Models.Core;
 using Chrysalis.Utils;
+using Chrysalis.Cbor.Utils;
+using Chrysalis.Cardano.Core;
+using Chrysalis.Cardano.Cbor;
 
 namespace Chrysalis.Cbor;
 public static class CborSerializer
