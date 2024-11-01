@@ -3,6 +3,7 @@ public enum CborType
 {
     Constr,
     Bytes,
+    Bool,
     Int,
     Ulong,
     Long,
