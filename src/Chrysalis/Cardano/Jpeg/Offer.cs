@@ -1,6 +1,7 @@
 using Chrysalis.Cardano.Cbor;
 using Chrysalis.Cardano.Core;
 using Chrysalis.Cbor;
+using Address = Chrysalis.Cardano.Plutus.Address;
 
 namespace Chrysalis.Cardano.Jpeg;
 

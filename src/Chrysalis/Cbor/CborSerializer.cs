@@ -1,9 +1,8 @@
 ﻿using System.Formats.Cbor;
 using System.Reflection;
 using System.Collections;
-using Chrysalis.Cbor.Utils;
 using Chrysalis.Cardano.Core;
-using Chrysalis.Cardano.Cbor;
+using Chrysalis.Cbor.Utils;
 
 namespace Chrysalis.Cbor;
 public static class CborSerializer
@@ -41,6 +40,9 @@ public static class CborSerializer
                     break;
                 case CborType.Int:
                     SerializeCborInt(writer, cbor, objType);
+                    break;
+                case CborType.Bool:
+                    SerializeCborBool(writer, cbor, objType);
                     break;
                 case CborType.Ulong:
                     SerializeCborUlong(writer, cbor, objType);
@@ -167,6 +169,11 @@ public static class CborSerializer
     private static void SerializeCborInt(CborWriter writer, ICbor cbor, Type objType)
     {
         writer.WriteInt32((int)cbor.GetValue(objType)!);
+    }
+
+    private static void SerializeCborBool(CborWriter writer, ICbor cbor, Type objType)
+    {
+        writer.WriteBoolean((bool)cbor.GetValue(objType)!);
     }
 
     private static void SerializeCborBytes(CborWriter writer, ICbor cbor, Type objType)
@@ -482,6 +489,7 @@ public static class CborSerializer
             {
                 CborType.Map => DeserializeMap(subReader, targetType),
                 CborType.Int => DeserializeCborInt(subReader, targetType),
+                CborType.Bool => DeserializeBool(subReader, targetType),
                 CborType.Ulong => DeserializeCborUlong(subReader, targetType),
                 CborType.Long => DeserializeCborLong(subReader, targetType),
                 CborType.Union => DeserializeUnion(subReader, targetType),
@@ -533,7 +541,7 @@ public static class CborSerializer
     private static ICbor DeserializeCborInt(CborReader reader, Type targetType)
     {
         int value = reader.ReadInt32();
-        return (CborInt)Activator.CreateInstance(targetType, value)!;
+        return (ICbor)Activator.CreateInstance(targetType, value)!;
     }
 
     private static ICbor DeserializeCborUlong(CborReader reader, Type targetType)
@@ -998,5 +1006,11 @@ public static class CborSerializer
         Type valueType = valueProperty?.PropertyType ?? targetType;
         ICbor? content = DeserializeCbor(reader, valueType);
         return (ICbor)Activator.CreateInstance(targetType, content!)!;
+    }
+
+    private static ICbor? DeserializeBool(CborReader reader, Type targetType)
+    {
+        bool value = reader.ReadBoolean();
+        return (ICbor)Activator.CreateInstance(targetType, value)!;
     }
 }
