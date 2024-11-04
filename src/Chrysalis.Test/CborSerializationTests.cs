@@ -3,6 +3,7 @@ using Chrysalis.Cardano.Core;
 using Chrysalis.Cardano.Plutus;
 using Chrysalis.Cbor;
 using Xunit;
+using Credential = Chrysalis.Cardano.Plutus.Credential;
 
 namespace Chrysalis.Test;
 
@@ -52,7 +53,7 @@ public class CborSerializerTests
     }
 
     [Theory]
-    [InlineData("d8799fd87a9f581c1eae96baf29e27682ea3f815aba361a0c6059d45e4bfbe95bbd2f44affff", typeof(Referenced<Cardano.Core.Credential>))]
+    [InlineData("d8799fd87a9f581c1eae96baf29e27682ea3f815aba361a0c6059d45e4bfbe95bbd2f44affff", typeof(Referenced<Credential>))]
     public void SerializeAndDeserializeBlock(string cborHex, Type type)
     {
         SerializeAndDeserialize(cborHex, type);
