@@ -1,5 +1,3 @@
-
-
 using Chrysalis.Cardano.Cbor;
 using Chrysalis.Cardano.Core;
 using Chrysalis.Cardano.Jpeg;
