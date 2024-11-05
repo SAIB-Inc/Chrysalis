@@ -2,7 +2,7 @@ using System.Formats.Cbor;
 using System.Reflection;
 using Chrysalis.Cbor;
 
-namespace Chrysalis.Utils;
+namespace Chrysalis.Cbor.Utils;
 
 public static class CborSerializerUtils
 {

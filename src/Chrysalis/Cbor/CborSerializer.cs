@@ -2,7 +2,8 @@
 using System.Reflection;
 using System.Collections;
 using Chrysalis.Cardano.Core;
-using Chrysalis.Utils;
+using Chrysalis.Cbor.Utils;
+
 namespace Chrysalis.Cbor;
 public static class CborSerializer
 {
