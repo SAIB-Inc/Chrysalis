@@ -113,7 +113,7 @@ To use Chrysalis in your .NET project:
 
 ## Smart Contract Datums 📝
 Cbor Types
-![Example Image](ChrysalisCborTypes.png)
+![Example Image](CborTypes.png)
 
 Datum Example
 ```csharp
