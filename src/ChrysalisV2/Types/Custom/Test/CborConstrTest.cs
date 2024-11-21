@@ -11,3 +11,12 @@ public record CborConstrTestWithParams(
     CborBytes ShortBytes,
     CborBoundedBytesTest LongBytes
 ) : CborConstr;
+
+[CborSerializable(typeof(CborConstr), index: 1, isDefinite: true)]
+public record CborConstrTestDefinite : CborConstr;
+
+[CborSerializable(typeof(CborConstr), 0)]
+public record CborConstrTestNested(
+    CborConstrTestWithParams WithParams,
+    CborConstrTestDefinite Definite
+) : CborConstr;

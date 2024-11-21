@@ -23,7 +23,7 @@ public static class CborConstrExtension
 
         // Determine if the array is definite or indefinite
         // then write the array
-        writer.WriteStartArray(attribute.IsDefinite ? properties?.Length ?? 0 : null);
+        writer.WriteStartArray(attribute.IsDefinite ? (properties?.Length - 1) ?? 0 : null);
         properties?.ToList().ForEach(property =>
         {
             object? value = property.GetValue(self);

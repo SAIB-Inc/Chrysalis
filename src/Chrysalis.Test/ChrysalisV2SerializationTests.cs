@@ -36,6 +36,7 @@ public class CborSerializerV2Tests
     [InlineData("f4", false, typeof(CborBool))]
     public void SerializeBool(string expectedValue, object value, Type type)
     {
+        value = new object[] { (bool)value };
         SerializeBaseTest(expectedValue, value, type);
     }
 
@@ -74,6 +75,16 @@ public static class ChrysalisV2TestData
                 new CborBoundedBytesTest(Encoding.UTF8.GetBytes("thisisalongstringtesttotestboundedbytesrandomrandomrandomrandomrrandomrandomrandomrandomrandomrandomrandomrandomrandomrandomranomdraondndsanoindosnaodnasodnoasndoasodnasodnoasdnaosndoasodnasodnasodnoasndoason")),
             },
             typeof(CborConstrTestWithParams)
+        };
+        yield return new object[] { "d8799fd8799f4b68656c6c6f5f776f726c645f5840746869736973616c6f6e67737472696e6774657374746f74657374626f756e646564627974657372616e646f6d72616e646f6d72616e646f6d72616e646f6d72584072616e646f6d72616e646f6d72616e646f6d72616e646f6d72616e646f6d72616e646f6d72616e646f6d72616e646f6d72616e646f6d72616e646f6d72616e6f58406d6472616f6e646e6473616e6f696e646f736e616f646e61736f646e6f61736e646f61736f646e61736f646e6f6173646e616f736e646f61736f646e61736f64506e61736f646e6f61736e646f61736f6effffd87a80ff",
+            new object[]{
+                new CborConstrTestWithParams(
+                    new CborBytes(Encoding.UTF8.GetBytes("hello_world")),
+                    new CborBoundedBytesTest(Encoding.UTF8.GetBytes("thisisalongstringtesttotestboundedbytesrandomrandomrandomrandomrrandomrandomrandomrandomrandomrandomrandomrandomrandomrandomranomdraondndsanoindosnaodnasodnoasndoasodnasodnoasdnaosndoasodnasodnasodnoasndoason"))
+                ),
+                new CborConstrTestDefinite()
+            },
+            typeof(CborConstrTestNested)
         };
     }
 }
