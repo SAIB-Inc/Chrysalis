@@ -9,6 +9,8 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Chrysalis", "src\Chrysalis\
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Chrysalis.Test", "src\Chrysalis.Test\Chrysalis.Test.csproj", "{79F21F38-F55F-481B-9F8D-4EC6BAB86D8F}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ChrysalisV2", "src\ChrysalisV2\ChrysalisV2.csproj", "{B813A8EA-51AE-4540-9650-97C86C5C548B}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -23,6 +25,10 @@ Global
 		{79F21F38-F55F-481B-9F8D-4EC6BAB86D8F}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{79F21F38-F55F-481B-9F8D-4EC6BAB86D8F}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{79F21F38-F55F-481B-9F8D-4EC6BAB86D8F}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B813A8EA-51AE-4540-9650-97C86C5C548B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B813A8EA-51AE-4540-9650-97C86C5C548B}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B813A8EA-51AE-4540-9650-97C86C5C548B}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B813A8EA-51AE-4540-9650-97C86C5C548B}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -30,6 +36,7 @@ Global
 	GlobalSection(NestedProjects) = preSolution
 		{9B3C3D47-7C7C-424D-BD69-FF9AE31E43EB} = {99A5B7BF-F17E-4EA3-A062-F783B9B7DB18}
 		{79F21F38-F55F-481B-9F8D-4EC6BAB86D8F} = {99A5B7BF-F17E-4EA3-A062-F783B9B7DB18}
+		{B813A8EA-51AE-4540-9650-97C86C5C548B} = {99A5B7BF-F17E-4EA3-A062-F783B9B7DB18}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {AF7CDAC5-E37D-4AF4-B9D7-418C1B20E64F}

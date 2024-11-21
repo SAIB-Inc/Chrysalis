@@ -7,6 +7,3 @@ public record CborBool(bool Value = false) : RawCbor
 {
     public CborBool() : this(false) { }
 }
-
-
-    

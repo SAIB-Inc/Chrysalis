@@ -24,6 +24,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Chrysalis\Chrysalis.csproj" />
+    <ProjectReference Include="..\ChrysalisV2\ChrysalisV2.csproj" />
   </ItemGroup>
 
 </Project>
