@@ -1,4 +1,4 @@
-namespace ChrysalisV2.Types.Core;
+namespace Chrysalis.Types.Core;
 
 public interface ICbor
 {
