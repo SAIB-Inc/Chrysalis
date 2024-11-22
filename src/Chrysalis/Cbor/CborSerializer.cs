@@ -905,7 +905,14 @@ public static class CborSerializer
 
                 if (parameterMap.TryGetValue(key.ToString()!, out var paramInfo))
                 {
-                    int index = Array.IndexOf(targetType.GetConstructors().First().GetParameters(), paramInfo.Parameter);
+                    ParameterInfo[] firstParams = targetType.GetConstructors().First().GetParameters();
+                    ParameterInfo secondParams = paramInfo.Parameter;
+
+                    int index = firstParams.ToList().FindIndex(p =>
+                        p.Name == secondParams.Name &&
+                        p.ParameterType == secondParams.ParameterType
+                    );
+
                     values[index] = DeserializeCbor(reader, paramInfo.Parameter.ParameterType);
                 }
                 else
