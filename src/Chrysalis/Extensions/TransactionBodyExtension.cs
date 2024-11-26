@@ -2,9 +2,9 @@ using Chrysalis.Cardano.Cbor;
 using Chrysalis.Cardano.Core;
 using Chrysalis.Cbor;
 
-namespace Chrysalis.Utils;
+namespace Chrysalis.Extensions;
 
-public static class TransactionBodyUtils
+public static class TransactionBodyExtension
 {
 
     public static string Id(this TransactionBody txBody) =>
@@ -68,6 +68,24 @@ public static class TransactionBodyUtils
                 CborIndefiniteListWithTag<TransactionOutput> list => list.Value.Value,
                 _ => throw new NotImplementedException()
             },
+            _ => throw new NotImplementedException()
+        };
+
+    public static byte[]? AuxiliaryDataHash(this TransactionBody transactionBody)
+        => transactionBody switch
+        {
+            ConwayTransactionBody x => x.AuxiliaryDataHash?.Value,
+            BabbageTransactionBody x => x.AuxiliaryDataHash?.Value,
+            AlonzoTransactionBody x => x.AuxiliaryDataHash?.Value,
+            _ => throw new NotImplementedException()
+        };
+    
+    public static Dictionary<CborBytes, TokenBundleMint>? Mint(this TransactionBody transactionBody)
+        => transactionBody switch
+        {
+            ConwayTransactionBody x => x.Mint?.Value,
+            BabbageTransactionBody x => x.Mint?.Value,
+            AlonzoTransactionBody x => x.Mint?.Value,
             _ => throw new NotImplementedException()
         };
 }

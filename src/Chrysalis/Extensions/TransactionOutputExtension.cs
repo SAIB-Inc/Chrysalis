@@ -1,8 +1,8 @@
 using Chrysalis.Cardano.Core;
 
-namespace Chrysalis.Utils;
+namespace Chrysalis.Extensions;
 
-public static class TransactionUtils
+public static class TransactionOutputExtension
 {
     public static Address? Address(this TransactionOutput transactionOutput)
         => transactionOutput switch
@@ -23,29 +23,37 @@ public static class TransactionUtils
             ShellyTransactionOutput shellyTransactionOutput => shellyTransactionOutput.Amount,
             _ => null
         };
-
-    public static MultiAssetOutput? MultiAsset(this Value value)
-        => value switch
+    
+    public static byte[]? ScriptRef(this TransactionOutput transactionOutput)
+        => transactionOutput switch
         {
-            LovelaceWithMultiAsset lovelaceWithMultiAsset => lovelaceWithMultiAsset.MultiAsset,
+            BabbageTransactionOutput babbageTransactionOutput => babbageTransactionOutput?.ScriptRef?.Value,
             _ => null
         };
 
-    public static ulong? GetCoin(this Value value)
-        => value switch
+    public static DatumOption? Datum(this TransactionOutput transactionOutput)
+        => transactionOutput switch
         {
-            Lovelace lovelace => lovelace.Value,
-            LovelaceWithMultiAsset lovelaceWithMultiAsset => lovelaceWithMultiAsset.Lovelace.Value,
+            BabbageTransactionOutput babbageTransactionOutput => babbageTransactionOutput.Datum,
             _ => null
         };
 
-    public static string GetSubject(this MultiAssetOutput multiAssetOutput)
+    public static byte[]? DatumHash(this TransactionOutput transactionOutput)
+        => transactionOutput switch
+        {
+            AlonzoTransactionOutput alonzoTransactionOutput => alonzoTransactionOutput.DatumHash.Value,
+            _ => null
+        };
+
+    public static byte[]? DatumInfo(this TransactionOutput transactionOutput)
     {
-        return multiAssetOutput.Value
-            .Select(v => v.Value.Value
-                .Select(tokenBundle =>
-                    Convert.ToHexString(v.Key.Value) + Convert.ToHexString(tokenBundle.Key.Value))
-                .First())
-            .First();
+        var datumOption = transactionOutput.Datum();
+        
+        if (datumOption == null)
+        {
+            return transactionOutput.DatumHash();
+        }
+
+        return datumOption.DatumOptionHash() ?? datumOption.InlineDatum();
     }
 }
