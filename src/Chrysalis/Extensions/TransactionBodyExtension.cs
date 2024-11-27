@@ -80,12 +80,12 @@ public static class TransactionBodyExtension
             _ => throw new NotImplementedException()
         };
     
-    public static Dictionary<CborBytes, TokenBundleMint>? Mint(this TransactionBody transactionBody)
+    public static Dictionary<byte[], TokenBundleMint>? Mint(this TransactionBody transactionBody)
         => transactionBody switch
         {
-            ConwayTransactionBody x => x.Mint?.Value,
-            BabbageTransactionBody x => x.Mint?.Value,
-            AlonzoTransactionBody x => x.Mint?.Value,
+            ConwayTransactionBody x => x.Mint?.Value.ToDictionary(kvp => kvp.Key.Value, kvp => kvp.Value),
+            BabbageTransactionBody x => x.Mint?.Value.ToDictionary(kvp => kvp.Key.Value, kvp => kvp.Value),
+            AlonzoTransactionBody x => x.Mint?.Value.ToDictionary(kvp => kvp.Key.Value, kvp => kvp.Value),
             _ => throw new NotImplementedException()
         };
 }

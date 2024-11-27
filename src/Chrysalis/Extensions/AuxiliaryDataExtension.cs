@@ -5,12 +5,12 @@ namespace Chrysalis.Extensions;
 
 public static class AuxiliaryDataExtension
 {
-    public static Dictionary<CborUlong, TransactionMetadatum>? Metadata(this AuxiliaryData auxiliaryData) 
+    public static Dictionary<ulong, TransactionMetadatum>? Metadata(this AuxiliaryData auxiliaryData) 
         => auxiliaryData switch
         {
-            Metadata metadata => metadata.Value,
-            PostAlonzoAuxiliaryData post => post.Value.Metadata?.Value,
-            ShellyMaAuxiliaryData shelley => shelley.TransactionMetadata.Value,
+            Metadata metadata => metadata.Value.ToDictionary(kvp => kvp.Key.Value, kvp => kvp.Value),
+            PostAlonzoAuxiliaryData post => post.Value.Metadata?.Value.ToDictionary(kvp => kvp.Key.Value, kvp => kvp.Value),
+            ShellyMaAuxiliaryData shelley => shelley.TransactionMetadata.Value.ToDictionary(kvp => kvp.Key.Value, kvp => kvp.Value),
             _ => null
         };
 
@@ -22,22 +22,24 @@ public static class AuxiliaryDataExtension
             _ => null
         };
     
-    public static IEnumerable<CborBytes>? PlutusV1Scripts(this AuxiliaryData auxiliaryData) 
+    public static IEnumerable<byte[]>? PlutusV1Scripts(this AuxiliaryData auxiliaryData) 
         => auxiliaryData switch
         {
-            PostAlonzoAuxiliaryData post => post.Value.PlutusV1ScriptSet?.Value,
+            PostAlonzoAuxiliaryData post => post.Value.PlutusV1ScriptSet?.Value.Select(script => script.Value),
             _ => null
         };
     
-    public static IEnumerable<CborBytes>? PlutusV2Scripts(this AuxiliaryData auxiliaryData) 
+    public static IEnumerable<byte[]>? PlutusV2Scripts(this AuxiliaryData auxiliaryData) 
         => auxiliaryData switch
     {
-        PostAlonzoAuxiliaryData post => post.Value.PlutusV2ScriptSet?.Value,
-        _ => null
-    };
-    public static IEnumerable<CborBytes>? PlutusV3Scripts(this AuxiliaryData auxiliaryData) => auxiliaryData switch
-    {
-        PostAlonzoAuxiliaryData post => post.Value.PlutusV3ScriptSet?.Value,
-        _ => null
-    };
+        PostAlonzoAuxiliaryData post => post.Value.PlutusV2ScriptSet?.Value.Select(script => script.Value),
+            _ => null
+        };
+    
+    public static IEnumerable<byte[]>? PlutusV3Scripts(this AuxiliaryData auxiliaryData) 
+        => auxiliaryData switch
+        {
+            PostAlonzoAuxiliaryData post => post.Value.PlutusV3ScriptSet?.Value.Select(script => script.Value),
+            _ => null
+        };
 }

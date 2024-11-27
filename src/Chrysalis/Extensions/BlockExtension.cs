@@ -23,11 +23,11 @@ public static class BlockExtension
     public static ulong TransactionCount(this Block block)
         => (ulong)TransactionBodies(block).Count();
 
-    public static CborBytes PrevHash(this Block block)
+    public static byte[] PrevHash(this Block block)
         => block.Header.HeaderBody switch
         {
-            AlonzoHeaderBody alonzoHeaderBody => alonzoHeaderBody.PrevHash.Value,
-            BabbageHeaderBody babbageHeaderBody => babbageHeaderBody.PrevHash.Value,
+            AlonzoHeaderBody alonzoHeaderBody => alonzoHeaderBody.PrevHash.Value.Value,
+            BabbageHeaderBody babbageHeaderBody => babbageHeaderBody.PrevHash.Value.Value,
             _ => throw new NotImplementedException()
         };
 
@@ -67,6 +67,6 @@ public static class BlockExtension
             _ => throw new NotImplementedException()
         };
 
-    public static Dictionary<CborInt, AuxiliaryData> AuxiliaryDataSet(this Block block)
-        => block.AuxiliaryDataSet.Value;
+    public static Dictionary<int, AuxiliaryData> AuxiliaryDataSet(this Block block)
+        => block.AuxiliaryDataSet.Value.ToDictionary(kvp => kvp.Key.Value, kvp => kvp.Value);
 }

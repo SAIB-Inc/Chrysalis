@@ -13,10 +13,11 @@ public static class AssetExtension
             _ => null
         };
 
-    public static Dictionary<CborBytes, TokenBundleOutput>? MultiAsset(this Value value)
+    public static Dictionary<string, TokenBundleOutput>? MultiAsset(this Value value)
         => value switch
         {
-            LovelaceWithMultiAsset lovelaceWithMultiAsset => lovelaceWithMultiAsset.MultiAsset.Value,
+            LovelaceWithMultiAsset lovelaceWithMultiAsset => lovelaceWithMultiAsset.MultiAsset.Value
+                .ToDictionary(kvp => Convert.ToHexString(kvp.Key.Value), kvp => kvp.Value),
             _ => null
         };
     
@@ -74,5 +75,17 @@ public static class AssetExtension
                         tokenBundle.Value.Value
                     )))
             .ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
+    }
+
+    public static Dictionary<string, ulong> TokenBundle(this TokenBundleOutput tokenBundleOutput)
+    {
+        return tokenBundleOutput.Value
+            .ToDictionary(kvp => Convert.ToHexString(kvp.Key.Value), kvp => kvp.Value.Value);
+    }
+
+    public static Dictionary<string, long> TokenBundle(this TokenBundleMint tokenBundleMint)
+    {
+        return tokenBundleMint.Value
+            .ToDictionary(kvp => Convert.ToHexString(kvp.Key.Value), kvp => kvp.Value.Value);
     }
 }
