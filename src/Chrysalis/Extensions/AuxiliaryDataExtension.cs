@@ -40,13 +40,4 @@ public static class AuxiliaryDataExtension
         PostAlonzoAuxiliaryData post => post.Value.PlutusV3ScriptSet?.Value,
         _ => null
     };
-
-    public static bool IsPostAlonzo(this AuxiliaryData auxiliaryData)
-        => auxiliaryData is PostAlonzoAuxiliaryData;
-    
-    public static bool IsShelleyMa(this AuxiliaryData auxiliaryData)
-        => auxiliaryData is ShellyMaAuxiliaryData;
-    
-    public static bool IsMetadataOnly(this AuxiliaryData auxiliaryData)
-        => auxiliaryData is Metadata;
 }

@@ -6,7 +6,7 @@ namespace Chrysalis.Extensions;
 
 public static class DatumExtension
 {
-    public static byte[]? DatumOptionHash(this DatumOption? datumOption)
+    public static byte[]? DatumHash(this DatumOption? datumOption)
         => datumOption switch
         {
             DatumHashOption hashOption => hashOption.DatumHash.Value,

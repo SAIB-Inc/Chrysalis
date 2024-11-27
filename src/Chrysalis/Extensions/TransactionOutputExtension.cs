@@ -23,7 +23,7 @@ public static class TransactionOutputExtension
             ShellyTransactionOutput shellyTransactionOutput => shellyTransactionOutput.Amount,
             _ => null
         };
-    
+
     public static byte[]? ScriptRef(this TransactionOutput transactionOutput)
         => transactionOutput switch
         {
@@ -31,7 +31,19 @@ public static class TransactionOutputExtension
             _ => null
         };
 
-    public static DatumOption? Datum(this TransactionOutput transactionOutput)
+    public static byte[]? Datum(this TransactionOutput transactionOutput)
+    {
+        DatumOption? datumOption = transactionOutput.DatumOption();
+
+        if (datumOption == null)
+        {
+            return transactionOutput.DatumHash();
+        }
+
+        return datumOption.DatumHash() ?? datumOption.InlineDatum();
+    }
+
+    public static DatumOption? DatumOption(this TransactionOutput transactionOutput)
         => transactionOutput switch
         {
             BabbageTransactionOutput babbageTransactionOutput => babbageTransactionOutput.Datum,
@@ -44,16 +56,4 @@ public static class TransactionOutputExtension
             AlonzoTransactionOutput alonzoTransactionOutput => alonzoTransactionOutput.DatumHash.Value,
             _ => null
         };
-
-    public static byte[]? DatumInfo(this TransactionOutput transactionOutput)
-    {
-        var datumOption = transactionOutput.Datum();
-        
-        if (datumOption == null)
-        {
-            return transactionOutput.DatumHash();
-        }
-
-        return datumOption.DatumOptionHash() ?? datumOption.InlineDatum();
-    }
 }

@@ -11,35 +11,35 @@ public static class TransactionBodyExtension
         Convert.ToHexString(CborSerializer.Serialize(txBody).ToBlake2b()).ToLowerInvariant();
 
     public static IEnumerable<TransactionInput> Inputs(this TransactionBody transactionBody)
-    => transactionBody switch
-    {
-        ConwayTransactionBody x => x.Inputs switch
+        => transactionBody switch
         {
+            ConwayTransactionBody x => x.Inputs switch
+            {
 
-            CborDefiniteList<TransactionInput> list => list.Value,
-            CborIndefiniteList<TransactionInput> list => list.Value,
-            CborDefiniteListWithTag<TransactionInput> list => list.Value.Value,
-            CborIndefiniteListWithTag<TransactionInput> list => list.Value.Value,
+                CborDefiniteList<TransactionInput> list => list.Value,
+                CborIndefiniteList<TransactionInput> list => list.Value,
+                CborDefiniteListWithTag<TransactionInput> list => list.Value.Value,
+                CborIndefiniteListWithTag<TransactionInput> list => list.Value.Value,
+                _ => throw new NotImplementedException()
+            },
+            BabbageTransactionBody x => x.Inputs switch
+            {
+                CborDefiniteList<TransactionInput> list => list.Value,
+                CborIndefiniteList<TransactionInput> list => list.Value,
+                CborDefiniteListWithTag<TransactionInput> tagList => tagList.Value.Value,
+                CborIndefiniteListWithTag<TransactionInput> tagList => tagList.Value.Value,
+                _ => throw new NotImplementedException()
+            },
+            AlonzoTransactionBody x => x.Inputs switch
+            {
+                CborDefiniteList<TransactionInput> list => list.Value,
+                CborIndefiniteList<TransactionInput> list => list.Value,
+                CborDefiniteListWithTag<TransactionInput> tagList => tagList.Value.Value,
+                CborIndefiniteListWithTag<TransactionInput> tagList => tagList.Value.Value,
+                _ => throw new NotImplementedException()
+            },
             _ => throw new NotImplementedException()
-        },
-        BabbageTransactionBody x => x.Inputs switch
-        {
-            CborDefiniteList<TransactionInput> list => list.Value,
-            CborIndefiniteList<TransactionInput> list => list.Value,
-            CborDefiniteListWithTag<TransactionInput> tagList => tagList.Value.Value,
-            CborIndefiniteListWithTag<TransactionInput> tagList => tagList.Value.Value,
-            _ => throw new NotImplementedException()
-        },
-        AlonzoTransactionBody x => x.Inputs switch
-        {
-            CborDefiniteList<TransactionInput> list => list.Value,
-            CborIndefiniteList<TransactionInput> list => list.Value,
-            CborDefiniteListWithTag<TransactionInput> tagList => tagList.Value.Value,
-            CborIndefiniteListWithTag<TransactionInput> tagList => tagList.Value.Value,
-            _ => throw new NotImplementedException()
-        },
-        _ => throw new NotImplementedException()
-    };
+        };
 
     public static IEnumerable<TransactionOutput> Outputs(this TransactionBody transactionBody)
         => transactionBody switch
