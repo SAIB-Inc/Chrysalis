@@ -37,12 +37,28 @@ public static class AssetExtension
     public static IEnumerable<string>? PolicyId(this MultiAssetMint multiAssetMint)
         => multiAssetMint.Value.Keys.Select(key => Convert.ToHexString(key.Value));
     
-    public static IEnumerable<string> Subjects(this MultiAssetOutput multiAssetOutput)
+    public static IEnumerable<string> AssetNames(this MultiAssetOutput multiAssetOutput)
     {
         return multiAssetOutput.Value
             .SelectMany(v => v.Value.Value
                 .Select(tokenBundle 
                     => Convert.ToHexString(tokenBundle.Key.Value)));
+    }
+
+    public static IEnumerable<string> AssetNames(this MultiAssetMint multiAssetMint)
+    {
+        return multiAssetMint.Value
+            .SelectMany(v => v.Value.Value
+                .Select(tokenBundle 
+                    => Convert.ToHexString(tokenBundle.Key.Value)));
+    }
+
+    public static IEnumerable<string> Subjects(this MultiAssetOutput multiAssetOutput)
+    {
+        return multiAssetOutput.Value
+            .SelectMany(v => v.Value.Value
+                .Select(tokenBundle 
+                    => Convert.ToHexString(v.Key.Value) + Convert.ToHexString(tokenBundle.Key.Value)));
     }
     
     public static IEnumerable<string> Subjects(this MultiAssetMint multiAssetMint)
@@ -50,7 +66,7 @@ public static class AssetExtension
         return multiAssetMint.Value
             .SelectMany(v => v.Value.Value
                 .Select(tokenBundle 
-                    => Convert.ToHexString(tokenBundle.Key.Value)));
+                    => Convert.ToHexString(v.Key.Value) +Convert.ToHexString(tokenBundle.Key.Value)));
     }
 
     public static Dictionary<string, ulong> TokenBundle(this MultiAssetOutput multiAssetOutput)
