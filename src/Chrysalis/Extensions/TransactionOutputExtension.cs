@@ -1,8 +1,8 @@
 using Chrysalis.Cardano.Core;
 
-namespace Chrysalis.Utils;
+namespace Chrysalis.Extensions;
 
-public static class TransactionUtils
+public static class TransactionOutputExtension
 {
     public static Address? Address(this TransactionOutput transactionOutput)
         => transactionOutput switch
@@ -24,28 +24,36 @@ public static class TransactionUtils
             _ => null
         };
 
-    public static MultiAssetOutput? MultiAsset(this Value value)
-        => value switch
+    public static byte[]? ScriptRef(this TransactionOutput transactionOutput)
+        => transactionOutput switch
         {
-            LovelaceWithMultiAsset lovelaceWithMultiAsset => lovelaceWithMultiAsset.MultiAsset,
+            BabbageTransactionOutput babbageTransactionOutput => babbageTransactionOutput?.ScriptRef?.Value,
             _ => null
         };
 
-    public static ulong? GetCoin(this Value value)
-        => value switch
-        {
-            Lovelace lovelace => lovelace.Value,
-            LovelaceWithMultiAsset lovelaceWithMultiAsset => lovelaceWithMultiAsset.Lovelace.Value,
-            _ => null
-        };
-
-    public static string GetSubject(this MultiAssetOutput multiAssetOutput)
+    public static byte[]? Datum(this TransactionOutput transactionOutput)
     {
-        return multiAssetOutput.Value
-            .Select(v => v.Value.Value
-                .Select(tokenBundle =>
-                    Convert.ToHexString(v.Key.Value) + Convert.ToHexString(tokenBundle.Key.Value))
-                .First())
-            .First();
+        DatumOption? datumOption = transactionOutput.DatumOption();
+
+        if (datumOption == null)
+        {
+            return transactionOutput.DatumHash();
+        }
+
+        return datumOption.DatumHash() ?? datumOption.InlineDatum();
     }
+
+    public static DatumOption? DatumOption(this TransactionOutput transactionOutput)
+        => transactionOutput switch
+        {
+            BabbageTransactionOutput babbageTransactionOutput => babbageTransactionOutput.Datum,
+            _ => null
+        };
+
+    public static byte[]? DatumHash(this TransactionOutput transactionOutput)
+        => transactionOutput switch
+        {
+            AlonzoTransactionOutput alonzoTransactionOutput => alonzoTransactionOutput.DatumHash.Value,
+            _ => null
+        };
 }
