@@ -5,12 +5,12 @@ namespace Chrysalis.Extensions;
 
 public static class AuxiliaryDataExtension
 {
-    public static Metadata? Metadata(this AuxiliaryData auxiliaryData) 
+    public static Dictionary<CborUlong, TransactionMetadatum>? Metadata(this AuxiliaryData auxiliaryData) 
         => auxiliaryData switch
         {
-            Metadata metadata => metadata,
-            PostAlonzoAuxiliaryData post => post.Value.Metadata,
-            ShellyMaAuxiliaryData shelley => shelley.TransactionMetadata,
+            Metadata metadata => metadata.Value,
+            PostAlonzoAuxiliaryData post => post.Value.Metadata?.Value,
+            ShellyMaAuxiliaryData shelley => shelley.TransactionMetadata.Value,
             _ => null
         };
 
