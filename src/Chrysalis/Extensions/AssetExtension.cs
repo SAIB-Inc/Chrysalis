@@ -20,7 +20,7 @@ public static class AssetExtension
                 .ToDictionary(kvp => Convert.ToHexString(kvp.Key.Value).ToLowerInvariant(), kvp => kvp.Value),
             _ => null
         };
-    
+
     public static MultiAssetOutput? MultiAssetOutput(this Value value)
         => value switch
         {
@@ -36,12 +36,12 @@ public static class AssetExtension
 
     public static IEnumerable<string>? PolicyId(this MultiAssetMint multiAssetMint)
         => multiAssetMint.Value.Keys.Select(key => Convert.ToHexString(key.Value).ToLowerInvariant());
-    
+
     public static IEnumerable<string> AssetNames(this MultiAssetOutput multiAssetOutput)
     {
         return multiAssetOutput.Value
             .SelectMany(v => v.Value.Value
-                .Select(tokenBundle 
+                .Select(tokenBundle
                     => Convert.ToHexString(tokenBundle.Key.Value).ToLowerInvariant()));
     }
 
@@ -49,7 +49,7 @@ public static class AssetExtension
     {
         return multiAssetMint.Value
             .SelectMany(v => v.Value.Value
-                .Select(tokenBundle 
+                .Select(tokenBundle
                     => Convert.ToHexString(tokenBundle.Key.Value).ToLowerInvariant()));
     }
 
@@ -57,7 +57,7 @@ public static class AssetExtension
     {
         return multiAssetOutput.Value
             .SelectMany(v => v.Value.Value
-                .Select(tokenBundle 
+                .Select(tokenBundle
                     => Convert.ToHexString(v.Key.Value).ToLowerInvariant() + Convert.ToHexString(tokenBundle.Key.Value).ToLowerInvariant()));
     }
 
@@ -65,15 +65,15 @@ public static class AssetExtension
     {
         return multiAssetOutput.Value
             .SelectMany(v => v.Value.Value
-                .Select(tokenBundle 
+                .Select(tokenBundle
                     => (Convert.ToHexString(v.Key.Value).ToLowerInvariant(), Convert.ToHexString(tokenBundle.Key.Value).ToLowerInvariant())));
     }
-    
+
     public static IEnumerable<string> Subjects(this MultiAssetMint multiAssetMint)
     {
         return multiAssetMint.Value
             .SelectMany(v => v.Value.Value
-                .Select(tokenBundle 
+                .Select(tokenBundle
                     => Convert.ToHexString(v.Key.Value).ToLowerInvariant() + Convert.ToHexString(tokenBundle.Key.Value).ToLowerInvariant()));
     }
 
@@ -88,7 +88,7 @@ public static class AssetExtension
                     )))
             .ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
     }
-    
+
     public static Dictionary<string, long> TokenBundle(this MultiAssetMint multiAssetMint)
     {
         return multiAssetMint.Value
@@ -111,5 +111,18 @@ public static class AssetExtension
     {
         return tokenBundleMint.Value
             .ToDictionary(kvp => Convert.ToHexString(kvp.Key.Value).ToLowerInvariant(), kvp => kvp.Value.Value);
+    }
+
+    public static Dictionary<string, ulong>? TokenBundleByPolicyId(this MultiAssetOutput multiAssetOutput, string policyId)
+    {
+        return multiAssetOutput.Value
+            .Where(v => Convert.ToHexString(v.Key.Value).ToLowerInvariant() == policyId.ToLowerInvariant())
+            .SelectMany(v => v.Value.Value
+                .Select(tokenBundle =>
+                    new KeyValuePair<string, ulong>(
+                        Convert.ToHexString(tokenBundle.Key.Value).ToLowerInvariant(),
+                        tokenBundle.Value.Value
+                    )))
+            .ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
     }
 }
