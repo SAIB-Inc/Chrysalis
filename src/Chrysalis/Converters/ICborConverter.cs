@@ -1,7 +1,9 @@
+using Chrysalis.Types;
+
 namespace Chrysalis.Converters;
 
-public interface ICborConverter<T>
+public interface ICborConverter<in T> where T : ICbor
 {
-    ReadOnlyMemory<byte> Serialize(T data);
-    T Deserialize(ReadOnlyMemory<byte> data);
+    byte[] Serialize(T value);
+    ICbor Deserialize(byte[] data, Type? targetType = null);
 }

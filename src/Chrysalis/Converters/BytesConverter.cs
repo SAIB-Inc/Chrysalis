@@ -1,24 +1,24 @@
 using System.Formats.Cbor;
 using System.Reflection;
 using Chrysalis.Attributes;
-using Chrysalis.Types.Core;
+using Chrysalis.Types;
 
 namespace Chrysalis.Converters;
 
-public class CborBytesConverter : ICborConverter<CborBytes>
+public class BytesConverter : ICborConverter<CborBytes>
 {
-    public ReadOnlyMemory<byte> Serialize(CborBytes data)
+    public byte[] Serialize(CborBytes data)
     {
-        // Get the CborSerializable attribute from the type of the current instance
-        CborSerializableAttribute attribute = data.GetType().GetCustomAttribute<CborSerializableAttribute>()
-            ?? throw new InvalidOperationException($"The type {data.GetType().Name} is not marked with CborSerializableAttribute.");
+        Type type = data.GetType();
+        bool isDefinite = type.GetCustomAttribute<CborDefiniteAttribute>() != null;
+        CborSizeAttribute? sizeAttr = type.GetCustomAttribute<CborSizeAttribute>();
 
         // Write the bytes either as a definite or indefinite length byte string
         CborWriter writer = new();
-        if (attribute.IsDefinite)
+        if (isDefinite && sizeAttr is not null)
         {
             writer.WriteStartIndefiniteLengthByteString();
-            data.Value.Chunk(attribute.Size).ToList().ForEach(writer.WriteByteString);
+            data.Value.Chunk(sizeAttr.Size).ToList().ForEach(writer.WriteByteString);
             writer.WriteEndIndefiniteLengthByteString();
         }
         else
@@ -29,7 +29,7 @@ public class CborBytesConverter : ICborConverter<CborBytes>
         return writer.Encode();
     }
 
-    public CborBytes Deserialize(ReadOnlyMemory<byte> data)
+    public ICbor Deserialize(byte[] data, Type? targetType = null)
     {
         CborReader reader = new(data);
 
