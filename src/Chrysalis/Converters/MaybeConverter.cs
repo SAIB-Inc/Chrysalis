@@ -3,32 +3,15 @@ using Chrysalis.Types;
 
 namespace Chrysalis.Converters;
 
-public class MaybeConverter<T> : ICborConverter<CborMaybe<T>>
-   where T : ICbor, new()
+public class MaybeConverter : ICborConverter
 {
-    public byte[] Serialize(CborMaybe<T> value)
+    public T Deserialize<T>(byte[] data) where T : Cbor
     {
-        CborWriter writer = new();
-
-        if (value.Value is null)
-            writer.WriteNull();
-        else
-            writer.WriteEncodedValue(CborSerializer.Serialize(value.Value));
-
-        return [.. writer.Encode()];
+        throw new NotImplementedException();
     }
 
-    public ICbor Deserialize(byte[] data, Type? targetType = null)
+    public byte[] Serialize(Cbor data)
     {
-        CborReader reader = new(data);
-
-        if (reader.PeekState() == CborReaderState.Null)
-        {
-            reader.ReadNull();
-            return new CborMaybe<T>(default);
-        }
-
-        byte[] valueBytes = reader.ReadEncodedValue().ToArray();
-        return new CborMaybe<T>(CborSerializer.Deserialize<T>(valueBytes));
+        throw new NotImplementedException();
     }
 }

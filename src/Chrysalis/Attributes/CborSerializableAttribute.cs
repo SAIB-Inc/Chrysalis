@@ -1,3 +1,5 @@
+using Chrysalis.Converters;
+
 namespace Chrysalis.Attributes;
 
 [AttributeUsage(AttributeTargets.Class | AttributeTargets.Struct | AttributeTargets.Interface)]
@@ -14,7 +16,7 @@ public class CborIndexAttribute(int tag) : Attribute
 }
 
 
-[AttributeUsage(AttributeTargets.Property)]
+[AttributeUsage(AttributeTargets.Property | AttributeTargets.Parameter)]
 public class CborPropertyAttribute(int index) : Attribute
 {
     public int Index { get; } = index;

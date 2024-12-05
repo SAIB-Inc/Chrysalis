@@ -6,25 +6,42 @@ namespace Chrysalis.Converters;
 
 public static class CborSerializer
 {
-    private static readonly Dictionary<Type, object> _converterCache = new();
+    private static readonly Dictionary<Type, object> _converterCache = [];
 
-    public static byte[] Serialize<T>(T value) where T : ICbor
+    public static byte[] Serialize<T>(T value) where T : Cbor
     {
-        ICborConverter<T> converter = GetConverter<T>(value.GetType());
+        ICborConverter converter = GetConverter<T>(value.GetType());
         return converter.Serialize(value);
     }
 
-    public static T Deserialize<T>(byte[] data) where T : ICbor
+    public static T Deserialize<T>(byte[] data) where T : Cbor
     {
-        ICborConverter<T> converter = GetConverter<T>(typeof(T));
-        return (T)converter.Deserialize(data);
+        Type? targetType = typeof(T);
+        ICborConverter converter = GetConverter<T>(targetType);
+
+        // Find the `Deserialize` method
+        MethodInfo deserializeMethod = typeof(ICborConverter).GetMethod(nameof(ICborConverter.Deserialize))
+            ?? throw new InvalidOperationException("The ICborConverter does not implement Deserialize.");
+
+        // Make the method generic with the targetType
+        MethodInfo genericMethod = deserializeMethod.MakeGenericMethod(targetType);
+
+        // Dynamically invoke Deserialize<T>(data)
+        object? result = genericMethod.Invoke(converter, [data]);
+
+        if (result is T typedResult)
+        {
+            return typedResult;
+        }
+
+        throw new InvalidOperationException($"Failed to cast deserialized result to {typeof(T).Name}.");
     }
 
-    private static ICborConverter<T> GetConverter<T>(Type type) where T : ICbor
+    private static ICborConverter GetConverter<T>(Type type) where T : ICbor
     {
         if (_converterCache.TryGetValue(type, out object? cached))
         {
-            return (ICborConverter<T>)cached;
+            return (ICborConverter)cached;
         }
 
         // If we're dealing with a derived type like CborDefList<T>
@@ -44,7 +61,7 @@ public static class CborSerializer
                 if (converter != null)
                 {
                     _converterCache[type] = converter;
-                    return (ICborConverter<T>)converter;
+                    return (ICborConverter)converter;
                 }
             }
         }
@@ -68,7 +85,7 @@ public static class CborSerializer
                     if (converter != null)
                     {
                         _converterCache[type] = converter;
-                        return (ICborConverter<T>)converter;
+                        return (ICborConverter)converter;
                     }
                 }
                 else
@@ -77,7 +94,7 @@ public static class CborSerializer
                     if (converter != null)
                     {
                         _converterCache[type] = converter;
-                        return (ICborConverter<T>)converter;
+                        return (ICborConverter)converter;
                     }
                 }
             }

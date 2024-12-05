@@ -2,8 +2,8 @@ using Chrysalis.Types;
 
 namespace Chrysalis.Converters;
 
-public interface ICborConverter<in T> where T : ICbor
+public interface ICborConverter
 {
-    byte[] Serialize(T value);
-    ICbor Deserialize(byte[] data, Type? targetType = null);
+    byte[] Serialize(Cbor data);
+    public T Deserialize<T>(byte[] data) where T : Cbor;
 }

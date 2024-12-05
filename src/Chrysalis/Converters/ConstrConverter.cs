@@ -5,14 +5,62 @@ using Chrysalis.Types;
 
 namespace Chrysalis.Converters
 {
-    public class ConstrConverter : ICborConverter<CborConstr>
+    public class ConstrConverter : ICborConverter
     {
-        public byte[] Serialize(CborConstr value)
+        public T Deserialize<T>(byte[] data) where T : Cbor
+        {
+            CborReader reader = new(data);
+
+            Type targetType = typeof(T);
+            bool isDefinite = targetType.GetCustomAttribute<CborDefiniteAttribute>() != null;
+
+            // Use the helper to get constructor parameters or properties
+            List<(int? Index, string Name, Type Type)> parametersOrProperties = GetCborPropertiesOrParameters(targetType).ToList();
+
+            // Read the tag and validate it
+            CborTag tag = reader.ReadTag();
+            CborTag expectedTag = GetTag(targetType.GetCustomAttribute<CborIndexAttribute>()?.Index ?? 0);
+
+            if (tag != expectedTag)
+            {
+                throw new InvalidOperationException($"Expected tag {expectedTag}, got {tag}");
+            }
+
+            // Read array start
+            reader.ReadStartArray();
+
+            // Prepare arguments for constructor
+            object?[] constructorArgs = new object[parametersOrProperties.Count];
+
+            for (int i = 0; i < parametersOrProperties.Count; i++)
+            {
+                (int? Index, string Name, Type ParameterType) = parametersOrProperties[i];
+
+                // Deserialize the value
+                byte[] encodedValue = reader.ReadEncodedValue().ToArray();
+                MethodInfo deserializeMethod = typeof(CborSerializer).GetMethod(nameof(CborSerializer.Deserialize))!;
+                object? deserializedValue = deserializeMethod.MakeGenericMethod(ParameterType)
+                    .Invoke(null, [encodedValue]);
+
+                constructorArgs[i] = deserializedValue;
+            }
+
+            reader.ReadEndArray();
+
+            // Create an instance using the resolved constructor arguments
+            T instance = (T)Activator.CreateInstance(targetType, constructorArgs)!;
+            instance.Raw = data;
+
+            return instance;
+        }
+
+
+        public byte[] Serialize(Cbor value)
         {
             Type type = value.GetType();
             int index = type.GetCustomAttribute<CborIndexAttribute>()?.Index ?? 0;
 
-            bool isDefinite = type.GetCustomAttribute<CborDefiniteAttribute>() is not null;
+            bool isDefinite = type.GetCustomAttribute<CborDefiniteAttribute>() != null;
 
             PropertyInfo[] properties = [.. type.GetProperties(BindingFlags.Public | BindingFlags.Instance)
                 .Where(p => p.GetCustomAttribute<CborPropertyAttribute>() != null)
@@ -27,79 +75,53 @@ namespace Chrysalis.Converters
             writer.WriteStartArray(isDefinite ? properties.Length : null);
 
             // Serialize properties
-            foreach (PropertyInfo? property in properties)
+            foreach (PropertyInfo property in properties)
             {
-                if (value == null) continue;
-
-                CborConverterAttribute? converterAttr = property.PropertyType.GetCustomAttribute<CborConverterAttribute>() ?? throw new InvalidOperationException($"Property {property.Name} type must have a CborConverter attribute");
-                object converter = Activator.CreateInstance(converterAttr.ConverterType)
-                    ?? throw new InvalidOperationException($"Could not create converter instance for {property.Name}");
-
-                // Get serialize method through reflection
-                MethodInfo method = converterAttr.ConverterType.GetMethod("Serialize")
-                    ?? throw new InvalidOperationException($"Converter must implement Serialize method");
-
-                byte[] serialized = (byte[])method.Invoke(converter, new[] { value })!;
+                object? propertyValue = property.GetValue(value);
+                byte[] serialized = CborSerializer.Serialize((Cbor)propertyValue!);
                 writer.WriteEncodedValue(serialized);
             }
 
             writer.WriteEndArray();
-            return [.. writer.Encode()];
-        }
-
-        public ICbor Deserialize(byte[] data, Type? targetType = null)
-        {
-            CborReader reader = new(data);
-            targetType ??= typeof(CborConstr);
-
-            bool isDefinite = targetType?.GetCustomAttribute<CborDefiniteAttribute>() != null;
-
-            PropertyInfo[]? properties = targetType?.GetProperties(BindingFlags.Public | BindingFlags.Instance)
-                .Where(p => p.GetCustomAttribute<CborPropertyAttribute>() != null)
-                .OrderBy(p => p.GetCustomAttribute<CborPropertyAttribute>()!.Index)
-                .ToArray();
-
-            // Read array start
-            CborTag tag = reader.ReadTag();
-            CborTag expectedTag = GetTag(targetType?.GetCustomAttribute<CborIndexAttribute>()?.Index ?? 0);
-
-            if (tag != expectedTag)
-                throw new InvalidOperationException($"Expected tag {expectedTag}, got {tag}");
-
-            reader.ReadStartArray();
-
-            object[] constructorArgs = new object[properties?.Length ?? 0];
-
-            // Deserialize properties
-            for (int i = 0; i < properties?.Length; i++)
-            {
-                PropertyInfo property = properties[i];
-                CborConverterAttribute? converterAttr = property.PropertyType.GetCustomAttribute<CborConverterAttribute>() ?? throw new InvalidOperationException($"Property {property.Name} type must have a CborConverter attribute");
-                object converter = Activator.CreateInstance(converterAttr.ConverterType)
-                    ?? throw new InvalidOperationException($"Could not create converter instance for {property.Name}");
-
-                // Get deserialize method through reflection
-                MethodInfo method = converterAttr.ConverterType.GetMethod("Deserialize")
-                    ?? throw new InvalidOperationException($"Converter must implement Deserialize method");
-
-                byte[] encodedValue = [.. reader.ReadEncodedValue().ToArray()];
-                object deserializedValue = method.Invoke(converter, [encodedValue])!;
-                constructorArgs[i] = deserializedValue;
-            }
-
-            reader.ReadEndArray();
-
-            // Create an instance of the custom type using the constructor arguments
-            object instance = Activator.CreateInstance(targetType ?? typeof(ICbor), constructorArgs)
-                ?? throw new InvalidOperationException($"Could not create instance of type {targetType?.Name}");
-
-            return (ICbor)instance;
+            return writer.Encode();
         }
 
         private static CborTag GetTag(int index)
         {
             int finalIndex = index > 6 ? 1280 - 7 : 121;
             return (CborTag)(finalIndex + index);
+        }
+
+
+        private static IEnumerable<(int? Index, string Name, Type Type)> GetCborPropertiesOrParameters(Type type)
+        {
+            // First try to get constructor parameters
+            var constructor = type.GetConstructors().FirstOrDefault();
+            if (constructor != null)
+            {
+                var parameters = constructor.GetParameters()
+                    .Select(p =>
+                    {
+                        var attr = p.GetCustomAttribute<CborPropertyAttribute>();
+                        return (attr?.Index, Name: p.Name ?? "", Type: p.ParameterType);
+                    });
+
+                // Filter out Raw property using named field
+                return parameters.Where(p => p.Name != "Raw");
+            }
+
+            // Fallback to properties if no constructor
+            return type.GetProperties()
+                .Where(p =>
+                    p.CanRead &&
+                    p.CanWrite &&
+                    p.Name != "Raw" &&
+                    p.GetCustomAttribute<CborPropertyAttribute>() != null)
+                .Select(p =>
+                {
+                    var attr = p.GetCustomAttribute<CborPropertyAttribute>();
+                    return (attr?.Index, p.Name, Type: p.PropertyType);
+                });
         }
     }
 }

@@ -82,7 +82,7 @@ public class CborSerializerTests
     // test constr
     [Theory]
     [MemberData(nameof(ConstrData))]
-    public void SerializeConstrTest(CborConstr value, string expectedValue)
+    public void SerializeConstrTest(Cbor value, string expectedValue)
     {
         string hex = Convert.ToHexString(CborSerializer.Serialize(value)).ToLowerInvariant();
         Assert.Equal(hex, expectedValue.ToLowerInvariant());
