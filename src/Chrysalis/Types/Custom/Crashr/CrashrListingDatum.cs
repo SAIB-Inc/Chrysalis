@@ -24,8 +24,8 @@ public record CrashrPayoutDatum(
 [CborIndex(0)]
 public record Address(
     [CborProperty(0)] Credential PaymentCredential,
-    [CborProperty(1)] Option<Inline<Credential>> StakeCredential)
-    : Cbor;
+    [CborProperty(1)] Option<Inline<Credential>> StakeCredential
+) : Cbor;
 
 [CborConverter(typeof(UnionConverter))]
 public abstract record Credential : Cbor;
