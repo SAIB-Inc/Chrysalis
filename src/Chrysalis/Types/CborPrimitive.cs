@@ -50,3 +50,6 @@ public record CborEncodedValue(byte[] Value) : Cbor;
 
 [CborConverter(typeof(ConstrConverter))]
 public abstract record CborConstr : Cbor;
+
+[CborConverter(typeof(NullableConverter))]
+public record CborNullable<T>(T Value) : Cbor;
