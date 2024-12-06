@@ -11,6 +11,7 @@ public class ConstrConverter : ICborConverter
     public T Deserialize<T>(byte[] data) where T : CborBase
     {
         CborReader reader = new(data);
+        CborTagUtils.ReadAndVerifyTag<T>(reader);
 
         Type targetType = typeof(T);
 
@@ -67,6 +68,7 @@ public class ConstrConverter : ICborConverter
                 .OrderBy(p => p.GetCustomAttribute<CborPropertyAttribute>()?.PropertyName)];
 
         CborWriter writer = new();
+        CborTagUtils.WriteTagIfPresent(writer, type);
 
         // Write the tag
         writer.WriteTag(GetTag(index));

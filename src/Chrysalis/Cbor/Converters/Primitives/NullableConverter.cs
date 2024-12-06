@@ -1,6 +1,7 @@
 using System.Formats.Cbor;
 using Chrysalis.Cbor.Types;
 using System.Reflection;
+using Chrysalis.Cbor.Utils;
 
 namespace Chrysalis.Cbor.Converters.Primitives;
 
@@ -9,6 +10,8 @@ public class NullableConverter : ICborConverter
     public T Deserialize<T>(byte[] data) where T : CborBase
     {
         CborReader reader = new(data);
+        CborTagUtils.ReadAndVerifyTag<T>(reader);
+
         Type targetType = typeof(T);
         Type valueType = targetType.GetGenericArguments()[0];
 
@@ -46,6 +49,7 @@ public class NullableConverter : ICborConverter
         if (value is null)
         {
             CborWriter writer = new();
+            CborTagUtils.WriteTagIfPresent(writer, valueType);
             writer.WriteNull();
             return writer.Encode();
         }

@@ -11,7 +11,6 @@ public class UnionConverter : ICborConverter
     public byte[] Serialize(CborBase value)
     {
         CborWriter writer = new();
-
         Type type = value.GetType();
 
         // Get the converter for the concrete type

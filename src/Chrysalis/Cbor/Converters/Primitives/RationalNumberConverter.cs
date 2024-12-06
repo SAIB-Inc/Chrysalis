@@ -1,6 +1,7 @@
 using System.Formats.Cbor;
 using System.Reflection;
 using Chrysalis.Cbor.Types;
+using Chrysalis.Cbor.Utils;
 
 namespace Chrysalis.Cbor.Converters.Primitives;
 
@@ -9,6 +10,7 @@ public class RationalNumberConverter : ICborConverter
     public T Deserialize<T>(byte[] data) where T : CborBase
     {
         CborReader reader = new(data);
+        CborTagUtils.ReadAndVerifyTag<T>(reader);
 
         // Expect array of 2 elements
         reader.ReadStartArray();
@@ -29,6 +31,7 @@ public class RationalNumberConverter : ICborConverter
 
     public byte[] Serialize(CborBase data)
     {
+        Type type = data.GetType();
         // numerator is the first ulong property
         PropertyInfo? numeratorProperty = data.GetType().GetProperties().FirstOrDefault(p => p.PropertyType == typeof(ulong) && p.Name != nameof(CborBase.Raw))
             ?? throw new InvalidOperationException("No ulong property found in Cbor object.");
@@ -44,6 +47,7 @@ public class RationalNumberConverter : ICborConverter
             throw new InvalidOperationException("Failed to serialize ulong properties.");
 
         CborWriter writer = new();
+        CborTagUtils.WriteTagIfPresent(writer, type);
         writer.WriteStartArray(2);
         writer.WriteUInt64(numerator);
         writer.WriteUInt64(denominator);
