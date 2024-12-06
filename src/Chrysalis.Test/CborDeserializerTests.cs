@@ -1,48 +1,11 @@
-using System.Text;
-using Chrysalis.Converters;
-using Chrysalis.Types;
-using Chrysalis.Types.Custom;
-using Chrysalis.Types.Custom.Crashr;
+using Chrysalis.Cardano.Crashr.Types.Datums;
+using Chrysalis.Cbor.Converters;
 using Xunit;
 
 namespace Chrysalis.Test;
 
 public class CborDeserializerTests
 {
-    // union test
-    public static IEnumerable<object[]> ConstrData =>
-    [
-        ["d87a80", new CborTrue(){
-            Raw = Convert.FromHexString("d87a80")
-        }],
-        ["d87a80", new CborInheritedTrue(){
-            Raw = Convert.FromHexString("d87a80")
-        }],
-        ["d87980", new CborFalse(){
-            Raw = Convert.FromHexString("d87980")
-        }],
-    ];
-
-    [Theory]
-    [MemberData(nameof(ConstrData))]
-    public void DeserializeConstrTest(string hex, ICbor expectedValue)
-    {
-        byte[] data = Convert.FromHexString(hex);
-
-        // Dynamically resolve the type of expectedValue
-        Type targetType = expectedValue.GetType();
-
-        // Call Deserialize with the resolved type
-        ICbor? result = (ICbor?)typeof(CborSerializer)
-            .GetMethod(nameof(CborSerializer.Deserialize))!
-            .MakeGenericMethod(targetType)
-            .Invoke(null, [data]);
-
-        Console.WriteLine($"Expected: {expectedValue}");
-        Console.WriteLine($"Actual: {result}");
-        Assert.Equal(result?.ToString(), expectedValue.ToString());
-    }
-
     [Theory]
     [InlineData("as")]
     public void DeserializeListingDatumTest(string hex)
