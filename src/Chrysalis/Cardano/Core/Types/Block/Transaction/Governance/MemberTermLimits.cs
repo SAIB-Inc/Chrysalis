@@ -3,7 +3,7 @@ using Chrysalis.Cbor.Converters.Primitives;
 using Chrysalis.Cbor.Types;
 using Chrysalis.Cbor.Types.Primitives;
 
-namespace Chrysalis.Cardano.Core.Types.Block.Transaction.Output;
+namespace Chrysalis.Cardano.Core.Types.Block.Transaction.Governance;
 
 [CborConverter(typeof(MapConverter))]
-public record MultiAssetOutput(Dictionary<CborBytes, TokenBundleOutput> Value) : CborBase;
+public record MemberTermLimits(Dictionary<Credential, CborUlong> Value) : CborBase;
