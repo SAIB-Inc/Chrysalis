@@ -1,4 +1,5 @@
 using System.Reflection;
+using Chrysalis.Cbor.Attributes;
 
 namespace Chrysalis.Cbor.Utils;
 
@@ -26,6 +27,37 @@ public static class AssemblyUtils
                        IsAssignableToGenericType(t, baseTypeDefinition))
             .Cast<Type>()
             .ToArray();
+    }
+
+    public static IEnumerable<(int? Index, string Name, Type Type)> GetCborPropertiesOrParameters(Type type)
+    {
+        // First try to get constructor parameters
+        var constructor = type.GetConstructors().FirstOrDefault();
+        if (constructor != null)
+        {
+            var parameters = constructor.GetParameters()
+                .Select(p =>
+                {
+                    var attr = p.GetCustomAttribute<CborPropertyAttribute>();
+                    return (attr?.Index, Name: p.Name ?? "", Type: p.ParameterType);
+                });
+
+            // Filter out Raw property using named field
+            return parameters.Where(p => p.Name != "Raw");
+        }
+
+        // Fallback to properties if no constructor
+        return type.GetProperties()
+            .Where(p =>
+                p.CanRead &&
+                p.CanWrite &&
+                p.Name != "Raw" &&
+                p.GetCustomAttribute<CborPropertyAttribute>() != null)
+            .Select(p =>
+            {
+                var attr = p.GetCustomAttribute<CborPropertyAttribute>();
+                return (attr?.Index, p.Name, Type: p.PropertyType);
+            });
     }
 
     private static bool IsAssignableToGenericType(Type givenType, Type genericType)

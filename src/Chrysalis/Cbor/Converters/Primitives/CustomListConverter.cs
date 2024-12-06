@@ -6,7 +6,7 @@ using Chrysalis.Cbor.Utils;
 
 namespace Chrysalis.Cbor.Converters.Primitives;
 
-public class ConstrConverter : ICborConverter
+public class CustomListConverter : ICborConverter
 {
     public T Deserialize<T>(byte[] data) where T : CborBase
     {
@@ -16,21 +16,10 @@ public class ConstrConverter : ICborConverter
 
         // Use the helper to get constructor parameters or properties
         List<(int? Index, string Name, Type Type)> parametersOrProperties = AssemblyUtils.GetCborPropertiesOrParameters(targetType).ToList();
-
-        // Read the tag and validate it
-        CborTag tag = reader.ReadTag();
-        CborTag expectedTag = GetTag(targetType.GetCustomAttribute<CborIndexAttribute>()?.Index ?? 0);
-
-        if (tag != expectedTag)
-        {
-            throw new InvalidOperationException($"Expected tag {expectedTag}, got {tag}");
-        }
+        object?[] constructorArgs = new object[parametersOrProperties.Count];
 
         // Read array start
         reader.ReadStartArray();
-
-        // Prepare arguments for constructor
-        object?[] constructorArgs = new object[parametersOrProperties.Count];
 
         for (int i = 0; i < parametersOrProperties.Count; i++)
         {
@@ -58,8 +47,6 @@ public class ConstrConverter : ICborConverter
     public byte[] Serialize(CborBase value)
     {
         Type type = value.GetType();
-        int index = type.GetCustomAttribute<CborIndexAttribute>()?.Index ?? 0;
-
         bool isDefinite = type.GetCustomAttribute<CborDefiniteAttribute>() != null;
 
         PropertyInfo[] properties = [.. type.GetProperties(BindingFlags.Public | BindingFlags.Instance)
@@ -67,9 +54,6 @@ public class ConstrConverter : ICborConverter
                 .OrderBy(p => p.GetCustomAttribute<CborPropertyAttribute>()!.Index)];
 
         CborWriter writer = new();
-
-        // Write the tag
-        writer.WriteTag(GetTag(index));
 
         // Write array start
         writer.WriteStartArray(isDefinite ? properties.Length : null);
@@ -84,11 +68,5 @@ public class ConstrConverter : ICborConverter
 
         writer.WriteEndArray();
         return writer.Encode();
-    }
-
-    private static CborTag GetTag(int index)
-    {
-        int finalIndex = index > 6 ? 1280 - 7 : 121;
-        return (CborTag)(finalIndex + index);
     }
 }
