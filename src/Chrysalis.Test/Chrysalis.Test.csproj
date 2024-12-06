@@ -23,7 +23,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="../Chrysalis/ChrysalisOld.csproj" />
     <ProjectReference Include="../Chrysalis/Chrysalis.csproj" />
   </ItemGroup>
 
