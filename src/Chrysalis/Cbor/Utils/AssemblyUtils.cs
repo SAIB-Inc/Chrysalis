@@ -32,14 +32,18 @@ public static class AssemblyUtils
     public static IEnumerable<(int? Index, string Name, Type Type)> GetCborPropertiesOrParameters(Type type)
     {
         // First try to get constructor parameters
-        var constructor = type.GetConstructors().FirstOrDefault();
+        ConstructorInfo? constructor = type.GetConstructors().FirstOrDefault();
         if (constructor != null)
         {
-            var parameters = constructor.GetParameters()
+            IEnumerable<(int? Index, string Name, Type Type)> parameters = constructor.GetParameters()
                 .Select(p =>
                 {
-                    var attr = p.GetCustomAttribute<CborPropertyAttribute>();
-                    return (attr?.Index, Name: p.Name ?? "", Type: p.ParameterType);
+                    CborPropertyAttribute? attr = p.GetCustomAttribute<CborPropertyAttribute>();
+                    return (
+                        attr?.Index,
+                        Name: attr?.PropertyName ?? p.Name ?? "",
+                        Type: p.ParameterType
+                    );
                 });
 
             // Filter out Raw property using named field
@@ -55,8 +59,12 @@ public static class AssemblyUtils
                 p.GetCustomAttribute<CborPropertyAttribute>() != null)
             .Select(p =>
             {
-                var attr = p.GetCustomAttribute<CborPropertyAttribute>();
-                return (attr?.Index, p.Name, Type: p.PropertyType);
+                CborPropertyAttribute? attr = p.GetCustomAttribute<CborPropertyAttribute>();
+                return (
+                    attr?.Index,
+                    Name: attr?.PropertyName ?? p.Name,
+                    Type: p.PropertyType
+                );
             });
     }
 

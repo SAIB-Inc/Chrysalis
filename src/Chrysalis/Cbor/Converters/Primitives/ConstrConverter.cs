@@ -64,7 +64,7 @@ public class ConstrConverter : ICborConverter
 
         PropertyInfo[] properties = [.. type.GetProperties(BindingFlags.Public | BindingFlags.Instance)
                 .Where(p => p.GetCustomAttribute<CborPropertyAttribute>() != null)
-                .OrderBy(p => p.GetCustomAttribute<CborPropertyAttribute>()!.Index)];
+                .OrderBy(p => p.GetCustomAttribute<CborPropertyAttribute>()?.PropertyName)];
 
         CborWriter writer = new();
 
