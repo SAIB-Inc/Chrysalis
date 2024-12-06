@@ -1,6 +1,5 @@
-using Chrysalis.Cardano.Core.Types.Transaction.Output;
+using Chrysalis.Cardano.Core.Types.Block.Transaction.Output;
 using Chrysalis.Cbor.Attributes;
-using Chrysalis.Cbor.Converters;
 using Chrysalis.Cbor.Converters.Primitives;
 using Chrysalis.Cbor.Types;
 using Chrysalis.Plutus.Types.Address;
