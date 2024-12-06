@@ -1,0 +1,1 @@
+namespace Chrysalis.Cardano.Core.Types;
