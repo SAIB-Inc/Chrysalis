@@ -11,6 +11,8 @@ public class CustomMapConverter : ICborConverter
     public T Deserialize<T>(byte[] data) where T : CborBase
     {
         CborReader reader = new(data);
+        CborTagUtils.ReadAndVerifyTag<T>(reader);
+
         Type targetType = typeof(T);
 
         // Get properties with their CBOR property names
@@ -89,6 +91,8 @@ public class CustomMapConverter : ICborConverter
         }
 
         CborWriter writer = new();
+        CborTagUtils.WriteTagIfPresent(writer, type);
+
         writer.WriteStartMap(isDefinite ? properties.Length : null);
 
         foreach (PropertyInfo property in properties)

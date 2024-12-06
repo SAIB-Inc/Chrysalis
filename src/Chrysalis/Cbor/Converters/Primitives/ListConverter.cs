@@ -3,6 +3,7 @@ using System.Formats.Cbor;
 using System.Reflection;
 using Chrysalis.Cbor.Attributes;
 using Chrysalis.Cbor.Types;
+using Chrysalis.Cbor.Utils;
 
 namespace Chrysalis.Cbor.Converters.Primitives;
 
@@ -11,6 +12,8 @@ public class ListConverter : ICborConverter
     public T Deserialize<T>(byte[] data) where T : CborBase
     {
         CborReader reader = new(data);
+        CborTagUtils.ReadAndVerifyTag<T>(reader);
+
         reader.ReadStartArray();
 
         Type targetType = typeof(T);
@@ -56,6 +59,7 @@ public class ListConverter : ICborConverter
         if (collectionProperty.GetValue(data) is not ICollection collection) throw new InvalidOperationException("The collection property is null.");
 
         CborWriter writer = new();
+        CborTagUtils.WriteTagIfPresent(writer, type);
 
         writer.WriteStartArray(isDefinite ? collection.Count : null);
 

@@ -1,6 +1,7 @@
 using System.Formats.Cbor;
 using System.Reflection;
 using Chrysalis.Cbor.Types;
+using Chrysalis.Cbor.Utils;
 
 namespace Chrysalis.Cbor.Converters.Primitives;
 
@@ -9,6 +10,8 @@ public class IntConverter : ICborConverter
     public T Deserialize<T>(byte[] data) where T : CborBase
     {
         CborReader reader = new(data);
+        CborTagUtils.ReadAndVerifyTag<T>(reader);
+
         int value = reader.ReadInt32();
 
         // Use reflection to create an instance of T
@@ -24,6 +27,7 @@ public class IntConverter : ICborConverter
 
     public byte[] Serialize(CborBase data)
     {
+        Type type = data.GetType();
         PropertyInfo? intProperty = data.GetType().GetProperties().FirstOrDefault(p => p.PropertyType == typeof(int) && p.Name != nameof(CborBase.Raw))
             ?? throw new InvalidOperationException("No int property found in Cbor object.");
 
@@ -32,6 +36,7 @@ public class IntConverter : ICborConverter
         if (rawValue is not int v) throw new InvalidOperationException("Failed to serialize int property.");
 
         CborWriter writer = new();
+        CborTagUtils.WriteTagIfPresent(writer, type);
         writer.WriteInt32(v);
         return writer.Encode();
     }

@@ -2,6 +2,7 @@ using System.Formats.Cbor;
 using System.Reflection;
 using Chrysalis.Cbor.Attributes;
 using Chrysalis.Cbor.Types;
+using Chrysalis.Cbor.Utils;
 
 namespace Chrysalis.Cbor.Converters.Primitives;
 
@@ -10,6 +11,8 @@ public class BytesConverter : ICborConverter
     public T Deserialize<T>(byte[] data) where T : CborBase
     {
         CborReader reader = new(data);
+        CborTagUtils.ReadAndVerifyTag<T>(reader);
+
         byte[] value = [];
 
         if (reader.PeekState() == CborReaderState.StartIndefiniteLengthByteString)
@@ -51,6 +54,8 @@ public class BytesConverter : ICborConverter
         if (rawValue is not byte[] v) throw new InvalidOperationException("Failed to serialize byte[] property.");
 
         CborWriter writer = new();
+        CborTagUtils.WriteTagIfPresent(writer, type);
+
         if (isDefinite && sizeAttr is not null)
         {
             writer.WriteStartIndefiniteLengthByteString();

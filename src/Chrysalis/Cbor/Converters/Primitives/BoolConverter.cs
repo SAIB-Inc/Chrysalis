@@ -1,6 +1,7 @@
 using System.Formats.Cbor;
 using System.Reflection;
 using Chrysalis.Cbor.Types;
+using Chrysalis.Cbor.Utils;
 
 
 namespace Chrysalis.Cbor.Converters.Primitives;
@@ -11,6 +12,9 @@ public class BoolConverter : ICborConverter
     {
         CborReader reader = new(data);
         bool value = reader.ReadBoolean();
+
+        // Read and verify the tag
+        CborTagUtils.ReadAndVerifyTag<T>(reader);
 
         // Use reflection to create an instance of T
         ConstructorInfo constructor = typeof(T).GetConstructor([typeof(bool)])
@@ -37,6 +41,7 @@ public class BoolConverter : ICborConverter
         if (rawValue is not bool v) throw new InvalidOperationException("Failed to serialize bool property.");
 
         CborWriter writer = new();
+        CborTagUtils.WriteTagIfPresent(writer, type);
         writer.WriteBoolean(v);
         return writer.Encode();
     }

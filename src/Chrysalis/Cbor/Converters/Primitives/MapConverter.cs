@@ -2,6 +2,7 @@ using System.Collections;
 using System.Formats.Cbor;
 using System.Reflection;
 using Chrysalis.Cbor.Types;
+using Chrysalis.Cbor.Utils;
 
 namespace Chrysalis.Cbor.Converters.Primitives;
 
@@ -10,6 +11,8 @@ public class MapConverter : ICborConverter
     public T Deserialize<T>(byte[] data) where T : CborBase
     {
         CborReader reader = new(data);
+        CborTagUtils.ReadAndVerifyTag<T>(reader);
+
         reader.ReadStartMap();
 
         Type targetType = typeof(T);
@@ -63,6 +66,7 @@ public class MapConverter : ICborConverter
         if (dictionaryProperty.GetValue(data) is not IDictionary dictionary) throw new InvalidOperationException("The dictionary property is null.");
 
         CborWriter writer = new();
+        CborTagUtils.WriteTagIfPresent(writer, type);
         writer.WriteStartMap(dictionary.Count);
 
         foreach (DictionaryEntry entry in dictionary)

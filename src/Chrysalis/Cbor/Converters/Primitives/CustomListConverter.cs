@@ -11,6 +11,7 @@ public class CustomListConverter : ICborConverter
     public T Deserialize<T>(byte[] data) where T : CborBase
     {
         CborReader reader = new(data);
+        CborTagUtils.ReadAndVerifyTag<T>(reader);
 
         Type targetType = typeof(T);
 
@@ -54,6 +55,7 @@ public class CustomListConverter : ICborConverter
                 .OrderBy(p => p.GetCustomAttribute<CborPropertyAttribute>()?.Index)];
 
         CborWriter writer = new();
+        CborTagUtils.WriteTagIfPresent(writer, type);
 
         // Write array start
         writer.WriteStartArray(isDefinite ? properties.Length : null);
