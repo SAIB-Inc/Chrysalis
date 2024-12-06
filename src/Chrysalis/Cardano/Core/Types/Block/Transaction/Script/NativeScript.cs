@@ -18,20 +18,20 @@ public record ScriptPubKey(
 [CborConverter(typeof(CustomListConverter))]
 public record ScriptAll(
     [CborProperty(0)] CborInt Tag,
-    [CborProperty(1)] CborDefiniteList<NativeScript> Scripts
+    [CborProperty(1)] CborDefList<NativeScript> Scripts
 ) : NativeScript;
 
 [CborConverter(typeof(CustomListConverter))]
 public record ScriptAny(
     [CborProperty(0)] CborInt Tag,
-    [CborProperty(1)] CborDefiniteList<NativeScript> Scripts
+    [CborProperty(1)] CborDefList<NativeScript> Scripts
 ) : NativeScript;
 
 [CborConverter(typeof(CustomListConverter))]
 public record ScriptNOfK(
     [CborProperty(0)] CborInt Tag,
     [CborProperty(1)] CborInt N,
-    [CborProperty(2)] CborDefiniteList<NativeScript> Scripts
+    [CborProperty(2)] CborDefList<NativeScript> Scripts
 ) : NativeScript;
 
 [CborConverter(typeof(CustomListConverter))]

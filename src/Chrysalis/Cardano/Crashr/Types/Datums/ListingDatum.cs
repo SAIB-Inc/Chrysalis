@@ -11,6 +11,6 @@ namespace Chrysalis.Cardano.Crashr.Types.Datums;
 [CborConverter(typeof(ConstrConverter))]
 [CborIndex(0)]
 public record ListingDatum(
-  [CborProperty(0)] CborIndefiniteList<Payout> Payouts,
+  [CborProperty(0)] CborIndefList<Payout> Payouts,
   [CborProperty(1)] CborBytes Owner
 ) : CborBase;
