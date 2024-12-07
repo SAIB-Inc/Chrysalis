@@ -6,7 +6,8 @@ using Chrysalis.Cbor.Types.Primitives;
 
 namespace Chrysalis.Cardano.Core.Types.Block.Transaction.WitnessSet;
 
-[CborConverter(typeof(ListConverter))]
+[CborConverter(typeof(CustomListConverter))]
+[CborDefinite]
 public record BootstrapWitness(
     [CborProperty(0)] CborBytes PublicKey,
     [CborProperty(1)] CborBytes Signature,

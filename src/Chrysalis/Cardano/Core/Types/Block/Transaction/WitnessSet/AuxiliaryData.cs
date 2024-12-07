@@ -19,7 +19,7 @@ public record PostAlonzoAuxiliaryDataMap(
     [CborProperty(2)] CborDefList<CborBytes>? PlutusV1ScriptSet,
     [CborProperty(3)] CborDefList<CborBytes>? PlutusV2ScriptSet,
     [CborProperty(4)] CborDefList<CborBytes>? PlutusV3ScriptSet
-) : CborBase;
+) : AuxiliaryData;
 
 
 [CborConverter(typeof(MapConverter))]

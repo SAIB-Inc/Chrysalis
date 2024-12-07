@@ -22,6 +22,7 @@ public class CustomMapConverter : ICborConverter
         // Create mappings for both string and integer keys
         Dictionary<string, int> stringKeyMap = parametersOrProperties
             .Select((prop, index) => (prop.Name, index))
+            .Where(x => !string.IsNullOrEmpty(x.Name))  // Only include non-empty property names
             .ToDictionary(x => x.Name, x => x.index);
 
         Dictionary<int, int> intKeyMap = parametersOrProperties

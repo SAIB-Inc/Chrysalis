@@ -5,7 +5,7 @@ using Chrysalis.Cbor.Types;
 namespace Chrysalis.Cardano.Core.Types.Block.Transaction.Output;
 
 
-[CborConverter(typeof(MapConverter))]
+[CborConverter(typeof(UnionConverter))]
 public abstract record Value : CborBase;
 
 
@@ -13,7 +13,7 @@ public abstract record Value : CborBase;
 public record Lovelace(ulong Value) : Value;
 
 
-[CborConverter(typeof(CustomMapConverter))]
+[CborConverter(typeof(CustomListConverter))]
 public record LovelaceWithMultiAsset(
     [CborProperty(0)] Lovelace Lovelace,
     [CborProperty(1)] MultiAssetOutput MultiAsset

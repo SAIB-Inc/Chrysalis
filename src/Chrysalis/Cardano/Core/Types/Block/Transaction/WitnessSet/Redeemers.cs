@@ -4,6 +4,7 @@ using Chrysalis.Cbor.Attributes;
 using Chrysalis.Cbor.Types;
 using Chrysalis.Cbor.Types.Primitives;
 using Chrysalis.Cardano.Core.Types.Block.Transaction.Protocol;
+using Chrysalis.Cardano.Core.Types.Block.Transaction.Script;
 
 namespace Chrysalis.Cardano.Core.Types.Block.Transaction.WitnessSet;
 
@@ -12,7 +13,7 @@ public abstract record Redeemers : CborBase;
 
 [CborConverter(typeof(ListConverter))]
 [CborDefinite]
-public record RedeemerList(RedeemerEntry[] Value) : Redeemers;
+public record RedeemerList(List<RedeemerEntry> Value) : Redeemers;
 
 [CborConverter(typeof(MapConverter))]
 [CborDefinite]

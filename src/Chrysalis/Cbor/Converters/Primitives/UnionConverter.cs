@@ -40,6 +40,12 @@ public class UnionConverter : ICborConverter
         Assembly[] assemblies = AppDomain.CurrentDomain.GetAssemblies();
         Type[] concreteTypes = AssemblyUtils.FindConcreteTypes(baseType, assemblies);
 
+        var testData = "D90103A100A11902A2A1636D7367826F4C616D696E61722052656C61796572784031666533313230376633613939663134333764666163363038623330363664333830326137613330303831343531393133313436336234386466656234663339".ToLowerInvariant();
+        if (Convert.ToHexString(data).ToLowerInvariant() == testData)
+        {
+            Console.Write("");
+        }
+
         foreach (Type concreteType in concreteTypes)
         {
             try

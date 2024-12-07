@@ -10,12 +10,12 @@ using Xunit;
 namespace Chrysalis.Test.Types.Cardano.Crashr;
 
 public record InheritedCrashrListingDatum(
-    CborIndefiniteList<Payout> Payouts,
+    CborList<Payout> Payouts,
     CborBytes Owner
 ) : ListingDatum(Payouts, Owner);
 
 public record NestedInheritedCrashrListingDatum(
-    CborIndefiniteList<Payout> Payouts,
+    CborList<Payout> Payouts,
     CborBytes Owner
 ) : InheritedCrashrListingDatum(Payouts, Owner);
 
@@ -30,7 +30,7 @@ public class CrashrTestData
         get
         {
             ListingDatum listingDatum = new(
-                new CborIndefiniteList<Payout>(
+                new CborList<Payout>(
                     [
                             new Payout(
                                 new(

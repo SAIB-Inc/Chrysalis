@@ -5,7 +5,7 @@ using Chrysalis.Cbor.Types.Primitives;
 
 namespace Chrysalis.Cardano.Core.Types.Block.Header.Body;
 
-[CborConverter(typeof(CustomMapConverter))]
+[CborConverter(typeof(CustomListConverter))]
 public record OperationalCert(
     [CborProperty(0)] CborBytes HotVKey,
     [CborProperty(1)] CborUlong SequenceNumber,

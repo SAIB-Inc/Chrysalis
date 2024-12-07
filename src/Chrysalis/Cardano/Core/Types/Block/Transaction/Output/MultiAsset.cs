@@ -10,12 +10,14 @@ public abstract record MultiAsset : CborBase;
 
 
 [CborConverter(typeof(MapConverter))]
+[CborDefinite]
 public record MultiAssetOutput(
     Dictionary<CborBytes, TokenBundleOutput> Value
 ) : MultiAsset;
 
 
 [CborConverter(typeof(MapConverter))]
+[CborDefinite]
 public record MultiAssetMint(
     Dictionary<CborBytes, TokenBundleMint> Value
 ) : MultiAsset;
