@@ -17,10 +17,10 @@ public class TextConverter : ICborConverter
         ConstructorInfo constructor = typeof(T).GetConstructor([typeof(string)])
             ?? throw new InvalidOperationException($"Type {typeof(T).Name} does not have a constructor that accepts a string.");
 
-        CborBase instance = (T)constructor.Invoke([value]);
+        T instance = (T)constructor.Invoke([value]);
         instance.Raw = data;
 
-        return (T)constructor.Invoke([value]);
+        return instance;
     }
 
     public byte[] Serialize(CborBase data)

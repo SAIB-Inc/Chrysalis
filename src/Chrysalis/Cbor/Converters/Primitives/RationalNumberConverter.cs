@@ -22,11 +22,11 @@ public class RationalNumberConverter : ICborConverter
         ConstructorInfo constructor = typeof(T).GetConstructor([typeof(ulong), typeof(ulong)])
             ?? throw new InvalidOperationException($"Type {typeof(T).Name} does not have a constructor that accepts two ulong values.");
 
-        CborBase instance = (T)constructor.Invoke([numerator, denominator]);
+        T instance = (T)constructor.Invoke([numerator, denominator]);
         instance.Raw = data;
 
         // Dynamically create the instance of T
-        return (T)constructor.Invoke([numerator, denominator]);
+        return instance;
     }
 
     public byte[] Serialize(CborBase data)

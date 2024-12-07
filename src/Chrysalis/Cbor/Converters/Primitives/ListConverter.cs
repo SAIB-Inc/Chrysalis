@@ -43,7 +43,9 @@ public class ListConverter : ICborConverter
         reader.ReadEndArray();
 
         // Create the Cbor instance
-        return (T)constructor.Invoke([list]);
+        T instance = (T)constructor.Invoke([list]);
+        instance.Raw = data;
+        return instance;
     }
 
     public byte[] Serialize(CborBase data)

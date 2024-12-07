@@ -23,11 +23,11 @@ public class EncodedValueConverter : ICborConverter
         ConstructorInfo constructor = typeof(T).GetConstructor([typeof(byte[])])
             ?? throw new InvalidOperationException($"Type {typeof(T).Name} does not have a constructor that accepts a byte[].");
 
-        CborBase instance = (T)constructor.Invoke([value]);
+        T instance = (T)constructor.Invoke([value]);
         instance.Raw = data;
 
         // Dynamically create the instance of T
-        return (T)constructor.Invoke([value]);
+        return instance;
     }
 
     public byte[] Serialize(CborBase data)

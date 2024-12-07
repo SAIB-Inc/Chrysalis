@@ -32,9 +32,9 @@ public class NullableConverter : ICborConverter
                 .Invoke(null, [data]);
         }
 
-        CborBase instance = (T)constructor.Invoke([value]);
+        T instance = (T)constructor.Invoke([value]);
         instance.Raw = data;
-        return (T)constructor.Invoke([value]);
+        return instance;
     }
 
     public byte[] Serialize(CborBase data)

@@ -40,12 +40,6 @@ public class UnionConverter : ICborConverter
         Assembly[] assemblies = AppDomain.CurrentDomain.GetAssemblies();
         Type[] concreteTypes = AssemblyUtils.FindConcreteTypes(baseType, assemblies);
 
-        var testData = "D90103A100A11902A2A1636D7367826F4C616D696E61722052656C61796572784031666533313230376633613939663134333764666163363038623330363664333830326137613330303831343531393133313436336234386466656234663339".ToLowerInvariant();
-        if (Convert.ToHexString(data).ToLowerInvariant() == testData)
-        {
-            Console.Write("");
-        }
-
         foreach (Type concreteType in concreteTypes)
         {
             try
@@ -58,16 +52,12 @@ public class UnionConverter : ICborConverter
                     typeToDeserialize = concreteType.MakeGenericType(baseType.GetGenericArguments());
                 }
 
-                CborBase deserializedValue = TryDeserialize(data, typeToDeserialize);
-                if (deserializedValue != null)
-                {
-                    return (T)deserializedValue;
-                }
+                T deserializedValue = (T)TryDeserialize(data, typeToDeserialize);
+                deserializedValue.Raw = data;
+
+                if (deserializedValue is not null) return deserializedValue;
             }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Failed to deserialize as {concreteType.Name}: {ex.Message}");
-            }
+            catch { }
         }
 
         throw new InvalidOperationException($"Unable to deserialize to any concrete type implementing {baseType.Name}.");

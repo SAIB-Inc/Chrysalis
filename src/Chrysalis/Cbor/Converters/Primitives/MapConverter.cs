@@ -51,7 +51,9 @@ public class MapConverter : ICborConverter
         reader.ReadEndMap();
 
         // Create the Cbor instance
-        return (T)constructor.Invoke([dictionary]);
+        T instance = (T)constructor.Invoke([dictionary]);
+        instance.Raw = data;
+        return instance;
     }
 
     public byte[] Serialize(CborBase data)

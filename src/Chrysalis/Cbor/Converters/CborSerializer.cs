@@ -29,10 +29,7 @@ public static class CborSerializer
         // Dynamically invoke Deserialize<T>(data)
         object? result = genericMethod.Invoke(converter, [data]);
 
-        if (result is T typedResult)
-        {
-            return typedResult;
-        }
+        if (result is T typedResult) return typedResult;
 
         throw new InvalidOperationException($"Failed to cast deserialized result to {typeof(T).Name}.");
     }
