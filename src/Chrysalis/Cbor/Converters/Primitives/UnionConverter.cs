@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Formats.Cbor;
 using System.Reflection;
 using Chrysalis.Cbor.Attributes;
@@ -8,23 +9,25 @@ namespace Chrysalis.Cbor.Converters.Primitives;
 
 public class UnionConverter : ICborConverter
 {
+    // Cache converter instances and their methods to avoid repeated reflection
+    private static readonly ConcurrentDictionary<Type, (object Converter, MethodInfo SerializeMethod, MethodInfo DeserializeMethod)>
+        _converterCache = new();
+
+    // Cache concrete types for each base type to avoid repeated assembly scanning
+    private static readonly ConcurrentDictionary<Type, Type[]> _concreteTypeCache = new();
+
+    // Cache closed generic types to avoid repeated MakeGenericType calls
+    private static readonly ConcurrentDictionary<(Type Definition, Type[] Args), Type> _closedGenericCache = new();
+
     public byte[] Serialize(CborBase value)
     {
         CborWriter writer = new();
         Type type = value.GetType();
 
-        // Get the converter for the concrete type
-        CborConverterAttribute? converterAttr = type.GetCustomAttribute<CborConverterAttribute>();
-        if (converterAttr is not null && converterAttr.ConverterType != typeof(UnionConverter))
+        var (converter, serializeMethod, _) = GetOrCreateConverter(type);
+        if (converter is not null)
         {
-            // Use the concrete type's converter
-            object converterInstance = Activator.CreateInstance(converterAttr.ConverterType)
-                ?? throw new InvalidOperationException($"Failed to create converter for {type.Name}");
-
-            MethodInfo serializeMethod = converterAttr.ConverterType.GetMethod("Serialize")
-                ?? throw new InvalidOperationException($"No Serialize method found for {type.Name}");
-
-            byte[] serializedData = (byte[])serializeMethod.Invoke(converterInstance, [value])!;
+            byte[] serializedData = (byte[])serializeMethod.Invoke(converter, [value])!;
             writer.WriteEncodedValue(serializedData);
             return writer.Encode();
         }
@@ -35,27 +38,27 @@ public class UnionConverter : ICborConverter
     public T Deserialize<T>(byte[] data) where T : CborBase
     {
         Type baseType = typeof(T);
+        Type[] concreteTypes = GetConcreteTypes(baseType);
 
-        // Get all concrete types that implement the interface or base class
-        Assembly[] assemblies = AppDomain.CurrentDomain.GetAssemblies();
-        Type[] concreteTypes = AssemblyUtils.FindConcreteTypes(baseType, assemblies);
+        // Consider parallel processing if there are many types to try
+        if (concreteTypes.Length > 4)
+        {
+            return ParallelDeserialize<T>(data, concreteTypes, baseType);
+        }
 
+        return SequentialDeserialize<T>(data, concreteTypes, baseType);
+    }
+
+    private static T SequentialDeserialize<T>(byte[] data, Type[] concreteTypes, Type baseType) where T : CborBase
+    {
         foreach (Type concreteType in concreteTypes)
         {
             try
             {
-                // If the base type is generic (like Option<T>) and concrete type is generic (like Some<T>)
-                // We need to close the concrete type with the type arguments from T
-                Type typeToDeserialize = concreteType;
-                if (baseType.IsGenericType && concreteType.IsGenericTypeDefinition)
-                {
-                    typeToDeserialize = concreteType.MakeGenericType(baseType.GetGenericArguments());
-                }
-
+                Type typeToDeserialize = GetClosedGenericType(concreteType, baseType);
                 T deserializedValue = (T)TryDeserialize(data, typeToDeserialize);
                 deserializedValue.Raw = data;
-
-                if (deserializedValue is not null) return deserializedValue;
+                return deserializedValue;
             }
             catch { }
         }
@@ -63,25 +66,91 @@ public class UnionConverter : ICborConverter
         throw new InvalidOperationException($"Unable to deserialize to any concrete type implementing {baseType.Name}.");
     }
 
-    private static CborBase TryDeserialize(byte[] data, Type type)
+    private static T ParallelDeserialize<T>(byte[] data, Type[] concreteTypes, Type baseType) where T : CborBase
     {
-        // Check if the type has a specific converter
-        CborConverterAttribute? converterAttr = type.GetCustomAttribute<CborConverterAttribute>();
-        if (converterAttr != null)
+        var results = concreteTypes
+            .AsParallel()
+            .Select(concreteType =>
+            {
+                try
+                {
+                    Type typeToDeserialize = GetClosedGenericType(concreteType, baseType);
+                    T deserializedValue = (T)TryDeserialize(data, typeToDeserialize);
+                    deserializedValue.Raw = data;
+                    return (Success: true, Value: deserializedValue);
+                }
+                catch
+                {
+                    return (Success: false, Value: default(T));
+                }
+            })
+            .Where(result => result.Success)
+            .Take(1)
+            .ToArray();
+
+        if (results.Length > 0)
         {
-            object converterInstance = Activator.CreateInstance(converterAttr.ConverterType)
-                ?? throw new InvalidOperationException($"Failed to create converter for {type.Name}");
+            return results[0].Value!;
+        }
+
+        throw new InvalidOperationException($"Unable to deserialize to any concrete type implementing {baseType.Name}.");
+    }
+
+    private static Type GetClosedGenericType(Type concreteType, Type baseType)
+    {
+        if (!baseType.IsGenericType || !concreteType.IsGenericTypeDefinition)
+        {
+            return concreteType;
+        }
+
+        var typeArgs = baseType.GetGenericArguments();
+        return _closedGenericCache.GetOrAdd((concreteType, typeArgs),
+            key => key.Definition.MakeGenericType(key.Args));
+    }
+
+    private static Type[] GetConcreteTypes(Type baseType)
+    {
+        return _concreteTypeCache.GetOrAdd(baseType, type =>
+        {
+            Assembly[] assemblies = AppDomain.CurrentDomain.GetAssemblies();
+            return AssemblyUtils.FindConcreteTypes(type, assemblies);
+        });
+    }
+
+    private static (object Converter, MethodInfo SerializeMethod, MethodInfo DeserializeMethod) GetOrCreateConverter(Type type)
+    {
+        return _converterCache.GetOrAdd(type, t =>
+        {
+            CborConverterAttribute? converterAttr = t.GetCustomAttribute<CborConverterAttribute>();
+            if (converterAttr is null || converterAttr.ConverterType == typeof(UnionConverter))
+            {
+                return (null!, null!, null!);
+            }
+
+            object converter = Activator.CreateInstance(converterAttr.ConverterType)
+                ?? throw new InvalidOperationException($"Failed to create converter for {t.Name}");
+
+            MethodInfo serializeMethod = converterAttr.ConverterType.GetMethod("Serialize")
+                ?? throw new InvalidOperationException($"No Serialize method found for {t.Name}");
 
             MethodInfo deserializeMethod = converterAttr.ConverterType.GetMethod("Deserialize")
-                ?? throw new InvalidOperationException($"No Deserialize method found for {type.Name}");
+                ?? throw new InvalidOperationException($"No Deserialize method found for {t.Name}");
 
-            // At this point, type should be a closed generic type if it was generic
+            return (converter, serializeMethod, deserializeMethod);
+        });
+    }
+
+    private static CborBase TryDeserialize(byte[] data, Type type)
+    {
+        var (converter, _, deserializeMethod) = GetOrCreateConverter(type);
+        if (converter is not null)
+        {
             if (type.ContainsGenericParameters)
             {
                 throw new InvalidOperationException($"Cannot deserialize open generic type {type.Name}");
             }
 
-            return (CborBase)deserializeMethod.MakeGenericMethod(type).Invoke(converterInstance, [data])!;
+            return (CborBase)deserializeMethod.MakeGenericMethod(type).Invoke(converter, [data])!;
         }
 
         throw new InvalidOperationException($"No converter found for type {type.Name}");

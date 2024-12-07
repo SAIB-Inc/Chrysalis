@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Reflection;
 using Chrysalis.Cbor.Attributes;
 
@@ -5,6 +6,9 @@ namespace Chrysalis.Cbor.Utils;
 
 public static class AssemblyUtils
 {
+    private static readonly ConcurrentDictionary<(Type GivenType, Type GenericType), bool> _assignableCache = new();
+    private static readonly ConcurrentDictionary<Type, (Type[] BaseTypes, Type[] Interfaces)> _typeHierarchyCache = new();
+
     public static Type[] FindConcreteTypes(Type baseType, IEnumerable<Assembly> assemblies)
     {
         Type baseTypeDefinition = baseType.IsGenericType
@@ -12,54 +16,50 @@ public static class AssemblyUtils
             : baseType;
 
         return assemblies
-            .Where(a => !a.IsDynamic)
-            .SelectMany(a =>
-            {
-                try { return a.GetTypes(); }
-                catch (ReflectionTypeLoadException ex)
-                {
-                    return ex.Types.Where(t => t != null).Cast<Type>();
-                }
-            })
-            .Where(t => t != null &&
-                       !t.IsInterface &&
-                       !t.IsAbstract &&
-                       IsAssignableToGenericType(t, baseTypeDefinition))
-            .Cast<Type>()
+            .SelectMany(RuntimeMetadataCache.GetTypes)
+            .Where(type =>
+                type != null &&
+                !type.IsInterface &&
+                !type.IsAbstract &&
+                IsAssignableToGenericType(type, baseTypeDefinition))
             .ToArray();
     }
 
+
     public static IEnumerable<(int? Index, string Name, Type Type)> GetCborPropertiesOrParameters(Type type)
     {
-        // First try to get constructor parameters
+        // Cache attributes for the type
+        object[] attributes = RuntimeMetadataCache.GetAttributes(type);
+
+        // First try constructor parameters
         ConstructorInfo? constructor = type.GetConstructors().FirstOrDefault();
         if (constructor != null)
         {
-            IEnumerable<(int? Index, string Name, Type Type)> parameters = constructor.GetParameters()
+            return constructor.GetParameters()
                 .Select(p =>
                 {
-                    CborPropertyAttribute? attr = p.GetCustomAttribute<CborPropertyAttribute>();
+                    CborPropertyAttribute? attr = attributes.OfType<CborPropertyAttribute>()
+                        .FirstOrDefault(a => a.PropertyName == p.Name);
                     return (
                         attr?.Index,
                         Name: attr?.PropertyName ?? p.Name ?? "",
                         Type: p.ParameterType
                     );
-                });
-
-            // Filter out Raw property using named field
-            return parameters.Where(p => p.Name != "Raw");
+                })
+                .Where(p => p.Name != "Raw");
         }
 
-        // Fallback to properties if no constructor
+        // Fallback to properties
         return type.GetProperties()
             .Where(p =>
                 p.CanRead &&
                 p.CanWrite &&
                 p.Name != "Raw" &&
-                p.GetCustomAttribute<CborPropertyAttribute>() != null)
+                attributes.OfType<CborPropertyAttribute>().Any(a => a.PropertyName == p.Name))
             .Select(p =>
             {
-                CborPropertyAttribute? attr = p.GetCustomAttribute<CborPropertyAttribute>();
+                CborPropertyAttribute? attr = attributes.OfType<CborPropertyAttribute>()
+                    .FirstOrDefault(a => a.PropertyName == p.Name);
                 return (
                     attr?.Index,
                     Name: attr?.PropertyName ?? p.Name,
@@ -70,30 +70,31 @@ public static class AssemblyUtils
 
     private static bool IsAssignableToGenericType(Type givenType, Type genericType)
     {
-        // For non-generic types, use standard assignability
         if (!genericType.IsGenericTypeDefinition)
         {
             return genericType.IsAssignableFrom(givenType);
         }
 
-        // Get the generic type definition of the given type if it's generic
-        Type givenTypeDefinition = givenType.IsGenericType
-            ? givenType.GetGenericTypeDefinition()
-            : givenType;
+        // Cache the type hierarchy and interfaces
+        var typeHierarchy = _typeHierarchyCache.GetOrAdd(givenType, t =>
+        {
+            var baseTypes = new List<Type>();
+            var currentType = t;
+            while (currentType != null && currentType != typeof(object))
+            {
+                baseTypes.Add(currentType);
+                currentType = currentType.BaseType;
+            }
+
+            var interfaces = t.GetInterfaces();
+            return (baseTypes.ToArray(), interfaces);
+        });
 
         // Check base types
-        Type? type = givenTypeDefinition;
-        while (type != null && type != typeof(object))
-        {
-            if (type.IsGenericType && type.GetGenericTypeDefinition() == genericType)
-                return true;
-            type = type.BaseType;
-        }
+        if (typeHierarchy.BaseTypes.Any(t => t.IsGenericType && t.GetGenericTypeDefinition() == genericType))
+            return true;
 
         // Check interfaces
-        return givenTypeDefinition.GetInterfaces()
-            .Where(it => it.IsGenericType)
-            .Select(it => it.GetGenericTypeDefinition())
-            .Any(it => it == genericType);
+        return typeHierarchy.Interfaces.Any(i => i.IsGenericType && i.GetGenericTypeDefinition() == genericType);
     }
 }

@@ -1,3 +1,5 @@
+using System;
+using System.Collections.Concurrent;
 using System.Reflection;
 using Chrysalis.Cbor.Attributes;
 using Chrysalis.Cbor.Types;
@@ -7,6 +9,7 @@ namespace Chrysalis.Cbor.Converters;
 public static class CborSerializer
 {
     private static readonly Dictionary<Type, object> _converterCache = [];
+    private static readonly ConcurrentDictionary<Type, Func<byte[], object>> _deserializeDelegates = new();
 
     public static byte[] Serialize<T>(T value) where T : CborBase
     {
@@ -16,22 +19,25 @@ public static class CborSerializer
 
     public static T Deserialize<T>(byte[] data) where T : CborBase
     {
-        Type? targetType = typeof(T);
-        ICborConverter converter = GetConverter<T>(targetType);
+        Type targetType = typeof(T);
 
-        // Find the `Deserialize` method
-        MethodInfo deserializeMethod = typeof(ICborConverter).GetMethod(nameof(ICborConverter.Deserialize))
-            ?? throw new InvalidOperationException("The ICborConverter does not implement Deserialize.");
+        // Use the delegate cache to retrieve or create the deserialization logic
+        Func<byte[], object> deserializer = _deserializeDelegates.GetOrAdd(targetType, type =>
+        {
+            ICborConverter converter = GetConverter<T>(type);
 
-        // Make the method generic with the targetType
-        MethodInfo genericMethod = deserializeMethod.MakeGenericMethod(targetType);
+            // Use reflection to create the specific Deserialize<T> method
+            MethodInfo deserializeMethod = typeof(ICborConverter).GetMethod(nameof(ICborConverter.Deserialize))
+                ?.MakeGenericMethod(type) ?? throw new InvalidOperationException("The ICborConverter does not implement Deserialize.");
 
-        // Dynamically invoke Deserialize<T>(data)
-        object? result = genericMethod.Invoke(converter, [data]);
+            return (byte[] inputData) =>
+            {
+                return deserializeMethod.Invoke(converter, new object[] { inputData })!;
+            };
+        });
 
-        if (result is T typedResult) return typedResult;
-
-        throw new InvalidOperationException($"Failed to cast deserialized result to {typeof(T).Name}.");
+        // Call the cached delegate
+        return (T)deserializer(data);
     }
 
     private static ICborConverter GetConverter<T>(Type type) where T : ICbor
@@ -41,10 +47,9 @@ public static class CborSerializer
             return (ICborConverter)cached;
         }
 
-        // If we're dealing with a derived type like CborDefList<T>
+        // Check if the type has a base type with a converter attribute
         if (type.BaseType?.GetCustomAttribute<CborConverterAttribute>() != null)
         {
-            // Use the base type's converter but with the derived type
             Type baseType = type.BaseType;
             CborConverterAttribute? converterAttr = baseType.GetCustomAttribute<CborConverterAttribute>();
             Type? converterType = converterAttr?.ConverterType;
@@ -73,12 +78,10 @@ public static class CborSerializer
 
                 if (converterType.IsGenericTypeDefinition)
                 {
-                    // Get the generic args from the type where we found the converter
                     Type[] genericArgs = type.GenericTypeArguments;
                     Type constructedType = converterType.MakeGenericType(genericArgs);
                     object? converter = Activator.CreateInstance(constructedType);
 
-                    // Explicitly cast to ICborConverter<T>
                     if (converter != null)
                     {
                         _converterCache[type] = converter;

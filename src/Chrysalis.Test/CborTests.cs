@@ -76,7 +76,10 @@ public class CborTests
         Block block = null;
         try
         {
-            block = CborSerializer.Deserialize<Block>(cborRaw);
+            for (int i = 0; i < 100000; i++)
+            {
+                block = CborSerializer.Deserialize<Block>(cborRaw);
+            }
         }
         catch (Exception ex)
         {
