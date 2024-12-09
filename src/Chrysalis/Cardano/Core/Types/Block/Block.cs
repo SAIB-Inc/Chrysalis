@@ -31,7 +31,7 @@ public record ShelleyBlock(
 ) : Block;
 
 [CborConverter(typeof(CustomListConverter))]
-public record PreAlonzo(
+public record PreAlonzoBlock(
     [CborProperty(0)] BlockHeader Header,
     [CborProperty(1)] CborMaybeIndefList<TransactionBody> TransactionBodies,
     [CborProperty(2)] CborMaybeIndefList<TransactionWitnessSet> TransactionWitnessSets,
