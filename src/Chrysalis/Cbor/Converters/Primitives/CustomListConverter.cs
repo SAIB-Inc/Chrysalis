@@ -27,7 +27,15 @@ public class CustomListConverter : ICborConverter
             (int? Index, string Name, Type ParameterType) = parametersOrProperties[i];
 
             // Deserialize the value
-            byte[] encodedValue = reader.ReadEncodedValue().ToArray();
+            byte[] encodedValue = [];
+            try
+            {
+                encodedValue = reader.ReadEncodedValue().ToArray();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine("");
+            }
             MethodInfo deserializeMethod = typeof(CborSerializer).GetMethod(nameof(CborSerializer.Deserialize))!;
             object? deserializedValue = deserializeMethod.MakeGenericMethod(ParameterType)
                 .Invoke(null, [encodedValue]);

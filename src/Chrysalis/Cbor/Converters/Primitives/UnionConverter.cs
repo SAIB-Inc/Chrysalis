@@ -40,13 +40,7 @@ public class UnionConverter : ICborConverter
         Type baseType = typeof(T);
         Type[] concreteTypes = GetConcreteTypes(baseType);
 
-        // Consider parallel processing if there are many types to try
-        if (concreteTypes.Length > 4)
-        {
-            return ParallelDeserialize<T>(data, concreteTypes, baseType);
-        }
-
-        return SequentialDeserialize<T>(data, concreteTypes, baseType);
+        return ParallelDeserialize<T>(data, concreteTypes, baseType);
     }
 
     private static T SequentialDeserialize<T>(byte[] data, Type[] concreteTypes, Type baseType) where T : CborBase
