@@ -1,7 +1,7 @@
 using NSec.Cryptography;
 
 namespace Chrysalis.Cardano.Core.Extensions;
-public static class Blake2bUtils
+public static class Blake2bExtension
 {
     public static byte[] ToBlake2b(this byte[] input)
     {

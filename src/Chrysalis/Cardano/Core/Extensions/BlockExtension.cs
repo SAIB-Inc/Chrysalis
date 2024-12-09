@@ -10,7 +10,7 @@ using Chrysalis.Cbor.Types.Collections;
 
 namespace Chrysalis.Cardano.Core.Extensions;
 
-public static class BlockUtils
+public static class BlockExtension
 {
     public static Block GetBlock(this Block block)
     => block switch
