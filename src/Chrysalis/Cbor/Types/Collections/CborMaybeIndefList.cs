@@ -19,7 +19,7 @@ public record CborIndefList<T>(List<T> Value) : CborMaybeIndefList<T> where T : 
 [CborConverter(typeof(ListConverter))]
 [CborDefinite]
 [CborTag(258)]
-public record CborDefiniteListWithTag<T>(List<T> Value) : CborMaybeIndefList<T> where T : CborBase;
+public record CborDefListWithTag<T>(List<T> Value) : CborMaybeIndefList<T> where T : CborBase;
 
 
 [CborConverter(typeof(ListConverter))]
