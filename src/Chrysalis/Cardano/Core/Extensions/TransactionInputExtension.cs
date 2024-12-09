@@ -1,7 +1,6 @@
-using Chrysalis.Cardano.Core;
 using Chrysalis.Cardano.Core.Types.Block.Transaction.Input;
 
-namespace Chrysalis.Extensions;
+namespace Chrysalis.Cardano.Core.Extensions;
 
 public static class TransactionInputExtension
 {

@@ -1,6 +1,6 @@
 using Chrysalis.Cardano.Core.Types.Block.Transaction.Output;
 
-namespace Chrysalis.Extensions;
+namespace Chrysalis.Cardano.Core.Extensions;
 
 public static class DatumExtension
 {

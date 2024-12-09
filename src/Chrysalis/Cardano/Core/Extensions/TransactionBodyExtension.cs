@@ -1,7 +1,6 @@
 using Chrysalis.Cardano.Core.Types.Block.Transaction.Body;
 using Chrysalis.Cardano.Core.Types.Block.Transaction.Input;
 using Chrysalis.Cardano.Core.Types.Block.Transaction.Output;
-using Chrysalis.Cardano.Core.Utils;
 using Chrysalis.Cbor.Types.Collections;
 
 namespace Chrysalis.Cardano.Core.Extensions;
@@ -10,7 +9,7 @@ public static class TransactionBodyExtension
 {
 
     public static string Id(this TransactionBody txBody) =>
-        Convert.ToHexString(HashUtility.Blake2b256(txBody.Raw ?? [])).ToLowerInvariant();
+        Convert.ToHexString(txBody.Raw?.ToBlake2b256() ?? []).ToLowerInvariant();
 
     public static IEnumerable<TransactionInput> Inputs(this TransactionBody transactionBody)
         => transactionBody switch

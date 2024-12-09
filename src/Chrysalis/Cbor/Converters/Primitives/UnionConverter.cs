@@ -24,7 +24,7 @@ public class UnionConverter : ICborConverter
         CborWriter writer = new();
         Type type = value.GetType();
 
-        var (converter, serializeMethod, _) = GetOrCreateConverter(type);
+        (object converter, MethodInfo serializeMethod, MethodInfo _) = GetOrCreateConverter(type);
         if (converter is not null)
         {
             byte[] serializedData = (byte[])serializeMethod.Invoke(converter, [value])!;
@@ -62,7 +62,7 @@ public class UnionConverter : ICborConverter
 
     private static T ParallelDeserialize<T>(byte[] data, Type[] concreteTypes, Type baseType) where T : CborBase
     {
-        var results = concreteTypes
+        (bool Success, T? Value) = concreteTypes
             .AsParallel()
             .Select(concreteType =>
             {
@@ -75,16 +75,15 @@ public class UnionConverter : ICborConverter
                 }
                 catch
                 {
-                    return (Success: false, Value: default(T));
+                    return (Success: false, Value: null!);
                 }
             })
-            .Where(result => result.Success)
-            .Take(1)
-            .ToArray();
+            .WithMergeOptions(ParallelMergeOptions.NotBuffered)
+            .FirstOrDefault(result => result.Success);
 
-        if (results.Length > 0)
+        if (Success)
         {
-            return results[0].Value!;
+            return Value!;
         }
 
         throw new InvalidOperationException($"Unable to deserialize to any concrete type implementing {baseType.Name}.");
@@ -97,7 +96,7 @@ public class UnionConverter : ICborConverter
             return concreteType;
         }
 
-        var typeArgs = baseType.GetGenericArguments();
+        Type[] typeArgs = baseType.GetGenericArguments();
         return _closedGenericCache.GetOrAdd((concreteType, typeArgs),
             key => key.Definition.MakeGenericType(key.Args));
     }
@@ -136,7 +135,7 @@ public class UnionConverter : ICborConverter
 
     private static CborBase TryDeserialize(byte[] data, Type type)
     {
-        var (converter, _, deserializeMethod) = GetOrCreateConverter(type);
+        (object converter, MethodInfo _, MethodInfo deserializeMethod) = GetOrCreateConverter(type);
         if (converter is not null)
         {
             if (type.ContainsGenericParameters)
