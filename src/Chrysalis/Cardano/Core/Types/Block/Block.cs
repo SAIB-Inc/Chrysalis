@@ -11,7 +11,7 @@ using Chrysalis.Cbor.Types.Primitives;
 namespace Chrysalis.Cardano.Core.Types.Block;
 
 [CborConverter(typeof(UnionConverter))]
-public record Block : CborBase;
+public abstract record Block : CborBase;
 
 [CborConverter(typeof(CustomListConverter))]
 public record PostAlonzoBlock(
