@@ -7,7 +7,7 @@ namespace Chrysalis.Cbor.Converters;
 
 public static class CborSerializer
 {
-    private static readonly Dictionary<Type, object> _converterCache = [];
+    private static readonly ConcurrentDictionary<Type, object> _converterCache = [];
     private static readonly ConcurrentDictionary<Type, Func<byte[], object>> _deserializeDelegates = new();
 
     public static byte[] Serialize<T>(T value) where T : CborBase
