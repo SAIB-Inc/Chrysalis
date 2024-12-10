@@ -4,6 +4,12 @@
     <TargetFramework>net9.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <Version>0.5.0</Version>
+    <PackageId>Chrysalis</PackageId>
+    <Authors>clark@saib.dev, rjlacanlale@saib.dev, kathea.mayol@saib.dev</Authors>
+    <Company>SAIB Inc</Company>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageLicenseFile>LICENSE.md</PackageLicenseFile>
   </PropertyGroup>
 
   <ItemGroup>
