@@ -40,7 +40,8 @@ public class UnionConverter : ICborConverter
         Type baseType = typeof(T);
         Type[] concreteTypes = GetConcreteTypes(baseType);
 
-        return ParallelDeserialize<T>(data, concreteTypes, baseType);
+        // Instead of await, directly block on the returned task:
+        return ParallelDeserializeAsync<T>(data, concreteTypes, baseType).GetAwaiter().GetResult();
     }
 
     private static T SequentialDeserialize<T>(byte[] data, Type[] concreteTypes, Type baseType) where T : CborBase
@@ -60,50 +61,42 @@ public class UnionConverter : ICborConverter
         throw new InvalidOperationException($"Unable to deserialize to any concrete type implementing {baseType.Name}.");
     }
 
-    private static T ParallelDeserialize<T>(byte[] data, Type[] concreteTypes, Type baseType) where T : CborBase
+    private static async Task<T> ParallelDeserializeAsync<T>(byte[] data, Type[] concreteTypes, Type baseType) where T : CborBase
     {
-        T? result = null;
-        object locker = new();
-        bool found = false;
+        TaskCompletionSource<T> successTcs = new TaskCompletionSource<T>(TaskCreationOptions.RunContinuationsAsynchronously);
 
-        try
+        // Create a list of tasks that attempt to deserialize in parallel
+        Task[] tasks = concreteTypes.Select(async concreteType =>
         {
-            Parallel.ForEach(
-                concreteTypes,
-                new ParallelOptions { MaxDegreeOfParallelism = Environment.ProcessorCount },
-                (concreteType, state) =>
-                {
-                    if (state.ShouldExitCurrentIteration) return;
+            if (successTcs.Task.IsCompleted)
+                return; // If already succeeded, just return early.
 
-                    try
-                    {
-                        Type typeToDeserialize = GetClosedGenericType(concreteType, baseType);
-                        T deserializedValue = (T)TryDeserialize(data, typeToDeserialize);
-                        deserializedValue.Raw = data;
-
-                        lock (locker)
-                        {
-                            if (!found)
-                            {
-                                found = true;
-                                result = deserializedValue;
-                                state.Stop();
-                            }
-                        }
-                    }
-                    catch
-                    {
-                        if (state.ShouldExitCurrentIteration) return;
-                    }
-                });
-
-            if (found && result != null)
+            try
             {
-                return result;
-            }
-        }
-        catch (AggregateException) { }
+                Type typeToDeserialize = GetClosedGenericType(concreteType, baseType);
+                T deserializedValue = (T)TryDeserialize(data, typeToDeserialize);
+                deserializedValue.Raw = data;
 
+                // Try to set the result - if another task beat us to it, this will be ignored.
+                successTcs.TrySetResult(deserializedValue);
+            }
+            catch
+            {
+                // Ignore failures - if all fail, we handle that after all tasks complete.
+                // But do not throw here, since we only want to fail if NO type works.
+            }
+        }).ToArray();
+
+        // Wait until either one task succeeds (successTcs.Task) or all tasks finish (Task.WhenAll)
+        Task completed = await Task.WhenAny(successTcs.Task, Task.WhenAll(tasks)).ConfigureAwait(false);
+
+        if (completed == successTcs.Task)
+        {
+            // We have a successful result
+            return await successTcs.Task.ConfigureAwait(false);
+        }
+
+        // If we reach here, it means Task.WhenAll completed first and no task succeeded
         throw new InvalidOperationException($"Unable to deserialize to any concrete type implementing {baseType.Name}.");
     }
 
