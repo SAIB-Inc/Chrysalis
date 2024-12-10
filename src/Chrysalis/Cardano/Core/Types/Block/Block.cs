@@ -27,7 +27,7 @@ public record ShelleyBlock(
     [CborProperty(0)] BlockHeader Header,
     [CborProperty(1)] CborMaybeIndefList<TransactionBody> TransactionBodies,
     [CborProperty(2)] CborMaybeIndefList<TransactionWitnessSet> TransactionWitnessSets,
-    [CborProperty(3)] Dictionary<CborInt, TransactionMetadatum> TransactionMetadata
+    [CborProperty(3)] CborMap<CborInt, TransactionMetadatum> TransactionMetadata
 ) : Block;
 
 [CborConverter(typeof(CustomListConverter))]
