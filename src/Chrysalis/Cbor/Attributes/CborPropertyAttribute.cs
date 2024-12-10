@@ -3,7 +3,7 @@ namespace Chrysalis.Cbor.Attributes;
 [AttributeUsage(AttributeTargets.Property | AttributeTargets.Parameter)]
 public class CborPropertyAttribute : Attribute
 {
-    public string PropertyName { get; }
+    public string? PropertyName { get; }  // Make nullable
     public int? Index { get; }
 
     // Constructor for name-only
@@ -16,7 +16,7 @@ public class CborPropertyAttribute : Attribute
     // Constructor for index-only
     public CborPropertyAttribute(int index)
     {
-        PropertyName = string.Empty;
+        PropertyName = null;  // Changed from string.Empty to null
         Index = index;
     }
 

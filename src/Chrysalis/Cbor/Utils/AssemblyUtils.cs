@@ -28,9 +28,6 @@ public static class AssemblyUtils
 
     public static IEnumerable<(int? Index, string Name, Type Type)> GetCborPropertiesOrParameters(Type type)
     {
-        // Cache attributes for the type
-        object[] attributes = RuntimeMetadataCache.GetAttributes(type);
-
         // First try constructor parameters
         ConstructorInfo? constructor = type.GetConstructors().FirstOrDefault();
         if (constructor != null)
@@ -38,8 +35,8 @@ public static class AssemblyUtils
             return constructor.GetParameters()
                 .Select(p =>
                 {
-                    CborPropertyAttribute? attr = attributes.OfType<CborPropertyAttribute>()
-                        .FirstOrDefault(a => a.PropertyName == p.Name);
+                    // Get the CborProperty attribute directly from the parameter
+                    CborPropertyAttribute? attr = p.GetCustomAttribute<CborPropertyAttribute>();
                     return (
                         attr?.Index,
                         Name: attr?.PropertyName ?? p.Name ?? "",
@@ -55,11 +52,10 @@ public static class AssemblyUtils
                 p.CanRead &&
                 p.CanWrite &&
                 p.Name != "Raw" &&
-                attributes.OfType<CborPropertyAttribute>().Any(a => a.PropertyName == p.Name))
+                p.GetCustomAttribute<CborPropertyAttribute>() != null)
             .Select(p =>
             {
-                CborPropertyAttribute? attr = attributes.OfType<CborPropertyAttribute>()
-                    .FirstOrDefault(a => a.PropertyName == p.Name);
+                CborPropertyAttribute? attr = p.GetCustomAttribute<CborPropertyAttribute>();
                 return (
                     attr?.Index,
                     Name: attr?.PropertyName ?? p.Name,
