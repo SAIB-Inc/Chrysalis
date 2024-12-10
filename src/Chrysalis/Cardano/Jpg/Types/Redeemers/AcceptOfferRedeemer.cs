@@ -6,4 +6,4 @@ namespace Chrysalis.Cardano.Jpg.Types.Redeemers;
 
 [CborConverter(typeof(ConstrConverter))]
 [CborIndex(1)]
-public record JpegAcceptOfferRedeemer() : CborBase;
+public record AcceptOfferRedeemer() : CborBase;
