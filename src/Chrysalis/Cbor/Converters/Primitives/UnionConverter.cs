@@ -44,23 +44,6 @@ public class UnionConverter : ICborConverter
         return ParallelDeserializeAsync<T>(data, concreteTypes, baseType).GetAwaiter().GetResult();
     }
 
-    private static T SequentialDeserialize<T>(byte[] data, Type[] concreteTypes, Type baseType) where T : CborBase
-    {
-        foreach (Type concreteType in concreteTypes)
-        {
-            try
-            {
-                Type typeToDeserialize = GetClosedGenericType(concreteType, baseType);
-                T deserializedValue = (T)TryDeserialize(data, typeToDeserialize);
-                deserializedValue.Raw = data;
-                return deserializedValue;
-            }
-            catch { }
-        }
-
-        throw new InvalidOperationException($"Unable to deserialize to any concrete type implementing {baseType.Name}.");
-    }
-
     private static async Task<T> ParallelDeserializeAsync<T>(byte[] data, Type[] concreteTypes, Type baseType) where T : CborBase
     {
         TaskCompletionSource<T> successTcs = new TaskCompletionSource<T>(TaskCreationOptions.RunContinuationsAsynchronously);
