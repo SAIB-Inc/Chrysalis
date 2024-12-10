@@ -62,29 +62,47 @@ public class UnionConverter : ICborConverter
 
     private static T ParallelDeserialize<T>(byte[] data, Type[] concreteTypes, Type baseType) where T : CborBase
     {
-        (bool Success, T? Value) = concreteTypes
-            .AsParallel()
-            .Select(concreteType =>
-            {
-                try
-                {
-                    Type typeToDeserialize = GetClosedGenericType(concreteType, baseType);
-                    T deserializedValue = (T)TryDeserialize(data, typeToDeserialize);
-                    deserializedValue.Raw = data;
-                    return (Success: true, Value: deserializedValue);
-                }
-                catch
-                {
-                    return (Success: false, Value: null!);
-                }
-            })
-            .WithMergeOptions(ParallelMergeOptions.NotBuffered)
-            .FirstOrDefault(result => result.Success);
+        T? result = null;
+        object locker = new();
+        bool found = false;
 
-        if (Success)
+        try
         {
-            return Value!;
+            Parallel.ForEach(
+                concreteTypes,
+                new ParallelOptions { MaxDegreeOfParallelism = Environment.ProcessorCount },
+                (concreteType, state) =>
+                {
+                    if (state.ShouldExitCurrentIteration) return;
+
+                    try
+                    {
+                        Type typeToDeserialize = GetClosedGenericType(concreteType, baseType);
+                        T deserializedValue = (T)TryDeserialize(data, typeToDeserialize);
+                        deserializedValue.Raw = data;
+
+                        lock (locker)
+                        {
+                            if (!found)
+                            {
+                                found = true;
+                                result = deserializedValue;
+                                state.Stop();
+                            }
+                        }
+                    }
+                    catch
+                    {
+                        if (state.ShouldExitCurrentIteration) return;
+                    }
+                });
+
+            if (found && result != null)
+            {
+                return result;
+            }
         }
+        catch (AggregateException) { }
 
         throw new InvalidOperationException($"Unable to deserialize to any concrete type implementing {baseType.Name}.");
     }
