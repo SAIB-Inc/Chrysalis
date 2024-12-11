@@ -44,7 +44,7 @@ public record PlutusDefiniteBytes(byte[] Value) : PlutusBytes;
 
 [CborConverter(typeof(BytesConverter))]
 [CborTag(2)]
-public record PlutusBytesWithTag(PlutusBytes Value) : PlutusData;
+public record PlutusBytesWithTag(byte[] Value) : PlutusBytes;
 
 
 [CborConverter(typeof(UnionConverter))]

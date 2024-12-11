@@ -31,7 +31,6 @@ public class BytesConverter : ICborConverter
         }
 
         // Use reflection to find a constructor that accepts byte[]
-        // Use reflection to create an instance of T
         ConstructorInfo constructor = typeof(T).GetConstructor([typeof(byte[])])
             ?? throw new InvalidOperationException($"Type {typeof(T).Name} does not have a constructor that accepts a byte[].");
 
