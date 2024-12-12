@@ -1,4 +1,5 @@
 
+using Chrysalis.Cardano.Core.Types.Block.Transaction;
 using Chrysalis.Cbor.Attributes;
 using Chrysalis.Cbor.Converters.Primitives;
 using Chrysalis.Cbor.Types;
@@ -7,16 +8,31 @@ using Chrysalis.Cbor.Types.Primitives;
 
 namespace Chrysalis.Plutus.Types;
 
+
+
+[CborConverter(typeof(UnionConverter))]
+public abstract record Cip68<T> : CborBase;
+
 [CborConverter(typeof(ConstrConverter))]
 [CborIndex(0)]
-public record CIP68<T>() : CborBase
-{
+public record Cip68WithoutExtra<T>(
     [CborProperty(0)]
-    public required CborMap<CborBase, CborBase> Metadata { get; init; }
+    CborMap<CborBytes, TransactionMetadatum> Metadata,
 
     [CborProperty(1)]
-    public required CborInt Version { get; init; }
+    CborInt Version
+) : Cip68<T>;
+
+[CborConverter(typeof(ConstrConverter))]
+[CborIndex(0)]
+public record Cip68WithExtra<T>(
+    [CborProperty(0)]
+    CborMap<CborBytes, TransactionMetadatum> Metadata,
+
+    [CborProperty(1)]
+    CborInt Version,
 
     [CborProperty(2)]
-    public required T Extra { get; init; }
-}
+    T PlutusData
+) : Cip68<T> where T : CborBase;
+
