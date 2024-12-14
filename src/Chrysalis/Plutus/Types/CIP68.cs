@@ -43,6 +43,8 @@ public abstract record Cip68Metadata : CborBase;
 [CborConverter(typeof(UnionConverter))]
 public abstract record Cip68BigInt : Cip68Metadata;
 
+[CborConverter(typeof(IntConverter))]
+public record Cip68Int(int Value) : Cip68BigInt;
 
 [CborConverter(typeof(BytesConverter))]
 [CborSize(64)]
