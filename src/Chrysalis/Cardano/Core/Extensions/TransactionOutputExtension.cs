@@ -24,6 +24,30 @@ public static class TransactionOutputExtension
             _ => null
         };
 
+    public static ulong? Lovelace(this TransactionOutput output)
+        => output.Amount()?.Lovelace();
+
+    public static ulong? QuantityOf(this TransactionOutput output, string policyId, string assetName)
+        => output.Amount()?.QuantityOf(policyId, assetName);
+
+    public static byte[] AddressValue(this TransactionOutput transactionOutput)
+        => transactionOutput switch
+    {
+            BabbageTransactionOutput babbageTransactionOutput => babbageTransactionOutput.Address.Value,
+            AlonzoTransactionOutput alonzoTransactionOutput => alonzoTransactionOutput.Address.Value,
+            MaryTransactionOutput maryTransactionOutput => maryTransactionOutput.Address.Value,
+            ShellyTransactionOutput shellyTransactionOutput => shellyTransactionOutput.Address.Value,
+            _ => throw new NotImplementedException()
+        };
+    // public static Dictionary<string, ulong>? AssetsByPolicy(this TransactionOutput output, string policyId)
+    //     => output.Amount()?.AssetsByPolicy(policyId);
+
+    // public static bool HasMultipleAssets(this TransactionOutput output)
+    //     => output.Amount()?.HasMultipleAssets() ?? false;
+
+    // public static IEnumerable<string>? PolicyIds(this TransactionOutput output)
+    //     => output.Amount()?.PolicyIds();
+        
     public static byte[]? ScriptRef(this TransactionOutput transactionOutput)
         => transactionOutput switch
         {

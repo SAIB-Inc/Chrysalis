@@ -9,4 +9,7 @@ public static class TransactionInputExtension
 
     public static ulong Index(this TransactionInput transactionInput)
         => transactionInput.Index.Value;
+
+    public static string OutRef(this TransactionInput transactionInput)
+        => $"{transactionInput.TransactionId()}#{transactionInput.Index()}";
 }

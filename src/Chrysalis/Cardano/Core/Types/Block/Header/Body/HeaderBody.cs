@@ -41,3 +41,18 @@ public record AlonzoHeaderBody(
     [CborProperty(13)] CborUlong ProtocolMajor,
     [CborProperty(14)] CborUlong ProtocolMinor
 ) : BlockHeaderBody;
+
+[CborConverter(typeof(CustomListConverter))]
+public record ShelleyHeaderBody(
+    [CborProperty(0)] CborUlong BlockNumber,
+    [CborProperty(1)] CborUlong Slot,
+    [CborProperty(2)] CborNullable<CborBytes> PrevHash,
+    [CborProperty(3)] CborBytes IssuerVKey,
+    [CborProperty(4)] CborBytes VrfVKey,
+    [CborProperty(5)] VrfCert NonceVrf,
+    [CborProperty(6)] VrfCert LeaderVrf,
+    [CborProperty(7)] CborUlong BlockBodySize,
+    [CborProperty(8)] CborBytes BlockBodyHash,
+    [CborProperty(9)] OperationalCert OperationalCert,
+    [CborProperty(10)] ProtocolVersion ProtocolVersion
+) : BlockHeaderBody;
