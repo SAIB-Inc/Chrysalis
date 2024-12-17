@@ -13,8 +13,7 @@ public static class BlockExtension
     => block switch
     {
         ShelleyBlock shelleyBlock => shelleyBlock,
-        AllegraBlock allegraBlock => allegraBlock,
-        PostMaryBlock postMaryBlock => postMaryBlock,
+        AlonzoBlock alonzoBlock => alonzoBlock,
         _ => throw new NotImplementedException()
     };
 
@@ -33,8 +32,7 @@ public static class BlockExtension
     => block switch
     {
         ShelleyBlock shelleyBlock => shelleyBlock.Header,
-        AllegraBlock allegraBlock => allegraBlock.Header,
-        PostMaryBlock postMaryBlock => postMaryBlock.Header,
+        AlonzoBlock alonzoBlock => alonzoBlock.Header,
         _ => throw new NotImplementedException()
     };
 
@@ -65,15 +63,7 @@ public static class BlockExtension
                 CborIndefListWithTag<TransactionBody> x => x.Value,
                 _ => throw new NotImplementedException()
             },
-            AllegraBlock allegraBlock => allegraBlock.TransactionBodies switch
-            {
-                CborDefList<TransactionBody> x => x.Value,
-                CborIndefList<TransactionBody> x => x.Value,
-                CborDefListWithTag<TransactionBody> x => x.Value,
-                CborIndefListWithTag<TransactionBody> x => x.Value,
-                _ => throw new NotImplementedException()
-            },
-            PostMaryBlock postMaryBlock => postMaryBlock.TransactionBodies switch
+            AlonzoBlock alonzoBlock => alonzoBlock.TransactionBodies switch
             {
                 CborDefList<TransactionBody> x => x.Value,
                 CborIndefList<TransactionBody> x => x.Value,
@@ -95,15 +85,7 @@ public static class BlockExtension
                 CborIndefListWithTag<TransactionWitnessSet> x => x.Value,
                 _ => throw new NotImplementedException()
             },
-            AllegraBlock allegraBlock => allegraBlock.TransactionWitnessSets switch
-            {
-                CborDefList<TransactionWitnessSet> x => x.Value,
-                CborIndefList<TransactionWitnessSet> x => x.Value,
-                CborDefListWithTag<TransactionWitnessSet> x => x.Value,
-                CborIndefListWithTag<TransactionWitnessSet> x => x.Value,
-                _ => throw new NotImplementedException()
-            },
-            PostMaryBlock postMaryBlock => postMaryBlock.TransactionWitnessSets switch
+            AlonzoBlock alonzoBlock => alonzoBlock.TransactionWitnessSets switch
             {
                 CborDefList<TransactionWitnessSet> x => x.Value,
                 CborIndefList<TransactionWitnessSet> x => x.Value,
@@ -119,8 +101,7 @@ public static class BlockExtension
         return block switch
         {
             ShelleyBlock shelleyBlock => shelleyBlock.TransactionMetadataSet.Value.ToDictionary(kvp => kvp.Key.Value, kvp => kvp.Value),
-            AllegraBlock allegraBlock => allegraBlock.AuxiliaryDataSet.Value.ToDictionary(kvp => kvp.Key.Value, kvp => kvp.Value),
-            PostMaryBlock postMaryBlock => postMaryBlock.AuxiliaryDataSet.Value.ToDictionary(kvp => kvp.Key.Value, kvp => kvp.Value),
+            AlonzoBlock alonzoBlock => alonzoBlock.AuxiliaryDataSet.Value.ToDictionary(kvp => kvp.Key.Value, kvp => kvp.Value),
             _ => throw new NotImplementedException()
         };
     }

@@ -21,16 +21,9 @@ public record ShelleyBlock(
     [CborProperty(3)] AuxiliaryDataSet TransactionMetadataSet
 ) : Block;
 
-[CborConverter(typeof(CustomListConverter))]
-public record AllegraBlock(
-    [CborProperty(0)] BlockHeader Header,
-    [CborProperty(1)] CborMaybeIndefList<TransactionBody> TransactionBodies,
-    [CborProperty(2)] CborMaybeIndefList<TransactionWitnessSet> TransactionWitnessSets,
-    [CborProperty(3)] AuxiliaryDataSet AuxiliaryDataSet
-) : Block;
 
 [CborConverter(typeof(CustomListConverter))]
-public record PostMaryBlock(
+public record AlonzoBlock(
     [CborProperty(0)] BlockHeader Header,
     [CborProperty(1)] CborMaybeIndefList<TransactionBody> TransactionBodies,
     [CborProperty(2)] CborMaybeIndefList<TransactionWitnessSet> TransactionWitnessSets,
