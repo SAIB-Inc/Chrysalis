@@ -38,14 +38,14 @@ public static class TransactionOutputExtension
     public static ulong? QuantityOf(this TransactionOutput output, string policyId, string assetName)
         => output.Amount()?.QuantityOf(policyId, assetName);
 
-    public static byte[] AddressValue(this TransactionOutput transactionOutput)
+    public static byte[]? AddressValue(this TransactionOutput transactionOutput)
         => transactionOutput switch
         {
             BabbageTransactionOutput babbageTransactionOutput => babbageTransactionOutput.Address.Value,
             AlonzoTransactionOutput alonzoTransactionOutput => alonzoTransactionOutput.Address.Value,
             MaryTransactionOutput maryTransactionOutput => maryTransactionOutput.Address.Value,
             ShellyTransactionOutput shellyTransactionOutput => shellyTransactionOutput.Address.Value,
-            _ => throw new NotImplementedException()
+            _ => null
         };
 
     public static byte[]? ScriptRef(this TransactionOutput transactionOutput)

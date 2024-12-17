@@ -18,7 +18,7 @@ public static class TransactionWitnessSetExtension
                 CborIndefList<VKeyWitness> list => list.Value,
                 CborDefListWithTag<VKeyWitness> list => list.Value,
                 CborIndefListWithTag<VKeyWitness> list => list.Value,
-                _ => throw new NotImplementedException()
+                _ => []
             },
             AlonzoTransactionWitnessSet x => x.VKeyWitnessSet switch
             {
@@ -26,7 +26,7 @@ public static class TransactionWitnessSetExtension
                 CborIndefList<VKeyWitness> list => list.Value,
                 CborDefListWithTag<VKeyWitness> list => list.Value,
                 CborIndefListWithTag<VKeyWitness> list => list.Value,
-                _ => throw new NotImplementedException()
+                _ => []
             },
             BabbageTransactionWitnessSet x => x.VKeyWitnessSet switch
             {
@@ -34,7 +34,7 @@ public static class TransactionWitnessSetExtension
                 CborIndefList<VKeyWitness> list => list.Value,
                 CborDefListWithTag<VKeyWitness> list => list.Value,
                 CborIndefListWithTag<VKeyWitness> list => list.Value,
-                _ => throw new NotImplementedException()
+                _ => []
             },
             ConwayTransactionWitnessSet x => x.VKeyWitnessSet switch
             {
@@ -42,9 +42,9 @@ public static class TransactionWitnessSetExtension
                 CborIndefList<VKeyWitness> list => list.Value,
                 CborDefListWithTag<VKeyWitness> list => list.Value,
                 CborIndefListWithTag<VKeyWitness> list => list.Value,
-                _ => throw new NotImplementedException()
+                _ => []
             },
-            _ => throw new NotImplementedException()
+            _ => []
         };
     
     public static Redeemers? Redeemers(this TransactionWitnessSet transactionWitness)
@@ -53,7 +53,7 @@ public static class TransactionWitnessSetExtension
             AlonzoTransactionWitnessSet x => x.Redeemers,
             BabbageTransactionWitnessSet x => x.Redeemers,
             ConwayTransactionWitnessSet x => x.Redeemers,
-            _ => throw new NotImplementedException()
+            _ => null
         };
     
     public static IEnumerable<NativeScript>? NativeScriptSet(this TransactionWitnessSet transactionWitness)
@@ -65,7 +65,7 @@ public static class TransactionWitnessSetExtension
                 CborIndefList<NativeScript> list => list.Value,
                 CborDefListWithTag<NativeScript> list => list.Value,
                 CborIndefListWithTag<NativeScript> list => list.Value,
-                _ => throw new NotImplementedException()
+                _ => []
             },
             AlonzoTransactionWitnessSet x => x.NativeScriptSet switch
             {
@@ -73,7 +73,7 @@ public static class TransactionWitnessSetExtension
                 CborIndefList<NativeScript> list => list.Value,
                 CborDefListWithTag<NativeScript> list => list.Value,
                 CborIndefListWithTag<NativeScript> list => list.Value,
-                _ => throw new NotImplementedException()
+                _ => []
             },
             BabbageTransactionWitnessSet x => x.NativeScriptSet switch
             {
@@ -81,7 +81,7 @@ public static class TransactionWitnessSetExtension
                 CborIndefList<NativeScript> list => list.Value,
                 CborDefListWithTag<NativeScript> list => list.Value,
                 CborIndefListWithTag<NativeScript> list => list.Value,
-                _ => throw new NotImplementedException()
+                _ => []
             },
             ConwayTransactionWitnessSet x => x.NativeScriptSet switch
             {
@@ -89,9 +89,9 @@ public static class TransactionWitnessSetExtension
                 CborIndefList<NativeScript> list => list.Value,
                 CborDefListWithTag<NativeScript> list => list.Value,
                 CborIndefListWithTag<NativeScript> list => list.Value,
-                _ => throw new NotImplementedException()
+                _ => []
             },
-            _ => throw new NotImplementedException()
+            _ => []
         };
     
     public static IEnumerable<BootstrapWitness>? BootstrapWitnessSet(this TransactionWitnessSet transactionWitness)
@@ -103,7 +103,7 @@ public static class TransactionWitnessSetExtension
                 CborIndefList<BootstrapWitness> list => list.Value,
                 CborDefListWithTag<BootstrapWitness> list => list.Value,
                 CborIndefListWithTag<BootstrapWitness> list => list.Value,
-                _ => throw new NotImplementedException()
+                _ => []
             },
             AlonzoTransactionWitnessSet x => x.BootstrapWitnessSet switch
             {
@@ -111,7 +111,7 @@ public static class TransactionWitnessSetExtension
                 CborIndefList<BootstrapWitness> list => list.Value,
                 CborDefListWithTag<BootstrapWitness> list => list.Value,
                 CborIndefListWithTag<BootstrapWitness> list => list.Value,
-                _ => throw new NotImplementedException()
+                _ => []
             },
             BabbageTransactionWitnessSet x => x.BootstrapWitnessSet switch
             {
@@ -119,7 +119,7 @@ public static class TransactionWitnessSetExtension
                 CborIndefList<BootstrapWitness> list => list.Value,
                 CborDefListWithTag<BootstrapWitness> list => list.Value,
                 CborIndefListWithTag<BootstrapWitness> list => list.Value,
-                _ => throw new NotImplementedException()
+                _ => []
             },
             ConwayTransactionWitnessSet x => x.BootstrapWitnessSet switch
             {
@@ -127,9 +127,9 @@ public static class TransactionWitnessSetExtension
                 CborIndefList<BootstrapWitness> list => list.Value,
                 CborDefListWithTag<BootstrapWitness> list => list.Value,
                 CborIndefListWithTag<BootstrapWitness> list => list.Value,
-                _ => throw new NotImplementedException()
+                _ => []
             },
-            _ => throw new NotImplementedException()
+            _ => []
         };
 
     public static IEnumerable<PlutusData>? PlutusDataSet(this TransactionWitnessSet transactionWitness)
@@ -141,7 +141,7 @@ public static class TransactionWitnessSetExtension
                 CborIndefList<PlutusData> list => list.Value,
                 CborDefListWithTag<PlutusData> list => list.Value,
                 CborIndefListWithTag<PlutusData> list => list.Value,
-                _ => throw new NotImplementedException()
+                _ => []
             },
             BabbageTransactionWitnessSet x => x.PlutusDataSet switch
             {
@@ -149,7 +149,7 @@ public static class TransactionWitnessSetExtension
                 CborIndefList<PlutusData> list => list.Value,
                 CborDefListWithTag<PlutusData> list => list.Value,
                 CborIndefListWithTag<PlutusData> list => list.Value,
-                _ => throw new NotImplementedException()
+                _ => []
             },
             ConwayTransactionWitnessSet x => x.PlutusDataSet switch
             {
@@ -157,9 +157,9 @@ public static class TransactionWitnessSetExtension
                 CborIndefList<PlutusData> list => list.Value,
                 CborDefListWithTag<PlutusData> list => list.Value,
                 CborIndefListWithTag<PlutusData> list => list.Value,
-                _ => throw new NotImplementedException()
+                _ => []
             },
-            _ => throw new NotImplementedException()
+            _ => []
         };
     
     public static IEnumerable<byte[]>? PlutusV1ScriptSet(this TransactionWitnessSet transactionWitness)
@@ -171,7 +171,7 @@ public static class TransactionWitnessSetExtension
                 CborIndefList<CborBytes> list => list.Value.Select(x => x.Value).ToList(),
                 CborDefListWithTag<CborBytes> list => list.Value.Select(x => x.Value).ToList(),
                 CborIndefListWithTag<CborBytes> list => list.Value.Select(x => x.Value).ToList(),
-                _ => throw new NotImplementedException()
+                _ => []
             },
             BabbageTransactionWitnessSet x => x.PlutusV1ScriptSet switch
             {
@@ -179,7 +179,7 @@ public static class TransactionWitnessSetExtension
                 CborIndefList<CborBytes> list => list.Value.Select(x => x.Value).ToList(),
                 CborDefListWithTag<CborBytes> list => list.Value.Select(x => x.Value).ToList(),
                 CborIndefListWithTag<CborBytes> list => list.Value.Select(x => x.Value).ToList(),
-                _ => throw new NotImplementedException()
+                _ => []
             },
             ConwayTransactionWitnessSet x => x.PlutusV1ScriptSet switch
             {
@@ -187,9 +187,9 @@ public static class TransactionWitnessSetExtension
                 CborIndefList<CborBytes> list => list.Value.Select(x => x.Value).ToList(),
                 CborDefListWithTag<CborBytes> list => list.Value.Select(x => x.Value).ToList(),
                 CborIndefListWithTag<CborBytes> list => list.Value.Select(x => x.Value).ToList(),
-                _ => throw new NotImplementedException()
+                _ => []
             },
-            _ => throw new NotImplementedException()
+            _ => []
         };
 
     public static IEnumerable<byte[]>? PlutusV2ScriptSet(this TransactionWitnessSet transactionWitness)
@@ -201,7 +201,7 @@ public static class TransactionWitnessSetExtension
                 CborIndefList<CborBytes> list => list.Value.Select(x => x.Value).ToList(),
                 CborDefListWithTag<CborBytes> list => list.Value.Select(x => x.Value).ToList(),
                 CborIndefListWithTag<CborBytes> list => list.Value.Select(x => x.Value).ToList(),
-                _ => throw new NotImplementedException()
+                _ => []
             },
             ConwayTransactionWitnessSet x => x.PlutusV2ScriptSet switch
             {
@@ -209,9 +209,9 @@ public static class TransactionWitnessSetExtension
                 CborIndefList<CborBytes> list => list.Value.Select(x => x.Value).ToList(),
                 CborDefListWithTag<CborBytes> list => list.Value.Select(x => x.Value).ToList(),
                 CborIndefListWithTag<CborBytes> list => list.Value.Select(x => x.Value).ToList(),
-                _ => throw new NotImplementedException()
+                _ => []
             },
-            _ => throw new NotImplementedException()
+            _ => []
         };
     
     public static IEnumerable<byte[]>? PlutusV3ScriptSet(this TransactionWitnessSet transactionWitness)
@@ -223,8 +223,8 @@ public static class TransactionWitnessSetExtension
                 CborIndefList<CborBytes> list => list.Value.Select(x => x.Value).ToList(),
                 CborDefListWithTag<CborBytes> list => list.Value.Select(x => x.Value).ToList(),
                 CborIndefListWithTag<CborBytes> list => list.Value.Select(x => x.Value).ToList(),
-                _ => throw new NotImplementedException()
+                _ => []
             },
-            _ => throw new NotImplementedException()
+            _ => []
         };
 }
