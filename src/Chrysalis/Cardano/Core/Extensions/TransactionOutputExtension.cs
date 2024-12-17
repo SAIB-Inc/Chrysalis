@@ -1,3 +1,4 @@
+using Chrysalis.Cardano.Core.Types.Block.Transaction.Body;
 using Chrysalis.Cardano.Core.Types.Block.Transaction.Output;
 
 namespace Chrysalis.Cardano.Core.Extensions;
@@ -57,44 +58,28 @@ public static class TransactionOutputExtension
 
     public static byte[]? Datum(this TransactionOutput transactionOutput)
     {
-        DatumOption? datumOption = transactionOutput.DatumOption();
-        byte[]? datumHash = transactionOutput.DatumHash();
+        (DatumType DatumType, byte[]? RawData) datum = transactionOutput.DatumInfo();
 
-        byte[]? rawData = datumOption switch
-        {
-            DatumHashOption hashOption => hashOption.DatumHash.Value,
-            InlineDatumOption inlineOption => inlineOption.Data.Value,
-            _ => null
-        };
-
-        rawData ??= datumHash;
-
-        return rawData;
+        return datum.RawData;
     }
 
     public static (DatumType DatumType, byte[]? RawData) DatumInfo(this TransactionOutput transactionOutput)
     {
-        DatumOption? datumOption = transactionOutput.DatumOption();
 
-        return datumOption switch
+        return transactionOutput switch
         {
-            DatumHashOption hashOption => (DatumType.Hash, hashOption.DatumHash.Value),
-            InlineDatumOption inlineOption => (DatumType.Inline, inlineOption.Data.Value),
+            AlonzoTransactionOutput a => a.DatumHash switch
+            {
+                null => (DatumType.None, null),
+                _ => (DatumType.Hash, a.DatumHash.Value)
+            },
+            BabbageTransactionOutput b => b.Datum switch
+            {
+                InlineDatumOption inline => (DatumType.Inline, inline.Data.Value),
+                DatumHashOption hash => (DatumType.Hash, hash.DatumHash.Value),
+                _ => (DatumType.None, null)
+            },
             _ => (DatumType.None, null)
         };
     }
-
-    public static DatumOption? DatumOption(this TransactionOutput transactionOutput)
-        => transactionOutput switch
-        {
-            BabbageTransactionOutput babbageTransactionOutput => babbageTransactionOutput.Datum,
-            _ => null
-        };
-
-    public static byte[]? DatumHash(this TransactionOutput transactionOutput)
-        => transactionOutput switch
-        {
-            AlonzoTransactionOutput alonzoTransactionOutput => alonzoTransactionOutput.DatumHash.Value,
-            _ => null
-        };
 }
