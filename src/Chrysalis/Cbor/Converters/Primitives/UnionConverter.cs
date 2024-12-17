@@ -48,8 +48,8 @@ public class UnionConverter : ICborConverter
     {
         TaskCompletionSource<T> successTcs = new TaskCompletionSource<T>(TaskCreationOptions.RunContinuationsAsynchronously);
 
-        // Create tasks that run the deserialization attempts in parallel
-        Task[] tasks = concreteTypes.Select(concreteType => Task.Run(() =>
+        // Create a list of tasks that attempt to deserialize in parallel
+        Task[] tasks = concreteTypes.Select(async concreteType =>
         {
             if (successTcs.Task.IsCompleted)
                 return; // If already succeeded, just return early.
@@ -68,18 +68,19 @@ public class UnionConverter : ICborConverter
                 // Ignore failures - if all fail, we handle that after all tasks complete.
                 // But do not throw here, since we only want to fail if NO type works.
             }
-        })).ToArray();
+        }).ToArray();
 
-        // Wait for all tasks to complete
-        await Task.WhenAll(tasks);
+        // Wait until either one task succeeds (successTcs.Task) or all tasks finish (Task.WhenAll)
+        Task completed = await Task.WhenAny(successTcs.Task, Task.WhenAll(tasks)).ConfigureAwait(false);
 
-        // If no type succeeded, throw an exception
-        if (!successTcs.Task.IsCompleted)
+        if (completed == successTcs.Task)
         {
-            throw new InvalidOperationException("Failed to deserialize with any of the provided types");
+            // We have a successful result
+            return await successTcs.Task.ConfigureAwait(false);
         }
 
-        return await successTcs.Task;
+        // If we reach here, it means Task.WhenAll completed first and no task succeeded
+        throw new InvalidOperationException($"Unable to deserialize to any concrete type implementing {baseType.Name}.");
     }
 
     private static Type GetClosedGenericType(Type concreteType, Type baseType)
