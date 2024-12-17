@@ -18,13 +18,13 @@ public static class AuxiliaryDataExtension
     public static Dictionary<ulong, TransactionMetadatum> GetMetadata(this AuxiliaryData data)
         => data switch
         {
-            PostAlonzoAuxiliaryDataMap x => x.Metadata?.Value.ToDictionary(kvp => kvp.Key.Value, kvp => kvp.Value) ?? throw new InvalidOperationException("Metadata cannot be null in PostAlonzoAuxiliaryData."),
+            PostAlonzoAuxiliaryDataMap x => x.Metadata?.Value.ToDictionary(kvp => kvp.Key.Value, kvp => kvp.Value) ?? [],
             Metadata x => x.Value.ToDictionary(kvp => kvp.Key.Value, kvp => kvp.Value),
             ShellyMaAuxiliaryData x => x.TransactionMetadata.Value.ToDictionary(kvp => kvp.Key.Value, kvp => kvp.Value),
-            _ => throw new NotImplementedException()
+            _ => []
         };
 
-    public static object GetMetadataValue(this TransactionMetadatum data)
+    public static object? GetMetadataValue(this TransactionMetadatum data)
     => data switch
     {
         MetadatumMap x => x.Value,
@@ -33,11 +33,11 @@ public static class AuxiliaryDataExtension
         {
             MetadatumIntLong longValue => longValue.Value,
             MetadatumIntUlong ulongValue => ulongValue.Value,
-            _ => throw new NotImplementedException("Unhandled MetadatumInt type.")
+            _ => null
         },
         MetadatumBytes x => x.Value,
         MetadataText x => x.Value,
-        _ => throw new NotImplementedException("Unsupported TransactionMetadatum type.")
+        _ => null
     };
 
     public static IEnumerable<NativeScript>? NativeScripts(this AuxiliaryData auxiliaryData)

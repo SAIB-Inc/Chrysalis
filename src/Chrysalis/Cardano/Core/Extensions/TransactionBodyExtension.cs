@@ -22,7 +22,7 @@ public static class TransactionBodyExtension
                 CborIndefList<TransactionInput> list => list.Value,
                 CborDefListWithTag<TransactionInput> list => list.Value,
                 CborIndefListWithTag<TransactionInput> list => list.Value,
-                _ => throw new NotImplementedException()
+                _ => []
             },
             BabbageTransactionBody x => x.Inputs switch
             {
@@ -30,7 +30,7 @@ public static class TransactionBodyExtension
                 CborIndefList<TransactionInput> list => list.Value,
                 CborDefListWithTag<TransactionInput> tagList => tagList.Value,
                 CborIndefListWithTag<TransactionInput> tagList => tagList.Value,
-                _ => throw new NotImplementedException()
+                _ => []
             },
             AlonzoTransactionBody x => x.Inputs switch
             {
@@ -38,9 +38,9 @@ public static class TransactionBodyExtension
                 CborIndefList<TransactionInput> list => list.Value,
                 CborDefListWithTag<TransactionInput> tagList => tagList.Value,
                 CborIndefListWithTag<TransactionInput> tagList => tagList.Value,
-                _ => throw new NotImplementedException()
+                _ => []
             },
-            _ => throw new NotImplementedException()
+            _ => []
         };
 
     public static IEnumerable<TransactionOutput> Outputs(this TransactionBody transactionBody)
@@ -52,7 +52,7 @@ public static class TransactionBodyExtension
                 CborIndefList<TransactionOutput> list => list.Value,
                 CborDefListWithTag<TransactionOutput> list => list.Value,
                 CborIndefListWithTag<TransactionOutput> list => list.Value,
-                _ => throw new NotImplementedException()
+                _ => []
             },
             BabbageTransactionBody x => x.Outputs switch
             {
@@ -60,7 +60,7 @@ public static class TransactionBodyExtension
                 CborIndefList<TransactionOutput> list => list.Value,
                 CborDefListWithTag<TransactionOutput> list => list.Value,
                 CborIndefListWithTag<TransactionOutput> list => list.Value,
-                _ => throw new NotImplementedException()
+                _ => []
             },
             AlonzoTransactionBody x => x.Outputs switch
             {
@@ -68,9 +68,9 @@ public static class TransactionBodyExtension
                 CborIndefList<TransactionOutput> list => list.Value,
                 CborDefListWithTag<TransactionOutput> list => list.Value,
                 CborIndefListWithTag<TransactionOutput> list => list.Value,
-                _ => throw new NotImplementedException()
+                _ => []
             },
-            _ => throw new NotImplementedException()
+            _ => []
         };
 
     public static IEnumerable<TransactionOutput> OutputsSentToAddress(this TransactionBody transactionBody, string address)
@@ -92,7 +92,7 @@ public static class TransactionBodyExtension
             ConwayTransactionBody x => x.AuxiliaryDataHash?.Value,
             BabbageTransactionBody x => x.AuxiliaryDataHash?.Value,
             AlonzoTransactionBody x => x.AuxiliaryDataHash?.Value,
-            _ => throw new NotImplementedException()
+            _ => null
         };
 
     public static Dictionary<byte[], TokenBundleMint>? Mint(this TransactionBody transactionBody)
@@ -101,6 +101,6 @@ public static class TransactionBodyExtension
             ConwayTransactionBody x => x.Mint?.Value.ToDictionary(kvp => kvp.Key.Value, kvp => kvp.Value),
             BabbageTransactionBody x => x.Mint?.Value.ToDictionary(kvp => kvp.Key.Value, kvp => kvp.Value),
             AlonzoTransactionBody x => x.Mint?.Value.ToDictionary(kvp => kvp.Key.Value, kvp => kvp.Value),
-            _ => throw new NotImplementedException()
+            _ => null
         };
 }

@@ -45,7 +45,7 @@ public static class TransactionOutputExtension
             AlonzoTransactionOutput alonzoTransactionOutput => alonzoTransactionOutput.Address.Value,
             MaryTransactionOutput maryTransactionOutput => maryTransactionOutput.Address.Value,
             ShellyTransactionOutput shellyTransactionOutput => shellyTransactionOutput.Address.Value,
-            _ => throw new NotImplementedException()
+            _ => []
         };
 
     public static byte[]? ScriptRef(this TransactionOutput transactionOutput)
