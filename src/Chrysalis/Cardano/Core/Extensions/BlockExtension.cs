@@ -12,9 +12,8 @@ public static class BlockExtension
     public static Block GetBlock(this Block block)
     => block switch
     {
-        PostAlonzoBlock postAlonzoBlock => postAlonzoBlock,
         ShelleyBlock shelleyBlock => shelleyBlock,
-        PreAlonzoBlock preAlonzoBlock => preAlonzoBlock,
+        AlonzoBlock alonzoBlock => alonzoBlock,
         _ => throw new NotImplementedException()
     };
 
@@ -32,9 +31,8 @@ public static class BlockExtension
     public static BlockHeader Header(this Block block)
     => block switch
     {
-        PostAlonzoBlock postAlonzoBlock => postAlonzoBlock.Header,
         ShelleyBlock shelleyBlock => shelleyBlock.Header,
-        PreAlonzoBlock preAlonzoBlock => preAlonzoBlock.Header,
+        AlonzoBlock alonzoBlock => alonzoBlock.Header,
         _ => throw new NotImplementedException()
     };
 
@@ -57,14 +55,6 @@ public static class BlockExtension
     public static IEnumerable<TransactionBody> TransactionBodies(this Block block)
         => block switch
         {
-            PostAlonzoBlock postAlonzoBlock => postAlonzoBlock.TransactionBodies switch
-            {
-                CborDefList<TransactionBody> x => x.Value,
-                CborIndefList<TransactionBody> x => x.Value,
-                CborDefListWithTag<TransactionBody> x => x.Value,
-                CborIndefListWithTag<TransactionBody> x => x.Value,
-                _ => throw new NotImplementedException()
-            },
             ShelleyBlock shelleyBlock => shelleyBlock.TransactionBodies switch
             {
                 CborDefList<TransactionBody> x => x.Value,
@@ -73,7 +63,7 @@ public static class BlockExtension
                 CborIndefListWithTag<TransactionBody> x => x.Value,
                 _ => throw new NotImplementedException()
             },
-            PreAlonzoBlock preAlonzoBlock => preAlonzoBlock.TransactionBodies switch
+            AlonzoBlock alonzoBlock => alonzoBlock.TransactionBodies switch
             {
                 CborDefList<TransactionBody> x => x.Value,
                 CborIndefList<TransactionBody> x => x.Value,
@@ -87,14 +77,6 @@ public static class BlockExtension
     public static IEnumerable<TransactionWitnessSet> TransactionWitnessSets(this Block block)
         => block switch
         {
-            PostAlonzoBlock postAlonzoBlock => postAlonzoBlock.TransactionWitnessSets switch
-            {
-                CborDefList<TransactionWitnessSet> x => x.Value,
-                CborIndefList<TransactionWitnessSet> x => x.Value,
-                CborDefListWithTag<TransactionWitnessSet> x => x.Value,
-                CborIndefListWithTag<TransactionWitnessSet> x => x.Value,
-                _ => throw new NotImplementedException()
-            },
             ShelleyBlock shelleyBlock => shelleyBlock.TransactionWitnessSets switch
             {
                 CborDefList<TransactionWitnessSet> x => x.Value,
@@ -103,7 +85,7 @@ public static class BlockExtension
                 CborIndefListWithTag<TransactionWitnessSet> x => x.Value,
                 _ => throw new NotImplementedException()
             },
-            PreAlonzoBlock preAlonzoBlock => preAlonzoBlock.TransactionWitnessSets switch
+            AlonzoBlock alonzoBlock => alonzoBlock.TransactionWitnessSets switch
             {
                 CborDefList<TransactionWitnessSet> x => x.Value,
                 CborIndefList<TransactionWitnessSet> x => x.Value,
@@ -115,10 +97,12 @@ public static class BlockExtension
         };
 
     public static Dictionary<int, AuxiliaryData> AuxiliaryDataSet(this Block block)
-        => block switch
+    {
+        return block switch
         {
-            PostAlonzoBlock postAlonzoBlock => postAlonzoBlock.AuxiliaryDataSet.Value.ToDictionary(kvp => kvp.Key.Value, kvp => kvp.Value),
-            PreAlonzoBlock preAlonzoBlock => preAlonzoBlock.AuxiliaryDataSet.Value.ToDictionary(kvp => kvp.Key.Value, kvp => kvp.Value),
+            ShelleyBlock shelleyBlock => shelleyBlock.TransactionMetadataSet.Value.ToDictionary(kvp => kvp.Key.Value, kvp => kvp.Value),
+            AlonzoBlock alonzoBlock => alonzoBlock.AuxiliaryDataSet.Value.ToDictionary(kvp => kvp.Key.Value, kvp => kvp.Value),
             _ => throw new NotImplementedException()
         };
+    }
 }

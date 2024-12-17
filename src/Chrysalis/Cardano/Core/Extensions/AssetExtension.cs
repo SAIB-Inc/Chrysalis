@@ -4,13 +4,21 @@ namespace Chrysalis.Cardano.Core.Extensions;
 
 public static class AssetExtension
 {
-    public static ulong? Coin(this Value value)
+    public static ulong? Lovelace(this Value value)
         => value switch
         {
             Lovelace lovelace => lovelace.Value,
             LovelaceWithMultiAsset lovelaceWithMultiAsset => lovelaceWithMultiAsset.Lovelace.Value,
             _ => null
         };
+
+    public static ulong? QuantityOf(this Value value, string policyId, string assetName) =>
+        value.MultiAsset() is { } multiAsset
+        && multiAsset.TryGetValue(policyId.ToLowerInvariant(), out var multiAssetOutput)
+        && multiAssetOutput.TokenBundle().TryGetValue(assetName.ToLowerInvariant(), out var quantity)
+            ? quantity
+            : null;
+
 
     public static Dictionary<string, TokenBundleOutput>? MultiAsset(this Value value)
         => value switch

@@ -1,6 +1,7 @@
 using Chrysalis.Cardano.Core.Types.Block.Transaction.Body;
 using Chrysalis.Cardano.Core.Types.Block.Transaction.Input;
 using Chrysalis.Cardano.Core.Types.Block.Transaction.Output;
+using Chrysalis.Cardano.Core.Types.Block.Transaction.WitnessSet;
 using Chrysalis.Cbor.Types.Collections;
 
 namespace Chrysalis.Cardano.Core.Extensions;
@@ -72,9 +73,22 @@ public static class TransactionBodyExtension
             _ => throw new NotImplementedException()
         };
 
+    public static IEnumerable<TransactionOutput> OutputsSentToAddress(this TransactionBody transactionBody, string address)
+        => transactionBody.Outputs().Where(output => output.Address()?.ToString().ToLowerInvariant() == address.ToLowerInvariant());
+
+    public static IEnumerable<TransactionOutput> OutputsWithDatum<T>(this TransactionBody transactionBody, byte[] datum)
+        => transactionBody.Outputs().Where(output => output.Datum()?.SequenceEqual(datum) ?? false);
+
+    public static IEnumerable<string> OutRefs(this TransactionBody transactionBody)
+        => transactionBody.Inputs().Select(input => input.OutRef());
+
+
     public static byte[]? AuxiliaryDataHash(this TransactionBody transactionBody)
         => transactionBody switch
         {
+            ShelleyTransactionBody x => x.MetadataHash?.Value,
+            AllegraTransactionBody x => x.MetadataHash?.Value,
+            MaryTransactionBody x => x.MetadataHash?.Value,
             ConwayTransactionBody x => x.AuxiliaryDataHash?.Value,
             BabbageTransactionBody x => x.AuxiliaryDataHash?.Value,
             AlonzoTransactionBody x => x.AuxiliaryDataHash?.Value,

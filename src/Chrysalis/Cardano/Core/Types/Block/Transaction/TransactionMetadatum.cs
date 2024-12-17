@@ -38,4 +38,4 @@ public record MetadatumIntLong(long Value) : MetadatumInt;
 
 
 [CborConverter(typeof(UlongConverter))]
-public record MetadatumIntULong(ulong Value) : MetadatumInt;
+public record MetadatumIntUlong(ulong Value) : MetadatumInt;

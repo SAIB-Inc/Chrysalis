@@ -14,28 +14,21 @@ namespace Chrysalis.Cardano.Core.Types.Block;
 public abstract record Block : CborBase;
 
 [CborConverter(typeof(CustomListConverter))]
-public record PostAlonzoBlock(
+public record ShelleyBlock(
+    [CborProperty(0)] BlockHeader Header,
+    [CborProperty(1)] CborMaybeIndefList<TransactionBody> TransactionBodies,
+    [CborProperty(2)] CborMaybeIndefList<TransactionWitnessSet> TransactionWitnessSets,
+    [CborProperty(3)] AuxiliaryDataSet TransactionMetadataSet
+) : Block;
+
+
+[CborConverter(typeof(CustomListConverter))]
+public record AlonzoBlock(
     [CborProperty(0)] BlockHeader Header,
     [CborProperty(1)] CborMaybeIndefList<TransactionBody> TransactionBodies,
     [CborProperty(2)] CborMaybeIndefList<TransactionWitnessSet> TransactionWitnessSets,
     [CborProperty(3)] AuxiliaryDataSet AuxiliaryDataSet,
     [CborProperty(4)] CborMaybeIndefList<CborInt>? InvalidTransactions
-) : Block;
-
-[CborConverter(typeof(CustomListConverter))]
-public record ShelleyBlock(
-    [CborProperty(0)] BlockHeader Header,
-    [CborProperty(1)] CborMaybeIndefList<TransactionBody> TransactionBodies,
-    [CborProperty(2)] CborMaybeIndefList<TransactionWitnessSet> TransactionWitnessSets,
-    [CborProperty(3)] CborMap<CborInt, TransactionMetadatum> TransactionMetadata
-) : Block;
-
-[CborConverter(typeof(CustomListConverter))]
-public record PreAlonzoBlock(
-    [CborProperty(0)] BlockHeader Header,
-    [CborProperty(1)] CborMaybeIndefList<TransactionBody> TransactionBodies,
-    [CborProperty(2)] CborMaybeIndefList<TransactionWitnessSet> TransactionWitnessSets,
-    [CborProperty(3)] AuxiliaryDataSet AuxiliaryDataSet
 ) : Block;
 
 
