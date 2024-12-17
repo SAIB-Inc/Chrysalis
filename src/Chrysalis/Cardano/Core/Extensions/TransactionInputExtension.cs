@@ -11,5 +11,5 @@ public static class TransactionInputExtension
         => transactionInput.Index.Value;
 
     public static string OutRef(this TransactionInput transactionInput)
-        => $"{transactionInput.TransactionId()}#{transactionInput.Index()}";
+        => $"{transactionInput.TransactionId()}{transactionInput.Index()}";
 }
