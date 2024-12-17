@@ -84,7 +84,7 @@ public static class AuxiliaryDataExtension
            || auxiliaryData.PlutusV3Scripts()?.Any() == true;
 
     public static bool IsShelleyEra(this AuxiliaryData auxiliaryData)
-    => auxiliaryData is Metadata;
+        => auxiliaryData is Metadata;
 
     public static bool IsShelleyMaEra(this AuxiliaryData auxiliaryData)
         => auxiliaryData is ShellyMaAuxiliaryData;

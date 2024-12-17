@@ -17,7 +17,6 @@ public static class TransactionBodyExtension
         {
             ConwayTransactionBody x => x.Inputs switch
             {
-
                 CborDefList<TransactionInput> list => list.Value,
                 CborIndefList<TransactionInput> list => list.Value,
                 CborDefListWithTag<TransactionInput> list => list.Value,
@@ -33,6 +32,30 @@ public static class TransactionBodyExtension
                 _ => throw new NotImplementedException()
             },
             AlonzoTransactionBody x => x.Inputs switch
+            {
+                CborDefList<TransactionInput> list => list.Value,
+                CborIndefList<TransactionInput> list => list.Value,
+                CborDefListWithTag<TransactionInput> tagList => tagList.Value,
+                CborIndefListWithTag<TransactionInput> tagList => tagList.Value,
+                _ => throw new NotImplementedException()
+            },
+            MaryTransactionBody x => x.Inputs switch
+            {
+                CborDefList<TransactionInput> list => list.Value,
+                CborIndefList<TransactionInput> list => list.Value,
+                CborDefListWithTag<TransactionInput> tagList => tagList.Value,
+                CborIndefListWithTag<TransactionInput> tagList => tagList.Value,
+                _ => throw new NotImplementedException()
+            },
+            AllegraTransactionBody x => x.Inputs switch
+            {
+                CborDefList<TransactionInput> list => list.Value,
+                CborIndefList<TransactionInput> list => list.Value,
+                CborDefListWithTag<TransactionInput> tagList => tagList.Value,
+                CborIndefListWithTag<TransactionInput> tagList => tagList.Value,
+                _ => throw new NotImplementedException()
+            },
+            ShelleyTransactionBody x => x.Inputs switch
             {
                 CborDefList<TransactionInput> list => list.Value,
                 CborIndefList<TransactionInput> list => list.Value,
@@ -70,6 +93,30 @@ public static class TransactionBodyExtension
                 CborIndefListWithTag<TransactionOutput> list => list.Value,
                 _ => throw new NotImplementedException()
             },
+            MaryTransactionBody x => x.Outputs switch
+            {
+                CborDefList<TransactionOutput> list => list.Value,
+                CborIndefList<TransactionOutput> list => list.Value,
+                CborDefListWithTag<TransactionOutput> tagList => tagList.Value,
+                CborIndefListWithTag<TransactionOutput> tagList => tagList.Value,
+                _ => throw new NotImplementedException()
+            },
+            AllegraTransactionBody x => x.Outputs switch
+            {
+                CborDefList<TransactionOutput> list => list.Value,
+                CborIndefList<TransactionOutput> list => list.Value,
+                CborDefListWithTag<TransactionOutput> tagList => tagList.Value,
+                CborIndefListWithTag<TransactionOutput> tagList => tagList.Value,
+                _ => throw new NotImplementedException()
+            },
+            ShelleyTransactionBody x => x.Outputs switch
+            {
+                CborDefList<TransactionOutput> list => list.Value,
+                CborIndefList<TransactionOutput> list => list.Value,
+                CborDefListWithTag<TransactionOutput> tagList => tagList.Value,
+                CborIndefListWithTag<TransactionOutput> tagList => tagList.Value,
+                _ => throw new NotImplementedException()
+            },
             _ => throw new NotImplementedException()
         };
 
@@ -81,7 +128,6 @@ public static class TransactionBodyExtension
 
     public static IEnumerable<string> OutRefs(this TransactionBody transactionBody)
         => transactionBody.Inputs().Select(input => input.OutRef());
-
 
     public static byte[]? AuxiliaryDataHash(this TransactionBody transactionBody)
         => transactionBody switch
@@ -101,6 +147,7 @@ public static class TransactionBodyExtension
             ConwayTransactionBody x => x.Mint?.Value.ToDictionary(kvp => kvp.Key.Value, kvp => kvp.Value),
             BabbageTransactionBody x => x.Mint?.Value.ToDictionary(kvp => kvp.Key.Value, kvp => kvp.Value),
             AlonzoTransactionBody x => x.Mint?.Value.ToDictionary(kvp => kvp.Key.Value, kvp => kvp.Value),
+            MaryTransactionBody x => x.Mint?.Value.ToDictionary(kvp => kvp.Key.Value, kvp => kvp.Value),
             _ => throw new NotImplementedException()
         };
 }

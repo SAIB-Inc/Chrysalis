@@ -4,6 +4,7 @@ using Chrysalis.Cardano.Core.Types.Block.Header.Body;
 using Chrysalis.Cardano.Core.Types.Block.Transaction.Body;
 using Chrysalis.Cardano.Core.Types.Block.Transaction.WitnessSet;
 using Chrysalis.Cbor.Types.Collections;
+using Chrysalis.Cbor.Types.Primitives;
 
 namespace Chrysalis.Cardano.Core.Extensions;
 
@@ -25,8 +26,17 @@ public static class BlockExtension
         {
             AlonzoHeaderBody alonzoHeaderBody => alonzoHeaderBody.Slot.Value,
             BabbageHeaderBody babbageHeaderBody => babbageHeaderBody.Slot.Value,
+            ShelleyHeaderBody shelleyHeaderBody => shelleyHeaderBody.Slot.Value,
             _ => throw new NotImplementedException()
         };
+
+    public static List<string> InputOutRefs(this Block block)
+        => block.TransactionBodies()
+            .SelectMany(
+                tx => tx.Inputs(),
+                (tx, input) => input.TransactionId() + input.Index().ToString()
+            )
+            .ToList();
 
     public static BlockHeader Header(this Block block)
     => block switch
@@ -41,6 +51,7 @@ public static class BlockExtension
         {
             AlonzoHeaderBody alonzoHeaderBody => alonzoHeaderBody,
             BabbageHeaderBody babbageHeaderBody => babbageHeaderBody,
+            ShelleyHeaderBody shelleyHeaderBody => shelleyHeaderBody,
             _ => throw new NotImplementedException()
         };
 
@@ -49,6 +60,7 @@ public static class BlockExtension
         {
             AlonzoHeaderBody alonzoHeaderBody => alonzoHeaderBody.BlockNumber.Value,
             BabbageHeaderBody babbageHeaderBody => babbageHeaderBody.BlockNumber.Value,
+            ShelleyHeaderBody shelleyHeaderBody => shelleyHeaderBody.BlockNumber.Value,
             _ => throw new NotImplementedException()
         };
 
@@ -105,4 +117,19 @@ public static class BlockExtension
             _ => throw new NotImplementedException()
         };
     }
+
+    public static IEnumerable<int>? InvalidTransactions(this Block block)
+        => block switch
+        {
+            ShelleyBlock shelleyBlock => null,
+            AlonzoBlock alonzoBlock => alonzoBlock.InvalidTransactions switch
+            {
+                CborDefList<CborInt> x => x.Value.Select(x => x.Value),
+                CborIndefList<CborInt> x => x.Value.Select(x => x.Value),
+                CborDefListWithTag<CborInt> x => x.Value.Select(x => x.Value),
+                CborIndefListWithTag<CborInt> x => x.Value.Select(x => x.Value),
+                _ => throw new NotImplementedException()
+            },
+            _ => throw new NotImplementedException()
+        };
 }
