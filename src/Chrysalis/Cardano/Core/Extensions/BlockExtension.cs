@@ -10,24 +10,24 @@ namespace Chrysalis.Cardano.Core.Extensions;
 
 public static class BlockExtension
 {
-    public static Block GetBlock(this Block block)
+    public static Block? GetBlock(this Block block)
     => block switch
     {
         ShelleyBlock shelleyBlock => shelleyBlock,
         AlonzoBlock alonzoBlock => alonzoBlock,
-        _ => throw new NotImplementedException()
+        _ => null
     };
 
     public static string Hash(this Block block)
         => Convert.ToHexString(block.Header().Raw?.ToBlake2b256() ?? []).ToLowerInvariant();
 
-    public static ulong Slot(this Block block)
+    public static ulong? Slot(this Block block)
         => block.HeaderBody() switch
         {
             AlonzoHeaderBody alonzoHeaderBody => alonzoHeaderBody.Slot.Value,
             BabbageHeaderBody babbageHeaderBody => babbageHeaderBody.Slot.Value,
             ShelleyHeaderBody shelleyHeaderBody => shelleyHeaderBody.Slot.Value,
-            _ => throw new NotImplementedException()
+            _ => null
         };
 
     public static List<string> InputOutRefs(this Block block)
@@ -38,30 +38,30 @@ public static class BlockExtension
             )
             .ToList();
 
-    public static BlockHeader Header(this Block block)
+    public static BlockHeader? Header(this Block block)
     => block switch
     {
         ShelleyBlock shelleyBlock => shelleyBlock.Header,
         AlonzoBlock alonzoBlock => alonzoBlock.Header,
-        _ => throw new NotImplementedException()
+        _ => null
     };
 
-    public static BlockHeaderBody HeaderBody(this Block block)
-        => block.Header().HeaderBody switch
+    public static BlockHeaderBody? HeaderBody(this Block block)
+        => block.Header()?.HeaderBody switch
         {
             AlonzoHeaderBody alonzoHeaderBody => alonzoHeaderBody,
             BabbageHeaderBody babbageHeaderBody => babbageHeaderBody,
             ShelleyHeaderBody shelleyHeaderBody => shelleyHeaderBody,
-            _ => throw new NotImplementedException()
+            _ => null
         };
 
-    public static ulong Number(this Block block)
+    public static ulong? Number(this Block block)
         => block.HeaderBody() switch
         {
             AlonzoHeaderBody alonzoHeaderBody => alonzoHeaderBody.BlockNumber.Value,
             BabbageHeaderBody babbageHeaderBody => babbageHeaderBody.BlockNumber.Value,
             ShelleyHeaderBody shelleyHeaderBody => shelleyHeaderBody.BlockNumber.Value,
-            _ => throw new NotImplementedException()
+            _ => null
         };
 
     public static IEnumerable<TransactionBody> TransactionBodies(this Block block)
@@ -73,7 +73,7 @@ public static class BlockExtension
                 CborIndefList<TransactionBody> x => x.Value,
                 CborDefListWithTag<TransactionBody> x => x.Value,
                 CborIndefListWithTag<TransactionBody> x => x.Value,
-                _ => throw new NotImplementedException()
+                _ => []
             },
             AlonzoBlock alonzoBlock => alonzoBlock.TransactionBodies switch
             {
@@ -81,9 +81,9 @@ public static class BlockExtension
                 CborIndefList<TransactionBody> x => x.Value,
                 CborDefListWithTag<TransactionBody> x => x.Value,
                 CborIndefListWithTag<TransactionBody> x => x.Value,
-                _ => throw new NotImplementedException()
+                _ => []
             },
-            _ => throw new NotImplementedException()
+            _ => []
         };
 
     public static IEnumerable<TransactionWitnessSet> TransactionWitnessSets(this Block block)
@@ -95,7 +95,7 @@ public static class BlockExtension
                 CborIndefList<TransactionWitnessSet> x => x.Value,
                 CborDefListWithTag<TransactionWitnessSet> x => x.Value,
                 CborIndefListWithTag<TransactionWitnessSet> x => x.Value,
-                _ => throw new NotImplementedException()
+                _ => []
             },
             AlonzoBlock alonzoBlock => alonzoBlock.TransactionWitnessSets switch
             {
@@ -103,9 +103,9 @@ public static class BlockExtension
                 CborIndefList<TransactionWitnessSet> x => x.Value,
                 CborDefListWithTag<TransactionWitnessSet> x => x.Value,
                 CborIndefListWithTag<TransactionWitnessSet> x => x.Value,
-                _ => throw new NotImplementedException()
+                _ => []
             },
-            _ => throw new NotImplementedException()
+            _ => []
         };
 
     public static Dictionary<int, AuxiliaryData> AuxiliaryDataSet(this Block block)
@@ -114,7 +114,7 @@ public static class BlockExtension
         {
             ShelleyBlock shelleyBlock => shelleyBlock.TransactionMetadataSet.Value.ToDictionary(kvp => kvp.Key.Value, kvp => kvp.Value),
             AlonzoBlock alonzoBlock => alonzoBlock.AuxiliaryDataSet.Value.ToDictionary(kvp => kvp.Key.Value, kvp => kvp.Value),
-            _ => throw new NotImplementedException()
+            _ => []
         };
     }
 
@@ -128,8 +128,8 @@ public static class BlockExtension
                 CborIndefList<CborInt> x => x.Value.Select(x => x.Value),
                 CborDefListWithTag<CborInt> x => x.Value.Select(x => x.Value),
                 CborIndefListWithTag<CborInt> x => x.Value.Select(x => x.Value),
-                _ => throw new NotImplementedException()
+                _ => []
             },
-            _ => throw new NotImplementedException()
+            _ => []
         };
 }
