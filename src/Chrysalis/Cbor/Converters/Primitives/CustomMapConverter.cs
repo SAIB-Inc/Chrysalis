@@ -47,8 +47,7 @@ public class CustomMapConverter : ICborConverter
 
             if (!found)
             {
-                reader.SkipValue();
-                continue;
+                throw new InvalidOperationException("Key not found in property map");
             }
 
             // Deserialize the value
