@@ -1,5 +1,6 @@
 using Chrysalis.Cardano.Core.Types.Block.Header.Body;
 using Chrysalis.Cardano.Core.Types.Block.Transaction.Governance;
+using Chrysalis.Cardano.Core.Types.Block.Transaction.Output;
 using Chrysalis.Cbor.Attributes;
 using Chrysalis.Cbor.Converters.Primitives;
 using Chrysalis.Cbor.Types;
@@ -7,7 +8,7 @@ using Chrysalis.Cbor.Types.Primitives;
 
 namespace Chrysalis.Cardano.Core.Types.Block.Transaction.Protocol;
 
-[CborConverter(typeof(MapConverter))]
+[CborConverter(typeof(UnionConverter))]
 public abstract record ProtocolParamUpdate : CborBase;
 
 
@@ -99,6 +100,25 @@ public record AlonzoProtocolParamUpdate(
     [CborProperty(24)] CborUlong? MaxCollateralInputs
 ) : ProtocolParamUpdate;
 
+[CborConverter(typeof(CustomMapConverter))]
+public record MaryProtocolParamUpdate(
+    [CborProperty(0)] CborUlong? MinFeeA,
+    [CborProperty(1)] CborUlong? MinFeeB,
+    [CborProperty(2)] CborUlong? MaxBlockBodySize,
+    [CborProperty(3)] CborUlong? MaxTransactionSize,
+    [CborProperty(4)] CborUlong? MaxBlockHeaderSize,
+    [CborProperty(5)] CborUlong? KeyDeposit,
+    [CborProperty(6)] CborUlong? PoolDeposit,
+    [CborProperty(7)] CborUlong? MaximumEpoch,
+    [CborProperty(8)] CborUlong? DesiredNumberOfStakePools,
+    [CborProperty(9)] CborRationalNumber? PoolPledgeInfluence,
+    [CborProperty(10)] CborRationalNumber? ExpansionRate,
+    [CborProperty(11)] CborRationalNumber? TreasuryGrowthRate,
+    [CborProperty(12)] CborRationalNumber? DecentralizationConstant,
+    [CborProperty(13)] Nonce? ExtraEntropy,
+    [CborProperty(14)] ProtocolVersion? ProtocolVersion,
+    [CborProperty(15)] CborUlong? Coin
+) : ProtocolParamUpdate;
 
 
 [CborConverter(typeof(MapConverter))]
