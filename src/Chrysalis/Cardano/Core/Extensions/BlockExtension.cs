@@ -19,15 +19,15 @@ public static class BlockExtension
     };
 
     public static string Hash(this Block block)
-        => Convert.ToHexString(block.Header().Raw?.ToBlake2b256() ?? []).ToLowerInvariant();
+        => Convert.ToHexString(block.Header()?.Raw?.ToBlake2b256() ?? []).ToLowerInvariant();
 
-    public static ulong? Slot(this Block block)
+    public static ulong Slot(this Block block)
         => block.HeaderBody() switch
         {
             AlonzoHeaderBody alonzoHeaderBody => alonzoHeaderBody.Slot.Value,
             BabbageHeaderBody babbageHeaderBody => babbageHeaderBody.Slot.Value,
             ShelleyHeaderBody shelleyHeaderBody => shelleyHeaderBody.Slot.Value,
-            _ => null
+            _ => 0
         };
 
     public static List<string> InputOutRefs(this Block block)
@@ -55,13 +55,13 @@ public static class BlockExtension
             _ => null
         };
 
-    public static ulong? Number(this Block block)
+    public static ulong Number(this Block block)
         => block.HeaderBody() switch
         {
             AlonzoHeaderBody alonzoHeaderBody => alonzoHeaderBody.BlockNumber.Value,
             BabbageHeaderBody babbageHeaderBody => babbageHeaderBody.BlockNumber.Value,
             ShelleyHeaderBody shelleyHeaderBody => shelleyHeaderBody.BlockNumber.Value,
-            _ => null
+            _ => 0
         };
 
     public static IEnumerable<TransactionBody> TransactionBodies(this Block block)
@@ -118,10 +118,10 @@ public static class BlockExtension
         };
     }
 
-    public static IEnumerable<int>? InvalidTransactions(this Block block)
+    public static IEnumerable<int> InvalidTransactions(this Block block)
         => block switch
         {
-            ShelleyBlock shelleyBlock => null,
+            ShelleyBlock shelleyBlock => [],
             AlonzoBlock alonzoBlock => alonzoBlock.InvalidTransactions switch
             {
                 CborDefList<CborInt> x => x.Value.Select(x => x.Value),
