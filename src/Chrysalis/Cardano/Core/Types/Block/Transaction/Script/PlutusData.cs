@@ -13,48 +13,32 @@ public record PlutusConstr(List<PlutusData> PlutusData) : PlutusData;
 
 
 [CborConverter(typeof(MapConverter))]
-[CborDefinite]
-public record PlutusMap(Dictionary<PlutusData, PlutusData> Value) : PlutusData;
+public record PlutusMap(Dictionary<PlutusData, PlutusData> PlutusData) : PlutusData;
+
+[CborConverter(typeof(ListConverter))]
+public record PlutusList(List<PlutusData> PlutusData) : PlutusData;
 
 
 [CborConverter(typeof(UnionConverter))]
 public abstract record PlutusBigInt : PlutusData;
 
 
-[CborConverter(typeof(UlongConverter))]
-public record PlutusBigUInt(ulong Value) : PlutusBigInt;
-
-
 [CborConverter(typeof(LongConverter))]
-public record PlutusBigNInt(long Value) : PlutusBigInt;
-
-
-[CborConverter(typeof(UnionConverter))]
-public abstract record PlutusBytes : PlutusData;
+public record PlutusInt(long Value) : PlutusBigInt;
 
 
 [CborConverter(typeof(BytesConverter))]
 [CborSize(64)]
-public record PlutusBoundedBytes(byte[] Value) : PlutusBytes;
-
-
-[CborConverter(typeof(BytesConverter))]
-public record PlutusDefiniteBytes(byte[] Value) : PlutusBytes;
-
-
-[CborConverter(typeof(BytesConverter))]
 [CborTag(2)]
-public record PlutusBytesWithTag(byte[] Value) : PlutusBytes;
+public record PlutusBigUint(byte[] Value) : PlutusBigInt;
 
 
-[CborConverter(typeof(UnionConverter))]
-public abstract record PlutusList : PlutusData;
+[CborConverter(typeof(BytesConverter))]
+[CborSize(64)]
+[CborTag(3)]
+public record PlutusBigNint(byte[] Value) : PlutusBigInt;
 
 
-[CborConverter(typeof(ListConverter))]
-public record PlutusIndefiniteList(List<PlutusData> Value) : PlutusList;
-
-
-[CborConverter(typeof(ListConverter))]
-[CborDefinite]
-public record PlutusDefiniteList(List<PlutusData> Value) : PlutusList;
+[CborConverter(typeof(BytesConverter))]
+[CborSize(64)]
+public record PlutusBoundedBytes(byte[] Value) : PlutusData;
