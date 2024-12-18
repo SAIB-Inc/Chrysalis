@@ -23,8 +23,16 @@ public record PlutusList(List<PlutusData> PlutusData) : PlutusData;
 public abstract record PlutusBigInt : PlutusData;
 
 
+[CborConverter(typeof(UnionConverter))]
+public abstract record PlutusInt : PlutusBigInt;
+
+
 [CborConverter(typeof(LongConverter))]
-public record PlutusInt(long Value) : PlutusBigInt;
+public record PlutusInt64(long Value) : PlutusInt;
+
+
+[CborConverter(typeof(UlongConverter))]
+public record PlutusUint64(ulong Value) : PlutusInt;
 
 
 [CborConverter(typeof(BytesConverter))]
