@@ -40,11 +40,6 @@ public class UnionConverter : ICborConverter
         Type baseType = typeof(T);
         Type[] concreteTypes = GetConcreteTypes(baseType);
 
-        if (Convert.ToHexString(data) == "8182584C82D818584283581C5C7D7EF14E09F2DEB82BC8C43381AEFA2E871760B357D7F5385E34F9A101581E581CC9A4C68C63646830C5F13C51549C6B2B52918D239ECD44C2066EFFCF001A833C18221A3B9ACA00")
-        {
-            Console.WriteLine();
-        }
-
         // Instead of await, directly block on the returned task:
         return ParallelDeserializeAsync<T>(data, concreteTypes, baseType).GetAwaiter().GetResult();
     }

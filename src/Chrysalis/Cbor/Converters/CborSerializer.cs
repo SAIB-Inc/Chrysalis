@@ -46,60 +46,77 @@ public static class CborSerializer
             return (ICborConverter)cached;
         }
 
-        // Check if the type has a base type with a converter attribute
-        if (type.BaseType?.GetCustomAttribute<CborConverterAttribute>() != null)
+        // First check if the type itself has a converter attribute
+        CborConverterAttribute? converterAttr = type.GetCustomAttribute<CborConverterAttribute>();
+
+        if (converterAttr == null)
         {
-            Type baseType = type.BaseType;
-            CborConverterAttribute? converterAttr = baseType.GetCustomAttribute<CborConverterAttribute>();
-            Type? converterType = converterAttr?.ConverterType;
-
-            if (converterType is not null && converterType.IsGenericTypeDefinition)
+            // If not found on type, check base types
+            Type? currentType = type;
+            while (currentType != null && currentType != typeof(object))
             {
-                Type[] genericArgs = type.GenericTypeArguments;
-                Type constructedConverter = converterType.MakeGenericType(genericArgs);
-                object? converter = Activator.CreateInstance(constructedConverter);
-
-                if (converter != null)
-                {
-                    _converterCache[type] = converter;
-                    return (ICborConverter)converter;
-                }
+                converterAttr = currentType.GetCustomAttribute<CborConverterAttribute>();
+                if (converterAttr != null)
+                    break;
+                currentType = currentType.BaseType;
             }
         }
 
-        Type? currentType = type;
-        while (currentType != null && currentType != typeof(object))
+        if (converterAttr != null)
         {
-            CborConverterAttribute? converterAttr = currentType.GetCustomAttribute<CborConverterAttribute>();
-            if (converterAttr != null)
+            Type converterType = converterAttr.ConverterType;
+            object? converter;
+
+            if (converterType.IsGenericTypeDefinition)
             {
-                Type converterType = converterAttr.ConverterType;
-
-                if (converterType.IsGenericTypeDefinition)
+                // Handle generic converters
+                Type[] genericArgs;
+                if (type.IsGenericType)
                 {
-                    Type[] genericArgs = type.GenericTypeArguments;
-                    Type constructedType = converterType.MakeGenericType(genericArgs);
-                    object? converter = Activator.CreateInstance(constructedType);
-
-                    if (converter != null)
-                    {
-                        _converterCache[type] = converter;
-                        return (ICborConverter)converter;
-                    }
+                    genericArgs = type.GetGenericArguments();
                 }
                 else
                 {
-                    object? converter = Activator.CreateInstance(converterType);
-                    if (converter != null)
-                    {
-                        _converterCache[type] = converter;
-                        return (ICborConverter)converter;
-                    }
+                    // If the type isn't generic but converter is, use T as the generic argument
+                    genericArgs = new[] { typeof(T) };
+                }
+
+                try
+                {
+                    Type constructedType = converterType.MakeGenericType(genericArgs);
+                    converter = Activator.CreateInstance(constructedType);
+                }
+                catch (ArgumentException)
+                {
+                    // If we can't construct with the type's generic arguments, try with just T
+                    Type constructedType = converterType.MakeGenericType(typeof(T));
+                    converter = Activator.CreateInstance(constructedType);
                 }
             }
-            currentType = currentType.BaseType;
+            else
+            {
+                converter = Activator.CreateInstance(converterType);
+            }
+
+            if (converter != null)
+            {
+                _converterCache[type] = converter;
+                return (ICborConverter)converter;
+            }
         }
 
-        throw new InvalidOperationException($"No valid converter found for {type}");
+        // Additional fallback for generic types
+        if (type.IsGenericType)
+        {
+            Type genericDefinition = type.GetGenericTypeDefinition();
+            if (_converterCache.TryGetValue(genericDefinition, out object? genericConverter))
+            {
+                _converterCache[type] = genericConverter;
+                return (ICborConverter)genericConverter;
+            }
+        }
+
+        throw new InvalidOperationException(
+            $"No valid converter found for {type}. Please ensure a [CborConverter] attribute is defined.");
     }
 }

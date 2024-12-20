@@ -26,32 +26,25 @@ public class CustomListConverter : ICborConverter
         {
             (int? Index, string Name, Type ParameterType) = parametersOrProperties[i];
 
-            // Check if we're at the end of the array
             if (reader.PeekState() == CborReaderState.EndArray)
             {
-                // If the type is nullable, we can safely set it to null and continue
-                if (IsNullableType(ParameterType))
+                if (IsOptionalType(ParameterType) || HasOptionalAttribute(parametersOrProperties[i]))
                 {
                     constructorArgs[i] = null;
                     continue;
                 }
-                // If it's not nullable, this is an error condition
+
                 throw new Exception($"Missing required value for {Name}");
             }
 
-            try
-            {
-                byte[] encodedValue = reader.ReadEncodedValue().ToArray();
-                MethodInfo deserializeMethod = typeof(CborSerializer).GetMethod(nameof(CborSerializer.Deserialize))!;
-                object? deserializedValue = deserializeMethod.MakeGenericMethod(ParameterType)
-                    .Invoke(null, [encodedValue]);
-                constructorArgs[i] = deserializedValue;
-            }
-            catch when (IsNullableType(ParameterType))
-            {
-                // If deserialization fails for a nullable type, set it to null
-                constructorArgs[i] = null;
-            }
+            // Deserialize the value
+            byte[] encodedValue = reader.ReadEncodedValue().ToArray();
+
+            MethodInfo deserializeMethod = typeof(CborSerializer).GetMethod(nameof(CborSerializer.Deserialize))!;
+            object? deserializedValue = deserializeMethod.MakeGenericMethod(ParameterType)
+                .Invoke(null, [encodedValue]);
+
+            constructorArgs[i] = deserializedValue;
         }
 
         reader.ReadEndArray();
@@ -74,6 +67,36 @@ public class CustomListConverter : ICborConverter
             return true;
 
         return false;
+    }
+
+    private static bool IsOptionalType(Type type)
+    {
+        // Check for nullable value types
+        if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(Nullable<>))
+            return true;
+
+        // Check for reference types
+        if (!type.IsValueType)
+            return true;
+
+        return false;
+    }
+
+    private static bool HasOptionalAttribute((int? Index, string Name, Type Type) parameter)
+    {
+        // Get the parameter info from the declaring type
+        var memberInfo = parameter.Type.DeclaringType?
+            .GetMembers()
+            .FirstOrDefault(m => m.Name == parameter.Name);
+
+        if (memberInfo == null)
+            return false;
+
+        // Check for any attributes that indicate optionality
+        // You can extend this to check for your specific attributes
+        return memberInfo.GetCustomAttributes(true)
+            .Any(attr => attr.GetType().Name.Contains("Optional") ||
+                         attr.GetType().Name.Contains("Nullable"));
     }
 
     public byte[] Serialize(CborBase value)
