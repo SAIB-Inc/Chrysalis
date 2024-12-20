@@ -13,8 +13,9 @@ public static class BlockExtension
     public static Block? GetBlock(this Block block)
     => block switch
     {
-        ShelleyBlock shelleyBlock => shelleyBlock,
-        AlonzoBlock alonzoBlock => alonzoBlock,
+        AlonzoCompatibleBlock alonzoBlock => alonzoBlock,
+        BabbageBlock babbageBlock => babbageBlock,
+        ConwayBlock conwayBlock => conwayBlock,
         _ => null
     };
 
@@ -26,7 +27,6 @@ public static class BlockExtension
         {
             AlonzoHeaderBody alonzoHeaderBody => alonzoHeaderBody.Slot.Value,
             BabbageHeaderBody babbageHeaderBody => babbageHeaderBody.Slot.Value,
-            ShelleyHeaderBody shelleyHeaderBody => shelleyHeaderBody.Slot.Value,
             _ => null
         };
 
@@ -41,8 +41,9 @@ public static class BlockExtension
     public static BlockHeader? Header(this Block block)
     => block switch
     {
-        ShelleyBlock shelleyBlock => shelleyBlock.Header,
-        AlonzoBlock alonzoBlock => alonzoBlock.Header,
+        AlonzoCompatibleBlock a => a.Header,
+        BabbageBlock b => b.Header,
+        ConwayBlock c => c.Header,
         _ => null
     };
 
@@ -51,7 +52,6 @@ public static class BlockExtension
         {
             AlonzoHeaderBody alonzoHeaderBody => alonzoHeaderBody,
             BabbageHeaderBody babbageHeaderBody => babbageHeaderBody,
-            ShelleyHeaderBody shelleyHeaderBody => shelleyHeaderBody,
             _ => null
         };
 
@@ -60,27 +60,35 @@ public static class BlockExtension
         {
             AlonzoHeaderBody alonzoHeaderBody => alonzoHeaderBody.BlockNumber.Value,
             BabbageHeaderBody babbageHeaderBody => babbageHeaderBody.BlockNumber.Value,
-            ShelleyHeaderBody shelleyHeaderBody => shelleyHeaderBody.BlockNumber.Value,
             _ => null
         };
 
     public static IEnumerable<TransactionBody> TransactionBodies(this Block block)
         => block switch
         {
-            ShelleyBlock shelleyBlock => shelleyBlock.TransactionBodies switch
+
+            AlonzoCompatibleBlock a => a.TransactionBodies switch
             {
-                CborDefList<TransactionBody> x => x.Value,
-                CborIndefList<TransactionBody> x => x.Value,
-                CborDefListWithTag<TransactionBody> x => x.Value,
-                CborIndefListWithTag<TransactionBody> x => x.Value,
+                CborDefList<AlonzoTransactionBody> x => x.Value,
+                CborIndefList<AlonzoTransactionBody> x => x.Value,
+                CborDefListWithTag<AlonzoTransactionBody> x => x.Value,
+                CborIndefListWithTag<AlonzoTransactionBody> x => x.Value,
                 _ => []
             },
-            AlonzoBlock alonzoBlock => alonzoBlock.TransactionBodies switch
+            BabbageBlock b => b.TransactionBodies switch
             {
-                CborDefList<TransactionBody> x => x.Value,
-                CborIndefList<TransactionBody> x => x.Value,
-                CborDefListWithTag<TransactionBody> x => x.Value,
-                CborIndefListWithTag<TransactionBody> x => x.Value,
+                CborDefList<BabbageTransactionBody> x => x.Value,
+                CborIndefList<BabbageTransactionBody> x => x.Value,
+                CborDefListWithTag<BabbageTransactionBody> x => x.Value,
+                CborIndefListWithTag<BabbageTransactionBody> x => x.Value,
+                _ => []
+            },
+            ConwayBlock c => c.TransactionBodies switch
+            {
+                CborDefList<ConwayTransactionBody> x => x.Value,
+                CborIndefList<ConwayTransactionBody> x => x.Value,
+                CborDefListWithTag<ConwayTransactionBody> x => x.Value,
+                CborIndefListWithTag<ConwayTransactionBody> x => x.Value,
                 _ => []
             },
             _ => []
@@ -89,20 +97,28 @@ public static class BlockExtension
     public static IEnumerable<TransactionWitnessSet> TransactionWitnessSets(this Block block)
         => block switch
         {
-            ShelleyBlock shelleyBlock => shelleyBlock.TransactionWitnessSets switch
+            AlonzoCompatibleBlock a => a.TransactionWitnessSets switch
             {
-                CborDefList<TransactionWitnessSet> x => x.Value,
-                CborIndefList<TransactionWitnessSet> x => x.Value,
-                CborDefListWithTag<TransactionWitnessSet> x => x.Value,
-                CborIndefListWithTag<TransactionWitnessSet> x => x.Value,
+                CborDefList<AlonzoTransactionWitnessSet> x => x.Value,
+                CborIndefList<AlonzoTransactionWitnessSet> x => x.Value,
+                CborDefListWithTag<AlonzoTransactionWitnessSet> x => x.Value,
+                CborIndefListWithTag<AlonzoTransactionWitnessSet> x => x.Value,
                 _ => []
             },
-            AlonzoBlock alonzoBlock => alonzoBlock.TransactionWitnessSets switch
+            BabbageBlock b => b.TransactionWitnessSets switch
             {
-                CborDefList<TransactionWitnessSet> x => x.Value,
-                CborIndefList<TransactionWitnessSet> x => x.Value,
-                CborDefListWithTag<TransactionWitnessSet> x => x.Value,
-                CborIndefListWithTag<TransactionWitnessSet> x => x.Value,
+                CborDefList<PostAlonzoTransactionWitnessSet> x => x.Value,
+                CborIndefList<PostAlonzoTransactionWitnessSet> x => x.Value,
+                CborDefListWithTag<PostAlonzoTransactionWitnessSet> x => x.Value,
+                CborIndefListWithTag<PostAlonzoTransactionWitnessSet> x => x.Value,
+                _ => []
+            },
+            ConwayBlock c => c.TransactionWitnessSets switch
+            {
+                CborDefList<PostAlonzoTransactionWitnessSet> x => x.Value,
+                CborIndefList<PostAlonzoTransactionWitnessSet> x => x.Value,
+                CborDefListWithTag<PostAlonzoTransactionWitnessSet> x => x.Value,
+                CborIndefListWithTag<PostAlonzoTransactionWitnessSet> x => x.Value,
                 _ => []
             },
             _ => []
@@ -112,8 +128,9 @@ public static class BlockExtension
     {
         return block switch
         {
-            ShelleyBlock shelleyBlock => shelleyBlock.TransactionMetadataSet.Value.ToDictionary(kvp => kvp.Key.Value, kvp => kvp.Value),
-            AlonzoBlock alonzoBlock => alonzoBlock.AuxiliaryDataSet.Value.ToDictionary(kvp => kvp.Key.Value, kvp => kvp.Value),
+            AlonzoCompatibleBlock a => a.AuxiliaryDataSet.Value.ToDictionary(kvp => kvp.Key.Value, kvp => kvp.Value),
+            BabbageBlock b => b.AuxiliaryDataSet.Value.ToDictionary(kvp => kvp.Key.Value, kvp => kvp.Value),
+            ConwayBlock c => c.AuxiliaryDataSet.Value.ToDictionary(kvp => kvp.Key.Value, kvp => kvp.Value),
             _ => []
         };
     }
@@ -121,8 +138,15 @@ public static class BlockExtension
     public static IEnumerable<int>? InvalidTransactions(this Block block)
         => block switch
         {
-            ShelleyBlock shelleyBlock => null,
-            AlonzoBlock alonzoBlock => alonzoBlock.InvalidTransactions switch
+            BabbageBlock b => b.InvalidTransactions switch
+            {
+                CborDefList<CborInt> x => x.Value.Select(x => x.Value),
+                CborIndefList<CborInt> x => x.Value.Select(x => x.Value),
+                CborDefListWithTag<CborInt> x => x.Value.Select(x => x.Value),
+                CborIndefListWithTag<CborInt> x => x.Value.Select(x => x.Value),
+                _ => []
+            },
+            ConwayBlock c => c.InvalidTransactions switch
             {
                 CborDefList<CborInt> x => x.Value.Select(x => x.Value),
                 CborIndefList<CborInt> x => x.Value.Select(x => x.Value),

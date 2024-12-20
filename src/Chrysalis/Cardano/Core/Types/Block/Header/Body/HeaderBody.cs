@@ -8,6 +8,24 @@ namespace Chrysalis.Cardano.Core.Types.Block.Header.Body;
 [CborConverter(typeof(UnionConverter))]
 public abstract record BlockHeaderBody : CborBase;
 
+[CborConverter(typeof(CustomListConverter))]
+public record AlonzoHeaderBody(
+    [CborProperty(0)] CborUlong BlockNumber,
+    [CborProperty(1)] CborUlong Slot,
+    [CborProperty(2)] CborNullable<CborBytes> PrevHash,
+    [CborProperty(3)] CborBytes IssuerVKey,
+    [CborProperty(4)] CborBytes VrfVKey,
+    [CborProperty(5)] VrfCert NonceVrf,
+    [CborProperty(6)] VrfCert LeaderVrf,
+    [CborProperty(7)] CborUlong BlockBodySize,
+    [CborProperty(8)] CborBytes BlockBodyHash,
+    [CborProperty(9)] CborBytes HotVKey,
+    [CborProperty(10)] CborUlong OperationalCertSequenceNumber,
+    [CborProperty(11)] CborUlong OperationalCertKesPeriod,
+    [CborProperty(12)] CborBytes OperationalCertSigma,
+    [CborProperty(13)] CborUlong ProtocolMajor,
+    [CborProperty(14)] CborUlong ProtocolMinor
+) : BlockHeaderBody;
 
 [CborConverter(typeof(CustomListConverter))]
 public record BabbageHeaderBody(
@@ -21,38 +39,4 @@ public record BabbageHeaderBody(
     [CborProperty(7)] CborBytes BlockBodyHash,
     [CborProperty(8)] OperationalCert OperationalCert,
     [CborProperty(9)] ProtocolVersion ProtocolVersion
-) : BlockHeaderBody;
-
-[CborConverter(typeof(CustomListConverter))]
-public record AlonzoHeaderBody(
-    [CborProperty(0)] CborUlong BlockNumber,
-    [CborProperty(1)] CborUlong Slot,
-    [CborProperty(2)] CborNullable<CborBytes> PrevHash,
-    [CborProperty(3)] CborBytes IssuerVKey,
-    [CborProperty(4)] CborBytes VrfVKey,
-    [CborProperty(5)] VrfCert NonceVrf,
-    [CborProperty(6)] VrfCert LeaderVrf,
-    [CborProperty(7)] CborUlong BlockBodySize,
-    [CborProperty(8)] CborBytes BlockBodyHash,
-    [CborProperty(9)] CborBytes HotVKey,
-    [CborProperty(10)] CborUlong SequenceNumber,
-    [CborProperty(11)] CborUlong KesPeriod,
-    [CborProperty(12)] CborBytes Sigma,
-    [CborProperty(13)] CborUlong ProtocolMajor,
-    [CborProperty(14)] CborUlong ProtocolMinor
-) : BlockHeaderBody;
-
-[CborConverter(typeof(CustomListConverter))]
-public record ShelleyHeaderBody(
-    [CborProperty(0)] CborUlong BlockNumber,
-    [CborProperty(1)] CborUlong Slot,
-    [CborProperty(2)] CborNullable<CborBytes> PrevHash,
-    [CborProperty(3)] CborBytes IssuerVKey,
-    [CborProperty(4)] CborBytes VrfVKey,
-    [CborProperty(5)] VrfCert NonceVrf,
-    [CborProperty(6)] VrfCert LeaderVrf,
-    [CborProperty(7)] CborUlong BlockBodySize,
-    [CborProperty(8)] CborBytes BlockBodyHash,
-    [CborProperty(9)] OperationalCert OperationalCert,
-    [CborProperty(10)] ProtocolVersion ProtocolVersion
 ) : BlockHeaderBody;

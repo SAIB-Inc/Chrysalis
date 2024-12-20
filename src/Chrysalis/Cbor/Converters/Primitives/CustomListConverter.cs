@@ -26,14 +26,32 @@ public class CustomListConverter : ICborConverter
         {
             (int? Index, string Name, Type ParameterType) = parametersOrProperties[i];
 
-            // Deserialize the value
-            byte[] encodedValue = reader.ReadEncodedValue().ToArray();
+            // Check if we're at the end of the array
+            if (reader.PeekState() == CborReaderState.EndArray)
+            {
+                // If the type is nullable, we can safely set it to null and continue
+                if (IsNullableType(ParameterType))
+                {
+                    constructorArgs[i] = null;
+                    continue;
+                }
+                // If it's not nullable, this is an error condition
+                throw new Exception($"Missing required value for {Name}");
+            }
 
-            MethodInfo deserializeMethod = typeof(CborSerializer).GetMethod(nameof(CborSerializer.Deserialize))!;
-            object? deserializedValue = deserializeMethod.MakeGenericMethod(ParameterType)
-                .Invoke(null, [encodedValue]);
-
-            constructorArgs[i] = deserializedValue;
+            try
+            {
+                byte[] encodedValue = reader.ReadEncodedValue().ToArray();
+                MethodInfo deserializeMethod = typeof(CborSerializer).GetMethod(nameof(CborSerializer.Deserialize))!;
+                object? deserializedValue = deserializeMethod.MakeGenericMethod(ParameterType)
+                    .Invoke(null, [encodedValue]);
+                constructorArgs[i] = deserializedValue;
+            }
+            catch when (IsNullableType(ParameterType))
+            {
+                // If deserialization fails for a nullable type, set it to null
+                constructorArgs[i] = null;
+            }
         }
 
         reader.ReadEndArray();
@@ -45,6 +63,18 @@ public class CustomListConverter : ICborConverter
         return instance;
     }
 
+    private static bool IsNullableType(Type type)
+    {
+        // Check if it's a nullable value type
+        if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(Nullable<>))
+            return true;
+
+        // Check if it's a reference type
+        if (!type.IsValueType)
+            return true;
+
+        return false;
+    }
 
     public byte[] Serialize(CborBase value)
     {
