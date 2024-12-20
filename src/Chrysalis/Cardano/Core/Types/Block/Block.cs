@@ -19,7 +19,8 @@ public record AlonzoCompatibleBlock(
     [CborProperty(0)] BlockHeader Header,
     [CborProperty(1)] CborMaybeIndefList<AlonzoTransactionBody> TransactionBodies,
     [CborProperty(2)] CborMaybeIndefList<AlonzoTransactionWitnessSet> TransactionWitnessSets,
-    [CborProperty(3)] AuxiliaryDataSet AuxiliaryDataSet
+    [CborProperty(3)] AuxiliaryDataSet AuxiliaryDataSet,
+    [CborProperty(4)] CborMaybeIndefList<CborInt>? InvalidTransactions
 ) : Block;
 
 [CborConverter(typeof(CustomListConverter))]
