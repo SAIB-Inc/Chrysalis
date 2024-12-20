@@ -39,30 +39,6 @@ public static class TransactionBodyExtension
                 CborIndefListWithTag<TransactionInput> tagList => tagList.Value,
                 _ => []
             },
-            MaryTransactionBody x => x.Inputs switch
-            {
-                CborDefList<TransactionInput> list => list.Value,
-                CborIndefList<TransactionInput> list => list.Value,
-                CborDefListWithTag<TransactionInput> tagList => tagList.Value,
-                CborIndefListWithTag<TransactionInput> tagList => tagList.Value,
-                _ => []
-            },
-            AllegraTransactionBody x => x.Inputs switch
-            {
-                CborDefList<TransactionInput> list => list.Value,
-                CborIndefList<TransactionInput> list => list.Value,
-                CborDefListWithTag<TransactionInput> tagList => tagList.Value,
-                CborIndefListWithTag<TransactionInput> tagList => tagList.Value,
-                _ => []
-            },
-            ShelleyTransactionBody x => x.Inputs switch
-            {
-                CborDefList<TransactionInput> list => list.Value,
-                CborIndefList<TransactionInput> list => list.Value,
-                CborDefListWithTag<TransactionInput> tagList => tagList.Value,
-                CborIndefListWithTag<TransactionInput> tagList => tagList.Value,
-                _ => []
-            },
             _ => []
         };
 
@@ -71,50 +47,26 @@ public static class TransactionBodyExtension
         {
             ConwayTransactionBody x => x.Outputs switch
             {
-                CborDefList<TransactionOutput> list => list.Value,
-                CborIndefList<TransactionOutput> list => list.Value,
-                CborDefListWithTag<TransactionOutput> list => list.Value,
-                CborIndefListWithTag<TransactionOutput> list => list.Value,
+                CborDefList<PostAlonzoTransactionOutput> list => list.Value,
+                CborIndefList<PostAlonzoTransactionOutput> list => list.Value,
+                CborDefListWithTag<PostAlonzoTransactionOutput> list => list.Value,
+                CborIndefListWithTag<PostAlonzoTransactionOutput> list => list.Value,
                 _ => []
             },
             BabbageTransactionBody x => x.Outputs switch
             {
-                CborDefList<TransactionOutput> list => list.Value,
-                CborIndefList<TransactionOutput> list => list.Value,
-                CborDefListWithTag<TransactionOutput> list => list.Value,
-                CborIndefListWithTag<TransactionOutput> list => list.Value,
+                CborDefList<PostAlonzoTransactionOutput> list => list.Value,
+                CborIndefList<PostAlonzoTransactionOutput> list => list.Value,
+                CborDefListWithTag<PostAlonzoTransactionOutput> list => list.Value,
+                CborIndefListWithTag<PostAlonzoTransactionOutput> list => list.Value,
                 _ => []
             },
             AlonzoTransactionBody x => x.Outputs switch
             {
-                CborDefList<TransactionOutput> list => list.Value,
-                CborIndefList<TransactionOutput> list => list.Value,
-                CborDefListWithTag<TransactionOutput> list => list.Value,
-                CborIndefListWithTag<TransactionOutput> list => list.Value,
-                _ => []
-            },
-            MaryTransactionBody x => x.Outputs switch
-            {
-                CborDefList<TransactionOutput> list => list.Value,
-                CborIndefList<TransactionOutput> list => list.Value,
-                CborDefListWithTag<TransactionOutput> tagList => tagList.Value,
-                CborIndefListWithTag<TransactionOutput> tagList => tagList.Value,
-                _ => []
-            },
-            AllegraTransactionBody x => x.Outputs switch
-            {
-                CborDefList<TransactionOutput> list => list.Value,
-                CborIndefList<TransactionOutput> list => list.Value,
-                CborDefListWithTag<TransactionOutput> tagList => tagList.Value,
-                CborIndefListWithTag<TransactionOutput> tagList => tagList.Value,
-                _ => []
-            },
-            ShelleyTransactionBody x => x.Outputs switch
-            {
-                CborDefList<TransactionOutput> list => list.Value,
-                CborIndefList<TransactionOutput> list => list.Value,
-                CborDefListWithTag<TransactionOutput> tagList => tagList.Value,
-                CborIndefListWithTag<TransactionOutput> tagList => tagList.Value,
+                CborDefList<AlonzoTransactionOutput> list => list.Value,
+                CborIndefList<AlonzoTransactionOutput> list => list.Value,
+                CborDefListWithTag<AlonzoTransactionOutput> list => list.Value,
+                CborIndefListWithTag<AlonzoTransactionOutput> list => list.Value,
                 _ => []
             },
             _ => []
@@ -132,9 +84,6 @@ public static class TransactionBodyExtension
     public static byte[]? AuxiliaryDataHash(this TransactionBody transactionBody)
         => transactionBody switch
         {
-            ShelleyTransactionBody x => x.MetadataHash?.Value,
-            AllegraTransactionBody x => x.MetadataHash?.Value,
-            MaryTransactionBody x => x.MetadataHash?.Value,
             ConwayTransactionBody x => x.AuxiliaryDataHash?.Value,
             BabbageTransactionBody x => x.AuxiliaryDataHash?.Value,
             AlonzoTransactionBody x => x.AuxiliaryDataHash?.Value,
@@ -147,7 +96,6 @@ public static class TransactionBodyExtension
             ConwayTransactionBody x => x.Mint?.Value.ToDictionary(kvp => kvp.Key.Value, kvp => kvp.Value),
             BabbageTransactionBody x => x.Mint?.Value.ToDictionary(kvp => kvp.Key.Value, kvp => kvp.Value),
             AlonzoTransactionBody x => x.Mint?.Value.ToDictionary(kvp => kvp.Key.Value, kvp => kvp.Value),
-            MaryTransactionBody x => x.Mint?.Value.ToDictionary(kvp => kvp.Key.Value, kvp => kvp.Value),
             _ => []
         };
 }

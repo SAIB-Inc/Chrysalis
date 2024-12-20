@@ -16,20 +16,16 @@ public static class TransactionOutputExtension
     public static Address? Address(this TransactionOutput transactionOutput)
         => transactionOutput switch
         {
-            BabbageTransactionOutput babbageTransactionOutput => babbageTransactionOutput.Address,
-            AlonzoTransactionOutput alonzoTransactionOutput => alonzoTransactionOutput.Address,
-            MaryTransactionOutput maryTransactionOutput => maryTransactionOutput.Address,
-            ShellyTransactionOutput shellyTransactionOutput => shellyTransactionOutput.Address,
+            PostAlonzoTransactionOutput e => e.Address,
+            AlonzoTransactionOutput e => e.Address,
             _ => null
         };
 
     public static Value? Amount(this TransactionOutput transactionOutput)
         => transactionOutput switch
         {
-            BabbageTransactionOutput babbageTransactionOutput => babbageTransactionOutput.Amount,
-            AlonzoTransactionOutput alonzoTransactionOutput => alonzoTransactionOutput.Amount,
-            MaryTransactionOutput maryTransactionOutput => maryTransactionOutput.Amount,
-            ShellyTransactionOutput shellyTransactionOutput => shellyTransactionOutput.Amount,
+            PostAlonzoTransactionOutput e => e.Amount,
+            AlonzoTransactionOutput e => e.Amount,
             _ => null
         };
 
@@ -42,17 +38,15 @@ public static class TransactionOutputExtension
     public static byte[]? AddressValue(this TransactionOutput transactionOutput)
         => transactionOutput switch
         {
-            BabbageTransactionOutput babbageTransactionOutput => babbageTransactionOutput.Address.Value,
-            AlonzoTransactionOutput alonzoTransactionOutput => alonzoTransactionOutput.Address.Value,
-            MaryTransactionOutput maryTransactionOutput => maryTransactionOutput.Address.Value,
-            ShellyTransactionOutput shellyTransactionOutput => shellyTransactionOutput.Address.Value,
+            PostAlonzoTransactionOutput e => e.Address.Value,
+            AlonzoTransactionOutput e => e.Address.Value,
             _ => null
         };
 
     public static byte[]? ScriptRef(this TransactionOutput transactionOutput)
         => transactionOutput switch
         {
-            BabbageTransactionOutput babbageTransactionOutput => babbageTransactionOutput?.ScriptRef?.Value,
+            PostAlonzoTransactionOutput e => e?.ScriptRef?.Value,
             _ => null
         };
 
@@ -73,7 +67,7 @@ public static class TransactionOutputExtension
                 null => (DatumType.None, null),
                 _ => (DatumType.Hash, a.DatumHash.Value)
             },
-            BabbageTransactionOutput b => b.Datum switch
+            PostAlonzoTransactionOutput b => b.Datum switch
             {
                 InlineDatumOption inline => (DatumType.Inline, inline.Data.Value),
                 DatumHashOption hash => (DatumType.Hash, hash.DatumHash.Value),
