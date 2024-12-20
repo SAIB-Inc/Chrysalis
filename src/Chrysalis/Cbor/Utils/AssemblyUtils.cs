@@ -6,7 +6,6 @@ namespace Chrysalis.Cbor.Utils;
 
 public static class AssemblyUtils
 {
-    private static readonly ConcurrentDictionary<(Type GivenType, Type GenericType), bool> _assignableCache = new();
     private static readonly ConcurrentDictionary<Type, (Type[] BaseTypes, Type[] Interfaces)> _typeHierarchyCache = new();
 
     public static Type[] FindConcreteTypes(Type baseType, IEnumerable<Assembly> assemblies)
