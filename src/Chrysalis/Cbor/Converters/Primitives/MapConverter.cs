@@ -10,12 +10,13 @@ public class MapConverter : ICborConverter
 {
     public T Deserialize<T>(byte[] data) where T : CborBase
     {
-        CborReader reader = new(data);
+        CborReader reader = CborSerializer.CreateReader(data);
         CborTagUtils.ReadAndVerifyTag<T>(reader);
 
         reader.ReadStartMap();
 
         Type targetType = typeof(T);
+        string targetTypeName = targetType.Name;
         ConstructorInfo constructor = targetType.GetConstructors().FirstOrDefault() ?? throw new InvalidOperationException($"Type {targetType.Name} must have a constructor.");
 
         // Determine the key and value types of the dictionary

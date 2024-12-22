@@ -9,7 +9,7 @@ public class UlongConverter : ICborConverter
 {
     public T Deserialize<T>(byte[] data) where T : CborBase
     {
-        CborReader reader = new(data);
+        CborReader reader = CborSerializer.CreateReader(data);
         CborTagUtils.ReadAndVerifyTag<T>(reader);
 
         ulong value = reader.ReadUInt64();

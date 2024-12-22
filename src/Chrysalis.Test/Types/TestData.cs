@@ -24,8 +24,8 @@ public class TestData : IXunitSerializable
         Serialized = info.GetValue<string>(nameof(Serialized));
         var typeName = info.GetValue<string>("DeserializedType");
         var json = info.GetValue<string>(nameof(Deserialized));
-        var type = Type.GetType(typeName);
-        Deserialized = (CborBase)JsonConvert.DeserializeObject(json, type);
+        var type = Type.GetType(typeName) ?? throw new InvalidOperationException("Failed to get type.");
+        Deserialized = (CborBase?)JsonConvert.DeserializeObject(json, type) ?? throw new InvalidOperationException("Failed to deserialize object.");
     }
 
     public void Serialize(IXunitSerializationInfo info)

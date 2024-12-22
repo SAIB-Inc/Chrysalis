@@ -10,7 +10,7 @@ public class BoolConverter : ICborConverter
 {
     public T Deserialize<T>(byte[] data) where T : CborBase
     {
-        CborReader reader = new(data);
+        CborReader reader = CborSerializer.CreateReader(data);
         bool value = reader.ReadBoolean();
 
         // Read and verify the tag
