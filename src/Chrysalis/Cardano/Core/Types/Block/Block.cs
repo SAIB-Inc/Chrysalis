@@ -1,7 +1,5 @@
 using Chrysalis.Cardano.Core.Types.Block.Header;
-using Chrysalis.Cardano.Core.Types.Block.Transaction;
 using Chrysalis.Cardano.Core.Types.Block.Transaction.Body;
-using Chrysalis.Cardano.Core.Types.Block.Transaction.Output;
 using Chrysalis.Cardano.Core.Types.Block.Transaction.WitnessSet;
 using Chrysalis.Cbor.Attributes;
 using Chrysalis.Cbor.Converters.Primitives;

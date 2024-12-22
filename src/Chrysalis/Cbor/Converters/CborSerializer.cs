@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Formats.Cbor;
 using System.Reflection;
 using Chrysalis.Cbor.Attributes;
 using Chrysalis.Cbor.Types;
@@ -29,9 +30,10 @@ public static class CborSerializer
             MethodInfo deserializeMethod = typeof(ICborConverter).GetMethod(nameof(ICborConverter.Deserialize))
                 ?.MakeGenericMethod(type) ?? throw new InvalidOperationException("The ICborConverter does not implement Deserialize.");
 
+
             return (byte[] inputData) =>
             {
-                return deserializeMethod.Invoke(converter, new object[] { inputData })!;
+                return deserializeMethod.Invoke(converter, [inputData])!;
             };
         });
 
@@ -78,7 +80,7 @@ public static class CborSerializer
                 else
                 {
                     // If the type isn't generic but converter is, use T as the generic argument
-                    genericArgs = new[] { typeof(T) };
+                    genericArgs = [typeof(T)];
                 }
 
                 try
@@ -118,5 +120,10 @@ public static class CborSerializer
 
         throw new InvalidOperationException(
             $"No valid converter found for {type}. Please ensure a [CborConverter] attribute is defined.");
+    }
+
+    public static CborReader CreateReader(byte[] data)
+    {
+        return new(data, CborConformanceMode.Lax);
     }
 }

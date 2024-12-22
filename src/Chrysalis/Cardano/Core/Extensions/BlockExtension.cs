@@ -20,7 +20,7 @@ public static class BlockExtension
     };
 
     public static string Hash(this Block block)
-        => Convert.ToHexString(block.Header().Raw?.ToBlake2b256() ?? []).ToLowerInvariant();
+        => Convert.ToHexString(block.Header()?.Raw?.ToBlake2b256() ?? []).ToLowerInvariant();
 
     public static ulong? Slot(this Block block)
         => block.HeaderBody() switch

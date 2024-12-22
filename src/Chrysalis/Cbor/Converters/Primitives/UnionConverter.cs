@@ -46,13 +46,13 @@ public class UnionConverter : ICborConverter
 
     private static async Task<T> ParallelDeserializeAsync<T>(byte[] data, Type[] concreteTypes, Type baseType) where T : CborBase
     {
-        TaskCompletionSource<T> successTcs = new TaskCompletionSource<T>(TaskCreationOptions.RunContinuationsAsynchronously);
+        TaskCompletionSource<T> successTcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
         // Create a list of tasks that attempt to deserialize in parallel
-        Task[] tasks = concreteTypes.Select(async concreteType =>
+        Task[] tasks = [.. concreteTypes.Select(concreteType =>
         {
             if (successTcs.Task.IsCompleted)
-                return; // If already succeeded, just return early.
+                return successTcs.Task; // If already succeeded, just return early.
 
             try
             {
@@ -68,7 +68,9 @@ public class UnionConverter : ICborConverter
                 // Ignore failures - if all fail, we handle that after all tasks complete.
                 // But do not throw here, since we only want to fail if NO type works.
             }
-        }).ToArray();
+
+            return Task.CompletedTask;
+        })];
 
         // Wait until either one task succeeds (successTcs.Task) or all tasks finish (Task.WhenAll)
         Task completed = await Task.WhenAny(successTcs.Task, Task.WhenAll(tasks)).ConfigureAwait(false);

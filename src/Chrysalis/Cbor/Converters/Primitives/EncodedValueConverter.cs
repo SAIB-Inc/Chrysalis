@@ -9,7 +9,7 @@ public class EncodedValueConverter : ICborConverter
 {
     public T Deserialize<T>(byte[] data) where T : CborBase
     {
-        CborReader reader = new(data);
+        CborReader reader = CborSerializer.CreateReader(data);
         CborTagUtils.ReadAndVerifyTag<T>(reader);
 
         CborTag tag = reader.ReadTag();
