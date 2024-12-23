@@ -23,7 +23,7 @@ public class BytesConverter : ICborConverter
             while (reader.PeekState() != CborReaderState.EndIndefiniteLengthByteString) chunks.Add(reader.ReadByteString());
             reader.ReadEndIndefiniteLengthByteString();
 
-            value = chunks.SelectMany(x => x).ToArray();
+            value = [.. chunks.SelectMany(x => x)];
         }
         else
         {

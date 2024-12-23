@@ -16,7 +16,7 @@ public class CustomListConverter : ICborConverter
         Type targetType = typeof(T);
 
         // Use the helper to get constructor parameters or properties
-        List<(int? Index, string Name, Type Type)> parametersOrProperties = AssemblyUtils.GetCborPropertiesOrParameters(targetType).ToList();
+        List<(int? Index, string Name, Type Type)> parametersOrProperties = [.. AssemblyUtils.GetCborPropertiesOrParameters(targetType)];
         object?[] constructorArgs = new object[parametersOrProperties.Count];
 
         // Read array start
