@@ -19,6 +19,9 @@ public class CustomListConverter : ICborConverter
         List<(int? Index, string Name, Type Type)> parametersOrProperties = [.. AssemblyUtils.GetCborPropertiesOrParameters(targetType)];
         object?[] constructorArgs = new object[parametersOrProperties.Count];
 
+        if (reader.PeekState() != CborReaderState.StartArray)
+            throw new InvalidOperationException($"Error at type {typeof(T).Name} => Expected StartArray but got {reader.PeekState()}");
+
         // Read array start
         reader.ReadStartArray();
 

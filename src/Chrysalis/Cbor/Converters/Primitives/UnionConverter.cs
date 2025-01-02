@@ -19,6 +19,17 @@ public class UnionConverter : ICborConverter
     // Cache closed generic types to avoid repeated MakeGenericType calls
     private static readonly ConcurrentDictionary<(Type Definition, Type[] Args), Type> _closedGenericCache = new();
 
+    // Add this record at class level
+    private record struct DeserializationAttempt(
+        ICborConverter Converter,
+        ReadOnlyMemory<byte> Bytes,
+        Result Result);
+
+    private record struct Result(
+        CborBase? Object,
+        Exception? Error
+    );
+
     public byte[] Serialize(CborBase value)
     {
         CborWriter writer = new();
@@ -46,27 +57,39 @@ public class UnionConverter : ICborConverter
 
     private static async Task<T> ParallelDeserializeAsync<T>(byte[] data, Type[] concreteTypes, Type baseType) where T : CborBase
     {
-        TaskCompletionSource<T> successTcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        ConcurrentDictionary<Type, DeserializationAttempt> attempts = [];
+        var successTcs = new TaskCompletionSource<T>(TaskCreationOptions.RunContinuationsAsynchronously);
 
         // Create a list of tasks that attempt to deserialize in parallel
         Task[] tasks = [.. concreteTypes.Select(concreteType =>
         {
             if (successTcs.Task.IsCompleted)
-                return successTcs.Task; // If already succeeded, just return early.
+                return successTcs.Task; // If already succeeded, just return early
 
             try
             {
                 Type typeToDeserialize = GetClosedGenericType(concreteType, baseType);
-                T deserializedValue = (T)TryDeserialize(data, typeToDeserialize);
+                (var converter, _, var deserializeMethod) = GetOrCreateConverter(typeToDeserialize);
+
+                if (converter is null)
+                {
+                    Result result = new(null,new InvalidOperationException($"No converter found for type {typeToDeserialize.Name}"));
+                    attempts[typeToDeserialize] = new(null!, data, result);
+                    return Task.CompletedTask;
+                }
+
+                var deserializedValue = (T)deserializeMethod.MakeGenericMethod(typeToDeserialize)
+                    .Invoke(converter, [data])!;
                 deserializedValue.Raw = data;
 
-                // Try to set the result - if another task beat us to it, this will be ignored.
+                attempts[typeToDeserialize] = new((ICborConverter)converter, data, new(deserializedValue, null));
                 successTcs.TrySetResult(deserializedValue);
             }
-            catch
+            catch (Exception ex)
             {
-                // Ignore failures - if all fail, we handle that after all tasks complete.
-                // But do not throw here, since we only want to fail if NO type works.
+                Type typeToDeserialize = GetClosedGenericType(concreteType, baseType);
+                (var converter, _, var deserializeMethod) = GetOrCreateConverter(typeToDeserialize);
+                attempts[concreteType] = new((ICborConverter)converter, data, new(null, ex.GetBaseException()));
             }
 
             return Task.CompletedTask;
@@ -77,11 +100,9 @@ public class UnionConverter : ICborConverter
 
         if (completed == successTcs.Task)
         {
-            // We have a successful result
             return await successTcs.Task.ConfigureAwait(false);
         }
 
-        // If we reach here, it means Task.WhenAll completed first and no task succeeded
         throw new InvalidOperationException($"Unable to deserialize to any concrete type implementing {baseType.Name}.");
     }
 
