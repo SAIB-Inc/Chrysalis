@@ -1,6 +1,7 @@
 using System.Formats.Cbor;
 using System.Reflection;
 using Chrysalis.Cbor.Types;
+using Chrysalis.Cbor.Types.Primitives;
 using Chrysalis.Cbor.Utils;
 
 
@@ -13,8 +14,8 @@ public class BoolConverter : ICborConverter
         CborReader reader = CborSerializer.CreateReader(data);
 
         if (reader.PeekState() != CborReaderState.Boolean)
-            throw new InvalidOperationException($"Error at type {typeof(T).Name} => Expected Boolean but got {reader.PeekState()}");
-            
+            throw new InvalidOperationException($"Error at type {typeof(T).Name} for property {typeof(T).GetProperties().First().Name}=> Expected Boolean but got {reader.PeekState()}");
+
         bool value = reader.ReadBoolean();
 
         // Read and verify the tag

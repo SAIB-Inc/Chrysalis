@@ -15,7 +15,7 @@ public class ListConverter : ICborConverter
         CborTagUtils.ReadAndVerifyTag<T>(reader);
 
         if (reader.PeekState() != CborReaderState.StartArray)
-            throw new InvalidOperationException($"Error at type {typeof(T).Name} => Expected StartArray but got {reader.PeekState()}");
+            throw new InvalidOperationException($"Error at type {typeof(T).Name} for property {typeof(T).GetProperties().First().Name}=> Expected StartArray but got {reader.PeekState()}");
             
         reader.ReadStartArray();
 

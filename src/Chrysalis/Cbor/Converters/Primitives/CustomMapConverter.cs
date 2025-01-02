@@ -31,7 +31,7 @@ public class CustomMapConverter : ICborConverter
             .ToDictionary(x => x.Index!.Value, x => x.index);
 
         if (reader.PeekState() != CborReaderState.StartMap)
-            throw new InvalidOperationException($"Error at type {typeof(T).Name} => Expected StartMap but got {reader.PeekState()}");
+            throw new InvalidOperationException($"Error at type {typeof(T).Name} for property {typeof(T).GetProperties().First().Name} => Expected StartMap but got {reader.PeekState()}");
 
         // Read map start
         reader.ReadStartMap();
@@ -53,16 +53,25 @@ public class CustomMapConverter : ICborConverter
                 throw new InvalidOperationException("Key not found in property map");
             }
 
+
             // Deserialize the value
             (int? Index, string Name, Type Type) parameterInfo = parametersOrProperties[index];
             Type propertyType = parameterInfo.Type;
 
-            byte[] encodedValue = reader.ReadEncodedValue().ToArray();
-            MethodInfo deserializeMethod = typeof(CborSerializer).GetMethod(nameof(CborSerializer.Deserialize))!;
-            object? deserializedValue = deserializeMethod.MakeGenericMethod(propertyType)
-                .Invoke(null, [encodedValue]);
+            try
+            {
+                byte[] encodedValue = reader.ReadEncodedValue().ToArray();
+            
+                MethodInfo deserializeMethod = typeof(CborSerializer).GetMethod(nameof(CborSerializer.Deserialize))!;
+                object? deserializedValue = deserializeMethod.MakeGenericMethod(propertyType)
+                    .Invoke(null, [encodedValue]);
 
-            constructorArgs[index] = deserializedValue;
+                constructorArgs[index] = deserializedValue;
+            }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException($"Error at property {parameterInfo.Name}", ex);
+            }
         }
 
         reader.ReadEndMap();

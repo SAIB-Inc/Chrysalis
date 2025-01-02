@@ -27,7 +27,7 @@ public class UnionConverter : ICborConverter
 
     private record struct Result(
         CborBase? Object,
-        Exception? Error
+        string? Error
     );
 
     public byte[] Serialize(CborBase value)
@@ -73,7 +73,7 @@ public class UnionConverter : ICborConverter
 
                 if (converter is null)
                 {
-                    Result result = new(null,new InvalidOperationException($"No converter found for type {typeToDeserialize.Name}"));
+                    Result result = new(null,$"No converter found for type {typeToDeserialize.Name}");
                     attempts[typeToDeserialize] = new(null!, data, result);
                     return Task.CompletedTask;
                 }
@@ -88,7 +88,7 @@ public class UnionConverter : ICborConverter
             {
                 Type typeToDeserialize = GetClosedGenericType(concreteType, baseType);
                 (var converter, _, var deserializeMethod) = GetOrCreateConverter(typeToDeserialize);
-                attempts[concreteType] = new((ICborConverter)converter, data, new(null, ex.GetBaseException()));
+                attempts[concreteType] = new((ICborConverter)converter, data, new(null, ex.ToString()));
             }
 
             return Task.CompletedTask;
@@ -105,7 +105,7 @@ public class UnionConverter : ICborConverter
         var attemptDetails = attempts.Select(kvp =>
             $"- {kvp.Key.Name}:\n" +
             $"  Result: {(kvp.Value.Result.Object != null ? "Success" : "Failed")}\n" +
-            $"  Error: {kvp.Value.Result.Error?.ToString() ?? "None"}"
+            $"  Error: {kvp.Value.Result.Error ?? "None"}"
         );
 
         var errorMessage = string.Join("\n",
@@ -170,7 +170,7 @@ public class UnionConverter : ICborConverter
             {
                 throw new InvalidOperationException($"Cannot deserialize open generic type {type.Name}");
             }
-
+            
             return (CborBase)deserializeMethod.MakeGenericMethod(type).Invoke(converter, [data])!;
         }
 

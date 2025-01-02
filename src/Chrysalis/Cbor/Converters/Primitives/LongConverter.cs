@@ -14,7 +14,7 @@ public class LongConverter : ICborConverter
         CborTagUtils.ReadAndVerifyTag<T>(reader);
 
         if (reader.PeekState() != CborReaderState.UnsignedInteger && reader.PeekState() != CborReaderState.NegativeInteger)
-            throw new InvalidOperationException($"Error at type {typeof(T).Name} => Expected an Unsigned or Negative Integer but got {reader.PeekState()}");
+            throw new InvalidOperationException($"Error at type {typeof(T).Name} for property {typeof(T).GetProperties().First().Name} => Expected an Unsigned or Negative Integer but got {reader.PeekState()}");
 
         long value = reader.ReadInt64();
 
