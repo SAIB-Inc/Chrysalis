@@ -13,6 +13,9 @@ public class LongConverter : ICborConverter
         CborReader reader = CborSerializer.CreateReader(data);
         CborTagUtils.ReadAndVerifyTag<T>(reader);
 
+        if (reader.PeekState() != CborReaderState.UnsignedInteger && reader.PeekState() != CborReaderState.NegativeInteger)
+            throw new InvalidOperationException($"Error at type {typeof(T).Name} => Expected an Unsigned or Negative Integer but got {reader.PeekState()}");
+
         long value = reader.ReadInt64();
 
         // Use reflection to create an instance of T

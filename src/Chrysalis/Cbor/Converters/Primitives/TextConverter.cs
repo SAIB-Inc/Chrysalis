@@ -12,6 +12,9 @@ public class TextConverter : ICborConverter
         CborReader reader = CborSerializer.CreateReader(data);
         CborTagUtils.ReadAndVerifyTag<T>(reader);
 
+        if (reader.PeekState() != CborReaderState.TextString)
+            throw new InvalidOperationException($"Error at type {typeof(T).Name} => Expected TextString but got {reader.PeekState()}");
+            
         string value = reader.ReadTextString();
 
         ConstructorInfo constructor = typeof(T).GetConstructor([typeof(string)])

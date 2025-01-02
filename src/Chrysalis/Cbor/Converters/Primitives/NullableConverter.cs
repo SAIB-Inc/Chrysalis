@@ -29,7 +29,8 @@ public class NullableConverter : ICborConverter
             value = typeof(CborSerializer)
                 .GetMethod(nameof(CborSerializer.Deserialize))!
                 .MakeGenericMethod(valueType)
-                .Invoke(null, [data]);
+                .Invoke(null, [data])
+                ?? throw new InvalidOperationException($"Deserialization returned null for type {valueType.Name} at {typeof(T).Name}.");
         }
 
         T instance = (T)constructor.Invoke([value]);

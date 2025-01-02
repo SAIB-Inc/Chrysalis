@@ -13,6 +13,9 @@ public class MapConverter : ICborConverter
         CborReader reader = CborSerializer.CreateReader(data);
         CborTagUtils.ReadAndVerifyTag<T>(reader);
 
+        if (reader.PeekState() != CborReaderState.StartMap)
+            throw new InvalidOperationException($"Error at type {typeof(T).Name} => Expected StartMap but got {reader.PeekState()}");
+
         reader.ReadStartMap();
 
         Type targetType = typeof(T);

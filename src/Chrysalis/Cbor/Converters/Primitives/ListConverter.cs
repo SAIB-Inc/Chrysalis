@@ -14,6 +14,9 @@ public class ListConverter : ICborConverter
         CborReader reader = CborSerializer.CreateReader(data);
         CborTagUtils.ReadAndVerifyTag<T>(reader);
 
+        if (reader.PeekState() != CborReaderState.StartArray)
+            throw new InvalidOperationException($"Error at type {typeof(T).Name} => Expected StartArray but got {reader.PeekState()}");
+            
         reader.ReadStartArray();
 
         Type targetType = typeof(T);
