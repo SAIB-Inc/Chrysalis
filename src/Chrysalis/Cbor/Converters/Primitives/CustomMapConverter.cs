@@ -30,6 +30,9 @@ public class CustomMapConverter : ICborConverter
             .Where(x => x.Index.HasValue)
             .ToDictionary(x => x.Index!.Value, x => x.index);
 
+        if (reader.PeekState() != CborReaderState.StartMap)
+            throw new InvalidOperationException($"Error at type {typeof(T).Name} => Expected StartMap but got {reader.PeekState()}");
+
         // Read map start
         reader.ReadStartMap();
 
