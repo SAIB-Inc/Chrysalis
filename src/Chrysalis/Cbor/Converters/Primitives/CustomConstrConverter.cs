@@ -14,8 +14,14 @@ public class CustomConstrConverter : ICborConverter
         CborReader reader = CborSerializer.CreateReader(data);
         Type targetType = typeof(T);
 
+        if (reader.PeekState() != CborReaderState.Tag)
+            throw new InvalidOperationException($"Error at type {typeof(T).Name} => Expected Tag but got {reader.PeekState()}");
+
         // Read the tag
         int tag = (int)reader.ReadTag();
+
+        if (reader.PeekState() != CborReaderState.StartArray)
+            throw new InvalidOperationException($"Error at type {typeof(T).Name} => Expected StartArray but got {reader.PeekState()}");
 
         // Read array start
         reader.ReadStartArray();

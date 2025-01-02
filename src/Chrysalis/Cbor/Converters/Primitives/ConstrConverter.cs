@@ -18,6 +18,9 @@ public class ConstrConverter : ICborConverter
         // Use the helper to get constructor parameters or properties
         List<(int? Index, string Name, Type Type)> parametersOrProperties = AssemblyUtils.GetCborPropertiesOrParameters(targetType).ToList();
 
+        if (reader.PeekState() != CborReaderState.Tag)
+            throw new InvalidOperationException($"Error at type {typeof(T).Name} => Expected Tag but got {reader.PeekState()}");
+
         // Read the tag and validate it
         CborTag tag = reader.ReadTag();
         CborTag expectedTag = GetTag(targetType.GetCustomAttribute<CborIndexAttribute>()?.Index ?? 0);

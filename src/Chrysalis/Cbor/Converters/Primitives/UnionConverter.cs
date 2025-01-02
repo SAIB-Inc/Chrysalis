@@ -78,8 +78,7 @@ public class UnionConverter : ICborConverter
                     return Task.CompletedTask;
                 }
 
-                var deserializedValue = (T)deserializeMethod.MakeGenericMethod(typeToDeserialize)
-                    .Invoke(converter, [data])!;
+                T deserializedValue = (T)TryDeserialize(data, typeToDeserialize);
                 deserializedValue.Raw = data;
 
                 attempts[typeToDeserialize] = new((ICborConverter)converter, data, new(deserializedValue, null));
@@ -103,7 +102,19 @@ public class UnionConverter : ICborConverter
             return await successTcs.Task.ConfigureAwait(false);
         }
 
-        throw new InvalidOperationException($"Unable to deserialize to any concrete type implementing {baseType.Name}.");
+        var attemptDetails = attempts.Select(kvp =>
+            $"- {kvp.Key.Name}:\n" +
+            $"  Result: {(kvp.Value.Result.Object != null ? "Success" : "Failed")}\n" +
+            $"  Error: {kvp.Value.Result.Error?.ToString() ?? "None"}"
+        );
+
+        var errorMessage = string.Join("\n",
+            $"Unable to deserialize to any concrete type implementing {baseType.Name}.",
+            "\nAttempted conversions:",
+            string.Join("\n", attemptDetails)
+        );
+
+        throw new InvalidOperationException(errorMessage.ToString());
     }
 
     private static Type GetClosedGenericType(Type concreteType, Type baseType)

@@ -11,6 +11,10 @@ public class BoolConverter : ICborConverter
     public T Deserialize<T>(byte[] data) where T : CborBase
     {
         CborReader reader = CborSerializer.CreateReader(data);
+
+        if (reader.PeekState() != CborReaderState.Boolean)
+            throw new InvalidOperationException($"Error at type {typeof(T).Name} => Expected Boolean but got {reader.PeekState()}");
+            
         bool value = reader.ReadBoolean();
 
         // Read and verify the tag

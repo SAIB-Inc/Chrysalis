@@ -12,6 +12,9 @@ public class EncodedValueConverter : ICborConverter
         CborReader reader = CborSerializer.CreateReader(data);
         CborTagUtils.ReadAndVerifyTag<T>(reader);
 
+        if (reader.PeekState() != CborReaderState.Tag)
+            throw new InvalidOperationException($"Error at type {typeof(T).Name} => Expected Tag but got {reader.PeekState()}");
+
         CborTag tag = reader.ReadTag();
 
         if (tag != CborTag.EncodedCborDataItem)
