@@ -33,7 +33,7 @@ public static class CborTagUtils
         if (tagAttr != null)
         {
             if (reader.PeekState() != CborReaderState.Tag)
-                throw new InvalidOperationException($"Error at type {type.Name} => Expected Tag but got {reader.PeekState()}");
+                throw new InvalidOperationException($"Error at type {type.Name} for property {type.GetProperties().First().Name} => Expected Tag but got {reader.PeekState()}");
 
             int tag = (int)reader.ReadTag();
             if (tag != tagAttr.Tag)
