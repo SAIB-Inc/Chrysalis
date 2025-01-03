@@ -9,7 +9,7 @@ namespace Chrysalis.Cbor.Converters.Primitives;
 
 public class ListConverter : ICborConverter
 {
-    public T Deserialize<T>(byte[] data) where T : CborBase
+    public T Deserialize<T>(ReadOnlyMemory<byte> data) where T : CborBase
     {
         CborReader reader = CborSerializer.CreateReader(data);
         CborTagUtils.ReadAndVerifyTag<T>(reader);

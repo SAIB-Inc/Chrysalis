@@ -10,7 +10,7 @@ public static class TransactionBodyExtension
 {
 
     public static string Id(this TransactionBody txBody) =>
-        Convert.ToHexString(txBody.Raw?.ToBlake2b256() ?? []).ToLowerInvariant();
+        Convert.ToHexString(txBody.GetRawBytes()?.ToBlake2b256() ?? []).ToLowerInvariant();
 
     public static IEnumerable<TransactionInput> Inputs(this TransactionBody transactionBody)
         => transactionBody switch

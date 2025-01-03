@@ -9,7 +9,7 @@ namespace Chrysalis.Cbor.Converters;
 public static class CborSerializer
 {
     private static readonly ConcurrentDictionary<Type, object> _converterCache = [];
-    private static readonly ConcurrentDictionary<Type, Func<byte[], object>> _deserializeDelegates = new();
+    private static readonly ConcurrentDictionary<Type, Func<ReadOnlyMemory<byte>, object>> _deserializeDelegates = new();
 
     public static byte[] Serialize<T>(T value) where T : CborBase
     {
@@ -22,7 +22,7 @@ public static class CborSerializer
         Type targetType = typeof(T);
 
         // Use the delegate cache to retrieve or create the deserialization logic
-        Func<byte[], object> deserializer = _deserializeDelegates.GetOrAdd(targetType, type =>
+        Func<ReadOnlyMemory<byte>, object> deserializer = _deserializeDelegates.GetOrAdd(targetType, type =>
         {
             ICborConverter converter = GetConverter<T>(type);
 
@@ -31,7 +31,7 @@ public static class CborSerializer
                 ?.MakeGenericMethod(type) ?? throw new InvalidOperationException("The ICborConverter does not implement Deserialize.");
 
 
-            return (byte[] inputData) =>
+            return (ReadOnlyMemory<byte> inputData) =>
             {
                 return deserializeMethod.Invoke(converter, [inputData])!;
             };
@@ -122,8 +122,8 @@ public static class CborSerializer
             $"No valid converter found for {type}. Please ensure a [CborConverter] attribute is defined.");
     }
 
-    public static CborReader CreateReader(byte[] data)
+    public static CborReader CreateReader(ReadOnlyMemory<byte> data)
     {
         return new(data, CborConformanceMode.Lax);
     }
-}
+} 

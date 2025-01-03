@@ -96,7 +96,7 @@ public class CrashrTestData
         Assert.Equal(expected.Payouts.Value.Count, actual.Payouts.Value.Count);
 
         // Raw Cbor Check
-        Assert.True(expected.Raw!.SequenceEqual(actual.Raw!));
+        Assert.True(expected.GetRawBytes()!.SequenceEqual(actual.GetRawBytes()!));
 
         // Compare each payout
         for (int i = 0; i < expected.Payouts.Value.Count; i++)

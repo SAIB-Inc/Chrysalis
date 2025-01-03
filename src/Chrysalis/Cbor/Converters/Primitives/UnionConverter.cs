@@ -46,7 +46,7 @@ public class UnionConverter : ICborConverter
         throw new InvalidOperationException($"No converter found for type {type.Name}");
     }
 
-    public T Deserialize<T>(byte[] data) where T : CborBase
+    public T Deserialize<T>(ReadOnlyMemory<byte> data) where T : CborBase
     {
         Type baseType = typeof(T);
         Type[] concreteTypes = GetConcreteTypes(baseType);
@@ -55,7 +55,7 @@ public class UnionConverter : ICborConverter
         return ParallelDeserializeAsync<T>(data, concreteTypes, baseType).GetAwaiter().GetResult();
     }
 
-    private static async Task<T> ParallelDeserializeAsync<T>(byte[] data, Type[] concreteTypes, Type baseType) where T : CborBase
+    private static async Task<T> ParallelDeserializeAsync<T>(ReadOnlyMemory<byte> data, Type[] concreteTypes, Type baseType) where T : CborBase
     {
         ConcurrentDictionary<Type, DeserializationAttempt> attempts = [];
         var successTcs = new TaskCompletionSource<T>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -161,7 +161,7 @@ public class UnionConverter : ICborConverter
         });
     }
 
-    private static CborBase TryDeserialize(byte[] data, Type type)
+    private static CborBase TryDeserialize(ReadOnlyMemory<byte> data, Type type)
     {
         (object converter, MethodInfo _, MethodInfo deserializeMethod) = GetOrCreateConverter(type);
         if (converter is not null)
