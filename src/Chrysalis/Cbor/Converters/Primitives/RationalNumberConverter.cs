@@ -13,16 +13,16 @@ public class RationalNumberConverter : ICborConverter
         CborTagUtils.ReadAndVerifyTag<T>(reader);
 
         if (reader.PeekState() != CborReaderState.StartArray)
-            throw new InvalidOperationException($"Error at type {typeof(T).Name} => Expected StartArray but got {reader.PeekState()}");
+            throw new InvalidOperationException($"Error at type {typeof(T).Name} for property {typeof(T).GetProperties().First().Name} => Expected StartArray but got {reader.PeekState()}");
         // Expect array of 2 elements
         reader.ReadStartArray();
 
         if(reader.PeekState() != CborReaderState.UnsignedInteger)
-            throw new InvalidOperationException($"Error at type {typeof(T).Name} => Expected an Unsigned Integer but got {reader.PeekState()}");
+            throw new InvalidOperationException($"Error at type {typeof(T).Name} for property {typeof(T).GetProperties().First().Name} => Expected an Unsigned Integer but got {reader.PeekState()}");
         ulong numerator = reader.ReadUInt64();
 
         if(reader.PeekState() != CborReaderState.UnsignedInteger)
-            throw new InvalidOperationException($"Error at type {typeof(T).Name} => Expected an Unsigned Integer but got {reader.PeekState()}");
+            throw new InvalidOperationException($"Error at type {typeof(T).Name} for property {typeof(T).GetProperties().First().Name} => Expected an Unsigned Integer but got {reader.PeekState()}");
         ulong denominator = reader.ReadUInt64();
         
         reader.ReadEndArray();

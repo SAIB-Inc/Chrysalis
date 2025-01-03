@@ -13,7 +13,7 @@ public class TextConverter : ICborConverter
         CborTagUtils.ReadAndVerifyTag<T>(reader);
 
         if (reader.PeekState() != CborReaderState.TextString)
-            throw new InvalidOperationException($"Error at type {typeof(T).Name} => Expected TextString but got {reader.PeekState()}");
+            throw new InvalidOperationException($"Error at type {typeof(T).Name} for property {typeof(T).GetProperties().First().Name} => Expected TextString but got {reader.PeekState()}");
             
         string value = reader.ReadTextString();
 

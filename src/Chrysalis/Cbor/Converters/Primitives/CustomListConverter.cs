@@ -20,7 +20,7 @@ public class CustomListConverter : ICborConverter
         object?[] constructorArgs = new object[parametersOrProperties.Count];
 
         if (reader.PeekState() != CborReaderState.StartArray)
-            throw new InvalidOperationException($"Error at type {typeof(T).Name} => Expected StartArray but got {reader.PeekState()}");
+            throw new InvalidOperationException($"Error at type {typeof(T).Name} for property {typeof(T).GetProperties().First().Name} => Expected StartArray but got {reader.PeekState()}");
 
         // Read array start
         reader.ReadStartArray();
@@ -43,11 +43,16 @@ public class CustomListConverter : ICborConverter
             // Deserialize the value
             byte[] encodedValue = reader.ReadEncodedValue().ToArray();
 
-            MethodInfo deserializeMethod = typeof(CborSerializer).GetMethod(nameof(CborSerializer.Deserialize))!;
-            object? deserializedValue = deserializeMethod.MakeGenericMethod(ParameterType)
-                .Invoke(null, [encodedValue]);
-
-            constructorArgs[i] = deserializedValue;
+            try
+            {
+                MethodInfo deserializeMethod = typeof(CborSerializer).GetMethod(nameof(CborSerializer.Deserialize))!;
+                object? deserializedValue = deserializeMethod.MakeGenericMethod(ParameterType).Invoke(null, [encodedValue]);
+                constructorArgs[i] = deserializedValue;
+            }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException($"Error at property {Name}", ex);
+            }
         }
 
         reader.ReadEndArray();

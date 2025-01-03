@@ -28,7 +28,7 @@ public class BytesConverter : ICborConverter
         else
         {
             if (reader.PeekState() != CborReaderState.ByteString)
-                throw new InvalidOperationException($"Error at type {typeof(T).Name} => Expected ByteString but got {reader.PeekState()}");
+                throw new InvalidOperationException($"Error at type {typeof(T).Name} for property {typeof(T).GetProperties().First().Name} => Expected ByteString but got {reader.PeekState()}");
 
             value = reader.ReadByteString();
         }

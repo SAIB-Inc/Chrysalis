@@ -15,13 +15,13 @@ public class CustomConstrConverter : ICborConverter
         Type targetType = typeof(T);
 
         if (reader.PeekState() != CborReaderState.Tag)
-            throw new InvalidOperationException($"Error at type {typeof(T).Name} => Expected Tag but got {reader.PeekState()}");
+            throw new InvalidOperationException($"Error at type {typeof(T).Name} for property {typeof(T).GetProperties().First().Name} => Expected Tag but got {reader.PeekState()}");
 
         // Read the tag
         int tag = (int)reader.ReadTag();
 
         if (reader.PeekState() != CborReaderState.StartArray)
-            throw new InvalidOperationException($"Error at type {typeof(T).Name} => Expected StartArray but got {reader.PeekState()}");
+            throw new InvalidOperationException($"Error at type {typeof(T).Name} for property {typeof(T).GetProperties().First().Name} => Expected StartArray but got {reader.PeekState()}");
 
         // Read array start
         reader.ReadStartArray();

@@ -19,16 +19,13 @@ public class UnionConverter : ICborConverter
     // Cache closed generic types to avoid repeated MakeGenericType calls
     private static readonly ConcurrentDictionary<(Type Definition, Type[] Args), Type> _closedGenericCache = new();
 
-    // Add this record at class level
-    private record struct DeserializationAttempt(
+    private readonly record struct DeserializationOutcome(
         ICborConverter Converter,
         ReadOnlyMemory<byte> Bytes,
-        Result Result);
-
-    private record struct Result(
-        CborBase? Object,
-        Exception? Error
+        Result Result
     );
+
+    private readonly record struct Result(CborBase? Object, string? Error);
 
     public byte[] Serialize(CborBase value)
     {
@@ -57,7 +54,7 @@ public class UnionConverter : ICborConverter
 
     private static async Task<T> ParallelDeserializeAsync<T>(ReadOnlyMemory<byte> data, Type[] concreteTypes, Type baseType) where T : CborBase
     {
-        ConcurrentDictionary<Type, DeserializationAttempt> attempts = [];
+        ConcurrentDictionary<Type, DeserializationOutcome> deserializationResults = [];
         var successTcs = new TaskCompletionSource<T>(TaskCreationOptions.RunContinuationsAsynchronously);
 
         // Create a list of tasks that attempt to deserialize in parallel
@@ -73,22 +70,22 @@ public class UnionConverter : ICborConverter
 
                 if (converter is null)
                 {
-                    Result result = new(null,new InvalidOperationException($"No converter found for type {typeToDeserialize.Name}"));
-                    attempts[typeToDeserialize] = new(null!, data, result);
+                    Result result = new(null,$"No converter found for type {typeToDeserialize.Name}");
+                    deserializationResults[typeToDeserialize] = new(null!, data, result);
                     return Task.CompletedTask;
                 }
 
                 T deserializedValue = (T)TryDeserialize(data, typeToDeserialize);
                 deserializedValue.Raw = data;
 
-                attempts[typeToDeserialize] = new((ICborConverter)converter, data, new(deserializedValue, null));
+                deserializationResults[typeToDeserialize] = new((ICborConverter)converter, data, new(deserializedValue, null));
                 successTcs.TrySetResult(deserializedValue);
             }
             catch (Exception ex)
             {
                 Type typeToDeserialize = GetClosedGenericType(concreteType, baseType);
                 (var converter, _, var deserializeMethod) = GetOrCreateConverter(typeToDeserialize);
-                attempts[concreteType] = new((ICborConverter)converter, data, new(null, ex.GetBaseException()));
+                deserializationResults[concreteType] = new((ICborConverter)converter, data, new(null, ExceptionParserUtils.GetErrorInfo(ex)));
             }
 
             return Task.CompletedTask;
@@ -102,19 +99,19 @@ public class UnionConverter : ICborConverter
             return await successTcs.Task.ConfigureAwait(false);
         }
 
-        var attemptDetails = attempts.Select(kvp =>
+        IEnumerable<string> resultDetails = deserializationResults.Select(kvp =>
             $"- {kvp.Key.Name}:\n" +
             $"  Result: {(kvp.Value.Result.Object != null ? "Success" : "Failed")}\n" +
-            $"  Error: {kvp.Value.Result.Error?.ToString() ?? "None"}"
+            $"  Message:\n{kvp.Value.Result.Error ?? "None"}"
         );
 
-        var errorMessage = string.Join("\n",
+        string errorMessage = string.Join("\n",
             $"Unable to deserialize to any concrete type implementing {baseType.Name}.",
             "\nAttempted conversions:",
-            string.Join("\n", attemptDetails)
+            string.Join("\n", resultDetails)
         );
 
-        throw new InvalidOperationException(errorMessage.ToString());
+        throw new InvalidOperationException(errorMessage);
     }
 
     private static Type GetClosedGenericType(Type concreteType, Type baseType)
@@ -170,7 +167,7 @@ public class UnionConverter : ICborConverter
             {
                 throw new InvalidOperationException($"Cannot deserialize open generic type {type.Name}");
             }
-
+            
             return (CborBase)deserializeMethod.MakeGenericMethod(type).Invoke(converter, [data])!;
         }
 

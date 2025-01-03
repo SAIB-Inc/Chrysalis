@@ -19,7 +19,7 @@ public class ConstrConverter : ICborConverter
         List<(int? Index, string Name, Type Type)> parametersOrProperties = AssemblyUtils.GetCborPropertiesOrParameters(targetType).ToList();
 
         if (reader.PeekState() != CborReaderState.Tag)
-            throw new InvalidOperationException($"Error at type {typeof(T).Name} => Expected Tag but got {reader.PeekState()}");
+            throw new InvalidOperationException($"Error at type {typeof(T).Name} for property {typeof(T).GetProperties().First().Name} => Expected Tag but got {reader.PeekState()}");
 
         // Read the tag and validate it
         CborTag tag = reader.ReadTag();
@@ -40,13 +40,20 @@ public class ConstrConverter : ICborConverter
         {
             (int? Index, string Name, Type ParameterType) = parametersOrProperties[i];
 
-            // Deserialize the value
-            byte[] encodedValue = reader.ReadEncodedValue().ToArray();
-            MethodInfo deserializeMethod = typeof(CborSerializer).GetMethod(nameof(CborSerializer.Deserialize))!;
-            object? deserializedValue = deserializeMethod.MakeGenericMethod(ParameterType)
-                .Invoke(null, [encodedValue]);
+            try
+            {
+                // Deserialize the value
+                byte[] encodedValue = reader.ReadEncodedValue().ToArray();
+                MethodInfo deserializeMethod = typeof(CborSerializer).GetMethod(nameof(CborSerializer.Deserialize))!;
+                object? deserializedValue = deserializeMethod.MakeGenericMethod(ParameterType)
+                    .Invoke(null, [encodedValue]);
 
-            constructorArgs[i] = deserializedValue;
+                constructorArgs[i] = deserializedValue;
+            }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException($"Error at property {Name}", ex);
+            }
         }
 
         reader.ReadEndArray();

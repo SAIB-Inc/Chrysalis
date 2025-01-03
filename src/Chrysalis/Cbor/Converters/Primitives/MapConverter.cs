@@ -14,7 +14,7 @@ public class MapConverter : ICborConverter
         CborTagUtils.ReadAndVerifyTag<T>(reader);
 
         if (reader.PeekState() != CborReaderState.StartMap)
-            throw new InvalidOperationException($"Error at type {typeof(T).Name} => Expected StartMap but got {reader.PeekState()}");
+            throw new InvalidOperationException($"Error at type {typeof(T).Name} for property {typeof(T).GetProperties().First().Name} => Expected StartMap but got {reader.PeekState()}");
 
         reader.ReadStartMap();
 

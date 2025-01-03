@@ -13,7 +13,7 @@ public class EncodedValueConverter : ICborConverter
         CborTagUtils.ReadAndVerifyTag<T>(reader);
 
         if (reader.PeekState() != CborReaderState.Tag)
-            throw new InvalidOperationException($"Error at type {typeof(T).Name} => Expected Tag but got {reader.PeekState()}");
+            throw new InvalidOperationException($"Error at type {typeof(T).Name} for property {typeof(T).GetProperties().First().Name} => Expected Tag but got {reader.PeekState()}");
 
         CborTag tag = reader.ReadTag();
 
