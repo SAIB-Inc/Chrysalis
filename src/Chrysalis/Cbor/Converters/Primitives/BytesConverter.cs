@@ -13,17 +13,17 @@ public class BytesConverter : ICborConverter
         CborReader reader = CborSerializer.CreateReader(data);
         CborTagUtils.ReadAndVerifyTag<T>(reader);
 
-        byte[] value = [];
+        ReadOnlyMemory<byte> value = new();
 
         if (reader.PeekState() == CborReaderState.StartIndefiniteLengthByteString)
         {
             reader.ReadStartIndefiniteLengthByteString();
 
-            List<byte[]> chunks = [];
+            List<ReadOnlyMemory<byte>> chunks = [];
             while (reader.PeekState() != CborReaderState.EndIndefiniteLengthByteString) chunks.Add(reader.ReadByteString());
             reader.ReadEndIndefiniteLengthByteString();
 
-            value = [.. chunks.SelectMany(x => x)];
+            value = new ReadOnlyMemory<byte>(chunks.SelectMany(x => x.ToArray()).ToArray());
         }
         else
         {
