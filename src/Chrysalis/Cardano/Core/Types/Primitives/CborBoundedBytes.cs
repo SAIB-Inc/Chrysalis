@@ -6,4 +6,4 @@ namespace Chrysalis.Cardano.Core.Types.Primitives;
 
 [CborConverter(typeof(BytesConverter))]
 [CborSize(64)]
-public record CborBoundedBytes(byte[] Value) : CborBase;
+public record CborBoundedBytes(ReadOnlyMemory<byte> Value) : CborBase;

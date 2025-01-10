@@ -51,21 +51,21 @@ public static class AuxiliaryDataExtension
     public static IEnumerable<byte[]>? PlutusV1Scripts(this AuxiliaryData auxiliaryData)
         => auxiliaryData switch
         {
-            PostAlonzoAuxiliaryDataMap post => post.PlutusV1ScriptSet?.Value.Select(script => script.Value),
+            PostAlonzoAuxiliaryDataMap post => post.PlutusV1ScriptSet?.Value.Select(script => script.Value.ToArray()),
             _ => null
         };
 
     public static IEnumerable<byte[]>? PlutusV2Scripts(this AuxiliaryData auxiliaryData)
         => auxiliaryData switch
         {
-            PostAlonzoAuxiliaryDataMap post => post.PlutusV2ScriptSet?.Value.Select(script => script.Value),
+            PostAlonzoAuxiliaryDataMap post => post.PlutusV2ScriptSet?.Value.Select(script => script.Value.ToArray()),
             _ => null
         };
 
     public static IEnumerable<byte[]>? PlutusV3Scripts(this AuxiliaryData auxiliaryData)
         => auxiliaryData switch
         {
-            PostAlonzoAuxiliaryDataMap post => post.PlutusV3ScriptSet?.Value.Select(script => script.Value),
+            PostAlonzoAuxiliaryDataMap post => post.PlutusV3ScriptSet?.Value.Select(script => script.Value.ToArray()),
             _ => null
         };
 

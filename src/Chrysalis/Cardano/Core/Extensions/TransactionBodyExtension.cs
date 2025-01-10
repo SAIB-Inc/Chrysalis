@@ -84,18 +84,18 @@ public static class TransactionBodyExtension
     public static byte[]? AuxiliaryDataHash(this TransactionBody transactionBody)
         => transactionBody switch
         {
-            ConwayTransactionBody x => x.AuxiliaryDataHash?.Value,
-            BabbageTransactionBody x => x.AuxiliaryDataHash?.Value,
-            AlonzoTransactionBody x => x.AuxiliaryDataHash?.Value,
+            ConwayTransactionBody x => x.AuxiliaryDataHash?.Value.ToArray(),
+            BabbageTransactionBody x => x.AuxiliaryDataHash?.Value.ToArray(),
+            AlonzoTransactionBody x => x.AuxiliaryDataHash?.Value.ToArray(),
             _ => null
         };
 
     public static Dictionary<byte[], TokenBundleMint>? Mint(this TransactionBody transactionBody)
         => transactionBody switch
         {
-            ConwayTransactionBody x => x.Mint?.Value.ToDictionary(kvp => kvp.Key.Value, kvp => kvp.Value),
-            BabbageTransactionBody x => x.Mint?.Value.ToDictionary(kvp => kvp.Key.Value, kvp => kvp.Value),
-            AlonzoTransactionBody x => x.Mint?.Value.ToDictionary(kvp => kvp.Key.Value, kvp => kvp.Value),
+            ConwayTransactionBody x => x.Mint?.Value.ToDictionary(kvp => kvp.Key.Value.ToArray(), kvp => kvp.Value),
+            BabbageTransactionBody x => x.Mint?.Value.ToDictionary(kvp => kvp.Key.Value.ToArray(), kvp => kvp.Value),
+            AlonzoTransactionBody x => x.Mint?.Value.ToDictionary(kvp => kvp.Key.Value.ToArray(), kvp => kvp.Value),
             _ => []
         };
 }

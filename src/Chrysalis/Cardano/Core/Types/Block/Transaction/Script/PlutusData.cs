@@ -38,15 +38,15 @@ public record PlutusUint64(ulong Value) : PlutusInt;
 [CborConverter(typeof(BytesConverter))]
 [CborSize(64)]
 [CborTag(2)]
-public record PlutusBigUint(byte[] Value) : PlutusBigInt;
+public record PlutusBigUint(ReadOnlyMemory<byte> Value) : PlutusBigInt;
 
 
 [CborConverter(typeof(BytesConverter))]
 [CborSize(64)]
 [CborTag(3)]
-public record PlutusBigNint(byte[] Value) : PlutusBigInt;
+public record PlutusBigNint(ReadOnlyMemory<byte> Value) : PlutusBigInt;
 
 
 [CborConverter(typeof(BytesConverter))]
 [CborSize(64)]
-public record PlutusBoundedBytes(byte[] Value) : PlutusData;
+public record PlutusBoundedBytes(ReadOnlyMemory<byte> Value) : PlutusData;

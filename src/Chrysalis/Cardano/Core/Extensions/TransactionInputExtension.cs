@@ -5,7 +5,7 @@ namespace Chrysalis.Cardano.Core.Extensions;
 public static class TransactionInputExtension
 {
     public static string TransactionId(this TransactionInput transactionInput)
-        => Convert.ToHexString(transactionInput.TransactionId.Value).ToLowerInvariant();
+        => Convert.ToHexString(transactionInput.TransactionId.Value.ToArray()).ToLowerInvariant();
 
     public static ulong Index(this TransactionInput transactionInput)
         => transactionInput.Index.Value;

@@ -110,18 +110,18 @@ public static class TransactionWitnessSetExtension
         {
             AlonzoTransactionWitnessSet x => x.PlutusV1ScriptSet switch
             {
-                CborDefList<CborBytes> list => list.Value.Select(x => x.Value).ToList(),
-                CborIndefList<CborBytes> list => list.Value.Select(x => x.Value).ToList(),
-                CborDefListWithTag<CborBytes> list => list.Value.Select(x => x.Value).ToList(),
-                CborIndefListWithTag<CborBytes> list => list.Value.Select(x => x.Value).ToList(),
+                CborDefList<CborBytes> list => list.Value.Select(x => x.Value.ToArray()).ToList(),
+                CborIndefList<CborBytes> list => list.Value.Select(x => x.Value.ToArray()).ToList(),
+                CborDefListWithTag<CborBytes> list => list.Value.Select(x => x.Value.ToArray()).ToList(),
+                CborIndefListWithTag<CborBytes> list => list.Value.Select(x => x.Value.ToArray()).ToList(),
                 _ => []
             },
             PostAlonzoTransactionWitnessSet x => x.PlutusV1ScriptSet switch
             {
-                CborDefList<CborBytes> list => list.Value.Select(x => x.Value).ToList(),
-                CborIndefList<CborBytes> list => list.Value.Select(x => x.Value).ToList(),
-                CborDefListWithTag<CborBytes> list => list.Value.Select(x => x.Value).ToList(),
-                CborIndefListWithTag<CborBytes> list => list.Value.Select(x => x.Value).ToList(),
+                CborDefList<CborBytes> list => list.Value.Select(x => x.Value.ToArray()).ToList(),
+                CborIndefList<CborBytes> list => list.Value.Select(x => x.Value.ToArray()).ToList(),
+                CborDefListWithTag<CborBytes> list => list.Value.Select(x => x.Value.ToArray()).ToList(),
+                CborIndefListWithTag<CborBytes> list => list.Value.Select(x => x.Value.ToArray()).ToList(),
                 _ => []
             },
             _ => []
@@ -132,10 +132,10 @@ public static class TransactionWitnessSetExtension
         {
             PostAlonzoTransactionWitnessSet x => x.PlutusV2ScriptSet switch
             {
-                CborDefList<CborBytes> list => list.Value.Select(x => x.Value).ToList(),
-                CborIndefList<CborBytes> list => list.Value.Select(x => x.Value).ToList(),
-                CborDefListWithTag<CborBytes> list => list.Value.Select(x => x.Value).ToList(),
-                CborIndefListWithTag<CborBytes> list => list.Value.Select(x => x.Value).ToList(),
+                CborDefList<CborBytes> list => list.Value.Select(x => x.Value.ToArray()).ToList(),
+                CborIndefList<CborBytes> list => list.Value.Select(x => x.Value.ToArray()).ToList(),
+                CborDefListWithTag<CborBytes> list => list.Value.Select(x => x.Value.ToArray()).ToList(),
+                CborIndefListWithTag<CborBytes> list => list.Value.Select(x => x.Value.ToArray()).ToList(),
                 _ => []
             },
             _ => []
@@ -146,10 +146,10 @@ public static class TransactionWitnessSetExtension
         {
             PostAlonzoTransactionWitnessSet x => x.PlutusV3ScriptSet switch
             {
-                CborDefList<CborBytes> list => list.Value.Select(x => x.Value).ToList(),
-                CborIndefList<CborBytes> list => list.Value.Select(x => x.Value).ToList(),
-                CborDefListWithTag<CborBytes> list => list.Value.Select(x => x.Value).ToList(),
-                CborIndefListWithTag<CborBytes> list => list.Value.Select(x => x.Value).ToList(),
+                CborDefList<CborBytes> list => list.Value.Select(x => x.Value.ToArray()).ToList(),
+                CborIndefList<CborBytes> list => list.Value.Select(x => x.Value.ToArray()).ToList(),
+                CborDefListWithTag<CborBytes> list => list.Value.Select(x => x.Value.ToArray()).ToList(),
+                CborIndefListWithTag<CborBytes> list => list.Value.Select(x => x.Value.ToArray()).ToList(),
                 _ => []
             },
             _ => []

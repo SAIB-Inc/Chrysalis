@@ -38,8 +38,8 @@ public static class TransactionOutputExtension
     public static byte[]? AddressValue(this TransactionOutput transactionOutput)
         => transactionOutput switch
         {
-            PostAlonzoTransactionOutput e => e.Address.Value,
-            AlonzoTransactionOutput e => e.Address.Value,
+            PostAlonzoTransactionOutput e => e.Address.Value.ToArray(),
+            AlonzoTransactionOutput e => e.Address.Value.ToArray(),
             _ => null
         };
 
@@ -65,12 +65,12 @@ public static class TransactionOutputExtension
             AlonzoTransactionOutput a => a.DatumHash switch
             {
                 null => (DatumType.None, null),
-                _ => (DatumType.Hash, a.DatumHash.Value)
+                _ => (DatumType.Hash, a.DatumHash.Value.ToArray())
             },
             PostAlonzoTransactionOutput b => b.Datum switch
             {
                 InlineDatumOption inline => (DatumType.Inline, inline.Data.Value),
-                DatumHashOption hash => (DatumType.Hash, hash.DatumHash.Value),
+                DatumHashOption hash => (DatumType.Hash, hash.DatumHash.Value.ToArray()),
                 _ => (DatumType.None, null)
             },
             _ => (DatumType.None, null)

@@ -26,10 +26,11 @@ public class NullableConverter : ICborConverter
         }
         else
         {
+            byte[] dataValue = data.ToArray();
             value = typeof(CborSerializer)
                 .GetMethod(nameof(CborSerializer.Deserialize))!
                 .MakeGenericMethod(valueType)
-                .Invoke(null, [data])
+                .Invoke(null, [dataValue])
                 ?? throw new InvalidOperationException($"Deserialization returned null for type {valueType.Name} at {typeof(T).Name}.");
         }
 

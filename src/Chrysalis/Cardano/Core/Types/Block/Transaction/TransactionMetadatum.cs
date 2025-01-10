@@ -22,7 +22,7 @@ public record MetadatumList(
 
 
 [CborConverter(typeof(BytesConverter))]
-public record MetadatumBytes(byte[] Value) : TransactionMetadatum;
+public record MetadatumBytes(ReadOnlyMemory<byte> Value) : TransactionMetadatum;
 
 
 [CborConverter(typeof(TextConverter))]

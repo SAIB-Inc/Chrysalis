@@ -7,7 +7,7 @@ public static class DatumExtension
     public static byte[]? DatumHash(this DatumOption? datumOption)
         => datumOption switch
         {
-            DatumHashOption hashOption => hashOption.DatumHash.Value,
+            DatumHashOption hashOption => hashOption.DatumHash.Value.ToArray(),
             InlineDatumOption => null,
             _ => null
         };

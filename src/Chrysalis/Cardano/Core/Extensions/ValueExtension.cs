@@ -24,7 +24,7 @@ public static class ValueExtension
         => value switch
         {
             LovelaceWithMultiAsset lovelaceWithMultiAsset => lovelaceWithMultiAsset.MultiAsset.Value
-                .ToDictionary(kvp => Convert.ToHexString(kvp.Key.Value).ToLowerInvariant(), kvp => kvp.Value),
+                .ToDictionary(kvp => Convert.ToHexString(kvp.Key.Value.ToArray()).ToLowerInvariant(), kvp => kvp.Value),
             _ => null
         };
 
