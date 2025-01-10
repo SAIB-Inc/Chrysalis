@@ -55,28 +55,28 @@ public class ConstrConverter : ICborConverter
         return instance;
     }
 
-
     public byte[] Serialize(CborBase value)
     {
         Type type = value.GetType();
         int index = type.GetCustomAttribute<CborIndexAttribute>()?.Index ?? 0;
-
         bool isDefinite = type.GetCustomAttribute<CborDefiniteAttribute>() != null;
 
-        PropertyInfo[] properties = [.. type.GetProperties(BindingFlags.Public | BindingFlags.Instance)
-                .Where(p => p.GetCustomAttribute<CborPropertyAttribute>() != null)
-                .OrderBy(p => p.GetCustomAttribute<CborPropertyAttribute>()?.PropertyName)];
+        // Get the first constructor and its parameters
+        ConstructorInfo constructor = type.GetConstructors(BindingFlags.Public | BindingFlags.Instance).First();
+        ParameterInfo[] parameters = constructor.GetParameters();
+
+        // Map parameters to properties
+        PropertyInfo?[] properties = parameters
+            .Select(param => type.GetProperty(param.Name!, BindingFlags.Public | BindingFlags.Instance | BindingFlags.IgnoreCase))
+            .Where(prop => prop != null)
+            .ToArray()!;
 
         CborWriter writer = new();
         CborTagUtils.WriteTagIfPresent(writer, type);
 
-        // Write the tag
         writer.WriteTag(GetTag(index));
-
-        // Write array start
         writer.WriteStartArray(isDefinite ? properties.Length : null);
 
-        // Serialize properties
         foreach (PropertyInfo property in properties)
         {
             object? propertyValue = property.GetValue(value);
