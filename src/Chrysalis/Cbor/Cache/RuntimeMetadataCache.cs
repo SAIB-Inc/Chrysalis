@@ -1,5 +1,7 @@
 using System.Collections.Concurrent;
 using System.Reflection;
+using Chrysalis.Cbor.Attributes;
+using Chrysalis.Cbor.Types;
 
 public static class RuntimeMetadataCache
 {
