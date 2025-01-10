@@ -17,7 +17,7 @@ public abstract record Target : CborBase;
 
 
 [CborConverter(typeof(MapConverter))]
-public record StakeCredentials(Dictionary<Credential, CborInt> Value) : Target;
+public record StakeCredentials(Dictionary<Credential, CborUlong> Value) : Target;
 
 
 [CborConverter(typeof(UlongConverter))]

@@ -13,7 +13,6 @@ namespace Chrysalis.Cardano.Core.Types.Block.Transaction.Body;
 [CborConverter(typeof(UnionConverter))]
 public abstract record TransactionBody : CborBase;
 
-
 [CborConverter(typeof(CustomMapConverter))]
 public record AlonzoTransactionBody(
     [CborProperty(0)] CborMaybeIndefList<TransactionInput> Inputs,
