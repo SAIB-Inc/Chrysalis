@@ -2,6 +2,7 @@ using Chrysalis.Cardano.Core.Types.Block.Transaction.Body.Certificates;
 using Chrysalis.Cardano.Core.Types.Block.Transaction.Governance;
 using Chrysalis.Cardano.Core.Types.Block.Transaction.Input;
 using Chrysalis.Cardano.Core.Types.Block.Transaction.Output;
+using Chrysalis.Cbor.Abstractions;
 using Chrysalis.Cbor.Attributes;
 using Chrysalis.Cbor.Converters.Primitives;
 using Chrysalis.Cbor.Types;

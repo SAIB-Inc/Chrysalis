@@ -2,9 +2,9 @@ using System.Collections.Concurrent;
 using System.Formats.Cbor;
 using System.Reflection;
 using Chrysalis.Cbor.Attributes;
-using Chrysalis.Cbor.Types;
+using Chrysalis.Cbor.Abstractions;
 
-namespace Chrysalis.Cbor.Converters;
+namespace Chrysalis.Cbor.Serializer;
 
 public static class CborSerializer
 {

@@ -1,8 +1,8 @@
 using Chrysalis.Cardano.Coinecta.Types.Common;
 using Chrysalis.Cardano.MPF.Types.Common;
+using Chrysalis.Cbor.Abstractions;
 using Chrysalis.Cbor.Attributes;
 using Chrysalis.Cbor.Converters.Primitives;
-using Chrysalis.Cbor.Types;
 
 namespace Chrysalis.Cardano.Coinecta.Types.Redeemers;
 

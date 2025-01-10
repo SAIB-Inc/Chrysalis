@@ -2,7 +2,7 @@ using System.Collections.Concurrent;
 using System.Formats.Cbor;
 using System.Reflection;
 using Chrysalis.Cbor.Attributes;
-using Chrysalis.Cbor.Types;
+using Chrysalis.Cbor.Abstractions;
 using Chrysalis.Cbor.Utils;
 
 namespace Chrysalis.Cbor.Converters.Primitives;

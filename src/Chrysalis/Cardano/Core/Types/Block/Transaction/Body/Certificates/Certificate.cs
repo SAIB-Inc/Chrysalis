@@ -1,8 +1,8 @@
 using Chrysalis.Cardano.Core.Types.Block.Transaction.Body.ProposalProcedures;
 using Chrysalis.Cardano.Core.Types.Block.Transaction.Governance;
+using Chrysalis.Cbor.Abstractions;
 using Chrysalis.Cbor.Attributes;
 using Chrysalis.Cbor.Converters.Primitives;
-using Chrysalis.Cbor.Types;
 using Chrysalis.Cbor.Types.Collections;
 using Chrysalis.Cbor.Types.Primitives;
 

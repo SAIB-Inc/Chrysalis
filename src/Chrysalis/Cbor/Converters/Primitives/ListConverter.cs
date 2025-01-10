@@ -2,8 +2,9 @@ using System.Collections;
 using System.Formats.Cbor;
 using System.Reflection;
 using Chrysalis.Cbor.Attributes;
-using Chrysalis.Cbor.Types;
+using Chrysalis.Cbor.Abstractions;
 using Chrysalis.Cbor.Utils;
+using Chrysalis.Cbor.Serializer;
 
 namespace Chrysalis.Cbor.Converters.Primitives;
 

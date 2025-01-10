@@ -1,8 +1,8 @@
 using Chrysalis.Cardano.Core.Types.Block.Transaction.Body;
 using Chrysalis.Cardano.Core.Types.Block.Transaction.WitnessSet;
+using Chrysalis.Cbor.Abstractions;
 using Chrysalis.Cbor.Attributes;
 using Chrysalis.Cbor.Converters.Primitives;
-using Chrysalis.Cbor.Types;
 using Chrysalis.Cbor.Types.Primitives;
 
 namespace Chrysalis.Cardano.Core.Types.Block.Transaction;

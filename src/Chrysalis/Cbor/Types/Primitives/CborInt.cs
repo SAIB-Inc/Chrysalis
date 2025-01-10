@@ -1,3 +1,4 @@
+using Chrysalis.Cbor.Abstractions;
 using Chrysalis.Cbor.Attributes;
 using Chrysalis.Cbor.Converters.Primitives;
 

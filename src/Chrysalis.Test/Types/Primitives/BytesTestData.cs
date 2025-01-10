@@ -2,8 +2,8 @@ using Chrysalis.Cbor.Types.Primitives;
 
 namespace Chrysalis.Test.Types.Primitives;
 
-public record InheritedBytes(byte[] Value) : CborBytes(Value);
-public record NestedInheritedBytes(byte[] Value) : InheritedBytes(Value);
+public record InheritedBytes(ReadOnlyMemory<byte> Value) : CborBytes(Value);
+public record NestedInheritedBytes(ReadOnlyMemory<byte> Value) : InheritedBytes(Value);
 
 public class BytesTestData
 {

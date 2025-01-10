@@ -1,6 +1,4 @@
-using Chrysalis.Cbor.Types;
-
-namespace Chrysalis.Cbor.Converters;
+namespace Chrysalis.Cbor.Abstractions;
 
 public interface ICborConverter
 {

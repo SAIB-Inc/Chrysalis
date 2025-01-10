@@ -1,10 +1,10 @@
 
 using Chrysalis.Cbor.Converters.Primitives;
 using Chrysalis.Cbor.Attributes;
-using Chrysalis.Cbor.Types;
 using Chrysalis.Cbor.Types.Primitives;
 using Chrysalis.Cardano.Core.Types.Block.Transaction.Protocol;
 using Chrysalis.Cardano.Core.Types.Block.Transaction.Script;
+using Chrysalis.Cbor.Abstractions;
 
 namespace Chrysalis.Cardano.Core.Types.Block.Transaction.WitnessSet;
 

@@ -1,3 +1,4 @@
+using Chrysalis.Cbor.Abstractions;
 using Chrysalis.Cbor.Types;
 using Newtonsoft.Json;
 using Xunit.Abstractions;

@@ -5,6 +5,7 @@ using Chrysalis.Cbor.Types.Collections;
 using Chrysalis.Cbor.Types;
 using Chrysalis.Cbor.Types.Primitives;
 using Chrysalis.Cardano.Jpg.Types.Common;
+using Chrysalis.Cbor.Abstractions;
 
 namespace Chrysalis.Cardano.Jpg.Types.Datums;
 

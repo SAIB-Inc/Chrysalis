@@ -1,6 +1,6 @@
+using Chrysalis.Cbor.Abstractions;
 using Chrysalis.Cbor.Attributes;
 using Chrysalis.Cbor.Converters.Primitives;
-using Chrysalis.Cbor.Types;
 using Chrysalis.Cbor.Types.Functional;
 
 namespace Chrysalis.Plutus.Types.Address;

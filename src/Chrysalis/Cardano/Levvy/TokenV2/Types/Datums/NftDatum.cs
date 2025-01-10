@@ -1,7 +1,7 @@
 using Chrysalis.Cardano.Core.Types.Primitives;
+using Chrysalis.Cbor.Abstractions;
 using Chrysalis.Cbor.Attributes;
 using Chrysalis.Cbor.Converters.Primitives;
-using Chrysalis.Cbor.Types;
 using Chrysalis.Cbor.Types.Primitives;
 using Chrysalis.Plutus.Types;
 using Chrysalis.Plutus.Types.Address;

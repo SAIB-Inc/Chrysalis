@@ -1,4 +1,4 @@
-namespace Chrysalis.Cbor.Types;
+namespace Chrysalis.Cbor.Abstractions;
 
 public interface ICbor { }
 

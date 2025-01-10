@@ -1,13 +1,11 @@
 
 using Chrysalis.Cardano.Core.Types.Block.Transaction.Script;
+using Chrysalis.Cbor.Abstractions;
 using Chrysalis.Cbor.Attributes;
 using Chrysalis.Cbor.Converters.Primitives;
-using Chrysalis.Cbor.Types;
 using Chrysalis.Cbor.Types.Primitives;
 
 namespace Chrysalis.Plutus.Types;
-
-
 
 [CborConverter(typeof(UnionConverter))]
 public abstract record Cip68<T> : CborBase;
