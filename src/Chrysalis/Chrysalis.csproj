@@ -4,7 +4,7 @@
     <TargetFramework>net9.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <Version>0.5.22</Version>
+    <Version>0.5.23</Version>
     <PackageId>Chrysalis</PackageId>
     <Authors>clark@saib.dev, rjlacanlale@saib.dev, kathea.mayol@saib.dev</Authors>
     <Company>SAIB Inc</Company>
