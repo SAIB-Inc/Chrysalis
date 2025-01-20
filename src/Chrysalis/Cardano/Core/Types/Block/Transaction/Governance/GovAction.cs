@@ -48,7 +48,7 @@ public record NoConfidence(
 public record UpdateCommittee(
     [CborProperty(0)] CborInt ActionType,
     [CborProperty(1)] CborNullable<GovActionId> GovActionId,
-    [CborProperty(2)] CborDefList<Credential> NewMembers,
+    [CborProperty(2)] CborMaybeIndefList<Credential> NewMembers,
     [CborProperty(3)] MemberTermLimits MemberTermLimits,
     [CborProperty(4)] CborRationalNumber QuorumThreshold
 ) : GovAction;
