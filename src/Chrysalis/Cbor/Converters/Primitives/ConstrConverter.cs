@@ -1,96 +1,32 @@
 using System.Formats.Cbor;
-using System.Reflection;
-using Chrysalis.Cbor.Attributes;
 using Chrysalis.Cbor.Types;
-using Chrysalis.Cbor.Utils;
 
 namespace Chrysalis.Cbor.Converters.Primitives;
 
 public class ConstrConverter : ICborConverter
 {
-    public T Deserialize<T>(byte[] data) where T : CborBase
+    public void Serialize(CborWriter writer, object value, CborOptions? options = null)
     {
-        CborReader reader = CborSerializer.CreateReader(data);
-        CborTagUtils.ReadAndVerifyTag<T>(reader);
-
-        Type targetType = typeof(T);
-
-        // Use the helper to get constructor parameters or properties
-        List<(int? Index, string Name, Type Type)> parametersOrProperties = AssemblyUtils.GetCborPropertiesOrParameters(targetType).ToList();
-
-        // Read the tag and validate it
-        CborTag tag = reader.ReadTag();
-        CborTag expectedTag = GetTag(targetType.GetCustomAttribute<CborIndexAttribute>()?.Index ?? 0);
-
-        if (tag != expectedTag)
+        object[] propertyValues = CborSerializer.GetPropertyValues(value, options?.Index ?? 0);
+        writer.WriteStartArray(options?.IsDefinite == true ? propertyValues.Length : null);
+        foreach (object propertyValue in propertyValues)
         {
-            throw new InvalidOperationException($"Expected tag {expectedTag}, got {tag}");
+            CborSerializer.Serialize(writer, propertyValue);
         }
+        writer.WriteEndArray();
+    }
 
-        // Read array start
+    public object Deserialize(CborReader reader, CborOptions? options = null)
+    {
         reader.ReadStartArray();
 
-        // Prepare arguments for constructor
-        object?[] constructorArgs = new object[parametersOrProperties.Count];
-
-        for (int i = 0; i < parametersOrProperties.Count; i++)
+        List<object> values = [];
+        while (reader.PeekState() != CborReaderState.EndArray)
         {
-            (int? Index, string Name, Type ParameterType) = parametersOrProperties[i];
-
-            // Deserialize the value
-            byte[] encodedValue = reader.ReadEncodedValue().ToArray();
-            MethodInfo deserializeMethod = typeof(CborSerializer).GetMethod(nameof(CborSerializer.Deserialize))!;
-            object? deserializedValue = deserializeMethod.MakeGenericMethod(ParameterType)
-                .Invoke(null, [encodedValue]);
-
-            constructorArgs[i] = deserializedValue;
+            object value = CborSerializer.Deserialize(reader);
+            values.Add(value);
         }
-
         reader.ReadEndArray();
-
-        // Create an instance using the resolved constructor arguments
-        T instance = (T)Activator.CreateInstance(targetType, constructorArgs)!;
-        instance.Raw = data;
-
-        return instance;
-    }
-
-    public byte[] Serialize(CborBase value)
-    {
-        Type type = value.GetType();
-        int index = type.GetCustomAttribute<CborIndexAttribute>()?.Index ?? 0;
-        bool isDefinite = type.GetCustomAttribute<CborDefiniteAttribute>() != null;
-
-        // Get the first constructor and its parameters
-        ConstructorInfo constructor = type.GetConstructors(BindingFlags.Public | BindingFlags.Instance).First();
-        ParameterInfo[] parameters = constructor.GetParameters();
-
-        // Map parameters to properties
-        PropertyInfo?[] properties = parameters
-            .Select(param => type.GetProperty(param.Name!, BindingFlags.Public | BindingFlags.Instance | BindingFlags.IgnoreCase))
-            .Where(prop => prop != null)
-            .ToArray()!;
-
-        CborWriter writer = new();
-        CborTagUtils.WriteTagIfPresent(writer, type);
-
-        writer.WriteTag(GetTag(index));
-        writer.WriteStartArray(isDefinite ? properties.Length : null);
-
-        foreach (PropertyInfo property in properties)
-        {
-            object? propertyValue = property.GetValue(value);
-            byte[] serialized = CborSerializer.Serialize((CborBase)propertyValue!);
-            writer.WriteEncodedValue(serialized);
-        }
-
-        writer.WriteEndArray();
-        return writer.Encode();
-    }
-
-    private static CborTag GetTag(int index)
-    {
-        int finalIndex = index > 6 ? 1280 - 7 : 121;
-        return (CborTag)(finalIndex + index);
+        return values.ToArray();
     }
 }
