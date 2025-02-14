@@ -10,14 +10,6 @@ namespace Chrysalis.Cbor.Converters;
 
 public static class CborSerializer
 {
-    private static readonly Lazy<ChrysalisRegistry> _registry = new(() =>
-    {
-        var registry = new ChrysalisRegistry();
-        registry.InitializeRegistry();
-        return registry;
-    }, LazyThreadSafetyMode.ExecutionAndPublication);
-
-    private static ChrysalisRegistry Registry => _registry.Value;
 
     public static byte[] Serialize<T>(T value) where T : CborBase
     {
@@ -238,6 +230,32 @@ public static class CborSerializer
         }
         return propertyName.ToLowerInvariant();
     }
+
+    //     private static readonly Lazy<Registry> _registry = new(() =>
+    // {
+    //     var registry = new Registry();
+    //     registry.Initialize();
+    //     return registry;
+    // }, LazyThreadSafetyMode.ExecutionAndPublication);
+
+    //     private static Registry Registry => _registry.Value;
+    //     internal static Type[] GetConcreteTypes(Type baseType)
+    //     {
+    //         // Note: The new Registry doesn't expose Options directly, so we need to handle this differently
+    //         var allTypes = TypeScanner.GetCborTypes()
+    //             .Where(t => baseType.IsAssignableFrom(t) && !t.IsAbstract)
+    //             .ToArray();
+    //         return allTypes;
+    //     }
+
+    private static readonly Lazy<ChrysalisRegistry> _registry = new(() =>
+    {
+        var registry = new ChrysalisRegistry();
+        registry.InitializeRegistry();
+        return registry;
+    }, LazyThreadSafetyMode.ExecutionAndPublication);
+
+    private static ChrysalisRegistry Registry => _registry.Value;
 
     internal static Type[] GetConcreteTypes(Type baseType)
     {
