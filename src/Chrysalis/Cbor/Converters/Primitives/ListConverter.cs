@@ -9,10 +9,14 @@ public class ListConverter : ICborConverter
     public object Deserialize(CborReader reader, CborOptions? options = null)
     {
         reader.ReadStartArray();
-        List<object> list = [];
+        List<object?> list = [];
+        Type underlyingType = options?.ActivatorType?.GetGenericArguments()[0] ??
+            throw new InvalidOperationException("Underlying type not specified in options");
+        CborOptions underlyingOptions = CborSerializer.GetOptions(underlyingType) ??
+            throw new InvalidOperationException("Underlying options not found");
         while (reader.PeekState() != CborReaderState.EndArray)
         {
-            object item = CborSerializer.Deserialize(reader);
+            object? item = CborSerializer.Deserialize(reader, underlyingOptions);
             list.Add(item);
         }
         reader.ReadEndArray();

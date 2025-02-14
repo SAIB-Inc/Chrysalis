@@ -1,135 +1,128 @@
-using System.Formats.Cbor;
-using System.Reflection;
-using Chrysalis.Cbor.Attributes;
 using Chrysalis.Cbor.Types;
-using Chrysalis.Cbor.Utils;
 
 namespace Chrysalis.Cbor.Converters.Primitives;
+
+using System.Formats.Cbor;
 
 public class CustomMapConverter : ICborConverter
 {
     public object Deserialize(CborReader reader, CborOptions? options = null)
     {
-        // CborReader reader = CborSerializer.CreateReader(data);
-        // CborTagUtils.ReadAndVerifyTag<T>(reader);
+        reader.ReadStartMap();
+        Dictionary<object, object> values = [];
 
-        // Type targetType = typeof(T);
+        // Determine if we're using string or integer keys based on options
+        bool useStringKeys = options?.PropertyNameTypes?.Count > 0;
+        int maxProperties = options?.Size ?? int.MaxValue;
+        int propertiesRead = 0;
 
-        // // Get properties with their CBOR property names
-        // List<(int? Index, string Name, Type Type)> parametersOrProperties = AssemblyUtils.GetCborPropertiesOrParameters(targetType).ToList();
-        // object?[] constructorArgs = new object[parametersOrProperties.Count];
+        while (reader.PeekState() != CborReaderState.EndMap && propertiesRead < maxProperties)
+        {
+            // Determine the key and its type based on the reader state
+            object? key;
+            Type? keyType;
+            Type? valueType;
 
-        // // Create mappings for both string and integer keys
-        // Dictionary<string, int> stringKeyMap = parametersOrProperties
-        //     .Select((prop, index) => (prop.Name, index))
-        //     .Where(x => !string.IsNullOrEmpty(x.Name))  // Only include non-empty property names
-        //     .ToDictionary(x => x.Name, x => x.index);
+            if (useStringKeys)
+            {
+                key = reader.ReadTextString();
 
-        // Dictionary<int, int> intKeyMap = parametersOrProperties
-        //     .Select((prop, index) => (prop.Index, index))
-        //     .Where(x => x.Index.HasValue)
-        //     .ToDictionary(x => x.Index!.Value, x => x.index);
+                // Find the value type based on the string key
+                if (options?.PropertyNameTypes?.TryGetValue((string)key, out keyType) != true)
+                {
+                    reader.SkipValue(); // Skip value if key not found
+                    continue;
+                }
 
-        // // Read map start
-        // reader.ReadStartMap();
+                // Get the corresponding value type
+                valueType = options?.PropertyIndexTypes?.GetValueOrDefault(
+                    options.PropertyNameTypes.Keys.ToList().IndexOf((string)key)
+                );
+            }
+            else
+            {
+                // Handle integer keys
+                if (reader.PeekState() != CborReaderState.UnsignedInteger &&
+                    reader.PeekState() != CborReaderState.NegativeInteger)
+                {
+                    reader.SkipValue(); // Skip unexpected key
+                    reader.SkipValue(); // Skip corresponding value
+                    continue;
+                }
 
-        // // Read all key-value pairs
-        // while (reader.PeekState() != CborReaderState.EndMap)
-        // {
-        //     CborReaderState keyState = reader.PeekState();
+                key = (int)reader.ReadInt64();
 
-        //     (bool found, int index) = keyState switch
-        //     {
-        //         CborReaderState.TextString => TryReadStringKey(reader, stringKeyMap),
-        //         CborReaderState.UnsignedInteger or CborReaderState.NegativeInteger => TryReadIntKey(reader, intKeyMap),
-        //         _ => (false, -1)
-        //     };
+                // Find the value type based on the integer key
+                if (options?.PropertyIndexTypes?.TryGetValue((int)key, out valueType) != true)
+                {
+                    reader.SkipValue(); // Skip value if key not found
+                    continue;
+                }
 
-        //     if (!found)
-        //     {
-        //         throw new InvalidOperationException("Key not found in property map");
-        //     }
+                keyType = typeof(int);
+            }
 
-        //     // Deserialize the value
-        //     (int? Index, string Name, Type Type) parameterInfo = parametersOrProperties[index];
-        //     Type propertyType = parameterInfo.Type;
+            // If no value type found, skip the value
+            if (valueType == null)
+            {
+                reader.SkipValue();
+                continue;
+            }
 
-        //     byte[] encodedValue = reader.ReadEncodedValue().ToArray();
-        //     MethodInfo deserializeMethod = typeof(CborSerializer).GetMethod(nameof(CborSerializer.Deserialize))!;
-        //     object? deserializedValue = deserializeMethod.MakeGenericMethod(propertyType)
-        //         .Invoke(null, [encodedValue]);
+            // Deserialize the value
+            CborOptions valueOptions = CborSerializer.GetOptions(valueType)!;
+            object? value = CborSerializer.Deserialize(reader, valueOptions);
 
-        //     constructorArgs[index] = deserializedValue;
-        // }
+            values[key] = value!;
+            propertiesRead++;
+        }
 
-        // reader.ReadEndMap();
+        // Ensure we read the end of the map
+        while (reader.PeekState() != CborReaderState.EndMap)
+        {
+            reader.SkipValue();
+        }
+        reader.ReadEndMap();
 
-        // // Create an instance using the resolved constructor arguments
-        // T instance = (T)Activator.CreateInstance(targetType, constructorArgs)!;
-        // instance.Raw = data;
-
-        // return instance;
-
-        return new object();
+        return values;
     }
 
     public void Serialize(CborWriter writer, object value, CborOptions? options = null)
     {
-        // Type type = value.GetType();
-        // bool isDefinite = type.GetCustomAttribute<CborDefiniteAttribute>() != null;
+        // Determine if we're using string or integer keys
+        bool useStringKeys = options?.PropertyNameTypes?.Count > 0;
 
-        // // Get properties with CborProperty attribute
-        // PropertyInfo[] properties = [.. type.GetProperties(BindingFlags.Public | BindingFlags.Instance)
-        //     .Where(p => p.GetCustomAttribute<CborPropertyAttribute>() != null)];
+        // Get sorted properties
+        object[] properties = CborSerializer.GetSortedProperties(value);
 
-        // // Determine if we're using string or integer keys based on the first property
-        // CborPropertyAttribute? firstAttr = properties.FirstOrDefault()?.GetCustomAttribute<CborPropertyAttribute>();
-        // bool useStringKeys = !string.IsNullOrEmpty(firstAttr?.PropertyName);
+        // Write map start
+        writer.WriteStartMap(options?.IsDefinite == true ? properties.Length / 2 : null);
 
-        // // Order properties appropriately
-        // if (!useStringKeys)
-        // {
-        //     properties = [.. properties.OrderBy(p => p.GetCustomAttribute<CborPropertyAttribute>()!.Index)];
-        // }
+        for (int i = 0; i < properties.Length; i += 2)
+        {
+            object key = properties[i];
+            object propValue = properties[i + 1];
 
-        // CborWriter writer = new();
-        // CborTagUtils.WriteTagIfPresent(writer, type);
+            // Write key based on whether we're using string or integer keys
+            if (useStringKeys)
+            {
+                // Use the key as a string, preferring the actual property name if available
+                string keyStr = key.ToString()!;
+                writer.WriteTextString(keyStr);
+            }
+            else if (key is int intKey)
+            {
+                writer.WriteInt64(intKey);
+            }
+            else
+            {
+                throw new InvalidOperationException("Invalid key type for integer key mapping");
+            }
 
-        // writer.WriteStartMap(isDefinite ? properties.Length : null);
+            // Serialize the value
+            CborSerializer.Serialize(writer, propValue);
+        }
 
-        // foreach (PropertyInfo property in properties)
-        // {
-        //     CborPropertyAttribute? attr = property.GetCustomAttribute<CborPropertyAttribute>();
-
-        //     // Write the key (either string or integer)
-        //     if (useStringKeys)
-        //     {
-        //         writer.WriteTextString(attr?.PropertyName ?? property.Name.ToLowerInvariant());
-        //     }
-        //     else
-        //     {
-        //         writer.WriteInt64(attr?.Index ?? 0);
-        //     }
-
-        //     // Write the value
-        //     object? propertyValue = property.GetValue(value);
-        //     byte[] serialized = CborSerializer.Serialize((CborBase)propertyValue!);
-        //     writer.WriteEncodedValue(serialized);
-        // }
-
-        // writer.WriteEndMap();
-        // return writer.Encode();
+        writer.WriteEndMap();
     }
-
-    // private static (bool found, int index) TryReadStringKey(CborReader reader, Dictionary<string, int> stringKeyMap)
-    // {
-    //     string key = reader.ReadTextString();
-    //     return stringKeyMap.TryGetValue(key, out int index) ? (true, index) : (false, -1);
-    // }
-
-    // private static (bool found, int index) TryReadIntKey(CborReader reader, Dictionary<int, int> intKeyMap)
-    // {
-    //     int key = (int)reader.ReadInt64();
-    //     return intKeyMap.TryGetValue(key, out int index) ? (true, index) : (false, -1);
-    // }
 }

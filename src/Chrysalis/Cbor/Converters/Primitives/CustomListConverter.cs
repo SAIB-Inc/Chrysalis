@@ -2,41 +2,48 @@ using System.Formats.Cbor;
 using Chrysalis.Cbor.Types;
 
 namespace Chrysalis.Cbor.Converters.Primitives;
+
 public class CustomListConverter : ICborConverter
 {
     public object Deserialize(CborReader reader, CborOptions? options = null)
     {
         reader.ReadStartArray();
-        var values = new List<object>();
+        List<object> values = [];
 
-        // Read until end or max properties
-        var maxProperties = options?.Size ?? int.MaxValue;
+        // Get ordered property types from options
+        Dictionary<int, Type> propertyTypes = options?.PropertyIndexTypes ??
+            throw new InvalidOperationException("Property types not specified in options");
+
+        int maxProperties = options?.Size ?? propertyTypes.Count;
         for (int i = 0; i < maxProperties && reader.PeekState() != CborReaderState.EndArray; i++)
         {
-            var value = CborSerializer.Deserialize(reader);
-            values.Add(value);
+            // Get type and options for this index
+            if (!propertyTypes.TryGetValue(i, out Type? propertyType))
+            {
+                throw new InvalidOperationException($"No type found for index {i}");
+            }
+
+            CborOptions propertyOptions = CborSerializer.GetOptions(propertyType)!;
+            object? value = CborSerializer.Deserialize(reader, propertyOptions);
+            values.Add(value!);
         }
 
-        // Skip any remaining values if we hit max size
         while (reader.PeekState() != CborReaderState.EndArray)
         {
             reader.SkipValue();
         }
-
         reader.ReadEndArray();
         return values;
     }
 
     public void Serialize(CborWriter writer, object value, CborOptions? options = null)
     {
-        var properties = CborSerializer.GetSortedProperties(value);
+        object[] properties = CborSerializer.GetSortedProperties(value);
         writer.WriteStartArray(options?.IsDefinite == true ? properties.Length : null);
-
-        foreach (var prop in properties)
+        foreach (object prop in properties)
         {
             CborSerializer.Serialize(writer, prop);
         }
-
         writer.WriteEndArray();
     }
 }
