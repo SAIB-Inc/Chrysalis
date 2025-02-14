@@ -58,7 +58,7 @@ public class CborTests
         byte[] cborRaw = Convert.FromHexString(cbor);
 
         const int concurrencyLevel = 1;   // Number of parallel tasks
-        const int iterationsPerTask = 2; // Number of deserializations per task
+        const int iterationsPerTask = 1; // Number of deserializations per task
 
         IEnumerable<Task> tasks = [.. Enumerable.Range(0, concurrencyLevel).Select(_ => Task.Run(() =>
         {

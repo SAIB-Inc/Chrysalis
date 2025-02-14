@@ -37,8 +37,19 @@ public class ChrysalisRegistry
         Type normalizedType = NormalizeType(type);
         if (_options.TryGetValue(normalizedType, out CborOptions? options))
         {
-            options.ActivatorType = type;
-            return options;
+            // Create new instance instead of returning shared one
+            return new CborOptions(
+                Index: options.Index,
+                ConverterType: options.ConverterType,
+                IsDefinite: options.IsDefinite,
+                IsUnion: options.IsUnion,
+                ActivatorType: type,  // Use the specific type here
+                Size: options.Size,
+                Tag: options.Tag,
+                PropertyNameTypes: new Dictionary<string, Type>(options.PropertyNameTypes ?? new Dictionary<string, Type>()),
+                PropertyIndexTypes: new Dictionary<int, Type>(options.PropertyIndexTypes ?? new Dictionary<int, Type>()),
+                UnionTypes: options.UnionTypes?.ToList()
+            );
         }
         throw new InvalidOperationException($"No options registered for type {type}");
     }

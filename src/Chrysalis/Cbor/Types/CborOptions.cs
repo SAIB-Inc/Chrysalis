@@ -1,5 +1,3 @@
-using Chrysalis.Cbor.Converters;
-
 namespace Chrysalis.Cbor.Types;
 
 public record CborOptions

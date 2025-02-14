@@ -1,7 +1,6 @@
 using Chrysalis.Cardano.Core.Types.Block.Transaction.Body;
 using Chrysalis.Cardano.Core.Types.Block.Transaction.Input;
 using Chrysalis.Cardano.Core.Types.Block.Transaction.Output;
-using Chrysalis.Cardano.Core.Types.Block.Transaction.WitnessSet;
 using Chrysalis.Cbor.Types.Collections;
 
 namespace Chrysalis.Cardano.Core.Extensions;

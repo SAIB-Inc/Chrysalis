@@ -1,4 +1,3 @@
-using Chrysalis.Cardano.Core.Types.Block.Transaction.Body;
 using Chrysalis.Cardano.Core.Types.Block.Transaction.Output;
 
 namespace Chrysalis.Cardano.Core.Extensions;

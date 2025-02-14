@@ -1,29 +1,23 @@
 using System.Collections;
-using System.Collections.Concurrent;
 using System.Formats.Cbor;
 using System.Reflection;
 using Chrysalis.Cbor.Attributes;
 using Chrysalis.Cbor.Cache;
 using Chrysalis.Cbor.Types;
+using Chrysalis.Cbor.Utils;
 
 namespace Chrysalis.Cbor.Converters;
 
 public static class CborSerializer
 {
-    private static ChrysalisRegistry? _registry;
-    private static ChrysalisRegistry Registry
+    private static readonly Lazy<ChrysalisRegistry> _registry = new(() =>
     {
-        get
-        {
-            if (_registry == null)
-            {
-                _registry = new ChrysalisRegistry();
-                _registry.InitializeRegistry();
-            }
-            return _registry;
-        }
-        set => _registry = value;
-    }
+        var registry = new ChrysalisRegistry();
+        registry.InitializeRegistry();
+        return registry;
+    }, LazyThreadSafetyMode.ExecutionAndPublication);
+
+    private static ChrysalisRegistry Registry => _registry.Value;
 
     public static byte[] Serialize<T>(T value) where T : CborBase
     {
@@ -33,10 +27,10 @@ public static class CborSerializer
     public static T Deserialize<T>(byte[] data) where T : CborBase
     {
         Type type = typeof(T);
-        CborReader reader = new(data);
+        CborReader reader = CborReaderFactory.Create(data);
         CborOptions? options = Registry.GetOptions(type)
             ?? throw new InvalidOperationException($"No options registered for type {type}");
-
+        ReadAndVerifyTag(reader, options);
         // The internal method now instantiates the object.
         T instance = (T)Deserialize(reader, options)!;
         instance.Raw = data;
@@ -45,8 +39,9 @@ public static class CborSerializer
 
     internal static object? Deserialize(CborReader reader, CborOptions? options = null)
     {
-        ICborConverter converter = Registry.GetConverter(options?.ConverterType ?? throw new InvalidOperationException("No converter type"));
 
+        ICborConverter converter = Registry.GetConverter(options?.ConverterType ?? throw new InvalidOperationException("No converter type"));
+        ReadAndVerifyTag(reader, options);
         object? result = converter.Deserialize(reader, options);
         if (result == null) return null;
 
@@ -69,11 +64,6 @@ public static class CborSerializer
         Console.WriteLine($"Type: {activatorType.Name}");
         Console.WriteLine($"Parameter Count: {paramCount}");
         Console.WriteLine($"Result type: {result?.GetType()}");
-
-        if (activatorType.Name == "AlonzoTransactionBody")
-        {
-            Console.WriteLine("here");
-        }
 
         if (result != null)
         {
@@ -124,8 +114,17 @@ public static class CborSerializer
 
                 foreach (var entry in entries)
                 {
-                    newDict.Add(entry.Key, entry.Value);
+                    // Skip if key already exists instead of throwing
+                    if (!newDict.Contains(entry.Key))
+                    {
+                        newDict.Add(entry.Key, entry.Value);
+                    }
+                    else
+                    {
+                        Console.WriteLine($"Skipping duplicate key: {entry.Key}");
+                    }
                 }
+
                 return Activator.CreateInstance(activatorType, newDict);
             }
 
@@ -247,13 +246,32 @@ public static class CborSerializer
         return types;
     }
 
+    internal static ConstructorInfo[] GetConstructorInfo(Type type)
+    {
+        return Registry.GetConstructors(type);
+    }
+
     internal static object? TryDeserialize(byte[] data, Type type)
     {
-        CborOptions option = Registry.GetOptions(type);
-        option.ActivatorType = type;
-        ICborConverter converter = Registry.GetConverter(option.ConverterType!);
-        CborReader reader = new(data);
-        return converter.Deserialize(reader, option);
+        try
+        {
+            CborOptions option = Registry.GetOptions(type);
+            option.ActivatorType = type;
+            CborReader reader = CborReaderFactory.Create(data);
+
+            // Do tag verification
+            ReadAndVerifyTag(reader, option);
+
+            // Get the converter and let it handle the raw deserialization
+            // This matches the original behavior but with tag verification
+            ICborConverter converter = Registry.GetConverter(option.ConverterType!);
+            return converter.Deserialize(reader, option);
+        }
+        catch (Exception e)
+        {
+            Console.WriteLine($"Failed to deserialize as {type.FullName}: {e.Message}");
+            throw;
+        }
     }
 
     internal static CborOptions? GetOptions(Type type)
@@ -269,5 +287,20 @@ public static class CborSerializer
     internal static ICborConverter GetConverter(Type type)
     {
         return Registry.GetConverter(type);
+    }
+
+    internal static void ReadAndVerifyTag(CborReader reader, CborOptions? options = null)
+    {
+        if (reader.PeekState() == CborReaderState.Tag)
+        {
+            CborTag tag = reader.ReadTag();
+
+            if (options?.Tag is null) return;
+
+            if (tag != (CborTag)options.Tag)
+            {
+                throw new InvalidOperationException($"Expected tag {options.Tag}, got {tag}");
+            }
+        }
     }
 }
