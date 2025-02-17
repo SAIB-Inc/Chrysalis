@@ -14,19 +14,32 @@ public static class CborSerializer
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static byte[] Serialize<T>(T value) where T : CborBase
     {
-        // var writer = new CborWriter();
-        // Serialize(writer, value);
-        // return writer.ToArray();
-        throw new NotImplementedException();
+        CborWriter writer = new(CborConformanceMode.Lax);
+        CborOptions options = CborRegistry.Instance.GetOptions(typeof(T));
+        Serialize(writer, value, options);
+
+        return writer.Encode();
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     internal static void Serialize<T>(CborWriter writer, T value, CborOptions options) where T : CborBase
     {
-        // var converter = GetConverter<T>();
-        // var options = GetOptions<T>();  // Gets options from attributes
-        // converter.Write(writer, value, options);
-        throw new NotImplementedException();
+
+        Type converterType = options.ConverterType ?? throw new InvalidOperationException("No converter type specified");
+        ICborConverter converter = CborRegistry.Instance.GetConverter(converterType);
+
+        CborUtils.WriteTag(writer, options.Tag);
+        converter.Write(writer, value, options);
+
+        // _ = converter switch
+        // {
+        //     UnionConverter => UnionSerializationUtil.Write(writer, value, options),
+        //     CustomConstrConverter => CustomConstrSerializationUtil.Write(writer, value, options),
+        //     CustomListConverter => CustomListSerializationUtil.Write(writer, value, options),
+        //     CustomMapConverter => CustomMapSerializationUtil.Write(writer, value, options),
+        //     ConstrConverter => ConstrSerializationUtil.Write(writer, value, options),
+        //     _ => converter.Write(writer, value, options)
+        // };
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -50,15 +63,17 @@ public static class CborSerializer
         // First step if to check if the cbor is tagged
         CborUtils.ReadAndVerifyTag(reader, options.Tag);
 
-        object? value = converter switch
-        {
-            UnionConverter => UnionSerializationUtil.Read(reader.ReadEncodedValue(true), options),
-            CustomConstrConverter => CustomConstrSerializationUtil.Read(reader, options),
-            CustomListConverter => CustomListSerializationUtil.Read(reader, options),
-            CustomMapConverter => CustomMapSerializationUtil.Read(reader, options),
-            ConstrConverter => ConstrSerializationUtil.Read(reader, options),
-            _ => converter.Read(reader, options)
-        };
+        // object? value = converter switch
+        // {
+        //     UnionConverter => UnionSerializationUtil.Read(reader.ReadEncodedValue(true), options),
+        //     CustomConstrConverter => CustomConstrSerializationUtil.Read(reader, options),
+        //     CustomListConverter => CustomListSerializationUtil.Read(reader, options),
+        //     CustomMapConverter => CustomMapSerializationUtil.Read(reader, options),
+        //     ConstrConverter => ConstrSerializationUtil.Read(reader, options),
+        //     _ => converter.Read(reader, options)
+        // };
+
+        object? value = converter.Read(reader, options);
 
         if (options.RuntimeType is null)
             throw new InvalidOperationException("Runtime type not specified");

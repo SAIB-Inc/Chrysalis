@@ -1,10 +1,12 @@
 using System.Formats.Cbor;
+using System.Runtime.CompilerServices;
 using Chrysalis.Cbor.Serialization.Exceptions;
 
 namespace Chrysalis.Cbor.Serialization.Converters.Custom;
 
 public sealed class RationalNumberConverter : ICborConverter
 {
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public object? Read(CborReader reader, CborOptions options)
     {
         reader.ReadStartArray();
@@ -15,6 +17,7 @@ public sealed class RationalNumberConverter : ICborConverter
         return new object[] { numerator, denominator };
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void Write(CborWriter writer, object? value, CborOptions options)
     {
         if (value is not ulong[] array || array.Length != 2)

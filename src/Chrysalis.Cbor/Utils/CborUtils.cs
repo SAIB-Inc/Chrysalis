@@ -26,4 +26,11 @@ public static class CborUtils
 
         }
     }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static void WriteTag(CborWriter writer, int? tag)
+    {
+        if (tag is not null && tag >= 0)
+            writer.WriteTag((CborTag)tag);
+    }
 }
