@@ -1,6 +1,4 @@
-using System.Formats.Cbor;
 using Chrysalis.Cbor.Serialization;
-using Chrysalis.Cbor.Serialization.Registry;
 
 namespace Chrysalis.Cbor.Utils;
 
