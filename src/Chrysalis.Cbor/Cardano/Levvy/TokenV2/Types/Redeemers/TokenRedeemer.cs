@@ -1,28 +1,29 @@
 using Chrysalis.Cbor.Attributes;
-using Chrysalis.Cbor.Converters.Primitives;
+using Chrysalis.Cbor.Serialization.Converters.Custom;
+using Chrysalis.Cbor.Serialization.Converters.Primitives;
 using Chrysalis.Cbor.Types;
 
-namespace Chrysalis.Cardano.Levvy.TokenV2.Types.Redeemers;
+namespace Chrysalis.Cbor.Cardano.Levvy.TokenV2.Types.Redeemers;
 
 [CborConverter(typeof(UnionConverter))]
 public record TokenRedeemer() : CborBase;
 
 [CborConverter(typeof(ConstrConverter))]
-[CborIndex(0)]
+[CborOptions(Index = 0)]
 public record BorrowTokenAction() : TokenRedeemer;
 
 [CborConverter(typeof(ConstrConverter))]
-[CborIndex(1)]
+[CborOptions(Index = 1)]
 public record RepayTokenAction() : TokenRedeemer;
 
 [CborConverter(typeof(ConstrConverter))]
-[CborIndex(2)]
+[CborOptions(Index = 2)]
 public record ClaimTokenAction() : TokenRedeemer;
 
 [CborConverter(typeof(ConstrConverter))]
-[CborIndex(3)]
+[CborOptions(Index = 3)]
 public record ForecloseTokenAction() : TokenRedeemer;
 
 [CborConverter(typeof(ConstrConverter))]
-[CborIndex(4)]
+[CborOptions(Index = 4)]
 public record CancelTokenAction() : TokenRedeemer;
