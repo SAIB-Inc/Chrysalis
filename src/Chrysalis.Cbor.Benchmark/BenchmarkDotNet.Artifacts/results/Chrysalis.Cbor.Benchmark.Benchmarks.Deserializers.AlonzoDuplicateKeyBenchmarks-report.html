@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang='en'>
+<head>
+<meta charset='utf-8' />
+<title>Chrysalis.Cbor.Benchmark.Benchmarks.Deserializers.AlonzoDuplicateKeyBenchmarks-20250218-154635</title>
+
+<style type="text/css">
+	table { border-collapse: collapse; display: block; width: 100%; overflow: auto; }
+	td, th { padding: 6px 13px; border: 1px solid #ddd; text-align: right; }
+	tr { background-color: #fff; border-top: 1px solid #ccc; }
+	tr:nth-child(even) { background: #f8f8f8; }
+</style>
+</head>
+<body>
+<pre><code>
+BenchmarkDotNet v0.14.0, Ubuntu 22.04.3 LTS (Jammy Jellyfish) WSL
+12th Gen Intel Core i5-12400, 1 CPU, 12 logical and 6 physical cores
+.NET SDK 9.0.100
+  [Host]     : .NET 9.0.0 (9.0.24.52809), X64 RyuJIT AVX2
+  Job-BZGSBA : .NET 9.0.0 (9.0.24.52809), X64 RyuJIT AVX2
+</code></pre>
+<pre><code>IterationCount=10  MaxIterationCount=20  UnrollFactor=1  
+WarmupCount=3  
+</code></pre>
+
+<table>
+<thead><tr><th>Method</th><th>Mean</th><th>Error</th><th>StdDev</th><th>Min</th><th>Max</th><th>Code Size</th><th>Gen0</th><th>Gen1</th><th>Allocated</th>
+</tr>
+</thead><tbody><tr><td>New</td><td>13.26 ms</td><td>0.404 ms</td><td>0.267 ms</td><td>12.83 ms</td><td>13.61 ms</td><td>226 B</td><td>953.1250</td><td>437.5000</td><td>8.51 MB</td>
+</tr><tr><td>Old</td><td>36.84 ms</td><td>2.610 ms</td><td>1.726 ms</td><td>33.98 ms</td><td>39.19 ms</td><td>154 B</td><td>1454.5455</td><td>-</td><td>13.01 MB</td>
+</tr></tbody></table>
+</body>
+</html>

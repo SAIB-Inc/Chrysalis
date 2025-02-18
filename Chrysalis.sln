@@ -8,6 +8,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Chrysalis.Cbor", "src\Chrys
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Chrysalis.Test", "src\Chrysalis.Cbor.Test\Chrysalis.Test.csproj", "{B6D86DA9-6597-0A6F-88F9-740F3B44DD6A}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Chrysalis.Cbor.Benchmark", "src\Chrysalis.Cbor.Benchmark\Chrysalis.Cbor.Benchmark.csproj", "{070067AA-3F9C-FB4F-0890-CD5D5C2098E1}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -22,6 +24,10 @@ Global
 		{B6D86DA9-6597-0A6F-88F9-740F3B44DD6A}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{B6D86DA9-6597-0A6F-88F9-740F3B44DD6A}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{B6D86DA9-6597-0A6F-88F9-740F3B44DD6A}.Release|Any CPU.Build.0 = Release|Any CPU
+		{070067AA-3F9C-FB4F-0890-CD5D5C2098E1}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{070067AA-3F9C-FB4F-0890-CD5D5C2098E1}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{070067AA-3F9C-FB4F-0890-CD5D5C2098E1}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{070067AA-3F9C-FB4F-0890-CD5D5C2098E1}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -29,8 +35,9 @@ Global
 	GlobalSection(NestedProjects) = preSolution
 		{75E9FD85-74D0-AEF7-712E-4AE33F9AF441} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 		{B6D86DA9-6597-0A6F-88F9-740F3B44DD6A} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
+		{070067AA-3F9C-FB4F-0890-CD5D5C2098E1} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
-		SolutionGuid = {11F2AF25-F527-4420-A271-BBABABABB29F}
+		SolutionGuid = {561F3AAE-A6D8-4F94-88AE-58AC76DD87A0}
 	EndGlobalSection
 EndGlobal
