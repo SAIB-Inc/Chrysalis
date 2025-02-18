@@ -30,10 +30,38 @@ public sealed class CustomMapConverter : ICborConverter
 
     public void Write(CborWriter writer, List<object?> value, CborOptions options)
     {
-        writer.WriteStartMap(options.IsDefinite ? options.Size : null);
+        int count = value.Count(v => v is not null);
+        writer.WriteStartMap(options.IsDefinite ? count : null);
 
-        if (value.Count > 0)
-            CustomListSerializationUtil.Write(writer, value);
+        bool useIndexMapping = options.IndexPropertyMapping != null && options.IndexPropertyMapping.Count > 0;
+
+        // Write key-value pairs only for non-null properties
+        for (int i = 0; i < value.Count; i++)
+        {
+            object? property = value[i];
+            if (property == null) continue; // Skip null properties
+
+            // Write the key based on mapping type
+            if (useIndexMapping)
+            {
+                writer.WriteInt32(i); // Write index as key
+            }
+            else if (options.NamedPropertyMapping != null)
+            {
+                // Get property name from type's property at index i
+                string? propName = options.RuntimeType?.GetProperties()
+                    .Where(p => p.Name != "Raw")
+                    .ElementAtOrDefault(i)?.Name;
+
+                if (propName != null)
+                    writer.WriteTextString(propName); // Write name as key
+                else
+                    continue; // Skip if property name not found
+            }
+
+            // Write the property value
+            CborSerializer.Serialize(writer, property, options);
+        }
 
         writer.WriteEndMap();
     }

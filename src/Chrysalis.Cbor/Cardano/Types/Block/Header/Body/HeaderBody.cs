@@ -9,6 +9,7 @@ namespace Chrysalis.Cbor.Cardano.Types.Block.Header.Body;
 public abstract record BlockHeaderBody : CborBase;
 
 [CborConverter(typeof(CustomListConverter))]
+[CborOptions(IsDefinite = true)]
 public record AlonzoHeaderBody(
     [CborIndex(0)] CborUlong BlockNumber,
     [CborIndex(1)] CborUlong Slot,
@@ -28,6 +29,7 @@ public record AlonzoHeaderBody(
 ) : BlockHeaderBody;
 
 [CborConverter(typeof(CustomListConverter))]
+[CborOptions(IsDefinite = true)]
 public record BabbageHeaderBody(
     [CborIndex(0)] CborUlong BlockNumber,
     [CborIndex(1)] CborUlong Slot,

@@ -27,39 +27,26 @@ public sealed class MapConverter : ICborConverter
         // Expect that the first element is the dictionary.
         object? firstElement = value.First();
         if (firstElement is not IDictionary dict)
-            throw new InvalidOperationException("Expected the first element to be a dictionary");
-
-        // Get generic map types from options
-        (Type KeyType, Type ValueType) genericTypes = MapSerializationUtil.GetGenericMapTypes(options.RuntimeType?.GetConstructors().First());
+            throw new InvalidOperationException($"Expected the first element to be a dictionary, but got {firstElement?.GetType().FullName ?? "null"}");
 
         writer.WriteStartMap(options.IsDefinite ? dict.Count : null);
 
-        // Iterate over the dictionary as an IEnumerable.
-        foreach (object item in dict)
+        // Iterate over the dictionary
+        foreach (DictionaryEntry entry in dict)
         {
-            DictionaryEntry entry;
-            if (item is DictionaryEntry de)
-            {
-                entry = de;
-            }
-            else
-            {
-                // For generic dictionaries, item will be a KeyValuePair<,>
-                Type type = item.GetType();
-                var keyProp = type.GetProperty("Key");
-                var valueProp = type.GetProperty("Value");
+            if (entry.Key == null)
+                throw new InvalidOperationException("Dictionary key cannot be null");
 
-                if (keyProp == null || valueProp == null)
-                    throw new InvalidOperationException("Dictionary item does not have Key and Value properties.");
+            // Get type information from the actual objects
+            Type keyType = entry.Key.GetType();
+            Type valueType = entry.Value?.GetType() ?? typeof(object);
 
-                object key = keyProp.GetValue(item) ?? throw new InvalidOperationException("Key cannot be null");
-                object? val = valueProp.GetValue(item);
-                entry = new DictionaryEntry(key, val);
-            }
+            CborOptions keyOptions = CborRegistry.Instance.GetOptions(keyType);
+            CborOptions valueOptions = entry.Value != null
+                ? CborRegistry.Instance.GetOptions(valueType)
+                : CborOptions.Default;
 
-            CborOptions keyOptions = CborRegistry.Instance.GetOptions(genericTypes.KeyType);
-            CborOptions valueOptions = CborRegistry.Instance.GetOptions(genericTypes.ValueType);
-
+            // Serialize key and value
             CborSerializer.Serialize(writer, entry.Key, keyOptions);
             CborSerializer.Serialize(writer, entry.Value, valueOptions);
         }

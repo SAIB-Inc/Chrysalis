@@ -34,9 +34,10 @@ public static class CustomListSerializationUtil
 
     public static void Write(CborWriter writer, List<object?> propertyValues)
     {
-        if (propertyValues.Count > 0)
+        int count = propertyValues.Count(v => v is not null);
+        if (count > 0)
         {
-            for (int i = 0; i < propertyValues.Count; i++)
+            for (int i = 0; i < count; i++)
             {
                 object? propertyValue = propertyValues[i];
                 if (propertyValue is not null)

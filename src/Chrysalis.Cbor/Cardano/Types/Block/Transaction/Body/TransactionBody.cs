@@ -14,6 +14,7 @@ namespace Chrysalis.Cbor.Cardano.Types.Block.Transaction.Body;
 public abstract record TransactionBody : CborBase;
 
 [CborConverter(typeof(CustomMapConverter))]
+[CborOptions(IsDefinite = true)]
 public record AlonzoTransactionBody(
     [CborIndex(0)] CborMaybeIndefList<TransactionInput> Inputs,
     [CborIndex(1)] CborMaybeIndefList<AlonzoTransactionOutput> Outputs,
@@ -32,6 +33,7 @@ public record AlonzoTransactionBody(
 ) : TransactionBody;
 
 [CborConverter(typeof(CustomMapConverter))]
+[CborOptions(IsDefinite = true)]
 public record BabbageTransactionBody(
     [CborIndex(0)] CborMaybeIndefList<TransactionInput> Inputs,
     [CborIndex(1)] CborMaybeIndefList<TransactionOutput> Outputs,
@@ -54,6 +56,7 @@ public record BabbageTransactionBody(
 
 
 [CborConverter(typeof(CustomMapConverter))]
+[CborOptions(IsDefinite = true)]
 public record ConwayTransactionBody(
     [CborIndex(0)] CborMaybeIndefList<TransactionInput> Inputs,
     [CborIndex(1)] CborMaybeIndefList<TransactionOutput> Outputs,

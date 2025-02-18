@@ -13,6 +13,7 @@ namespace Chrysalis.Cbor.Cardano.Types.Block;
 public abstract record Block : CborBase;
 
 [CborConverter(typeof(CustomListConverter))]
+[CborOptions(IsDefinite = true)]
 public record AlonzoCompatibleBlock(
     [CborIndex(0)] BlockHeader Header,
     [CborIndex(1)] CborMaybeIndefList<AlonzoTransactionBody> TransactionBodies,
@@ -22,6 +23,7 @@ public record AlonzoCompatibleBlock(
 ) : Block;
 
 [CborConverter(typeof(CustomListConverter))]
+[CborOptions(IsDefinite = true)]
 public record BabbageBlock(
     [CborIndex(0)] BlockHeader Header,
     [CborIndex(1)] CborMaybeIndefList<BabbageTransactionBody> TransactionBodies,
@@ -31,6 +33,7 @@ public record BabbageBlock(
 ) : Block;
 
 [CborConverter(typeof(CustomListConverter))]
+[CborOptions(IsDefinite = true)]
 public record ConwayBlock(
     [CborIndex(0)] BlockHeader Header,
     [CborIndex(1)] CborMaybeIndefList<ConwayTransactionBody> TransactionBodies,

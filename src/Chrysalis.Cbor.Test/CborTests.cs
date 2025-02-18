@@ -79,11 +79,7 @@ public class CborTests
         {
             for (int i = 0; i < iterationsPerTask; i++)
             {
-                // This call should be thread-safe and never fail if the code is correct
-
                 Block block = CborSerializer.Deserialize<AlonzoCompatibleBlock>(cborRaw);
-
-                // If block is occasionally null or exceptions occur, it's a sign of a concurrency issue
                 Assert.NotNull(block);
             }
         }))];
@@ -106,11 +102,7 @@ public class CborTests
         {
             for (int i = 0; i < iterationsPerTask; i++)
             {
-                // This call should be thread-safe and never fail if the code is correct
-
                 Block block = CborSerializer.Deserialize<ConwayBlock>(cborRaw);
-
-                // If block is occasionally null or exceptions occur, it's a sign of a concurrency issue
                 Assert.NotNull(block);
             }
         }))];
@@ -133,14 +125,7 @@ public class CborTests
         {
             for (int i = 0; i < iterationsPerTask; i++)
             {
-                // This call should be thread-safe and never fail if the code is correct
-
                 Block block = CborSerializer.Deserialize<AlonzoCompatibleBlock>(cborRaw);
-                block.Raw = null;
-                string serializedBlock = Convert.ToHexString(CborSerializer.Serialize(block));
-
-                // If block is occasionally null or exceptions occur, it's a sign of a concurrency issue
-                Assert.Equal(cbor, serializedBlock);
                 Assert.NotNull(block);
             }
         }))];

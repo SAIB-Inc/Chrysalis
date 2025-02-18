@@ -11,7 +11,7 @@ public sealed class BytesConverter : ICborConverter
             return reader.ReadByteString();
 
         // Handle indefinite length
-        using var stream = new MemoryStream();
+        using MemoryStream stream = new MemoryStream();
         reader.ReadStartIndefiniteLengthByteString();
 
         while (reader.PeekState() != CborReaderState.EndIndefiniteLengthByteString)

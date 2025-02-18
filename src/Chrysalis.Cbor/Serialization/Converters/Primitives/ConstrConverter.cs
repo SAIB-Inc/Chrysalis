@@ -60,8 +60,9 @@ public sealed class ConstrConverter : ICborConverter
         CborTag resolvedTag = CborUtil.ResolveTag(tag);
         writer.WriteTag(resolvedTag);
 
-        writer.WriteStartArray(options.IsDefinite ? options.Size : null);
-        CustomListSerializationUtil.Write(writer, value);
+        int count = value.Count(v => v is not null);
+        writer.WriteStartArray(options.IsDefinite ? count : null);
+        CustomListSerializationUtil.Write(writer, [.. value.Where(v => v is not null)]);
         writer.WriteEndArray();
     }
 }

@@ -1,5 +1,4 @@
 using System.Formats.Cbor;
-using Chrysalis.Cbor.Serialization.Exceptions;
 using Chrysalis.Cbor.Utils;
 
 namespace Chrysalis.Cbor.Serialization.Converters.Custom;
@@ -13,8 +12,8 @@ public sealed class CustomListConverter : ICborConverter
 
     public void Write(CborWriter writer, List<object?> value, CborOptions options)
     {
-
-        writer.WriteStartArray(options.IsDefinite ? options.Size : null);
+        int count = value.Count(v => v is not null);
+        writer.WriteStartArray(options.IsDefinite ? count : null);
 
         if (value.Count > 0)
             CustomListSerializationUtil.Write(writer, value);

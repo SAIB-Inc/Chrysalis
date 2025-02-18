@@ -39,7 +39,9 @@ public sealed class CustomConstrConverter : ICborConverter
         int tag = Math.Max(0, options.Index);
         CborTag resolvedTag = CborUtil.ResolveTag(tag);
         writer.WriteTag(resolvedTag);
-        writer.WriteStartArray(options.IsDefinite ? options.Size : null);
+
+        int count = value.Count(v => v is not null);
+        writer.WriteStartArray(options.IsDefinite ? count : null);
 
         // Get inner type same way as read
         Type innerType = options.RuntimeType?.GetGenericArguments()[0]
@@ -47,8 +49,11 @@ public sealed class CustomConstrConverter : ICborConverter
         CborOptions innerOptions = CborRegistry.Instance.GetOptions(innerType);
 
         // Write each item
-        foreach (var item in value)
-            CborSerializer.Serialize(writer, item, innerOptions);
+        foreach (object? item in value)
+        {
+            if (item is not null)
+                CborSerializer.Serialize(writer, item, innerOptions);
+        }
 
         writer.WriteEndArray();
     }

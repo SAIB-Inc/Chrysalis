@@ -1,6 +1,9 @@
+using System.Collections;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using Chrysalis.Cbor.Attributes;
+using Chrysalis.Cbor.Serialization;
+using Chrysalis.Cbor.Serialization.Exceptions;
 
 namespace Chrysalis.Cbor.Utils;
 
@@ -91,6 +94,53 @@ public static class PropertyResolver
         return [.. obj.GetType()
             .GetProperties()
             .Where(p => p.Name != "Raw")
+            .Where(p => p is not null)
             .Select(p => p.GetValue(obj))];
+    }
+
+    public static Type GetInnerType(CborOptions options, object? value)
+    {
+        // 1. Try to extract from generic type arguments first
+        if (options.RuntimeType?.IsGenericType == true)
+        {
+            Type[] args = options.RuntimeType.GetGenericArguments();
+            if (args.Length > 0)
+                return args[0];
+        }
+
+        // 2. Try to get from constructor parameter
+        Type? paramType = options.RuntimeType
+            ?.GetConstructors().FirstOrDefault()
+            ?.GetParameters().FirstOrDefault()
+            ?.ParameterType;
+
+        if (paramType?.IsGenericType == true)
+        {
+            Type[] genericArgs = paramType.GetGenericArguments();
+            if (genericArgs.Length > 0)
+                return genericArgs[0];
+        }
+
+        // 3. For collections of simple types, use dynamic type detection from values
+        if (value != null)
+        {
+            if (value is IEnumerable enumerable)
+            {
+                foreach (object? item in enumerable)
+                {
+                    if (item != null)
+                        return item.GetType();
+                }
+            }
+            else if (value is IList<object?> list && list.Count > 0)
+            {
+                object? firstNonNull = list.FirstOrDefault(x => x != null);
+                if (firstNonNull != null)
+                    return firstNonNull.GetType();
+            }
+        }
+
+        // 4. Last resort: use object type (least specific)
+        return typeof(object);
     }
 }

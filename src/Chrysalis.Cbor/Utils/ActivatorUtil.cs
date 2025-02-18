@@ -67,10 +67,10 @@ public static class ActivatorUtil
         if (options.IndexPropertyMapping != null)
         {
             int currPropIndex = 0;
-            foreach (var mapping in options.IndexPropertyMapping)
+            foreach (KeyValuePair<int, Type> mapping in options.IndexPropertyMapping)
             {
                 int mappingKey = mapping.Key;
-                var foundValue = dict
+                object? foundValue = dict
                     .Where(kv => TryConvertKeyToInt(kv.Key, out int keyAsInt) && keyAsInt == mappingKey)
                     .Select(kv => kv.Value)
                     .FirstOrDefault();
@@ -190,7 +190,7 @@ public static class ActivatorUtil
         switch (value)
         {
             case IEnumerable<KeyValuePair<object, object?>> entries:
-                foreach (var entry in entries)
+                foreach (KeyValuePair<object, object?> entry in entries)
                 {
                     if (!dict.Contains(entry.Key))
                     {
@@ -210,7 +210,7 @@ public static class ActivatorUtil
                 break;
 
             case IEnumerable enumerable:
-                foreach (var item in enumerable)
+                foreach (object? item in enumerable)
                 {
                     if (item is KeyValuePair<object, object> kvp)
                     {

@@ -1,5 +1,6 @@
 using System.Formats.Cbor;
 using System.Runtime.CompilerServices;
+using Chrysalis.Cbor.Serialization.Exceptions;
 using Chrysalis.Cbor.Serialization.Registry;
 using Chrysalis.Cbor.Types;
 using Chrysalis.Cbor.Utils;
@@ -24,17 +25,25 @@ public static class CborSerializer
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     internal static void Serialize(CborWriter writer, object? value, CborOptions options)
     {
-        if (value is null)
-            throw new InvalidOperationException("Value cannot be null");
+        try
+        {
+            if (value is null)
+                throw new InvalidOperationException("Value cannot be null");
 
-        Type resolvedType = value.GetType();
-        CborOptions resolvedOptions = CborRegistry.Instance.GetOptions(resolvedType);
-        Type converterType = resolvedOptions.ConverterType ?? throw new InvalidOperationException("No converter type specified");
-        ICborConverter converter = CborRegistry.Instance.GetConverter(converterType);
-        List<object?> filteredProperties = PropertyResolver.GetFilteredProperties(value);
-        resolvedOptions.RuntimeType = resolvedType;
-        CborUtil.WriteTag(writer, options.Tag);
-        converter.Write(writer, filteredProperties, options);
+            Type resolvedType = value.GetType();
+            CborOptions resolvedOptions = CborRegistry.Instance.GetOptions(resolvedType);
+            Type converterType = resolvedOptions.ConverterType ?? throw new InvalidOperationException("No converter type specified");
+            ICborConverter converter = CborRegistry.Instance.GetConverter(converterType);
+            List<object?> filteredProperties = PropertyResolver.GetFilteredProperties(value);
+            resolvedOptions.RuntimeType = resolvedType;
+            CborUtil.WriteTag(writer, options.Tag);
+            converter.Write(writer, filteredProperties, options);
+        }
+        catch (Exception e)
+        {
+            //throw new Exception($"Failed to serialize object with value {value}, options: {options}", e);
+            throw;
+        }
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
