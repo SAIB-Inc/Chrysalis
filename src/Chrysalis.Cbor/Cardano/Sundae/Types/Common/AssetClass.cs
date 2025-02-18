@@ -1,10 +1,10 @@
 using Chrysalis.Cbor.Attributes;
-using Chrysalis.Cbor.Converters.Primitives;
+using Chrysalis.Cbor.Serialization.Converters.Custom;
+using Chrysalis.Cbor.Serialization.Converters.Primitives;
 using Chrysalis.Cbor.Types;
 using Chrysalis.Cbor.Types.Primitives;
 
-namespace Chrysalis.Cardano.Sundae.Types.Common;
-
+namespace Chrysalis.Cbor.Cardano.Sundae.Types.Common;
 
 [CborConverter(typeof(UnionConverter))]
 public abstract record AssetClass : CborBase;
@@ -13,10 +13,8 @@ public abstract record AssetClass : CborBase;
 public record AssetClassIndefinite(List<CborBytes> Value) : AssetClass;
 
 [CborConverter(typeof(ListConverter))]
-[CborDefinite]
+[CborOptions(IsDefinite = true)]
 public record AssetClassDefinite(List<CborBytes> Value) : AssetClass;
-
-
 
 [CborConverter(typeof(UnionConverter))]
 public abstract record AssetClassTuple : CborBase;
@@ -25,5 +23,5 @@ public abstract record AssetClassTuple : CborBase;
 public record AssetClassTupleIndef(List<AssetClass> Value) : AssetClassTuple;
 
 [CborConverter(typeof(ListConverter))]
-[CborDefinite]
+[CborOptions(IsDefinite = true)]
 public record AssetClassTupleDef(List<AssetClass> Value) : AssetClassTuple;

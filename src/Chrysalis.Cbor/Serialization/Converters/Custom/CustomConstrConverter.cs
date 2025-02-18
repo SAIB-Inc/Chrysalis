@@ -1,5 +1,6 @@
 using System.Formats.Cbor;
 using Chrysalis.Cbor.Serialization.Registry;
+using Chrysalis.Cbor.Utils;
 
 namespace Chrysalis.Cbor.Serialization.Converters.Custom;
 
@@ -32,8 +33,23 @@ public sealed class CustomConstrConverter : ICborConverter
         return items;
     }
 
-    public void Write(CborWriter writer, object? value, CborOptions options)
+    public void Write(CborWriter writer, List<object?> value, CborOptions options)
     {
+        // Write tag and start array 
+        int tag = Math.Max(0, options.Index);
+        CborTag resolvedTag = CborUtil.ResolveTag(tag);
+        writer.WriteTag(resolvedTag);
+        writer.WriteStartArray(options.IsDefinite ? options.Size : null);
 
+        // Get inner type same way as read
+        Type innerType = options.RuntimeType?.GetGenericArguments()[0]
+            ?? throw new InvalidOperationException("Runtime type is not defined in options.");
+        CborOptions innerOptions = CborRegistry.Instance.GetOptions(innerType);
+
+        // Write each item
+        foreach (var item in value)
+            CborSerializer.Serialize(writer, item, innerOptions);
+
+        writer.WriteEndArray();
     }
 }

@@ -15,12 +15,6 @@ public static class ActivatorUtil
             .OrderByDescending(c => c.GetParameters().Length)
             .FirstOrDefault() ?? throw new InvalidOperationException($"No constructor found for {targetType}");
 
-
-        if (targetType.Name == "BabbageTransactionBody")
-        {
-            Console.WriteLine();
-        }
-
         ParameterInfo[] parameters = ctor.GetParameters();
 
         object result = parameters.Length switch
@@ -70,22 +64,18 @@ public static class ActivatorUtil
         object?[] args,
     CborOptions options)
     {
-        // Handle index-based mapping (CustomMapConverter)
         if (options.IndexPropertyMapping != null)
         {
             int currPropIndex = 0;
-            foreach (var prop in options.IndexPropertyMapping)
+            foreach (var mapping in options.IndexPropertyMapping)
             {
-                if (dict.TryGetValue(prop.Key, out object? value))
-                {
-                    args[currPropIndex] = value;
-                }
-                else
-                {
-                    args[currPropIndex] = null;
-                }
+                int mappingKey = mapping.Key;
+                var foundValue = dict
+                    .Where(kv => TryConvertKeyToInt(kv.Key, out int keyAsInt) && keyAsInt == mappingKey)
+                    .Select(kv => kv.Value)
+                    .FirstOrDefault();
+                args[currPropIndex++] = foundValue;
             }
-
             return;
         }
 
@@ -123,6 +113,25 @@ public static class ActivatorUtil
 
                 args[0] = typedDict;
             }
+        }
+    }
+
+    private static bool TryConvertKeyToInt(object key, out int result)
+    {
+        if (key is int i)
+        {
+            result = i;
+            return true;
+        }
+        try
+        {
+            result = Convert.ToInt32(key);
+            return true;
+        }
+        catch
+        {
+            result = default;
+            return false;
         }
     }
 

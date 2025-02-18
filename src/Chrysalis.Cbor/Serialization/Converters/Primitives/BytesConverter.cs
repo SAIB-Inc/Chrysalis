@@ -24,9 +24,9 @@ public sealed class BytesConverter : ICborConverter
         return stream.ToArray();
     }
 
-    public void Write(CborWriter writer, object? value, CborOptions options)
+    public void Write(CborWriter writer, List<object?> value, CborOptions options)
     {
-        if (value is not byte[] v)
+        if (value.First() is not byte[] v)
             throw new CborTypeMismatchException("Value is not a byte array", typeof(byte[]));
 
         if (options.IsDefinite)

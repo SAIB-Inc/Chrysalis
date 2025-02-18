@@ -1,4 +1,5 @@
 using System.Formats.Cbor;
+using Chrysalis.Cbor.Serialization.Exceptions;
 using Chrysalis.Cbor.Serialization.Registry;
 using Chrysalis.Cbor.Utils;
 
@@ -37,8 +38,8 @@ public sealed class UnionConverter : ICborConverter
         return null; // Never reached, just for compiler
     }
 
-    public void Write(CborWriter writer, object? value, CborOptions options)
+    public void Write(CborWriter writer, List<object?> value, CborOptions options)
     {
-
+        CborSerializer.Serialize(writer, value, options);
     }
 }

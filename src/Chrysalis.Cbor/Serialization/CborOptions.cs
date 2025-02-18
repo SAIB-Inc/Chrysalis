@@ -17,7 +17,7 @@ public record CborOptions
     public IReadOnlyDictionary<int, Type>? IndexPropertyMapping { get; }
     public IReadOnlyDictionary<string, Type>? NamedPropertyMapping { get; }
     public IReadOnlyCollection<Type>? UnionTypes { get; }
-    public ConstructorInfo? Constructor { get; }
+    public ConstructorInfo? Constructor { get; set; }
 
     public CborOptions(
         int index = -1,

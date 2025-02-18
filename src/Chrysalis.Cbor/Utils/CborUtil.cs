@@ -3,7 +3,7 @@ using System.Runtime.CompilerServices;
 
 namespace Chrysalis.Cbor.Utils;
 
-public static class CborUtils
+public static class CborUtil
 {
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static CborTag ResolveTag(int index)

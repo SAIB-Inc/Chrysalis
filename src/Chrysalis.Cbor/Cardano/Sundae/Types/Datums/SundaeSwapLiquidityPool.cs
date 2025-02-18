@@ -1,36 +1,35 @@
-using Chrysalis.Cardano.Sundae.Types.Common;
 using Chrysalis.Cbor.Attributes;
-using Chrysalis.Cbor.Converters.Primitives;
+using Chrysalis.Cbor.Cardano.Sundae.Types.Common;
+using Chrysalis.Cbor.Serialization.Converters.Primitives;
 using Chrysalis.Cbor.Types;
-using Chrysalis.Cbor.Types.Functional;
 using Chrysalis.Cbor.Types.Primitives;
 
-namespace Chrysalis.Cardano.Sundae.Types.Datums;
+namespace Chrysalis.Cbor.Cardano.Sundae.Types.Datums;
 
 [CborConverter(typeof(ConstrConverter))]
-[CborIndex(0)]
+[CborOptions(Index = 0)]
 public record SundaeSwapLiquidityPool(
-    [CborProperty(0)]
+    [CborIndex(0)]
     CborBytes Identifier,
-    
-    [CborProperty(1)]
+
+    [CborIndex(1)]
     AssetClassTuple Assets,
-    
-    [CborProperty(2)]
+
+    [CborIndex(2)]
     CborUlong CirculatingLp,
-    
-    [CborProperty(3)]
+
+    [CborIndex(3)]
     CborUlong BidFeesPer10Thousand,
-    
-    [CborProperty(4)]
+
+    [CborIndex(4)]
     CborUlong AskFeesPer10Thousand,
-    
-    [CborProperty(5)]
+
+    [CborIndex(5)]
     Option<MultisigScript> FeeManager,
-    
-    [CborProperty(6)]
+
+    [CborIndex(6)]
     CborUlong MarketOpen,
-    
-    [CborProperty(7)]
+
+    [CborIndex(7)]
     CborUlong ProtocolFees
 ) : CborBase;

@@ -1,5 +1,6 @@
 using System.Formats.Cbor;
 using System.Reflection;
+using Chrysalis.Cbor.Serialization.Exceptions;
 using Chrysalis.Cbor.Serialization.Registry;
 using Chrysalis.Cbor.Utils;
 
@@ -13,7 +14,7 @@ public sealed class ConstrConverter : ICborConverter
             throw new InvalidOperationException("Constructor is expected to be tagged");
 
         int index = Math.Max(0, options.Index);
-        CborTag expectedTag = CborUtils.ResolveTag(index);
+        CborTag expectedTag = CborUtil.ResolveTag(index);
         CborTag tag = reader.ReadTag();
 
         if (tag != expectedTag)
@@ -50,8 +51,17 @@ public sealed class ConstrConverter : ICborConverter
         return constructorArgs;
     }
 
-    public void Write(CborWriter writer, object? value, CborOptions options)
+    public void Write(CborWriter writer, List<object?> value, CborOptions options)
     {
+        if (options.Constructor is null)
+            throw new CborSerializationException("Constructor cannot be null");
 
+        int tag = Math.Max(0, options.Index);
+        CborTag resolvedTag = CborUtil.ResolveTag(tag);
+        writer.WriteTag(resolvedTag);
+
+        writer.WriteStartArray(options.IsDefinite ? options.Size : null);
+        CustomListSerializationUtil.Write(writer, value);
+        writer.WriteEndArray();
     }
 }

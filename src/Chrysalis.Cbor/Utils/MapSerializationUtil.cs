@@ -39,6 +39,16 @@ public static class MapSerializationUtil
         return (genericArgs[0], genericArgs[1]);
     }
 
+    public static (Type KeyType, Type ValueType) GetGenericMapTypes(ConstructorInfo constructorInfo)
+    {
+        ParameterInfo parameter = constructorInfo.GetParameters()
+            .First(p => p.ParameterType.IsGenericType &&
+                       p.ParameterType.GetGenericTypeDefinition() == typeof(Dictionary<,>));
+
+        Type[] genericArgs = parameter.ParameterType.GetGenericArguments();
+        return (genericArgs[0], genericArgs[1]);
+    }
+
     public static object CreateMapInstance(List<KeyValuePair<object, object?>> entries, CborOptions options)
     {
         (Type KeyType, Type ValueType) genericTypes = GetGenericMapTypes(options);

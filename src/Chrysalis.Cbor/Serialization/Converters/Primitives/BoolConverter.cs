@@ -13,9 +13,9 @@ public sealed class BoolConverter : ICborConverter
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public void Write(CborWriter writer, object? value, CborOptions options)
+    public void Write(CborWriter writer, List<object?> value, CborOptions options)
     {
-        if (value is not bool v)
+        if (value.First() is not bool v)
             throw new CborTypeMismatchException("Value is not a boolean", typeof(bool));
 
         writer.WriteBoolean(v);

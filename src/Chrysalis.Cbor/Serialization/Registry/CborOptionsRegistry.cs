@@ -32,7 +32,7 @@ public sealed class CborOptionsRegistry
         CborOptionsAttribute? optionsAttr = AttributeResolver.GetInheritedAttribute<CborOptionsAttribute>(type);
         Type? converterType = AttributeResolver.ResolveConverterType(type);
         IReadOnlyCollection<Type>? unionTypes = UnionResolver.ResolveUnionTypes(type, converterType);
-        var (indexMap, namedMap, constructor) = PropertyResolvers.ResolvePropertyMappings(type);
+        var (indexMap, namedMap, constructor) = PropertyResolver.ResolvePropertyMappings(type);
 
         return new CborOptions(
             index: optionsAttr?.Index ?? -1,

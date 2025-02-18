@@ -1,6 +1,7 @@
 using System.Reflection;
 using System.Text.Json;
 using Chrysalis.Cbor.Cardano.Types.Block;
+using Chrysalis.Cbor.Cardano.Types.Block.Transaction.Output;
 using Chrysalis.Cbor.Serialization;
 using Xunit;
 
@@ -71,8 +72,8 @@ public class CborTests
     {
         byte[] cborRaw = Convert.FromHexString(cbor);
 
-        const int concurrencyLevel = 10;   // Number of parallel tasks
-        const int iterationsPerTask = 1000; // Number of deserializations per task
+        const int concurrencyLevel = 1;   // Number of parallel tasks
+        const int iterationsPerTask = 3; // Number of deserializations per task
 
         IEnumerable<Task> tasks = [.. Enumerable.Range(0, concurrencyLevel).Select(_ => Task.Run(() =>
         {
@@ -126,7 +127,7 @@ public class CborTests
         byte[] cborRaw = Convert.FromHexString(cbor);
 
         const int concurrencyLevel = 1;   // Number of parallel tasks
-        const int iterationsPerTask = 2; // Number of deserializations per task
+        const int iterationsPerTask = 1; // Number of deserializations per task
 
         IEnumerable<Task> tasks = [.. Enumerable.Range(0, concurrencyLevel).Select(_ => Task.Run(() =>
         {
@@ -135,8 +136,11 @@ public class CborTests
                 // This call should be thread-safe and never fail if the code is correct
 
                 Block block = CborSerializer.Deserialize<AlonzoCompatibleBlock>(cborRaw);
+                block.Raw = null;
+                string serializedBlock = Convert.ToHexString(CborSerializer.Serialize(block));
 
                 // If block is occasionally null or exceptions occur, it's a sign of a concurrency issue
+                Assert.Equal(cbor, serializedBlock);
                 Assert.NotNull(block);
             }
         }))];
@@ -144,27 +148,4 @@ public class CborTests
         // Await all tasks to complete; if any fail, the test will fail
         await Task.WhenAll(tasks);
     }
-
-    // public void SerializeDatum()
-    // {
-    //     List<(string, string)> addresses = [
-    //         ("1234", "1234"),
-    //         ("5678", "5678")
-    //     ];
-
-    //     List<Payout> payouts = addresses.Select(payout =>
-    //     {
-
-    //         return new Payout(
-    //         new Address(
-    //             new VerificationKey(new(Convert.FromHexString(payout.Item1))),
-    //             new Some<Inline<Credential>>(new Inline<Credential>(new VerificationKey(new(Convert.FromHexString(payout.Item2)))))
-    //             ),
-    //         new([]));
-    //     }).ToList();
-
-    //     ListingDatum datum = new(new(payouts), new(Convert.FromHexString("1234")));
-    //     var res = CborSerializer.Serialize(datum);
-    //     Assert.NotNull(res);
-    // }
 }

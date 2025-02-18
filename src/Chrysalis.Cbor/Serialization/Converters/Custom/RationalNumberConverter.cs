@@ -18,15 +18,14 @@ public sealed class RationalNumberConverter : ICborConverter
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public void Write(CborWriter writer, object? value, CborOptions options)
+    public void Write(CborWriter writer, List<object?> value, CborOptions options)
     {
-        if (value is not ulong[] array || array.Length != 2)
+        if (value.Count != 2 ||
+            value[0] is not ulong numerator ||
+            value[1] is not ulong denominator)
         {
-            throw new CborTypeMismatchException("Value is not a rational number", typeof(ulong[]));
+            throw new CborTypeMismatchException("Value is not a rational number", typeof(ulong));
         }
-
-        ulong numerator = array[0];
-        ulong denominator = array[1];
 
         writer.WriteStartArray(2);
         writer.WriteUInt64(numerator);

@@ -20,7 +20,6 @@ public sealed class CborConverterRegistry
         {
             if (Activator.CreateInstance(converterType) is ICborConverter converter)
                 _converters.TryAdd(converterType, converter);
-
         }
     }
 

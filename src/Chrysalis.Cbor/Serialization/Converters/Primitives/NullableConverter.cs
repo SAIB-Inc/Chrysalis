@@ -22,8 +22,16 @@ public sealed class NullableConverter : ICborConverter
         return CborSerializer.Deserialize(reader, innerOptions);
     }
 
-    public void Write(CborWriter writer, object? value, CborOptions options)
+    public void Write(CborWriter writer, List<object?> value, CborOptions options)
     {
-        throw new NotImplementedException();
+        if (value.First() is null)
+        {
+            writer.WriteNull();
+            return;
+        }
+
+        Type innerType = options.RuntimeType!.GetGenericArguments()[0];
+        CborOptions innerOptions = CborRegistry.Instance.GetOptions(innerType);
+        CborSerializer.Serialize(writer, value.First(), innerOptions);
     }
 }

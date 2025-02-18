@@ -28,8 +28,13 @@ public sealed class CustomMapConverter : ICborConverter
         return items;
     }
 
-    public void Write(CborWriter writer, object? value, CborOptions options)
+    public void Write(CborWriter writer, List<object?> value, CborOptions options)
     {
+        writer.WriteStartMap(options.IsDefinite ? options.Size : null);
 
+        if (value.Count > 0)
+            CustomListSerializationUtil.Write(writer, value);
+
+        writer.WriteEndMap();
     }
 }

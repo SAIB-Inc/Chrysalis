@@ -14,9 +14,9 @@ public sealed class IntConverter : ICborConverter
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public void Write(CborWriter writer, object? value, CborOptions options)
+    public void Write(CborWriter writer, List<object?> value, CborOptions options)
     {
-        if (value is not int v)
+        if (value.First() is not int v)
             throw new CborTypeMismatchException("Value is not a int", typeof(int));
 
         writer.WriteInt32(v);

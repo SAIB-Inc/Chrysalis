@@ -1,5 +1,6 @@
 using System.Formats.Cbor;
 using System.Reflection;
+using Chrysalis.Cbor.Serialization.Exceptions;
 using Chrysalis.Cbor.Serialization.Registry;
 
 namespace Chrysalis.Cbor.Serialization.Converters.Primitives;
@@ -39,8 +40,24 @@ public sealed class ListConverter : ICborConverter
         return items;
     }
 
-    public void Write(CborWriter writer, object? value, CborOptions options)
+    public void Write(CborWriter writer, List<object?> value, CborOptions options)
     {
-        throw new NotImplementedException();
+        if (value.First() is not IEnumerable<object> validValues)
+            throw new CborSerializationException("Expected List<object?>");
+
+        // Get inner type - same logic as Read
+        Type innerType = options.RuntimeType?.IsGenericType == true
+            ? options.RuntimeType.GetGenericArguments()[0]
+            : options.RuntimeType?.GetConstructors()[0].GetParameters()[0].ParameterType.GetGenericArguments()[0]
+            ?? throw new CborSerializationException("Cannot determine inner type");
+
+        CborOptions innerOptions = CborRegistry.Instance.GetOptions(innerType);
+
+        writer.WriteStartArray(options.IsDefinite ? validValues.Count() : null);
+
+        foreach (object? item in validValues)
+            CborSerializer.Serialize(writer, item, innerOptions);
+
+        writer.WriteEndArray();
     }
 }

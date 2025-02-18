@@ -31,4 +31,21 @@ public static class CustomListSerializationUtil
 
         return items;
     }
+
+    public static void Write(CborWriter writer, List<object?> propertyValues)
+    {
+        if (propertyValues.Count > 0)
+        {
+            for (int i = 0; i < propertyValues.Count; i++)
+            {
+                object? propertyValue = propertyValues[i];
+                if (propertyValue is not null)
+                {
+                    Type propertyType = propertyValue.GetType();
+                    CborOptions innerOptions = CborRegistry.Instance.GetOptions(propertyType);
+                    CborSerializer.Serialize(writer, propertyValue, innerOptions);
+                }
+            }
+        }
+    }
 }

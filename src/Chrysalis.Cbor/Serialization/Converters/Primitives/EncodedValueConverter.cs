@@ -13,9 +13,9 @@ public sealed class EncodedValueConverter : ICborConverter
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public void Write(CborWriter writer, object? value, CborOptions options)
+    public void Write(CborWriter writer, List<object?> value, CborOptions options)
     {
-        if (value is not byte[] v)
+        if (value.First() is not byte[] v)
             throw new CborTypeMismatchException("Value is not a bytes", typeof(byte[]));
 
         writer.WriteByteString(v);
