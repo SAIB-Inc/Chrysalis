@@ -41,8 +41,7 @@ public static class CborSerializer
         }
         catch (Exception e)
         {
-            //throw new Exception($"Failed to serialize object with value {value}, options: {options}", e);
-            throw;
+            throw new Exception($"Failed to serialize object with value {value}, options: {options}", e);
         }
     }
 
