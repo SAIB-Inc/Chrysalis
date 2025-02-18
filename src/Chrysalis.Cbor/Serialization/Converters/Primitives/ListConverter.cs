@@ -11,7 +11,7 @@ public sealed class ListConverter : ICborConverter
     public object? Read(CborReader reader, CborOptions options)
     {
         if (options.RuntimeType is null)
-            throw new InvalidOperationException("Runtime type not specified");
+            throw new CborDeserializationException("Runtime type not specified");
 
         Type innerType;
         if (options.RuntimeType.IsGenericType)

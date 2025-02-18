@@ -11,14 +11,14 @@ public sealed class ConstrConverter : ICborConverter
     public object? Read(CborReader reader, CborOptions options)
     {
         if (reader.PeekState() != CborReaderState.Tag)
-            throw new InvalidOperationException("Constructor is expected to be tagged");
+            throw new CborDeserializationException("Constructor is expected to be tagged");
 
         int index = Math.Max(0, options.Index);
         CborTag expectedTag = CborUtil.ResolveTag(index);
         CborTag tag = reader.ReadTag();
 
         if (tag != expectedTag)
-            throw new InvalidOperationException($"Expected tag {expectedTag} but got {tag}");
+            throw new CborDeserializationException($"Expected tag {expectedTag} but got {tag}");
 
         reader.ReadStartArray();
 
@@ -31,7 +31,7 @@ public sealed class ConstrConverter : ICborConverter
             {
                 object? result = CustomListSerializationUtil.Read(reader, options);
                 if (result is not List<object?> resultList)
-                    throw new InvalidOperationException("Expected List<object?> from CustomListSerializationUtil.Read");
+                    throw new CborDeserializationException("Expected List<object?> from CustomListSerializationUtil.Read");
                 constructorArgs.AddRange(resultList);
             }
             else

@@ -1,4 +1,5 @@
 using System.Formats.Cbor;
+using Chrysalis.Cbor.Serialization.Exceptions;
 using Chrysalis.Cbor.Serialization.Registry;
 using Chrysalis.Cbor.Utils;
 
@@ -11,13 +12,13 @@ public sealed class CustomConstrConverter : ICborConverter
         // In a custom constructor, we do not check for specific index
         // This converter is expected to only accept single list as constructor argument
         if (reader.PeekState() != CborReaderState.Tag)
-            throw new InvalidOperationException("Custom constructor is expected to be tagged");
+            throw new CborDeserializationException("Custom constructor is expected to be tagged");
 
         reader.ReadTag();
         reader.ReadStartArray();
 
         if (options.RuntimeType is null)
-            throw new InvalidOperationException("Runtime type is not defined in options.");
+            throw new CborDeserializationException("Runtime type is not defined in options.");
 
         Type innerType = options.RuntimeType.GetGenericArguments()[0];
         CborOptions innerOptions = CborRegistry.Instance.GetOptions(innerType);
@@ -45,7 +46,7 @@ public sealed class CustomConstrConverter : ICborConverter
 
         // Get inner type same way as read
         Type innerType = options.RuntimeType?.GetGenericArguments()[0]
-            ?? throw new InvalidOperationException("Runtime type is not defined in options.");
+            ?? throw new CborSerializationException("Runtime type is not defined in options.");
         CborOptions innerOptions = CborRegistry.Instance.GetOptions(innerType);
 
         // Write each item

@@ -19,9 +19,7 @@ public sealed class CustomMapConverter : ICborConverter
             (object? key, object? value) = CustomMapSerializationUtil.ReadKeyValuePair(reader, options, isIndexBased);
 
             if (key is not null)
-            {
                 items[key] = value;
-            }
         }
 
         reader.ReadEndMap();

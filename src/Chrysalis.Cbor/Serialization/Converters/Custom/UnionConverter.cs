@@ -10,7 +10,7 @@ public sealed class UnionConverter : ICborConverter
     public object? Read(CborReader reader, CborOptions options)
     {
         if (options.UnionTypes is null || options.UnionTypes.Count == 0)
-            throw new InvalidOperationException("Union types are not defined in options.");
+            throw new CborDeserializationException("Union types are not defined in options.");
 
         ReadOnlyMemory<byte> data = reader.ReadEncodedValue();
         IEnumerable<Type> concreteTypes = UnionSerializationUtil.ResolveConcreteTypes(options);

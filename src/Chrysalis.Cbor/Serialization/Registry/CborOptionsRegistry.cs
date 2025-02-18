@@ -7,6 +7,9 @@ using Chrysalis.Cbor.Utils;
 
 namespace Chrysalis.Cbor.Serialization.Registry;
 
+/// <summary>
+/// Registry for CBOR options
+/// </summary>
 public sealed class CborOptionsRegistry
 {
     private readonly ConcurrentDictionary<Type, CborOptions> _optionsCache = new();

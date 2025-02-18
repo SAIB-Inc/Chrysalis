@@ -9,7 +9,7 @@ public sealed class NullableConverter : ICborConverter
     public object? Read(CborReader reader, CborOptions options)
     {
         if (options.RuntimeType is null)
-            throw new CborException("Runtime type not specified");
+            throw new CborDeserializationException("Runtime type not specified");
 
         if (reader.PeekState() == CborReaderState.Null)
         {

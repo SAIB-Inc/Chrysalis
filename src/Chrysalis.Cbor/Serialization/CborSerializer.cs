@@ -7,9 +7,26 @@ using Chrysalis.Cbor.Utils;
 
 namespace Chrysalis.Cbor.Serialization;
 
-// Main serialization orchestrator
+/// <summary>
+/// Provides methods to serialize and deserialize objects to and from CBOR.
+/// </summary>
 public static class CborSerializer
 {
+    /// <summary>
+    /// Serializes a CborBase-derived object to a Concise Binary Object Representation (CBOR) byte array.
+    /// </summary>
+    /// <typeparam name="T">The type of object to serialize, which must inherit from CborBase.</typeparam>
+    /// <param name="value">The object instance to serialize. If this object already contains serialized data in its Raw property, that data will be returned directly.</param>
+    /// <returns>A byte array containing the CBOR-encoded representation of the object.</returns>
+    /// <remarks>
+    /// This method performs the following steps:
+    /// 1. Checks if the object already contains pre-serialized data (Raw property)
+    /// 2. If not, creates a new CborWriter with Lax conformance mode
+    /// 3. Retrieves type-specific serialization options from the CborRegistry
+    /// 4. Delegates to the appropriate serialization implementation
+    /// 5. Encodes and returns the final byte array
+    /// </remarks>
+    /// <exception cref="CborSerializationException">Thrown when an error occurs during serialization.</exception>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static byte[] Serialize<T>(T value) where T : CborBase
     {
@@ -45,6 +62,23 @@ public static class CborSerializer
         }
     }
 
+    /// <summary>
+    /// Deserializes a CBOR byte array into an object of type T.
+    /// </summary>
+    /// <typeparam name="T">The target type for deserialization, which must inherit from CborBase.</typeparam>
+    /// <param name="data">The CBOR-encoded byte array to deserialize.</param>
+    /// <returns>A deserialized instance of type T with its Raw property set to the input data.</returns>
+    /// <remarks>
+    /// This method performs the following steps:
+    /// 1. Creates a new CborReader with the provided data and Lax conformance mode
+    /// 2. Retrieves type-specific deserialization options from the CborRegistry
+    /// 3. Delegates to the appropriate deserialization implementation
+    /// 4. Casts the result to CborBase and validates it is non-null
+    /// 5. Stores the original byte array in the instance's Raw property
+    /// 6. Returns the typed instance
+    /// </remarks>
+    /// <exception cref="CborDeserializationException">Thrown when an error occurs during deserialization.</exception>
+    /// <exception cref="CborTypeMismatchException">Thrown when the deserialized type does not match the expected type.</exception>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static T Deserialize<T>(ReadOnlyMemory<byte> data) where T : CborBase
     {
@@ -62,10 +96,7 @@ public static class CborSerializer
     {
         Type converterType = options.ConverterType ?? throw new InvalidOperationException("No converter type specified");
         ICborConverter converter = CborRegistry.Instance.GetConverter(converterType);
-
-        // First step if to check if the cbor is tagged
         CborUtil.ReadAndVerifyTag(reader, options.Tag);
-
         object? value = converter.Read(reader, options);
 
         if (options.RuntimeType is null)
