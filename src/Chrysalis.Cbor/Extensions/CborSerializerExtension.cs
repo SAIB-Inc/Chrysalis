@@ -5,7 +5,7 @@ namespace Chrysalis.Cbor.Extensions;
 
 public static class CborSerializerExtensions
 {
-    public static byte[] ToCbor<T>(this T value) where T : CborBase
+    public static ReadOnlySpan<byte> ToCbor<T>(this T value) where T : CborBase
         => CborSerializer.Serialize(value);
 
     public static T FromCbor<T>(this byte[] data) where T : CborBase

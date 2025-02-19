@@ -28,7 +28,7 @@ public static class CborSerializer
     /// </remarks>
     /// <exception cref="CborSerializationException">Thrown when an error occurs during serialization.</exception>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static byte[] Serialize<T>(T value) where T : CborBase
+    public static ReadOnlySpan<byte> Serialize<T>(T value) where T : CborBase
     {
         if (value.Raw is not null) return value.Raw;
 

@@ -1,9 +1,7 @@
 using System.Collections;
 using System.Reflection;
-using System.Runtime.CompilerServices;
 using Chrysalis.Cbor.Attributes;
 using Chrysalis.Cbor.Serialization;
-using Chrysalis.Cbor.Serialization.Exceptions;
 
 namespace Chrysalis.Cbor.Utils;
 

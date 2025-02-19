@@ -1,6 +1,5 @@
 using System.Collections;
 using System.Formats.Cbor;
-using System.Reflection;
 using System.Runtime.CompilerServices;
 using Chrysalis.Cbor.Serialization.Registry;
 using Chrysalis.Cbor.Utils;
