@@ -1,4 +1,4 @@
-## .NET 9.0.0 (9.0.24.52809), X64 RyuJIT AVX2
+## .NET 9.0.1 (9.0.124.61010), X64 RyuJIT AVX2
 ```assembly
 ; Chrysalis.Cbor.Benchmark.Benchmarks.Deserializers.AlonzoBenchmarks.New()
        push      rbp
@@ -9,7 +9,7 @@
        mov       [rbp-20],rdi
        mov       dword ptr [rbp-18],0FFFFFFFF
        lea       rdi,[rbp-20]
-       call      qword ptr [7F7B0CE74AE0]
+       call      qword ptr [7F8F41704C18]
        mov       rax,[rbp-10]
        test      rax,rax
        je        short M00_L01
@@ -19,7 +19,7 @@ M00_L00:
        ret
 M00_L01:
        lea       rdi,[rbp-10]
-       call      qword ptr [7F7B0D05D2A8]
+       call      qword ptr [7F8F418CE3B8]
        jmp       short M00_L00
 ; Total bytes of code 68
 ```
@@ -35,7 +35,7 @@ M01_L00:
        ret
 M01_L01:
        xor       esi,esi
-       call      qword ptr [7F7B0CE76BC8]; System.Runtime.CompilerServices.TaskAwaiter.HandleNonSuccessAndDebuggerNotification(System.Threading.Tasks.Task, System.Threading.Tasks.ConfigureAwaitOptions)
+       call      qword ptr [7F8F41706D78]; System.Runtime.CompilerServices.TaskAwaiter.HandleNonSuccessAndDebuggerNotification(System.Threading.Tasks.Task, System.Threading.Tasks.ConfigureAwaitOptions)
        jmp       short M01_L00
 ; Total bytes of code 33
 ```
@@ -52,7 +52,7 @@ M01_L01:
        mov       rdi,rbx
        xor       edx,edx
        mov       esi,0FFFFFFFF
-       call      qword ptr [7F7B0CE76BF8]; System.Threading.Tasks.Task.InternalWaitCore(Int32, System.Threading.CancellationToken)
+       call      qword ptr [7F8F41706D90]; System.Threading.Tasks.Task.InternalWaitCore(Int32, System.Threading.CancellationToken)
 M02_L00:
        test      dword ptr [rbx+34],10000000
        jne       short M02_L03
@@ -74,21 +74,21 @@ M02_L03:
        test      eax,eax
        je        short M02_L01
        mov       rdi,rbx
-       call      qword ptr [7F7B0D05CA98]
+       call      qword ptr [7F8F418CDB30]
        jmp       short M02_L01
 M02_L04:
        test      r15b,2
        jne       short M02_L05
        mov       rdi,rbx
-       call      qword ptr [7F7B0D05D2C0]
+       call      qword ptr [7F8F418CE3D0]
 M02_L05:
        mov       rdi,rbx
-       call      qword ptr [7F7B0D05FF18]
+       call      qword ptr [7F8F418CFFC0]
        jmp       short M02_L02
 ; Total bytes of code 125
 ```
 
-## .NET 9.0.0 (9.0.24.52809), X64 RyuJIT AVX2
+## .NET 9.0.1 (9.0.124.61010), X64 RyuJIT AVX2
 ```assembly
 ; Chrysalis.Cbor.Benchmark.Benchmarks.Deserializers.AlonzoBenchmarks.Old()
        push      rbp
@@ -99,7 +99,7 @@ M02_L05:
        mov       [rbp-20],rdi
        mov       dword ptr [rbp-18],0FFFFFFFF
        lea       rdi,[rbp-20]
-       call      qword ptr [7FA20C454AE0]
+       call      qword ptr [7FA2850D4B40]
        mov       rax,[rbp-10]
        test      rax,rax
        je        short M00_L01
@@ -109,7 +109,7 @@ M00_L00:
        ret
 M00_L01:
        lea       rdi,[rbp-10]
-       call      qword ptr [7FA20D3C5020]
+       call      qword ptr [7FA286035290]
        jmp       short M00_L00
 ; Total bytes of code 68
 ```
@@ -125,7 +125,7 @@ M01_L00:
        ret
 M01_L01:
        xor       esi,esi
-       call      qword ptr [7FA20C456A60]; System.Runtime.CompilerServices.TaskAwaiter.HandleNonSuccessAndDebuggerNotification(System.Threading.Tasks.Task, System.Threading.Tasks.ConfigureAwaitOptions)
+       call      qword ptr [7FA2850D6AC0]; System.Runtime.CompilerServices.TaskAwaiter.HandleNonSuccessAndDebuggerNotification(System.Threading.Tasks.Task, System.Threading.Tasks.ConfigureAwaitOptions)
        jmp       short M01_L00
 ; Total bytes of code 33
 ```
@@ -142,7 +142,7 @@ M01_L01:
        mov       rdi,rbx
        xor       edx,edx
        mov       esi,0FFFFFFFF
-       call      qword ptr [7FA20C456A78]; System.Threading.Tasks.Task.InternalWaitCore(Int32, System.Threading.CancellationToken)
+       call      qword ptr [7FA2850D6AD8]; System.Threading.Tasks.Task.InternalWaitCore(Int32, System.Threading.CancellationToken)
 M02_L00:
        test      dword ptr [rbx+34],10000000
        jne       short M02_L03
@@ -164,16 +164,16 @@ M02_L03:
        test      eax,eax
        je        short M02_L01
        mov       rdi,rbx
-       call      qword ptr [7FA20D3C48E8]
+       call      qword ptr [7FA286034B58]
        jmp       short M02_L01
 M02_L04:
        test      r15b,2
        jne       short M02_L05
        mov       rdi,rbx
-       call      qword ptr [7FA20D3C5038]
+       call      qword ptr [7FA2860352A8]
 M02_L05:
        mov       rdi,rbx
-       call      qword ptr [7FA20D3C5AA0]
+       call      qword ptr [7FA286035A40]
        jmp       short M02_L02
 ; Total bytes of code 125
 ```

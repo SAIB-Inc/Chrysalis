@@ -1,0 +1,9 @@
+[package]
+name = "n2c-stdout"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+hex = "0.4.3"
+pallas = { path = "../../pallas" }
+tokio = { version = "1.43.0", features = ["full"] }
