@@ -14,10 +14,10 @@ public record CborOptions
     public Type? NormalizedType { get; }
     public Type? ConverterType { get; }
     public Type? RuntimeType { get; set; }
+    public ConstructorInfo? Constructor { get; set; }
     public IReadOnlyDictionary<int, Type>? IndexPropertyMapping { get; }
     public IReadOnlyDictionary<string, Type>? NamedPropertyMapping { get; }
     public IReadOnlyCollection<Type>? UnionTypes { get; }
-    public ConstructorInfo? Constructor { get; set; }
 
     public CborOptions(
         int index = -1,
