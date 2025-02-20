@@ -24,16 +24,9 @@ public sealed class UnionConverter : ICborConverter
 
                 // Create new options with the same context
                 CborOptions typeOptions = CborRegistry.Instance.GetBaseOptionsWithContext(type, options);
-                typeOptions = typeOptions with
-                {
-                    RuntimeType = type,
-                    // Pass the sliced data as original data for this attempt
-                    OriginalData = data
-                };
-
                 object? value = CborSerializer.Deserialize(innerReader, typeOptions);
-
                 typeOptions.RuntimeType = type;
+
                 return value;
             }
             catch (Exception ex)

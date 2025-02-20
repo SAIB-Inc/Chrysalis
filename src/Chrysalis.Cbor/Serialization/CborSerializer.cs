@@ -86,26 +86,27 @@ public static class CborSerializer
         CborOptions options = CborRegistry.Instance.GetBaseOptions(typeof(T));
         options.OriginalData = data;
 
-        CborBase instance = Deserialize(reader, options);
+        CborBase instance = Deserialize(reader, options, false);
         instance.Raw = data.ToArray();
 
         return (T)instance;
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    internal static CborBase Deserialize(CborReader reader, CborOptions options)
+    internal static CborBase Deserialize(CborReader reader, CborOptions options, bool readChunk = true)
     {
-        // We need to peek to determine if we're at the start of an array/map/value
-        int startingRemaining = reader.BytesRemaining;
+
+        ReadOnlyMemory<byte>? chunk = null;
+        if (readChunk)
+        {
+            chunk = reader.ReadEncodedValue(true);
+            reader = new CborReader(chunk.Value, CborConformanceMode.Lax);
+        }
 
         Type converterType = options.ConverterType ?? throw new CborDeserializationException("No converter type specified");
         ICborConverter converter = CborRegistry.Instance.GetConverter(converterType);
         CborUtil.ReadAndVerifyTag(reader, options.Tag);
         object? value = converter.Read(reader, options);
-
-        // Calculate bytes consumed for just this value
-        int endingRemaining = reader.BytesRemaining;
-        int consumedBytes = startingRemaining - endingRemaining;
 
         if (options.RuntimeType is null)
             throw new CborDeserializationException("Runtime type not specified");
@@ -114,9 +115,8 @@ public static class CborSerializer
             (CborBase)ActivatorUtil.CreateInstance(options.RuntimeType, value, options) :
             (CborBase)value!) ?? throw new CborDeserializationException("Failed to create instance of type");
 
-        // Calculate the actual offset in the original data
-        int offset = options.OriginalData.Length - startingRemaining;
-        instance.Raw = options.OriginalData.Slice(offset, consumedBytes).ToArray();
+        if (readChunk && chunk.HasValue)
+            instance.Raw = chunk;
 
         return instance;
     }
