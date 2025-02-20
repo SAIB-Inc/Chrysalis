@@ -1,6 +1,7 @@
 using System.Collections;
 using System.Formats.Cbor;
 using System.Reflection;
+using Chrysalis.Cbor.Cardano.Types.Block.Transaction.Governance;
 using Chrysalis.Cbor.Serialization;
 using Chrysalis.Cbor.Serialization.Registry;
 
@@ -19,6 +20,12 @@ public static class MapSerializationUtil
         while (reader.PeekState() != CborReaderState.EndMap)
         {
             object? key = CborSerializer.Deserialize(reader, CborRegistry.Instance.GetOptions(genericTypes.KeyType));
+
+            if (key is Voter)
+            {
+                Console.WriteLine("Voter key");
+            }
+
             object? value = CborSerializer.Deserialize(reader, CborRegistry.Instance.GetOptions(genericTypes.ValueType));
 
             if (key != null && seenKeys.Add(key))  // Add returns false if key already exists
@@ -31,35 +38,143 @@ public static class MapSerializationUtil
 
     public static (Type KeyType, Type ValueType) GetGenericMapTypes(CborOptions options)
     {
-        ParameterInfo parameter = options.Constructor!.GetParameters()
-            .First(p => p.ParameterType.IsGenericType &&
-                       p.ParameterType.GetGenericTypeDefinition() == typeof(Dictionary<,>));
+        try
+        {
+            // If RuntimeType is available, use it directly
+            if (options.RuntimeType != null)
+            {
+                return ExtractDictionaryTypes(options.RuntimeType);
+            }
 
-        Type[] genericArgs = parameter.ParameterType.GetGenericArguments();
-        return (genericArgs[0], genericArgs[1]);
+            // Try ObjectType next
+            if (options.ObjectType != null)
+            {
+                return ExtractDictionaryTypes(options.ObjectType);
+            }
+
+            // Fall back to constructor-based extraction
+            if (options.Constructor != null)
+            {
+                ParameterInfo? parameter = options.Constructor.GetParameters()
+                    .FirstOrDefault(p => p.ParameterType.IsGenericType &&
+                                   p.ParameterType.GetGenericTypeDefinition() == typeof(Dictionary<,>));
+
+                if (parameter != null)
+                {
+                    Type[] genericArgs = parameter.ParameterType.GetGenericArguments();
+                    return (genericArgs[0], genericArgs[1]);
+                }
+            }
+
+            throw new InvalidOperationException($"Cannot determine generic types from options");
+        }
+        catch (Exception ex)
+        {
+            string typeName = options.RuntimeType?.Name ?? options.ObjectType?.Name ?? "unknown";
+            throw new InvalidOperationException(
+                $"Cannot determine dictionary types for {typeName}", ex);
+        }
     }
 
-    public static (Type KeyType, Type ValueType) GetGenericMapTypes(ConstructorInfo constructorInfo)
+    private static (Type KeyType, Type ValueType) ExtractDictionaryTypes(Type type)
     {
-        ParameterInfo parameter = constructorInfo.GetParameters()
-            .First(p => p.ParameterType.IsGenericType &&
-                       p.ParameterType.GetGenericTypeDefinition() == typeof(Dictionary<,>));
+        // For direct Dictionary<K,V> type
+        if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(Dictionary<,>))
+        {
+            Type[] args = type.GetGenericArguments();
+            return (args[0], args[1]);
+        }
 
-        Type[] genericArgs = parameter.ParameterType.GetGenericArguments();
-        return (genericArgs[0], genericArgs[1]);
+        // For types that implement IDictionary<K,V>
+        foreach (Type interfaceType in type.GetInterfaces())
+        {
+            if (interfaceType.IsGenericType &&
+                interfaceType.GetGenericTypeDefinition() == typeof(IDictionary<,>))
+            {
+                Type[] args = interfaceType.GetGenericArguments();
+                return (args[0], args[1]);
+            }
+        }
+
+        // For types with a Dictionary<K,V> property - works for record types like MultiAssetOutput
+        PropertyInfo? propertyWithDictionary = type.GetProperties()
+            .FirstOrDefault(p => p.PropertyType.IsGenericType &&
+                          p.PropertyType.GetGenericTypeDefinition() == typeof(Dictionary<,>));
+
+        if (propertyWithDictionary != null)
+        {
+            Type[] args = propertyWithDictionary.PropertyType.GetGenericArguments();
+            return (args[0], args[1]);
+        }
+
+        // For record types with Dictionary constructor parameter
+        ParameterInfo? constructorWithDictionary = type.GetConstructors()
+            .SelectMany(c => c.GetParameters())
+            .FirstOrDefault(p => p.ParameterType.IsGenericType &&
+                           p.ParameterType.GetGenericTypeDefinition() == typeof(Dictionary<,>));
+
+        if (constructorWithDictionary != null)
+        {
+            Type[] args = constructorWithDictionary.ParameterType.GetGenericArguments();
+            return (args[0], args[1]);
+        }
+
+        throw new InvalidOperationException($"Type {type.Name} is not a Dictionary<,> or IDictionary<,>");
     }
 
     public static object CreateMapInstance(List<KeyValuePair<object, object?>> entries, CborOptions options)
     {
-        (Type KeyType, Type ValueType) genericTypes = GetGenericMapTypes(options);
-        Type dictType = typeof(Dictionary<,>).MakeGenericType(genericTypes.KeyType, genericTypes.ValueType);
-        IDictionary dict = (IDictionary)Activator.CreateInstance(dictType)!;
-
-        foreach (KeyValuePair<object, object?> entry in entries)
+        try
         {
-            dict.Add(entry.Key, entry.Value);
-        }
+            // Check if we're dealing with CborMap directly
+            bool isCborMap = options.ObjectType?.Name?.StartsWith("CborMap`2") == true ||
+                             options.RuntimeType?.Name?.StartsWith("CborMap`2") == true;
 
-        return options.Constructor!.Invoke([dict]);
+            if (isCborMap && entries.Count > 0)
+            {
+                // For CborMap, directly use concrete types from the first entry
+                Type keyType = entries[0].Key?.GetType() ?? typeof(object);
+                Type valueType = entries[0].Value?.GetType() ?? typeof(object);
+
+                // Create the CborMap with these concrete types
+                Type cborMapType = typeof(Chrysalis.Cbor.Types.Primitives.CborMap<,>)
+                    .MakeGenericType(keyType, valueType);
+
+                // Create dictionary with the same concrete types
+                Type dType = typeof(Dictionary<,>).MakeGenericType(keyType, valueType);
+                IDictionary d = (IDictionary)Activator.CreateInstance(dType)!;
+
+                // Add entries
+                foreach (KeyValuePair<object, object?> entry in entries)
+                {
+                    d.Add(entry.Key, entry.Value);
+                }
+
+                // Create the instance
+                return Activator.CreateInstance(cborMapType, d)!;
+            }
+
+            // Standard approach for other types
+            (Type KeyType, Type ValueType) genericTypes = GetGenericMapTypes(options);
+
+            // Create dictionary
+            Type dictType = typeof(Dictionary<,>).MakeGenericType(genericTypes.KeyType, genericTypes.ValueType);
+            IDictionary dict = (IDictionary)Activator.CreateInstance(dictType)!;
+
+            // Add entries
+            foreach (KeyValuePair<object, object?> entry in entries)
+            {
+                dict.Add(entry.Key, entry.Value);
+            }
+
+            // Invoke constructor
+            return options.Constructor!.Invoke([dict]);
+        }
+        catch (Exception ex)
+        {
+            string typeName = options.RuntimeType?.Name ?? options.ObjectType?.Name ?? "unknown";
+            throw new InvalidOperationException(
+                $"Failed to create map instance for {typeName}: {ex.Message}", ex);
+        }
     }
 }

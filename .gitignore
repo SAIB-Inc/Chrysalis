@@ -12,3 +12,4 @@
 **/bin-debug/
 **/obj-debug/
 .DS_Store
+**/target

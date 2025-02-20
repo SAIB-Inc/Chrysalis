@@ -92,7 +92,7 @@ public static class CborSerializer
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    internal static object? Deserialize(CborReader reader, CborOptions options)
+    internal static CborBase? Deserialize(CborReader reader, CborOptions options)
     {
         Type converterType = options.ConverterType ?? throw new InvalidOperationException("No converter type specified");
         ICborConverter converter = CborRegistry.Instance.GetConverter(converterType);
@@ -103,11 +103,11 @@ public static class CborSerializer
             throw new InvalidOperationException("Runtime type not specified");
 
         if (value?.GetType() == options.RuntimeType)
-            return value;
+            return (CborBase)value;
 
-        if (options.RuntimeType?.IsAbstract == false)
-            return ActivatorUtil.CreateInstance(options.RuntimeType, value, options);
+        if (!options.RuntimeType.IsAbstract)
+            return (CborBase)ActivatorUtil.CreateInstance(options.RuntimeType, value, options);
 
-        return value;
+        return (CborBase?)value;
     }
 }

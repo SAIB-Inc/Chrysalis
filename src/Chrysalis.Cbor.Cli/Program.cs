@@ -48,8 +48,8 @@ if (Console.IsInputRedirected)
             totalBlockBytesRead += bytesRead;
         }
 
-        Console.Out.WriteLine(Convert.ToHexString(blockBuffer));
-        var block = CborSerializer.Deserialize<BlockWithEra<ConwayBlock>>(blockBuffer);
-        Console.Out.WriteLine(block.Block.Slot());
+        //Console.Out.WriteLine(Convert.ToHexString(blockBuffer));
+        CborSerializer.Deserialize<BlockWithEra<Block>>(blockBuffer);
+        //Console.Out.WriteLine(block.Block.Slot());
     }
 }
