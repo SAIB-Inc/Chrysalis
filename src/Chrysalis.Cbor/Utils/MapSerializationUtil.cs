@@ -21,11 +21,6 @@ public static class MapSerializationUtil
         {
             object? key = CborSerializer.Deserialize(reader, CborRegistry.Instance.GetOptions(genericTypes.KeyType));
 
-            if (key is Voter)
-            {
-                Console.WriteLine("Voter key");
-            }
-
             object? value = CborSerializer.Deserialize(reader, CborRegistry.Instance.GetOptions(genericTypes.ValueType));
 
             if (key != null && seenKeys.Add(key))  // Add returns false if key already exists
