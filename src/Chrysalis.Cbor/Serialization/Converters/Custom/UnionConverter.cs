@@ -21,8 +21,16 @@ public sealed class UnionConverter : ICborConverter
             try
             {
                 CborReader innerReader = new(data, CborConformanceMode.Lax);
-                CborOptions typeOptions = CborRegistry.Instance.GetOptions(type);
-                typeOptions = typeOptions with { RuntimeType = type };
+
+                // Create new options with the same context
+                CborOptions typeOptions = CborRegistry.Instance.GetBaseOptionsWithContext(type, options);
+                typeOptions = typeOptions with
+                {
+                    RuntimeType = type,
+                    // Pass the sliced data as original data for this attempt
+                    OriginalData = data
+                };
+
                 object? value = CborSerializer.Deserialize(innerReader, typeOptions);
 
                 typeOptions.RuntimeType = type;

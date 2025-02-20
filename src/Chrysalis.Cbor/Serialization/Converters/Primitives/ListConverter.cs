@@ -25,7 +25,7 @@ public sealed class ListConverter : ICborConverter
             innerType = parameters.ParameterType.GetGenericArguments()[0];
         }
 
-        CborOptions innerOptions = CborRegistry.Instance.GetOptions(innerType);
+        CborOptions innerOptions = CborRegistry.Instance.GetBaseOptionsWithContext(innerType, options);
 
         reader.ReadStartArray();
 
@@ -48,7 +48,7 @@ public sealed class ListConverter : ICborConverter
 
         // Get inner type using helper method
         Type innerType = PropertyResolver.GetInnerType(options, value.First());
-        CborOptions innerOptions = CborRegistry.Instance.GetOptions(innerType);
+        CborOptions innerOptions = CborRegistry.Instance.GetBaseOptions(innerType);
 
         int count = validValues.Count(p => p is not null);
         writer.WriteStartArray(options.IsDefinite ? count : null);

@@ -18,6 +18,7 @@ public record CborOptions
     public IReadOnlyDictionary<int, Type>? IndexPropertyMapping { get; }
     public IReadOnlyDictionary<string, Type>? NamedPropertyMapping { get; }
     public IReadOnlyCollection<Type>? UnionTypes { get; }
+    public ReadOnlyMemory<byte> OriginalData { get; set; }
 
     public CborOptions(
         int index = -1,

@@ -40,7 +40,7 @@ public static class CustomListSerializationUtil
                 }
             }
 
-            CborOptions innerOptions = CborRegistry.Instance.GetOptions(innerType);
+            CborOptions innerOptions = CborRegistry.Instance.GetBaseOptionsWithContext(innerType, options);
             object? item = CborSerializer.Deserialize(reader, innerOptions);
             items.Add(item);
         }
@@ -61,7 +61,7 @@ public static class CustomListSerializationUtil
                 if (propertyValue is not null)
                 {
                     Type propertyType = propertyValue.GetType();
-                    CborOptions innerOptions = CborRegistry.Instance.GetOptions(propertyType);
+                    CborOptions innerOptions = CborRegistry.Instance.GetBaseOptions(propertyType);
                     CborSerializer.Serialize(writer, propertyValue, innerOptions);
                 }
             }

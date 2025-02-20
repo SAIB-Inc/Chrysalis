@@ -37,7 +37,7 @@ public sealed class CborRegistry
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public CborOptions GetOptions(Type type)
+    public CborOptions GetBaseOptions(Type type)
     {
         EnsureInitialized();
         CborOptions? options = _options.GetOptions(type)
@@ -48,6 +48,16 @@ public sealed class CborRegistry
             RuntimeType = type
         };
     }
+
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public CborOptions GetBaseOptionsWithContext(Type type, CborOptions contextOptions)
+    {
+        CborOptions options = GetBaseOptions(type);
+        options.OriginalData = contextOptions.OriginalData;
+        return options;
+    }
+
 
     private void EnsureInitialized()
     {

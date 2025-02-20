@@ -28,12 +28,12 @@ public static class CborSerializer
     /// </remarks>
     /// <exception cref="CborSerializationException">Thrown when an error occurs during serialization.</exception>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static byte[] Serialize<T>(T value) where T : CborBase
+    public static byte[]? Serialize<T>(T value) where T : CborBase
     {
-        if (value.Raw is not null) return value.Raw;
+        if (value.Raw is not null) return value.Raw.Value.ToArray();
 
         CborWriter writer = new(CborConformanceMode.Lax);
-        CborOptions options = CborRegistry.Instance.GetOptions(typeof(T));
+        CborOptions options = CborRegistry.Instance.GetBaseOptions(typeof(T));
         Serialize(writer, value, options);
 
         return writer.Encode();
@@ -48,7 +48,7 @@ public static class CborSerializer
                 throw new InvalidOperationException("Value cannot be null");
 
             Type resolvedType = value.GetType();
-            CborOptions resolvedOptions = CborRegistry.Instance.GetOptions(resolvedType);
+            CborOptions resolvedOptions = CborRegistry.Instance.GetBaseOptions(resolvedType);
             Type converterType = resolvedOptions.ConverterType ?? throw new InvalidOperationException("No converter type specified");
             ICborConverter converter = CborRegistry.Instance.GetConverter(converterType);
             List<object?> filteredProperties = PropertyResolver.GetFilteredProperties(value);
@@ -83,31 +83,41 @@ public static class CborSerializer
     public static T Deserialize<T>(ReadOnlyMemory<byte> data) where T : CborBase
     {
         CborReader reader = new(data, CborConformanceMode.Lax);
-        CborOptions options = CborRegistry.Instance.GetOptions(typeof(T));
-        object? deserializedValue = Deserialize(reader, options);
-        CborBase instance = (CborBase?)deserializedValue ?? throw new InvalidOperationException("Deserialized value is null");
+        CborOptions options = CborRegistry.Instance.GetBaseOptions(typeof(T));
+        options.OriginalData = data;
+
+        CborBase instance = Deserialize(reader, options);
         instance.Raw = data.ToArray();
 
         return (T)instance;
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    internal static CborBase? Deserialize(CborReader reader, CborOptions options)
+    internal static CborBase Deserialize(CborReader reader, CborOptions options)
     {
-        Type converterType = options.ConverterType ?? throw new InvalidOperationException("No converter type specified");
+        // We need to peek to determine if we're at the start of an array/map/value
+        int startingRemaining = reader.BytesRemaining;
+
+        Type converterType = options.ConverterType ?? throw new CborDeserializationException("No converter type specified");
         ICborConverter converter = CborRegistry.Instance.GetConverter(converterType);
         CborUtil.ReadAndVerifyTag(reader, options.Tag);
         object? value = converter.Read(reader, options);
 
+        // Calculate bytes consumed for just this value
+        int endingRemaining = reader.BytesRemaining;
+        int consumedBytes = startingRemaining - endingRemaining;
+
         if (options.RuntimeType is null)
-            throw new InvalidOperationException("Runtime type not specified");
+            throw new CborDeserializationException("Runtime type not specified");
 
-        if (value?.GetType() == options.RuntimeType)
-            return (CborBase)value;
+        CborBase? instance = (!options.RuntimeType.IsAbstract ?
+            (CborBase)ActivatorUtil.CreateInstance(options.RuntimeType, value, options) :
+            (CborBase)value!) ?? throw new CborDeserializationException("Failed to create instance of type");
 
-        if (!options.RuntimeType.IsAbstract)
-            return (CborBase)ActivatorUtil.CreateInstance(options.RuntimeType, value, options);
+        // Calculate the actual offset in the original data
+        int offset = options.OriginalData.Length - startingRemaining;
+        instance.Raw = options.OriginalData.Slice(offset, consumedBytes).ToArray();
 
-        return (CborBase?)value;
+        return instance;
     }
 }

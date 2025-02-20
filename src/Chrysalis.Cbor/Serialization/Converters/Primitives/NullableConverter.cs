@@ -18,7 +18,7 @@ public sealed class NullableConverter : ICborConverter
         }
 
         Type innerType = options.RuntimeType.GetGenericArguments()[0];
-        CborOptions innerOptions = CborRegistry.Instance.GetOptions(innerType);
+        CborOptions innerOptions = CborRegistry.Instance.GetBaseOptionsWithContext(innerType, options);
         return CborSerializer.Deserialize(reader, innerOptions);
     }
 
@@ -31,7 +31,7 @@ public sealed class NullableConverter : ICborConverter
         }
 
         Type innerType = options.RuntimeType!.GetGenericArguments()[0];
-        CborOptions innerOptions = CborRegistry.Instance.GetOptions(innerType);
+        CborOptions innerOptions = CborRegistry.Instance.GetBaseOptions(innerType);
         CborSerializer.Serialize(writer, value.First(), innerOptions);
     }
 }

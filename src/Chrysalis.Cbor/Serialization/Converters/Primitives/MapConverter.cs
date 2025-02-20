@@ -40,9 +40,9 @@ public sealed class MapConverter : ICborConverter
             Type keyType = entry.Key.GetType();
             Type valueType = entry.Value?.GetType() ?? typeof(object);
 
-            CborOptions keyOptions = CborRegistry.Instance.GetOptions(keyType);
+            CborOptions keyOptions = CborRegistry.Instance.GetBaseOptions(keyType);
             CborOptions valueOptions = entry.Value != null
-                ? CborRegistry.Instance.GetOptions(valueType)
+                ? CborRegistry.Instance.GetBaseOptions(valueType)
                 : CborOptions.Default;
 
             // Serialize key and value

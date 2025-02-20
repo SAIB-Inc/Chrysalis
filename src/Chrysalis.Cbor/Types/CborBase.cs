@@ -8,10 +8,9 @@ namespace Chrysalis.Cbor.Types;
 /// </summary>
 public abstract record CborBase
 {
-    public byte[]? Raw;
+    public ReadOnlyMemory<byte>? Raw;
 
-    public ReadOnlySpan<byte> ToBytes() =>
-        Raw ?? CborSerializer.Serialize(this);
-    public static T FromBytes<T>(ReadOnlyMemory<byte> bytes) where T : CborBase =>
-        CborSerializer.Deserialize<T>(bytes);
+    public byte[]? ToBytes() => Raw is not null ? Raw.Value.ToArray() : CborSerializer.Serialize(this);
+
+    public static T FromBytes<T>(ReadOnlyMemory<byte> bytes) where T : CborBase => CborSerializer.Deserialize<T>(bytes);
 }
