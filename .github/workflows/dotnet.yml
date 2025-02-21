@@ -36,7 +36,7 @@ jobs:
 
     - name: Test
       run: dotnet test --verbosity normal
-      working-directory: ./src/Chrysalis.Test
+      working-directory: ./
 
     - name: Publish
       run: dotnet publish --no-restore
