@@ -1,3 +1,5 @@
+using Chrysalis.Network.Core;
+
 namespace Chrysalis.Network.Multiplexer;
 
 public class Plexer(IBearer bearer) : IDisposable
@@ -8,10 +10,10 @@ public class Plexer(IBearer bearer) : IDisposable
 
     public void Spawn()
     {
-        Task.WhenAll(
-            Muxer.RunAsync(TokenSource.Token), 
-            Demuxer.RunAsync(TokenSource.Token)
-        );
+        // Task.WhenAll(
+        //     Muxer.RunAsync(TokenSource.Token), 
+        //     Demuxer.RunAsync(TokenSource.Token)
+        // );
     }
 
     public void Dispose()

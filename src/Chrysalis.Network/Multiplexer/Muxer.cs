@@ -1,3 +1,5 @@
+using Chrysalis.Network.Core;
+
 namespace Chrysalis.Network.Multiplexer;
 
 public class Muxer(IBearer bearer)
@@ -18,12 +20,5 @@ public class Muxer(IBearer bearer)
 
         byte[] encoded = MuxSegmentCodec.Encode(segment);
         await bearer.SendAsync(encoded, cancellationToken);
-    }
-
-    public async Task RunAsync(CancellationToken cancellationToken)
-    {
-        while (!cancellationToken.IsCancellationRequested)
-        {
-        }
     }
 }

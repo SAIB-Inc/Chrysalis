@@ -1,4 +1,4 @@
-namespace Chrysalis.Network.Multiplexer;
+namespace Chrysalis.Network.Core;
 
 public interface IBearer : IDisposable
 {
