@@ -13,3 +13,5 @@
 **/obj-debug/
 .DS_Store
 **/target
+
+out
