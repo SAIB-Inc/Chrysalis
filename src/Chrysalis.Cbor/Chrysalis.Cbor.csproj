@@ -4,7 +4,7 @@
     <TargetFramework>net9.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <Version>0.5.24</Version>
+    <Version>0.6.0</Version>
     <PackageId>Chrysalis.Cbor</PackageId>
     <Authors>clark@saib.dev, rjlacanlale@saib.dev, kathea.mayol@saib.dev</Authors>
     <Company>SAIB Inc</Company>
@@ -15,7 +15,7 @@
   <ItemGroup>
     <PackageReference Include="NSec.Cryptography" Version="24.4.0" />
     <PackageReference Include="SauceControl.Blake2Fast" Version="2.0.0" />
-    <PackageReference Include="System.Formats.Cbor" Version="9.0.0" />
+    <PackageReference Include="System.Formats.Cbor" Version="9.0.2" />
   </ItemGroup>
 
   <ItemGroup>
