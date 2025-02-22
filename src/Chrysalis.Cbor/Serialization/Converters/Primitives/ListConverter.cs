@@ -25,7 +25,7 @@ public sealed class ListConverter : ICborConverter
             innerType = parameters.ParameterType.GetGenericArguments()[0];
         }
 
-        CborOptions innerOptions = CborRegistry.Instance.GetBaseOptionsWithContext(innerType, options);
+        CborOptions innerOptions = CborRegistry.Instance.GetBaseOptions(innerType);
 
         reader.ReadStartArray();
 
