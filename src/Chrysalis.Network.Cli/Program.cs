@@ -1,6 +1,4 @@
-﻿using Chrysalis.Cbor.Serialization;
-using Chrysalis.Network.Cbor;
-using Chrysalis.Network.Core;
+﻿using Chrysalis.Network.Core;
 using Chrysalis.Network.Multiplexer;
 
 var bearer = new TcpBearer("localhost", 1234);
