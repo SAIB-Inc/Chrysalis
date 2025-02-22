@@ -15,7 +15,7 @@ agent.Subscribe(chunk =>
     try
     {
         var handshakeMessage = CborSerializer.Deserialize<HandshakeMessage>(chunk);
-        Console.WriteLine($"Received chunk: {JsonSerializer.Serialize(handshakeMessage)}");
+        Console.WriteLine($"Received chunk: {handshakeMessage}");
     }
     catch (Exception ex)
     {
@@ -24,7 +24,7 @@ agent.Subscribe(chunk =>
 });
 
 var proposeMessage = CborSerializer.Deserialize<HandshakeMessage>(Convert.FromHexString("8200a7078202f5088202f5098202f50a8202f50b8402f500f40c8402f500f40d8402f500f4"));
-Console.WriteLine("Sending propose message... {0}", JsonSerializer.Serialize(proposeMessage));
+Console.WriteLine("Sending propose message... {0}\n", proposeMessage);
 await agent.EnqueueChunkAsync(CborSerializer.Serialize(proposeMessage));
 
 while (true)
