@@ -1,4 +1,4 @@
-namespace Chrysalis.Network.Multiplexer;
+namespace Chrysalis.Network.Core;
 
 public enum ProtocolType
 {
@@ -11,9 +11,4 @@ public enum ProtocolType
     LocalStateQuery = 7,
     KeepAlive = 8,
     PeerSharing = 10,
-}
-
-public interface IMiniProtocol
-{
-    ProtocolType ProtocolId { get; }
 }

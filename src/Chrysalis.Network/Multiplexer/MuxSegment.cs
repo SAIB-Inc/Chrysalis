@@ -1,3 +1,5 @@
+using Chrysalis.Network.Core;
+
 namespace Chrysalis.Network.Multiplexer;
 
 public record MuxSegment(

@@ -8,6 +8,10 @@
     <BaseIntermediateOutputPath>../../build/obj/$(AssemblyName)</BaseIntermediateOutputPath>
   </PropertyGroup>
 
+  <ItemGroup>
+    <PackageReference Include="System.Reactive" Version="6.0.1" />
+  </ItemGroup>
+
   <Import Project="Sdk.props" Sdk="Microsoft.NET.Sdk" />
   <Import Project="Sdk.targets" Sdk="Microsoft.NET.Sdk" />
 </Project>

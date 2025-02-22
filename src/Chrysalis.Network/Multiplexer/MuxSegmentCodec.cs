@@ -1,5 +1,6 @@
+using Chrysalis.Network.Core;
+using System;
 using System.IO;
-using System.Net;
 
 namespace Chrysalis.Network.Multiplexer;
 
@@ -10,6 +11,29 @@ public static class MuxSegmentCodec
         using var memoryStream = new MemoryStream();
         using var binaryWriter = new BinaryWriter(memoryStream);
 
+        EncodeHeaderInternal(segment, binaryWriter); // Reuse header encoding logic
+
+        // 4. Payload (byte array)
+        binaryWriter.Write(segment.Payload);
+
+        return memoryStream.ToArray();
+    }
+
+    // New method to Encode Header only
+    public static byte[] EncodeHeader(MuxSegment segment)
+    {
+        using var memoryStream = new MemoryStream();
+        using var binaryWriter = new BinaryWriter(memoryStream);
+
+        EncodeHeaderInternal(segment, binaryWriter); // Reuse header encoding logic
+
+        return memoryStream.ToArray();
+    }
+
+
+    // Private method to encapsulate header encoding logic (reused by Encode and EncodeHeader)
+    private static void EncodeHeaderInternal(MuxSegment segment, BinaryWriter binaryWriter)
+    {
         // 1. Transmission Time (uint32, big-endian)
         byte[] transmissionTimeBytes = BitConverter.GetBytes(segment.TransmissionTime);
         if (BitConverter.IsLittleEndian)
@@ -38,19 +62,32 @@ public static class MuxSegmentCodec
             Array.Reverse(payloadLengthBytes); // Convert to big-endian
         }
         binaryWriter.Write(payloadLengthBytes);
-
-        // 4. Payload (byte array)
-        binaryWriter.Write(segment.Payload);
-
-        return memoryStream.ToArray();
     }
+
 
     public static MuxSegment Decode(byte[] bytes)
     {
         using var memoryStream = new MemoryStream(bytes);
         using var binaryReader = new BinaryReader(memoryStream);
 
-        // 1. Transmission Time (uint32, big-endian)
+        return DecodeInternal(binaryReader, true); // Decode full segment (including payload)
+    }
+
+
+     // New method to Decode Header only
+    public static MuxSegment DecodeHeader(byte[] bytes)
+    {
+         using var memoryStream = new MemoryStream(bytes);
+        using var binaryReader = new BinaryReader(memoryStream);
+
+        return DecodeInternal(binaryReader, false); // Decode only header (payload is empty)
+    }
+
+
+    // Private method to encapsulate decoding logic (reused by Decode and DecodeHeader)
+    private static MuxSegment DecodeInternal(BinaryReader binaryReader, bool decodePayload)
+    {
+         // 1. Transmission Time (uint32, big-endian)
         byte[] transmissionTimeBytes = binaryReader.ReadBytes(4);
         if (BitConverter.IsLittleEndian)
         {
@@ -76,8 +113,14 @@ public static class MuxSegmentCodec
         }
         ushort payloadLength = BitConverter.ToUInt16(payloadLengthBytes, 0);
 
-        // 4. Payload (byte array)
-        byte[] payload = binaryReader.ReadBytes(payloadLength); // Read exactly PayloadLength bytes
+        byte[] payload = Array.Empty<byte>(); // Default to empty payload
+
+        // 4. Payload (byte array) - only decode if decodePayload is true
+        if (decodePayload)
+        {
+             payload = binaryReader.ReadBytes(payloadLength); // Read exactly PayloadLength bytes
+        }
+
 
         return new MuxSegment(
             TransmissionTime: transmissionTime,
