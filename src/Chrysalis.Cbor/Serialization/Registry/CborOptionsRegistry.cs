@@ -26,15 +26,30 @@ public sealed class CborOptionsRegistry
         }
     }
 
-    public CborOptions GetOptions(Type type) =>
-        _optionsCache.GetValueOrDefault(type.NormalizeType()) ?? CborOptions.Default;
+    public CborOptions GetOptions(Type type)
+    {
+
+        CborOptions? options;
+        if (_optionsCache.TryGetValue(type.NormalizeType(), out CborOptions? value))
+        {
+            options = value;
+        }
+        else
+        {
+            CborOptions newOptions = BuildOptionsForType(type);
+            _optionsCache.TryAdd(type.NormalizeType(), newOptions);
+            options = newOptions;
+        }
+
+        return options;
+    }
 
     private static CborOptions BuildOptionsForType(Type type)
     {
         Type normalizedType = type.NormalizeType();
-        CborOptionsAttribute? optionsAttr = AttributeResolver.GetInheritedAttribute<CborOptionsAttribute>(type);
-        Type? converterType = AttributeResolver.ResolveConverterType(type);
-        IReadOnlyCollection<Type>? unionTypes = UnionResolver.ResolveUnionTypes(type, converterType);
+        CborOptionsAttribute? optionsAttr = type.GetCustomAttribute<CborOptionsAttribute>();
+        CborConverterAttribute? converterTypeAttr = type.GetCustomAttribute<CborConverterAttribute>();
+        IReadOnlyCollection<Type>? unionTypes = UnionResolver.ResolveUnionTypes(type, converterTypeAttr?.ConverterType);
         (IReadOnlyDictionary<int, Type> indexMap, IReadOnlyDictionary<string, Type> namedMap, ConstructorInfo constructor) = PropertyResolver.ResolvePropertyMappings(type);
 
         return new CborOptions(
@@ -44,7 +59,7 @@ public sealed class CborOptionsRegistry
             size: optionsAttr?.Size ?? -1,
             objectType: type,
             normalizedType: normalizedType,
-            converterType: converterType,
+            converterType: converterTypeAttr?.ConverterType,
             indexPropertyMapping: indexMap,
             namedPropertyMapping: namedMap,
             unionTypes: unionTypes,

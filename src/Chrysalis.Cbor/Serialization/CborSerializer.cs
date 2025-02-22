@@ -28,12 +28,12 @@ public static class CborSerializer
     /// </remarks>
     /// <exception cref="CborSerializationException">Thrown when an error occurs during serialization.</exception>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static byte[]? Serialize<T>(T value) where T : CborBase
+    public static byte[] Serialize(CborBase value)
     {
         if (value.Raw is not null) return value.Raw.Value.ToArray();
 
         CborWriter writer = new(CborConformanceMode.Lax);
-        CborOptions options = CborRegistry.Instance.GetBaseOptions(typeof(T));
+        CborOptions options = CborRegistry.Instance.GetBaseOptions(value.GetType());
         Serialize(writer, value, options);
 
         return writer.Encode();
@@ -111,9 +111,20 @@ public static class CborSerializer
         if (options.RuntimeType is null)
             throw new CborDeserializationException("Runtime type not specified");
 
-        CborBase? instance = (!options.RuntimeType.IsAbstract ?
-            (CborBase)ActivatorUtil.CreateInstance(options.RuntimeType, value, options) :
-            (CborBase)value!) ?? throw new CborDeserializationException("Failed to create instance of type");
+        CborBase? instance;
+
+        // If the value is already of the correct type, use it directly
+        if (value != null && options.RuntimeType.IsAssignableFrom(value.GetType()))
+        {
+            instance = (CborBase)value;
+        }
+        else
+        {
+            // Otherwise create a new instance
+            instance = (!options.RuntimeType.IsAbstract ?
+                (CborBase)ActivatorUtil.CreateInstance(options.RuntimeType, value, options) :
+                (CborBase)value!) ?? throw new CborDeserializationException("Failed to create instance of type");
+        }
 
         if (readChunk && chunk.HasValue)
             instance.Raw = chunk;

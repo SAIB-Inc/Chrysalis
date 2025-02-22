@@ -48,7 +48,7 @@ public sealed class CustomConstrConverter : ICborConverter
         // Get inner type same way as read
         Type innerType = options.RuntimeType?.GetGenericArguments()[0]
             ?? throw new CborSerializationException("Runtime type is not defined in options.");
-        CborOptions innerOptions = CborRegistry.Instance.GetBaseOptionsWithContext(innerType, options);
+        CborOptions innerOptions = CborRegistry.Instance.GetBaseOptions(innerType);
 
         // Write each item
         foreach (object? item in value)
