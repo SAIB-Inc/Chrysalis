@@ -2,6 +2,17 @@
     "version": "0.2.0",
     "configurations": [
         {
+            "name": "Chrysalis.Network.Cli",
+            "type": "coreclr",
+            "request": "launch",
+            "preLaunchTask": "build:network:cli",
+            "program": "${workspaceFolder}/src/Chrysalis.Network.Cli/bin/Debug/net9.0/Chrysalis.Network.Cli.dll",
+            "args": [],
+            "cwd": "${workspaceFolder}",
+            "stopAtEntry": false,
+            "console": "integratedTerminal"
+        },
+        {
             // Use IntelliSense to find out which attributes exist for C# debugging
             // Use hover for the description of the existing attributes
             // For further information visit https://github.com/dotnet/vscode-csharp/blob/main/debugger-launchjson.md
