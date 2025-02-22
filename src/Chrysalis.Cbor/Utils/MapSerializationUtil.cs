@@ -19,8 +19,8 @@ public static class MapSerializationUtil
         reader.ReadStartMap();
         while (reader.PeekState() != CborReaderState.EndMap)
         {
-            object? key = CborSerializer.Deserialize(reader, CborRegistry.Instance.GetBaseOptionsWithContext(genericTypes.KeyType, options));
-            object? value = CborSerializer.Deserialize(reader, CborRegistry.Instance.GetBaseOptionsWithContext(genericTypes.ValueType, options));
+            object? key = CborSerializer.Deserialize(reader, CborRegistry.Instance.GetBaseOptions(genericTypes.KeyType));
+            object? value = CborSerializer.Deserialize(reader, CborRegistry.Instance.GetBaseOptions(genericTypes.ValueType));
 
             if (key != null && seenKeys.Add(key))  // Add returns false if key already exists
                 entries.Add(new KeyValuePair<object, object?>(key, value));

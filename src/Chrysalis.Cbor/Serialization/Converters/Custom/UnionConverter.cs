@@ -23,9 +23,9 @@ public sealed class UnionConverter : ICborConverter
                 CborReader innerReader = new(data, CborConformanceMode.Lax);
 
                 // Create new options with the same context
-                CborOptions typeOptions = CborRegistry.Instance.GetBaseOptionsWithContext(type, options);
+                CborOptions typeOptions = CborRegistry.Instance.GetBaseOptions(type);
                 object? value = CborSerializer.Deserialize(innerReader, typeOptions);
-                typeOptions.RuntimeType = type;
+                options.RuntimeType = type;
 
                 return value;
             }
