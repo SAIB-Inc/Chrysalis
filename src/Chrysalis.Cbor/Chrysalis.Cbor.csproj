@@ -10,8 +10,6 @@
     <Company>SAIB Inc</Company>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageLicenseFile>LICENSE.md</PackageLicenseFile>
-    <BaseOutputPath>../../build/bin/$(AssemblyName)</BaseOutputPath>
-    <BaseIntermediateOutputPath>../../build/obj/$(AssemblyName)</BaseIntermediateOutputPath>
   </PropertyGroup>
 
   <ItemGroup>

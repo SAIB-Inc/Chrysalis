@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project>
 
   <ItemGroup>
     <ProjectReference Include="..\Chrysalis.Network\Chrysalis.Network.csproj" />
@@ -10,5 +10,8 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
   </PropertyGroup>
+
+  <Import Project="Sdk.props" Sdk="Microsoft.NET.Sdk" />
+  <Import Project="Sdk.targets" Sdk="Microsoft.NET.Sdk" />
 
 </Project>

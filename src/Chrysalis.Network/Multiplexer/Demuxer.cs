@@ -59,7 +59,7 @@ public class Demuxer(IBearer bearer) : IDisposable
                 }
                 else
                 {
-                    byte[] received = await _bearer.ReceiveAsync(cancellationToken);
+                    byte[] received = await _bearer.ReceiveExactAsync(n, cancellationToken);
                     if (received.Length > 0)
                     {
                         buffer.Write(received, 0, received.Length);

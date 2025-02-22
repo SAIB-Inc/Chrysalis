@@ -24,7 +24,7 @@ public record ProposeVersionId(int Value) : CborBase;
 public record AcceptVersion(
     [CborIndex(0)] CborInt AcceptVersionId,
     [CborIndex(1)] VersionNumber VersionNumber,
-    [CborIndex(2)] CborInt NodeToNodeVersionData
+    [CborIndex(2)] NodeToNodeVersionData NodeToNodeVersionData
 ) : HandshakeMessage;
 
 [CborConverter(typeof(EnforcedIntConverter))]
