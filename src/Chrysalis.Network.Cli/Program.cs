@@ -13,7 +13,7 @@ using Chrysalis.Network.Cbor;
 static Aff<Unit> Program() =>
     // Create the bearer as an effect.
     from bearer in TcpBearer.CreateAsync("localhost", 1234)
-        // Acquire a Plexer resource using our custom bracket helper.
+    // Acquire a Plexer resource using our custom bracket helper.
     from _ in Bracket(
          // Resource acquisition: create a new Plexer from the bearer.
          () => new Plexer(bearer),
