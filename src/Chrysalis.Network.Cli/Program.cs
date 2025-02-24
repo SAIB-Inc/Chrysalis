@@ -1,35 +1,39 @@
 ﻿using System;
-using System.Threading;
 using System.Threading.Tasks;
-using Chrysalis.Cbor.Serialization;
-using Chrysalis.Network.Cbor;
-using Chrysalis.Network.Core;
-using Chrysalis.Network.Multiplexer;
 using LanguageExt;
 using static LanguageExt.Prelude;
+using Chrysalis.Cbor.Serialization;
+using Chrysalis.Network.Core;
+using Chrysalis.Network.Multiplexer;
+using Chrysalis.Network.Cbor;
 
-async Task MainAsync()
+/// <summary>
+/// The entire program is expressed as a single Aff effect.
+/// </summary>
+static Aff<Unit> Program() =>
+    // Create the bearer as an effect.
+    from bearer in TcpBearer.CreateAsync("localhost", 1234)
+        // Acquire a Plexer resource using our custom bracket helper.
+    from _ in Bracket(
+         // Resource acquisition: create a new Plexer from the bearer.
+         () => new Plexer(bearer),
+         // Resource use: run the plexer run loop, handle messages, and then await an infinite delay.
+         plexer =>
+             from __ in plexer.Run()           // spawn the run loop (fire‑and‑forget internally)
+             from ___ in HandleMessages(plexer)
+             from ____ in DelayInfinite()      // keep the program alive
+             select unit,
+         // Resource release: dispose the plexer.
+         plexer => plexer.Dispose()
+    )
+    select unit;
+
+/// <summary>
+/// Composes the subscription and sending of a propose message as an Aff effect.
+/// </summary>
+static Aff<Unit> HandleMessages(Plexer plexer)
 {
-    // Create the bearer as an Aff effect, run it, and unwrap the result using Match.
-    var bearerFin = await TcpBearer.CreateAsync("localhost", 1234).Run();
-    IBearer bearer = bearerFin.Match(
-        b => b,
-        ex => { throw ex; }
-    );
-
-    // Create a plexer using the functional style.
-    using var plexer = new Plexer(bearer);
-
-    // Create a CancellationTokenSource for the plexer run loop.
-    var cts = new CancellationTokenSource();
-
-    // Start the plexer run loop concurrently as an Aff effect.
-    var plexerRun = plexer.Run();
-
-    // Fire-and-forget the plexer run loop.
-    _ = plexerRun.Run();
-
-    // Subscribe to the agent channel for Handshake messages.
+    // Subscribe to the Handshake channel.
     var agent = plexer.SubscribeClient(ProtocolType.Handshake);
     agent.Subscribe(chunk =>
     {
@@ -47,11 +51,43 @@ async Task MainAsync()
     );
     Console.WriteLine("Sending propose message... {0}\n", proposeMessage);
 
-    // Send the propose message using the functional EnqueueChunk effect.
-    await agent.EnqueueChunk(CborSerializer.Serialize(proposeMessage)).Run();
-
-    // Keep the program running indefinitely.
-    await Task.Delay(Timeout.Infinite);
+    // Return the effect that sends the propose message.
+    return agent.EnqueueChunk(CborSerializer.Serialize(proposeMessage));
 }
 
-await MainAsync();
+/// <summary>
+/// A helper that returns an Aff effect which delays forever.
+/// </summary>
+static Aff<Unit> DelayInfinite() =>
+    Aff(async () =>
+    {
+        await Task.Delay(Timeout.Infinite);
+        return unit;
+    });
+
+/// <summary>
+/// A custom bracket helper that acquires a resource, uses it, and then releases it.
+/// </summary>
+/// <typeparam name="A">The resource type.</typeparam>
+/// <typeparam name="R">The result type.</typeparam>
+/// <param name="acquire">A function to acquire the resource.</param>
+/// <param name="use">A function that uses the resource, returning an Aff effect.</param>
+/// <param name="release">An action to release the resource.</param>
+/// <returns>An Aff effect yielding the result R.</returns>
+static Aff<R> Bracket<A, R>(Func<A> acquire, Func<A, Aff<R>> use, Action<A> release) =>
+    Aff(async () =>
+    {
+        A resource = acquire();
+        try
+        {
+            // use(resource).Run() returns a Fin<R>, so unwrap it:
+            var finResult = await use(resource).Run();
+            return finResult.Match(r => r, ex => { throw ex; });
+        }
+        finally
+        {
+            release(resource);
+        }
+    });
+
+await Program().Run();
