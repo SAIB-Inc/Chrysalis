@@ -1,3 +1,4 @@
+using Chrysalis.Network.Cbor;
 using Chrysalis.Network.Core;
 using Chrysalis.Network.MiniProtocols;
 
@@ -6,10 +7,10 @@ namespace Chrysalis.Network.Multiplexer;
 public class NodeClient : IDisposable
 {
     private readonly Plexer _plexer;
-    private AgentChannel _handshakeChannel;
+    private readonly AgentChannel _handshakeChannel;
 
     #region MiniProtocols
-    public Handshake<object> Handshake { get; private set; }
+    public Handshake Handshake { get; private set; }
     #endregion
 
     private NodeClient(IBearer bearer)
@@ -28,7 +29,7 @@ public class NodeClient : IDisposable
         let client = new NodeClient(bearer)
         from _ in client.Start()
         from delay in Aff(async () => {  await Task.Delay(1); return unit; }) // @TODO: Remove this hack
-        from __ in client.Handshake.Send()
+        from __ in client.Handshake.Send(HandshakeMessages.ProposeVersions(VersionTables.N2C_V10_AND_ABOVE))
         select client;
 
     public void Dispose()
