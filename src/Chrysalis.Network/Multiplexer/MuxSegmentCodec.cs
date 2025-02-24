@@ -1,44 +1,133 @@
 using Chrysalis.Network.Core;
-using System;
-using System.IO;
+using SysArray = System.Array;
 
 namespace Chrysalis.Network.Multiplexer;
 
+/// <summary>
+/// Provides methods for encoding and decoding mux segments using functional programming concepts.
+/// </summary>
 public static class MuxSegmentCodec
 {
+    /// <summary>
+    /// Encodes a full mux segment (header and payload) into a byte array.
+    /// </summary>
+    /// <param name="segment">The mux segment to encode.</param>
+    /// <returns>A byte array representing the encoded mux segment.</returns>
     public static byte[] Encode(MuxSegment segment)
     {
         using var memoryStream = new MemoryStream();
         using var binaryWriter = new BinaryWriter(memoryStream);
 
-        EncodeHeaderInternal(segment, binaryWriter); // Reuse header encoding logic
+        // Encode the header.
+        EncodeHeaderInternal(segment, binaryWriter);
 
-        // 4. Payload (byte array)
+        // Write the payload.
         binaryWriter.Write(segment.Payload);
 
         return memoryStream.ToArray();
     }
 
-    // New method to Encode Header only
+    /// <summary>
+    /// Encodes only the header of a mux segment into a byte array.
+    /// </summary>
+    /// <param name="segment">The mux segment whose header to encode.</param>
+    /// <returns>A byte array representing the encoded header.</returns>
     public static byte[] EncodeHeader(MuxSegment segment)
     {
         using var memoryStream = new MemoryStream();
         using var binaryWriter = new BinaryWriter(memoryStream);
 
-        EncodeHeaderInternal(segment, binaryWriter); // Reuse header encoding logic
+        // Encode the header.
+        EncodeHeaderInternal(segment, binaryWriter);
 
         return memoryStream.ToArray();
     }
 
+    /// <summary>
+    /// Wraps the encoding of a full mux segment in a Try monad to capture any exceptions.
+    /// </summary>
+    /// <param name="segment">The mux segment to encode.</param>
+    /// <returns>
+    /// A Try monad yielding the encoded byte array, or capturing an exception if one occurs.
+    /// </returns>
+    public static Try<byte[]> TryEncode(MuxSegment segment) =>
+        Try(() => Encode(segment));
 
-    // Private method to encapsulate header encoding logic (reused by Encode and EncodeHeader)
+    /// <summary>
+    /// Wraps the encoding of a mux segment header in a Try monad.
+    /// </summary>
+    /// <param name="segment">The mux segment whose header to encode.</param>
+    /// <returns>
+    /// A Try monad yielding the encoded header byte array, or capturing an exception if one occurs.
+    /// </returns>
+    public static Try<byte[]> TryEncodeHeader(MuxSegment segment) =>
+        Try(() => EncodeHeader(segment));
+
+    /// <summary>
+    /// Decodes a full mux segment (header and payload) from a byte array.
+    /// </summary>
+    /// <param name="bytes">The byte array to decode.</param>
+    /// <returns>A mux segment containing the decoded header and payload.</returns>
+    public static MuxSegment Decode(byte[] bytes)
+    {
+        using var memoryStream = new MemoryStream(bytes);
+        using var binaryReader = new BinaryReader(memoryStream);
+        return DecodeInternal(binaryReader, decodePayload: true);
+    }
+
+    /// <summary>
+    /// Decodes only the header of a mux segment from a byte array.
+    /// </summary>
+    /// <param name="bytes">The byte array to decode.</param>
+    /// <returns>A mux segment containing the decoded header with an empty payload.</returns>
+    public static MuxSegment DecodeHeader(byte[] bytes)
+    {
+        using var memoryStream = new MemoryStream(bytes);
+        using var binaryReader = new BinaryReader(memoryStream);
+        return DecodeInternal(binaryReader, decodePayload: false);
+    }
+
+    /// <summary>
+    /// Wraps the decoding of a full mux segment in a Try monad to capture any exceptions.
+    /// </summary>
+    /// <param name="bytes">The byte array to decode.</param>
+    /// <returns>
+    /// A Try monad yielding the mux segment, or capturing an exception if one occurs.
+    /// </returns>
+    public static Try<MuxSegment> TryDecode(byte[] bytes) =>
+        Try(() => Decode(bytes));
+
+    /// <summary>
+    /// Wraps the decoding of a mux segment header in a Try monad.
+    /// </summary>
+    /// <param name="bytes">The byte array to decode.</param>
+    /// <returns>
+    /// A Try monad yielding the mux segment header, or capturing an exception if one occurs.
+    /// </returns>
+    public static Try<MuxSegment> TryDecodeHeader(byte[] bytes) =>
+        Try(() => DecodeHeader(bytes));
+
+    /// <summary>
+    /// Attempts to decode a full mux segment from a byte array.
+    /// Returns an Option containing the segment if successful, or None if decoding fails.
+    /// </summary>
+    /// <param name="bytes">The byte array to decode.</param>
+    /// <returns>An Option containing the decoded mux segment, or None on failure.</returns>
+    public static Option<MuxSegment> DecodeOption(byte[] bytes) =>
+        TryDecode(bytes).ToOption();
+
+    /// <summary>
+    /// Encodes the header portion of a mux segment.
+    /// </summary>
+    /// <param name="segment">The mux segment to encode.</param>
+    /// <param name="binaryWriter">The binary writer used to write to the memory stream.</param>
     private static void EncodeHeaderInternal(MuxSegment segment, BinaryWriter binaryWriter)
     {
         // 1. Transmission Time (uint32, big-endian)
         byte[] transmissionTimeBytes = BitConverter.GetBytes(segment.TransmissionTime);
         if (BitConverter.IsLittleEndian)
         {
-            Array.Reverse(transmissionTimeBytes); // Convert to big-endian if necessary
+            SysArray.Reverse(transmissionTimeBytes);
         }
         binaryWriter.Write(transmissionTimeBytes);
 
@@ -46,12 +135,12 @@ public static class MuxSegmentCodec
         ushort protocolIdValue = (ushort)segment.ProtocolId;
         if (segment.Mode)
         {
-            protocolIdValue |= (ushort)0x8000; // Set the most significant bit for Mode = 1
+            protocolIdValue |= 0x8000; // Set the most significant bit for Mode = 1
         }
         byte[] protocolIdBytes = BitConverter.GetBytes(protocolIdValue);
         if (BitConverter.IsLittleEndian)
         {
-            Array.Reverse(protocolIdBytes); // Convert to big-endian
+            SysArray.Reverse(protocolIdBytes);
         }
         binaryWriter.Write(protocolIdBytes);
 
@@ -59,39 +148,24 @@ public static class MuxSegmentCodec
         byte[] payloadLengthBytes = BitConverter.GetBytes(segment.PayloadLength);
         if (BitConverter.IsLittleEndian)
         {
-            Array.Reverse(payloadLengthBytes); // Convert to big-endian
+            SysArray.Reverse(payloadLengthBytes);
         }
         binaryWriter.Write(payloadLengthBytes);
     }
 
-
-    public static MuxSegment Decode(byte[] bytes)
-    {
-        using var memoryStream = new MemoryStream(bytes);
-        using var binaryReader = new BinaryReader(memoryStream);
-
-        return DecodeInternal(binaryReader, true); // Decode full segment (including payload)
-    }
-
-
-     // New method to Decode Header only
-    public static MuxSegment DecodeHeader(byte[] bytes)
-    {
-         using var memoryStream = new MemoryStream(bytes);
-        using var binaryReader = new BinaryReader(memoryStream);
-
-        return DecodeInternal(binaryReader, false); // Decode only header (payload is empty)
-    }
-
-
-    // Private method to encapsulate decoding logic (reused by Decode and DecodeHeader)
+    /// <summary>
+    /// Decodes a mux segment from a binary reader.
+    /// </summary>
+    /// <param name="binaryReader">The binary reader to read from.</param>
+    /// <param name="decodePayload">If true, also decodes the payload; otherwise, the payload remains empty.</param>
+    /// <returns>The decoded mux segment.</returns>
     private static MuxSegment DecodeInternal(BinaryReader binaryReader, bool decodePayload)
     {
-         // 1. Transmission Time (uint32, big-endian)
+        // 1. Transmission Time (uint32, big-endian)
         byte[] transmissionTimeBytes = binaryReader.ReadBytes(4);
         if (BitConverter.IsLittleEndian)
         {
-            Array.Reverse(transmissionTimeBytes);
+            SysArray.Reverse(transmissionTimeBytes);
         }
         uint transmissionTime = BitConverter.ToUInt32(transmissionTimeBytes, 0);
 
@@ -99,7 +173,7 @@ public static class MuxSegmentCodec
         byte[] protocolIdBytes = binaryReader.ReadBytes(2);
         if (BitConverter.IsLittleEndian)
         {
-            Array.Reverse(protocolIdBytes);
+            SysArray.Reverse(protocolIdBytes);
         }
         ushort protocolIdAndMode = BitConverter.ToUInt16(protocolIdBytes, 0);
         bool mode = (protocolIdAndMode & 0x8000) != 0; // Check the most significant bit
@@ -109,18 +183,17 @@ public static class MuxSegmentCodec
         byte[] payloadLengthBytes = binaryReader.ReadBytes(2);
         if (BitConverter.IsLittleEndian)
         {
-            Array.Reverse(payloadLengthBytes);
+            SysArray.Reverse(payloadLengthBytes);
         }
         ushort payloadLength = BitConverter.ToUInt16(payloadLengthBytes, 0);
 
-        byte[] payload = Array.Empty<byte>(); // Default to empty payload
+        byte[] payload = SysArray.Empty<byte>(); // Use SysArray alias for System.Array
 
-        // 4. Payload (byte array) - only decode if decodePayload is true
+        // 4. Payload (only decode if requested)
         if (decodePayload)
         {
-             payload = binaryReader.ReadBytes(payloadLength); // Read exactly PayloadLength bytes
+            payload = binaryReader.ReadBytes(payloadLength);
         }
-
 
         return new MuxSegment(
             TransmissionTime: transmissionTime,

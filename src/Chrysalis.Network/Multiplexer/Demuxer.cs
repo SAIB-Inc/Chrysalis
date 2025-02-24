@@ -1,10 +1,11 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Reactive.Subjects;
 using System.Threading;
-using System.Threading.Tasks;
+using LanguageExt;
+using static LanguageExt.Prelude;
 using Chrysalis.Network.Core;
-using System.IO;
 
 namespace Chrysalis.Network.Multiplexer;
 
@@ -14,69 +15,71 @@ namespace Chrysalis.Network.Multiplexer;
 /// <param name="bearer">The bearer connection to receive data from.</param>
 public class Demuxer(IBearer bearer) : IDisposable
 {
-    private readonly IBearer _bearer = bearer ?? throw new ArgumentNullException(nameof(bearer));
-    private readonly Dictionary<ProtocolType, Subject<byte[]>> _egressChannels = new();
+    // Primary constructor parameter 'bearer' becomes the readonly field.
+    private readonly IBearer _bearer = bearer;
+    private readonly Dictionary<ProtocolType, Subject<byte[]>> _egressChannels = [];
     private readonly CancellationTokenSource _demuxerCts = new();
 
     /// <summary>
-    /// Reads a full segment from the bearer, including header and payload, handling partial reads.
-    /// Waits indefinitely if no bytes are available until data arrives or the operation is canceled.
+    /// Reads a full segment from the bearer, including header and payload.
+    /// It waits indefinitely if no bytes are available until data arrives or the operation is canceled.
     /// </summary>
     /// <param name="cancellationToken">A cancellation token for the operation.</param>
-    /// <returns>A tuple containing the protocol type and payload of the segment.</returns>
-    public async Task<(ProtocolType protocol, byte[] payload)> ReadSegmentAsync(CancellationToken cancellationToken)
-    {
-        const int HeaderLength = 8;
-        byte[] headerBytes = await ReadExactlyAsync(HeaderLength, cancellationToken);
-        MuxSegment headerSegment = MuxSegmentCodec.DecodeHeader(headerBytes);
-        byte[] payloadBytes = await ReadExactlyAsync(headerSegment.PayloadLength, cancellationToken);
-        return (headerSegment.ProtocolId, payloadBytes);
-    }
+    /// <returns>
+    /// An Aff monad yielding a tuple containing the protocol type and payload of the segment.
+    /// </returns>
+    public Aff<(ProtocolType protocol, byte[] payload)> ReadSegment(CancellationToken cancellationToken) =>
+        from headerBytes in ReadExactly(8, cancellationToken)
+        let headerSegment = MuxSegmentCodec.DecodeHeader(headerBytes)
+        from payloadBytes in ReadExactly(headerSegment.PayloadLength, cancellationToken)
+        select (headerSegment.ProtocolId, payloadBytes);
 
     /// <summary>
-    /// Reads exactly n bytes from the bearer, using a MemoryStream buffer to handle partial reads.
-    /// Waits indefinitely if no bytes are available until data arrives or the operation is canceled.
+    /// Reads exactly n bytes from the bearer as a functional effect.
+    /// Uses a MemoryStream buffer to handle partial reads.
     /// </summary>
     /// <param name="n">The number of bytes to read.</param>
     /// <param name="cancellationToken">A cancellation token for the operation.</param>
-    /// <returns>An array containing exactly n bytes.</returns>
-    private async Task<byte[]> ReadExactlyAsync(int n, CancellationToken cancellationToken)
-    {
-        byte[] result = new byte[n];
-        int bytesRead = 0;
-
-        // Buffer scoped to this method
-        using (MemoryStream buffer = new())
+    /// <returns>
+    /// An Aff monad yielding an array containing exactly n bytes.
+    /// </returns>
+    private Aff<byte[]> ReadExactly(int n, CancellationToken cancellationToken) =>
+        Aff(async () =>
         {
+            byte[] result = new byte[n];
+            int bytesRead = 0;
+            // Use a MemoryStream as a temporary buffer.
+            using var buffer = new MemoryStream();
             while (bytesRead < n)
             {
                 int bytesToRead = n - bytesRead;
                 int readFromBuffer = buffer.Read(result, bytesRead, bytesToRead);
-
                 if (readFromBuffer > 0)
                 {
                     bytesRead += readFromBuffer;
                 }
                 else
                 {
-                    byte[] received = await _bearer.ReceiveExactAsync(n, cancellationToken);
+                    // Run the Aff effect and explicitly cast the Fin<byte[]> to byte[].
+                    byte[] received = (byte[])(await _bearer.ReceiveExactAsync(n, cancellationToken).Run());
                     if (received.Length > 0)
                     {
                         buffer.Write(received, 0, received.Length);
-                        buffer.Position = 0; 
+                        // Reset the buffer position to allow reading the newly written bytes.
+                        buffer.Position = 0;
                     }
                 }
             }
-        }
-
-        return result;
-    }
+            return result;
+        });
 
     /// <summary>
     /// Subscribes to receive messages for a specific protocol type.
     /// </summary>
     /// <param name="protocol">The protocol type to subscribe to.</param>
-    /// <returns>The Subject for the protocol, to which payloads will be pushed.</returns>
+    /// <returns>
+    /// The Subject for the protocol, to which payloads will be pushed.
+    /// </returns>
     public Subject<byte[]> Subscribe(ProtocolType protocol)
     {
         if (!_egressChannels.TryGetValue(protocol, out var subject))
@@ -91,33 +94,36 @@ public class Demuxer(IBearer bearer) : IDisposable
     /// Processes a single segment and forwards it to the appropriate channel.
     /// </summary>
     /// <param name="cancellationToken">A cancellation token for the operation.</param>
-    /// <returns>A task representing the asynchronous operation.</returns>
-    public async Task TickAsync(CancellationToken cancellationToken)
-    {
-        var (protocol, payload) = await ReadSegmentAsync(cancellationToken);
-
-        if (_egressChannels.TryGetValue(protocol, out var channelSubject))
+    /// <returns>
+    /// An Aff monad yielding Unit upon processing the segment.
+    /// </returns>
+    public Aff<Unit> Tick(CancellationToken cancellationToken) =>
+        // Read a segment and then push its payload to the corresponding channel.
+        ReadSegment(cancellationToken).Map(segment =>
         {
-            channelSubject.OnNext(payload);
-        }
-    }
+            if (_egressChannels.TryGetValue(segment.protocol, out var channelSubject))
+            {
+                channelSubject.OnNext(segment.payload);
+            }
+            return unit;
+        });
 
     /// <summary>
-    /// Runs the demultiplexer in a continuous loop, processing incoming segments.
+    /// Runs the demultiplexer in a continuous loop as a functional effect.
     /// </summary>
     /// <param name="cancellationToken">A cancellation token for the operation.</param>
-    /// <returns>A task representing the asynchronous operation.</returns>
-    public async Task RunAsync(CancellationToken cancellationToken)
-    {
-        await Task.Run(async () => // Run the loop on a background thread using Task.Run for simplicity
+    /// <returns>
+    /// An Aff monad yielding Unit when processing completes or cancellation is triggered.
+    /// </returns>
+    public Aff<Unit> Run(CancellationToken cancellationToken) =>
+        Aff(async () =>
         {
             while (!cancellationToken.IsCancellationRequested)
             {
-                await TickAsync(cancellationToken).ConfigureAwait(false);
+                await Tick(cancellationToken).Run();
             }
-        }, cancellationToken).ConfigureAwait(false);
-    }
-
+            return unit;
+        });
 
     /// <summary>
     /// Disposes of the demuxer and releases resources.
@@ -126,7 +132,6 @@ public class Demuxer(IBearer bearer) : IDisposable
     {
         GC.SuppressFinalize(this);
         _demuxerCts.Cancel();
-
         foreach (var subject in _egressChannels.Values)
         {
             subject.OnCompleted();
