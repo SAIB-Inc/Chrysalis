@@ -61,7 +61,7 @@ public class Demuxer(IBearer bearer) : IDisposable
                 else
                 {
                     // Run the Aff effect and explicitly cast the Fin<byte[]> to byte[].
-                    byte[] received = (byte[])(await _bearer.ReceiveExactAsync(n, cancellationToken).Run());
+                    byte[] received = (byte[])await _bearer.ReceiveExactAsync(n, cancellationToken).Run();
                     if (received.Length > 0)
                     {
                         buffer.Write(received, 0, received.Length);
