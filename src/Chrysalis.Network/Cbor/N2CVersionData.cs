@@ -7,10 +7,8 @@ namespace Chrysalis.Network.Cbor;
 
 [CborConverter(typeof(CustomListConverter))]
 [CborOptions(IsDefinite = true)]
-public record NodeToNodeVersionData(
+public record N2CVersionData(
     [CborIndex(0)] CborUlong NetworkMagic,
-    [CborIndex(1)] CborBool InitiatorOnlyDiffusionMode,
-    [CborIndex(2)] CborInt? PeerSharing,
-    [CborIndex(3)] CborBool? Query
+    [CborIndex(1)] CborBool? Query
 ) : CborBase;
 
