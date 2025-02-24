@@ -64,7 +64,7 @@ public class Muxer(IBearer bearer, ProtocolMode muxerMode) : IDisposable
     public Aff<Unit> Run(CancellationToken cancellationToken) =>
         Aff(async () =>
         {
-            await _messageSubject.AsObservable()
+            await GetMessageSubject().AsObservable()
                 .ForEachAsync(async message =>
                 {
                     // Execute the WriteSegment effect for each incoming message.

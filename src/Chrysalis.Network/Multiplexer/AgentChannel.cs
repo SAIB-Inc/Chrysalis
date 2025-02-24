@@ -4,6 +4,7 @@ using System.Reactive.Subjects;
 using LanguageExt;
 using static LanguageExt.Prelude;
 using Chrysalis.Network.Core;
+using Chrysalis.Cbor.Cardano.Types.Block.Transaction.Output;
 
 namespace Chrysalis.Network.Multiplexer;
 
@@ -29,6 +30,22 @@ public class AgentChannel(ProtocolType protocol, ISubject<ProtocolMessage> toPle
         {
             toPlexerSubject.OnNext(new ProtocolMessage(Protocol, chunk));
             return ValueTask.FromResult(unit);
+        });
+
+    /// <summary>
+    /// Asynchronously waits until the next message chunk is available and returns it as an effectful computation.
+    /// 
+    /// This method subscribes to the underlying observable and waits for a single emission.
+    /// Each invocation consumes the next available item; subsequent calls will wait for subsequent chunks.
+    /// </summary>
+    /// <returns>
+    /// An <see cref="Aff{T}"/> effect yielding the next message chunk as a byte array.
+    /// </returns>
+    public Aff<byte[]> ReceiveNextChunk() =>
+        Aff(async () =>
+        {
+            var chunk = await FromPlexerPort.FirstAsync();
+            return chunk;
         });
 
     /// <summary>
