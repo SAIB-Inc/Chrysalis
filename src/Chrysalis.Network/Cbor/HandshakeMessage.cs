@@ -8,28 +8,38 @@ namespace Chrysalis.Network.Cbor;
 [CborConverter(typeof(UnionConverter))]
 public abstract record HandshakeMessage : CborBase;
 
+public class HandshakeMessages
+{
+    public static ProposeVersions ProposeVersions(VersionTable versionTable) =>
+        new(new ProposeVersionIdx(0), versionTable);
+
+    public static N2NAcceptVersion N2NAcceptVersion(N2NVersion version, N2NVersionData versionData) =>
+        new(new AcceptVersionIdx(1), version, versionData);
+    
+    public static N2CAcceptVersion N2CAcceptVersion(N2CVersion version, N2CVersionData versionData) =>
+        new(new AcceptVersionIdx(1), version, versionData);
+    
+    public static Refuse Refuse(RefuseReason reason) =>
+        new(new RefuseIdx(2), reason);
+    
+    public static N2NQueryReply N2NQueryReply(N2NVersionTable versionTable) =>
+        new(new QueryReplyIdx(3), versionTable);
+    
+    public static N2CQueryReply N2CQueryReply(N2CVersionTable versionTable) =>
+        new(new QueryReplyIdx(3), versionTable);
+}
+
 #region ProposeVersions
-[CborConverter(typeof(UnionConverter))]
-public abstract record ProposeVersion : HandshakeMessage;
-
 [CborConverter(typeof(CustomListConverter))]
 [CborOptions(IsDefinite = true)]
-public record N2NProposeVersions(
+public record ProposeVersions(
     [CborIndex(0)] ProposeVersionIdx Idx,
-    [CborIndex(1)] N2NVersionTable VersionTable
-) : ProposeVersion;
-
-[CborConverter(typeof(CustomListConverter))]
-[CborOptions(IsDefinite = true)]
-public record N2CProposeVersions(
-    [CborIndex(0)] ProposeVersionIdx Idx,
-    [CborIndex(1)] N2CVersionTable VersionTable
-) : ProposeVersion;
+    [CborIndex(1)] VersionTable VersionTable
+) : HandshakeMessage;
 
 [CborConverter(typeof(EnforcedIntConverter))]
 [CborOptions(Index = 0)]
 public record ProposeVersionIdx(int Value) : CborBase;
-
 #endregion
 
 #region AcceptVersions
@@ -41,7 +51,7 @@ public abstract record AcceptVersion : HandshakeMessage;
 [CborConverter(typeof(CustomListConverter))]
 [CborOptions(IsDefinite = true)]
 public record N2NAcceptVersion(
-    [CborIndex(0)] CborInt AcceptVersionIdx,
+    [CborIndex(0)] AcceptVersionIdx AcceptVersionIdx,
     [CborIndex(1)] N2NVersion Version,
     [CborIndex(2)] N2NVersionData VersionData
 ) : AcceptVersion;
@@ -49,7 +59,7 @@ public record N2NAcceptVersion(
 [CborConverter(typeof(CustomListConverter))]
 [CborOptions(IsDefinite = true)]
 public record N2CAcceptVersion(
-    [CborIndex(0)] CborInt AcceptVersionIdx,
+    [CborIndex(0)] AcceptVersionIdx AcceptVersionIdx,
     [CborIndex(1)] N2CVersion Version,
     [CborIndex(2)] N2CVersionData VersionData
 ) : AcceptVersion;
