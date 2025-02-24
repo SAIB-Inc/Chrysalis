@@ -23,6 +23,14 @@ public sealed class CborConverterRegistry
         }
     }
 
-    public ICborConverter? GetConverter(Type converterType) =>
-        _converters.GetValueOrDefault(converterType);
+    public ICborConverter? GetConverter(Type converterType)
+    {
+        if (_converters.TryGetValue(converterType, out ICborConverter? converter))
+            return converter;
+
+        ICborConverter newConverter = (ICborConverter)Activator.CreateInstance(converterType)!;
+        _converters.TryAdd(converterType, newConverter);
+
+        return newConverter;
+    }
 }

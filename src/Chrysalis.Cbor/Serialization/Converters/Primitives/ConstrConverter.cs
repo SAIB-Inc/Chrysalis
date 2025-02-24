@@ -39,7 +39,7 @@ public sealed class ConstrConverter : ICborConverter
                 for (int i = 0; i < parameters.Length && reader.PeekState() != CborReaderState.EndArray; i++)
                 {
                     ParameterInfo parameter = parameters[i];
-                    CborOptions innerOptions = CborRegistry.Instance.GetBaseOptionsWithContext(parameter.ParameterType, options);
+                    CborOptions innerOptions = CborRegistry.Instance.GetBaseOptions(parameter.ParameterType);
                     object? item = CborSerializer.Deserialize(reader, innerOptions);
                     constructorArgs.Add(item);
                 }

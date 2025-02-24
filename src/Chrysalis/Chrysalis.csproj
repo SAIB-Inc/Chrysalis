@@ -1,5 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
-
+﻿<Project>
   <ItemGroup>
     <ProjectReference Include="..\Chrysalis.Cbor\Chrysalis.Cbor.csproj" />
   </ItemGroup>
@@ -20,4 +19,7 @@
     <None Include="../../LICENSE.md" Pack="true" PackagePath="" />
     <None Include="../../README.md" Pack="true" PackagePath="" />
   </ItemGroup>
+
+  <Import Project="Sdk.props" Sdk="Microsoft.NET.Sdk" />
+  <Import Project="Sdk.targets" Sdk="Microsoft.NET.Sdk" />
 </Project>
