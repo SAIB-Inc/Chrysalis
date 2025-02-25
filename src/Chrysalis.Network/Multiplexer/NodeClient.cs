@@ -10,6 +10,7 @@ public class NodeClient : IDisposable
     private readonly Plexer _plexer;
     #region MiniProtocols
     public Option<Handshake> Handshake { get; private set; } = None;
+    public Option<LocalStateQuery> LocalStateQuery { get; private set; } = None;
     #endregion
 
     private NodeClient(Plexer plexer)
@@ -20,9 +21,11 @@ public class NodeClient : IDisposable
     private Aff<Unit> Start() =>
         from _ in _plexer.Run()
         let handshakeAgent = _plexer.SubscribeClient(ProtocolType.Handshake)
+        let localStateQueryAgent = _plexer.SubscribeClient(ProtocolType.LocalStateQuery)
         from __ in Aff(() =>
         {
             Handshake = Some(new Handshake(handshakeAgent));
+            LocalStateQuery = Some(new LocalStateQuery(localStateQueryAgent));
             return ValueTask.FromResult(unit);
         })
         select unit;
