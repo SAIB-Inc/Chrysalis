@@ -35,17 +35,20 @@ public record VolatileTipIdx(int Value) : AcquireIdx;
 public record ImmutableTipIdx(int Value) : AcquireIdx;
 
 [CborConverter(typeof(CustomListConverter))]
+[CborOptions(IsDefinite = true)]
 public record SpecificPoint(
     [CborIndex(0)] SpecificPointIdx Idx,
     [CborIndex(0)] Point Point
 ) : Acquire;
 
 [CborConverter(typeof(CustomListConverter))]
+[CborOptions(IsDefinite = true)]
 public record VolatileTip(
     [CborIndex(0)] VolatileTipIdx Idx
 ) : Acquire;
 
 [CborConverter(typeof(CustomListConverter))]
+[CborOptions(IsDefinite = true)]
 public record ImmutableTip(
     [CborIndex(0)] ImmutableTipIdx Idx
 ) : Acquire;

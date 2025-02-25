@@ -5,9 +5,8 @@ using Chrysalis.Cbor.Types;
 namespace Chrysalis.Network.Cbor.LocalStateQuery.Messages;
 
 [CborConverter(typeof(CustomListConverter))]
-public record Acquired(
-    [CborIndex(0)] AcquiredIdx Idx
-) : LocalStateQueryMessage;
+[CborOptions(IsDefinite = true)]
+public record Acquired([CborIndex(0)] AcquiredIdx Idx) : LocalStateQueryMessage;
 
 [CborConverter(typeof(EnforcedIntConverter))]
 [CborOptions(Index = 1)]

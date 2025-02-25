@@ -7,17 +7,17 @@ using Chrysalis.Cbor.Types.Primitives;
 namespace Chrysalis.Network.Cbor.LocalStateQuery.Messages;
 
 [CborConverter(typeof(CustomListConverter))]
+[CborOptions(IsDefinite = true)]
 public record Query(
     [CborIndex(0)] QueryIdx Idx,
-    [CborIndex(1)] CborBytes QueryRequest
+    [CborIndex(1)] CborBase QueryRequest
 ) : LocalStateQueryMessage;
 
 public class QueryRequest
 {
-    public static CborBytes New(CborBytes queryRequest)
+    public static byte[] New(CborBase queryRequest)
     {
-        byte[] request = CborSerializer.Serialize(new Query(new(3), queryRequest));
-        return new CborBytes(request);
+        return CborSerializer.Serialize(new Query(new(3), queryRequest));
     }
 }
 

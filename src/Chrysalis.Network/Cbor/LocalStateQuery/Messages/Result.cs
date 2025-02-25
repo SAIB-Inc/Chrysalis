@@ -6,9 +6,10 @@ using Chrysalis.Cbor.Types.Primitives;
 namespace Chrysalis.Network.Cbor.LocalStateQuery.Messages;
 
 [CborConverter(typeof(CustomListConverter))]
+[CborOptions(IsDefinite = true)]
 public record Result(
-    [CborIndex(0)] QueryIdx Idx,
-    [CborIndex(1)] CborBytes QueryResult
+    [CborIndex(0)] ResultIdx Idx,
+    [CborIndex(1)] CborEncodedValue QueryResult
 ) : LocalStateQueryMessage;
 
 [CborConverter(typeof(EnforcedIntConverter))]

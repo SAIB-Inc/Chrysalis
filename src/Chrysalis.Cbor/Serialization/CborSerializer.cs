@@ -82,14 +82,19 @@ public static class CborSerializer
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static T Deserialize<T>(ReadOnlyMemory<byte> data) where T : CborBase
     {
-        CborReader reader = new(data, CborConformanceMode.Lax);
-        CborOptions options = CborRegistry.Instance.GetBaseOptions(typeof(T));
-        options.OriginalData = data;
+        try
+        {
+            CborReader reader = new(data, CborConformanceMode.Lax);
+            CborOptions options = CborRegistry.Instance.GetBaseOptions(typeof(T));
+            CborBase instance = Deserialize(reader, options, false);
+            instance.Raw = data.ToArray();
 
-        CborBase instance = Deserialize(reader, options, false);
-        instance.Raw = data.ToArray();
-
-        return (T)instance;
+            return (T)instance;
+        }
+        catch (Exception e)
+        {
+            throw new Exception($"Failed to deserialize object with data {data}", e);
+        }
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]

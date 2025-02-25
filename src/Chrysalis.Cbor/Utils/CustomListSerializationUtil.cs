@@ -52,19 +52,17 @@ public static class CustomListSerializationUtil
 
     public static void Write(CborWriter writer, List<object?> propertyValues)
     {
-        int count = propertyValues.Count(v => v is not null);
-        if (count > 0)
+        // Filter out null values to serialize only non-null elements
+        List<object?> nonNullValues = propertyValues.Where(v => v != null).ToList();
+        int count = nonNullValues.Count;
+
+        // Write each non-null property value
+        for (int i = 0; i < count; i++)
         {
-            for (int i = 0; i < count; i++)
-            {
-                object? propertyValue = propertyValues[i];
-                if (propertyValue is not null)
-                {
-                    Type propertyType = propertyValue.GetType();
-                    CborOptions innerOptions = CborRegistry.Instance.GetBaseOptions(propertyType);
-                    CborSerializer.Serialize(writer, propertyValue, innerOptions);
-                }
-            }
+            object propertyValue = nonNullValues[i]!;
+            Type propertyType = propertyValue.GetType();
+            CborOptions innerOptions = CborRegistry.Instance.GetBaseOptions(propertyType);
+            CborSerializer.Serialize(writer, propertyValue, innerOptions);
         }
     }
 }

@@ -12,11 +12,14 @@ public sealed class CustomListConverter : ICborConverter
 
     public void Write(CborWriter writer, List<object?> value, CborOptions options)
     {
-        int count = value.Count(v => v is not null);
+        // Calculate the number of non-null elements
+        int count = value.Count(v => v != null);
+
+        // Write the array start with the correct count
         writer.WriteStartArray(options.IsDefinite ? count : null);
 
-        if (value.Count > 0)
-            CustomListSerializationUtil.Write(writer, value);
+        // Write only non-null elements
+        CustomListSerializationUtil.Write(writer, value);
 
         writer.WriteEndArray();
     }

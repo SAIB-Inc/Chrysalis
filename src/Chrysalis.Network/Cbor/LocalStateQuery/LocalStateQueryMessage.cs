@@ -6,3 +6,4 @@ namespace Chrysalis.Network.Cbor.LocalStateQuery;
 
 [CborConverter(typeof(UnionConverter))]
 public abstract record LocalStateQueryMessage : CborBase;
+
