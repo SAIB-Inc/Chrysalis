@@ -8,31 +8,33 @@ namespace Chrysalis.Network.Multiplexer;
 public class NodeClient : IDisposable
 {
     private readonly Plexer _plexer;
-    private readonly AgentChannel _handshakeChannel;
-    private readonly AgentChannel _localStateQueryChannel;
-
     #region MiniProtocols
-    public Handshake Handshake { get; private set; }
+    public Option<Handshake> Handshake { get; private set; } = None;
     #endregion
 
-    private NodeClient(IBearer bearer)
+    private NodeClient(Plexer plexer)
     {
-        _plexer = new(bearer);
-        _handshakeChannel = _plexer.SubscribeClient(ProtocolType.Handshake);
-        _localStateQueryChannel = _plexer.SubscribeClient(ProtocolType.LocalStateQuery);
-        Handshake = new(_handshakeChannel);
+        _plexer = plexer;
     }
 
     private Aff<Unit> Start() =>
         from _ in _plexer.Run()
+        let handshakeAgent = _plexer.SubscribeClient(ProtocolType.Handshake)
+        from __ in Aff(() =>
+        {
+            Handshake = Some(new Handshake(handshakeAgent));
+            return ValueTask.FromResult(unit);
+        })
         select unit;
 
     public static Aff<NodeClient> Connect(string socketPath) =>
         from bearer in UnixBearer.Create(socketPath)
-        let client = new NodeClient(bearer)
+        let plexer = new Plexer(bearer)
+        let client = new NodeClient(plexer)
         from _ in client.Start()
-        from delay in Aff(async () => { await Task.Delay(1); return unit; }) // @TODO: Remove this hack
-        from __ in client.Handshake.Send(HandshakeMessages.ProposeVersions(VersionTables.N2C_V10_AND_ABOVE))
+        from __ in client.Handshake
+             .IfNone(() => throw new Exception("Handshake missing"))
+             .Send(HandshakeMessages.ProposeVersions(VersionTables.N2C_V10_AND_ABOVE))
         select client;
 
     public void Dispose()
