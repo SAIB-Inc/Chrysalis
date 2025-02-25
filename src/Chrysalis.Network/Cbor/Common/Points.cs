@@ -9,7 +9,7 @@ namespace Chrysalis.Network.Cbor.Common;
 [CborConverter(typeof(CustomListConverter))]
 [CborOptions(IsDefinite = true)]
 public record Point(
-    [CborIndex(0)] CborInt Slot,
+    [CborIndex(0)] CborUlong Slot,
     [CborIndex(1)] CborBytes Hash
 ) : CborBase;
 
