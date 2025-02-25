@@ -3,7 +3,7 @@ using Chrysalis.Cbor.Serialization.Converters.Custom;
 using Chrysalis.Cbor.Serialization.Converters.Primitives;
 using Chrysalis.Cbor.Types;
 
-namespace Chrysalis.Network.Cbor;
+namespace Chrysalis.Network.Cbor.Handshake;
 
 [CborConverter(typeof(UnionConverter))]
 public record VersionTable : CborBase;

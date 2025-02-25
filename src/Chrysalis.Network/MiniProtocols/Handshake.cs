@@ -1,6 +1,5 @@
-using Chrysalis.Cbor.Cardano.Types.Block.Transaction.Output;
 using Chrysalis.Cbor.Serialization;
-using Chrysalis.Network.Cbor;
+using Chrysalis.Network.Cbor.Handshake;
 using Chrysalis.Network.Multiplexer;
 
 namespace Chrysalis.Network.MiniProtocols;

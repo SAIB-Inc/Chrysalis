@@ -3,7 +3,7 @@ using Chrysalis.Cbor.Serialization.Converters.Custom;
 using Chrysalis.Cbor.Types;
 using Chrysalis.Cbor.Types.Primitives;
 
-namespace Chrysalis.Network.Cbor;
+namespace Chrysalis.Network.Cbor.Handshake;
 
 [CborConverter(typeof(CustomListConverter))]
 [CborOptions(IsDefinite = true)]

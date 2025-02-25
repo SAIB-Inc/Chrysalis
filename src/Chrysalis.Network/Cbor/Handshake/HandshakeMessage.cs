@@ -1,9 +1,8 @@
 using Chrysalis.Cbor.Attributes;
 using Chrysalis.Cbor.Serialization.Converters.Custom;
 using Chrysalis.Cbor.Types;
-using Chrysalis.Cbor.Types.Primitives;
 
-namespace Chrysalis.Network.Cbor;
+namespace Chrysalis.Network.Cbor.Handshake;
 
 [CborConverter(typeof(UnionConverter))]
 public abstract record HandshakeMessage : CborBase;
@@ -15,16 +14,16 @@ public class HandshakeMessages
 
     public static N2NAcceptVersion N2NAcceptVersion(N2NVersion version, N2NVersionData versionData) =>
         new(new AcceptVersionIdx(1), version, versionData);
-    
+
     public static N2CAcceptVersion N2CAcceptVersion(N2CVersion version, N2CVersionData versionData) =>
         new(new AcceptVersionIdx(1), version, versionData);
-    
+
     public static Refuse Refuse(RefuseReason reason) =>
         new(new RefuseIdx(2), reason);
-    
+
     public static N2NQueryReply N2NQueryReply(N2NVersionTable versionTable) =>
         new(new QueryReplyIdx(3), versionTable);
-    
+
     public static N2CQueryReply N2CQueryReply(N2CVersionTable versionTable) =>
         new(new QueryReplyIdx(3), versionTable);
 }

@@ -4,7 +4,7 @@ using Chrysalis.Cbor.Types;
 using Chrysalis.Cbor.Types.Custom;
 using Chrysalis.Cbor.Types.Primitives;
 
-namespace Chrysalis.Network.Cbor;
+namespace Chrysalis.Network.Cbor.Handshake;
 
 [CborConverter(typeof(UnionConverter))]
 public record RefuseReason : CborBase;
