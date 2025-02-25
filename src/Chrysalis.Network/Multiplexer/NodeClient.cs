@@ -1,6 +1,7 @@
 using Chrysalis.Network.Cbor;
 using Chrysalis.Network.Core;
 using Chrysalis.Network.MiniProtocols;
+using LanguageExt.ClassInstances.Const;
 
 namespace Chrysalis.Network.Multiplexer;
 
@@ -9,6 +10,7 @@ public class NodeClient : IDisposable
     private readonly Plexer _plexer;
     #region MiniProtocols
     public Option<Handshake> Handshake { get; private set; } = None;
+    public Option<ChainSync> ChainSync { get; private set; } = None;
     #endregion
 
     private NodeClient(Plexer plexer)
@@ -22,6 +24,7 @@ public class NodeClient : IDisposable
         from __ in Aff(() =>
         {
             Handshake = Some(new Handshake(handshakeAgent));
+            ChainSync = Some(new ChainSync(_plexer.SubscribeClient(ProtocolType.ClientChainSync)));
             return ValueTask.FromResult(unit);
         })
         select unit;
