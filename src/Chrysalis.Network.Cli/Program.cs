@@ -49,7 +49,7 @@ static Aff<Unit> Program()
 
                     var nextResponse = nextResponseResult.Match(
                         Succ: nextResponse => NextResponseLogger(nextResponse),
-                        Fail: ex => Console.WriteLine($"Next request failed with error: {ex.Message}")
+                        Fail: ex => Console.WriteLine($"We are synced to tip, awaiting for next response")
                     );
                 }
                 return unit;
