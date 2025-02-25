@@ -51,7 +51,7 @@ public class Muxer(IBearer bearer, ProtocolMode muxerMode) : IDisposable
         .Bind(segment =>
             Aff(() => ValueTask.FromResult(MuxSegmentCodec.TryEncode(segment).IfFailThrow())))
         // Send the encoded segment over the bearer.
-        .Bind(encodedSegment => bearer.SendAsync(encodedSegment, cancellationToken));
+        .Bind(encodedSegment => bearer.Send(encodedSegment, cancellationToken));
 
     /// <summary>
     /// Runs the multiplexing process, continuously processing messages from the subject.
