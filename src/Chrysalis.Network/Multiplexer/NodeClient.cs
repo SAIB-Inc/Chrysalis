@@ -2,6 +2,7 @@ using Chrysalis.Network.Cbor;
 using Chrysalis.Network.Cbor.Handshake;
 using Chrysalis.Network.Core;
 using Chrysalis.Network.MiniProtocols;
+using LanguageExt.ClassInstances.Const;
 
 namespace Chrysalis.Network.Multiplexer;
 
@@ -11,6 +12,7 @@ public class NodeClient : IDisposable
     #region MiniProtocols
     public Option<Handshake> Handshake { get; private set; } = None;
     public Option<LocalStateQuery> LocalStateQuery { get; private set; } = None;
+    public Option<ChainSync> ChainSync { get; private set; } = None;
     #endregion
 
     private NodeClient(Plexer plexer)
@@ -26,6 +28,7 @@ public class NodeClient : IDisposable
         {
             Handshake = Some(new Handshake(handshakeAgent));
             LocalStateQuery = Some(new LocalStateQuery(localStateQueryAgent));
+            ChainSync = Some(new ChainSync(_plexer.SubscribeClient(ProtocolType.ClientChainSync)));
             return ValueTask.FromResult(unit);
         })
         select unit;

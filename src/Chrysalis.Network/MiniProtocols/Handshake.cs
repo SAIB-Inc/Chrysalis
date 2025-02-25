@@ -12,3 +12,4 @@ public class Handshake(AgentChannel channel) : IMiniProtocol
         let handshakeResponseMessage = CborSerializer.Deserialize<HandshakeMessage>(handshakeResponseChunk)
         select handshakeResponseMessage;
 }
+

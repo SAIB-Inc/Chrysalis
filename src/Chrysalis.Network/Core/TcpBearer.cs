@@ -43,7 +43,7 @@ public class TcpBearer : IBearer
     /// <param name="data">The byte array to send.</param>
     /// <param name="cancellationToken">Cancellation token to cancel the operation.</param>
     /// <returns>An Aff monad yielding Unit upon completion.</returns>
-    public Aff<Unit> SendAsync(byte[] data, CancellationToken cancellationToken) =>
+    public Aff<Unit> Send(byte[] data, CancellationToken cancellationToken) =>
         Aff(async () =>
         {
             await _stream.WriteAsync(data, cancellationToken);
@@ -57,7 +57,7 @@ public class TcpBearer : IBearer
     /// <param name="len">The exact number of bytes to receive.</param>
     /// <param name="cancellationToken">Cancellation token to cancel the operation.</param>
     /// <returns>An Aff monad yielding the received byte array.</returns>
-    public Aff<byte[]> ReceiveExactAsync(int len, CancellationToken cancellationToken) =>
+    public Aff<byte[]> ReceiveExact(int len, CancellationToken cancellationToken) =>
         Aff(async () =>
         {
             if (_stream.DataAvailable)

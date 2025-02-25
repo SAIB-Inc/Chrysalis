@@ -18,7 +18,7 @@ public class Muxer(IBearer bearer, ProtocolMode muxerMode) : IDisposable
     // Primary constructor parameters become fields.
     private readonly IBearer bearer = bearer;
     private readonly ProtocolMode muxerMode = muxerMode;
-    
+
     private readonly DateTimeOffset _startTime = DateTimeOffset.UtcNow;
     private readonly ReplaySubject<ProtocolMessage> _messageSubject = new(bufferSize: 1);
     private readonly CancellationTokenSource _muxerCts = new();
@@ -39,19 +39,20 @@ public class Muxer(IBearer bearer, ProtocolMode muxerMode) : IDisposable
     /// An Aff monad yielding Unit upon successful sending or capturing an exception on failure.
     /// </returns>
     public Aff<Unit> WriteSegment(ProtocolMessage message, CancellationToken cancellationToken) =>
-        // Create the mux segment as a pure computation.
-        Aff(() => ValueTask.FromResult(
-            new MuxSegment(
-                TransmissionTime: (uint)(DateTimeOffset.UtcNow - _startTime).TotalMilliseconds,
-                ProtocolId: message.Protocol,
-                PayloadLength: (ushort)message.Payload.Length,
-                Payload: message.Payload,
-                Mode: muxerMode == ProtocolMode.Responder)))
-        // Encode the mux segment using our functional encoder wrapped in a ValueTask.
-        .Bind(segment =>
-            Aff(() => ValueTask.FromResult(MuxSegmentCodec.TryEncode(segment).IfFailThrow())))
-        // Send the encoded segment over the bearer.
-        .Bind(encodedSegment => bearer.SendAsync(encodedSegment, cancellationToken));
+        from segment in Aff(() =>
+            ValueTask.FromResult(
+                new MuxSegment(
+                    TransmissionTime: (uint)(DateTimeOffset.UtcNow - _startTime).TotalMilliseconds,
+                    ProtocolId: message.Protocol,
+                    PayloadLength: (ushort)message.Payload.Length,
+                    Payload: message.Payload,
+                    Mode: muxerMode == ProtocolMode.Responder))
+            )
+        from encodedSegment in Aff(() =>
+                ValueTask.FromResult(MuxSegmentCodec.TryEncode(segment).IfFailThrow())
+            )
+        from _ in bearer.Send(encodedSegment, cancellationToken)
+        select unit;
 
     /// <summary>
     /// Runs the multiplexing process, continuously processing messages from the subject.
