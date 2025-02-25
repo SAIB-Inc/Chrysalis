@@ -55,7 +55,7 @@ namespace Chrysalis.Network.Core
         public Aff<Unit> Send(byte[] data, CancellationToken cancellationToken) =>
             Aff(async () =>
             {
-                await _stream.WriteAsync(data, 0, data.Length, cancellationToken);
+                await _stream.WriteAsync(data, cancellationToken);
                 return unit;
             });
 
@@ -75,7 +75,7 @@ namespace Chrysalis.Network.Core
                     await _stream.ReadExactlyAsync(buffer, 0, len, cancellationToken);
                     return buffer;
                 }
-                return System.Array.Empty<byte>();
+                return [];
             });
 
         /// <summary>
