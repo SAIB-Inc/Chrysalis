@@ -1,228 +1,244 @@
+using System;
 using System.Collections;
+using System.Linq;
 using System.Reflection;
-using System.Runtime.CompilerServices;
 using Chrysalis.Cbor.Attributes;
 using Chrysalis.Cbor.Serialization;
 
-namespace Chrysalis.Cbor.Utils;
-
-public static class ActivatorUtil
+namespace Chrysalis.Cbor.Utils
 {
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static object CreateInstance(Type targetType, object? value, CborOptions options)
+    /// <summary>
+    /// Provides utility methods for creating instances of types using reflection,
+    /// tailored for CBOR serialization and deserialization.
+    /// </summary>
+    public static class ActivatorUtil
     {
-        ConstructorInfo ctor = targetType.GetConstructors()
-            .OrderByDescending(c => c.GetParameters().Length)
-            .FirstOrDefault() ?? throw new InvalidOperationException($"No constructor found for {targetType}");
-
-        ParameterInfo[] parameters = ctor.GetParameters();
-
-        object result = parameters.Length switch
+        /// <summary>
+        /// Creates an instance of the specified type using the provided value and CBOR options.
+        /// Selects the constructor with the most parameters and populates its arguments.
+        /// </summary>
+        /// <param name="targetType">The type to instantiate.</param>
+        /// <param name="value">The data used to populate constructor arguments.</param>
+        /// <param name="options">CBOR options containing mapping configurations.</param>
+        /// <returns>An instance of the target type.</returns>
+        /// <exception cref="ArgumentNullException">Thrown if <paramref name="targetType"/> or <paramref name="options"/> is null.</exception>
+        /// <exception cref="InvalidOperationException">Thrown if no constructor is found or argument transformation fails.</exception>
+        public static object CreateInstance(Type targetType, object? value, CborOptions options)
         {
-            0 => Activator.CreateInstance(targetType)!,
-            1 => CreateSingleParameterInstance(targetType, ctor, value),
-            _ => CreateMultiParameterInstance(targetType, ctor, value, options)
-        };
+            if (targetType == null) throw new ArgumentNullException(nameof(targetType));
+            if (options == null) throw new ArgumentNullException(nameof(options));
 
-        return result;
-    }
+            ConstructorInfo? constructor = targetType.GetConstructors()
+                .OrderByDescending(c => c.GetParameters().Length)
+                .FirstOrDefault()
+                ?? throw new InvalidOperationException($"No constructor found for type '{targetType.FullName}'.");
 
-    private static object CreateSingleParameterInstance(Type targetType, ConstructorInfo ctor, object? value)
-    {
-        Type paramType = ctor.GetParameters()[0].ParameterType;
-
-        if (value != null && IsCollectionType(paramType))
-        {
-            object convertedValue = ConvertCollection(value, paramType);
-            return Activator.CreateInstance(targetType, convertedValue)!;
-        }
-
-        return Activator.CreateInstance(targetType, value)!;
-    }
-
-    private static object CreateMultiParameterInstance(Type targetType, ConstructorInfo ctor, object? value, CborOptions options)
-    {
-        ParameterInfo[] parameters = ctor.GetParameters();
-        object?[] args = new object?[parameters.Length];
-
-        switch (value)
-        {
-            case Dictionary<object, object> dict:
-                MapDictionaryToParameters(parameters, dict, args, options);
-                break;
-            case IEnumerable<object> sequence:
-                MapSequenceToParameters(sequence, args);
-                break;
-        }
-
-        return Activator.CreateInstance(targetType, args)!;
-    }
-
-    private static void MapDictionaryToParameters(
-        ParameterInfo[] parameters,
-        Dictionary<object, object> dict,
-        object?[] args,
-    CborOptions options)
-    {
-        if (options.IndexPropertyMapping != null)
-        {
-            int currPropIndex = 0;
-            foreach (KeyValuePair<int, Type> mapping in options.IndexPropertyMapping)
+            ParameterInfo[] parameters = constructor.GetParameters();
+            if (parameters.Length == 0)
             {
-                int mappingKey = mapping.Key;
-                object? foundValue = dict
-                    .Where(kv => TryConvertKeyToInt(kv.Key, out int keyAsInt) && keyAsInt == mappingKey)
-                    .Select(kv => kv.Value)
-                    .FirstOrDefault();
-                args[currPropIndex++] = foundValue;
+                return Activator.CreateInstance(targetType)
+                    ?? throw new InvalidOperationException($"Failed to create instance of '{targetType.FullName}'.");
             }
-            return;
+
+            object?[] arguments = PrepareArguments(parameters, value, options);
+            return constructor.Invoke(arguments);
         }
 
-        // Handle name-based mapping
-        if (options.NamedPropertyMapping != null)
+        /// <summary>
+        /// Prepares arguments for a constructor based on the provided value and options.
+        /// </summary>
+        private static object?[] PrepareArguments(ParameterInfo[] parameters, object? value, CborOptions options)
+        {
+            object?[] arguments = new object?[parameters.Length];
+
+            if (parameters.Length == 1)
+            {
+                arguments[0] = TransformValue(value, parameters[0].ParameterType);
+                return arguments;
+            }
+
+            switch (value)
+            {
+                case IDictionary dictionary when options.IndexPropertyMapping != null:
+                    MapByIndex(dictionary, options.IndexPropertyMapping, parameters, arguments);
+                    break;
+
+                case IDictionary dictionary when options.NamedPropertyMapping != null:
+                    MapByName(dictionary, parameters, arguments);
+                    break;
+
+                case IEnumerable sequence:
+                    MapBySequence(sequence, parameters, arguments);
+                    break;
+
+                    // Unmapped cases leave arguments as null, relying on parameter defaults or nullability
+            }
+
+            return arguments;
+        }
+
+        /// <summary>
+        /// Maps dictionary values to arguments using an index-based mapping.
+        /// </summary>
+        private static void MapByIndex(
+            IDictionary dictionary,
+            IReadOnlyDictionary<int, Type> mapping,
+            ParameterInfo[] parameters,
+            object?[] arguments)
+        {
+            int index = 0;
+            foreach (int key in mapping.Keys.OrderBy(k => k))
+            {
+                if (index >= arguments.Length) break;
+                object? matchingKey = dictionary.Keys
+                    .OfType<object>()
+                    .FirstOrDefault(k => TryConvertKey(k, out int intKey) && intKey == key);
+                if (matchingKey != null)
+                {
+                    arguments[index] = TransformValue(dictionary[matchingKey], parameters[index].ParameterType);
+                }
+                index++;
+            }
+        }
+
+        /// <summary>
+        /// Maps dictionary values to arguments using parameter names from attributes.
+        /// </summary>
+        private static void MapByName(IDictionary dictionary, ParameterInfo[] parameters, object?[] arguments)
         {
             for (int i = 0; i < parameters.Length; i++)
             {
-                ParameterInfo param = parameters[i];
-                CborPropertyAttribute? propAttr = param.GetCustomAttribute<CborPropertyAttribute>();
-
-                if (propAttr != null && dict.TryGetValue(propAttr.Name, out object? value))
+                string? propertyName = parameters[i].GetCustomAttribute<CborPropertyAttribute>()?.Name;
+                if (propertyName != null && dictionary.Contains(propertyName))
                 {
-                    args[i] = value;
+                    arguments[i] = TransformValue(dictionary[propertyName], parameters[i].ParameterType);
                 }
             }
-            return;
         }
 
-        // Handle regular dictionary case (MapConverter)
-        if (parameters.Length == 1)
+        /// <summary>
+        /// Maps sequence items to arguments in order.
+        /// </summary>
+        private static void MapBySequence(IEnumerable sequence, ParameterInfo[] parameters, object?[] arguments)
         {
-            Type paramType = parameters[0].ParameterType;
-            if (paramType.IsGenericType &&
-                paramType.GetGenericTypeDefinition() == typeof(Dictionary<,>))
+            int index = 0;
+            foreach (object? item in sequence)
             {
-                Type[] genericArgs = paramType.GetGenericArguments();
-                Type dictType = typeof(Dictionary<,>).MakeGenericType(genericArgs);
-                IDictionary typedDict = (IDictionary)Activator.CreateInstance(dictType)!;
-
-                foreach (KeyValuePair<object, object> kvp in dict)
-                {
-                    typedDict.Add(kvp.Key, kvp.Value);
-                }
-
-                args[0] = typedDict;
+                if (index >= arguments.Length) break;
+                arguments[index] = TransformValue(item, parameters[index].ParameterType);
+                index++;
             }
         }
-    }
 
-    private static bool TryConvertKeyToInt(object key, out int result)
-    {
-        if (key is int i)
+        /// <summary>
+        /// Transforms a value to match the target type, handling various conversion scenarios.
+        /// </summary>
+        private static object? TransformValue(object? value, Type targetType)
         {
-            result = i;
-            return true;
-        }
-        try
-        {
-            result = Convert.ToInt32(key);
-            return true;
-        }
-        catch
-        {
-            result = default;
-            return false;
-        }
-    }
+            if (value == null) return null;
 
-    private static void MapSequenceToParameters(IEnumerable<object> sequence, object?[] args)
-    {
-        object[] values = [.. sequence];
-        Array.Copy(values, args, Math.Min(values.Length, args.Length));
-    }
-
-    private static bool IsCollectionType(Type type)
-    {
-        if (!type.IsGenericType)
-            return false;
-
-        Type genericType = type.GetGenericTypeDefinition();
-        return genericType == typeof(List<>) ||
-               genericType == typeof(Dictionary<,>);
-    }
-
-    private static object ConvertCollection(object value, Type targetType)
-    {
-        if (!targetType.IsGenericType)
-            throw new InvalidOperationException($"Expected generic collection type, got {targetType}");
-
-        Type genericDef = targetType.GetGenericTypeDefinition();
-
-        return genericDef switch
-        {
-            var t when t == typeof(List<>) => CreateGenericList(value, targetType.GetGenericArguments()[0]),
-            var t when t == typeof(Dictionary<,>) => CreateGenericDictionary(value, targetType.GetGenericArguments()),
-            _ => throw new InvalidOperationException($"Unsupported collection type: {targetType}")
-        };
-    }
-
-    private static object CreateGenericList(object value, Type elementType)
-    {
-        IList list = (IList)Activator.CreateInstance(typeof(List<>)
-            .MakeGenericType(elementType))!;
-
-        if (value is IEnumerable<object> items)
-        {
-            foreach (object item in items)
+            // Handle case where value is a collection but target type is not
+            if (!typeof(IEnumerable).IsAssignableFrom(targetType) && value is IEnumerable enumerable)
             {
-                list.Add(item);
+                if (enumerable is IEnumerable<object> items)
+                {
+                    object? firstItem = items.FirstOrDefault();
+                    if (firstItem != null && targetType.IsAssignableFrom(firstItem.GetType()))
+                    {
+                        return firstItem;
+                    }
+                }
+            }
+
+            Type sourceType = value.GetType();
+            if (targetType.IsAssignableFrom(sourceType)) return value;
+
+            // Try constructor with single parameter of value's type
+            ConstructorInfo? constructor = targetType.GetConstructor([sourceType]);
+            if (constructor != null)
+            {
+                return constructor.Invoke([value]);
+            }
+
+            // Handle generic collections
+            if (IsCollectionType(targetType) && targetType.IsGenericType)
+            {
+                return ConvertToCollection(value, targetType);
+            }
+
+            throw new InvalidOperationException(
+                $"Cannot transform value of type '{sourceType.FullName}' to target type '{targetType.FullName}'.");
+        }
+
+        /// <summary>
+        /// Converts a value to a generic collection type (List<> or Dictionary<,>).
+        /// </summary>
+        private static object ConvertToCollection(object value, Type targetType)
+        {
+            Type genericType = targetType.GetGenericTypeDefinition();
+            Type[] typeArguments = targetType.GetGenericArguments();
+
+            if (genericType == typeof(List<>))
+            {
+                Type listType = typeof(List<>).MakeGenericType(typeArguments[0]);
+                IList list = (IList)Activator.CreateInstance(listType)!;
+                if (value is IEnumerable items)
+                {
+                    foreach (object? item in items)
+                    {
+                        list.Add(item);
+                    }
+                }
+                return list;
+            }
+
+            if (genericType == typeof(Dictionary<,>))
+            {
+                Type dictType = typeof(Dictionary<,>).MakeGenericType(typeArguments);
+                IDictionary dictionary = (IDictionary)Activator.CreateInstance(dictType)!;
+                if (value is IDictionary source)
+                {
+                    foreach (DictionaryEntry entry in source)
+                    {
+                        dictionary.Add(entry.Key, entry.Value);
+                    }
+                }
+                return dictionary;
+            }
+
+            throw new InvalidOperationException($"Unsupported collection type: '{targetType.FullName}'.");
+        }
+
+        /// <summary>
+        /// Determines if a type is a supported generic collection (List<> or Dictionary<,>).
+        /// </summary>
+        private static bool IsCollectionType(Type type) =>
+            type.IsGenericType && (
+                type.GetGenericTypeDefinition() == typeof(List<>) ||
+                type.GetGenericTypeDefinition() == typeof(Dictionary<,>)
+            );
+
+        /// <summary>
+        /// Attempts to convert a key to an integer.
+        /// </summary>
+        private static bool TryConvertKey(object key, out int result)
+        {
+            if (key is int intKey)
+            {
+                result = intKey;
+                return true;
+            }
+
+            try
+            {
+                result = Convert.ToInt32(key);
+                return true;
+            }
+            catch
+            {
+                result = 0;
+                return false;
             }
         }
-
-        return list;
-    }
-
-    private static object CreateGenericDictionary(object value, Type[] typeArgs)
-    {
-        IDictionary dict = (IDictionary)Activator.CreateInstance(
-            typeof(Dictionary<,>).MakeGenericType(typeArgs))!;
-
-        switch (value)
-        {
-            case IEnumerable<KeyValuePair<object, object?>> entries:
-                foreach (KeyValuePair<object, object?> entry in entries)
-                {
-                    if (!dict.Contains(entry.Key))
-                    {
-                        dict.Add(entry.Key, entry.Value);
-                    }
-                }
-                break;
-
-            case IDictionary dictionary:
-                foreach (DictionaryEntry entry in dictionary)
-                {
-                    if (!dict.Contains(entry.Key))
-                    {
-                        dict.Add(entry.Key, entry.Value);
-                    }
-                }
-                break;
-
-            case IEnumerable enumerable:
-                foreach (object? item in enumerable)
-                {
-                    if (item is KeyValuePair<object, object> kvp)
-                    {
-                        if (!dict.Contains(kvp.Key))
-                        {
-                            dict.Add(kvp.Key, kvp.Value);
-                        }
-                    }
-                }
-                break;
-        }
-
-        return dict;
     }
 }
