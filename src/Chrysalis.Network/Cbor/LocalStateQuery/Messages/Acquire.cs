@@ -9,6 +9,8 @@ public abstract record Acquire : LocalStateQueryMessage;
 
 public class AcquireTypes
 {
+    public static Acquire Default(Point? point = null) => point is not null ? SpecificPoint(point) : VolatileTip;
+
     public static SpecificPoint SpecificPoint(Point point) =>
         new(new(0), point);
 

@@ -9,13 +9,15 @@ public abstract record ReAcquire : LocalStateQueryMessage;
 
 public class ReAcquireIdxs
 {
+    public static Acquire Default(Point? point = null) => point is not null ? SpecificPoint(point) : VolatileTip;
+
     public static SpecificPoint SpecificPoint(Point point) =>
         new(new(6), point);
 
-    public static VolatileTip VolatileTip() =>
+    public static VolatileTip VolatileTip =>
         new(new(9));
 
-    public static ImmutableTip ImmutableTip() =>
+    public static ImmutableTip ImmutableTip =>
         new(new(11));
 }
 

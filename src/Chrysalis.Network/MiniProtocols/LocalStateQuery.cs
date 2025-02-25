@@ -9,6 +9,7 @@ using Chrysalis.Network.Multiplexer;
 using Chrysalis.Cbor.Serialization;
 using Chrysalis.Network.Cbor.LocalStateQuery;
 using Query = Chrysalis.Network.Cbor.LocalStateQuery.Messages.Query;
+using Chrysalis.Cbor.Types;
 
 namespace Chrysalis.Network.MiniProtocols;
 
@@ -17,14 +18,19 @@ namespace Chrysalis.Network.MiniProtocols;
 /// </summary>
 public class LocalStateQuery(AgentChannel channel)
 {
+    static readonly Error AcquireFailed = (Error)"Acquire failed";
 
-    public Aff<Result> QueryTip() =>
+    public Aff<Result> Query(Point? point, ShellyQuery query) =>
         from acquireChunk in channel.EnqueueChunk(
-            CborSerializer.Serialize(AcquireTypes.VolatileTip))
+            CborSerializer.Serialize(AcquireTypes.Default(point))
+        )
         from acquireResponseChunk in channel.ReceiveNextChunk()
         let acquireResponse = CborSerializer.Deserialize<LocalStateQueryMessage>(acquireResponseChunk)
+        from _1 in guard(acquireResponse is Acquired, AcquireFailed)
         from queryChunk in channel.EnqueueChunk(
-            QueryRequest.New(Queries.QueryTip))
+            QueryRequest.New(query)
+        )
+        from shellyResponseChunk in channel.ReceiveNextChunk()
         from responseChunk in channel.ReceiveNextChunk()
         let response = CborSerializer.Deserialize<Result>(responseChunk)
         select response;

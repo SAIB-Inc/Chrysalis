@@ -5,10 +5,10 @@ using Chrysalis.Cbor.Types;
 namespace Chrysalis.Network.Cbor.LocalStateQuery.Messages;
 
 [CborConverter(typeof(CustomListConverter))]
-public record IsDone(
-    [CborIndex(0)] IsDoneIdx Idx
+public record IsMessageDone(
+    [CborIndex(0)] IsMessageDoneIdx Idx
 ) : LocalStateQueryMessage;
 
 [CborConverter(typeof(EnforcedIntConverter))]
 [CborOptions(Index = 7)]
-public record IsDoneIdx(int Value) : CborBase;
+public record IsMessageDoneIdx(int Value) : CborBase;
