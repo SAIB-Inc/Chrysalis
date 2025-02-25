@@ -40,7 +40,6 @@ namespace Chrysalis.Network.Core
                 var socket = new Socket(AddressFamily.Unix, SocketType.Stream, SocketProtocolType.Unspecified);
                 var endpoint = new UnixDomainSocketEndPoint(path);
                 await socket.ConnectAsync(endpoint);
-                Console.WriteLine($"Connected to Unix domain socket at {socket.Connected}");
                 // Create a network stream over the socket.
                 var stream = new NetworkStream(socket, ownsSocket: true);
                 return new UnixBearer(socket, stream);
@@ -53,10 +52,10 @@ namespace Chrysalis.Network.Core
         /// <param name="data">The byte array to send.</param>
         /// <param name="cancellationToken">Cancellation token to cancel the operation.</param>
         /// <returns>An Aff monad yielding Unit upon completion.</returns>
-        public Aff<Unit> SendAsync(byte[] data, CancellationToken cancellationToken) =>
+        public Aff<Unit> Send(byte[] data, CancellationToken cancellationToken) =>
             Aff(async () =>
             {
-                await _stream.WriteAsync(data, 0, data.Length, cancellationToken);
+                await _stream.WriteAsync(data, cancellationToken);
                 return unit;
             });
 
@@ -67,7 +66,7 @@ namespace Chrysalis.Network.Core
         /// <param name="len">The exact number of bytes to receive.</param>
         /// <param name="cancellationToken">Cancellation token to cancel the operation.</param>
         /// <returns>An Aff monad yielding the received byte array.</returns>
-        public Aff<byte[]> ReceiveExactAsync(int len, CancellationToken cancellationToken) =>
+        public Aff<byte[]> ReceiveExact(int len, CancellationToken cancellationToken) =>
             Aff(async () =>
             {
                 if (_stream.DataAvailable)
@@ -76,7 +75,7 @@ namespace Chrysalis.Network.Core
                     await _stream.ReadExactlyAsync(buffer, 0, len, cancellationToken);
                     return buffer;
                 }
-                return System.Array.Empty<byte>();
+                return [];
             });
 
         /// <summary>

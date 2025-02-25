@@ -1,4 +1,3 @@
-using Chrysalis.Cbor.Cardano.Types.Block.Transaction.Output;
 using Chrysalis.Cbor.Serialization;
 using Chrysalis.Network.Cbor;
 using Chrysalis.Network.Multiplexer;
@@ -13,3 +12,4 @@ public class Handshake(AgentChannel channel) : IMiniProtocol
         let handshakeResponseMessage = CborSerializer.Deserialize<HandshakeMessage>(handshakeResponseChunk)
         select handshakeResponseMessage;
 }
+
