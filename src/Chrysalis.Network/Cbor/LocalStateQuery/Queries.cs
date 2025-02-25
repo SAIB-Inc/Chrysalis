@@ -31,10 +31,7 @@ public static class Queries
                     // @TODO: This is currently hardcoded. We need to probably make this dynamic
                     // by querying the current era from the ledger.
                     new CborUlong((ulong)QueryEra.Conway),
-                    new ShellyQuery(
-                        query,
-                        null
-                    )
+                    query
                 )
             )
         );
@@ -49,10 +46,16 @@ public static class Queries
             )
         );
 
-    public static ShellyQuery GetTip => CreateShellyQuery(new CborUlong(0));
+    public static ShellyQuery GetTip => CreateShellyQuery(
+        new ShellyQuery(
+            new CborUlong(0),
+            null
+        )
+    );
+
     public static ShellyQuery GetUtxoByAddress(List<byte[]> addresses)
     {
-        var cborAddress = addresses.Select(a => new CborBytes(a)).ToList();
+        List<CborBytes> cborAddress = [.. addresses.Select(a => new CborBytes(a))];
         return CreateShellyQuery(new UtxoByAddressQuery(new(6), new TaggedAddresses(cborAddress)));
     }
 }
@@ -65,7 +68,7 @@ public record BasicQuery([CborIndex(0)] CborUlong Idx) : CborBase;
 [CborOptions(IsDefinite = true)]
 public record ShellyQuery(
     [CborIndex(0)] CborBase Query,
-    [CborIndex(1)] ShellyQuery? InnerQuery
+    [CborIndex(1)] CborBase? InnerQuery
 ) : CborBase;
 
 [CborConverter(typeof(CustomListConverter))]
@@ -76,5 +79,5 @@ public record UtxoByAddressQuery(
 ) : CborBase;
 
 [CborConverter(typeof(ListConverter))]
-[CborOptions(IsDefinite = true, Tag = 258)]
+[CborOptions(IsDefinite = true)]
 public record TaggedAddresses(List<CborBytes> Addresses) : CborBase;
