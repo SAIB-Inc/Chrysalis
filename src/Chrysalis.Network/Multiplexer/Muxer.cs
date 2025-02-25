@@ -20,7 +20,7 @@ public class Muxer(IBearer bearer, ProtocolMode muxerMode) : IDisposable
     private readonly ProtocolMode muxerMode = muxerMode;
     
     private readonly DateTimeOffset _startTime = DateTimeOffset.UtcNow;
-    private readonly Subject<ProtocolMessage> _messageSubject = new();
+    private readonly ReplaySubject<ProtocolMessage> _messageSubject = new(bufferSize: 1);
     private readonly CancellationTokenSource _muxerCts = new();
 
     /// <summary>
@@ -64,7 +64,7 @@ public class Muxer(IBearer bearer, ProtocolMode muxerMode) : IDisposable
     public Aff<Unit> Run(CancellationToken cancellationToken) =>
         Aff(async () =>
         {
-            await GetMessageSubject().AsObservable()
+            await _messageSubject.AsObservable()
                 .ForEachAsync(async message =>
                 {
                     // Execute the WriteSegment effect for each incoming message.
