@@ -23,15 +23,9 @@ public class LocalStateQuery(AgentChannel channel)
             CborSerializer.Serialize(AcquireTypes.VolatileTip))
         from acquireResponseChunk in channel.ReceiveNextChunk()
         let acquireResponse = CborSerializer.Deserialize<LocalStateQueryMessage>(acquireResponseChunk)
-        from _ in acquireResponse switch
-        {
-            Acquired => unitAff,
-            Failure f => FailAff<Unit>(new Exception($"Acquisition failed: {f.Reason}")),
-            _ => FailAff<Unit>(new Exception("Unexpected acquire response"))
-        }
         from queryChunk in channel.EnqueueChunk(
-            QueryRequest.New(CborSerializer.Serialize(CborSerializer.Serialize(Queries.GetLedgerTipQuery))
+            QueryRequest.New(Queries.QueryTip))
         from responseChunk in channel.ReceiveNextChunk()
-        let response = CborSerializer.Deserialize<Result<Tip>>(responseChunk)
-        select response.Value;
+        let response = CborSerializer.Deserialize<Result>(responseChunk)
+        select response;
 }
