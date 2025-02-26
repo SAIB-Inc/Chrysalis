@@ -7,10 +7,14 @@ namespace Chrysalis.Cbor.Utils;
 
 public static class PropertyResolver
 {
-    public static (IReadOnlyDictionary<int, Type> IndexMap, IReadOnlyDictionary<string, Type> NamedMap, ConstructorInfo Constructor) ResolvePropertyMappings(Type type)
+    public static (
+        IReadOnlyDictionary<int, (Type Type, object? ExpectedValue)> IndexMap, 
+        IReadOnlyDictionary<string, (Type Type, object? ExpectedValue)> NamedMap, 
+        ConstructorInfo Constructor
+    ) ResolvePropertyMappings(Type type)
     {
         if (type.IsAbstract)
-            return (new Dictionary<int, Type>(), new Dictionary<string, Type>(), null!);
+            return (new Dictionary<int, (Type, object?)>(), new Dictionary<string, (Type, object?)>(), null!);
 
         ConstructorInfo constructor = type.GetConstructors(BindingFlags.Public | BindingFlags.Instance)
             .OrderByDescending(c => c.GetParameters().Length)
@@ -18,31 +22,39 @@ public static class PropertyResolver
             ?? throw new InvalidOperationException($"No suitable constructor found for {type}");
 
         ParameterInfo[] parameters = constructor.GetParameters();
-        Dictionary<int, Type> indexMap = [];
-        Dictionary<string, Type> namedMap = [];
+        Dictionary<int, (Type Type, object? ExpectedValue)> indexMap = [];
+        Dictionary<string, (Type Type, object? ExpectedValue)> namedMap = [];
 
         foreach (ParameterInfo param in parameters)
         {
+            // Retrieve CBOR attributes
             CborIndexAttribute? indexAttr = param.GetCustomAttribute<CborIndexAttribute>();
+            CborPropertyAttribute? propAttr = param.GetCustomAttribute<CborPropertyAttribute>();
+            // Retrieve ExactValue attribute
+            ExactValueAttribute? exactAttr = param.GetCustomAttribute<ExactValueAttribute>();
+
+            // Map index if present
             if (indexAttr != null)
             {
-                indexMap[indexAttr.Index] = param.ParameterType;
+                indexMap[indexAttr.Index] = (param.ParameterType, exactAttr?.Value);
                 continue;
             }
 
-            CborPropertyAttribute? propAttr = param.GetCustomAttribute<CborPropertyAttribute>();
-
+            // Map property name if present
             if (propAttr != null)
-                namedMap[propAttr.Name] = param.ParameterType;
+            {
+                namedMap[propAttr.Name] = (param.ParameterType, exactAttr?.Value);
+            }
         }
 
         return (indexMap, namedMap, constructor);
     }
 
+    // Other methods remain unchanged for this query but are included for completeness
     public static List<object?> GetPropertyValues(object obj, ConstructorInfo constructorInfo)
     {
         ParameterInfo[] parameters = constructorInfo.GetParameters();
-        List<object?> values = [];
+        List<object?> values = [.. new object?[parameters.Length]];
 
         for (int i = 0; i < parameters.Length; i++)
         {
@@ -58,7 +70,6 @@ public static class PropertyResolver
 
         return values;
     }
-
 
     public static List<object?> GetObjectProperties(object obj)
     {
@@ -89,11 +100,12 @@ public static class PropertyResolver
 
     public static List<object?> GetFilteredProperties(object obj)
     {
-        return [.. obj.GetType()
+        return obj.GetType()
             .GetProperties()
             .Where(p => p.Name != "Raw")
             .Where(p => p is not null)
-            .Select(p => p.GetValue(obj))];
+            .Select(p => p.GetValue(obj))
+            .ToList();
     }
 
     public static Type GetInnerType(CborOptions options, object? value)

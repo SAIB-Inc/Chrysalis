@@ -59,11 +59,11 @@ public static class CustomMapSerializationUtil
     {
         if (isIndexBased)
         {
-            return options.IndexPropertyMapping![Convert.ToInt32(key)];
+            return options.IndexPropertyMapping![Convert.ToInt32(key)].Type;
         }
         else
         {
-            return options.NamedPropertyMapping![key.ToString()!];
+            return options.NamedPropertyMapping![key.ToString()!].Type;
         }
     }
 }

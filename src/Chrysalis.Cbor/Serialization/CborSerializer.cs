@@ -104,7 +104,7 @@ public static class CborSerializer
         ReadOnlyMemory<byte>? chunk = null;
         if (readChunk)
         {
-            chunk = reader.ReadEncodedValue(true);
+            chunk = reader.ReadEncodedValue();
             reader = new CborReader(chunk.Value, CborConformanceMode.Lax);
         }
 

@@ -10,6 +10,7 @@ using Chrysalis.Cbor.Serialization;
 using Chrysalis.Network.Cbor.LocalStateQuery;
 using Query = Chrysalis.Network.Cbor.LocalStateQuery.Messages.Query;
 using Chrysalis.Cbor.Types;
+using Chrysalis.Network.Cbor.Common;
 
 namespace Chrysalis.Network.MiniProtocols;
 
@@ -30,7 +31,6 @@ public class LocalStateQuery(AgentChannel channel)
         from queryChunk in channel.EnqueueChunk(
             QueryRequest.New(query)
         )
-        from shellyResponseChunk in channel.ReceiveNextChunk()
         from responseChunk in channel.ReceiveNextChunk()
         let response = CborSerializer.Deserialize<Result>(responseChunk)
         select response;
