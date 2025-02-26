@@ -9,7 +9,7 @@ public sealed class EncodedValueConverter : ICborConverter
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public object? Read(CborReader reader, CborOptions options)
     {
-        return reader.ReadByteString();
+        return reader.ReadEncodedValue().ToArray();
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -18,6 +18,6 @@ public sealed class EncodedValueConverter : ICborConverter
         if (value.First() is not byte[] v)
             throw new CborTypeMismatchException("Value is not a bytes", typeof(byte[]));
 
-        writer.WriteByteString(v);
+        writer.WriteEncodedValue(v);
     }
 }

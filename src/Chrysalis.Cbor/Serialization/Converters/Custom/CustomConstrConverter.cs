@@ -22,7 +22,6 @@ public sealed class CustomConstrConverter : ICborConverter
 
         Type innerType = options.RuntimeType.GetGenericArguments()[0];
         CborOptions innerOptions = CborRegistry.Instance.GetBaseOptions(innerType);
-        innerOptions.OriginalData = options.OriginalData;
 
         List<object?> items = [];
         while (reader.PeekState() != CborReaderState.EndArray)
