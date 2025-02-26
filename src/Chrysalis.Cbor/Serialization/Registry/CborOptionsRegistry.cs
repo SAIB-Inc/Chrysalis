@@ -50,7 +50,7 @@ public sealed class CborOptionsRegistry
         CborOptionsAttribute? optionsAttr = type.GetCustomAttribute<CborOptionsAttribute>();
         CborConverterAttribute? converterTypeAttr = type.GetCustomAttribute<CborConverterAttribute>();
         IReadOnlyCollection<Type>? unionTypes = UnionResolver.ResolveUnionTypes(type, converterTypeAttr?.ConverterType);
-        (IReadOnlyDictionary<int, Type> indexMap, IReadOnlyDictionary<string, Type> namedMap, ConstructorInfo constructor) = PropertyResolver.ResolvePropertyMappings(type);
+        (IReadOnlyDictionary<int, (Type Type, object? ExpectedValue)> IndexMap, IReadOnlyDictionary<string, (Type Type, object? ExpectedValue)> NamedMap, ConstructorInfo Constructor) = PropertyResolver.ResolvePropertyMappings(type);
 
         return new CborOptions(
             index: optionsAttr?.Index ?? -1,
@@ -60,10 +60,10 @@ public sealed class CborOptionsRegistry
             objectType: type,
             normalizedType: normalizedType,
             converterType: converterTypeAttr?.ConverterType,
-            indexPropertyMapping: indexMap,
-            namedPropertyMapping: namedMap,
+            indexPropertyMapping: IndexMap,
+            namedPropertyMapping: NamedMap,
             unionTypes: unionTypes,
-            constructor: constructor
+            constructor: Constructor
         );
     }
 }

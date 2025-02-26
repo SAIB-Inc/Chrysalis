@@ -31,7 +31,9 @@ public class Demuxer(IBearer bearer) : IDisposable
     public Aff<(ProtocolType protocol, byte[] payload)> ReadSegment(CancellationToken cancellationToken) =>
         from headerBytes in ReadExactly(8, cancellationToken)
         let headerSegment = MuxSegmentCodec.DecodeHeader(headerBytes)
+    
         from payloadBytes in ReadExactly(headerSegment.PayloadLength, cancellationToken)
+         let payloadHex = Convert.ToHexString(payloadBytes)
         select (headerSegment.ProtocolId, payloadBytes);
 
     /// <summary>

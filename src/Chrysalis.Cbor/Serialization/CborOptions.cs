@@ -14,9 +14,10 @@ public record CborOptions
     public Type? NormalizedType { get; }
     public Type? ConverterType { get; }
     public Type? RuntimeType { get; set; }
+    public object? ExactValue { get; set; }
     public ConstructorInfo? Constructor { get; set; }
-    public IReadOnlyDictionary<int, Type>? IndexPropertyMapping { get; }
-    public IReadOnlyDictionary<string, Type>? NamedPropertyMapping { get; }
+    public IReadOnlyDictionary<int, (Type Type, object? ExpectedValue)>? IndexPropertyMapping { get; }
+    public IReadOnlyDictionary<string, (Type Type, object? ExpectedValue)>? NamedPropertyMapping { get; }
     public IReadOnlyCollection<Type>? UnionTypes { get; }
 
     public CborOptions(
@@ -27,8 +28,8 @@ public record CborOptions
         Type? objectType = null,
         Type? normalizedType = null,
         Type? converterType = null,
-        IReadOnlyDictionary<int, Type>? indexPropertyMapping = null,
-        IReadOnlyDictionary<string, Type>? namedPropertyMapping = null,
+        IReadOnlyDictionary<int, (Type Type, object? ExpectedValue)>? indexPropertyMapping = null,
+        IReadOnlyDictionary<string, (Type Type, object? ExpectedValue)>? namedPropertyMapping = null,
         IReadOnlyCollection<Type>? unionTypes = null,
         ConstructorInfo? constructor = null
     )

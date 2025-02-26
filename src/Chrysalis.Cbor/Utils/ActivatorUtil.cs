@@ -82,7 +82,7 @@ namespace Chrysalis.Cbor.Utils
         /// </summary>
         private static void MapByIndex(
             IDictionary dictionary,
-            IReadOnlyDictionary<int, Type> mapping,
+            IReadOnlyDictionary<int, (Type Type, object? ExpectedValue)> mapping,
             ParameterInfo[] parameters,
             object?[] arguments)
         {

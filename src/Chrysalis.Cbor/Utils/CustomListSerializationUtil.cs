@@ -20,15 +20,15 @@ public static class CustomListSerializationUtil
         List<object?> items = [];
         for (int i = 0; i < options.IndexPropertyMapping.Count && reader.PeekState() != CborReaderState.EndArray; i++)
         {
-            if (!options.IndexPropertyMapping.TryGetValue(i, out Type? parameterType))
+            if (!options.IndexPropertyMapping.TryGetValue(i, out (Type Type, object? ExpectedValue) parameterType))
                 throw new CborDeserializationException($"No type found for index {i}");
 
             // Resolve the concrete type if it's a generic parameter
-            Type innerType = parameterType;
-            if (parameterType.IsGenericParameter && options.RuntimeType?.IsGenericType == true)
+            Type innerType = parameterType.Type;
+            if (innerType.IsGenericParameter && options.RuntimeType?.IsGenericType == true)
             {
                 // Get the position of the generic parameter
-                int position = parameterType.GenericParameterPosition;
+                int position = innerType.GenericParameterPosition;
 
                 // Get the type arguments of the runtime type
                 Type[] typeArgs = options.RuntimeType.GetGenericArguments();
@@ -41,6 +41,7 @@ public static class CustomListSerializationUtil
             }
 
             CborOptions innerOptions = CborRegistry.Instance.GetBaseOptions(innerType);
+            innerOptions.ExactValue = parameterType.ExpectedValue;
             object? item = CborSerializer.Deserialize(reader, innerOptions);
             items.Add(item);
         }

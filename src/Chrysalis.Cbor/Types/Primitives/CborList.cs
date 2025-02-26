@@ -5,3 +5,4 @@ namespace Chrysalis.Cbor.Types.Primitives;
 
 [CborConverter(typeof(ListConverter))]
 public record CborList<T>(List<T> Value) : CborBase where T : CborBase;
+
