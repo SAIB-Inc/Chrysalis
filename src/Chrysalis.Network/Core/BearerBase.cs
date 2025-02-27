@@ -18,7 +18,7 @@ namespace Chrysalis.Network.Core
         /// <param name="data">The byte array to send.</param>
         /// <param name="cancellationToken">Cancellation token to cancel the operation.</param>
         /// <returns>An Aff monad yielding Unit upon completion.</returns>
-        public Aff<Unit> Send(byte[] data, CancellationToken cancellationToken) =>
+        public Aff<Unit> Send(ReadOnlyMemory<byte> data, CancellationToken cancellationToken) =>
             Aff(async () =>
             {
                 await _stream.WriteAsync(data, cancellationToken);

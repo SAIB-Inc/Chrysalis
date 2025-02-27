@@ -41,7 +41,7 @@ static Aff<Unit> QueryUtxo() =>
 /// </summary>
 static Aff<Unit> ChainSync()
 {
-    return from nodeClient in NodeClient.Connect("/tmp/intercept_node_socket")
+    return from nodeClient in NodeClient.Connect("/home/rawriclark/CardanoPreview/pool/txpipe/relay1/ipc/node.socket")
            from _ in nodeClient.ChainSync
                .IfNone(() => throw new Exception("ChainSync missing"))
                .FindInterection([new Point(new(73793022), new(Convert.FromHexString("1b6b4afeef73bf4a1e2a014b492549b6cedc61919fda6a7e4d3813f578eba4db")))])
@@ -70,23 +70,22 @@ static Aff<Unit> ChainSync()
 
 static void NextResponseLogger(MessageNextResponse nextResponse)
 {
-    Console.WriteLine($"Next Response: {nextResponse}");
-    ulong slot = nextResponse switch
+    ulong blockNo = nextResponse switch
     {
-        MessageRollForward response => CborSerializer.Deserialize<BlockWithEra<Block>>(response.Payload.Value).Block.Slot()!.Value,
+        MessageRollForward response => CborSerializer.Deserialize<BlockWithEra<Block>>(response.Payload.Value).Block.Number()!.Value,
         MessageRollBackward response => response.Point.Slot.Value,
         MessageAwaitReply response => 0,
         _ => 0,
     };
-    if (slot > 0)
-        Console.WriteLine($"Slot: {slot}");
+    if (blockNo > 0)
+        Console.WriteLine($"Block No: {blockNo}");
     else
         Console.WriteLine("Tip Reached!");
 }
 static async Task MainAsync()
 {
     // Run the program to get a Fin<Unit> result.
-    var finResult = await QueryUtxo().Run();
+    var finResult = await ChainSync().Run();
     // var finResult = await ChainSync().Run();
 
     // Match on the Fin result to handle success or error.

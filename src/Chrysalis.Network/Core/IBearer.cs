@@ -11,7 +11,8 @@ public interface IBearer : IDisposable
     /// <param name="data">The data to send.</param>
     /// <param name="cancellationToken">Token to cancel the operation.</param>
     /// <returns>An Aff monad that yields Unit upon completion.</returns>
-    Aff<Unit> Send(byte[] data, CancellationToken cancellationToken);
+    Aff<Unit> Send(ReadOnlyMemory<byte> data, CancellationToken cancellationToken);
+
 
     /// <summary>
     /// Receives exactly the specified number of bytes asynchronously as a functional effect.
@@ -20,4 +21,5 @@ public interface IBearer : IDisposable
     /// <param name="cancellationToken">Token to cancel the operation.</param>
     /// <returns>An Aff monad that yields the received byte array.</returns>
     Aff<ReadOnlyMemory<byte>> Receive(int len, CancellationToken cancellationToken);
+
 }

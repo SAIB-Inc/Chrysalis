@@ -196,11 +196,76 @@ public static class MuxSegmentCodec
         }
 
         return new MuxSegment(
-            TransmissionTime: transmissionTime,
-            ProtocolId: protocolId,
-            PayloadLength: payloadLength,
-            Payload: payload,
-            Mode: mode
+            transmissionTime: transmissionTime,
+            protocolId: protocolId,
+            payloadLength: payloadLength,
+            payload: payload,
+            mode: mode
         );
+    }
+
+    /// <summary>
+    /// Encodes a mux segment directly into a provided buffer for maximum efficiency.
+    /// </summary>
+    /// <param name="segment">The segment to encode</param>
+    /// <param name="buffer">Pre-allocated buffer to encode into</param>
+    /// <returns>The number of bytes written</returns>
+    public static int EncodeInto(MuxSegment segment, Span<byte> buffer)
+    {
+        int position = 0;
+
+        // 1. Transmission Time (uint32, big-endian)
+        uint transmissionTime = segment.TransmissionTime;
+        if (BitConverter.IsLittleEndian)
+        {
+            buffer[position++] = (byte)(transmissionTime >> 24);
+            buffer[position++] = (byte)(transmissionTime >> 16);
+            buffer[position++] = (byte)(transmissionTime >> 8);
+            buffer[position++] = (byte)transmissionTime;
+        }
+        else
+        {
+            BitConverter.TryWriteBytes(buffer.Slice(position, 4), transmissionTime);
+            position += 4;
+        }
+
+        // 2. Mini Protocol ID (ushort with Mode bit, big-endian)
+        ushort protocolIdValue = (ushort)segment.ProtocolId;
+        if (segment.Mode)
+        {
+            protocolIdValue |= 0x8000; // Set the most significant bit
+        }
+
+        if (BitConverter.IsLittleEndian)
+        {
+            buffer[position++] = (byte)(protocolIdValue >> 8);
+            buffer[position++] = (byte)protocolIdValue;
+        }
+        else
+        {
+            BitConverter.TryWriteBytes(buffer.Slice(position, 2), protocolIdValue);
+            position += 2;
+        }
+
+        // 3. Payload Length (ushort, big-endian)
+        if (BitConverter.IsLittleEndian)
+        {
+            buffer[position++] = (byte)(segment.PayloadLength >> 8);
+            buffer[position++] = (byte)segment.PayloadLength;
+        }
+        else
+        {
+            BitConverter.TryWriteBytes(buffer.Slice(position, 2), segment.PayloadLength);
+            position += 2;
+        }
+
+        // 4. Payload
+        if (segment.Payload != null && segment.Payload.Length > 0)
+        {
+            segment.Payload.AsSpan().CopyTo(buffer[position..]);
+            position += segment.Payload.Length;
+        }
+
+        return position;
     }
 }
