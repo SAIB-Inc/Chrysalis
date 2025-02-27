@@ -10,6 +10,7 @@ public abstract record TransactionOutput : CborBase;
 
 
 [CborConverter(typeof(CustomListConverter))]
+[CborOptions(IsDefinite = true)]
 public record AlonzoTransactionOutput(
     [CborIndex(0)] Address Address,
     [CborIndex(1)] Value Amount,
@@ -18,6 +19,7 @@ public record AlonzoTransactionOutput(
 
 
 [CborConverter(typeof(CustomMapConverter))]
+[CborOptions(IsDefinite = true)]
 public record PostAlonzoTransactionOutput(
     [CborIndex(0)] Address Address,
     [CborIndex(1)] Value Amount,

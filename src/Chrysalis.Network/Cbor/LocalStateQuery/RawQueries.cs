@@ -19,15 +19,15 @@ public enum QueryEra
     Conway = 6,
 }
 
-public static class Queries
+public static class RawQueries
 {
-    public static ShellyQuery CreateShellyQuery(CborBase query)
+    public static BlockQuery CreateBlockQuery(CborBase query)
     {
-        return new ShellyQuery(
+        return new BlockQuery(
             new CborUlong(0),
-            new ShellyQuery(
+            new BlockQuery(
                 new CborUlong(0),
-                new ShellyQuery(
+                new BlockQuery(
                     // @TODO: This is currently hardcoded. We need to probably make this dynamic
                     // by querying the current era from the ledger.
                     new CborUlong((ulong)QueryEra.Conway),
@@ -37,26 +37,31 @@ public static class Queries
         );
     }
 
-    public static ShellyQuery GetCurrentEra =>
-        new ShellyQuery(
+    public static BlockQuery GetCurrentEra =>
+        new BlockQuery(
             new CborUlong(0),
-            new ShellyQuery(
+            new BlockQuery(
                 new CborUlong(2),
                 null
             )
         );
 
-    public static ShellyQuery GetTip => CreateShellyQuery(
-        new ShellyQuery(
+    public static BlockQuery GetTip => CreateBlockQuery(
+        new BlockQuery(
             new CborUlong(0),
             null
         )
     );
 
-    public static ShellyQuery GetUtxoByAddress(List<byte[]> addresses)
+    public static BlockQuery GetUtxoByAddress(List<byte[]> addresses)
     {
         List<CborBytes> cborAddress = [.. addresses.Select(a => new CborBytes(a))];
-        return CreateShellyQuery(new UtxoByAddressQuery(new(6), new TaggedAddresses(cborAddress)));
+        return CreateBlockQuery(new UtxoByAddressQuery(new(6), new Addresses(cborAddress)));
+    }
+
+    public static BlockQuery GetUtxoByTxIns(List<TransactionInput> txIns)
+    {
+        return CreateBlockQuery(new UtxoByTxInQuery(new(15), new(txIns)));
     }
 }
 
@@ -66,7 +71,7 @@ public record BasicQuery([CborIndex(0)] CborUlong Idx) : CborBase;
 
 [CborConverter(typeof(CustomListConverter))]
 [CborOptions(IsDefinite = true)]
-public record ShellyQuery(
+public record BlockQuery(
     [CborIndex(0)] CborBase Query,
     [CborIndex(1)] CborBase? InnerQuery
 ) : CborBase;
@@ -75,9 +80,16 @@ public record ShellyQuery(
 [CborOptions(IsDefinite = true)]
 public record UtxoByAddressQuery(
     [CborIndex(0)] CborUlong Idx,
-    [CborIndex(1)] TaggedAddresses Addresses
+    [CborIndex(1)] Addresses Addresses
+) : CborBase;
+
+[CborConverter(typeof(CustomListConverter))]
+[CborOptions(IsDefinite = true)]
+public record UtxoByTxInQuery(
+    [CborIndex(0)] CborUlong Idx,
+    [CborIndex(1)] CborDefList<TransactionInput> TxIns
 ) : CborBase;
 
 [CborConverter(typeof(ListConverter))]
 [CborOptions(IsDefinite = true)]
-public record TaggedAddresses(List<CborBytes> Addresses) : CborBase;
+public record Addresses(List<CborBytes> Addrs) : CborBase;

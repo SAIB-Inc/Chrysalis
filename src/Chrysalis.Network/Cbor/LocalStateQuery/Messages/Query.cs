@@ -16,8 +16,8 @@ public record Query(
 
 public class QueryRequest
 {
-    public static byte[] New(CborBase queryRequest)
+    public static Query New(CborBase queryRequest)
     {
-        return CborSerializer.Serialize(new Query(new ExactValue<CborInt>(new(3)), queryRequest));
+        return new Query(new ExactValue<CborInt>(new(3)), queryRequest);
     }
 }

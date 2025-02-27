@@ -14,7 +14,7 @@ public sealed class MapConverter : ICborConverter
             throw new InvalidOperationException("Constructor not specified");
 
         List<KeyValuePair<object, object?>> entries = MapSerializationUtil.ReadKeyValuePairs(reader, options);
-        return MapSerializationUtil.CreateMapInstance(entries, options);
+        return entries;
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
