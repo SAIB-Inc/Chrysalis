@@ -8,6 +8,7 @@ using Chrysalis.Cbor.Cardano.Types.Block;
 using Chrysalis.Cbor.Cardano.Extensions;
 using Chrysalis.Network.Cbor.LocalStateQuery;
 using Chrysalis.Network.MiniProtocols.Extensions;
+using System.Diagnostics;
 
 static Aff<Unit> QueryUtox() =>
     from client in NodeClient.Connect("/tmp/intercept_node_socket")
@@ -24,53 +25,147 @@ static Aff<Unit> QueryUtox() =>
     })
     select unit;
 
-/// <summary>
-/// The entire program is expressed as a single Aff effect.
-/// </summary>
+
 static Aff<Unit> ChainSync()
 {
-    return from nodeClient in NodeClient.Connect("/tmp/intercept_node_socket")
+    return from nodeClient in NodeClient.Connect("/home/rawriclark/CardanoPreview/pool/txpipe/relay1/ipc/node.socket")
            from _ in nodeClient.ChainSync
                .IfNone(() => throw new Exception("ChainSync missing"))
                .FindInterection([new Point(new(73793022), new(Convert.FromHexString("1b6b4afeef73bf4a1e2a014b492549b6cedc61919fda6a7e4d3813f578eba4db")))])
            from loop in Aff(async () =>
-           {
-               while (true)
-               {
-                   var nextResponseResult = await nodeClient.ChainSync
-                   .IfNone(() => throw new Exception("ChainSync missing"))
-                   .NextRequest().Run();
+            {
+                // For tracking blocks processed per second
+                Stopwatch secondTimer = Stopwatch.StartNew();
+                Stopwatch totalTimer = Stopwatch.StartNew();
+                int blocksProcessed = 0;
+                int totalBlocksProcessed = 0;
+                ulong lastBlockNo = 0;
+                
+                // Idle time tracking
+                bool isAtTip = false;
+                Stopwatch idleTimer = new Stopwatch();
+                TimeSpan totalIdleTime = TimeSpan.Zero;
 
-                   var nextResponse = nextResponseResult.Match(
-                       Succ: nextResponse => NextResponseLogger(nextResponse),
-                       Fail: ex => throw ex
-                   );
-               }
-               return unit;
-           })
+                // Set up Ctrl+C handler to show stats when exiting
+                Console.CancelKeyPress += (sender, e) =>
+                {
+                    // Capture final idle time if we're at the tip
+                    if (isAtTip && idleTimer.IsRunning)
+                    {
+                        totalIdleTime += idleTimer.Elapsed;
+                    }
+                    
+                    double activeTime = totalTimer.Elapsed.TotalSeconds - totalIdleTime.TotalSeconds;
+                    Console.WriteLine($"\nSummary: Processed {totalBlocksProcessed} blocks in {totalTimer.Elapsed.TotalSeconds:F2} seconds");
+                    Console.WriteLine($"Active sync time: ~{activeTime:F2} seconds");
+                    Console.WriteLine($"Idle time at tip: ~{totalIdleTime.TotalSeconds:F2} seconds");
+                    Console.WriteLine($"Average rate during active sync: {totalBlocksProcessed / activeTime:F2} blocks/sec");
+                };
+
+                var chainSync = nodeClient.ChainSync
+                    .IfNone(() => throw new Exception("ChainSync missing"));
+
+                while (true)
+                {
+                    var nextResponseResult = await chainSync.NextRequest().Run();
+
+                    var result = nextResponseResult.Match(
+                        Succ: nextResponse => ProcessNextResponse(nextResponse, ref blocksProcessed, ref lastBlockNo, secondTimer),
+                        Fail: ex => throw ex
+                    );
+                    
+                    var (shouldLog, blockNo, isNewBlock, currentAtTip) = result;
+
+                    // Handle tip state changes and idle time tracking
+                    if (currentAtTip && !isAtTip)
+                    {
+                        // Just reached the tip
+                        isAtTip = true;
+                        idleTimer.Start();
+                        Console.WriteLine("Entering idle state at tip");
+                    }
+                    else if (!currentAtTip && isAtTip)
+                    {
+                        // No longer at tip (new blocks arrived)
+                        isAtTip = false;
+                        idleTimer.Stop();
+                        totalIdleTime += idleTimer.Elapsed;
+                        idleTimer.Reset();
+                        Console.WriteLine($"Exiting idle state, idle time so far: {totalIdleTime.TotalSeconds:F2}s");
+                    }
+
+                    // Update total blocks count
+                    if (isNewBlock)
+                    {
+                        totalBlocksProcessed++;
+                        
+                        // Log immediately for blocks after tip
+                        if (isAtTip)
+                        {
+                            Console.WriteLine($"New block arrived while at tip: {blockNo}");
+                            shouldLog = true;
+                        }
+                    }
+
+                    // Log on timer or when explicitly requested
+                    if (shouldLog)
+                    {
+                        Console.WriteLine($"Processed {blocksProcessed} blocks in the last {secondTimer.ElapsedMilliseconds}ms. Latest block: {lastBlockNo} | Total: {totalBlocksProcessed} blocks in {(totalTimer.Elapsed.TotalSeconds - totalIdleTime.TotalSeconds):F2}s active time");
+                        blocksProcessed = 0;
+                        secondTimer.Restart();
+                    }
+                }
+
+                return ValueTask.FromResult(unit);
+            })
            from ______ in Aff(async () =>
            {
                await Task.Delay(Timeout.Infinite);
-               return unit;
+               return ValueTask.FromResult(unit);
            })
            select unit;
 }
 
-static void NextResponseLogger(MessageNextResponse nextResponse)
+static (bool shouldLog, ulong blockNo, bool isNewBlock, bool atTip) ProcessNextResponse(
+    MessageNextResponse nextResponse,
+    ref int blocksProcessed,
+    ref ulong lastBlockNo,
+    Stopwatch timer)
 {
-    Console.WriteLine($"Next Response: {nextResponse}");
-    ulong slot = nextResponse switch
+    ulong blockNo = 0;
+    bool isNewBlock = false;
+    bool atTip = false;
+
+    switch (nextResponse)
     {
-        MessageRollForward response => CborSerializer.Deserialize<BlockWithEra<Block>>(response.Payload.Value).Block.Slot()!.Value,
-        MessageRollBackward response => response.Point.Slot.Value,
-        MessageAwaitReply response => 0,
-        _ => 0,
-    };
-    if (slot > 0)
-        Console.WriteLine($"Slot: {slot}");
-    else
-        Console.WriteLine("Tip Reached!");
+        case MessageRollForward response:
+            // Got a new block
+            blockNo = CborSerializer.Deserialize<BlockWithEra<Block>>(response.Payload.Value).Block.Number()!.Value;
+            blocksProcessed++;
+            lastBlockNo = blockNo;
+            isNewBlock = true;
+            // We received a block, so we're definitely not at tip
+            atTip = false;
+            break;
+
+        case MessageRollBackward response:
+            blockNo = response.Point.Slot.Value;
+            Console.WriteLine($"ROLLBACK to slot {blockNo}");
+            // After rollback we're not at tip
+            atTip = false;
+            break;
+
+        case MessageAwaitReply _:
+            Console.WriteLine("Tip Reached!");
+            timer.Restart();
+            // This is the signal we're at tip
+            atTip = true;
+            break;
+    }
+
+    return (timer.ElapsedMilliseconds >= 1000, blockNo, isNewBlock, atTip);
 }
+
 static async Task MainAsync()
 {
     // Run the program to get a Fin<Unit> result.
