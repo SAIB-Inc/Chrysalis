@@ -2,28 +2,24 @@
 using static LanguageExt.Prelude;
 using Chrysalis.Cbor.Serialization;
 using Chrysalis.Network.Multiplexer;
-using Chrysalis.Network.Cbor.LocalStateQuery;
 using Chrysalis.Network.Cbor.Common;
 using Chrysalis.Network.Cbor.ChainSync;
 using Chrysalis.Cbor.Cardano.Types.Block;
 using Chrysalis.Cbor.Cardano.Extensions;
+using Chrysalis.Network.Cbor.LocalStateQuery;
+using Chrysalis.Network.MiniProtocols.Extensions;
 
-// 007060251a30c40e428085cdb477aa0ca8462ae5d8b6a55e5e9616aeb6850282937506f53d58e9e6fd7ccbbbc57196d58b2a11e36a76a60857
-
-static Aff<Unit> QueryUtxo() =>
+static Aff<Unit> QueryUtox() =>
     from client in NodeClient.Connect("/tmp/intercept_node_socket")
-    from tipResult in client.LocalStateQuery
+    from result in client.LocalStateQuery
          .IfNone(() => throw new Exception("LocalStateQuery not initialized"))
-         .Query(
-            point: null,
-            // query : Queries.GetTip
-            query: Queries.GetUtxoByAddress(
-                [Convert.FromHexString("007060251a30c40e428085cdb477aa0ca8462ae5d8b6a55e5e9616aeb6850282937506f53d58e9e6fd7ccbbbc57196d58b2a11e36a76a60857")]
-            )
-         )
+         .GetUtxosByTxIn([
+             new TransactionInput(new(Convert.FromHexString("30576c97934d1f88f77add233b14b0a85b65410df38c8f03b0104aaa2fdf651c")), new(0))
+         ])
     from _ in Aff(() =>
     {
-        Console.WriteLine($"Tip: {tipResult}");
+        Console.WriteLine($"Result: {result}");
+        Console.WriteLine($"ResultCbor: {Convert.ToHexString(result.Raw!.Value.ToArray())}");
         return ValueTask.FromResult(unit);
     })
     select unit;
@@ -67,9 +63,13 @@ static void NextResponseLogger(MessageNextResponse nextResponse)
     {
         MessageRollForward response => CborSerializer.Deserialize<BlockWithEra<Block>>(response.Payload.Value).Block.Slot()!.Value,
         MessageRollBackward response => response.Point.Slot.Value,
+        MessageAwaitReply response => 0,
         _ => 0,
     };
-    Console.WriteLine($"Slot: {slot}");
+    if (slot > 0)
+        Console.WriteLine($"Slot: {slot}");
+    else
+        Console.WriteLine("Tip Reached!");
 }
 static async Task MainAsync()
 {
