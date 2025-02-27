@@ -171,7 +171,7 @@ static (bool shouldLog, ulong blockNo, bool isNewBlock, bool atTip) ProcessNextR
         case MessageRollBackward response:
             blockNo = response.Point.Slot.Value;
             Console.WriteLine($"ROLLBACK to slot {blockNo}");
-            // After rollback we're not at tip
+            // After rollback, we're not at tip
             atTip = false;
             break;
 
@@ -180,6 +180,8 @@ static (bool shouldLog, ulong blockNo, bool isNewBlock, bool atTip) ProcessNextR
             timer.Restart();
             // This is the signal we're at tip
             atTip = true;
+            // Reset blocksProcessed when reaching the tip to avoid duplicate counting
+            blocksProcessed = 0;
             break;
     }
 
