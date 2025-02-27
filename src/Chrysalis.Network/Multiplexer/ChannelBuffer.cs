@@ -44,7 +44,7 @@ public class ChannelBuffer(AgentChannel channel) : IDisposable
     /// <typeparam name="T">The type of message to send.</typeparam>
     /// <param name="msg">The message to send.</param>
     /// <returns>An Aff monad yielding Unit upon completion.</returns>
-    public Aff<Unit> SendMsgChunks<T>(T msg) where T : CborBase =>
+    public Aff<Unit> SendFullMessage<T>(T msg) where T : CborBase =>
         from payload in Aff(() => ValueTask.FromResult(CborSerializer.Serialize(msg)))
         from _ in SendPayloadInChunks(payload)
         select unit;
@@ -73,7 +73,7 @@ public class ChannelBuffer(AgentChannel channel) : IDisposable
     /// </summary>
     /// <typeparam name="T">The type of message to receive.</typeparam>
     /// <returns>An Aff monad yielding the complete received message.</returns>
-    public Aff<T> RecvFullMsg<T>() where T : CborBase =>
+    public Aff<T> RecieveFullMessage<T>() where T : CborBase =>
         from maybeMessage in CheckBufferForCompleteMessage<T>()
         from result in maybeMessage.Match(
             Some: msg => SuccessAff(msg),

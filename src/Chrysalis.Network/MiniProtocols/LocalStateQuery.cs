@@ -25,12 +25,12 @@ public class LocalStateQuery(AgentChannel channel)
     /// <param name="point">Optional point in chain history to query state at.</param>
     /// <param name="query">The query to execute.</param>
     /// <returns>An Aff monad yielding the query result.</returns>
-    public Aff<Result> Query(LanguageExt.Option<Point> point, BlockQuery query) =>
-        from _ in _buffer.SendMsgChunks(AcquireTypes.Default(point))
-        from acquireResponse in _buffer.RecvFullMsg<LocalStateQueryMessage>()
+    public Aff<Result> Query(Option<Point> point, BlockQuery query) =>
+        from _ in _buffer.SendFullMessage(AcquireTypes.Default(point))
+        from acquireResponse in _buffer.RecieveFullMessage<LocalStateQueryMessage>()
         from __ in guard(acquireResponse is Acquired, AcquireFailed)
-        from ___ in _buffer.SendMsgChunks(QueryRequest.New(query))
-        from response in _buffer.RecvFullMsg<LocalStateQueryMessage>()
+        from ___ in _buffer.SendFullMessage(QueryRequest.New(query))
+        from response in _buffer.RecieveFullMessage<LocalStateQueryMessage>()
         from result in Aff(() => ValueTask.FromResult(
             CborSerializer.Deserialize<Result>(CborSerializer.Serialize(response))
         ))
