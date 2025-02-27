@@ -1,6 +1,7 @@
 using System.Formats.Cbor;
 using Chrysalis.Cbor.Serialization.Exceptions;
 using Chrysalis.Cbor.Serialization.Registry;
+using Chrysalis.Cbor.Types;
 using Chrysalis.Cbor.Types.Primitives;
 
 namespace Chrysalis.Cbor.Serialization.Converters.Custom;
@@ -18,9 +19,9 @@ public class ExactValueConverter : ICborConverter
         object exactValue = options.ExactValue;
         bool isMatch = deserialized switch
         {
-            CborUlong ulongValue => (ulong)exactValue == ulongValue.Value,
-            CborLong longValue => (long)exactValue == longValue.Value,
-            CborInt intValue => (int)exactValue == intValue.Value,
+            ICborNumber<ulong> ulongValue => (ulong)exactValue == ulongValue.Value,
+            ICborNumber<long> longValue => (long)exactValue == longValue.Value,
+            ICborNumber<int> intValue => (int)exactValue == intValue.Value,
             _ => throw new CborException("Invalid type"),
         };
 

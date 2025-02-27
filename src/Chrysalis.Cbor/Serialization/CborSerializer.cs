@@ -87,7 +87,7 @@ public static class CborSerializer
             CborReader reader = new(data, CborConformanceMode.Lax);
             CborOptions options = CborRegistry.Instance.GetBaseOptions(typeof(T));
             CborBase instance = Deserialize(reader, options, false);
-            instance.Raw = data.ToArray();
+            instance.Raw = data;
 
             return (T)instance;
         }
