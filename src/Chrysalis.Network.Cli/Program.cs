@@ -10,28 +10,42 @@ using Chrysalis.Network.Cbor.LocalStateQuery;
 using Chrysalis.Network.MiniProtocols.Extensions;
 using System.Diagnostics;
 
-static Aff<Unit> QueryUtox() =>
-    from client in NodeClient.Connect("/tmp/intercept_node_socket")
-    from result in client.LocalStateQuery
-         .IfNone(() => throw new Exception("LocalStateQuery not initialized"))
-         .GetUtxosByTxIn([
-             new TransactionInput(new(Convert.FromHexString("30576c97934d1f88f77add233b14b0a85b65410df38c8f03b0104aaa2fdf651c")), new(0))
-         ])
-    from _ in Aff(() =>
-    {
-        Console.WriteLine($"Result: {result}");
-        Console.WriteLine($"ResultCbor: {Convert.ToHexString(result.Raw!.Value.ToArray())}");
-        return ValueTask.FromResult(unit);
-    })
-    select unit;
+// static Aff<Unit> QueryUtox() =>
+//     from client in NodeClient.Connect("/tmp/intercept_node_socket")
+//     from result in client.LocalStateQuery
+//          .IfNone(() => throw new Exception("LocalStateQuery not initialized"))
+//          .GetUtxosByTxIn([
+//              new TransactionInput(new(Convert.FromHexString("30576c97934d1f88f77add233b14b0a85b65410df38c8f03b0104aaa2fdf651c")), new(0))
+//          ])
+//     from _ in Aff(() =>
+//     {
+//         Console.WriteLine($"Result: {result}");
+//         Console.WriteLine($"ResultCbor: {Convert.ToHexString(result.Raw!.Value.ToArray())}");
+//         return ValueTask.FromResult(unit);
+//     })
+//     select unit;
 
 
 static Aff<Unit> ChainSync()
 {
-    return from nodeClient in NodeClient.Connect("/home/rawriclark/CardanoPreview/pool/txpipe/relay1/ipc/node.socket")
+    // hello
+    // 8200a51980108202f41980118202f41980128202f41980138202f41980148202f4 
+
+    // intersection 18k blocks
+    // 820481821a04616347582080d97516b7adf283999bc3a5ed88491f7e3ec0c9c43cca1b4b88b78e1f4626c2
+
+    // intersection million blocks 
+    // 820481821A02CBBA4E5820CC804E6B2A5487A3E8FFC706E974B64C96EE0331DBDE774ADC75F4AB713460E1
+
+    //var zz = Convert.ToHexString(CborSerializer.Serialize(ChainSyncMessages.NextRequest()));
+    var zz = Convert.ToHexString(CborSerializer.Serialize(ChainSyncMessages.FindIntersect(
+        new([new Point(new(46905934), new(Convert.FromHexString("cc804e6b2a5487a3e8ffc706e974b64c96ee0331dbde774adc75f4ab713460e1")))])
+    )));
+
+    return from nodeClient in NodeClient.Connect("/home/rjlacanlale/cardano/ipc/node.socket")
            from _ in nodeClient.ChainSync
                .IfNone(() => throw new Exception("ChainSync missing"))
-               .FindInterection([new Point(new(73793022), new(Convert.FromHexString("1b6b4afeef73bf4a1e2a014b492549b6cedc61919fda6a7e4d3813f578eba4db")))])
+               .FindInterectionBenchmark(Convert.FromHexString("820481821A02CBBA4E5820CC804E6B2A5487A3E8FFC706E974B64C96EE0331DBDE774ADC75F4AB713460E1"))
            from loop in Aff(async () =>
            {
                // For tracking blocks processed per second
@@ -77,12 +91,19 @@ static Aff<Unit> ChainSync()
 
                while (true)
                {
-                   var nextResponseResult = await chainSync.NextRequest().Run();
+                   var nextResponseResult = await chainSync.NextRequest(Convert.FromHexString("8100")).Run();
 
-                   var result = nextResponseResult.Match(
-                       Succ: nextResponse => ProcessNextResponse(nextResponse, ref blocksProcessed, ref lastBlockNo, secondTimer),
-                       Fail: ex => throw ex
-                   );
+                    // Extract the value using pattern matching on the Fin<byte[]>
+                    byte[] data = nextResponseResult.Match(
+                        Succ: bytes => bytes,  // On success, return the byte array
+                        Fail: ex => {
+                            // Handle the error case
+                            Console.WriteLine($"Error: {ex.Message}");
+                            return [];       // Or return an empty array: Array.Empty<byte>()
+                        }
+                    );
+
+                   var result = ProcessNextResponse(data, ref blocksProcessed, ref lastBlockNo, secondTimer);
 
                    var (shouldLog, blockNo, isNewBlock, currentAtTip) = result;
 
@@ -147,7 +168,7 @@ static Aff<Unit> ChainSync()
 }
 
 static (bool shouldLog, ulong blockNo, bool isNewBlock, bool atTip) ProcessNextResponse(
-    MessageNextResponse nextResponse,
+    byte[] data,
     ref int blocksProcessed,
     ref ulong lastBlockNo,
     Stopwatch timer)
@@ -156,33 +177,13 @@ static (bool shouldLog, ulong blockNo, bool isNewBlock, bool atTip) ProcessNextR
     bool isNewBlock = false;
     bool atTip = false;
 
-    switch (nextResponse)
+    blocksProcessed++;
+    lastBlockNo = (ulong)blocksProcessed;
+    isNewBlock = true;
+
+    if (data.Length <= 0)
     {
-        case MessageRollForward response:
-            // Got a new block
-            blockNo = CborSerializer.Deserialize<BlockWithEra<Block>>(response.Payload.Value).Block.Number()!.Value;
-            blocksProcessed++;
-            lastBlockNo = blockNo;
-            isNewBlock = true;
-            // We received a block, so we're definitely not at tip
-            atTip = false;
-            break;
-
-        case MessageRollBackward response:
-            blockNo = response.Point.Slot.Value;
-            Console.WriteLine($"ROLLBACK to slot {blockNo}");
-            // After rollback, we're not at tip
-            atTip = false;
-            break;
-
-        case MessageAwaitReply _:
-            Console.WriteLine("Tip Reached!");
-            timer.Restart();
-            // This is the signal we're at tip
-            atTip = true;
-            // Reset blocksProcessed when reaching the tip to avoid duplicate counting
-            blocksProcessed = 0;
-            break;
+        atTip = true;
     }
 
     return (timer.ElapsedMilliseconds >= 1000, blockNo, isNewBlock, atTip);
