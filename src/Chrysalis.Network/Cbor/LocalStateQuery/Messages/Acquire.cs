@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using Chrysalis.Cbor.Attributes;
 using Chrysalis.Cbor.Serialization.Converters.Custom;
 using Chrysalis.Cbor.Types;
@@ -12,16 +13,19 @@ public abstract record Acquire : LocalStateQueryMessage;
 
 public class AcquireTypes
 {
-    public static Acquire Default(Point? point = null) => point is not null ? SpecificPoint(point) : VolatileTip;
+    public static Acquire Default(LanguageExt.Option<Point> point) => point.Match(
+        Some: SpecificPoint,
+        None: () => VolatileTip 
+    );
 
-    public static SpecificPoint SpecificPoint(Point point) =>
-        new (new ExactValue<CborInt>(new(0)), point);
+    public static Acquire SpecificPoint(Point point) =>
+        new SpecificPoint(new ExactValue<CborInt>(new(0)), point);
 
-    public static VolatileTip VolatileTip =>
-        new (new ExactValue<CborInt>(new(8)));
+    public static Acquire VolatileTip =>
+        new VolatileTip(new ExactValue<CborInt>(new(8)));
 
-    public static ImmutableTip ImmutableTip =>
-        new (new ExactValue<CborInt>(new(10)));
+    public static Acquire ImmutableTip =>
+        new ImmutableTip(new ExactValue<CborInt>(new(10)));
 }
 
 [CborConverter(typeof(UnionConverter))]

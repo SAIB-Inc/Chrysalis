@@ -1,15 +1,7 @@
-using LanguageExt;
-using LanguageExt.Common;
-using static LanguageExt.Prelude;
-using System;
-using System.Threading.Tasks;
-using Chrysalis.Cbor.Types.Primitives;
 using Chrysalis.Network.Cbor.LocalStateQuery.Messages;
 using Chrysalis.Network.Multiplexer;
 using Chrysalis.Cbor.Serialization;
 using Chrysalis.Network.Cbor.LocalStateQuery;
-using Query = Chrysalis.Network.Cbor.LocalStateQuery.Messages.Query;
-using Chrysalis.Cbor.Types;
 using Chrysalis.Network.Cbor.Common;
 
 namespace Chrysalis.Network.MiniProtocols;
@@ -17,21 +9,30 @@ namespace Chrysalis.Network.MiniProtocols;
 /// <summary>
 /// Implementation of the Local State Query mini-protocol as described in the Ouroboros specification
 /// </summary>
+/// <remarks>
+/// Initializes a new instance of the LocalStateQuery mini-protocol.
+/// </remarks>
+/// <param name="channel">The AgentChannel to wrap for protocol communication.</param>
 public class LocalStateQuery(AgentChannel channel)
 {
-    static readonly Error AcquireFailed = (Error)"Acquire failed";
+    private readonly ChannelBuffer _buffer = new(channel);
+    
+    private static readonly Error AcquireFailed = Error.New("Acquire failed");
 
-    public Aff<Result> Query(Point? point, ShellyQuery query) =>
-        from acquireChunk in channel.EnqueueChunk(
-            CborSerializer.Serialize(AcquireTypes.Default(point))
-        )
-        from acquireResponseChunk in channel.ReceiveNextChunk()
-        let acquireResponse = CborSerializer.Deserialize<LocalStateQueryMessage>(acquireResponseChunk)
-        from _1 in guard(acquireResponse is Acquired, AcquireFailed)
-        from queryChunk in channel.EnqueueChunk(
-            QueryRequest.New(query)
-        )
-        from responseChunk in channel.ReceiveNextChunk()
-        let response = CborSerializer.Deserialize<Result>(responseChunk)
-        select response;
+    /// <summary>
+    /// Executes a query against the local state at the specified point.
+    /// </summary>
+    /// <param name="point">Optional point in chain history to query state at.</param>
+    /// <param name="query">The query to execute.</param>
+    /// <returns>An Aff monad yielding the query result.</returns>
+    public Aff<Result> Query(LanguageExt.Option<Point> point, BlockQuery query) =>
+        from _ in _buffer.SendMsgChunks(AcquireTypes.Default(point))
+        from acquireResponse in _buffer.RecvFullMsg<LocalStateQueryMessage>()
+        from __ in guard(acquireResponse is Acquired, AcquireFailed)
+        from ___ in _buffer.SendMsgChunks(QueryRequest.New(query))
+        from response in _buffer.RecvFullMsg<LocalStateQueryMessage>()
+        from result in Aff(() => ValueTask.FromResult(
+            CborSerializer.Deserialize<Result>(CborSerializer.Serialize(response))
+        ))
+        select result;
 }
