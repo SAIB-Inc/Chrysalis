@@ -9,7 +9,7 @@ using Chrysalis.Cbor.Cardano.Extensions;
 using Chrysalis.Network.Cbor.LocalStateQuery;
 using Chrysalis.Network.MiniProtocols.Extensions;
 
-static Aff<Unit> QueryUtox() =>
+static Aff<Unit> QueryTxIn() =>
     from client in NodeClient.Connect("/tmp/intercept_node_socket")
     from result in client.LocalStateQuery
          .IfNone(() => throw new Exception("LocalStateQuery not initialized"))
@@ -20,6 +20,18 @@ static Aff<Unit> QueryUtox() =>
     {
         Console.WriteLine($"Result: {result}");
         Console.WriteLine($"ResultCbor: {Convert.ToHexString(result.Raw!.Value.ToArray())}");
+        return ValueTask.FromResult(unit);
+    })
+    select unit;
+
+static Aff<Unit> QueryUtxo() =>
+    from client in NodeClient.Connect("/tmp/intercept_node_socket")
+    from result in client.LocalStateQuery
+         .IfNone(() => throw new Exception("LocalStateQuery not initialized"))
+         .GetUtxosByAddress([Convert.FromHexString("007060251a30c40e428085cdb477aa0ca8462ae5d8b6a55e5e9616aeb6850282937506f53d58e9e6fd7ccbbbc57196d58b2a11e36a76a60857")])
+    from _ in Aff(() =>
+    {
+        Console.WriteLine($"Result: {result}");
         return ValueTask.FromResult(unit);
     })
     select unit;
@@ -74,8 +86,8 @@ static void NextResponseLogger(MessageNextResponse nextResponse)
 static async Task MainAsync()
 {
     // Run the program to get a Fin<Unit> result.
-    // var finResult = await QueryUtxo().Run();
-    var finResult = await ChainSync().Run();
+    var finResult = await QueryUtxo().Run();
+    // var finResult = await ChainSync().Run();
 
     // Match on the Fin result to handle success or error.
     finResult.Match(

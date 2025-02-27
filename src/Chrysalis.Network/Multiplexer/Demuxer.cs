@@ -1,11 +1,7 @@
-using System;
-using System.Collections.Generic;
-using System.IO;
 using System.Reactive.Subjects;
-using System.Threading;
-using LanguageExt;
-using static LanguageExt.Prelude;
 using Chrysalis.Network.Core;
+using System.Buffers;
+using SArray = System.Array;
 
 namespace Chrysalis.Network.Multiplexer;
 
@@ -31,9 +27,7 @@ public class Demuxer(IBearer bearer) : IDisposable
     public Aff<(ProtocolType protocol, byte[] payload)> ReadSegment(CancellationToken cancellationToken) =>
         from headerBytes in ReadExactly(8, cancellationToken)
         let headerSegment = MuxSegmentCodec.DecodeHeader(headerBytes)
-    
         from payloadBytes in ReadExactly(headerSegment.PayloadLength, cancellationToken)
-         let payloadHex = Convert.ToHexString(payloadBytes)
         select (headerSegment.ProtocolId, payloadBytes);
 
     /// <summary>
@@ -48,31 +42,84 @@ public class Demuxer(IBearer bearer) : IDisposable
     private Aff<byte[]> ReadExactly(int n, CancellationToken cancellationToken) =>
         Aff(async () =>
         {
-            byte[] result = new byte[n];
-            int bytesRead = 0;
-            // Use a MemoryStream as a temporary buffer.
-            using var buffer = new MemoryStream();
-            while (bytesRead < n)
+            if (n <= 0) return [];
+            
+            // Use ArrayPool to rent the result buffer instead of allocating new
+            byte[] result = ArrayPool<byte>.Shared.Rent(n);
+            
+            try
             {
-                int bytesToRead = n - bytesRead;
-                int readFromBuffer = buffer.Read(result, bytesRead, bytesToRead);
-                if (readFromBuffer > 0)
+                int bytesRead = 0;
+                
+                // Only create the temporary buffer when we actually need it
+                MemoryStream? tempBuffer = null;
+                
+                while (bytesRead < n)
                 {
-                    bytesRead += readFromBuffer;
-                }
-                else
-                {
-                    // Run the Aff effect and explicitly cast the Fin<byte[]> to byte[].
-                    byte[] received = (byte[])await _bearer.ReceiveExact(n, cancellationToken).Run();
+                    int bytesToRead = n - bytesRead;
+                    
+                    // Read directly from bearer into our result buffer when possible
+                    ReadOnlyMemory<byte> received = (await _bearer.Receive(bytesToRead, cancellationToken).Run()).Match(
+                        Succ: memory => memory,
+                        Fail: ex => ReadOnlyMemory<byte>.Empty
+                    );
+                    
                     if (received.Length > 0)
                     {
-                        buffer.Write(received, 0, received.Length);
-                        // Reset the buffer position to allow reading the newly written bytes.
-                        buffer.Position = 0;
+                        if (received.Length <= bytesToRead)
+                        {
+                            // We can copy directly to the result buffer
+                            received.CopyTo(result.AsMemory(bytesRead));
+                            bytesRead += received.Length;
+                        }
+                        else
+                        {
+                            // We received more data than needed, store the excess in tempBuffer
+                            tempBuffer ??= new MemoryStream();
+                            
+                            // Copy what we need to result
+                            received.Slice(0, bytesToRead).CopyTo(result.AsMemory(bytesRead));
+                            bytesRead += bytesToRead;
+                            
+                            // Store excess in tempBuffer for next iteration
+                            tempBuffer.Write(received.Slice(bytesToRead).Span);
+                            tempBuffer.Position = 0;
+                        }
+                    }
+                    else if (tempBuffer != null && tempBuffer.Length > 0)
+                    {
+                        // Read from tempBuffer if available
+                        int readFromBuffer = tempBuffer.Read(result, bytesRead, bytesToRead);
+                        if (readFromBuffer > 0)
+                        {
+                            bytesRead += readFromBuffer;
+                            
+                            // Reset position if there's still data in the buffer
+                            if (tempBuffer.Position < tempBuffer.Length)
+                                tempBuffer.Position = 0;
+                        }
+                    }
+                    
+                    // If we didn't get any data from either source, prevent CPU spinning
+                    if (received.Length == 0 && (tempBuffer == null || tempBuffer.Length == 0))
+                    {
+                        await Task.Delay(1, cancellationToken);
                     }
                 }
+                
+                // Clean up temporary buffer if we used one
+                tempBuffer?.Dispose();
+                
+                // Create a properly sized result array
+                byte[] finalResult = new byte[n];
+                Buffer.BlockCopy(result, 0, finalResult, 0, n);
+                return finalResult;
             }
-            return result;
+            finally
+            {
+                // Return the rented buffer to the pool
+                ArrayPool<byte>.Shared.Return(result);
+            }
         });
 
     /// <summary>

@@ -19,5 +19,5 @@ public interface IBearer : IDisposable
     /// <param name="len">The exact number of bytes to receive.</param>
     /// <param name="cancellationToken">Token to cancel the operation.</param>
     /// <returns>An Aff monad that yields the received byte array.</returns>
-    Aff<byte[]> ReceiveExact(int len, CancellationToken cancellationToken);
+    Aff<ReadOnlyMemory<byte>> Receive(int len, CancellationToken cancellationToken);
 }
