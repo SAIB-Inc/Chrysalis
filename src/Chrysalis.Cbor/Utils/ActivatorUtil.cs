@@ -196,6 +196,8 @@ namespace Chrysalis.Cbor.Utils
             {
                 Type dictType = typeof(Dictionary<,>).MakeGenericType(typeArguments);
                 IDictionary dictionary = (IDictionary)Activator.CreateInstance(dictType)!;
+
+                // Handle traditional non-generic IDictionary (DictionaryEntry)
                 if (value is IDictionary source)
                 {
                     foreach (DictionaryEntry entry in source)
@@ -203,6 +205,29 @@ namespace Chrysalis.Cbor.Utils
                         dictionary.Add(entry.Key, entry.Value);
                     }
                 }
+                // Handle modern collections that might be KeyValuePair-based
+                else if (value is IEnumerable items)
+                {
+                    foreach (object? item in items)
+                    {
+                        // Try to get the Key and Value properties using reflection
+                        Type itemType = item.GetType();
+                        PropertyInfo? keyProperty = itemType.GetProperty("Key");
+                        PropertyInfo? valueProperty = itemType.GetProperty("Value");
+
+                        if (keyProperty != null && valueProperty != null)
+                        {
+                            object? key = keyProperty.GetValue(item);
+                            object? val = valueProperty.GetValue(item);
+
+                            if (key != null) // Prevent null key exceptions
+                            {
+                                dictionary.Add(key, val);
+                            }
+                        }
+                    }
+                }
+
                 return dictionary;
             }
 
