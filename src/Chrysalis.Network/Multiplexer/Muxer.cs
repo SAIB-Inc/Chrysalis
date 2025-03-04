@@ -1,10 +1,6 @@
-using System;
-using System.Reactive.Subjects;
-using System.Reactive.Linq;
-using System.Threading;
-using LanguageExt;
-using static LanguageExt.Prelude;
 using Chrysalis.Network.Core;
+using System.Buffers;
+using System.Threading.Channels;
 
 namespace Chrysalis.Network.Multiplexer;
 
@@ -15,75 +11,39 @@ namespace Chrysalis.Network.Multiplexer;
 /// <param name="muxerMode">The mode of operation (Initiator or Responder).</param>
 public class Muxer(IBearer bearer, ProtocolMode muxerMode) : IDisposable
 {
-    // Primary constructor parameters become fields.
-    private readonly IBearer bearer = bearer;
-    private readonly ProtocolMode muxerMode = muxerMode;
-
     private readonly DateTimeOffset _startTime = DateTimeOffset.UtcNow;
-    private readonly ReplaySubject<ProtocolMessage> _messageSubject = new(bufferSize: 1);
-    private readonly CancellationTokenSource _muxerCts = new();
+    private readonly Channel<(ProtocolType ProtocolType, ReadOnlySequence<byte> Payload)> _channel = Channel.CreateBounded<(ProtocolType, ReadOnlySequence<byte>)>(50);
 
-    /// <summary>
-    /// Gets the subject for sending messages.
-    /// </summary>
-    /// <returns>The message subject to which messages can be pushed.</returns>
-    public ISubject<ProtocolMessage> GetMessageSubject() => _messageSubject;
+    public ChannelWriter<(ProtocolType, ReadOnlySequence<byte>)> Writer => _channel.Writer;
 
-    /// <summary>
-    /// Encodes a protocol message into a mux segment and sends it over the bearer.
-    /// This method composes pure computations (segment creation and encoding) with effectful sends.
-    /// </summary>
-    /// <param name="message">The protocol message to send.</param>
-    /// <param name="cancellationToken">A cancellation token for the operation.</param>
-    /// <returns>
-    /// An Aff monad yielding Unit upon successful sending or capturing an exception on failure.
-    /// </returns>
-    public Aff<Unit> WriteSegment(ProtocolMessage message, CancellationToken cancellationToken) =>
-        from segment in Aff(() =>
-            ValueTask.FromResult(
-                new MuxSegment(
-                    TransmissionTime: (uint)(DateTimeOffset.UtcNow - _startTime).TotalMilliseconds,
-                    ProtocolId: message.Protocol,
-                    PayloadLength: (ushort)message.Payload.Length,
-                    Payload: message.Payload,
-                    Mode: muxerMode == ProtocolMode.Responder))
-            )
-        from encodedSegment in Aff(() =>
-                ValueTask.FromResult(MuxSegmentCodec.TryEncode(segment).IfFailThrow())
-            )
-        from _ in bearer.Send(encodedSegment, cancellationToken)
-        select unit;
+    private async Task WriteSegmentAsync(MuxSegment segment, CancellationToken cancellationToken)
+    {
+        ReadOnlySequence<byte> encodedSegment = MuxSegmentCodec.Encode(segment);
+        await bearer.SendAsync(encodedSegment, cancellationToken);
+    }
 
-    /// <summary>
-    /// Runs the multiplexing process, continuously processing messages from the subject.
-    /// This method wraps the reactive loop into an Aff monad.
-    /// </summary>
-    /// <param name="cancellationToken">A cancellation token for the operation.</param>
-    /// <returns>
-    /// An Aff monad yielding Unit when processing completes or cancellation is triggered.
-    /// </returns>
-    public Aff<Unit> Run(CancellationToken cancellationToken) =>
-        Aff(async () =>
+    public async Task RunAsync(CancellationToken cancellationToken)
+    {
+        while (!cancellationToken.IsCancellationRequested)
         {
-            await _messageSubject.AsObservable()
-                .ForEachAsync(async message =>
-                {
-                    // Execute the WriteSegment effect for each incoming message.
-                    await WriteSegment(message, cancellationToken).Run();
-                }, cancellationToken);
-            return unit;
-        });
+            (ProtocolType ProtocolId, ReadOnlySequence<byte> Payload) = await _channel.Reader.ReadAsync(cancellationToken);
 
-    /// <summary>
-    /// Disposes of the muxer, cancelling the processing loop and releasing resources.
-    /// </summary>
+            MuxSegmentHeader segmentHeader = new(
+               TransmissionTime: (uint)(DateTimeOffset.UtcNow - _startTime).TotalMilliseconds,
+               ProtocolId,
+               PayloadLength: (ushort)Payload.Length,
+               Mode: muxerMode == ProtocolMode.Responder
+            );
+
+            MuxSegment segment = new(segmentHeader, Payload);
+
+            await WriteSegmentAsync(segment, cancellationToken);
+        }
+    }
+
     public void Dispose()
     {
         GC.SuppressFinalize(this);
-        if (!_muxerCts.IsCancellationRequested)
-            _muxerCts.Cancel();
-        _messageSubject.OnCompleted();
-        _messageSubject.Dispose();
-        _muxerCts.Dispose();
+        bearer.Dispose();
     }
 }

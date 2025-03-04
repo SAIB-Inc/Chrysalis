@@ -1,3 +1,4 @@
+using System.Buffers;
 using Chrysalis.Cbor.Serialization;
 using Chrysalis.Network.Cbor.Handshake;
 using Chrysalis.Network.Multiplexer;
@@ -6,10 +7,12 @@ namespace Chrysalis.Network.MiniProtocols;
 
 public class Handshake(AgentChannel channel) : IMiniProtocol
 {
-    public Aff<HandshakeMessage> Send(ProposeVersions proposeVersions) =>
-        from proposeVersionsChunk in channel.EnqueueChunk(CborSerializer.Serialize(proposeVersions))
-        from handshakeResponseChunk in channel.ReceiveNextChunk()
-        let handshakeResponseMessage = CborSerializer.Deserialize<HandshakeMessage>(handshakeResponseChunk)
-        select handshakeResponseMessage;
+    public async Task<HandshakeMessage> SendAsync(ProposeVersions propose, CancellationToken cancellationToken)
+    {
+        byte[] data = CborSerializer.Serialize(propose);
+        await channel.EnqueueChunkAsync(new(data), cancellationToken);
+        ReadOnlySequence<byte> responseData = await channel.ReadChunkAsync(cancellationToken);
+        return CborSerializer.Deserialize<HandshakeMessage>(responseData.First);
+    }
 }
 
