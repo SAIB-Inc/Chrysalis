@@ -11,7 +11,7 @@ public class NodeClient : IDisposable
     #region MiniProtocols
     public Handshake? Handshake { get; private set; }
     // public LocalStateQuery LocalStateQuery { get; private set; } 
-    // public ChainSync ChainSync { get; private set; } 
+    public ChainSync? ChainSync { get; private set; }
     #endregion
 
     private NodeClient(Plexer plexer)
@@ -30,6 +30,7 @@ public class NodeClient : IDisposable
     {
         _ = _plexer.RunAsync(CancellationToken.None);
         Handshake = new(_plexer.SubscribeClient(ProtocolType.Handshake));
+        ChainSync = new(_plexer.SubscribeClient(ProtocolType.ClientChainSync));
     }
 
     public void Dispose()

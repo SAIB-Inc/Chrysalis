@@ -19,7 +19,8 @@ public class Muxer(IBearer bearer, ProtocolMode muxerMode) : IDisposable
     private async Task WriteSegmentAsync(MuxSegment segment, CancellationToken cancellationToken)
     {
         ReadOnlySequence<byte> encodedSegment = MuxSegmentCodec.Encode(segment);
-        await bearer.SendAsync(encodedSegment, cancellationToken);
+        await bearer.Writer.WriteAsync(encodedSegment.First, cancellationToken);
+        await bearer.Writer.FlushAsync(cancellationToken);
     }
 
     public async Task RunAsync(CancellationToken cancellationToken)

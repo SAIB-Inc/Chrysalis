@@ -1,4 +1,5 @@
 using System.Buffers;
+using System.IO.Pipelines;
 using System.Threading.Channels;
 using Chrysalis.Network.Core;
 
@@ -18,10 +19,31 @@ public class Demuxer(IBearer bearer) : IDisposable
 
     public async Task<MuxSegment> ReadSegmentAsync(CancellationToken cancellationToken)
     {
-        ReadOnlySequence<byte> headerData = await bearer.ReceiveExactAsync(8, cancellationToken);
-        MuxSegmentHeader headerSegment = MuxSegmentCodec.DecodeHeader(headerData);
-        ReadOnlySequence<byte> payload = await bearer.ReceiveExactAsync(headerSegment.PayloadLength, cancellationToken);
-        return new(headerSegment, payload);
+        ReadResult result = await bearer.Reader.ReadAtLeastAsync(8, cancellationToken);
+        ReadOnlySequence<byte> resultBuffer = result.Buffer;
+        ReadOnlySequence<byte> headerSlice = resultBuffer.Slice(0, 8);
+        MuxSegmentHeader headerSegment = MuxSegmentCodec.DecodeHeader(headerSlice);
+
+        if (resultBuffer.Length >= headerSegment.PayloadLength + 8)
+        {
+            ReadOnlySequence<byte> payloadSlice = resultBuffer.Slice(8, headerSegment.PayloadLength);
+            ReadOnlySequence<byte> payloadSequence = new(payloadSlice.First);
+            bearer.Reader.AdvanceTo(resultBuffer.GetPosition(headerSegment.PayloadLength + 8));
+
+            return new(headerSegment, payloadSequence);
+        }
+        else
+        {
+            bearer.Reader.AdvanceTo(resultBuffer.GetPosition(8));
+            result = await bearer.Reader.ReadAtLeastAsync(headerSegment.PayloadLength, cancellationToken);
+            resultBuffer = result.Buffer;
+
+            ReadOnlySequence<byte> payloadSlice = resultBuffer.Slice(0, headerSegment.PayloadLength);
+            ReadOnlySequence<byte> payloadSequence = new(payloadSlice.First);
+            bearer.Reader.AdvanceTo(resultBuffer.GetPosition(headerSegment.PayloadLength));
+
+            return new(headerSegment, payloadSequence);
+        }
     }
 
     public async Task RunAsync(CancellationToken cancellationToken)

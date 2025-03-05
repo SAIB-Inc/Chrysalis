@@ -1,4 +1,5 @@
 using System.Buffers;
+using System.IO.Pipelines;
 
 namespace Chrysalis.Network.Core;
 
@@ -7,7 +8,6 @@ namespace Chrysalis.Network.Core;
 /// </summary>
 public interface IBearer : IDisposable
 {
-    Task SendAsync(ReadOnlySequence<byte> data, CancellationToken cancellationToken);
-
-    Task<ReadOnlySequence<byte>> ReceiveExactAsync(int len, CancellationToken cancellationToken);
+    PipeReader Reader { get; }
+    PipeWriter Writer { get; }
 }
