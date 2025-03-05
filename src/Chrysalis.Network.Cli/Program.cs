@@ -9,6 +9,7 @@ using Chrysalis.Network.Multiplexer;
 using System.Diagnostics;
 using System.Formats.Cbor;
 
+
 async Task Main()
 {
     // For tracking blocks processed per second
@@ -70,7 +71,8 @@ async Task Main()
     Console.WriteLine("Starting chain sync...");
     while (true)
     {
-        MessageNextResponse nextResponse = await client.ChainSync.NextRequestAsync(CancellationToken.None);
+        MessageNextResponse? nextResponse = await client.ChainSync.NextRequestAsync(CancellationToken.None);
+
         (bool shouldLog, ulong blockNo, bool isNewBlock, bool currentAtTip) = ProcessNextResponse(
             nextResponse,
             ref blocksProcessed,
@@ -144,8 +146,8 @@ async Task Main()
     {
         case MessageRollForward messageRollForward:
             // Got a new block
-            Block block = TestUtils.DeserializeBlockWithEra(messageRollForward.Payload.Value)!;
-            blockNo = block.Number()!.Value;
+            // Block? block = TestUtils.DeserializeBlockWithEra(messageRollForward.Payload.Value)!;
+            // blockNo = block.Number()!.Value;
             blocksProcessed++;
             lastBlockNo = blockNo;
             isNewBlock = true;

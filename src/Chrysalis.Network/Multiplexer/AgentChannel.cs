@@ -1,6 +1,7 @@
 using Chrysalis.Network.Core;
 using System.Threading.Channels;
 using System.Buffers;
+using System.Runtime.CompilerServices;
 
 namespace Chrysalis.Network.Multiplexer;
 
@@ -10,9 +11,11 @@ public class AgentChannel(
     ChannelReader<ReadOnlySequence<byte>> plexerReader
 )
 {
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public async Task EnqueueChunkAsync(ReadOnlySequence<byte> chunk, CancellationToken cancellationToken)
         => await plexerWriter.WriteAsync((ProtocolId, Payload: chunk), cancellationToken);
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public async Task<ReadOnlySequence<byte>> ReadChunkAsync(CancellationToken cancellationToken)
         => await plexerReader.ReadAsync(cancellationToken);
 }
