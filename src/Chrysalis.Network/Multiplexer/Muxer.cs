@@ -4,11 +4,6 @@ using System.Threading.Channels;
 
 namespace Chrysalis.Network.Multiplexer;
 
-/// <summary>
-/// Multiplexes messages over a single bearer connection using functional asynchronous effects.
-/// </summary>
-/// <param name="bearer">The bearer connection for sending data.</param>
-/// <param name="muxerMode">The mode of operation (Initiator or Responder).</param>
 public class Muxer(IBearer bearer, ProtocolMode muxerMode) : IDisposable
 {
     private readonly DateTimeOffset _startTime = DateTimeOffset.UtcNow;

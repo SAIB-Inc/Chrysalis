@@ -7,12 +7,11 @@ namespace Chrysalis.Network.MiniProtocols;
 
 public class Handshake(AgentChannel channel) : IMiniProtocol
 {
+    private readonly ChannelBuffer _channelBuffer = new(channel);
     public async Task<HandshakeMessage> SendAsync(ProposeVersions propose, CancellationToken cancellationToken)
     {
-        byte[] data = CborSerializer.Serialize(propose);
-        await channel.EnqueueChunkAsync(new(data), cancellationToken);
-        ReadOnlySequence<byte> responseData = await channel.ReadChunkAsync(cancellationToken);
-        return CborSerializer.Deserialize<HandshakeMessage>(responseData.First);
+        await _channelBuffer.SendFullMessageAsync(propose, cancellationToken);
+        return await _channelBuffer.ReceiveFullMessageAsync<HandshakeMessage>(cancellationToken);
     }
 }
 

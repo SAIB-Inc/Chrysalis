@@ -2,73 +2,53 @@ using System.Buffers;
 using System.IO.Pipelines;
 using Chrysalis.Cbor.Serialization;
 using Chrysalis.Cbor.Types;
+using Chrysalis.Network.Core;
 
 namespace Chrysalis.Network.Multiplexer;
 
-public class ChannelBuffer(AgentChannel channel) : IDisposable
+public class ChannelBuffer(AgentChannel channel)
 {
-    private readonly AgentChannel _channel = channel;
-    private readonly MemoryStream _buffer = new();
-    private const int MAX_SEGMENT_PAYLOAD_LENGTH = 65535;
-
     public async Task SendFullMessageAsync<T>(T message, CancellationToken cancellationToken) where T : CborBase
     {
         byte[] payload = CborSerializer.Serialize(message);
-        List<byte[]> payloadSplit = SplitPayloadIntoChunks(payload);
-        foreach (byte[] chunk in payloadSplit)
+        Memory<byte> payloadMemory = payload.AsMemory();
+
+        for (int offset = 0; offset < payload.Length; offset += ProtocolConstants.MAX_SEGMENT_PAYLOAD_LENGTH)
         {
-            await _channel.EnqueueChunkAsync(new(chunk), cancellationToken);
+            int chunkSize = Math.Min(ProtocolConstants.MAX_SEGMENT_PAYLOAD_LENGTH, payload.Length - offset);
+            ReadOnlyMemory<byte> chunkMemory = payloadMemory.Slice(offset, chunkSize);
+            ReadOnlySequence<byte> chunkSequence = new(chunkMemory);
+            await channel.EnqueueChunkAsync(chunkSequence, cancellationToken);
         }
     }
 
     public async Task<T> ReceiveFullMessageAsync<T>(CancellationToken cancellationToken) where T : CborBase
     {
-        PipeWriter bufferWriter = PipeWriter.Create(_buffer);
+        // Create a reusable buffer for receiving messages
+        using MemoryStream buffer = new();
+
         while (true)
         {
-            ReadOnlySequence<byte> chunk = await _channel.ReadChunkAsync(cancellationToken);
-            bufferWriter.Write(chunk.FirstSpan);
-            await bufferWriter.FlushAsync(cancellationToken);
-
-            if (TryDecode(out T? message))
+            try
             {
-                return message!;
+                // Try to deserialize with current data
+                buffer.Position = 0;
+                return CborSerializer.Deserialize<T>(buffer.ToArray());
+            }
+            catch
+            {
+                // Need more data - read the next chunk
+                ReadOnlySequence<byte> chunk = await channel.ReadChunkAsync(cancellationToken);
+
+                // Reset position to end for appending
+                buffer.Position = buffer.Length;
+
+                // Copy chunk to our buffer
+                foreach (ReadOnlyMemory<byte> memory in chunk)
+                {
+                    buffer.Write(memory.Span);
+                }
             }
         }
-    }
-
-    public bool TryDecode<T>(out T? value) where T : CborBase
-    {
-        try
-        {
-            value = CborSerializer.Deserialize<T>(_buffer.ToArray());
-            return true;
-        }
-        catch
-        {
-            value = default;
-            return false;
-        }
-    }
-
-    private static List<byte[]> SplitPayloadIntoChunks(byte[] payload)
-    {
-        List<byte[]> chunks = [];
-
-        for (int offset = 0; offset < payload.Length; offset += MAX_SEGMENT_PAYLOAD_LENGTH)
-        {
-            int chunkSize = Math.Min(MAX_SEGMENT_PAYLOAD_LENGTH, payload.Length - offset);
-            byte[] chunk = new byte[chunkSize];
-            Array.Copy(payload, offset, chunk, 0, chunkSize);
-            chunks.Add(chunk);
-        }
-
-        return chunks;
-    }
-
-    public void Dispose()
-    {
-        _buffer.Dispose();
-        GC.SuppressFinalize(this);
     }
 }
