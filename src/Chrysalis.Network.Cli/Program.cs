@@ -9,26 +9,27 @@ using Chrysalis.Cbor.Cardano.Extensions;
 using Chrysalis.Network.Cbor.LocalStateQuery;
 using Chrysalis.Network.MiniProtocols.Extensions;
 using System.Diagnostics;
+using Chrysalis.Network.Cli;
 
-static Aff<Unit> QueryUtox() =>
-    from client in NodeClient.Connect("/tmp/intercept_node_socket")
-    from result in client.LocalStateQuery
-         .IfNone(() => throw new Exception("LocalStateQuery not initialized"))
-         .GetUtxosByTxIn([
-             new TransactionInput(new(Convert.FromHexString("30576c97934d1f88f77add233b14b0a85b65410df38c8f03b0104aaa2fdf651c")), new(0))
-         ])
-    from _ in Aff(() =>
-    {
-        Console.WriteLine($"Result: {result}");
-        Console.WriteLine($"ResultCbor: {Convert.ToHexString(result.Raw!.Value.ToArray())}");
-        return ValueTask.FromResult(unit);
-    })
-    select unit;
+// static Aff<Unit> QueryUtox() =>
+//     from client in NodeClient.Connect("/tmp/intercept_node_socket")
+//     from result in client.LocalStateQuery
+//          .IfNone(() => throw new Exception("LocalStateQuery not initialized"))
+//          .GetUtxosByTxIn([
+//              new TransactionInput(new(Convert.FromHexString("30576c97934d1f88f77add233b14b0a85b65410df38c8f03b0104aaa2fdf651c")), new(0))
+//          ])
+//     from _ in Aff(() =>
+//     {
+//         Console.WriteLine($"Result: {result}");
+//         Console.WriteLine($"ResultCbor: {Convert.ToHexString(result.Raw!.Value.ToArray())}");
+//         return ValueTask.FromResult(unit);
+//     })
+//     select unit;
 
 
 static Aff<Unit> ChainSync()
 {
-    return from nodeClient in NodeClient.Connect("/home/rawriclark/CardanoPreview/pool/txpipe/relay1/ipc/node.socket")
+    return from nodeClient in NodeClient.Connect("/home/rjlacanlale/cardano/ipc/node.socket")
            from _ in nodeClient.ChainSync
                .IfNone(() => throw new Exception("ChainSync missing"))
                .FindInterection([new Point(new(73793022), new(Convert.FromHexString("1b6b4afeef73bf4a1e2a014b492549b6cedc61919fda6a7e4d3813f578eba4db")))])
@@ -160,7 +161,7 @@ static (bool shouldLog, ulong blockNo, bool isNewBlock, bool atTip) ProcessNextR
     {
         case MessageRollForward response:
             // Got a new block
-            blockNo = CborSerializer.Deserialize<BlockWithEra<Block>>(response.Payload.Value).Block.Number()!.Value;
+            blockNo = TestUtils.DeserializeBlockWithEra(response.Payload.Value)!.Number()!.Value;
             blocksProcessed++;
             lastBlockNo = blockNo;
             isNewBlock = true;
