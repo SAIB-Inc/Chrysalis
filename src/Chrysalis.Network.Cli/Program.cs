@@ -161,9 +161,9 @@ static (bool shouldLog, ulong blockNo, bool isNewBlock, bool atTip) ProcessNextR
     {
         case MessageRollForward response:
             // Got a new block
-            blockNo = TestUtils.DeserializeBlockWithEra(response.Payload.Value)!.Number()!.Value;
+            //blockNo = TestUtils.DeserializeBlockWithEra(response.Payload.Value)!.Number()!.Value;
             blocksProcessed++;
-            lastBlockNo = blockNo;
+            //lastBlockNo = blockNo;
             isNewBlock = true;
             // We received a block, so we're definitely not at tip
             atTip = false;
