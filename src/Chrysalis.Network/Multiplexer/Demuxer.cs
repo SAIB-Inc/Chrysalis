@@ -103,7 +103,7 @@ public sealed class Demuxer(IBearer bearer) : IDisposable
         {
             payload.CopyTo(payloadCopy);
             // Store the buffer in the memory record for later return to pool
-            var managedPayload = new PooledMemory(payloadCopy, _bufferPool, (int)payload.Length);
+            PooledMemory managedPayload = new PooledMemory(payloadCopy, _bufferPool, (int)payload.Length);
             return new ReadOnlySequence<byte>(managedPayload.Memory);
         }
         catch

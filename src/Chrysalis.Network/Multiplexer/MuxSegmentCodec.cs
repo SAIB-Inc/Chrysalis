@@ -69,7 +69,7 @@ public static class MuxSegmentCodec
             EncodeToBuffer(segment, pooledBuffer);
 
             // Create a managed memory to ensure buffer is returned to pool
-            var managedMemory = new EncodedMemory(pooledBuffer, _encodeBufferPool, totalSize);
+            EncodedMemory managedMemory = new EncodedMemory(pooledBuffer, _encodeBufferPool, totalSize);
             return new ReadOnlySequence<byte>(managedMemory.Memory);
         }
         catch
