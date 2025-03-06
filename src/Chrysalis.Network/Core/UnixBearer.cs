@@ -14,7 +14,6 @@ public class UnixBearer : IBearer
 
     private UnixBearer(Socket socket, NetworkStream stream, PipeReader reader, PipeWriter writer)
     {
-
         _socket = socket;
         _stream = stream;
         Reader = reader;
@@ -23,7 +22,6 @@ public class UnixBearer : IBearer
 
     public static async Task<UnixBearer> CreateAsync(string path)
     {
-        // Create a Unix domain socket.
         Socket socket = new(AddressFamily.Unix, SocketType.Stream, SocketProtocolType.Unspecified);
         UnixDomainSocketEndPoint endpoint = new(path);
         await socket.ConnectAsync(endpoint);

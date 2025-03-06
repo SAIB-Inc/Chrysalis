@@ -11,9 +11,6 @@ public readonly record struct MuxSegmentHeader(
     bool Mode
 );
 
-/// <summary>
-/// Represents a multiplexer segment which contains header information and a payload.
-/// </summary>
 public readonly record struct MuxSegment(
     MuxSegmentHeader Header,
     ReadOnlySequence<byte> Payload

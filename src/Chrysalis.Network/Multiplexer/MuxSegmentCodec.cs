@@ -1,5 +1,6 @@
 using System.Buffers;
 using System.Buffers.Binary;
+using System.Runtime.CompilerServices;
 using Chrysalis.Network.Core;
 
 namespace Chrysalis.Network.Multiplexer;
@@ -15,7 +16,8 @@ public static class MuxSegmentCodec
     private const ushort PayloadLengthSize = 2;
     public const ushort HeaderSize = TransmissionTimeSize + ProtocolIdSize + PayloadLengthSize;
 
-    public static ReadOnlySequence<byte> Encode(MuxSegment segment)
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static ReadOnlySequence<byte> Encode(in MuxSegment segment)
     {
         // Calculate total size needed
         int totalSize = HeaderSize + segment.Header.PayloadLength;
@@ -46,7 +48,8 @@ public static class MuxSegmentCodec
         return new(result);
     }
 
-    public static MuxSegmentHeader DecodeHeader(ReadOnlySequence<byte> headerSequence)
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static MuxSegmentHeader DecodeHeader(in ReadOnlySequence<byte> headerSequence)
     {
         uint transmissionTime = BinaryPrimitives.ReadUInt32BigEndian(headerSequence.Slice(0, 4).FirstSpan);
         ushort protocolIdAndMode = BinaryPrimitives.ReadUInt16BigEndian(headerSequence.Slice(4, 2).FirstSpan);
