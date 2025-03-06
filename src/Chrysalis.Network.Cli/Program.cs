@@ -1,13 +1,17 @@
 ﻿using Chrysalis.Cbor.Cardano.Extensions;
 using Chrysalis.Cbor.Cardano.Types.Block;
 using Chrysalis.Cbor.Serialization;
+using Chrysalis.Cbor.Types;
 using Chrysalis.Network.Cbor.ChainSync;
 using Chrysalis.Network.Cbor.Common;
 using Chrysalis.Network.Cbor.Handshake;
 using Chrysalis.Network.Cli;
+using Chrysalis.Network.Core;
 using Chrysalis.Network.Multiplexer;
+using System.Buffers;
 using System.Diagnostics;
 using System.Formats.Cbor;
+using System.IO.Pipelines;
 
 
 async Task Main()
@@ -52,29 +56,46 @@ async Task Main()
 
     // Connect to node
     Console.WriteLine("Connecting to node...");
-    NodeClient client = await NodeClient.ConnectAsync("/home/rjlacanlale/cardano/ipc/node.socket");
-    client.Start();
+    // NodeClient client = await NodeClient.ConnectAsync("/tmp/intercept_node_socket");
+    // client.Start();
+
+    UnixBearer bearer = await UnixBearer.CreateAsync("/home/rjlacanlale/cardano/ipc/node.socket");
 
     // Handshake
     Console.WriteLine("Performing handshake...");
-    var handshakeResult = await client.Handshake!.SendAsync(
-        HandshakeMessages.ProposeVersions(VersionTables.N2C_V10_AND_ABOVE),
-        CancellationToken.None);
+    // var handshakeResult = await client.Handshake!.SendAsync(
+    //     HandshakeMessages.ProposeVersions(VersionTables.N2C_V10_AND_ABOVE),
+    //     CancellationToken.None);
+
+    // 000005fa000000218200a51980108202f41980118202f41980128202f41980138202f41980148202f4
+
+    // STEP1: Handshake
+    await ReadWriteSegmentAsync<HandshakeMessage>(new(Convert.FromHexString("000005fa000000218200a51980108202f41980118202f41980128202f41980138202f41980148202f4")), bearer);
 
     // Find intersection
     Console.WriteLine("Finding intersection point...");
-    var point = new Point(
-        new(73793022),
-        new(Convert.FromHexString("1b6b4afeef73bf4a1e2a014b492549b6cedc61919fda6a7e4d3813f578eba4db")));
-    await client.ChainSync!.FindIntersectionAsync([point], CancellationToken.None);
+    // var point = new Point(
+    //     new(73793022),
+    //     new(Convert.FromHexString("1b6b4afeef73bf4a1e2a014b492549b6cedc61919fda6a7e4d3813f578eba4db")));
+
+    // 0000a3ba0005002b820481821a0465fdfe58201b6b4afeef73bf4a1e2a014b492549b6cedc61919fda6a7e4d3813f578eba4db
+    // await client.ChainSync!.FindIntersectionAsync([point], CancellationToken.None);
+    // await client.ChainSync!.Channel.EnqueueChunkAsync(new(Convert.FromHexString("0000a3ba0005002b820481821a0465fdfe58201b6b4afeef73bf4a1e2a014b492549b6cedc61919fda6a7e4d3813f578eba4db")), CancellationToken.None);
+    // await client.ChainSync!.Channel.ReadChunkAsync(CancellationToken.None);
+
+    await ReadWriteSegmentAsync<ChainSyncMessage>(new(Convert.FromHexString("0000a3ba0005002b820481821a0465fdfe58201b6b4afeef73bf4a1e2a014b492549b6cedc61919fda6a7e4d3813f578eba4db")), bearer);
 
     Console.WriteLine("Starting chain sync...");
     while (true)
     {
-        MessageNextResponse? nextResponse = await client.ChainSync.NextRequestAsync(CancellationToken.None);
+        //000185ea000500028100
+        // MessageNextResponse? nextResponse = await client.ChainSync.NextRequestAsync(CancellationToken.None);
+        // await client.ChainSync!.Channel.EnqueueChunkAsync(new(Convert.FromHexString("000185ea000500028100")), CancellationToken.None);
+        // var nextResponse = await client.ChainSync!.Channel.ReadChunkAsync(CancellationToken.None);
 
-        (bool shouldLog, ulong blockNo, bool isNewBlock, bool currentAtTip) = ProcessNextResponse(
-            nextResponse,
+        await ReadWriteSegmentAsync<MessageNextResponse>(new(Convert.FromHexString("000185ea000500028100")), bearer);
+
+        (bool shouldLog, ulong blockNo, bool isNewBlock, bool currentAtTip) = ProcessNextResponseRaw(
             ref blocksProcessed,
             ref lastBlockNo,
             secondTimer);
@@ -132,6 +153,32 @@ async Task Main()
     }
 }
 
+static async Task ReadWriteSegmentAsync<T>(ReadOnlySequence<byte> segment, UnixBearer bearer) where T : CborBase
+{
+    await bearer.Writer.WriteAsync(segment.First, CancellationToken.None);
+    ReadResult headerResult = await bearer.Reader.ReadAtLeastAsync(8, CancellationToken.None);
+    ReadOnlySequence<byte> headerSlice = headerResult.Buffer.Slice(0, 8);
+    MuxSegmentHeader headerSegment = MuxSegmentCodec.DecodeHeader(headerSlice);
+    bearer.Reader.AdvanceTo(headerResult.Buffer.GetPosition(8));
+
+    ReadResult payloadResult = await bearer.Reader.ReadAtLeastAsync(headerSegment.PayloadLength);
+    ReadOnlySequence<byte> payloadSlice = payloadResult.Buffer.Slice(0, headerSegment.PayloadLength);
+
+    try
+    {
+        var nextResponse = CborSerializer.Deserialize<MessageNextResponse>(payloadSlice.First);
+        CborSerializer.Deserialize<BlockWithEra<ConwayBlock>>(((MessageRollForward)nextResponse).Payload.Value);
+    }
+    catch
+    {
+        //
+    }
+
+    bearer.Reader.AdvanceTo(payloadResult.Buffer.GetPosition(headerSegment.PayloadLength));
+
+    // return new MuxSegment(headerSegment, payloadSlice);
+}
+
 (bool shouldLog, ulong blockNo, bool isNewBlock, bool atTip) ProcessNextResponse(
     MessageNextResponse nextResponse,
     ref int blocksProcessed,
@@ -175,6 +222,32 @@ async Task Main()
             blocksProcessed = 0;
             break;
     }
+
+    return (timer.ElapsedMilliseconds >= 1000, blockNo, isNewBlock, atTip);
+}
+
+(bool shouldLog, ulong blockNo, bool isNewBlock, bool atTip) ProcessNextResponseRaw(
+    ref int blocksProcessed,
+    ref ulong lastBlockNo,
+    Stopwatch timer)
+{
+    ulong blockNo = 0;
+    bool isNewBlock = false;
+    bool atTip = false;
+
+    blocksProcessed++;
+    lastBlockNo = blockNo;
+    isNewBlock = true;
+
+    blocksProcessed++;
+    lastBlockNo = blockNo;
+    isNewBlock = true;
+
+    // Output basic block info
+    //Console.WriteLine($"Block: {blockNo} | Hash: {block.Block.Hash()} | Slot: {block.Block.Slot()}");
+
+    // We received a block, so we're definitely not at tip
+    atTip = false;
 
     return (timer.ElapsedMilliseconds >= 1000, blockNo, isNewBlock, atTip);
 }
