@@ -1,77 +1,92 @@
-// using System;
-// using System.Collections.Generic;
-// using System.Threading.Tasks;
-// using LanguageExt;
-// using LanguageExt.Common;
-// using static LanguageExt.Prelude;
-// using Chrysalis.Cbor.Serialization;
-// using Chrysalis.Network.Cbor.LocalStateQuery;
-// using Chrysalis.Network.Cbor.LocalStateQuery.Messages;
-// using Chrysalis.Cbor.Types.Primitives;
-// using Chrysalis.Cbor.Types;
+using System;
+using System.Collections.Generic;
+using System.Threading.Tasks;
+using Chrysalis.Cbor.Serialization;
+using Chrysalis.Cbor.Types;
+using Chrysalis.Network.Cbor.LocalStateQuery;
+using Chrysalis.Network.Cbor.LocalStateQuery.Messages;
 
-// namespace Chrysalis.Network.MiniProtocols.Extensions;
+namespace Chrysalis.Network.MiniProtocols.Extensions;
 
-// /// <summary>
-// /// Extension methods for the LocalStateQuery protocol
-// /// </summary>
-// public static class LocalStateQueryExtension
-// {
-//     private static readonly Error DeserializationError = Error.New("Failed to deserialize response");
-//     private static readonly Error InvalidResponseError = Error.New("Invalid response format");
+/// <summary>
+/// Extension methods for the LocalStateQuery protocol
+/// </summary>
+public static class LocalStateQueryExtension
+{
+    private static readonly string DeserializationError = "Failed to deserialize response";
+    private static readonly string InvalidResponseError = "Invalid response format";
 
-//     /// <summary>
-//     /// Gets UTxOs by address
-//     /// </summary>
-//     /// <param name="localStateQuery">The LocalStateQuery protocol instance</param>
-//     /// <param name="addresses">List of addresses to query</param>
-//     /// <returns>An Aff monad yielding the UTxO response</returns>
-//     public static Aff<UtxoByAddressResponse> GetUtxosByAddress(this LocalStateQuery localStateQuery, List<byte[]> addresses) =>
-//         from queryResult in localStateQuery.Query(None, RawQueries.GetUtxoByAddress(addresses))
-//         from raw in ExtractRawBytes(queryResult)
-//         from utxoResponse in DeserializeResponse<UtxoByAddressResponse>(raw)
-//         select utxoResponse;
+    /// <summary>
+    /// Gets UTxOs by address
+    /// </summary>
+    /// <param name="localStateQuery">The LocalStateQuery protocol instance</param>
+    /// <param name="addresses">List of addresses to query</param>
+    /// <returns>A task yielding the UTxO response</returns>
+    /// <exception cref="InvalidOperationException">Thrown when response extraction or deserialization fails</exception>
+    public static async Task<UtxoByAddressResponse> GetUtxosByAddressAsync(
+        this LocalStateQuery localStateQuery,
+        List<byte[]> addresses)
+    {
+        Result queryResult = await localStateQuery.QueryAsync(null, RawQueries.GetUtxoByAddress(addresses),
+            default);
+        byte[] rawBytes = await ExtractRawBytesAsync(queryResult);
+        return await DeserializeResponseAsync<UtxoByAddressResponse>(rawBytes);
+    }
 
-//     /// <summary>
-//     /// Gets UTxOs by address
-//     /// </summary>
-//     /// <param name="localStateQuery">The LocalStateQuery protocol instance</param>
-//     /// <param name="addresses">List of addresses to query</param>
-//     /// <returns>An Aff monad yielding the UTxO response</returns>
-//     public static Aff<UtxoByAddressResponse> GetUtxosByTxIn(this LocalStateQuery localStateQuery, List<TransactionInput> txIns) =>
-//         from queryResult in localStateQuery.Query(None, RawQueries.GetUtxoByTxIns(txIns))
-//         from raw in ExtractRawBytes(queryResult)
-//         from utxoResponse in DeserializeResponse<UtxoByAddressResponse>(raw)
-//         select utxoResponse;
+    /// <summary>
+    /// Gets UTxOs by transaction inputs
+    /// </summary>
+    /// <param name="localStateQuery">The LocalStateQuery protocol instance</param>
+    /// <param name="txIns">List of transaction inputs to query</param>
+    /// <returns>A task yielding the UTxO response</returns>
+    /// <exception cref="InvalidOperationException">Thrown when response extraction or deserialization fails</exception>
+    public static async Task<UtxoByAddressResponse> GetUtxosByTxInAsync(
+        this LocalStateQuery localStateQuery,
+        List<TransactionInput> txIns)
+    {
+        Result queryResult = await localStateQuery.QueryAsync(null, RawQueries.GetUtxoByTxIns(txIns),
+            default);
+        byte[] rawBytes = await ExtractRawBytesAsync(queryResult);
+        return await DeserializeResponseAsync<UtxoByAddressResponse>(rawBytes);
+    }
 
-//     /// <summary>
-//     /// Extracts raw bytes from a query result
-//     /// </summary>
-//     /// <param name="result">The query result to extract bytes from</param>
-//     /// <returns>An Aff monad yielding the raw bytes</returns>
-//     private static Aff<byte[]> ExtractRawBytes(Result result) =>
-//         Aff(() => ValueTask.FromResult(
-//                 Try(() => result.QueryResult.Raw!.Value.ToArray())
-//                     .Match(
-//                         Succ: val => val,
-//                         Fail: ex => throw new Exception($"{InvalidResponseError}: {ex.Message}")
-//                     )
-//             )
-//         );
+    /// <summary>
+    /// Extracts raw bytes from a query result
+    /// </summary>
+    /// <param name="result">The query result to extract bytes from</param>
+    /// <returns>A task yielding the raw bytes</returns>
+    /// <exception cref="InvalidOperationException">Thrown when raw bytes extraction fails</exception>
+    private static Task<byte[]> ExtractRawBytesAsync(Result result)
+    {
+        try
+        {
+            if (result.QueryResult.Raw == null)
+                throw new InvalidOperationException($"{InvalidResponseError}: Result has no raw data");
 
-//     /// <summary>
-//     /// Deserializes raw bytes to the specified type
-//     /// </summary>
-//     /// <typeparam name="T">The type to deserialize to</typeparam>
-//     /// <param name="rawBytes">The raw bytes to deserialize</param>
-//     /// <returns>An Aff monad yielding the deserialized object</returns>
-//     private static Aff<T> DeserializeResponse<T>(byte[] rawBytes) where T : CborBase =>
-//         Aff(() => ValueTask.FromResult(
-//                 Try(() => CborSerializer.Deserialize<T>(rawBytes))
-//                     .Match(
-//                         Succ: val => val,
-//                         Fail: ex => throw new Exception($"{DeserializationError}: {ex.Message}")
-//                     )
-//             )
-//         );
-// }
+            return Task.FromResult(result.QueryResult.Raw.Value.ToArray());
+        }
+        catch (Exception ex) when (ex is not InvalidOperationException)
+        {
+            throw new InvalidOperationException($"{InvalidResponseError}: {ex.Message}", ex);
+        }
+    }
+
+    /// <summary>
+    /// Deserializes raw bytes to the specified type
+    /// </summary>
+    /// <typeparam name="T">The type to deserialize to</typeparam>
+    /// <param name="rawBytes">The raw bytes to deserialize</param>
+    /// <returns>A task yielding the deserialized object</returns>
+    /// <exception cref="InvalidOperationException">Thrown when deserialization fails</exception>
+    private static Task<T> DeserializeResponseAsync<T>(byte[] rawBytes) where T : CborBase
+    {
+        try
+        {
+            return Task.FromResult(CborSerializer.Deserialize<T>(rawBytes));
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidOperationException($"{DeserializationError}: {ex.Message}", ex);
+        }
+    }
+}
