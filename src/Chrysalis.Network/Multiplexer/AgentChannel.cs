@@ -33,8 +33,17 @@ public sealed class AgentChannel(
     /// <returns>A task that completes when the data has been queued for sending.</returns>
     /// <exception cref="ChannelClosedException">Thrown if the channel has been completed.</exception>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public ValueTask EnqueueChunkAsync(ReadOnlySequence<byte> chunk, CancellationToken cancellationToken = default) =>
-        plexerWriter.WriteAsync((protocolId, chunk), cancellationToken);
+    public ValueTask EnqueueChunkAsync(ReadOnlySequence<byte> chunk, CancellationToken cancellationToken = default)
+    {
+        // Fast path - try to write synchronously first to avoid task allocation
+        if (plexerWriter.TryWrite((protocolId, chunk)))
+        {
+            return ValueTask.CompletedTask;
+        }
+        
+        // Fall back to async path if channel is full
+        return plexerWriter.WriteAsync((protocolId, chunk), cancellationToken);
+    }
 
     /// <summary>
     /// Reads the next available chunk of data from this protocol channel.

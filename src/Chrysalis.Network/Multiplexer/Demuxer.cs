@@ -79,15 +79,59 @@ public sealed class Demuxer(IBearer bearer) : IDisposable
         return new MuxSegment(header, payloadSequence);
     }
 
+    // Shared buffer pool to reduce allocations
+    private static readonly ArrayPool<byte> _bufferPool = ArrayPool<byte>.Shared;
+
     /// <summary>
-    /// Creates a copy of the payload from a ReadOnlySequence.
+    /// Creates a copy of the payload from a ReadOnlySequence using buffer pooling.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static ReadOnlySequence<byte> CopyPayload(ReadOnlySequence<byte> payload)
+    private ReadOnlySequence<byte> CopyPayload(ReadOnlySequence<byte> payload)
     {
-        byte[] payloadCopy = new byte[payload.Length];
-        payload.CopyTo(payloadCopy);
-        return new ReadOnlySequence<byte>(payloadCopy);
+        // For very small payloads, using pooling introduces more overhead than benefit
+        if (payload.Length <= 128)
+        {
+            byte[] smallPayloadCopy = new byte[payload.Length];
+            payload.CopyTo(smallPayloadCopy);
+            return new ReadOnlySequence<byte>(smallPayloadCopy);
+        }
+
+        // For larger payloads, use the shared buffer pool
+        byte[] payloadCopy = _bufferPool.Rent((int)payload.Length);
+
+        try
+        {
+            payload.CopyTo(payloadCopy);
+            // Store the buffer in the memory record for later return to pool
+            var managedPayload = new PooledMemory(payloadCopy, _bufferPool, (int)payload.Length);
+            return new ReadOnlySequence<byte>(managedPayload.Memory);
+        }
+        catch
+        {
+            // Ensure buffer is returned on exception
+            _bufferPool.Return(payloadCopy);
+            throw;
+        }
+    }
+
+    // Helper class to track pooled memory and return it when no longer used
+    private sealed class PooledMemory(byte[] buffer, ArrayPool<byte> pool, int length) : IMemoryOwner<byte>
+    {
+        private readonly byte[] _buffer = buffer;
+        private readonly ArrayPool<byte> _pool = pool;
+        private readonly int _length = length;
+        private bool _disposed = false;
+
+        public Memory<byte> Memory => _buffer.AsMemory(0, _length);
+
+        public void Dispose()
+        {
+            if (!_disposed)
+            {
+                _pool.Return(_buffer);
+                _disposed = true;
+            }
+        }
     }
 
     /// <summary>

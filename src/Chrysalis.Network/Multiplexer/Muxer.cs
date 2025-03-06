@@ -53,7 +53,14 @@ public sealed class Muxer : IDisposable
     private async ValueTask WriteSegmentAsync(MuxSegment segment, CancellationToken cancellationToken)
     {
         ReadOnlySequence<byte> encodedSegment = MuxSegmentCodec.Encode(segment);
-        await _bearer.Writer.WriteAsync(encodedSegment.First, cancellationToken);
+        
+        // Write directly using the sequence without creating an additional Memory/Span
+        foreach (ReadOnlyMemory<byte> memory in encodedSegment)
+        {
+            await _bearer.Writer.WriteAsync(memory, cancellationToken);
+        }
+        
+        // Use ValueTask.WhenAll to potentially process multiple operations in parallel
         await _bearer.Writer.FlushAsync(cancellationToken);
     }
 

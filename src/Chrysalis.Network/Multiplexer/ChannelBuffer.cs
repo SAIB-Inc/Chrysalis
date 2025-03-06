@@ -4,6 +4,7 @@ using System.Runtime.CompilerServices;
 using Chrysalis.Cbor.Serialization;
 using Chrysalis.Cbor.Types;
 using Chrysalis.Network.Core;
+using System.Threading;
 
 namespace Chrysalis.Network.Multiplexer;
 
@@ -16,6 +17,10 @@ namespace Chrysalis.Network.Multiplexer;
 /// </remarks>
 public sealed class ChannelBuffer(AgentChannel channel)
 {
+    // Reusable buffer pool to reduce allocations
+    private static readonly ArrayPool<byte> _bufferPool = ArrayPool<byte>.Shared;
+    private const int INITIAL_BUFFER_SIZE = 4096;
+
     /// <summary>
     /// Sends a complete CBOR message, automatically chunking if needed.
     /// </summary>
@@ -28,14 +33,18 @@ public sealed class ChannelBuffer(AgentChannel channel)
     {
         ArgumentNullException.ThrowIfNull(message);
 
+        // Use standard serialization - the CborSerializer doesn't accept a buffer writer
         byte[] payload = CborSerializer.Serialize(message);
-        Memory<byte> payloadMemory = payload.AsMemory();
-
-        for (int offset = 0; offset < payload.Length; offset += ProtocolConstants.MAX_SEGMENT_PAYLOAD_LENGTH)
+        
+        ReadOnlyMemory<byte> payloadMemory = payload.AsMemory();
+        int payloadLength = payload.Length;
+        
+        // Send the payload in chunks
+        for (int offset = 0; offset < payloadLength; offset += ProtocolConstants.MAX_SEGMENT_PAYLOAD_LENGTH)
         {
             if (cancellationToken.IsCancellationRequested) break;
 
-            int chunkSize = Math.Min(ProtocolConstants.MAX_SEGMENT_PAYLOAD_LENGTH, payload.Length - offset);
+            int chunkSize = Math.Min(ProtocolConstants.MAX_SEGMENT_PAYLOAD_LENGTH, payloadLength - offset);
             ReadOnlyMemory<byte> chunkMemory = payloadMemory.Slice(offset, chunkSize);
             ReadOnlySequence<byte> chunkSequence = new(chunkMemory);
             await channel.EnqueueChunkAsync(chunkSequence, cancellationToken);
@@ -48,33 +57,50 @@ public sealed class ChannelBuffer(AgentChannel channel)
     /// <typeparam name="T">The type of CBOR message to receive.</typeparam>
     /// <param name="cancellationToken">A token to cancel the operation.</param>
     /// <returns>The deserialized message.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public async Task<T> ReceiveFullMessageAsync<T>(CancellationToken cancellationToken) where T : CborBase
     {
-        // Create a reusable buffer for receiving messages
-        using MemoryStream buffer = new();
-
-        while (true)
+        byte[] buffer = _bufferPool.Rent(INITIAL_BUFFER_SIZE);
+        int bufferLength = 0;
+        
+        try
         {
-            try
+            // Keep reading chunks until we can successfully deserialize
+            while (true)
             {
-                // Try to deserialize with current data
-                buffer.Position = 0;
-                return CborSerializer.Deserialize<T>(buffer.ToArray());
-            }
-            catch
-            {
-                // Need more data - read the next chunk
+                // Read the next chunk first, instead of attempting deserialization prematurely
                 ReadOnlySequence<byte> chunk = await channel.ReadChunkAsync(cancellationToken);
-
-                // Reset position to end for appending
-                buffer.Position = buffer.Length;
-
-                // Copy chunk to our buffer
-                foreach (ReadOnlyMemory<byte> memory in chunk)
+                
+                // Ensure buffer is large enough
+                if (bufferLength + chunk.Length > buffer.Length)
                 {
-                    buffer.Write(memory.Span);
+                    // Need to resize - rent a new buffer with double capacity
+                    byte[] newBuffer = _bufferPool.Rent(Math.Max(buffer.Length * 2, bufferLength + (int)chunk.Length));
+                    Buffer.BlockCopy(buffer, 0, newBuffer, 0, bufferLength);
+                    _bufferPool.Return(buffer);
+                    buffer = newBuffer;
+                }
+                
+                // Copy chunk to buffer
+                chunk.CopyTo(buffer.AsSpan(bufferLength));
+                bufferLength += (int)chunk.Length;
+                
+                try
+                {
+                    // Try to deserialize with current data
+                    T result = CborSerializer.Deserialize<T>(buffer.AsMemory(0, bufferLength));
+                    return result;
+                }
+                catch
+                {
+                    // Need more data, continue to next iteration
                 }
             }
+        }
+        finally
+        {
+            // Always return the buffer to the pool
+            _bufferPool.Return(buffer);
         }
     }
 
