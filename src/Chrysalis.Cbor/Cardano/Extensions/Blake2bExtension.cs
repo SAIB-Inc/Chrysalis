@@ -12,6 +12,6 @@ public static class Blake2bExtension
 
     public static byte[] ToBlake2b256(this ReadOnlyMemory<byte> input)
     {
-        return ToBlake2b256(input);
+        return ToBlake2b256(input.ToArray());
     }
 }

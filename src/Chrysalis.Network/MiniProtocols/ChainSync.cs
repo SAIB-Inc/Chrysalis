@@ -1,26 +1,33 @@
+using System.Buffers;
 using System.Drawing;
+using System.Runtime.CompilerServices;
 using Chrysalis.Cbor.Serialization;
 using Chrysalis.Network.Cbor;
 using Chrysalis.Network.Cbor.ChainSync;
 using Chrysalis.Network.Cbor.Common;
 using Chrysalis.Network.Multiplexer;
+using Point = Chrysalis.Network.Cbor.Common.Point;
 
 namespace Chrysalis.Network.MiniProtocols;
 
 public class ChainSync(AgentChannel channel) : IMiniProtocol
 {
-    private readonly ChannelBuffer _buffer = new(channel);
-    public Aff<MessageIntersectResult> FindInterection(IEnumerable<Cbor.Common.Point> points) =>
-        from pointsCboralized in Aff(() => ValueTask.FromResult(new Points([.. points])))
-        from findIntersectMessage in Aff(() => ValueTask.FromResult(ChainSyncMessages.FindIntersect(pointsCboralized)))
-        from findIntersectChunk in _buffer.SendFullMessage(findIntersectMessage)
-        from intersectionMessage in _buffer.RecieveFullMessage<MessageIntersectResult>()
-        select intersectionMessage;
+    private readonly ChannelBuffer _channelBuffer = new(channel);
+    private readonly ChainSyncMessage _nextRequest = ChainSyncMessages.NextRequest();
 
-    public Aff<MessageNextResponse> NextRequest() =>
-        from nextRequestMessage in Aff(() => ValueTask.FromResult(ChainSyncMessages.NextRequest()))
-        from nextRequestChunk in _buffer.SendFullMessage(nextRequestMessage)
-        from nextResponseMessage in _buffer.RecieveFullMessage<MessageNextResponse>()
-        select nextResponseMessage;
+    public async Task<ChainSyncMessage> FindIntersectionAsync(IEnumerable<Point> points, CancellationToken cancellationToken)
+    {
+        Points message = new([.. points]);
+        MessageFindIntersect messageCbor = ChainSyncMessages.FindIntersect(message);
+        await _channelBuffer.SendFullMessageAsync(messageCbor, cancellationToken);
+        return await _channelBuffer.ReceiveFullMessageAsync<ChainSyncMessage>(cancellationToken);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public async Task<MessageNextResponse> NextRequestAsync(CancellationToken cancellationToken)
+    {
+        await _channelBuffer.SendFullMessageAsync(_nextRequest, cancellationToken);
+        return await _channelBuffer.ReceiveFullMessageAsync<MessageNextResponse>(cancellationToken);
+    }
 }
 

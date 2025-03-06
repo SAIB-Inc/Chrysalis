@@ -13,10 +13,7 @@ public abstract record Acquire : LocalStateQueryMessage;
 
 public class AcquireTypes
 {
-    public static Acquire Default(LanguageExt.Option<Point> point) => point.Match(
-        Some: SpecificPoint,
-        None: () => VolatileTip 
-    );
+    public static Acquire Default(Point? point) => point is not null ? SpecificPoint(point) : VolatileTip;
 
     public static Acquire SpecificPoint(Point point) =>
         new SpecificPoint(new ExactValue<CborInt>(new(0)), point);
@@ -34,19 +31,19 @@ public abstract record AcquireIdx : CborBase;
 [CborConverter(typeof(CustomListConverter))]
 [CborOptions(IsDefinite = true)]
 public record SpecificPoint(
-    [CborIndex(0)] [ExactValue(0)] ExactValue<CborInt> Idx,
+    [CborIndex(0)][ExactValue(0)] ExactValue<CborInt> Idx,
     [CborIndex(1)] Point Point
 ) : Acquire;
 
 [CborConverter(typeof(CustomListConverter))]
 [CborOptions(IsDefinite = true)]
 public record VolatileTip(
-    [CborIndex(0)] [ExactValue(8)] ExactValue<CborInt> Idx
+    [CborIndex(0)][ExactValue(8)] ExactValue<CborInt> Idx
 ) : Acquire;
 
 [CborConverter(typeof(CustomListConverter))]
 [CborOptions(IsDefinite = true)]
 public record ImmutableTip(
-    [CborIndex(0)] [ExactValue(10)] ExactValue<CborInt> Idx
+    [CborIndex(0)][ExactValue(10)] ExactValue<CborInt> Idx
 ) : Acquire;
 
