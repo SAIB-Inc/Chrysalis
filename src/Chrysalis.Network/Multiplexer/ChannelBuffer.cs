@@ -48,8 +48,6 @@ public sealed class ChannelBuffer(AgentChannel channel)
     /// <typeparam name="T">The type of CBOR message to receive.</typeparam>
     /// <param name="cancellationToken">A token to cancel the operation.</param>
     /// <returns>The deserialized message.</returns>
-    /// <exception cref="OperationCanceledException">Thrown if the operation is canceled.</exception>
-    /// <exception cref="InvalidDataException">Thrown if the received data cannot be deserialized or exceeds size limits.</exception>
     public async Task<T> ReceiveFullMessageAsync<T>(CancellationToken cancellationToken) where T : CborBase
     {
         // Create a reusable buffer for receiving messages
