@@ -1,6 +1,5 @@
 using Chrysalis.Network.Cbor.LocalStateQuery.Messages;
 using Chrysalis.Network.Multiplexer;
-using Chrysalis.Cbor.Serialization;
 using Chrysalis.Network.Cbor.LocalStateQuery;
 using Chrysalis.Network.Cbor.Common;
 

@@ -4,7 +4,6 @@ using System.Runtime.CompilerServices;
 using Chrysalis.Cbor.Serialization;
 using Chrysalis.Cbor.Types;
 using Chrysalis.Network.Core;
-using System.Threading;
 
 namespace Chrysalis.Network.Multiplexer;
 

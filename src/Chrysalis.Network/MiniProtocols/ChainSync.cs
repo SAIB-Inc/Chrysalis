@@ -1,8 +1,4 @@
-using System.Buffers;
-using System.Drawing;
 using System.Runtime.CompilerServices;
-using Chrysalis.Cbor.Serialization;
-using Chrysalis.Network.Cbor;
 using Chrysalis.Network.Cbor.ChainSync;
 using Chrysalis.Network.Cbor.Common;
 using Chrysalis.Network.Multiplexer;

@@ -1,7 +1,3 @@
-using System;
-using System.Threading;
-using System.Threading.Tasks;
-using Chrysalis.Network.Cbor.Handshake;
 using Chrysalis.Network.Core;
 using Chrysalis.Network.MiniProtocols;
 

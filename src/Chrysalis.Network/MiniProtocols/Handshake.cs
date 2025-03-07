@@ -1,5 +1,3 @@
-using System.Buffers;
-using Chrysalis.Cbor.Serialization;
 using Chrysalis.Network.Cbor.Handshake;
 using Chrysalis.Network.Multiplexer;
 
