@@ -87,7 +87,7 @@ public sealed class Muxer(IBearer bearer, ProtocolMode muxerMode) : IDisposable
                 MuxSegmentHeader segmentHeader = new(
                     TransmissionTime: CalculateTransmissionTime(),
                     ProtocolId: protocolId,
-                    PayloadLength: (ushort)Math.Min(payloadSlice.Length, ProtocolConstants.MAX_SEGMENT_PAYLOAD_LENGTH),
+                    PayloadLength: (ushort)Math.Min(payloadSlice.Length, ProtocolConstants.MaxSegmentPayloadLength),
                     Mode: _muxerMode == ProtocolMode.Responder
                 );
 

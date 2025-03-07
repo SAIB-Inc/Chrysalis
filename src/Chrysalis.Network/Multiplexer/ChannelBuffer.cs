@@ -29,11 +29,11 @@ public sealed class ChannelBuffer(AgentChannel channel)
         ReadOnlyMemory<byte> payloadMemory = payload.AsMemory();
         int payloadLength = payload.Length;
 
-        for (int offset = 0; offset < payloadLength; offset += ProtocolConstants.MAX_SEGMENT_PAYLOAD_LENGTH)
+        for (int offset = 0; offset < payloadLength; offset += ProtocolConstants.MaxSegmentPayloadLength)
         {
             if (cancellationToken.IsCancellationRequested) break;
 
-            int chunkSize = Math.Min(ProtocolConstants.MAX_SEGMENT_PAYLOAD_LENGTH, payloadLength - offset);
+            int chunkSize = Math.Min(ProtocolConstants.MaxSegmentPayloadLength, payloadLength - offset);
             ReadOnlyMemory<byte> chunkMemory = payloadMemory.Slice(offset, chunkSize);
             ReadOnlySequence<byte> chunkSequence = new(chunkMemory);
             await _channel.EnqueueChunkAsync(chunkSequence, cancellationToken);

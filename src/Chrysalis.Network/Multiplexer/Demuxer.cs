@@ -53,25 +53,25 @@ public sealed class Demuxer(IBearer bearer) : IDisposable
     public async ValueTask<MuxSegment> ReadSegmentAsync(CancellationToken cancellationToken)
     {
         // Read the header
-        ReadResult result = await bearer.Reader.ReadAtLeastAsync(ProtocolConstants.SEGMENT_HEADER_SIZE, cancellationToken);
+        ReadResult result = await bearer.Reader.ReadAtLeastAsync(ProtocolConstants.SegmentHeaderSize, cancellationToken);
         ReadOnlySequence<byte> buffer = result.Buffer;
 
         // Decode the header
-        ReadOnlySequence<byte> headerSlice = buffer.Slice(0, ProtocolConstants.SEGMENT_HEADER_SIZE);
+        ReadOnlySequence<byte> headerSlice = buffer.Slice(0, ProtocolConstants.SegmentHeaderSize);
         MuxSegmentHeader header = MuxSegmentCodec.DecodeHeader(headerSlice);
 
         // Advance past the header
-        bearer.Reader.AdvanceTo(buffer.GetPosition(ProtocolConstants.SEGMENT_HEADER_SIZE));
+        bearer.Reader.AdvanceTo(buffer.GetPosition(ProtocolConstants.SegmentHeaderSize));
 
         // Read and process the payload
         ReadOnlySequence<byte> payloadSequence;
 
-        if (buffer.Length >= header.PayloadLength + ProtocolConstants.SEGMENT_HEADER_SIZE)
+        if (buffer.Length >= header.PayloadLength + ProtocolConstants.SegmentHeaderSize)
         {
             // We already have the complete payload in the buffer
-            ReadOnlySequence<byte> payloadSlice = buffer.Slice(ProtocolConstants.SEGMENT_HEADER_SIZE, header.PayloadLength);
+            ReadOnlySequence<byte> payloadSlice = buffer.Slice(ProtocolConstants.SegmentHeaderSize, header.PayloadLength);
             payloadSequence = CopyPayload(payloadSlice);
-            bearer.Reader.AdvanceTo(buffer.GetPosition(header.PayloadLength + ProtocolConstants.SEGMENT_HEADER_SIZE));
+            bearer.Reader.AdvanceTo(buffer.GetPosition(header.PayloadLength + ProtocolConstants.SegmentHeaderSize));
         }
         else
         {
