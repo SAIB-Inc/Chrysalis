@@ -50,7 +50,7 @@ public class TcpBearer : IBearer
     /// <param name="port">The port to connect to.</param>
     /// <param name="cancellationToken">A token to cancel the operation.</param>
     /// <returns>A connected TCP bearer.</returns>
-    public static async Task<TcpBearer> CreateAsync(string host, int port, CancellationToken cancellationToken = default)
+    public static async Task<TcpBearer> CreateAsync(string host, int port, CancellationToken cancellationToken)
     {
         TcpClient client = new();
         await client.ConnectAsync(host, port, cancellationToken);
@@ -69,7 +69,7 @@ public class TcpBearer : IBearer
         Writer.Complete();
         _stream.Dispose();
         _client.Dispose();
-        
+
         _isDisposed = true;
         GC.SuppressFinalize(this);
     }
