@@ -6,33 +6,30 @@ namespace Chrysalis.Network.Multiplexer;
 /// <summary>
 /// Provides a high-level client for connecting to Cardano nodes.
 /// </summary>
-/// <remarks>
-/// NodeClient encapsulates the multiplexing infrastructure and provides
-/// convenient access to the Cardano mini-protocols. The typical usage is
-/// to create an instance via <see cref="ConnectAsync"/> and then call <see cref="Start"/>.
-/// </remarks>
 public class NodeClient : IDisposable
 {
     private readonly Plexer _plexer;
     private bool _isDisposed;
 
-    #region MiniProtocols
     /// <summary>
-    /// Gets the Handshake protocol handler, available after <see cref="Start"/> is called.
+    /// Gets the Handshake protocol handler.
     /// </summary>
     public Handshake? Handshake { get; private set; }
 
     /// <summary>
-    /// Gets the LocalStateQuery protocol handler, available after <see cref="Start"/> is called.
+    /// Gets the LocalStateQuery protocol handler.
     /// </summary>
     public LocalStateQuery? LocalStateQuery { get; private set; }
 
     /// <summary>
-    /// Gets the ChainSync protocol handler, available after <see cref="Start"/> is called.
+    /// Gets the ChainSync protocol handler.
     /// </summary>
     public ChainSync? ChainSync { get; private set; }
-    #endregion
 
+    /// <summary>
+    /// Initializes a new instance of the NodeClient class.
+    /// </summary>
+    /// <param name="plexer">The multiplexer for managing protocol channels.</param>
     private NodeClient(Plexer plexer)
     {
         _plexer = plexer ?? throw new ArgumentNullException(nameof(plexer));
@@ -42,29 +39,40 @@ public class NodeClient : IDisposable
     /// Creates and connects a new NodeClient instance to a Cardano node.
     /// </summary>
     /// <param name="socketPath">The path to the node's Unix domain socket.</param>
+    /// <param name="cancellationToken">A token to cancel the connection operation.</param>
     /// <returns>A connected NodeClient instance.</returns>
-    /// <exception cref="IOException">Thrown if the connection to the socket fails.</exception>
-    public static async Task<NodeClient> ConnectAsync(string socketPath)
+    /// <exception cref="InvalidOperationException">Thrown if the connection fails.</exception>
+    public static async Task<NodeClient> ConnectAsync(string socketPath, CancellationToken cancellationToken = default)
     {
-        UnixBearer unixBearer = await UnixBearer.CreateAsync(socketPath);
+        UnixBearer unixBearer = await UnixBearer.CreateAsync(socketPath, cancellationToken);
         Plexer plexer = new(unixBearer);
+        return new(plexer);
+    }
+
+    /// <summary>
+    /// Creates and connects a new NodeClient instance to a Cardano node over TCP.
+    /// </summary>
+    /// <param name="host">The host to connect to.</param>
+    /// <param name="port">The port to connect to.</param>
+    /// <param name="cancellationToken">A token to cancel the connection operation.</param>
+    /// <returns>A connected NodeClient instance.</returns>
+    public static async Task<NodeClient> ConnectTcpAsync(string host, int port, CancellationToken cancellationToken = default)
+    {
+        TcpBearer tcpBearer = await TcpBearer.CreateAsync(host, port, cancellationToken);
+        Plexer plexer = new(tcpBearer);
         return new(plexer);
     }
 
     /// <summary>
     /// Starts the client and initializes protocol handlers.
     /// </summary>
-    /// <remarks>
-    /// This method starts the multiplexer's processing loop and creates
-    /// protocol handlers for Handshake, ChainSync, and LocalStateQuery.
-    /// Must be called after connection and before using any protocol handler.
-    /// </remarks>
+    /// <param name="cancellationToken">A token to cancel the start operation.</param>
+    /// <exception cref="InvalidOperationException">Thrown if the client is already started.</exception>
     public void Start()
     {
         _ = _plexer.RunAsync(CancellationToken.None);
         Handshake = new(_plexer.SubscribeClient(ProtocolType.Handshake));
         ChainSync = new(_plexer.SubscribeClient(ProtocolType.ClientChainSync));
-        LocalStateQuery = new(_plexer.SubscribeClient(ProtocolType.LocalStateQuery));
     }
 
     /// <summary>
