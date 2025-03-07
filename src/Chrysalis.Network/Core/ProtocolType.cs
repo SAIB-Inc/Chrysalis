@@ -10,5 +10,6 @@ public enum ProtocolType
     LocalTxSubmission = 6,
     LocalStateQuery = 7,
     KeepAlive = 8,
+    LocalTxMonitor = 9,
     PeerSharing = 10,
 }

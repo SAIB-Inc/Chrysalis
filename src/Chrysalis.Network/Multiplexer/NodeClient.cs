@@ -13,6 +13,7 @@ public class NodeClient : IDisposable
     // public LocalStateQuery LocalStateQuery { get; private set; } 
     public ChainSync? ChainSync { get; private set; }
     public LocalTxSubmit? LocalTxSubmit { get; private set; }
+    public LocalTxMonitor? LocalTxMonitor { get; private set; }
     #endregion
 
     private NodeClient(Plexer plexer)
@@ -33,6 +34,7 @@ public class NodeClient : IDisposable
         Handshake = new(_plexer.SubscribeClient(ProtocolType.Handshake));
         ChainSync = new(_plexer.SubscribeClient(ProtocolType.ClientChainSync));
         LocalTxSubmit = new(_plexer.SubscribeClient(ProtocolType.LocalTxSubmission));
+        LocalTxMonitor = new(_plexer.SubscribeClient(ProtocolType.LocalTxMonitor));
     }
 
     public void Dispose()
