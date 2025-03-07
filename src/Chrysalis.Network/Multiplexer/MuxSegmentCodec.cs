@@ -20,16 +20,16 @@ public static class MuxSegmentCodec
 {
     // Header size constants
     /// <summary>Size in bytes of the transmission time field.</summary>
-    private const ushort TransmissionTimeSize = 4;
+    private const ushort TRANSMISSION_TIME_SIZE = 4;
 
     /// <summary>Size in bytes of the protocol ID field.</summary>
-    private const ushort ProtocolIdSize = 2;
+    private const ushort PROTOCOL_ID_SIZE = 2;
 
     /// <summary>Size in bytes of the payload length field.</summary>
-    private const ushort PayloadLengthSize = 2;
+    private const ushort PAYLOAD_LENGTH_SIZE = 2;
 
     /// <summary>Total size in bytes of the segment header.</summary>
-    public const ushort HeaderSize = TransmissionTimeSize + ProtocolIdSize + PayloadLengthSize;
+    private const ushort HEADER_SIZE = TRANSMISSION_TIME_SIZE + PROTOCOL_ID_SIZE + PAYLOAD_LENGTH_SIZE;
 
     // Buffer pool for encoding to reduce allocations
     private static readonly ArrayPool<byte> _encodeBufferPool = ArrayPool<byte>.Shared;
@@ -50,7 +50,7 @@ public static class MuxSegmentCodec
     public static ReadOnlySequence<byte> Encode(in MuxSegment segment)
     {
         // Calculate total size needed
-        int totalSize = HeaderSize + segment.Header.PayloadLength;
+        int totalSize = HEADER_SIZE + segment.Header.PayloadLength;
 
         // For small segments, avoid the pooling overhead
         if (totalSize <= 256)
@@ -86,7 +86,7 @@ public static class MuxSegmentCodec
     private static void EncodeToBuffer(in MuxSegment segment, byte[] buffer)
     {
         // Write header
-        Span<byte> headerSpan = buffer.AsSpan(0, HeaderSize);
+        Span<byte> headerSpan = buffer.AsSpan(0, HEADER_SIZE);
         BinaryPrimitives.WriteUInt32BigEndian(headerSpan[..4], segment.Header.TransmissionTime);
 
         ushort protocolIdValue = (ushort)segment.Header.ProtocolId;
@@ -101,7 +101,7 @@ public static class MuxSegmentCodec
         // Write payload after header
         if (segment.Header.PayloadLength > 0 && !segment.Payload.IsEmpty)
         {
-            Span<byte> payloadSpan = buffer.AsSpan(HeaderSize, segment.Header.PayloadLength);
+            Span<byte> payloadSpan = buffer.AsSpan(HEADER_SIZE, segment.Header.PayloadLength);
             segment.Payload.CopyTo(payloadSpan);
         }
     }
@@ -145,8 +145,8 @@ public static class MuxSegmentCodec
     {
         uint transmissionTime = BinaryPrimitives.ReadUInt32BigEndian(headerSequence.Slice(0, 4).FirstSpan);
         ushort protocolIdAndMode = BinaryPrimitives.ReadUInt16BigEndian(headerSequence.Slice(4, 2).FirstSpan);
-        bool mode = (protocolIdAndMode & 0x8000) != 0;         // Extract high bit for mode
-        ProtocolType protocolId = (ProtocolType)(protocolIdAndMode & 0x7FFF);  // Extract lower 15 bits for protocol ID
+        bool mode = (protocolIdAndMode & 0x8000) != 0;
+        ProtocolType protocolId = (ProtocolType)(protocolIdAndMode & 0x7FFF);
         ushort payloadLength = BinaryPrimitives.ReadUInt16BigEndian(headerSequence.Slice(6, 2).FirstSpan);
 
         return new(
