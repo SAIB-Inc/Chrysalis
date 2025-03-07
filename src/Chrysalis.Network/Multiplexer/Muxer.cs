@@ -52,21 +52,6 @@ public sealed class Muxer(IBearer bearer, ProtocolMode muxerMode) : IDisposable
         await _bearer.Writer.FlushAsync(cancellationToken);
     }
 
-    // [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    // public async ValueTask WriteSegmentTestAsync(ReadOnlySequence<byte> encodedSegment, CancellationToken cancellationToken)
-    // {
-    //     //ReadOnlySequence<byte> encodedSegment = MuxSegmentCodec.Encode(segment);
-
-    //     // Write directly using the sequence without creating an additional Memory/Span
-    //     foreach (ReadOnlyMemory<byte> memory in encodedSegment)
-    //     {
-    //         await _bearer.Writer.WriteAsync(memory, cancellationToken);
-    //     }
-
-    //     // Use ValueTask.WhenAll to potentially process multiple operations in parallel
-    //     await _bearer.Writer.FlushAsync(cancellationToken);
-    // }
-
     /// <summary>
     /// Calculates the transmission time relative to the muxer start time.
     /// </summary>
@@ -115,10 +100,7 @@ public sealed class Muxer(IBearer bearer, ProtocolMode muxerMode) : IDisposable
             {
                 break;
             }
-            catch (Exception ex)
-            {
-                // Console.WriteLine(ex.Message);
-            }
+            catch { }
         }
 
         _pipe.Writer.Complete();

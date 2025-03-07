@@ -7,7 +7,7 @@ using Chrysalis.Network.Multiplexer;
 
 // home/rjlacanlale/cardano/ipc/node.socket
 //NodeClient client = await NodeClient.ConnectAsync("/tmp/intercept_node_socket");
-NodeClient client = await NodeClient.ConnectAsync("/home/rjlacanlale/cardano/ipc/node.socket");
+NodeClient client = await NodeClient.ConnectAsync("/home/rawriclark/CardanoPreview/pool/txpipe/relay1/ipc/node.socket");
 client.Start();
 
 ProposeVersions proposeVersion = HandshakeMessages.ProposeVersions(VersionTables.N2C_V10_AND_ABOVE);
@@ -16,9 +16,6 @@ Console.WriteLine("Sending handshake message...");
 await client.Handshake!.SendAsync(proposeVersion, CancellationToken.None);
 Console.WriteLine("Handshake success!!");
 
-// Point point = new(
-//     new(73793022),
-//     new(Convert.FromHexString("1b6b4afeef73bf4a1e2a014b492549b6cedc61919fda6a7e4d3813f578eba4db")));
 Point point = new(
     new(57371845),
     new(Convert.FromHexString("20a81db38339bf6ee9b1d7e22b22c0ac4d887d332bbf4f3005db4848cd647743")));
