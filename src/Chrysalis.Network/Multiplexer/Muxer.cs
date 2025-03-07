@@ -1,4 +1,6 @@
 using System.Buffers;
+using System.Buffers.Binary;
+using System.IO.Pipelines;
 using System.Runtime.CompilerServices;
 using System.Threading.Channels;
 using Chrysalis.Network.Core;
@@ -12,37 +14,24 @@ namespace Chrysalis.Network.Multiplexer;
 /// The Muxer takes messages from different protocol handlers and sends them
 /// through a single bearer, adding appropriate headers for demultiplexing.
 /// </remarks>
-public sealed class Muxer : IDisposable
+/// <remarks>
+/// Initializes a new instance of the <see cref="Muxer"/> class.
+/// </remarks>
+/// <param name="bearer">The bearer to write segments to.</param>
+/// <param name="muxerMode">The mode of operation (initiator or responder).</param>
+/// <exception cref="ArgumentNullException">Thrown if bearer is null.</exception>
+public sealed class Muxer(IBearer bearer, ProtocolMode muxerMode) : IDisposable
 {
-    private readonly IBearer _bearer;
-    private readonly ProtocolMode _muxerMode;
+    private readonly IBearer _bearer = bearer ?? throw new ArgumentNullException(nameof(bearer));
+    private readonly ProtocolMode _muxerMode = muxerMode;
     private readonly DateTimeOffset _startTime = DateTimeOffset.UtcNow;
-    private readonly Channel<(ProtocolType ProtocolType, ReadOnlySequence<byte> Payload)> _channel;
+    private readonly Pipe _pipe = new();
     private bool _isDisposed;
-
-    /// <summary>
-    /// Initializes a new instance of the <see cref="Muxer"/> class.
-    /// </summary>
-    /// <param name="bearer">The bearer to write segments to.</param>
-    /// <param name="muxerMode">The mode of operation (initiator or responder).</param>
-    /// <exception cref="ArgumentNullException">Thrown if bearer is null.</exception>
-    public Muxer(IBearer bearer, ProtocolMode muxerMode)
-    {
-        _bearer = bearer ?? throw new ArgumentNullException(nameof(bearer));
-        _muxerMode = muxerMode;
-        _channel = Channel.CreateBounded<(ProtocolType, ReadOnlySequence<byte>)>(
-            new BoundedChannelOptions(ProtocolConstants.MAX_CHANNEL_LOAD)
-            {
-                SingleReader = true,
-                SingleWriter = false,
-                FullMode = BoundedChannelFullMode.Wait
-            });
-    }
 
     /// <summary>
     /// Gets the channel writer for sending messages through the muxer.
     /// </summary>
-    public ChannelWriter<(ProtocolType ProtocolType, ReadOnlySequence<byte> Payload)> Writer => _channel.Writer;
+    public PipeWriter Writer => _pipe.Writer;
 
     /// <summary>
     /// Writes a multiplexed segment to the bearer.
@@ -50,19 +39,34 @@ public sealed class Muxer : IDisposable
     /// <param name="segment">The segment to write.</param>
     /// <param name="cancellationToken">A token to cancel the operation.</param>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private async ValueTask WriteSegmentAsync(MuxSegment segment, CancellationToken cancellationToken)
+    private async Task WriteSegmentAsync(MuxSegment segment, CancellationToken cancellationToken)
     {
         ReadOnlySequence<byte> encodedSegment = MuxSegmentCodec.Encode(segment);
-        
+
         // Write directly using the sequence without creating an additional Memory/Span
         foreach (ReadOnlyMemory<byte> memory in encodedSegment)
         {
             await _bearer.Writer.WriteAsync(memory, cancellationToken);
         }
-        
+
         // Use ValueTask.WhenAll to potentially process multiple operations in parallel
         await _bearer.Writer.FlushAsync(cancellationToken);
     }
+
+    // [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    // public async ValueTask WriteSegmentTestAsync(ReadOnlySequence<byte> encodedSegment, CancellationToken cancellationToken)
+    // {
+    //     //ReadOnlySequence<byte> encodedSegment = MuxSegmentCodec.Encode(segment);
+
+    //     // Write directly using the sequence without creating an additional Memory/Span
+    //     foreach (ReadOnlyMemory<byte> memory in encodedSegment)
+    //     {
+    //         await _bearer.Writer.WriteAsync(memory, cancellationToken);
+    //     }
+
+    //     // Use ValueTask.WhenAll to potentially process multiple operations in parallel
+    //     await _bearer.Writer.FlushAsync(cancellationToken);
+    // }
 
     /// <summary>
     /// Calculates the transmission time relative to the muxer start time.
@@ -78,39 +82,47 @@ public sealed class Muxer : IDisposable
     /// <param name="cancellationToken">A token to cancel the operation.</param>
     public async Task RunAsync(CancellationToken cancellationToken)
     {
-        try
+        while (!cancellationToken.IsCancellationRequested)
         {
-            while (!cancellationToken.IsCancellationRequested)
+            try
             {
-                try
-                {
-                    (ProtocolType protocolId, ReadOnlySequence<byte> payload) = await _channel.Reader.ReadAsync(cancellationToken);
+                ReadResult protocolMessageResult = await _pipe.Reader.ReadAsync(cancellationToken);
+                ReadOnlySequence<byte> protocolMessageBuffer = protocolMessageResult.Buffer;
 
-                    MuxSegmentHeader segmentHeader = new MuxSegmentHeader(
-                        TransmissionTime: CalculateTransmissionTime(),
-                        ProtocolId: protocolId,
-                        PayloadLength: (ushort)Math.Min(payload.Length, ProtocolConstants.MAX_SEGMENT_PAYLOAD_LENGTH),
-                        Mode: _muxerMode == ProtocolMode.Responder
-                    );
+                // protocol id
+                ReadOnlySequence<byte> protocolIdSlice = protocolMessageBuffer.Slice(0, 1);
+                ProtocolType protocolId = (ProtocolType)protocolIdSlice.FirstSpan[0];
 
-                    MuxSegment segment = new MuxSegment(segmentHeader, payload);
-                    await WriteSegmentAsync(segment, cancellationToken);
-                }
-                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-                {
-                    break;
-                }
-                catch (Exception)
-                {
-                    // @TODO: Logging
-                }
+                // payload length
+                ReadOnlySequence<byte> payloadLengthSlice = protocolMessageBuffer.Slice(1, 2);
+                ushort payloadLength = BinaryPrimitives.ReadUInt16BigEndian(payloadLengthSlice.FirstSpan);
+
+                // payload
+                ReadOnlySequence<byte> payloadSlice = protocolMessageBuffer.Slice(3, payloadLength);
+
+                MuxSegmentHeader segmentHeader = new(
+                    TransmissionTime: CalculateTransmissionTime(),
+                    ProtocolId: protocolId,
+                    PayloadLength: (ushort)Math.Min(payloadSlice.Length, ProtocolConstants.MAX_SEGMENT_PAYLOAD_LENGTH),
+                    Mode: _muxerMode == ProtocolMode.Responder
+                );
+
+                MuxSegment segment = new(segmentHeader, payloadSlice);
+                await WriteSegmentAsync(segment, cancellationToken);
+                _pipe.Reader.AdvanceTo(payloadSlice.End);
+
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                break;
+            }
+            catch (Exception ex)
+            {
+                // Console.WriteLine(ex.Message);
             }
         }
-        finally
-        {
-            // Ensure we clean up when the loop exits
-            _channel.Writer.Complete();
-        }
+
+        _pipe.Writer.Complete();
     }
 
     /// <summary>
@@ -121,7 +133,7 @@ public sealed class Muxer : IDisposable
         if (_isDisposed) return;
 
         // Complete the channel
-        _channel.Writer.Complete();
+        _pipe.Writer.Complete();
 
         // Don't dispose bearer here - it's provided externally
         _isDisposed = true;

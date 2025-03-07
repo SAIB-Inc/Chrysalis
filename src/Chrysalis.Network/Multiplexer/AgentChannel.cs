@@ -1,4 +1,6 @@
 using System.Buffers;
+using System.Buffers.Binary;
+using System.IO.Pipelines;
 using System.Runtime.CompilerServices;
 using System.Threading.Channels;
 using Chrysalis.Network.Core;
@@ -21,8 +23,8 @@ namespace Chrysalis.Network.Multiplexer;
 /// <exception cref="ArgumentNullException">Thrown if plexerWriter or plexerReader is null.</exception>
 public sealed class AgentChannel(
     ProtocolType protocolId,
-    ChannelWriter<(ProtocolType ProtocolId, ReadOnlySequence<byte> Payload)> plexerWriter,
-    ChannelReader<ReadOnlySequence<byte>> plexerReader
+    PipeWriter plexerWriter,
+    PipeReader plexerReader
 )
 {
     /// <summary>
@@ -33,16 +35,26 @@ public sealed class AgentChannel(
     /// <returns>A task that completes when the data has been queued for sending.</returns>
     /// <exception cref="ChannelClosedException">Thrown if the channel has been completed.</exception>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public ValueTask EnqueueChunkAsync(ReadOnlySequence<byte> chunk, CancellationToken cancellationToken = default)
+    public async Task EnqueueChunkAsync(ReadOnlySequence<byte> chunk, CancellationToken cancellationToken = default)
     {
-        // Fast path - try to write synchronously first to avoid task allocation
-        if (plexerWriter.TryWrite((protocolId, chunk)))
-        {
-            return ValueTask.CompletedTask;
-        }
-        
-        // Fall back to async path if channel is full
-        return plexerWriter.WriteAsync((protocolId, chunk), cancellationToken);
+        // Get the total length of the payload
+        int payloadLength = (int)chunk.Length;
+
+        // Create buffer for header (3 bytes total: 1 for protocol ID, 2 for length)
+        Span<byte> protocolMessage = stackalloc byte[3 + payloadLength];
+
+        // Write protocol ID (1 byte)
+        protocolMessage[0] = (byte)protocolId;
+
+        // Write payload length (2 bytes) in big-endian format
+        BinaryPrimitives.WriteUInt16BigEndian(protocolMessage[1..], (ushort)payloadLength);
+
+        Span<byte> payloadSlice = protocolMessage.Slice(3, payloadLength);
+        chunk.CopyTo(payloadSlice);
+
+        // Write payload - handle multi-segment sequences efficiently
+        plexerWriter.Write(protocolMessage);
+        await plexerWriter.FlushAsync(cancellationToken);
     }
 
     /// <summary>
@@ -52,6 +64,10 @@ public sealed class AgentChannel(
     /// <returns>The received data.</returns>
     /// <exception cref="ChannelClosedException">Thrown if the channel has been completed.</exception>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public ValueTask<ReadOnlySequence<byte>> ReadChunkAsync(CancellationToken cancellationToken = default) =>
-        plexerReader.ReadAsync(cancellationToken);
+    public async Task<ReadResult> ReadChunkAsync(CancellationToken cancellationToken = default)
+    {
+        return await plexerReader.ReadAsync(cancellationToken);
+    }
+
+    public void AdvanceTo(SequencePosition position) => plexerReader.AdvanceTo(position);
 }

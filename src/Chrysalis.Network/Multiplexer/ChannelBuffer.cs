@@ -17,10 +17,6 @@ namespace Chrysalis.Network.Multiplexer;
 /// </remarks>
 public sealed class ChannelBuffer(AgentChannel channel)
 {
-    // Reusable buffer pool to reduce allocations
-    private static readonly ArrayPool<byte> _bufferPool = ArrayPool<byte>.Shared;
-    private const int INITIAL_BUFFER_SIZE = 4096;
-
     /// <summary>
     /// Sends a complete CBOR message, automatically chunking if needed.
     /// </summary>
@@ -31,14 +27,12 @@ public sealed class ChannelBuffer(AgentChannel channel)
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public async ValueTask SendFullMessageAsync<T>(T message, CancellationToken cancellationToken) where T : CborBase
     {
-        ArgumentNullException.ThrowIfNull(message);
-
         // Use standard serialization - the CborSerializer doesn't accept a buffer writer
         byte[] payload = CborSerializer.Serialize(message);
-        
+
         ReadOnlyMemory<byte> payloadMemory = payload.AsMemory();
         int payloadLength = payload.Length;
-        
+
         // Send the payload in chunks
         for (int offset = 0; offset < payloadLength; offset += ProtocolConstants.MAX_SEGMENT_PAYLOAD_LENGTH)
         {
@@ -60,70 +54,51 @@ public sealed class ChannelBuffer(AgentChannel channel)
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public async Task<T> ReceiveFullMessageAsync<T>(CancellationToken cancellationToken) where T : CborBase
     {
-        byte[] buffer = _bufferPool.Rent(INITIAL_BUFFER_SIZE);
-        int bufferLength = 0;
-        
-        try
+        while (true)
         {
-            // Keep reading chunks until we can successfully deserialize
-            while (true)
+            // Read available data from the pipe
+            ReadResult readResult = await channel.ReadChunkAsync(cancellationToken);
+            ReadOnlySequence<byte> buffer = readResult.Buffer;
+
+            // Try to deserialize
+            try
             {
-                // Read the next chunk first, instead of attempting deserialization prematurely
-                ReadOnlySequence<byte> chunk = await channel.ReadChunkAsync(cancellationToken);
-                
-                // Ensure buffer is large enough
-                if (bufferLength + chunk.Length > buffer.Length)
+                // Attempt to deserialize directly from the ReadOnlySequence
+                T result;
+
+                if (buffer.IsSingleSegment)
                 {
-                    // Need to resize - rent a new buffer with double capacity
-                    byte[] newBuffer = _bufferPool.Rent(Math.Max(buffer.Length * 2, bufferLength + (int)chunk.Length));
-                    Buffer.BlockCopy(buffer, 0, newBuffer, 0, bufferLength);
-                    _bufferPool.Return(buffer);
-                    buffer = newBuffer;
+                    result = CborSerializer.Deserialize<T>(buffer.First);
                 }
-                
-                // Copy chunk to buffer
-                chunk.CopyTo(buffer.AsSpan(bufferLength));
-                bufferLength += (int)chunk.Length;
-                
-                try
+                else
                 {
-                    // Try to deserialize with current data
-                    T result = CborSerializer.Deserialize<T>(buffer.AsMemory(0, bufferLength));
-                    return result;
+                    Memory<byte> subBuffer = new(ArrayPool<byte>.Shared.Rent((int)buffer.Length));
+                    int bytesRead = 0;
+
+                    foreach (ReadOnlyMemory<byte> segment in readResult.Buffer)
+                    {
+                        Memory<byte> subBufferSlice = subBuffer.Slice(bytesRead, segment.Length);
+                        segment.CopyTo(subBufferSlice);
+                        bytesRead += subBufferSlice.Length;
+                    }
+
+                    result = CborSerializer.Deserialize<T>(subBuffer[..(int)buffer.Length]);
                 }
-                catch
-                {
-                    // Need more data, continue to next iteration
-                }
+
+                // Success! Mark all data as consumed
+                channel.AdvanceTo(buffer.End);
+                return result;
             }
-        }
-        finally
-        {
-            // Always return the buffer to the pool
-            _bufferPool.Return(buffer);
-        }
-    }
+            catch
+            {
+                // If we couldn't deserialize, we need more data
+                // Mark what we've examined but couldn't use
+                channel.AdvanceTo(buffer.Start);
 
-    /// <summary>
-    /// Tries to receive a message with a timeout.
-    /// </summary>
-    /// <typeparam name="T">The type of CBOR message to receive.</typeparam>
-    /// <param name="timeout">The maximum time to wait for a complete message.</param>
-    /// <param name="cancellationToken">A token to cancel the operation.</param>
-    /// <returns>The deserialized message or null if the timeout expires.</returns>
-    public async ValueTask<T?> TryReceiveWithTimeoutAsync<T>(TimeSpan timeout, CancellationToken cancellationToken) where T : CborBase
-    {
-        using CancellationTokenSource timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        timeoutCts.CancelAfter(timeout);
-
-        try
-        {
-            return await ReceiveFullMessageAsync<T>(timeoutCts.Token);
-        }
-        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
-        {
-            // Timeout occurred
-            return null;
+                // If pipe is completed and we still can't deserialize, that's an error
+                if (readResult.IsCompleted)
+                    throw new InvalidOperationException("Pipe completed before a valid message could be parsed");
+            }
         }
     }
 }

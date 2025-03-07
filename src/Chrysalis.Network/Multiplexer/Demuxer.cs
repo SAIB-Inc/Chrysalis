@@ -20,7 +20,7 @@ namespace Chrysalis.Network.Multiplexer;
 /// <param name="bearer">The bearer to read segments from.</param>
 public sealed class Demuxer(IBearer bearer) : IDisposable
 {
-    private readonly ConcurrentDictionary<ProtocolType, Channel<ReadOnlySequence<byte>>> _protocolChannels = [];
+    private readonly ConcurrentDictionary<ProtocolType, Pipe> _protocolPipes = [];
     private bool _isDisposed;
 
     /// <summary>
@@ -28,14 +28,21 @@ public sealed class Demuxer(IBearer bearer) : IDisposable
     /// </summary>
     /// <param name="protocol">The protocol type to subscribe to.</param>
     /// <returns>A channel reader for consuming messages for the specified protocol.</returns>
-    public ChannelReader<ReadOnlySequence<byte>> Subscribe(ProtocolType protocol)
+    public PipeReader Subscribe(ProtocolType protocol)
     {
-        if (!_protocolChannels.TryGetValue(protocol, out Channel<ReadOnlySequence<byte>>? channel))
+        if (!_protocolPipes.TryGetValue(protocol, out Pipe? pipe))
         {
-            channel = Channel.CreateBounded<ReadOnlySequence<byte>>(ProtocolConstants.MAX_CHANNEL_LOAD);
-            _protocolChannels[protocol] = channel;
+            pipe = new Pipe(
+                new PipeOptions(
+                    pool: MemoryPool<byte>.Shared,
+                    minimumSegmentSize: 4096,
+                    pauseWriterThreshold: 100 * 1024,
+                    resumeWriterThreshold: 99 * 1024
+                )
+            );
+            _protocolPipes[protocol] = pipe;
         }
-        return channel.Reader;
+        return pipe.Reader;
     }
 
     /// <summary>
@@ -86,7 +93,7 @@ public sealed class Demuxer(IBearer bearer) : IDisposable
     /// Creates a copy of the payload from a ReadOnlySequence using buffer pooling.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private ReadOnlySequence<byte> CopyPayload(ReadOnlySequence<byte> payload)
+    private static ReadOnlySequence<byte> CopyPayload(ReadOnlySequence<byte> payload)
     {
         // For very small payloads, using pooling introduces more overhead than benefit
         if (payload.Length <= 128)
@@ -103,7 +110,7 @@ public sealed class Demuxer(IBearer bearer) : IDisposable
         {
             payload.CopyTo(payloadCopy);
             // Store the buffer in the memory record for later return to pool
-            PooledMemory managedPayload = new PooledMemory(payloadCopy, _bufferPool, (int)payload.Length);
+            PooledMemory managedPayload = new(payloadCopy, _bufferPool, (int)payload.Length);
             return new ReadOnlySequence<byte>(managedPayload.Memory);
         }
         catch
@@ -146,9 +153,10 @@ public sealed class Demuxer(IBearer bearer) : IDisposable
             {
                 MuxSegment segment = await ReadSegmentAsync(cancellationToken);
 
-                if (_protocolChannels.TryGetValue(segment.Header.ProtocolId, out Channel<ReadOnlySequence<byte>>? channel))
+                if (_protocolPipes.TryGetValue(segment.Header.ProtocolId, out Pipe? pipe))
                 {
-                    await channel.Writer.WriteAsync(segment.Payload, cancellationToken);
+                    await pipe.Writer.WriteAsync(segment.Payload.First, cancellationToken);
+                    await pipe.Writer.FlushAsync(cancellationToken);
                 }
                 else
                 {
@@ -158,13 +166,10 @@ public sealed class Demuxer(IBearer bearer) : IDisposable
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
-                // Normal cancellation, just exit
                 break;
             }
             catch (Exception)
             {
-                // Consider logging or handling errors
-                // For now, we just continue to the next segment
             }
         }
     }
@@ -177,9 +182,9 @@ public sealed class Demuxer(IBearer bearer) : IDisposable
         if (_isDisposed) return;
 
         // Complete all channels
-        foreach (Channel<ReadOnlySequence<byte>> channel in _protocolChannels.Values)
+        foreach (Pipe pipe in _protocolPipes.Values)
         {
-            channel.Writer.Complete();
+            pipe.Writer.Complete();
         }
 
         // Don't dispose bearer here - it's provided externally
