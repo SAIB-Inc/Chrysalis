@@ -15,18 +15,13 @@ namespace Chrysalis.Network.MiniProtocols;
 /// <param name="channel">The channel for protocol communication.</param>
 public class ChainSync(AgentChannel channel) : IMiniProtocol
 {
-    private readonly ChannelBuffer _buffer = new(channel);
-    private readonly ChainSyncMessage _nextRequest = ChainSyncMessages.NextRequest();
-
-    /// <summary>
-    /// Gets the communication channel used by this protocol.
-    /// </summary>
-    public AgentChannel Channel { get; } = channel;
-
     /// <summary>
     /// Gets the protocol type identifier.
     /// </summary>
-    public ProtocolType ProtocolType => ProtocolType.ClientChainSync;
+    public static ProtocolType ProtocolType => ProtocolType.Handshake;
+
+    private readonly ChannelBuffer _buffer = new(channel);
+    private readonly ChainSyncMessage _nextRequest = ChainSyncMessages.NextRequest();
 
     /// <summary>
     /// Finds an intersection point between the local and remote chains.
