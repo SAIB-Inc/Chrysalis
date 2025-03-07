@@ -20,7 +20,6 @@ namespace Chrysalis.Network.Multiplexer;
 /// <param name="protocolId">The protocol ID this channel handles.</param>
 /// <param name="plexerWriter">The writer for sending outbound messages to the multiplexer.</param>
 /// <param name="plexerReader">The reader for receiving inbound messages from the demultiplexer.</param>
-/// <exception cref="ArgumentNullException">Thrown if plexerWriter or plexerReader is null.</exception>
 public sealed class AgentChannel(
     ProtocolType protocolId,
     PipeWriter plexerWriter,
@@ -33,7 +32,6 @@ public sealed class AgentChannel(
     /// <param name="chunk">The data to send.</param>
     /// <param name="cancellationToken">A token to cancel the operation.</param>
     /// <returns>A task that completes when the data has been queued for sending.</returns>
-    /// <exception cref="ChannelClosedException">Thrown if the channel has been completed.</exception>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public async Task EnqueueChunkAsync(ReadOnlySequence<byte> chunk, CancellationToken cancellationToken = default)
     {
@@ -49,6 +47,7 @@ public sealed class AgentChannel(
         // Write payload length (2 bytes) in big-endian format
         BinaryPrimitives.WriteUInt16BigEndian(protocolMessage[1..], (ushort)payloadLength);
 
+        // Copy the payload chunk to the protocol message
         Span<byte> payloadSlice = protocolMessage.Slice(3, payloadLength);
         chunk.CopyTo(payloadSlice);
 
@@ -62,12 +61,14 @@ public sealed class AgentChannel(
     /// </summary>
     /// <param name="cancellationToken">A token to cancel the operation.</param>
     /// <returns>The received data.</returns>
-    /// <exception cref="ChannelClosedException">Thrown if the channel has been completed.</exception>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public async Task<ReadResult> ReadChunkAsync(CancellationToken cancellationToken = default)
-    {
-        return await plexerReader.ReadAsync(cancellationToken);
-    }
+    public async Task<ReadResult> ReadChunkAsync(CancellationToken cancellationToken = default) =>
+        await plexerReader.ReadAsync(cancellationToken);
 
+    /// <summary>
+    /// Advances the channels reader to a position.
+    /// </summary>
+    /// <param name="position">The SequencePosition of the last consumed data.</param>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void AdvanceTo(SequencePosition position) => plexerReader.AdvanceTo(position);
 }
