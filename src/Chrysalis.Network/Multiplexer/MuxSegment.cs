@@ -14,7 +14,7 @@ namespace Chrysalis.Network.Multiplexer;
 /// This is a lightweight value type optimized for efficient processing.
 /// When passing to methods, use the 'in' modifier to avoid copying.
 /// </remarks>
-public readonly record struct MuxSegmentHeader(
+public record MuxSegmentHeader(
     uint TransmissionTime,
     ProtocolType ProtocolId,
     ushort PayloadLength,
@@ -31,7 +31,7 @@ public readonly record struct MuxSegmentHeader(
 /// It encapsulates both the protocol metadata (Header) and the actual message data (Payload).
 /// As a value type, it should be passed using the 'in' modifier to avoid copying.
 /// </remarks>
-public readonly record struct MuxSegment(
+public record MuxSegment(
     MuxSegmentHeader Header,
     ReadOnlySequence<byte> Payload
 );
