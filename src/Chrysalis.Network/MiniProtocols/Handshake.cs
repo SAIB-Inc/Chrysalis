@@ -13,6 +13,12 @@ public class Handshake(AgentChannel channel) : IMiniProtocol
 
     private readonly ChannelBuffer _buffer = new(channel);
 
+    /// <summary>
+    /// Sends a version proposal and receives the handshake response.
+    /// </summary>
+    /// <param name="propose">The version proposal message.</param>
+    /// <param name="cancellationToken">Token to cancel the operation.</param>
+    /// <returns>The handshake response message.</returns>
     public async Task<HandshakeMessage> SendAsync(ProposeVersions propose, CancellationToken cancellationToken)
     {
         await _buffer.SendFullMessageAsync(propose, cancellationToken);
