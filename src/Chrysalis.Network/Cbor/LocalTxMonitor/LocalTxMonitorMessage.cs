@@ -1,4 +1,6 @@
+using System.Transactions;
 using Chrysalis.Cbor.Attributes;
+using Chrysalis.Cbor.Plutus.Types;
 using Chrysalis.Cbor.Serialization.Converters.Custom;
 using Chrysalis.Cbor.Types;
 using Chrysalis.Cbor.Types.Custom;
@@ -28,13 +30,11 @@ public record Done(
     [CborIndex(0)][ExactValue(0)] ExactValue<CborInt> Idx
 ) : LocalTxMonitorMessage;
 
-
 [CborConverter(typeof(CustomListConverter))]
 [CborOptions(IsDefinite = true)]
 public record Acquire(
     [CborIndex(0)][ExactValue(1)] ExactValue<CborInt> Idx
 ) : LocalTxMonitorMessage;
-
 
 [CborConverter(typeof(CustomListConverter))]
 [CborOptions(IsDefinite = true)]
@@ -42,8 +42,6 @@ public record Acquired(
     [CborIndex(0)][ExactValue(2)] ExactValue<CborInt> Idx,
     [CborIndex(1)] CborUlong Slot
 ) : LocalTxMonitorMessage;
-
-
 
 [CborConverter(typeof(CustomListConverter))]
 [CborOptions(IsDefinite = true)]
@@ -100,13 +98,11 @@ public record ReplyGetSizes(
     [CborIndex(1)] CborList<CborUlong> Sizes
 ) : LocalTxMonitorMessage;
 
-
 [CborConverter(typeof(CustomListConverter))]
 [CborOptions(IsDefinite = true)]
 public record GetMeasures(
     [CborIndex(0)][ExactValue(11)] ExactValue<CborInt> Idx
 ) : LocalTxMonitorMessage;
-
 
 [CborConverter(typeof(CustomListConverter))]
 [CborOptions(IsDefinite = true)]
@@ -122,5 +118,6 @@ public record Measures(
     [CborIndex(0)] CborInt CurrentSize,
     [CborIndex(1)] CborInt MaxCapacity
 );
+
 
 
