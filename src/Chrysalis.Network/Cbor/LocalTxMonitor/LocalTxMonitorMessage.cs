@@ -1,10 +1,9 @@
 using Chrysalis.Cbor.Attributes;
-using Chrysalis.Cbor.Cardano.Types.Block.Transaction;
-using Chrysalis.Cbor.Plutus.Types;
 using Chrysalis.Cbor.Serialization.Converters.Custom;
 using Chrysalis.Cbor.Types;
 using Chrysalis.Cbor.Types.Custom;
 using Chrysalis.Cbor.Types.Primitives;
+using Chrysalis.Network.Cbor.LocalTxSubmit;
 
 namespace Chrysalis.Network.Cbor.Handshake;
 
@@ -71,7 +70,7 @@ public record ReplyNextTxWithoutTx(
 [CborOptions(IsDefinite = true)]
 public record ReplyNextTxWithTx(
     [CborIndex(0)][ExactValue(6)] ExactValue<CborInt> Idx,
-    [CborIndex(1)] Transaction Tx
+    [CborIndex(1)] EraTx EraTx
 ) : ReplyNextTx;
 
 [CborConverter(typeof(CustomListConverter))]
