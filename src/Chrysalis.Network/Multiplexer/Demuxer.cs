@@ -149,27 +149,17 @@ public sealed class Demuxer(IBearer bearer) : IDisposable
     {
         while (!cancellationToken.IsCancellationRequested)
         {
-            try
-            {
-                MuxSegment segment = await ReadSegmentAsync(cancellationToken);
+            MuxSegment segment = await ReadSegmentAsync(cancellationToken);
 
-                if (_protocolPipes.TryGetValue(segment.Header.ProtocolId, out Pipe? pipe))
-                {
-                    await pipe.Writer.WriteAsync(segment.Payload.First, cancellationToken);
-                    await pipe.Writer.FlushAsync(cancellationToken);
-                }
-                else
-                {
-                    // Protocol not subscribed - log or handle as needed
-                    // For now we just drop the segment
-                }
-            }
-            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            if (_protocolPipes.TryGetValue(segment.Header.ProtocolId, out Pipe? pipe))
             {
-                break;
+                await pipe.Writer.WriteAsync(segment.Payload.First, cancellationToken);
+                await pipe.Writer.FlushAsync(cancellationToken);
             }
-            catch (Exception)
+            else
             {
+                // Protocol not subscribed - log or handle as needed
+                // For now we just drop the segment
             }
         }
     }
