@@ -18,7 +18,7 @@ public class ChainSync(AgentChannel channel) : IMiniProtocol
     /// <summary>
     /// Gets the protocol type identifier.
     /// </summary>
-    public static ProtocolType ProtocolType => ProtocolType.Handshake;
+    public static ProtocolType ProtocolType => ProtocolType.ClientChainSync;
 
     private readonly ChannelBuffer _buffer = new(channel);
     private readonly ChainSyncMessage _nextRequest = ChainSyncMessages.NextRequest();
