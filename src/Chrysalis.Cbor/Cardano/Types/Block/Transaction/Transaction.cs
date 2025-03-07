@@ -12,6 +12,7 @@ public abstract record Transaction : CborBase;
 
 
 [CborConverter(typeof(CustomListConverter))]
+[CborOptions(IsDefinite = true)]
 public record ShelleyTransaction(
     [CborIndex(0)] TransactionBody TransactionBody,
     [CborIndex(1)] TransactionWitnessSet TransactionWitnessSet,
@@ -19,6 +20,7 @@ public record ShelleyTransaction(
 ) : Transaction;
 
 [CborConverter(typeof(CustomListConverter))]
+[CborOptions(IsDefinite = true)]
 public record AllegraTransaction(
     [CborIndex(0)] TransactionBody TransactionBody,
     [CborIndex(1)] TransactionWitnessSet TransactionWitnessSet,
@@ -26,6 +28,7 @@ public record AllegraTransaction(
 ) : Transaction;
 
 [CborConverter(typeof(CustomListConverter))]
+[CborOptions(IsDefinite = true)]
 public record PostMaryTransaction(
     [CborIndex(0)] TransactionBody TransactionBody,
     [CborIndex(1)] TransactionWitnessSet TransactionWitnessSet,

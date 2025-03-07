@@ -14,6 +14,7 @@ public record Lovelace(ulong Value) : Value;
 
 
 [CborConverter(typeof(CustomListConverter))]
+[CborOptions(IsDefinite = true)]
 public record LovelaceWithMultiAsset(
     [CborIndex(0)] Lovelace Lovelace,
     [CborIndex(1)] MultiAssetOutput MultiAsset
