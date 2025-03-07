@@ -31,7 +31,7 @@ public class LocalStateQuery(AgentChannel channel) : IMiniProtocol
     /// <param name="cancellationToken">Token to cancel the operation.</param>
     /// <returns>The query result.</returns>
     /// <exception cref="InvalidOperationException">Thrown when acquisition fails.</exception>
-    public async Task<Result> QueryAsync<TResult>(Point? point, BlockQuery query, CancellationToken cancellationToken = default)
+    public async Task<Result> QueryAsync(Point? point, BlockQuery query, CancellationToken cancellationToken = default)
     {
         await _buffer.SendFullMessageAsync(AcquireTypes.Default(point), cancellationToken);
         LocalStateQueryMessage acquireResponse = await _buffer.ReceiveFullMessageAsync<LocalStateQueryMessage>(cancellationToken);
