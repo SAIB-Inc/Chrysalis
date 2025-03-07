@@ -17,7 +17,8 @@ public sealed class EncodedValueConverter : ICborConverter
     {
         if (value.First() is not byte[] v)
             throw new CborTypeMismatchException("Value is not a bytes", typeof(byte[]));
-
-        writer.WriteEncodedValue(v);
+        
+        writer.WriteTag(CborTag.EncodedCborDataItem);
+        writer.WriteByteString(v);
     }
 }

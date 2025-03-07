@@ -9,7 +9,12 @@ namespace Chrysalis.Network.Multiplexer;
 public class NodeClient : IDisposable
 {
     private readonly Plexer _plexer;
-    private bool _isDisposed;
+
+    /// <summary>
+    /// Gets the LocalTxSubmit protocol handler.
+    /// </summary>
+
+    public LocalTxSubmit? LocalTxSubmit { get; private set; }
 
     /// <summary>
     /// Gets the Handshake protocol handler.
@@ -73,6 +78,7 @@ public class NodeClient : IDisposable
         _ = _plexer.RunAsync(CancellationToken.None);
         Handshake = new(_plexer.SubscribeClient(ProtocolType.Handshake));
         ChainSync = new(_plexer.SubscribeClient(ProtocolType.ClientChainSync));
+        LocalTxSubmit = new(_plexer.SubscribeClient(ProtocolType.LocalTxSubmission));
     }
 
     /// <summary>
@@ -80,10 +86,7 @@ public class NodeClient : IDisposable
     /// </summary>
     public void Dispose()
     {
-        if (_isDisposed) return;
-
         _plexer.Dispose();
-        _isDisposed = true;
         GC.SuppressFinalize(this);
     }
 }
