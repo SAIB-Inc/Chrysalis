@@ -18,6 +18,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Chrysalis.Network", "src\Ch
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Chrysalis.Network.Cli", "src\Chrysalis.Network.Cli\Chrysalis.Network.Cli.csproj", "{410C13F6-68D9-4CEC-A380-D402BC4FC3ED}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Chrysalis.Cbor.Generators", "src\Chrysalis.Cbor.Generators\Chrysalis.Cbor.Generators.csproj", "{0877F818-1DBE-4B6C-B4EB-8AD0C95DE844}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -52,6 +54,10 @@ Global
 		{410C13F6-68D9-4CEC-A380-D402BC4FC3ED}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{410C13F6-68D9-4CEC-A380-D402BC4FC3ED}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{410C13F6-68D9-4CEC-A380-D402BC4FC3ED}.Release|Any CPU.Build.0 = Release|Any CPU
+		{0877F818-1DBE-4B6C-B4EB-8AD0C95DE844}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{0877F818-1DBE-4B6C-B4EB-8AD0C95DE844}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{0877F818-1DBE-4B6C-B4EB-8AD0C95DE844}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{0877F818-1DBE-4B6C-B4EB-8AD0C95DE844}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -64,6 +70,7 @@ Global
 		{75E9FD85-74D0-AEF7-712E-4AE33F9AF441} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 		{5F419E1F-75D9-4F37-9709-1DD5F4969BF2} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 		{410C13F6-68D9-4CEC-A380-D402BC4FC3ED} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
+		{0877F818-1DBE-4B6C-B4EB-8AD0C95DE844} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {728F4C1F-B8FC-42EF-9AE0-69EBD52A1957}
