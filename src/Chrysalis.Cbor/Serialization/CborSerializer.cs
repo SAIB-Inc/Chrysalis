@@ -80,7 +80,7 @@ public static class CborSerializer
     /// <exception cref="CborDeserializationException">Thrown when an error occurs during deserialization.</exception>
     /// <exception cref="CborTypeMismatchException">Thrown when the deserialized type does not match the expected type.</exception>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static T Deserialize<T>(ReadOnlyMemory<byte> data) where T : CborBase
+    public static T Deserialize<T>(in ReadOnlyMemory<byte> data) where T : CborBase
     {
         try
         {
@@ -98,7 +98,7 @@ public static class CborSerializer
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    internal static CborBase Deserialize(CborReader reader, CborOptions options, bool readChunk = true)
+    internal static CborBase Deserialize(CborReader reader, in CborOptions options, bool readChunk = true)
     {
 
         ReadOnlyMemory<byte>? chunk = null;

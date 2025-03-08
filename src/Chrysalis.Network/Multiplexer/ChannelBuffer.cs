@@ -6,48 +6,88 @@ using Chrysalis.Network.Core;
 
 namespace Chrysalis.Network.Multiplexer;
 
-public class ChannelBuffer(AgentChannel channel)
+/// <summary>
+/// Provides buffer management for sending and receiving complete CBOR messages over an AgentChannel.
+/// </summary>
+/// <remarks>
+/// Initializes a new instance of the ChannelBuffer class.
+/// </remarks>
+/// <param name="channel">The channel to buffer data for.</param>
+public sealed class ChannelBuffer(AgentChannel channel)
 {
-    public async Task SendFullMessageAsync<T>(T message, CancellationToken cancellationToken) where T : CborBase
+    private readonly AgentChannel _channel = channel;
+
+    /// <summary>
+    /// Sends a complete CBOR message, automatically chunking if needed.
+    /// </summary>
+    /// <typeparam name="T">The type of CBOR message to send.</typeparam>
+    /// <param name="message">The message to send.</param>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    public async ValueTask SendFullMessageAsync<T>(T message, CancellationToken cancellationToken = default) where T : CborBase
     {
         byte[] payload = CborSerializer.Serialize(message);
-        Memory<byte> payloadMemory = payload.AsMemory();
+        ReadOnlyMemory<byte> payloadMemory = payload.AsMemory();
+        int payloadLength = payload.Length;
 
-        for (int offset = 0; offset < payload.Length; offset += ProtocolConstants.MAX_SEGMENT_PAYLOAD_LENGTH)
+        for (int offset = 0; offset < payloadLength; offset += ProtocolConstants.MaxSegmentPayloadLength)
         {
-            int chunkSize = Math.Min(ProtocolConstants.MAX_SEGMENT_PAYLOAD_LENGTH, payload.Length - offset);
+            if (cancellationToken.IsCancellationRequested) break;
+
+            int chunkSize = Math.Min(ProtocolConstants.MaxSegmentPayloadLength, payloadLength - offset);
             ReadOnlyMemory<byte> chunkMemory = payloadMemory.Slice(offset, chunkSize);
             ReadOnlySequence<byte> chunkSequence = new(chunkMemory);
-            await channel.EnqueueChunkAsync(chunkSequence, cancellationToken);
+            await _channel.EnqueueChunkAsync(chunkSequence, cancellationToken);
         }
     }
 
-    public async Task<T> ReceiveFullMessageAsync<T>(CancellationToken cancellationToken) where T : CborBase
+    /// <summary>
+    /// Receives a complete CBOR message, automatically handling chunked data.
+    /// </summary>
+    /// <typeparam name="T">The type of CBOR message to receive.</typeparam>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    /// <returns>The deserialized message.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when the pipe completes before a valid message could be parsed.</exception>
+    public async Task<T> ReceiveFullMessageAsync<T>(CancellationToken cancellationToken = default) where T : CborBase
     {
-        // Create a reusable buffer for receiving messages
-        using MemoryStream buffer = new();
-
         while (true)
         {
+            ReadResult readResult = await _channel.ReadChunkAsync(cancellationToken);
+            ReadOnlySequence<byte> buffer = readResult.Buffer;
+
             try
             {
-                // Try to deserialize with current data
-                buffer.Position = 0;
-                return CborSerializer.Deserialize<T>(buffer.ToArray());
-            }
-            catch
-            {
-                // Need more data - read the next chunk
-                ReadOnlySequence<byte> chunk = await channel.ReadChunkAsync(cancellationToken);
-
-                // Reset position to end for appending
-                buffer.Position = buffer.Length;
-
-                // Copy chunk to our buffer
-                foreach (ReadOnlyMemory<byte> memory in chunk)
+                T result;
+                if (buffer.IsSingleSegment)
                 {
-                    buffer.Write(memory.Span);
+                    result = CborSerializer.Deserialize<T>(buffer.First);
+                    _channel.AdvanceTo(buffer.End);
+                    return result;
                 }
+
+                // Buffer is multi-segment, need to copy to contiguous memory
+                byte[] rentedBuffer = ArrayPool<byte>.Shared.Rent((int)buffer.Length);
+                try
+                {
+                    buffer.CopyTo(rentedBuffer);
+                    result = CborSerializer.Deserialize<T>(rentedBuffer.AsMemory(0, (int)buffer.Length));
+                    _channel.AdvanceTo(buffer.End);
+                    return result;
+                }
+                finally
+                {
+                    ArrayPool<byte>.Shared.Return(rentedBuffer);
+                }
+            }
+            catch (Exception) when (!readResult.IsCompleted)
+            {
+                // Need more data - mark what we examined but couldn't use
+                _channel.AdvanceTo(buffer.Start);
+            }
+            catch (Exception) when (readResult.IsCompleted)
+            {
+                // If pipe is completed and we still can't deserialize, that's an error
+                _channel.AdvanceTo(buffer.End);
+                throw new InvalidOperationException("Pipe completed before a valid message could be parsed");
             }
         }
     }
