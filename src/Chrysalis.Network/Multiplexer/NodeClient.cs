@@ -30,6 +30,9 @@ public class NodeClient : IDisposable
     /// Gets the ChainSync protocol handler.
     /// </summary>
     public ChainSync? ChainSync { get; private set; }
+    public LocalTxSubmit? LocalTxSubmit { get; private set; }
+    public LocalTxMonitor? LocalTxMonitor { get; private set; }
+    #endregion
 
     /// <summary>
     /// Initializes a new instance of the NodeClient class.
@@ -79,6 +82,7 @@ public class NodeClient : IDisposable
         Handshake = new(_plexer.SubscribeClient(ProtocolType.Handshake));
         ChainSync = new(_plexer.SubscribeClient(ProtocolType.ClientChainSync));
         LocalTxSubmit = new(_plexer.SubscribeClient(ProtocolType.LocalTxSubmission));
+        LocalTxMonitor = new(_plexer.SubscribeClient(ProtocolType.LocalTxMonitor));
     }
 
     /// <summary>
