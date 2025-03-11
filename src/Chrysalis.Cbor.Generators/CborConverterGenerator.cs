@@ -4,6 +4,7 @@ using Microsoft.CodeAnalysis.CSharp.Syntax;
 
 namespace Chrysalis.Cbor.Generators;
 
+[Generator]
 public class CborConverterGenerator : IIncrementalGenerator
 {
     public void Initialize(IncrementalGeneratorInitializationContext context)
@@ -49,10 +50,15 @@ public class CborConverterGenerator : IIncrementalGenerator
         context.RegisterSourceOutput(compilation, GenerateCborConverter!);
     }
 
-    private void GenerateCborConverter(SourceProductionContext ctx,
-    (Compilation Compilation, (ImmutableArray<TypeDeclarationSyntax> Converters, ImmutableArray<TypeDeclarationSyntax> Types)) tuple)
+    private void GenerateCborConverter(SourceProductionContext ctx, (Compilation Compilation, (ImmutableArray<TypeDeclarationSyntax> Converters, ImmutableArray<TypeDeclarationSyntax> Types)) tuple)
     {
         var (compilation, (converters, types)) = tuple;
+
+        Dictionary<string, TypeDeclarationSyntax> convertersByName = converters
+            .ToDictionary(
+                c => compilation.GetSemanticModel(c.SyntaxTree).GetDeclaredSymbol(c)?.ToDisplayString() ?? string.Empty,
+                c => c
+            );
 
         foreach (var typeSyntax in types)
         {
@@ -60,34 +66,110 @@ public class CborConverterGenerator : IIncrementalGenerator
 
             if (semanticModel.GetDeclaredSymbol(typeSyntax) is not INamedTypeSymbol typeSymbol) continue;
 
-            System.Diagnostics.Debug.WriteLine($"Checking {typeSymbol.ToDisplayString()} for IConverter");
+            // Check if already inherits from CborBase to avoid redundant inheritance
+            var baseType = typeSymbol.BaseType;
+            var interfaces = typeSymbol.Interfaces.Select(i => i.ToDisplayString()).ToList();
+
+            // Add all namespaces from base types and interfaces
+            var additionalNamespaces = new HashSet<string>();
+            if (typeSymbol.BaseType != null && !string.IsNullOrEmpty(typeSymbol.BaseType.ContainingNamespace?.ToDisplayString()))
+            {
+                additionalNamespaces.Add($"using {typeSymbol.BaseType.ContainingNamespace!.ToDisplayString()};");
+            }
+
+            foreach (var iface in typeSymbol.Interfaces)
+            {
+                if (!string.IsNullOrEmpty(iface.ContainingNamespace?.ToDisplayString()))
+                {
+                    additionalNamespaces.Add($"using {iface.ContainingNamespace!.ToDisplayString()};");
+                }
+            }
 
             var converterAttribute = typeSymbol
                 .GetAttributes()
-                .FirstOrDefault(a => a.AttributeClass?.Name == "Chrysalis.Cbor.Attributes.CborConverterAttribute");
+                .FirstOrDefault(a => a.AttributeClass?.Name == "CborConverterAttribute" ||
+                                   a.AttributeClass?.ToDisplayString() == "Chrysalis.Cbor.Attributes.CborConverterAttribute");
 
-            if (converterAttribute == null || converterAttribute.ConstructorArguments.Length == 0) continue;
-            if (converterAttribute.ConstructorArguments[0].Value is not INamedTypeSymbol converterType) continue;
+            if (converterAttribute == null) continue;
+
+            // Get the converter type from the attribute
+            if (converterAttribute.ConstructorArguments.Length == 0) continue;
+            if (converterAttribute.ConstructorArguments[0].Value is not INamedTypeSymbol converterTypeSymbol) continue;
+            string converterTypeName = converterTypeSymbol.ToDisplayString();
+            string converterNamespace = converterTypeSymbol.ContainingNamespace.ToDisplayString();
+
+            // Find the converter implementation
+            if (!convertersByName.TryGetValue(converterTypeName, out var converterSyntax)) continue;
+
+            // Extract Read and Write method implementations
+            var readMethod = converterSyntax.Members.OfType<MethodDeclarationSyntax>()
+                .FirstOrDefault(m => m.Identifier.Text == "Read");
+
+            var writeMethod = converterSyntax.Members.OfType<MethodDeclarationSyntax>()
+                .FirstOrDefault(m => m.Identifier.Text == "Write");
+
+            if (readMethod == null || writeMethod == null) continue;
+
+            string readBody = readMethod.Body?.ToString() ?? "{ throw new NotImplementedException(); }";
+            string writeBody = writeMethod.Body?.ToString() ?? "{ throw new NotImplementedException(); }";
+
+            // Clean up braces from the extracted body
+            readBody = readBody.Trim();
+            if (readBody.StartsWith("{")) readBody = readBody.Substring(1);
+            if (readBody.EndsWith("}")) readBody = readBody.Substring(0, readBody.Length - 1);
+
+            writeBody = writeBody.Trim();
+            if (writeBody.StartsWith("{")) writeBody = writeBody.Substring(1);
+            if (writeBody.EndsWith("}")) writeBody = writeBody.Substring(0, writeBody.Length - 1);
+
+            // Extract using directives from the converter's syntax tree
+            var converterSyntaxTree = converterSyntax.SyntaxTree;
+            var converterRoot = converterSyntaxTree.GetRoot();
+            var usingDirectives = converterRoot.DescendantNodes()
+                .OfType<UsingDirectiveSyntax>()
+                .Select(u => u.ToString())
+                .ToList();
+
+            usingDirectives.Add("using Chrysalis.Cbor.Serialization;");
+            usingDirectives.Add("using Chrysalis.Cbor.Types;");
+            usingDirectives.AddRange(additionalNamespaces);
 
             string typeName = typeSymbol.Name;
-            string converterName = converterType.Name;
             string namespaceName = typeSymbol.ContainingNamespace.ToDisplayString();
+            string typeSyntaxString = typeSyntax is ClassDeclarationSyntax
+                ? "class"
+                : "record";
+
+            string typeParameters = "";
+            if (typeSymbol.IsGenericType)
+            {
+                var typeParams = typeSymbol.TypeParameters.Select(p => p.Name);
+                typeParameters = $"<{string.Join(", ", typeParams)}>";
+            }
+
 
             var converterCode = $$"""
-                using System.Formats.Cbor;
-                using Chrysalis.Cbor.Types;
-                using {{namespaceName}};
+                #nullable enable
+                // This code is generated
+                {{string.Join("\n", usingDirectives.Distinct())}}
 
-                namespace Chrysalis.Cbor.Generated;
-
-                public static class {{typeName}}Extension
+                namespace {{namespaceName}};
+                
+                public partial {{typeSyntaxString}} {{typeName}}{{typeParameters}}
                 {
-                    public static {{typeName}} Read(this {{typeName}} self, CborReader reader) => throw new NotImplementedException();
-                    public static void Write(this {{typeName}} self, CborWriter writer, {{typeName}} value) => throw new NotImplementedException();
+                    public override object? Read(CborReader reader, CborOptions options)
+                    {
+                        {{readBody}}
+                    }
+                    
+                    public override void Write(CborWriter writer, List<object?> value, CborOptions options)
+                    {
+                        {{writeBody}}
+                    }
                 }
             """;
 
-            ctx.AddSource($"{typeName}Extension.g.cs", converterCode);
+            ctx.AddSource($"{namespaceName}.{typeName}.g.cs", converterCode);
         }
     }
 }

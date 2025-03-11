@@ -4,4 +4,4 @@ using Chrysalis.Cbor.Serialization.Converters.Custom;
 namespace Chrysalis.Cbor.Types.Custom;
 
 [CborConverter(typeof(ExactValueConverter))]
-public record ExactValue<T>(T Value) : CborBase where T : CborBase;
+public partial record ExactValue<T>(T Value) : CborBase where T : CborBase;

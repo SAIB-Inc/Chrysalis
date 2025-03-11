@@ -10,11 +10,11 @@ using Chrysalis.Cbor.Types;
 namespace Chrysalis.Cbor.Cardano.Types.Block;
 
 [CborConverter(typeof(UnionConverter))]
-public abstract record Block : CborBase;
+public abstract partial record Block : CborBase;
 
 [CborConverter(typeof(CustomListConverter))]
 [CborOptions(IsDefinite = true)]
-public record AlonzoCompatibleBlock(
+public partial record AlonzoCompatibleBlock(
     [CborIndex(0)] BlockHeader Header,
     [CborIndex(1)] CborMaybeIndefList<AlonzoTransactionBody> TransactionBodies,
     [CborIndex(2)] CborMaybeIndefList<AlonzoTransactionWitnessSet> TransactionWitnessSets,
@@ -24,7 +24,7 @@ public record AlonzoCompatibleBlock(
 
 [CborConverter(typeof(CustomListConverter))]
 [CborOptions(IsDefinite = true)]
-public record BabbageBlock(
+public partial record BabbageBlock(
     [CborIndex(0)] BlockHeader Header,
     [CborIndex(1)] CborMaybeIndefList<BabbageTransactionBody> TransactionBodies,
     [CborIndex(2)] CborMaybeIndefList<PostAlonzoTransactionWitnessSet> TransactionWitnessSets,
@@ -34,7 +34,7 @@ public record BabbageBlock(
 
 [CborConverter(typeof(CustomListConverter))]
 [CborOptions(IsDefinite = true)]
-public record ConwayBlock(
+public partial record ConwayBlock(
     [CborIndex(0)] BlockHeader Header,
     [CborIndex(1)] CborMaybeIndefList<ConwayTransactionBody> TransactionBodies,
     [CborIndex(2)] CborMaybeIndefList<PostAlonzoTransactionWitnessSet> TransactionWitnessSets,

@@ -33,11 +33,11 @@ public class HandshakeMessages
 #region ProposeVersions
 [CborConverter(typeof(CustomListConverter))]
 [CborOptions(IsDefinite = true)]
-public record ProposeVersions(
+public partial record ProposeVersions(
     [CborIndex(0)] [ExactValue(0)]
     ExactValue<CborInt> Idx,
 
-    [CborIndex(1)] 
+    [CborIndex(1)]
     VersionTable VersionTable
 ) : HandshakeMessage;
 
@@ -51,16 +51,16 @@ public abstract record AcceptVersion : HandshakeMessage;
 
 [CborConverter(typeof(CustomListConverter))]
 [CborOptions(IsDefinite = true)]
-public record N2NAcceptVersion(
-    [CborIndex(0)] [ExactValue(1)] ExactValue<CborInt> Idx,
+public partial record N2NAcceptVersion(
+    [CborIndex(0)][ExactValue(1)] ExactValue<CborInt> Idx,
     [CborIndex(1)] N2NVersion Version,
     [CborIndex(2)] N2NVersionData VersionData
 ) : AcceptVersion;
 
 [CborConverter(typeof(CustomListConverter))]
 [CborOptions(IsDefinite = true)]
-public record N2CAcceptVersion(
-    [CborIndex(0)] [ExactValue(1)] ExactValue<CborInt> Idx,
+public partial record N2CAcceptVersion(
+    [CborIndex(0)][ExactValue(1)] ExactValue<CborInt> Idx,
     [CborIndex(1)] N2CVersion Version,
     [CborIndex(2)] N2CVersionData VersionData
 ) : AcceptVersion;
@@ -71,8 +71,8 @@ public record N2CAcceptVersion(
 #region Refuse
 [CborConverter(typeof(CustomListConverter))]
 [CborOptions(IsDefinite = true)]
-public record Refuse(
-    [CborIndex(0)] [ExactValue(2)] ExactValue<CborInt> Idx,
+public partial record Refuse(
+    [CborIndex(0)][ExactValue(2)] ExactValue<CborInt> Idx,
     [CborIndex(1)] RefuseReason Reason
 ) : HandshakeMessage;
 
@@ -84,15 +84,15 @@ public abstract record QueryReply : HandshakeMessage;
 
 [CborConverter(typeof(CustomListConverter))]
 [CborOptions(IsDefinite = true)]
-public record N2NQueryReply(
-    [CborIndex(0)] [ExactValue(3)] ExactValue<CborInt> Idx,
+public partial record N2NQueryReply(
+    [CborIndex(0)][ExactValue(3)] ExactValue<CborInt> Idx,
     [CborIndex(1)] N2NVersionTable VersionTable
 ) : QueryReply;
 
 [CborConverter(typeof(CustomListConverter))]
 [CborOptions(IsDefinite = true)]
-public record N2CQueryReply(
-    [CborIndex(0)] [ExactValue(3)] ExactValue<CborInt> Idx,
+public partial record N2CQueryReply(
+    [CborIndex(0)][ExactValue(3)] ExactValue<CborInt> Idx,
     [CborIndex(1)] N2CVersionTable VersionTable
 ) : QueryReply;
 

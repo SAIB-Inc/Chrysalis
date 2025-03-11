@@ -6,7 +6,7 @@ using Chrysalis.Cbor.Types.Primitives;
 namespace Chrysalis.Cbor.Cardano.Types.Block.Transaction;
 
 [CborConverter(typeof(CustomListConverter))]
-public record Anchor(
+public partial record Anchor(
     [CborIndex(0)] CborText AnchorUrl,
     [CborIndex(1)] CborBytes AnchorDataHash
 ) : CborBase;

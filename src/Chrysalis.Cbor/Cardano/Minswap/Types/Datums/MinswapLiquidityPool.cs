@@ -11,7 +11,7 @@ namespace Chrysalis.Cbor.Cardano.Minswap.Types.Datums;
 
 [CborConverter(typeof(ConstrConverter))]
 [CborOptions(Index = 0)]
-public record MinswapLiquidityPool(
+public partial record MinswapLiquidityPool(
     [CborIndex(0)]
     Inline<Credential> StakeCredential,
 

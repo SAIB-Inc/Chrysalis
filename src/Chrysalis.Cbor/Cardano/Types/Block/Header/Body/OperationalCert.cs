@@ -6,7 +6,7 @@ using Chrysalis.Cbor.Types.Primitives;
 namespace Chrysalis.Cbor.Cardano.Types.Block.Header.Body;
 
 [CborConverter(typeof(CustomListConverter))]
-public record OperationalCert(
+public partial record OperationalCert(
     [CborIndex(0)] CborBytes HotVKey,
     [CborIndex(1)] CborUlong SequenceNumber,
     [CborIndex(2)] CborUlong KesPeriod,

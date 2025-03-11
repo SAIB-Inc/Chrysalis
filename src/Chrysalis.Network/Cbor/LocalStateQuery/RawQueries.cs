@@ -67,29 +67,29 @@ public static class RawQueries
 
 [CborConverter(typeof(CustomListConverter))]
 [CborOptions(IsDefinite = true)]
-public record BasicQuery([CborIndex(0)] CborUlong Idx) : CborBase;
+public partial record BasicQuery([CborIndex(0)] CborUlong Idx) : CborBase;
 
 [CborConverter(typeof(CustomListConverter))]
 [CborOptions(IsDefinite = true)]
-public record BlockQuery(
+public partial record BlockQuery(
     [CborIndex(0)] CborBase Query,
     [CborIndex(1)] CborBase? InnerQuery
 ) : CborBase;
 
 [CborConverter(typeof(CustomListConverter))]
 [CborOptions(IsDefinite = true)]
-public record UtxoByAddressQuery(
+public partial record UtxoByAddressQuery(
     [CborIndex(0)] CborUlong Idx,
     [CborIndex(1)] Addresses Addresses
 ) : CborBase;
 
 [CborConverter(typeof(CustomListConverter))]
 [CborOptions(IsDefinite = true)]
-public record UtxoByTxInQuery(
+public partial record UtxoByTxInQuery(
     [CborIndex(0)] CborUlong Idx,
     [CborIndex(1)] CborDefList<TransactionInput> TxIns
 ) : CborBase;
 
 [CborConverter(typeof(ListConverter))]
 [CborOptions(IsDefinite = true)]
-public record Addresses(List<CborBytes> Addrs) : CborBase;
+public partial record Addresses(List<CborBytes> Addrs) : CborBase;

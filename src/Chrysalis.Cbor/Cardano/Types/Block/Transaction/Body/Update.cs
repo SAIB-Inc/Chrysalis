@@ -7,7 +7,7 @@ using Chrysalis.Cbor.Types;
 namespace Chrysalis.Cbor.Cardano.Types.Block.Transaction.Body;
 
 [CborConverter(typeof(CustomListConverter))]
-public record Update(
+public partial record Update(
     [CborIndex(0)] ProposedProtocolParameterUpdates ProposedProtocolParameterUpdates,
     [CborIndex(1)] CborUlong Epoch
 ) : CborBase;

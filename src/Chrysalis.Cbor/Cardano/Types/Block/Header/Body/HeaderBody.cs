@@ -6,11 +6,11 @@ using Chrysalis.Cbor.Types.Primitives;
 namespace Chrysalis.Cbor.Cardano.Types.Block.Header.Body;
 
 [CborConverter(typeof(UnionConverter))]
-public abstract record BlockHeaderBody : CborBase;
+public abstract partial record BlockHeaderBody : CborBase;
 
 [CborConverter(typeof(CustomListConverter))]
 [CborOptions(IsDefinite = true)]
-public record AlonzoHeaderBody(
+public partial record AlonzoHeaderBody(
     [CborIndex(0)] CborUlong BlockNumber,
     [CborIndex(1)] CborUlong Slot,
     [CborIndex(2)] CborNullable<CborBytes> PrevHash,
@@ -30,7 +30,7 @@ public record AlonzoHeaderBody(
 
 [CborConverter(typeof(CustomListConverter))]
 [CborOptions(IsDefinite = true)]
-public record BabbageHeaderBody(
+public partial record BabbageHeaderBody(
     [CborIndex(0)] CborUlong BlockNumber,
     [CborIndex(1)] CborUlong Slot,
     [CborIndex(2)] CborNullable<CborBytes> PrevHash,

@@ -7,4 +7,4 @@ using Chrysalis.Cbor.Types;
 namespace Chrysalis.Cbor.Cardano.Types.Block;
 
 [CborConverter(typeof(MapConverter))]
-public record AuxiliaryDataSet(Dictionary<CborInt, AuxiliaryData> Value) : CborBase;
+public partial record AuxiliaryDataSet(Dictionary<CborInt, AuxiliaryData> Value) : CborBase;

@@ -7,4 +7,4 @@ namespace Chrysalis.Cbor.Cardano.Levvy.TokenV2.Types.Datums;
 
 [CborConverter(typeof(ConstrConverter))]
 [CborOptions(Index = 0)]
-public record PaymentDatum(OutputReference OutputReference) : CborBase;
+public partial record PaymentDatum(OutputReference OutputReference) : CborBase;

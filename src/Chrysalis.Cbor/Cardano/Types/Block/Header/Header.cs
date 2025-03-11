@@ -8,7 +8,7 @@ namespace Chrysalis.Cbor.Cardano.Types.Block.Header;
 
 [CborConverter(typeof(CustomListConverter))]
 [CborOptions(IsDefinite = true)]
-public record BlockHeader(
+public partial record BlockHeader(
     [CborIndex(0)] BlockHeaderBody HeaderBody,
     [CborIndex(1)] CborBytes BodySignature
 ) : CborBase;

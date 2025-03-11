@@ -5,8 +5,8 @@ using Chrysalis.Cbor.Types;
 namespace Chrysalis.Cbor.Cardano.Types.Block.Transaction.Script;
 
 [CborConverter(typeof(UnionConverter))]
-public abstract record PlutusOption<T> : CborBase;
+public abstract partial record PlutusOption<T> : CborBase;
 
-public record PlutusSome<T>([CborIndex(0)] T Value) : PlutusOption<T>;
+public partial record PlutusSome<T>([CborIndex(0)] T Value) : PlutusOption<T>;
 
-public record PlutusNone<T> : PlutusOption<T>;
+public partial record PlutusNone<T> : PlutusOption<T>;

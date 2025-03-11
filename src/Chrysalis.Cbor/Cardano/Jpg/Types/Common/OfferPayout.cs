@@ -8,7 +8,7 @@ namespace Chrysalis.Cbor.Cardano.Jpg.Types.Common;
 
 [CborConverter(typeof(ConstrConverter))]
 [CborOptions(Index = 0)]
-public record OfferPayout(
+public partial record OfferPayout(
     [CborIndex(0)]
     Address Address,
 
@@ -17,4 +17,4 @@ public record OfferPayout(
 ) : CborBase;
 
 [CborConverter(typeof(MapConverter))]
-public record PayoutValue(Dictionary<CborBytes, Token> Value) : CborBase;
+public partial record PayoutValue(Dictionary<CborBytes, Token> Value) : CborBase;

@@ -7,7 +7,7 @@ namespace Chrysalis.Cbor.Cardano.Types.Block.Transaction.WitnessSet;
 
 [CborConverter(typeof(CustomListConverter))]
 [CborOptions(IsDefinite = true)]
-public record BootstrapWitness(
+public partial record BootstrapWitness(
     [CborIndex(0)] CborBytes PublicKey,
     [CborIndex(1)] CborBytes Signature,
     [CborIndex(2)] CborBytes ChainCode,

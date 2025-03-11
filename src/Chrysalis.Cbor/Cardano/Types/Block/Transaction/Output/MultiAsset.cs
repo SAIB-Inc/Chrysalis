@@ -7,18 +7,18 @@ using Chrysalis.Cbor.Types.Primitives;
 namespace Chrysalis.Cbor.Cardano.Types.Block.Transaction.Output;
 
 [CborConverter(typeof(UnionConverter))]
-public abstract record MultiAsset : CborBase;
+public abstract partial record MultiAsset : CborBase;
 
 
 [CborConverter(typeof(MapConverter))]
 [CborOptions(IsDefinite = true)]
-public record MultiAssetOutput(
+public partial record MultiAssetOutput(
     Dictionary<CborBytes, TokenBundleOutput> Value
 ) : MultiAsset;
 
 
 [CborConverter(typeof(MapConverter))]
 [CborOptions(IsDefinite = true)]
-public record MultiAssetMint(
+public partial record MultiAssetMint(
     Dictionary<CborBytes, TokenBundleMint> Value
 ) : MultiAsset;

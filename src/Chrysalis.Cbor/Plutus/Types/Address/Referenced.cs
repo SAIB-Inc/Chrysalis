@@ -7,17 +7,17 @@ using Chrysalis.Cbor.Types.Primitives;
 namespace Chrysalis.Cbor.Plutus.Types.Address;
 
 [CborConverter(typeof(UnionConverter))]
-public abstract record Referenced<T> : CborBase;
+public abstract partial record Referenced<T> : CborBase;
 
 
 [CborConverter(typeof(ConstrConverter))]
 [CborOptions(Index = 0)]
-public record Inline<T>(T Value) : Referenced<T>;
+public partial record Inline<T>(T Value) : Referenced<T>;
 
 
 [CborConverter(typeof(ConstrConverter))]
 [CborOptions(Index = 1)]
-public record Pointer(
+public partial record Pointer(
     [CborIndex(0)]
     CborUlong SlotNumber,
 

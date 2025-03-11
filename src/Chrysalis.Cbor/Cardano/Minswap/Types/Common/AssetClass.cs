@@ -7,7 +7,7 @@ namespace Chrysalis.Cbor.Cardano.Minswap.Types.Common;
 
 [CborConverter(typeof(ConstrConverter))]
 [CborOptions(Index = 0)]
-public record AssetClass(
+public partial record AssetClass(
     [CborIndex(0)]
     CborBytes PolicyId,
 

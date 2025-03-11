@@ -30,20 +30,20 @@ public abstract record AcquireIdx : CborBase;
 
 [CborConverter(typeof(CustomListConverter))]
 [CborOptions(IsDefinite = true)]
-public record SpecificPoint(
+public partial record SpecificPoint(
     [CborIndex(0)][ExactValue(0)] ExactValue<CborInt> Idx,
     [CborIndex(1)] Point Point
 ) : Acquire;
 
 [CborConverter(typeof(CustomListConverter))]
 [CborOptions(IsDefinite = true)]
-public record VolatileTip(
+public partial record VolatileTip(
     [CborIndex(0)][ExactValue(8)] ExactValue<CborInt> Idx
 ) : Acquire;
 
 [CborConverter(typeof(CustomListConverter))]
 [CborOptions(IsDefinite = true)]
-public record ImmutableTip(
+public partial record ImmutableTip(
     [CborIndex(0)][ExactValue(10)] ExactValue<CborInt> Idx
 ) : Acquire;
 

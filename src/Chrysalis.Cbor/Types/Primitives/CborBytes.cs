@@ -5,4 +5,4 @@ namespace Chrysalis.Cbor.Types.Primitives;
 
 [CborConverter(typeof(BytesConverter))]
 [CborOptions(IsDefinite = true)]
-public record CborBytes(byte[] Value) : CborBase;
+public partial record CborBytes(byte[] Value) : CborBase;

@@ -10,7 +10,7 @@ namespace Chrysalis.Cbor.Cardano.Splash.Types.Datums;
 
 [CborConverter(typeof(ConstrConverter))]
 [CborOptions(Index = 0)]
-public record SplashLiquidityPool(
+public partial record SplashLiquidityPool(
     [CborIndex(0)]
     AssetClass PoolNft,
 

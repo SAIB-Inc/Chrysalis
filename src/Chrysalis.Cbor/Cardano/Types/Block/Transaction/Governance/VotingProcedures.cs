@@ -6,12 +6,12 @@ using Chrysalis.Cbor.Types.Primitives;
 namespace Chrysalis.Cbor.Cardano.Types.Block.Transaction.Governance;
 
 [CborConverter(typeof(MapConverter))]
-public record VotingProcedures(
+public partial record VotingProcedures(
     Dictionary<Voter, CborMap<GovActionId, VotingProcedure>> Value
 ) : CborBase;
 
 
 [CborConverter(typeof(MapConverter))]
-public record VoterChoices(
+public partial record VoterChoices(
     Dictionary<GovActionId, VotingProcedure> Value
 ) : CborBase;

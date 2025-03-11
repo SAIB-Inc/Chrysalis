@@ -7,19 +7,19 @@ using Chrysalis.Cbor.Types.Primitives;
 namespace Chrysalis.Cbor.Cardano.Types.Block.Transaction.Body.Certificates;
 
 [CborConverter(typeof(CustomListConverter))]
-public record MoveInstantaneousReward(
+public partial record MoveInstantaneousReward(
     [CborIndex(0)] CborInt InstantaneousRewardSource,
     [CborIndex(1)] Target InstantaneousRewardTarget
 ) : CborBase;
 
 
 [CborConverter(typeof(UnionConverter))]
-public abstract record Target : CborBase;
+public abstract partial record Target : CborBase;
 
 
 [CborConverter(typeof(MapConverter))]
-public record StakeCredentials(Dictionary<Credential, CborUlong> Value) : Target;
+public partial record StakeCredentials(Dictionary<Credential, CborUlong> Value) : Target;
 
 
 [CborConverter(typeof(UlongConverter))]
-public record OtherAccountingPot(ulong Value) : Target;
+public partial record OtherAccountingPot(ulong Value) : Target;

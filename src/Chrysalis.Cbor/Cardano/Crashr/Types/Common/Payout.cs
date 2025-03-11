@@ -8,7 +8,7 @@ namespace Chrysalis.Cbor.Cardano.Crashr.Types.Common;
 
 [CborConverter(typeof(ConstrConverter))]
 [CborOptions(Index = 0)]
-public record Payout(
+public partial record Payout(
   [CborIndex(0)] Address Address,
   [CborIndex(1)] MultiAssetOutput Amount
 ) : CborBase;

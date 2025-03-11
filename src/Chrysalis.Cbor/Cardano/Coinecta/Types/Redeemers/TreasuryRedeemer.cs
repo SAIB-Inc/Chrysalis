@@ -8,11 +8,11 @@ using Chrysalis.Cbor.Types;
 namespace Chrysalis.Cbor.Cardano.Coinecta.Types.Redeemers;
 
 [CborConverter(typeof(UnionConverter))]
-public record TreasuryRedeemer : CborBase;
+public partial record TreasuryRedeemer : CborBase;
 
 [CborConverter(typeof(ConstrConverter))]
 [CborOptions(Index = 0)]
-public record TreasuryClaimRedeemer(
+public partial record TreasuryClaimRedeemer(
     [CborIndex(0)]
     Proof Proof,
 
@@ -22,4 +22,4 @@ public record TreasuryClaimRedeemer(
 
 [CborConverter(typeof(ConstrConverter))]
 [CborOptions(Index = 1)]
-public record TreasuryWithdrawRedeemer() : TreasuryRedeemer;
+public partial record TreasuryWithdrawRedeemer() : TreasuryRedeemer;

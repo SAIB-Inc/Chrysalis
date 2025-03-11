@@ -9,7 +9,7 @@ namespace Chrysalis.Cbor.Cardano.Coinecta.Types.Common;
 
 [CborConverter(typeof(ConstrConverter))]
 [CborOptions(Index = 0)]
-public record ClaimEntry(
+public partial record ClaimEntry(
     [CborIndex(0)]
     MultisigScript Claimant,
 

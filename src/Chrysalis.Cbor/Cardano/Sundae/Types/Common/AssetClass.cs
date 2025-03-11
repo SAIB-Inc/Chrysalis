@@ -7,21 +7,21 @@ using Chrysalis.Cbor.Types.Primitives;
 namespace Chrysalis.Cbor.Cardano.Sundae.Types.Common;
 
 [CborConverter(typeof(UnionConverter))]
-public abstract record AssetClass : CborBase;
+public abstract partial record AssetClass : CborBase;
 
 [CborConverter(typeof(ListConverter))]
-public record AssetClassIndefinite(List<CborBytes> Value) : AssetClass;
+public partial record AssetClassIndefinite(List<CborBytes> Value) : AssetClass;
 
 [CborConverter(typeof(ListConverter))]
 [CborOptions(IsDefinite = true)]
-public record AssetClassDefinite(List<CborBytes> Value) : AssetClass;
+public partial record AssetClassDefinite(List<CborBytes> Value) : AssetClass;
 
 [CborConverter(typeof(UnionConverter))]
-public abstract record AssetClassTuple : CborBase;
+public abstract partial record AssetClassTuple : CborBase;
 
 [CborConverter(typeof(ListConverter))]
-public record AssetClassTupleIndef(List<AssetClass> Value) : AssetClassTuple;
+public partial record AssetClassTupleIndef(List<AssetClass> Value) : AssetClassTuple;
 
 [CborConverter(typeof(ListConverter))]
 [CborOptions(IsDefinite = true)]
-public record AssetClassTupleDef(List<AssetClass> Value) : AssetClassTuple;
+public partial record AssetClassTupleDef(List<AssetClass> Value) : AssetClassTuple;

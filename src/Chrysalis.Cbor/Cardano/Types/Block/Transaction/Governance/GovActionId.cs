@@ -6,7 +6,7 @@ using Chrysalis.Cbor.Types.Primitives;
 namespace Chrysalis.Cbor.Cardano.Types.Block.Transaction.Governance;
 
 [CborConverter(typeof(CustomListConverter))]
-public record GovActionId(
+public partial record GovActionId(
     [CborIndex(0)] CborBytes TransactionId,
     [CborIndex(1)] CborInt GovActionIndex
 ) : CborBase;

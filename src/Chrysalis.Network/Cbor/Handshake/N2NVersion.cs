@@ -18,4 +18,4 @@ public static class N2NVersions
 }
 
 [CborConverter(typeof(IntConverter))]
-public record N2NVersion(int Value) : CborBase;
+public partial record N2NVersion(int Value) : CborBase;

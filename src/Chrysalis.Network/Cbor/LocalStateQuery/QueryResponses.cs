@@ -10,19 +10,19 @@ namespace Chrysalis.Network.Cbor.LocalStateQuery;
 
 [CborConverter(typeof(CustomListConverter))]
 [CborOptions(IsDefinite = true)]
-public record CurrentEraQueryResponse(
+public partial record CurrentEraQueryResponse(
     [CborIndex(0)] CborUlong CurrentEra
 ) : CborBase;
 
 [CborConverter(typeof(CustomListConverter))]
 [CborOptions(IsDefinite = true)]
-public record UtxoByAddressResponse(
+public partial record UtxoByAddressResponse(
     [CborIndex(0)] CborMap<TransactionInput, TransactionOutput> Utxos
 ) : CborBase;
 
 [CborConverter(typeof(CustomListConverter))]
 [CborOptions(IsDefinite = true)]
-public record TransactionInput(
+public partial record TransactionInput(
     [CborIndex(0)] CborBytes TxHash,
     [CborIndex(1)] CborUlong Index
 ) : CborBase;

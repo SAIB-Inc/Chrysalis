@@ -24,7 +24,7 @@ public class LocalTxSubmissionMessages
 
 [CborConverter(typeof(CustomListConverter))]
 [CborOptions(IsDefinite = true)]
-public record SubmitTx(
+public partial record SubmitTx(
     [CborIndex(0)] [ExactValue(0)]
     ExactValue<CborInt> Idx,
 
@@ -34,14 +34,14 @@ public record SubmitTx(
 
 [CborConverter(typeof(CustomListConverter))]
 [CborOptions(IsDefinite = true)]
-public record AcceptTx(
+public partial record AcceptTx(
     [CborIndex(0)] [ExactValue(1)]
     ExactValue<CborInt> Idx
 ) : LocalTxSubmissionMessage;
 
 [CborConverter(typeof(CustomListConverter))]
 [CborOptions(IsDefinite = true)]
-public record RejectTx(
+public partial record RejectTx(
     [CborIndex(0)] [ExactValue(2)]
     ExactValue<CborInt> Idx,
 
@@ -51,14 +51,14 @@ public record RejectTx(
 
 [CborConverter(typeof(CustomListConverter))]
 [CborOptions(IsDefinite = true)]
-public record Done(
+public partial record Done(
     [CborIndex(0)] [ExactValue(3)]
     ExactValue<CborInt> Idx
 ) : LocalTxSubmissionMessage;
 
 [CborConverter(typeof(CustomListConverter))]
 [CborOptions(IsDefinite = true)]
-public record EraTx(
+public partial record EraTx(
     [CborIndex(0)]
     CborInt Era,
 

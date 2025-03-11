@@ -9,11 +9,11 @@ using Chrysalis.Cbor.Types.Primitives;
 namespace Chrysalis.Cbor.Cardano.MPF.Types.Common;
 
 [CborConverter(typeof(UnionConverter))]
-public record ProofStep : CborBase;
+public partial record ProofStep : CborBase;
 
 [CborConverter(typeof(ConstrConverter))]
 [CborOptions(Index = 0)]
-public record Branch(
+public partial record Branch(
     [CborIndex(0)]
     CborUlong Skip,
 
@@ -23,7 +23,7 @@ public record Branch(
 
 [CborConverter(typeof(ConstrConverter))]
 [CborOptions(Index = 1)]
-public record Fork(
+public partial record Fork(
     [CborIndex(0)]
     CborUlong Skip,
 
@@ -33,7 +33,7 @@ public record Fork(
 
 [CborConverter(typeof(ConstrConverter))]
 [CborOptions(Index = 2)]
-public record Leaf(
+public partial record Leaf(
     [CborIndex(0)]
     CborUlong Skip,
 
@@ -46,7 +46,7 @@ public record Leaf(
 
 [CborConverter(typeof(ConstrConverter))]
 [CborOptions(Index = 0)]
-public record Neighbor(
+public partial record Neighbor(
     [CborIndex(0)]
     CborUlong Nibble,
 
@@ -58,4 +58,4 @@ public record Neighbor(
 ) : ProofStep;
 
 [CborConverter(typeof(ListConverter))]
-public record Proof(CborIndefList<ProofStep> ProofSteps) : CborBase;
+public partial record Proof(CborIndefList<ProofStep> ProofSteps) : CborBase;

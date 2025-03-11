@@ -4,4 +4,4 @@ using Chrysalis.Cbor.Serialization.Converters.Primitives;
 namespace Chrysalis.Cbor.Types.Primitives;
 
 [CborConverter(typeof(BoolConverter))]
-public record CborBool(bool Value) : CborBase;
+public partial record CborBool(bool Value) : CborBase;

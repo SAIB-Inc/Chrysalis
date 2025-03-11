@@ -7,7 +7,7 @@ namespace Chrysalis.Network.Cbor.Handshake;
 
 [CborConverter(typeof(CustomListConverter))]
 [CborOptions(IsDefinite = true)]
-public record N2NVersionData(
+public partial record N2NVersionData(
     [CborIndex(0)] CborUlong NetworkMagic,
     [CborIndex(1)] CborBool InitiatorOnlyDiffusionMode,
     [CborIndex(2)] CborInt? PeerSharing,

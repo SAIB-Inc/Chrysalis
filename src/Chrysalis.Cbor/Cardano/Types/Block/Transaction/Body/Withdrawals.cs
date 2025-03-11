@@ -7,4 +7,4 @@ using Chrysalis.Cbor.Types;
 namespace Chrysalis.Cbor.Cardano.Types.Block.Transaction.Body;
 
 [CborConverter(typeof(MapConverter))]
-public record Withdrawals(Dictionary<RewardAccount, CborUlong> Value) : CborBase;
+public partial record Withdrawals(Dictionary<RewardAccount, CborUlong> Value) : CborBase;

@@ -9,26 +9,26 @@ using Chrysalis.Network.Cbor.Common;
 namespace Chrysalis.Network.Cbor.ChainSync;
 
 [CborConverter(typeof(UnionConverter))]
-public record ChainSyncMessage : CborBase;
+public partial record ChainSyncMessage : CborBase;
 
 [CborConverter(typeof(UnionConverter))]
-public record MessageNextResponse : ChainSyncMessage;
+public partial record MessageNextResponse : ChainSyncMessage;
 
 [CborConverter(typeof(CustomListConverter))]
 [CborOptions(IsDefinite = true)]
-public record MessageNextRequest(
+public partial record MessageNextRequest(
     [CborIndex(0)][ExactValue(0)] ExactValue<CborInt> Idx
 ) : ChainSyncMessage;
 
 [CborConverter(typeof(CustomListConverter))]
 [CborOptions(IsDefinite = true)]
-public record MessageAwaitReply(
+public partial record MessageAwaitReply(
    [CborIndex(0)][ExactValue(1)] ExactValue<CborInt> Idx
 ) : MessageNextResponse;
 
 [CborConverter(typeof(CustomListConverter))]
 [CborOptions(IsDefinite = true)]
-public record MessageRollForward(
+public partial record MessageRollForward(
     [CborIndex(0)][ExactValue(2)] ExactValue<CborInt> Idx,
     [CborIndex(1)] CborBytes Payload,
     [CborIndex(2)] Tip Tip
@@ -36,7 +36,7 @@ public record MessageRollForward(
 
 [CborConverter(typeof(CustomListConverter))]
 [CborOptions(IsDefinite = true)]
-public record MessageRollBackward(
+public partial record MessageRollBackward(
     [CborIndex(0)][ExactValue(3)] ExactValue<CborInt> Idx,
     [CborIndex(1)] Point Point,
     [CborIndex(2)] Tip Tip
@@ -44,18 +44,18 @@ public record MessageRollBackward(
 
 [CborConverter(typeof(CustomListConverter))]
 [CborOptions(IsDefinite = true)]
-public record MessageFindIntersect(
+public partial record MessageFindIntersect(
     [CborIndex(0)][ExactValue(4)] ExactValue<CborInt> Idx,
     [CborIndex(1)] Points Points
 ) : ChainSyncMessage;
 
 
 [CborConverter(typeof(UnionConverter))]
-public record MessageIntersectResult : ChainSyncMessage;
+public partial record MessageIntersectResult : ChainSyncMessage;
 
 [CborConverter(typeof(CustomListConverter))]
 [CborOptions(IsDefinite = true)]
-public record MessageIntersectFound(
+public partial record MessageIntersectFound(
     [CborIndex(0)][ExactValue(5)] ExactValue<CborInt> Idx,
     [CborIndex(1)] Point Point,
     [CborIndex(2)] Tip Tip
@@ -63,7 +63,7 @@ public record MessageIntersectFound(
 
 [CborConverter(typeof(CustomListConverter))]
 [CborOptions(IsDefinite = true)]
-public record MessageIntersectNotFound(
+public partial record MessageIntersectNotFound(
     [CborIndex(0)][ExactValue(6)] ExactValue<CborInt> Idx,
     [CborIndex(1)] Point Point,
     [CborIndex(2)] Tip Tip

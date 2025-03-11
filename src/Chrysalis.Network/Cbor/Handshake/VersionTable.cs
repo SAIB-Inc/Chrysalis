@@ -6,16 +6,16 @@ using Chrysalis.Cbor.Types;
 namespace Chrysalis.Network.Cbor.Handshake;
 
 [CborConverter(typeof(UnionConverter))]
-public record VersionTable : CborBase;
+public partial record VersionTable : CborBase;
 
 [CborConverter(typeof(MapConverter))]
 [CborOptions(IsDefinite = true)]
-public record N2CVersionTable(Dictionary<N2CVersion, N2CVersionData> Value) : VersionTable;
+public partial record N2CVersionTable(Dictionary<N2CVersion, N2CVersionData> Value) : VersionTable;
 
 
 [CborConverter(typeof(MapConverter))]
 [CborOptions(IsDefinite = true)]
-public record N2NVersionTable(Dictionary<N2NVersion, N2NVersionData> Value) : VersionTable;
+public partial record N2NVersionTable(Dictionary<N2NVersion, N2NVersionData> Value) : VersionTable;
 
 public class VersionTables
 {

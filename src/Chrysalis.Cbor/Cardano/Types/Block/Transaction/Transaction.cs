@@ -8,12 +8,12 @@ using Chrysalis.Cbor.Types;
 namespace Chrysalis.Cbor.Cardano.Types.Block.Transaction;
 
 [CborConverter(typeof(UnionConverter))]
-public abstract record Transaction : CborBase;
+public abstract partial record Transaction : CborBase;
 
 
 [CborConverter(typeof(CustomListConverter))]
 [CborOptions(IsDefinite = true)]
-public record ShelleyTransaction(
+public partial record ShelleyTransaction(
     [CborIndex(0)] TransactionBody TransactionBody,
     [CborIndex(1)] TransactionWitnessSet TransactionWitnessSet,
     [CborIndex(2)] CborNullable<Metadata> TransactionMetadata
@@ -21,7 +21,7 @@ public record ShelleyTransaction(
 
 [CborConverter(typeof(CustomListConverter))]
 [CborOptions(IsDefinite = true)]
-public record AllegraTransaction(
+public partial record AllegraTransaction(
     [CborIndex(0)] TransactionBody TransactionBody,
     [CborIndex(1)] TransactionWitnessSet TransactionWitnessSet,
     [CborIndex(2)] CborNullable<AuxiliaryData> AuxiliaryData
@@ -29,7 +29,7 @@ public record AllegraTransaction(
 
 [CborConverter(typeof(CustomListConverter))]
 [CborOptions(IsDefinite = true)]
-public record PostMaryTransaction(
+public partial record PostMaryTransaction(
     [CborIndex(0)] TransactionBody TransactionBody,
     [CborIndex(1)] TransactionWitnessSet TransactionWitnessSet,
     [CborIndex(2)] CborBool IsValid,

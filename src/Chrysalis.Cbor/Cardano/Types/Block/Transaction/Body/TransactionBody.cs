@@ -11,11 +11,11 @@ using Chrysalis.Cbor.Types;
 namespace Chrysalis.Cbor.Cardano.Types.Block.Transaction.Body;
 
 [CborConverter(typeof(UnionConverter))]
-public abstract record TransactionBody : CborBase;
+public abstract partial record TransactionBody : CborBase;
 
 [CborConverter(typeof(CustomMapConverter))]
 [CborOptions(IsDefinite = true)]
-public record AlonzoTransactionBody(
+public partial record AlonzoTransactionBody(
     [CborIndex(0)] CborMaybeIndefList<TransactionInput> Inputs,
     [CborIndex(1)] CborMaybeIndefList<AlonzoTransactionOutput> Outputs,
     [CborIndex(2)] CborUlong Fee,
@@ -34,7 +34,7 @@ public record AlonzoTransactionBody(
 
 [CborConverter(typeof(CustomMapConverter))]
 [CborOptions(IsDefinite = true)]
-public record BabbageTransactionBody(
+public partial record BabbageTransactionBody(
     [CborIndex(0)] CborMaybeIndefList<TransactionInput> Inputs,
     [CborIndex(1)] CborMaybeIndefList<TransactionOutput> Outputs,
     [CborIndex(2)] CborUlong Fee,
@@ -57,7 +57,7 @@ public record BabbageTransactionBody(
 
 [CborConverter(typeof(CustomMapConverter))]
 [CborOptions(IsDefinite = true)]
-public record ConwayTransactionBody(
+public partial record ConwayTransactionBody(
     [CborIndex(0)] CborMaybeIndefList<TransactionInput> Inputs,
     [CborIndex(1)] CborMaybeIndefList<TransactionOutput> Outputs,
     [CborIndex(2)] CborUlong Fee,

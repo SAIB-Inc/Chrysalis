@@ -10,23 +10,23 @@ using Chrysalis.Cbor.Types.Primitives;
 namespace Chrysalis.Cbor.Cardano.Levvy.TokenV2.Types.Datums;
 
 [CborConverter(typeof(UnionConverter))]
-public record TokenDatum() : CborBase;
+public partial record TokenDatum() : CborBase;
 
 [CborConverter(typeof(ConstrConverter))]
 [CborOptions(Index = 0)]
-public record LendTokenDatum(LendTokenDetails LendTokenDetails) : TokenDatum;
+public partial record LendTokenDatum(LendTokenDetails LendTokenDetails) : TokenDatum;
 
 [CborConverter(typeof(ConstrConverter))]
 [CborOptions(Index = 1)]
-public record BorrowTokenDatum(BorrowTokenDetails BorrowTokenDetails) : TokenDatum;
+public partial record BorrowTokenDatum(BorrowTokenDetails BorrowTokenDetails) : TokenDatum;
 
 [CborConverter(typeof(ConstrConverter))]
 [CborOptions(Index = 2)]
-public record RepayTokenDatum(RepayTokenDetails RepayTokenDetails) : TokenDatum;
+public partial record RepayTokenDatum(RepayTokenDetails RepayTokenDetails) : TokenDatum;
 
 [CborConverter(typeof(ConstrConverter))]
 [CborOptions(Index = 0)]
-public record LendTokenDetails(
+public partial record LendTokenDetails(
     [CborIndex(0)]
     Address AdaOwner,
 
@@ -54,7 +54,7 @@ public record LendTokenDetails(
 
 [CborConverter(typeof(ConstrConverter))]
 [CborOptions(Index = 0)]
-public record BorrowTokenDetails(
+public partial record BorrowTokenDetails(
     [CborIndex(0)]
     Address AdaOwner,
 
@@ -85,7 +85,7 @@ public record BorrowTokenDetails(
 
 [CborConverter(typeof(ConstrConverter))]
 [CborOptions(Index = 0)]
-public record RepayTokenDetails(
+public partial record RepayTokenDetails(
     [CborIndex(0)]
     Address AdaOwner,
 

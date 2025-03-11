@@ -6,16 +6,16 @@ using Chrysalis.Cbor.Types;
 namespace Chrysalis.Cbor.Cardano.Types.Block.Transaction.Output;
 
 [CborConverter(typeof(UnionConverter))]
-public abstract record Value : CborBase;
+public abstract partial record Value : CborBase;
 
 
 [CborConverter(typeof(UlongConverter))]
-public record Lovelace(ulong Value) : Value;
+public partial record Lovelace(ulong Value) : Value;
 
 
 [CborConverter(typeof(CustomListConverter))]
 [CborOptions(IsDefinite = true)]
-public record LovelaceWithMultiAsset(
+public partial record LovelaceWithMultiAsset(
     [CborIndex(0)] Lovelace Lovelace,
     [CborIndex(1)] MultiAssetOutput MultiAsset
 ) : Value;

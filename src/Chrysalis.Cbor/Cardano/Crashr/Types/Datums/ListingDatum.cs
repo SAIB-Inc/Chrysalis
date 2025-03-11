@@ -8,7 +8,7 @@ namespace Chrysalis.Cbor.Cardano.Crashr.Types.Datums;
 
 [CborConverter(typeof(ConstrConverter))]
 [CborOptions(Index = 1)]
-public record ListingDatum(
+public partial record ListingDatum(
   [CborIndex(0)] CborList<Payout> Payouts,
   [CborIndex(1)] CborBytes Owner
 ) : CborBase;

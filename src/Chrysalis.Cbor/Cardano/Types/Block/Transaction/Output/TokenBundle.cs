@@ -7,12 +7,12 @@ using Chrysalis.Cbor.Types.Primitives;
 namespace Chrysalis.Cbor.Cardano.Types.Block.Transaction.Output;
 
 [CborConverter(typeof(UnionConverter))]
-public abstract record TokenBundle : CborBase;
+public abstract partial record TokenBundle : CborBase;
 
 
 [CborConverter(typeof(MapConverter))]
-public record TokenBundleOutput(Dictionary<CborBytes, CborUlong> Value) : TokenBundle;
+public partial record TokenBundleOutput(Dictionary<CborBytes, CborUlong> Value) : TokenBundle;
 
 
 [CborConverter(typeof(MapConverter))]
-public record TokenBundleMint(Dictionary<CborBytes, CborLong> Value) : TokenBundle;
+public partial record TokenBundleMint(Dictionary<CborBytes, CborLong> Value) : TokenBundle;

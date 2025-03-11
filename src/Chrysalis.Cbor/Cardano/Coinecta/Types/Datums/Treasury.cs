@@ -9,7 +9,7 @@ namespace Chrysalis.Cbor.Cardano.Coinecta.Types.Datums;
 
 [CborConverter(typeof(ConstrConverter))]
 [CborOptions(Index = 0)]
-public record Treasury(
+public partial record Treasury(
     [CborIndex(0)]
     MultisigScript Owner,
 

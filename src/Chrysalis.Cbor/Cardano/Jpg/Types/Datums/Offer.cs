@@ -9,7 +9,7 @@ namespace Chrysalis.Cbor.Cardano.Jpg.Types.Datums;
 
 [CborConverter(typeof(ConstrConverter))]
 [CborOptions(Index = 0)]
-public record Offer(
+public partial record Offer(
     [CborIndex(0)]
     CborBytes OwnerPkh,
 

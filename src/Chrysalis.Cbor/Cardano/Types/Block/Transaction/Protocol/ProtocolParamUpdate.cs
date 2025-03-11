@@ -9,11 +9,11 @@ using Chrysalis.Cbor.Types;
 namespace Chrysalis.Cbor.Cardano.Types.Block.Transaction.Protocol;
 
 [CborConverter(typeof(UnionConverter))]
-public abstract record ProtocolParamUpdate : CborBase;
+public abstract partial record ProtocolParamUpdate : CborBase;
 
 
 [CborConverter(typeof(CustomMapConverter))]
-public record ConwayProtocolParamUpdate(
+public partial record ConwayProtocolParamUpdate(
     [CborIndex(0)] CborUlong? MinFeeA,
     [CborIndex(1)] CborUlong? MinFeeB,
     [CborIndex(2)] CborUlong? MaxBlockBodySize,
@@ -47,7 +47,7 @@ public record ConwayProtocolParamUpdate(
 ) : ProtocolParamUpdate;
 
 [CborConverter(typeof(CustomMapConverter))]
-public record BabbageProtocolParamUpdate(
+public partial record BabbageProtocolParamUpdate(
     [CborIndex(0)] CborUlong? MinFeeA,
     [CborIndex(1)] CborUlong? MinFeeB,
     [CborIndex(2)] CborUlong? MaxBlockBodySize,
@@ -73,7 +73,7 @@ public record BabbageProtocolParamUpdate(
 ) : ProtocolParamUpdate;
 
 [CborConverter(typeof(CustomMapConverter))]
-public record AlonzoProtocolParamUpdate(
+public partial record AlonzoProtocolParamUpdate(
     [CborIndex(0)] CborUlong? MinFeeA,
     [CborIndex(1)] CborUlong? MinFeeB,
     [CborIndex(2)] CborUlong? MaxBlockBodySize,
@@ -101,7 +101,7 @@ public record AlonzoProtocolParamUpdate(
 ) : ProtocolParamUpdate;
 
 [CborConverter(typeof(CustomMapConverter))]
-public record MaryProtocolParamUpdate(
+public partial record MaryProtocolParamUpdate(
     [CborIndex(0)] CborUlong? MinFeeA,
     [CborIndex(1)] CborUlong? MinFeeB,
     [CborIndex(2)] CborUlong? MaxBlockBodySize,
@@ -122,6 +122,6 @@ public record MaryProtocolParamUpdate(
 
 
 [CborConverter(typeof(MapConverter))]
-public record ProposedProtocolParameterUpdates(
+public partial record ProposedProtocolParameterUpdates(
     Dictionary<CborBytes, ProtocolParamUpdate> Value
 ) : CborBase;

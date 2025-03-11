@@ -6,4 +6,4 @@ namespace Chrysalis.Cbor.Cardano.Jpg.Types.Redeemers;
 
 [CborConverter(typeof(ConstrConverter))]
 [CborOptions(Index = 1)]
-public record AcceptOfferRedeemer() : CborBase;
+public partial record AcceptOfferRedeemer() : CborBase;

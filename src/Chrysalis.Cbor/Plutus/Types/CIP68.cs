@@ -8,11 +8,11 @@ using Chrysalis.Cbor.Types.Primitives;
 namespace Chrysalis.Cbor.Plutus.Types;
 
 [CborConverter(typeof(UnionConverter))]
-public abstract record Cip68<T> : CborBase;
+public abstract partial record Cip68<T> : CborBase;
 
 [CborConverter(typeof(ConstrConverter))]
 [CborOptions(Index = 0)]
-public record Cip68WithoutExtra<T>(
+public partial record Cip68WithoutExtra<T>(
     [CborIndex(0)]
     PlutusData Metadata,
 
@@ -22,7 +22,7 @@ public record Cip68WithoutExtra<T>(
 
 [CborConverter(typeof(ConstrConverter))]
 [CborOptions(Index = 0)]
-public record Cip68WithExtra<T>(
+public partial record Cip68WithExtra<T>(
     [CborIndex(0)]
     PlutusData Metadata,
 

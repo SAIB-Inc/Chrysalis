@@ -6,11 +6,11 @@ using Chrysalis.Cbor.Types.Primitives;
 namespace Chrysalis.Cbor.Cardano.Types.Block.Transaction.Body.Certificates;
 
 [CborConverter(typeof(UnionConverter))]
-public abstract record Relay : CborBase;
+public abstract partial record Relay : CborBase;
 
 
 [CborConverter(typeof(CustomListConverter))]
-public record SingleHostAddr(
+public partial record SingleHostAddr(
     [CborIndex(0)] CborInt Tag,
     [CborIndex(1)] CborNullable<CborUlong> Port,
     [CborIndex(2)] CborNullable<CborBytes> IPv4,
@@ -19,7 +19,7 @@ public record SingleHostAddr(
 
 
 [CborConverter(typeof(CustomListConverter))]
-public record SingleHostName(
+public partial record SingleHostName(
     [CborIndex(0)] CborInt Tag,
     [CborIndex(1)] CborNullable<CborUlong> Port,
     [CborIndex(2)] CborText DNSName
@@ -27,7 +27,7 @@ public record SingleHostName(
 
 
 [CborConverter(typeof(CustomListConverter))]
-public record MultiHostName(
+public partial record MultiHostName(
     [CborIndex(0)] CborInt Tag,
     [CborIndex(1)] CborText DNSName
 ) : Relay;

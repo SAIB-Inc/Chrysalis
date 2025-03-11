@@ -6,7 +6,7 @@ using Chrysalis.Cbor.Types.Primitives;
 namespace Chrysalis.Cbor.Cardano.Types.Block;
 
 [CborConverter(typeof(CustomListConverter))]
-public record BlockWithEra<T>(
+public partial record BlockWithEra<T>(
     [CborIndex(0)] CborInt EraNumber,
     [CborIndex(1)] T Block
 ) : CborBase where T : Block;

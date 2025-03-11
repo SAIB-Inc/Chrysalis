@@ -7,7 +7,7 @@ namespace Chrysalis.Cbor.Cardano.Jpg.Types.Common;
 
 [CborConverter(typeof(ConstrConverter))]
 [CborOptions(Index = 0)]
-public record Token(
+public partial record Token(
     [CborIndex(0)]
     CborInt TokenType,
 

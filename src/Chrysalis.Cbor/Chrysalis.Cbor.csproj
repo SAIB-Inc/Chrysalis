@@ -11,7 +11,7 @@
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageLicenseFile>LICENSE.md</PackageLicenseFile>
     <EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>
-    <CompilerGeneratedFilesOutputPath>$(ProjectDir)Generated</CompilerGeneratedFilesOutputPath>
+    <CompilerGeneratedFilesOutputPath>$(ProjectDir)Generated/Converters</CompilerGeneratedFilesOutputPath>
   </PropertyGroup>
 
   <ItemGroup>
@@ -23,7 +23,6 @@
   <ItemGroup>
     <ProjectReference Include="..\Chrysalis.Cbor.Generators\Chrysalis.Cbor.Generators.csproj" 
                       OutputItemType="Analyzer" 
-                      ReferenceOutputAssembly="false" 
     />
   </ItemGroup>
 

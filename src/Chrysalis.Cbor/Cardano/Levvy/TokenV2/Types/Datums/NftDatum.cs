@@ -10,24 +10,24 @@ using Chrysalis.Cbor.Types.Primitives;
 namespace Chrysalis.Cbor.Cardano.Levvy.TokenV2.Types.Datums;
 
 [CborConverter(typeof(UnionConverter))]
-public record NftDatum() : CborBase;
+public partial record NftDatum() : CborBase;
 
 [CborConverter(typeof(ConstrConverter))]
 [CborOptions(Index = 0)]
-public record LendNftDatum(LendNftDetails LendNftDetails) : NftDatum;
+public partial record LendNftDatum(LendNftDetails LendNftDetails) : NftDatum;
 
 [CborConverter(typeof(ConstrConverter))]
 [CborOptions(Index = 1)]
-public record BorrowNftDatum(BorrowNftDetails BorrowNftDetails) : NftDatum;
+public partial record BorrowNftDatum(BorrowNftDetails BorrowNftDetails) : NftDatum;
 
 [CborConverter(typeof(ConstrConverter))]
 [CborOptions(Index = 2)]
-public record RepayNftDatum(RepayNftDetails RepayNftDetails) : NftDatum;
+public partial record RepayNftDatum(RepayNftDetails RepayNftDetails) : NftDatum;
 
 
 [CborConverter(typeof(ConstrConverter))]
 [CborOptions(Index = 0)]
-public record LendNftDetails(
+public partial record LendNftDetails(
     [CborIndex(0)]
     Address AdaOwner,
 
@@ -46,7 +46,7 @@ public record LendNftDetails(
 
 [CborConverter(typeof(ConstrConverter))]
 [CborOptions(Index = 0)]
-public record BorrowNftDetails(
+public partial record BorrowNftDetails(
     [CborIndex(0)]
     Address AdaOwner,
 
@@ -74,7 +74,7 @@ public record BorrowNftDetails(
 
 [CborConverter(typeof(ConstrConverter))]
 [CborOptions(Index = 0)]
-public record RepayNftDetails(
+public partial record RepayNftDetails(
     [CborIndex(0)]
     Address AdaOwner,
 

@@ -9,8 +9,8 @@ namespace Chrysalis.Network.Cbor.LocalStateQuery.Messages;
 
 [CborConverter(typeof(CustomListConverter))]
 [CborOptions(IsDefinite = true)]
-public record Query(
-    [CborIndex(0)] [ExactValue(3)] ExactValue<CborInt> Idx,
+public partial record Query(
+    [CborIndex(0)][ExactValue(3)] ExactValue<CborInt> Idx,
     [CborIndex(1)] CborBase QueryRequest
 ) : LocalStateQueryMessage;
 

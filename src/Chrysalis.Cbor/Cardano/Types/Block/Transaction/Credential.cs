@@ -6,7 +6,7 @@ using Chrysalis.Cbor.Types.Primitives;
 namespace Chrysalis.Cbor.Cardano.Types.Block.Transaction;
 
 [CborConverter(typeof(CustomListConverter))]
-public record Credential(
+public partial record Credential(
     [CborIndex(0)] CborInt CredentialType,
     [CborIndex(1)] CborBytes Hash
 ) : CborBase;

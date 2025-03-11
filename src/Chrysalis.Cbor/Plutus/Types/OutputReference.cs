@@ -7,7 +7,7 @@ namespace Chrysalis.Cbor.Plutus.Types;
 
 [CborConverter(typeof(ConstrConverter))]
 [CborOptions(Index = 0)]
-public record OutputReference(
+public partial record OutputReference(
     [CborIndex(0)]
     TransactionId TransactionId,
 
@@ -17,4 +17,4 @@ public record OutputReference(
 
 [CborConverter(typeof(ConstrConverter))]
 [CborOptions(Index = 0)]
-public record TransactionId(CborBytes Hash) : CborBase;
+public partial record TransactionId(CborBytes Hash) : CborBase;

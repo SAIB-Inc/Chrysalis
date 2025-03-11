@@ -15,13 +15,13 @@ public class ReAcquireIdxs
     public static ReAcquire Default(Point? point = null) => point is not null ? SpecificPoint(point) : VolatileTip;
 
     public static ReAcquireSpecificPoint SpecificPoint(Point point) =>
-        new (new ExactValue<CborInt>(new(6)), point);
+        new(new ExactValue<CborInt>(new(6)), point);
 
     public static ReAcquireVolatileTip VolatileTip =>
-        new (new ExactValue<CborInt>(new(9)));
+        new(new ExactValue<CborInt>(new(9)));
 
     public static ReAcquireImmutableTip ImmutableTip =>
-        new (new ExactValue<CborInt>(new(11)));
+        new(new ExactValue<CborInt>(new(11)));
 }
 
 [CborConverter(typeof(UnionConverter))]
@@ -29,19 +29,19 @@ public abstract record ReAcquireIdx : CborBase;
 
 [CborConverter(typeof(CustomListConverter))]
 [CborOptions(IsDefinite = true)]
-public record ReAcquireSpecificPoint(
-    [CborIndex(0)] [ExactValue(6)] ExactValue<CborInt> Idx,
+public partial record ReAcquireSpecificPoint(
+    [CborIndex(0)][ExactValue(6)] ExactValue<CborInt> Idx,
     [CborIndex(1)] Point Point
 ) : ReAcquire;
 
 [CborConverter(typeof(CustomListConverter))]
 [CborOptions(IsDefinite = true)]
-public record ReAcquireVolatileTip(
-    [CborIndex(0)] [ExactValue(9)] ExactValue<CborInt> Idx
+public partial record ReAcquireVolatileTip(
+    [CborIndex(0)][ExactValue(9)] ExactValue<CborInt> Idx
 ) : ReAcquire;
 
 [CborConverter(typeof(CustomListConverter))]
 [CborOptions(IsDefinite = true)]
-public record ReAcquireImmutableTip(
-    [CborIndex(0)] [ExactValue(11)] ExactValue<CborInt> Idx
+public partial record ReAcquireImmutableTip(
+    [CborIndex(0)][ExactValue(11)] ExactValue<CborInt> Idx
 ) : ReAcquire;

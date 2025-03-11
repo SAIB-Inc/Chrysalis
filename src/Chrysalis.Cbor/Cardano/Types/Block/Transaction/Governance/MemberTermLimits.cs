@@ -6,4 +6,4 @@ using Chrysalis.Cbor.Types.Primitives;
 namespace Chrysalis.Cbor.Cardano.Types.Block.Transaction.Governance;
 
 [CborConverter(typeof(MapConverter))]
-public record MemberTermLimits(Dictionary<Credential, CborUlong> Value) : CborBase;
+public partial record MemberTermLimits(Dictionary<Credential, CborUlong> Value) : CborBase;

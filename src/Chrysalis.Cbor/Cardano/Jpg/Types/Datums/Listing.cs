@@ -10,7 +10,7 @@ namespace Chrysalis.Cbor.Cardano.Jpg.Types.Datums;
 
 [CborConverter(typeof(ConstrConverter))]
 [CborOptions(Index = 0)]
-public record Listing(
+public partial record Listing(
     [CborIndex(0)]
     CborIndefList<ListingPayout> Payouts,
 

@@ -9,12 +9,12 @@ using Chrysalis.Cbor.Types;
 namespace Chrysalis.Cbor.Cardano.Types.Block.Transaction.WitnessSet;
 
 [CborConverter(typeof(UnionConverter))]
-public abstract record AuxiliaryData : CborBase;
+public abstract partial record AuxiliaryData : CborBase;
 
 
 [CborConverter(typeof(CustomMapConverter))]
 [CborOptions(Tag = 259)]
-public record PostAlonzoAuxiliaryDataMap(
+public partial record PostAlonzoAuxiliaryDataMap(
     [CborIndex(0)] Metadata? Metadata,
     [CborIndex(1)] CborDefList<NativeScript>? NativeScriptSet,
     [CborIndex(2)] CborDefList<CborBytes>? PlutusV1ScriptSet,
@@ -24,11 +24,11 @@ public record PostAlonzoAuxiliaryDataMap(
 
 
 [CborConverter(typeof(MapConverter))]
-public record Metadata(Dictionary<CborUlong, TransactionMetadatum> Value) : AuxiliaryData;
+public partial record Metadata(Dictionary<CborUlong, TransactionMetadatum> Value) : AuxiliaryData;
 
 
 [CborConverter(typeof(CustomListConverter))]
-public record ShellyMaAuxiliaryData(
+public partial record ShellyMaAuxiliaryData(
     [CborIndex(0)] Metadata TransactionMetadata,
     [CborIndex(1)] CborDefList<NativeScript> AuxiliaryScripts
 ) : AuxiliaryData;

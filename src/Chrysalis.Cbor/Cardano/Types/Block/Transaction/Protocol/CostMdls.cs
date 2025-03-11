@@ -7,4 +7,4 @@ using Chrysalis.Cbor.Types.Primitives;
 namespace Chrysalis.Cbor.Cardano.Types.Block.Transaction.Protocol;
 
 [CborConverter(typeof(MapConverter))]
-public record CostMdls(Dictionary<CborInt, CborIndefList<CborLong>> Value) : CborBase;
+public partial record CostMdls(Dictionary<CborInt, CborIndefList<CborLong>> Value) : CborBase;

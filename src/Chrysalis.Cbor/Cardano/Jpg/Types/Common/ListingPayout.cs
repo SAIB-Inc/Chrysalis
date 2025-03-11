@@ -8,7 +8,7 @@ namespace Chrysalis.Cbor.Cardano.Jpg.Types.Common;
 
 [CborConverter(typeof(ConstrConverter))]
 [CborOptions(Index = 1)]
-public record ListingPayout(
+public partial record ListingPayout(
     [CborIndex(0)]
     Address Address,
 

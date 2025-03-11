@@ -6,26 +6,26 @@ using Chrysalis.Cbor.Types.Primitives;
 namespace Chrysalis.Cbor.Cardano.Types.Block.Transaction.Governance;
 
 [CborConverter(typeof(UnionConverter))]
-public abstract record DRep : CborBase;
+public abstract partial record DRep : CborBase;
 
 [CborConverter(typeof(CustomListConverter))]
-public record DRepAddrKeyHash(
+public partial record DRepAddrKeyHash(
     [CborIndex(0)] CborInt Tag,
     [CborIndex(1)] CborBytes AddrKeyHash
 ) : DRep;
 
 [CborConverter(typeof(CustomListConverter))]
-public record DRepScriptHash(
+public partial record DRepScriptHash(
     [CborIndex(0)] CborInt Tag,
     [CborIndex(1)] CborBytes ScriptHash
 ) : DRep;
 
 [CborConverter(typeof(CustomListConverter))]
-public record Abstain(
+public partial record Abstain(
     [CborIndex(0)] CborInt Tag
 ) : DRep;
 
 [CborConverter(typeof(CustomListConverter))]
-public record DRepNoConfidence(
+public partial record DRepNoConfidence(
     [CborIndex(0)] CborInt Tag
 ) : DRep;

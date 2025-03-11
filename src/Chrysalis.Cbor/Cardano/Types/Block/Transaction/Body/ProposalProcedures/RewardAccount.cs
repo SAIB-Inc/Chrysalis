@@ -5,4 +5,4 @@ using Chrysalis.Cbor.Types;
 namespace Chrysalis.Cbor.Cardano.Types.Block.Transaction.Body.ProposalProcedures;
 
 [CborConverter(typeof(BytesConverter))]
-public record RewardAccount(byte[] Value) : CborBase;
+public partial record RewardAccount(byte[] Value) : CborBase;

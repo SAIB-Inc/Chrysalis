@@ -7,7 +7,7 @@ namespace Chrysalis.Cbor.Plutus.Types.Address;
 
 [CborConverter(typeof(ConstrConverter))]
 [CborOptions(Index = 0)]
-public record Address(
+public partial record Address(
     [CborIndex(0)] Credential PaymentCredential,
     [CborIndex(1)] Option<Inline<Credential>> StakeCredential
 ) : CborBase;

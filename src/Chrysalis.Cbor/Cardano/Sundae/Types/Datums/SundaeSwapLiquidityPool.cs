@@ -8,7 +8,7 @@ namespace Chrysalis.Cbor.Cardano.Sundae.Types.Datums;
 
 [CborConverter(typeof(ConstrConverter))]
 [CborOptions(Index = 0)]
-public record SundaeSwapLiquidityPool(
+public partial record SundaeSwapLiquidityPool(
     [CborIndex(0)]
     CborBytes Identifier,
 

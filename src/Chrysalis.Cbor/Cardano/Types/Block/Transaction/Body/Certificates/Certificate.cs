@@ -9,25 +9,25 @@ using Chrysalis.Cbor.Types;
 namespace Chrysalis.Cbor.Cardano.Types.Block.Transaction.Body.Certificates;
 
 [CborConverter(typeof(UnionConverter))]
-public abstract record Certificate : CborBase;
+public abstract partial record Certificate : CborBase;
 
 
 [CborConverter(typeof(CustomListConverter))]
-public record StakeRegistration(
+public partial record StakeRegistration(
     [CborIndex(0)] CborInt Tag,
     [CborIndex(1)] Credential StakeCredential
 ) : Certificate;
 
 
 [CborConverter(typeof(CustomListConverter))]
-public record StakeDeregistration(
+public partial record StakeDeregistration(
     [CborIndex(0)] CborInt Tag,
     [CborIndex(1)] Credential StakeCredential
 ) : Certificate;
 
 
 [CborConverter(typeof(CustomListConverter))]
-public record StakeDelegation(
+public partial record StakeDelegation(
     [CborIndex(0)] CborInt Tag,
     [CborIndex(1)] Credential StakeCredential,
     [CborIndex(2)] CborBytes PoolKeyHash
@@ -35,7 +35,7 @@ public record StakeDelegation(
 
 
 [CborConverter(typeof(CustomListConverter))]
-public record PoolRegistration(
+public partial record PoolRegistration(
     [CborIndex(0)] CborInt Tag,
     [CborIndex(1)] CborBytes Operator,
     [CborIndex(2)] CborBytes VrfKeyHash,
@@ -50,7 +50,7 @@ public record PoolRegistration(
 
 
 [CborConverter(typeof(CustomListConverter))]
-public record PoolRetirement(
+public partial record PoolRetirement(
     [CborIndex(0)] CborInt Tag,
     [CborIndex(1)] CborBytes PoolKeyHash,
     [CborIndex(2)] CborUlong EpochNo
@@ -58,7 +58,7 @@ public record PoolRetirement(
 
 
 [CborConverter(typeof(CustomListConverter))]
-public record RegCert(
+public partial record RegCert(
     [CborIndex(0)] CborInt Tag,
     [CborIndex(1)] Credential StakeCredential,
     [CborIndex(2)] CborUlong Coin
@@ -66,7 +66,7 @@ public record RegCert(
 
 
 [CborConverter(typeof(CustomListConverter))]
-public record UnRegCert(
+public partial record UnRegCert(
     [CborIndex(0)] CborInt Tag,
     [CborIndex(1)] Credential StakeCredential,
     [CborIndex(2)] CborUlong Coin
@@ -74,7 +74,7 @@ public record UnRegCert(
 
 
 [CborConverter(typeof(CustomListConverter))]
-public record VoteDelegCert(
+public partial record VoteDelegCert(
     [CborIndex(0)] CborInt Tag,
     [CborIndex(1)] Credential StakeCredential,
     [CborIndex(2)] DRep DRep
@@ -82,7 +82,7 @@ public record VoteDelegCert(
 
 
 [CborConverter(typeof(CustomListConverter))]
-public record StakeVoteDelegCert(
+public partial record StakeVoteDelegCert(
     [CborIndex(0)] CborInt Tag,
     [CborIndex(1)] Credential StakeCredential,
     [CborIndex(2)] CborBytes PoolKeyHash,
@@ -91,7 +91,7 @@ public record StakeVoteDelegCert(
 
 
 [CborConverter(typeof(CustomListConverter))]
-public record StakeRegDelegCert(
+public partial record StakeRegDelegCert(
     [CborIndex(0)] CborInt Tag,
     [CborIndex(1)] Credential StakeCredential,
     [CborIndex(2)] CborBytes PoolKeyHash,
@@ -100,7 +100,7 @@ public record StakeRegDelegCert(
 
 
 [CborConverter(typeof(CustomListConverter))]
-public record VoteRegDelegCert(
+public partial record VoteRegDelegCert(
     [CborIndex(0)] CborInt Tag,
     [CborIndex(1)] Credential StakeCredential,
     [CborIndex(2)] DRep DRep,
@@ -109,7 +109,7 @@ public record VoteRegDelegCert(
 
 
 [CborConverter(typeof(CustomListConverter))]
-public record StakeVoteRegDelegCert(
+public partial record StakeVoteRegDelegCert(
     [CborIndex(0)] CborInt Tag,
     [CborIndex(1)] Credential StakeCredential,
     [CborIndex(2)] CborBytes PoolKeyHash,
@@ -119,7 +119,7 @@ public record StakeVoteRegDelegCert(
 
 
 [CborConverter(typeof(CustomListConverter))]
-public record AuthCommitteeHotCert(
+public partial record AuthCommitteeHotCert(
     [CborIndex(0)] CborInt Tag,
     [CborIndex(1)] Credential CommitteeColdCredential,
     [CborIndex(2)] Credential CommitteeHotCredential
@@ -127,7 +127,7 @@ public record AuthCommitteeHotCert(
 
 
 [CborConverter(typeof(CustomListConverter))]
-public record ResignCommitteeColdCert(
+public partial record ResignCommitteeColdCert(
     [CborIndex(0)] CborInt Tag,
     [CborIndex(1)] CborBytes CommitteeColdCredential,
     [CborIndex(2)] Anchor? Anchor
@@ -135,7 +135,7 @@ public record ResignCommitteeColdCert(
 
 
 [CborConverter(typeof(CustomListConverter))]
-public record RegDrepCert(
+public partial record RegDrepCert(
     [CborIndex(0)] CborInt Tag,
     [CborIndex(1)] Credential DRepCredential,
     [CborIndex(2)] CborUlong Coin,
@@ -144,7 +144,7 @@ public record RegDrepCert(
 
 
 [CborConverter(typeof(CustomListConverter))]
-public record UnRegDrepCert(
+public partial record UnRegDrepCert(
     [CborIndex(0)] CborInt Tag,
     [CborIndex(1)] Credential DrepCredential,
     [CborIndex(2)] CborUlong Coin
@@ -152,7 +152,7 @@ public record UnRegDrepCert(
 
 
 [CborConverter(typeof(CustomListConverter))]
-public record UpdateDrepCert(
+public partial record UpdateDrepCert(
     [CborIndex(0)] CborInt Tag,
     [CborIndex(1)] Credential DrepCredential,
     [CborIndex(2)] CborNullable<Anchor> Anchor
@@ -160,7 +160,7 @@ public record UpdateDrepCert(
 
 
 [CborConverter(typeof(CustomListConverter))]
-public record GenesisKeyDelegation(
+public partial record GenesisKeyDelegation(
     [CborIndex(0)] CborInt Tag,
     [CborIndex(1)] CborBytes GenesisHash,
     [CborIndex(2)] CborBytes GenesisDelegateHash,
@@ -169,7 +169,7 @@ public record GenesisKeyDelegation(
 
 
 [CborConverter(typeof(CustomListConverter))]
-public record MoveInstantaneousRewardsCert(
+public partial record MoveInstantaneousRewardsCert(
     [CborIndex(0)] CborInt Tag,
     [CborIndex(1)] MoveInstantaneousReward MoveInstantaneousReward
 ) : Certificate;

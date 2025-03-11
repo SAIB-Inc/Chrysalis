@@ -5,4 +5,4 @@ using Chrysalis.Cbor.Types;
 namespace Chrysalis.Cbor.Cardano.Types.Block.Transaction.Output;
 
 [CborConverter(typeof(BytesConverter))]
-public record Address(byte[] Value) : CborBase;
+public partial record Address(byte[] Value) : CborBase;
