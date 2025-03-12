@@ -33,8 +33,7 @@ public static class CustomMapSerializationUtil
             return (null, null);
         }
 
-        CborOptions innerOptions = CborRegistry.Instance.GetBaseOptions(valueType);
-        object? value = CborSerializer.Deserialize(reader, innerOptions);
+        object? value = valueType.TryCallStaticRead(reader);
 
         return (key, value);
     }

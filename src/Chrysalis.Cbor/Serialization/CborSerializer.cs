@@ -33,33 +33,10 @@ public static class CborSerializer
         if (value.Raw is not null) return value.Raw.Value.ToArray();
 
         CborWriter writer = new(CborConformanceMode.Lax);
-        CborOptions options = CborRegistry.Instance.GetBaseOptions(value.GetType());
-        Serialize(writer, value, options);
+        List<object?> filteredProperties = PropertyResolver.GetFilteredProperties(value);
+        value.Write(writer, filteredProperties);
 
         return writer.Encode();
-    }
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    internal static void Serialize(CborWriter writer, object? value, CborOptions options)
-    {
-        try
-        {
-            if (value is null)
-                throw new InvalidOperationException("Value cannot be null");
-
-            Type resolvedType = value.GetType();
-            CborOptions resolvedOptions = CborRegistry.Instance.GetBaseOptions(resolvedType);
-            Type converterType = resolvedOptions.ConverterType ?? throw new InvalidOperationException("No converter type specified");
-            ICborConverter converter = CborRegistry.Instance.GetConverter(converterType);
-            List<object?> filteredProperties = PropertyResolver.GetFilteredProperties(value);
-            resolvedOptions.RuntimeType = resolvedType;
-            CborUtil.WriteTag(writer, options.Tag);
-            converter.Write(writer, filteredProperties, options);
-        }
-        catch (Exception e)
-        {
-            throw new Exception($"Failed to serialize object with value {value}, options: {options}", e);
-        }
     }
 
     /// <summary>
@@ -85,9 +62,8 @@ public static class CborSerializer
         try
         {
             CborReader reader = new(data, CborConformanceMode.Lax);
-            CborOptions options = CborRegistry.Instance.GetBaseOptions(typeof(T));
-            CborBase instance = Deserialize(reader, options, false);
-            instance.Raw = data;
+            CborBase? instance = typeof(T).TryCallStaticRead(reader) as CborBase;
+            instance!.Raw = data;
 
             return (T)instance;
         }
@@ -97,43 +73,75 @@ public static class CborSerializer
         }
     }
 
+
+    /// <summary>
+    /// Extension method that tries to call a static Read method if available
+    /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    internal static CborBase Deserialize(CborReader reader, CborOptions options, bool readChunk = true)
+    public static object? TryCallStaticRead(this Type type, CborReader reader)
     {
-
-        ReadOnlyMemory<byte>? chunk = null;
-        if (readChunk)
+        try
         {
-            chunk = reader.ReadEncodedValue();
-            reader = new CborReader(chunk.Value, CborConformanceMode.Lax);
+            // Get the static Read method if it exists
+            var method = type.GetMethod("Read",
+                System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static,
+                null,
+                [typeof(CborReader)],
+                null);
+
+            // If the method exists, invoke it
+            if (method != null)
+            {
+                return method.Invoke(null, [reader]);
+            }
+        }
+        catch
+        {
+            // If anything fails, we'll fall back to the normal path
         }
 
-        Type converterType = options.ConverterType ?? throw new CborDeserializationException("No converter type specified");
-        ICborConverter converter = CborRegistry.Instance.GetConverter(converterType);
-        CborUtil.ReadAndVerifyTag(reader, options.Tag);
-        object? value = converter.Read(reader, options);
-
-        if (options.RuntimeType is null)
-            throw new CborDeserializationException("Runtime type not specified");
-
-        CborBase? instance;
-
-        // If the value is already of the correct type, use it directly
-        if (value != null && options.RuntimeType.IsAssignableFrom(value.GetType()))
-        {
-            instance = (CborBase)value;
-        }
-        else
-        {
-            // Otherwise create a new instance
-            instance = (!options.RuntimeType.IsAbstract ?
-                (CborBase)ActivatorUtil.CreateInstance(options.RuntimeType, value, options) :
-                (CborBase)value!) ?? throw new CborDeserializationException("Failed to create instance of type");
-        }
-
-        if (readChunk && chunk.HasValue)
-            instance.Raw = chunk;
-
-        return instance;
+        // Return null to indicate we couldn't call the static method
+        return null;
     }
+
+
+    // [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    // internal static CborBase Deserialize(CborReader reader, CborOptions options, bool readChunk = true)
+    // {
+
+    //     ReadOnlyMemory<byte>? chunk = null;
+    //     if (readChunk)
+    //     {
+    //         chunk = reader.ReadEncodedValue();
+    //         reader = new CborReader(chunk.Value, CborConformanceMode.Lax);
+    //     }
+
+    //     Type converterType = options.ConverterType ?? throw new CborDeserializationException("No converter type specified");
+    //     ICborConverter converter = CborRegistry.Instance.GetConverter(converterType);
+    //     CborUtil.ReadAndVerifyTag(reader, options.Tag);
+    //     object? value = converter.Read(reader, options);
+
+    //     if (options.RuntimeType is null)
+    //         throw new CborDeserializationException("Runtime type not specified");
+
+    //     CborBase? instance;
+
+    //     // If the value is already of the correct type, use it directly
+    //     if (value != null && options.RuntimeType.IsAssignableFrom(value.GetType()))
+    //     {
+    //         instance = (CborBase)value;
+    //     }
+    //     else
+    //     {
+    //         // Otherwise create a new instance
+    //         instance = (!options.RuntimeType.IsAbstract ?
+    //             (CborBase)ActivatorUtil.CreateInstance(options.RuntimeType, value, options) :
+    //             (CborBase)value!) ?? throw new CborDeserializationException("Failed to create instance of type");
+    //     }
+
+    //     if (readChunk && chunk.HasValue)
+    //         instance.Raw = chunk;
+
+    //     return instance;
+    // }
 }

@@ -2,6 +2,7 @@ using System.Formats.Cbor;
 using Chrysalis.Cbor.Serialization;
 using Chrysalis.Cbor.Serialization.Exceptions;
 using Chrysalis.Cbor.Serialization.Registry;
+using Chrysalis.Cbor.Types;
 
 namespace Chrysalis.Cbor.Utils;
 
@@ -40,9 +41,7 @@ public static class CustomListSerializationUtil
                 }
             }
 
-            CborOptions innerOptions = CborRegistry.Instance.GetBaseOptions(innerType);
-            innerOptions.ExactValue = parameterType.ExpectedValue;
-            object? item = CborSerializer.Deserialize(reader, innerOptions);
+            object? item = innerType.TryCallStaticRead(reader);
             items.Add(item);
         }
 
@@ -61,9 +60,9 @@ public static class CustomListSerializationUtil
         for (int i = 0; i < count; i++)
         {
             object propertyValue = nonNullValues[i]!;
-            Type propertyType = propertyValue.GetType();
-            CborOptions innerOptions = CborRegistry.Instance.GetBaseOptions(propertyType);
-            CborSerializer.Serialize(writer, propertyValue, innerOptions);
+            CborBase? propertyValueCbor = propertyValue as CborBase;
+            List<object?> filteredProperties = PropertyResolver.GetFilteredProperties(propertyValue);
+            propertyValueCbor!.Write(writer, filteredProperties);
         }
     }
 }

@@ -1,6 +1,7 @@
 using System.Formats.Cbor;
 using Chrysalis.Cbor.Serialization.Exceptions;
 using Chrysalis.Cbor.Serialization.Registry;
+using Chrysalis.Cbor.Types;
 using Chrysalis.Cbor.Utils;
 
 namespace Chrysalis.Cbor.Serialization.Converters.Custom;
@@ -26,7 +27,7 @@ public sealed class CustomConstrConverter : ICborConverter
         List<object?> items = [];
         while (reader.PeekState() != CborReaderState.EndArray)
         {
-            object? item = CborSerializer.Deserialize(reader, innerOptions);
+            object? item = innerType.TryCallStaticRead(reader);
             items.Add(item);
         }
         reader.ReadEndArray();
@@ -50,10 +51,13 @@ public sealed class CustomConstrConverter : ICborConverter
         CborOptions innerOptions = CborRegistry.Instance.GetBaseOptions(innerType);
 
         // Write each item
-        foreach (object? item in value)
+        foreach (CborBase? item in value)
         {
             if (item is not null)
-                CborSerializer.Serialize(writer, item, innerOptions);
+            {
+                List<object?> filteredProperties = PropertyResolver.GetFilteredProperties(value);
+                item.Write(writer, filteredProperties);
+            }
         }
 
         writer.WriteEndArray();

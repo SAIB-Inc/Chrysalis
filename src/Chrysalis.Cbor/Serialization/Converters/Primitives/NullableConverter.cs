@@ -1,6 +1,8 @@
 using System.Formats.Cbor;
 using Chrysalis.Cbor.Serialization.Exceptions;
 using Chrysalis.Cbor.Serialization.Registry;
+using Chrysalis.Cbor.Types;
+using Chrysalis.Cbor.Utils;
 
 namespace Chrysalis.Cbor.Serialization.Converters.Primitives;
 
@@ -18,8 +20,8 @@ public sealed class NullableConverter : ICborConverter
         }
 
         Type innerType = options.RuntimeType.GetGenericArguments()[0];
-        CborOptions innerOptions = CborRegistry.Instance.GetBaseOptions(innerType);
-        return CborSerializer.Deserialize(reader, innerOptions);
+
+        return innerType.TryCallStaticRead(reader);
     }
 
     public void Write(CborWriter writer, List<object?> value, CborOptions options)
@@ -30,8 +32,7 @@ public sealed class NullableConverter : ICborConverter
             return;
         }
 
-        Type innerType = options.RuntimeType!.GetGenericArguments()[0];
-        CborOptions innerOptions = CborRegistry.Instance.GetBaseOptions(innerType);
-        CborSerializer.Serialize(writer, value.First(), innerOptions);
+        CborBase? valueCborBase = value[0] as CborBase;
+        valueCborBase!.Write(writer, value);
     }
 }

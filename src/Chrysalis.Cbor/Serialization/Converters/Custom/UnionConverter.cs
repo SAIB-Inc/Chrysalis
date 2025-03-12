@@ -1,6 +1,7 @@
 using System.Formats.Cbor;
 using Chrysalis.Cbor.Serialization.Exceptions;
 using Chrysalis.Cbor.Serialization.Registry;
+using Chrysalis.Cbor.Types;
 using Chrysalis.Cbor.Utils;
 
 namespace Chrysalis.Cbor.Serialization.Converters.Custom;
@@ -13,7 +14,7 @@ public sealed class UnionConverter : ICborConverter
             throw new CborDeserializationException("Union types are not defined in options.");
 
         ReadOnlyMemory<byte> data = reader.ReadEncodedValue();
-        IEnumerable<Type> concreteTypes = UnionSerializationUtil.ResolveConcreteTypes(options);
+        IEnumerable<Type> concreteTypes = options.UnionTypes;
         Dictionary<Type, Exception> errors = [];
 
         foreach (Type type in concreteTypes)
@@ -24,7 +25,8 @@ public sealed class UnionConverter : ICborConverter
 
                 // Create new options with the same context
                 CborOptions typeOptions = CborRegistry.Instance.GetBaseOptions(type);
-                object? value = CborSerializer.Deserialize(innerReader, typeOptions);
+
+                object? value = typeOptions.RuntimeType!.TryCallStaticRead(innerReader);
                 options.RuntimeType = type;
 
                 return value;
@@ -41,6 +43,8 @@ public sealed class UnionConverter : ICborConverter
 
     public void Write(CborWriter writer, List<object?> value, CborOptions options)
     {
-        CborSerializer.Serialize(writer, value, options);
+        List<object?> filteredProperties = PropertyResolver.GetFilteredProperties(value);
+        CborBase cborBase = (CborBase)value[0]! ?? throw new CborSerializationException("Null value for Union");
+        cborBase.Write(writer, filteredProperties);
     }
 }

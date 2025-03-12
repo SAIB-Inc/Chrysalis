@@ -2,6 +2,7 @@ using System.Formats.Cbor;
 using System.Reflection;
 using Chrysalis.Cbor.Serialization.Exceptions;
 using Chrysalis.Cbor.Serialization.Registry;
+using Chrysalis.Cbor.Types;
 using Chrysalis.Cbor.Utils;
 
 namespace Chrysalis.Cbor.Serialization.Converters.Primitives;
@@ -25,14 +26,12 @@ public sealed class ListConverter : ICborConverter
             innerType = parameters.ParameterType.GetGenericArguments()[0];
         }
 
-        CborOptions innerOptions = CborRegistry.Instance.GetBaseOptions(innerType);
-
         reader.ReadStartArray();
 
         List<object?> items = [];
         while (reader.PeekState() != CborReaderState.EndArray)
         {
-            object? item = CborSerializer.Deserialize(reader, innerOptions);
+            object? item = innerType.TryCallStaticRead(reader);
             items.Add(item);
         }
 
@@ -54,7 +53,11 @@ public sealed class ListConverter : ICborConverter
         writer.WriteStartArray(options.IsDefinite ? count : null);
 
         foreach (object? item in validValues)
-            CborSerializer.Serialize(writer, item, innerOptions);
+        {
+            List<object?> filteredProperties = PropertyResolver.GetFilteredProperties(item);
+            CborBase cborBase = (CborBase)item ?? throw new CborSerializationException("Null value for List");
+            cborBase.Write(writer, filteredProperties);
+        }
 
         writer.WriteEndArray();
     }

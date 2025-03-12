@@ -3,6 +3,7 @@ using Chrysalis.Cbor.Serialization.Exceptions;
 using Chrysalis.Cbor.Serialization.Registry;
 using Chrysalis.Cbor.Types;
 using Chrysalis.Cbor.Types.Primitives;
+using Chrysalis.Cbor.Utils;
 
 namespace Chrysalis.Cbor.Serialization.Converters.Custom;
 
@@ -14,8 +15,7 @@ public class ExactValueConverter : ICborConverter
             throw new CborException("Invalid value");
 
         Type T = options.RuntimeType!.GetGenericArguments()[0];
-        CborOptions tOptions = CborRegistry.Instance.GetBaseOptions(T);
-        object? deserialized = CborSerializer.Deserialize(reader, tOptions);
+        object? deserialized = T.TryCallStaticRead(reader);
         object exactValue = options.ExactValue;
         bool isMatch = deserialized switch
         {
@@ -31,15 +31,16 @@ public class ExactValueConverter : ICborConverter
         return deserialized;
     }
 
-public void Write(CborWriter writer, List<object?> value, CborOptions options)
-{
-    if (value == null || value.Count != 1)
-        throw new CborException("Invalid value list for ExactValue");
+    public void Write(CborWriter writer, List<object?> value, CborOptions options)
+    {
+        if (value == null || value.Count != 1)
+            throw new CborException("Invalid value list for ExactValue");
 
-    object? tValue = value[0] ?? throw new CborException("Null value for ExactValue");
-    Type T = options.RuntimeType!.GetGenericArguments()[0];
-    CborOptions tOptions = CborRegistry.Instance.GetBaseOptions(T);
+        object? tValue = value[0] ?? throw new CborException("Null value for ExactValue");
+        Type T = options.RuntimeType!.GetGenericArguments()[0];
 
-    CborSerializer.Serialize(writer, tValue, tOptions);
-}
+        List<object?> filteredProperties = PropertyResolver.GetFilteredProperties(tValue);
+        CborBase tValueCbor = (CborBase)tValue;
+        tValueCbor.Write(writer, filteredProperties);
+    }
 }

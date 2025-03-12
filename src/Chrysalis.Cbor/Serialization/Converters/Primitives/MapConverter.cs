@@ -1,13 +1,16 @@
 using System.Collections;
 using System.Formats.Cbor;
 using System.Runtime.CompilerServices;
+using Chrysalis.Cbor.Serialization.Exceptions;
 using Chrysalis.Cbor.Serialization.Registry;
+using Chrysalis.Cbor.Types;
 using Chrysalis.Cbor.Utils;
 
 namespace Chrysalis.Cbor.Serialization.Converters.Primitives;
 
 public sealed class MapConverter : ICborConverter
 {
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public object Read(CborReader reader, CborOptions options)
     {
         if (options.Constructor is null)
@@ -36,18 +39,15 @@ public sealed class MapConverter : ICborConverter
             if (entry.Key == null)
                 throw new InvalidOperationException("Dictionary key cannot be null");
 
-            // Get type information from the actual objects
-            Type keyType = entry.Key.GetType();
-            Type valueType = entry.Value?.GetType() ?? typeof(object);
+            List<object?> keyFilteredProperties = PropertyResolver.GetFilteredProperties(entry.Key);
+            CborBase? keyCborBase = entry.Key as CborBase;
 
-            CborOptions keyOptions = CborRegistry.Instance.GetBaseOptions(keyType);
-            CborOptions valueOptions = entry.Value != null
-                ? CborRegistry.Instance.GetBaseOptions(valueType)
-                : CborOptions.Default;
+            List<object?> valueFilteredProperties = PropertyResolver.GetFilteredProperties(entry.Value!);
+            CborBase? valueCborBase = entry.Value as CborBase;
 
             // Serialize key and value
-            CborSerializer.Serialize(writer, entry.Key, keyOptions);
-            CborSerializer.Serialize(writer, entry.Value, valueOptions);
+            keyCborBase!.Write(writer, keyFilteredProperties);
+            valueCborBase!.Write(writer, valueFilteredProperties);
         }
 
         writer.WriteEndMap();

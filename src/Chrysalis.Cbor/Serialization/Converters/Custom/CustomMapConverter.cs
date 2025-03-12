@@ -1,4 +1,5 @@
 using System.Formats.Cbor;
+using Chrysalis.Cbor.Types;
 using Chrysalis.Cbor.Utils;
 
 namespace Chrysalis.Cbor.Serialization.Converters.Custom;
@@ -37,6 +38,7 @@ public sealed class CustomMapConverter : ICborConverter
         for (int i = 0; i < value.Count; i++)
         {
             object? property = value[i];
+            CborBase? cborProperty = property as CborBase;
             if (property == null) continue; // Skip null properties
 
             // Write the key based on mapping type
@@ -58,7 +60,8 @@ public sealed class CustomMapConverter : ICborConverter
             }
 
             // Write the property value
-            CborSerializer.Serialize(writer, property, options);
+            List<object?> filteredProperties = PropertyResolver.GetFilteredProperties(property);
+            cborProperty!.Write(writer, filteredProperties);
         }
 
         writer.WriteEndMap();
