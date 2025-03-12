@@ -1,0 +1,13 @@
+[package]
+name = "plutus-vm-dotnet-rs"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib"]
+
+
+[dependencies]
+hex = "0.4"
+chrono = "0.4.39"
+pallas = { path = "../../../../../pallas/pallas", features = ["phase-two"] }

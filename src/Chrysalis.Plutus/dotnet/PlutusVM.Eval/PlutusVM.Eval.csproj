@@ -1,0 +1,47 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <Nullable>enable</Nullable>
+    <Version>0.6.0</Version>
+    <PackageId>Chrysalis.Plutus</PackageId>
+    <Authors>ricoquiblat@saib.dev</Authors>
+    <Company>SAIB Inc</Company>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageLicenseFile>LICENSE.md</PackageLicenseFile>
+  </PropertyGroup>
+
+  <Target Name="PreBuild" BeforeTargets="PreBuildEvent">
+    <Exec Command="./build-rs.sh" />
+  </Target>
+
+   <ItemGroup>
+    <None Update="*.so">
+      <Pack>true</Pack>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Link>%(FileName)%(Extension)</Link>
+    </None>
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="*.dylib">
+      <Pack>true</Pack>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Link>%(FileName)%(Extension)</Link>
+    </None>
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="lib/libplutus_vm_dotnet_rs.dylib">
+      <Link>libplutus_vm_dotnet_rs.dylib</Link>
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      <PackageCopyToOutput>true</PackageCopyToOutput>
+      <PackagePath>runtimes/osx-arm64/native</PackagePath>
+      <pack>true</pack>
+    </Content>
+  </ItemGroup>
+
+
+</Project>
