@@ -1,0 +1,1 @@
+namespace Chrysalis.Cbor.SourceGenerator;

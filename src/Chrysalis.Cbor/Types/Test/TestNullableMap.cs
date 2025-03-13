@@ -4,7 +4,6 @@ namespace Chrysalis.Cbor.Types.Test;
 
 // Creating a nullable serializable type
 [CborSerializable]
-[CborNullable]
 [CborMap]
 public partial record NullableTestMap(
     [property: CborProperty("0")]

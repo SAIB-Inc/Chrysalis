@@ -21,7 +21,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Chrysalis.Cbor.Generators\Chrysalis.Cbor.Generators.csproj" 
+    <ProjectReference Include="..\Chrysalis.Cbor.SourceGenerator\Chrysalis.Cbor.SourceGenerator.csproj" 
                       OutputItemType="Analyzer" 
     />
   </ItemGroup>

@@ -13,7 +13,7 @@ public sealed class CborMapAttribute : Attribute
     public CborMapAttribute() { }
 }
 
-[AttributeUsage(AttributeTargets.Class | AttributeTargets.Struct, Inherited = false, AllowMultiple = false)]
+[AttributeUsage(AttributeTargets.Property | AttributeTargets.Parameter, Inherited = false, AllowMultiple = false)]
 public sealed class CborNullableAttribute : Attribute
 {
     public CborNullableAttribute() { }

@@ -58,12 +58,12 @@ public abstract partial record TestUnion : CborBase<TestUnion>
 
 
     [CborSerializable]
-    [CborNullable]
     [CborMap]
     public partial record NullableTestMapUnion(
         [property: CborProperty("0")]
         int Value1,
         [property: CborProperty("1")]
+        [CborNullable]
         string Value2
     ) : CborBase<NullableTestMapUnion>;
 }
