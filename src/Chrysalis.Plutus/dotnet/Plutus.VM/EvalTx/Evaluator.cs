@@ -5,8 +5,8 @@ namespace Plutus.VM.EvalTx;
 
 public class Evaluator
 {
-    public IReadOnlyList<EvaluationResult> EvaluateTransaction(string txCborHex, string utxosCborHex) =>
-        NativeEvaluator.EvaluateTransaction(
+    public IReadOnlyList<EvaluationResult> EvaluateTx(string txCborHex, string utxosCborHex) =>
+        NativeEvaluator.EvaluateTx(
             txCborHex, utxosCborHex
         );
 

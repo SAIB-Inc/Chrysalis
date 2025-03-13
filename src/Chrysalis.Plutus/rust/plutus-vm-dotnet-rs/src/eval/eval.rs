@@ -36,11 +36,11 @@ impl std::error::Error for EvaluationError {}
 
 pub type EvaluationResult<T> = Result<T, EvaluationError>;
 
-pub struct TransactionEvaluator;
+pub struct TxEvaluator;
 
-impl TransactionEvaluator {
+impl TxEvaluator {
     pub fn new() -> Self {
-        TransactionEvaluator
+        TxEvaluator
     }
 
     pub fn evaluate(
@@ -65,10 +65,10 @@ impl TransactionEvaluator {
     }
 }
 
-pub fn evaluate_transaction(
+pub fn evaluate_tx(
     transaction_cbor: &[u8],
     utxo_cbor: &[u8],
 ) -> EvaluationResult<Vec<TxEvalResult>> {
-    let evaluator = TransactionEvaluator::new();
+    let evaluator = TxEvaluator::new();
     evaluator.evaluate(transaction_cbor, utxo_cbor)
 }

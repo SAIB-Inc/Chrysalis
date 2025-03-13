@@ -3,14 +3,13 @@ using System.Runtime.InteropServices;
 using Plutus.VM.Models;
 using Plutus.VM.Models.Enums;
 using Plutus.VM.Models.Interop;
-using Plutus.VM.Utils;
 
 namespace Plutus.VM.Interop;
 
 internal static class NativeEvaluator
 {
 
-    internal static IReadOnlyList<EvaluationResult> EvaluateTransaction(string txCborHex, string utxosCborHex)
+    internal static IReadOnlyList<EvaluationResult> EvaluateTx(string txCborHex, string utxosCborHex)
     {
         ArgumentException.ThrowIfNullOrEmpty(txCborHex, nameof(txCborHex));
         ArgumentException.ThrowIfNullOrEmpty(utxosCborHex, nameof(utxosCborHex));
@@ -18,10 +17,10 @@ internal static class NativeEvaluator
         try
         {
 
-            byte[] transactionCborBytes = Converter.HexToBytes(txCborHex);
-            byte[] utxosCborBytes = Converter.HexToBytes(utxosCborHex);
+            byte[] transactionCborBytes = Convert.FromHexString(txCborHex);
+            byte[] utxosCborBytes = Convert.FromHexString(utxosCborHex);
 
-            var nativeResults = EvaluateNative(transactionCborBytes, utxosCborBytes);
+            var nativeResults = EvaluateRaw(transactionCborBytes, utxosCborBytes);
 
             return [.. nativeResults
                 .Select(native => new EvaluationResult(
@@ -35,7 +34,7 @@ internal static class NativeEvaluator
         }
     }
 
-    internal static List<TxEvalResult> EvaluateNative(byte[] transactionCborBytes, byte[] utxosCborBytes)
+    internal static List<TxEvalResult> EvaluateRaw(byte[] transactionCborBytes, byte[] utxosCborBytes)
     {
         TxEvalResultArray resultArray = NativeMethods.EvalTx(
             transactionCborBytes,
