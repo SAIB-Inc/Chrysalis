@@ -2,7 +2,7 @@ mod eval;
 mod interop;
 
 use interop::CTxEvalResultArray;
-use interop::FfiConverter;
+use interop::Interop;
 
 #[no_mangle]
 pub unsafe extern "C" fn eval_tx(
@@ -11,7 +11,7 @@ pub unsafe extern "C" fn eval_tx(
     resolved_utxo_cbor_bytes: *const u8,
     resolved_utxo_cbor_len: usize,
 ) -> CTxEvalResultArray {
-    FfiConverter::evaluate_transaction(
+    Interop::evaluate_transaction(
         transaction_cbor_bytes,
         transaction_cbor_len,
         resolved_utxo_cbor_bytes,

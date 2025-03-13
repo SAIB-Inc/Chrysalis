@@ -3,9 +3,9 @@ use pallas::ledger::validate::uplc::tx::TxEvalResult;
 use std::os::raw::{c_uint, c_ulong};
 use std::slice;
 
-pub struct FfiConverter;
+pub struct Interop;
 
-impl FfiConverter {
+impl Interop {
     pub unsafe fn bytes_from_ptr(ptr: *const u8, len: usize) -> Option<&'static [u8]> {
         if ptr.is_null() || len == 0 {
             return None;
