@@ -20,7 +20,7 @@ internal static class NativeEvaluator
             byte[] transactionCborBytes = Convert.FromHexString(txCborHex);
             byte[] utxosCborBytes = Convert.FromHexString(utxosCborHex);
 
-            var nativeResults = EvaluateRaw(transactionCborBytes, utxosCborBytes);
+            var nativeResults = EvaluateTxRaw(transactionCborBytes, utxosCborBytes);
 
             return [.. nativeResults
                 .Select(native => new EvaluationResult(
@@ -34,7 +34,7 @@ internal static class NativeEvaluator
         }
     }
 
-    internal static List<TxEvalResult> EvaluateRaw(byte[] transactionCborBytes, byte[] utxosCborBytes)
+    internal static List<TxEvalResult> EvaluateTxRaw(byte[] transactionCborBytes, byte[] utxosCborBytes)
     {
         TxEvalResultArray resultArray = NativeMethods.EvalTx(
             transactionCborBytes,
