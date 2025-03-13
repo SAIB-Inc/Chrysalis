@@ -5,7 +5,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <Nullable>enable</Nullable>
-    <Version>0.6.0</Version>
+    <Version>0.1.0</Version>
     <PackageId>Chrysalis.Plutus</PackageId>
     <Authors>ricoquiblat@saib.dev</Authors>
     <Company>SAIB Inc</Company>
@@ -33,7 +33,18 @@
     </None>
   </ItemGroup>
 
-  <ItemGroup>
+  <ItemGroup Condition="$([MSBuild]::IsOSPlatform('Linux'))">
+    <Content Include="lib/libpallas_dotnet_rs.so">
+      <Link>libpallas_dotnet_rs.so</Link>
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      <PackageCopyToOutput>true</PackageCopyToOutput>
+      <PackagePath>runtimes/linux-x64/native</PackagePath>
+      <pack>true</pack>
+    </Content>
+  </ItemGroup>
+
+
+  <ItemGroup Condition="$([MSBuild]::IsOSPlatform('OSX'))">
     <Content Include="lib/libplutus_vm_dotnet_rs.dylib">
       <Link>libplutus_vm_dotnet_rs.dylib</Link>
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
@@ -42,6 +53,8 @@
       <pack>true</pack>
     </Content>
   </ItemGroup>
+
+
 
 
 </Project>
