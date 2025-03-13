@@ -35,7 +35,7 @@ impl Interop {
             None => return CTxEvalResultArray::null(),
         };
 
-        match eval::eval::evaluate_transaction(tx_bytes, utxo_bytes) {
+        match eval::evaluate_transaction(tx_bytes, utxo_bytes) {
             Ok(results) => Self::results_to_c_array(results),
             Err(_) => CTxEvalResultArray::null(),
         }
