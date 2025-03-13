@@ -3,7 +3,7 @@ using System.Runtime.InteropServices;
 using Chrysalis.Plutus.Models;
 using Chrysalis.Plutus.Models.Enums;
 using Chrysalis.Plutus.Models.Interop;
-using PlutusVM.Eval.Utils;
+using Chrysalis.Plutus.Utils;
 
 namespace Chrysalis.Plutus.Interop;
 
