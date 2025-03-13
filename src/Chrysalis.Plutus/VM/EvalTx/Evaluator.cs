@@ -9,18 +9,23 @@ namespace Chrysalis.Plutus.VM.EvalTx;
 
 public static class Evaluator
 {
+
     public static IReadOnlyList<EvaluationResult> EvaluateTx(string txCborHex, string utxosCborHex)
     {
+        byte[] txCborBytes = Convert.FromHexString(txCborHex);
+        byte[] utxosCborBytes = Convert.FromHexString(utxosCborHex);
 
+        return EvaluateTx(txCborBytes, utxosCborBytes);
+    }
 
-        byte[] txBytes = Convert.FromHexString(txCborHex);
-        byte[] utxoBytes = Convert.FromHexString(utxosCborHex);
+    public static IReadOnlyList<EvaluationResult> EvaluateTx(byte[] txCborBytes, byte[] utxosCborBytes)
+    {
 
         TxEvalResultArray resultArray = NativeMethods.EvalTxRaw(
-            txBytes,
-            (nuint)txBytes.Length,
-            utxoBytes,
-            (nuint)utxoBytes.Length
+            txCborBytes,
+            (nuint)txCborBytes.Length,
+            utxosCborBytes,
+            (nuint)utxosCborBytes.Length
         );
 
         try
