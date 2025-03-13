@@ -9,9 +9,9 @@ internal static partial class NativeMethods
 
     [LibraryImport(LibraryName, EntryPoint = "eval_tx")]
     public static partial TxEvalResultArray EvalTx(
-        [In] byte[] txCborBytes, 
-        nuint txCborBytesLength, 
-        [In] byte[] utxoCborBytes, 
+        [In] byte[] txCborBytes,
+        nuint txCborBytesLength,
+        [In] byte[] utxoCborBytes,
         nuint utxoCborBytesLength
     );
 
