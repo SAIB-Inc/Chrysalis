@@ -1,6 +1,6 @@
 {
     "deno.enable": false,
     "rust-analyzer.linkedProjects": [
-    "src/Chrysalis.Plutus/rust/plutus-vm-dotnet-rs/Cargo.toml"
+    "src/Chrysalis.Plutus/Chrysalis.Plutus.VM/Dependencies/plutus-vm-dotnet-rs/Cargo.toml"
   ]
 }

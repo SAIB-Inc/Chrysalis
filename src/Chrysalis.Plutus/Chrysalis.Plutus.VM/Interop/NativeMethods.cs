@@ -1,14 +1,14 @@
 using System.Runtime.InteropServices;
-using Plutus.VM.Models.Interop;
+using Chrysalis.Plutus.VM.Models.Interop;
 
-namespace  Plutus.VM.Interop;
+namespace Chrysalis.Plutus.VM.Interop;
 
 internal static partial class NativeMethods
 {
     private const string LibraryName = "plutus_vm_dotnet_rs";
 
     [LibraryImport(LibraryName, EntryPoint = "eval_tx")]
-    public static partial TxEvalResultArray EvalTx(
+    public static partial TxEvalResultArray EvalTxRaw(
         [In] byte[] txCborBytes,
         nuint txCborBytesLength,
         [In] byte[] utxoCborBytes,

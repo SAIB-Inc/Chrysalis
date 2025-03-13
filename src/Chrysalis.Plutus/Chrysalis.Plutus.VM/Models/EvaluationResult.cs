@@ -1,5 +1,5 @@
-using Plutus.VM.Models.Enums;
+using Chrysalis.Plutus.VM.Models.Enums;
 
-namespace Plutus.VM.Models;
+namespace Chrysalis.Plutus.VM.Models;
 
 public record EvaluationResult(RedeemerTag RedeemerTag, uint Index, ExUnits ExUnits);

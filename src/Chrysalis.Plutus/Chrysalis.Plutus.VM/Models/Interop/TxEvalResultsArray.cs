@@ -1,6 +1,6 @@
 using System.Runtime.InteropServices;
 
-namespace Plutus.VM.Models.Interop;
+namespace Chrysalis.Plutus.VM.Models.Interop;
 
 [StructLayout(LayoutKind.Sequential)]
 internal struct TxEvalResultArray
@@ -9,5 +9,6 @@ internal struct TxEvalResultArray
 
     public nuint Length;
 
-    public bool IsEmpty => Ptr == IntPtr.Zero || Length == 0;
+    public readonly bool IsEmpty => Ptr == IntPtr.Zero || Length == 0;
+
 }

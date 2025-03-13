@@ -1,6 +1,6 @@
 using System.Runtime.InteropServices;
 
-namespace Plutus.VM.Models.Interop;
+namespace Chrysalis.Plutus.VM.Models.Interop;
 
 [StructLayout(LayoutKind.Sequential)]
 internal struct TxEvalResult

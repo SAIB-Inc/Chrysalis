@@ -1,30 +1,131 @@
-// core/utils.rs - Utility functions for transaction evaluation
-use pallas::codec::minicbor::{self, Decode};
-use pallas::codec::utils::{CborWrap, KeepRaw};
-use pallas::ledger::primitives as pallas_primitives;
+use pallas::codec::minicbor::{self, Decode, Encode};
+use pallas::codec::utils::{CborWrap, KeepRaw, KeyValuePairs};
 use pallas::ledger::primitives::conway::{
     CostModels, DRepVotingThresholds, MintedTx, NativeScript, PoolVotingThresholds,
-    PseudoDatumOption, PseudoScript, PseudoTransactionOutput,
+    PseudoDatumOption, PseudoScript, PseudoTransactionOutput, TransactionOutput,
 };
-use pallas::ledger::primitives::ExUnits;
-use pallas::ledger::primitives::{PlutusData, RationalNumber};
-use pallas::ledger::traverse::{Era, MultiEraInput, MultiEraOutput};
-use pallas::ledger::validate::utils::{ConwayProtParams, EraCbor, TxoRef, UtxoMap};
+use pallas::ledger::primitives::{
+    self as pallas_primitives, ExUnits, PlutusData, RationalNumber, TransactionInput,
+};
+use pallas::ledger::traverse::{Era, MultiEraInput, MultiEraOutput, MultiEraTx};
+use pallas::ledger::validate::uplc::script_context::SlotConfig;
+use pallas::ledger::validate::uplc::tx::{eval_tx as eval_tx_raw, TxEvalResult};
+use pallas::ledger::validate::utils::{
+    ConwayProtParams, EraCbor, MultiEraProtocolParameters, TxoRef, UtxoMap,
+};
 use std::borrow::Cow;
+use std::os::raw::{c_uint, c_ulong};
+use std::slice;
 
-use super::eval::{EvaluationError, EvaluationResult, ResolvedInput};
-
-pub fn decode_transaction(tx_cbor: &[u8]) -> EvaluationResult<MintedTx<'_>> {
-    minicbor::decode(tx_cbor)
-        .map_err(|e| EvaluationError::DecodingError(format!("Failed to decode transaction: {}", e)))
+#[repr(C)]
+pub struct CTxEvalResult {
+    pub tag: u8,
+    pub index: c_uint,
+    pub memory: c_ulong,
+    pub steps: c_ulong,
 }
 
-pub fn build_utxo_map(resolved_inputs: Vec<ResolvedInput>) -> EvaluationResult<UtxoMap> {
+#[repr(C)]
+pub struct CTxEvalResultArray {
+    ptr: *mut CTxEvalResult,
+    len: usize,
+}
+
+#[derive(Decode, Encode, Clone)]
+pub struct ResolvedInput {
+    #[n(0)]
+    pub input: TransactionInput,
+    #[n(1)]
+    pub output: TransactionOutput,
+}
+
+
+impl CTxEvalResultArray {
+    fn null() -> Self {
+        CTxEvalResultArray {
+            ptr: std::ptr::null_mut(),
+            len: 0,
+        }
+    }
+
+    fn from_vec(mut vec: Vec<CTxEvalResult>) -> Self {
+        if vec.is_empty() {
+            return Self::null();
+        }
+
+        let ptr = vec.as_mut_ptr();
+        let len = vec.len();
+
+        std::mem::forget(vec);
+
+        CTxEvalResultArray { ptr, len }
+    }
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn eval_tx(
+    transaction_cbor_bytes: *const u8,
+    transaction_cbor_len: usize,
+    resolved_utxo_cbor_bytes: *const u8,
+    resolved_utxo_cbor_len: usize,
+) -> CTxEvalResultArray {
+    let transaction_cbor =
+        bytes_from_raw_parts(transaction_cbor_bytes, transaction_cbor_len).unwrap();
+
+    let utxo_cbor = bytes_from_raw_parts(resolved_utxo_cbor_bytes, resolved_utxo_cbor_len).unwrap();
+
+    let c_results = eval(transaction_cbor, utxo_cbor)
+        .unwrap()
+        .into_iter()
+        .map(|result| CTxEvalResult {
+            tag: result.tag as u8,
+            index: result.index,
+            memory: result.units.mem,
+            steps: result.units.steps,
+        })
+        .collect();
+
+    CTxEvalResultArray::from_vec(c_results)
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn free_eval_results(results: *mut CTxEvalResult, len: usize) {
+    if !results.is_null() && len > 0 {
+        let _ = Vec::from_raw_parts(results, len, len);
+    }
+}
+
+unsafe fn bytes_from_raw_parts(ptr: *const u8, len: usize) -> Option<&'static [u8]> {
+    if ptr.is_null() || len == 0 {
+        return None;
+    }
+    Some(slice::from_raw_parts(ptr, len))
+}
+
+fn eval(transaction_cbor: &[u8], utxo_cbor: &[u8]) -> Result<Vec<TxEvalResult>, String> {
+    let mtx: MintedTx = minicbor::decode(transaction_cbor)
+        .map_err(|e| format!("Failed to decode transaction: {}", e))?;
+
+    let metx = MultiEraTx::from_conway(&mtx);
+
+    let resolved_inputs: Vec<ResolvedInput> =
+        minicbor::decode(utxo_cbor).map_err(|e| format!("Failed to decode UTXOs: {}", e))?;
+
+    let utxos = build_utxo_map(resolved_inputs);
+
+    let prot_params = MultiEraProtocolParameters::Conway(protocol_params());
+
+    eval_tx_raw(&metx, &prot_params, &utxos, &SlotConfig::default())
+        .map_err(|e| format!("Evaluation failed: {}", e))
+}
+
+fn build_utxo_map(resolved_inputs: Vec<ResolvedInput>) -> UtxoMap {
     let mut utxos: UtxoMap = UtxoMap::new();
 
     for resolved_input in resolved_inputs {
         let multi_era_in: MultiEraInput =
             MultiEraInput::AlonzoCompatible(Box::new(Cow::Owned(resolved_input.input)));
+
         match resolved_input.output {
             PseudoTransactionOutput::Legacy(output) => {
                 let multi_era_out: MultiEraOutput =
@@ -42,12 +143,7 @@ pub fn build_utxo_map(resolved_inputs: Vec<ResolvedInput>) -> EvaluationResult<U
                                 &mut minicbor::Decoder::new(new_datum_buf.as_slice()),
                                 &mut (),
                             )
-                            .map_err(|e| {
-                                EvaluationError::DecodingError(format!(
-                                    "Failed to encode datum: {}",
-                                    e
-                                ))
-                            })?;
+                            .unwrap_or_else(|_| panic!("Failed to decode datum"));
                             Some(PseudoDatumOption::Data(CborWrap(keep_raw_new_datum)))
                         }
                         PseudoDatumOption::Hash(_) => None,
@@ -65,13 +161,7 @@ pub fn build_utxo_map(resolved_inputs: Vec<ResolvedInput>) -> EvaluationResult<U
                                 &mut minicbor::Decoder::new(&new_script_buf.as_slice()),
                                 &mut (),
                             )
-                            .map_err(|e| {
-                                EvaluationError::DecodingError(format!(
-                                    "Failed to encode script ref: {}",
-                                    e
-                                ))
-                            })?;
-
+                            .unwrap_or_else(|_| panic!("Failed to decode script"));
                             Some(CborWrap(PseudoScript::NativeScript(keep_raw_new_script)))
                         }
                         PseudoScript::PlutusV1Script(script) => {
@@ -103,10 +193,10 @@ pub fn build_utxo_map(resolved_inputs: Vec<ResolvedInput>) -> EvaluationResult<U
         }
     }
 
-    Ok(utxos)
+    utxos
 }
 
-pub fn create_protocol_params() -> ConwayProtParams {
+fn protocol_params() -> ConwayProtParams {
     ConwayProtParams {
         system_start: chrono::DateTime::parse_from_rfc3339("2022-10-25T00:00:00Z").unwrap(),
         epoch_length: 432000,
@@ -149,6 +239,7 @@ pub fn create_protocol_params() -> ConwayProtParams {
                 82523, 4, 265318, 0, 4, 0, 85931, 32, 205665, 812, 1, 1, 41182, 32, 212342, 32,
                 31220, 32, 32696, 32, 43357, 32, 32247, 32, 38314, 32, 9462713, 1021, 10,
             ]),
+
             plutus_v2: Some(vec![
                 205665,
                 812,
@@ -348,9 +439,9 @@ pub fn create_protocol_params() -> ConwayProtParams {
                 107878, 680, 0, 1, 95336, 1, 281145, 18848, 0, 1, 180194, 159, 1, 1, 158519, 8942,
                 0, 1, 159378, 8813, 0, 1, 107490, 3298, 1, 106057, 655, 1, 1964219, 24520, 3,
             ]),
-            unknown: pallas::codec::utils::KeyValuePairs::from(vec![]),
+            unknown: KeyValuePairs::from(vec![]),
         },
-        execution_costs: pallas::ledger::primitives::ExUnitPrices {
+        execution_costs: pallas_primitives::ExUnitPrices {
             mem_price: RationalNumber {
                 numerator: 577,
                 denominator: 10000,
