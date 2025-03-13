@@ -10,16 +10,16 @@ namespace Chrysalis.Cbor.Types;
 /// <summary>
 /// Base class for all CBOR-serializable types
 /// </summary>
-public abstract partial record CborBase
+public abstract partial record CborBase<T>
 {
     // Raw serialized data for caching and quick re-serialization
     public ReadOnlyMemory<byte>? Raw { get; set; }
 
-    // Static methods for serialization/deserialization with converter delegation
-    // These are implemented by source generator for each type
-    public virtual void Write(CborWriter writer, List<object?> value)
-        => throw new NotImplementedException("This method should be implemented by source generator");
+    // // Static methods for serialization/deserialization with converter delegation
+    // // These are implemented by source generator for each type
+    // public static void Write(CborWriter writer, T value)
+    //     => throw new NotImplementedException("This method should be implemented by source generator");
 
-    public static object? Read(CborReader reader)
-        => throw new NotImplementedException("This method should be implemented by source generator");
+    // public static T? Read(CborReader reader)
+    //     => throw new NotImplementedException("This method should be implemented by source generator");
 }

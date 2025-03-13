@@ -1,27 +1,28 @@
-using Chrysalis.Cbor.Attributes;
-using Chrysalis.Cbor.Serialization.Converters.Custom;
-using Chrysalis.Cbor.Serialization.Converters.Primitives;
+using Chrysalis.Cbor.Serialization.Attributes;
 
 namespace Chrysalis.Cbor.Types.Custom;
 
-[CborConverter(typeof(UnionConverter))]
-public abstract partial record CborMaybeIndefList<T> : CborBase where T : CborBase;
+[CborSerializable]
+[CborUnion]
+public abstract partial record CborMaybeIndefList<T> : CborBase<CborMaybeIndefList<T>>
+{
+    [CborSerializable]
+    public partial record CborDefList(List<T> Value) : CborMaybeIndefList<T>;
 
 
-[CborConverter(typeof(ListConverter))]
-[CborOptions(IsDefinite = true)]
-public partial record CborDefList<T>(List<T> Value) : CborMaybeIndefList<T> where T : CborBase;
+    [CborSerializable]
+    public partial record CborIndefList(List<T> Value) : CborMaybeIndefList<T>;
 
 
-[CborConverter(typeof(ListConverter))]
-public partial record CborIndefList<T>(List<T> Value) : CborMaybeIndefList<T> where T : CborBase;
+    [CborSerializable]
+    [CborTag(258)]
+    public partial record CborDefListWithTag(List<T> Value) : CborMaybeIndefList<T>;
 
 
-[CborConverter(typeof(ListConverter))]
-[CborOptions(IsDefinite = true, Tag = 258)]
-public partial record CborDefListWithTag<T>(List<T> Value) : CborMaybeIndefList<T> where T : CborBase;
-
-
-[CborConverter(typeof(ListConverter))]
-[CborOptions(IsDefinite = false, Tag = 258)]
-public partial record CborIndefListWithTag<T>(List<T> Value) : CborMaybeIndefList<T> where T : CborBase;
+    [CborSerializable]
+    [CborTag(258)]
+    public partial record CborIndefListWithTag(
+        [CborIndefinite]
+        List<T> Value
+    ) : CborMaybeIndefList<T>;
+}

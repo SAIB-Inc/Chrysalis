@@ -5,45 +5,51 @@ using Chrysalis.Cbor.Cardano.Types.Block.Transaction.Governance;
 using Chrysalis.Cbor.Types.Custom;
 using Chrysalis.Cbor.Types.Primitives;
 using Chrysalis.Cbor.Types;
+using Chrysalis.Cbor.Serialization.Attributes;
 
 namespace Chrysalis.Cbor.Cardano.Types.Block.Transaction.Body.Certificates;
 
-[CborConverter(typeof(UnionConverter))]
-public abstract partial record Certificate : CborBase;
+[CborSerializable]
+[CborUnion]
+public abstract partial record Certificate : CborBase<Certificate>;
 
 
-[CborConverter(typeof(CustomListConverter))]
+[CborSerializable]
+[CborList]
 public partial record StakeRegistration(
-    [CborIndex(0)] CborInt Tag,
+    [CborIndex(0)] int Tag,
     [CborIndex(1)] Credential StakeCredential
 ) : Certificate;
 
 
-[CborConverter(typeof(CustomListConverter))]
+[CborSerializable]
+[CborList]
 public partial record StakeDeregistration(
-    [CborIndex(0)] CborInt Tag,
+    [CborIndex(0)] int Tag,
     [CborIndex(1)] Credential StakeCredential
 ) : Certificate;
 
 
-[CborConverter(typeof(CustomListConverter))]
+[CborSerializable]
+[CborList]
 public partial record StakeDelegation(
-    [CborIndex(0)] CborInt Tag,
+    [CborIndex(0)] int Tag,
     [CborIndex(1)] Credential StakeCredential,
-    [CborIndex(2)] CborBytes PoolKeyHash
+    [CborIndex(2)] byte[] PoolKeyHash
 ) : Certificate;
 
 
-[CborConverter(typeof(CustomListConverter))]
+[CborSerializable]
+[CborList]
 public partial record PoolRegistration(
-    [CborIndex(0)] CborInt Tag,
-    [CborIndex(1)] CborBytes Operator,
-    [CborIndex(2)] CborBytes VrfKeyHash,
-    [CborIndex(3)] CborUlong Pledge,
-    [CborIndex(4)] CborUlong Cost,
+    [CborIndex(0)] int Tag,
+    [CborIndex(1)] byte[] Operator,
+    [CborIndex(2)] byte[] VrfKeyHash,
+    [CborIndex(3)] ulong Pledge,
+    [CborIndex(4)] ulong Cost,
     [CborIndex(5)] CborRationalNumber Margin,
     [CborIndex(6)] RewardAccount RewardAccount,
-    [CborIndex(7)] CborMaybeIndefList<CborBytes> PoolOwners,
+    [CborIndex(7)] CborMaybeIndefList<byte[]> PoolOwners,
     [CborIndex(8)] CborMaybeIndefList<Relay> Relay,
     [CborIndex(9)] CborNullable<PoolMetadata> PoolMetadata
 ) : Certificate;
