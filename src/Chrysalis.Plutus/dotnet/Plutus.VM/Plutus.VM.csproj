@@ -6,7 +6,7 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <Nullable>enable</Nullable>
     <Version>0.1.0</Version>
-    <PackageId>Chrysalis.Plutus</PackageId>
+    <PackageId>Plutus.VM</PackageId>
     <Authors>ricoquiblat@saib.dev</Authors>
     <Company>SAIB Inc</Company>
     <PackageReadmeFile>README.md</PackageReadmeFile>

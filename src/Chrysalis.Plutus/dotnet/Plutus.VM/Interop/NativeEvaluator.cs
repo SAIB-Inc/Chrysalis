@@ -1,11 +1,11 @@
 
 using System.Runtime.InteropServices;
-using Chrysalis.Plutus.Models;
-using Chrysalis.Plutus.Models.Enums;
-using Chrysalis.Plutus.Models.Interop;
-using Chrysalis.Plutus.Utils;
+using Plutus.VM.Models;
+using Plutus.VM.Models.Enums;
+using Plutus.VM.Models.Interop;
+using Plutus.VM.Utils;
 
-namespace Chrysalis.Plutus.Interop;
+namespace Plutus.VM.Interop;
 
 internal static class NativeEvaluator
 {

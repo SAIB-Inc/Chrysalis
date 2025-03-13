@@ -1,4 +1,4 @@
-namespace Chrysalis.Plutus.Utils;
+namespace Plutus.VM.Utils;
 
 internal static class Converter
 {

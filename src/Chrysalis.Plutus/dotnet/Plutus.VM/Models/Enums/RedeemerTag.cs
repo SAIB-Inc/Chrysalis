@@ -1,4 +1,4 @@
-namespace Chrysalis.Plutus.Models.Enums;
+namespace Plutus.VM.Models.Enums;
 
 public enum RedeemerTag
 {

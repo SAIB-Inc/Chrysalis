@@ -1,7 +1,7 @@
 using System.Runtime.InteropServices;
-using Chrysalis.Plutus.Models.Interop;
+using Plutus.VM.Models.Interop;
 
-namespace Chrysalis.Plutus.Interop;
+namespace  Plutus.VM.Interop;
 
 internal static partial class NativeMethods
 {

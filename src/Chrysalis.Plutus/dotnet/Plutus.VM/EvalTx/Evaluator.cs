@@ -1,7 +1,7 @@
-﻿using Chrysalis.Plutus.Models;
-using Chrysalis.Plutus.Interop;
+﻿using Plutus.VM.Models;
+using Plutus.VM.Interop;
 
-namespace Chrysalis.Plutus.Eval;
+namespace Plutus.VM.EvalTx;
 
 public class Evaluator
 {
