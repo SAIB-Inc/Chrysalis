@@ -1,17 +1,18 @@
 // core/utils.rs - Utility functions for transaction evaluation
 use pallas::codec::minicbor::{self, Decode};
-use pallas::ledger::primitives as pallas_primitives;
 use pallas::codec::utils::{CborWrap, KeepRaw};
-use pallas::ledger::primitives::{PlutusData, RationalNumber};
+use pallas::ledger::primitives as pallas_primitives;
 use pallas::ledger::primitives::conway::{
-    CostModels, DRepVotingThresholds, MintedTx, NativeScript, PoolVotingThresholds, PseudoDatumOption, PseudoScript, PseudoTransactionOutput
+    CostModels, DRepVotingThresholds, MintedTx, NativeScript, PoolVotingThresholds,
+    PseudoDatumOption, PseudoScript, PseudoTransactionOutput,
 };
-use pallas::ledger::validate::utils::{ConwayProtParams, UtxoMap, EraCbor, TxoRef};
-use pallas::ledger::traverse::{Era, MultiEraInput, MultiEraOutput};
 use pallas::ledger::primitives::ExUnits;
+use pallas::ledger::primitives::{PlutusData, RationalNumber};
+use pallas::ledger::traverse::{Era, MultiEraInput, MultiEraOutput};
+use pallas::ledger::validate::utils::{ConwayProtParams, EraCbor, TxoRef, UtxoMap};
 use std::borrow::Cow;
 
-use crate::eval::types::{ResolvedInput, EvaluationError, EvaluationResult};
+use super::eval::{EvaluationError, EvaluationResult, ResolvedInput};
 
 pub fn decode_transaction(tx_cbor: &[u8]) -> EvaluationResult<MintedTx<'_>> {
     minicbor::decode(tx_cbor)
@@ -41,11 +42,14 @@ pub fn build_utxo_map(resolved_inputs: Vec<ResolvedInput>) -> EvaluationResult<U
                                 &mut minicbor::Decoder::new(new_datum_buf.as_slice()),
                                 &mut (),
                             )
-                            .map_err(|e| EvaluationError::DecodingError(
-                                format!("Failed to encode datum: {}", e)
-                            ))?;
+                            .map_err(|e| {
+                                EvaluationError::DecodingError(format!(
+                                    "Failed to encode datum: {}",
+                                    e
+                                ))
+                            })?;
                             Some(PseudoDatumOption::Data(CborWrap(keep_raw_new_datum)))
-                        },
+                        }
                         PseudoDatumOption::Hash(_) => None,
                     },
                     None => None,
@@ -61,9 +65,12 @@ pub fn build_utxo_map(resolved_inputs: Vec<ResolvedInput>) -> EvaluationResult<U
                                 &mut minicbor::Decoder::new(&new_script_buf.as_slice()),
                                 &mut (),
                             )
-                            .map_err(|e| EvaluationError::DecodingError(
-                                format!("Failed to encode script ref: {}", e)
-                            ))?;
+                            .map_err(|e| {
+                                EvaluationError::DecodingError(format!(
+                                    "Failed to encode script ref: {}",
+                                    e
+                                ))
+                            })?;
 
                             Some(CborWrap(PseudoScript::NativeScript(keep_raw_new_script)))
                         }
@@ -79,7 +86,6 @@ pub fn build_utxo_map(resolved_inputs: Vec<ResolvedInput>) -> EvaluationResult<U
                     },
                     None => None,
                 };
-               
 
                 let tx_out: pallas_primitives::conway::MintedTransactionOutput =
                     pallas_primitives::conway::PseudoTransactionOutput::PostAlonzo(
@@ -96,10 +102,9 @@ pub fn build_utxo_map(resolved_inputs: Vec<ResolvedInput>) -> EvaluationResult<U
             }
         }
     }
-    
+
     Ok(utxos)
 }
-
 
 pub fn create_protocol_params() -> ConwayProtParams {
     ConwayProtParams {
@@ -145,18 +150,181 @@ pub fn create_protocol_params() -> ConwayProtParams {
                 31220, 32, 32696, 32, 43357, 32, 32247, 32, 38314, 32, 9462713, 1021, 10,
             ]),
             plutus_v2: Some(vec![
-                205665, 812, 1, 1, 1000, 571, 0, 1, 1000, 24177, 4, 1, 1000, 32, 117366, 10475, 4,
-                23000, 100, 23000, 100, 23000, 100, 23000, 100, 23000, 100, 23000, 100, 100, 100,
-                23000, 100, 19537, 32, 175354, 32, 46417, 4, 221973, 511, 0, 1, 89141, 32, 497525,
-                14068, 4, 2, 196500, 453240, 220, 0, 1, 1, 1000, 28662, 4, 2, 245000, 216773, 62,
-                1, 1060367, 12586, 1, 208512, 421, 1, 187000, 1000, 52998, 1, 80436, 32, 43249, 32,
-                1000, 32, 80556, 1, 57667, 4, 1000, 10, 197145, 156, 1, 197145, 156, 1, 204924,
-                473, 1, 208896, 511, 1, 52467, 32, 64832, 32, 65493, 32, 22558, 32, 16563, 32,
-                76511, 32, 196500, 453240, 220, 0, 1, 1, 69522, 11687, 0, 1, 60091, 32, 196500,
-                453240, 220, 0, 1, 1, 196500, 453240, 220, 0, 1, 1, 1159724, 392670, 0, 2, 806990,
-                30482, 4, 1927926, 82523, 4, 265318, 0, 4, 0, 85931, 32, 205665, 812, 1, 1, 41182,
-                32, 212342, 32, 31220, 32, 32696, 32, 43357, 32, 32247, 32, 38314, 32, 20000000000,
-                20000000000, 9462713, 1021, 10, 20000000000, 0, 20000000000,
+                205665,
+                812,
+                1,
+                1,
+                1000,
+                571,
+                0,
+                1,
+                1000,
+                24177,
+                4,
+                1,
+                1000,
+                32,
+                117366,
+                10475,
+                4,
+                23000,
+                100,
+                23000,
+                100,
+                23000,
+                100,
+                23000,
+                100,
+                23000,
+                100,
+                23000,
+                100,
+                100,
+                100,
+                23000,
+                100,
+                19537,
+                32,
+                175354,
+                32,
+                46417,
+                4,
+                221973,
+                511,
+                0,
+                1,
+                89141,
+                32,
+                497525,
+                14068,
+                4,
+                2,
+                196500,
+                453240,
+                220,
+                0,
+                1,
+                1,
+                1000,
+                28662,
+                4,
+                2,
+                245000,
+                216773,
+                62,
+                1,
+                1060367,
+                12586,
+                1,
+                208512,
+                421,
+                1,
+                187000,
+                1000,
+                52998,
+                1,
+                80436,
+                32,
+                43249,
+                32,
+                1000,
+                32,
+                80556,
+                1,
+                57667,
+                4,
+                1000,
+                10,
+                197145,
+                156,
+                1,
+                197145,
+                156,
+                1,
+                204924,
+                473,
+                1,
+                208896,
+                511,
+                1,
+                52467,
+                32,
+                64832,
+                32,
+                65493,
+                32,
+                22558,
+                32,
+                16563,
+                32,
+                76511,
+                32,
+                196500,
+                453240,
+                220,
+                0,
+                1,
+                1,
+                69522,
+                11687,
+                0,
+                1,
+                60091,
+                32,
+                196500,
+                453240,
+                220,
+                0,
+                1,
+                1,
+                196500,
+                453240,
+                220,
+                0,
+                1,
+                1,
+                1159724,
+                392670,
+                0,
+                2,
+                806990,
+                30482,
+                4,
+                1927926,
+                82523,
+                4,
+                265318,
+                0,
+                4,
+                0,
+                85931,
+                32,
+                205665,
+                812,
+                1,
+                1,
+                41182,
+                32,
+                212342,
+                32,
+                31220,
+                32,
+                32696,
+                32,
+                43357,
+                32,
+                32247,
+                32,
+                38314,
+                32,
+                20000000000,
+                20000000000,
+                9462713,
+                1021,
+                10,
+                20000000000,
+                0,
+                20000000000,
             ]),
             plutus_v3: Some(vec![
                 100788, 420, 1, 1, 1000, 173, 0, 1, 1000, 59957, 4, 1, 11183, 32, 201305, 8356, 4,

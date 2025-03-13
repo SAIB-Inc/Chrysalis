@@ -1,8 +1,8 @@
 mod eval;
-mod ffi;
+mod interop;
 
-use ffi::converter::FfiConverter;
-use ffi::types::CTxEvalResultArray;
+use interop::CTxEvalResultArray;
+use interop::FfiConverter;
 
 #[no_mangle]
 pub unsafe extern "C" fn eval_tx(
@@ -20,7 +20,7 @@ pub unsafe extern "C" fn eval_tx(
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn free_tx_results(results: CTxEvalResultArray, len: usize) {
+pub unsafe extern "C" fn free_eval_results(results: CTxEvalResultArray, len: usize) {
     if !results.ptr.is_null() && len > 0 {
         let _ = Vec::from_raw_parts(results.ptr, len, len);
     }
