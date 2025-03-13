@@ -20,7 +20,6 @@ public static class Evaluator
 
     public static IReadOnlyList<EvaluationResult> EvaluateTx(byte[] txCborBytes, byte[] utxosCborBytes)
     {
-
         TxEvalResultArray resultArray = NativeMethods.EvalTxRaw(
             txCborBytes,
             (nuint)txCborBytes.Length,
