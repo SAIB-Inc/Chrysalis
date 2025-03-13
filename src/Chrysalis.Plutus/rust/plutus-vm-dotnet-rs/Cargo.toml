@@ -10,4 +10,6 @@ crate-type = ["cdylib"]
 [dependencies]
 hex = "0.4"
 chrono = "0.4.39"
-pallas = { path = "../../../../../pallas/pallas", features = ["phase-two"] }
+
+pallas = { git = "https://github.com/txpipe/pallas.git", features = ["phase-two"] }
+# pallas = { path = "../../../../../pallas/pallas", features = ["phase-two"] }
