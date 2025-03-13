@@ -23,10 +23,9 @@ public static class Evaluator
             (nuint)utxoBytes.Length
         );
 
-
         try
         {
-   
+
             var results = new List<EvaluationResult>((int)resultArray.Length);
             int structSize = Marshal.SizeOf<TxEvalResult>();
 

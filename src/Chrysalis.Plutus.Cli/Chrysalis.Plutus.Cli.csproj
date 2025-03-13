@@ -1,7 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
 <ItemGroup>
-    <ProjectReference Include="../Chrysalis.Plutus/Chrysalis.Plutus.VM/Chrysalis.Plutus.VM.csproj" />
+    <ProjectReference Include="../Chrysalis.Plutus/Chrysalis.Plutus.csproj" />
   </ItemGroup>
 
   <PropertyGroup>
