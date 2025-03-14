@@ -1,18 +1,17 @@
-using Chrysalis.Cbor.Attributes;
-using Chrysalis.Cbor.Serialization.Converters.Custom;
-using Chrysalis.Cbor.Serialization.Converters.Primitives;
+using Chrysalis.Cbor.Serialization.Attributes;
 
 namespace Chrysalis.Cbor.Types.Primitives;
 
-[CborConverter(typeof(UnionConverter))]
-public abstract partial record Option<T> : CborBase;
+// [CborSerializable]
+[CborUnion]
+public abstract partial record Option<T> : CborBase<Option<T>>
+{
+    // [CborSerializable]
+    [CborConstr(0)]
+    public partial record Some<U>([CborOrder(0)] U Value) : Option<U>;
 
 
-[CborConverter(typeof(ConstrConverter))]
-[CborOptions(Index = 0)]
-public partial record Some<T>([CborIndex(0)] T Value) : Option<T>;
-
-
-[CborConverter(typeof(ConstrConverter))]
-[CborOptions(Index = 1)]
-public partial record None<T> : Option<T>;
+    // [CborSerializable]
+    [CborConstr(1)]
+    public partial record None<U> : Option<U>;
+}

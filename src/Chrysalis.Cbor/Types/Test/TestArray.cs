@@ -3,7 +3,7 @@ using Chrysalis.Cbor.Serialization.Attributes;
 
 namespace Chrysalis.Cbor.Types.Test;
 
-[CborSerializable]
+// [CborSerializable]
 [CborList]
 public partial record TestList(
     [CborOrder(0)]

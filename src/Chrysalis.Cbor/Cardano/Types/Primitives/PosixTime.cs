@@ -1,5 +1,6 @@
-using Chrysalis.Cbor.Types.Primitives;
+using Chrysalis.Cbor.Types;
 
 namespace Chrysalis.Cbor.Cardano.Types.Primitives;
 
-public partial record PosixTime(ulong Value) : CborUlong(Value);
+// [CborSerializable]
+public partial record PosixTime(ulong Value) : CborBase<PosixTime>;

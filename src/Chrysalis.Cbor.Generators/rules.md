@@ -53,7 +53,7 @@ This document defines the rules for CBOR serialization in the Cardano C# library
 
 | Attribute                 | Description                                              | Example                           |
 |---------------------------|----------------------------------------------------------|-----------------------------------|
-| `[CborSerializable]`      | Marks a type for CBOR serialization                      | `[CborSerializable] public class Transaction {...}` |
+| `// [CborSerializable]`      | Marks a type for CBOR serialization                      | `// [CborSerializable] public class Transaction {...}` |
 | `[CborTag(ulong)]`        | Applies a CBOR tag to the serialized output              | `[CborTag(121)] public record PlutusData {...}` |
 | `[CborMap]`               | Serializes type as a CBOR map                            | `[CborMap] public record Metadata {...}` |
 | `[CborArray]`             | Serializes type as a CBOR array                          | `[CborArray] public record Coordinates {...}` |
@@ -116,7 +116,7 @@ public abstract record PlutusData
 For unions of different types without a common base:
 
 ```csharp
-[CborSerializable]
+// [CborSerializable]
 public class MetadataField
 {
     [CborProperty(0)]
@@ -186,7 +186,7 @@ public class HeterogeneousMap
 For collections that should use indefinite length encoding:
 
 ```csharp
-[CborSerializable]
+// [CborSerializable]
 public class Transaction
 {
     [CborProperty(0)]
@@ -200,7 +200,7 @@ public class Transaction
 For byte arrays with fixed size requirements:
 
 ```csharp
-[CborSerializable]
+// [CborSerializable]
 public class BlockHeader
 {
     [CborProperty(0)]
@@ -214,7 +214,7 @@ public class BlockHeader
 For properties that require specific values or ranges:
 
 ```csharp
-[CborSerializable]
+// [CborSerializable]
 public class ProtocolParameters
 {
     // Must be exactly 1
@@ -264,7 +264,7 @@ public class AddressValidator : ICborValidator<Address>
 
 The source generator will:
 
-1. Find all types marked with `[CborSerializable]`, `[CborMap]`, `[CborArray]`, `[CborUnion]` or `[CborConstr]`
+1. Find all types marked with `// [CborSerializable]`, `[CborMap]`, `[CborArray]`, `[CborUnion]` or `[CborConstr]`
 2. Generate extension methods for serialization/deserialization
 3. Follow these rules:
    - Respect all attribute configurations
@@ -284,7 +284,7 @@ public static Transaction FromCbor(byte[] data);
 ### 6.1 Transaction with Multiple Output Types
 
 ```csharp
-[CborSerializable]
+// [CborSerializable]
 public class Transaction
 {
     [CborProperty(0)]
@@ -347,7 +347,7 @@ public abstract record Value
 ### 6.4 Protocol Parameters with Validation
 
 ```csharp
-[CborSerializable]
+// [CborSerializable]
 public class ProtocolParameters
 {
     [CborProperty(0)]
@@ -375,7 +375,7 @@ public class ProtocolParameters
 6.5 This can handle arbitrary validation outside the compile-time constant constraints
 
 ```csharp
-[CborSerializable]
+// [CborSerializable]
 [CborConstr(0)]
 public record ExactAddress(
   byte[] PaymentKeyHash,
@@ -424,7 +424,7 @@ public partial record PostAlonzoTransactionOutput(
 
 New Design
 ```csharp
-[CborSerializable]
+// [CborSerializable]
 [CborUnion]
 public abstract partial record TransactionOutput
 {

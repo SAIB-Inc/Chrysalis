@@ -22,6 +22,21 @@ public sealed partial class CborSourceGenerator
             IsEnum = symbol.TypeKind == TypeKind.Enum;
             IsAbstract = symbol.IsAbstract;
             IsRecord = symbol.IsRecord;
+            
+            // Handle generic types
+            IsGeneric = symbol is INamedTypeSymbol namedType && namedType.IsGenericType;
+            
+            if (IsGeneric && symbol is INamedTypeSymbol genericType)
+            {
+                // Store generic type parameters
+                TypeParameters = genericType.TypeArguments
+                    .Select(t => new TypeInfo(t))
+                    .ToList();
+            }
+            else
+            {
+                TypeParameters = new List<TypeInfo>();
+            }
         }
 
         public string Name { get; }
@@ -31,6 +46,8 @@ public sealed partial class CborSourceGenerator
         public bool IsEnum { get; }
         public bool IsAbstract { get; }
         public bool IsRecord { get; }
+        public bool IsGeneric { get; }
+        public List<TypeInfo> TypeParameters { get; }
         public bool CanBeNull => !IsValueType;
     }
 
@@ -83,6 +100,10 @@ public sealed partial class CborSourceGenerator
         public bool ValidateExact { get; set; }
         public bool ValidateRange { get; set; }
         public bool CustomValidation { get; set; }
+        
+        // Method hiding control (for determining when to use 'new' keyword)
+        public bool HasBaseWriteMethod { get; set; }
+        public bool HasBaseReadMethod { get; set; }
     }
 
     /// <summary>

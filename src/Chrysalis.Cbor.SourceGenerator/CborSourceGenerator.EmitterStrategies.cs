@@ -12,8 +12,11 @@ public sealed partial class CborSourceGenerator
         /// </summary>
         public static string GenerateReadCode(string typeName, string variableName, bool isNullable = false)
         {
-            // Handle null values for nullable types
-            if (isNullable)
+            // If the type itself is already nullable (like ulong?), don't add additional null check
+            bool isAlreadyNullable = typeName.EndsWith("?") && !typeName.Contains("?>");
+            
+            // Handle null values for reference types and nullable types
+            if (isNullable && !isAlreadyNullable)
             {
                 return $$"""
                     if (reader.PeekState() == CborReaderState.Null)
@@ -56,7 +59,47 @@ public sealed partial class CborSourceGenerator
 
         private static string InternalGenerateReadCode(string typeName, string variableName)
         {
-            if (IsPrimitive(typeName))
+            // Check if we're dealing with a nullable value type (like int?)
+            bool isNullableValueType = typeName.EndsWith("?") && !typeName.Contains("?>");
+            string cleanTypeName = typeName.TrimEnd('?');
+            
+            // Special handling for nullable primitive types like ulong?
+            if (isNullableValueType && IsPrimitive(cleanTypeName))
+            {
+                string readMethod = cleanTypeName switch
+                {
+                    "System.Int32" or "int" => "reader.ReadInt32()",
+                    "System.String" or "string" => "reader.ReadTextString()",
+                    "System.Boolean" or "bool" => "reader.ReadBoolean()",
+                    "System.UInt32" or "uint" => "reader.ReadUInt32()",
+                    "System.Int64" or "long" => "reader.ReadInt64()",
+                    "System.UInt64" or "ulong" => "reader.ReadUInt64()",
+                    "System.Single" or "float" => "reader.ReadSingle()",
+                    "System.Double" or "double" => "reader.ReadDouble()",
+                    "System.Decimal" or "decimal" => "(decimal)reader.ReadDouble()",
+                    "System.Byte[]" or "byte[]" => "reader.ReadByteString()",
+                    "System.DateTime" => "DateTime.Parse(reader.ReadTextString())",
+                    _ => throw new InvalidOperationException($"Unsupported primitive type: {typeName}")
+                };
+
+                if (cleanTypeName == "ulong")
+                {
+                    return $$"""
+                        if (reader.PeekState() == CborReaderState.UnsignedInteger)
+                        {
+                            {{variableName}} = reader.ReadUInt64();
+                        }
+                        else
+                        {
+                            reader.SkipValue();
+                            {{variableName}} = null;
+                        }
+                        """;
+                }
+                
+                return $"{variableName} = {readMethod};";
+            }
+            else if (IsPrimitive(typeName))
             {
                 return GeneratePrimitiveRead(typeName, variableName);
             }
@@ -66,14 +109,74 @@ public sealed partial class CborSourceGenerator
             }
             else
             {
-                // Custom CBOR type
-                return $"{variableName} = {typeName}.Read(reader);";
+                // Special handling for globally qualified types
+                if (typeName.Contains("global::"))
+                {
+                    // Custom CBOR type - read the encoded value and pass it to the Read method
+                    return $$"""
+                        // Read the encoded value as ReadOnlyMemory<byte>
+                        var encodedValue = reader.ReadEncodedValue();
+                        
+                        // Deserialize using the type's Read method
+                        {{variableName}} = {{cleanTypeName}}.Read(encodedValue);
+                        """;
+                }
+                else
+                {
+                    // Custom CBOR type - read the encoded value and pass it to the Read method  
+                    return $$"""
+                        // Read the encoded value as ReadOnlyMemory<byte>
+                        var encodedValue = reader.ReadEncodedValue();
+                        
+                        // Deserialize using the type's Read method
+                        {{variableName}} = {{cleanTypeName}}.Read(encodedValue);
+                        """;
+                }
             }
         }
 
         private static string InternalGenerateWriteCode(string variableName, string typeName)
         {
-            if (IsPrimitive(typeName))
+            // Check if we're dealing with a nullable type (like int?)
+            bool isNullableValueType = typeName.EndsWith("?") && !typeName.Contains("?>");
+            string cleanTypeName = typeName.TrimEnd('?');
+            
+            // Special handling for nullable primitive types like ulong?
+            if (isNullableValueType && IsPrimitive(cleanTypeName))
+            {
+                if (cleanTypeName == "ulong" || cleanTypeName == "System.UInt64")
+                {
+                    return $$"""
+                        if ({{variableName}}.HasValue)
+                        {
+                            writer.WriteUInt64({{variableName}}.Value);
+                        }
+                        else
+                        {
+                            writer.WriteNull();
+                        }
+                        """;
+                }
+                
+                string writeMethod = cleanTypeName switch
+                {
+                    "System.Int32" or "int" => $"writer.WriteInt32({variableName}.Value);",
+                    "System.String" or "string" => $"writer.WriteTextString({variableName});",
+                    "System.Boolean" or "bool" => $"writer.WriteBoolean({variableName}.Value);",
+                    "System.UInt32" or "uint" => $"writer.WriteUInt32({variableName}.Value);",
+                    "System.Int64" or "long" => $"writer.WriteInt64({variableName}.Value);",
+                    "System.UInt64" or "ulong" => $"writer.WriteUInt64({variableName}.Value);",
+                    "System.Single" or "float" => $"writer.WriteSingle({variableName}.Value);",
+                    "System.Double" or "double" => $"writer.WriteDouble({variableName}.Value);",
+                    "System.Decimal" or "decimal" => $"writer.WriteDouble((double){variableName}.Value);",
+                    "System.Byte[]" or "byte[]" => $"writer.WriteByteString({variableName});",
+                    "System.DateTime" => $"writer.WriteTextString({variableName}.Value.ToString(\"o\"));",
+                    _ => throw new InvalidOperationException($"Unsupported primitive type: {typeName}")
+                };
+
+                return writeMethod;
+            }
+            else if (IsPrimitive(typeName))
             {
                 return GeneratePrimitiveWrite(variableName, typeName);
             }
@@ -83,17 +186,29 @@ public sealed partial class CborSourceGenerator
             }
             else
             {
-                // Custom CBOR type with potential raw bytes
-                return $$"""
-                    // If we have raw bytes, use them directly
-                    if ({{variableName}}.Raw.HasValue)
-                    {writer.WriteEncodedValue({{variableName}}.Raw.Value.Span);
-                    }
-                    else
-                    {
-                        {{typeName}}.Write(writer, {{variableName}});
-                    }
-                    """;
+                // Check if this is a global type (fully qualified)
+                if (typeName.Contains("global::"))
+                {
+                    // Always use the type's static Write method for custom types
+                    return $$"""
+                        {{cleanTypeName}}.Write(writer, {{variableName}});
+                        """;
+                }
+                else
+                {
+                    // Custom CBOR type with potential raw bytes
+                    return $$"""
+                        // If we have raw bytes, use them directly
+                        if ({{variableName}}.Raw.HasValue)
+                        {
+                            writer.WriteEncodedValue({{variableName}}.Raw.Value.Span);
+                        }
+                        else
+                        {
+                            {{cleanTypeName}}.Write(writer, {{variableName}});
+                        }
+                        """;
+                }
             }
         }
 
@@ -102,7 +217,10 @@ public sealed partial class CborSourceGenerator
         /// </summary>
         public static bool IsPrimitive(string typeName)
         {
-            return typeName switch
+            // Remove any question mark for nullable types
+            string cleanTypeName = typeName.TrimEnd('?');
+            
+            return cleanTypeName switch
             {
                 "System.Int32" or "int" => true,
                 "System.String" or "string" => true,
@@ -152,7 +270,13 @@ public sealed partial class CborSourceGenerator
         /// </summary>
         public static string GeneratePrimitiveRead(string typeName, string variableName)
         {
-            string readMethod = typeName switch
+            // Check if the type is nullable (ends with ?)
+            bool isNullableValueType = typeName.EndsWith("?") && typeName != "string";
+            
+            // Get the clean type name without question mark
+            string cleanTypeName = typeName.TrimEnd('?');
+            
+            string readMethod = cleanTypeName switch
             {
                 "System.Int32" or "int" => "reader.ReadInt32()",
                 "System.String" or "string" => "reader.ReadTextString()",
@@ -176,7 +300,10 @@ public sealed partial class CborSourceGenerator
         /// </summary>
         public static string GeneratePrimitiveWrite(string variableName, string typeName)
         {
-            return typeName switch
+            // Get the clean type name without question mark
+            string cleanTypeName = typeName.TrimEnd('?');
+            
+            return cleanTypeName switch
             {
                 "System.Int32" or "int" => $"writer.WriteInt32({variableName});",
                 "System.String" or "string" => $"writer.WriteTextString({variableName});",
@@ -271,18 +398,38 @@ public sealed partial class CborSourceGenerator
         {
             string elementType = ExtractElementType(typeName);
             bool elementIsNullable = !IsPrimitive(elementType) || elementType == "string";
+            bool isPrimitiveElement = IsPrimitive(elementType);
 
-            return $$"""
-                {{variableName}} = new {{typeName}}();
-                reader.ReadStartArray();
-                while (reader.PeekState() != CborReaderState.EndArray)
-                {
-                    {{elementType}} element = default;
-                    {{GenerateReadCode(elementType, "element", elementIsNullable)}}
-                    {{variableName}}.Add(element);
-                }
-                reader.ReadEndArray();
-                """;
+            if (isPrimitiveElement)
+            {
+                // For primitive types, use the simple approach
+                return $$"""
+                    {{variableName}} = new {{typeName}}();
+                    reader.ReadStartArray();
+                    while (reader.PeekState() != CborReaderState.EndArray)
+                    {
+                        {{elementType}} element = default;
+                        {{GenerateReadCode(elementType, "element", elementIsNullable)}}
+                        {{variableName}}.Add(element);
+                    }
+                    reader.ReadEndArray();
+                    """;
+            }
+            else
+            {
+                // For complex types, use ReadOnlyMemory<byte> slicing
+                return $$"""
+                    {{variableName}} = new {{typeName}}();
+                    reader.ReadStartArray();
+                    while (reader.PeekState() != CborReaderState.EndArray)
+                    {
+                        {{elementType}} element = default;
+                        {{GenerateReadCode(elementType, "element", elementIsNullable)}}
+                        {{variableName}}.Add(element);
+                    }
+                    reader.ReadEndArray();
+                    """;
+            }
         }
 
         /// <summary>
@@ -311,7 +458,9 @@ public sealed partial class CborSourceGenerator
             string keyType = ExtractKeyType(typeName);
             string valueType = ExtractElementType(typeName);
             bool valueIsNullable = !IsPrimitive(valueType) || valueType == "string";
-
+            
+            // Dictionary implementation is the same regardless of value type
+            // because our ReadCode implementation handles both primitives and complex types
             return $$"""
                 {{variableName}} = new {{typeName}}();
                 reader.ReadStartMap();

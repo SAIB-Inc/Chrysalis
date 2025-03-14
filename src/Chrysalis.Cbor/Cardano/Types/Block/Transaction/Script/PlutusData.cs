@@ -1,54 +1,49 @@
-using Chrysalis.Cbor.Attributes;
-using Chrysalis.Cbor.Serialization.Converters.Custom;
-using Chrysalis.Cbor.Serialization.Converters.Primitives;
+using Chrysalis.Cbor.Serialization.Attributes;
 using Chrysalis.Cbor.Types;
 
 namespace Chrysalis.Cbor.Cardano.Types.Block.Transaction.Script;
 
-[CborConverter(typeof(UnionConverter))]
-public abstract partial record PlutusData : CborBase;
+// [CborSerializable]
+[CborUnion]
+public abstract partial record PlutusData : CborBase<PlutusData>
+{
+    // [CborSerializable]
+    [CborConstr(0)]
+    public partial record PlutusConstr(List<PlutusData> PlutusData) : PlutusData;
 
 
-[CborConverter(typeof(CustomConstrConverter))]
-[CborOptions(IsDefinite = true)]
-public partial record PlutusConstr(List<PlutusData> PlutusData) : PlutusData;
+    // [CborSerializable]
+    public partial record PlutusMap(Dictionary<PlutusData, PlutusData> PlutusData) : PlutusData;
+
+    // [CborSerializable]
+    public partial record PlutusList(List<PlutusData> PlutusData) : PlutusData;
 
 
-[CborConverter(typeof(MapConverter))]
-[CborOptions(IsDefinite = true)]
-public partial record PlutusMap(Dictionary<PlutusData, PlutusData> PlutusData) : PlutusData;
+    // [CborSerializable]
+    [CborUnion]
+    public abstract partial record PlutusBigInt : PlutusData
+    {
+        // [CborSerializable]
+        [CborUnion]
+        public abstract partial record PlutusInt : PlutusBigInt
+        {
+            // [CborSerializable]
+            public partial record PlutusInt64(long Value) : PlutusInt;
 
-[CborConverter(typeof(ListConverter))]
-[CborOptions(IsDefinite = true)]
-public partial record PlutusList(List<PlutusData> PlutusData) : PlutusData;
+            // [CborSerializable]
+            public partial record PlutusUint64(ulong Value) : PlutusInt;
+        }
 
-
-[CborConverter(typeof(UnionConverter))]
-public abstract partial record PlutusBigInt : PlutusData;
-
-
-[CborConverter(typeof(UnionConverter))]
-public abstract partial record PlutusInt : PlutusBigInt;
-
-
-[CborConverter(typeof(LongConverter))]
-public partial record PlutusInt64(long Value) : PlutusInt;
+        // [CborSerializable]
+        public partial record PlutusBigUint([CborSize(64)] byte[] Value) : PlutusBigInt;
 
 
-[CborConverter(typeof(UlongConverter))]
-public partial record PlutusUint64(ulong Value) : PlutusInt;
+        // [CborSerializable]
+        public partial record PlutusBigNint([CborSize(64)] byte[] Value) : PlutusBigInt;
+    }
 
+    // [CborSerializable]
+    public partial record PlutusBoundedBytes([CborSize(64)] byte[] Value) : PlutusData;
 
-[CborConverter(typeof(BytesConverter))]
-[CborOptions(IsDefinite = true, Size = 64, Tag = 2)]
-public partial record PlutusBigUint(byte[] Value) : PlutusBigInt;
+}
 
-
-[CborConverter(typeof(BytesConverter))]
-[CborOptions(IsDefinite = true, Size = 64, Tag = 3)]
-public partial record PlutusBigNint(byte[] Value) : PlutusBigInt;
-
-
-[CborConverter(typeof(BytesConverter))]
-[CborOptions(IsDefinite = true, Size = 64)]
-public partial record PlutusBoundedBytes(byte[] Value) : PlutusData;

@@ -1,40 +1,41 @@
 using Chrysalis.Cbor.Attributes;
-using Chrysalis.Cbor.Serialization.Converters.Custom;
-using Chrysalis.Cbor.Serialization.Converters.Primitives;
 using Chrysalis.Cbor.Cardano.Types.Block.Transaction.Protocol;
 using Chrysalis.Cbor.Cardano.Types.Block.Transaction.Script;
-using Chrysalis.Cbor.Types.Primitives;
 using Chrysalis.Cbor.Types;
+using Chrysalis.Cbor.Serialization.Attributes;
 
 namespace Chrysalis.Cbor.Cardano.Types.Block.Transaction.WitnessSet;
 
-[CborConverter(typeof(UnionConverter))]
-public abstract partial record Redeemers : CborBase;
+// [CborSerializable]
+[CborUnion]
+public abstract partial record Redeemers : CborBase<Redeemers>
+{
+    // [CborSerializable]
+    public partial record RedeemerList(List<RedeemerEntry> Value) : Redeemers;
 
-[CborConverter(typeof(ListConverter))]
-[CborOptions(IsDefinite = true)]
-public partial record RedeemerList(List<RedeemerEntry> Value) : Redeemers;
+    // [CborSerializable]
+    public partial record RedeemerMap(Dictionary<RedeemerKey, RedeemerValue> Value) : Redeemers;
+}
 
-[CborConverter(typeof(MapConverter))]
-[CborOptions(IsDefinite = true)]
-public partial record RedeemerMap(Dictionary<RedeemerKey, RedeemerValue> Value) : Redeemers;
-
-[CborConverter(typeof(CustomListConverter))]
+// [CborSerializable]
+[CborList]
 public partial record RedeemerEntry(
-    [CborIndex(0)] CborInt Tag,
-    [CborIndex(1)] CborUlong Index,
+    [CborIndex(0)] int Tag,
+    [CborIndex(1)] ulong Index,
     [CborIndex(2)] PlutusData Data,
     [CborIndex(3)] ExUnits ExUnits
-) : CborBase;
+) : CborBase<RedeemerEntry>;
 
-[CborConverter(typeof(CustomListConverter))]
+// [CborSerializable]
+[CborList]
 public partial record RedeemerKey(
-    [CborIndex(0)] CborInt Tag,
-    [CborIndex(1)] CborUlong Index
-) : CborBase;
+    [CborIndex(0)] int Tag,
+    [CborIndex(1)] ulong Index
+) : CborBase<RedeemerKey>;
 
-[CborConverter(typeof(CustomListConverter))]
+// [CborSerializable]
+[CborList]
 public partial record RedeemerValue(
     [CborIndex(0)] PlutusData Data,
     [CborIndex(1)] ExUnits ExUnits
-) : CborBase;
+) : CborBase<RedeemerValue>;

@@ -1,12 +1,13 @@
 using Chrysalis.Cbor.Attributes;
-using Chrysalis.Cbor.Serialization.Converters.Custom;
+using Chrysalis.Cbor.Serialization.Attributes;
+
 using Chrysalis.Cbor.Types;
-using Chrysalis.Cbor.Types.Primitives;
 
 namespace Chrysalis.Cbor.Cardano.Types.Block.Transaction.WitnessSet;
 
-[CborConverter(typeof(CustomListConverter))]
+// [CborSerializable]
+[CborList]
 public partial record VKeyWitness(
-    [CborIndex(0)] CborBytes VKey,
-    [CborIndex(1)] CborBytes Signature
-) : CborBase;
+[CborIndex(0)] byte[] VKey,
+[CborIndex(1)] byte[] Signature
+) : CborBase<VKeyWitness>;

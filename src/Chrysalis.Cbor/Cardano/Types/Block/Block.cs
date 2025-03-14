@@ -1,43 +1,43 @@
-using Chrysalis.Cbor.Attributes;
-using Chrysalis.Cbor.Serialization.Converters.Custom;
 using Chrysalis.Cbor.Cardano.Types.Block.Header;
-using Chrysalis.Cbor.Cardano.Types.Block.Transaction.Body;
-using Chrysalis.Cbor.Cardano.Types.Block.Transaction.WitnessSet;
 using Chrysalis.Cbor.Types.Custom;
-using Chrysalis.Cbor.Types.Primitives;
 using Chrysalis.Cbor.Types;
+using Chrysalis.Cbor.Serialization.Attributes;
+using static Chrysalis.Cbor.Cardano.Types.Block.Transaction.Body.TransactionBody;
+using static Chrysalis.Cbor.Cardano.Types.Block.Transaction.WitnessSet.TransactionWitnessSet;
 
 namespace Chrysalis.Cbor.Cardano.Types.Block;
 
-[CborConverter(typeof(UnionConverter))]
-public abstract partial record Block : CborBase;
+// [CborSerializable]
+[CborUnion]
+public abstract partial record Block : CborBase<Block>
+{
+    // [CborSerializable]
+    [CborList]
+    public partial record AlonzoCompatibleBlock(
+        [CborOrder(0)] BlockHeader Header,
+        [CborOrder(1)] CborMaybeIndefList<AlonzoTransactionBody> TransactionBodies,
+        [CborOrder(2)] CborMaybeIndefList<AlonzoTransactionWitnessSet> TransactionWitnessSets,
+        [CborOrder(3)] AuxiliaryDataSet AuxiliaryDataSet,
+        [CborOrder(4)] CborMaybeIndefList<int>? InvalidTransactions
+    ) : Block;
 
-[CborConverter(typeof(CustomListConverter))]
-[CborOptions(IsDefinite = true)]
-public partial record AlonzoCompatibleBlock(
-    [CborIndex(0)] BlockHeader Header,
-    [CborIndex(1)] CborMaybeIndefList<AlonzoTransactionBody> TransactionBodies,
-    [CborIndex(2)] CborMaybeIndefList<AlonzoTransactionWitnessSet> TransactionWitnessSets,
-    [CborIndex(3)] AuxiliaryDataSet AuxiliaryDataSet,
-    [CborIndex(4)] CborMaybeIndefList<CborInt>? InvalidTransactions
-) : Block;
+    // [CborSerializable]
+    [CborList]
+    public partial record BabbageBlock(
+        [CborOrder(0)] BlockHeader Header,
+        [CborOrder(1)] CborMaybeIndefList<BabbageTransactionBody> TransactionBodies,
+        [CborOrder(2)] CborMaybeIndefList<PostAlonzoTransactionWitnessSet> TransactionWitnessSets,
+        [CborOrder(3)] AuxiliaryDataSet AuxiliaryDataSet,
+        [CborOrder(4)] CborMaybeIndefList<int>? InvalidTransactions
+    ) : Block;
 
-[CborConverter(typeof(CustomListConverter))]
-[CborOptions(IsDefinite = true)]
-public partial record BabbageBlock(
-    [CborIndex(0)] BlockHeader Header,
-    [CborIndex(1)] CborMaybeIndefList<BabbageTransactionBody> TransactionBodies,
-    [CborIndex(2)] CborMaybeIndefList<PostAlonzoTransactionWitnessSet> TransactionWitnessSets,
-    [CborIndex(3)] AuxiliaryDataSet AuxiliaryDataSet,
-    [CborIndex(4)] CborMaybeIndefList<CborInt>? InvalidTransactions
-) : Block;
-
-[CborConverter(typeof(CustomListConverter))]
-[CborOptions(IsDefinite = true)]
-public partial record ConwayBlock(
-    [CborIndex(0)] BlockHeader Header,
-    [CborIndex(1)] CborMaybeIndefList<ConwayTransactionBody> TransactionBodies,
-    [CborIndex(2)] CborMaybeIndefList<PostAlonzoTransactionWitnessSet> TransactionWitnessSets,
-    [CborIndex(3)] AuxiliaryDataSet AuxiliaryDataSet,
-    [CborIndex(4)] CborMaybeIndefList<CborInt>? InvalidTransactions
-) : Block;
+    // [CborSerializable]
+    [CborList]
+    public partial record ConwayBlock(
+        [CborOrder(0)] BlockHeader Header,
+        [CborOrder(1)] CborMaybeIndefList<ConwayTransactionBody> TransactionBodies,
+        [CborOrder(2)] CborMaybeIndefList<PostAlonzoTransactionWitnessSet> TransactionWitnessSets,
+        [CborOrder(3)] AuxiliaryDataSet AuxiliaryDataSet,
+        [CborOrder(4)] CborMaybeIndefList<int>? InvalidTransactions
+    ) : Block;
+}

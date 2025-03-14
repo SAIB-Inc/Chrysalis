@@ -151,6 +151,10 @@ public sealed partial class CborSourceGenerator
 
                 // Handle collection types
                 ExtractCollectionTypeInfo(namedType, metadata);
+
+                // Check if type has base Write/Read methods
+                metadata.HasBaseWriteMethod = true;
+                metadata.HasBaseReadMethod = true;
             }
             else if (type is IArrayTypeSymbol arrayType)
             {

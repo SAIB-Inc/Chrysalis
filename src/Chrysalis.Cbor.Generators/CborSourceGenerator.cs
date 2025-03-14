@@ -15,7 +15,7 @@ public sealed partial class CborSourceGenerator : IIncrementalGenerator
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
         // Create a syntax provider to select candidate context classes 
-        // (e.g. classes decorated with [CborSerializable])
+        // (e.g. classes decorated with // [CborSerializable])
         IncrementalValueProvider<System.Collections.Immutable.ImmutableArray<TypeDeclarationSyntax>> contextTypeProvider = context.SyntaxProvider.CreateSyntaxProvider(
             predicate: static (node, cancellationToken) =>
             {

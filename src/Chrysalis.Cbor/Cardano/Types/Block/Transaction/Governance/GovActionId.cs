@@ -1,12 +1,13 @@
 using Chrysalis.Cbor.Attributes;
-using Chrysalis.Cbor.Serialization.Converters.Custom;
+using Chrysalis.Cbor.Serialization.Attributes;
+
 using Chrysalis.Cbor.Types;
-using Chrysalis.Cbor.Types.Primitives;
 
 namespace Chrysalis.Cbor.Cardano.Types.Block.Transaction.Governance;
 
-[CborConverter(typeof(CustomListConverter))]
+// [CborSerializable]
+[CborList]
 public partial record GovActionId(
-    [CborIndex(0)] CborBytes TransactionId,
-    [CborIndex(1)] CborInt GovActionIndex
-) : CborBase;
+    [CborIndex(0)] byte[] TransactionId,
+    [CborIndex(1)] int GovActionIndex
+) : CborBase<GovActionId>;

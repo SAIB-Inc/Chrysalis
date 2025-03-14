@@ -1,12 +1,13 @@
 using Chrysalis.Cbor.Attributes;
-using Chrysalis.Cbor.Serialization.Converters.Custom;
+using Chrysalis.Cbor.Serialization.Attributes;
+
 using Chrysalis.Cbor.Types;
-using Chrysalis.Cbor.Types.Primitives;
 
 namespace Chrysalis.Cbor.Cardano.Types.Block.Transaction.Protocol;
 
-[CborConverter(typeof(CustomListConverter))]
+// [CborSerializable]
+[CborList]
 public partial record ExUnits(
-    [CborIndex(0)] CborUlong Mem,
-    [CborIndex(1)] CborUlong Steps
-) : CborBase;
+    [CborIndex(0)] ulong Mem,
+    [CborIndex(1)] ulong Steps
+) : CborBase<ExUnits>;

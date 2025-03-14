@@ -1,12 +1,13 @@
 using Chrysalis.Cbor.Attributes;
-using Chrysalis.Cbor.Serialization.Converters.Custom;
+using Chrysalis.Cbor.Serialization.Attributes;
+
 using Chrysalis.Cbor.Types;
-using Chrysalis.Cbor.Types.Primitives;
 
 namespace Chrysalis.Cbor.Cardano.Types.Block.Transaction;
 
-[CborConverter(typeof(CustomListConverter))]
+// [CborSerializable]
+[CborList]
 public partial record Anchor(
-    [CborIndex(0)] CborText AnchorUrl,
-    [CborIndex(1)] CborBytes AnchorDataHash
-) : CborBase;
+    [CborIndex(0)] string AnchorUrl,
+    [CborIndex(1)] byte[] AnchorDataHash
+) : CborBase<Anchor>;

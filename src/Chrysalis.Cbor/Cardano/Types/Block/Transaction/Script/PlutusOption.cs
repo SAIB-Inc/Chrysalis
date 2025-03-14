@@ -1,12 +1,17 @@
 using Chrysalis.Cbor.Attributes;
-using Chrysalis.Cbor.Serialization.Converters.Custom;
+using Chrysalis.Cbor.Serialization.Attributes;
+
 using Chrysalis.Cbor.Types;
 
 namespace Chrysalis.Cbor.Cardano.Types.Block.Transaction.Script;
 
-[CborConverter(typeof(UnionConverter))]
-public abstract partial record PlutusOption<T> : CborBase;
+// [CborSerializable]
+[CborUnion]
+public abstract partial record PlutusOption<T> : CborBase<PlutusOption<T>>
+{
+    // [CborSerializable]
+    public partial record PlutusSome<U>([CborIndex(0)] U Value) : PlutusOption<U>;
 
-public partial record PlutusSome<T>([CborIndex(0)] T Value) : PlutusOption<T>;
-
-public partial record PlutusNone<T> : PlutusOption<T>;
+    // [CborSerializable]
+    public partial record PlutusNone<U> : PlutusOption<U>;
+}

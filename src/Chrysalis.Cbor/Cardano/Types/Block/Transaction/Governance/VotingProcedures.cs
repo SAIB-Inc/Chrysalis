@@ -1,17 +1,14 @@
-using Chrysalis.Cbor.Attributes;
-using Chrysalis.Cbor.Serialization.Converters.Primitives;
 using Chrysalis.Cbor.Types;
-using Chrysalis.Cbor.Types.Primitives;
 
 namespace Chrysalis.Cbor.Cardano.Types.Block.Transaction.Governance;
 
-[CborConverter(typeof(MapConverter))]
+// [CborSerializable]
 public partial record VotingProcedures(
-    Dictionary<Voter, CborMap<GovActionId, VotingProcedure>> Value
-) : CborBase;
+    Dictionary<Voter, Dictionary<GovActionId, VotingProcedure>> Value
+) : CborBase<VotingProcedure>;
 
 
-[CborConverter(typeof(MapConverter))]
+// [CborSerializable]
 public partial record VoterChoices(
     Dictionary<GovActionId, VotingProcedure> Value
-) : CborBase;
+) : CborBase<VoterChoices>;

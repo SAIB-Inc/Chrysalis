@@ -1,14 +1,15 @@
 using Chrysalis.Cbor.Attributes;
-using Chrysalis.Cbor.Serialization.Converters.Custom;
+using Chrysalis.Cbor.Serialization.Attributes;
+
 using Chrysalis.Cbor.Types;
-using Chrysalis.Cbor.Types.Primitives;
 
 namespace Chrysalis.Cbor.Cardano.Types.Block.Header.Body;
 
-[CborConverter(typeof(CustomListConverter))]
+// [CborSerializable]
+[CborList]
 public partial record OperationalCert(
-    [CborIndex(0)] CborBytes HotVKey,
-    [CborIndex(1)] CborUlong SequenceNumber,
-    [CborIndex(2)] CborUlong KesPeriod,
-    [CborIndex(3)] CborBytes Sigma
-) : CborBase;
+[CborIndex(0)] byte[] HotVKey,
+[CborIndex(1)] ulong SequenceNumber,
+[CborIndex(2)] ulong KesPeriod,
+[CborIndex(3)] byte[] Sigma
+) : CborBase<OperationalCert>;

@@ -1,14 +1,14 @@
 using Chrysalis.Cbor.Attributes;
-using Chrysalis.Cbor.Serialization.Converters.Custom;
+
 using Chrysalis.Cbor.Cardano.Types.Block.Header.Body;
-using Chrysalis.Cbor.Types.Primitives;
 using Chrysalis.Cbor.Types;
+using Chrysalis.Cbor.Serialization.Attributes;
 
 namespace Chrysalis.Cbor.Cardano.Types.Block.Header;
 
-[CborConverter(typeof(CustomListConverter))]
-[CborOptions(IsDefinite = true)]
+// [CborSerializable]
+[CborList]
 public partial record BlockHeader(
     [CborIndex(0)] BlockHeaderBody HeaderBody,
-    [CborIndex(1)] CborBytes BodySignature
-) : CborBase;
+    [CborIndex(1)] byte[] BodySignature
+) : CborBase<BlockHeader>;
