@@ -5,6 +5,7 @@ using Chrysalis.Cbor.Cardano.Types.Block;
 using Chrysalis.Cbor.Cardano.Types.Block.Transaction.Input;
 using Chrysalis.Cbor.Cardano.Types.Block.Transaction.Output;
 using Chrysalis.Cbor.Serialization;
+using Chrysalis.Cbor.Types.Test;
 using Xunit;
 
 namespace Chrysalis.Test;
@@ -21,9 +22,27 @@ public class CborTests
 
         CborWriter writer = new();
         TransactionInput.Write(writer, txInput);
-        var serialized = Convert.ToHexString(writer.Encode());
+        ReadOnlyMemory<byte> serializedRaw = writer.Encode();
+        string serialized = Convert.ToHexString(serializedRaw.Span);
+        TransactionInput? deserialized = TransactionInput.Read(serializedRaw);
 
         Assert.NotNull(serialized);
+        Assert.NotNull(deserialized);
+    }
+
+    [Fact]
+    public void TestConstrTest()
+    {
+        TestConstr data = new(1, Convert.FromHexString("aabb"), "test_str", false, 10L, 0.5f, 1.0d, 1.0m, 50, 10UL);
+
+        CborWriter writer = new();
+        TestConstr.Write(writer, data);
+        ReadOnlyMemory<byte> serializedRaw = writer.Encode();
+        string serialized = Convert.ToHexString(serializedRaw.Span);
+        TestConstr? deserialized = TestConstr.Read(serializedRaw);
+
+        Assert.NotNull(serialized);
+        Assert.NotNull(deserialized);
     }
 }
 //     // [Theory]
