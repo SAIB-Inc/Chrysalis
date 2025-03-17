@@ -22,6 +22,10 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Chrysalis.Plutus.Cli", "src
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Chrysalis.Plutus", "src\Chrysalis.Plutus\Chrysalis.Plutus.csproj", "{73757F74-B323-44AC-8D4D-71687007C5B5}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Chrysalis.Tx", "src\Chrysalis.Tx\Chrysalis.Tx.csproj", "{5117E586-260B-4FBF-AC77-8823719A165B}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Chrysalis.Tx.Cli", "src\Chrysalis.Tx.Cli\Chrysalis.Tx.Cli.csproj", "{E17077EB-70DD-432D-A8F0-002A95ECC9CC}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -64,6 +68,14 @@ Global
 		{73757F74-B323-44AC-8D4D-71687007C5B5}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{73757F74-B323-44AC-8D4D-71687007C5B5}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{73757F74-B323-44AC-8D4D-71687007C5B5}.Release|Any CPU.Build.0 = Release|Any CPU
+		{5117E586-260B-4FBF-AC77-8823719A165B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{5117E586-260B-4FBF-AC77-8823719A165B}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{5117E586-260B-4FBF-AC77-8823719A165B}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{5117E586-260B-4FBF-AC77-8823719A165B}.Release|Any CPU.Build.0 = Release|Any CPU
+		{E17077EB-70DD-432D-A8F0-002A95ECC9CC}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{E17077EB-70DD-432D-A8F0-002A95ECC9CC}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{E17077EB-70DD-432D-A8F0-002A95ECC9CC}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{E17077EB-70DD-432D-A8F0-002A95ECC9CC}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -78,6 +90,8 @@ Global
 		{410C13F6-68D9-4CEC-A380-D402BC4FC3ED} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 		{6B658D27-EA30-4FB9-93B8-9C92DAB3B607} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 		{73757F74-B323-44AC-8D4D-71687007C5B5} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
+		{5117E586-260B-4FBF-AC77-8823719A165B} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
+		{E17077EB-70DD-432D-A8F0-002A95ECC9CC} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {728F4C1F-B8FC-42EF-9AE0-69EBD52A1957}
