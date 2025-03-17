@@ -2,7 +2,7 @@ using Chrysalis.Cbor.Serialization.Attributes;
 
 namespace Chrysalis.Cbor.Types.Test;
 
-// [CborSerializable]
+[CborSerializable]
 [CborUnion]
 public abstract partial record TestUnion : CborBase<TestUnion>
 {

@@ -1,5 +1,6 @@
 
 using Chrysalis.Cbor.Serialization.Attributes;
+using Chrysalis.Cbor.Types.Primitives;
 
 namespace Chrysalis.Cbor.Types.Test;
 
@@ -7,23 +8,20 @@ namespace Chrysalis.Cbor.Types.Test;
 [CborConstr(0)]
 public partial record TestConstr(
     [CborOrder(0)]
-    int Value1,
-    [CborOrder(1)]
-    byte[] Value2,
+    int IntValue,
+    [CborOrder(1)][CborSize(32)]
+    byte[] BoundedBytesValue,
     [CborOrder(2)]
-    string Value3,
+    byte[] UnboundedBytesValue,
     [CborOrder(3)]
-    bool Value4,
-    [CborOrder(4)]
-    long Value6,
-    [CborOrder(5)]
-    float Value7,
-    [CborOrder(6)]
-    double Value8,
-    [CborOrder(7)]
-    decimal Value9,
-    [CborOrder(8)]
-    uint Value11,
-    [CborOrder(9)]
-    ulong Value12
+    CborEncodedValue EncodedValue
 ) : CborBase<TestConstr>;
+
+
+public class TestConstrValidator : ICborValidator<TestConstr>
+{
+    public bool Validate(TestConstr input)
+    {
+        return true;
+    }
+}

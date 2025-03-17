@@ -1,3 +1,4 @@
+using System.Text;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 
@@ -18,9 +19,9 @@ public sealed partial class CborSourceGenerator
         /// Parses a type declaration and creates serialization metadata for it and all related types
         /// </summary>
         public SerializationContext ParseType(
-            TypeDeclarationSyntax typeDeclaration,
-            SemanticModel semanticModel,
-            CancellationToken cancellationToken)
+    TypeDeclarationSyntax typeDeclaration,
+    SemanticModel semanticModel,
+    CancellationToken cancellationToken)
         {
             // Reset our tracking collections
             _processedTypes.Clear();
@@ -32,6 +33,9 @@ public sealed partial class CborSourceGenerator
                 return new SerializationContext();
             }
 
+            // Store compilation for validator detection
+            var compilation = semanticModel.Compilation;
+
             // Create the context
             var context = new SerializationContext
             {
@@ -42,12 +46,113 @@ public sealed partial class CborSourceGenerator
             DiscoverInitialTypes(contextType);
 
             // Process all discovered types
-            ProcessTypeQueue(cancellationToken);
+            ProcessTypeQueue(cancellationToken, compilation);
 
             // Add processed types to context
             context.Types = _processedTypes.Values.ToList();
 
             return context;
+        }
+
+        /// <summary>
+        /// Processes all types in the queue
+        /// </summary>
+        private void ProcessTypeQueue(CancellationToken cancellationToken, Compilation compilation = null)
+        {
+            while (_typesToProcess.Count > 0)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+
+                var typeToProcess = _typesToProcess.Dequeue();
+
+                // Skip if already processed (might have been added multiple times)
+                if (_processedTypes.ContainsKey(typeToProcess.Type))
+                    continue;
+
+                // Extract metadata and add to processed types
+                var typeMetadata = ExtractTypeMetadata(typeToProcess, compilation);
+                _processedTypes.Add(typeToProcess.Type, typeMetadata);
+
+                // Queue dependent types for processing
+                QueueDependentTypes(typeMetadata);
+            }
+        }
+
+        /// <summary>
+        /// Extracts metadata from a type
+        /// </summary>
+        private SerializableType ExtractTypeMetadata(TypeToProcess typeToProcess, Compilation compilation = null)
+        {
+            var type = typeToProcess.Type;
+            var logBuilder = new StringBuilder();
+
+            logBuilder.AppendLine($"// Extracting metadata for type: {type.ToDisplayString()}");
+
+            // Create the base serializable type
+            SerializableType metadata = new SerializableType
+            {
+                Type = new TypeInfo(type),
+                InfoPropertyName = type.Name
+            };
+
+            // Set format based on nullable flag
+            if (typeToProcess.IsNullable)
+            {
+                metadata.Format = SerializationType.Nullable;
+                logBuilder.AppendLine($"// Set initial format to Nullable based on processing flag");
+            }
+
+            // Extract format and other attributes
+            ProcessTypeAttributes(type, metadata, compilation, logBuilder);
+
+            // Process type members based on kind
+            if (type is INamedTypeSymbol namedType)
+            {
+                // Extract properties
+                ExtractProperties(namedType, metadata);
+                logBuilder.AppendLine($"// Extracted {metadata.Properties.Count} properties");
+
+                // Extract constructor parameters
+                ExtractConstructorParameters(namedType, metadata);
+                logBuilder.AppendLine($"// Extracted {metadata.Parameters.Count} constructor parameters");
+
+                // Handle union types
+                if (metadata.Format == SerializationType.Union)
+                {
+                    ExtractUnionCases(namedType, metadata);
+                    logBuilder.AppendLine($"// Extracted {metadata.UnionCases.Count} union cases");
+                }
+
+                // Handle collection types
+                ExtractCollectionTypeInfo(namedType, metadata);
+
+                if (metadata.ElementType != null)
+                    logBuilder.AppendLine($"// Extracted element type: {metadata.ElementType.FullName}");
+
+                if (metadata.KeyType != null)
+                    logBuilder.AppendLine($"// Extracted key type: {metadata.KeyType.FullName}");
+
+                // Check if type has base Write/Read methods
+                metadata.HasBaseWriteMethod = true;
+                metadata.HasBaseReadMethod = true;
+            }
+            else if (type is IArrayTypeSymbol arrayType)
+            {
+                // Handle array types
+                metadata.ElementType = new TypeInfo(arrayType.ElementType);
+                metadata.Format = SerializationType.Array;
+                logBuilder.AppendLine($"// Set format to Array for array type with element type: {metadata.ElementType.FullName}");
+            }
+
+            logBuilder.AppendLine($"// Final metadata extraction result:");
+            logBuilder.AppendLine($"//   Format: {metadata.Format}");
+            logBuilder.AppendLine($"//   ValidatorTypeName: {metadata.ValidatorTypeName ?? "None"}");
+            logBuilder.AppendLine($"//   HasValidator: {metadata.HasValidator}");
+
+            // Store the debug info in the metadata for logging
+            metadata.DebugInfo = logBuilder.ToString();
+
+            return metadata;
         }
 
         /// <summary>
@@ -169,34 +274,47 @@ public sealed partial class CborSourceGenerator
         /// <summary>
         /// Processes attributes on a type to determine format and settings
         /// </summary>
-        private void ProcessTypeAttributes(ITypeSymbol type, SerializableType metadata)
+        private void ProcessTypeAttributes(ITypeSymbol type, SerializableType metadata, Compilation compilation = null, StringBuilder logBuilder = null)
         {
+            logBuilder?.AppendLine($"// Processing attributes for type: {type.ToDisplayString()}");
+
             bool hasSerializableAttr = false;
             bool isFormatDetermined = metadata.Format != SerializationType.Object;
 
             foreach (var attr in type.GetAttributes())
             {
                 string? attrName = attr.AttributeClass?.ToDisplayString();
+                logBuilder?.AppendLine($"//   Attribute: {attrName}");
 
                 switch (attrName)
                 {
                     case Constants.CborSerializableAttributeFullName:
                         hasSerializableAttr = true;
+
+                        if (type.ToDisplayString() == "Chrysalis.Cbor.Types.Primitives.CborEncodedValue")
+                        {
+                            metadata.Format = SerializationType.Encoded;
+                            isFormatDetermined = true;
+                            logBuilder?.AppendLine($"//     Set format to Encoded");
+                        }
                         break;
 
                     case Constants.CborMapAttributeFullName:
                         metadata.Format = SerializationType.Map;
                         isFormatDetermined = true;
+                        logBuilder?.AppendLine($"//     Set format to Map");
                         break;
 
                     case Constants.CborListAttributeFullName:
                         metadata.Format = SerializationType.Array;
                         isFormatDetermined = true;
+                        logBuilder?.AppendLine($"//     Set format to Array");
                         break;
 
                     case Constants.CborUnionAttributeFullName:
                         metadata.Format = SerializationType.Union;
                         isFormatDetermined = true;
+                        logBuilder?.AppendLine($"//     Set format to Union");
                         break;
 
                     case Constants.CborConstrAttributeFullName:
@@ -205,6 +323,7 @@ public sealed partial class CborSourceGenerator
                         if (attr.ConstructorArguments.Length > 0)
                         {
                             metadata.Constructor = attr.ConstructorArguments[0].Value as int?;
+                            logBuilder?.AppendLine($"//     Set format to Constr with index: {metadata.Constructor}");
                         }
                         break;
 
@@ -212,46 +331,41 @@ public sealed partial class CborSourceGenerator
                         if (attr.ConstructorArguments.Length > 0)
                         {
                             metadata.Tag = attr.ConstructorArguments[0].Value as int?;
+                            logBuilder?.AppendLine($"//     Set tag: {metadata.Tag}");
                         }
                         break;
 
                     case Constants.CborNullableAttributeFullName:
                         metadata.Format = SerializationType.Nullable;
                         isFormatDetermined = true;
+                        logBuilder?.AppendLine($"//     Set format to Nullable");
                         break;
 
                     case Constants.CborIndefiniteAttributeFullName:
                         metadata.IsIndefinite = true;
+                        logBuilder?.AppendLine($"//     Set IsIndefinite = true");
                         break;
 
                     case Constants.CborSizeAttributeFullName:
                         if (attr.ConstructorArguments.Length > 0)
                         {
                             metadata.Size = attr.ConstructorArguments[0].Value as int?;
+                            logBuilder?.AppendLine($"//     Set Size = {metadata.Size}");
                         }
-                        break;
-
-                    case Constants.CborValidateExactAttributeFullName:
-                        metadata.ValidateExact = true;
-                        break;
-
-                    case Constants.CborValidateRangeAttributeFullName:
-                        metadata.ValidateRange = true;
-                        break;
-
-                    case Constants.CborValidateAttributeFullName:
-                        metadata.CustomValidation = true;
                         break;
                 }
             }
+
+            // Detect validator with detailed logging
+            DetectValidator(type, metadata, compilation, logBuilder);
 
             // Handle container types with a single property
             if (hasSerializableAttr && !isFormatDetermined && metadata.Properties.Count == 1)
             {
                 metadata.Format = SerializationType.Container;
+                logBuilder?.AppendLine($"//   Set format to Container (single property)");
             }
         }
-
         /// <summary>
         /// Extracts property metadata from a type
         /// </summary>
@@ -407,5 +521,136 @@ public sealed partial class CborSourceGenerator
         public bool IsNullable { get; set; }
         public ITypeSymbol? InnerType { get; set; }
         public SerializationType? InnerFormat { get; set; }
+    }
+
+    /// <summary>
+    /// Detects and sets validator information for a type
+    /// </summary>
+    private static void DetectValidator(ITypeSymbol type, SerializableType metadata, Compilation compilation, StringBuilder? logBuilder = null)
+    {
+        if (type is not INamedTypeSymbol namedType || compilation == null)
+            return;
+
+        // Log start of validator detection if logging is enabled
+        logBuilder?.AppendLine($"// Detecting validator for: {namedType.ToDisplayString()}");
+
+        // 1. First approach: Check if the type implements ICborValidator<T> for itself
+        bool implementsSelfValidator = false;
+        foreach (var interfaceType in namedType.AllInterfaces)
+        {
+            string interfaceFullName = interfaceType.ToDisplayString();
+            bool isValidator = interfaceFullName.StartsWith("Chrysalis.Cbor.Types.ICborValidator<") ||
+                               interfaceFullName.StartsWith("Chrysalis.Cbor.Serialization.ICborValidator<") ||
+                               interfaceFullName.Contains(".ICborValidator<");
+
+            logBuilder?.AppendLine($"//    Interface: {interfaceFullName}, IsValidator: {isValidator}");
+
+            if (isValidator && interfaceType.TypeArguments.Length == 1)
+            {
+                var typeArgFullName = interfaceType.TypeArguments[0].ToDisplayString();
+                var selfFullName = namedType.ToDisplayString();
+
+                logBuilder?.AppendLine($"//       Type arg: {typeArgFullName}, Self: {selfFullName}");
+
+                if (typeArgFullName == selfFullName)
+                {
+                    implementsSelfValidator = true;
+                    metadata.ValidatorTypeName = namedType.ToDisplayString();
+
+                    logBuilder?.AppendLine($"//       Self-validation detected: {metadata.ValidatorTypeName}");
+                    break;
+                }
+            }
+        }
+
+        // If the type doesn't validate itself, look for a dedicated validator
+        if (!implementsSelfValidator)
+        {
+            // 2. Look for a validator with the pattern "{TypeName}Validator"
+            string validatorName = $"{namedType.Name}Validator";
+            logBuilder?.AppendLine($"//    Searching for validator named: {validatorName}");
+
+            // Possible namespaces to check
+            var namespacesToCheck = new List<string>
+        {
+            namedType.ContainingNamespace.ToDisplayString(), // Same namespace
+            $"{namedType.ContainingNamespace}.Validators", // Dedicated validators namespace
+            "Chrysalis.Cbor.Types.Validators", // Global validators namespace
+            "Chrysalis.Cbor.Serialization.Validators" // Another common validators namespace
+        };
+
+            // Try specific namespace locations first
+            foreach (var ns in namespacesToCheck)
+            {
+                string fullName = $"{ns}.{validatorName}";
+                logBuilder?.AppendLine($"//    Checking: {fullName}");
+
+                var validatorType = compilation.GetTypeByMetadataName(fullName);
+                if (validatorType != null)
+                {
+                    logBuilder?.AppendLine($"//       Found validator type: {fullName}");
+
+                    // Check if it implements ICborValidator<T> for our type
+                    CheckIfImplementsValidator(validatorType, namedType, metadata, logBuilder);
+
+                    if (metadata.ValidatorTypeName != null)
+                        break;
+                }
+            }
+
+            // If still not found, try a broader search
+            if (metadata.ValidatorTypeName == null)
+            {
+                logBuilder?.AppendLine($"//    Performing broader search for: {validatorName}");
+
+                // Search for any type that ends with our validator name
+                foreach (var symbol in compilation.GetSymbolsWithName(n => n == validatorName, SymbolFilter.Type))
+                {
+                    if (symbol is INamedTypeSymbol validatorType)
+                    {
+                        logBuilder?.AppendLine($"//       Found potential validator: {validatorType.ToDisplayString()}");
+
+                        // Check if it implements ICborValidator<T> for our type
+                        CheckIfImplementsValidator(validatorType, namedType, metadata, logBuilder);
+
+                        if (metadata.ValidatorTypeName != null)
+                            break;
+                    }
+                }
+            }
+        }
+
+        logBuilder?.AppendLine($"// Final validator detection result: {metadata.ValidatorTypeName ?? "None"}");
+    }
+
+    /// <summary>
+    /// Checks if a type implements ICborValidator for another type
+    /// </summary>
+    private static void CheckIfImplementsValidator(INamedTypeSymbol validatorType, INamedTypeSymbol targetType, SerializableType metadata, StringBuilder? logBuilder = null)
+    {
+        foreach (var interfaceType in validatorType.AllInterfaces)
+        {
+            string interfaceFullName = interfaceType.ToDisplayString();
+            bool isValidator = interfaceFullName.StartsWith("Chrysalis.Cbor.Types.ICborValidator<") ||
+                               interfaceFullName.StartsWith("Chrysalis.Cbor.Serialization.ICborValidator<") ||
+                               interfaceFullName.Contains(".ICborValidator<");
+
+            logBuilder?.AppendLine($"//          Interface: {interfaceFullName}, IsValidator: {isValidator}");
+
+            if (isValidator && interfaceType.TypeArguments.Length == 1)
+            {
+                var validatedTypeName = interfaceType.TypeArguments[0].ToDisplayString();
+                var targetTypeName = targetType.ToDisplayString();
+
+                logBuilder?.AppendLine($"//             Validates: {validatedTypeName}, Target: {targetTypeName}");
+
+                if (validatedTypeName == targetTypeName)
+                {
+                    metadata.ValidatorTypeName = validatorType.ToDisplayString();
+                    logBuilder?.AppendLine($"//             MATCH FOUND: {metadata.ValidatorTypeName}");
+                    return;
+                }
+            }
+        }
     }
 }

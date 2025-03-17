@@ -22,10 +22,10 @@ public sealed partial class CborSourceGenerator
             IsEnum = symbol.TypeKind == TypeKind.Enum;
             IsAbstract = symbol.IsAbstract;
             IsRecord = symbol.IsRecord;
-            
+
             // Handle generic types
             IsGeneric = symbol is INamedTypeSymbol namedType && namedType.IsGenericType;
-            
+
             if (IsGeneric && symbol is INamedTypeSymbol genericType)
             {
                 // Store generic type parameters
@@ -38,7 +38,7 @@ public sealed partial class CborSourceGenerator
                 TypeParameters = new List<TypeInfo>();
             }
         }
-
+        public string DebugInfo { get; set; } = string.Empty;
         public string Name { get; }
         public string FullName { get; }
         public string Namespace { get; }
@@ -62,7 +62,8 @@ public sealed partial class CborSourceGenerator
         Constr,     // Constructor-encoded type
         Union,      // Union type with multiple cases
         Nullable,   // Nullable type
-        Container   // Single-property container type
+        Container,   // Single-property container type
+        Encoded
     }
 
     /// <summary>
@@ -97,13 +98,13 @@ public sealed partial class CborSourceGenerator
         public SerializationType? InnerFormat { get; set; }
 
         // Validation
-        public bool ValidateExact { get; set; }
-        public bool ValidateRange { get; set; }
-        public bool CustomValidation { get; set; }
-        
+        public string? ValidatorTypeName { get; set; }
+        public bool HasValidator => !string.IsNullOrEmpty(ValidatorTypeName);
+
         // Method hiding control (for determining when to use 'new' keyword)
         public bool HasBaseWriteMethod { get; set; }
         public bool HasBaseReadMethod { get; set; }
+        public string DebugInfo { get; set; } = string.Empty;
     }
 
     /// <summary>
@@ -137,11 +138,8 @@ public sealed partial class CborSourceGenerator
             Order = ExtractOrderAttribute(property);
             Size = ExtractSizeAttribute(property);
             IsIndefinite = ExtractIndefiniteAttribute(property);
-
-            // Extract validation attributes
-            ValidateExact = ExtractValidateExactAttribute(property);
-            ValidateRange = ExtractValidateRangeAttribute(property);
-            CustomValidation = ExtractValidateAttribute(property);
+            IsCborNullable = ExtractCborNullableAttribute(property);
+            IsPropertyNullable = Type.CanBeNull;
 
             // Analyze collection type (with null checks)
             if (property.Type is IArrayTypeSymbol arrayType && arrayType.ElementType != null)
@@ -165,6 +163,8 @@ public sealed partial class CborSourceGenerator
         public int? Order { get; }
         public int? Size { get; }
         public bool IsIndefinite { get; }
+        public bool IsCborNullable { get; }
+        public bool IsPropertyNullable { get; }
 
         // Type structure
         public bool IsCollection { get; private set; }
@@ -172,10 +172,6 @@ public sealed partial class CborSourceGenerator
         public TypeInfo? ElementType { get; private set; }
         public TypeInfo? KeyType { get; private set; }
 
-        // Validation
-        public bool ValidateExact { get; }
-        public bool ValidateRange { get; }
-        public bool CustomValidation { get; }
 
         private void AnalyzeCollectionType(INamedTypeSymbol type)
         {
@@ -226,14 +222,8 @@ public sealed partial class CborSourceGenerator
         private static bool ExtractIndefiniteAttribute(IPropertySymbol property) =>
             property.GetAttributes().Any(a => a.AttributeClass?.Name == Constants.CborIndefiniteAttribute);
 
-        private static bool ExtractValidateExactAttribute(IPropertySymbol property) =>
-            property.GetAttributes().Any(a => a.AttributeClass?.Name == Constants.CborValidateExactAttribute);
-
-        private static bool ExtractValidateRangeAttribute(IPropertySymbol property) =>
-            property.GetAttributes().Any(a => a.AttributeClass?.Name == Constants.CborValidateRangeAttribute);
-
-        private static bool ExtractValidateAttribute(IPropertySymbol property) =>
-            property.GetAttributes().Any(a => a.AttributeClass?.Name == Constants.CborValidateAttribute);
+        private static bool ExtractCborNullableAttribute(IPropertySymbol property) =>
+            property.GetAttributes().Any(a => a.AttributeClass?.Name == Constants.CborNullableAttribute);
     }
 
     private sealed class ConstructorParam(IParameterSymbol parameter)

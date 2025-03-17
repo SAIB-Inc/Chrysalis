@@ -10,15 +10,27 @@ using Xunit;
 
 namespace Chrysalis.Test;
 
+
+record TestRecord(string p, int i);
+
+
 public class CborTests
 {
     [Fact]
+    [InlineData([1, 2, 3])]
     public void TransactionInputTest()
     {
         TransactionInput txInput = new(
             Convert.FromHexString("1708090925029788ab1713c7175d842a3051bed5ec846be41c543719acfecc1f"),
             0
         );
+
+        TransactionInput txInput2 = new(
+            Convert.FromHexString("1708090925029788ab1713c7175d842a3051bed5ec846be41c543719acfecc1f"),
+            0
+        );
+
+
 
         CborWriter writer = new();
         TransactionInput.Write(writer, txInput);
@@ -28,6 +40,7 @@ public class CborTests
 
         Assert.NotNull(serialized);
         Assert.NotNull(deserialized);
+        Assert.Equal(new TestRecord("test", 1), new TestRecord("test", 1));
     }
 
     [Fact]
