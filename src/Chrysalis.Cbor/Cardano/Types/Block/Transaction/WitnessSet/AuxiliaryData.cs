@@ -6,11 +6,11 @@ using Chrysalis.Cbor.Serialization.Attributes;
 
 namespace Chrysalis.Cbor.Cardano.Types.Block.Transaction.WitnessSet;
 
-// [CborSerializable]
+[CborSerializable]
 [CborUnion]
 public abstract partial record AuxiliaryData : CborBase<AuxiliaryData>
 {
-    // [CborSerializable]
+    [CborSerializable]
     [CborMap]
     [CborTag(259)]
     public partial record PostAlonzoAuxiliaryDataMap(
@@ -22,11 +22,11 @@ public abstract partial record AuxiliaryData : CborBase<AuxiliaryData>
     ) : AuxiliaryData;
 
 
-    // [CborSerializable]
+    [CborSerializable]
     public partial record Metadata(Dictionary<ulong, TransactionMetadatum> Value) : AuxiliaryData;
 
 
-    // [CborSerializable]
+    [CborSerializable]
     [CborList]
     public partial record ShellyMaAuxiliaryData(
        [CborIndex(0)] Metadata TransactionMetadata,

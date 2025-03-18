@@ -582,17 +582,24 @@ public sealed partial class CborSourceGenerator
                 sb.AppendLine($"{prop.Type.FullName} {prop.Name} = default;");
             }
 
-            // Read map entries
+            // Read map entries - use a unique variable name for the map key
             sb.AppendLine("while (reader.PeekState() != CborReaderState.EndMap)");
             sb.AppendLine("{");
-            sb.AppendLine("    string key = reader.ReadTextString();");
-            sb.AppendLine("    switch (key)");
+            sb.AppendLine("    string mapEntryKey = reader.ReadTextString();");
+            sb.AppendLine("    switch (mapEntryKey)");
             sb.AppendLine("    {");
 
             foreach (var prop in type.Properties)
             {
                 sb.AppendLine($"        case \"{prop.Key}\":");
-                sb.AppendLine($"            {GenericEmitterStrategy.GenerateReadCode(prop.Type.FullName, prop.Name, prop.IsPropertyNullable)}");
+
+                // Get the read code and ensure variable names don't conflict
+                string readCode = GenericEmitterStrategy.GenerateReadCode(prop.Type.FullName, prop.Name, prop.IsPropertyNullable);
+                // If there are dictionaries inside, we need to make sure their variable names don't conflict
+                readCode = readCode.Replace(" key = ", $" dictKey_{prop.Name} = ");
+                readCode = readCode.Replace(" value = ", $" dictValue_{prop.Name} = ");
+
+                sb.AppendLine($"            {readCode}");
                 sb.AppendLine("            break;");
             }
 

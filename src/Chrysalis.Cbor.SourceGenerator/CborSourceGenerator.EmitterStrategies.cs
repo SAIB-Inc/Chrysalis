@@ -112,29 +112,25 @@ public sealed partial class CborSourceGenerator
             }
             else
             {
-                // Special handling for globally qualified types
-                if (typeName.Contains("global::"))
-                {
-                    // Custom CBOR type - read the encoded value and pass it to the Read method
-                    return $$"""
-                    // Read the encoded value as ReadOnlyMemory<byte>
-                    var encodedValue = reader.ReadEncodedValue();
-                    
-                    // Deserialize using the type's Read method
-                    {{variableName}} = {{cleanTypeName}}.Read(encodedValue);
-                    """;
-                }
-                else
-                {
-                    // Custom CBOR type - read the encoded value and pass it to the Read method  
-                    return $$"""
-                    // Read the encoded value as ReadOnlyMemory<byte>
-                    var encodedValue = reader.ReadEncodedValue();
-                    
-                    // Deserialize using the type's Read method
-                    {{variableName}} = {{cleanTypeName}}.Read(encodedValue);
-                    """;
-                }
+                // Check if this is a nested type with a dot in the name
+                bool isNestedType = cleanTypeName.Contains(".");
+
+                // Check if this is a nested type that ends with ".CborDefList" or similar
+                bool isNestedClassType = cleanTypeName.Contains(".") &&
+                                        (cleanTypeName.EndsWith(".CborDefList") ||
+                                         cleanTypeName.Contains(".CborDefList<") ||
+                                         cleanTypeName.Contains(">.CborDefList"));
+
+                // Special handling for globally qualified or nested types
+                string readCode = $$"""
+            // Read the encoded value as ReadOnlyMemory<byte>
+            var encodedValue = reader.ReadEncodedValue();
+            
+            // Deserialize using the type's Read method
+            {{variableName}} = {{(isNestedClassType ? $"({cleanTypeName})" : "")}}{{cleanTypeName}}.Read(encodedValue);
+            """;
+
+                return readCode;
             }
         }
 
@@ -717,14 +713,14 @@ public sealed partial class CborSourceGenerator
             sb.AppendLine("while (reader.PeekState() != CborReaderState.EndMap)");
             sb.AppendLine("{");
 
-            // Handle key
-            sb.AppendLine($"    {keyType} key = default;");
+            // Use a more specific variable name with property name to avoid conflicts
+            sb.AppendLine($"    {keyType} dictKey_{variableName} = default;");
             if (keyContainsGenericParams)
             {
                 sb.AppendLine("    if (reader.PeekState() == CborReaderState.Null)");
                 sb.AppendLine("    {");
                 sb.AppendLine("        reader.ReadNull();");
-                sb.AppendLine("        key = default;");
+                sb.AppendLine($"        dictKey_{variableName} = default;");
                 sb.AppendLine("    }");
                 sb.AppendLine("    else");
                 sb.AppendLine("    {");
@@ -735,19 +731,19 @@ public sealed partial class CborSourceGenerator
                 sb.AppendLine("        if (keyState == CborReaderState.Null)");
                 sb.AppendLine("        {");
                 sb.AppendLine("            keyReader.ReadNull();");
-                sb.AppendLine("            key = default;");
+                sb.AppendLine($"            dictKey_{variableName} = default;");
                 sb.AppendLine("        }");
                 sb.AppendLine("        else if (keyState == CborReaderState.UnsignedInteger)");
                 sb.AppendLine("        {");
                 sb.AppendLine("            var uintValue = keyReader.ReadUInt32();");
                 sb.AppendLine("            if (typeof(T) == typeof(int))");
-                sb.AppendLine("                key = (T)(object)(int)uintValue;");
+                sb.AppendLine($"                dictKey_{variableName} = (T)(object)(int)uintValue;");
                 sb.AppendLine("            else if (typeof(T) == typeof(uint))");
-                sb.AppendLine("                key = (T)(object)uintValue;");
+                sb.AppendLine($"                dictKey_{variableName} = (T)(object)uintValue;");
                 sb.AppendLine("            else if (typeof(T) == typeof(long))");
-                sb.AppendLine("                key = (T)(object)(long)uintValue;");
+                sb.AppendLine($"                dictKey_{variableName} = (T)(object)(long)uintValue;");
                 sb.AppendLine("            else if (typeof(T) == typeof(ulong))");
-                sb.AppendLine("                key = (T)(object)(ulong)uintValue;");
+                sb.AppendLine($"                dictKey_{variableName} = (T)(object)(ulong)uintValue;");
                 sb.AppendLine("            else");
                 sb.AppendLine($"                throw new InvalidOperationException($\"Cannot deserialize UInt32 to key type {{{keyType}}}\");");
                 sb.AppendLine("        }");
@@ -755,7 +751,7 @@ public sealed partial class CborSourceGenerator
                 sb.AppendLine("        {");
                 sb.AppendLine("            var strValue = keyReader.ReadTextString();");
                 sb.AppendLine("            if (typeof(T) == typeof(string))");
-                sb.AppendLine("                key = (T)(object)strValue;");
+                sb.AppendLine($"                dictKey_{variableName} = (T)(object)strValue;");
                 sb.AppendLine("            else");
                 sb.AppendLine($"                throw new InvalidOperationException($\"Cannot deserialize string to key type {{{keyType}}}\");");
                 sb.AppendLine("        }");
@@ -767,17 +763,21 @@ public sealed partial class CborSourceGenerator
             }
             else
             {
-                sb.AppendLine($"    {GenerateReadCode(keyType, "key", false)}");
+                // Replace the code being generated for read key with new variable name
+                string keyReadCode = GenerateReadCode(keyType, $"dictKey_{variableName}", false);
+                // Replace any temporary variables inside to avoid conflicts
+                keyReadCode = keyReadCode.Replace("key = ", $"dictKey_{variableName} = ");
+                sb.AppendLine($"    {keyReadCode}");
             }
 
-            // Handle value
-            sb.AppendLine($"    {valueType} value = default;");
+            // Use a more specific variable name with property name to avoid conflicts
+            sb.AppendLine($"    {valueType} dictValue_{variableName} = default;");
             if (valueContainsGenericParams)
             {
                 sb.AppendLine("    if (reader.PeekState() == CborReaderState.Null)");
                 sb.AppendLine("    {");
                 sb.AppendLine("        reader.ReadNull();");
-                sb.AppendLine("        value = default;");
+                sb.AppendLine($"        dictValue_{variableName} = default;");
                 sb.AppendLine("    }");
                 sb.AppendLine("    else");
                 sb.AppendLine("    {");
@@ -788,19 +788,19 @@ public sealed partial class CborSourceGenerator
                 sb.AppendLine("        if (valueState == CborReaderState.Null)");
                 sb.AppendLine("        {");
                 sb.AppendLine("            valueReader.ReadNull();");
-                sb.AppendLine("            value = default;");
+                sb.AppendLine($"            dictValue_{variableName} = default;");
                 sb.AppendLine("        }");
                 sb.AppendLine("        else if (valueState == CborReaderState.UnsignedInteger)");
                 sb.AppendLine("        {");
                 sb.AppendLine("            var uintValue = valueReader.ReadUInt32();");
                 sb.AppendLine("            if (typeof(T) == typeof(int))");
-                sb.AppendLine("                value = (T)(object)(int)uintValue;");
+                sb.AppendLine($"                dictValue_{variableName} = (T)(object)(int)uintValue;");
                 sb.AppendLine("            else if (typeof(T) == typeof(uint))");
-                sb.AppendLine("                value = (T)(object)uintValue;");
+                sb.AppendLine($"                dictValue_{variableName} = (T)(object)uintValue;");
                 sb.AppendLine("            else if (typeof(T) == typeof(long))");
-                sb.AppendLine("                value = (T)(object)(long)uintValue;");
+                sb.AppendLine($"                dictValue_{variableName} = (T)(object)(long)uintValue;");
                 sb.AppendLine("            else if (typeof(T) == typeof(ulong))");
-                sb.AppendLine("                value = (T)(object)(ulong)uintValue;");
+                sb.AppendLine($"                dictValue_{variableName} = (T)(object)(ulong)uintValue;");
                 sb.AppendLine("            else");
                 sb.AppendLine($"                throw new InvalidOperationException($\"Cannot deserialize UInt32 to value type {{{valueType}}}\");");
                 sb.AppendLine("        }");
@@ -808,7 +808,7 @@ public sealed partial class CborSourceGenerator
                 sb.AppendLine("        {");
                 sb.AppendLine("            var strValue = valueReader.ReadTextString();");
                 sb.AppendLine("            if (typeof(T) == typeof(string))");
-                sb.AppendLine("                value = (T)(object)strValue;");
+                sb.AppendLine($"                dictValue_{variableName} = (T)(object)strValue;");
                 sb.AppendLine("            else");
                 sb.AppendLine($"                throw new InvalidOperationException($\"Cannot deserialize string to value type {{{valueType}}}\");");
                 sb.AppendLine("        }");
@@ -820,10 +820,14 @@ public sealed partial class CborSourceGenerator
             }
             else
             {
-                sb.AppendLine($"    {GenerateReadCode(valueType, "value", valueIsNullable)}");
+                // Replace the code being generated for read value with new variable name
+                string valueReadCode = GenerateReadCode(valueType, $"dictValue_{variableName}", valueIsNullable);
+                // Replace any temporary variables inside to avoid conflicts
+                valueReadCode = valueReadCode.Replace("value = ", $"dictValue_{variableName} = ");
+                sb.AppendLine($"    {valueReadCode}");
             }
 
-            sb.AppendLine($"    {variableName}[key] = value;");
+            sb.AppendLine($"    {variableName}[dictKey_{variableName}] = dictValue_{variableName};");
             sb.AppendLine("}");
             sb.AppendLine("reader.ReadEndMap();");
 

@@ -10,11 +10,11 @@ using Chrysalis.Cbor.Serialization.Attributes;
 
 namespace Chrysalis.Cbor.Cardano.Types.Block.Transaction.Governance;
 
-// [CborSerializable]
+[CborSerializable]
 [CborUnion]
 public abstract partial record GovAction : CborBase<GovAction>
 {
-    // [CborSerializable]
+    [CborSerializable]
     [CborList]
     public partial record ParameterChangeAction(
         [CborIndex(0)] int ActionType,
@@ -24,7 +24,7 @@ public abstract partial record GovAction : CborBase<GovAction>
     ) : GovAction;
 
 
-    // [CborSerializable]
+    [CborSerializable]
     [CborList]
     public partial record HardForkInitiationAction(
          [CborIndex(0)] int ActionType,
@@ -33,7 +33,7 @@ public abstract partial record GovAction : CborBase<GovAction>
      ) : GovAction;
 
 
-    // [CborSerializable]
+    [CborSerializable]
     [CborList]
     public partial record TreasuryWithdrawalsAction(
          [CborIndex(0)] int ActionType,
@@ -42,14 +42,14 @@ public abstract partial record GovAction : CborBase<GovAction>
      ) : GovAction;
 
 
-    // [CborSerializable]
+    [CborSerializable]
     [CborList]
     public partial record NoConfidence(
         [CborIndex(0)] int ActionType,
         [CborIndex(1)] GovActionId? GovActionId
     ) : GovAction;
 
-    // [CborSerializable]
+    [CborSerializable]
     [CborList]
     public partial record UpdateCommittee(
         [CborIndex(0)] int ActionType,
@@ -59,7 +59,7 @@ public abstract partial record GovAction : CborBase<GovAction>
         [CborIndex(4)] CborRationalNumber QuorumThreshold
     ) : GovAction;
 
-    // [CborSerializable]
+    [CborSerializable]
     [CborList]
     public partial record NewConstitution(
         [CborIndex(0)] int ActionType,
@@ -67,7 +67,7 @@ public abstract partial record GovAction : CborBase<GovAction>
         [CborIndex(2)] Constitution Constitution
     ) : GovAction;
 
-    // [CborSerializable]
+    [CborSerializable]
     [CborList]
     public partial record InfoAction(
         [CborIndex(0)] int Value

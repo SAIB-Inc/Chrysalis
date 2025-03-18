@@ -7,11 +7,11 @@ using Chrysalis.Cbor.Serialization.Attributes;
 
 namespace Chrysalis.Cbor.Cardano.Types.Block.Transaction.Protocol;
 
-// [CborSerializable]
+[CborSerializable]
 [CborUnion]
 public abstract partial record ProtocolParamUpdate : CborBase<ProtocolParamUpdate>
 {
-    // [CborSerializable]
+    [CborSerializable]
     [CborList]
     public partial record ConwayProtocolParamUpdate(
         [CborIndex(0)] ulong? MinFeeA,
@@ -46,7 +46,7 @@ public abstract partial record ProtocolParamUpdate : CborBase<ProtocolParamUpdat
         [CborIndex(33)] CborRationalNumber? MinFeeRefScriptCostPerByte
     ) : ProtocolParamUpdate;
 
-    // [CborSerializable]
+    [CborSerializable]
     [CborMap]
     public partial record BabbageProtocolParamUpdate(
         [CborIndex(0)] ulong? MinFeeA,
@@ -73,7 +73,7 @@ public abstract partial record ProtocolParamUpdate : CborBase<ProtocolParamUpdat
         [CborIndex(24)] ulong? MaxCollateralInputs
     ) : ProtocolParamUpdate;
 
-    // [CborSerializable]
+    [CborSerializable]
     [CborMap]
     public partial record AlonzoProtocolParamUpdate(
         [CborIndex(0)] ulong? MinFeeA,
@@ -102,7 +102,7 @@ public abstract partial record ProtocolParamUpdate : CborBase<ProtocolParamUpdat
         [CborIndex(24)] ulong? MaxCollateralInputs
     ) : ProtocolParamUpdate;
 
-    // [CborSerializable]
+    [CborSerializable]
     [CborMap]
     public partial record MaryProtocolParamUpdate(
         [CborIndex(0)] ulong? MinFeeA,
@@ -125,7 +125,7 @@ public abstract partial record ProtocolParamUpdate : CborBase<ProtocolParamUpdat
 }
 
 
-// [CborSerializable]
+[CborSerializable]
 public partial record ProposedProtocolParameterUpdates(
     Dictionary<byte[], ProtocolParamUpdate> Value
 ) : CborBase<ProposedProtocolParameterUpdates>;

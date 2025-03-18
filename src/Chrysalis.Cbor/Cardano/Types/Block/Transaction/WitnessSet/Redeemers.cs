@@ -6,18 +6,18 @@ using Chrysalis.Cbor.Serialization.Attributes;
 
 namespace Chrysalis.Cbor.Cardano.Types.Block.Transaction.WitnessSet;
 
-// [CborSerializable]
+[CborSerializable]
 [CborUnion]
 public abstract partial record Redeemers : CborBase<Redeemers>
 {
-    // [CborSerializable]
+    [CborSerializable]
     public partial record RedeemerList(List<RedeemerEntry> Value) : Redeemers;
 
-    // [CborSerializable]
+    [CborSerializable]
     public partial record RedeemerMap(Dictionary<RedeemerKey, RedeemerValue> Value) : Redeemers;
 }
 
-// [CborSerializable]
+[CborSerializable]
 [CborList]
 public partial record RedeemerEntry(
     [CborIndex(0)] int Tag,
@@ -26,14 +26,14 @@ public partial record RedeemerEntry(
     [CborIndex(3)] ExUnits ExUnits
 ) : CborBase<RedeemerEntry>;
 
-// [CborSerializable]
+[CborSerializable]
 [CborList]
 public partial record RedeemerKey(
     [CborIndex(0)] int Tag,
     [CborIndex(1)] ulong Index
 ) : CborBase<RedeemerKey>;
 
-// [CborSerializable]
+[CborSerializable]
 [CborList]
 public partial record RedeemerValue(
     [CborIndex(0)] PlutusData Data,

@@ -3,7 +3,7 @@ using Chrysalis.Cbor.Serialization.Attributes;
 namespace Chrysalis.Cbor.Types.Test;
 
 // Creating a nullable serializable type
-// [CborSerializable]
+[CborSerializable]
 [CborMap]
 public partial record NullableTestMap(
     [property: CborProperty("0")]

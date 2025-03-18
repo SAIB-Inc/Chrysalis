@@ -6,7 +6,7 @@ using Chrysalis.Cbor.Serialization.Attributes;
 
 namespace Chrysalis.Cbor.Cardano.Types.Block.Header;
 
-// [CborSerializable]
+[CborSerializable]
 [CborList]
 public partial record BlockHeader(
     [CborIndex(0)] BlockHeaderBody HeaderBody,

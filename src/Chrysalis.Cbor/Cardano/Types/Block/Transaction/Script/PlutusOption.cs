@@ -5,13 +5,13 @@ using Chrysalis.Cbor.Types;
 
 namespace Chrysalis.Cbor.Cardano.Types.Block.Transaction.Script;
 
-// [CborSerializable]
+[CborSerializable]
 [CborUnion]
-public abstract partial record PlutusOption<T> : CborBase<PlutusOption<T>>
+public abstract partial record PlutusOption : CborBase<PlutusOption>
 {
-    // [CborSerializable]
-    public partial record PlutusSome<U>([CborIndex(0)] U Value) : PlutusOption<U>;
+    [CborSerializable]
+    public partial record PlutusSome<T>([CborIndex(0)] T Value) : PlutusOption;
 
-    // [CborSerializable]
-    public partial record PlutusNone<U> : PlutusOption<U>;
+    [CborSerializable]
+    public partial record PlutusNone : PlutusOption;
 }

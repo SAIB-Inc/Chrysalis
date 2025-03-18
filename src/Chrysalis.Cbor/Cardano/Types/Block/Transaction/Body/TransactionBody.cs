@@ -7,20 +7,18 @@ using Chrysalis.Cbor.Cardano.Types.Block.Transaction.Output;
 using Chrysalis.Cbor.Types.Custom;
 using Chrysalis.Cbor.Types;
 using Chrysalis.Cbor.Serialization.Attributes;
-using static Chrysalis.Cbor.Cardano.Types.Block.Transaction.Output.TransactionOutput;
-using static Chrysalis.Cbor.Cardano.Types.Block.Transaction.Output.MultiAsset;
 
 namespace Chrysalis.Cbor.Cardano.Types.Block.Transaction.Body;
 
-// [CborSerializable]
+[CborSerializable]
 [CborUnion]
 public abstract partial record TransactionBody : CborBase<TransactionBody>
 {
-    // [CborSerializable]
+    [CborSerializable]
     [CborMap]
     public partial record AlonzoTransactionBody(
             [CborIndex(0)] CborMaybeIndefList<TransactionInput> Inputs,
-            [CborIndex(1)] CborMaybeIndefList<AlonzoTransactionOutput> Outputs,
+            [CborIndex(1)] CborMaybeIndefList<TransactionOutput.AlonzoTransactionOutput> Outputs,
             [CborIndex(2)] ulong Fee,
             [CborIndex(3)] ulong? TimeToLive,
             [CborIndex(4)] CborMaybeIndefList<Certificate>? Certificates,
@@ -28,14 +26,14 @@ public abstract partial record TransactionBody : CborBase<TransactionBody>
             [CborIndex(6)] Update? Update,
             [CborIndex(7)] byte[]? AuxiliaryDataHash,
             [CborIndex(8)] ulong? ValidityIntervalStart,
-            [CborIndex(9)] MultiAssetMint? Mint,
+            [CborIndex(9)] MultiAsset.MultiAssetMint? Mint,
             [CborIndex(11)] byte[]? ScriptDataHash,
             [CborIndex(13)] CborMaybeIndefList<TransactionInput>? Collateral,
             [CborIndex(14)] CborMaybeIndefList<byte[]>? RequiredSigners,
             [CborIndex(15)] int? NetworkId
         ) : TransactionBody;
 
-    // [CborSerializable]
+    [CborSerializable]
     [CborMap]
     public partial record BabbageTransactionBody(
         [CborIndex(0)] CborMaybeIndefList<TransactionInput> Inputs,
@@ -47,7 +45,7 @@ public abstract partial record TransactionBody : CborBase<TransactionBody>
         [CborIndex(6)] Update? Update,
         [CborIndex(7)] byte[]? AuxiliaryDataHash,
         [CborIndex(8)] ulong? ValidityIntervalStart,
-        [CborIndex(9)] MultiAssetMint? Mint,
+        [CborIndex(9)] MultiAsset.MultiAssetMint? Mint,
         [CborIndex(11)] byte[]? ScriptDataHash,
         [CborIndex(13)] CborMaybeIndefList<TransactionInput>? Collateral,
         [CborIndex(14)] CborMaybeIndefList<byte[]>? RequiredSigners,
@@ -58,7 +56,7 @@ public abstract partial record TransactionBody : CborBase<TransactionBody>
     ) : TransactionBody;
 
 
-    // [CborSerializable]
+    [CborSerializable]
     [CborMap]
     public partial record ConwayTransactionBody(
         [CborIndex(0)] CborMaybeIndefList<TransactionInput> Inputs,
@@ -69,7 +67,7 @@ public abstract partial record TransactionBody : CborBase<TransactionBody>
         [CborIndex(5)] Withdrawals? Withdrawals,
         [CborIndex(7)] byte[]? AuxiliaryDataHash,
         [CborIndex(8)] ulong? ValidityIntervalStart,
-        [CborIndex(9)] MultiAssetMint? Mint,
+        [CborIndex(9)] MultiAsset.MultiAssetMint? Mint,
         [CborIndex(11)] byte[]? ScriptDataHash,
         [CborIndex(13)] CborMaybeIndefList<TransactionInput>? Collateral,
         [CborIndex(14)] CborMaybeIndefList<byte[]>? RequiredSigners,

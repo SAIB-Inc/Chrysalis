@@ -200,7 +200,7 @@ public sealed partial class CborSourceGenerator
                 }
             }
 
-            // If it's only // [CborSerializable] with no other CBOR-specific attributes and has a single property,
+            // If it's only [CborSerializable] with no other CBOR-specific attributes and has a single property,
             // we'll treat it as a "pass-through" type
             if (hasSerializableAttribute && !isCategorized && spec.Properties.Count == 1)
             {

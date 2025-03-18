@@ -6,7 +6,7 @@ namespace Chrysalis.Cbor.Types.Test;
 [CborUnion]
 public abstract partial record TestUnion : CborBase<TestUnion>
 {
-    // [CborSerializable]
+    [CborSerializable]
     [CborList]
     public partial record TestListUnion(
         [CborOrder(0)]
@@ -16,7 +16,7 @@ public abstract partial record TestUnion : CborBase<TestUnion>
         Dictionary<string, TestConstr> Value3
     ) : TestUnion;
 
-    // [CborSerializable]
+    [CborSerializable]
     [CborConstr(0)]
     public partial record TestConstrUnion(
         [CborOrder(0)]
@@ -41,7 +41,7 @@ public abstract partial record TestUnion : CborBase<TestUnion>
         ulong Value12
     ) : TestUnion;
 
-    // [CborSerializable]
+    [CborSerializable]
     [CborMap]
     public partial record TestMapUnion(
         [property: CborProperty("0")]
@@ -57,7 +57,7 @@ public abstract partial record TestUnion : CborBase<TestUnion>
     ) : TestUnion;
 
 
-    // [CborSerializable]
+    [CborSerializable]
     [CborMap]
     public partial record NullableTestMapUnion(
         [property: CborProperty("0")]

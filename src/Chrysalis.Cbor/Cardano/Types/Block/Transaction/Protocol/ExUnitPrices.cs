@@ -6,7 +6,7 @@ using Chrysalis.Cbor.Types.Primitives;
 
 namespace Chrysalis.Cbor.Cardano.Types.Block.Transaction.Protocol;
 
-// [CborSerializable]
+[CborSerializable]
 [CborList]
 public partial record ExUnitPrices(
     [CborIndex(0)] CborRationalNumber MemPrice,
