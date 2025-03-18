@@ -160,6 +160,8 @@ public sealed partial class CborSourceGenerator
                 #pragma warning disable CS8600
                 #pragma warning disable CS0693
                 #pragma warning disable CS8625
+                #pragma warning disable CS8601
+                #pragma warning disable CS8629
 
                 using System;
                 using System.Collections.Generic;
@@ -196,6 +198,8 @@ public sealed partial class CborSourceGenerator
                 #pragma warning restore CS8600
                 #pragma warning restore CS0693
                 #pragma warning restore CS8625
+                #pragma warning restore CS8601
+                #pragma warning restore CS8629
             """;
         }
 
@@ -276,6 +280,8 @@ public sealed partial class CborSourceGenerator
                 #pragma warning disable CS8600
                 #pragma warning disable CS0693
                 #pragma warning disable CS8625
+                #pragma warning disable CS8601
+                #pragma warning disable CS8629
 
                 using System;
                 using System.Collections.Generic;
@@ -317,6 +323,8 @@ public sealed partial class CborSourceGenerator
                 #pragma warning restore CS8600
                 #pragma warning restore CS0693
                 #pragma warning restore CS8625
+                #pragma warning restore CS8601
+                #pragma warning restore CS8629
             """;
         }
 

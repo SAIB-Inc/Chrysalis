@@ -58,7 +58,7 @@ public sealed partial class CborSourceGenerator
         /// <summary>
         /// Processes all types in the queue
         /// </summary>
-        private void ProcessTypeQueue(CancellationToken cancellationToken, Compilation compilation = null)
+        private void ProcessTypeQueue(CancellationToken cancellationToken, Compilation? compilation = null)
         {
             while (_typesToProcess.Count > 0)
             {
@@ -82,7 +82,7 @@ public sealed partial class CborSourceGenerator
         /// <summary>
         /// Extracts metadata from a type
         /// </summary>
-        private SerializableType ExtractTypeMetadata(TypeToProcess typeToProcess, Compilation compilation = null)
+        private SerializableType ExtractTypeMetadata(TypeToProcess typeToProcess, Compilation? compilation = null)
         {
             var type = typeToProcess.Type;
             var logBuilder = new StringBuilder();
@@ -275,7 +275,7 @@ public sealed partial class CborSourceGenerator
         /// <summary>
         /// Processes attributes on a type to determine format and settings
         /// </summary>
-        private void ProcessTypeAttributes(ITypeSymbol type, SerializableType metadata, Compilation compilation = null, StringBuilder logBuilder = null)
+        private void ProcessTypeAttributes(ITypeSymbol type, SerializableType metadata, Compilation? compilation = null, StringBuilder? logBuilder = null)
         {
             logBuilder?.AppendLine($"// Processing attributes for type: {type.ToDisplayString()}");
 
@@ -527,7 +527,7 @@ public sealed partial class CborSourceGenerator
     /// <summary>
     /// Detects and sets validator information for a type
     /// </summary>
-    private static void DetectValidator(ITypeSymbol type, SerializableType metadata, Compilation compilation, StringBuilder? logBuilder = null)
+    private static void DetectValidator(ITypeSymbol type, SerializableType metadata, Compilation? compilation, StringBuilder? logBuilder = null)
     {
         if (type is not INamedTypeSymbol namedType || compilation == null)
             return;
