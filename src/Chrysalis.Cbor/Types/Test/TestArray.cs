@@ -18,5 +18,5 @@ public partial record TestList(
 [CborList]
 public partial record TestListMaybe(
     [CborOrder(0)]
-    CborMaybeIndefList<int> Value1
+    CborMaybeIndefList<TestList> Value1
 ) : CborBase<TestListMaybe>;

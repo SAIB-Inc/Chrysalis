@@ -77,6 +77,19 @@ public sealed partial class CborSourceGenerator
             bool isNullableValueType = typeName.EndsWith("?") && !typeName.Contains("?>");
             string cleanTypeName = typeName.TrimEnd('?');
 
+            // Handle generic type parameters (like T)
+            if (ContainsGenericParameters(cleanTypeName) && !IsCollection(cleanTypeName) &&
+                (cleanTypeName.Length == 1 || cleanTypeName == "TKey" || cleanTypeName == "TValue"))
+            {
+                return $$"""
+                // Read the encoded value for generic type parameter
+                var encodedValue = reader.ReadEncodedValue();
+                
+                // Deserialize using the generic helper
+                {{variableName}} = DeserializeGenericValue<{{cleanTypeName}}>(encodedValue);
+                """;
+            }
+
             // Special handling for nullable primitive types like ulong?
             if (isNullableValueType && IsPrimitive(cleanTypeName))
             {
@@ -123,12 +136,12 @@ public sealed partial class CborSourceGenerator
 
                 // Special handling for globally qualified or nested types
                 string readCode = $$"""
-            // Read the encoded value as ReadOnlyMemory<byte>
-            var encodedValue = reader.ReadEncodedValue();
-            
-            // Deserialize using the type's Read method
-            {{variableName}} = {{(isNestedClassType ? $"({cleanTypeName})" : "")}}{{cleanTypeName}}.Read(encodedValue);
-            """;
+                // Read the encoded value as ReadOnlyMemory<byte>
+                var encodedValue = reader.ReadEncodedValue();
+                
+                // Deserialize using the type's Read method
+                {{variableName}} = {{(isNestedClassType ? $"({cleanTypeName})" : "")}}{{cleanTypeName}}.Read(encodedValue);
+                """;
 
                 return readCode;
             }
@@ -139,6 +152,13 @@ public sealed partial class CborSourceGenerator
             // Check if we're dealing with a nullable type (like int?)
             bool isNullableValueType = typeName.EndsWith("?") && !typeName.Contains("?>");
             string cleanTypeName = typeName.TrimEnd('?');
+
+            // Handle generic type parameters (like T)
+            if (ContainsGenericParameters(cleanTypeName) && !IsCollection(cleanTypeName) &&
+                (cleanTypeName.Length == 1 || cleanTypeName == "TKey" || cleanTypeName == "TValue"))
+            {
+                return $"WriteGenericValue(writer, {variableName});";
+            }
 
             // Special handling for nullable primitive types like ulong?
             if (isNullableValueType && IsPrimitive(cleanTypeName))
@@ -196,17 +216,7 @@ public sealed partial class CborSourceGenerator
                 else
                 {
                     // Custom CBOR type with potential raw bytes
-                    return $$"""
-                    // If we have raw bytes, use them directly
-                    if ({{variableName}}.Raw.HasValue)
-                    {
-                        writer.WriteEncodedValue({{variableName}}.Raw.Value.Span);
-                    }
-                    else
-                    {
-                        {{cleanTypeName}}.Write(writer, {{variableName}});
-                    }
-                    """;
+                    return $$"""{{cleanTypeName}}.Write(writer, {{variableName}});""";
                 }
             }
         }
