@@ -10,10 +10,12 @@ public sealed partial class CborSourceGenerator
     /// <summary>
     /// Handles emitting source code for serialization
     /// </summary>
-    private class Emitter(SourceProductionContext context)
+    private class Emitter(SourceProductionContext context, Compilation compilation = null)
     {
         private readonly SourceProductionContext _context = context;
+        private readonly Compilation _compilation = compilation;
         private readonly HashSet<string> _usedHintNames = [];
+        private readonly HashSet<string> _typesWithExistingMethods = new();
 
         /// <summary>
         /// Emits source code for all types in the serialization context
@@ -23,6 +25,34 @@ public sealed partial class CborSourceGenerator
             foreach (var type in serializationContext.Types)
             {
                 _context.CancellationToken.ThrowIfCancellationRequested();
+
+                // Check if the type already has CBOR serialization methods to avoid duplicate generation
+                string typeFullName = type.Type.FullName;
+                
+                // Skip types we've already processed
+                if (_typesWithExistingMethods.Contains(typeFullName))
+                {
+                    continue;
+                }
+                
+                // Check if the type already has Write/Read methods defined
+                if (_compilation != null)
+                {
+                    INamedTypeSymbol typeSymbol = FindTypeSymbol(typeFullName);
+                    if (typeSymbol != null)
+                    {
+                        // Look for static Write and Read methods with the right signatures
+                        bool hasWriteMethod = HasMethod(typeSymbol, "Write", new[] { "CborWriter", typeFullName });
+                        bool hasReadMethod = HasMethod(typeSymbol, "Read", new[] { "ReadOnlyMemory<byte>", "bool" });
+                        
+                        if (hasWriteMethod || hasReadMethod)
+                        {
+                            // Skip generation for this type as it already has serialization methods
+                            _typesWithExistingMethods.Add(typeFullName);
+                            continue;
+                        }
+                    }
+                }
 
                 // Get the appropriate emitter strategy for the type
                 var strategy = GetEmitterStrategy(type);
@@ -50,6 +80,69 @@ public sealed partial class CborSourceGenerator
                 // Add the source
                 _context.AddSource(baseName, SourceText.From(sourceCode, Encoding.UTF8));
             }
+        }
+
+        /// <summary>
+        /// Find a type symbol by its full name
+        /// </summary>
+        private INamedTypeSymbol FindTypeSymbol(string typeFullName)
+        {
+            if (_compilation == null)
+                return null;
+
+            // Parse the namespace and name
+            string namespaceName = "";
+            string typeName = typeFullName;
+
+            int lastDot = typeFullName.LastIndexOf('.');
+            if (lastDot >= 0)
+            {
+                namespaceName = typeFullName.Substring(0, lastDot);
+                typeName = typeFullName.Substring(lastDot + 1);
+            }
+
+            // Handle generic types
+            if (typeName.Contains("<"))
+            {
+                typeName = typeName.Substring(0, typeName.IndexOf("<"));
+            }
+
+            // Look up the type in compilation
+            return _compilation.GetTypeByMetadataName($"{namespaceName}.{typeName}");
+        }
+
+        /// <summary>
+        /// Check if a type has a method with the specified name and parameter types
+        /// </summary>
+        private bool HasMethod(INamedTypeSymbol typeSymbol, string methodName, string[] parameterTypes)
+        {
+            if (typeSymbol == null)
+                return false;
+
+            foreach (var member in typeSymbol.GetMembers(methodName))
+            {
+                if (member is IMethodSymbol method && method.IsStatic)
+                {
+                    if (method.Parameters.Length == parameterTypes.Length)
+                    {
+                        bool paramsMatch = true;
+                        for (int i = 0; i < parameterTypes.Length; i++)
+                        {
+                            string paramTypeName = method.Parameters[i].Type.ToDisplayString();
+                            if (paramTypeName != parameterTypes[i] && !paramTypeName.EndsWith("." + parameterTypes[i]))
+                            {
+                                paramsMatch = false;
+                                break;
+                            }
+                        }
+
+                        if (paramsMatch)
+                            return true;
+                    }
+                }
+            }
+
+            return false;
         }
 
         /// <summary>
@@ -151,6 +244,17 @@ public sealed partial class CborSourceGenerator
             bool needsGenericValueHelper = NeedsGenericValueHelper(type);
             string genericValueHelper = needsGenericValueHelper ? GenerateWriteGenericValueMethod() : "";
 
+            // Add any helper methods at the class level
+            string helperMethods = string.Empty;
+            if (!string.IsNullOrEmpty(type.SerializerHelperMethods))
+            {
+                helperMethods += type.SerializerHelperMethods;
+            }
+            if (!string.IsNullOrEmpty(type.DeserializerHelperMethods))
+            {
+                helperMethods += type.DeserializerHelperMethods;
+            }
+
             return $$"""
                 #nullable enable
                 // <auto-generated/>
@@ -189,6 +293,7 @@ public sealed partial class CborSourceGenerator
                         {{deserializerCode}}
                     }
 
+                    {{helperMethods}}
                     {{genericValueHelper}}
                 }
                 
@@ -216,7 +321,18 @@ public sealed partial class CborSourceGenerator
             string validatorCode = validatorSb.ToString();
 
             // For generics, include the helper methods for generic deserialization
-            string helperMethods = GenerateGenericDeserializationHelper();
+            string deserializationHelper = GenerateGenericDeserializationHelper();
+
+            // Add any additional helper methods at the class level
+            string helperMethods = deserializationHelper;
+            if (!string.IsNullOrEmpty(type.SerializerHelperMethods))
+            {
+                helperMethods += "\n" + type.SerializerHelperMethods;
+            }
+            if (!string.IsNullOrEmpty(type.DeserializerHelperMethods))
+            {
+                helperMethods += "\n" + type.DeserializerHelperMethods;
+            }
 
             // We need to make sure we have a clean and useful type parameter list
             // If no type parameters are available, use T as a placeholder
@@ -892,8 +1008,9 @@ public sealed partial class CborSourceGenerator
         {
             var sb = new StringBuilder();
             
-            // Add helper methods for nested types first
+            // Add helper methods for nested types first as properly scoped methods
             var nestedHelperMethods = new StringBuilder();
+            var helperMethodDeclarations = new StringBuilder();
             bool hasNestedTypes = false;
 
             foreach (var unionCase in type.UnionCases)
@@ -904,23 +1021,16 @@ public sealed partial class CborSourceGenerator
                     hasNestedTypes = true;
                     string nestedTypeName = unionCase.Name;
                     
-                    // Generate helper method to serialize the nested type without causing infinite recursion
-                    nestedHelperMethods.AppendLine();
-                    nestedHelperMethods.AppendLine($"// Helper method to serialize {nestedTypeName} without infinite recursion");
-                    nestedHelperMethods.AppendLine($"private static void SerializeNestedType_{nestedTypeName}(CborWriter writer, {unionCase.FullName} value)");
-                    nestedHelperMethods.AppendLine("{");
-                    
-                    // Implementation of the serializer for this specific nested type
-                    // This is a placeholder - the actual implementation would need to match the format of the specific type
-                    nestedHelperMethods.AppendLine("    // Full serialization implementation for this specific nested type");
-                    nestedHelperMethods.AppendLine("    // This would be similar to the code generated for the nested type's Write method");
-                    
-                    // For a map-based type:
-                    nestedHelperMethods.AppendLine("    writer.WriteStartMap(null);");
-                    nestedHelperMethods.AppendLine("    // Write properties here...");
-                    nestedHelperMethods.AppendLine("    writer.WriteEndMap();");
-                    
-                    nestedHelperMethods.AppendLine("}");
+                    // Add the method declaration at the class level (will be added to the final string later)
+                    helperMethodDeclarations.AppendLine($"private static void SerializeNestedType_{nestedTypeName}(CborWriter writer, {unionCase.FullName} value)");
+                    helperMethodDeclarations.AppendLine("{");
+                    helperMethodDeclarations.AppendLine("    // Full serialization implementation for this specific nested type");
+                    helperMethodDeclarations.AppendLine("    // This would be similar to the code generated for the nested type's Write method");
+                    helperMethodDeclarations.AppendLine("    writer.WriteStartMap(null);");
+                    helperMethodDeclarations.AppendLine("    // Write properties here...");
+                    helperMethodDeclarations.AppendLine("    writer.WriteEndMap();");
+                    helperMethodDeclarations.AppendLine("}");
+                    helperMethodDeclarations.AppendLine();
                 }
             }
 
@@ -957,23 +1067,24 @@ public sealed partial class CborSourceGenerator
             sb.AppendLine("        throw new Exception($\"Unknown union type: {value.CborTypeName}\");");
             sb.AppendLine("}");
 
-            // If we have nested types, append the helper methods
+            // For helper methods, we'll add a comment indicating these are class-level methods
             if (hasNestedTypes)
             {
-                return sb.ToString() + nestedHelperMethods.ToString();
+                // Store helper methods to be added at the class level by GenerateSourceCode
+                nestedHelperMethods.Append(helperMethodDeclarations);
+                type.SerializerHelperMethods = nestedHelperMethods.ToString();
             }
-            else
-            {
-                return sb.ToString();
-            }
+
+            return sb.ToString();
         }
 
         public override string EmitDeserializer(SerializableType type)
         {
             var sb = new StringBuilder();
 
-            // Add helper methods for nested types first
+            // Add helper methods for nested types first as properly scoped methods
             var nestedHelperMethods = new StringBuilder();
+            var helperMethodDeclarations = new StringBuilder();
             bool hasNestedTypes = false;
 
             foreach (var unionCase in type.UnionCases)
@@ -984,32 +1095,47 @@ public sealed partial class CborSourceGenerator
                     hasNestedTypes = true;
                     string nestedTypeName = unionCase.Name;
                     
-                    // Generate helper method to deserialize the nested type without causing infinite recursion
-                    nestedHelperMethods.AppendLine();
-                    nestedHelperMethods.AppendLine($"// Helper method to deserialize {nestedTypeName} without infinite recursion");
-                    nestedHelperMethods.AppendLine($"private static {type.Type.FullName} DeserializeNestedType_{nestedTypeName}(ReadOnlyMemory<byte> data, bool preserveRaw)");
-                    nestedHelperMethods.AppendLine("{");
+                    // Add the method declaration at the class level (will be added to the final string later)
+                    helperMethodDeclarations.AppendLine($"private static {type.Type.FullName} DeserializeNestedType_{nestedTypeName}(ReadOnlyMemory<byte> data, bool preserveRaw)");
+                    helperMethodDeclarations.AppendLine("{");
+                    helperMethodDeclarations.AppendLine("    var reader = new CborReader(data);");
+                    helperMethodDeclarations.AppendLine("    var originalData = data;");
+                    helperMethodDeclarations.AppendLine("    // Full deserialization implementation for this specific nested type");
+                    helperMethodDeclarations.AppendLine("    // Create instance with default values");
                     
-                    // Implementation of the deserializer for this specific nested type
-                    // This would normally be in the nested type's generated Read method,
-                    // but we need to implement it here to avoid calling the parent class's Read method
+                    // We need to handle constructor parameters by using reflection to get the constructor info
+                    helperMethodDeclarations.AppendLine($"    // Create an instance using reflection to handle constructor parameters");
+                    helperMethodDeclarations.AppendLine($"    var instanceType = typeof({unionCase.FullName});");
+                    helperMethodDeclarations.AppendLine($"    var constructors = instanceType.GetConstructors();");
+                    helperMethodDeclarations.AppendLine($"    if (constructors.Length == 0)");
+                    helperMethodDeclarations.AppendLine($"    {{");
+                    helperMethodDeclarations.AppendLine($"        throw new InvalidOperationException(\"No constructor found for {unionCase.FullName}\");");
+                    helperMethodDeclarations.AppendLine($"    }}");
+                    helperMethodDeclarations.AppendLine($"    var ctor = constructors[0]; // Use the first constructor");
+                    helperMethodDeclarations.AppendLine($"    var parameters = ctor.GetParameters();");
+                    helperMethodDeclarations.AppendLine($"    var paramValues = new object[parameters.Length];");
+                    helperMethodDeclarations.AppendLine($"    // Create default values for each parameter");
+                    helperMethodDeclarations.AppendLine($"    for (int i = 0; i < parameters.Length; i++)");
+                    helperMethodDeclarations.AppendLine($"    {{");
+                    helperMethodDeclarations.AppendLine($"        var paramType = parameters[i].ParameterType;");
+                    helperMethodDeclarations.AppendLine($"        paramValues[i] = paramType.IsValueType ? Activator.CreateInstance(paramType) : null;");
+                    helperMethodDeclarations.AppendLine($"        // Provide empty collections for common collection types");
+                    helperMethodDeclarations.AppendLine($"        if (paramType.IsGenericType)");
+                    helperMethodDeclarations.AppendLine($"        {{");
+                    helperMethodDeclarations.AppendLine($"            var genericTypeDef = paramType.GetGenericTypeDefinition();");
+                    helperMethodDeclarations.AppendLine($"            if (genericTypeDef == typeof(List<>))");
+                    helperMethodDeclarations.AppendLine($"                paramValues[i] = Activator.CreateInstance(paramType);");
+                    helperMethodDeclarations.AppendLine($"            else if (genericTypeDef == typeof(Dictionary<,>))");
+                    helperMethodDeclarations.AppendLine($"                paramValues[i] = Activator.CreateInstance(paramType);");
+                    helperMethodDeclarations.AppendLine($"        }}");
+                    helperMethodDeclarations.AppendLine($"    }}");
+                    helperMethodDeclarations.AppendLine($"    // Create the instance");
+                    helperMethodDeclarations.AppendLine($"    var instance = ({unionCase.FullName})ctor.Invoke(paramValues);");
                     
-                    // The exact implementation would depend on the format of the type
-                    // For demonstration, we'll use a simple implementation:
-                    nestedHelperMethods.AppendLine("    var reader = new CborReader(data);");
-                    nestedHelperMethods.AppendLine("    var originalData = data;");
-                    
-                    // This is a placeholder - the actual implementation would need to match the format of the specific type
-                    // In a real implementation, we would need to look at the type's serialization format
-                    // and generate the appropriate deserialization code
-                    nestedHelperMethods.AppendLine("    // Full deserialization implementation for this specific nested type");
-                    nestedHelperMethods.AppendLine("    // This would be similar to the code generated for the nested type's Read method");
-                    
-                    // Create and return the nested type instance
-                    nestedHelperMethods.AppendLine($"    var instance = new {unionCase.FullName}();");
-                    nestedHelperMethods.AppendLine("    if (preserveRaw) instance.Raw = originalData;");
-                    nestedHelperMethods.AppendLine("    return instance;");
-                    nestedHelperMethods.AppendLine("}");
+                    helperMethodDeclarations.AppendLine("    if (preserveRaw) instance.Raw = originalData;");
+                    helperMethodDeclarations.AppendLine("    return instance;");
+                    helperMethodDeclarations.AppendLine("}");
+                    helperMethodDeclarations.AppendLine();
                 }
             }
 
@@ -1064,15 +1190,15 @@ public sealed partial class CborSourceGenerator
             // If we get here, all cases failed
             sb.AppendLine("throw new Exception(\"Could not deserialize union type\", lastException);");
 
-            // If we have nested types, append the helper methods
+            // For helper methods, we'll add them at the class level
             if (hasNestedTypes)
             {
-                return sb.ToString() + nestedHelperMethods.ToString();
+                // Store helper methods to be added at the class level by GenerateSourceCode
+                nestedHelperMethods.Append(helperMethodDeclarations);
+                type.DeserializerHelperMethods = nestedHelperMethods.ToString();
             }
-            else
-            {
-                return sb.ToString();
-            }
+
+            return sb.ToString();
         }
     }
 

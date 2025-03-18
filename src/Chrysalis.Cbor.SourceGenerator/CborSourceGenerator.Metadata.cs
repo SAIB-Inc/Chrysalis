@@ -130,6 +130,10 @@ public sealed partial class CborSourceGenerator
         public bool HasBaseWriteMethod { get; set; }
         public bool HasBaseReadMethod { get; set; }
         public string DebugInfo { get; set; } = string.Empty;
+        
+        // Helper methods for serialization/deserialization
+        public string SerializerHelperMethods { get; set; } = string.Empty;
+        public string DeserializerHelperMethods { get; set; } = string.Empty;
     }
 
     /// <summary>

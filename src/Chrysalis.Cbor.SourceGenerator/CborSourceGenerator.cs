@@ -44,7 +44,10 @@ public sealed partial class CborSourceGenerator : IIncrementalGenerator
 
             // Create parser and emitter
             var parser = new Parser();
-            var emitter = new Emitter(context);
+            var emitter = new Emitter(context, compilation);
+
+            // Track generated types to avoid duplicating implementations
+            var generatedTypes = new HashSet<string>();
 
             // Process each type declaration
             foreach (var typeDecl in typeDeclarations)
@@ -63,11 +66,38 @@ public sealed partial class CborSourceGenerator : IIncrementalGenerator
                 if (serializationContext == null || serializationContext.Types.Count == 0)
                     continue;
 
-                // Output metadata debug information
-                GenerateMetadataDebugFile(context, serializationContext, typeDecl.Identifier.Text);
+                // Filter out types we've already generated code for
+                var typesToEmit = new List<SerializableType>();
+                foreach (var type in serializationContext.Types)
+                {
+                    string typeKey = type.Type.FullName;
+                    
+                    // For generic types, use the name with arity instead of the full type name
+                    // as the full name will contain the concrete type arguments
+                    if (type.Type.IsGeneric)
+                    {
+                        typeKey = $"{type.Type.Namespace}.{type.Type.Name}";
+                    }
+                    
+                    if (!generatedTypes.Contains(typeKey))
+                    {
+                        typesToEmit.Add(type);
+                        generatedTypes.Add(typeKey);
+                    }
+                }
+                
+                // Create a new serialization context with just the types to emit
+                var filteredContext = new SerializationContext
+                {
+                    ContextType = serializationContext.ContextType,
+                    Types = typesToEmit
+                };
 
-                // Emit source code
-                emitter.Emit(serializationContext);
+                // Output metadata debug information
+                GenerateMetadataDebugFile(context, filteredContext, typeDecl.Identifier.Text);
+
+                // Emit source code only for filtered types
+                emitter.Emit(filteredContext);
             }
         }
         catch (Exception ex)
