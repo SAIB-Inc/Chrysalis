@@ -920,7 +920,8 @@ public sealed partial class CborSourceGenerator
                 sb.AppendLine($"// Try {unionCase.Name}");
                 sb.AppendLine("try");
                 sb.AppendLine("{");
-                sb.AppendLine($"    var result = {unionCase.FullName}.Read(originalData, preserveRaw);");
+                // Add explicit cast to ensure the correct type is returned
+                sb.AppendLine($"    var result = ({type.Type.FullName}){unionCase.FullName}.Read(originalData, preserveRaw);");
 
                 // If we get here, it means the deserialization was successful
                 // Add validation if needed - immediately after a successful deserialization

@@ -4,7 +4,7 @@ using Chrysalis.Cbor.Types.Custom;
 
 namespace Chrysalis.Cbor.Types.Test;
 
-// [CborSerializable]
+[CborSerializable]
 [CborList]
 public partial record TestList(
     [CborOrder(0)]

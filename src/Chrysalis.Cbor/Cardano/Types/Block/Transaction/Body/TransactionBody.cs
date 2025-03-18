@@ -1,5 +1,3 @@
-using Chrysalis.Cbor.Attributes;
-
 using Chrysalis.Cbor.Cardano.Types.Block.Transaction.Body.Certificates;
 using Chrysalis.Cbor.Cardano.Types.Block.Transaction.Governance;
 using Chrysalis.Cbor.Cardano.Types.Block.Transaction.Input;
@@ -10,74 +8,74 @@ using Chrysalis.Cbor.Serialization.Attributes;
 
 namespace Chrysalis.Cbor.Cardano.Types.Block.Transaction.Body;
 
-// [CborSerializable]
+[CborSerializable]
 [CborUnion]
 public abstract partial record TransactionBody : CborBase<TransactionBody>
 {
-    // [CborSerializable]
+    [CborSerializable]
     [CborMap]
     public partial record AlonzoTransactionBody(
-            [CborIndex(0)] CborMaybeIndefList<TransactionInput> Inputs,
-            [CborIndex(1)] CborMaybeIndefList<TransactionOutput.AlonzoTransactionOutput> Outputs,
-            [CborIndex(2)] ulong Fee,
-            [CborIndex(3)] ulong? TimeToLive,
-            [CborIndex(4)] CborMaybeIndefList<Certificate>? Certificates,
-            [CborIndex(5)] Withdrawals? Withdrawals,
-            [CborIndex(6)] Update? Update,
-            [CborIndex(7)] byte[]? AuxiliaryDataHash,
-            [CborIndex(8)] ulong? ValidityIntervalStart,
-            [CborIndex(9)] MultiAsset.MultiAssetMint? Mint,
-            [CborIndex(11)] byte[]? ScriptDataHash,
-            [CborIndex(13)] CborMaybeIndefList<TransactionInput>? Collateral,
-            [CborIndex(14)] CborMaybeIndefList<byte[]>? RequiredSigners,
-            [CborIndex(15)] int? NetworkId
+            [CborProperty("0")] CborMaybeIndefList<TransactionInput> Inputs,
+            [CborProperty("1")] CborMaybeIndefList<TransactionOutput.AlonzoTransactionOutput> Outputs,
+            [CborProperty("2")] ulong Fee,
+            [CborProperty("3")] ulong? TimeToLive,
+            [CborProperty("4")] CborMaybeIndefList<Certificate>? Certificates,
+            [CborProperty("5")] Withdrawals? Withdrawals,
+            [CborProperty("6")] Update? Update,
+            [CborProperty("7")] byte[]? AuxiliaryDataHash,
+            [CborProperty("8")] ulong? ValidityIntervalStart,
+            [CborProperty("9")] MultiAsset.MultiAssetMint? Mint,
+            [CborProperty("11")] byte[]? ScriptDataHash,
+            [CborProperty("13")] CborMaybeIndefList<TransactionInput>? Collateral,
+            [CborProperty("14")] CborMaybeIndefList<byte[]>? RequiredSigners,
+            [CborProperty("15")] int? NetworkId
         ) : TransactionBody;
 
-    // [CborSerializable]
+    [CborSerializable]
     [CborMap]
     public partial record BabbageTransactionBody(
-        [CborIndex(0)] CborMaybeIndefList<TransactionInput> Inputs,
-        [CborIndex(1)] CborMaybeIndefList<TransactionOutput> Outputs,
-        [CborIndex(2)] ulong Fee,
-        [CborIndex(3)] ulong? TimeToLive,
-        [CborIndex(4)] CborMaybeIndefList<Certificate>? Certificates,
-        [CborIndex(5)] Withdrawals? Withdrawals,
-        [CborIndex(6)] Update? Update,
-        [CborIndex(7)] byte[]? AuxiliaryDataHash,
-        [CborIndex(8)] ulong? ValidityIntervalStart,
-        [CborIndex(9)] MultiAsset.MultiAssetMint? Mint,
-        [CborIndex(11)] byte[]? ScriptDataHash,
-        [CborIndex(13)] CborMaybeIndefList<TransactionInput>? Collateral,
-        [CborIndex(14)] CborMaybeIndefList<byte[]>? RequiredSigners,
-        [CborIndex(15)] byte[]? NetworkId,
-        [CborIndex(16)] TransactionOutput? CollateralReturn,
-        [CborIndex(17)] ulong? TotalCollateral,
-        [CborIndex(18)] CborMaybeIndefList<TransactionInput>? ReferenceInputs
+        [CborProperty("0")] CborMaybeIndefList<TransactionInput> Inputs,
+        [CborProperty("1")] CborMaybeIndefList<TransactionOutput> Outputs,
+        [CborProperty("2")] ulong Fee,
+        [CborProperty("3")] ulong? TimeToLive,
+        [CborProperty("4")] CborMaybeIndefList<Certificate>? Certificates,
+        [CborProperty("5")] Withdrawals? Withdrawals,
+        [CborProperty("6")] Update? Update,
+        [CborProperty("7")] byte[]? AuxiliaryDataHash,
+        [CborProperty("8")] ulong? ValidityIntervalStart,
+        [CborProperty("9")] MultiAsset.MultiAssetMint? Mint,
+        [CborProperty("11")] byte[]? ScriptDataHash,
+        [CborProperty("13")] CborMaybeIndefList<TransactionInput>? Collateral,
+        [CborProperty("14")] CborMaybeIndefList<byte[]>? RequiredSigners,
+        [CborProperty("15")] byte[]? NetworkId,
+        [CborProperty("16")] TransactionOutput? CollateralReturn,
+        [CborProperty("17")] ulong? TotalCollateral,
+        [CborProperty("18")] CborMaybeIndefList<TransactionInput>? ReferenceInputs
     ) : TransactionBody;
 
 
-    // [CborSerializable]
+    [CborSerializable]
     [CborMap]
     public partial record ConwayTransactionBody(
-        [CborIndex(0)] CborMaybeIndefList<TransactionInput> Inputs,
-        [CborIndex(1)] CborMaybeIndefList<TransactionOutput> Outputs,
-        [CborIndex(2)] ulong Fee,
-        [CborIndex(3)] ulong? TimeToLive,
-        [CborIndex(4)] CborMaybeIndefList<Certificate>? Certificates,
-        [CborIndex(5)] Withdrawals? Withdrawals,
-        [CborIndex(7)] byte[]? AuxiliaryDataHash,
-        [CborIndex(8)] ulong? ValidityIntervalStart,
-        [CborIndex(9)] MultiAsset.MultiAssetMint? Mint,
-        [CborIndex(11)] byte[]? ScriptDataHash,
-        [CborIndex(13)] CborMaybeIndefList<TransactionInput>? Collateral,
-        [CborIndex(14)] CborMaybeIndefList<byte[]>? RequiredSigners,
-        [CborIndex(15)] int? NetworkId,
-        [CborIndex(16)] TransactionOutput? CollateralReturn,
-        [CborIndex(17)] ulong? TotalCollateral,
-        [CborIndex(18)] CborMaybeIndefList<TransactionInput>? ReferenceInputs,
-        [CborIndex(19)] VotingProcedures VotingProcedures,
-        [CborIndex(20)] CborMaybeIndefList<ProposalProcedure>? ProposalProcedures,
-        [CborIndex(21)] ulong? TreasuryValue,
-        [CborIndex(22)] ulong? Donation
+        [CborProperty("0")] CborMaybeIndefList<TransactionInput> Inputs,
+        [CborProperty("1")] CborMaybeIndefList<TransactionOutput> Outputs,
+        [CborProperty("2")] ulong Fee,
+        [CborProperty("3")] ulong? TimeToLive,
+        [CborProperty("4")] CborMaybeIndefList<Certificate>? Certificates,
+        [CborProperty("5")] Withdrawals? Withdrawals,
+        [CborProperty("7")] byte[]? AuxiliaryDataHash,
+        [CborProperty("8")] ulong? ValidityIntervalStart,
+        [CborProperty("9")] MultiAsset.MultiAssetMint? Mint,
+        [CborProperty("11")] byte[]? ScriptDataHash,
+        [CborProperty("13")] CborMaybeIndefList<TransactionInput>? Collateral,
+        [CborProperty("14")] CborMaybeIndefList<byte[]>? RequiredSigners,
+        [CborProperty("15")] int? NetworkId,
+        [CborProperty("16")] TransactionOutput? CollateralReturn,
+        [CborProperty("17")] ulong? TotalCollateral,
+        [CborProperty("18")] CborMaybeIndefList<TransactionInput>? ReferenceInputs,
+        [CborProperty("19")] VotingProcedures VotingProcedures,
+        [CborProperty("20")] CborMaybeIndefList<ProposalProcedure>? ProposalProcedures,
+        [CborProperty("21")] ulong? TreasuryValue,
+        [CborProperty("22")] ulong? Donation
     ) : TransactionBody;
 }

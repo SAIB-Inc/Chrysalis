@@ -3,46 +3,46 @@ using Chrysalis.Cbor.Types;
 
 namespace Chrysalis.Cbor.Cardano.Types.Block.Transaction.Script;
 
-// [CborSerializable]
+[CborSerializable]
 [CborUnion]
 public abstract partial record PlutusData : CborBase<PlutusData>
 {
-    // [CborSerializable]
+    [CborSerializable]
     [CborConstr(0)]
     public partial record PlutusConstr(List<PlutusData> PlutusData) : PlutusData;
 
 
-    // [CborSerializable]
+    [CborSerializable]
     public partial record PlutusMap(Dictionary<PlutusData, PlutusData> PlutusData) : PlutusData;
 
-    // [CborSerializable]
+    [CborSerializable]
     public partial record PlutusList(List<PlutusData> PlutusData) : PlutusData;
 
 
-    // [CborSerializable]
+    [CborSerializable]
     [CborUnion]
     public abstract partial record PlutusBigInt : PlutusData
     {
-        // [CborSerializable]
+        [CborSerializable]
         [CborUnion]
         public abstract partial record PlutusInt : PlutusBigInt
         {
-            // [CborSerializable]
+            [CborSerializable]
             public partial record PlutusInt64(long Value) : PlutusInt;
 
-            // [CborSerializable]
+            [CborSerializable]
             public partial record PlutusUint64(ulong Value) : PlutusInt;
         }
 
-        // [CborSerializable]
+        [CborSerializable]
         public partial record PlutusBigUint([CborSize(64)] byte[] Value) : PlutusBigInt;
 
 
-        // [CborSerializable]
+        [CborSerializable]
         public partial record PlutusBigNint([CborSize(64)] byte[] Value) : PlutusBigInt;
     }
 
-    // [CborSerializable]
+    [CborSerializable]
     public partial record PlutusBoundedBytes([CborSize(64)] byte[] Value) : PlutusData;
 
 }

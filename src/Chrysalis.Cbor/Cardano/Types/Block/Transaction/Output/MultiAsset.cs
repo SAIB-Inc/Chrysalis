@@ -1,21 +1,20 @@
 using Chrysalis.Cbor.Serialization.Attributes;
 using Chrysalis.Cbor.Types;
-using static Chrysalis.Cbor.Cardano.Types.Block.Transaction.Output.TokenBundle;
 
 namespace Chrysalis.Cbor.Cardano.Types.Block.Transaction.Output;
 
-// [CborSerializable]
+[CborSerializable]
 [CborUnion]
 public abstract partial record MultiAsset : CborBase<MultiAsset>
 {
-    // [CborSerializable]
+    [CborSerializable]
     public partial record MultiAssetOutput(
-        Dictionary<byte[], TokenBundleOutput> Value
+        Dictionary<byte[], TokenBundle.TokenBundleOutput> Value
     ) : MultiAsset;
 
 
-    // [CborSerializable]
+    [CborSerializable]
     public partial record MultiAssetMint(
-        Dictionary<byte[], TokenBundleMint> Value
+        Dictionary<byte[], TokenBundle.TokenBundleMint> Value
     ) : MultiAsset;
 }

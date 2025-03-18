@@ -1,38 +1,37 @@
-using Chrysalis.Cbor.Attributes;
 using Chrysalis.Cbor.Serialization.Attributes;
 
 using Chrysalis.Cbor.Types;
 
 namespace Chrysalis.Cbor.Cardano.Types.Block.Transaction.Governance;
 
-// [CborSerializable]
+[CborSerializable]
 [CborUnion]
 public abstract partial record DRep : CborBase<DRep>
 {
-    // [CborSerializable]
+    [CborSerializable]
     [CborList]
     public partial record DRepAddrKeyHash(
-        [CborIndex(0)] int Tag,
-        [CborIndex(1)] byte[] AddrKeyHash
+        [CborOrder(0)] int Tag,
+        [CborOrder(1)] byte[] AddrKeyHash
     ) : DRep;
 
-    // [CborSerializable]
+    [CborSerializable]
     [CborList]
     public partial record DRepScriptHash(
-        [CborIndex(0)] int Tag,
-        [CborIndex(1)] byte[] ScriptHash
+        [CborOrder(0)] int Tag,
+        [CborOrder(1)] byte[] ScriptHash
     ) : DRep;
 
-    // [CborSerializable]
+    [CborSerializable]
     [CborList]
     public partial record Abstain(
-        [CborIndex(0)] int Tag
+        [CborOrder(0)] int Tag
     ) : DRep;
 
-    // [CborSerializable]
+    [CborSerializable]
     [CborList]
     public partial record DRepNoConfidence(
-        [CborIndex(0)] int Tag
+        [CborOrder(0)] int Tag
     ) : DRep;
 
 }

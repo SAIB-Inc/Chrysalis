@@ -82,11 +82,11 @@ public sealed partial class CborSourceGenerator
                 (cleanTypeName.Length == 1 || cleanTypeName == "TKey" || cleanTypeName == "TValue"))
             {
                 return $$"""
-                // Read the encoded value for generic type parameter
-                var encodedValue = reader.ReadEncodedValue();
-                
-                // Deserialize using the generic helper
-                {{variableName}} = DeserializeGenericValue<{{cleanTypeName}}>(encodedValue);
+                    // Read the encoded value for generic type parameter
+                    var encodedValue_{{variableName}} = reader.ReadEncodedValue();
+                    
+                    // Deserialize using the generic helper
+                    {{variableName}} = DeserializeGenericValue<{{cleanTypeName}}>(encodedValue_{{variableName}});
                 """;
             }
 
@@ -125,23 +125,18 @@ public sealed partial class CborSourceGenerator
             }
             else
             {
-                // Check if this is a nested type with a dot in the name
-                bool isNestedType = cleanTypeName.Contains(".");
-
-                // Check if this is a nested type that ends with ".CborDefList" or similar
-                bool isNestedClassType = cleanTypeName.Contains(".") &&
-                                        (cleanTypeName.EndsWith(".CborDefList") ||
-                                         cleanTypeName.Contains(".CborDefList<") ||
-                                         cleanTypeName.Contains(">.CborDefList"));
+                // FIXED: Always add an explicit cast for complex types to handle inheritance scenarios
+                // This ensures the returned object from Read() is properly cast to the expected type,
+                // which is especially important when the Read method returns a base type but we need a derived type
 
                 // Special handling for globally qualified or nested types
                 string readCode = $$"""
-                // Read the encoded value as ReadOnlyMemory<byte>
-                var encodedValue = reader.ReadEncodedValue();
-                
-                // Deserialize using the type's Read method
-                {{variableName}} = {{(isNestedClassType ? $"({cleanTypeName})" : "")}}{{cleanTypeName}}.Read(encodedValue);
-                """;
+                    // Read the encoded value as ReadOnlyMemory<byte>
+                    var encodedValue_{{variableName}} = reader.ReadEncodedValue();
+                    
+                    // Deserialize using the type's Read method with explicit cast
+                    {{variableName}} = ({{cleanTypeName}}){{cleanTypeName}}.Read(encodedValue_{{variableName}});
+                    """;
 
                 return readCode;
             }
@@ -689,19 +684,30 @@ public sealed partial class CborSourceGenerator
             {
                 // For concrete types
                 bool isPrimitiveElement = IsPrimitive(elementType);
-                bool elementIsNullable = !isPrimitiveElement || elementType == "string";
 
                 return $$"""
-                {{variableName}} = new {{typeName}}();
-                reader.ReadStartArray();
-                while (reader.PeekState() != CborReaderState.EndArray)
-                {
-                    {{elementType}} element = default;
-                    {{GenerateReadCode(elementType, "element", elementIsNullable)}}
-                    {{variableName}}.Add(element);
-                }
-                reader.ReadEndArray();
-                """;
+                    {{variableName}} = new {{typeName}}();
+                    reader.ReadStartArray();
+                    while (reader.PeekState() != CborReaderState.EndArray)
+                    {
+                        {{elementType}} element_{{variableName}} = default;
+                        if (reader.PeekState() == CborReaderState.Null)
+                        {
+                            reader.ReadNull();
+                            element_{{variableName}} = default;
+                        }
+                        else
+                        {
+                            // Read the encoded value as ReadOnlyMemory<byte>
+                            var encodedValue_{{variableName}}_element = reader.ReadEncodedValue();
+                            
+                            // Deserialize using the type's Read method
+                            element_{{variableName}} = {{elementType}}.Read(encodedValue_{{variableName}}_element);
+                        }
+                        {{variableName}}.Add(element_{{variableName}});
+                    }
+                    reader.ReadEndArray();
+            """;
             }
         }
 
@@ -715,6 +721,7 @@ public sealed partial class CborSourceGenerator
             bool keyContainsGenericParams = ContainsGenericParameters(keyType);
             bool valueContainsGenericParams = ContainsGenericParameters(valueType);
             bool valueIsNullable = !IsPrimitive(valueType) || valueType == "string";
+            bool valueIsDictionary = IsDictionaryType(valueType);
 
             var sb = new StringBuilder();
 
@@ -723,7 +730,7 @@ public sealed partial class CborSourceGenerator
             sb.AppendLine("while (reader.PeekState() != CborReaderState.EndMap)");
             sb.AppendLine("{");
 
-            // Use a more specific variable name with property name to avoid conflicts
+            // Process key reading (unchanged code)
             sb.AppendLine($"    {keyType} dictKey_{variableName} = default;");
             if (keyContainsGenericParams)
             {
@@ -734,55 +741,299 @@ public sealed partial class CborSourceGenerator
                 sb.AppendLine("    }");
                 sb.AppendLine("    else");
                 sb.AppendLine("    {");
-                sb.AppendLine("        var encodedKey = reader.ReadEncodedValue();");
-                sb.AppendLine("        var keyReader = new CborReader(encodedKey);");
-                sb.AppendLine("        var keyState = keyReader.PeekState();");
+                sb.AppendLine($"        var encodedKey_{variableName} = reader.ReadEncodedValue();");
+                sb.AppendLine($"        var keyReader_{variableName} = new CborReader(encodedKey_{variableName});");
+                sb.AppendLine($"        var keyState_{variableName} = keyReader_{variableName}.PeekState();");
                 sb.AppendLine("");
-                sb.AppendLine("        if (keyState == CborReaderState.Null)");
+                sb.AppendLine($"        if (keyState_{variableName} == CborReaderState.Null)");
                 sb.AppendLine("        {");
-                sb.AppendLine("            keyReader.ReadNull();");
+                sb.AppendLine($"            keyReader_{variableName}.ReadNull();");
                 sb.AppendLine($"            dictKey_{variableName} = default;");
                 sb.AppendLine("        }");
-                sb.AppendLine("        else if (keyState == CborReaderState.UnsignedInteger)");
+                sb.AppendLine($"        else if (keyState_{variableName} == CborReaderState.UnsignedInteger)");
                 sb.AppendLine("        {");
-                sb.AppendLine("            var uintValue = keyReader.ReadUInt32();");
+                sb.AppendLine($"            var uintValue_{variableName} = keyReader_{variableName}.ReadUInt32();");
                 sb.AppendLine("            if (typeof(T) == typeof(int))");
-                sb.AppendLine($"                dictKey_{variableName} = (T)(object)(int)uintValue;");
+                sb.AppendLine($"                dictKey_{variableName} = (T)(object)(int)uintValue_{variableName};");
                 sb.AppendLine("            else if (typeof(T) == typeof(uint))");
-                sb.AppendLine($"                dictKey_{variableName} = (T)(object)uintValue;");
+                sb.AppendLine($"                dictKey_{variableName} = (T)(object)uintValue_{variableName};");
                 sb.AppendLine("            else if (typeof(T) == typeof(long))");
-                sb.AppendLine($"                dictKey_{variableName} = (T)(object)(long)uintValue;");
+                sb.AppendLine($"                dictKey_{variableName} = (T)(object)(long)uintValue_{variableName};");
                 sb.AppendLine("            else if (typeof(T) == typeof(ulong))");
-                sb.AppendLine($"                dictKey_{variableName} = (T)(object)(ulong)uintValue;");
+                sb.AppendLine($"                dictKey_{variableName} = (T)(object)(ulong)uintValue_{variableName};");
                 sb.AppendLine("            else");
                 sb.AppendLine($"                throw new InvalidOperationException($\"Cannot deserialize UInt32 to key type {{{keyType}}}\");");
                 sb.AppendLine("        }");
-                sb.AppendLine("        else if (keyState == CborReaderState.TextString)");
+                sb.AppendLine($"        else if (keyState_{variableName} == CborReaderState.TextString)");
                 sb.AppendLine("        {");
-                sb.AppendLine("            var strValue = keyReader.ReadTextString();");
+                sb.AppendLine($"            var strValue_{variableName} = keyReader_{variableName}.ReadTextString();");
                 sb.AppendLine("            if (typeof(T) == typeof(string))");
-                sb.AppendLine($"                dictKey_{variableName} = (T)(object)strValue;");
+                sb.AppendLine($"                dictKey_{variableName} = (T)(object)strValue_{variableName};");
                 sb.AppendLine("            else");
                 sb.AppendLine($"                throw new InvalidOperationException($\"Cannot deserialize string to key type {{{keyType}}}\");");
                 sb.AppendLine("        }");
                 sb.AppendLine("        else");
                 sb.AppendLine("        {");
-                sb.AppendLine($"            throw new InvalidOperationException($\"Cannot deserialize {{keyState}} to key type {{{keyType}}}\");");
+                sb.AppendLine($"            throw new InvalidOperationException($\"Cannot deserialize {{keyState_{variableName}}} to key type {{{keyType}}}\");");
                 sb.AppendLine("        }");
                 sb.AppendLine("    }");
             }
             else
             {
-                // Replace the code being generated for read key with new variable name
-                string keyReadCode = GenerateReadCode(keyType, $"dictKey_{variableName}", false);
-                // Replace any temporary variables inside to avoid conflicts
-                keyReadCode = keyReadCode.Replace("key = ", $"dictKey_{variableName} = ");
-                sb.AppendLine($"    {keyReadCode}");
+                if (keyType == "byte[]" || keyType == "System.Byte[]")
+                {
+                    sb.AppendLine($"    switch (reader.PeekState())");
+                    sb.AppendLine("    {");
+                    sb.AppendLine("        case CborReaderState.StartIndefiniteLengthByteString:");
+                    sb.AppendLine("            using (var stream = new MemoryStream())");
+                    sb.AppendLine("            {");
+                    sb.AppendLine("                reader.ReadStartIndefiniteLengthByteString();");
+                    sb.AppendLine("                while (reader.PeekState() != CborReaderState.EndIndefiniteLengthByteString)");
+                    sb.AppendLine("                {");
+                    sb.AppendLine("                    byte[] chunk = reader.ReadByteString();");
+                    sb.AppendLine("                    stream.Write(chunk, 0, chunk.Length);");
+                    sb.AppendLine("                }");
+                    sb.AppendLine("                reader.ReadEndIndefiniteLengthByteString();");
+                    sb.AppendLine($"                dictKey_{variableName} = stream.ToArray();");
+                    sb.AppendLine("            }");
+                    sb.AppendLine("            break;");
+                    sb.AppendLine("        default:");
+                    sb.AppendLine($"            dictKey_{variableName} = reader.ReadByteString();");
+                    sb.AppendLine("            break;");
+                    sb.AppendLine("    }");
+                }
+                else if (IsPrimitive(keyType))
+                {
+                    string readMethod = keyType switch
+                    {
+                        "System.Int32" or "int" => $"dictKey_{variableName} = reader.ReadInt32();",
+                        "System.String" or "string" => $"dictKey_{variableName} = reader.ReadTextString();",
+                        "System.Boolean" or "bool" => $"dictKey_{variableName} = reader.ReadBoolean();",
+                        "System.UInt32" or "uint" => $"dictKey_{variableName} = reader.ReadUInt32();",
+                        "System.Int64" or "long" => $"dictKey_{variableName} = reader.ReadInt64();",
+                        "System.UInt64" or "ulong" => $"dictKey_{variableName} = reader.ReadUInt64();",
+                        "System.Single" or "float" => $"dictKey_{variableName} = reader.ReadSingle();",
+                        "System.Double" or "double" => $"dictKey_{variableName} = reader.ReadDouble();",
+                        "System.Decimal" or "decimal" => $"dictKey_{variableName} = (decimal)reader.ReadDouble();",
+                        "System.DateTime" => $"dictKey_{variableName} = DateTime.Parse(reader.ReadTextString());",
+                        _ => $"dictKey_{variableName} = reader.ReadTextString();" // Default fallback
+                    };
+                    sb.AppendLine($"    {readMethod}");
+                }
+                else
+                {
+                    // Complex object key
+                    sb.AppendLine("    // Read the encoded value as ReadOnlyMemory<byte>");
+                    sb.AppendLine($"    var encodedKey_{variableName} = reader.ReadEncodedValue();");
+                    sb.AppendLine();
+                    sb.AppendLine("    // Deserialize using the type's Read method");
+                    sb.AppendLine($"    dictKey_{variableName} = {keyType}.Read(encodedKey_{variableName});");
+                }
             }
 
-            // Use a more specific variable name with property name to avoid conflicts
+            // Handle the value - check if it's a dictionary
             sb.AppendLine($"    {valueType} dictValue_{variableName} = default;");
-            if (valueContainsGenericParams)
+
+            if (valueIsDictionary)
+            {
+                // Special handling for nested dictionaries
+                string nestedKeyType = ExtractKeyType(valueType);
+                string nestedValueType = ExtractElementType(valueType);
+
+                sb.AppendLine("    if (reader.PeekState() == CborReaderState.Null)");
+                sb.AppendLine("    {");
+                sb.AppendLine("        reader.ReadNull();");
+                sb.AppendLine($"        dictValue_{variableName} = default;");
+                sb.AppendLine("    }");
+                sb.AppendLine("    else");
+                sb.AppendLine("    {");
+                sb.AppendLine($"        dictValue_{variableName} = new {valueType}();");
+                sb.AppendLine("        reader.ReadStartMap();");
+                sb.AppendLine("        while (reader.PeekState() != CborReaderState.EndMap)");
+                sb.AppendLine("        {");
+
+                // Generate code for the nested key
+                if (nestedKeyType == "byte[]" || nestedKeyType == "System.Byte[]")
+                {
+                    sb.AppendLine($"            {nestedKeyType} nestedKey_{variableName} = default;");
+                    sb.AppendLine($"            switch (reader.PeekState())");
+                    sb.AppendLine("            {");
+                    sb.AppendLine("                case CborReaderState.StartIndefiniteLengthByteString:");
+                    sb.AppendLine("                    using (var stream = new MemoryStream())");
+                    sb.AppendLine("                    {");
+                    sb.AppendLine("                        reader.ReadStartIndefiniteLengthByteString();");
+                    sb.AppendLine("                        while (reader.PeekState() != CborReaderState.EndIndefiniteLengthByteString)");
+                    sb.AppendLine("                        {");
+                    sb.AppendLine("                            byte[] chunk = reader.ReadByteString();");
+                    sb.AppendLine("                            stream.Write(chunk, 0, chunk.Length);");
+                    sb.AppendLine("                        }");
+                    sb.AppendLine("                        reader.ReadEndIndefiniteLengthByteString();");
+                    sb.AppendLine($"                        nestedKey_{variableName} = stream.ToArray();");
+                    sb.AppendLine("                    }");
+                    sb.AppendLine("                    break;");
+                    sb.AppendLine("                default:");
+                    sb.AppendLine($"                    nestedKey_{variableName} = reader.ReadByteString();");
+                    sb.AppendLine("                    break;");
+                    sb.AppendLine("            }");
+                }
+                else if (IsPrimitive(nestedKeyType))
+                {
+                    sb.AppendLine($"            {nestedKeyType} nestedKey_{variableName} = default;");
+                    string readMethod = nestedKeyType switch
+                    {
+                        "System.Int32" or "int" => $"nestedKey_{variableName} = reader.ReadInt32();",
+                        "System.String" or "string" => $"nestedKey_{variableName} = reader.ReadTextString();",
+                        "System.Boolean" or "bool" => $"nestedKey_{variableName} = reader.ReadBoolean();",
+                        "System.UInt32" or "uint" => $"nestedKey_{variableName} = reader.ReadUInt32();",
+                        "System.Int64" or "long" => $"nestedKey_{variableName} = reader.ReadInt64();",
+                        "System.UInt64" or "ulong" => $"nestedKey_{variableName} = reader.ReadUInt64();",
+                        "System.Single" or "float" => $"nestedKey_{variableName} = reader.ReadSingle();",
+                        "System.Double" or "double" => $"nestedKey_{variableName} = reader.ReadDouble();",
+                        "System.Decimal" or "decimal" => $"nestedKey_{variableName} = (decimal)reader.ReadDouble();",
+                        "System.DateTime" => $"nestedKey_{variableName} = DateTime.Parse(reader.ReadTextString());",
+                        _ => $"nestedKey_{variableName} = reader.ReadTextString();" // Default fallback
+                    };
+                    sb.AppendLine($"            {readMethod}");
+                }
+                else
+                {
+                    // Complex object key
+                    sb.AppendLine($"            {nestedKeyType} nestedKey_{variableName} = default;");
+                    sb.AppendLine("            // Read the encoded value as ReadOnlyMemory<byte>");
+                    sb.AppendLine($"            var encodedNestedKey_{variableName} = reader.ReadEncodedValue();");
+                    sb.AppendLine("");
+                    sb.AppendLine("            // Deserialize using the type's Read method");
+                    sb.AppendLine($"            nestedKey_{variableName} = {nestedKeyType}.Read(encodedNestedKey_{variableName});");
+                }
+
+                // Generate code for the nested value
+                bool nestedValueIsNullable = !IsPrimitive(nestedValueType) || nestedValueType == "string";
+
+                sb.AppendLine($"            {nestedValueType} nestedValue_{variableName} = default;");
+                if (nestedValueIsNullable)
+                {
+                    sb.AppendLine("            if (reader.PeekState() == CborReaderState.Null)");
+                    sb.AppendLine("            {");
+                    sb.AppendLine("                reader.ReadNull();");
+                    sb.AppendLine($"                nestedValue_{variableName} = default;");
+                    sb.AppendLine("            }");
+                    sb.AppendLine("            else");
+                    sb.AppendLine("            {");
+
+                    if (IsPrimitive(nestedValueType))
+                    {
+                        string readMethod = nestedValueType switch
+                        {
+                            "System.Int32" or "int" => $"nestedValue_{variableName} = reader.ReadInt32();",
+                            "System.String" or "string" => $"nestedValue_{variableName} = reader.ReadTextString();",
+                            "System.Boolean" or "bool" => $"nestedValue_{variableName} = reader.ReadBoolean();",
+                            "System.UInt32" or "uint" => $"nestedValue_{variableName} = reader.ReadUInt32();",
+                            "System.Int64" or "long" => $"nestedValue_{variableName} = reader.ReadInt64();",
+                            "System.UInt64" or "ulong" => $"nestedValue_{variableName} = reader.ReadUInt64();",
+                            "System.Single" or "float" => $"nestedValue_{variableName} = reader.ReadSingle();",
+                            "System.Double" or "double" => $"nestedValue_{variableName} = reader.ReadDouble();",
+                            "System.Decimal" or "decimal" => $"nestedValue_{variableName} = (decimal)reader.ReadDouble();",
+                            "System.DateTime" => $"nestedValue_{variableName} = DateTime.Parse(reader.ReadTextString());",
+                            _ => ""
+                        };
+
+                        if (!string.IsNullOrEmpty(readMethod))
+                        {
+                            sb.AppendLine($"                {readMethod}");
+                        }
+                        else if (nestedValueType == "byte[]" || nestedValueType == "System.Byte[]")
+                        {
+                            sb.AppendLine($"                switch (reader.PeekState())");
+                            sb.AppendLine("                {");
+                            sb.AppendLine("                    case CborReaderState.StartIndefiniteLengthByteString:");
+                            sb.AppendLine("                        using (var stream = new MemoryStream())");
+                            sb.AppendLine("                        {");
+                            sb.AppendLine("                            reader.ReadStartIndefiniteLengthByteString();");
+                            sb.AppendLine("                            while (reader.PeekState() != CborReaderState.EndIndefiniteLengthByteString)");
+                            sb.AppendLine("                            {");
+                            sb.AppendLine("                                byte[] chunk = reader.ReadByteString();");
+                            sb.AppendLine("                                stream.Write(chunk, 0, chunk.Length);");
+                            sb.AppendLine("                            }");
+                            sb.AppendLine("                            reader.ReadEndIndefiniteLengthByteString();");
+                            sb.AppendLine($"                            nestedValue_{variableName} = stream.ToArray();");
+                            sb.AppendLine("                        }");
+                            sb.AppendLine("                        break;");
+                            sb.AppendLine("                    default:");
+                            sb.AppendLine($"                        nestedValue_{variableName} = reader.ReadByteString();");
+                            sb.AppendLine("                        break;");
+                            sb.AppendLine("                }");
+                        }
+                        else
+                        {
+                            // Fallback for other types
+                            sb.AppendLine($"                // Read the encoded value as ReadOnlyMemory<byte>");
+                            sb.AppendLine($"                var encodedNestedValue_{variableName} = reader.ReadEncodedValue();");
+                            sb.AppendLine("");
+                            sb.AppendLine($"                // Deserialize using the type's Read method");
+                            sb.AppendLine($"                nestedValue_{variableName} = {nestedValueType}.Read(encodedNestedValue_{variableName});");
+                        }
+                    }
+                    else
+                    {
+                        sb.AppendLine($"                // Read the encoded value as ReadOnlyMemory<byte>");
+                        sb.AppendLine($"                var encodedNestedValue_{variableName} = reader.ReadEncodedValue();");
+                        sb.AppendLine("");
+                        sb.AppendLine($"                // Deserialize using the type's Read method");
+                        sb.AppendLine($"                nestedValue_{variableName} = {nestedValueType}.Read(encodedNestedValue_{variableName});");
+                    }
+
+                    sb.AppendLine("            }");
+                }
+                else
+                {
+                    // Non-nullable value types
+                    if (IsPrimitive(nestedValueType))
+                    {
+                        string readMethod = nestedValueType switch
+                        {
+                            "System.Int32" or "int" => $"nestedValue_{variableName} = reader.ReadInt32();",
+                            "System.Boolean" or "bool" => $"nestedValue_{variableName} = reader.ReadBoolean();",
+                            "System.UInt32" or "uint" => $"nestedValue_{variableName} = reader.ReadUInt32();",
+                            "System.Int64" or "long" => $"nestedValue_{variableName} = reader.ReadInt64();",
+                            "System.UInt64" or "ulong" => $"nestedValue_{variableName} = reader.ReadUInt64();",
+                            "System.Single" or "float" => $"nestedValue_{variableName} = reader.ReadSingle();",
+                            "System.Double" or "double" => $"nestedValue_{variableName} = reader.ReadDouble();",
+                            "System.Decimal" or "decimal" => $"nestedValue_{variableName} = (decimal)reader.ReadDouble();",
+                            _ => ""
+                        };
+
+                        if (!string.IsNullOrEmpty(readMethod))
+                        {
+                            sb.AppendLine($"            {readMethod}");
+                        }
+                        else
+                        {
+                            // Complex object value
+                            sb.AppendLine($"            // Read the encoded value as ReadOnlyMemory<byte>");
+                            sb.AppendLine($"            var encodedNestedValue_{variableName} = reader.ReadEncodedValue();");
+                            sb.AppendLine("");
+                            sb.AppendLine($"            // Deserialize using the type's Read method");
+                            sb.AppendLine($"            nestedValue_{variableName} = {nestedValueType}.Read(encodedNestedValue_{variableName});");
+                        }
+                    }
+                    else
+                    {
+                        // Complex object value
+                        sb.AppendLine($"            // Read the encoded value as ReadOnlyMemory<byte>");
+                        sb.AppendLine($"            var encodedNestedValue_{variableName} = reader.ReadEncodedValue();");
+                        sb.AppendLine("");
+                        sb.AppendLine($"            // Deserialize using the type's Read method");
+                        sb.AppendLine($"            nestedValue_{variableName} = {nestedValueType}.Read(encodedNestedValue_{variableName});");
+                    }
+                }
+
+                // Add to nested dictionary
+                sb.AppendLine($"            dictValue_{variableName}[nestedKey_{variableName}] = nestedValue_{variableName};");
+                sb.AppendLine("        }");
+                sb.AppendLine("        reader.ReadEndMap();");
+                sb.AppendLine("    }");
+            }
+            else if (valueContainsGenericParams)
             {
                 sb.AppendLine("    if (reader.PeekState() == CborReaderState.Null)");
                 sb.AppendLine("    {");
@@ -791,50 +1042,184 @@ public sealed partial class CborSourceGenerator
                 sb.AppendLine("    }");
                 sb.AppendLine("    else");
                 sb.AppendLine("    {");
-                sb.AppendLine("        var encodedValue = reader.ReadEncodedValue();");
-                sb.AppendLine("        var valueReader = new CborReader(encodedValue);");
-                sb.AppendLine("        var valueState = valueReader.PeekState();");
+                sb.AppendLine($"        var encodedValue_{variableName} = reader.ReadEncodedValue();");
+                sb.AppendLine($"        var valueReader_{variableName} = new CborReader(encodedValue_{variableName});");
+                sb.AppendLine($"        var valueState_{variableName} = valueReader_{variableName}.PeekState();");
                 sb.AppendLine("");
-                sb.AppendLine("        if (valueState == CborReaderState.Null)");
+                sb.AppendLine($"        if (valueState_{variableName} == CborReaderState.Null)");
                 sb.AppendLine("        {");
-                sb.AppendLine("            valueReader.ReadNull();");
+                sb.AppendLine($"            valueReader_{variableName}.ReadNull();");
                 sb.AppendLine($"            dictValue_{variableName} = default;");
                 sb.AppendLine("        }");
-                sb.AppendLine("        else if (valueState == CborReaderState.UnsignedInteger)");
+                sb.AppendLine($"        else if (valueState_{variableName} == CborReaderState.UnsignedInteger)");
                 sb.AppendLine("        {");
-                sb.AppendLine("            var uintValue = valueReader.ReadUInt32();");
+                sb.AppendLine($"            var uintValue_{variableName} = valueReader_{variableName}.ReadUInt32();");
                 sb.AppendLine("            if (typeof(T) == typeof(int))");
-                sb.AppendLine($"                dictValue_{variableName} = (T)(object)(int)uintValue;");
+                sb.AppendLine($"                dictValue_{variableName} = (T)(object)(int)uintValue_{variableName};");
                 sb.AppendLine("            else if (typeof(T) == typeof(uint))");
-                sb.AppendLine($"                dictValue_{variableName} = (T)(object)uintValue;");
+                sb.AppendLine($"                dictValue_{variableName} = (T)(object)uintValue_{variableName};");
                 sb.AppendLine("            else if (typeof(T) == typeof(long))");
-                sb.AppendLine($"                dictValue_{variableName} = (T)(object)(long)uintValue;");
+                sb.AppendLine($"                dictValue_{variableName} = (T)(object)(long)uintValue_{variableName};");
                 sb.AppendLine("            else if (typeof(T) == typeof(ulong))");
-                sb.AppendLine($"                dictValue_{variableName} = (T)(object)(ulong)uintValue;");
+                sb.AppendLine($"                dictValue_{variableName} = (T)(object)(ulong)uintValue_{variableName};");
                 sb.AppendLine("            else");
                 sb.AppendLine($"                throw new InvalidOperationException($\"Cannot deserialize UInt32 to value type {{{valueType}}}\");");
                 sb.AppendLine("        }");
-                sb.AppendLine("        else if (valueState == CborReaderState.TextString)");
+                sb.AppendLine($"        else if (valueState_{variableName} == CborReaderState.TextString)");
                 sb.AppendLine("        {");
-                sb.AppendLine("            var strValue = valueReader.ReadTextString();");
+                sb.AppendLine($"            var strValue_{variableName} = valueReader_{variableName}.ReadTextString();");
                 sb.AppendLine("            if (typeof(T) == typeof(string))");
-                sb.AppendLine($"                dictValue_{variableName} = (T)(object)strValue;");
+                sb.AppendLine($"                dictValue_{variableName} = (T)(object)strValue_{variableName};");
                 sb.AppendLine("            else");
                 sb.AppendLine($"                throw new InvalidOperationException($\"Cannot deserialize string to value type {{{valueType}}}\");");
                 sb.AppendLine("        }");
                 sb.AppendLine("        else");
                 sb.AppendLine("        {");
-                sb.AppendLine($"            throw new InvalidOperationException($\"Cannot deserialize {{valueState}} to value type {{{valueType}}}\");");
+                sb.AppendLine($"            throw new InvalidOperationException($\"Cannot deserialize {{valueState_{variableName}}} to value type {{{valueType}}}\");");
                 sb.AppendLine("        }");
                 sb.AppendLine("    }");
             }
             else
             {
-                // Replace the code being generated for read value with new variable name
-                string valueReadCode = GenerateReadCode(valueType, $"dictValue_{variableName}", valueIsNullable);
-                // Replace any temporary variables inside to avoid conflicts
-                valueReadCode = valueReadCode.Replace("value = ", $"dictValue_{variableName} = ");
-                sb.AppendLine($"    {valueReadCode}");
+                if (valueIsNullable)
+                {
+                    sb.AppendLine("    if (reader.PeekState() == CborReaderState.Null)");
+                    sb.AppendLine("    {");
+                    sb.AppendLine("        reader.ReadNull();");
+                    sb.AppendLine($"        dictValue_{variableName} = default;");
+                    sb.AppendLine("    }");
+                    sb.AppendLine("    else");
+                    sb.AppendLine("    {");
+
+                    if (IsPrimitive(valueType))
+                    {
+                        string readMethod = valueType switch
+                        {
+                            "System.Int32" or "int" => $"dictValue_{variableName} = reader.ReadInt32();",
+                            "System.String" or "string" => $"dictValue_{variableName} = reader.ReadTextString();",
+                            "System.Boolean" or "bool" => $"dictValue_{variableName} = reader.ReadBoolean();",
+                            "System.UInt32" or "uint" => $"dictValue_{variableName} = reader.ReadUInt32();",
+                            "System.Int64" or "long" => $"dictValue_{variableName} = reader.ReadInt64();",
+                            "System.UInt64" or "ulong" => $"dictValue_{variableName} = reader.ReadUInt64();",
+                            "System.Single" or "float" => $"dictValue_{variableName} = reader.ReadSingle();",
+                            "System.Double" or "double" => $"dictValue_{variableName} = reader.ReadDouble();",
+                            "System.Decimal" or "decimal" => $"dictValue_{variableName} = (decimal)reader.ReadDouble();",
+                            "System.DateTime" => $"dictValue_{variableName} = DateTime.Parse(reader.ReadTextString());",
+                            _ => ""
+                        };
+
+                        if (!string.IsNullOrEmpty(readMethod))
+                        {
+                            sb.AppendLine($"        {readMethod}");
+                        }
+                        else if (valueType == "byte[]" || valueType == "System.Byte[]")
+                        {
+                            sb.AppendLine($"        switch (reader.PeekState())");
+                            sb.AppendLine("        {");
+                            sb.AppendLine("            case CborReaderState.StartIndefiniteLengthByteString:");
+                            sb.AppendLine("                using (var stream = new MemoryStream())");
+                            sb.AppendLine("                {");
+                            sb.AppendLine("                    reader.ReadStartIndefiniteLengthByteString();");
+                            sb.AppendLine("                    while (reader.PeekState() != CborReaderState.EndIndefiniteLengthByteString)");
+                            sb.AppendLine("                    {");
+                            sb.AppendLine("                        byte[] chunk = reader.ReadByteString();");
+                            sb.AppendLine("                        stream.Write(chunk, 0, chunk.Length);");
+                            sb.AppendLine("                    }");
+                            sb.AppendLine("                    reader.ReadEndIndefiniteLengthByteString();");
+                            sb.AppendLine($"                    dictValue_{variableName} = stream.ToArray();");
+                            sb.AppendLine("                }");
+                            sb.AppendLine("                break;");
+                            sb.AppendLine("            default:");
+                            sb.AppendLine($"                dictValue_{variableName} = reader.ReadByteString();");
+                            sb.AppendLine("                break;");
+                            sb.AppendLine("        }");
+                        }
+                        else
+                        {
+                            // Fallback for other types
+                            sb.AppendLine($"        // Read the encoded value as ReadOnlyMemory<byte>");
+                            sb.AppendLine($"        var encodedValue_{variableName}_value = reader.ReadEncodedValue();");
+                            sb.AppendLine("");
+                            sb.AppendLine($"        // Deserialize using the type's Read method");
+                            sb.AppendLine($"        dictValue_{variableName} = {valueType}.Read(encodedValue_{variableName}_value);");
+                        }
+                    }
+                    else
+                    {
+                        // Complex object value with explicit cast
+                        sb.AppendLine($"        // Read the encoded value as ReadOnlyMemory<byte>");
+                        sb.AppendLine($"        var encodedValue_{variableName}_value = reader.ReadEncodedValue();");
+                        sb.AppendLine("");
+
+                        // Add explicit cast to ensure we get the right derived type
+                        if (valueType.Contains("."))
+                        {
+                            // It's likely a specific derived type like TokenBundle.TokenBundleMint
+                            // Need to add a cast to the specific type
+                            sb.AppendLine($"        // Deserialize using the type's Read method with explicit cast to derived type");
+                            sb.AppendLine($"        dictValue_{variableName} = ({valueType}){valueType}.Read(encodedValue_{variableName}_value);");
+                        }
+                        else
+                        {
+                            sb.AppendLine($"        // Deserialize using the type's Read method");
+                            sb.AppendLine($"        dictValue_{variableName} = {valueType}.Read(encodedValue_{variableName}_value);");
+                        }
+                    }
+
+                    sb.AppendLine("    }");
+                }
+                else
+                {
+                    // Non-nullable value types
+                    if (IsPrimitive(valueType))
+                    {
+                        string readMethod = valueType switch
+                        {
+                            "System.Int32" or "int" => $"dictValue_{variableName} = reader.ReadInt32();",
+                            "System.Boolean" or "bool" => $"dictValue_{variableName} = reader.ReadBoolean();",
+                            "System.UInt32" or "uint" => $"dictValue_{variableName} = reader.ReadUInt32();",
+                            "System.Int64" or "long" => $"dictValue_{variableName} = reader.ReadInt64();",
+                            "System.UInt64" or "ulong" => $"dictValue_{variableName} = reader.ReadUInt64();",
+                            "System.Single" or "float" => $"dictValue_{variableName} = reader.ReadSingle();",
+                            "System.Double" or "double" => $"dictValue_{variableName} = reader.ReadDouble();",
+                            "System.Decimal" or "decimal" => $"dictValue_{variableName} = (decimal)reader.ReadDouble();",
+                            _ => ""
+                        };
+
+                        if (!string.IsNullOrEmpty(readMethod))
+                        {
+                            sb.AppendLine($"    {readMethod}");
+                        }
+                        else
+                        {
+                            // Complex object value
+                            sb.AppendLine($"    // Read the encoded value as ReadOnlyMemory<byte>");
+                            sb.AppendLine($"    var encodedValue_{variableName}_value = reader.ReadEncodedValue();");
+                            sb.AppendLine("");
+                            sb.AppendLine($"    // Deserialize using the type's Read method");
+                            sb.AppendLine($"    dictValue_{variableName} = {valueType}.Read(encodedValue_{variableName}_value);");
+                        }
+                    }
+                    else
+                    {
+                        // Complex object value with explicit cast
+                        sb.AppendLine($"    // Read the encoded value as ReadOnlyMemory<byte>");
+                        sb.AppendLine($"    var encodedValue_{variableName}_value = reader.ReadEncodedValue();");
+                        sb.AppendLine("");
+
+                        // Add explicit cast for derived types
+                        if (valueType.Contains("."))
+                        {
+                            sb.AppendLine($"    // Deserialize using the type's Read method with explicit cast to derived type");
+                            sb.AppendLine($"    dictValue_{variableName} = ({valueType}){valueType}.Read(encodedValue_{variableName}_value);");
+                        }
+                        else
+                        {
+                            sb.AppendLine($"    // Deserialize using the type's Read method");
+                            sb.AppendLine($"    dictValue_{variableName} = {valueType}.Read(encodedValue_{variableName}_value);");
+                        }
+                    }
+                }
             }
 
             sb.AppendLine($"    {variableName}[dictKey_{variableName}] = dictValue_{variableName};");
@@ -855,20 +1240,20 @@ public sealed partial class CborSourceGenerator
                 bool containsGenericParams = ContainsGenericParameters(elementType);
 
                 return $$"""
-            if ({{variableName}} == null)
-            {
-                writer.WriteNull();
-                return;
-            }
-            
-            writer.WriteStartArray({{variableName}}.Count);
-            foreach (var item in {{variableName}})
-            {
-                {{(containsGenericParams ? "WriteGenericValue(writer, item);" :
-                      GenerateWriteCode("item", elementType, IsNullableType(elementType)))}}
-            }
-            writer.WriteEndArray();
-            """;
+                    if ({{variableName}} == null)
+                    {
+                        writer.WriteNull();
+                        return;
+                    }
+                    
+                    writer.WriteStartArray({{variableName}}.Count);
+                    foreach (var item in {{variableName}})
+                    {
+                        {{(containsGenericParams ? "WriteGenericValue(writer, item);" :
+                            GenerateWriteCode("item", elementType, IsNullableType(elementType)))}}
+                    }
+                    writer.WriteEndArray();
+                """;
             }
             else if (IsDictionaryType(typeName))
             {
@@ -877,25 +1262,87 @@ public sealed partial class CborSourceGenerator
                 bool keyContainsGenericParams = ContainsGenericParameters(keyType);
                 bool valueContainsGenericParams = ContainsGenericParameters(valueType);
                 bool valueIsNullable = IsNullableType(valueType);
+                bool valueIsDictionary = IsDictionaryType(valueType);
 
-                return $$"""
-            if ({{variableName}} == null)
-            {
-                writer.WriteNull();
-                return;
-            }
-            
-            writer.WriteStartMap({{variableName}}.Count);
-            foreach (var kvp in {{variableName}})
-            {
-                {{(keyContainsGenericParams ? "WriteGenericValue(writer, kvp.Key);" :
-                      GenerateWriteCode("kvp.Key", keyType, false))}}
-                
-                {{(valueContainsGenericParams ? "WriteGenericValue(writer, kvp.Value);" :
-                      GenerateWriteCode("kvp.Value", valueType, valueIsNullable))}}
-            }
-            writer.WriteEndMap();
-            """;
+                // Create a sanitized variable name by replacing dots with underscores
+                string safeVarName = variableName.Replace(".", "_");
+
+                var codeBuilder = new StringBuilder();
+
+                codeBuilder.AppendLine($"if ({variableName} == null)");
+                codeBuilder.AppendLine("{");
+                codeBuilder.AppendLine("    writer.WriteNull();");
+                codeBuilder.AppendLine("    return;");
+                codeBuilder.AppendLine("}");
+                codeBuilder.AppendLine();
+                codeBuilder.AppendLine($"writer.WriteStartMap({variableName}.Count);");
+                codeBuilder.AppendLine($"foreach (var kvp_{safeVarName} in {variableName})");
+                codeBuilder.AppendLine("{");
+
+                // Handle key
+                if (keyContainsGenericParams)
+                {
+                    codeBuilder.AppendLine($"    WriteGenericValue(writer, kvp_{safeVarName}.Key);");
+                }
+                else
+                {
+                    codeBuilder.AppendLine($"    {GenerateWriteCode($"kvp_{safeVarName}.Key", keyType, false)}");
+                }
+
+                // Handle value - special case for nested dictionaries
+                if (valueIsDictionary)
+                {
+                    string nestedKeyType = ExtractKeyType(valueType);
+                    string nestedValueType = ExtractElementType(valueType);
+                    bool nestedValueIsNullable = IsNullableType(nestedValueType);
+
+                    codeBuilder.AppendLine($"    if (kvp_{safeVarName}.Value == null)");
+                    codeBuilder.AppendLine("    {");
+                    codeBuilder.AppendLine("        writer.WriteNull();");
+                    codeBuilder.AppendLine("    }");
+                    codeBuilder.AppendLine("    else");
+                    codeBuilder.AppendLine("    {");
+                    codeBuilder.AppendLine($"        writer.WriteStartMap(kvp_{safeVarName}.Value.Count);");
+                    codeBuilder.AppendLine($"        foreach (var nested_kvp_{safeVarName} in kvp_{safeVarName}.Value)");
+                    codeBuilder.AppendLine("        {");
+
+                    // Nested key
+                    if (ContainsGenericParameters(nestedKeyType))
+                    {
+                        codeBuilder.AppendLine($"            WriteGenericValue(writer, nested_kvp_{safeVarName}.Key);");
+                    }
+                    else
+                    {
+                        codeBuilder.AppendLine($"            {GenerateWriteCode($"nested_kvp_{safeVarName}.Key", nestedKeyType, false)}");
+                    }
+
+                    // Nested value
+                    if (ContainsGenericParameters(nestedValueType))
+                    {
+                        codeBuilder.AppendLine($"            WriteGenericValue(writer, nested_kvp_{safeVarName}.Value);");
+                    }
+                    else
+                    {
+                        codeBuilder.AppendLine($"            {GenerateWriteCode($"nested_kvp_{safeVarName}.Value", nestedValueType, nestedValueIsNullable)}");
+                    }
+
+                    codeBuilder.AppendLine("        }");
+                    codeBuilder.AppendLine("        writer.WriteEndMap();");
+                    codeBuilder.AppendLine("    }");
+                }
+                else if (valueContainsGenericParams)
+                {
+                    codeBuilder.AppendLine($"    WriteGenericValue(writer, kvp_{safeVarName}.Value);");
+                }
+                else
+                {
+                    codeBuilder.AppendLine($"    {GenerateWriteCode($"kvp_{safeVarName}.Value", valueType, valueIsNullable)}");
+                }
+
+                codeBuilder.AppendLine("}");
+                codeBuilder.AppendLine("writer.WriteEndMap();");
+
+                return codeBuilder.ToString();
             }
 
             throw new InvalidOperationException($"Unsupported collection type: {typeName}");

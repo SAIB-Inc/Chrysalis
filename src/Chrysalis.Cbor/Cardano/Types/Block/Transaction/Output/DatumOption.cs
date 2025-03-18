@@ -1,27 +1,26 @@
-using Chrysalis.Cbor.Attributes;
 using Chrysalis.Cbor.Serialization.Attributes;
 
 using Chrysalis.Cbor.Types;
 
 namespace Chrysalis.Cbor.Cardano.Types.Block.Transaction.Output;
 
-// [CborSerializable]
+[CborSerializable]
 [CborUnion]
 public abstract partial record DatumOption : CborBase<DatumOption>
 {
-    // [CborSerializable]
+    [CborSerializable]
     [CborList]
     public partial record DatumHashOption(
-        [CborIndex(0)] int Option,
-        [CborIndex(1)] byte[] DatumHash
+        [CborOrder(0)] int Option,
+        [CborOrder(1)] byte[] DatumHash
     ) : DatumOption;
 
 
-    // [CborSerializable]
+    [CborSerializable]
     [CborList]
     public partial record InlineDatumOption(
-        [CborIndex(0)] int Option,
-        [CborIndex(1)][CborSize(32)] byte[] Data
+        [CborOrder(0)] int Option,
+        [CborOrder(1)][CborSize(32)] byte[] Data
     ) : DatumOption;
 }
 
