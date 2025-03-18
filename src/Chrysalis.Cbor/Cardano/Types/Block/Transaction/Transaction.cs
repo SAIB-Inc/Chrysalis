@@ -3,6 +3,7 @@ using Chrysalis.Cbor.Cardano.Types.Block.Transaction.Body;
 using Chrysalis.Cbor.Cardano.Types.Block.Transaction.WitnessSet;
 using Chrysalis.Cbor.Types;
 using Chrysalis.Cbor.Serialization.Attributes;
+using Metadata = Chrysalis.Cbor.Cardano.Types.Block.Transaction.TransactionMetadata;
 
 namespace Chrysalis.Cbor.Cardano.Types.Block.Transaction;
 
