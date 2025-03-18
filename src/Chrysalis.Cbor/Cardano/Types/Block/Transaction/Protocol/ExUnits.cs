@@ -5,7 +5,7 @@ using Chrysalis.Cbor.Types;
 
 namespace Chrysalis.Cbor.Cardano.Types.Block.Transaction.Protocol;
 
-[CborSerializable]
+// [CborSerializable]
 [CborList]
 public partial record ExUnits(
     [CborIndex(0)] ulong Mem,

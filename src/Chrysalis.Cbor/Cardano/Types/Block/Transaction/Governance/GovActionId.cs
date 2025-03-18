@@ -5,7 +5,7 @@ using Chrysalis.Cbor.Types;
 
 namespace Chrysalis.Cbor.Cardano.Types.Block.Transaction.Governance;
 
-[CborSerializable]
+// [CborSerializable]
 [CborList]
 public partial record GovActionId(
     [CborIndex(0)] byte[] TransactionId,

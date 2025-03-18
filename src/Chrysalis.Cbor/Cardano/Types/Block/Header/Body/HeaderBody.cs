@@ -4,11 +4,11 @@ using Chrysalis.Cbor.Types;
 
 namespace Chrysalis.Cbor.Cardano.Types.Block.Header.Body;
 
-[CborSerializable]
+// [CborSerializable]
 [CborUnion]
 public abstract partial record BlockHeaderBody : CborBase<BlockHeaderBody>
 {
-    [CborSerializable]
+    // [CborSerializable]
     [CborList]
     public partial record AlonzoHeaderBody(
             [CborOrder(0)] ulong BlockNumber,
@@ -28,7 +28,7 @@ public abstract partial record BlockHeaderBody : CborBase<BlockHeaderBody>
             [CborOrder(14)] ulong ProtocolMinor
         ) : BlockHeaderBody;
 
-    [CborSerializable]
+    // [CborSerializable]
     [CborList]
     public partial record BabbageHeaderBody(
         [CborOrder(0)] ulong BlockNumber,

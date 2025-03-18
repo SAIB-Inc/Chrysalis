@@ -3,7 +3,7 @@ using Chrysalis.Cbor.Types;
 
 namespace Chrysalis.Cbor.Cardano.Types.Block;
 
-[CborSerializable]
+// [CborSerializable]
 [CborList]
 public partial record BlockWithEra<T>(
     [CborOrder(0)] int EraNumber,

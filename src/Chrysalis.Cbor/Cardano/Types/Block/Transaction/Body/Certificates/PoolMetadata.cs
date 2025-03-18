@@ -5,7 +5,7 @@ using Chrysalis.Cbor.Types;
 
 namespace Chrysalis.Cbor.Cardano.Types.Block.Transaction.Body.Certificates;
 
-[CborSerializable]
+// [CborSerializable]
 [CborList]
 public partial record PoolMetadata(
     [CborIndex(0)] string Url,

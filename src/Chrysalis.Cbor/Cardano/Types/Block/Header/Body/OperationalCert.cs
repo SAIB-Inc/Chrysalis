@@ -5,7 +5,7 @@ using Chrysalis.Cbor.Types;
 
 namespace Chrysalis.Cbor.Cardano.Types.Block.Header.Body;
 
-[CborSerializable]
+// [CborSerializable]
 [CborList]
 public partial record OperationalCert(
     [CborIndex(0)] byte[] HotVKey,

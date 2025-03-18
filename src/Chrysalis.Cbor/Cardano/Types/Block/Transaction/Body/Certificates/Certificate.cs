@@ -9,11 +9,11 @@ using Chrysalis.Cbor.Serialization.Attributes;
 
 namespace Chrysalis.Cbor.Cardano.Types.Block.Transaction.Body.Certificates;
 
-[CborSerializable]
+// [CborSerializable]
 [CborUnion]
 public abstract partial record Certificate : CborBase<Certificate>
 {
-    [CborSerializable]
+    // [CborSerializable]
     [CborList]
     public partial record StakeRegistration(
     [CborIndex(0)] int Tag,
@@ -21,7 +21,7 @@ public abstract partial record Certificate : CborBase<Certificate>
 ) : Certificate;
 
 
-    [CborSerializable]
+    // [CborSerializable]
     [CborList]
     public partial record StakeDeregistration(
         [CborIndex(0)] int Tag,
@@ -29,7 +29,7 @@ public abstract partial record Certificate : CborBase<Certificate>
     ) : Certificate;
 
 
-    [CborSerializable]
+    // [CborSerializable]
     [CborList]
     public partial record StakeDelegation(
         [CborIndex(0)] int Tag,
@@ -38,7 +38,7 @@ public abstract partial record Certificate : CborBase<Certificate>
     ) : Certificate;
 
 
-    [CborSerializable]
+    // [CborSerializable]
     [CborList]
     public partial record PoolRegistration(
         [CborIndex(0)] int Tag,
@@ -54,7 +54,7 @@ public abstract partial record Certificate : CborBase<Certificate>
     ) : Certificate;
 
 
-    [CborSerializable]
+    // [CborSerializable]
     [CborList]
     public partial record PoolRetirement(
         [CborIndex(0)] int Tag,
@@ -63,7 +63,7 @@ public abstract partial record Certificate : CborBase<Certificate>
     ) : Certificate;
 
 
-    [CborSerializable]
+    // [CborSerializable]
     [CborList]
     public partial record RegCert(
         [CborIndex(0)] int Tag,
@@ -72,7 +72,7 @@ public abstract partial record Certificate : CborBase<Certificate>
     ) : Certificate;
 
 
-    [CborSerializable]
+    // [CborSerializable]
     [CborList]
     public partial record UnRegCert(
         [CborIndex(0)] int Tag,
@@ -81,7 +81,7 @@ public abstract partial record Certificate : CborBase<Certificate>
     ) : Certificate;
 
 
-    [CborSerializable]
+    // [CborSerializable]
     [CborList]
     public partial record VoteDelegCert(
         [CborIndex(0)] int Tag,
@@ -90,7 +90,7 @@ public abstract partial record Certificate : CborBase<Certificate>
     ) : Certificate;
 
 
-    [CborSerializable]
+    // [CborSerializable]
     [CborList]
     public partial record StakeVoteDelegCert(
         [CborIndex(0)] int Tag,
@@ -100,7 +100,7 @@ public abstract partial record Certificate : CborBase<Certificate>
     ) : Certificate;
 
 
-    [CborSerializable]
+    // [CborSerializable]
     [CborList]
     public partial record StakeRegDelegCert(
         [CborIndex(0)] int Tag,
@@ -110,7 +110,7 @@ public abstract partial record Certificate : CborBase<Certificate>
     ) : Certificate;
 
 
-    [CborSerializable]
+    // [CborSerializable]
     [CborList]
     public partial record VoteRegDelegCert(
         [CborIndex(0)] int Tag,
@@ -120,7 +120,7 @@ public abstract partial record Certificate : CborBase<Certificate>
     ) : Certificate;
 
 
-    [CborSerializable]
+    // [CborSerializable]
     [CborList]
     public partial record StakeVoteRegDelegCert(
         [CborIndex(0)] int Tag,
@@ -131,7 +131,7 @@ public abstract partial record Certificate : CborBase<Certificate>
     ) : Certificate;
 
 
-    [CborSerializable]
+    // [CborSerializable]
     [CborList]
     public partial record AuthCommitteeHotCert(
         [CborIndex(0)] int Tag,
@@ -140,7 +140,7 @@ public abstract partial record Certificate : CborBase<Certificate>
     ) : Certificate;
 
 
-    [CborSerializable]
+    // [CborSerializable]
     [CborList]
     public partial record ResignCommitteeColdCert(
         [CborIndex(0)] int Tag,
@@ -149,7 +149,7 @@ public abstract partial record Certificate : CborBase<Certificate>
     ) : Certificate;
 
 
-    [CborSerializable]
+    // [CborSerializable]
     [CborList]
     public partial record RegDrepCert(
         [CborIndex(0)] int Tag,
@@ -159,7 +159,7 @@ public abstract partial record Certificate : CborBase<Certificate>
     ) : Certificate;
 
 
-    [CborSerializable]
+    // [CborSerializable]
     [CborList]
     public partial record UnRegDrepCert(
         [CborIndex(0)] int Tag,
@@ -168,7 +168,7 @@ public abstract partial record Certificate : CborBase<Certificate>
     ) : Certificate;
 
 
-    [CborSerializable]
+    // [CborSerializable]
     [CborList]
     public partial record UpdateDrepCert(
         [CborIndex(0)] int Tag,
@@ -177,7 +177,7 @@ public abstract partial record Certificate : CborBase<Certificate>
     ) : Certificate;
 
 
-    [CborSerializable]
+    // [CborSerializable]
     [CborList]
     public partial record GenesisKeyDelegation(
         [CborIndex(0)] int Tag,
@@ -187,7 +187,7 @@ public abstract partial record Certificate : CborBase<Certificate>
     ) : Certificate;
 
 
-    [CborSerializable]
+    // [CborSerializable]
     [CborList]
     public partial record MoveInstantaneousRewardsCert(
         [CborIndex(0)] int Tag,

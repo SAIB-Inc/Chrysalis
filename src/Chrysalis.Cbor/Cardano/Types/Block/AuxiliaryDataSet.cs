@@ -4,5 +4,5 @@ using Chrysalis.Cbor.Types;
 
 namespace Chrysalis.Cbor.Cardano.Types.Block;
 
-[CborSerializable]
+// [CborSerializable]
 public partial record AuxiliaryDataSet(Dictionary<int, AuxiliaryData> Value) : CborBase<AuxiliaryDataSet>;

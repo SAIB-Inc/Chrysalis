@@ -10,11 +10,11 @@ using Chrysalis.Cbor.Serialization.Attributes;
 
 namespace Chrysalis.Cbor.Cardano.Types.Block.Transaction.Body;
 
-[CborSerializable]
+// [CborSerializable]
 [CborUnion]
 public abstract partial record TransactionBody : CborBase<TransactionBody>
 {
-    [CborSerializable]
+    // [CborSerializable]
     [CborMap]
     public partial record AlonzoTransactionBody(
             [CborIndex(0)] CborMaybeIndefList<TransactionInput> Inputs,
@@ -33,7 +33,7 @@ public abstract partial record TransactionBody : CborBase<TransactionBody>
             [CborIndex(15)] int? NetworkId
         ) : TransactionBody;
 
-    [CborSerializable]
+    // [CborSerializable]
     [CborMap]
     public partial record BabbageTransactionBody(
         [CborIndex(0)] CborMaybeIndefList<TransactionInput> Inputs,
@@ -56,7 +56,7 @@ public abstract partial record TransactionBody : CborBase<TransactionBody>
     ) : TransactionBody;
 
 
-    [CborSerializable]
+    // [CborSerializable]
     [CborMap]
     public partial record ConwayTransactionBody(
         [CborIndex(0)] CborMaybeIndefList<TransactionInput> Inputs,

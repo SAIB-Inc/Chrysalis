@@ -5,11 +5,11 @@ using Chrysalis.Cbor.Types;
 
 namespace Chrysalis.Cbor.Cardano.Types.Block.Transaction.Output;
 
-[CborSerializable]
+// [CborSerializable]
 [CborUnion]
 public abstract partial record TransactionOutput : CborBase<TransactionOutput>
 {
-    [CborSerializable]
+    // [CborSerializable]
     [CborList]
     public partial record AlonzoTransactionOutput(
         [CborIndex(0)] Address Address,
@@ -18,7 +18,7 @@ public abstract partial record TransactionOutput : CborBase<TransactionOutput>
     ) : TransactionOutput;
 
 
-    [CborSerializable]
+    // [CborSerializable]
     [CborMap]
     public partial record PostAlonzoTransactionOutput(
         [CborIndex(0)] Address Address,

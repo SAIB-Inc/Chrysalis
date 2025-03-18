@@ -3,6 +3,6 @@ using Chrysalis.Cbor.Types;
 
 namespace Chrysalis.Cbor.Cardano.Types.Block.Transaction.Governance;
 
-[CborSerializable]
+// [CborSerializable]
 
 public partial record MemberTermLimits(Dictionary<Credential, ulong> Value) : CborBase<MemberTermLimits>;

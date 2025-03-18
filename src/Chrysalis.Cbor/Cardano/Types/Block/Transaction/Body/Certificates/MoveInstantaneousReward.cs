@@ -6,7 +6,7 @@ using Chrysalis.Cbor.Types;
 
 namespace Chrysalis.Cbor.Cardano.Types.Block.Transaction.Body.Certificates;
 
-[CborSerializable]
+// [CborSerializable]
 [CborList]
 public partial record MoveInstantaneousReward(
     [CborIndex(0)] int InstantaneousRewardSource,
@@ -14,15 +14,15 @@ public partial record MoveInstantaneousReward(
 ) : CborBase<MoveInstantaneousReward>;
 
 
-[CborSerializable]
+// [CborSerializable]
 [CborUnion]
 public abstract partial record Target : CborBase<Target>
 {
-    [CborSerializable]
+    // [CborSerializable]
     public partial record StakeCredentials(Dictionary<Credential, ulong> Value) : Target;
 
 
-    [CborSerializable]
+    // [CborSerializable]
     public partial record OtherAccountingPot(ulong Value) : Target;
 }
 

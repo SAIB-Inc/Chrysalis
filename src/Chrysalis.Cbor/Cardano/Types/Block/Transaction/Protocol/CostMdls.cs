@@ -4,5 +4,5 @@ using Chrysalis.Cbor.Types.Custom;
 
 namespace Chrysalis.Cbor.Cardano.Types.Block.Transaction.Protocol;
 
-[CborSerializable]
+// [CborSerializable]
 public partial record CostMdls(Dictionary<int, CborMaybeIndefList<long>.CborIndefList> Value) : CborBase<CostMdls>;

@@ -5,11 +5,11 @@ using Chrysalis.Cbor.Types;
 
 namespace Chrysalis.Cbor.Cardano.Types.Block.Transaction.Body.Certificates;
 
-[CborSerializable]
+// [CborSerializable]
 [CborUnion]
 public abstract partial record Relay : CborBase<Relay>
 {
-    [CborSerializable]
+    // [CborSerializable]
     [CborList]
     public partial record SingleHostAddr(
     [CborIndex(0)] int Tag,
@@ -19,7 +19,7 @@ public abstract partial record Relay : CborBase<Relay>
 ) : Relay;
 
 
-    [CborSerializable]
+    // [CborSerializable]
     [CborList]
     public partial record SingleHostName(
         [CborIndex(0)] int Tag,
@@ -28,7 +28,7 @@ public abstract partial record Relay : CborBase<Relay>
     ) : Relay;
 
 
-    [CborSerializable]
+    // [CborSerializable]
     [CborList]
     public partial record MultiHostName(
         [CborIndex(0)] int Tag,

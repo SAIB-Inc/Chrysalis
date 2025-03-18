@@ -7,11 +7,11 @@ using Chrysalis.Cbor.Serialization.Attributes;
 
 namespace Chrysalis.Cbor.Cardano.Types.Block.Transaction.WitnessSet;
 
-[CborSerializable]
+// [CborSerializable]
 [CborUnion]
 public abstract partial record TransactionWitnessSet : CborBase<TransactionWitnessSet>
 {
-    [CborSerializable]
+    // [CborSerializable]
     [CborMap]
     public partial record AlonzoTransactionWitnessSet(
         [CborIndex(0)] CborMaybeIndefList<VKeyWitness>? VKeyWitnessSet,
@@ -22,7 +22,7 @@ public abstract partial record TransactionWitnessSet : CborBase<TransactionWitne
         [CborIndex(5)] Redeemers? Redeemers
     ) : TransactionWitnessSet;
 
-    [CborSerializable]
+    // [CborSerializable]
     [CborMap]
     public partial record PostAlonzoTransactionWitnessSet(
         [CborIndex(0)] CborMaybeIndefList<VKeyWitness>? VKeyWitnessSet,

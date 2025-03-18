@@ -6,7 +6,7 @@ using Chrysalis.Cbor.Serialization.Attributes;
 
 namespace Chrysalis.Cbor.Cardano.Types.Block.Transaction.Body;
 
-[CborSerializable]
+// [CborSerializable]
 [CborList]
 public partial record Update(
 [CborIndex(0)] ProposedProtocolParameterUpdates ProposedProtocolParameterUpdates,

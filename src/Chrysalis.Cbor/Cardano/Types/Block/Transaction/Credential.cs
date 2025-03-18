@@ -5,7 +5,7 @@ using Chrysalis.Cbor.Types;
 
 namespace Chrysalis.Cbor.Cardano.Types.Block.Transaction;
 
-[CborSerializable]
+// [CborSerializable]
 [CborList]
 public partial record Credential(
     [CborIndex(0)] int CredentialType,

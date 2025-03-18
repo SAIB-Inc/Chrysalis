@@ -7,11 +7,11 @@ using static Chrysalis.Cbor.Cardano.Types.Block.Transaction.WitnessSet.Transacti
 
 namespace Chrysalis.Cbor.Cardano.Types.Block;
 
-[CborSerializable]
+// [CborSerializable]
 [CborUnion]
 public abstract partial record Block : CborBase<Block>
 {
-    [CborSerializable]
+    // [CborSerializable]
     [CborList]
     public partial record AlonzoCompatibleBlock(
         [CborOrder(0)] BlockHeader Header,
@@ -21,7 +21,7 @@ public abstract partial record Block : CborBase<Block>
         [CborOrder(4)] CborMaybeIndefList<int>? InvalidTransactions
     ) : Block;
 
-    [CborSerializable]
+    // [CborSerializable]
     [CborList]
     public partial record BabbageBlock(
         [CborOrder(0)] BlockHeader Header,
@@ -31,7 +31,7 @@ public abstract partial record Block : CborBase<Block>
         [CborOrder(4)] CborMaybeIndefList<int>? InvalidTransactions
     ) : Block;
 
-    [CborSerializable]
+    // [CborSerializable]
     [CborList]
     public partial record ConwayBlock(
         [CborOrder(0)] BlockHeader Header,

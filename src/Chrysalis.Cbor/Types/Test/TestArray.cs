@@ -1,9 +1,10 @@
 
 using Chrysalis.Cbor.Serialization.Attributes;
+using Chrysalis.Cbor.Types.Custom;
 
 namespace Chrysalis.Cbor.Types.Test;
 
-[CborSerializable]
+// [CborSerializable]
 [CborList]
 public partial record TestList(
     [CborOrder(0)]
@@ -12,3 +13,10 @@ public partial record TestList(
     List<TestConstr> Value2,
     Dictionary<string, TestConstr> Value3
 ) : CborBase<TestList>;
+
+[CborSerializable]
+[CborList]
+public partial record TestListMaybe(
+    [CborOrder(0)]
+    CborMaybeIndefList<int> Value1
+) : CborBase<TestListMaybe>;

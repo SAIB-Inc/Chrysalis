@@ -6,7 +6,7 @@ using Chrysalis.Cbor.Types.Primitives;
 
 namespace Chrysalis.Cbor.Cardano.Types.Block.Transaction.Governance;
 
-[CborSerializable]
+// [CborSerializable]
 [CborList]
 public partial record DRepVotingThresholds(
     [CborIndex(0)] CborRationalNumber MotionNoConfidence,

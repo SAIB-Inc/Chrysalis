@@ -5,7 +5,7 @@ using Chrysalis.Cbor.Types;
 
 namespace Chrysalis.Cbor.Cardano.Types.Block.Transaction.WitnessSet;
 
-[CborSerializable]
+// [CborSerializable]
 [CborList]
 public partial record BootstrapWitness(
    [CborIndex(0)] byte[] PublicKey,

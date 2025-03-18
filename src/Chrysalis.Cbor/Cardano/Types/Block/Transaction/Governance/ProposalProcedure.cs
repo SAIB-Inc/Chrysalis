@@ -6,7 +6,7 @@ using Chrysalis.Cbor.Serialization.Attributes;
 
 namespace Chrysalis.Cbor.Cardano.Types.Block.Transaction.Governance;
 
-[CborSerializable]
+// [CborSerializable]
 [CborList]
 public partial record ProposalProcedure(
     [CborIndex(0)] ulong Deposit,
