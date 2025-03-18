@@ -1,4 +1,8 @@
+using System;
+using System.Collections.Generic;
 using System.Formats.Cbor;
+using System.Reflection;
+using System.Text;
 
 namespace Chrysalis.Cbor.SourceGenerator;
 
@@ -25,16 +29,16 @@ public sealed partial class CborSourceGenerator
             if (isNullable && !isAlreadyNullable)
             {
                 return $$"""
-                    if (reader.PeekState() == CborReaderState.Null)
-                    {
-                        reader.ReadNull();
-                        {{variableName}} = null;
-                    }
-                    else
-                    {
-                        {{InternalGenerateReadCode(typeName, variableName)}}
-                    }
-                    """;
+                if (reader.PeekState() == CborReaderState.Null)
+                {
+                    reader.ReadNull();
+                    {{variableName}} = default;
+                }
+                else
+                {
+                    {{InternalGenerateReadCode(typeName, variableName)}}
+                }
+                """;
             }
 
             return InternalGenerateReadCode(typeName, variableName);
@@ -53,15 +57,15 @@ public sealed partial class CborSourceGenerator
             if (isNullable)
             {
                 return $$"""
-                    if ({{variableName}} == null)
-                    {
-                        writer.WriteNull();
-                    }
-                    else
-                    {
-                        {{InternalGenerateWriteCode(variableName, typeName, isNullable)}}
-                    }
-                    """;
+                if ({{variableName}} == null)
+                {
+                    writer.WriteNull();
+                }
+                else
+                {
+                    {{InternalGenerateWriteCode(variableName, typeName, isNullable)}}
+                }
+                """;
             }
 
             return InternalGenerateWriteCode(variableName, typeName, isNullable);
@@ -113,23 +117,23 @@ public sealed partial class CborSourceGenerator
                 {
                     // Custom CBOR type - read the encoded value and pass it to the Read method
                     return $$"""
-                        // Read the encoded value as ReadOnlyMemory<byte>
-                        var encodedValue = reader.ReadEncodedValue();
-                        
-                        // Deserialize using the type's Read method
-                        {{variableName}} = {{cleanTypeName}}.Read(encodedValue);
-                        """;
+                    // Read the encoded value as ReadOnlyMemory<byte>
+                    var encodedValue = reader.ReadEncodedValue();
+                    
+                    // Deserialize using the type's Read method
+                    {{variableName}} = {{cleanTypeName}}.Read(encodedValue);
+                    """;
                 }
                 else
                 {
                     // Custom CBOR type - read the encoded value and pass it to the Read method  
                     return $$"""
-                        // Read the encoded value as ReadOnlyMemory<byte>
-                        var encodedValue = reader.ReadEncodedValue();
-                        
-                        // Deserialize using the type's Read method
-                        {{variableName}} = {{cleanTypeName}}.Read(encodedValue);
-                        """;
+                    // Read the encoded value as ReadOnlyMemory<byte>
+                    var encodedValue = reader.ReadEncodedValue();
+                    
+                    // Deserialize using the type's Read method
+                    {{variableName}} = {{cleanTypeName}}.Read(encodedValue);
+                    """;
                 }
             }
         }
@@ -146,15 +150,15 @@ public sealed partial class CborSourceGenerator
                 if (cleanTypeName == "ulong" || cleanTypeName == "System.UInt64")
                 {
                     return $$"""
-                        if ({{variableName}}.HasValue)
-                        {
-                            writer.WriteUInt64({{variableName}}.Value);
-                        }
-                        else
-                        {
-                            writer.WriteNull();
-                        }
-                        """;
+                    if ({{variableName}}.HasValue)
+                    {
+                        writer.WriteUInt64({{variableName}}.Value);
+                    }
+                    else
+                    {
+                        writer.WriteNull();
+                    }
+                    """;
                 }
 
                 string writeMethod = cleanTypeName switch
@@ -190,23 +194,23 @@ public sealed partial class CborSourceGenerator
                 {
                     // Always use the type's static Write method for custom types
                     return $$"""
-                        {{cleanTypeName}}.Write(writer, {{variableName}});
-                        """;
+                    {{cleanTypeName}}.Write(writer, {{variableName}});
+                    """;
                 }
                 else
                 {
                     // Custom CBOR type with potential raw bytes
                     return $$"""
-                        // If we have raw bytes, use them directly
-                        if ({{variableName}}.Raw.HasValue)
-                        {
-                            writer.WriteEncodedValue({{variableName}}.Raw.Value.Span);
-                        }
-                        else
-                        {
-                            {{cleanTypeName}}.Write(writer, {{variableName}});
-                        }
-                        """;
+                    // If we have raw bytes, use them directly
+                    if ({{variableName}}.Raw.HasValue)
+                    {
+                        writer.WriteEncodedValue({{variableName}}.Raw.Value.Span);
+                    }
+                    else
+                    {
+                        {{cleanTypeName}}.Write(writer, {{variableName}});
+                    }
+                    """;
                 }
             }
         }
@@ -250,9 +254,9 @@ public sealed partial class CborSourceGenerator
         public static bool IsListType(string typeName)
         {
             return typeName.Contains("System.Collections.Generic.List<") ||
-                typeName.Contains("System.Collections.Generic.IList<") ||
-                typeName.Contains("System.Collections.Generic.ICollection<") ||
-                typeName.Contains("System.Collections.Generic.IEnumerable<");
+                   typeName.Contains("System.Collections.Generic.IList<") ||
+                   typeName.Contains("System.Collections.Generic.ICollection<") ||
+                   typeName.Contains("System.Collections.Generic.IEnumerable<");
         }
 
         /// <summary>
@@ -261,7 +265,7 @@ public sealed partial class CborSourceGenerator
         public static bool IsDictionaryType(string typeName)
         {
             return typeName.Contains("System.Collections.Generic.Dictionary<") ||
-                typeName.Contains("System.Collections.Generic.IDictionary<");
+                   typeName.Contains("System.Collections.Generic.IDictionary<");
         }
 
         /// <summary>
@@ -349,55 +353,54 @@ public sealed partial class CborSourceGenerator
         public static string GenerateByteRead(string variableName)
         {
             return $$"""
-                if (reader.PeekState() != CborReaderState.StartIndefiniteLengthByteString)
-                {
-                    {{variableName}} = reader.ReadByteString();
-                } else 
-                {
-                    // Handle indefinite length
-                    using MemoryStream stream = new();
-                    reader.ReadStartIndefiniteLengthByteString();
-
-                    while (reader.PeekState() != CborReaderState.EndIndefiniteLengthByteString)
+            switch (reader.PeekState())
+            {
+                case CborReaderState.StartIndefiniteLengthByteString:
+                    using (var stream = new MemoryStream())
                     {
-                        byte[] chunk = reader.ReadByteString();
-                        stream.Write(chunk);
+                        reader.ReadStartIndefiniteLengthByteString();
+                        while (reader.PeekState() != CborReaderState.EndIndefiniteLengthByteString)
+                        {
+                            byte[] chunk = reader.ReadByteString();
+                            stream.Write(chunk, 0, chunk.Length);
+                        }
+                        reader.ReadEndIndefiniteLengthByteString();
+                        {{variableName}} = stream.ToArray();
                     }
-
-                    reader.ReadEndIndefiniteLengthByteString();
-                    {{variableName}} = stream.ToArray();
-                }
+                    break;
+                default:
+                    {{variableName}} = reader.ReadByteString();
+                    break;
+            }
             """;
         }
 
         /// <summary>
-        /// Generates code to read a byte[] value
+        /// Generates code to write a byte[] value
         /// </summary>
         public static string GenerateByteWrite(string variableName, int? size = null)
         {
             if (!size.HasValue)
             {
                 return $$"""
-                    writer.WriteByteString({{variableName}});
+                writer.WriteByteString({{variableName}});
                 """;
             }
 
-
             return $$"""
-                writer.WriteStartIndefiniteLengthByteString();
-                
-                int chunkSize = {{size.Value}};
-                
-                for (int i = 0; i < {{variableName}}.Length; i += chunkSize)
-                {
-                    int remainingBytes = Math.Min(chunkSize, data.Length - i);
-                    writer.WriteByteString(data.AsSpan(i, remainingBytes));
-                }
-                
-                writer.WriteEndIndefiniteLengthByteString();
+            writer.WriteStartIndefiniteLengthByteString();
+            
+            int chunkSize = {{size.Value}};
+            
+            for (int i = 0; i < {{variableName}}.Length; i += chunkSize)
+            {
+                int remainingBytes = Math.Min(chunkSize, {{variableName}}.Length - i);
+                writer.WriteByteString({{variableName}}.AsSpan(i, remainingBytes));
+            }
+            
+            writer.WriteEndIndefiniteLengthByteString();
             """;
         }
-
 
         /// <summary>
         /// Extracts the key type from a dictionary type name
@@ -415,87 +418,51 @@ public sealed partial class CborSourceGenerator
         }
 
         /// <summary>
-        /// Generates code to read a collection value
+        /// Determines if a type contains any generic parameters
         /// </summary>
-        public static string GenerateCollectionRead(string typeName, string variableName)
+        public static bool ContainsGenericParameters(string typeName)
         {
-            if (IsListType(typeName))
-            {
-                return GenerateListRead(typeName, variableName);
-            }
-            else if (IsDictionaryType(typeName))
-            {
-                return GenerateDictionaryRead(typeName, variableName);
-            }
+            // Check for common type parameter patterns
+            if (typeName.Length == 1 && char.IsUpper(typeName[0]))
+                return true;
 
-            throw new InvalidOperationException($"Unsupported collection type: {typeName}");
-        }
+            // Check for standalone type parameters
+            if (typeName == "T" || typeName == "U" || typeName == "V" ||
+                typeName == "TKey" || typeName == "TValue")
+                return true;
 
-        /// <summary>
-        /// Generates code to write a collection with special handling for generic elements
-        /// </summary>
-        public static string GenerateCollectionWrite(string variableName, string typeName, bool isNullable)
-        {
-            if (IsListType(typeName))
+            // Check for generic parameters inside angle brackets
+            if (typeName.Contains('<') && typeName.Contains('>'))
             {
-                string elementType = ExtractElementType(typeName);
+                int startBracket = typeName.IndexOf('<');
+                int endBracket = typeName.LastIndexOf('>');
 
-                // Special handling for generic element types
-                if (elementType == "T" || elementType.Contains("<T>") || elementType.EndsWith("<T"))
+                if (startBracket >= 0 && endBracket > startBracket)
                 {
-                    return $$"""
-                        if ({{variableName}} == null)
-                        {
-                            writer.WriteNull();
-                            return;
-                        }
-                        
-                        {{GenerateGenericCollectionWriteCode(variableName, elementType)}}
-                    """;
-                }
-                else
-                {
-                    // Standard collection handling for non-generic element types
-                    return $$"""
-                    if ({{variableName}} == null)
+                    string paramList = typeName.Substring(startBracket + 1, endBracket - startBracket - 1);
+                    string[] parameters = paramList.Split(',');
+
+                    foreach (var param in parameters)
                     {
-                        writer.WriteNull();
-                        return;
+                        string trimmedParam = param.Trim();
+
+                        // Check if this parameter itself is a generic parameter
+                        if (trimmedParam.Length == 1 && char.IsUpper(trimmedParam[0]))
+                            return true;
+
+                        // Check for common type parameter names
+                        if (trimmedParam == "T" || trimmedParam == "U" || trimmedParam == "V" ||
+                            trimmedParam == "TKey" || trimmedParam == "TValue")
+                            return true;
+
+                        // Recursively check for nested generic parameters
+                        if (ContainsGenericParameters(trimmedParam))
+                            return true;
                     }
-                    
-                    writer.WriteStartArray({{variableName}}.Count);
-                    foreach (var item in {{variableName}})
-                    {
-                        {{GenerateWriteCode("item", elementType, IsNullableType(elementType))}}
-                    }
-                    writer.WriteEndArray();
-                """;
                 }
             }
-            else if (IsDictionaryType(typeName))
-            {
-                string keyType = ExtractKeyType(typeName);
-                string valueType = ExtractElementType(typeName);
-                bool valueIsNullable = IsNullableType(valueType);
 
-                return $$"""
-                    if ({{variableName}} == null)
-                    {
-                        writer.WriteNull();
-                        return;
-                    }
-                    
-                    writer.WriteStartMap({{variableName}}.Count);
-                    foreach (var kvp in {{variableName}})
-                    {
-                        {{GenerateWriteCode("kvp.Key", keyType, false)}}
-                        {{GenerateWriteCode("kvp.Value", valueType, valueIsNullable)}}
-                    }
-                    writer.WriteEndMap();
-                 """;
-            }
-
-            throw new InvalidOperationException($"Unsupported collection type: {typeName}");
+            return false;
         }
 
         /// <summary>
@@ -535,9 +502,169 @@ public sealed partial class CborSourceGenerator
                 "ushort" or "System.UInt16" => true,
                 "uint" or "System.UInt32" => true,
                 "ulong" or "System.UInt64" => true,
-                // Add other primitive value types as needed
                 _ => false
             };
+        }
+
+        /// <summary>
+        /// Generates code to read a collection of generic elements
+        /// </summary>
+        public static string GenerateGenericCollectionReadCode(string collectionVarName, string elementTypeName, string resultCollectionType)
+        {
+            var sb = new StringBuilder();
+
+            sb.AppendLine($"if (reader.PeekState() == CborReaderState.Null)");
+            sb.AppendLine("{");
+            sb.AppendLine("    reader.ReadNull();");
+            sb.AppendLine($"    {collectionVarName} = null;");
+            sb.AppendLine("}");
+            sb.AppendLine("else");
+            sb.AppendLine("{");
+            sb.AppendLine($"    {collectionVarName} = new {resultCollectionType}();");
+            sb.AppendLine("    reader.ReadStartArray();");
+            sb.AppendLine("    while (reader.PeekState() != CborReaderState.EndArray)");
+            sb.AppendLine("    {");
+
+            // Handle generic element type carefully
+            if (ContainsGenericParameters(elementTypeName))
+            {
+                // For generic parameters, use type-aware deserialization
+                sb.AppendLine("        // Handling generic type parameter");
+                sb.AppendLine("        if (reader.PeekState() == CborReaderState.Null)");
+                sb.AppendLine("        {");
+                sb.AppendLine("            reader.ReadNull();");
+                sb.AppendLine($"            {collectionVarName}.Add(default);");
+                sb.AppendLine("        }");
+                sb.AppendLine("        else");
+                sb.AppendLine("        {");
+                sb.AppendLine("            var encodedValue = reader.ReadEncodedValue();");
+                sb.AppendLine("            var elementReader = new CborReader(encodedValue);");
+                sb.AppendLine($"            {elementTypeName} deserializedValue = default;");
+                sb.AppendLine("");
+                sb.AppendLine("            switch (elementReader.PeekState())");
+                sb.AppendLine("            {");
+                sb.AppendLine("                case CborReaderState.Null:");
+                sb.AppendLine("                    elementReader.ReadNull();");
+                sb.AppendLine("                    deserializedValue = default;");
+                sb.AppendLine("                    break;");
+                sb.AppendLine("                case CborReaderState.UnsignedInteger:");
+                sb.AppendLine("                    var uintValue = elementReader.ReadUInt64();");
+                sb.AppendLine("                    if (typeof(T) == typeof(int))");
+                sb.AppendLine("                        deserializedValue = (T)(object)(int)uintValue;");
+                sb.AppendLine("                    else if (typeof(T) == typeof(uint))");
+                sb.AppendLine("                        deserializedValue = (T)(object)(uint)uintValue;");
+                sb.AppendLine("                    else if (typeof(T) == typeof(long))");
+                sb.AppendLine("                        deserializedValue = (T)(object)(long)uintValue;");
+                sb.AppendLine("                    else if (typeof(T) == typeof(ulong))");
+                sb.AppendLine("                        deserializedValue = (T)(object)uintValue;");
+                sb.AppendLine("                    else");
+                sb.AppendLine($"                        throw new InvalidOperationException($\"Cannot convert UInt64 to {{typeof(T).Name}}\");");
+                sb.AppendLine("                    break;");
+                sb.AppendLine("                case CborReaderState.NegativeInteger:");
+                sb.AppendLine("                    var intValue = elementReader.ReadInt64();");
+                sb.AppendLine("                    if (typeof(T) == typeof(int))");
+                sb.AppendLine("                        deserializedValue = (T)(object)(int)intValue;");
+                sb.AppendLine("                    else if (typeof(T) == typeof(long))");
+                sb.AppendLine("                        deserializedValue = (T)(object)intValue;");
+                sb.AppendLine("                    else");
+                sb.AppendLine($"                        throw new InvalidOperationException($\"Cannot convert Int64 to {{typeof(T).Name}}\");");
+                sb.AppendLine("                    break;");
+                sb.AppendLine("                case CborReaderState.TextString:");
+                sb.AppendLine("                    var strValue = elementReader.ReadTextString();");
+                sb.AppendLine("                    if (typeof(T) == typeof(string))");
+                sb.AppendLine("                        deserializedValue = (T)(object)strValue;");
+                sb.AppendLine("                    else if (typeof(T) == typeof(Guid))");
+                sb.AppendLine("                        deserializedValue = (T)(object)Guid.Parse(strValue);");
+                sb.AppendLine("                    else if (typeof(T) == typeof(DateTime))");
+                sb.AppendLine("                        deserializedValue = (T)(object)DateTime.Parse(strValue);");
+                sb.AppendLine("                    else");
+                sb.AppendLine($"                        throw new InvalidOperationException($\"Cannot convert string to {{typeof(T).Name}}\");");
+                sb.AppendLine("                    break;");
+                sb.AppendLine("                case CborReaderState.ByteString:");
+                sb.AppendLine("                    var byteValue = elementReader.ReadByteString();");
+                sb.AppendLine("                    if (typeof(T) == typeof(byte[]))");
+                sb.AppendLine("                        deserializedValue = (T)(object)byteValue;");
+                sb.AppendLine("                    else");
+                sb.AppendLine($"                        throw new InvalidOperationException($\"Cannot convert byte[] to {{typeof(T).Name}}\");");
+                sb.AppendLine("                    break;");
+                sb.AppendLine("                case CborReaderState.Boolean:");
+                sb.AppendLine("                    var boolValue = elementReader.ReadBoolean();");
+                sb.AppendLine("                    if (typeof(T) == typeof(bool))");
+                sb.AppendLine("                        deserializedValue = (T)(object)boolValue;");
+                sb.AppendLine("                    else");
+                sb.AppendLine($"                        throw new InvalidOperationException($\"Cannot convert bool to {{typeof(T).Name}}\");");
+                sb.AppendLine("                    break;");
+                sb.AppendLine("                case CborReaderState.SinglePrecisionFloat:");
+                sb.AppendLine("                    var floatValue = elementReader.ReadSingle();");
+                sb.AppendLine("                    if (typeof(T) == typeof(float))");
+                sb.AppendLine("                        deserializedValue = (T)(object)floatValue;");
+                sb.AppendLine("                    else if (typeof(T) == typeof(double))");
+                sb.AppendLine("                        deserializedValue = (T)(object)(double)floatValue;");
+                sb.AppendLine("                    else if (typeof(T) == typeof(decimal))");
+                sb.AppendLine("                        deserializedValue = (T)(object)(decimal)floatValue;");
+                sb.AppendLine("                    else");
+                sb.AppendLine($"                        throw new InvalidOperationException($\"Cannot convert float to {{typeof(T).Name}}\");");
+                sb.AppendLine("                    break;");
+                sb.AppendLine("                case CborReaderState.DoublePrecisionFloat:");
+                sb.AppendLine("                    var doubleValue = elementReader.ReadDouble();");
+                sb.AppendLine("                    if (typeof(T) == typeof(float))");
+                sb.AppendLine("                        deserializedValue = (T)(object)(float)doubleValue;");
+                sb.AppendLine("                    else if (typeof(T) == typeof(double))");
+                sb.AppendLine("                        deserializedValue = (T)(object)doubleValue;");
+                sb.AppendLine("                    else if (typeof(T) == typeof(decimal))");
+                sb.AppendLine("                        deserializedValue = (T)(object)(decimal)doubleValue;");
+                sb.AppendLine("                    else");
+                sb.AppendLine($"                        throw new InvalidOperationException($\"Cannot convert double to {{typeof(T).Name}}\");");
+                sb.AppendLine("                    break;");
+                sb.AppendLine("                default:");
+                sb.AppendLine($"                    throw new InvalidOperationException($\"Cannot deserialize {{elementReader.PeekState()}} to type {{typeof(T).Name}}\");");
+                sb.AppendLine("            }");
+                sb.AppendLine("");
+                sb.AppendLine($"            {collectionVarName}.Add(deserializedValue);");
+                sb.AppendLine("        }");
+            }
+            else
+            {
+                // For concrete types, we can call their Read method directly
+                sb.AppendLine($"        {elementTypeName} element = default;");
+                sb.AppendLine("        if (reader.PeekState() == CborReaderState.Null)");
+                sb.AppendLine("        {");
+                sb.AppendLine("            reader.ReadNull();");
+                sb.AppendLine("            element = default;");
+                sb.AppendLine("        }");
+                sb.AppendLine("        else");
+                sb.AppendLine("        {");
+                sb.AppendLine("            // Read the encoded value as ReadOnlyMemory<byte>");
+                sb.AppendLine("            var encodedValue = reader.ReadEncodedValue();");
+                sb.AppendLine("            ");
+                sb.AppendLine($"            // Deserialize using the type's Read method");
+                sb.AppendLine($"            element = {elementTypeName}.Read(encodedValue);");
+                sb.AppendLine("        }");
+                sb.AppendLine($"        {collectionVarName}.Add(element);");
+            }
+
+            sb.AppendLine("    }");
+            sb.AppendLine("    reader.ReadEndArray();");
+            sb.AppendLine("}");
+
+            return sb.ToString();
+        }
+
+        /// <summary>
+        /// Generates code to read a collection
+        /// </summary>
+        public static string GenerateCollectionRead(string typeName, string variableName)
+        {
+            if (IsListType(typeName))
+            {
+                return GenerateListRead(typeName, variableName);
+            }
+            else if (IsDictionaryType(typeName))
+            {
+                return GenerateDictionaryRead(typeName, variableName);
+            }
+
+            throw new InvalidOperationException($"Unsupported collection type: {typeName}");
         }
 
         /// <summary>
@@ -546,56 +673,30 @@ public sealed partial class CborSourceGenerator
         private static string GenerateListRead(string typeName, string variableName)
         {
             string elementType = ExtractElementType(typeName);
-            bool elementIsNullable = !IsPrimitive(elementType) || elementType == "string";
-            bool isPrimitiveElement = IsPrimitive(elementType);
+            bool containsGenericParameters = ContainsGenericParameters(elementType);
 
-            if (isPrimitiveElement)
+            if (containsGenericParameters)
             {
-                // For primitive types, use the simple approach
-                return $$"""
-                    {{variableName}} = new {{typeName}}();
-                    reader.ReadStartArray();
-                    while (reader.PeekState() != CborReaderState.EndArray)
-                    {
-                        {{elementType}} element = default;
-                        {{GenerateReadCode(elementType, "element", elementIsNullable)}}
-                        {{variableName}}.Add(element);
-                    }
-                    reader.ReadEndArray();
-                    """;
+                return GenerateGenericCollectionReadCode(variableName, elementType, typeName);
             }
             else
             {
-                // For complex types, use ReadOnlyMemory<byte> slicing
+                // For concrete types
+                bool isPrimitiveElement = IsPrimitive(elementType);
+                bool elementIsNullable = !isPrimitiveElement || elementType == "string";
+
                 return $$"""
-                    {{variableName}} = new {{typeName}}();
-                    reader.ReadStartArray();
-                    while (reader.PeekState() != CborReaderState.EndArray)
-                    {
-                        {{elementType}} element = default;
-                        {{GenerateReadCode(elementType, "element", elementIsNullable)}}
-                        {{variableName}}.Add(element);
-                    }
-                    reader.ReadEndArray();
-                    """;
-            }
-        }
-
-        /// <summary>
-        /// Generates code to write a list-like collection
-        /// </summary>
-        private static string GenerateListWrite(string variableName, string typeName, bool isNullable)
-        {
-            string elementType = ExtractElementType(typeName);
-
-            return $$"""
-                writer.WriteStartArray({{variableName}}.Count);
-                foreach (var item in {{variableName}})
+                {{variableName}} = new {{typeName}}();
+                reader.ReadStartArray();
+                while (reader.PeekState() != CborReaderState.EndArray)
                 {
-                    {{GenerateWriteCode("item", elementType, isNullable)}}
+                    {{elementType}} element = default;
+                    {{GenerateReadCode(elementType, "element", elementIsNullable)}}
+                    {{variableName}}.Add(element);
                 }
-                writer.WriteEndArray();
+                reader.ReadEndArray();
                 """;
+            }
         }
 
         /// <summary>
@@ -605,45 +706,270 @@ public sealed partial class CborSourceGenerator
         {
             string keyType = ExtractKeyType(typeName);
             string valueType = ExtractElementType(typeName);
+            bool keyContainsGenericParams = ContainsGenericParameters(keyType);
+            bool valueContainsGenericParams = ContainsGenericParameters(valueType);
             bool valueIsNullable = !IsPrimitive(valueType) || valueType == "string";
 
-            // Dictionary implementation is the same regardless of value type
-            // because our ReadCode implementation handles both primitives and complex types
-            return $$"""
-                {{variableName}} = new {{typeName}}();
-                reader.ReadStartMap();
-                while (reader.PeekState() != CborReaderState.EndMap)
-                {
-                    {{keyType}} key = default;
-                    {{GenerateReadCode(keyType, "key", false)}}
-                    
-                    {{valueType}} value = default;
-                    {{GenerateReadCode(valueType, "value", valueIsNullable)}}
-                    
-                    {{variableName}}[key] = value;
-                }
-                reader.ReadEndMap();
-                """;
+            var sb = new StringBuilder();
+
+            sb.AppendLine($"{variableName} = new {typeName}();");
+            sb.AppendLine("reader.ReadStartMap();");
+            sb.AppendLine("while (reader.PeekState() != CborReaderState.EndMap)");
+            sb.AppendLine("{");
+
+            // Handle key
+            sb.AppendLine($"    {keyType} key = default;");
+            if (keyContainsGenericParams)
+            {
+                sb.AppendLine("    if (reader.PeekState() == CborReaderState.Null)");
+                sb.AppendLine("    {");
+                sb.AppendLine("        reader.ReadNull();");
+                sb.AppendLine("        key = default;");
+                sb.AppendLine("    }");
+                sb.AppendLine("    else");
+                sb.AppendLine("    {");
+                sb.AppendLine("        var encodedKey = reader.ReadEncodedValue();");
+                sb.AppendLine("        var keyReader = new CborReader(encodedKey);");
+                sb.AppendLine("        var keyState = keyReader.PeekState();");
+                sb.AppendLine("");
+                sb.AppendLine("        if (keyState == CborReaderState.Null)");
+                sb.AppendLine("        {");
+                sb.AppendLine("            keyReader.ReadNull();");
+                sb.AppendLine("            key = default;");
+                sb.AppendLine("        }");
+                sb.AppendLine("        else if (keyState == CborReaderState.UnsignedInteger)");
+                sb.AppendLine("        {");
+                sb.AppendLine("            var uintValue = keyReader.ReadUInt32();");
+                sb.AppendLine("            if (typeof(T) == typeof(int))");
+                sb.AppendLine("                key = (T)(object)(int)uintValue;");
+                sb.AppendLine("            else if (typeof(T) == typeof(uint))");
+                sb.AppendLine("                key = (T)(object)uintValue;");
+                sb.AppendLine("            else if (typeof(T) == typeof(long))");
+                sb.AppendLine("                key = (T)(object)(long)uintValue;");
+                sb.AppendLine("            else if (typeof(T) == typeof(ulong))");
+                sb.AppendLine("                key = (T)(object)(ulong)uintValue;");
+                sb.AppendLine("            else");
+                sb.AppendLine($"                throw new InvalidOperationException($\"Cannot deserialize UInt32 to key type {{{keyType}}}\");");
+                sb.AppendLine("        }");
+                sb.AppendLine("        else if (keyState == CborReaderState.TextString)");
+                sb.AppendLine("        {");
+                sb.AppendLine("            var strValue = keyReader.ReadTextString();");
+                sb.AppendLine("            if (typeof(T) == typeof(string))");
+                sb.AppendLine("                key = (T)(object)strValue;");
+                sb.AppendLine("            else");
+                sb.AppendLine($"                throw new InvalidOperationException($\"Cannot deserialize string to key type {{{keyType}}}\");");
+                sb.AppendLine("        }");
+                sb.AppendLine("        else");
+                sb.AppendLine("        {");
+                sb.AppendLine($"            throw new InvalidOperationException($\"Cannot deserialize {{keyState}} to key type {{{keyType}}}\");");
+                sb.AppendLine("        }");
+                sb.AppendLine("    }");
+            }
+            else
+            {
+                sb.AppendLine($"    {GenerateReadCode(keyType, "key", false)}");
+            }
+
+            // Handle value
+            sb.AppendLine($"    {valueType} value = default;");
+            if (valueContainsGenericParams)
+            {
+                sb.AppendLine("    if (reader.PeekState() == CborReaderState.Null)");
+                sb.AppendLine("    {");
+                sb.AppendLine("        reader.ReadNull();");
+                sb.AppendLine("        value = default;");
+                sb.AppendLine("    }");
+                sb.AppendLine("    else");
+                sb.AppendLine("    {");
+                sb.AppendLine("        var encodedValue = reader.ReadEncodedValue();");
+                sb.AppendLine("        var valueReader = new CborReader(encodedValue);");
+                sb.AppendLine("        var valueState = valueReader.PeekState();");
+                sb.AppendLine("");
+                sb.AppendLine("        if (valueState == CborReaderState.Null)");
+                sb.AppendLine("        {");
+                sb.AppendLine("            valueReader.ReadNull();");
+                sb.AppendLine("            value = default;");
+                sb.AppendLine("        }");
+                sb.AppendLine("        else if (valueState == CborReaderState.UnsignedInteger)");
+                sb.AppendLine("        {");
+                sb.AppendLine("            var uintValue = valueReader.ReadUInt32();");
+                sb.AppendLine("            if (typeof(T) == typeof(int))");
+                sb.AppendLine("                value = (T)(object)(int)uintValue;");
+                sb.AppendLine("            else if (typeof(T) == typeof(uint))");
+                sb.AppendLine("                value = (T)(object)uintValue;");
+                sb.AppendLine("            else if (typeof(T) == typeof(long))");
+                sb.AppendLine("                value = (T)(object)(long)uintValue;");
+                sb.AppendLine("            else if (typeof(T) == typeof(ulong))");
+                sb.AppendLine("                value = (T)(object)(ulong)uintValue;");
+                sb.AppendLine("            else");
+                sb.AppendLine($"                throw new InvalidOperationException($\"Cannot deserialize UInt32 to value type {{{valueType}}}\");");
+                sb.AppendLine("        }");
+                sb.AppendLine("        else if (valueState == CborReaderState.TextString)");
+                sb.AppendLine("        {");
+                sb.AppendLine("            var strValue = valueReader.ReadTextString();");
+                sb.AppendLine("            if (typeof(T) == typeof(string))");
+                sb.AppendLine("                value = (T)(object)strValue;");
+                sb.AppendLine("            else");
+                sb.AppendLine($"                throw new InvalidOperationException($\"Cannot deserialize string to value type {{{valueType}}}\");");
+                sb.AppendLine("        }");
+                sb.AppendLine("        else");
+                sb.AppendLine("        {");
+                sb.AppendLine($"            throw new InvalidOperationException($\"Cannot deserialize {{valueState}} to value type {{{valueType}}}\");");
+                sb.AppendLine("        }");
+                sb.AppendLine("    }");
+            }
+            else
+            {
+                sb.AppendLine($"    {GenerateReadCode(valueType, "value", valueIsNullable)}");
+            }
+
+            sb.AppendLine($"    {variableName}[key] = value;");
+            sb.AppendLine("}");
+            sb.AppendLine("reader.ReadEndMap();");
+
+            return sb.ToString();
         }
 
         /// <summary>
-        /// Generates code to write a dictionary-like collection
+        /// Generates code to write a collection
         /// </summary>
-        private static string GenerateDictionaryWrite(string variableName, string typeName)
+        public static string GenerateCollectionWrite(string variableName, string typeName, bool isNullable)
         {
-            string keyType = ExtractKeyType(typeName);
-            string valueType = ExtractElementType(typeName);
-            bool valueIsNullable = !IsPrimitive(valueType) || valueType == "string";
+            if (IsListType(typeName))
+            {
+                string elementType = ExtractElementType(typeName);
+                bool containsGenericParams = ContainsGenericParameters(elementType);
 
-            return $$"""
-                writer.WriteStartMap({{variableName}}.Count);
-                foreach (var kvp in {{variableName}})
+                return $$"""
+            if ({{variableName}} == null)
+            {
+                writer.WriteNull();
+                return;
+            }
+            
+            writer.WriteStartArray({{variableName}}.Count);
+            foreach (var item in {{variableName}})
+            {
+                {{(containsGenericParams ? "WriteGenericValue(writer, item);" :
+                      GenerateWriteCode("item", elementType, IsNullableType(elementType)))}}
+            }
+            writer.WriteEndArray();
+            """;
+            }
+            else if (IsDictionaryType(typeName))
+            {
+                string keyType = ExtractKeyType(typeName);
+                string valueType = ExtractElementType(typeName);
+                bool keyContainsGenericParams = ContainsGenericParameters(keyType);
+                bool valueContainsGenericParams = ContainsGenericParameters(valueType);
+                bool valueIsNullable = IsNullableType(valueType);
+
+                return $$"""
+            if ({{variableName}} == null)
+            {
+                writer.WriteNull();
+                return;
+            }
+            
+            writer.WriteStartMap({{variableName}}.Count);
+            foreach (var kvp in {{variableName}})
+            {
+                {{(keyContainsGenericParams ? "WriteGenericValue(writer, kvp.Key);" :
+                      GenerateWriteCode("kvp.Key", keyType, false))}}
+                
+                {{(valueContainsGenericParams ? "WriteGenericValue(writer, kvp.Value);" :
+                      GenerateWriteCode("kvp.Value", valueType, valueIsNullable))}}
+            }
+            writer.WriteEndMap();
+            """;
+            }
+
+            throw new InvalidOperationException($"Unsupported collection type: {typeName}");
+        }
+
+        /// <summary>
+        /// Generates the WriteGenericValue method for serializing generic values
+        /// </summary>
+        public static string GenerateWriteGenericValueMethod()
+        {
+            return """
+        /// <summary>
+        /// Writes any generic type to a CBOR writer based on runtime type
+        /// </summary>
+        private static void WriteGenericValue<T>(CborWriter writer, T value)
+        {
+            if (value == null)
+            {
+                writer.WriteNull();
+                return;
+            }
+
+            Type valueType = value.GetType();
+
+            // Handle primitive types first (most common case)
+            if (valueType == typeof(int))
+                writer.WriteInt32((int)(object)value);
+            else if (valueType == typeof(uint))
+                writer.WriteUInt32((uint)(object)value);
+            else if (valueType == typeof(long))
+                writer.WriteInt64((long)(object)value);
+            else if (valueType == typeof(ulong))
+                writer.WriteUInt64((ulong)(object)value);
+            else if (valueType == typeof(float))
+                writer.WriteSingle((float)(object)value);
+            else if (valueType == typeof(double))
+                writer.WriteDouble((double)(object)value);
+            else if (valueType == typeof(decimal))
+                writer.WriteDouble((double)(decimal)(object)value);
+            else if (valueType == typeof(bool))
+                writer.WriteBoolean((bool)(object)value);
+            else if (valueType == typeof(string))
+                writer.WriteTextString((string)(object)value);
+            else if (valueType == typeof(byte[]))
+                writer.WriteByteString((byte[])(object)value);
+            else if (valueType == typeof(DateTime))
+                writer.WriteTextString(((DateTime)(object)value).ToString("o"));
+            else if (valueType == typeof(Guid))
+                writer.WriteTextString(((Guid)(object)value).ToString());
+            else
+            {
+                // Check if the type has a Raw property for direct serialization
+                PropertyInfo rawProperty = valueType.GetProperty("Raw");
+                if (rawProperty != null && 
+                    rawProperty.PropertyType.IsGenericType && 
+                    rawProperty.PropertyType.GetGenericTypeDefinition() == typeof(Nullable<>) &&
+                    rawProperty.PropertyType.GetGenericArguments()[0] == typeof(ReadOnlyMemory<byte>))
                 {
-                    {{GenerateWriteCode("kvp.Key", keyType, false)}}
-                    {{GenerateWriteCode("kvp.Value", valueType, valueIsNullable)}}
+                    var rawValue = rawProperty.GetValue(value);
+                    if (rawValue != null)
+                    {
+                        var memory = (ReadOnlyMemory<byte>?)rawValue;
+                        if (memory.HasValue)
+                        {
+                            writer.WriteEncodedValue(memory.Value.Span);
+                            return;
+                        }
+                    }
                 }
-                writer.WriteEndMap();
-                """;
+
+                // Try to find and invoke a static Write method
+                MethodInfo writeMethod = valueType.GetMethod("Write", 
+                    BindingFlags.Public | BindingFlags.Static, 
+                    null, 
+                    new[] { typeof(CborWriter), valueType }, 
+                    null);
+                    
+                if (writeMethod != null)
+                {
+                    writeMethod.Invoke(null, new object[] { writer, value });
+                    return;
+                }
+                
+                // Final fallback
+                writer.WriteTextString(value.ToString());
+            }
+        }
+        """;
         }
     }
 }

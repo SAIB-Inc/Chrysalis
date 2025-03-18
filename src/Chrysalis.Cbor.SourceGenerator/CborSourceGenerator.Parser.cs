@@ -19,9 +19,10 @@ public sealed partial class CborSourceGenerator
         /// Parses a type declaration and creates serialization metadata for it and all related types
         /// </summary>
         public SerializationContext ParseType(
-    TypeDeclarationSyntax typeDeclaration,
-    SemanticModel semanticModel,
-    CancellationToken cancellationToken)
+            TypeDeclarationSyntax typeDeclaration,
+            SemanticModel semanticModel,
+            CancellationToken cancellationToken
+        )
         {
             // Reset our tracking collections
             _processedTypes.Clear();
