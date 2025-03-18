@@ -16,7 +16,32 @@ public sealed partial class CborSourceGenerator
                 throw new ArgumentNullException(nameof(symbol), "Type symbol cannot be null");
 
             Name = symbol.Name ?? string.Empty;
-            FullName = symbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) ?? symbol.Name ?? string.Empty;
+
+            // First check if this is a type parameter (like T) - needs special handling
+            if (symbol.TypeKind == TypeKind.TypeParameter)
+            {
+                // For type parameters like T, keep the simple name
+                FullName = Name;
+                IsTypeParameter = true;
+            }
+            // Next check if it's a nested type (but not a type parameter)
+            else if (symbol.ContainingType != null)
+            {
+                // Only format as nested if it's a real nested type, not a type parameter
+                string containingTypeFullName = symbol.ContainingType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+                FullName = $"{containingTypeFullName}.{symbol.Name}";
+                
+                // Make sure we capture the correct namespace for nested types
+                Namespace = symbol.ContainingType.ContainingNamespace?.ToDisplayString() ?? string.Empty;
+                IsTypeParameter = false;
+            }
+            else
+            {
+                // Regular type
+                FullName = symbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) ?? symbol.Name ?? string.Empty;
+                IsTypeParameter = false;
+            }
+
             Namespace = symbol.ContainingNamespace?.ToDisplayString() ?? string.Empty;
             IsValueType = symbol.IsValueType;
             IsEnum = symbol.TypeKind == TypeKind.Enum;
@@ -29,16 +54,16 @@ public sealed partial class CborSourceGenerator
             if (IsGeneric && symbol is INamedTypeSymbol genericType)
             {
                 // Store generic type parameters
-                TypeParameters = genericType.TypeArguments
-                    .Select(t => new TypeInfo(t))
-                    .ToList();
+                TypeParameters = [.. genericType.TypeArguments.Select(t => new TypeInfo(t))];
             }
             else
             {
-                TypeParameters = new List<TypeInfo>();
+                TypeParameters = [];
             }
         }
-        public string DebugInfo { get; set; } = string.Empty;
+
+        // Add this property
+        public bool IsTypeParameter { get; }
         public string Name { get; }
         public string FullName { get; }
         public string Namespace { get; }
@@ -76,9 +101,9 @@ public sealed partial class CborSourceGenerator
         public SerializationType Format { get; set; } = SerializationType.Object;
 
         // Type structure information
-        public List<SerializableProperty> Properties { get; } = new();
-        public List<ConstructorParam> Parameters { get; } = new();
-        public HashSet<TypeInfo> Dependencies { get; } = new();
+        public List<SerializableProperty> Properties { get; } = [];
+        public List<ConstructorParam> Parameters { get; } = [];
+        public HashSet<TypeInfo> Dependencies { get; } = [];
 
         // Collection info
         public TypeInfo? ElementType { get; set; }  // For collections
@@ -91,7 +116,7 @@ public sealed partial class CborSourceGenerator
         public int? Size { get; set; }             // For fixed size
 
         // Union handling
-        public List<TypeInfo> UnionCases { get; } = new();
+        public List<TypeInfo> UnionCases { get; } = [];
 
         // Nullable handling
         public TypeInfo? InnerType { get; set; }
@@ -236,6 +261,6 @@ public sealed partial class CborSourceGenerator
     private sealed class SerializationContext
     {
         public TypeInfo ContextType { get; set; } = null!;
-        public List<SerializableType> Types { get; set; } = new();
+        public List<SerializableType> Types { get; set; } = [];
     }
 }

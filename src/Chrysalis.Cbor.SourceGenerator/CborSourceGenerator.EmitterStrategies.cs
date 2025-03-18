@@ -130,12 +130,15 @@ public sealed partial class CborSourceGenerator
                 // which is especially important when the Read method returns a base type but we need a derived type
 
                 // Special handling for globally qualified or nested types
+                // Ensure we use fully qualified type references to avoid namespace conflicts
+                string fullyQualifiedType = cleanTypeName.Contains(".") ? cleanTypeName : $"global::{cleanTypeName}";
+                
                 string readCode = $$"""
                     // Read the encoded value as ReadOnlyMemory<byte>
                     var encodedValue_{{variableName}} = reader.ReadEncodedValue();
                     
                     // Deserialize using the type's Read method with explicit cast
-                    {{variableName}} = ({{cleanTypeName}}){{cleanTypeName}}.Read(encodedValue_{{variableName}});
+                    {{variableName}} = ({{cleanTypeName}}){{fullyQualifiedType}}.Read(encodedValue_{{variableName}});
                     """;
 
                 return readCode;
@@ -200,19 +203,13 @@ public sealed partial class CborSourceGenerator
             }
             else
             {
-                // Check if this is a global type (fully qualified)
-                if (typeName.Contains("global::"))
-                {
-                    // Always use the type's static Write method for custom types
-                    return $$"""
-                    {{cleanTypeName}}.Write(writer, {{variableName}});
-                    """;
-                }
-                else
-                {
-                    // Custom CBOR type with potential raw bytes
-                    return $$"""{{cleanTypeName}}.Write(writer, {{variableName}});""";
-                }
+                // Always ensure the type reference is fully qualified to avoid namespace conflicts
+                string fullyQualifiedType = cleanTypeName.Contains(".") 
+                    ? cleanTypeName 
+                    : $"global::{cleanTypeName}";
+                
+                // Always use the type's static Write method for custom types
+                return $$"""{{fullyQualifiedType}}.Write(writer, {{variableName}});""";
             }
         }
 

@@ -14,6 +14,6 @@ public abstract partial record Value : CborBase<Value>
     [CborList]
     public partial record LovelaceWithMultiAsset(
          [CborOrder(0)] Lovelace LovelaceValue,
-         [CborOrder(1)] MultiAssetOutput MultiAsset
+         [CborOrder(1)] MultiAsset.MultiAssetOutput MultiAsset
      ) : Value;
 }
