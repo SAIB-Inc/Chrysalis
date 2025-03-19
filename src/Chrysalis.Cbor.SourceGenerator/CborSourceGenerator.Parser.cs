@@ -14,7 +14,7 @@ public sealed partial class CborSourceGenerator
 
         // Queue of types waiting to be processed
         private readonly Queue<TypeToProcess> _typesToProcess = new();
-        
+
         // Reference to the compilation for type lookup across assemblies
         private Compilation? _compilation;
 
@@ -125,6 +125,22 @@ public sealed partial class CborSourceGenerator
                 {
                     ExtractUnionCases(namedType, metadata);
                     logBuilder.AppendLine($"// Extracted {metadata.UnionCases.Count} union cases");
+                }
+
+                // Special handling for list-based types in our custom CBOR classes
+                if (type.ToDisplayString().Contains("Chrysalis.Cbor.Types.Custom.CborDefList") ||
+                    type.ToDisplayString().Contains("Chrysalis.Cbor.Types.Custom.CborIndefList"))
+                {
+                    // Force array format for all list types, regardless of tag
+                    metadata.Format = SerializationType.Array;
+                    logBuilder.AppendLine($"// Forced format to Array for List-based custom type: {type.ToDisplayString()}");
+
+                    // For tagged variants, disable tag handling in the serialization/deserialization
+                    if (type.ToDisplayString().Contains("WithTag"))
+                    {
+                        // Save tag value but remove the attribute to prevent the readtag and writetag calls
+                        logBuilder.AppendLine($"// Note: Tag handling for {type.ToDisplayString()} is manually implemented");
+                    }
                 }
 
                 // Handle collection types
@@ -431,7 +447,7 @@ public sealed partial class CborSourceGenerator
 
             // Get type assembly
             var assembly = type.ContainingAssembly;
-            
+
             // Use a HashSet to track processed types by full name
             var processedTypeFullNames = new HashSet<string>();
             // Use a separate HashSet to track type names to avoid duplicate case labels
@@ -443,14 +459,14 @@ public sealed partial class CborSourceGenerator
                 if (IsUnionCaseType(nestedType, type))
                 {
                     string fullName = nestedType.ToDisplayString();
-                    
+
                     // Skip if already processed
                     if (processedTypeFullNames.Contains(fullName))
                         continue;
-                        
+
                     processedTypeFullNames.Add(fullName);
                     processedTypeNames.Add(nestedType.Name);
-                    
+
                     var nestedTypeInfo = new TypeInfo(nestedType);
                     metadata.UnionCases.Add(nestedTypeInfo);
                     metadata.Dependencies.Add(nestedTypeInfo);
@@ -471,14 +487,14 @@ public sealed partial class CborSourceGenerator
                     if (!SymbolEqualityComparer.Default.Equals(nsType, type) && IsUnionCaseType(nsType, type))
                     {
                         string fullName = nsType.ToDisplayString();
-                        
+
                         // Skip if already processed
                         if (processedTypeFullNames.Contains(fullName))
                             continue;
-                            
+
                         processedTypeFullNames.Add(fullName);
                         processedTypeNames.Add(nsType.Name);
-                        
+
                         var caseTypeInfo = new TypeInfo(nsType);
                         metadata.UnionCases.Add(caseTypeInfo);
                         metadata.Dependencies.Add(caseTypeInfo);
@@ -512,29 +528,29 @@ public sealed partial class CborSourceGenerator
                             s => !s.Contains("<") && !s.StartsWith("_"), // Filter out generic instantiations and compiler-generated names
                             SymbolFilter.Type))
                         {
-                            if (symbol is INamedTypeSymbol potentialType && 
-                                !potentialType.IsAbstract && 
+                            if (symbol is INamedTypeSymbol potentialType &&
+                                !potentialType.IsAbstract &&
                                 !SymbolEqualityComparer.Default.Equals(potentialType, type))
                             {
                                 if (IsUnionCaseType(potentialType, type))
                                 {
                                     string fullName = potentialType.ToDisplayString();
-                                    
+
                                     // Skip if already processed
                                     if (processedTypeFullNames.Contains(fullName))
                                         continue;
-                                        
+
                                     processedTypeFullNames.Add(fullName);
-                                    
+
                                     // Check for duplicate type names
                                     if (processedTypeNames.Contains(potentialType.Name))
                                     {
                                         logBuilder?.AppendLine($"//   Skipping duplicate type name: {potentialType.Name}");
                                         continue;
                                     }
-                                    
+
                                     processedTypeNames.Add(potentialType.Name);
-                                    
+
                                     var caseTypeInfo = new TypeInfo(potentialType);
                                     metadata.UnionCases.Add(caseTypeInfo);
                                     metadata.Dependencies.Add(caseTypeInfo);
@@ -618,9 +634,9 @@ public sealed partial class CborSourceGenerator
                             inheritsFromBase = true;
                             break;
                         }
-                        
+
                         // For non-generic types, also check if base type name matches (for different assemblies)
-                        if (currentType.BaseType.Name == baseType.Name && 
+                        if (currentType.BaseType.Name == baseType.Name &&
                             currentType.BaseType.ContainingNamespace?.ToString() == baseType.ContainingNamespace?.ToString())
                         {
                             inheritsFromBase = true;
@@ -634,8 +650,8 @@ public sealed partial class CborSourceGenerator
 
             // If we still haven't found a match and both types are named types,
             // do a more thorough check for generic types
-            if (!inheritsFromBase && 
-                candidateType is INamedTypeSymbol candidateNamedType && 
+            if (!inheritsFromBase &&
+                candidateType is INamedTypeSymbol candidateNamedType &&
                 baseType is INamedTypeSymbol baseNamedType)
             {
                 // Handle special case for generic types in different compilation units
@@ -643,20 +659,20 @@ public sealed partial class CborSourceGenerator
                 {
                     var baseTypeWithoutArgs = baseNamedType.Name.Split('`')[0];
                     var candidateBase = candidateNamedType.BaseType;
-                    
+
                     while (candidateBase != null)
                     {
                         if (candidateBase is INamedTypeSymbol candidateBaseNamed && candidateBaseNamed.IsGenericType)
                         {
                             var candidateBaseName = candidateBaseNamed.Name.Split('`')[0];
-                            if (candidateBaseName == baseTypeWithoutArgs && 
+                            if (candidateBaseName == baseTypeWithoutArgs &&
                                 candidateBaseNamed.ContainingNamespace?.ToString() == baseNamedType.ContainingNamespace?.ToString())
                             {
                                 inheritsFromBase = true;
                                 break;
                             }
                         }
-                        
+
                         candidateBase = candidateBase.BaseType;
                     }
                 }

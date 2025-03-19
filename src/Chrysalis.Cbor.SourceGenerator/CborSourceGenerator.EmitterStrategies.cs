@@ -57,14 +57,14 @@ public sealed partial class CborSourceGenerator
             if (isNullable)
             {
                 return $$"""
-                if ({{variableName}} == null)
-                {
-                    writer.WriteNull();
-                }
-                else
-                {
-                    {{InternalGenerateWriteCode(variableName, typeName, isNullable)}}
-                }
+                    if ({{variableName}} == null)
+                    {
+                        writer.WriteNull();
+                    }
+                    else
+                    {
+                        {{InternalGenerateWriteCode(variableName, typeName, isNullable)}}
+                    }
                 """;
             }
 

@@ -882,18 +882,59 @@ public sealed partial class CborSourceGenerator
         {
             var sb = new StringBuilder();
 
-            // Store original data for later
+            sb.AppendLine("// Initialize variables");
             sb.AppendLine("var originalData = data;");
             sb.AppendLine("var reader = new CborReader(data);");
+            sb.AppendLine("bool isMap = false;");  // Initialize isMap for all cases
 
-            // Handle tag if needed
-            if (type.Tag.HasValue)
+            // Special handling for tagged lists
+            if (type.Type.Name.Contains("WithTag"))
+            {
+                // Special handling for tagged list types
+                sb.AppendLine("// Special handling for tagged list types");
+                sb.AppendLine("if (reader.PeekState() == CborReaderState.Tag)");
+                sb.AppendLine("{");
+                sb.AppendLine($"    reader.ReadTag(); // Skip the tag value, we know it's a tagged list");
+                sb.AppendLine("}");
+
+                // Check for map vs array format
+                sb.AppendLine("// Check if the data is in map or array format");
+                sb.AppendLine("if (reader.PeekState() == CborReaderState.StartMap)");
+                sb.AppendLine("{");
+                sb.AppendLine("    isMap = true;");
+                sb.AppendLine("    reader.ReadStartMap();");
+                sb.AppendLine("    ");
+                sb.AppendLine("    // Handle map format - read the 'Value' property");
+                sb.AppendLine("    string key = \"\";");
+                sb.AppendLine("    while (reader.PeekState() != CborReaderState.EndMap)");
+                sb.AppendLine("    {");
+                sb.AppendLine("        if (reader.PeekState() == CborReaderState.TextString)");
+                sb.AppendLine("        {");
+                sb.AppendLine("            key = reader.ReadTextString();");
+                sb.AppendLine("            if (key == \"Value\")");
+                sb.AppendLine("            {");
+                sb.AppendLine("                // Found the value property, will read it below");
+                sb.AppendLine("                break;");
+                sb.AppendLine("            }");
+                sb.AppendLine("        }");
+                sb.AppendLine("        else");
+                sb.AppendLine("        {");
+                sb.AppendLine("            reader.SkipValue(); // Skip the key");
+                sb.AppendLine("        }");
+                sb.AppendLine("        reader.SkipValue(); // Skip the value");
+                sb.AppendLine("    }");
+                sb.AppendLine("}");
+            }
+            // Regular tag handling for non-tagged list types
+            else if (type.Tag.HasValue)
             {
                 sb.AppendLine($"if (reader.ReadTag() != (CborTag){type.Tag.Value}) throw new Exception(\"Invalid tag\");");
             }
 
-            // Start reading array
-            sb.AppendLine("reader.ReadStartArray();");
+            // Start reading array (for map format, we're already past the map start)
+            sb.AppendLine("if (!isMap) {");
+            sb.AppendLine("    reader.ReadStartArray();");
+            sb.AppendLine("}");
 
             // Declare local variables for properties
             var orderedProperties = type.Properties
@@ -913,7 +954,12 @@ public sealed partial class CborSourceGenerator
                 sb.AppendLine(GenericEmitterStrategy.GenerateReadCode(prop.Type.FullName, prop.Name, prop.IsPropertyNullable));
             }
 
-            sb.AppendLine("reader.ReadEndArray();");
+            // Close the array or map structure appropriately
+            sb.AppendLine("if (!isMap) {");
+            sb.AppendLine("    reader.ReadEndArray();");
+            sb.AppendLine("} else {");
+            sb.AppendLine("    reader.ReadEndMap();");
+            sb.AppendLine("}");
 
             // Create the result and store raw bytes
             sb.AppendLine($"var result = new {type.Type.FullName}(");
@@ -1057,11 +1103,17 @@ public sealed partial class CborSourceGenerator
     /// <summary>
     /// Strategy for emitting Container type serialization
     /// </summary>
+    /// <summary>
+    /// Strategy for emitting Container type serialization - for types with a single property
+    /// </summary>
     private class ContainerEmitterStrategy : EmitterStrategyBase
     {
         public override string EmitSerializer(SerializableType type)
         {
             var sb = new StringBuilder();
+
+            // Add validation if needed
+            ValidationHelpers.AddSerializationValidation(sb, type);
 
             // Check if we have a single property
             if (type.Properties.Count != 1)
@@ -1104,7 +1156,14 @@ public sealed partial class CborSourceGenerator
             // Tag if needed
             if (type.Tag.HasValue)
             {
-                sb.AppendLine($"if (reader.ReadTag() != (CborTag){type.Tag.Value}) throw new Exception(\"Invalid tag\");");
+                sb.AppendLine($"if (reader.PeekState() == CborReaderState.Tag)");
+                sb.AppendLine("{");
+                sb.AppendLine($"    var tag = reader.ReadTag();");
+                sb.AppendLine($"    if (tag != (CborTag){type.Tag.Value})");
+                sb.AppendLine("    {");
+                sb.AppendLine($"        throw new Exception($\"Expected tag {type.Tag.Value}, but got: {{tag}}\");");
+                sb.AppendLine("    }");
+                sb.AppendLine("}");
             }
 
             // Read the property value
@@ -1514,14 +1573,14 @@ public sealed partial class CborSourceGenerator
                 sb.AppendLine("// This is an abstract union type - we need to delegate to the concrete implementation");
                 sb.AppendLine("Type valueType = value.GetType();");
                 sb.AppendLine();
-                
+
                 // If this is exactly the abstract type (not a subclass), we can't serialize it directly
                 sb.AppendLine($"if (valueType == typeof({type.Type.FullName}))");
                 sb.AppendLine("{");
                 sb.AppendLine("    throw new Exception($\"Cannot serialize abstract union type {value.GetType().Name} directly. Use a concrete implementation.\");");
                 sb.AppendLine("}");
                 sb.AppendLine();
-                
+
                 // It's a subclass, try to use its static Write method
                 sb.AppendLine("// Get the concrete type's static Write method");
                 sb.AppendLine("var writeMethod = valueType.GetMethod(\"Write\", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static, null, new[] { typeof(CborWriter), valueType }, null);");
@@ -1532,29 +1591,29 @@ public sealed partial class CborSourceGenerator
                 sb.AppendLine("    return;");
                 sb.AppendLine("}");
                 sb.AppendLine();
-                
+
                 // Try to write using the CborTypeName property to identify the concrete type
                 sb.AppendLine("// Try using the CborTypeName property to find the concrete implementation");
                 sb.AppendLine("if (value.CborTypeName != null)");
                 sb.AppendLine("{");
                 sb.AppendLine("    switch (value.CborTypeName)");
                 sb.AppendLine("    {");
-                
+
                 if (type.UnionCases.Count > 0)
                 {
                     int caseCounter = 0;
                     // Use a HashSet to track which case names we've already added
                     var processedCaseNames = new HashSet<string>();
-                    
+
                     foreach (var unionCase in type.UnionCases)
                     {
                         string caseTypeName = unionCase.FullName;
                         string shortTypeName = unionCase.Name;
-                        
+
                         // Skip duplicate case names
                         if (processedCaseNames.Contains(shortTypeName))
                             continue;
-                            
+
                         processedCaseNames.Add(shortTypeName);
                         string caseVarName = $"caseValue{caseCounter++}";
 
@@ -1565,13 +1624,13 @@ public sealed partial class CborSourceGenerator
                         sb.AppendLine($"            return;");
                     }
                 }
-                
+
                 sb.AppendLine("        default:");
                 sb.AppendLine("            break;");
                 sb.AppendLine("    }");
                 sb.AppendLine("}");
                 sb.AppendLine();
-                
+
                 // Final fallback - look for any matching implementation in the assembly
                 sb.AppendLine("// Final fallback - look for subtypes in the assembly");
                 sb.AppendLine($"var assembly = typeof({type.Type.FullName}).Assembly;");
@@ -1591,7 +1650,7 @@ public sealed partial class CborSourceGenerator
                 sb.AppendLine("    }");
                 sb.AppendLine("}");
                 sb.AppendLine();
-                
+
                 // Absolute last resort - throw an error
                 sb.AppendLine("throw new Exception($\"Could not serialize union type {value.GetType().Name}. No suitable serializer found.\");");
             }
@@ -1599,6 +1658,35 @@ public sealed partial class CborSourceGenerator
             {
                 // For concrete implementation of a union type, implement normal serialization logic
                 // Whatever serialization approach the concrete type needs will be handled by the appropriate strategy
+
+                // Check for list-type formats since they need special handling
+                bool isList = false;
+
+                // Method 1: Check for presence of List property
+                if (type.Properties.Count == 1 &&
+                    type.Properties[0].Name == "Value" &&
+                    type.Properties[0].Type.FullName.StartsWith("System.Collections.Generic.List<"))
+                {
+                    isList = true;
+                }
+
+                // Method 2: Check for element type
+                if (type.ElementType != null)
+                {
+                    isList = true;
+                }
+
+                // Method 3: Check naming convention (list-like types often have "List" in their name)
+                if (type.Type.Name.Contains("List") || type.Type.Name.Contains("Array"))
+                {
+                    isList = true;
+                }
+
+                if (isList)
+                {
+                    // Use array format for list-like types
+                    return new ArrayEmitterStrategy().EmitSerializer(type);
+                }
 
                 // Just delegate to the base strategy's implementation
                 if (type.Format == SerializationType.Map)
@@ -1634,45 +1722,141 @@ public sealed partial class CborSourceGenerator
                 sb.AppendLine("// Store original data for reuse");
                 sb.AppendLine("var originalData = data;");
                 sb.AppendLine();
-                
+
                 // Try each known union case one by one
-                sb.AppendLine("// Try each known union case");
+                sb.AppendLine("// Before trying each case individually, check if we have a specific CBOR format");
+                sb.AppendLine("var peekReader = new CborReader(data);");
+                sb.AppendLine("var initialState = peekReader.PeekState();");
                 sb.AppendLine("Exception? lastException = null;");
-                
-                if (type.UnionCases.Count > 0)
+
+                // Add special handling for major type detection to improve deserialization
+                sb.AppendLine("// Special handling to support both map and array formats");
+
+                sb.AppendLine("// See if we're dealing with a list-like union type");
+                sb.AppendLine("bool isListType = false;");
+                foreach (var uc in type.UnionCases)
                 {
-                    // Use a HashSet to track which types we've already tried to deserialize
-                    var processedCaseTypes = new HashSet<string>();
-                    
-                    foreach (var unionCase in type.UnionCases)
+                    if (uc.Name.Contains("List"))
                     {
-                        string caseTypeName = unionCase.FullName;
-                        string shortTypeName = unionCase.Name;
-                        
-                        // Skip duplicate deserializer attempts for the same concrete type
-                        if (processedCaseTypes.Contains(caseTypeName))
-                            continue;
-                            
-                        processedCaseTypes.Add(caseTypeName);
-    
-                        sb.AppendLine($"// Try {shortTypeName}");
-                        sb.AppendLine("try");
-                        sb.AppendLine("{");
-                        sb.AppendLine($"    var result = {caseTypeName}.Read(data, preserveRaw);");
-                        sb.AppendLine("    if (result != null)");
-                        sb.AppendLine("    {");
-                        sb.AppendLine($"        return ({type.Type.FullName})result;");
-                        sb.AppendLine("    }");
-                        sb.AppendLine("}");
-                        sb.AppendLine("catch (Exception ex)");
-                        sb.AppendLine("{");
-                        sb.AppendLine("    // Store exception but continue trying other cases");
-                        sb.AppendLine("    lastException = ex;");
-                        sb.AppendLine("}");
-                        sb.AppendLine();
+                        sb.AppendLine("// This union type contains List implementations");
+                        sb.AppendLine("isListType = true;");
+                        break;
                     }
                 }
-                else
+
+                sb.AppendLine("// Special handling for list-like union types");
+                sb.AppendLine("if (isListType)");
+                sb.AppendLine("{");
+                // Try the Def/Indef list variants first for arrays - in a specific order
+
+                // First try non-tagged definite list types
+                foreach (var listCase in type.UnionCases.Where(uc =>
+                    uc.Name.Contains("Def") && !uc.Name.Contains("Tag")))
+                {
+                    sb.AppendLine($"    // Try non-tagged definite list: {listCase.Name}");
+                    sb.AppendLine("    try");
+                    sb.AppendLine("    {");
+                    sb.AppendLine($"        var result = {listCase.FullName}.Read(data, preserveRaw);");
+                    sb.AppendLine("        if (result != null)");
+                    sb.AppendLine("        {");
+                    sb.AppendLine($"            return ({type.Type.FullName})result;");
+                    sb.AppendLine("        }");
+                    sb.AppendLine("    }");
+                    sb.AppendLine("    catch (Exception ex)");
+                    sb.AppendLine("    {");
+                    sb.AppendLine("        // Continue to next variant");
+                    sb.AppendLine("        lastException = ex;");
+                    sb.AppendLine("    }");
+                }
+
+                // Then try non-tagged indefinite list types
+                foreach (var listCase in type.UnionCases.Where(uc =>
+                    uc.Name.Contains("Indef") && !uc.Name.Contains("Tag")))
+                {
+                    sb.AppendLine($"    // Try non-tagged indefinite list: {listCase.Name}");
+                    sb.AppendLine("    try");
+                    sb.AppendLine("    {");
+                    sb.AppendLine($"        var result = {listCase.FullName}.Read(data, preserveRaw);");
+                    sb.AppendLine("        if (result != null)");
+                    sb.AppendLine("        {");
+                    sb.AppendLine($"            return ({type.Type.FullName})result;");
+                    sb.AppendLine("        }");
+                    sb.AppendLine("    }");
+                    sb.AppendLine("    catch (Exception ex)");
+                    sb.AppendLine("    {");
+                    sb.AppendLine("        // Continue to next variant");
+                    sb.AppendLine("        lastException = ex;");
+                    sb.AppendLine("    }");
+                }
+
+                // Then try tagged variants
+                foreach (var tagCase in type.UnionCases.Where(uc =>
+                    uc.Name.Contains("Tag")))
+                {
+                    sb.AppendLine($"    // Try tagged list variant: {tagCase.Name}");
+                    sb.AppendLine("    try");
+                    sb.AppendLine("    {");
+                    sb.AppendLine($"        var result = {tagCase.FullName}.Read(data, preserveRaw);");
+                    sb.AppendLine("        if (result != null)");
+                    sb.AppendLine("        {");
+                    sb.AppendLine($"            return ({type.Type.FullName})result;");
+                    sb.AppendLine("        }");
+                    sb.AppendLine("    }");
+                    sb.AppendLine("    catch (Exception ex)");
+                    sb.AppendLine("    {");
+                    sb.AppendLine("        // Continue to next variant");
+                    sb.AppendLine("        lastException = ex;");
+                    sb.AppendLine("    }");
+                }
+
+                // If none of the specific list variants worked, try any other cases
+                foreach (var uc in type.UnionCases.Where(uc =>
+                    !uc.Name.Contains("Def") && !uc.Name.Contains("Indef") && !uc.Name.Contains("Tag")))
+                {
+                    sb.AppendLine($"    // Try other union case: {uc.Name}");
+                    sb.AppendLine("    try");
+                    sb.AppendLine("    {");
+                    sb.AppendLine($"        var result = {uc.FullName}.Read(data, preserveRaw);");
+                    sb.AppendLine("        if (result != null)");
+                    sb.AppendLine("        {");
+                    sb.AppendLine($"            return ({type.Type.FullName})result;");
+                    sb.AppendLine("        }");
+                    sb.AppendLine("    }");
+                    sb.AppendLine("    catch (Exception ex)");
+                    sb.AppendLine("    {");
+                    sb.AppendLine("        // Store exception but continue");
+                    sb.AppendLine("        lastException = ex;");
+                    sb.AppendLine("    }");
+                }
+
+                sb.AppendLine("}");
+                sb.AppendLine("else // Regular non-list union types");
+                sb.AppendLine("{");
+                sb.AppendLine("    // Try all concrete cases for the union");
+
+                // Try each case one by one
+                foreach (var uc in type.UnionCases)
+                {
+                    sb.AppendLine($"    // Try {uc.Name}");
+                    sb.AppendLine("    try");
+                    sb.AppendLine("    {");
+                    sb.AppendLine($"        var result = {uc.FullName}.Read(data, preserveRaw);");
+                    sb.AppendLine("        if (result != null)");
+                    sb.AppendLine("        {");
+                    sb.AppendLine($"            return ({type.Type.FullName})result;");
+                    sb.AppendLine("        }");
+                    sb.AppendLine("    }");
+                    sb.AppendLine("    catch (Exception ex)");
+                    sb.AppendLine("    {");
+                    sb.AppendLine("        // Store exception but continue");
+                    sb.AppendLine("        lastException = ex;");
+                    sb.AppendLine("    }");
+                }
+
+                sb.AppendLine("}");
+
+                // If there are no union cases, try to search assembly
+                if (type.UnionCases.Count == 0)
                 {
                     // If we don't have any union cases explicitly discovered,
                     // search the assembly for all potential implementations
@@ -1705,7 +1889,7 @@ public sealed partial class CborSourceGenerator
                     sb.AppendLine("    }");
                     sb.AppendLine("}");
                 }
-                
+
                 // All cases failed
                 sb.AppendLine("// All union cases failed");
                 sb.AppendLine($"throw new Exception($\"Could not deserialize any known case of {type.Type.Name}\", lastException);");
@@ -1715,7 +1899,36 @@ public sealed partial class CborSourceGenerator
                 // For concrete implementation of a union type, implement normal deserialization logic
                 // Whatever deserialization approach the concrete type needs
 
-                // Just delegate to the base strategy's implementation
+                // Check for list-type formats since they need special handling
+                bool isList = false;
+
+                // Method 1: Check for presence of List property
+                if (type.Properties.Count == 1 &&
+                    type.Properties[0].Name == "Value" &&
+                    type.Properties[0].Type.FullName.StartsWith("System.Collections.Generic.List<"))
+                {
+                    isList = true;
+                }
+
+                // Method 2: Check for element type
+                if (type.ElementType != null)
+                {
+                    isList = true;
+                }
+
+                // Method 3: Check naming convention (list-like types often have "List" in their name)
+                if (type.Type.Name.Contains("List") || type.Type.Name.Contains("Array"))
+                {
+                    isList = true;
+                }
+
+                if (isList)
+                {
+                    // Use array format for list-like types
+                    return new ArrayEmitterStrategy().EmitDeserializer(type);
+                }
+
+                // Just delegate to the base strategy's implementation based on format
                 if (type.Format == SerializationType.Map)
                 {
                     return new MapEmitterStrategy().EmitDeserializer(type);
