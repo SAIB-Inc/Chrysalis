@@ -83,7 +83,8 @@ public class TxTemplateBuilder<T>
                 transaction.AddInput(InputUtils.BuildInput("1aef0ed0ac1acc12b38a5e32be81478d4658f3cc92832c6b7bf264005d4a6d10", 1UL));
 
             }
-
+            
+            //Hardcoded for now since fee calculation is not yet implemented
             transaction.SetFee(2000000UL);
 
             var tx = transaction.Build();
