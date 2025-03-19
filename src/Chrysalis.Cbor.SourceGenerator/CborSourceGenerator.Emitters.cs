@@ -637,7 +637,15 @@ public sealed partial class CborSourceGenerator
                 // Check if the key is numeric
                 if (int.TryParse(prop.Key, out int numericKey))
                 {
-                    sb.AppendLine($"writer.WriteInt32({numericKey});");
+                    // If key is negative, use WriteInt32, otherwise use WriteUInt32
+                    if (numericKey < 0)
+                    {
+                        sb.AppendLine($"writer.WriteInt32({numericKey});");
+                    }
+                    else
+                    {
+                        sb.AppendLine($"writer.WriteUInt32((uint){numericKey});");
+                    }
                 }
                 else
                 {
@@ -692,11 +700,92 @@ public sealed partial class CborSourceGenerator
             sb.AppendLine("    {");
             sb.AppendLine("        mapEntryKey = reader.ReadInt32().ToString();");
             sb.AppendLine("    }");
+            sb.AppendLine("    else if (keyState == CborReaderState.ByteString)");
+            sb.AppendLine("    {");
+            sb.AppendLine("        byte[] bytes = reader.ReadByteString();");
+            sb.AppendLine("        mapEntryKey = BitConverter.ToString(bytes).Replace(\"-\", \"\");");
+            sb.AppendLine("    }");
+            sb.AppendLine("    else if (keyState == CborReaderState.StartArray)");
+            sb.AppendLine("    {");
+            sb.AppendLine("        try");
+            sb.AppendLine("        {");
+            sb.AppendLine("            // For array keys, read the array and convert it to a string representation");
+            sb.AppendLine("            var arrayKey = new List<object>();");
+            sb.AppendLine("            reader.ReadStartArray();");
+            sb.AppendLine("            while (reader.PeekState() != CborReaderState.EndArray)");
+            sb.AppendLine("            {");
+            sb.AppendLine("                // Use a recursive approach or a simple reader.SkipValue() + dummy value");
+            sb.AppendLine("                if (reader.PeekState() == CborReaderState.UnsignedInteger)");
+            sb.AppendLine("                    arrayKey.Add(reader.ReadUInt64());");
+            sb.AppendLine("                else if (reader.PeekState() == CborReaderState.NegativeInteger)");
+            sb.AppendLine("                    arrayKey.Add(reader.ReadInt64());");
+            sb.AppendLine("                else if (reader.PeekState() == CborReaderState.TextString)");
+            sb.AppendLine("                    arrayKey.Add(reader.ReadTextString());");
+            sb.AppendLine("                else if (reader.PeekState() == CborReaderState.ByteString)");
+            sb.AppendLine("                {");
+            sb.AppendLine("                    byte[] bytes = reader.ReadByteString();");
+            sb.AppendLine("                    arrayKey.Add(BitConverter.ToString(bytes).Replace(\"-\", \"\"));");
+            sb.AppendLine("                }");
+            sb.AppendLine("                else if (reader.PeekState() == CborReaderState.StartArray)");
+            sb.AppendLine("                {");
+            sb.AppendLine("                    // Handle nested arrays");
+            sb.AppendLine("                    var nestedValue = new List<object>();");
+            sb.AppendLine("                    reader.ReadStartArray();");
+            sb.AppendLine("                    while (reader.PeekState() != CborReaderState.EndArray)");
+            sb.AppendLine("                    {");
+            sb.AppendLine("                        // Simple skip for nested values");
+            sb.AppendLine("                        reader.SkipValue();");
+            sb.AppendLine("                        nestedValue.Add(\"<?>\");");
+            sb.AppendLine("                    }");
+            sb.AppendLine("                    reader.ReadEndArray();");
+            sb.AppendLine("                    arrayKey.Add($\"[{string.Join(\",\", nestedValue)}]\");");
+            sb.AppendLine("                }");
+            sb.AppendLine("                else if (reader.PeekState() == CborReaderState.StartMap)");
+            sb.AppendLine("                {");
+            sb.AppendLine("                    // Handle nested maps with simple skip");
+            sb.AppendLine("                    reader.ReadStartMap();");
+            sb.AppendLine("                    while (reader.PeekState() != CborReaderState.EndMap)");
+            sb.AppendLine("                    {");
+            sb.AppendLine("                        reader.SkipValue(); // Skip key");
+            sb.AppendLine("                        reader.SkipValue(); // Skip value");
+            sb.AppendLine("                    }");
+            sb.AppendLine("                    reader.ReadEndMap();");
+            sb.AppendLine("                    arrayKey.Add(\"{...}\");");
+            sb.AppendLine("                }");
+            sb.AppendLine("                else");
+            sb.AppendLine("                {");
+            sb.AppendLine("                    reader.SkipValue();");
+            sb.AppendLine("                    arrayKey.Add(\"<?>\");");
+            sb.AppendLine("                }");
+            sb.AppendLine("            }");
+            sb.AppendLine("            reader.ReadEndArray();");
+            sb.AppendLine("            mapEntryKey = $\"Array[{string.Join(\",\", arrayKey)}]\";");
+            sb.AppendLine("        }");
+            sb.AppendLine("        catch (Exception)");
+            sb.AppendLine("        {");
+            sb.AppendLine("            // Error recovery - try to skip to end array if possible");
+            sb.AppendLine("            try { while (reader.PeekState() != CborReaderState.EndArray) reader.SkipValue(); reader.ReadEndArray(); } catch { }");
+            sb.AppendLine("            mapEntryKey = $\"Array_Error_{Guid.NewGuid().ToString(\"N\")}\";");
+            sb.AppendLine("        }");
+            sb.AppendLine("    }");
+            sb.AppendLine("    else if (keyState == CborReaderState.StartMap)");
+            sb.AppendLine("    {");
+            sb.AppendLine("        // For map keys, skip and use a placeholder key");
+            sb.AppendLine("        // We need to fully skip the map and its values");
+            sb.AppendLine("        reader.ReadStartMap();");
+            sb.AppendLine("        while (reader.PeekState() != CborReaderState.EndMap)");
+            sb.AppendLine("        {");
+            sb.AppendLine("            reader.SkipValue(); // skip key");
+            sb.AppendLine("            reader.SkipValue(); // skip value");
+            sb.AppendLine("        }");
+            sb.AppendLine("        reader.ReadEndMap();");
+            sb.AppendLine("        mapEntryKey = $\"Map_{Guid.NewGuid().ToString(\"N\")}\";");
+            sb.AppendLine("    }");
             sb.AppendLine("    else");
             sb.AppendLine("    {");
-            sb.AppendLine("        reader.SkipValue(); // Skip unknown key type");
-            sb.AppendLine("        reader.SkipValue(); // Skip corresponding value");
-            sb.AppendLine("        continue;");
+            sb.AppendLine("        // Process all other types by skipping and using a placeholder");
+            sb.AppendLine("        reader.SkipValue();");
+            sb.AppendLine("        mapEntryKey = $\"Unknown_{keyState}_{Guid.NewGuid().ToString(\"N\")}\";");
             sb.AppendLine("    }");
             sb.AppendLine("    switch (mapEntryKey)");
             sb.AppendLine("    {");
