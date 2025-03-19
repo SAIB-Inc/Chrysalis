@@ -37,8 +37,8 @@ public class BlockfrostUtxo
  public class Amount
     {
         [JsonPropertyName("unit")]
-        public string Unit { get; set; }
+        public string? Unit { get; set; }
         
         [JsonPropertyName("quantity")]
-        public string Quantity { get; set; }
+        public string? Quantity { get; set; }
     }

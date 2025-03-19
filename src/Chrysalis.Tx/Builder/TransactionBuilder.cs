@@ -15,52 +15,68 @@ namespace Chrysalis.Tx.Builder;
 
 public class TransactionBuilder
 {
-    private readonly List<TransactionInput> inputs = [];
-    private readonly List<TransactionOutput> outputs = [];
+    private List<TransactionInput>? inputs;
+    private List<TransactionOutput>? outputs;
     public Address? changeAddress;
-    private List<Utxo> availableUtxos = [];
-    private CborUlong fee = new(0UL);
+    private List<Utxo>? availableUtxos;
+    private CborUlong? fee;
     private CborUlong? ttl;
     private CborUlong? validityStart;
-    private readonly List<Certificate>? certificates;
-    private readonly Withdrawals? withdrawals;
-    private readonly Update? update;
-    private readonly CborBytes? auxiliaryDataHash;
-    private readonly MultiAssetMint? mint;
-    private readonly CborBytes? scriptDataHash;
-    private readonly List<TransactionInput>? collateral;
-    private readonly List<CborBytes>? requiredSigners;
-    private readonly CborInt? networkId;
+    private List<Certificate>? certificates;
+    private Withdrawals? withdrawals;
+    private Update? update;
+    private CborBytes? auxiliaryDataHash;
+    private MultiAssetMint? mint;
+    private CborBytes? scriptDataHash;
+    private List<TransactionInput>? collateral;
+    private List<CborBytes>? requiredSigners;
+    private CborInt? networkId;
     private TransactionOutput? collateralReturn;
-    private readonly CborUlong? totalCollateral;
+    private CborUlong? totalCollateral;
     private List<TransactionInput>? referenceInputs;
-
-    private readonly VotingProcedures? votingProcedures;
-    private readonly List<ProposalProcedure>? proposalProcedures;
-    private readonly CborUlong? treasuryValue;
-    private readonly CborUlong? donation;
-
+    private VotingProcedures? votingProcedures;
+    private List<ProposalProcedure>? proposalProcedures;
+    private CborUlong? treasuryValue;
+    private CborUlong? donation;
     private TransactionWitnessSet? witnessSet;
-
-    private readonly List<VKeyWitness>? vKeyWitnesses;
-    private readonly List<NativeScript>? nativeScripts;
-    private readonly List<BootstrapWitness>? bootstrapWitnesses;
-    private readonly List<CborBytes>? plutusV1Scripts;
-    private readonly List<CborBytes>? plutusV2Scripts;
-    private readonly List<CborBytes>? plutusV3Scripts;
-    private readonly List<PlutusData>? plutusData;
-    private readonly Redeemers? redeemers;
-
-    private readonly AuxiliaryData? auxiliaryData;
+    private List<VKeyWitness>? vKeyWitnesses;
+    private List<NativeScript>? nativeScripts;
+    private List<BootstrapWitness>? bootstrapWitnesses;
+    private List<CborBytes>? plutusV1Scripts;
+    private List<CborBytes>? plutusV2Scripts;
+    private List<CborBytes>? plutusV3Scripts;
+    private List<PlutusData>? plutusData;
+    private Redeemers? redeemers;
+    private AuxiliaryData? auxiliaryData;
 
 
     public static TransactionBuilder Create()
     {
         return new TransactionBuilder();
     }
+
+    public TransactionBuilder SetNetworkId(int networkId)
+    {
+        this.networkId = new CborInt(networkId);
+        return this;
+    }
+
     public TransactionBuilder AddInput(TransactionInput input)
     {
+        inputs ??= [];
         inputs.Add(input);
+        return this;
+    }
+    public TransactionBuilder AddReferenceInput(TransactionInput input)
+    {
+        referenceInputs ??= [];
+        referenceInputs.Add(input);
+        return this;
+    }
+    public TransactionBuilder AddOutput(TransactionOutput output)
+    {
+        outputs ??= [];
+        outputs.Add(output);
         return this;
     }
 
@@ -76,22 +92,152 @@ public class TransactionBuilder
         return this;
     }
 
-    public TransactionBuilder AddReferenceInput(TransactionInput input)
+    public TransactionBuilder AddCollateral(TransactionInput input)
     {
-        referenceInputs ??= [];
-        referenceInputs.Add(input);
+        collateral ??= [];
+        collateral.Add(input);
         return this;
     }
 
-    public TransactionBuilder AddOutput(TransactionOutput output)
+
+    public TransactionBuilder AddCertificate(Certificate certificate)
     {
-        outputs.Add(output);
+        certificates ??= [];
+        certificates.Add(certificate);
         return this;
     }
 
+    public TransactionBuilder AddUpdate(Update update)
+    {
+        this.update = update;
+        return this;
+    }
     public TransactionBuilder SetCollateralReturn(TransactionOutput output)
     {
         collateralReturn = output;
+        return this;
+    }
+
+    public TransactionBuilder SetTotalCollateral(ulong total)
+    {
+        totalCollateral = new CborUlong(total);
+        return this;
+    }
+
+    public TransactionBuilder AddRequiredSigner(CborBytes signer)
+    {
+        requiredSigners ??= [];
+        requiredSigners.Add(signer);
+        return this;
+    }
+
+    public TransactionBuilder AddVotingProcedure(VotingProcedures votingProcedures)
+    {
+        this.votingProcedures = votingProcedures;
+        return this;
+    }
+
+    public TransactionBuilder AddProposalProcedure(ProposalProcedure proposal)
+    {
+        proposalProcedures ??= [];
+        proposalProcedures.Add(proposal);
+        return this;
+    }
+
+    public TransactionBuilder SetTreasuryValue(ulong value)
+    {
+        treasuryValue = new CborUlong(value);
+        return this;
+    }
+
+    public TransactionBuilder SetDonation(ulong value)
+    {
+        donation = new CborUlong(value);
+        return this;
+    }
+
+    public TransactionBuilder AddMint(MultiAssetMint mint)
+    {
+        this.mint = mint;
+        return this;
+    }
+
+    public TransactionBuilder SetWithdrawals(Withdrawals withdrawals)
+    {
+        this.withdrawals = withdrawals;
+        return this;
+    }
+
+    public TransactionBuilder SetRedeemer(Redeemers redeemers)
+    {
+        this.redeemers = redeemers;
+        return this;
+    }
+
+    public TransactionBuilder SetAuxiliaryData(AuxiliaryData auxiliaryData)
+    {
+        this.auxiliaryData = auxiliaryData;
+        return this;
+    }
+
+    public TransactionBuilder AddVKeyWitness(VKeyWitness witness)
+    {
+        vKeyWitnesses ??= [];
+        vKeyWitnesses.Add(witness);
+        return this;
+    }
+
+    public TransactionBuilder AddNativeScript(NativeScript script)
+    {
+        nativeScripts ??= [];
+        nativeScripts.Add(script);
+        return this;
+    }
+
+    public TransactionBuilder AddPlutusV1Script(CborBytes script)
+    {
+        plutusV1Scripts ??= [];
+        plutusV1Scripts.Add(script);
+        return this;
+    }
+
+    public TransactionBuilder AddPlutusV2Script(CborBytes script)
+    {
+        plutusV2Scripts ??= [];
+        plutusV2Scripts.Add(script);
+        return this;
+    }
+
+    public TransactionBuilder AddPlutusV3Script(CborBytes script)
+    {
+        plutusV3Scripts ??= [];
+        plutusV3Scripts.Add(script);
+        return this;
+    }
+
+    public TransactionBuilder AddPlutusData(PlutusData data)
+    {
+        plutusData ??= [];
+        plutusData.Add(data);
+        return this;
+    }
+
+    public TransactionBuilder SetAuxiliaryDataHash(CborBytes hash)
+    {
+        auxiliaryDataHash = hash;
+        return this;
+    }
+
+    public TransactionBuilder SetScriptDataHash(CborBytes hash)
+    {
+        scriptDataHash = hash;
+        return this;
+    }
+
+    public TransactionBuilder AddBootstrapWitness(BootstrapWitness witness)
+    {
+        bootstrapWitnesses ??= [];
+        bootstrapWitnesses.Add(witness);
         return this;
     }
 
@@ -110,6 +256,13 @@ public class TransactionBuilder
     public TransactionBuilder SetValidityIntervalStart(ulong start)
     {
         validityStart = new CborUlong(start);
+        return this;
+    }
+
+
+    public TransactionBuilder SetValidityIntervalEnd(ulong end)
+    {
+        ttl = new CborUlong(end);
         return this;
     }
 
@@ -151,9 +304,9 @@ public class TransactionBuilder
     private ConwayTransactionBody BuildConwayBody()
     {
 
-        var inputList = new CborDefListWithTag<TransactionInput>(inputs);
+        var inputList = new CborDefListWithTag<TransactionInput>(inputs ?? []);
 
-        var outputList = new CborDefList<TransactionOutput>(outputs);
+        var outputList = new CborDefList<TransactionOutput>(outputs ?? []);
 
         CborMaybeIndefList<Certificate>? certList = certificates != null ?
             new CborDefList<Certificate>(certificates) : null;
@@ -173,7 +326,7 @@ public class TransactionBuilder
         return new ConwayTransactionBody(
             inputList,
             outputList,
-            fee,
+            fee ?? new CborUlong(0),
             ttl,
             certList,
             withdrawals,

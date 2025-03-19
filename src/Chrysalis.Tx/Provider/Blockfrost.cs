@@ -9,7 +9,6 @@ namespace Chrysalis.Tx.Provider;
 
 public class Blockfrost : IProvider
 {
-
     private readonly HttpClient _httpClient;
     private readonly string _baseUrl;
 
@@ -44,30 +43,30 @@ public class Blockfrost : IProvider
             {
                 ulong lovelace = 0;
                 Dictionary<CborBytes, TokenBundleOutput> assets = [];
-                foreach (var amount in utxo.Amount)
+                foreach (var amount in utxo.Amount!)
                 {
                     if (amount.Unit == "lovelace")
                     {
-                        lovelace = ulong.Parse(amount.Quantity);
+                        lovelace = ulong.Parse(amount.Quantity!);
                     }
                     else
                     {
-                        var policy = new CborBytes(Convert.FromHexString(amount.Unit[..56]));
-                        var assetName = new CborBytes(Convert.FromHexString(amount.Unit[56..]));
+                        var policy = new CborBytes(Convert.FromHexString(amount.Unit![..56]));
+                        var assetName = new CborBytes(Convert.FromHexString(amount.Unit![56..]));
                         if (!assets.ContainsKey(policy))
                         {
                             assets[policy] = new TokenBundleOutput(new Dictionary<CborBytes, CborUlong>
                             {
-                                [assetName] = new CborUlong(ulong.Parse(amount.Quantity))
+                                [assetName] = new CborUlong(ulong.Parse(amount.Quantity!))
                             });
                         }
                         else
                         {
-                            assets[policy].Value[assetName] = new CborUlong(ulong.Parse(amount.Quantity));
+                            assets[policy].Value[assetName] = new CborUlong(ulong.Parse(amount.Quantity!));
                         }
                     }
                 }
-                TransactionInput outref = new(new CborBytes(Convert.FromHexString(utxo.TxHash)), new CborUlong((ulong)utxo.TxIndex));
+                TransactionInput outref = new(new CborBytes(Convert.FromHexString(utxo.TxHash!)), new CborUlong((ulong)utxo.TxIndex!));
                 Lovelace CborLovelace = new(lovelace);
                 Value value = new Lovelace(lovelace);
                 if (assets.Count > 0)
