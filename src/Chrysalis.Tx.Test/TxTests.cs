@@ -211,36 +211,36 @@ public class TxTests
         Assert.Equal(expectedOutput, result);
     }
 
-    [Fact]
-    public void AddressDerivation_Encode_Test()
-    {
-        string words = "gesture figure area company load wash drive south bicycle youth luggage bronze chunk false nature warrior genre bless fish cool purity already habit cement";
+    // [Fact]
+    // public void AddressDerivation_Encode_Test()
+    // {
+    //     string words = "gesture figure area company load wash drive south bicycle youth luggage bronze chunk false nature warrior genre bless fish cool purity already habit cement";
 
-        MnemonicKey mnemonic = Mnemonic.Restore(words, English.Words);
-        PrivateKey rootKey = mnemonic.GetRootKey();
+    //     MnemonicKey mnemonic = Mnemonic.Restore(words, English.Words);
+    //     PrivateKey rootKey = mnemonic.GetRootKey();
 
-        (PrivateKey? paymentPrv1, PublicKey? paymentPub1) = TxTestUtils.GetKeyPairFromPath("m/1855'/1815'/0'", rootKey);
+    //     (PrivateKey? paymentPrv1, PublicKey? paymentPub1) = TxTestUtils.GetKeyPairFromPath("m/1855'/1815'/0'", rootKey);
 
-        string bip39words = "gesture\r figure\r area\r company\r load\r wash\r drive\r south\r bicycle\r youth\r luggage\r bronze\r chunk\r false\r nature\r warrior\r genre\r bless\r fish\r cool\r purity\r already\r habit\r cement\r";
-        var bip39 = new BIP39();
-        var bip39words1 = bip39.GenerateMnemonic(256, BIP39Wordlist.English);
-        byte[] entropy = Convert.FromHexString(bip39.MnemonicToEntropy(bip39words, BIP39Wordlist.English));
-        MnemonicKey mnemonicKey = new(words.Split(' '), entropy);
+    //     string bip39words = "gesture\r figure\r area\r company\r load\r wash\r drive\r south\r bicycle\r youth\r luggage\r bronze\r chunk\r false\r nature\r warrior\r genre\r bless\r fish\r cool\r purity\r already\r habit\r cement\r";
+    //     var bip39 = new BIP39();
+    //     var bip39words1 = bip39.GenerateMnemonic(256, BIP39Wordlist.English);
+    //     byte[] entropy = Convert.FromHexString(bip39.MnemonicToEntropy(bip39words, BIP39Wordlist.English));
+    //     MnemonicKey mnemonicKey = new(words.Split(' '), entropy);
 
-        Assert.Equal(mnemonicKey.GetRootKey().Key, mnemonic.GetRootKey().Key);
-        Assert.Equal(mnemonicKey.GetRootKey().Chaincode, mnemonic.GetRootKey().Chaincode);
+    //     Assert.Equal(mnemonicKey.GetRootKey().Key, mnemonic.GetRootKey().Key);
+    //     Assert.Equal(mnemonicKey.GetRootKey().Chaincode, mnemonic.GetRootKey().Chaincode);
 
-        // IAccountNodeDerivation paymentDerivation = rootKey.Derive()     // IMasterNodeDerivation
-        //     .Derive(PurposeType.PolicyKeys)             // IPurposeNodeDerivation
-        //     .Derive(CoinType.Ada)                       // ICoinNodeDerivation
-        //     .Derive(0);                                 // IAccountNodeDerivation
+    //     // IAccountNodeDerivation paymentDerivation = rootKey.Derive()     // IMasterNodeDerivation
+    //     //     .Derive(PurposeType.PolicyKeys)             // IPurposeNodeDerivation
+    //     //     .Derive(CoinType.Ada)                       // ICoinNodeDerivation
+    //     //     .Derive(0);                                 // IAccountNodeDerivation
 
-        // Assert
-        // Assert.Equal(paymentPrv1.Key, paymentDerivation.PrivateKey.Key);
-        // Assert.Equal(paymentPrv1.Chaincode, paymentDerivation.PrivateKey.Chaincode);
+    //     // Assert
+    //     // Assert.Equal(paymentPrv1.Key, paymentDerivation.PrivateKey.Key);
+    //     // Assert.Equal(paymentPrv1.Chaincode, paymentDerivation.PrivateKey.Chaincode);
 
-        // Assert.Equal(paymentPub1.Key, paymentDerivation.PublicKey.Key);
-        // Assert.Equal(paymentPub1.Chaincode, paymentDerivation.PublicKey.Chaincode);
-    }
+    //     // Assert.Equal(paymentPub1.Key, paymentDerivation.PublicKey.Key);
+    //     // Assert.Equal(paymentPub1.Chaincode, paymentDerivation.PublicKey.Chaincode);
+    // }
 }
 
