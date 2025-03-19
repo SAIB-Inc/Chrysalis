@@ -240,9 +240,10 @@ public sealed partial class CborSourceGenerator
             string writeNewKeyword = type.HasBaseWriteMethod ? "new " : "";
             string readNewKeyword = type.HasBaseReadMethod ? "new " : "";
 
-            // Check if this type needs the WriteGenericValue method
-            bool needsGenericValueHelper = NeedsGenericValueHelper(type);
-            string genericValueHelper = needsGenericValueHelper ? GenerateWriteGenericValueMethod() : "";
+            // Always include the WriteGenericValue method at the class level
+            // This ensures it's available for all implementations
+            bool needsGenericValueHelper = true;
+            string genericValueHelper = needsGenericValueHelper ? GenericEmitterStrategy.GenerateWriteGenericValueMethod() : "";
 
             // Add any helper methods at the class level
             string helperMethods = string.Empty;
@@ -321,7 +322,10 @@ public sealed partial class CborSourceGenerator
             string validatorCode = validatorSb.ToString();
 
             // For generics, include the helper methods for generic deserialization
-            string deserializationHelper = GenerateGenericDeserializationHelper();
+            // Only include the helper if we're not already using the UnionEmitterStrategy
+            string deserializationHelper = type.Format != SerializationType.Union 
+                ? GenerateGenericDeserializationHelper()
+                : "";
 
             // Add any additional helper methods at the class level
             string helperMethods = deserializationHelper;
@@ -383,9 +387,10 @@ public sealed partial class CborSourceGenerator
             string writeNewKeyword = type.HasBaseWriteMethod ? "new " : "";
             string readNewKeyword = type.HasBaseReadMethod ? "new " : "";
 
-            // Check if this type needs the WriteGenericValue method
-            bool needsGenericValueHelper = NeedsGenericValueHelper(type);
-            string genericValueHelper = needsGenericValueHelper ? GenerateWriteGenericValueMethod() : "";
+            // Always include the WriteGenericValue method at the class level
+            // This ensures it's available for all implementations
+            bool needsGenericValueHelper = true;
+            string genericValueHelper = needsGenericValueHelper ? GenericEmitterStrategy.GenerateWriteGenericValueMethod() : "";
 
             return $$"""
                 #nullable enable
@@ -449,6 +454,10 @@ public sealed partial class CborSourceGenerator
         /// </summary>
         private bool NeedsGenericValueHelper(SerializableType type)
         {
+            // Always include the helper for union types
+            if (type.Format == SerializationType.Union)
+                return true;
+                
             // If it's not generic, check for list/dictionary properties that contain generic types
             if (!type.Type.IsGeneric)
             {
@@ -551,86 +560,12 @@ public sealed partial class CborSourceGenerator
         /// <summary>
         /// Generates the WriteGenericValue method for serializing generic values
         /// </summary>
+        /// This method is no longer used directly - we use GenericEmitterStrategy.GenerateWriteGenericValueMethod() 
+        /// to ensure we use a consistent implementation
         private string GenerateWriteGenericValueMethod()
         {
-            return """
-                /// <summary>
-                /// Writes any generic type to a CBOR writer based on runtime type
-                /// </summary>
-                private static void WriteGenericValue<T>(CborWriter writer, T value)
-                {
-                    if (value == null)
-                    {
-                        writer.WriteNull();
-                        return;
-                    }
-
-                    Type valueType = value.GetType();
-
-                    // Handle primitive types first (most common case)
-                    if (valueType == typeof(int))
-                        writer.WriteInt32((int)(object)value);
-                    else if (valueType == typeof(uint))
-                        writer.WriteUInt32((uint)(object)value);
-                    else if (valueType == typeof(long))
-                        writer.WriteInt64((long)(object)value);
-                    else if (valueType == typeof(ulong))
-                        writer.WriteUInt64((ulong)(object)value);
-                    else if (valueType == typeof(float))
-                        writer.WriteSingle((float)(object)value);
-                    else if (valueType == typeof(double))
-                        writer.WriteDouble((double)(object)value);
-                    else if (valueType == typeof(decimal))
-                        writer.WriteDouble((double)(decimal)(object)value);
-                    else if (valueType == typeof(bool))
-                        writer.WriteBoolean((bool)(object)value);
-                    else if (valueType == typeof(string))
-                        writer.WriteTextString((string)(object)value);
-                    else if (valueType == typeof(byte[]))
-                        writer.WriteByteString((byte[])(object)value);
-                    else if (valueType == typeof(DateTime))
-                        writer.WriteTextString(((DateTime)(object)value).ToString("o"));
-                    else if (valueType == typeof(Guid))
-                        writer.WriteTextString(((Guid)(object)value).ToString());
-                    else
-                    {
-                        // Check if the type has a Raw property for direct serialization
-                        PropertyInfo rawProperty = valueType.GetProperty("Raw");
-                        if (rawProperty != null && 
-                            rawProperty.PropertyType.IsGenericType && 
-                            rawProperty.PropertyType.GetGenericTypeDefinition() == typeof(Nullable<>) &&
-                            rawProperty.PropertyType.GetGenericArguments()[0] == typeof(ReadOnlyMemory<byte>))
-                        {
-                            var rawValue = rawProperty.GetValue(value);
-                            if (rawValue != null)
-                            {
-                                var memory = (ReadOnlyMemory<byte>?)rawValue;
-                                if (memory.HasValue)
-                                {
-                                    writer.WriteEncodedValue(memory.Value.Span);
-                                    return;
-                                }
-                            }
-                        }
-
-                        // Try to find and invoke a static Write method
-                        MethodInfo writeMethod = valueType.GetMethod("Write", 
-                            BindingFlags.Public | BindingFlags.Static, 
-                            null, 
-                            new[] { typeof(CborWriter), valueType }, 
-                            null);
-                            
-                        if (writeMethod != null)
-                        {
-                            writeMethod.Invoke(null, new object[] { writer, value });
-                            return;
-                        }
-                        
-                        // Final fallback
-                        writer.WriteTextString(value.ToString());
-                    }
-                }
-            """;
+            // Delegate to the strategy class to ensure consistent implementation
+            return GenericEmitterStrategy.GenerateWriteGenericValueMethod();
         }
 
         /// <summary>
@@ -999,103 +934,7 @@ public sealed partial class CborSourceGenerator
         }
     }
 
-    /// <summary>
-    /// Strategy for emitting Union type serialization
-    /// </summary>
-    private class UnionEmitterStrategy : EmitterStrategyBase
-    {
-        public override string EmitSerializer(SerializableType type)
-        {
-            var sb = new StringBuilder();
-            
-            // Add helper methods for nested types, but now try to reuse existing methods
-            var nestedHelperMethods = new StringBuilder();
-            var helperMethodDeclarations = new StringBuilder();
-            
-            // We no longer need to create stub implementations for nested types
-            // Only if we need to forward from child serializers to parent serializers
-
-            // Add validation if needed
-            ValidationHelpers.AddSerializationValidation(sb, type);
-
-            // Main switch statement for determining which serializer to use
-            sb.AppendLine("// Determine the concrete type from its type name");
-            sb.AppendLine("switch (value.CborTypeName)");
-            sb.AppendLine("{");
-
-            foreach (var unionCase in type.UnionCases)
-            {
-                bool isNestedType = unionCase.FullName.StartsWith(type.Type.FullName + ".");
-                sb.AppendLine($"    case \"{unionCase.Name}\":");
-                
-                // Whether nested or not, use the type's own Write method if available
-                string fullyQualifiedName = unionCase.FullName.Contains(".") ? unionCase.FullName : $"global::{unionCase.FullName}";
-                sb.AppendLine($"        {fullyQualifiedName}.Write(writer, ({unionCase.FullName})value);");
-                sb.AppendLine("        break;");
-            }
-
-            sb.AppendLine("    default:");
-            sb.AppendLine("        throw new Exception($\"Unknown union type: {value.CborTypeName}\");");
-            sb.AppendLine("}");
-
-            // We no longer need helper methods
-            type.SerializerHelperMethods = string.Empty;
-
-            return sb.ToString();
-        }
-
-        public override string EmitDeserializer(SerializableType type)
-        {
-            var sb = new StringBuilder();
-            
-            // We no longer need to create helper methods for nested types
-            // Instead we'll directly use each subtype's Read method
-
-            // The main deserialization code
-            sb.AppendLine("// Try each union case");
-            sb.AppendLine("var originalData = data;");
-            sb.AppendLine("Exception lastException = null;");
-
-            foreach (var unionCase in type.UnionCases)
-            {
-                sb.AppendLine($"// Try {unionCase.Name}");
-                sb.AppendLine("try");
-                sb.AppendLine("{");
-                
-                // Whether nested or not, use the type's own Read method
-                string fullyQualifiedName = unionCase.FullName.Contains(".") ? unionCase.FullName : $"global::{unionCase.FullName}";
-                sb.AppendLine($"    var result = ({type.Type.FullName}){fullyQualifiedName}.Read(originalData, preserveRaw);");
-
-                // If we get here, it means the deserialization was successful
-                // Add validation if needed - immediately after a successful deserialization
-                if (type.HasValidator)
-                {
-                    sb.AppendLine();
-                    sb.AppendLine("    // Validate deserialized object");
-                    sb.AppendLine($"    if (!_validator.Validate(result))");
-                    sb.AppendLine("    {");
-                    sb.AppendLine($"        throw new System.InvalidOperationException(\"Validation failed for {type.Type.Name}\");");
-                    sb.AppendLine("    }");
-                }
-
-                sb.AppendLine("    return result; // Successfully deserialized and validated");
-                sb.AppendLine("}");
-                sb.AppendLine("catch (Exception ex)");
-                sb.AppendLine("{");
-                sb.AppendLine("    lastException = ex;");
-                sb.AppendLine("    // Continue to the next case");
-                sb.AppendLine("}");
-            }
-
-            // If we get here, all cases failed
-            sb.AppendLine("throw new Exception(\"Could not deserialize union type\", lastException);");
-
-            // We no longer need helper methods
-            type.DeserializerHelperMethods = string.Empty;
-
-            return sb.ToString();
-        }
-    }
+// The UnionEmitterStrategy class is now defined in CborSourceGenerator.UnionEmitter.cs
 
     /// <summary>
     /// Strategy for emitting Container type serialization
