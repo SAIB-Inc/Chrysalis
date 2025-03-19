@@ -1,5 +1,5 @@
 namespace Chrysalis.Tx.Models;
 
-public interface IData {
+public interface ICbor {
     
 }
