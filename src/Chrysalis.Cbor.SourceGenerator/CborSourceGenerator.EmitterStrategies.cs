@@ -132,7 +132,7 @@ public sealed partial class CborSourceGenerator
                 // Special handling for globally qualified or nested types
                 // Ensure we use fully qualified type references to avoid namespace conflicts
                 string fullyQualifiedType = cleanTypeName.Contains(".") ? cleanTypeName : $"global::{cleanTypeName}";
-                
+
                 string readCode = $$"""
                     // Read the encoded value as ReadOnlyMemory<byte>
                     var encodedValue_{{variableName}} = reader.ReadEncodedValue();
@@ -204,10 +204,10 @@ public sealed partial class CborSourceGenerator
             else
             {
                 // Always ensure the type reference is fully qualified to avoid namespace conflicts
-                string fullyQualifiedType = cleanTypeName.Contains(".") 
-                    ? cleanTypeName 
+                string fullyQualifiedType = cleanTypeName.Contains(".")
+                    ? cleanTypeName
                     : $"global::{cleanTypeName}";
-                
+
                 // Always use the type's static Write method for custom types
                 return $$"""{{fullyQualifiedType}}.Write(writer, {{variableName}});""";
             }

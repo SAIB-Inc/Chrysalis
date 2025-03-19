@@ -30,7 +30,7 @@ public sealed partial class CborSourceGenerator
                 // Only format as nested if it's a real nested type, not a type parameter
                 string containingTypeFullName = symbol.ContainingType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
                 FullName = $"{containingTypeFullName}.{symbol.Name}";
-                
+
                 // Make sure we capture the correct namespace for nested types
                 Namespace = symbol.ContainingType.ContainingNamespace?.ToDisplayString() ?? string.Empty;
                 IsTypeParameter = false;
@@ -130,7 +130,7 @@ public sealed partial class CborSourceGenerator
         public bool HasBaseWriteMethod { get; set; }
         public bool HasBaseReadMethod { get; set; }
         public string DebugInfo { get; set; } = string.Empty;
-        
+
         // Helper methods for serialization/deserialization
         public string SerializerHelperMethods { get; set; } = string.Empty;
         public string DeserializerHelperMethods { get; set; } = string.Empty;
@@ -163,7 +163,11 @@ public sealed partial class CborSourceGenerator
             }
 
             // Extract serialization attributes (with null checks)
-            Key = ExtractKey(property) ?? property.Name ?? string.Empty;
+            var keyInfo = ExtractKeyInfo(property);
+            Key = keyInfo.Key ?? property.Name ?? string.Empty;
+            IntKey = keyInfo.IntKey;
+            IsIntKey = keyInfo.IsIntKey;
+
             Order = ExtractOrderAttribute(property);
             Size = ExtractSizeAttribute(property);
             IsIndefinite = ExtractIndefiniteAttribute(property);
@@ -189,11 +193,14 @@ public sealed partial class CborSourceGenerator
 
         // Serialization details
         public string? Key { get; }
+        public int? IntKey { get; }
+        public bool IsIntKey { get; }
         public int? Order { get; }
         public int? Size { get; }
         public bool IsIndefinite { get; }
         public bool IsCborNullable { get; }
         public bool IsPropertyNullable { get; }
+
 
         // Type structure
         public bool IsCollection { get; private set; }
@@ -253,6 +260,24 @@ public sealed partial class CborSourceGenerator
 
         private static bool ExtractCborNullableAttribute(IPropertySymbol property) =>
             property.GetAttributes().Any(a => a.AttributeClass?.Name == Constants.CborNullableAttribute);
+    }
+
+    private static (string? Key, int? IntKey, bool IsIntKey) ExtractKeyInfo(IPropertySymbol property)
+    {
+        var attr = property.GetAttributes().FirstOrDefault(a =>
+            a.AttributeClass?.Name == Constants.CborPropertyAttribute ||
+            (a.AttributeClass?.ToDisplayString().Contains(Constants.CborPropertyAttribute) ?? false));
+
+        if (attr == null || attr.ConstructorArguments.Length == 0)
+            return (null, null, false);
+
+        var arg = attr.ConstructorArguments[0];
+        if (arg.Value is string strValue)
+            return (strValue, null, false);
+        else if (arg.Value is int intValue)
+            return (intValue.ToString(), intValue, true);
+
+        return (null, null, false);
     }
 
     private sealed class ConstructorParam(IParameterSymbol parameter)

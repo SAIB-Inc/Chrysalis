@@ -28,13 +28,13 @@ public sealed partial class CborSourceGenerator
 
                 // Check if the type already has CBOR serialization methods to avoid duplicate generation
                 string typeFullName = type.Type.FullName;
-                
+
                 // Skip types we've already processed
                 if (_typesWithExistingMethods.Contains(typeFullName))
                 {
                     continue;
                 }
-                
+
                 // Check if the type already has Write/Read methods defined
                 if (_compilation != null)
                 {
@@ -44,7 +44,7 @@ public sealed partial class CborSourceGenerator
                         // Look for static Write and Read methods with the right signatures
                         bool hasWriteMethod = HasMethod(typeSymbol, "Write", new[] { "CborWriter", typeFullName });
                         bool hasReadMethod = HasMethod(typeSymbol, "Read", new[] { "ReadOnlyMemory<byte>", "bool" });
-                        
+
                         if (hasWriteMethod || hasReadMethod)
                         {
                             // Skip generation for this type as it already has serialization methods
@@ -323,7 +323,7 @@ public sealed partial class CborSourceGenerator
 
             // For generics, include the helper methods for generic deserialization
             // Only include the helper if we're not already using the UnionEmitterStrategy
-            string deserializationHelper = type.Format != SerializationType.Union 
+            string deserializationHelper = type.Format != SerializationType.Union
                 ? GenerateGenericDeserializationHelper()
                 : "";
 
@@ -457,7 +457,7 @@ public sealed partial class CborSourceGenerator
             // Always include the helper for union types
             if (type.Format == SerializationType.Union)
                 return true;
-                
+
             // If it's not generic, check for list/dictionary properties that contain generic types
             if (!type.Type.IsGeneric)
             {
@@ -633,7 +633,17 @@ public sealed partial class CborSourceGenerator
             foreach (var prop in type.Properties)
             {
                 sb.AppendLine($"// Write property: {prop.Name}");
-                sb.AppendLine($"writer.WriteTextString(\"{prop.Key}\");");
+
+                // Check if the key is numeric
+                if (int.TryParse(prop.Key, out int numericKey))
+                {
+                    sb.AppendLine($"writer.WriteInt32({numericKey});");
+                }
+                else
+                {
+                    sb.AppendLine($"writer.WriteTextString(\"{prop.Key}\");");
+                }
+
                 sb.AppendLine(GenericEmitterStrategy.GenerateWriteCode($"value.{prop.Name}", prop.Type.FullName, prop.IsCborNullable));
             }
 
@@ -668,7 +678,26 @@ public sealed partial class CborSourceGenerator
             // Read map entries - use a unique variable name for the map key
             sb.AppendLine("while (reader.PeekState() != CborReaderState.EndMap)");
             sb.AppendLine("{");
-            sb.AppendLine("    string mapEntryKey = reader.ReadTextString();");
+            sb.AppendLine("    string mapEntryKey;");
+            sb.AppendLine("    var keyState = reader.PeekState();");
+            sb.AppendLine("    if (keyState == CborReaderState.TextString)");
+            sb.AppendLine("    {");
+            sb.AppendLine("        mapEntryKey = reader.ReadTextString();");
+            sb.AppendLine("    }");
+            sb.AppendLine("    else if (keyState == CborReaderState.UnsignedInteger)");
+            sb.AppendLine("    {");
+            sb.AppendLine("        mapEntryKey = reader.ReadUInt32().ToString();");
+            sb.AppendLine("    }");
+            sb.AppendLine("    else if (keyState == CborReaderState.NegativeInteger)");
+            sb.AppendLine("    {");
+            sb.AppendLine("        mapEntryKey = reader.ReadInt32().ToString();");
+            sb.AppendLine("    }");
+            sb.AppendLine("    else");
+            sb.AppendLine("    {");
+            sb.AppendLine("        reader.SkipValue(); // Skip unknown key type");
+            sb.AppendLine("        reader.SkipValue(); // Skip corresponding value");
+            sb.AppendLine("        continue;");
+            sb.AppendLine("    }");
             sb.AppendLine("    switch (mapEntryKey)");
             sb.AppendLine("    {");
 
@@ -934,7 +963,7 @@ public sealed partial class CborSourceGenerator
         }
     }
 
-// The UnionEmitterStrategy class is now defined in CborSourceGenerator.UnionEmitter.cs
+    // The UnionEmitterStrategy class is now defined in CborSourceGenerator.UnionEmitter.cs
 
     /// <summary>
     /// Strategy for emitting Container type serialization

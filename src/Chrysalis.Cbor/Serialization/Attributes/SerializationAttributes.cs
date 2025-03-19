@@ -52,9 +52,27 @@ public sealed class CborOrderAttribute(int order) : Attribute
 }
 
 [AttributeUsage(AttributeTargets.Property | AttributeTargets.Parameter, Inherited = false, AllowMultiple = false)]
-public sealed class CborPropertyAttribute(string key) : Attribute
+public sealed class CborPropertyAttribute : Attribute
 {
-    public string Key { get; } = key;
+    public string StringKey { get; }
+    public int? IntKey { get; }
+    public bool IsIntKey { get; }
+
+    // Constructor for string keys
+    public CborPropertyAttribute(string key)
+    {
+        StringKey = key;
+        IntKey = null;
+        IsIntKey = false;
+    }
+
+    // Constructor for integer keys
+    public CborPropertyAttribute(int key)
+    {
+        StringKey = key.ToString();
+        IntKey = key;
+        IsIntKey = true;
+    }
 }
 
 [AttributeUsage(AttributeTargets.Property | AttributeTargets.Parameter, Inherited = false, AllowMultiple = false)]
