@@ -14,6 +14,9 @@ public sealed partial class CborSourceGenerator
 
         // Queue of types waiting to be processed
         private readonly Queue<TypeToProcess> _typesToProcess = new();
+        
+        // Reference to the compilation for type lookup across assemblies
+        private Compilation? _compilation;
 
         /// <summary>
         /// Parses a type declaration and creates serialization metadata for it and all related types
@@ -34,8 +37,8 @@ public sealed partial class CborSourceGenerator
                 return new SerializationContext();
             }
 
-            // Store compilation for validator detection
-            var compilation = semanticModel.Compilation;
+            // Store compilation for validator detection and type lookup
+            _compilation = semanticModel.Compilation;
 
             // Create the context
             var context = new SerializationContext
@@ -47,7 +50,7 @@ public sealed partial class CborSourceGenerator
             DiscoverInitialTypes(contextType);
 
             // Process all discovered types
-            ProcessTypeQueue(cancellationToken, compilation);
+            ProcessTypeQueue(cancellationToken, _compilation);
 
             // Add processed types to context
             context.Types = _processedTypes.Values.ToList();
@@ -367,6 +370,8 @@ public sealed partial class CborSourceGenerator
                 logBuilder?.AppendLine($"//   Set format to Container (single property)");
             }
         }
+
+
         /// <summary>
         /// Extracts property metadata from a type
         /// </summary>
@@ -418,19 +423,246 @@ public sealed partial class CborSourceGenerator
         }
 
         /// <summary>
-        /// Extracts union case types
+        /// Extracts union case types for a union type
         /// </summary>
-        private void ExtractUnionCases(INamedTypeSymbol type, SerializableType metadata)
+        private void ExtractUnionCases(INamedTypeSymbol type, SerializableType metadata, StringBuilder? logBuilder = null)
         {
+            logBuilder?.AppendLine($"// Extracting union cases for: {type.ToDisplayString()}");
+
+            // Get type assembly
+            var assembly = type.ContainingAssembly;
+            
+            // Use a HashSet to track processed types by full name
+            var processedTypeFullNames = new HashSet<string>();
+            // Use a separate HashSet to track type names to avoid duplicate case labels
+            var processedTypeNames = new HashSet<string>();
+
+            // First, add direct nested types (for nested class approach)
             foreach (var nestedType in type.GetTypeMembers())
             {
-                var nestedTypeInfo = new TypeInfo(nestedType);
-                metadata.UnionCases.Add(nestedTypeInfo);
-                metadata.Dependencies.Add(nestedTypeInfo);
+                if (IsUnionCaseType(nestedType, type))
+                {
+                    string fullName = nestedType.ToDisplayString();
+                    
+                    // Skip if already processed
+                    if (processedTypeFullNames.Contains(fullName))
+                        continue;
+                        
+                    processedTypeFullNames.Add(fullName);
+                    processedTypeNames.Add(nestedType.Name);
+                    
+                    var nestedTypeInfo = new TypeInfo(nestedType);
+                    metadata.UnionCases.Add(nestedTypeInfo);
+                    metadata.Dependencies.Add(nestedTypeInfo);
 
-                // Add to processing queue
-                AddTypeToQueue(nestedType, isNullable: false);
+                    logBuilder?.AppendLine($"//   Added nested union case: {nestedTypeInfo.FullName}");
+
+                    // Add to processing queue
+                    AddTypeToQueue(nestedType, isNullable: false);
+                }
             }
+
+            // Check for implementations in the same namespace (for separate class approach)
+            var typeNs = type.ContainingNamespace;
+            if (typeNs != null)
+            {
+                foreach (var nsType in typeNs.GetTypeMembers())
+                {
+                    if (!SymbolEqualityComparer.Default.Equals(nsType, type) && IsUnionCaseType(nsType, type))
+                    {
+                        string fullName = nsType.ToDisplayString();
+                        
+                        // Skip if already processed
+                        if (processedTypeFullNames.Contains(fullName))
+                            continue;
+                            
+                        processedTypeFullNames.Add(fullName);
+                        processedTypeNames.Add(nsType.Name);
+                        
+                        var caseTypeInfo = new TypeInfo(nsType);
+                        metadata.UnionCases.Add(caseTypeInfo);
+                        metadata.Dependencies.Add(caseTypeInfo);
+
+                        logBuilder?.AppendLine($"//   Added namespace union case: {caseTypeInfo.FullName}");
+
+                        // Add to processing queue
+                        AddTypeToQueue(nsType, isNullable: false);
+                    }
+                }
+            }
+
+            // For separate implementations that might be in different namespaces,
+            // search the assembly for other types that derive from this one
+            if (assembly != null)
+            {
+                // If the type is abstract, log that we're searching deeper
+                if (type.IsAbstract)
+                {
+                    logBuilder?.AppendLine($"//   Searching for implementations of abstract type: {type.ToDisplayString()}");
+                }
+
+                var compilation = _compilation;
+                if (compilation != null)
+                {
+                    try
+                    {
+                        // Get all types from the compilation that might be candidates
+                        // This uses a more direct approach to find types in all namespaces
+                        foreach (var symbol in compilation.GetSymbolsWithName(
+                            s => !s.Contains("<") && !s.StartsWith("_"), // Filter out generic instantiations and compiler-generated names
+                            SymbolFilter.Type))
+                        {
+                            if (symbol is INamedTypeSymbol potentialType && 
+                                !potentialType.IsAbstract && 
+                                !SymbolEqualityComparer.Default.Equals(potentialType, type))
+                            {
+                                if (IsUnionCaseType(potentialType, type))
+                                {
+                                    string fullName = potentialType.ToDisplayString();
+                                    
+                                    // Skip if already processed
+                                    if (processedTypeFullNames.Contains(fullName))
+                                        continue;
+                                        
+                                    processedTypeFullNames.Add(fullName);
+                                    
+                                    // Check for duplicate type names
+                                    if (processedTypeNames.Contains(potentialType.Name))
+                                    {
+                                        logBuilder?.AppendLine($"//   Skipping duplicate type name: {potentialType.Name}");
+                                        continue;
+                                    }
+                                    
+                                    processedTypeNames.Add(potentialType.Name);
+                                    
+                                    var caseTypeInfo = new TypeInfo(potentialType);
+                                    metadata.UnionCases.Add(caseTypeInfo);
+                                    metadata.Dependencies.Add(caseTypeInfo);
+
+                                    logBuilder?.AppendLine($"//   Added cross-namespace union case: {caseTypeInfo.FullName}");
+
+                                    // Add to processing queue
+                                    AddTypeToQueue(potentialType, isNullable: false);
+                                }
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        // Log any exceptions during the search but continue processing
+                        logBuilder?.AppendLine($"//   Error during cross-namespace search: {ex.Message}");
+                    }
+                }
+            }
+
+            // Remove any duplicate union cases based on type name
+            var uniqueCases = new Dictionary<string, TypeInfo>();
+            foreach (var unionCase in metadata.UnionCases.ToList())
+            {
+                string typeName = unionCase.Name;
+                if (!uniqueCases.ContainsKey(typeName))
+                {
+                    uniqueCases[typeName] = unionCase;
+                }
+                else
+                {
+                    logBuilder?.AppendLine($"//   Removed duplicate union case name: {typeName}");
+                    metadata.UnionCases.Remove(unionCase);
+                }
+            }
+
+            logBuilder?.AppendLine($"//   Total union cases found: {metadata.UnionCases.Count}");
+        }
+
+        /// <summary>
+        /// Determines if a type is a valid union case for the given base type
+        /// </summary>
+        private bool IsUnionCaseType(ITypeSymbol candidateType, ITypeSymbol baseType)
+        {
+            // Must not be abstract
+            if (candidateType.IsAbstract)
+                return false;
+
+            // Must not be the base type itself
+            if (SymbolEqualityComparer.Default.Equals(candidateType, baseType))
+                return false;
+
+            // Check inheritance relationship
+            bool inheritsFromBase = false;
+
+            // Walk the inheritance chain
+            var currentType = candidateType;
+            while (currentType != null)
+            {
+                if (currentType.BaseType != null)
+                {
+                    // For generic types, we need to check the original definition
+                    if (currentType.BaseType is INamedTypeSymbol baseTypeSymbol && baseTypeSymbol.IsGenericType)
+                    {
+                        var baseTypeDef = baseTypeSymbol.OriginalDefinition;
+                        var unionBaseDef = baseType is INamedTypeSymbol namedBaseType && namedBaseType.IsGenericType
+                            ? namedBaseType.OriginalDefinition
+                            : baseType;
+
+                        if (SymbolEqualityComparer.Default.Equals(baseTypeDef, unionBaseDef))
+                        {
+                            inheritsFromBase = true;
+                            break;
+                        }
+                    }
+                    else
+                    {
+                        // Check direct inheritance
+                        if (SymbolEqualityComparer.Default.Equals(currentType.BaseType, baseType))
+                        {
+                            inheritsFromBase = true;
+                            break;
+                        }
+                        
+                        // For non-generic types, also check if base type name matches (for different assemblies)
+                        if (currentType.BaseType.Name == baseType.Name && 
+                            currentType.BaseType.ContainingNamespace?.ToString() == baseType.ContainingNamespace?.ToString())
+                        {
+                            inheritsFromBase = true;
+                            break;
+                        }
+                    }
+                }
+
+                currentType = currentType.BaseType;
+            }
+
+            // If we still haven't found a match and both types are named types,
+            // do a more thorough check for generic types
+            if (!inheritsFromBase && 
+                candidateType is INamedTypeSymbol candidateNamedType && 
+                baseType is INamedTypeSymbol baseNamedType)
+            {
+                // Handle special case for generic types in different compilation units
+                if (baseNamedType.IsGenericType)
+                {
+                    var baseTypeWithoutArgs = baseNamedType.Name.Split('`')[0];
+                    var candidateBase = candidateNamedType.BaseType;
+                    
+                    while (candidateBase != null)
+                    {
+                        if (candidateBase is INamedTypeSymbol candidateBaseNamed && candidateBaseNamed.IsGenericType)
+                        {
+                            var candidateBaseName = candidateBaseNamed.Name.Split('`')[0];
+                            if (candidateBaseName == baseTypeWithoutArgs && 
+                                candidateBaseNamed.ContainingNamespace?.ToString() == baseNamedType.ContainingNamespace?.ToString())
+                            {
+                                inheritsFromBase = true;
+                                break;
+                            }
+                        }
+                        
+                        candidateBase = candidateBase.BaseType;
+                    }
+                }
+            }
+
+            return inheritsFromBase;
         }
 
         /// <summary>

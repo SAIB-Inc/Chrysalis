@@ -16,7 +16,7 @@ public partial record AlonzoHeaderBody(
             [CborOrder(0)] ulong BlockNumber,
             [CborOrder(1)] ulong Slot,
             [CborOrder(2)][CborNullable] byte[] PrevHash,
-            [CborOrder(3)] ulong IssuerVKey,
+            [CborOrder(3)] byte[] IssuerVKey,
             [CborOrder(4)] byte[] VrfVKey,
             [CborOrder(5)] VrfCert NonceVrf,
             [CborOrder(6)] VrfCert LeaderVrf,

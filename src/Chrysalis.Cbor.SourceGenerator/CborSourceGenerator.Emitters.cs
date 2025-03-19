@@ -1495,4 +1495,246 @@ public sealed partial class CborSourceGenerator
                 throw new InvalidOperationException($""Cannot deserialize to type {typeof(T).Name}"");
             }";
     }
+
+    /// <summary>
+    /// Strategy for emitting Union type serialization
+    /// </summary>
+    private class UnionEmitterStrategy : EmitterStrategyBase
+    {
+        public override string EmitSerializer(SerializableType type)
+        {
+            var sb = new StringBuilder();
+
+            // Add validation if needed
+            ValidationHelpers.AddSerializationValidation(sb, type);
+
+            // For abstract parent type (marked with [CborUnion]), we need to serialize based on the concrete implementation
+            if (type.Type.IsAbstract)
+            {
+                sb.AppendLine("// This is an abstract union type - we need to delegate to the concrete implementation");
+                sb.AppendLine("Type valueType = value.GetType();");
+                sb.AppendLine();
+                
+                // If this is exactly the abstract type (not a subclass), we can't serialize it directly
+                sb.AppendLine($"if (valueType == typeof({type.Type.FullName}))");
+                sb.AppendLine("{");
+                sb.AppendLine("    throw new Exception($\"Cannot serialize abstract union type {value.GetType().Name} directly. Use a concrete implementation.\");");
+                sb.AppendLine("}");
+                sb.AppendLine();
+                
+                // It's a subclass, try to use its static Write method
+                sb.AppendLine("// Get the concrete type's static Write method");
+                sb.AppendLine("var writeMethod = valueType.GetMethod(\"Write\", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static, null, new[] { typeof(CborWriter), valueType }, null);");
+                sb.AppendLine("if (writeMethod != null)");
+                sb.AppendLine("{");
+                sb.AppendLine("    // Delegate to the concrete type's Write method");
+                sb.AppendLine("    writeMethod.Invoke(null, new object[] { writer, value });");
+                sb.AppendLine("    return;");
+                sb.AppendLine("}");
+                sb.AppendLine();
+                
+                // Try to write using the CborTypeName property to identify the concrete type
+                sb.AppendLine("// Try using the CborTypeName property to find the concrete implementation");
+                sb.AppendLine("if (value.CborTypeName != null)");
+                sb.AppendLine("{");
+                sb.AppendLine("    switch (value.CborTypeName)");
+                sb.AppendLine("    {");
+                
+                if (type.UnionCases.Count > 0)
+                {
+                    int caseCounter = 0;
+                    // Use a HashSet to track which case names we've already added
+                    var processedCaseNames = new HashSet<string>();
+                    
+                    foreach (var unionCase in type.UnionCases)
+                    {
+                        string caseTypeName = unionCase.FullName;
+                        string shortTypeName = unionCase.Name;
+                        
+                        // Skip duplicate case names
+                        if (processedCaseNames.Contains(shortTypeName))
+                            continue;
+                            
+                        processedCaseNames.Add(shortTypeName);
+                        string caseVarName = $"caseValue{caseCounter++}";
+
+                        sb.AppendLine($"        case \"{shortTypeName}\":");
+                        sb.AppendLine($"            // Cast to the specific type and delegate to its Write method");
+                        sb.AppendLine($"            var {caseVarName} = ({caseTypeName})value;");
+                        sb.AppendLine($"            {caseTypeName}.Write(writer, {caseVarName});");
+                        sb.AppendLine($"            return;");
+                    }
+                }
+                
+                sb.AppendLine("        default:");
+                sb.AppendLine("            break;");
+                sb.AppendLine("    }");
+                sb.AppendLine("}");
+                sb.AppendLine();
+                
+                // Final fallback - look for any matching implementation in the assembly
+                sb.AppendLine("// Final fallback - look for subtypes in the assembly");
+                sb.AppendLine($"var assembly = typeof({type.Type.FullName}).Assembly;");
+                sb.AppendLine("foreach (var potentialType in assembly.GetTypes())");
+                sb.AppendLine("{");
+                sb.AppendLine($"    if (!potentialType.IsAbstract && typeof({type.Type.FullName}).IsAssignableFrom(potentialType) && potentialType != typeof({type.Type.FullName}))");
+                sb.AppendLine("    {");
+                sb.AppendLine("        if (potentialType.IsInstanceOfType(value))");
+                sb.AppendLine("        {");
+                sb.AppendLine("            var subtypeWriteMethod = potentialType.GetMethod(\"Write\", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static, null, new[] { typeof(CborWriter), potentialType }, null);");
+                sb.AppendLine("            if (subtypeWriteMethod != null)");
+                sb.AppendLine("            {");
+                sb.AppendLine("                subtypeWriteMethod.Invoke(null, new object[] { writer, value });");
+                sb.AppendLine("                return;");
+                sb.AppendLine("            }");
+                sb.AppendLine("        }");
+                sb.AppendLine("    }");
+                sb.AppendLine("}");
+                sb.AppendLine();
+                
+                // Absolute last resort - throw an error
+                sb.AppendLine("throw new Exception($\"Could not serialize union type {value.GetType().Name}. No suitable serializer found.\");");
+            }
+            else
+            {
+                // For concrete implementation of a union type, implement normal serialization logic
+                // Whatever serialization approach the concrete type needs will be handled by the appropriate strategy
+
+                // Just delegate to the base strategy's implementation
+                if (type.Format == SerializationType.Map)
+                {
+                    return new MapEmitterStrategy().EmitSerializer(type);
+                }
+                else if (type.Format == SerializationType.Array)
+                {
+                    return new ArrayEmitterStrategy().EmitSerializer(type);
+                }
+                else if (type.Format == SerializationType.Constr)
+                {
+                    return new ConstrEmitterStrategy().EmitSerializer(type);
+                }
+                else
+                {
+                    return new MapEmitterStrategy().EmitSerializer(type);
+                }
+            }
+
+            return sb.ToString();
+        }
+
+        public override string EmitDeserializer(SerializableType type)
+        {
+            var sb = new StringBuilder();
+
+            // For abstract parent type (marked with [CborUnion]), we need a special deserializer
+            // that tries each subtype's deserializer until one succeeds
+            if (type.Type.IsAbstract)
+            {
+                // Store original data for later use
+                sb.AppendLine("// Store original data for reuse");
+                sb.AppendLine("var originalData = data;");
+                sb.AppendLine();
+                
+                // Try each known union case one by one
+                sb.AppendLine("// Try each known union case");
+                sb.AppendLine("Exception? lastException = null;");
+                
+                if (type.UnionCases.Count > 0)
+                {
+                    // Use a HashSet to track which types we've already tried to deserialize
+                    var processedCaseTypes = new HashSet<string>();
+                    
+                    foreach (var unionCase in type.UnionCases)
+                    {
+                        string caseTypeName = unionCase.FullName;
+                        string shortTypeName = unionCase.Name;
+                        
+                        // Skip duplicate deserializer attempts for the same concrete type
+                        if (processedCaseTypes.Contains(caseTypeName))
+                            continue;
+                            
+                        processedCaseTypes.Add(caseTypeName);
+    
+                        sb.AppendLine($"// Try {shortTypeName}");
+                        sb.AppendLine("try");
+                        sb.AppendLine("{");
+                        sb.AppendLine($"    var result = {caseTypeName}.Read(data, preserveRaw);");
+                        sb.AppendLine("    if (result != null)");
+                        sb.AppendLine("    {");
+                        sb.AppendLine($"        return ({type.Type.FullName})result;");
+                        sb.AppendLine("    }");
+                        sb.AppendLine("}");
+                        sb.AppendLine("catch (Exception ex)");
+                        sb.AppendLine("{");
+                        sb.AppendLine("    // Store exception but continue trying other cases");
+                        sb.AppendLine("    lastException = ex;");
+                        sb.AppendLine("}");
+                        sb.AppendLine();
+                    }
+                }
+                else
+                {
+                    // If we don't have any union cases explicitly discovered,
+                    // search the assembly for all potential implementations
+                    sb.AppendLine("// No known union cases - search the assembly for implementations");
+                    sb.AppendLine($"var assembly = typeof({type.Type.FullName}).Assembly;");
+                    sb.AppendLine();
+                    sb.AppendLine("// Try to find types in the same assembly that might be subtypes");
+                    sb.AppendLine("foreach (var potentialType in assembly.GetTypes())");
+                    sb.AppendLine("{");
+                    sb.AppendLine($"    if (!potentialType.IsAbstract && typeof({type.Type.FullName}).IsAssignableFrom(potentialType))");
+                    sb.AppendLine("    {");
+                    sb.AppendLine("        try");
+                    sb.AppendLine("        {");
+                    sb.AppendLine("            // Look for a static Read method on the type");
+                    sb.AppendLine("            var readMethod = potentialType.GetMethod(\"Read\", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static, null, new[] { typeof(ReadOnlyMemory<byte>), typeof(bool) }, null);");
+                    sb.AppendLine("            if (readMethod != null)");
+                    sb.AppendLine("            {");
+                    sb.AppendLine("                var result = readMethod.Invoke(null, new object[] { data, preserveRaw });");
+                    sb.AppendLine("                if (result != null)");
+                    sb.AppendLine("                {");
+                    sb.AppendLine($"                    return ({type.Type.FullName})result;");
+                    sb.AppendLine("                }");
+                    sb.AppendLine("            }");
+                    sb.AppendLine("        }");
+                    sb.AppendLine("        catch (Exception ex)");
+                    sb.AppendLine("        {");
+                    sb.AppendLine("            // Just store the exception and continue");
+                    sb.AppendLine("            lastException = ex;");
+                    sb.AppendLine("        }");
+                    sb.AppendLine("    }");
+                    sb.AppendLine("}");
+                }
+                
+                // All cases failed
+                sb.AppendLine("// All union cases failed");
+                sb.AppendLine($"throw new Exception($\"Could not deserialize any known case of {type.Type.Name}\", lastException);");
+            }
+            else
+            {
+                // For concrete implementation of a union type, implement normal deserialization logic
+                // Whatever deserialization approach the concrete type needs
+
+                // Just delegate to the base strategy's implementation
+                if (type.Format == SerializationType.Map)
+                {
+                    return new MapEmitterStrategy().EmitDeserializer(type);
+                }
+                else if (type.Format == SerializationType.Array)
+                {
+                    return new ArrayEmitterStrategy().EmitDeserializer(type);
+                }
+                else if (type.Format == SerializationType.Constr)
+                {
+                    return new ConstrEmitterStrategy().EmitDeserializer(type);
+                }
+                else
+                {
+                    return new MapEmitterStrategy().EmitDeserializer(type);
+                }
+            }
+
+            return sb.ToString();
+        }
+    }
 }

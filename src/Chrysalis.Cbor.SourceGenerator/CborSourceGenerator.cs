@@ -71,21 +71,21 @@ public sealed partial class CborSourceGenerator : IIncrementalGenerator
                 foreach (var type in serializationContext.Types)
                 {
                     string typeKey = type.Type.FullName;
-                    
+
                     // For generic types, use the name with arity instead of the full type name
                     // as the full name will contain the concrete type arguments
                     if (type.Type.IsGeneric)
                     {
                         typeKey = $"{type.Type.Namespace}.{type.Type.Name}";
                     }
-                    
+
                     if (!generatedTypes.Contains(typeKey))
                     {
                         typesToEmit.Add(type);
                         generatedTypes.Add(typeKey);
                     }
                 }
-                
+
                 // Create a new serialization context with just the types to emit
                 var filteredContext = new SerializationContext
                 {
