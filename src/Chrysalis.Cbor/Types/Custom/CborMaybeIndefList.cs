@@ -6,23 +6,25 @@ namespace Chrysalis.Cbor.Types.Custom;
 [CborUnion]
 public abstract partial record CborMaybeIndefList<T> : CborBase<CborMaybeIndefList<T>>
 {
-    [CborSerializable]
-    public partial record CborDefList(List<T> Value) : CborMaybeIndefList<T>;
-
-
-    [CborSerializable]
-    public partial record CborIndefList(List<T> Value) : CborMaybeIndefList<T>;
-
-
-    [CborSerializable]
-    [CborTag(258)]
-    public partial record CborDefListWithTag(List<T> Value) : CborMaybeIndefList<T>;
-
-
-    [CborSerializable]
-    [CborTag(258)]
-    public partial record CborIndefListWithTag(
-        [CborIndefinite]
-        List<T> Value
-    ) : CborMaybeIndefList<T>;
 }
+
+
+[CborSerializable]
+public partial record CborDefList<T>(List<T> Value) : CborMaybeIndefList<T>;
+
+
+[CborSerializable]
+public partial record CborIndefList<T>(List<T> Value) : CborMaybeIndefList<T>;
+
+
+[CborSerializable]
+[CborTag(258)]
+public partial record CborDefListWithTag<T>(List<T> Value) : CborMaybeIndefList<T>;
+
+
+[CborSerializable]
+[CborTag(258)]
+public partial record CborIndefListWithTag<T>(
+    [CborIndefinite]
+        List<T> Value
+) : CborMaybeIndefList<T>;

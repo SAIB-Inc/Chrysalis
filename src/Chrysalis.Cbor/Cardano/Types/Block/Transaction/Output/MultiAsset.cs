@@ -7,14 +7,15 @@ namespace Chrysalis.Cbor.Cardano.Types.Block.Transaction.Output;
 [CborUnion]
 public abstract partial record MultiAsset : CborBase<MultiAsset>
 {
-    [CborSerializable]
-    public partial record MultiAssetOutput(
-        Dictionary<byte[], TokenBundle.TokenBundleOutput> Value
-    ) : MultiAsset;
-
-
-    [CborSerializable]
-    public partial record MultiAssetMint(
-        Dictionary<byte[], TokenBundle.TokenBundleMint> Value
-    ) : MultiAsset;
 }
+
+[CborSerializable]
+public partial record MultiAssetOutput(
+    Dictionary<byte[], TokenBundleOutput> Value
+) : MultiAsset;
+
+
+[CborSerializable]
+public partial record MultiAssetMint(
+    Dictionary<byte[], TokenBundleMint> Value
+) : MultiAsset;

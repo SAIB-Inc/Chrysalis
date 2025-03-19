@@ -9,12 +9,13 @@ namespace Chrysalis.Cbor.Cardano.Types.Block.Transaction.WitnessSet;
 [CborUnion]
 public abstract partial record Redeemers : CborBase<Redeemers>
 {
-    [CborSerializable]
-    public partial record RedeemerList(List<RedeemerEntry> Value) : Redeemers;
-
-    [CborSerializable]
-    public partial record RedeemerMap(Dictionary<RedeemerKey, RedeemerValue> Value) : Redeemers;
 }
+
+[CborSerializable]
+public partial record RedeemerList(List<RedeemerEntry> Value) : Redeemers;
+
+[CborSerializable]
+public partial record RedeemerMap(Dictionary<RedeemerKey, RedeemerValue> Value) : Redeemers;
 
 [CborSerializable]
 [CborList]

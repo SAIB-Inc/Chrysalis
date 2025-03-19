@@ -8,9 +8,11 @@ namespace Chrysalis.Cbor.Cardano.Types.Block.Header.Body;
 [CborUnion]
 public abstract partial record BlockHeaderBody : CborBase<BlockHeaderBody>
 {
-    [CborSerializable]
-    [CborList]
-    public partial record AlonzoHeaderBody(
+}
+
+[CborSerializable]
+[CborList]
+public partial record AlonzoHeaderBody(
             [CborOrder(0)] ulong BlockNumber,
             [CborOrder(1)] ulong Slot,
             [CborOrder(2)][CborNullable] byte[] PrevHash,
@@ -28,18 +30,17 @@ public abstract partial record BlockHeaderBody : CborBase<BlockHeaderBody>
             [CborOrder(14)] ulong ProtocolMinor
         ) : BlockHeaderBody;
 
-    [CborSerializable]
-    [CborList]
-    public partial record BabbageHeaderBody(
-        [CborOrder(0)] ulong BlockNumber,
-        [CborOrder(1)] ulong Slot,
-        [CborOrder(2)][CborNullable] byte[] PrevHash,
-        [CborOrder(3)] byte[] IssuerVKey,
-        [CborOrder(4)] byte[] VrfVKey,
-        [CborOrder(5)] VrfCert VrfResult,
-        [CborOrder(6)] ulong BlockBodySize,
-        [CborOrder(7)] byte[] BlockBodyHash,
-        [CborOrder(8)] OperationalCert OperationalCert,
-        [CborOrder(9)] ProtocolVersion ProtocolVersion
-    ) : BlockHeaderBody;
-}
+[CborSerializable]
+[CborList]
+public partial record BabbageHeaderBody(
+    [CborOrder(0)] ulong BlockNumber,
+    [CborOrder(1)] ulong Slot,
+    [CborOrder(2)][CborNullable] byte[] PrevHash,
+    [CborOrder(3)] byte[] IssuerVKey,
+    [CborOrder(4)] byte[] VrfVKey,
+    [CborOrder(5)] VrfCert VrfResult,
+    [CborOrder(6)] ulong BlockBodySize,
+    [CborOrder(7)] byte[] BlockBodyHash,
+    [CborOrder(8)] OperationalCert OperationalCert,
+    [CborOrder(9)] ProtocolVersion ProtocolVersion
+) : BlockHeaderBody;

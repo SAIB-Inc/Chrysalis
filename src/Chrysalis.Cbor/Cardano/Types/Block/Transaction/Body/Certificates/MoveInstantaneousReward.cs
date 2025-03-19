@@ -17,11 +17,12 @@ public partial record MoveInstantaneousReward(
 [CborUnion]
 public abstract partial record Target : CborBase<Target>
 {
-    [CborSerializable]
-    public partial record StakeCredentials(Dictionary<Credential, ulong> Value) : Target;
-
-
-    [CborSerializable]
-    public partial record OtherAccountingPot(ulong Value) : Target;
 }
+
+[CborSerializable]
+public partial record StakeCredentials(Dictionary<Credential, ulong> Value) : Target;
+
+
+[CborSerializable]
+public partial record OtherAccountingPot(ulong Value) : Target;
 

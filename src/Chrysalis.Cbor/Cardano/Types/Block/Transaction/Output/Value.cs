@@ -7,13 +7,14 @@ namespace Chrysalis.Cbor.Cardano.Types.Block.Transaction.Output;
 [CborUnion]
 public abstract partial record Value : CborBase<Value>
 {
-    [CborSerializable]
-    public partial record Lovelace(ulong Value) : Value;
-
-    [CborSerializable]
-    [CborList]
-    public partial record LovelaceWithMultiAsset(
-         [CborOrder(0)] Lovelace LovelaceValue,
-         [CborOrder(1)] MultiAsset.MultiAssetOutput MultiAsset
-     ) : Value;
 }
+
+[CborSerializable]
+public partial record Lovelace(ulong Value) : Value;
+
+[CborSerializable]
+[CborList]
+public partial record LovelaceWithMultiAsset(
+     [CborOrder(0)] Lovelace LovelaceValue,
+     [CborOrder(1)] MultiAssetOutput MultiAsset
+ ) : Value;
