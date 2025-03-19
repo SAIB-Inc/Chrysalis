@@ -21,6 +21,7 @@ public record AlonzoTransactionWitnessSet(
 ) : TransactionWitnessSet;
 
 [CborConverter(typeof(CustomMapConverter))]
+[CborOptions(IsDefinite = true)]
 public record PostAlonzoTransactionWitnessSet(
     [CborIndex(0)] CborMaybeIndefList<VKeyWitness>? VKeyWitnessSet,
     [CborIndex(1)] CborMaybeIndefList<NativeScript>? NativeScriptSet,

@@ -15,14 +15,7 @@ public static class TransactionBodyExtension
     public static IEnumerable<TransactionInput> Inputs(this TransactionBody transactionBody)
         => transactionBody switch
         {
-            ConwayTransactionBody x => x.Inputs switch
-            {
-                CborDefList<TransactionInput> list => list.Value,
-                CborIndefList<TransactionInput> list => list.Value,
-                CborDefListWithTag<TransactionInput> list => list.Value,
-                CborIndefListWithTag<TransactionInput> list => list.Value,
-                _ => []
-            },
+            ConwayTransactionBody x => x.Inputs.Value,
             BabbageTransactionBody x => x.Inputs switch
             {
                 CborDefList<TransactionInput> list => list.Value,

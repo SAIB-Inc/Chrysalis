@@ -6,6 +6,7 @@ using Chrysalis.Cbor.Types.Primitives;
 namespace Chrysalis.Cbor.Cardano.Types.Block.Transaction.Input;
 
 [CborConverter(typeof(CustomListConverter))]
+[CborOptions(IsDefinite = true)]
 public record TransactionInput(
     [CborIndex(0)] CborBytes TransactionId,
     [CborIndex(1)] CborUlong Index

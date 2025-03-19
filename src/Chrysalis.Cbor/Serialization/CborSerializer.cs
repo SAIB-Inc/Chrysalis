@@ -53,8 +53,8 @@ public static class CborSerializer
             ICborConverter converter = CborRegistry.Instance.GetConverter(converterType);
             List<object?> filteredProperties = PropertyResolver.GetFilteredProperties(value);
             resolvedOptions.RuntimeType = resolvedType;
-            CborUtil.WriteTag(writer, options.Tag);
-            converter.Write(writer, filteredProperties, options);
+            CborUtil.WriteTag(writer, resolvedOptions.Tag);
+            converter.Write(writer, filteredProperties, resolvedOptions);
         }
         catch (Exception e)
         {

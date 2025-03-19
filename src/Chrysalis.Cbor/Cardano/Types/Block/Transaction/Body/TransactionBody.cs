@@ -58,7 +58,7 @@ public record BabbageTransactionBody(
 [CborConverter(typeof(CustomMapConverter))]
 [CborOptions(IsDefinite = true)]
 public record ConwayTransactionBody(
-    [CborIndex(0)] CborMaybeIndefList<TransactionInput> Inputs,
+    [CborIndex(0)] CborDefListWithTag<TransactionInput> Inputs,
     [CborIndex(1)] CborMaybeIndefList<TransactionOutput> Outputs,
     [CborIndex(2)] CborUlong Fee,
     [CborIndex(3)] CborUlong? TimeToLive,
@@ -68,13 +68,13 @@ public record ConwayTransactionBody(
     [CborIndex(8)] CborUlong? ValidityIntervalStart,
     [CborIndex(9)] MultiAssetMint? Mint,
     [CborIndex(11)] CborBytes? ScriptDataHash,
-    [CborIndex(13)] CborMaybeIndefList<TransactionInput>? Collateral,
+    [CborIndex(13)] CborDefListWithTag<TransactionInput>? Collateral,
     [CborIndex(14)] CborMaybeIndefList<CborBytes>? RequiredSigners,
     [CborIndex(15)] CborInt? NetworkId,
-    [CborIndex(16)] TransactionOutput? CollateralReturn,
+    [CborIndex(16)] TransactionOutput? CollateralReturn,    
     [CborIndex(17)] CborUlong? TotalCollateral,
-    [CborIndex(18)] CborMaybeIndefList<TransactionInput>? ReferenceInputs,
-    [CborIndex(19)] VotingProcedures VotingProcedures,
+    [CborIndex(18)] CborDefListWithTag<TransactionInput>? ReferenceInputs,
+    [CborIndex(19)] VotingProcedures? VotingProcedures,
     [CborIndex(20)] CborMaybeIndefList<ProposalProcedure>? ProposalProcedures,
     [CborIndex(21)] CborUlong? TreasuryValue,
     [CborIndex(22)] CborUlong? Donation
