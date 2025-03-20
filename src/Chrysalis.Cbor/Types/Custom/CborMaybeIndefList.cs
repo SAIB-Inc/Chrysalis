@@ -1,3 +1,4 @@
+using Chrysalis.Cbor.Cardano.Types.Block.Transaction.Output;
 using Chrysalis.Cbor.Serialization.Attributes;
 
 namespace Chrysalis.Cbor.Types.Custom;
@@ -7,7 +8,6 @@ namespace Chrysalis.Cbor.Types.Custom;
 public abstract partial record CborMaybeIndefList<T> : CborBase<CborMaybeIndefList<T>>
 {
 }
-
 
 [CborSerializable]
 public partial record CborDefList<T>(List<T> Value) : CborMaybeIndefList<T>;

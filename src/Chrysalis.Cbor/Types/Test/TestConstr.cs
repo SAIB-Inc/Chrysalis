@@ -1,4 +1,5 @@
 
+using Chrysalis.Cbor.Serialization;
 using Chrysalis.Cbor.Serialization.Attributes;
 using Chrysalis.Cbor.Types.Primitives;
 
@@ -13,10 +14,9 @@ public partial record TestConstr(
     byte[] BoundedBytesValue,
     [CborOrder(2)]
     byte[] UnboundedBytesValue,
-    [CborOrder(3)]
-    CborEncodedValue EncodedValue
-) : CborBase<TestConstr>;
-
+    [CborOrder(3)][CborNullable]
+    CborEncodedValue? EncodedValue
+) : CborBase<TestConstr>, ICborPreserveRaw;
 
 public class TestConstrValidator : ICborValidator<TestConstr>
 {

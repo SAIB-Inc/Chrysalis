@@ -1,4 +1,4 @@
-namespace Chrysalis.Cbor.Types;
+namespace Chrysalis.Cbor.Serialization;
 
 public interface ICborValidator<T>
 {

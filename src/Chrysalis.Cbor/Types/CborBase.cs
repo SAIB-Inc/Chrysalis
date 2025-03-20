@@ -1,5 +1,3 @@
-using System.Formats.Cbor;
-
 namespace Chrysalis.Cbor.Types;
 
 /// <summary>
@@ -8,7 +6,7 @@ namespace Chrysalis.Cbor.Types;
 /// <summary>
 /// Base class for all CBOR-serializable types
 /// </summary>
-public abstract partial record CborBase<T>
+public abstract partial record CborBase<T> where T : CborBase<T>
 {
     // Raw serialized data for caching and quick re-serialization
     public ReadOnlyMemory<byte>? Raw { get; set; }

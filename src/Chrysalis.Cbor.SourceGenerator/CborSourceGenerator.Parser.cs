@@ -134,12 +134,34 @@ public sealed partial class CborSourceGenerator
                     // Force array format for all list types, regardless of tag
                     metadata.Format = SerializationType.Array;
                     logBuilder.AppendLine($"// Forced format to Array for List-based custom type: {type.ToDisplayString()}");
+                    
+                    // Mark as array format but ensure we don't wrap the Value property in an additional array
+                    metadata.Format = SerializationType.Array;
+                    
+                    // Set indefinite flag appropriately for indefinite lists
+                    if (type.ToDisplayString().Contains("CborIndefList"))
+                    {
+                        metadata.IsIndefinite = true;
+                        logBuilder.AppendLine($"// Setting IsIndefinite = true for indefinite list type");
+                    }
 
-                    // For tagged variants, disable tag handling in the serialization/deserialization
+                    // For tagged variants, handle tags correctly
                     if (type.ToDisplayString().Contains("WithTag"))
                     {
-                        // Save tag value but remove the attribute to prevent the readtag and writetag calls
-                        logBuilder.AppendLine($"// Note: Tag handling for {type.ToDisplayString()} is manually implemented");
+                        // Make sure tag is processed
+                        foreach (var attr in type.GetAttributes())
+                        {
+                            if (attr.AttributeClass?.ToDisplayString() == Constants.CborTagAttributeFullName)
+                            {
+                                if (attr.ConstructorArguments.Length > 0)
+                                {
+                                    metadata.Tag = attr.ConstructorArguments[0].Value as int?;
+                                    logBuilder.AppendLine($"// Setting tag value: {metadata.Tag} for tagged list");
+                                }
+                            }
+                        }
+                        
+                        logBuilder.AppendLine($"// Note: Tag handling for {type.ToDisplayString()} is properly configured");
                     }
                 }
 
