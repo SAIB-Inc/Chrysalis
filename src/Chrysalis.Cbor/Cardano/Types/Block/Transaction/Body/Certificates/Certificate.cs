@@ -124,7 +124,7 @@ public abstract partial record Certificate : CborBase<Certificate>
         [CborOrder(0)] int Tag,
         [CborOrder(1)] Credential StakeCredential,
         [CborOrder(2)] byte[] PoolKeyHash,
-        [CborOrder(3)] DRep Drep,
+        [CborOrder(3)] DRep DRep,
         [CborOrder(4)] ulong Coin
     ) : Certificate;
 
@@ -151,7 +151,7 @@ public abstract partial record Certificate : CborBase<Certificate>
     [CborList]
     public partial record RegDrepCert(
         [CborOrder(0)] int Tag,
-        [CborOrder(1)] Credential DRepCredential,
+        [CborOrder(1)] Credential DrepCredential,
         [CborOrder(2)] ulong Coin,
         [CborOrder(3)][CborNullable] Anchor? Anchor
     ) : Certificate;

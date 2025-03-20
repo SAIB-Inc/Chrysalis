@@ -47,7 +47,7 @@ public abstract partial record NativeScript : CborBase<NativeScript>
 
     [CborSerializable]
     [CborList]
-    public partial record InvalidHereafter(
+    public partial record InvalidHereAfter(
         [CborOrder(0)] int Tag,
         [CborOrder(1)] ulong Slot
     ) : NativeScript;
