@@ -6,7 +6,7 @@ using Chrysalis.Cbor.Cardano.Types.Block.Transaction.Input;
 using Chrysalis.Cbor.Cardano.Types.Block.Transaction.Output;
 
 namespace Chrysalis.Tx.Models;
-public record Utxo(
+public record ResolvedInput(
     [CborIndex(0)]TransactionInput Outref,
     [CborIndex(1)]TransactionOutput Output
 );
