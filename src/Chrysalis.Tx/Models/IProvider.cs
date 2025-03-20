@@ -1,8 +1,10 @@
 
+using Chrysalis.Cbor.Cardano.Types.Block.Transaction.Protocol;
+
 namespace Chrysalis.Tx.Models;
 
 public interface IProvider
 {
-    public Task<List<Utxo>> GetUtxosAsync(string address);
-    // Todo: Add more methods
+    public Task<List<ResolvedInput>> GetUtxosAsync(string address);
+    public Task<ConwayProtocolParamUpdate> GetParametersAsync();    // Todo: Add more methods
 }
