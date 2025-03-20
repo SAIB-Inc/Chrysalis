@@ -6,14 +6,14 @@ using Chrysalis.Cbor.Utils.Transaction;
 using Xunit;
 using Chrysalis.Cbor.Serialization;
 using Chrysalis.Tx.Utils;
-using Chrysalis.Tx.Services;
 using Chrysalis.Tx.Services.Encoding;
 using Chrysalis.Tx.Words;
 using Chrysalis.Tx.Models.Keys;
 using Chrysalis.Tx.Extensions;
-using Chaos.NaCl;
 using System.Text;
 using Chrysalis.Tx.Models.Enums;
+using Chrysalis.Tx.Models.Addresses;
+using Address = Chrysalis.Tx.Models.Addresses.Address;
 
 namespace Chrysalis.Tx.Test;
 
@@ -190,7 +190,7 @@ public class TxTests
 
         string expectedOutput = "019493315cd92eb5d8c4304e67b7e16ae36d61d34502694657811a2c8e337b62cfff6403a06a3acbc34f8c46003c69fe79a3628cefa9c47251";
 
-        (string hrp, byte[] data) = Bech32Encoder.Decode(bech32Addr);
+        (string hrp, byte[] data) = Bech32Codec.Decode(bech32Addr);
         string result = Convert.ToHexStringLower(data);
         // var paymentAndDelegation = Bech32Encoder.ExtractPaymentAndDelegation(data);
         // paymentAndDelegation.paymentPart
@@ -204,7 +204,7 @@ public class TxTests
 
         string expectedOutput = "addr1qx2fxv2umyhttkxyxp8x0dlpdt3k6cwng5pxj3jhsydzer3n0d3vllmyqwsx5wktcd8cc3sq835lu7drv2xwl2wywfgse35a3x";
 
-        string result = Bech32Encoder.Encode(addressBytes, "addr");
+        string result = Bech32Codec.Encode(addressBytes, "addr");
 
         Assert.Equal(expectedOutput, result);
     }
@@ -296,7 +296,7 @@ public class TxTests
         byte header = AddressUtil.GetHeader(AddressUtil.GetNetworkInfo(NetworkType.Testnet), AddressType.BasePayment);
         string prefix = AddressUtil.GetPrefix(AddressType.BasePayment, NetworkType.Testnet);
 
-        string address = Bech32Encoder.Encode([header, .. addressBody], prefix);
+        string address = Bech32Codec.Encode([header, .. addressBody], prefix);
 
         Assert.Equal(expectedAddress, address);
     }
@@ -397,6 +397,31 @@ public class TxTests
         bool verified = pkPub.Verify(txHash, signature);
         Assert.True(signature.SequenceEqual(signatureFromBlaze));
         Assert.True(verified);
+    }
+
+    [Fact]
+    public void Address_ByteConstructor_Test()
+    {
+        byte[] addressBytes = Convert.FromHexString("002b097cb1513202c8d33e73b09f85aca2c8ed3bed48b9fed4b1b89a916686835f68f6531aea676d87fae51771504cc0fbe479130ffab81cf0");
+        string expectedEncodedAddress = "addr_test1qq4sjl932yeq9jxn8eemp8u94j3v3mfma4ytnlk5kxuf4ytxs6p4768k2vdw5emdslaw29m32pxvp7ly0yfsl74crncq7evfjf";
+
+        Address address = new(addressBytes);
+        Address address1 = Address.FromBytes(addressBytes);
+        Assert.Equal(expectedEncodedAddress, address.ToBech32());
+        Assert.Equal(expectedEncodedAddress, address1.ToBech32());
+    }
+
+    [Fact]
+    public void Address_Bech32Constructor_Test()
+    {
+        byte[] addressBytes = Convert.FromHexString("002b097cb1513202c8d33e73b09f85aca2c8ed3bed48b9fed4b1b89a916686835f68f6531aea676d87fae51771504cc0fbe479130ffab81cf0");
+        string expectedEncodedAddress = "addr_test1qq4sjl932yeq9jxn8eemp8u94j3v3mfma4ytnlk5kxuf4ytxs6p4768k2vdw5emdslaw29m32pxvp7ly0yfsl74crncq7evfjf";
+
+        Address address = new(expectedEncodedAddress);
+        Address address1 = Address.FromBech32(expectedEncodedAddress);
+
+        Assert.Equal(address.ToBytes(), addressBytes);
+        Assert.Equal(address1.ToBytes(), addressBytes);
     }
 }
 
