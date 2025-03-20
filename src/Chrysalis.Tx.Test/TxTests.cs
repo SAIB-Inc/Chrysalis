@@ -10,11 +10,10 @@ using Chrysalis.Tx.Services;
 using Chrysalis.Tx.Services.Encoding;
 using Chrysalis.Tx.Words;
 using Chrysalis.Tx.Models.Keys;
-using Chrysalis.Tx.Derivations.Extensions;
-using Chrysalis.Tx.Models.Enums;
 using Chrysalis.Tx.Extensions;
-using Chrysalis.Tx.Derivations;
-using dotnetstandard_bip39;
+using Chaos.NaCl;
+using System.Text;
+using Chrysalis.Tx.Models.Enums;
 
 namespace Chrysalis.Tx.Test;
 
@@ -191,8 +190,8 @@ public class TxTests
 
         string expectedOutput = "019493315cd92eb5d8c4304e67b7e16ae36d61d34502694657811a2c8e337b62cfff6403a06a3acbc34f8c46003c69fe79a3628cefa9c47251";
 
-        var (hrp, data) = Bech32Encoder.Decode(bech32Addr);
-        var result = Convert.ToHexStringLower(data);
+        (string hrp, byte[] data) = Bech32Encoder.Decode(bech32Addr);
+        string result = Convert.ToHexStringLower(data);
         // var paymentAndDelegation = Bech32Encoder.ExtractPaymentAndDelegation(data);
         // paymentAndDelegation.paymentPart
         Assert.Equal(expectedOutput, result);
@@ -206,41 +205,198 @@ public class TxTests
         string expectedOutput = "addr1qx2fxv2umyhttkxyxp8x0dlpdt3k6cwng5pxj3jhsydzer3n0d3vllmyqwsx5wktcd8cc3sq835lu7drv2xwl2wywfgse35a3x";
 
         string result = Bech32Encoder.Encode(addressBytes, "addr");
-        
 
         Assert.Equal(expectedOutput, result);
     }
 
-    // [Fact]
-    // public void AddressDerivation_Encode_Test()
-    // {
-    //     string words = "gesture figure area company load wash drive south bicycle youth luggage bronze chunk false nature warrior genre bless fish cool purity already habit cement";
+    [Fact]
+    public void Mnemonic_Restore_Test()
+    {
+        // Generated from blaze
+        byte[] expectedOutput = Convert.FromHexString("616ac02d17482feed0d68115ffee130e528aa4a4dfba6102f55e97eae40e5a09");
 
-    //     MnemonicKey mnemonic = Mnemonic.Restore(words, English.Words);
-    //     PrivateKey rootKey = mnemonic.GetRootKey();
+        string words = "gesture figure area company load wash drive south bicycle youth luggage bronze chunk false nature warrior genre bless fish cool purity already habit cement";
 
-    //     (PrivateKey? paymentPrv1, PublicKey? paymentPub1) = TxTestUtils.GetKeyPairFromPath("m/1855'/1815'/0'", rootKey);
+        Mnemonic result = Mnemonic.Restore(words, English.Words);
+        Assert.Equal(expectedOutput, result.Entropy);
+    }
 
-    //     string bip39words = "gesture\r figure\r area\r company\r load\r wash\r drive\r south\r bicycle\r youth\r luggage\r bronze\r chunk\r false\r nature\r warrior\r genre\r bless\r fish\r cool\r purity\r already\r habit\r cement\r";
-    //     var bip39 = new BIP39();
-    //     var bip39words1 = bip39.GenerateMnemonic(256, BIP39Wordlist.English);
-    //     byte[] entropy = Convert.FromHexString(bip39.MnemonicToEntropy(bip39words, BIP39Wordlist.English));
-    //     MnemonicKey mnemonicKey = new(words.Split(' '), entropy);
+    [Fact]
+    public void Mnemonic_RestoreV2_Test()
+    {
+        // Generated from blaze
+        byte[] expectedOutput = Convert.FromHexString("616ac02d17482feed0d68115ffee130e528aa4a4dfba6102f55e97eae40e5a09");
 
-    //     Assert.Equal(mnemonicKey.GetRootKey().Key, mnemonic.GetRootKey().Key);
-    //     Assert.Equal(mnemonicKey.GetRootKey().Chaincode, mnemonic.GetRootKey().Chaincode);
+        string words = "gesture figure area company load wash drive south bicycle youth luggage bronze chunk false nature warrior genre bless fish cool purity already habit cement";
 
-    //     // IAccountNodeDerivation paymentDerivation = rootKey.Derive()     // IMasterNodeDerivation
-    //     //     .Derive(PurposeType.PolicyKeys)             // IPurposeNodeDerivation
-    //     //     .Derive(CoinType.Ada)                       // ICoinNodeDerivation
-    //     //     .Derive(0);                                 // IAccountNodeDerivation
+        Mnemonic result = Mnemonic.CreateMnemonicFromEntropy(expectedOutput, English.Words);
+        Mnemonic result1 = Mnemonic.Restore(words, English.Words);
 
-    //     // Assert
-    //     // Assert.Equal(paymentPrv1.Key, paymentDerivation.PrivateKey.Key);
-    //     // Assert.Equal(paymentPrv1.Chaincode, paymentDerivation.PrivateKey.Chaincode);
+        Assert.Equal(result1.Words, result.Words);
+        Assert.Equal(result1.Entropy, result.Entropy);
+    }
 
-    //     // Assert.Equal(paymentPub1.Key, paymentDerivation.PublicKey.Key);
-    //     // Assert.Equal(paymentPub1.Chaincode, paymentDerivation.PublicKey.Chaincode);
-    // }
+    [Fact]
+    public void Mnemonic_RootKeyHex_Test()
+    {
+        // Generated from blaze
+        byte[] expectedKeyOutput = Convert.FromHexString("e8becc107d4081aba54a56d492d8dce48afdafbf52db0637277fbf513765db475aa54be739be6b77a827133fe7850816deed7964391048b16136206a82932b1e");
+        byte[] expectedChainOutput = Convert.FromHexString("76572a2a6faf7982b945582a13fa37e0ff8a322818bdfb0f80a8c41d378398f9");
+
+        string words = "gesture figure area company load wash drive south bicycle youth luggage bronze chunk false nature warrior genre bless fish cool purity already habit cement";
+
+        Mnemonic mnemonic = Mnemonic.Restore(words, English.Words);
+        PrivateKey rootKey = mnemonic.GetRootKey();
+
+        Assert.Equal(expectedKeyOutput, rootKey.Key);
+        Assert.Equal(expectedChainOutput, rootKey.Chaincode);
+    }
+
+    [Fact]
+    public void Mnemonic_GetPublicKey_Test()
+    {
+        // Generated from blaze
+        byte[] expectedKeyOutput = Convert.FromHexString("c2e51b9cc7a55bf75c6b48cf3fcabaaf06884e199050efb537be15a9c95d2fb1");
+        byte[] expectedChainOutput = Convert.FromHexString("76572a2a6faf7982b945582a13fa37e0ff8a322818bdfb0f80a8c41d378398f9");
+        string words = "gesture figure area company load wash drive south bicycle youth luggage bronze chunk false nature warrior genre bless fish cool purity already habit cement";
+
+        Mnemonic mnemonic = Mnemonic.Restore(words, English.Words);
+        PrivateKey rootKey = mnemonic.GetRootKey();
+        PublicKey publicKey = rootKey.GetPublicKey();
+
+        Assert.Equal(expectedKeyOutput, publicKey.Key);
+        Assert.Equal(expectedChainOutput, publicKey.Chaincode);
+    }
+
+    [Fact]
+    public void BIP32_Address_Test()
+    {
+        // Generated from blaze
+        string expectedAddress = "addr_test1qq4sjl932yeq9jxn8eemp8u94j3v3mfma4ytnlk5kxuf4ytxs6p4768k2vdw5emdslaw29m32pxvp7ly0yfsl74crncq7evfjf";
+        string words = "gesture figure area company load wash drive south bicycle youth luggage bronze chunk false nature warrior genre bless fish cool purity already habit cement";
+
+        Mnemonic mnemonic = Mnemonic.Restore(words, English.Words);
+        PrivateKey accountKey = mnemonic
+            .GetRootKey()
+            .Derive(PurposeType.Shelley, DerivationType.HARD)
+            .Derive(CoinType.Ada, DerivationType.HARD)
+            .Derive(0, DerivationType.HARD);
+
+        PublicKey pkPub = accountKey
+            .Derive(RoleType.ExternalChain)
+            .Derive(0)
+            .GetPublicKey();
+
+        PublicKey skPub = accountKey
+            .Derive(RoleType.Staking)
+            .Derive(0)
+            .GetPublicKey();
+
+        byte[] addressBody = [.. HashUtil.Blake2b224(pkPub.Key), .. HashUtil.Blake2b224(skPub.Key)];
+        byte header = AddressUtil.GetHeader(AddressUtil.GetNetworkInfo(NetworkType.Testnet), AddressType.BasePayment);
+        string prefix = AddressUtil.GetPrefix(AddressType.BasePayment, NetworkType.Testnet);
+
+        string address = Bech32Encoder.Encode([header, .. addressBody], prefix);
+
+        Assert.Equal(expectedAddress, address);
+    }
+
+    [Fact]
+    public void BIP32_PublicKey_Test()
+    {
+        // Generated from blaze
+        byte[] expectedPublicKeyBytes = Convert.FromHexString("2b097cb1513202c8d33e73b09f85aca2c8ed3bed48b9fed4b1b89a91");
+        string words = "gesture figure area company load wash drive south bicycle youth luggage bronze chunk false nature warrior genre bless fish cool purity already habit cement";
+
+        Mnemonic mnemonic = Mnemonic.Restore(words, English.Words);
+        PrivateKey accountKey = mnemonic
+            .GetRootKey()
+            .Derive(PurposeType.Shelley, DerivationType.HARD)
+            .Derive(CoinType.Ada, DerivationType.HARD)
+            .Derive(0, DerivationType.HARD);
+
+        PublicKey pkPub = accountKey
+            .Derive(RoleType.ExternalChain)
+            .Derive(0)
+            .GetPublicKey();
+
+        byte[] hashedPubKey = HashUtil.Blake2b224(pkPub.Key);
+        Assert.Equal(expectedPublicKeyBytes, hashedPubKey);
+    }
+
+    [Fact]
+    public void BIP32_StakeKey_Test()
+    {
+        // Generated from blaze
+        byte[] expectedStakingKeyBytes = Convert.FromHexString("6686835f68f6531aea676d87fae51771504cc0fbe479130ffab81cf0");
+        string words = "gesture figure area company load wash drive south bicycle youth luggage bronze chunk false nature warrior genre bless fish cool purity already habit cement";
+
+        Mnemonic mnemonic = Mnemonic.Restore(words, English.Words);
+        PrivateKey accountKey = mnemonic
+            .GetRootKey()
+            .Derive(PurposeType.Shelley, DerivationType.HARD)
+            .Derive(CoinType.Ada, DerivationType.HARD)
+            .Derive(0, DerivationType.HARD);
+
+        PublicKey skPub = accountKey
+            .Derive(RoleType.Staking)
+            .Derive(0)
+            .GetPublicKey();
+
+        byte[] hashedStakeKey = HashUtil.Blake2b224(skPub.Key);
+
+        Assert.Equal(expectedStakingKeyBytes, hashedStakeKey);
+    }
+
+    [Fact]
+    public void Mnemonic_IsValidMnemonic_Test()
+    {
+        Mnemonic mnemonic = Mnemonic.Generate(English.Words);
+
+        Assert.Equal([], []);
+    }
+
+    [Theory]
+    [InlineData("message")]
+    [InlineData("verified")]
+    public void Key_SignVerify_Test(string message)
+    {
+        KeyPair keyPair = KeyPair.GenerateKeyPair();
+        byte[] messageByte = Encoding.UTF8.GetBytes(message);
+
+        byte[] signature = keyPair.PrivateKey.Sign(messageByte);
+        bool verified = keyPair.PublicKey.Verify(messageByte, signature);
+
+        Assert.True(verified);
+    }
+
+    [Fact]
+    public void Key_SignTx_Test()
+    {
+        byte[] txBodyBytes = Convert.FromHexString("a300d90102818258209d18eba8c164bf6a145abe1288d206ef7bb992dfefb2c22b9eaa08162e3ac0d9020182825839002b097cb1513202c8d33e73b09f85aca2c8ed3bed48b9fed4b1b89a916686835f68f6531aea676d87fae51771504cc0fbe479130ffab81cf01a001e8480825839002b097cb1513202c8d33e73b09f85aca2c8ed3bed48b9fed4b1b89a916686835f68f6531aea676d87fae51771504cc0fbe479130ffab81cf01b00000001230c6bed021a0002917d");
+
+        string words = "gesture figure area company load wash drive south bicycle youth luggage bronze chunk false nature warrior genre bless fish cool purity already habit cement";
+
+        Mnemonic mnemonic = Mnemonic.Restore(words, English.Words);
+        PrivateKey accountKey = mnemonic
+            .GetRootKey()
+            .Derive(PurposeType.Shelley, DerivationType.HARD)
+            .Derive(CoinType.Ada, DerivationType.HARD)
+            .Derive(0, DerivationType.HARD);
+
+        PrivateKey pkPriv = accountKey
+            .Derive(RoleType.ExternalChain)
+            .Derive(0);
+
+        PublicKey pkPub = pkPriv.GetPublicKey();
+
+        byte[] txHash = HashUtil.Blake2b256(txBodyBytes);
+        byte[] signature = pkPriv.Sign(txHash);
+        byte[] signatureFromBlaze = Convert.FromHexString("846e3c4461dd98a02553c4ccbf943e015b8f6a1ec699769a6feb71087f29a4edd2d4eb3a5ba5c6b78d84bd56908e216959254cb785bec2b96e2b5a9a0f9b1809");
+
+        bool verified = pkPub.Verify(txHash, signature);
+        Assert.True(signature.SequenceEqual(signatureFromBlaze));
+        Assert.True(verified);
+    }
 }
 

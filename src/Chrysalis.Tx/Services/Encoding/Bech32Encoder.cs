@@ -3,7 +3,7 @@ using Chrysalis.Tx.Models.Enums;
 
 namespace Chrysalis.Tx.Services.Encoding;
 
-public class Bech32Encoder
+public static class Bech32Encoder
 {
     private const int CheckSumSize = 6;
     private const int HrpMinLength = 1;

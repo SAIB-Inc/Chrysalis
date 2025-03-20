@@ -13,7 +13,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="NSec.Cryptography" Version="24.4.0" />
+    <PackageReference Include="NSec.Cryptography" Version="25.2.0-preview.3" />
     <PackageReference Include="SauceControl.Blake2Fast" Version="2.0.0" />
     <PackageReference Include="System.Formats.Cbor" Version="9.0.2" />
   </ItemGroup>
