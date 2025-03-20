@@ -46,7 +46,7 @@ public class Address
         if (delegationPart != null)
         {
             CredentialType delegationType = (CredentialType)(delegationPart[0] >> 7);
-            byte[] delegationHash = delegationPart.Skip(1).Take(27).ToArray();
+            byte[] delegationHash = [.. delegationPart.Skip(1).Take(27)];
             StakeCredential = new Credential(delegationType, delegationHash);
         }
         _addressBytes = ConstructAddressBytes(type, network, PaymentCredential, StakeCredential);
