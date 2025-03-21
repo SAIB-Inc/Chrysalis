@@ -1,4 +1,5 @@
 
+using System.Collections.Concurrent;
 using System.Formats.Cbor;
 using System.Reflection;
 using Chrysalis.Cbor.Types.Primitives;
@@ -9,7 +10,7 @@ public delegate T ReadDelegate<T>(ReadOnlyMemory<byte> data);
 
 public static class GenericSerializationUtil
 {
-    private static readonly Dictionary<Type, Delegate> ReadMethodCache = [];
+    private static readonly ConcurrentDictionary<Type, Delegate> ReadMethodCache = [];
 
     public static T? Read<T>(CborReader reader)
     {
