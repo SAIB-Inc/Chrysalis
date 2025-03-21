@@ -13,8 +13,8 @@ public abstract partial record DRep : CborBase<DRep>
 [CborSerializable]
 [CborList]
 public partial record DRepAddrKeyHash(
-    [CborOrder(0)] int Tag,
-    [CborOrder(1)] byte[] AddrKeyHash
+[CborOrder(0)] int Tag,
+[CborOrder(1)] byte[] AddrKeyHash
 ) : DRep;
 
 [CborSerializable]
@@ -35,3 +35,4 @@ public partial record Abstain(
 public partial record DRepNoConfidence(
     [CborOrder(0)] int Tag
 ) : DRep;
+

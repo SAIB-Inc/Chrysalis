@@ -13,6 +13,7 @@ public abstract partial record TestUnion : CborBase<TestUnion>
         int Value1,
         [CborOrder(1)]
         List<TestConstr> Value2,
+        [CborOrder(2)]
         Dictionary<string, TestConstr> Value3
     ) : TestUnion;
 
@@ -44,15 +45,15 @@ public abstract partial record TestUnion : CborBase<TestUnion>
     [CborSerializable]
     [CborMap]
     public partial record TestMapUnion(
-        [property: CborProperty("0")]
+        [CborProperty(0)]
         int Value1,
-        [property: CborProperty("1")]
+        [CborProperty(1)]
         byte[] Value2,
-        [property: CborProperty("2")]
+        [CborProperty(2)]
         string Value3,
-        [property: CborProperty("3")]
+        [CborProperty(3)]
         bool Value4,
-        [property: CborProperty("4")]
+        [CborProperty(4)]
         long Value6
     ) : TestUnion;
 
@@ -60,9 +61,9 @@ public abstract partial record TestUnion : CborBase<TestUnion>
     [CborSerializable]
     [CborMap]
     public partial record NullableTestMapUnion(
-        [property: CborProperty("0")]
+        [CborProperty(0)]
         int Value1,
-        [property: CborProperty("1")]
+        [CborProperty(1)]
         [CborNullable]
         string Value2
     ) : TestUnion;

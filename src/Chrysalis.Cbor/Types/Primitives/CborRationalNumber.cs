@@ -4,4 +4,8 @@ namespace Chrysalis.Cbor.Types.Primitives;
 
 [CborSerializable]
 [CborTag(30)]
-public partial record CborRationalNumber(ulong Numerator, ulong Denominator) : CborBase<CborRationalNumber>;
+[CborList]
+public partial record CborRationalNumber(
+    [CborOrder(0)] ulong Numerator,
+    [CborOrder(1)] ulong Denominator
+) : CborBase<CborRationalNumber>;

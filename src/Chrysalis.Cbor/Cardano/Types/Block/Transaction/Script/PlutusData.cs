@@ -10,9 +10,8 @@ public abstract partial record PlutusData : CborBase<PlutusData>
 }
 
 [CborSerializable]
-[CborConstr(0)]
+[CborConstr]
 public partial record PlutusConstr(List<PlutusData> PlutusData) : PlutusData;
-
 
 [CborSerializable]
 public partial record PlutusMap(Dictionary<PlutusData, PlutusData> PlutusData) : PlutusData;
@@ -39,7 +38,6 @@ public partial record PlutusInt64(long Value) : PlutusInt;
 [CborSerializable]
 public partial record PlutusUint64(ulong Value) : PlutusInt;
 
-
 [CborSerializable]
 public partial record PlutusBigUint([CborSize(64)] byte[] Value) : PlutusBigInt;
 
@@ -48,4 +46,3 @@ public partial record PlutusBigNint([CborSize(64)] byte[] Value) : PlutusBigInt;
 
 [CborSerializable]
 public partial record PlutusBoundedBytes([CborSize(64)] byte[] Value) : PlutusData;
-

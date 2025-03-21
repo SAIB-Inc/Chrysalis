@@ -9,16 +9,18 @@ namespace Chrysalis.Cbor.Cardano.Types.Block;
 
 [CborSerializable]
 [CborUnion]
-public abstract partial record Block : CborBase<Block> { }
+public abstract partial record Block : CborBase<Block>
+{
+}
 
 [CborSerializable]
 [CborList]
 public partial record AlonzoCompatibleBlock(
-    [CborOrder(0)] BlockHeader Header,
-    [CborOrder(1)] CborMaybeIndefList<AlonzoTransactionBody> TransactionBodies,
-    [CborOrder(2)] CborMaybeIndefList<AlonzoTransactionWitnessSet> TransactionWitnessSets,
-    [CborOrder(3)] AuxiliaryDataSet AuxiliaryDataSet,
-    [CborOrder(4)] CborMaybeIndefList<int>? InvalidTransactions
+[CborOrder(0)] BlockHeader Header,
+[CborOrder(1)] CborMaybeIndefList<AlonzoTransactionBody> TransactionBodies,
+[CborOrder(2)] CborMaybeIndefList<AlonzoTransactionWitnessSet> TransactionWitnessSets,
+[CborOrder(3)] AuxiliaryDataSet AuxiliaryDataSet,
+[CborOrder(4)] CborMaybeIndefList<int>? InvalidTransactions
 ) : Block;
 
 [CborSerializable]

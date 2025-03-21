@@ -1503,7 +1503,7 @@ public sealed partial class CborSourceGenerator
             sb.AppendLine("        else");
             sb.AppendLine("        {");
             sb.AppendLine("            // Read the encoded value for later use");
-            sb.AppendLine("            var encodedValue = reader.ReadEncodedValue();");
+            sb.AppendLine("            var encodedValue = reader.ReadEncodedValue(true);");
             sb.AppendLine("            ");
             sb.AppendLine("            // Since T is a type parameter, we need to find the appropriate deserialization");
             sb.AppendLine("            // This will be handled by the runtime based on the concrete type being used");

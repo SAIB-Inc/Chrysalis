@@ -22,7 +22,7 @@ public partial record ScriptPubKey(
 [CborList]
 public partial record ScriptAll(
     [CborOrder(0)] int Tag,
-    [CborOrder(1)] CborDefList<NativeScript> Scripts
+    [CborOrder(1)] CborIndefList<NativeScript> Scripts
 ) : NativeScript;
 
 [CborSerializable]

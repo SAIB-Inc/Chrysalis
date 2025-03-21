@@ -1,5 +1,6 @@
 using Chrysalis.Cbor.Serialization.Attributes;
 using Chrysalis.Cbor.Types;
+using static Chrysalis.Cbor.Cardano.Types.Block.Transaction.Output.TokenBundle;
 
 namespace Chrysalis.Cbor.Cardano.Types.Block.Transaction.Output;
 

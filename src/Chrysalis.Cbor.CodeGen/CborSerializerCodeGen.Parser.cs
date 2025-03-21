@@ -55,15 +55,42 @@ public sealed partial class CborSerializerCodeGen
 
         public static SerializableTypeMetadata? ParseSerialazableType(TypeDeclarationSyntax tds, SemanticModel model)
         {
-
             IEnumerable<AttributeSyntax> attributes = tds.AttributeLists.SelectMany(a => a.Attributes);
             AttributeSyntax? cborSerializableAttribute = attributes.FirstOrDefault(a => a.Name.ToString() == CborSerializable);
 
             if (cborSerializableAttribute == null) return null;
 
-            string identifier = tds.Identifier.ToFullString();
-            string? @namespace = tds.GetNamespace();
+            // Get the containing namespace (without parent types)
+            string baseNamespace = GetBaseNamespace(tds, model);
+
+            // Get the full namespace with parent types for the fully qualified name
+            (string path, string parentTypeParams) = GetFullNamespaceWithParentsAndTypeParams(tds, model);
+
+            // Get the keyword (class, record, struct, etc.)
             string? keyword = tds.Keyword.ToFullString();
+
+            // Set the namespace to just the base namespace
+            string? @namespace = baseNamespace;
+
+            // Get the type parameters if any
+            string? typeParams = null;
+            if (tds is TypeDeclarationSyntax typeDecl && typeDecl.TypeParameterList != null)
+            {
+                typeParams = typeDecl.TypeParameterList.ToString();
+            }
+
+            typeParams ??= parentTypeParams;
+
+            string baseIdentifier = RemoveGenericPart(tds.Identifier.ToFullString());
+            string identifier = $"{baseIdentifier}{typeParams}";
+
+            // For the fully qualified name, use the full path including parent types
+            string fullyQualifiedName = string.IsNullOrEmpty(path) ? baseIdentifier : $"{path}.{baseIdentifier}";
+
+            if (string.IsNullOrEmpty(parentTypeParams))
+            {
+                fullyQualifiedName = $"{fullyQualifiedName}{typeParams}";
+            }
 
             // Extract type attributes
             AttributeSyntax? cborMapAttribute = attributes.FirstOrDefault(a => a.Name.ToString() == CborMap);
@@ -82,14 +109,12 @@ public sealed partial class CborSerializerCodeGen
             IEnumerable<SerializablePropertyMetadata> properties = GetPropertyMetadata(tds, model);
             IEnumerable<SerializableTypeMetadata> childTypes = [];
 
-            if (serializationType == SerializationType.Union)
-            {
-                childTypes = GetChildTypes(tds, model);
-            }
-
             SerializableTypeMetadata typeMetadata = new(
+                baseIdentifier,
                 identifier,
                 @namespace,
+                typeParams,
+                fullyQualifiedName,
                 keyword,
                 cborTag,
                 constrIndex,
@@ -98,10 +123,15 @@ public sealed partial class CborSerializerCodeGen
                 shouldPreserveRaw
             );
 
+            if (serializationType == SerializationType.Union)
+            {
+                childTypes = GetChildTypes(tds, model);
+            }
+
             typeMetadata.Properties.AddRange(properties);
             typeMetadata.ChildTypes.AddRange(childTypes);
 
-            _cache[typeMetadata.FullyQualifiedName] = typeMetadata;
+            _cache[typeMetadata.FullyQualifiedName.Replace("global::", "")] = typeMetadata;
 
             return typeMetadata;
         }
@@ -207,7 +237,8 @@ public sealed partial class CborSerializerCodeGen
                 isIndefinite,
                 order,
                 stringKey,
-                intKey
+                intKey,
+                false
             );
         }
     }
@@ -220,9 +251,21 @@ public sealed partial class CborSerializerCodeGen
 
             string propertyName = param.Identifier.Text;
             string propertyType = param.Type?.ToString() ?? throw new ArgumentNullException(nameof(param.Type));
-            string propertyTypeFullName = model.GetSymbolInfo(param.Type).Symbol?.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) ?? string.Empty;
             string propertyTypeNamespace = string.Empty;
+            bool isOpenGeneric = false;
             ISymbol? typeSymbol = model.GetSymbolInfo(param.Type).Symbol;
+            string propertyTypeFullName = "";
+
+            if (typeSymbol is ITypeSymbol its)
+            {
+                if (its.TypeKind is TypeKind.TypeParameter)
+                {
+                    isOpenGeneric = true;
+                }
+
+                propertyTypeFullName = its.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+            }
+
             if (typeSymbol != null)
             {
                 // Handle primitives and special types
@@ -295,16 +338,24 @@ public sealed partial class CborSerializerCodeGen
                     mapKeyTypeFullName = keyTypeSymbol?.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
                     mapValueType = valueTypeSymbol?.Name;
                     mapValueTypeFullName = valueTypeSymbol?.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
-                    isMapKeyTypeOpenGeneric = keyTypeSymbol is INamedTypeSymbol namedKeyType &&
-                        namedKeyType.IsGenericType &&
-                        namedKeyType.TypeArguments.Any(ta => ta.TypeKind == TypeKind.TypeParameter);
-                    isMapValueTypeOpenGeneric = valueTypeSymbol is INamedTypeSymbol namedValueType &&
-                        namedValueType.IsGenericType &&
-                        namedValueType.TypeArguments.Any(ta => ta.TypeKind == TypeKind.TypeParameter);
                     mapKeyTypeNamespace = keyTypeSymbol?.ContainingNamespace?.IsGlobalNamespace == false ?
                         keyTypeSymbol.ContainingNamespace.ToDisplayString() : null;
                     mapValueTypeNamespace = valueTypeSymbol?.ContainingNamespace?.IsGlobalNamespace == false ?
                         valueTypeSymbol.ContainingNamespace.ToDisplayString() : null;
+
+                    isMapKeyTypeOpenGeneric = (keyTypeSymbol?.TypeKind == TypeKind.TypeParameter) ||
+                        (keyTypeSymbol is INamedTypeSymbol namedKeyType &&
+                            namedKeyType.IsGenericType &&
+                            namedKeyType.TypeArguments.Any(ta => ta.TypeKind == TypeKind.TypeParameter));
+
+                    isMapValueTypeOpenGeneric = (valueTypeSymbol?.TypeKind == TypeKind.TypeParameter) ||
+                        (valueTypeSymbol is INamedTypeSymbol namedValueType &&
+                            namedValueType.IsGenericType &&
+                            namedValueType.TypeArguments.Any(ta => ta.TypeKind == TypeKind.TypeParameter));
+
+                    mapKeyTypeFullName = keyTypeSymbol?.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+                    mapValueTypeFullName = valueTypeSymbol?.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+
                 }
                 else if (IsListType(ts, out ITypeSymbol? itemTypeSymbol))
                 {
@@ -313,9 +364,10 @@ public sealed partial class CborSerializerCodeGen
                     listItemTypeFullName = itemTypeSymbol?.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
                     listItemTypeNamespace = itemTypeSymbol?.ContainingNamespace?.IsGlobalNamespace == false ?
                         itemTypeSymbol.ContainingNamespace.ToDisplayString() : null;
-                    isListItemTypeOpenGeneric = itemTypeSymbol is INamedTypeSymbol namedItemType &&
-                        namedItemType.IsGenericType &&
-                        namedItemType.TypeArguments.Any(ta => ta.TypeKind == TypeKind.TypeParameter);
+                    isListItemTypeOpenGeneric = (itemTypeSymbol?.TypeKind == TypeKind.TypeParameter) ||
+                        (itemTypeSymbol is INamedTypeSymbol namedItemType &&
+                            namedItemType.IsGenericType &&
+                            namedItemType.TypeArguments.Any(ta => ta.TypeKind == TypeKind.TypeParameter));
                 }
             }
 
@@ -343,7 +395,8 @@ public sealed partial class CborSerializerCodeGen
                 isIndefinite,
                 order,
                 stringKey,
-                intKey
+                intKey,
+                isOpenGeneric
             );
         }
     }
@@ -373,12 +426,81 @@ public sealed partial class CborSerializerCodeGen
 
     private static IEnumerable<SerializableTypeMetadata> GetChildTypes(TypeDeclarationSyntax tds, SemanticModel model)
     {
-        // Get all child types of the given type declaration syntax
-        return tds.DescendantNodes()
-            .OfType<TypeDeclarationSyntax>()
-            .Select(childType => Parser.ParseSerialazableType(childType, model))
-            .Where(metadata => metadata != null)
-            .Select(metadata => metadata!);
+        // Get the type symbol for the current declaration
+        if (model.GetDeclaredSymbol(tds) is not INamedTypeSymbol typeSymbol)
+            return Enumerable.Empty<SerializableTypeMetadata>();
+
+        // Get all derived types across the entire compilation
+        IEnumerable<INamedTypeSymbol> derivedTypes = FindDerivedTypes(typeSymbol, model.Compilation);
+
+        // Process both nested types and derived types
+        List<SerializableTypeMetadata> result = new();
+
+        // Add nested types (original behavior)
+        foreach (TypeDeclarationSyntax nestedType in tds.DescendantNodes().OfType<TypeDeclarationSyntax>())
+        {
+            if (Parser.ParseSerialazableType(nestedType, model) is SerializableTypeMetadata metadata)
+                result.Add(metadata);
+        }
+
+        // Add derived types (new behavior)
+        foreach (INamedTypeSymbol derivedType in derivedTypes)
+        {
+            // Find the syntax reference for the derived type
+            SyntaxReference? syntaxRef = derivedType.DeclaringSyntaxReferences.FirstOrDefault();
+            if (syntaxRef?.GetSyntax() is TypeDeclarationSyntax derivedTypeSyntax)
+            {
+                // Create a new semantic model for the derived type's syntax tree if needed
+                SemanticModel derivedTypeModel = model;
+                if (syntaxRef.SyntaxTree != model.SyntaxTree)
+                    derivedTypeModel = model.Compilation.GetSemanticModel(syntaxRef.SyntaxTree);
+
+                if (Parser.ParseSerialazableType(derivedTypeSyntax, derivedTypeModel) is SerializableTypeMetadata metadata)
+                    result.Add(metadata);
+            }
+        }
+
+        return result;
+    }
+
+    private static IEnumerable<INamedTypeSymbol> FindDerivedTypes(INamedTypeSymbol baseType, Compilation compilation)
+    {
+        // Find all types in the compilation that inherit from the given type
+        return compilation.GetSymbolsWithName(
+            name => true,  // Consider all names
+            SymbolFilter.Type
+        )
+        .OfType<INamedTypeSymbol>()
+        .Where(type =>
+            !SymbolEqualityComparer.Default.Equals(type, baseType) && // Exclude the base type itself
+            type.BaseType != null &&                                  // Must have a base type
+            ImplementsOrInheritsFrom(type, baseType)                  // Must implement or inherit from base type
+        );
+    }
+
+    private static bool ImplementsOrInheritsFrom(INamedTypeSymbol type, INamedTypeSymbol baseType)
+    {
+        // Check if it's a direct inheritance relationship
+        if (baseType.TypeKind == TypeKind.Interface)
+        {
+            // For interfaces, check if the type implements the interface
+            return type.AllInterfaces.Any(i =>
+                SymbolEqualityComparer.Default.Equals(i.OriginalDefinition, baseType.OriginalDefinition));
+        }
+        else
+        {
+            // For classes or records, walk up the inheritance chain
+            INamedTypeSymbol? currentType = type;
+            while (currentType != null)
+            {
+                if (SymbolEqualityComparer.Default.Equals(currentType.OriginalDefinition, baseType.OriginalDefinition))
+                    return true;
+
+                currentType = currentType.BaseType;
+            }
+        }
+
+        return false;
     }
 
     // Helper method to detect if a type is a list (implements IEnumerable<T>)
@@ -429,5 +551,54 @@ public sealed partial class CborSerializerCodeGen
         }
 
         return false;
+    }
+
+    private static (string path, string typeParams) GetFullNamespaceWithParentsAndTypeParams(TypeDeclarationSyntax typeDecl, SemanticModel model)
+    {
+        // Get the declared symbol for most accurate information
+        if (model.GetDeclaredSymbol(typeDecl) is INamedTypeSymbol symbol)
+        {
+            // For nested types, the ContainingType will be non-null
+            if (symbol.ContainingType != null)
+            {
+                string containerName = symbol.ContainingType.ToDisplayString();
+
+                // Extract the type parameters from the containing type
+                string parentTypeParams = "";
+                if (symbol.ContainingType.TypeParameters.Length > 0)
+                {
+                    parentTypeParams = "<" + string.Join(", ", symbol.ContainingType.TypeParameters.Select(tp => tp.Name)) + ">";
+                }
+
+                return (containerName, parentTypeParams);
+            }
+
+            // For non-nested types, use the containing namespace
+            return (symbol.ContainingNamespace.ToDisplayString(), "");
+        }
+
+        // Fallback implementation...
+        return (typeDecl.GetNamespace() ?? string.Empty, "");
+    }
+    private static string GetBaseNamespace(TypeDeclarationSyntax typeDecl, SemanticModel model)
+    {
+        // Get the declared symbol for most accurate information
+        if (model.GetDeclaredSymbol(typeDecl) is INamedTypeSymbol symbol)
+        {
+            return symbol.ContainingNamespace.ToDisplayString();
+        }
+
+        // Fallback to syntax-based approach
+        return typeDecl.GetNamespace() ?? string.Empty;
+    }
+
+    private static string RemoveGenericPart(string identifier)
+    {
+        int angleBracketIndex = identifier.IndexOf('<');
+        if (angleBracketIndex > 0)
+        {
+            return identifier.Substring(0, angleBracketIndex).Trim();
+        }
+        return identifier.Trim();
     }
 }

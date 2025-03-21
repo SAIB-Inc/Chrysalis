@@ -11,6 +11,7 @@ public partial record TestList(
     int Value1,
     [CborOrder(1)]
     List<TestConstr> Value2,
+    [CborOrder(2)]
     Dictionary<string, TestConstr> Value3
 ) : CborBase<TestList>;
 

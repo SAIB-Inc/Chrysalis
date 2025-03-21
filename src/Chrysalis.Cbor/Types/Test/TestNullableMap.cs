@@ -6,8 +6,17 @@ namespace Chrysalis.Cbor.Types.Test;
 [CborSerializable]
 [CborMap]
 public partial record NullableTestMap(
-    [property: CborProperty("0")]
+    [CborProperty(0)]
     int Value1,
-    [property: CborProperty("1")]
+    [CborProperty(1)]
     string Value2
 ) : CborBase<NullableTestMap>;
+
+[CborSerializable]
+public partial record CborContainerSimpleTest(int Value1) : CborBase<NullableTestMap>;
+
+[CborSerializable]
+public partial record CborContainerConstrTest(TestConstr Value1) : CborBase<CborContainerConstrTest>;
+
+[CborSerializable]
+public partial record CborContainerGenericTest<T>(T Value1) : CborBase<CborContainerGenericTest<T>>;

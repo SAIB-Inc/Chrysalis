@@ -6,11 +6,11 @@ namespace Chrysalis.Cbor.Types.Test;
 [CborSerializable]
 [CborMap]
 public partial record TestMap(
-    [CborProperty("0")]
+    [CborProperty(0)]
     int Value1,
-    [CborProperty("1")]
+    [CborProperty(1)]
     byte[] Value2,
-    [CborProperty("2")]
+    [CborProperty(2)]
     string Value3,
     [CborProperty(3)]
     bool Value4,

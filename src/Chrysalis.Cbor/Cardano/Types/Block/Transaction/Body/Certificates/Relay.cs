@@ -13,11 +13,11 @@ public abstract partial record Relay : CborBase<Relay>
 [CborSerializable]
 [CborList]
 public partial record SingleHostAddr(
-       [CborOrder(0)] int Tag,
-       [CborOrder(1)][CborNullable] ulong? Port,
-       [CborOrder(2)][CborNullable] byte[]? IPv4,
-       [CborOrder(3)][CborNullable] byte[] IPv6
-   ) : Relay;
+   [CborOrder(0)] int Tag,
+   [CborOrder(1)][CborNullable] ulong? Port,
+   [CborOrder(2)][CborNullable] byte[]? IPv4,
+   [CborOrder(3)][CborNullable] byte[] IPv6
+) : Relay;
 
 
 [CborSerializable]

@@ -17,11 +17,11 @@ public abstract partial record GovAction : CborBase<GovAction>
 [CborSerializable]
 [CborList]
 public partial record ParameterChangeAction(
-        [CborOrder(0)] int ActionType,
-        [CborOrder(1)] GovActionId? GovActionId,
-        [CborOrder(2)] ProtocolParamUpdate ProtocolParamUpdate,
-        [CborOrder(3)] byte[]? PolicyHash
-    ) : GovAction;
+    [CborOrder(0)] int ActionType,
+    [CborOrder(1)] GovActionId? GovActionId,
+    [CborOrder(2)] ProtocolParamUpdate ProtocolParamUpdate,
+    [CborOrder(3)] byte[]? PolicyHash
+) : GovAction;
 
 
 [CborSerializable]

@@ -32,9 +32,24 @@ public sealed class CborUnionAttribute : Attribute
 }
 
 [AttributeUsage(AttributeTargets.Class | AttributeTargets.Struct | AttributeTargets.Interface, Inherited = false, AllowMultiple = false)]
-public sealed class CborConstrAttribute(int constructorIndex) : Attribute
+public sealed class CborConstrAttribute : Attribute
 {
-    public int ConstructorIndex { get; } = constructorIndex;
+    // Default constructor - use -1 to mean "any index"
+    public CborConstrAttribute()
+    {
+        ConstructorIndex = -1;
+    }
+
+    // Constructor with index parameter
+    public CborConstrAttribute(int constructorIndex)
+    {
+        ConstructorIndex = constructorIndex;
+    }
+
+    public int ConstructorIndex { get; }
+
+    // Helper property to check if any index is allowed
+    public bool IsAnyIndexAllowed => ConstructorIndex == -1;
 }
 
 [AttributeUsage(AttributeTargets.Class | AttributeTargets.Struct | AttributeTargets.Interface, Inherited = false, AllowMultiple = false)]

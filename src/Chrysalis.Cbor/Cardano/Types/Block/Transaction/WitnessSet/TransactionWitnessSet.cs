@@ -14,13 +14,13 @@ public abstract partial record TransactionWitnessSet : CborBase<TransactionWitne
 [CborSerializable]
 [CborMap]
 public partial record AlonzoTransactionWitnessSet(
-        [CborProperty(0)] CborMaybeIndefList<VKeyWitness>? VKeyWitnessSet,
-        [CborProperty(1)] CborMaybeIndefList<NativeScript>? NativeScriptSet,
-        [CborProperty(2)] CborMaybeIndefList<BootstrapWitness>? BootstrapWitnessSet,
-        [CborProperty(3)] CborMaybeIndefList<byte[]>? PlutusV1ScriptSet,
-        [CborProperty(4)] CborMaybeIndefList<PlutusData>? PlutusDataSet,
-        [CborProperty(5)] Redeemers? Redeemers
-    ) : TransactionWitnessSet;
+    [CborProperty(0)] CborMaybeIndefList<VKeyWitness>? VKeyWitnessSet,
+    [CborProperty(1)] CborMaybeIndefList<NativeScript>? NativeScriptSet,
+    [CborProperty(2)] CborMaybeIndefList<BootstrapWitness>? BootstrapWitnessSet,
+    [CborProperty(3)] CborMaybeIndefList<byte[]>? PlutusV1ScriptSet,
+    [CborProperty(4)] CborMaybeIndefList<PlutusData>? PlutusDataSet,
+    [CborProperty(5)] Redeemers? Redeemers
+) : TransactionWitnessSet;
 
 [CborSerializable]
 [CborMap]

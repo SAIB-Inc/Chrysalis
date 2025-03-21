@@ -12,8 +12,11 @@ public sealed partial class CborSerializerCodeGen
     }
 
     private sealed class SerializableTypeMetadata(
+        string baseIdentifier,
         string identifier,
         string? @namespace,
+        string? typeParams,
+        string fullyQualifiedName,
         string keyword,
         int? cborTag,
         int? cborIndex,
@@ -22,9 +25,11 @@ public sealed partial class CborSerializerCodeGen
         bool shouldPreserveRaw
     )
     {
+        public string BaseIdentifier { get; } = baseIdentifier;
         public string Indentifier { get; } = identifier;
         public string? Namespace { get; } = @namespace;
-        public string FullyQualifiedName { get; } = string.IsNullOrEmpty(@namespace) ? identifier : $"{@namespace}.{identifier}";
+        public string? TypeParams { get; } = typeParams;
+        public string FullyQualifiedName { get; } = fullyQualifiedName;
         public string Keyword { get; } = keyword;
         public int? CborTag { get; } = cborTag;
         public int? CborIndex { get; } = cborIndex;
@@ -42,6 +47,7 @@ public sealed partial class CborSerializerCodeGen
                 // Keyword: {{Keyword}}
                 // Identifier: {{Indentifier}}
                 // Namespace: {{Namespace}}
+                // TypeParams: {{TypeParams}}
                 // FullyQualifiedName: {{FullyQualifiedName}}
                 // SerializationType: {{SerializationType}}
                 // CborTag: {{CborTag}}
@@ -78,7 +84,8 @@ public sealed partial class CborSerializerCodeGen
         bool isIndefinite,
         int? order,
         string? propertyKeyString,
-        int? propertyKeyInt
+        int? propertyKeyInt,
+        bool isOpenGeneric
     )
     {
         public string PropertyName { get; } = propertyName;
@@ -108,6 +115,7 @@ public sealed partial class CborSerializerCodeGen
         public int? Order { get; set; } = order;
         public string? PropertyKeyString { get; } = propertyKeyString;
         public int? PropertyKeyInt { get; } = propertyKeyInt;
+        public bool IsOpenGeneric { get; } = isOpenGeneric;
 
         public override string ToString()
         {
@@ -135,6 +143,7 @@ public sealed partial class CborSerializerCodeGen
                 // MapValueTypeNamespace: {{MapValueTypeNamespace}}
                 // IsMapKeyTypeOpenGeneric: {{IsMapKeyTypeOpenGeneric}}
                 // IsMapValueTypeOpenGeneric: {{IsMapValueTypeOpenGeneric}}
+                // IsOpenGeneric: {{IsOpenGeneric}}
             """;
         }
     }

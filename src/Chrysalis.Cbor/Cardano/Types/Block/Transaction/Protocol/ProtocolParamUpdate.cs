@@ -124,7 +124,6 @@ public partial record MaryProtocolParamUpdate(
     [CborProperty(15)] ulong? Coin
 ) : ProtocolParamUpdate;
 
-
 [CborSerializable]
 public partial record ProposedProtocolParameterUpdates(
     Dictionary<byte[], ProtocolParamUpdate> Value

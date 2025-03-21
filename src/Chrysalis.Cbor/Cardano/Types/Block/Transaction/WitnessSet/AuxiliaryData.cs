@@ -15,11 +15,11 @@ public abstract partial record AuxiliaryData : CborBase<AuxiliaryData>
 [CborMap]
 [CborTag(259)]
 public partial record PostAlonzoAuxiliaryDataMap(
-    [CborProperty("0")] Metadata? MetadataValue,
-    [CborProperty("1")] CborDefList<NativeScript>? NativeScriptSet,
-    [CborProperty("2")] CborDefList<byte[]>? PlutusV1ScriptSet,
-    [CborProperty("3")] CborDefList<byte[]>? PlutusV2ScriptSet,
-    [CborProperty("4")] CborDefList<byte[]>? PlutusV3ScriptSet
+    [CborProperty(0)] Metadata? MetadataValue,
+    [CborProperty(1)] CborDefList<NativeScript>? NativeScriptSet,
+    [CborProperty(2)] CborDefList<byte[]>? PlutusV1ScriptSet,
+    [CborProperty(3)] CborDefList<byte[]>? PlutusV2ScriptSet,
+    [CborProperty(4)] CborDefList<byte[]>? PlutusV3ScriptSet
 ) : AuxiliaryData;
 
 

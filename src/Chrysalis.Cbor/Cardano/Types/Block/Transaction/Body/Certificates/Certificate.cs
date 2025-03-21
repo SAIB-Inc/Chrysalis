@@ -16,9 +16,9 @@ public abstract partial record Certificate : CborBase<Certificate>
 [CborSerializable]
 [CborList]
 public partial record StakeRegistration(
-       [CborOrder(0)] int Tag,
-       [CborOrder(1)] Credential StakeCredential
-   ) : Certificate;
+   [CborOrder(0)] int Tag,
+   [CborOrder(1)] Credential StakeCredential
+) : Certificate;
 
 
 [CborSerializable]
@@ -193,4 +193,5 @@ public partial record MoveInstantaneousRewardsCert(
     [CborOrder(0)] int Tag,
     [CborOrder(1)] MoveInstantaneousReward MoveInstantaneousReward
 ) : Certificate;
+
 

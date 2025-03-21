@@ -14,10 +14,10 @@ public abstract partial record Transaction : CborBase<Transaction>
 [CborSerializable]
 [CborList]
 public partial record ShelleyTransaction(
-       [CborOrder(0)] TransactionBody TransactionBody,
-       [CborOrder(1)] TransactionWitnessSet TransactionWitnessSet,
-       [CborOrder(2)][CborNullable] Metadata? TransactionMetadata
-   ) : Transaction;
+   [CborOrder(0)] TransactionBody TransactionBody,
+   [CborOrder(1)] TransactionWitnessSet TransactionWitnessSet,
+   [CborOrder(2)][CborNullable] Metadata? TransactionMetadata
+) : Transaction;
 
 [CborSerializable]
 [CborList]
