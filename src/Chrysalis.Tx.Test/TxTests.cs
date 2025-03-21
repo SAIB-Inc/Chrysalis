@@ -14,6 +14,7 @@ using System.Text;
 using Chrysalis.Tx.Models.Enums;
 using Chrysalis.Tx.Models.Addresses;
 using Address = Chrysalis.Tx.Models.Addresses.Address;
+using Chrysalis.Cbor.Cardano.Types.Block.Transaction;
 
 namespace Chrysalis.Tx.Test;
 
@@ -419,9 +420,62 @@ public class TxTests
 
         Address address = new(expectedEncodedAddress);
         Address address1 = Address.FromBech32(expectedEncodedAddress);
-
+        string pc = Convert.ToHexStringLower(address.StakeCredential?.Hash.ToBytes() ?? []);
         Assert.Equal(address.ToBytes(), addressBytes);
         Assert.Equal(address1.ToBytes(), addressBytes);
+    }
+
+    [Fact]
+    public void Address_CredentialsFromBytes_Test()
+    {
+        byte[] addressBytes = Convert.FromHexString("002b097cb1513202c8d33e73b09f85aca2c8ed3bed48b9fed4b1b89a916686835f68f6531aea676d87fae51771504cc0fbe479130ffab81cf0");
+
+        byte[] paymentCredHashBytes = Convert.FromHexString("2b097cb1513202c8d33e73b09f85aca2c8ed3bed48b9fed4b1b89a91");
+        byte[] stakeCredHashBytes = Convert.FromHexString("6686835f68f6531aea676d87fae51771504cc0fbe479130ffab81cf0");
+
+        (Credential payment, Credential? stake) = Address.ExtractCredentialsFromBytes(addressBytes);
+
+        Credential paymentCredential = new(new((int)CredentialType.KeyHash), new(paymentCredHashBytes));
+        Credential stakeCredential = new(new((int)CredentialType.KeyHash), new(stakeCredHashBytes));
+
+        Assert.True(payment.Hash.Value.SequenceEqual(paymentCredential.Hash.Value));
+        Assert.True(stake?.Hash.Value.SequenceEqual(stakeCredential.Hash.Value));
+    }
+
+    [Fact]
+    public void Address_CredentialConstructor_Test()
+    {
+        byte[] addressBytes = Convert.FromHexString("002b097cb1513202c8d33e73b09f85aca2c8ed3bed48b9fed4b1b89a916686835f68f6531aea676d87fae51771504cc0fbe479130ffab81cf0");
+        string expectedEncodedAddress = "addr_test1qq4sjl932yeq9jxn8eemp8u94j3v3mfma4ytnlk5kxuf4ytxs6p4768k2vdw5emdslaw29m32pxvp7ly0yfsl74crncq7evfjf";
+
+        byte[] paymentCredHashBytes = Convert.FromHexString("2b097cb1513202c8d33e73b09f85aca2c8ed3bed48b9fed4b1b89a91");
+        byte[] stakeCredHashBytes = Convert.FromHexString("6686835f68f6531aea676d87fae51771504cc0fbe479130ffab81cf0");
+
+        AddressHeader header = new(AddressType.BasePayment, NetworkType.Testnet, CredentialType.KeyHash);
+        Credential paymentCredential = new(new((int)CredentialType.KeyHash), new(paymentCredHashBytes));
+
+        Credential stakeCredential = new(new((int)CredentialType.KeyHash), new(stakeCredHashBytes));
+        Address address = new(header.Network, header.Type, paymentCredential, stakeCredential);
+
+        Assert.Equal(address.ToBytes(), addressBytes);
+        Assert.Equal(address.ToBech32(), expectedEncodedAddress);
+    }
+
+    [Fact]
+    public void Address_EnterpriseScriptCredential_Test()
+    {
+        byte[] addressBytes = Convert.FromHexString("7082e4521deddeb8cf121fb9666e5d00974848bfc5ebb4bf8b07cbcdb6");
+        string expectedEncodedAddress = "addr_test1wzpwg5saah0t3ncjr7ukvmjaqzt5sj9lch4mf0utql9umdsx68n9f";
+
+        byte[] paymentCredHashBytes = Convert.FromHexString("82e4521deddeb8cf121fb9666e5d00974848bfc5ebb4bf8b07cbcdb6");
+
+        AddressHeader header = new(AddressType.EnterpriseScriptPayment, NetworkType.Testnet, CredentialType.ScriptHash);
+        Credential paymentCredential = new(new((int)CredentialType.ScriptHash), new(paymentCredHashBytes));
+
+        Address address = new(header.Network, header.Type, paymentCredential, null);
+
+        Assert.Equal(address.ToBytes(), addressBytes);
+        Assert.Equal(address.ToBech32(), expectedEncodedAddress);
     }
 }
 
