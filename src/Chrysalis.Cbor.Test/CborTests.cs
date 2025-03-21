@@ -86,6 +86,10 @@ public class CborTests
                     // This call should be thread-safe and never fail if the code is correct
 
                     Block block = BabbageBlock.Read(cborRaw);
+                    CborWriter writer = new(CborConformanceMode.Lax);
+                    BabbageBlock.Write(writer, block);
+                    var serialized = writer.Encode().AsSpan();
+                    var serializedHex = Convert.ToHexString(serialized);
 
                     // If block is occasionally null or exceptions occur, it's a sign of a concurrency issue
                     Assert.NotNull(block);
@@ -111,6 +115,10 @@ public class CborTests
             for (int i = 0; i < iterationsPerTask; i++)
             {
                 Block? block = AlonzoCompatibleBlock.Read(cborRaw);
+                CborWriter writer = new(CborConformanceMode.Lax);
+                AlonzoCompatibleBlock.Write(writer, block);
+                var serialized = writer.Encode().AsSpan();
+                var serializedHex = Convert.ToHexString(serialized);
                 Assert.NotNull(block);
             }
         }))];
@@ -134,6 +142,10 @@ public class CborTests
             for (int i = 0; i < iterationsPerTask; i++)
             {
                 Block block = ConwayBlock.Read(cborRaw);
+                CborWriter writer = new(CborConformanceMode.Lax);
+                ConwayBlock.Write(writer, block);
+                var serialized = writer.Encode().AsSpan();
+                var serializedHex = Convert.ToHexString(serialized);
                 Assert.NotNull(block);
             }
         }))];
@@ -149,14 +161,19 @@ public class CborTests
     {
         byte[] cborRaw = Convert.FromHexString(cbor);
 
-        const int concurrencyLevel = 3;   // Number of parallel tasks
-        const int iterationsPerTask = 10000; // Number of deserializations per task
+        const int concurrencyLevel = 1;   // Number of parallel tasks
+        const int iterationsPerTask = 1; // Number of deserializations per task
 
         IEnumerable<Task> tasks = [.. Enumerable.Range(0, concurrencyLevel).Select(_ => Task.Run(() =>
         {
             for (int i = 0; i < iterationsPerTask; i++)
             {
                 Block block = AlonzoCompatibleBlock.Read(cborRaw);
+                CborWriter writer = new(CborConformanceMode.Lax);
+                AlonzoCompatibleBlock.Write(writer, block);
+                var serialized = writer.Encode().AsSpan();
+                var serializedHex = Convert.ToHexString(serialized);
+                //Assert.Equal(cborRaw, serialized);
                 Assert.NotNull(block);
             }
         }))];

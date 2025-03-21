@@ -7,11 +7,14 @@ using Chrysalis.Cbor.Types.Primitives;
 namespace Chrysalis.Cbor.Serialization.Utils;
 
 public delegate T ReadDelegate<T>(ReadOnlyMemory<byte> data);
+public delegate void WriteDelegate<T>(CborWriter writer, T value);
 
 public static class GenericSerializationUtil
 {
     private static readonly ConcurrentDictionary<Type, Delegate> ReadMethodCache = [];
+    private static readonly ConcurrentDictionary<Type, Delegate> WriteMethodCache = [];
 
+    #region Read
     public static T? Read<T>(CborReader reader)
     {
         if (IsPrimitiveType(typeof(T)))
@@ -282,23 +285,23 @@ public static class GenericSerializationUtil
             T item;
             if (IsPrimitiveType(typeof(T)))
             {
-                item = ReadPrimitive<T>(reader);
+                item = ReadPrimitive<T>(reader)!;
             }
             else
             {
                 item = ReadNonPrimitive<T>(reader);
             }
-            result.Add(item);
+            result.Add(item!);
         }
 
         reader.ReadEndArray();
         return result;
     }
 
-    public static Dictionary<TKey, TValue> ReadDictionary<TKey, TValue>(CborReader reader)
+    public static Dictionary<TKey, TValue?> ReadDictionary<TKey, TValue>(CborReader reader)
         where TKey : notnull
     {
-        Dictionary<TKey, TValue> result = [];
+        Dictionary<TKey, TValue?> result = [];
         reader.ReadStartMap();
 
         while (reader.PeekState() != CborReaderState.EndMap)
@@ -306,14 +309,14 @@ public static class GenericSerializationUtil
             TKey key;
             if (IsPrimitiveType(typeof(TKey)))
             {
-                key = ReadPrimitive<TKey>(reader);
+                key = ReadPrimitive<TKey>(reader)!;
             }
             else
             {
                 key = ReadNonPrimitive<TKey>(reader);
             }
 
-            TValue value;
+            TValue? value;
             if (IsPrimitiveType(typeof(TValue)))
             {
                 value = ReadPrimitive<TValue>(reader);
@@ -339,4 +342,383 @@ public static class GenericSerializationUtil
 
         return value;
     }
+    #endregion
+
+    #region Write
+
+    public static void Write<T>(CborWriter writer, T value)
+    {
+        if (IsPrimitiveType(typeof(T)))
+        {
+            WritePrimitive<T>(writer, value);
+        }
+        else
+        {
+            WriteNonPrimitive(writer, value);
+        }
+    }
+
+    public static void Write(CborWriter writer, object? value, Type type)
+    {
+        if (IsPrimitiveType(type))
+        {
+            WritePrimitive(writer, value, type);
+        }
+        else
+        {
+            WriteNonPrimitive(writer, value, type);
+        }
+    }
+
+    public static void Write(CborWriter writer, object? value)
+    {
+        Type? type = value?.GetType();
+
+        if (IsPrimitiveType(type!))
+        {
+            WritePrimitive(writer, value, type!);
+        }
+        else
+        {
+            WriteNonPrimitive(writer, value, type!);
+        }
+    }
+
+    public static void WritePrimitive(CborWriter writer, object? value, Type type)
+    {
+        // Handle nullable types by checking the underlying type
+        if (Nullable.GetUnderlyingType(type) != null)
+        {
+            // Get the underlying type of the nullable
+            type = Nullable.GetUnderlyingType(type)!;
+        }
+
+        // Use a switch statement to handle different types
+        switch (type)
+        {
+            case Type t when t == typeof(bool):
+                if (value is bool boolValue)
+                    writer.WriteBoolean(boolValue);
+                else
+                    throw new InvalidCastException($"Value is not of type {type}");
+                break;
+
+            case Type t when t == typeof(int):
+                if (value is int intValue)
+                    writer.WriteInt32(intValue);
+                else
+                    throw new InvalidCastException($"Value is not of type {type}");
+                break;
+
+            case Type t when t == typeof(uint):
+                if (value is uint uintValue)
+                    writer.WriteUInt32(uintValue);
+                else
+                    throw new InvalidCastException($"Value is not of type {type}");
+                break;
+
+            case Type t when t == typeof(long):
+                if (value is long longValue)
+                    writer.WriteInt64(longValue);
+                else
+                    throw new InvalidCastException($"Value is not of type {type}");
+                break;
+
+            case Type t when t == typeof(ulong):
+                if (value is ulong ulongValue)
+                    writer.WriteUInt64(ulongValue);
+                else
+                    throw new InvalidCastException($"Value is not of type {type}");
+                break;
+
+            case Type t when t == typeof(float):
+                if (value is float floatValue)
+                    writer.WriteSingle(floatValue);
+                else
+                    throw new InvalidCastException($"Value is not of type {type}");
+                break;
+
+            case Type t when t == typeof(double):
+                if (value is double doubleValue)
+                    writer.WriteDouble(doubleValue);
+                else
+                    throw new InvalidCastException($"Value is not of type {type}");
+                break;
+
+            case Type t when t == typeof(decimal):
+                if (value is decimal decimalValue)
+                    writer.WriteDecimal(decimalValue);
+                else
+                    throw new InvalidCastException($"Value is not of type {type}");
+                break;
+
+            case Type t when t == typeof(string):
+                if (value is string stringValue)
+                    writer.WriteTextString(stringValue);
+                else
+                    throw new InvalidCastException($"Value is not of type {type}");
+                break;
+
+            case Type t when t == typeof(byte[]):
+                if (value is byte[] bytesValue)
+                    writer.WriteByteString(bytesValue);
+                else
+                    throw new InvalidCastException($"Value is not of type {type}");
+                break;
+
+            case Type t when t == typeof(CborEncodedValue):
+                if (value is CborEncodedValue encodedValue)
+                {
+                    writer.WriteTag(CborTag.EncodedCborDataItem);
+                    writer.WriteByteString(encodedValue.Value);
+                }
+                else
+                    throw new InvalidCastException($"Value is not of type {type}");
+                break;
+
+            default:
+                throw new NotSupportedException($"Type {type} is not supported as a primitive type.");
+        }
+    }
+
+    public static void WritePrimitive<T>(CborWriter writer, object? value)
+    {
+        Type type = typeof(T);
+        // Handle nullable types by checking the underlying type
+        if (Nullable.GetUnderlyingType(type) != null)
+        {
+            // Get the underlying type of the nullable
+            type = Nullable.GetUnderlyingType(type)!;
+        }
+
+        // Use a switch statement to handle different types
+        switch (type)
+        {
+            case Type t when t == typeof(bool):
+                if (value is bool boolValue)
+                    writer.WriteBoolean(boolValue);
+                else
+                    throw new InvalidCastException($"Value is not of type {type}");
+                break;
+
+            case Type t when t == typeof(int):
+                if (value is int intValue)
+                    writer.WriteInt32(intValue);
+                else
+                    throw new InvalidCastException($"Value is not of type {type}");
+                break;
+
+            case Type t when t == typeof(uint):
+                if (value is uint uintValue)
+                    writer.WriteUInt32(uintValue);
+                else
+                    throw new InvalidCastException($"Value is not of type {type}");
+                break;
+
+            case Type t when t == typeof(long):
+                if (value is long longValue)
+                    writer.WriteInt64(longValue);
+                else
+                    throw new InvalidCastException($"Value is not of type {type}");
+                break;
+
+            case Type t when t == typeof(ulong):
+                if (value is ulong ulongValue)
+                    writer.WriteUInt64(ulongValue);
+                else
+                    throw new InvalidCastException($"Value is not of type {type}");
+                break;
+
+            case Type t when t == typeof(float):
+                if (value is float floatValue)
+                    writer.WriteSingle(floatValue);
+                else
+                    throw new InvalidCastException($"Value is not of type {type}");
+                break;
+
+            case Type t when t == typeof(double):
+                if (value is double doubleValue)
+                    writer.WriteDouble(doubleValue);
+                else
+                    throw new InvalidCastException($"Value is not of type {type}");
+                break;
+
+            case Type t when t == typeof(decimal):
+                if (value is decimal decimalValue)
+                    writer.WriteDecimal(decimalValue);
+                else
+                    throw new InvalidCastException($"Value is not of type {type}");
+                break;
+
+            case Type t when t == typeof(string):
+                if (value is string stringValue)
+                    writer.WriteTextString(stringValue);
+                else
+                    throw new InvalidCastException($"Value is not of type {type}");
+                break;
+
+            case Type t when t == typeof(byte[]):
+                if (value is byte[] bytesValue)
+                    writer.WriteByteString(bytesValue);
+                else
+                    throw new InvalidCastException($"Value is not of type {type}");
+                break;
+
+            case Type t when t == typeof(CborEncodedValue):
+                if (value is CborEncodedValue encodedValue)
+                {
+                    writer.WriteTag(CborTag.EncodedCborDataItem);
+                    writer.WriteByteString(encodedValue.Value);
+                }
+                else
+                    throw new InvalidCastException($"Value is not of type {type}");
+                break;
+
+            default:
+                throw new NotSupportedException($"Type {type} is not supported as a primitive type.");
+        }
+    }
+
+
+    public static void WriteNonPrimitive<T>(CborWriter writer, T value)
+    {
+        try
+        {
+            // Check if we have already cached the delegate for this type
+            if (!WriteMethodCache.TryGetValue(typeof(T), out var writeDelegate))
+            {
+                // If not cached, use reflection to find the Write method and create a delegate
+                var writeMethod = typeof(T).GetMethod("Write", BindingFlags.Public | BindingFlags.Static | BindingFlags.FlattenHierarchy, null, new[] { typeof(CborWriter), typeof(T) }, null)
+                    ?? throw new NotSupportedException($"Type {typeof(T).FullName} does not have a valid static Write method.");
+
+                // Create the delegate and cache it
+                writeDelegate = (WriteDelegate<T>)Delegate.CreateDelegate(typeof(WriteDelegate<T>), writeMethod);
+                WriteMethodCache[typeof(T)] = writeDelegate;
+            }
+
+            // Invoke the cached delegate
+            ((WriteDelegate<T>)writeDelegate)(writer, value);
+        }
+        catch (Exception ex)
+        {
+            // Log and throw any errors that occur
+            throw new InvalidOperationException($"Failed to write type {typeof(T).FullName}: {ex.Message}", ex);
+        }
+    }
+
+    public static void WriteNonPrimitive(CborWriter writer, object? value, Type type)
+    {
+        try
+        {
+            // Handle nullable types: check if type is Nullable<T>
+            if (Nullable.GetUnderlyingType(type) != null)
+            {
+                // Get the underlying type (e.g., ulong for ulong?)
+                Type underlyingType = Nullable.GetUnderlyingType(type)!;
+
+                // Use the underlying type for the rest of the method
+                type = underlyingType;
+            }
+
+            // Check if we have already cached the delegate for this type
+            if (!WriteMethodCache.TryGetValue(type, out var writeDelegate))
+            {
+                // Find the appropriate Write method
+                var writeMethod = type.GetMethod("Write", BindingFlags.Public | BindingFlags.Static | BindingFlags.FlattenHierarchy, null, new[] { typeof(CborWriter), type }, null)
+                                     ?? throw new NotSupportedException($"Type {type.FullName} does not have a valid static Write method.");
+
+                // Create delegate type for the specific type
+                Type delegateType = typeof(WriteDelegate<>).MakeGenericType(type);
+
+                // Create and cache the delegate
+                writeDelegate = Delegate.CreateDelegate(delegateType, writeMethod);
+                WriteMethodCache[type] = writeDelegate;
+            }
+
+            // Invoke the cached delegate with the appropriate value
+            writeDelegate.DynamicInvoke(writer, value);
+        }
+        catch (Exception ex) when (ex is not InvalidOperationException)
+        {
+            // Provide better diagnostics
+            throw new InvalidOperationException($"Failed to write type {type.FullName} via delegate invocation: {ex.Message}", ex);
+        }
+    }
+
+    public static void WriteList<T>(CborWriter writer, List<T> list)
+    {
+        writer.WriteStartArray(list.Count);
+
+        foreach (var item in list)
+        {
+            if (IsPrimitiveType(typeof(T)))
+            {
+                WritePrimitive<T>(writer, item);
+            }
+            else
+            {
+                WriteNonPrimitive(writer, item);
+            }
+        }
+
+        writer.WriteEndArray();
+    }
+
+    public static void WriteDictionary<TKey, TValue>(CborWriter writer, Dictionary<TKey, TValue?> dictionary)
+        where TKey : notnull
+    {
+
+        writer.WriteStartMap(dictionary.Count);
+
+        foreach (var kvp in dictionary)
+        {
+            // Write key
+            if (IsPrimitiveType(typeof(TKey)))
+            {
+                WritePrimitive<TKey>(writer, kvp.Key);
+            }
+            else
+            {
+                WriteNonPrimitive<TKey>(writer, kvp.Key);
+            }
+
+            if (IsPrimitiveType(typeof(TValue)))
+            {
+                WritePrimitive<TValue>(writer, kvp.Value);
+            }
+            else
+            {
+                WriteNonPrimitive<TValue>(writer, kvp.Value!);
+            }
+        }
+
+        writer.WriteEndMap();
+    }
+
+    // Helper method for writing byte arrays with potential chunking
+    public static void WriteByteArray(CborWriter writer, byte[] data, int chunkSize = 1024)
+    {
+        if (data.Length <= chunkSize)
+        {
+            // Write as a single byte string if it's small enough
+            writer.WriteByteString(data);
+        }
+        else
+        {
+            // Write as chunked byte string for larger data
+            writer.WriteStartIndefiniteLengthByteString();
+
+            for (int i = 0; i < data.Length; i += chunkSize)
+            {
+                int length = Math.Min(chunkSize, data.Length - i);
+                byte[] chunk = new byte[length];
+                Array.Copy(data, i, chunk, 0, length);
+                writer.WriteByteString(chunk);
+            }
+
+            writer.WriteEndIndefiniteLengthByteString();
+        }
+    }
+
+    #endregion
 }

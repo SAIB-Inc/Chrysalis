@@ -6,12 +6,12 @@ public sealed partial class CborSerializerCodeGen
 {
     private class MapEmitter : ICborSerializerEmitter
     {
-        public StringBuilder EmitCborDeserializer(StringBuilder sb, SerializableTypeMetadata metadata)
+        public StringBuilder EmitReader(StringBuilder sb, SerializableTypeMetadata metadata)
         {
-            Emitter.EmitNewCborReader(sb, "data");
+            Emitter.EmitCborReaderInstance(sb, "data");
             Emitter.EmitTagReader(sb, metadata.CborTag, "tagIndex");
-
             bool isIntKey = metadata.Properties[0].PropertyKeyInt is not null;
+
             sb.AppendLine($"Dictionary<{(isIntKey ? "int" : "string")}, object> resultMap = [];");
             sb.AppendLine($"reader.ReadStartMap();");
             sb.AppendLine("while (reader.PeekState() != CborReaderState.EndMap)");
@@ -27,35 +27,61 @@ public sealed partial class CborSerializerCodeGen
             }
 
             sb.AppendLine($"object value = null;");
-            Emitter.EmitSerializationRead(sb, "TypeMapping[key]", "value");
+
+            Emitter.EmitGenericReader(sb, "TypeMapping[key]", "value");
+
             sb.AppendLine($"resultMap.Add(key, value);");
             sb.AppendLine("}");
             sb.AppendLine($"reader.ReadEndMap();");
-
-            // Add constructor parameters
             sb.AppendLine($"{metadata.FullyQualifiedName} result = new {metadata.FullyQualifiedName}(");
+
             for (int i = 0; i < metadata.Properties.Count; i++)
             {
-                var prop = metadata.Properties[i];
-                string? key = isIntKey
-                    ? prop.PropertyKeyInt?.ToString()
-                    : prop.PropertyKeyString;
+                SerializablePropertyMetadata prop = metadata.Properties[i];
+                string? key = isIntKey ? prop.PropertyKeyInt?.ToString() : prop.PropertyKeyString;
 
-                sb.Append($"    resultMap.TryGetValue({key}, out var {prop.PropertyName}Value) ? ({prop.PropertyTypeFullName}){prop.PropertyName}Value : default");
-
-                if (i < metadata.Properties.Count - 1)
-                    sb.AppendLine(",");
-                else
-                    sb.AppendLine();
+                sb.Append($"resultMap.TryGetValue({key}, out var {prop.PropertyName}Value) ? ({prop.PropertyTypeFullName}){prop.PropertyName}Value : default");
+                sb.AppendLine($"{(i == metadata.Properties.Count - 1 ? "" : ",")}");
             }
+
             sb.AppendLine(");");
 
-            Emitter.EmitReadFinalizer(sb, metadata, "result");
+            Emitter.EmitReaderValidationAndResult(sb, metadata, "result");
             return sb;
         }
 
-        public StringBuilder EmitCborSerializer(StringBuilder sb, SerializableTypeMetadata metadata)
+        public StringBuilder EmitWriter(StringBuilder sb, SerializableTypeMetadata metadata)
         {
+            Emitter.EmitTagWriter(sb, metadata.CborTag);
+            bool isIntKey = metadata.Properties[0].PropertyKeyInt is not null;
+
+            sb.AppendLine($"writer.WriteStartMap(null);");
+            foreach (var prop in metadata.Properties)
+            {
+                if (prop.IsNullable)
+                {
+                    sb.AppendLine($"{(isIntKey ? $"writer.WriteInt32(KeyMapping[\"{prop.PropertyName}\"])" : $"writer.WriteTextString(KeyMapping[\"{prop.PropertyName}\"])")};");
+                    Emitter.EmitSerializablePropertyWriter(sb, prop);
+                }
+                else
+                {
+                    if (prop.IsTypeNullable)
+                    {
+                        sb.AppendLine($"if (data.{prop.PropertyName} is not null)");
+                        sb.AppendLine("{");
+                        sb.AppendLine($"{(isIntKey ? $"writer.WriteInt32(KeyMapping[\"{prop.PropertyName}\"])" : $"writer.WriteTextString(KeyMapping[\"{prop.PropertyName}\"])")};");
+                        Emitter.EmitSerializablePropertyWriter(sb, prop);
+                        sb.AppendLine("}");
+                    }
+                    else
+                    {
+                        sb.AppendLine($"{(isIntKey ? $"writer.WriteInt32(KeyMapping[\"{prop.PropertyName}\"])" : $"writer.WriteTextString(KeyMapping[\"{prop.PropertyName}\"])")};");
+                        Emitter.EmitSerializablePropertyWriter(sb, prop);
+                    }
+                }
+            }
+            sb.AppendLine($"writer.WriteEndMap();");
+
             return sb;
         }
     }

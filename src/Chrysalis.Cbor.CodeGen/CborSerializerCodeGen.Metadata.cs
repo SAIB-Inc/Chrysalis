@@ -1,3 +1,5 @@
+using System.Data.Common;
+
 namespace Chrysalis.Cbor.CodeGen;
 
 public sealed partial class CborSerializerCodeGen
@@ -36,6 +38,7 @@ public sealed partial class CborSerializerCodeGen
         public SerializationType SerializationType { get; } = serializationType;
         public string? Validator { get; } = validator;
         public bool ShouldPreserveRaw { get; } = shouldPreserveRaw;
+        public bool IsTypeNullable => Indentifier.Contains("?");
 
         public List<SerializableTypeMetadata> ChildTypes { get; } = [];
         public List<SerializablePropertyMetadata> Properties { get; } = [];
@@ -56,6 +59,7 @@ public sealed partial class CborSerializerCodeGen
                 // Validator: {{Validator}}
                 // Properties: {{string.Join(",", Properties.Select(p => p.ToString()))}}
                 // ChildTypes: {{string.Join(",", ChildTypes.Select(t => t.ToString()))}}
+                // IsTypeNullable: {{IsTypeNullable}}
             """;
         }
     }
@@ -110,6 +114,7 @@ public sealed partial class CborSerializerCodeGen
 
         // Attributes
         public bool IsNullable { get; } = isNullable;
+        public bool IsTypeNullable => PropertyType.Contains("?");
         public int? Size { get; } = size;
         public bool IsIndefinite { get; } = isIndefinite;
         public int? Order { get; set; } = order;
@@ -144,6 +149,7 @@ public sealed partial class CborSerializerCodeGen
                 // IsMapKeyTypeOpenGeneric: {{IsMapKeyTypeOpenGeneric}}
                 // IsMapValueTypeOpenGeneric: {{IsMapValueTypeOpenGeneric}}
                 // IsOpenGeneric: {{IsOpenGeneric}}
+                // IsTypeNullable: {{IsTypeNullable}}
             """;
         }
     }

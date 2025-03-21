@@ -22,14 +22,14 @@ public partial record ScriptPubKey(
 [CborList]
 public partial record ScriptAll(
     [CborOrder(0)] int Tag,
-    [CborOrder(1)] CborIndefList<NativeScript> Scripts
+    [CborOrder(1)] CborIndefList<NativeScript>? Scripts
 ) : NativeScript;
 
 [CborSerializable]
 [CborList]
 public partial record ScriptAny(
     [CborOrder(0)] int Tag,
-    [CborOrder(1)] CborDefList<NativeScript> Scripts
+    [CborOrder(1)] CborDefList<NativeScript>? Scripts
 ) : NativeScript;
 
 [CborSerializable]
@@ -37,7 +37,7 @@ public partial record ScriptAny(
 public partial record ScriptNOfK(
     [CborOrder(0)] int Tag,
     [CborOrder(1)] int N,
-    [CborOrder(2)] CborDefList<NativeScript> Scripts
+    [CborOrder(2)] CborDefList<NativeScript>? Scripts
 ) : NativeScript;
 
 [CborSerializable]

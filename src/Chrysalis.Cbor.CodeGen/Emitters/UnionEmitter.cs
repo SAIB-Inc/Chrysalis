@@ -6,7 +6,7 @@ public sealed partial class CborSerializerCodeGen
 {
     private class UnionEmitter : ICborSerializerEmitter
     {
-        public StringBuilder EmitCborDeserializer(StringBuilder sb, SerializableTypeMetadata metadata)
+        public StringBuilder EmitReader(StringBuilder sb, SerializableTypeMetadata metadata)
         {
             sb.AppendLine($"List<string> errors = [];");
             foreach (var childType in metadata.ChildTypes)
@@ -26,8 +26,19 @@ public sealed partial class CborSerializerCodeGen
             return sb;
         }
 
-        public StringBuilder EmitCborSerializer(StringBuilder sb, SerializableTypeMetadata metadata)
+        public StringBuilder EmitWriter(StringBuilder sb, SerializableTypeMetadata metadata)
         {
+            sb.AppendLine("switch (data.CborTypeName)");
+            sb.AppendLine("{");
+            foreach (var childType in metadata.ChildTypes)
+            {
+                sb.AppendLine($"case \"{childType.FullyQualifiedName}\":");
+                sb.AppendLine($"{childType.FullyQualifiedName}.Write(writer, ({childType.FullyQualifiedName})data);");
+                sb.AppendLine($"break;");
+            }
+            sb.AppendLine($"default:");
+            sb.AppendLine($"throw new Exception(\"Union serialization failed. {metadata.FullyQualifiedName} \");");
+            sb.AppendLine("}");
             return sb;
         }
     }

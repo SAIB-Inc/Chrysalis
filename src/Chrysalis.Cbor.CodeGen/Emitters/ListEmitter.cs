@@ -6,16 +6,18 @@ public sealed partial class CborSerializerCodeGen
 {
     private class ListEmitter : ICborSerializerEmitter
     {
-        public StringBuilder EmitCborDeserializer(StringBuilder sb, SerializableTypeMetadata metadata)
+        public StringBuilder EmitReader(StringBuilder sb, SerializableTypeMetadata metadata)
         {
-            Emitter.EmitNewCborReader(sb, "data");
+            Emitter.EmitCborReaderInstance(sb, "data");
             Emitter.EmitTagReader(sb, metadata.CborTag, "tagIndex");
-            Emitter.EmitListRead(sb, metadata);
+            Emitter.EmitCustomListReader(sb, metadata);
             return sb;
         }
 
-        public StringBuilder EmitCborSerializer(StringBuilder sb, SerializableTypeMetadata metadata)
+        public StringBuilder EmitWriter(StringBuilder sb, SerializableTypeMetadata metadata)
         {
+            Emitter.EmitTagWriter(sb, metadata.CborTag);
+            Emitter.EmitCustomListWriter(sb, metadata);
             return sb;
         }
     }

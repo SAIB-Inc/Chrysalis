@@ -6,33 +6,33 @@ public sealed partial class CborSerializerCodeGen
 {
     private class ConstructorEmitter : ICborSerializerEmitter
     {
-        public StringBuilder EmitCborDeserializer(StringBuilder sb, SerializableTypeMetadata metadata)
+        public StringBuilder EmitReader(StringBuilder sb, SerializableTypeMetadata metadata)
         {
-            int constrIndex = ResolveTag(metadata.CborIndex);
-            Emitter.EmitNewCborReader(sb, "data");
+            int constrIndex = Emitter.ResolveTag(metadata.CborIndex);
+            Emitter.EmitCborReaderInstance(sb, "data");
             Emitter.EmitTagReader(sb, metadata.CborTag, "tagIndex");
             Emitter.EmitTagReader(sb, constrIndex, "constrIndex");
-            Emitter.EmitListRead(sb, metadata);
+            Emitter.EmitCustomListReader(sb, metadata);
 
             return sb;
         }
 
-        public StringBuilder EmitCborSerializer(StringBuilder sb, SerializableTypeMetadata metadata)
+        public StringBuilder EmitWriter(StringBuilder sb, SerializableTypeMetadata metadata)
         {
-            return sb;
-        }
+            Emitter.EmitTagWriter(sb, metadata.CborTag);
 
-        private static int ResolveTag(int? index)
-        {
-            if (index is null || index < 0)
+            if (metadata.CborIndex is null || metadata.CborIndex < 0)
             {
-                return -1;
+                sb.AppendLine("writer.WriteTag((CborTag)data.ConstrIndex);");
             }
             else
             {
-                int finalIndex = index > 6 ? 1280 - 7 : 121;
-                return finalIndex + (index ?? 0);
+                sb.AppendLine($"writer.WriteTag((CborTag){Emitter.ResolveTag(metadata.CborIndex)});");
             }
+
+            Emitter.EmitCustomListWriter(sb, metadata);
+
+            return sb;
         }
     }
 }

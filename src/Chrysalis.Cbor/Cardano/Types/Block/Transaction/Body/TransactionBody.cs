@@ -76,7 +76,7 @@ public partial record ConwayTransactionBody(
     [CborProperty(16)] TransactionOutput? CollateralReturn,
     [CborProperty(17)] ulong? TotalCollateral,
     [CborProperty(18)] CborMaybeIndefList<TransactionInput>? ReferenceInputs,
-    [CborProperty(19)] VotingProcedures VotingProcedures,
+    [CborProperty(19)] VotingProcedures? VotingProcedures,
     [CborProperty(20)] CborMaybeIndefList<ProposalProcedure>? ProposalProcedures,
     [CborProperty(21)] ulong? TreasuryValue,
     [CborProperty(22)] ulong? Donation
