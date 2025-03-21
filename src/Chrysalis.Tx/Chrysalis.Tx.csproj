@@ -10,4 +10,15 @@
     <ProjectReference Include="../Chrysalis.Cbor/Chrysalis.Cbor.csproj" />
   </ItemGroup>
 
+    <ItemGroup>
+    <ProjectReference Include="../Chrysalis.Plutus/Chrysalis.Plutus.csproj" />
+  </ItemGroup>
+
+  
+  <ItemGroup>
+    <PackageReference Include="dotnetstandard-bip39" Version="1.0.2" />
+    <PackageReference Include="Microsoft.AspNetCore.Cryptography.KeyDerivation" Version="9.0.3" />
+    <PackageReference Include="CardanoSharp.Chaos" Version="0.1.0" />
+  </ItemGroup>
+
 </Project>

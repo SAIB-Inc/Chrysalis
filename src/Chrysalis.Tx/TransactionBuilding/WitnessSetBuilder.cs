@@ -15,7 +15,7 @@ public class WitnessSetBuilder
     private readonly List<CborBytes> plutusV2Scripts = [];
     private readonly List<CborBytes> plutusV3Scripts = [];
     private readonly List<PlutusData> plutusData = [];
-    private Redeemers? redeemers;
+    public Redeemers? redeemers;
 
     public WitnessSetBuilder AddVKeyWitness(VKeyWitness witness)
     {

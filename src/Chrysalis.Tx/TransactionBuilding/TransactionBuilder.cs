@@ -40,7 +40,7 @@ public class TransactionBuilder
         return this;
     }
 
-    public TransactionBuilder AddOutput(TransactionOutput output, bool isChange = false)
+    public TransactionBuilder AddOutput(PostAlonzoTransactionOutput output, bool isChange = false)
     {
         bodyBuilder.AddOutput((output, isChange));
         return this;
@@ -211,7 +211,7 @@ public class TransactionBuilder
 
     #endregion
 
-    public Transaction Build()
+    public PostMaryTransaction Build()
     {
         var body = bodyBuilder.Build();
         var witnessSet = witnessBuilder.Build();

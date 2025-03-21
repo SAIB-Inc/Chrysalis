@@ -33,6 +33,8 @@ public sealed class CustomMapConverter : ICborConverter
 
         bool useIndexMapping = options.IndexPropertyMapping != null && options.IndexPropertyMapping.Count > 0;
 
+        List<int> indexPropertyMapping = options.IndexPropertyMapping?.Keys.ToList() ?? [];
+
         // Write key-value pairs only for non-null properties
         for (int i = 0; i < value.Count; i++)
         {
@@ -42,7 +44,8 @@ public sealed class CustomMapConverter : ICborConverter
             // Write the key based on mapping type
             if (useIndexMapping)
             {
-                writer.WriteInt32(i); // Write index as key
+                var index = indexPropertyMapping[i];
+                writer.WriteInt32(index); // Write index as key
             }
             else if (options.NamedPropertyMapping != null)
             {
