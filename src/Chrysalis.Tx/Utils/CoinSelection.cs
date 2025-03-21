@@ -1,4 +1,6 @@
+using System.Security.Cryptography.X509Certificates;
 using Chrysalis.Cbor.Cardano.Extensions;
+using Chrysalis.Cbor.Cardano.Jpg.Types.Common;
 using Chrysalis.Cbor.Cardano.Types.Block.Transaction.Output;
 using Chrysalis.Cbor.Types.Primitives;
 using Chrysalis.Tx.Models;
@@ -21,10 +23,10 @@ public class CoinSelectionAlgorithm : ICoinSelection
         if (maxInputs <= 0)
             throw new ArgumentException("Maximum inputs must be greater than zero", nameof(maxInputs));
 
-        List<ResolvedInput> sortedUtxos = [.. self.OrderByDescending(u => u.Output.Lovelace() ?? 0)];
+        List<ResolvedInput> sortedUtxos = [.. self.OrderByDescending(u => u.Output.Lovelace())];
         List<ResolvedInput> selectedUtxos = [];
 
-        Dictionary<string, ulong> requiredAssets = [];
+        Dictionary<string, decimal> requiredAssets = [];
         foreach (Value value in requestedAmount)
         {
             if (value is LovelaceWithMultiAsset lovelaceWithMultiAsset)
@@ -42,20 +44,19 @@ public class CoinSelectionAlgorithm : ICoinSelection
                         }
                     }
                 }
-
             }
         }
 
-        ulong requestedLovelace = (ulong)requestedAmount.Select(x => (decimal)(x.Lovelace() ?? 0)).Sum();
 
+        ulong requestedLovelace = (ulong)requestedAmount.Select(x => (decimal)(x.Lovelace() ?? 0)).Sum();
         int iterCount = 0;
         ulong totalLovelaceSelected = 0;
-        bool isAssetsCovered = requiredAssets.Count == 0;
+        Dictionary<string, decimal> coinSelectedAssets = new(requiredAssets);
         while (true)
         {
             if (iterCount >= self.Count)
                 break;
-            if (totalLovelaceSelected >= requestedLovelace && isAssetsCovered)
+            if (totalLovelaceSelected >= requestedLovelace && requiredAssets.Count == 0)
                 break;
 
             if (!sortedUtxos.Any())
@@ -69,24 +70,49 @@ public class CoinSelectionAlgorithm : ICoinSelection
             ulong lovelace = utxo.Output.Lovelace() ?? 0;
             if (lovelace == 0) continue;
 
-            int satisfiedAssetsCount = 0;
+            bool isAssetPresent = false;
             foreach (var asset in requiredAssets)
             {
                 var policy = asset.Key[..56];
                 var name = asset.Key[56..];
-
-                var amount = utxo.Output.QuantityOf(policy, name) ?? 0;
+                var matchedPolicy = utxo.Output.Amount()?.MultiAssetOutput()?.TokenBundleByPolicyId(policy);
+                ulong amount = 0;
+                foreach (var item in matchedPolicy ?? [])
+                {
+                    if (item.Key == name)
+                    {
+                        amount = item.Value;
+                        break;
+                    }
+                }
                 if (amount == 0) continue;
-
+                isAssetPresent = true;
                 requiredAssets[asset.Key] -= amount;
                 if (requiredAssets[asset.Key] <= 0)
                 {
-                    satisfiedAssetsCount++;
+                    coinSelectedAssets[asset.Key] = requiredAssets[asset.Key];
+                    requiredAssets.Remove(asset.Key);
                 }
             }
-            if (satisfiedAssetsCount == requiredAssets.Count)
+
+            if (!isAssetPresent && totalLovelaceSelected >= requestedLovelace) continue;
+
+            if (utxo.Output.Amount() is LovelaceWithMultiAsset)
             {
-                isAssetsCovered = true;
+                var utxoOutput = utxo.Output.Amount()!.MultiAssetOutput()!;
+                List<string> policies = utxoOutput.PolicyId()?.ToList()!;
+                foreach (string policy in policies)
+                {
+                    Dictionary<string, ulong> tokenBundle = utxoOutput.TokenBundleByPolicyId(policy)!;
+
+                    foreach (var token in tokenBundle)
+                    {
+                        var subject = policy + token.Key;
+                        if (coinSelectedAssets.ContainsKey(subject)) continue;
+                            coinSelectedAssets[subject] = token.Value;
+
+                    }
+                }
             }
 
             selectedUtxos.Add(utxo);
@@ -94,10 +120,43 @@ public class CoinSelectionAlgorithm : ICoinSelection
         }
 
         ulong lovelacechange = totalLovelaceSelected - requestedLovelace;
+        Dictionary<CborBytes, TokenBundleOutput> assetsChange = [];
 
-        Dictionary<string, ulong> assetsChange = requiredAssets
-            .Where(x => x.Value < 0)
-            .ToDictionary(x => x.Key, x => (ulong)Math.Abs((decimal)x.Value));
+        Dictionary<string, Dictionary<string, decimal>> assetChangeMap = [];
+
+        foreach (var asset in coinSelectedAssets)
+        {
+            var policy = asset.Key[..56];
+            var name = asset.Key[56..];
+            {
+                if (!assetChangeMap.ContainsKey(policy))
+                {
+                    assetChangeMap[policy] = new()
+                    {
+                        { name, Math.Abs(asset.Value) }
+                    };
+                }
+                else
+                {
+                    if (!assetChangeMap[policy].ContainsKey(name))
+                    {
+                        assetChangeMap[policy][name] = Math.Abs(asset.Value);
+                    }
+                    else
+                    {
+                        assetChangeMap[policy][name] += Math.Abs(asset.Value);
+                    }
+                }
+            }
+        }
+
+
+        foreach (var asset in assetChangeMap)
+        {
+            var policyIdBytes = new CborBytes(Convert.FromHexString(asset.Key));
+            var tokenBundle = new TokenBundleOutput(asset.Value.ToDictionary(x => new CborBytes(Convert.FromHexString(x.Key)), x => new CborUlong((ulong)x.Value)));
+            assetsChange[policyIdBytes] = tokenBundle;
+        }
 
         return new CoinSelectionResult
         {
@@ -502,7 +561,7 @@ public record CoinSelectionResult
 {
     public List<ResolvedInput> Inputs { get; set; } = [];
     public ulong LovelaceChange { get; set; }
-    public Dictionary<string, ulong> AssetsChange { get; set; } = [];
+    public Dictionary<CborBytes, TokenBundleOutput> AssetsChange { get; set; } = [];
 }
 
 public enum SortingOrder

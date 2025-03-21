@@ -15,7 +15,7 @@ public class TransactionBodyBuilder
 {
     private CborInt? networkId;
     public List<TransactionInput> Inputs { get; set; } = [];
-    public List<(TransactionOutput, bool)> Outputs { get; set; } = [];
+    public List<(PostAlonzoTransactionOutput, bool)> Outputs { get; set; } = [];
     private CborUlong? fee;
     private CborUlong? ttl;
     private CborUlong? validityIntervalStart;
@@ -46,7 +46,7 @@ public class TransactionBodyBuilder
         return this;
     }
 
-    public TransactionBodyBuilder AddOutput((TransactionOutput, bool) output)
+    public TransactionBodyBuilder AddOutput((PostAlonzoTransactionOutput, bool) output)
     {
         Outputs.Add(output);
         return this;
@@ -158,7 +158,7 @@ public class TransactionBodyBuilder
     {
         return new ConwayTransactionBody(
             new CborDefListWithTag<TransactionInput>(Inputs),
-            new CborDefList<TransactionOutput>([.. Outputs.Select(o => o.Item1)]),
+            new CborDefList<PostAlonzoTransactionOutput>([.. Outputs.Select(o => o.Item1)]),
             fee ?? new CborUlong(0),
             ttl,
             certificates.Count != 0 ? new CborDefList<Certificate>(certificates) : null,

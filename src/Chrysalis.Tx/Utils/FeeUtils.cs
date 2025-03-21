@@ -88,4 +88,9 @@ public static class FeeUtil
          ulong outputSize = (ulong)cborBytes.Length;
          return utxoCostPerByte * (outputSize + PROTOCOL_OVERHEAD_BYTES);
      }
+
+     public static ulong CalculateRequiredCollateral(ulong fee, ulong collateralPercentage)
+     {
+         return (ulong)Math.Ceiling((decimal)fee * collateralPercentage / 100);
+     }
  }
