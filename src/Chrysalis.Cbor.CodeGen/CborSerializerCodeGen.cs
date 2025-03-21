@@ -10,18 +10,12 @@ public sealed partial class CborSerializerCodeGen : IIncrementalGenerator
 {
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
-        IncrementalValueProvider<ImmutableArray<TypeDeclarationSyntax>> typeProvider =
-            context.SyntaxProvider.CreateSyntaxProvider(
-                predicate: static (node, _) =>
-                {
-                    return node is TypeDeclarationSyntax tds &&
-                           tds.AttributeLists.Count > 0;
-                },
-                transform: static (ctx, _) => (TypeDeclarationSyntax)ctx.Node)
-            .Collect();
+        IncrementalValueProvider<ImmutableArray<TypeDeclarationSyntax>> typeProvider = context.SyntaxProvider.CreateSyntaxProvider(
+                predicate: static (node, _) => node is TypeDeclarationSyntax tds && tds.AttributeLists.Count > 0,
+                transform: static (ctx, _) => (TypeDeclarationSyntax)ctx.Node
+            ).Collect();
 
-        IncrementalValueProvider<(Compilation, ImmutableArray<TypeDeclarationSyntax>)> combined =
-            context.CompilationProvider.Combine(typeProvider);
+        IncrementalValueProvider<(Compilation, ImmutableArray<TypeDeclarationSyntax>)> combined = context.CompilationProvider.Combine(typeProvider);
 
         context.RegisterSourceOutput(combined, EmitSerializersAndMetadata);
     }
