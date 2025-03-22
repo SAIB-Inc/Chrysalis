@@ -1,4 +1,4 @@
-﻿// using Chrysalis.Cbor.Cardano.Types.Block;
+// using Chrysalis.Cbor.Cardano.Types.Block;
 // using Chrysalis.Network.Cbor.ChainSync;
 // using Chrysalis.Network.Cbor.Common;
 // using Chrysalis.Network.Cbor.Handshake;

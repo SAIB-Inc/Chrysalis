@@ -5,7 +5,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="LanguageExt.Core" Version="4.4.9" />
+    <PackageReference Include="Dapper" Version="2.1.66" />
+    <PackageReference Include="Npgsql" Version="9.0.3" />
   </ItemGroup>
 
   <PropertyGroup>

@@ -1,43 +1,64 @@
-using System.Buffers;
 using System.IO.Pipelines;
 using System.Net.Sockets;
 using SocketProtocolType = System.Net.Sockets.ProtocolType;
 
 namespace Chrysalis.Network.Core;
 
+/// <summary>
+/// Unix domain socket implementation of the bearer interface.
+/// </summary>
 public class UnixBearer : IBearer
 {
     private readonly Socket _socket;
     private readonly NetworkStream _stream;
-    public PipeReader Reader { get; private set; }
-    public PipeWriter Writer { get; private set; }
+    private bool _isDisposed;
 
-    private UnixBearer(Socket socket, NetworkStream stream, PipeReader reader, PipeWriter writer)
+    /// <summary>
+    /// Gets the reader for consuming data from the Unix socket.
+    /// </summary>
+    public PipeReader Reader { get; }
+
+    /// <summary>
+    /// Gets the writer for sending data to the Unix socket.
+    /// </summary>
+    public PipeWriter Writer { get; }
+
+    private UnixBearer(Socket socket, NetworkStream stream)
     {
-
         _socket = socket;
         _stream = stream;
-        Reader = reader;
-        Writer = writer;
+        Reader = PipeReader.Create(stream);
+        Writer = PipeWriter.Create(stream);
     }
 
-    public static async Task<UnixBearer> CreateAsync(string path)
+    /// <summary>
+    /// Creates a Unix domain socket bearer connected to the specified path.
+    /// </summary>
+    /// <param name="path">The socket path to connect to.</param>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    /// <returns>A connected Unix socket bearer.</returns>
+    public static async Task<UnixBearer> CreateAsync(string path, CancellationToken cancellationToken)
     {
-        // Create a Unix domain socket.
         Socket socket = new(AddressFamily.Unix, SocketType.Stream, SocketProtocolType.Unspecified);
         UnixDomainSocketEndPoint endpoint = new(path);
-        await socket.ConnectAsync(endpoint);
+        await socket.ConnectAsync(endpoint, cancellationToken);
         NetworkStream stream = new(socket, ownsSocket: true);
-        PipeReader reader = PipeReader.Create(stream);
-        PipeWriter writer = PipeWriter.Create(stream);
-
-        return new UnixBearer(socket, stream, reader, writer);
+        return new UnixBearer(socket, stream);
     }
 
+    /// <summary>
+    /// Disposes resources used by the bearer.
+    /// </summary>
     public void Dispose()
     {
+        if (_isDisposed) return;
+
+        Reader.Complete();
+        Writer.Complete();
         _stream.Dispose();
         _socket.Dispose();
+
+        _isDisposed = true;
         GC.SuppressFinalize(this);
     }
 }
