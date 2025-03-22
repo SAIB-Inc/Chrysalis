@@ -19,29 +19,4 @@ public static class RoslynExtension
 
         return null;
     }
-
-    // First argument
-    private static T? GetFirstAttributeValue<T>(this SyntaxNode node, string attributeName, SemanticModel semanticModel)
-    {
-        ISymbol? symbol = semanticModel.GetDeclaredSymbol(node);
-        AttributeData? attribute = symbol?.GetAttributes()
-            .FirstOrDefault(a => a.AttributeClass?.Name == attributeName ||
-                               a.AttributeClass?.Name == attributeName.Replace("Attribute", ""));
-
-        return attribute?.ConstructorArguments.FirstOrDefault().Value is T val ? val : default;
-    }
-
-    // Named property
-    private static T? GetNamedAttributeValue<T>(this SyntaxNode node, string attributeName, string propertyName, SemanticModel semanticModel)
-    {
-        ISymbol? symbol = semanticModel.GetDeclaredSymbol(node);
-        AttributeData? attribute = symbol?.GetAttributes()
-            .FirstOrDefault(a => a.AttributeClass?.Name == attributeName ||
-                               a.AttributeClass?.Name == attributeName.Replace("Attribute", ""));
-
-        KeyValuePair<string, TypedConstant>? namedArg = attribute?.NamedArguments
-            .FirstOrDefault(na => na.Key == propertyName);
-
-        return namedArg?.Value.Value is T val ? val : default;
-    }
 }
