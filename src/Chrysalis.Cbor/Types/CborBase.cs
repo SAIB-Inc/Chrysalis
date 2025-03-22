@@ -34,7 +34,7 @@ public abstract partial record CborBase<T> where T : CborBase<T>
                 int backtickIndex = baseName.IndexOf('`');
                 if (backtickIndex > 0)
                 {
-                    baseName = baseName.Substring(0, backtickIndex);
+                    baseName = baseName[..backtickIndex];
                 }
 
                 // Get the generic parameter names from the type definition
