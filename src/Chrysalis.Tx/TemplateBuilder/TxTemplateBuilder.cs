@@ -44,120 +44,122 @@ public class TxTemplateBuilder<T>
     {
         return async param =>
         {
-            var transaction = TransactionBuilder.Create();
 
-            // Extract default sender address
-            string senderAddress = "addr_test1qpw9cvvdq8mjncs9e90trvpdvg7azrncafv0wtgvz0uf9vhgjp8dc6v79uxw0detul8vnywlv5dzyt32ayjyadvhtjaqyl2gur";
+            // var transaction = TransactionBuilder.Create();
 
-            // Get available UTXOs
-            var utxos = await provider!.GetUtxosAsync(senderAddress);
+            // // Extract default sender address
+            // string senderAddress = "addr_test1qpw9cvvdq8mjncs9e90trvpdvg7azrncafv0wtgvz0uf9vhgjp8dc6v79uxw0detul8vnywlv5dzyt32ayjyadvhtjaqyl2gur";
 
-            var pparams = await provider!.GetParametersAsync();
+            // // Get available UTXOs
+            // var utxos = await provider!.GetUtxosAsync(senderAddress);
 
-            string changeAddr = "005c5c318d01f729e205c95eb1b02d623dd10e78ea58f72d0c13f892b2e8904edc699e2f0ce7b72be7cec991df651a222e2ae9244eb5975cba";
-            int changeIndex = 0;
+            // var pparams = await provider!.GetParametersAsync();
 
-
-            var additionalParties = param is IParameters parameters
-                ? parameters.Parties ?? []
-                : [];
-
-            var parties = MergeParties(staticParties, additionalParties);
-
-            ulong totalOutputLovelace = 0;
-            foreach (var config in outputConfigs)
-            {
-                var outputOptions = new OutputOptions("", null, null);
-                config(outputOptions, param);
-                totalOutputLovelace += outputOptions.Amount!.Lovelace() ?? 0;
-                transaction.AddOutput(OutputUtils.BuildOutput(outputOptions, parties));
-                changeIndex++;
-            }
-
-            List<Value> requiredInputValues = [];
-            foreach (var config in inputConfigs)
-            {
-                var inputOptions = new InputOptions("", null, null, null, null);
-                config(inputOptions, param);
-                requiredInputValues.Add(inputOptions.MinAmount!);
-            }
+            // string changeAddr = "005c5c318d01f729e205c95eb1b02d623dd10e78ea58f72d0c13f892b2e8904edc699e2f0ce7b72be7cec991df651a222e2ae9244eb5975cba";
+            // int changeIndex = 0;
 
 
-            var coinSelectionResult = CoinSelectionAlgorithm.LargestFirstAlgorithm(utxos, requiredInputValues);
+            // var additionalParties = param is IParameters parameters
+            //     ? parameters.Parties ?? []
+            //     : [];
 
-            foreach (var utxo in coinSelectionResult.Inputs)
-            {
-                transaction.AddInput(utxo.Outref);
-            }
+            // var parties = MergeParties(staticParties, additionalParties);
 
-            TransactionOutput? changeOutput = null;
+            // ulong totalOutputLovelace = 0;
+            // foreach (var config in outputConfigs)
+            // {
+            //     var outputOptions = new OutputOptions("", null, null);
+            //     config(outputOptions, param);
+            //     totalOutputLovelace += outputOptions.Amount!.Lovelace() ?? 0;
+            //     transaction.AddOutput(OutputUtils.BuildOutput(outputOptions, parties));
+            //     changeIndex++;
+            // }
 
-            if (coinSelectionResult.LovelaceChange > 0 || coinSelectionResult.AssetsChange.Count > 0)
-            {
-                Console.WriteLine(coinSelectionResult.LovelaceChange);
-                Lovelace lovelaceChange = new(coinSelectionResult.LovelaceChange);
-                Value changeValue = lovelaceChange;
+            // List<Value> requiredInputValues = [];
+            // foreach (var config in inputConfigs)
+            // {
+            //     var inputOptions = new InputOptions("", null, null, null, null);
+            //     config(inputOptions, param);
+            //     requiredInputValues.Add(inputOptions.MinAmount!);
+            // }
 
-                Dictionary<CborBytes, TokenBundleOutput> changeAssets = [];
-                foreach (var asset in coinSelectionResult.AssetsChange)
-                {
-                    var policy = Convert.FromHexString(asset.Key[..56]);
-                    var assetName = Convert.FromHexString(asset.Key[56..]);
 
-                    if (!changeAssets.ContainsKey(new CborBytes(policy)))
-                    {
-                        changeAssets[new CborBytes(policy)] = new TokenBundleOutput(new Dictionary<CborBytes, CborUlong>
-                        {
-                            [new CborBytes(assetName)] = new CborUlong(asset.Value)
-                        });
-                    }
-                    else
-                    {
-                        changeAssets[new CborBytes(policy)].Value[new CborBytes(assetName)] = new CborUlong(asset.Value);
-                    }
-                }
-                if (changeAssets.Count > 0)
-                {
-                    changeValue = new LovelaceWithMultiAsset(lovelaceChange, new MultiAssetOutput(changeAssets));
-                }
+            // var coinSelectionResult = CoinSelectionAlgorithm.LargestFirstAlgorithm(utxos, requiredInputValues);
 
-                changeOutput = new AlonzoTransactionOutput(
-                    new Address(Convert.FromHexString(changeAddr)),
-                    changeValue,
-                    null
-                );
-            }
+            // foreach (var utxo in coinSelectionResult.Inputs)
+            // {
+            //     transaction.AddInput(utxo.Outref);
+            // }
 
-            var draftTxBuilder = transaction;
+            // TransactionOutput? changeOutput = null;
 
-            if (changeOutput is not null)
-            {
-                draftTxBuilder.AddOutput(changeOutput, true);
-            }
+            // if (coinSelectionResult.LovelaceChange > 0 || coinSelectionResult.AssetsChange.Count > 0)
+            // {
+            //     Console.WriteLine(coinSelectionResult.LovelaceChange);
+            //     Lovelace lovelaceChange = new(coinSelectionResult.LovelaceChange);
+            //     Value changeValue = lovelaceChange;
 
-            // var draftWitnessSet = WitnessSetUtils.BuildPlaceholderWitnessSet();
-            // draftTxBuilder.SetWitnessSet(draftWitnessSet);
+            //     Dictionary<CborBytes, TokenBundleOutput> changeAssets = [];
+            //     foreach (var asset in coinSelectionResult.AssetsChange)
+            //     {
+            //         var policy = Convert.FromHexString(asset.Key[..56]);
+            //         var assetName = Convert.FromHexString(asset.Key[56..]);
 
-            var draftTx = draftTxBuilder.Build();
-            var draftTxCbor = CborSerializer.Serialize(draftTx);
-            ulong draftTxSize = (ulong)draftTxCbor.Length;
+            //         if (!changeAssets.ContainsKey(new CborBytes(policy)))
+            //         {
+            //             changeAssets[new CborBytes(policy)] = new TokenBundleOutput(new Dictionary<CborBytes, CborUlong>
+            //             {
+            //                 [new CborBytes(assetName)] = new CborUlong(asset.Value)
+            //             });
+            //         }
+            //         else
+            //         {
+            //             changeAssets[new CborBytes(policy)].Value[new CborBytes(assetName)] = new CborUlong(asset.Value);
+            //         }
+            //     }
+            //     if (changeAssets.Count > 0)
+            //     {
+            //         changeValue = new LovelaceWithMultiAsset(lovelaceChange, new MultiAssetOutput(changeAssets));
+            //     }
 
-            ulong min_fee = FeeUtil.CalculateFeeWithWitness(draftTxSize, pparams.MinFeeA!.Value, pparams.MinFeeB!.Value, 1);
+            //     changeOutput = new AlonzoTransactionOutput(
+            //         new Address(Convert.FromHexString(changeAddr)),
+            //         changeValue,
+            //         null
+            //     );
+            // }
 
-            if (changeOutput is not null)
-            {
-                transaction.AddOutput(new AlonzoTransactionOutput(
-                    new Address(Convert.FromHexString(changeAddr)),
-                    new Lovelace(changeOutput.Amount()!.Lovelace()!.Value! - min_fee),
-                    null
-                ), false);
-            }
+            // var draftTxBuilder = transaction;
 
-            transaction.SetFee(min_fee);
-            //Hardcoded for now since fee calculation is not yet implemented
+            // if (changeOutput is not null)
+            // {
+            //     draftTxBuilder.AddOutput(changeOutput, true);
+            // }
 
-            var tx = transaction.Build();
-            return CborSerializer.Serialize(tx);
+            // // var draftWitnessSet = WitnessSetUtils.BuildPlaceholderWitnessSet();
+            // // draftTxBuilder.SetWitnessSet(draftWitnessSet);
+
+            // var draftTx = draftTxBuilder.Build();
+            // var draftTxCbor = CborSerializer.Serialize(draftTx);
+            // ulong draftTxSize = (ulong)draftTxCbor.Length;
+
+            // ulong min_fee = FeeUtil.CalculateFeeWithWitness(draftTxSize, pparams.MinFeeA!.Value, pparams.MinFeeB!.Value, 1);
+
+            // if (changeOutput is not null)
+            // {
+            //     transaction.AddOutput(new AlonzoTransactionOutput(
+            //         new Address(Convert.FromHexString(changeAddr)),
+            //         new Lovelace(changeOutput.Amount()!.Lovelace()!.Value! - min_fee),
+            //         null
+            //     ), false);
+            // }
+
+            // transaction.SetFee(min_fee);
+            // //Hardcoded for now since fee calculation is not yet implemented
+
+            // var tx = transaction.Build();
+            // return CborSerializer.Serialize(tx);
+            return new byte[] { };
         };
     }
 

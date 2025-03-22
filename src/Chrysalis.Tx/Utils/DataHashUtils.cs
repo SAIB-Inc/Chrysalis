@@ -1,6 +1,7 @@
 
 using Chrysalis.Cbor.Cardano.Types.Block.Transaction.Script;
 using Chrysalis.Cbor.Cardano.Types.Block.Transaction.WitnessSet;
+using Chrysalis.Cbor.Serialization;
 
 namespace Chrysalis.Tx.Utils;
 
@@ -30,12 +31,9 @@ public static class ScriptDataHashUtil
             plutusDataBytes = datums.ToBytes() ?? [];
         }
 
-        byte[] redeemerBytes;
-        if (redeemers.Raw.HasValue)
-        {
-            redeemerBytes = redeemers.ToBytes() ?? [];
-        }
-        else
+        byte[] redeemerBytes = CborSerializer.Serialize(redeemers) ?? [];
+        
+        if(redeemerBytes.Length <= 0)
         {
             /**
             ; Finally, note that in the case that a transaction includes datums but does not
