@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using System.Text;
 using Microsoft.CodeAnalysis;
 
@@ -27,6 +28,7 @@ public sealed partial class CborSerializerCodeGen
             sb.AppendLine("#pragma warning disable CS0109");
             sb.AppendLine();
             sb.AppendLine("using System.Formats.Cbor;");
+            sb.AppendLine();
 
             if (metadata?.Namespace is not null)
             {
@@ -43,7 +45,7 @@ public sealed partial class CborSerializerCodeGen
                 sb.AppendLine($"static Dictionary<{(isIntKey ? "int" : "string")}, Type> TypeMapping = new()");
                 sb.AppendLine("{");
 
-                List<SerializablePropertyMetadata> properties = metadata.Properties.ToList();
+                List<SerializablePropertyMetadata> properties = [.. metadata.Properties];
                 for (int i = 0; i < properties.Count; i++)
                 {
                     SerializablePropertyMetadata prop = properties[i];

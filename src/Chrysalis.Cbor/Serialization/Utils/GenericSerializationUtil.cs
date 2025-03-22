@@ -2,6 +2,7 @@
 using System.Collections.Concurrent;
 using System.Formats.Cbor;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using Chrysalis.Cbor.Types.Primitives;
 
 namespace Chrysalis.Cbor.Serialization.Utils;
@@ -15,6 +16,8 @@ public static class GenericSerializationUtil
     private static readonly ConcurrentDictionary<Type, Delegate> WriteMethodCache = [];
 
     #region Read
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static T? Read<T>(CborReader reader)
     {
         if (IsPrimitiveType(typeof(T)))
@@ -27,6 +30,7 @@ public static class GenericSerializationUtil
         }
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static object? Read(CborReader reader, Type type)
     {
         if (IsPrimitiveType(type))
@@ -39,6 +43,7 @@ public static class GenericSerializationUtil
         }
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static object? Read(CborReader reader, object? value)
     {
         Type? type = value?.GetType();
@@ -58,6 +63,7 @@ public static class GenericSerializationUtil
         }
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static bool IsPrimitiveType(Type type)
     {
         if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(Nullable<>))
@@ -79,6 +85,7 @@ public static class GenericSerializationUtil
                type == typeof(CborEncodedValue);
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static T? ReadPrimitive<T>(CborReader reader)
     {
         Type type = typeof(T);
@@ -125,6 +132,7 @@ public static class GenericSerializationUtil
         throw new NotSupportedException($"Type {type} is not supported as a primitive type.");
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static object? ReadPrimitive(Type type, CborReader reader)
     {
         // Handle nullable types by checking the underlying type
@@ -173,7 +181,7 @@ public static class GenericSerializationUtil
         throw new NotSupportedException($"Type {type} is not supported as a primitive type.");
     }
 
-
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static byte[] ReadByteArray(CborReader reader)
     {
         if (reader.PeekState() == CborReaderState.StartIndefiniteLengthByteString)
@@ -194,6 +202,7 @@ public static class GenericSerializationUtil
         }
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static T ReadNonPrimitive<T>(CborReader reader)
     {
         // Read the encoded value
@@ -222,6 +231,7 @@ public static class GenericSerializationUtil
         }
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static object? ReadNonPrimitive(Type type, CborReader reader)
     {
         // Read the encoded value
@@ -275,6 +285,7 @@ public static class GenericSerializationUtil
     }
 
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static List<T> ReadList<T>(CborReader reader)
     {
         List<T> result = [];
@@ -298,8 +309,9 @@ public static class GenericSerializationUtil
         return result;
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static Dictionary<TKey, TValue?> ReadDictionary<TKey, TValue>(CborReader reader)
-        where TKey : notnull
+            where TKey : notnull
     {
         Dictionary<TKey, TValue?> result = [];
         reader.ReadStartMap();
@@ -333,6 +345,7 @@ public static class GenericSerializationUtil
         return result;
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static dynamic? ConvertValue(object value, Type targetType)
     {
         if (value == null) return null;
@@ -346,6 +359,7 @@ public static class GenericSerializationUtil
 
     #region Write
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static void Write<T>(CborWriter writer, T value)
     {
         if (IsPrimitiveType(typeof(T)))
@@ -358,6 +372,7 @@ public static class GenericSerializationUtil
         }
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static void Write(CborWriter writer, object? value, Type type)
     {
         if (IsPrimitiveType(type))
@@ -370,6 +385,7 @@ public static class GenericSerializationUtil
         }
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static void Write(CborWriter writer, object? value)
     {
         Type? type = value?.GetType();
@@ -384,6 +400,7 @@ public static class GenericSerializationUtil
         }
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static void WritePrimitive(CborWriter writer, object? value, Type type)
     {
         // Handle nullable types by checking the underlying type
@@ -481,6 +498,7 @@ public static class GenericSerializationUtil
         }
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static void WritePrimitive<T>(CborWriter writer, object? value)
     {
         Type type = typeof(T);
@@ -579,7 +597,7 @@ public static class GenericSerializationUtil
         }
     }
 
-
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static void WriteNonPrimitive<T>(CborWriter writer, T value)
     {
         try
@@ -606,6 +624,7 @@ public static class GenericSerializationUtil
         }
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static void WriteNonPrimitive(CborWriter writer, object? value, Type type)
     {
         try
@@ -645,6 +664,7 @@ public static class GenericSerializationUtil
         }
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static void WriteList<T>(CborWriter writer, List<T> list)
     {
         writer.WriteStartArray(list.Count);
@@ -664,6 +684,7 @@ public static class GenericSerializationUtil
         writer.WriteEndArray();
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static void WriteDictionary<TKey, TValue>(CborWriter writer, Dictionary<TKey, TValue?> dictionary)
         where TKey : notnull
     {
@@ -695,7 +716,7 @@ public static class GenericSerializationUtil
         writer.WriteEndMap();
     }
 
-    // Helper method for writing byte arrays with potential chunking
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static void WriteByteArray(CborWriter writer, byte[] data, int chunkSize = 1024)
     {
         if (data.Length <= chunkSize)

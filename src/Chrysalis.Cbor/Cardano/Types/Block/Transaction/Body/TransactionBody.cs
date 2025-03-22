@@ -11,9 +11,7 @@ namespace Chrysalis.Cbor.Cardano.Types.Block.Transaction.Body;
 
 [CborSerializable]
 [CborUnion]
-public abstract partial record TransactionBody : CborBase<TransactionBody>
-{
-}
+public abstract partial record TransactionBody : CborBase<TransactionBody> { }
 
 [CborSerializable]
 [CborMap]
