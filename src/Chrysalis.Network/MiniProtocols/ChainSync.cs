@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using Chrysalis.Network.Cbor.ChainSync;
 using Chrysalis.Network.Cbor.Common;
 using Chrysalis.Network.Core;
@@ -33,19 +34,15 @@ public class ChainSync(AgentChannel channel) : IMiniProtocol
     {
         Points message = new([.. points]);
         MessageFindIntersect messageCbor = ChainSyncMessages.FindIntersect(message);
-        await _buffer.SendFullMessageAsync(messageCbor, cancellationToken);
+        await _buffer.SendFullMessageAsync<ChainSyncMessage>(messageCbor, cancellationToken);
         return await _buffer.ReceiveFullMessageAsync<ChainSyncMessage>(cancellationToken);
     }
 
-    /// <summary>
-    /// Requests the next block from the chain.
-    /// </summary>
-    /// <param name="cancellationToken">Token to cancel the operation.</param>
-    /// <returns>The response message containing next block or chain status.</returns>
-    public async Task<MessageNextResponse> NextRequestAsync(CancellationToken cancellationToken)
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public async Task<MessageNextResponse?> NextRequestAsync(CancellationToken cancellationToken)
     {
         await _buffer.SendFullMessageAsync(_nextRequest, cancellationToken);
-        return await _buffer.ReceiveFullMessageAsync<MessageNextResponse>(cancellationToken);
+        return await _buffer.ReceiveFullMessageAsync<ChainSyncMessage>(cancellationToken) as MessageNextResponse;
     }
 }
 

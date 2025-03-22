@@ -1,20 +1,24 @@
-using Chrysalis.Cbor.Attributes;
-using Chrysalis.Cbor.Serialization.Converters.Custom;
+using Chrysalis.Cbor.Serialization.Attributes;
+
 using Chrysalis.Cbor.Types;
-using Chrysalis.Cbor.Types.Primitives;
 
 namespace Chrysalis.Cbor.Cardano.Types.Block.Transaction.Protocol;
 
-[CborConverter(typeof(UnionConverter))]
-public abstract record Nonce : CborBase;
+[CborSerializable]
+[CborUnion]
+public abstract partial record Nonce : CborBase<Nonce>
+{
+}
 
-[CborConverter(typeof(CustomListConverter))]
-public record NonceWithHash(
-    [CborIndex(0)] CborUlong Variant,
-    [CborIndex(1)] CborBytes? Hash
+[CborSerializable]
+[CborList]
+public partial record NonceWithHash(
+[CborOrder(0)] ulong Variant,
+[CborOrder(1)] byte[]? Hash
 ) : Nonce;
 
-[CborConverter(typeof(CustomListConverter))]
-public record NonceWithoutHash(
-    [CborIndex(0)] CborUlong Variant
+[CborSerializable]
+[CborList]
+public partial record NonceWithoutHash(
+    [CborOrder(0)] ulong Variant
 ) : Nonce;

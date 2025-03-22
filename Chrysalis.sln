@@ -1,4 +1,5 @@
-﻿Microsoft Visual Studio Solution File, Format Version 12.00
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.5.2.0
 MinimumVisualStudioVersion = 10.0.40219.1
@@ -18,9 +19,7 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Chrysalis.Network", "src\Ch
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Chrysalis.Network.Cli", "src\Chrysalis.Network.Cli\Chrysalis.Network.Cli.csproj", "{410C13F6-68D9-4CEC-A380-D402BC4FC3ED}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Chrysalis.Plutus.Cli", "src\Chrysalis.Plutus.Cli\Chrysalis.Plutus.Cli.csproj", "{6B658D27-EA30-4FB9-93B8-9C92DAB3B607}"
-EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Chrysalis.Plutus", "src\Chrysalis.Plutus\Chrysalis.Plutus.csproj", "{73757F74-B323-44AC-8D4D-71687007C5B5}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Chrysalis.Cbor.CodeGen", "src\Chrysalis.Cbor.CodeGen\Chrysalis.Cbor.CodeGen.csproj", "{E130E4B0-1F15-489D-99D8-9D1D707A03E4}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -56,14 +55,10 @@ Global
 		{410C13F6-68D9-4CEC-A380-D402BC4FC3ED}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{410C13F6-68D9-4CEC-A380-D402BC4FC3ED}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{410C13F6-68D9-4CEC-A380-D402BC4FC3ED}.Release|Any CPU.Build.0 = Release|Any CPU
-		{6B658D27-EA30-4FB9-93B8-9C92DAB3B607}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{6B658D27-EA30-4FB9-93B8-9C92DAB3B607}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{6B658D27-EA30-4FB9-93B8-9C92DAB3B607}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{6B658D27-EA30-4FB9-93B8-9C92DAB3B607}.Release|Any CPU.Build.0 = Release|Any CPU
-		{73757F74-B323-44AC-8D4D-71687007C5B5}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{73757F74-B323-44AC-8D4D-71687007C5B5}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{73757F74-B323-44AC-8D4D-71687007C5B5}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{73757F74-B323-44AC-8D4D-71687007C5B5}.Release|Any CPU.Build.0 = Release|Any CPU
+		{E130E4B0-1F15-489D-99D8-9D1D707A03E4}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{E130E4B0-1F15-489D-99D8-9D1D707A03E4}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{E130E4B0-1F15-489D-99D8-9D1D707A03E4}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{E130E4B0-1F15-489D-99D8-9D1D707A03E4}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -76,8 +71,7 @@ Global
 		{75E9FD85-74D0-AEF7-712E-4AE33F9AF441} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 		{5F419E1F-75D9-4F37-9709-1DD5F4969BF2} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 		{410C13F6-68D9-4CEC-A380-D402BC4FC3ED} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
-		{6B658D27-EA30-4FB9-93B8-9C92DAB3B607} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
-		{73757F74-B323-44AC-8D4D-71687007C5B5} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
+		{E130E4B0-1F15-489D-99D8-9D1D707A03E4} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {728F4C1F-B8FC-42EF-9AE0-69EBD52A1957}

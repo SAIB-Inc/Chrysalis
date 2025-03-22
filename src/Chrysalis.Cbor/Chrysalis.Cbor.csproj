@@ -1,5 +1,4 @@
 ﻿<Project>
-
   <PropertyGroup>
     <TargetFramework>net9.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
@@ -10,6 +9,7 @@
     <Company>SAIB Inc</Company>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageLicenseFile>LICENSE.md</PackageLicenseFile>
+    <EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>
   </PropertyGroup>
 
   <ItemGroup>
@@ -19,11 +19,16 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\Chrysalis.Cbor.CodeGen\Chrysalis.Cbor.CodeGen.csproj" 
+                      OutputItemType="Analyzer" 
+                      ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
+  <ItemGroup>
     <None Include="../../LICENSE.md" Pack="true" PackagePath="" />
     <None Include="../../README.md" Pack="true" PackagePath="" />
   </ItemGroup>
 
   <Import Project="Sdk.props" Sdk="Microsoft.NET.Sdk" />
   <Import Project="Sdk.targets" Sdk="Microsoft.NET.Sdk" />
-
 </Project>

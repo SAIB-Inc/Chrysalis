@@ -1,8 +1,11 @@
-using Chrysalis.Cbor.Attributes;
-using Chrysalis.Cbor.Serialization.Converters.Custom;
+using Chrysalis.Cbor.Serialization.Attributes;
 
 namespace Chrysalis.Cbor.Types.Primitives;
 
-[CborConverter(typeof(RationalNumberConverter))]
-[CborOptions(Tag = 30)]
-public record CborRationalNumber(ulong Numerator, ulong Denominator) : CborBase;
+[CborSerializable]
+[CborTag(30)]
+[CborList]
+public partial record CborRationalNumber(
+    [CborOrder(0)] ulong Numerator,
+    [CborOrder(1)] ulong Denominator
+) : CborBase<CborRationalNumber>;

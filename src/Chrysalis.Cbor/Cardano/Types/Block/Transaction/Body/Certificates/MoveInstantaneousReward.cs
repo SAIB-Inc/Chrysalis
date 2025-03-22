@@ -1,25 +1,28 @@
-using Chrysalis.Cbor.Attributes;
-using Chrysalis.Cbor.Serialization.Converters.Custom;
-using Chrysalis.Cbor.Serialization.Converters.Primitives;
+using Chrysalis.Cbor.Serialization.Attributes;
+
+
 using Chrysalis.Cbor.Types;
-using Chrysalis.Cbor.Types.Primitives;
 
 namespace Chrysalis.Cbor.Cardano.Types.Block.Transaction.Body.Certificates;
 
-[CborConverter(typeof(CustomListConverter))]
-public record MoveInstantaneousReward(
-    [CborIndex(0)] CborInt InstantaneousRewardSource,
-    [CborIndex(1)] Target InstantaneousRewardTarget
-) : CborBase;
+[CborSerializable]
+[CborList]
+public partial record MoveInstantaneousReward(
+    [CborOrder(0)] int InstantaneousRewardSource,
+    [CborOrder(1)] Target InstantaneousRewardTarget
+) : CborBase<MoveInstantaneousReward>;
 
 
-[CborConverter(typeof(UnionConverter))]
-public abstract record Target : CborBase;
+[CborSerializable]
+[CborUnion]
+public abstract partial record Target : CborBase<Target>
+{
+}
+
+[CborSerializable]
+public partial record StakeCredentials(Dictionary<Credential, ulong> Value) : Target;
 
 
-[CborConverter(typeof(MapConverter))]
-public record StakeCredentials(Dictionary<Credential, CborUlong> Value) : Target;
+[CborSerializable]
+public partial record OtherAccountingPot(ulong Value) : Target;
 
-
-[CborConverter(typeof(UlongConverter))]
-public record OtherAccountingPot(ulong Value) : Target;

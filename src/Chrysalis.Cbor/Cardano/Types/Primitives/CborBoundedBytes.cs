@@ -1,9 +1,8 @@
-using Chrysalis.Cbor.Attributes;
-using Chrysalis.Cbor.Serialization.Converters.Primitives;
+using Chrysalis.Cbor.Serialization.Attributes;
+
 using Chrysalis.Cbor.Types;
 
 namespace Chrysalis.Cbor.Cardano.Types.Primitives;
 
-[CborConverter(typeof(BytesConverter))]
-[CborOptions(Size = 64, IsDefinite = true)]
-public record CborBoundedBytes(byte[] Value) : CborBase;
+[CborSerializable]
+public partial record CborBoundedBytes([CborSize(64)] byte[] Value) : CborBase<CborBoundedBytes>;

@@ -1,16 +1,14 @@
-using Chrysalis.Cbor.Attributes;
-using Chrysalis.Cbor.Serialization.Converters.Custom;
+using Chrysalis.Cbor.Serialization.Attributes;
 using Chrysalis.Cbor.Types;
-using Chrysalis.Cbor.Types.Primitives;
 
 namespace Chrysalis.Network.Cbor.Handshake;
 
-[CborConverter(typeof(CustomListConverter))]
-[CborOptions(IsDefinite = true)]
-public record N2NVersionData(
-    [CborIndex(0)] CborUlong NetworkMagic,
-    [CborIndex(1)] CborBool InitiatorOnlyDiffusionMode,
-    [CborIndex(2)] CborInt? PeerSharing,
-    [CborIndex(3)] CborBool? Query
-) : CborBase;
+[CborSerializable]
+[CborList]
+public partial record N2NVersionData(
+    [CborOrder(0)] ulong NetworkMagic,
+    [CborOrder(1)] bool InitiatorOnlyDiffusionMode,
+    [CborOrder(2)] int? PeerSharing,
+    [CborOrder(3)] bool? Query
+) : CborBase<N2NVersionData>;
 

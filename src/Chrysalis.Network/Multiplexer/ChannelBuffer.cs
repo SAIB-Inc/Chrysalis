@@ -15,15 +15,7 @@ namespace Chrysalis.Network.Multiplexer;
 /// <param name="channel">The channel to buffer data for.</param>
 public sealed class ChannelBuffer(AgentChannel channel)
 {
-    private readonly AgentChannel _channel = channel;
-
-    /// <summary>
-    /// Sends a complete CBOR message, automatically chunking if needed.
-    /// </summary>
-    /// <typeparam name="T">The type of CBOR message to send.</typeparam>
-    /// <param name="message">The message to send.</param>
-    /// <param name="cancellationToken">A token to cancel the operation.</param>
-    public async ValueTask SendFullMessageAsync<T>(T message, CancellationToken cancellationToken = default) where T : CborBase
+    public async Task SendFullMessageAsync<T>(T message, CancellationToken cancellationToken) where T : CborBase<T>
     {
         byte[] payload = CborSerializer.Serialize(message);
         ReadOnlyMemory<byte> payloadMemory = payload.AsMemory();
@@ -36,22 +28,15 @@ public sealed class ChannelBuffer(AgentChannel channel)
             int chunkSize = Math.Min(ProtocolConstants.MaxSegmentPayloadLength, payloadLength - offset);
             ReadOnlyMemory<byte> chunkMemory = payloadMemory.Slice(offset, chunkSize);
             ReadOnlySequence<byte> chunkSequence = new(chunkMemory);
-            await _channel.EnqueueChunkAsync(chunkSequence, cancellationToken);
+            await channel.EnqueueChunkAsync(chunkSequence, cancellationToken);
         }
     }
 
-    /// <summary>
-    /// Receives a complete CBOR message, automatically handling chunked data.
-    /// </summary>
-    /// <typeparam name="T">The type of CBOR message to receive.</typeparam>
-    /// <param name="cancellationToken">A token to cancel the operation.</param>
-    /// <returns>The deserialized message.</returns>
-    /// <exception cref="InvalidOperationException">Thrown when the pipe completes before a valid message could be parsed.</exception>
-    public async Task<T> ReceiveFullMessageAsync<T>(CancellationToken cancellationToken = default) where T : CborBase
+    public async Task<T> ReceiveFullMessageAsync<T>(CancellationToken cancellationToken) where T : CborBase<T>
     {
         while (true)
         {
-            ReadResult readResult = await _channel.ReadChunkAsync(cancellationToken);
+            ReadResult readResult = await channel.ReadChunkAsync(cancellationToken);
             ReadOnlySequence<byte> buffer = readResult.Buffer;
 
             try
@@ -60,7 +45,7 @@ public sealed class ChannelBuffer(AgentChannel channel)
                 if (buffer.IsSingleSegment)
                 {
                     result = CborSerializer.Deserialize<T>(buffer.First);
-                    _channel.AdvanceTo(buffer.End);
+                    channel.AdvanceTo(buffer.End);
                     return result;
                 }
 
@@ -70,7 +55,7 @@ public sealed class ChannelBuffer(AgentChannel channel)
                 {
                     buffer.CopyTo(rentedBuffer);
                     result = CborSerializer.Deserialize<T>(rentedBuffer.AsMemory(0, (int)buffer.Length));
-                    _channel.AdvanceTo(buffer.End);
+                    channel.AdvanceTo(buffer.End);
                     return result;
                 }
                 finally
@@ -81,12 +66,12 @@ public sealed class ChannelBuffer(AgentChannel channel)
             catch (Exception) when (!readResult.IsCompleted)
             {
                 // Need more data - mark what we examined but couldn't use
-                _channel.AdvanceTo(buffer.Start);
+                channel.AdvanceTo(buffer.Start);
             }
             catch (Exception) when (readResult.IsCompleted)
             {
                 // If pipe is completed and we still can't deserialize, that's an error
-                _channel.AdvanceTo(buffer.End);
+                channel.AdvanceTo(buffer.End);
                 throw new InvalidOperationException("Pipe completed before a valid message could be parsed");
             }
         }

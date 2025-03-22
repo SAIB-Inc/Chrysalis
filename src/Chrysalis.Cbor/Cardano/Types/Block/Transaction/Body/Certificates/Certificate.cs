@@ -1,175 +1,197 @@
-using Chrysalis.Cbor.Attributes;
-using Chrysalis.Cbor.Serialization.Converters.Custom;
 using Chrysalis.Cbor.Cardano.Types.Block.Transaction.Body.ProposalProcedures;
 using Chrysalis.Cbor.Cardano.Types.Block.Transaction.Governance;
 using Chrysalis.Cbor.Types.Custom;
 using Chrysalis.Cbor.Types.Primitives;
 using Chrysalis.Cbor.Types;
+using Chrysalis.Cbor.Serialization.Attributes;
 
 namespace Chrysalis.Cbor.Cardano.Types.Block.Transaction.Body.Certificates;
 
-[CborConverter(typeof(UnionConverter))]
-public abstract record Certificate : CborBase;
+[CborSerializable]
+[CborUnion]
+public abstract partial record Certificate : CborBase<Certificate>
+{
+}
 
-
-[CborConverter(typeof(CustomListConverter))]
-public record StakeRegistration(
-    [CborIndex(0)] CborInt Tag,
-    [CborIndex(1)] Credential StakeCredential
+[CborSerializable]
+[CborList]
+public partial record StakeRegistration(
+   [CborOrder(0)] int Tag,
+   [CborOrder(1)] Credential StakeCredential
 ) : Certificate;
 
 
-[CborConverter(typeof(CustomListConverter))]
-public record StakeDeregistration(
-    [CborIndex(0)] CborInt Tag,
-    [CborIndex(1)] Credential StakeCredential
+[CborSerializable]
+[CborList]
+public partial record StakeDeregistration(
+    [CborOrder(0)] int Tag,
+    [CborOrder(1)] Credential StakeCredential
 ) : Certificate;
 
 
-[CborConverter(typeof(CustomListConverter))]
-public record StakeDelegation(
-    [CborIndex(0)] CborInt Tag,
-    [CborIndex(1)] Credential StakeCredential,
-    [CborIndex(2)] CborBytes PoolKeyHash
+[CborSerializable]
+[CborList]
+public partial record StakeDelegation(
+    [CborOrder(0)] int Tag,
+    [CborOrder(1)] Credential StakeCredential,
+    [CborOrder(2)] byte[] PoolKeyHash
 ) : Certificate;
 
 
-[CborConverter(typeof(CustomListConverter))]
-public record PoolRegistration(
-    [CborIndex(0)] CborInt Tag,
-    [CborIndex(1)] CborBytes Operator,
-    [CborIndex(2)] CborBytes VrfKeyHash,
-    [CborIndex(3)] CborUlong Pledge,
-    [CborIndex(4)] CborUlong Cost,
-    [CborIndex(5)] CborRationalNumber Margin,
-    [CborIndex(6)] RewardAccount RewardAccount,
-    [CborIndex(7)] CborMaybeIndefList<CborBytes> PoolOwners,
-    [CborIndex(8)] CborMaybeIndefList<Relay> Relay,
-    [CborIndex(9)] CborNullable<PoolMetadata> PoolMetadata
+[CborSerializable]
+[CborList]
+public partial record PoolRegistration(
+    [CborOrder(0)] int Tag,
+    [CborOrder(1)] byte[] Operator,
+    [CborOrder(2)] byte[] VrfKeyHash,
+    [CborOrder(3)] ulong Pledge,
+    [CborOrder(4)] ulong Cost,
+    [CborOrder(5)] CborRationalNumber Margin,
+    [CborOrder(6)] RewardAccount RewardAccount,
+    [CborOrder(7)] CborMaybeIndefList<byte[]> PoolOwners,
+    [CborOrder(8)] CborMaybeIndefList<Relay> Relay,
+    [CborOrder(9)][CborNullable] PoolMetadata? PoolMetadata
 ) : Certificate;
 
 
-[CborConverter(typeof(CustomListConverter))]
-public record PoolRetirement(
-    [CborIndex(0)] CborInt Tag,
-    [CborIndex(1)] CborBytes PoolKeyHash,
-    [CborIndex(2)] CborUlong EpochNo
+[CborSerializable]
+[CborList]
+public partial record PoolRetirement(
+    [CborOrder(0)] int Tag,
+    [CborOrder(1)] byte[] PoolKeyHash,
+    [CborOrder(2)] ulong EpochNo
 ) : Certificate;
 
 
-[CborConverter(typeof(CustomListConverter))]
-public record RegCert(
-    [CborIndex(0)] CborInt Tag,
-    [CborIndex(1)] Credential StakeCredential,
-    [CborIndex(2)] CborUlong Coin
+[CborSerializable]
+[CborList]
+public partial record RegCert(
+    [CborOrder(0)] int Tag,
+    [CborOrder(1)] Credential StakeCredential,
+    [CborOrder(2)] ulong Coin
 ) : Certificate;
 
 
-[CborConverter(typeof(CustomListConverter))]
-public record UnRegCert(
-    [CborIndex(0)] CborInt Tag,
-    [CborIndex(1)] Credential StakeCredential,
-    [CborIndex(2)] CborUlong Coin
+[CborSerializable]
+[CborList]
+public partial record UnRegCert(
+    [CborOrder(0)] int Tag,
+    [CborOrder(1)] Credential StakeCredential,
+    [CborOrder(2)] ulong Coin
 ) : Certificate;
 
 
-[CborConverter(typeof(CustomListConverter))]
-public record VoteDelegCert(
-    [CborIndex(0)] CborInt Tag,
-    [CborIndex(1)] Credential StakeCredential,
-    [CborIndex(2)] DRep DRep
+[CborSerializable]
+[CborList]
+public partial record VoteDelegCert(
+    [CborOrder(0)] int Tag,
+    [CborOrder(1)] Credential StakeCredential,
+    [CborOrder(2)] DRep DRep
 ) : Certificate;
 
 
-[CborConverter(typeof(CustomListConverter))]
-public record StakeVoteDelegCert(
-    [CborIndex(0)] CborInt Tag,
-    [CborIndex(1)] Credential StakeCredential,
-    [CborIndex(2)] CborBytes PoolKeyHash,
-    [CborIndex(3)] DRep DRep
+[CborSerializable]
+[CborList]
+public partial record StakeVoteDelegCert(
+    [CborOrder(0)] int Tag,
+    [CborOrder(1)] Credential StakeCredential,
+    [CborOrder(2)] byte[] PoolKeyHash,
+    [CborOrder(3)] DRep DRep
 ) : Certificate;
 
 
-[CborConverter(typeof(CustomListConverter))]
-public record StakeRegDelegCert(
-    [CborIndex(0)] CborInt Tag,
-    [CborIndex(1)] Credential StakeCredential,
-    [CborIndex(2)] CborBytes PoolKeyHash,
-    [CborIndex(3)] CborUlong Coin
+[CborSerializable]
+[CborList]
+public partial record StakeRegDelegCert(
+    [CborOrder(0)] int Tag,
+    [CborOrder(1)] Credential StakeCredential,
+    [CborOrder(2)] byte[] PoolKeyHash,
+    [CborOrder(3)] ulong Coin
 ) : Certificate;
 
 
-[CborConverter(typeof(CustomListConverter))]
-public record VoteRegDelegCert(
-    [CborIndex(0)] CborInt Tag,
-    [CborIndex(1)] Credential StakeCredential,
-    [CborIndex(2)] DRep DRep,
-    [CborIndex(3)] CborUlong Coin
+[CborSerializable]
+[CborList]
+public partial record VoteRegDelegCert(
+    [CborOrder(0)] int Tag,
+    [CborOrder(1)] Credential StakeCredential,
+    [CborOrder(2)] DRep DRep,
+    [CborOrder(3)] ulong Coin
 ) : Certificate;
 
 
-[CborConverter(typeof(CustomListConverter))]
-public record StakeVoteRegDelegCert(
-    [CborIndex(0)] CborInt Tag,
-    [CborIndex(1)] Credential StakeCredential,
-    [CborIndex(2)] CborBytes PoolKeyHash,
-    [CborIndex(3)] DRep Drep,
-    [CborIndex(4)] CborUlong Coin
+[CborSerializable]
+[CborList]
+public partial record StakeVoteRegDelegCert(
+    [CborOrder(0)] int Tag,
+    [CborOrder(1)] Credential StakeCredential,
+    [CborOrder(2)] byte[] PoolKeyHash,
+    [CborOrder(3)] DRep Drep,
+    [CborOrder(4)] ulong Coin
 ) : Certificate;
 
 
-[CborConverter(typeof(CustomListConverter))]
-public record AuthCommitteeHotCert(
-    [CborIndex(0)] CborInt Tag,
-    [CborIndex(1)] Credential CommitteeColdCredential,
-    [CborIndex(2)] Credential CommitteeHotCredential
+[CborSerializable]
+[CborList]
+public partial record AuthCommitteeHotCert(
+    [CborOrder(0)] int Tag,
+    [CborOrder(1)] Credential CommitteeColdCredential,
+    [CborOrder(2)] Credential CommitteeHotCredential
 ) : Certificate;
 
 
-[CborConverter(typeof(CustomListConverter))]
-public record ResignCommitteeColdCert(
-    [CborIndex(0)] CborInt Tag,
-    [CborIndex(1)] CborBytes CommitteeColdCredential,
-    [CborIndex(2)] Anchor? Anchor
+[CborSerializable]
+[CborList]
+public partial record ResignCommitteeColdCert(
+    [CborOrder(0)] int Tag,
+    [CborOrder(1)] byte[] CommitteeColdCredential,
+    [CborOrder(2)] Anchor? Anchor
 ) : Certificate;
 
 
-[CborConverter(typeof(CustomListConverter))]
-public record RegDrepCert(
-    [CborIndex(0)] CborInt Tag,
-    [CborIndex(1)] Credential DRepCredential,
-    [CborIndex(2)] CborUlong Coin,
-    [CborIndex(3)] CborNullable<Anchor> Anchor
+[CborSerializable]
+[CborList]
+public partial record RegDrepCert(
+    [CborOrder(0)] int Tag,
+    [CborOrder(1)] Credential DRepCredential,
+    [CborOrder(2)] ulong Coin,
+    [CborOrder(3)][CborNullable] Anchor? Anchor
 ) : Certificate;
 
 
-[CborConverter(typeof(CustomListConverter))]
-public record UnRegDrepCert(
-    [CborIndex(0)] CborInt Tag,
-    [CborIndex(1)] Credential DrepCredential,
-    [CborIndex(2)] CborUlong Coin
+[CborSerializable]
+[CborList]
+public partial record UnRegDrepCert(
+    [CborOrder(0)] int Tag,
+    [CborOrder(1)] Credential DrepCredential,
+    [CborOrder(2)] ulong Coin
 ) : Certificate;
 
 
-[CborConverter(typeof(CustomListConverter))]
-public record UpdateDrepCert(
-    [CborIndex(0)] CborInt Tag,
-    [CborIndex(1)] Credential DrepCredential,
-    [CborIndex(2)] CborNullable<Anchor> Anchor
+[CborSerializable]
+[CborList]
+public partial record UpdateDrepCert(
+    [CborOrder(0)] int Tag,
+    [CborOrder(1)] Credential DrepCredential,
+    [CborOrder(2)][CborNullable] Anchor? Anchor
 ) : Certificate;
 
 
-[CborConverter(typeof(CustomListConverter))]
-public record GenesisKeyDelegation(
-    [CborIndex(0)] CborInt Tag,
-    [CborIndex(1)] CborBytes GenesisHash,
-    [CborIndex(2)] CborBytes GenesisDelegateHash,
-    [CborIndex(3)] CborBytes VrfKeyHash
+[CborSerializable]
+[CborList]
+public partial record GenesisKeyDelegation(
+    [CborOrder(0)] int Tag,
+    [CborOrder(1)] byte[] GenesisHash,
+    [CborOrder(2)] byte[] GenesisDelegateHash,
+    [CborOrder(3)] byte[] VrfKeyHash
 ) : Certificate;
 
 
-[CborConverter(typeof(CustomListConverter))]
-public record MoveInstantaneousRewardsCert(
-    [CborIndex(0)] CborInt Tag,
-    [CborIndex(1)] MoveInstantaneousReward MoveInstantaneousReward
+[CborSerializable]
+[CborList]
+public partial record MoveInstantaneousRewardsCert(
+    [CborOrder(0)] int Tag,
+    [CborOrder(1)] MoveInstantaneousReward MoveInstantaneousReward
 ) : Certificate;
+
+

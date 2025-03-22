@@ -1,9 +1,8 @@
 using System.Formats.Cbor;
 using System.Runtime.CompilerServices;
-using Chrysalis.Cbor.Serialization.Exceptions;
-using Chrysalis.Cbor.Serialization.Registry;
+using Chrysalis.Cbor.Serialization.Utils;
 using Chrysalis.Cbor.Types;
-using Chrysalis.Cbor.Utils;
+
 
 namespace Chrysalis.Cbor.Serialization;
 
@@ -28,38 +27,17 @@ public static class CborSerializer
     /// </remarks>
     /// <exception cref="CborSerializationException">Thrown when an error occurs during serialization.</exception>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static byte[] Serialize(CborBase value)
+    public static byte[] Serialize<T>(T value) where T : CborBase<T>
     {
-        if (value.Raw is not null) return value.Raw.Value.ToArray();
+        if (value.Raw is not null)
+        {
+            return value.Raw.Value.ToArray();
+        }
 
         CborWriter writer = new(CborConformanceMode.Lax);
-        CborOptions options = CborRegistry.Instance.GetBaseOptions(value.GetType());
-        Serialize(writer, value, options);
+        GenericSerializationUtil.Write<T>(writer, value);
 
         return writer.Encode();
-    }
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    internal static void Serialize(CborWriter writer, object? value, CborOptions options)
-    {
-        try
-        {
-            if (value is null)
-                throw new InvalidOperationException("Value cannot be null");
-
-            Type resolvedType = value.GetType();
-            CborOptions resolvedOptions = CborRegistry.Instance.GetBaseOptions(resolvedType);
-            Type converterType = resolvedOptions.ConverterType ?? throw new InvalidOperationException("No converter type specified");
-            ICborConverter converter = CborRegistry.Instance.GetConverter(converterType);
-            List<object?> filteredProperties = PropertyResolver.GetFilteredProperties(value);
-            resolvedOptions.RuntimeType = resolvedType;
-            CborUtil.WriteTag(writer, options.Tag);
-            converter.Write(writer, filteredProperties, options);
-        }
-        catch (Exception e)
-        {
-            throw new Exception($"Failed to serialize object with value {value}, options: {options}", e);
-        }
     }
 
     /// <summary>
@@ -80,60 +58,10 @@ public static class CborSerializer
     /// <exception cref="CborDeserializationException">Thrown when an error occurs during deserialization.</exception>
     /// <exception cref="CborTypeMismatchException">Thrown when the deserialized type does not match the expected type.</exception>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static T Deserialize<T>(in ReadOnlyMemory<byte> data) where T : CborBase
+    public static T Deserialize<T>(ReadOnlyMemory<byte> data) where T : CborBase<T>
     {
-        try
-        {
-            CborReader reader = new(data, CborConformanceMode.Lax);
-            CborOptions options = CborRegistry.Instance.GetBaseOptions(typeof(T));
-            CborBase instance = Deserialize(reader, options, false);
-            instance.Raw = data;
-
-            return (T)instance;
-        }
-        catch (Exception e)
-        {
-            throw new Exception($"Failed to deserialize object with data {data}", e);
-        }
-    }
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    internal static CborBase Deserialize(CborReader reader, in CborOptions options, bool readChunk = true)
-    {
-
-        ReadOnlyMemory<byte>? chunk = null;
-        if (readChunk)
-        {
-            chunk = reader.ReadEncodedValue();
-            reader = new CborReader(chunk.Value, CborConformanceMode.Lax);
-        }
-
-        Type converterType = options.ConverterType ?? throw new CborDeserializationException("No converter type specified");
-        ICborConverter converter = CborRegistry.Instance.GetConverter(converterType);
-        CborUtil.ReadAndVerifyTag(reader, options.Tag);
-        object? value = converter.Read(reader, options);
-
-        if (options.RuntimeType is null)
-            throw new CborDeserializationException("Runtime type not specified");
-
-        CborBase? instance;
-
-        // If the value is already of the correct type, use it directly
-        if (value != null && options.RuntimeType.IsAssignableFrom(value.GetType()))
-        {
-            instance = (CborBase)value;
-        }
-        else
-        {
-            // Otherwise create a new instance
-            instance = (!options.RuntimeType.IsAbstract ?
-                (CborBase)ActivatorUtil.CreateInstance(options.RuntimeType, value, options) :
-                (CborBase)value!) ?? throw new CborDeserializationException("Failed to create instance of type");
-        }
-
-        if (readChunk && chunk.HasValue)
-            instance.Raw = chunk;
-
-        return instance;
+        CborReader reader = new(data, CborConformanceMode.Lax);
+        T? result = GenericSerializationUtil.Read<T>(reader);
+        return result ?? throw new Exception("Deserialization failed: result is null.");
     }
 }

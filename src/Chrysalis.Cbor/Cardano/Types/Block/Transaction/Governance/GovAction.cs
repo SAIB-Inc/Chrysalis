@@ -1,66 +1,74 @@
-using Chrysalis.Cbor.Attributes;
-using Chrysalis.Cbor.Serialization.Converters.Custom;
 using Chrysalis.Cbor.Cardano.Types.Block.Header.Body;
 using Chrysalis.Cbor.Cardano.Types.Block.Transaction.Body;
 using Chrysalis.Cbor.Cardano.Types.Block.Transaction.Protocol;
 using Chrysalis.Cbor.Types.Custom;
 using Chrysalis.Cbor.Types.Primitives;
 using Chrysalis.Cbor.Types;
+using Chrysalis.Cbor.Serialization.Attributes;
 
 namespace Chrysalis.Cbor.Cardano.Types.Block.Transaction.Governance;
 
-[CborConverter(typeof(UnionConverter))]
-public abstract record GovAction : CborBase;
+[CborSerializable]
+[CborUnion]
+public abstract partial record GovAction : CborBase<GovAction>
+{
+}
 
-
-[CborConverter(typeof(CustomListConverter))]
-public record ParameterChangeAction(
-    [CborIndex(0)] CborInt ActionType,
-    [CborIndex(1)] CborNullable<GovActionId> GovActionId,
-    [CborIndex(2)] ProtocolParamUpdate ProtocolParamUpdate,
-    [CborIndex(3)] CborNullable<CborBytes> PolicyHash
+[CborSerializable]
+[CborList]
+public partial record ParameterChangeAction(
+    [CborOrder(0)] int ActionType,
+    [CborOrder(1)] GovActionId? GovActionId,
+    [CborOrder(2)] ProtocolParamUpdate ProtocolParamUpdate,
+    [CborOrder(3)] byte[]? PolicyHash
 ) : GovAction;
 
 
-[CborConverter(typeof(CustomListConverter))]
-public record HardForkInitiationAction(
-    [CborIndex(0)] CborInt ActionType,
-    [CborIndex(1)] CborNullable<GovActionId> GovActionId,
-    [CborIndex(2)] ProtocolVersion ProtocolVersion
+[CborSerializable]
+[CborList]
+public partial record HardForkInitiationAction(
+     [CborOrder(0)] int ActionType,
+     [CborOrder(1)] GovActionId? GovActionId,
+     [CborOrder(2)] ProtocolVersion ProtocolVersion
+ ) : GovAction;
+
+
+[CborSerializable]
+[CborList]
+public partial record TreasuryWithdrawalsAction(
+     [CborOrder(0)] int ActionType,
+     [CborOrder(1)] Withdrawals Withdrawals,
+     [CborOrder(2)] byte[]? PolicyHash
+ ) : GovAction;
+
+
+[CborSerializable]
+[CborList]
+public partial record NoConfidence(
+    [CborOrder(0)] int ActionType,
+    [CborOrder(1)] GovActionId? GovActionId
 ) : GovAction;
 
-
-[CborConverter(typeof(CustomListConverter))]
-public record TreasuryWithdrawalsAction(
-    [CborIndex(0)] CborInt ActionType,
-    [CborIndex(1)] Withdrawals Withdrawals,
-    [CborIndex(2)] CborNullable<CborBytes> PolicyHash
+[CborSerializable]
+[CborList]
+public partial record UpdateCommittee(
+    [CborOrder(0)] int ActionType,
+    [CborOrder(1)] GovActionId? GovActionId,
+    [CborOrder(2)] CborMaybeIndefList<Credential> NewMembers,
+    [CborOrder(3)] MemberTermLimits MemberTermLimits,
+    [CborOrder(4)] CborRationalNumber QuorumThreshold
 ) : GovAction;
 
-
-[CborConverter(typeof(CustomListConverter))]
-public record NoConfidence(
-    [CborIndex(0)] CborInt ActionType,
-    [CborIndex(1)] CborNullable<GovActionId> GovActionId
+[CborSerializable]
+[CborList]
+public partial record NewConstitution(
+    [CborOrder(0)] int ActionType,
+    [CborOrder(1)] GovActionId? GovActionId,
+    [CborOrder(2)] Constitution Constitution
 ) : GovAction;
 
-[CborConverter(typeof(CustomListConverter))]
-public record UpdateCommittee(
-    [CborIndex(0)] CborInt ActionType,
-    [CborIndex(1)] CborNullable<GovActionId> GovActionId,
-    [CborIndex(2)] CborMaybeIndefList<Credential> NewMembers,
-    [CborIndex(3)] MemberTermLimits MemberTermLimits,
-    [CborIndex(4)] CborRationalNumber QuorumThreshold
-) : GovAction;
-
-[CborConverter(typeof(CustomListConverter))]
-public record NewConstitution(
-    [CborIndex(0)] CborInt ActionType,
-    [CborIndex(1)] CborNullable<GovActionId> GovActionId,
-    [CborIndex(2)] Constitution Constitution
-) : GovAction;
-
-[CborConverter(typeof(CustomListConverter))]
-public record InfoAction(
-    [CborIndex(0)] CborInt Value
+[CborSerializable]
+[CborList]
+public partial record InfoAction(
+    [CborOrder(0)] int Value
 ) : GovAction;

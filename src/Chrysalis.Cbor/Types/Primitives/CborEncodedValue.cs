@@ -1,7 +1,6 @@
-using Chrysalis.Cbor.Attributes;
-using Chrysalis.Cbor.Serialization.Converters.Primitives;
+using Chrysalis.Cbor.Serialization.Attributes;
 
 namespace Chrysalis.Cbor.Types.Primitives;
 
-[CborConverter(typeof(EncodedValueConverter))]
-public record CborEncodedValue(byte[] Value) : CborBase;
+[CborSerializable]
+public partial record CborEncodedValue(byte[] Value) : CborBase<CborEncodedValue>;

@@ -1,12 +1,13 @@
-using Chrysalis.Cbor.Attributes;
-using Chrysalis.Cbor.Serialization.Converters.Custom;
+using Chrysalis.Cbor.Serialization.Attributes;
+
 using Chrysalis.Cbor.Types;
 using Chrysalis.Cbor.Types.Primitives;
 
 namespace Chrysalis.Cbor.Cardano.Types.Block.Transaction.Protocol;
 
-[CborConverter(typeof(CustomListConverter))]
-public record ExUnitPrices(
-    [CborIndex(0)] CborRationalNumber MemPrice,
-    [CborIndex(1)] CborRationalNumber StepPrice
-) : CborBase;
+[CborSerializable]
+[CborList]
+public partial record ExUnitPrices(
+    [CborOrder(0)] CborRationalNumber MemPrice,
+    [CborOrder(1)] CborRationalNumber StepPrice
+) : CborBase<ExUnitPrices>;

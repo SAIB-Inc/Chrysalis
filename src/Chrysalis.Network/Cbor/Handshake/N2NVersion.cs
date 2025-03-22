@@ -1,5 +1,4 @@
-using Chrysalis.Cbor.Attributes;
-using Chrysalis.Cbor.Serialization.Converters.Primitives;
+using Chrysalis.Cbor.Serialization.Attributes;
 using Chrysalis.Cbor.Types;
 
 namespace Chrysalis.Network.Cbor.Handshake;
@@ -16,5 +15,5 @@ public static class N2NVersions
     public static N2NVersion V14 => new(14);
 }
 
-[CborConverter(typeof(IntConverter))]
-public record N2NVersion(int Value) : CborBase;
+[CborSerializable]
+public partial record N2NVersion(int Value) : CborBase<N2NVersion>;

@@ -1,34 +1,36 @@
-using Chrysalis.Cbor.Attributes;
-using Chrysalis.Cbor.Serialization.Converters.Custom;
-using Chrysalis.Cbor.Serialization.Converters.Primitives;
 using Chrysalis.Cbor.Cardano.Types.Block.Transaction.Script;
 using Chrysalis.Cbor.Types.Custom;
-using Chrysalis.Cbor.Types.Primitives;
 using Chrysalis.Cbor.Types;
+using Chrysalis.Cbor.Serialization.Attributes;
+using Chrysalis.Cbor.Serialization;
 
 namespace Chrysalis.Cbor.Cardano.Types.Block.Transaction.WitnessSet;
 
-[CborConverter(typeof(UnionConverter))]
-public abstract record AuxiliaryData : CborBase;
+[CborSerializable]
+[CborUnion]
+public abstract partial record AuxiliaryData : CborBase<AuxiliaryData>
+{
+}
+
+[CborSerializable]
+[CborMap]
+[CborTag(259)]
+public partial record PostAlonzoAuxiliaryDataMap(
+    [CborProperty(0)] Metadata? MetadataValue,
+    [CborProperty(1)] CborDefList<NativeScript>? NativeScriptSet,
+    [CborProperty(2)] CborDefList<byte[]>? PlutusV1ScriptSet,
+    [CborProperty(3)] CborDefList<byte[]>? PlutusV2ScriptSet,
+    [CborProperty(4)] CborDefList<byte[]>? PlutusV3ScriptSet
+) : AuxiliaryData, ICborPreserveRaw;
 
 
-[CborConverter(typeof(CustomMapConverter))]
-[CborOptions(Tag = 259)]
-public record PostAlonzoAuxiliaryDataMap(
-    [CborIndex(0)] Metadata? Metadata,
-    [CborIndex(1)] CborDefList<NativeScript>? NativeScriptSet,
-    [CborIndex(2)] CborDefList<CborBytes>? PlutusV1ScriptSet,
-    [CborIndex(3)] CborDefList<CborBytes>? PlutusV2ScriptSet,
-    [CborIndex(4)] CborDefList<CborBytes>? PlutusV3ScriptSet
-) : AuxiliaryData;
+[CborSerializable]
+public partial record Metadata(Dictionary<ulong, TransactionMetadatum> Value) : AuxiliaryData;
 
 
-[CborConverter(typeof(MapConverter))]
-public record Metadata(Dictionary<CborUlong, TransactionMetadatum> Value) : AuxiliaryData;
-
-
-[CborConverter(typeof(CustomListConverter))]
-public record ShellyMaAuxiliaryData(
-    [CborIndex(0)] Metadata TransactionMetadata,
-    [CborIndex(1)] CborDefList<NativeScript> AuxiliaryScripts
-) : AuxiliaryData;
+[CborSerializable]
+[CborList]
+public partial record ShellyMaAuxiliaryData(
+   [CborOrder(0)] Metadata TransactionMetadata,
+   [CborOrder(1)] CborDefList<NativeScript> AuxiliaryScripts
+) : AuxiliaryData, ICborPreserveRaw;

@@ -1,38 +1,39 @@
-using Chrysalis.Cbor.Attributes;
-using Chrysalis.Cbor.Serialization.Converters.Custom;
 using Chrysalis.Cbor.Cardano.Types.Block.Transaction.Body;
 using Chrysalis.Cbor.Cardano.Types.Block.Transaction.WitnessSet;
-using Chrysalis.Cbor.Types.Primitives;
 using Chrysalis.Cbor.Types;
+using Chrysalis.Cbor.Serialization.Attributes;
+using Chrysalis.Cbor.Serialization;
 
 namespace Chrysalis.Cbor.Cardano.Types.Block.Transaction;
 
-[CborConverter(typeof(UnionConverter))]
-public abstract record Transaction : CborBase;
+[CborSerializable]
+[CborUnion]
+public abstract partial record Transaction : CborBase<Transaction>
+{
+}
 
+[CborSerializable]
+[CborList]
+public partial record ShelleyTransaction(
+   [CborOrder(0)] TransactionBody TransactionBody,
+   [CborOrder(1)] TransactionWitnessSet TransactionWitnessSet,
+   [CborOrder(2)][CborNullable] Metadata? TransactionMetadata
+) : Transaction, ICborPreserveRaw;
 
-[CborConverter(typeof(CustomListConverter))]
-[CborOptions(IsDefinite = true)]
-public record ShelleyTransaction(
-    [CborIndex(0)] TransactionBody TransactionBody,
-    [CborIndex(1)] TransactionWitnessSet TransactionWitnessSet,
-    [CborIndex(2)] CborNullable<Metadata> TransactionMetadata
-) : Transaction;
+[CborSerializable]
+[CborList]
+public partial record AllegraTransaction(
+    [CborOrder(0)] TransactionBody TransactionBody,
+    [CborOrder(1)] TransactionWitnessSet TransactionWitnessSet,
+    [CborOrder(2)][CborNullable] AuxiliaryData? AuxiliaryData
+) : Transaction, ICborPreserveRaw;
 
-[CborConverter(typeof(CustomListConverter))]
-[CborOptions(IsDefinite = true)]
-public record AllegraTransaction(
-    [CborIndex(0)] TransactionBody TransactionBody,
-    [CborIndex(1)] TransactionWitnessSet TransactionWitnessSet,
-    [CborIndex(2)] CborNullable<AuxiliaryData> AuxiliaryData
-) : Transaction;
-
-[CborConverter(typeof(CustomListConverter))]
-[CborOptions(IsDefinite = true)]
-public record PostMaryTransaction(
-    [CborIndex(0)] TransactionBody TransactionBody,
-    [CborIndex(1)] TransactionWitnessSet TransactionWitnessSet,
-    [CborIndex(2)] CborBool IsValid,
-    [CborIndex(3)] CborNullable<AuxiliaryData> AuxiliaryData
-) : Transaction;
+[CborSerializable]
+[CborList]
+public partial record PostMaryTransaction(
+    [CborOrder(0)] TransactionBody TransactionBody,
+    [CborOrder(1)] TransactionWitnessSet TransactionWitnessSet,
+    [CborOrder(2)] bool IsValid,
+    [CborOrder(3)][CborNullable] AuxiliaryData? AuxiliaryData
+) : Transaction, ICborPreserveRaw;
 

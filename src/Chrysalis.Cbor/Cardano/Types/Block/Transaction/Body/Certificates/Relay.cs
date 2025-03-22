@@ -1,33 +1,37 @@
-using Chrysalis.Cbor.Attributes;
-using Chrysalis.Cbor.Serialization.Converters.Custom;
+using Chrysalis.Cbor.Serialization.Attributes;
+
 using Chrysalis.Cbor.Types;
-using Chrysalis.Cbor.Types.Primitives;
 
 namespace Chrysalis.Cbor.Cardano.Types.Block.Transaction.Body.Certificates;
 
-[CborConverter(typeof(UnionConverter))]
-public abstract record Relay : CborBase;
+[CborSerializable]
+[CborUnion]
+public abstract partial record Relay : CborBase<Relay>
+{
+}
 
-
-[CborConverter(typeof(CustomListConverter))]
-public record SingleHostAddr(
-    [CborIndex(0)] CborInt Tag,
-    [CborIndex(1)] CborNullable<CborUlong> Port,
-    [CborIndex(2)] CborNullable<CborBytes> IPv4,
-    [CborIndex(3)] CborNullable<CborBytes> IPv6
+[CborSerializable]
+[CborList]
+public partial record SingleHostAddr(
+   [CborOrder(0)] int Tag,
+   [CborOrder(1)][CborNullable] ulong? Port,
+   [CborOrder(2)][CborNullable] byte[]? IPv4,
+   [CborOrder(3)][CborNullable] byte[] IPv6
 ) : Relay;
 
 
-[CborConverter(typeof(CustomListConverter))]
-public record SingleHostName(
-    [CborIndex(0)] CborInt Tag,
-    [CborIndex(1)] CborNullable<CborUlong> Port,
-    [CborIndex(2)] CborText DNSName
+[CborSerializable]
+[CborList]
+public partial record SingleHostName(
+    [CborOrder(0)] int Tag,
+    [CborOrder(1)][CborNullable] ulong? Port,
+    [CborOrder(2)] string DNSName
 ) : Relay;
 
 
-[CborConverter(typeof(CustomListConverter))]
-public record MultiHostName(
-    [CborIndex(0)] CborInt Tag,
-    [CborIndex(1)] CborText DNSName
+[CborSerializable]
+[CborList]
+public partial record MultiHostName(
+    [CborOrder(0)] int Tag,
+    [CborOrder(1)] string DNSName
 ) : Relay;

@@ -1,21 +1,21 @@
-using Chrysalis.Cbor.Attributes;
-using Chrysalis.Cbor.Serialization.Converters.Custom;
-using Chrysalis.Cbor.Serialization.Converters.Primitives;
+using Chrysalis.Cbor.Serialization.Attributes;
 using Chrysalis.Cbor.Types;
+using static Chrysalis.Cbor.Cardano.Types.Block.Transaction.Output.MultiAsset;
 
 namespace Chrysalis.Cbor.Cardano.Types.Block.Transaction.Output;
 
-[CborConverter(typeof(UnionConverter))]
-public abstract record Value : CborBase;
+[CborSerializable]
+[CborUnion]
+public abstract partial record Value : CborBase<Value>
+{
+}
 
+[CborSerializable]
+public partial record Lovelace(ulong Value) : Value;
 
-[CborConverter(typeof(UlongConverter))]
-public record Lovelace(ulong Value) : Value;
-
-
-[CborConverter(typeof(CustomListConverter))]
-[CborOptions(IsDefinite = true)]
-public record LovelaceWithMultiAsset(
-    [CborIndex(0)] Lovelace Lovelace,
-    [CborIndex(1)] MultiAssetOutput MultiAsset
-) : Value;
+[CborSerializable]
+[CborList]
+public partial record LovelaceWithMultiAsset(
+     [CborOrder(0)] Lovelace LovelaceValue,
+     [CborOrder(1)] MultiAssetOutput MultiAsset
+ ) : Value;

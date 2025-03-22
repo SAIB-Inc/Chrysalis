@@ -1,12 +1,12 @@
-using Chrysalis.Cbor.Attributes;
-using Chrysalis.Cbor.Serialization.Converters.Custom;
+using Chrysalis.Cbor.Serialization.Attributes;
+
 using Chrysalis.Cbor.Types;
-using Chrysalis.Cbor.Types.Primitives;
 
 namespace Chrysalis.Cbor.Cardano.Types.Block.Transaction.Input;
 
-[CborConverter(typeof(CustomListConverter))]
-public record TransactionInput(
-    [CborIndex(0)] CborBytes TransactionId,
-    [CborIndex(1)] CborUlong Index
-) : CborBase;
+[CborSerializable]
+[CborList]
+public partial record TransactionInput(
+    [CborOrder(0)] byte[] TransactionId,
+    [CborOrder(1)] ulong Index
+) : CborBase<TransactionInput>;

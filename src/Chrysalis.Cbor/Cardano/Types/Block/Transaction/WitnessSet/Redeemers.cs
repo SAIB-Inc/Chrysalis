@@ -1,40 +1,42 @@
-using Chrysalis.Cbor.Attributes;
-using Chrysalis.Cbor.Serialization.Converters.Custom;
-using Chrysalis.Cbor.Serialization.Converters.Primitives;
 using Chrysalis.Cbor.Cardano.Types.Block.Transaction.Protocol;
 using Chrysalis.Cbor.Cardano.Types.Block.Transaction.Script;
-using Chrysalis.Cbor.Types.Primitives;
 using Chrysalis.Cbor.Types;
+using Chrysalis.Cbor.Serialization.Attributes;
+using Chrysalis.Cbor.Serialization;
 
 namespace Chrysalis.Cbor.Cardano.Types.Block.Transaction.WitnessSet;
 
-[CborConverter(typeof(UnionConverter))]
-public abstract record Redeemers : CborBase;
+[CborSerializable]
+[CborUnion]
+public abstract partial record Redeemers : CborBase<Redeemers>
+{
+}
 
-[CborConverter(typeof(ListConverter))]
-[CborOptions(IsDefinite = true)]
-public record RedeemerList(List<RedeemerEntry> Value) : Redeemers;
+[CborSerializable]
+public partial record RedeemerList(List<RedeemerEntry> Value) : Redeemers, ICborPreserveRaw;
 
-[CborConverter(typeof(MapConverter))]
-[CborOptions(IsDefinite = true)]
-public record RedeemerMap(Dictionary<RedeemerKey, RedeemerValue> Value) : Redeemers;
+[CborSerializable]
+public partial record RedeemerMap(Dictionary<RedeemerKey, RedeemerValue> Value) : Redeemers, ICborPreserveRaw;
 
-[CborConverter(typeof(CustomListConverter))]
-public record RedeemerEntry(
-    [CborIndex(0)] CborInt Tag,
-    [CborIndex(1)] CborUlong Index,
-    [CborIndex(2)] PlutusData Data,
-    [CborIndex(3)] ExUnits ExUnits
-) : CborBase;
+[CborSerializable]
+[CborList]
+public partial record RedeemerEntry(
+    [CborOrder(0)] int Tag,
+    [CborOrder(1)] ulong Index,
+    [CborOrder(2)] PlutusData Data,
+    [CborOrder(3)] ExUnits ExUnits
+) : CborBase<RedeemerEntry>, ICborPreserveRaw;
 
-[CborConverter(typeof(CustomListConverter))]
-public record RedeemerKey(
-    [CborIndex(0)] CborInt Tag,
-    [CborIndex(1)] CborUlong Index
-) : CborBase;
+[CborSerializable]
+[CborList]
+public partial record RedeemerKey(
+    [CborOrder(0)] int Tag,
+    [CborOrder(1)] ulong Index
+) : CborBase<RedeemerKey>, ICborPreserveRaw;
 
-[CborConverter(typeof(CustomListConverter))]
-public record RedeemerValue(
-    [CborIndex(0)] PlutusData Data,
-    [CborIndex(1)] ExUnits ExUnits
-) : CborBase;
+[CborSerializable]
+[CborList]
+public partial record RedeemerValue(
+    [CborOrder(0)] PlutusData Data,
+    [CborOrder(1)] ExUnits ExUnits
+) : CborBase<RedeemerValue>, ICborPreserveRaw;

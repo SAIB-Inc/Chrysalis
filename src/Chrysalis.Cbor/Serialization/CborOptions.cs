@@ -2,7 +2,7 @@ using System.Reflection;
 
 namespace Chrysalis.Cbor.Serialization;
 
-public record CborOptions
+public partial record CborOptions
 {
     public static readonly CborOptions Default = new();
 
