@@ -65,17 +65,17 @@ var pparams = await provider.GetParametersAsync();
 var txBuilder = TransactionBuilder.Create(pparams);
 
 var scriptAddress = "70d27ccc13fab5b782984a3d1f99353197ca1a81be069941ffc003ee75";
-var lockedUtxoTxHash = "ecf14739bdeebb0d324525ec675818ef24693f8d9fc36e85cc7a620eea819245";
+var lockedUtxoTxHash = "9320e7052d5193cabe397c738fa694dd9c8e1b4797480cceb46546f1bec25a12";
 
-var policy = "0401ce1fb4da93ce46ed4a22c95d3502a59c76476649a41e7bafa9da";
-var assetName = "494147";
-Dictionary<CborBytes, CborUlong> tokenBundle = new(){
-    { new CborBytes(Convert.FromHexString(assetName)), new CborUlong(1000) }
-};
+// var policy = "0401ce1fb4da93ce46ed4a22c95d3502a59c76476649a41e7bafa9da";
+// var assetName = "494147";
+// Dictionary<CborBytes, CborUlong> tokenBundle = new(){
+//     { new CborBytes(Convert.FromHexString(assetName)), new CborUlong(1000) }
+// };
 
-Dictionary<CborBytes, TokenBundleOutput> multiAsset = new(){
-    { new CborBytes(Convert.FromHexString(policy)), new TokenBundleOutput(tokenBundle) }
-};
+// Dictionary<CborBytes, TokenBundleOutput> multiAsset = new(){
+//     { new CborBytes(Convert.FromHexString(policy)), new TokenBundleOutput(tokenBundle) }
+// };
 
 // var output = new AlonzoTransactionOutput(
 //     new Address(Convert.FromHexString(rico)),
@@ -83,14 +83,14 @@ Dictionary<CborBytes, TokenBundleOutput> multiAsset = new(){
 //     null
 //     );
 
-byte[] scriptBytes = Convert.FromHexString("585c01010029800aba2aba1aab9eaab9dab9a4888896600264653001300600198031803800cc0180092225980099b8748008c01cdd500144c8cc892898050009805180580098041baa0028b200c180300098019baa0068a4d13656400401");
+byte[] cborEncodedScript = Convert.FromHexString("8203585E585C01010029800ABA2ABA1AAB9EAAB9DAB9A4888896600264653001300600198031803800CC0180092225980099B8748008C01CDD500144C8CC892898050009805180580098041BAA0028B200C180300098019BAA0068A4D13656400401");
 
 var refInput = new TransactionInput(new CborBytes(Convert.FromHexString(scriptRefTxHash)), new CborUlong(0));
 var refOutput = new PostAlonzoTransactionOutput(
     new Address(Convert.FromHexString(scriptAddress)),
     new Lovelace(1301620UL),
     null,
-    new CborEncodedValue(scriptBytes)
+    new CborEncodedValue(cborEncodedScript)
     );
 var refUtxo = new ResolvedInput(refInput, refOutput);
 
@@ -126,11 +126,6 @@ foreach (var utxo in utxos.OrderByDescending(e => e.Output.Amount()!.Lovelace())
     }
 }
 
-if (feeInput is not null)
-{
-    utxos.Remove(feeInput);
-    txBuilder.AddInput(feeInput.Outref);
-}
 
 ResolvedInput? collateralInput = null;
 foreach (var utxo in utxos.OrderByDescending(e => e.Output.Amount()!.Lovelace()))
@@ -149,21 +144,21 @@ if (collateralInput is not null)
 }
 
 
-var coinSelectionResult = CoinSelectionAlgorithm.LargestFirstAlgorithm(utxos, [output.Amount]);
+// var coinSelectionResult = CoinSelectionAlgorithm.LargestFirstAlgorithm(utxos, [output.Amount]);
 
-foreach (var consumed_input in coinSelectionResult.Inputs)
-{
-    txBuilder.AddInput(consumed_input.Outref);
-}
+// foreach (var consumed_input in coinSelectionResult.Inputs)
+// {
+//     txBuilder.AddInput(consumed_input.Outref);
+// }
 
 
-var lovelaceChange = new Lovelace(coinSelectionResult.LovelaceChange! + (feeInput?.Output.Amount()!.Lovelace() ?? 0 + (collateralInput?.Output.Amount()!.Lovelace() ?? 0)));
+var lovelaceChange = new Lovelace(feeInput?.Output.Amount()!.Lovelace() ?? 0);
 Value changeValue = lovelaceChange;
 
-if (coinSelectionResult.AssetsChange.Count > 0)
-{
-    changeValue = new LovelaceWithMultiAsset(lovelaceChange, new MultiAssetOutput(coinSelectionResult.AssetsChange));
-}
+// if (coinSelectionResult.AssetsChange.Count > 0)
+// {
+//     changeValue = new LovelaceWithMultiAsset(lovelaceChange, new MultiAssetOutput(coinSelectionResult.AssetsChange));
+// }
 
 
 var changeOutput = new PostAlonzoTransactionOutput(
@@ -180,22 +175,22 @@ var collateralOutput = new PostAlonzoTransactionOutput(
     null
     );
 
+var redeemerKey = new RedeemerKey(new CborInt(0), new CborUlong(0));
+var redeemerValue = new RedeemerValue(new PlutusConstr([]), new ExUnits(pparams.MaxTxExUnits!.Mem, pparams.MaxTxExUnits!.Steps));
 
-// var redeemerKey = new RedeemerKey(new CborInt(0), new CborUlong(0));
-// var redeemerValue = new RedeemerValue(new, new ExUnits(new CborUlong(0), new CborUlong(0)));
-
-// var redeemers = CborSerializer.Deserialize<RedeemerMap>(Convert.FromHexString("a182000082d87980821926171a002b49b1"));
-var redeemer = new RedeemerEntry(new CborInt(0), new CborUlong(0), CborSerializer.Deserialize<PlutusData>(Convert.FromHexString("d87980")), new ExUnits(new CborUlong(0), new CborUlong(0)));
+var redeemers = new RedeemerMap(new Dictionary<RedeemerKey, RedeemerValue> { { redeemerKey, redeemerValue } });
+// var redeemer = new RedeemerEntry(new CborInt(0), new CborUlong(0), CborSerializer.Deserialize<PlutusData>(Convert.FromHexString("d87980")), new ExUnits(new CborUlong(0), new CborUlong(0)));
 
 txBuilder
     .AddReferenceInput(refInput)
     .AddInput(lockedUtxoOutref)
+    .AddInput(feeInput!.Outref)
     .AddOutput(output)
     .AddOutput(changeOutput, true)
     .SetCollateralReturn(collateralOutput)
-    .SetRedeemers(new RedeemerList([redeemer]))
-    // .Evaluate(utxos_copy)
-    .CalculateFee(scriptBytes);
+    .SetRedeemers(redeemers)
+    .Evaluate(utxos)
+    .CalculateFee();
 
 
 var unsignedTx = txBuilder.Build();

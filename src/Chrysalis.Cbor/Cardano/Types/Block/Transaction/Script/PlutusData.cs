@@ -13,7 +13,6 @@ public abstract record PlutusData : CborBase;
 [CborOptions(IsDefinite = true)]
 public record PlutusConstr(List<PlutusData> PlutusData) : PlutusData;
 
-
 [CborConverter(typeof(MapConverter))]
 [CborOptions(IsDefinite = true)]
 public record PlutusMap(Dictionary<PlutusData, PlutusData> PlutusData) : PlutusData;

@@ -20,7 +20,7 @@ public static class TransactionExtension
         vKeyWitnesses.Add(vkeyWitness);
        
         var newWitnessSet = new PostAlonzoTransactionWitnessSet(
-            new CborDefList<VKeyWitness>(vKeyWitnesses),
+            new CborDefListWithTag<VKeyWitness>(vKeyWitnesses),
             transaction.TransactionWitnessSet.NativeScriptSet()!.Any() ? new CborDefList<NativeScript>([.. transaction.TransactionWitnessSet.NativeScriptSet()!]) : null,
             transaction.TransactionWitnessSet.BootstrapWitnessSet()!.Any() ? new CborDefList<BootstrapWitness>([.. transaction.TransactionWitnessSet.BootstrapWitnessSet()!]) : null,
             transaction.TransactionWitnessSet.PlutusV1ScriptSet()!.Any() ? new CborDefList<CborBytes>([.. transaction.TransactionWitnessSet.PlutusV1ScriptSet()!.Select(e => new CborBytes(e))]) : null,

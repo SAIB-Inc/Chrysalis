@@ -8,7 +8,6 @@ namespace Chrysalis.Cbor.Cardano.Types.Block.Transaction.Output;
 [CborConverter(typeof(UnionConverter))]
 public abstract record TransactionOutput : CborBase;
 
-
 [CborConverter(typeof(CustomListConverter))]
 [CborOptions(IsDefinite = true)]
 public record AlonzoTransactionOutput(

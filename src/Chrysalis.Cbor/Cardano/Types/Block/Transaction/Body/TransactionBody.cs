@@ -59,7 +59,7 @@ public record BabbageTransactionBody(
 [CborOptions(IsDefinite = true)]
 public record ConwayTransactionBody(
     [CborIndex(0)] CborDefListWithTag<TransactionInput> Inputs,
-    [CborIndex(1)] CborMaybeIndefList<TransactionOutput> Outputs,
+    [CborIndex(1)] CborMaybeIndefList<PostAlonzoTransactionOutput> Outputs,
     [CborIndex(2)] CborUlong Fee,
     [CborIndex(3)] CborUlong? TimeToLive,
     [CborIndex(4)] CborMaybeIndefList<Certificate>? Certificates,

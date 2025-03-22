@@ -42,18 +42,20 @@ public sealed class CustomConstrConverter : ICborConverter
         writer.WriteTag(resolvedTag);
 
         int count = value.Count(v => v is not null);
-        writer.WriteStartArray(options.IsDefinite ? count : null);
-
         // Get inner type same way as read
-        Type innerType = options.RuntimeType?.GetGenericArguments()[0]
+        Type innerType = options.RuntimeType?.BaseType
             ?? throw new CborSerializationException("Runtime type is not defined in options.");
         CborOptions innerOptions = CborRegistry.Instance.GetBaseOptions(innerType);
 
         // Write each item
-        foreach (object? item in value)
+        if (value[0] is IEnumerable<object> items)
         {
-            if (item is not null)
-                CborSerializer.Serialize(writer, item, innerOptions);
+            writer.WriteStartArray(options.IsDefinite ? items.Count() : null);
+            foreach (object? item in items)
+            {
+                if (item is not null)
+                    CborSerializer.Serialize(writer, item, innerOptions);
+            }
         }
 
         writer.WriteEndArray();

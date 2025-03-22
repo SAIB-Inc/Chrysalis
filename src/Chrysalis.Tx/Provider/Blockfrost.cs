@@ -37,7 +37,7 @@ public class Blockfrost : IProvider
         var parameters = JsonSerializer.Deserialize<BlockfrostProtocolParametersResponse>(content) ??
             throw new Exception("GetParameters: Could not parse response json");
 
-        Dictionary<CborInt, CborIndefList<CborLong>> costMdls = new();
+        Dictionary<CborInt, CborDefList<CborLong>> costMdls = new();
 
         foreach (var (key, value) in parameters.CostModelsRaw)
         {
@@ -49,7 +49,7 @@ public class Blockfrost : IProvider
                 _ => throw new ArgumentException("Invalid key", nameof(key))
             };
 
-            costMdls[new CborInt(version)] = new CborIndefList<CborLong>([.. value.Select(x => new CborLong(x))]);
+            costMdls[new CborInt(version)] = new CborDefList<CborLong>([.. value.Select(x => new CborLong(x))]);
         }
 
         return new ConwayProtocolParamUpdate(
@@ -68,7 +68,7 @@ public class Blockfrost : IProvider
             new CborUlong(ulong.Parse(parameters.MinPoolCost)),
             new CborUlong(ulong.Parse(parameters.CoinsPerUtxoSize)),
             new CostMdls(costMdls),
-            new ExUnitPrices(new CborRationalNumber((ulong)parameters.PriceMem, 1), new CborRationalNumber((ulong)parameters.PriceStep, 1)),
+            new ExUnitPrices(new CborRationalNumber((ulong)(parameters.PriceMem * 1000000), 1000000), new CborRationalNumber((ulong)(parameters.PriceStep * 1000000), 1000000)),
             new ExUnits(new CborUlong(ulong.Parse(parameters.MaxTxExMem)), new CborUlong(ulong.Parse(parameters.MaxTxExSteps))),
             new ExUnits(new CborUlong(ulong.Parse(parameters.MaxBlockExMem)), new CborUlong(ulong.Parse(parameters.MaxBlockExSteps))),
             new CborUlong(ulong.Parse(parameters.MaxValSize)),

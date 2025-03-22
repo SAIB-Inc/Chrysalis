@@ -1,5 +1,6 @@
 using Chrysalis.Cbor.Cardano.Types.Block.Transaction.Protocol;
 using Chrysalis.Cbor.Cardano.Types.Block.Transaction.WitnessSet;
+using Chrysalis.Tx.Models;
 
 namespace Chrysalis.Tx.Utils;
 
@@ -57,17 +58,21 @@ public static class FeeUtil
          return CalculateFee(totalTxSize, minFeeA, minFeeB);
      }
  
-     public static ulong CalculateScriptFee(RedeemerList redeemers, ulong exUnitPriceStep, ulong exUnitPriceMem)
+     public static ulong CalculateScriptExecutionFee(Redeemers redeemers, RationalNumber exUnitPriceStep, RationalNumber exUnitPriceMem)
      {
-         if (redeemers?.Value is null || redeemers.Value.Count == 0) return 0;
- 
-         List<ExUnits> exUnits = [.. redeemers.Value.Select(x => x.ExUnits)];
+         if (redeemers is null) return 0;
+
+         List<ExUnits> exUnits = redeemers switch {
+            RedeemerList redeemerList => [.. redeemerList.Value.Select(x => x.ExUnits)],
+            RedeemerMap redeemerMap => [.. redeemerMap.Value.Select(x => x.Value.ExUnits)],
+            _ => throw new ArgumentException("Invalid redeemers type", nameof(redeemers))
+         };
  
          ulong scriptFee = 0;
          exUnits.ForEach(exUnit => 
          {
-             ulong memCost = exUnit.Mem.Value * exUnitPriceMem;
-             ulong stepCost = exUnit.Steps.Value * exUnitPriceStep;
+             ulong memCost = exUnit.Mem.Value * exUnitPriceStep.Numerator / exUnitPriceStep.Denominator;
+             ulong stepCost = exUnit.Steps.Value * exUnitPriceMem.Numerator / exUnitPriceMem.Denominator;
              
              scriptFee += memCost + stepCost;
          });

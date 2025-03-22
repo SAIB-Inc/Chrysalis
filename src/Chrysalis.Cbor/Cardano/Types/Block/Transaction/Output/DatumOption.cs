@@ -17,6 +17,7 @@ public record DatumHashOption(
 
 
 [CborConverter(typeof(CustomListConverter))]
+[CborOptions(IsDefinite = true)]
 public record InlineDatumOption(
     [CborIndex(0)] CborInt Option,
     [CborIndex(1)] CborEncodedValue Data

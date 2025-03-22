@@ -6,6 +6,7 @@ using Chrysalis.Cbor.Types.Primitives;
 namespace Chrysalis.Cbor.Cardano.Types.Block.Transaction.Protocol;
 
 [CborConverter(typeof(CustomListConverter))]
+[CborOptions(IsDefinite = true)]
 public record ExUnits(
     [CborIndex(0)] CborUlong Mem,
     [CborIndex(1)] CborUlong Steps

@@ -11,6 +11,7 @@ public abstract record TokenBundle : CborBase;
 
 
 [CborConverter(typeof(MapConverter))]
+[CborOptions(IsDefinite = true)]
 public record TokenBundleOutput(Dictionary<CborBytes, CborUlong> Value) : TokenBundle;
 
 
