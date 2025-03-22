@@ -10,48 +10,25 @@ public sealed partial class CborSerializerCodeGen
 {
     private static class Parser
     {
-        // fully qualified name -> SerializableTypeMetadata cache
         public static readonly Dictionary<string, SerializableTypeMetadata> _cache = [];
 
-        public const string CborSerializableAttributeFullName = "Chrysalis.Cbor.Serialization.Attributes.CborSerializableAttribute";
-        public const string CborSerializableAttribute = "CborSerializableAttribute";
         public const string CborSerializable = "CborSerializable";
-        public const string CborMapAttributeFullName = "Chrysalis.Cbor.Serialization.Attributes.CborMapAttribute";
-        public const string CborMapAttribute = "CborMapAttribute";
         public const string CborMap = "CborMap";
-        public const string CborNullableAttributeFullName = "Chrysalis.Cbor.Serialization.Attributes.CborNullableAttribute";
-        public const string CborNullableAttribute = "CborNullableAttribute";
         public const string CborNullable = "CborNullable";
-        public const string CborListAttributeFullName = "Chrysalis.Cbor.Serialization.Attributes.CborListAttribute";
-        public const string CborListAttribute = "CborListAttribute";
         public const string CborList = "CborList";
-        public const string CborUnionAttributeFullName = "Chrysalis.Cbor.Serialization.Attributes.CborUnionAttribute";
-        public const string CborUnionAttribute = "CborUnionAttribute";
         public const string CborUnion = "CborUnion";
-        public const string CborConstrAttributeFullName = "Chrysalis.Cbor.Serialization.Attributes.CborConstrAttribute";
-        public const string CborConstrAttribute = "CborConstrAttribute";
         public const string CborConstr = "CborConstr";
-        public const string CborTagAttributeFullName = "Chrysalis.Cbor.Serialization.Attributes.CborTagAttribute";
-        public const string CborTagAttribute = "CborTagAttribute";
         public const string CborTag = "CborTag";
-        public const string CborOrderAttributeFullName = "Chrysalis.Cbor.Serialization.Attributes.CborOrderAttribute";
-        public const string CborOrderAttribute = "CborOrderAttribute";
         public const string CborOrder = "CborOrder";
-        public const string CborPropertyAttributeFullName = "Chrysalis.Cbor.Serialization.Attributes.CborPropertyAttribute";
         public const string CborPropertyAttribute = "CborPropertyAttribute";
         public const string CborProperty = "CborProperty";
-        public const string CborSizeAttributeFullName = "Chrysalis.Cbor.Serialization.Attributes.CborSizeAttribute";
-        public const string CborSizeAttribute = "CborSizeAttribute";
         public const string CborSize = "CborSize";
-        public const string CborIndefiniteAttributeFullName = "Chrysalis.Cbor.Serialization.Attributes.CborIndefiniteAttribute";
-        public const string CborIndefiniteAttribute = "CborIndefiniteAttribute";
         public const string CborIndefinite = "CborIndefinite";
 
         // Interfaces
         public const string ICborPreserveRawFullName = "Chrysalis.Cbor.Serialization.ICborPreserveRaw";
         public const string ICborPreserveRaw = "ICborPreserveRaw";
         public const string ICborValidatorFullName = "Chrysalis.Cbor.Serialization.ICborValidator`1";
-        public const string ICborValidator = "ICborValidator`1";
 
         public static SerializableTypeMetadata? ParseSerialazableType(TypeDeclarationSyntax tds, SemanticModel model)
         {

@@ -52,6 +52,8 @@ public sealed partial class CborSerializerCodeGen
 
         public StringBuilder EmitWriter(StringBuilder sb, SerializableTypeMetadata metadata)
         {
+            Emitter.EmitPreservedRawWriter(sb);
+            Emitter.EmitWriterValidation(sb, metadata);
             Emitter.EmitTagWriter(sb, metadata.CborTag);
             bool isIntKey = metadata.Properties[0].PropertyKeyInt is not null;
 

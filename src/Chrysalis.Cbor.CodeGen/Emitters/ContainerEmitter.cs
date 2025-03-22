@@ -27,6 +27,8 @@ public sealed partial class CborSerializerCodeGen
             if (metadata.Properties.Count > 1 || metadata.Properties.Count < 1)
                 throw new InvalidOperationException($"Container types must have exactly one property. {metadata.FullyQualifiedName}");
 
+            Emitter.EmitPreservedRawWriter(sb);
+            Emitter.EmitWriterValidation(sb, metadata);
             SerializablePropertyMetadata prop = metadata.Properties[0];
             Emitter.EmitTagWriter(sb, metadata.CborTag);
             Emitter.EmitSerializablePropertyWriter(sb, prop);

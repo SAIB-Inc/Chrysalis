@@ -19,6 +19,8 @@ public sealed partial class CborSerializerCodeGen
 
         public StringBuilder EmitWriter(StringBuilder sb, SerializableTypeMetadata metadata)
         {
+            Emitter.EmitPreservedRawWriter(sb);
+            Emitter.EmitWriterValidation(sb, metadata);
             Emitter.EmitTagWriter(sb, metadata.CborTag);
 
             if (metadata.CborIndex is null || metadata.CborIndex < 0)

@@ -321,11 +321,22 @@ public sealed partial class CborSerializerCodeGen
 
         public static StringBuilder EmitWriterValidation(StringBuilder sb, SerializableTypeMetadata metadata)
         {
-            if (metadata.Validator is null)
-                throw new InvalidOperationException($"Validator is null for {metadata.FullyQualifiedName}");
+            if (metadata.Validator is not null)
+            {
+                sb.AppendLine($"{metadata.Validator} validator = new();");
+                sb.AppendLine($"if (!validator.Validate(data)) throw new Exception(\"Validation failed\");");
+            }
 
-            sb.AppendLine($"if (!{metadata.Validator}.Validate(data)) throw new Exception(\"Validation failed for type {metadata.FullyQualifiedName}\");");
+            return sb;
+        }
 
+        public static StringBuilder EmitPreservedRawWriter(StringBuilder sb)
+        {
+            sb.AppendLine($"if (data.Raw is not null)");
+            sb.AppendLine("{");
+            sb.AppendLine($"writer.WriteByteString(data.Raw?.ToArray());");
+            sb.AppendLine("return;");
+            sb.AppendLine("}");
             return sb;
         }
     }
