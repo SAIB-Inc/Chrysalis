@@ -1,14 +1,11 @@
-using Chrysalis.Cbor.Attributes;
-
-
+using Chrysalis.Cbor.Serialization.Attributes;
 using Chrysalis.Cbor.Types;
-using Chrysalis.Cbor.Types.Primitives;
 
 namespace Chrysalis.Network.Cbor.Common;
 
-[CborConverter(typeof(CustomListConverter))]
-[CborOptions(IsDefinite = true)]
+[CborSerializable]
+[CborList]
 public partial record Tip(
-    [CborIndex(0)] Point Slot,
-    [CborIndex(1)] CborInt BlockNumber
-) : CborBase;
+    [CborOrder(0)] Point Slot,
+    [CborOrder(1)] int BlockNumber
+) : CborBase<Tip>;

@@ -5,7 +5,7 @@ namespace Chrysalis.Cbor.Cardano.Types.Block;
 
 [CborSerializable]
 [CborList]
-public partial record BlockWithEra<T>(
+public partial record BlockWithEra(
     [CborOrder(0)] int EraNumber,
     [CborOrder(1)] Block Block
-) : CborBase<Block>;
+) : CborBase<BlockWithEra>;

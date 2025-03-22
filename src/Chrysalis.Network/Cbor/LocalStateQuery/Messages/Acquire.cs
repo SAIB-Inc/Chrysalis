@@ -1,49 +1,49 @@
-using System.Text.RegularExpressions;
-using Chrysalis.Cbor.Attributes;
+// using System.Text.RegularExpressions;
+// using Chrysalis.Cbor.Attributes;
 
-using Chrysalis.Cbor.Types;
-using Chrysalis.Cbor.Types.Custom;
-using Chrysalis.Cbor.Types.Primitives;
-using Chrysalis.Network.Cbor.Common;
+// using Chrysalis.Cbor.Types;
+// using Chrysalis.Cbor.Types.Custom;
+// using Chrysalis.Cbor.Types.Primitives;
+// using Chrysalis.Network.Cbor.Common;
 
-namespace Chrysalis.Network.Cbor.LocalStateQuery.Messages;
+// namespace Chrysalis.Network.Cbor.LocalStateQuery.Messages;
 
-[CborConverter(typeof(UnionConverter))]
-public abstract record Acquire : LocalStateQueryMessage;
+// [CborConverter(typeof(UnionConverter))]
+// public abstract record Acquire : LocalStateQueryMessage;
 
-public class AcquireTypes
-{
-    public static Acquire Default(Point? point) => point is not null ? SpecificPoint(point) : VolatileTip;
+// public class AcquireTypes
+// {
+//     public static Acquire Default(Point? point) => point is not null ? SpecificPoint(point) : VolatileTip;
 
-    public static Acquire SpecificPoint(Point point) =>
-        new SpecificPoint(new ExactValue<CborInt>(new(0)), point);
+//     public static Acquire SpecificPoint(Point point) =>
+//         new SpecificPoint(new ExactValue<CborInt>(new(0)), point);
 
-    public static Acquire VolatileTip =>
-        new VolatileTip(new ExactValue<CborInt>(new(8)));
+//     public static Acquire VolatileTip =>
+//         new VolatileTip(new ExactValue<CborInt>(new(8)));
 
-    public static Acquire ImmutableTip =>
-        new ImmutableTip(new ExactValue<CborInt>(new(10)));
-}
+//     public static Acquire ImmutableTip =>
+//         new ImmutableTip(new ExactValue<CborInt>(new(10)));
+// }
 
-[CborConverter(typeof(UnionConverter))]
-public abstract record AcquireIdx : CborBase;
+// [CborConverter(typeof(UnionConverter))]
+// public abstract record AcquireIdx : CborBase;
 
-[CborConverter(typeof(CustomListConverter))]
-[CborOptions(IsDefinite = true)]
-public partial record SpecificPoint(
-    [CborIndex(0)][ExactValue(0)] ExactValue<CborInt> Idx,
-    [CborIndex(1)] Point Point
-) : Acquire;
+// [CborConverter(typeof(CustomListConverter))]
+// [CborOptions(IsDefinite = true)]
+// public partial record SpecificPoint(
+//     [CborIndex(0)][ExactValue(0)] ExactValue<CborInt> Idx,
+//     [CborIndex(1)] Point Point
+// ) : Acquire;
 
-[CborConverter(typeof(CustomListConverter))]
-[CborOptions(IsDefinite = true)]
-public partial record VolatileTip(
-    [CborIndex(0)][ExactValue(8)] ExactValue<CborInt> Idx
-) : Acquire;
+// [CborConverter(typeof(CustomListConverter))]
+// [CborOptions(IsDefinite = true)]
+// public partial record VolatileTip(
+//     [CborIndex(0)][ExactValue(8)] ExactValue<CborInt> Idx
+// ) : Acquire;
 
-[CborConverter(typeof(CustomListConverter))]
-[CborOptions(IsDefinite = true)]
-public partial record ImmutableTip(
-    [CborIndex(0)][ExactValue(10)] ExactValue<CborInt> Idx
-) : Acquire;
+// [CborConverter(typeof(CustomListConverter))]
+// [CborOptions(IsDefinite = true)]
+// public partial record ImmutableTip(
+//     [CborIndex(0)][ExactValue(10)] ExactValue<CborInt> Idx
+// ) : Acquire;
 

@@ -1,14 +1,12 @@
-using Chrysalis.Cbor.Attributes;
-
+using Chrysalis.Cbor.Serialization.Attributes;
 using Chrysalis.Cbor.Types;
-using Chrysalis.Cbor.Types.Primitives;
 
 namespace Chrysalis.Network.Cbor.Handshake;
 
-[CborConverter(typeof(CustomListConverter))]
-[CborOptions(IsDefinite = true)]
+[CborSerializable]
+[CborList]
 public partial record N2CVersionData(
-    [CborIndex(0)] CborUlong NetworkMagic,
-    [CborIndex(1)] CborBool? Query
-) : CborBase;
+    [CborOrder(0)] ulong NetworkMagic,
+    [CborOrder(1)] bool? Query
+) : CborBase<N2CVersionData>;
 

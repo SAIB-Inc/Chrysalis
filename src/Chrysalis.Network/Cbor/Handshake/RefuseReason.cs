@@ -1,34 +1,34 @@
-using Chrysalis.Cbor.Attributes;
-
+using Chrysalis.Cbor.Serialization.Attributes;
 using Chrysalis.Cbor.Types;
 using Chrysalis.Cbor.Types.Custom;
-using Chrysalis.Cbor.Types.Primitives;
+using Chrysalis.Network.Cbor.Common;
 
 namespace Chrysalis.Network.Cbor.Handshake;
 
 
-[CborConverter(typeof(UnionConverter))]
-public partial record RefuseReason : CborBase;
+[CborSerializable]
+[CborUnion]
+public partial record RefuseReason : CborBase<RefuseReason>;
 
-[CborConverter(typeof(CustomListConverter))]
-[CborOptions(IsDefinite = true)]
+[CborSerializable]
+[CborList]
 public partial record VersionMismatch(
-    [CborIndex(0)][ExactValue(0)] ExactValue<CborInt> Idx,
-    [CborIndex(1)] CborDefList<CborInt> VersionNumbers
+    [CborOrder(0)] Value0 Idx,
+    [CborOrder(1)] CborDefList<int> VersionNumbers
 ) : RefuseReason;
 
-[CborConverter(typeof(CustomListConverter))]
-[CborOptions(IsDefinite = true)]
+[CborSerializable]
+[CborList]
 public partial record HandshakeDecodeError(
-    [CborIndex(0)][ExactValue(1)] ExactValue<CborInt> Idx,
-    [CborIndex(1)] CborInt VersionNumber,
-    [CborIndex(2)] CborBytes ErrorData
+    [CborOrder(0)] Value1 Idx,
+    [CborOrder(1)] int VersionNumber,
+    [CborOrder(2)] byte[] ErrorData
 ) : RefuseReason;
 
-[CborConverter(typeof(CustomListConverter))]
-[CborOptions(IsDefinite = true)]
+[CborSerializable]
+[CborList]
 public partial record Refused(
-    [CborIndex(0)][ExactValue(2)] ExactValue<CborInt> Idx,
-    [CborIndex(1)] CborInt VersionNumber,
-    [CborIndex(2)] CborBytes ErrorData
+    [CborOrder(0)] Value2 Idx,
+    [CborOrder(1)] int VersionNumber,
+    [CborOrder(2)] byte[] ErrorData
 ) : RefuseReason;

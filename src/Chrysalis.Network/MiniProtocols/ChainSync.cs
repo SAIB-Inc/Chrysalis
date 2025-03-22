@@ -19,15 +19,15 @@ public class ChainSync(AgentChannel channel) : IMiniProtocol
     {
         Points message = new([.. points]);
         MessageFindIntersect messageCbor = ChainSyncMessages.FindIntersect(message);
-        await _channelBuffer.SendFullMessageAsync(messageCbor, cancellationToken);
+        await _channelBuffer.SendFullMessageAsync<ChainSyncMessage>(messageCbor, cancellationToken);
         return await _channelBuffer.ReceiveFullMessageAsync<ChainSyncMessage>(cancellationToken);
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public async Task<MessageNextResponse> NextRequestAsync(CancellationToken cancellationToken)
+    public async Task<MessageNextResponse?> NextRequestAsync(CancellationToken cancellationToken)
     {
         await _channelBuffer.SendFullMessageAsync(_nextRequest, cancellationToken);
-        return await _channelBuffer.ReceiveFullMessageAsync<MessageNextResponse>(cancellationToken);
+        return await _channelBuffer.ReceiveFullMessageAsync<ChainSyncMessage>(cancellationToken) as MessageNextResponse;
     }
 }
 
