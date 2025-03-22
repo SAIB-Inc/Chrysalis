@@ -301,9 +301,10 @@ public sealed partial class CborSerializerCodeGen
 
         public static StringBuilder EmitCustomListWriter(StringBuilder sb, SerializableTypeMetadata metadata)
         {
+            EmitPropertyCountWriter(sb, metadata);
             if (!(metadata.SerializationType == SerializationType.Constr && (metadata.CborIndex is null || metadata.CborIndex < 0)))
             {
-                sb.AppendLine($"writer.WriteStartArray(null);");
+                sb.AppendLine($"writer.WriteStartArray(propCount);");
             }
 
             foreach (SerializablePropertyMetadata prop in metadata.Properties)
@@ -337,6 +338,27 @@ public sealed partial class CborSerializerCodeGen
             sb.AppendLine($"writer.WriteByteString(data.Raw?.ToArray());");
             sb.AppendLine("return;");
             sb.AppendLine("}");
+            return sb;
+        }
+
+        public static StringBuilder EmitPropertyCountWriter(StringBuilder sb, SerializableTypeMetadata metadata)
+        {
+            sb.AppendLine($"int propCount = 0;");
+
+            foreach (SerializablePropertyMetadata prop in metadata.Properties)
+            {
+                if (prop.IsNullable || !prop.IsTypeNullable)
+                {
+                    sb.AppendLine("propCount++;");
+                }
+                else
+                {
+                    sb.AppendLine($"if (data.{prop.PropertyName} is not null) propCount++;");
+                }
+            }
+
+            sb.AppendLine();
+
             return sb;
         }
     }

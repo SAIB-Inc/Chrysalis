@@ -21,8 +21,8 @@ public class Handshake(AgentChannel channel) : IMiniProtocol
     /// <returns>The handshake response message.</returns>
     public async Task<HandshakeMessage> SendAsync(ProposeVersions propose, CancellationToken cancellationToken)
     {
-        await _channelBuffer.SendFullMessageAsync<HandshakeMessage>(propose, cancellationToken);
-        return await _channelBuffer.ReceiveFullMessageAsync<HandshakeMessage>(cancellationToken);
+        await _buffer.SendFullMessageAsync<HandshakeMessage>(propose, cancellationToken);
+        return await _buffer.ReceiveFullMessageAsync<HandshakeMessage>(cancellationToken);
     }
 }
 

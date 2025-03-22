@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using Chrysalis.Network.Cbor.ChainSync;
 using Chrysalis.Network.Cbor.Common;
 using Chrysalis.Network.Core;
@@ -33,15 +34,15 @@ public class ChainSync(AgentChannel channel) : IMiniProtocol
     {
         Points message = new([.. points]);
         MessageFindIntersect messageCbor = ChainSyncMessages.FindIntersect(message);
-        await _channelBuffer.SendFullMessageAsync<ChainSyncMessage>(messageCbor, cancellationToken);
-        return await _channelBuffer.ReceiveFullMessageAsync<ChainSyncMessage>(cancellationToken);
+        await _buffer.SendFullMessageAsync<ChainSyncMessage>(messageCbor, cancellationToken);
+        return await _buffer.ReceiveFullMessageAsync<ChainSyncMessage>(cancellationToken);
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public async Task<MessageNextResponse?> NextRequestAsync(CancellationToken cancellationToken)
     {
-        await _channelBuffer.SendFullMessageAsync(_nextRequest, cancellationToken);
-        return await _channelBuffer.ReceiveFullMessageAsync<ChainSyncMessage>(cancellationToken) as MessageNextResponse;
+        await _buffer.SendFullMessageAsync(_nextRequest, cancellationToken);
+        return await _buffer.ReceiveFullMessageAsync<ChainSyncMessage>(cancellationToken) as MessageNextResponse;
     }
 }
 

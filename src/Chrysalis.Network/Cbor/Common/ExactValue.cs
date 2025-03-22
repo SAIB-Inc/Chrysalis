@@ -5,14 +5,14 @@ using Chrysalis.Cbor.Types;
 namespace Chrysalis.Network.Cbor.Common;
 
 [CborSerializable]
-public record Value0(int Value) : CborBase<Value0>;
+public partial record Value0(int Value) : CborBase<Value0>;
 public record Value0Validator : ICborValidator<Value0>
 {
     public bool Validate(Value0 input) => input.Value == 0;
 }
 
 [CborSerializable]
-public record Value1(int Value) : CborBase<Value1>;
+public partial record Value1(int Value) : CborBase<Value1>;
 public record Value1Validator : ICborValidator<Value1>
 {
     public bool Validate(Value1 input) => input.Value == 1;

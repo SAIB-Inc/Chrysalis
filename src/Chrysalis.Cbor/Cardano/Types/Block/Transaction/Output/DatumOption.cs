@@ -1,3 +1,4 @@
+using Chrysalis.Cbor.Serialization;
 using Chrysalis.Cbor.Serialization.Attributes;
 
 using Chrysalis.Cbor.Types;
@@ -17,7 +18,7 @@ public abstract partial record DatumOption : CborBase<DatumOption>
 public partial record DatumHashOption(
     [CborOrder(0)] int Option,
     [CborOrder(1)] byte[] DatumHash
-) : DatumOption;
+) : DatumOption, ICborPreserveRaw;
 
 
 [CborSerializable]
@@ -25,5 +26,5 @@ public partial record DatumHashOption(
 public partial record InlineDatumOption(
     [CborOrder(0)] int Option,
     [CborOrder(1)] CborEncodedValue Data
-) : DatumOption;
+) : DatumOption, ICborPreserveRaw;
 

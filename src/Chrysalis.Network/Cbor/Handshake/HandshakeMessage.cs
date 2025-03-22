@@ -7,7 +7,7 @@ namespace Chrysalis.Network.Cbor.Handshake;
 
 [CborSerializable]
 [CborUnion]
-public abstract record HandshakeMessage : CborBase<HandshakeMessage>;
+public abstract partial record HandshakeMessage : CborBase<HandshakeMessage>;
 
 public class HandshakeMessages
 {
@@ -44,7 +44,7 @@ public partial record ProposeVersions(
 
 [CborSerializable]
 [CborUnion]
-public abstract record AcceptVersion : HandshakeMessage;
+public abstract partial record AcceptVersion : HandshakeMessage;
 
 
 [CborSerializable]
@@ -79,7 +79,7 @@ public partial record Refuse(
 #region Query
 [CborSerializable]
 [CborUnion]
-public abstract record QueryReply : HandshakeMessage;
+public abstract partial record QueryReply : HandshakeMessage;
 
 [CborSerializable]
 [CborList]

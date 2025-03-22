@@ -2,6 +2,7 @@ using Chrysalis.Cbor.Cardano.Types.Block.Transaction.Script;
 using Chrysalis.Cbor.Types.Custom;
 using Chrysalis.Cbor.Types;
 using Chrysalis.Cbor.Serialization.Attributes;
+using Chrysalis.Cbor.Serialization;
 
 namespace Chrysalis.Cbor.Cardano.Types.Block.Transaction.WitnessSet;
 
@@ -20,7 +21,7 @@ public partial record PostAlonzoAuxiliaryDataMap(
     [CborProperty(2)] CborDefList<byte[]>? PlutusV1ScriptSet,
     [CborProperty(3)] CborDefList<byte[]>? PlutusV2ScriptSet,
     [CborProperty(4)] CborDefList<byte[]>? PlutusV3ScriptSet
-) : AuxiliaryData;
+) : AuxiliaryData, ICborPreserveRaw;
 
 
 [CborSerializable]
@@ -32,4 +33,4 @@ public partial record Metadata(Dictionary<ulong, TransactionMetadatum> Value) : 
 public partial record ShellyMaAuxiliaryData(
    [CborOrder(0)] Metadata TransactionMetadata,
    [CborOrder(1)] CborDefList<NativeScript> AuxiliaryScripts
-) : AuxiliaryData;
+) : AuxiliaryData, ICborPreserveRaw;

@@ -39,9 +39,11 @@ public partial record PlutusInt64(long Value) : PlutusInt;
 public partial record PlutusUint64(ulong Value) : PlutusInt;
 
 [CborSerializable]
+[CborTag(2)]
 public partial record PlutusBigUint([CborSize(64)] byte[] Value) : PlutusBigInt;
 
 [CborSerializable]
+[CborTag(3)]
 public partial record PlutusBigNint([CborSize(64)] byte[] Value) : PlutusBigInt;
 
 [CborSerializable]

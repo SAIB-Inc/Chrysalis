@@ -14,7 +14,7 @@ public class NodeClient : IDisposable
     /// Gets the LocalTxSubmit protocol handler.
     /// </summary>
 
-    public LocalTxSubmit? LocalTxSubmit { get; private set; }
+    // public LocalTxSubmit? LocalTxSubmit { get; private set; }
 
     /// <summary>
     /// Gets the Handshake protocol handler.
@@ -24,14 +24,14 @@ public class NodeClient : IDisposable
     /// <summary>
     /// Gets the LocalStateQuery protocol handler.
     /// </summary>
-    public LocalStateQuery? LocalStateQuery { get; private set; }
+    //public LocalStateQuery? LocalStateQuery { get; private set; }
 
     /// <summary>
     /// Gets the ChainSync protocol handler.
     /// </summary>
     public ChainSync? ChainSync { get; private set; }
     // public LocalTxSubmit? LocalTxSubmit { get; private set; }
-#endregion
+
 
     /// <summary>
     /// Initializes a new instance of the NodeClient class.

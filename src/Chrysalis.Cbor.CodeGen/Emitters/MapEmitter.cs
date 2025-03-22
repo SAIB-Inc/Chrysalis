@@ -55,9 +55,10 @@ public sealed partial class CborSerializerCodeGen
             Emitter.EmitPreservedRawWriter(sb);
             Emitter.EmitWriterValidation(sb, metadata);
             Emitter.EmitTagWriter(sb, metadata.CborTag);
+            Emitter.EmitPropertyCountWriter(sb, metadata);
             bool isIntKey = metadata.Properties[0].PropertyKeyInt is not null;
 
-            sb.AppendLine($"writer.WriteStartMap(null);");
+            sb.AppendLine($"writer.WriteStartMap(propCount);");
             foreach (var prop in metadata.Properties)
             {
                 if (prop.IsNullable)

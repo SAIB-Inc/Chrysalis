@@ -28,7 +28,7 @@ public sealed class ChannelBuffer(AgentChannel channel)
             int chunkSize = Math.Min(ProtocolConstants.MaxSegmentPayloadLength, payloadLength - offset);
             ReadOnlyMemory<byte> chunkMemory = payloadMemory.Slice(offset, chunkSize);
             ReadOnlySequence<byte> chunkSequence = new(chunkMemory);
-            await _channel.EnqueueChunkAsync(chunkSequence, cancellationToken);
+            await channel.EnqueueChunkAsync(chunkSequence, cancellationToken);
         }
     }
 
@@ -36,7 +36,7 @@ public sealed class ChannelBuffer(AgentChannel channel)
     {
         while (true)
         {
-            ReadResult readResult = await _channel.ReadChunkAsync(cancellationToken);
+            ReadResult readResult = await channel.ReadChunkAsync(cancellationToken);
             ReadOnlySequence<byte> buffer = readResult.Buffer;
 
             try
@@ -45,7 +45,7 @@ public sealed class ChannelBuffer(AgentChannel channel)
                 if (buffer.IsSingleSegment)
                 {
                     result = CborSerializer.Deserialize<T>(buffer.First);
-                    _channel.AdvanceTo(buffer.End);
+                    channel.AdvanceTo(buffer.End);
                     return result;
                 }
 
@@ -55,7 +55,7 @@ public sealed class ChannelBuffer(AgentChannel channel)
                 {
                     buffer.CopyTo(rentedBuffer);
                     result = CborSerializer.Deserialize<T>(rentedBuffer.AsMemory(0, (int)buffer.Length));
-                    _channel.AdvanceTo(buffer.End);
+                    channel.AdvanceTo(buffer.End);
                     return result;
                 }
                 finally
@@ -66,12 +66,12 @@ public sealed class ChannelBuffer(AgentChannel channel)
             catch (Exception) when (!readResult.IsCompleted)
             {
                 // Need more data - mark what we examined but couldn't use
-                _channel.AdvanceTo(buffer.Start);
+                channel.AdvanceTo(buffer.Start);
             }
             catch (Exception) when (readResult.IsCompleted)
             {
                 // If pipe is completed and we still can't deserialize, that's an error
-                _channel.AdvanceTo(buffer.End);
+                channel.AdvanceTo(buffer.End);
                 throw new InvalidOperationException("Pipe completed before a valid message could be parsed");
             }
         }

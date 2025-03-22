@@ -4,6 +4,7 @@ using Chrysalis.Cbor.Types;
 using Chrysalis.Cbor.Serialization.Attributes;
 using Chrysalis.Cbor.Cardano.Types.Block.Transaction.Body;
 using Chrysalis.Cbor.Cardano.Types.Block.Transaction.WitnessSet;
+using Chrysalis.Cbor.Serialization;
 
 namespace Chrysalis.Cbor.Cardano.Types.Block;
 
@@ -19,7 +20,7 @@ public partial record AlonzoCompatibleBlock(
 [CborOrder(2)] CborMaybeIndefList<AlonzoTransactionWitnessSet> TransactionWitnessSets,
 [CborOrder(3)] AuxiliaryDataSet AuxiliaryDataSet,
 [CborOrder(4)] CborMaybeIndefList<int>? InvalidTransactions
-) : Block;
+) : Block, ICborPreserveRaw;
 
 [CborSerializable]
 [CborList]
@@ -29,7 +30,7 @@ public partial record BabbageBlock(
     [CborOrder(2)] CborMaybeIndefList<PostAlonzoTransactionWitnessSet> TransactionWitnessSets,
     [CborOrder(3)] AuxiliaryDataSet AuxiliaryDataSet,
     [CborOrder(4)] CborMaybeIndefList<int>? InvalidTransactions
-) : Block;
+) : Block, ICborPreserveRaw;
 
 [CborSerializable]
 [CborList]
@@ -39,4 +40,4 @@ public partial record ConwayBlock(
     [CborOrder(2)] CborMaybeIndefList<PostAlonzoTransactionWitnessSet> TransactionWitnessSets,
     [CborOrder(3)] AuxiliaryDataSet AuxiliaryDataSet,
     [CborOrder(4)] CborMaybeIndefList<int>? InvalidTransactions
-) : Block;
+) : Block, ICborPreserveRaw;

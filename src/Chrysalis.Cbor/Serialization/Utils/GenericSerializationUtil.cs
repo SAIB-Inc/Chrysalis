@@ -119,7 +119,7 @@ public static class GenericSerializationUtil
         if (type == typeof(byte[]))
             return (T)(object)ReadByteArray(reader);
         if (type == typeof(CborEncodedValue))
-            return (T)(object)reader.ReadEncodedValue();
+            return (T)(object)new CborEncodedValue(reader.ReadEncodedValue().ToArray());
 
         // Special handling for nullable types
         if (Nullable.GetUnderlyingType(type) != null)
@@ -176,7 +176,7 @@ public static class GenericSerializationUtil
         if (type == typeof(byte[]))
             return ReadByteArray(reader);
         if (type == typeof(CborEncodedValue))
-            return reader.ReadEncodedValue();
+            return new CborEncodedValue(reader.ReadEncodedValue().ToArray());
 
         throw new NotSupportedException($"Type {type} is not supported as a primitive type.");
     }

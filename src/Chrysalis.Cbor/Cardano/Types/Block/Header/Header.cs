@@ -1,6 +1,7 @@
 using Chrysalis.Cbor.Cardano.Types.Block.Header.Body;
 using Chrysalis.Cbor.Types;
 using Chrysalis.Cbor.Serialization.Attributes;
+using Chrysalis.Cbor.Serialization;
 
 namespace Chrysalis.Cbor.Cardano.Types.Block.Header;
 
@@ -9,4 +10,4 @@ namespace Chrysalis.Cbor.Cardano.Types.Block.Header;
 public partial record BlockHeader(
     [CborOrder(0)] BlockHeaderBody HeaderBody,
     [CborOrder(1)] byte[] BodySignature
-) : CborBase<BlockHeader>;
+) : CborBase<BlockHeader>, ICborPreserveRaw;

@@ -21,15 +21,17 @@ public static class TestUtils
     public static Block? DeserializeBlockWithEra(byte[] blockCbor)
     {
         CborReader reader = new(blockCbor, CborConformanceMode.Lax);
+        reader.ReadTag();
+        reader = new(reader.ReadByteString(), CborConformanceMode.Lax);
         reader.ReadStartArray();
         Era era = (Era)reader.ReadInt32();
         ReadOnlyMemory<byte> blockBytes = reader.ReadEncodedValue(true);
 
         return era switch
         {
-            Era.Shelley or Era.Allegra or Era.Mary or Era.Alonzo => CborSerializer.Deserialize<AlonzoCompatibleBlock>(blockBytes),
-            Era.Babbage => CborSerializer.Deserialize<BabbageBlock>(blockBytes),
-            Era.Conway => CborSerializer.Deserialize<ConwayBlock>(blockBytes),
+            Era.Shelley or Era.Allegra or Era.Mary or Era.Alonzo => AlonzoCompatibleBlock.Read(blockBytes),
+            Era.Babbage => BabbageBlock.Read(blockBytes),
+            Era.Conway => ConwayBlock.Read(blockBytes),
             _ => throw new NotSupportedException($"Unsupported era: {era}")
         };
     }

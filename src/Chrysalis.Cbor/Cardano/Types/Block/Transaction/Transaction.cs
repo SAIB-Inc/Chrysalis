@@ -2,6 +2,7 @@ using Chrysalis.Cbor.Cardano.Types.Block.Transaction.Body;
 using Chrysalis.Cbor.Cardano.Types.Block.Transaction.WitnessSet;
 using Chrysalis.Cbor.Types;
 using Chrysalis.Cbor.Serialization.Attributes;
+using Chrysalis.Cbor.Serialization;
 
 namespace Chrysalis.Cbor.Cardano.Types.Block.Transaction;
 
@@ -17,7 +18,7 @@ public partial record ShelleyTransaction(
    [CborOrder(0)] TransactionBody TransactionBody,
    [CborOrder(1)] TransactionWitnessSet TransactionWitnessSet,
    [CborOrder(2)][CborNullable] Metadata? TransactionMetadata
-) : Transaction;
+) : Transaction, ICborPreserveRaw;
 
 [CborSerializable]
 [CborList]
@@ -25,7 +26,7 @@ public partial record AllegraTransaction(
     [CborOrder(0)] TransactionBody TransactionBody,
     [CborOrder(1)] TransactionWitnessSet TransactionWitnessSet,
     [CborOrder(2)][CborNullable] AuxiliaryData? AuxiliaryData
-) : Transaction;
+) : Transaction, ICborPreserveRaw;
 
 [CborSerializable]
 [CborList]
@@ -34,5 +35,5 @@ public partial record PostMaryTransaction(
     [CborOrder(1)] TransactionWitnessSet TransactionWitnessSet,
     [CborOrder(2)] bool IsValid,
     [CborOrder(3)][CborNullable] AuxiliaryData? AuxiliaryData
-) : Transaction;
+) : Transaction, ICborPreserveRaw;
 
