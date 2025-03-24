@@ -6,7 +6,7 @@
 
 // [CborSerializable]
 // [CborUnion]
-// public abstract record LocalTxSubmissionMessage : CborBase<LocalTxSubmissionMessage>;
+// public abstract record LocalTxSubmissionMessage : CborBase;
 
 // public class LocalTxSubmissionMessages
 // {

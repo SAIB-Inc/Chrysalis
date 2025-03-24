@@ -8,7 +8,7 @@ namespace Chrysalis.Network.Cbor.Handshake;
 
 [CborSerializable]
 [CborUnion]
-public partial record RefuseReason : CborBase<RefuseReason>;
+public partial record RefuseReason : CborBase;
 
 [CborSerializable]
 [CborList]

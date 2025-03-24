@@ -7,7 +7,7 @@ namespace Chrysalis.Cbor.Cardano.Types.Block.Header.Body;
 
 [CborSerializable]
 [CborUnion]
-public abstract partial record BlockHeaderBody : CborBase<BlockHeaderBody>, ICborPreserveRaw
+public abstract partial record BlockHeaderBody : CborBase, ICborPreserveRaw
 {
 }
 

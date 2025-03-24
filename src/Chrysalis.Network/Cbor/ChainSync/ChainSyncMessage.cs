@@ -7,7 +7,7 @@ namespace Chrysalis.Network.Cbor.ChainSync;
 
 [CborSerializable]
 [CborUnion]
-public partial record ChainSyncMessage : CborBase<ChainSyncMessage>;
+public partial record ChainSyncMessage : CborBase;
 
 [CborSerializable]
 [CborUnion]

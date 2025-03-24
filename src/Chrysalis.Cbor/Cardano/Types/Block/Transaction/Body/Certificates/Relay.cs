@@ -6,7 +6,7 @@ namespace Chrysalis.Cbor.Cardano.Types.Block.Transaction.Body.Certificates;
 
 [CborSerializable]
 [CborUnion]
-public abstract partial record Relay : CborBase<Relay>
+public abstract partial record Relay : CborBase
 {
 }
 

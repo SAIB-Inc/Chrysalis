@@ -10,7 +10,7 @@ namespace Chrysalis.Cbor.Cardano.Types.Block;
 
 [CborSerializable]
 [CborUnion]
-public abstract partial record Block : CborBase<Block> { }
+public abstract partial record Block : CborBase { }
 
 [CborSerializable]
 [CborList]

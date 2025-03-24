@@ -8,4 +8,4 @@ namespace Chrysalis.Cbor.Cardano.Types.Block.Transaction.Governance;
 public partial record VotingProcedure(
     [CborOrder(0)] int Vote,
     [CborOrder(1)][CborNullable] Anchor? Anchor
-) : CborBase<VotingProcedure>;
+) : CborBase;

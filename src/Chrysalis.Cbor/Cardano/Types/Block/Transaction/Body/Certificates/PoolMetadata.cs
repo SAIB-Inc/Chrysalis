@@ -9,4 +9,4 @@ namespace Chrysalis.Cbor.Cardano.Types.Block.Transaction.Body.Certificates;
 public partial record PoolMetadata(
     [CborOrder(0)] string Url,
     [CborOrder(1)] byte[] PoolMetadataHash
-) : CborBase<PoolMetadata>;
+) : CborBase;

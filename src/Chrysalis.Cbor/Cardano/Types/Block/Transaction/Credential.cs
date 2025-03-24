@@ -9,4 +9,4 @@ namespace Chrysalis.Cbor.Cardano.Types.Block.Transaction;
 public partial record Credential(
     [CborOrder(0)] int CredentialType,
     [CborOrder(1)] byte[] Hash
-) : CborBase<Credential>;
+) : CborBase;

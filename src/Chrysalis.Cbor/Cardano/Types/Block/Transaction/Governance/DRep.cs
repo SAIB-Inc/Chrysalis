@@ -6,7 +6,7 @@ namespace Chrysalis.Cbor.Cardano.Types.Block.Transaction.Governance;
 
 [CborSerializable]
 [CborUnion]
-public abstract partial record DRep : CborBase<DRep>
+public abstract partial record DRep : CborBase
 {
 }
 

@@ -6,7 +6,7 @@ namespace Chrysalis.Cbor.Cardano.Types.Block.Transaction.Output;
 
 [CborSerializable]
 [CborUnion]
-public abstract partial record MultiAsset : CborBase<MultiAsset>
+public abstract partial record MultiAsset : CborBase
 {
 }
 

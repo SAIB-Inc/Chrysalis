@@ -1,15 +1,11 @@
-// using System.Text.RegularExpressions;
-// using Chrysalis.Cbor.Attributes;
-
-// using Chrysalis.Cbor.Types;
-// using Chrysalis.Cbor.Types.Custom;
-// using Chrysalis.Cbor.Types.Primitives;
+// using Chrysalis.Cbor.Serialization.Attributes;
 // using Chrysalis.Network.Cbor.Common;
 
 // namespace Chrysalis.Network.Cbor.LocalStateQuery.Messages;
 
-// [CborConverter(typeof(UnionConverter))]
-// public abstract record Acquire : LocalStateQueryMessage;
+// [CborSerializable]
+// [CborUnion]
+// public abstract record Acquire : LocalStateQueryMessage<Acquire>;
 
 // public class AcquireTypes
 // {

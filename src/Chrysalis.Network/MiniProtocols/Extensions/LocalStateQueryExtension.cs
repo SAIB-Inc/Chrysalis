@@ -75,7 +75,7 @@
 //     /// <param name="rawBytes">The raw bytes to deserialize</param>
 //     /// <returns>A task yielding the deserialized object</returns>
 //     /// <exception cref="InvalidOperationException">Thrown when deserialization fails</exception>
-//     private static Task<T> DeserializeResponseAsync<T>(byte[] rawBytes) where T : CborBase<T>
+//     private static Task<T> DeserializeResponseAsync<T>(byte[] rawBytes) where T : CborBase
 //     {
 //         try
 //         {

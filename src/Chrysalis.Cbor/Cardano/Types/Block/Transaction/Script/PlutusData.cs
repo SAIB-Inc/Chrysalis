@@ -5,7 +5,7 @@ namespace Chrysalis.Cbor.Cardano.Types.Block.Transaction.Script;
 
 [CborSerializable]
 [CborUnion]
-public abstract partial record PlutusData : CborBase<PlutusData>
+public abstract partial record PlutusData : CborBase
 {
 }
 

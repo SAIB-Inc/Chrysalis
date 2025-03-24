@@ -11,4 +11,4 @@ public partial record OperationalCert(
     [CborOrder(1)] ulong SequenceNumber,
     [CborOrder(2)] ulong KesPeriod,
     [CborOrder(3)] byte[] Sigma
-) : CborBase<OperationalCert>;
+) : CborBase;

@@ -16,4 +16,4 @@ public partial record TestMap(
     bool Value4,
     [CborProperty(4)]
     long Value6
-) : CborBase<TestMap>;
+) : CborBase;

@@ -10,4 +10,4 @@ namespace Chrysalis.Cbor.Cardano.Types.Block.Transaction.Protocol;
 public partial record ExUnitPrices(
     [CborOrder(0)] CborRationalNumber MemPrice,
     [CborOrder(1)] CborRationalNumber StepPrice
-) : CborBase<ExUnitPrices>;
+) : CborBase;

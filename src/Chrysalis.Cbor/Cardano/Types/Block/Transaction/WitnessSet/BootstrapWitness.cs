@@ -12,4 +12,4 @@ public partial record BootstrapWitness(
    [CborOrder(1)] byte[] Signature,
    [CborOrder(2)] byte[] ChainCode,
    [CborOrder(3)] byte[] Attributes
-) : CborBase<BootstrapWitness>, ICborPreserveRaw;
+) : CborBase, ICborPreserveRaw;

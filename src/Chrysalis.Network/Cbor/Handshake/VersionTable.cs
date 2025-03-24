@@ -5,7 +5,7 @@ namespace Chrysalis.Network.Cbor.Handshake;
 
 [CborSerializable]
 [CborUnion]
-public partial record VersionTable : CborBase<VersionTable>;
+public partial record VersionTable : CborBase;
 
 [CborSerializable]
 public partial record N2CVersionTable(Dictionary<N2CVersion, N2CVersionData> Value) : VersionTable;

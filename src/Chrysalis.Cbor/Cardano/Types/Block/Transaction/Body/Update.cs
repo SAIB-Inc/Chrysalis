@@ -9,4 +9,4 @@ namespace Chrysalis.Cbor.Cardano.Types.Block.Transaction.Body;
 public partial record Update(
     [CborOrder(0)] ProposedProtocolParameterUpdates ProposedProtocolParameterUpdates,
     [CborOrder(1)] ulong Epoch
-) : CborBase<Update>;
+) : CborBase;

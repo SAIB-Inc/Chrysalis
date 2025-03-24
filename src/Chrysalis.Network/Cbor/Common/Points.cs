@@ -8,7 +8,7 @@ namespace Chrysalis.Network.Cbor.Common;
 public partial record Point(
     [CborOrder(0)] ulong Slot,
     [CborOrder(1)] byte[] Hash
-) : CborBase<Point>;
+) : CborBase;
 
 [CborSerializable]
-public partial record Points(List<Point> Value) : CborBase<Points>;
+public partial record Points(List<Point> Value) : CborBase;
