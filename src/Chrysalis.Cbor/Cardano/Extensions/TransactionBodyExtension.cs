@@ -40,10 +40,10 @@ public static class TransactionBodyExtension
         {
             ConwayTransactionBody x => x.Outputs switch
             {
-                CborDefList<PostAlonzoTransactionOutput> list => list.Value,
-                CborIndefList<PostAlonzoTransactionOutput> list => list.Value,
-                CborDefListWithTag<PostAlonzoTransactionOutput> list => list.Value,
-                CborIndefListWithTag<PostAlonzoTransactionOutput> list => list.Value,
+                CborDefList<TransactionOutput> list => list.Value,
+                CborIndefList<TransactionOutput> list => list.Value,
+                CborDefListWithTag<TransactionOutput> list => list.Value,
+                CborIndefListWithTag<TransactionOutput> list => list.Value,
                 _ => []
             },
             BabbageTransactionBody x => x.Outputs switch

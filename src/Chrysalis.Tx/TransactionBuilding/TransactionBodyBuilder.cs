@@ -4,10 +4,8 @@ using Chrysalis.Cbor.Cardano.Types.Block.Transaction.Body.Certificates;
 using Chrysalis.Cbor.Cardano.Types.Block.Transaction.Governance;
 using Chrysalis.Cbor.Cardano.Types.Block.Transaction.Input;
 using Chrysalis.Cbor.Cardano.Types.Block.Transaction.Output;
-using Chrysalis.Cbor.Serialization;
 using Chrysalis.Cbor.Types.Custom;
 using Chrysalis.Cbor.Types.Primitives;
-using Chrysalis.Tx.Models;
 
 namespace Chrysalis.Tx.TransactionBuilding;
 
@@ -16,7 +14,7 @@ public class TransactionBodyBuilder
 {
     private CborInt? networkId;
     public List<TransactionInput> Inputs { get; set; } = [];
-    public List<(PostAlonzoTransactionOutput, bool)> Outputs { get; set; } = [];
+    public List<(TransactionOutput, bool)> Outputs { get; set; } = [];
     private CborUlong? fee;
     private CborUlong? ttl;
     private CborUlong? validityIntervalStart;
@@ -47,7 +45,7 @@ public class TransactionBodyBuilder
         return this;
     }
 
-    public TransactionBodyBuilder AddOutput((PostAlonzoTransactionOutput, bool) output)
+    public TransactionBodyBuilder AddOutput((TransactionOutput, bool) output)
     {
         Outputs.Add(output);
         return this;
@@ -159,7 +157,7 @@ public class TransactionBodyBuilder
     {
         return new ConwayTransactionBody(
             new CborDefListWithTag<TransactionInput>(Inputs),
-            new CborDefList<PostAlonzoTransactionOutput>([.. Outputs.Select(o => o.Item1)]),
+            new CborDefList<TransactionOutput>([.. Outputs.Select(o => o.Item1)]),
             fee ?? new CborUlong(0),
             ttl,
             certificates.Count != 0 ? new CborDefList<Certificate>(certificates) : null,
