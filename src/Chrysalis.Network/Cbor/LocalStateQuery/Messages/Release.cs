@@ -1,12 +1,10 @@
-// using Chrysalis.Cbor.Attributes;
+using Chrysalis.Cbor.Serialization.Attributes;
+using Chrysalis.Network.Cbor.Common;
 
-// using Chrysalis.Cbor.Types;
-// using Chrysalis.Cbor.Types.Custom;
-// using Chrysalis.Cbor.Types.Primitives;
+namespace Chrysalis.Network.Cbor.LocalStateQuery.Messages;
 
-// namespace Chrysalis.Network.Cbor.LocalStateQuery.Messages;
-
-// [CborConverter(typeof(CustomListConverter))]
-// public partial record Release(
-//     [CborIndex(0)][ExactValue(5)] ExactValue<CborInt> Idx
-// ) : LocalStateQueryMessage;
+[CborSerializable]
+[CborList]
+public partial record Release(
+    [CborOrder(0)] Value5 Idx
+) : LocalStateQueryMessage;

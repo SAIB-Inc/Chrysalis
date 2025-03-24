@@ -1,23 +1,22 @@
-// using Chrysalis.Cbor.Attributes;
+using Chrysalis.Cbor.Serialization.Attributes;
+using Chrysalis.Cbor.Types;
+using Chrysalis.Network.Cbor.Common;
 
+namespace Chrysalis.Network.Cbor.LocalStateQuery.Messages;
 
-// using Chrysalis.Cbor.Types;
-// using Chrysalis.Cbor.Types.Custom;
-// using Chrysalis.Cbor.Types.Primitives;
+[CborSerializable]
+[CborList]
+public partial record Failure(
+    [CborOrder(0)] Value2 Idx,
+    [CborOrder(1)] FailureReason Reason
+) : LocalStateQueryMessage;
 
-// namespace Chrysalis.Network.Cbor.LocalStateQuery.Messages;
+[CborSerializable]
+[CborUnion]
+public abstract partial record FailureReason : CborBase;
 
-// [CborConverter(typeof(CustomListConverter))]
-// [CborOptions(IsDefinite = true)]
-// public partial record Failure(
-//     [CborIndex(0)][ExactValue(2)] ExactValue<CborInt> Idx,
-//     [CborIndex(1)] FailureReason Reason
-// ) : LocalStateQueryMessage;
+[CborSerializable]
+public partial record AcquireFailurePointTooOld(Value0 Value) : FailureReason;
 
-// [CborConverter(typeof(UnionConverter))]
-// public abstract record FailureReason : CborBase;
-
-// public partial record AcquireFailurePointTooOld([CborIndex(0)][ExactValue(0)] CborInt Value) : ExactValue<CborInt>(Value);
-
-// [CborConverter(typeof(IntConverter))]
-// public partial record AcquireFailurePointNotOnChain([CborIndex(0)][ExactValue(1)] CborInt Value) : ExactValue<CborInt>(Value);
+[CborSerializable]
+public partial record AcquireFailurePointNotOnChain(Value1 Value) : FailureReason;

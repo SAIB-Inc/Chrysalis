@@ -73,3 +73,24 @@ public record Value9Validator : ICborValidator<Value9>
 {
     public bool Validate(Value9 input) => input.Value == 9;
 }
+
+[CborSerializable]
+public partial record Value10(int Value) : CborBase;
+public record Value10Validator : ICborValidator<Value10>
+{
+    public bool Validate(Value10 input) => input.Value == 10;
+}
+
+[CborSerializable]
+public partial record Value11(int Value) : CborBase;
+public record Value11Validator : ICborValidator<Value11>
+{
+    public bool Validate(Value11 input) => input.Value == 11;
+}
+
+[CborSerializable]
+public partial record Value12(int Value) : CborBase;
+public record Value12Validator : ICborValidator<Value12>
+{
+    public bool Validate(Value12 input) => input.Value == 12;
+}
