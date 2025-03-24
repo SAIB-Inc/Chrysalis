@@ -1,4 +1,6 @@
+using Chrysalis.Cbor.Cardano.Types.Block.Transaction.Input;
 using Chrysalis.Cbor.Cardano.Types.Block.Transaction.Output;
+using Chrysalis.Cbor.Cardano.Types.Block.Transaction.WitnessSet;
 using Chrysalis.Cbor.Types;
 using Chrysalis.Cbor.Types.Primitives;
 namespace Chrysalis.Tx.Models;
@@ -9,19 +11,20 @@ public record Outref(string TxId, ulong Index)
     public ulong Index { get; init; } = Index;
 }
 
-public record InputOptions(string From, Value? MinAmount, ICbor? Datum, ICbor? Redeemer, Outref? UtxoRef)
+public record InputOptions(string From, Value? MinAmount, DatumOption? Datum, Redeemers? Redeemer, TransactionInput? UtxoRef, bool IsReference = false)
 {
     public string From { get; set; } = From;
     public Value? MinAmount { get; set; } = MinAmount;
-    public Outref? UtxoRef { get; set; } = UtxoRef;
-    public ICbor? Datum { get; set; } = Datum;
-    public ICbor? Redeemer { get; set; } = Redeemer;
+    public TransactionInput? UtxoRef { get; set; } = UtxoRef;
+    public DatumOption ? Datum { get; set; } = Datum;
+    public Redeemers? Redeemer { get; set; } = Redeemer;
+    public bool IsReference { get; set; } = IsReference;
 }
 
-public class OutputOptions(string To, Value? Amount, ICbor? Datum)
+public class OutputOptions(string To, Value? Amount, DatumOption? Datum)
 {
     public string To { get; set; } = To;
     public Value? Amount { get; set; } = Amount;
-    public ICbor? Datum { get; set; } = Datum;
+    public DatumOption? Datum { get; set; } = Datum;
 
 }

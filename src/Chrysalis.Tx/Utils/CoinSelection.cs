@@ -12,7 +12,7 @@ public class CoinSelectionAlgorithm : ICoinSelection
     private const ulong UTXO_COST_PER_BYTE = 4310;
     private const ulong MINIMUM_UTXO_LOVELACE = 840_499;
 
-    public static CoinSelectionResult LargestFirstAlgorithm(List<ResolvedInput> self, List<Value> requestedAmount, int maxInputs = 20)
+    public static CoinSelectionResult LargestFirstAlgorithm(List<ResolvedInput> self, List<Value> requestedAmount, Value? minimumAmount = null, int maxInputs = 20)
     {
         if (self == null || !self.Any())
             throw new InvalidOperationException("UTxO Balance Insufficient");
@@ -69,6 +69,7 @@ public class CoinSelectionAlgorithm : ICoinSelection
             // Skip UTXOs with null amount or zero value
             ulong lovelace = utxo.Output.Lovelace() ?? 0;
             if (lovelace == 0) continue;
+            if (lovelace < (minimumAmount?.Lovelace() ?? 0)) continue;
 
             bool isAssetPresent = false;
             foreach (var asset in requiredAssets)

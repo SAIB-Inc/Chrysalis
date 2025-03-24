@@ -55,9 +55,9 @@ public static class TransactionBuilderExtensions
         {
             var totalCollateral = FeeUtil.CalculateRequiredCollateral(fee, builder.pparams!.CollateralPercentage!.Value);
             builder.SetTotalCollateral(totalCollateral);
-            builder.SetCollateralReturn(new PostAlonzoTransactionOutput(
+            builder.SetCollateralReturn(new AlonzoTransactionOutput(
                 builder.bodyBuilder!.collateralReturn!.Address()!,
-                new Lovelace(builder.bodyBuilder!.collateralReturn!.Lovelace()!.Value - totalCollateral), null, null));
+                new Lovelace(builder.bodyBuilder!.collateralReturn!.Lovelace()!.Value - totalCollateral), null));
         }
 
         var outputs = builder.bodyBuilder.Outputs;
@@ -72,16 +72,35 @@ public static class TransactionBuilderExtensions
             changeValue = new LovelaceWithMultiAsset(updatedChangeLovelace, lovelaceWithMultiAsset.MultiAsset);
         }
 
-        var updatedChangeOutput = new PostAlonzoTransactionOutput(
-            changeOutput.Item1.Address()!,
-            changeValue,
-            changeOutput.Item1.Datum,
-            changeOutput.Item1.ScriptRef
+        TransactionOutput? updatedChangeOutput = null;
+
+        if (changeOutput.Item1 is AlonzoTransactionOutput change)
+        {
+            updatedChangeOutput = new AlonzoTransactionOutput(
+                change.Address()!,
+                changeValue,
+                change.Datum() is not null ? new CborBytes(change.Datum()!) : null
             );
 
-        builder.bodyBuilder.Outputs.Remove(changeOutput);
-        builder.AddOutput(updatedChangeOutput, true)
-            .SetFee(fee);
+            builder.bodyBuilder.Outputs.Remove(changeOutput);
+            builder.AddOutput(updatedChangeOutput, true);
+        }
+        else if (changeOutput.Item1 is PostAlonzoTransactionOutput postAlonzoChange)
+        {
+            updatedChangeOutput = new PostAlonzoTransactionOutput(
+                postAlonzoChange.Address()!,
+                changeValue,
+                postAlonzoChange.Datum,
+                postAlonzoChange.ScriptRef
+            );
+
+            builder.bodyBuilder.Outputs.Remove(changeOutput);
+            builder.AddOutput(updatedChangeOutput, true);
+
+        }
+
+        builder.SetFee(fee);
+
 
         return builder;
     }

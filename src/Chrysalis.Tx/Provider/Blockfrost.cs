@@ -4,9 +4,11 @@ using Chrysalis.Cbor.Cardano.Types.Block.Transaction.Governance;
 using Chrysalis.Cbor.Cardano.Types.Block.Transaction.Input;
 using Chrysalis.Cbor.Cardano.Types.Block.Transaction.Output;
 using Chrysalis.Cbor.Cardano.Types.Block.Transaction.Protocol;
+using Chrysalis.Cbor.Serialization;
 using Chrysalis.Cbor.Types.Custom;
 using Chrysalis.Cbor.Types.Primitives;
 using Chrysalis.Tx.Models;
+using TxAddr = Chrysalis.Tx.Models.Addresses;
 
 namespace Chrysalis.Tx.Provider;
 
@@ -74,8 +76,8 @@ public class Blockfrost : IProvider
             new CborUlong(ulong.Parse(parameters.MaxValSize)),
             new CborUlong((ulong)parameters.CollateralPercent),
             new CborUlong((ulong)parameters.MaxCollateralInputs),
-            new PoolVotingThresholds(new CborRationalNumber(1, 1), new CborRationalNumber(1, 1), new CborRationalNumber(1, 1), new CborRationalNumber(1, 1), new CborRationalNumber(1, 1)), 
-            new DRepVotingThresholds(new CborRationalNumber(1, 1), new CborRationalNumber(1, 1), new CborRationalNumber(1, 1), new CborRationalNumber(1, 1), new CborRationalNumber(1, 1), new CborRationalNumber(1, 1), new CborRationalNumber(1, 1), new CborRationalNumber(1, 1), new CborRationalNumber(1,1 ), new CborRationalNumber(1, 1)),
+            new PoolVotingThresholds(new CborRationalNumber(1, 1), new CborRationalNumber(1, 1), new CborRationalNumber(1, 1), new CborRationalNumber(1, 1), new CborRationalNumber(1, 1)),
+            new DRepVotingThresholds(new CborRationalNumber(1, 1), new CborRationalNumber(1, 1), new CborRationalNumber(1, 1), new CborRationalNumber(1, 1), new CborRationalNumber(1, 1), new CborRationalNumber(1, 1), new CborRationalNumber(1, 1), new CborRationalNumber(1, 1), new CborRationalNumber(1, 1), new CborRationalNumber(1, 1)),
             new CborUlong(1),
             new CborUlong(1),
             new CborUlong(1),
@@ -140,10 +142,25 @@ public class Blockfrost : IProvider
                     value = new LovelaceWithMultiAsset(CborLovelace, new MultiAssetOutput(assets));
                 }
 
+                TxAddr.Address outputAddress = TxAddr.Address.FromBech32(utxo.Address!);
+                CborEncodedValue? scriptRef = null;
+
+                if(utxo.ReferenceScriptHash is not null)
+                {
+                    var scriptRefValue = await GetScript(utxo.ReferenceScriptHash);
+                    scriptRef = new CborEncodedValue(CborSerializer.Serialize(scriptRefValue));
+                }
+
+                DatumOption? datum = null;
+                if (utxo.InlineDatum is not null)
+                {
+                    datum = new InlineDatumOption(new CborInt(1), new CborEncodedValue(Convert.FromHexString(utxo.InlineDatum)));
+                }
+
                 TransactionOutput output = new PostAlonzoTransactionOutput(
                     // Address Utility is not yet implemented so hardcoded for now
-                    new Address(Convert.FromHexString("005c5c318d01f729e205c95eb1b02d623dd10e78ea58f72d0c13f892b2e8904edc699e2f0ce7b72be7cec991df651a222e2ae9244eb5975cba"))
-                    , value, null, null);
+                    new Address(outputAddress.ToBytes())
+                    , value, datum, scriptRef);
 
 
                 results.Add(new ResolvedInput(outref, output));
@@ -157,6 +174,61 @@ public class Blockfrost : IProvider
 
         }
         return results;
+    }
+
+    public async Task<ScriptRef> GetScript(string scriptHash)
+    {
+        var typeQuery = $"/scripts/{scriptHash}";
+        var typeResponse = await _httpClient.GetAsync($"{_baseUrl}{typeQuery}");
+        var typeContent = await typeResponse.Content.ReadAsStringAsync();
+
+        using var typeDoc = JsonDocument.Parse(typeContent);
+        var root = typeDoc.RootElement;
+
+        if (!root.TryGetProperty("type", out var typeElement))
+        {
+            throw new Exception("GetScriptRef: Could not parse response json");
+        }
+
+        var type = typeElement.GetString();
+        if (type == null)
+        {
+            throw new Exception("GetScriptRef: Could not parse type from response");
+        }
+
+        if (type == "timelock")
+        {
+            throw new Exception("GetScriptRef: Native scripts are not yet supported.");
+        }
+
+        var cborQuery = $"/scripts/{scriptHash}/cbor";
+        var cborResponse = await _httpClient.GetAsync($"{_baseUrl}{cborQuery}");
+        var cborContent = await cborResponse.Content.ReadAsStringAsync();
+
+        using var cborDoc = JsonDocument.Parse(cborContent);
+        root = cborDoc.RootElement;
+
+        if (!root.TryGetProperty("cbor", out var cborElement))
+        {
+            throw new Exception("GetScriptRef: Could not parse response json");
+        }
+
+        var cborHex = cborElement.GetString();
+        if (cborHex == null)
+        {
+            throw new Exception("GetScriptRef: Could not parse CBOR from response");
+        }
+
+        byte[] cborBytes = Convert.FromHexString(cborHex);
+        int scriptType = type switch
+        {
+            "plutusV1" => 1,
+            "plutusV2" => 2,
+            "plutusV3" => 3,
+            _ => throw new Exception("GetScriptRef: Unsupported script type")
+        };
+
+        return new ScriptRef(new CborInt(scriptType), new CborBytes(cborBytes));
     }
 
     private string GetBaseUrl()
