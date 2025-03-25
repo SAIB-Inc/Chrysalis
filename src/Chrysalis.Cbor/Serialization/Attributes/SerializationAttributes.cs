@@ -34,13 +34,11 @@ public sealed class CborUnionAttribute : Attribute
 [AttributeUsage(AttributeTargets.Class | AttributeTargets.Struct | AttributeTargets.Interface, Inherited = false, AllowMultiple = false)]
 public sealed class CborConstrAttribute : Attribute
 {
-    // Default constructor - use -1 to mean "any index"
     public CborConstrAttribute()
     {
         ConstructorIndex = -1;
     }
 
-    // Constructor with index parameter
     public CborConstrAttribute(int constructorIndex)
     {
         ConstructorIndex = constructorIndex;
@@ -48,7 +46,6 @@ public sealed class CborConstrAttribute : Attribute
 
     public int ConstructorIndex { get; }
 
-    // Helper property to check if any index is allowed
     public bool IsAnyIndexAllowed => ConstructorIndex == -1;
 }
 
@@ -73,7 +70,6 @@ public sealed class CborPropertyAttribute : Attribute
     public int? IntKey { get; }
     public bool IsIntKey { get; }
 
-    // Constructor for string keys
     public CborPropertyAttribute(string key)
     {
         StringKey = key;
@@ -81,7 +77,6 @@ public sealed class CborPropertyAttribute : Attribute
         IsIntKey = false;
     }
 
-    // Constructor for integer keys
     public CborPropertyAttribute(int key)
     {
         StringKey = key.ToString();
@@ -101,25 +96,3 @@ public sealed class CborIndefiniteAttribute : Attribute
 {
     public CborIndefiniteAttribute() { }
 }
-
-// Validation attributes
-
-[AttributeUsage(AttributeTargets.Property | AttributeTargets.Parameter, Inherited = false, AllowMultiple = false)]
-public sealed class CborValidateExactAttribute(object expectedValue) : Attribute
-{
-    public object ExpectedValue { get; } = expectedValue;
-}
-
-[AttributeUsage(AttributeTargets.Property | AttributeTargets.Parameter, Inherited = false, AllowMultiple = false)]
-public sealed class CborValidateRangeAttribute(double minimum, double maximum) : Attribute
-{
-    public double Minimum { get; } = minimum;
-    public double Maximum { get; } = maximum;
-}
-
-[AttributeUsage(AttributeTargets.Property | AttributeTargets.Parameter, Inherited = false, AllowMultiple = false)]
-public sealed class CborValidateAttribute(Type validatorType) : Attribute
-{
-    public Type ValidatorType { get; } = validatorType;
-}
-
