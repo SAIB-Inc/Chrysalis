@@ -2,6 +2,10 @@ using Chrysalis.Cbor.Cardano.Types.Block.Transaction.Body;
 using Chrysalis.Cbor.Cardano.Types.Block.Transaction.Input;
 using Chrysalis.Cbor.Cardano.Types.Block.Transaction.Output;
 using Chrysalis.Cbor.Cardano.Types.Block.Transaction;
+<<<<<<< HEAD
+=======
+using Chrysalis.Cbor.Types.Custom;
+>>>>>>> 76382dba94633c74b14200ac74333ce8d5c706c9
 using Chrysalis.Cbor.Types.Primitives;
 using Chrysalis.Cbor.Cardano.Types.Block.Transaction.WitnessSet;
 using Chrysalis.Cbor.Cardano.Types.Block.Transaction.Governance;

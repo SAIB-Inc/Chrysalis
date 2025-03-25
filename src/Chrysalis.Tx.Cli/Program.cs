@@ -1,4 +1,4 @@
-﻿using System.Transactions;
+﻿﻿using System.Transactions;
 using Chrysalis.Cbor.Cardano.Types.Block.Transaction.Input;
 using Chrysalis.Cbor.Cardano.Types.Block.Transaction.Output;
 using Chrysalis.Cbor.Cardano.Types.Block.Transaction.Protocol;
@@ -63,7 +63,6 @@ var lockLovelace = TxTemplateBuilder<LockParameters>.Create(provider)
 string scriptRefTxHash = "9489655981e70ab2c2df5db10d2ed11157bc2e404d02c3fabe853737366ced77";
 string lockTxHash = "ffe4c125de5d60d07413b803cc858b146c3831d44cdd81b18ee785e94fe7e43c";
 string withdrawalAddress = "stake_test17q37rysxtj0ctsgz40ds3r3x3mt8csywcf0tk9w2gc5tjqc29zef9";
-
 
 var unlockLovelace = TxTemplateBuilder<UnlockParameters>.Create(provider)
     .AddStaticParty("rico", ricoAddress)

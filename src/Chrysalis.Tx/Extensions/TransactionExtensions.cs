@@ -12,22 +12,22 @@ using Chrysalis.Tx.Utils;
 namespace Chrysalis.Tx.Extensions;
 public static class TransactionExtension
 {
-    public static PostMaryTransaction Sign(this PostMaryTransaction self, PrivateKey privateKey)
-    {
-        var txBodyBytes = CborSerializer.Serialize(self.TransactionBody);
-        var signature = privateKey.Sign(HashUtil.Blake2b256(txBodyBytes));
-        var vkeyWitness = new VKeyWitness(new CborBytes(privateKey.GetPublicKey().Key), new CborBytes(signature));
-        var vKeyWitnesses = self.TransactionWitnessSet.VKeyWitnessSet()?.ToList() ?? [];
-        vKeyWitnesses.Add(vkeyWitness);
-        // @TODO
-        return self;
-    }
+    // public static PostMaryTransaction Sign(this PostMaryTransaction self, PrivateKey privateKey)
+    // {
+    //     var txBodyBytes = CborSerializer.Serialize(self.TransactionBody);
+    //     var signature = privateKey.Sign(HashUtil.Blake2b256(txBodyBytes));
+    //     var vkeyWitness = new VKeyWitness(new CborBytes(privateKey.GetPublicKey().Key), new CborBytes(signature));
+    //     var vKeyWitnesses = self.TransactionWitnessSet.VKeyWitnessSet()?.ToList() ?? [];
+    //     vKeyWitnesses.Add(vkeyWitness);
+    //     // @TODO
+    //     return self;
+    // }
 
-    public static PostMaryTransaction Sign(this PostMaryTransaction self, List<VKeyWitness> vKeyWitnesses)
-    {
-        var vkeyWitnessSet = self.TransactionWitnessSet.VKeyWitnessSet()?.ToList() ?? [];
-        vkeyWitnessSet.AddRange(vKeyWitnesses);
-        // @TODO
-        return self;
-    }
+    // public static PostMaryTransaction Sign(this PostMaryTransaction self, List<VKeyWitness> vKeyWitnesses)
+    // {
+    //     var vkeyWitnessSet = self.TransactionWitnessSet.VKeyWitnessSet()?.ToList() ?? [];
+    //     vkeyWitnessSet.AddRange(vKeyWitnesses);
+    //     // @TODO
+    //     return self;
+    // }
 }
