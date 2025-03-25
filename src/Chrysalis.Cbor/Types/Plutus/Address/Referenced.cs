@@ -12,8 +12,8 @@ public partial record Inline<T>([CborOrder(0)] T Value) : Referenced<T>;
 
 [CborSerializable]
 [CborConstr(1)]
-public partial record Pointer(
+public partial record Pointer<T>(
     [CborOrder(0)] ulong SlotNumber,
     [CborOrder(1)] ulong TransactionIndex,
     [CborOrder(2)] ulong CertificateIndex
-) : Referenced<CborBase>;
+) : Referenced<T>;
