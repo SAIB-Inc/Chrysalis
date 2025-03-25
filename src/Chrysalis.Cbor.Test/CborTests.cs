@@ -1,15 +1,6 @@
-using System.Formats.Cbor;
-using System.Reflection;
-using System.Text.Json;
-using Chrysalis.Cbor.Cardano.Types.Block;
-using Chrysalis.Cbor.Cardano.Types.Block.Transaction.Body;
-using Chrysalis.Cbor.Cardano.Types.Block.Transaction.Input;
-using Chrysalis.Cbor.Cardano.Types.Block.Transaction.Output;
-using Chrysalis.Cbor.Cardano.Types.Block.Transaction.Script;
-using Chrysalis.Cbor.Cardano.Types.Block.Transaction.WitnessSet;
 using Chrysalis.Cbor.Serialization;
-using Chrysalis.Cbor.Types.Test;
-using Xunit;
+using Chrysalis.Cbor.Types.Cardano.Core;
+using Chrysalis.Cbor.Types.Cardano.Core.Common;
 
 namespace Chrysalis.Test;
 
