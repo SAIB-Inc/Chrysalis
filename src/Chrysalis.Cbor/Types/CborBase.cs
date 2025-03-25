@@ -8,13 +8,10 @@ namespace Chrysalis.Cbor.Types;
 /// <summary>
 /// Base class for all CBOR-serializable types
 /// </summary>
-public abstract partial record CborBase<T> where T : CborBase<T>
+public abstract partial record CborBase
 {
-    // Raw serialized data for caching and quick re-serialization
     public ReadOnlyMemory<byte>? Raw { get; set; }
 
-    // Type discriminator for unions (to avoid reflection)
-    // save the fully qualified name of the type
     public virtual string? CborTypeName
     {
         get
@@ -50,13 +47,13 @@ public abstract partial record CborBase<T> where T : CborBase<T>
 
     public int ConstrIndex { get; set; } = 0;
 
-    public static T Read(ReadOnlyMemory<byte> data)
+    public static CborBase Read(ReadOnlyMemory<byte> data)
     {
-        throw new NotImplementedException("Read method not implemented for " + typeof(T).Name);
+        throw new NotImplementedException();
     }
 
-    public static ReadOnlyMemory<byte> Write(CborWriter writer, T value)
+    public static void Write(CborWriter writer, CborBase? data)
     {
-        throw new NotImplementedException("Write method not implemented for " + typeof(T).Name);
+        throw new NotImplementedException();
     }
 }

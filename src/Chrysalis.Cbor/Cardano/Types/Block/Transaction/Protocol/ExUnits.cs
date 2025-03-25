@@ -9,4 +9,4 @@ namespace Chrysalis.Cbor.Cardano.Types.Block.Transaction.Protocol;
 public partial record ExUnits(
     [CborOrder(0)] ulong Mem,
     [CborOrder(1)] ulong Steps
-) : CborBase<ExUnits>;
+) : CborBase;

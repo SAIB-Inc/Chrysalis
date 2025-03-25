@@ -6,7 +6,7 @@ namespace Chrysalis.Cbor.Cardano.Types.Block.Transaction.Protocol;
 
 [CborSerializable]
 [CborUnion]
-public abstract partial record Nonce : CborBase<Nonce>
+public abstract partial record Nonce : CborBase
 {
 }
 

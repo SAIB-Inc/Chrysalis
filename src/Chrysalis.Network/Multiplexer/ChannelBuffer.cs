@@ -15,7 +15,7 @@ namespace Chrysalis.Network.Multiplexer;
 /// <param name="channel">The channel to buffer data for.</param>
 public sealed class ChannelBuffer(AgentChannel channel)
 {
-    public async Task SendFullMessageAsync<T>(T message, CancellationToken cancellationToken) where T : CborBase<T>
+    public async Task SendFullMessageAsync<T>(T message, CancellationToken cancellationToken) where T : CborBase
     {
         byte[] payload = CborSerializer.Serialize(message);
         ReadOnlyMemory<byte> payloadMemory = payload.AsMemory();
@@ -32,7 +32,7 @@ public sealed class ChannelBuffer(AgentChannel channel)
         }
     }
 
-    public async Task<T> ReceiveFullMessageAsync<T>(CancellationToken cancellationToken) where T : CborBase<T>
+    public async Task<T> ReceiveFullMessageAsync<T>(CancellationToken cancellationToken) where T : CborBase
     {
         while (true)
         {

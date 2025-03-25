@@ -13,11 +13,11 @@ public partial record TestList(
     List<TestConstr> Value2,
     [CborOrder(2)]
     Dictionary<string, TestConstr> Value3
-) : CborBase<TestList>;
+) : CborBase;
 
 [CborSerializable]
 [CborList]
 public partial record TestListMaybe(
     [CborOrder(0)]
     CborMaybeIndefList<TestList> Value1
-) : CborBase<TestListMaybe>;
+) : CborBase;

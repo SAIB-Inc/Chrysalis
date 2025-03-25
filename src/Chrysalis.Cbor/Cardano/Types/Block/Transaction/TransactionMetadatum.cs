@@ -7,7 +7,7 @@ namespace Chrysalis.Cbor.Cardano.Types.Block.Transaction;
 
 [CborSerializable]
 [CborUnion]
-public abstract partial record TransactionMetadatum : CborBase<TransactionMetadatum>
+public abstract partial record TransactionMetadatum : CborBase
 {
 }
 

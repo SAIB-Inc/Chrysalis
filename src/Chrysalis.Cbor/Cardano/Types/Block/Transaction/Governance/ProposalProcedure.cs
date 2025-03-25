@@ -11,4 +11,4 @@ public partial record ProposalProcedure(
     [CborOrder(1)] RewardAccount RewardAccount,
     [CborOrder(2)] GovAction GovAction,
     [CborOrder(3)] Anchor Anchor
-) : CborBase<ProposalProcedure>;
+) : CborBase;

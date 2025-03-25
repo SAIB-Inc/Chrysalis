@@ -1,9 +1,9 @@
-// using Chrysalis.Cbor.Attributes;
+using Chrysalis.Cbor.Serialization.Attributes;
+using Chrysalis.Cbor.Types;
 
-// using Chrysalis.Cbor.Types;
+namespace Chrysalis.Network.Cbor.LocalStateQuery;
 
-// namespace Chrysalis.Network.Cbor.LocalStateQuery;
-
-// [CborConverter(typeof(UnionConverter))]
-// public abstract record LocalStateQueryMessage : CborBase;
+[CborSerializable]
+[CborUnion]
+public abstract partial record LocalStateQueryMessage : CborBase;
 

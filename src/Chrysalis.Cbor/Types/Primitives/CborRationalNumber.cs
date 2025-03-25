@@ -8,4 +8,4 @@ namespace Chrysalis.Cbor.Types.Primitives;
 public partial record CborRationalNumber(
     [CborOrder(0)] ulong Numerator,
     [CborOrder(1)] ulong Denominator
-) : CborBase<CborRationalNumber>;
+) : CborBase;

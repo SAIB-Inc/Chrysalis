@@ -8,7 +8,7 @@ namespace Chrysalis.Cbor.Cardano.Types.Block.Transaction.Protocol;
 
 [CborSerializable]
 [CborUnion]
-public abstract partial record ProtocolParamUpdate : CborBase<ProtocolParamUpdate>
+public abstract partial record ProtocolParamUpdate : CborBase
 {
 }
 
@@ -127,4 +127,4 @@ public partial record MaryProtocolParamUpdate(
 [CborSerializable]
 public partial record ProposedProtocolParameterUpdates(
     Dictionary<byte[], ProtocolParamUpdate> Value
-) : CborBase<ProposedProtocolParameterUpdates>;
+) : CborBase;

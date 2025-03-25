@@ -9,4 +9,4 @@ namespace Chrysalis.Cbor.Cardano.Types.Block.Transaction.Governance;
 public partial record Constitution(
     [CborOrder(0)] Anchor Anchor,
     [CborOrder(1)][CborNullable] byte[]? ScriptHash
-) : CborBase<Constitution>;
+) : CborBase;

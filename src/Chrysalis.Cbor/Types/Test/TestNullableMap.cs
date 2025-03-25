@@ -10,13 +10,13 @@ public partial record NullableTestMap(
     int Value1,
     [CborProperty(1)]
     string Value2
-) : CborBase<NullableTestMap>;
+) : CborBase;
 
 [CborSerializable]
-public partial record CborContainerSimpleTest(int Value1) : CborBase<NullableTestMap>;
+public partial record CborContainerSimpleTest(int Value1) : CborBase;
 
 [CborSerializable]
-public partial record CborContainerConstrTest(TestConstr Value1) : CborBase<CborContainerConstrTest>;
+public partial record CborContainerConstrTest(TestConstr Value1) : CborBase;
 
 [CborSerializable]
-public partial record CborContainerGenericTest<T>(T Value1) : CborBase<CborContainerGenericTest<T>>;
+public partial record CborContainerGenericTest<T>(T Value1) : CborBase;

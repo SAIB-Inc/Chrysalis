@@ -7,7 +7,7 @@ namespace Chrysalis.Network.Cbor.Handshake;
 
 [CborSerializable]
 [CborUnion]
-public abstract partial record HandshakeMessage : CborBase<HandshakeMessage>;
+public abstract partial record HandshakeMessage : CborBase;
 
 public class HandshakeMessages
 {

@@ -9,4 +9,4 @@ namespace Chrysalis.Cbor.Cardano.Types.Block;
 public partial record BlockWithEra(
     [CborOrder(0)] int EraNumber,
     [CborOrder(1)] Block Block
-) : CborBase<BlockWithEra>, ICborPreserveRaw;
+) : CborBase, ICborPreserveRaw;

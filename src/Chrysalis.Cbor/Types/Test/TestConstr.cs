@@ -16,7 +16,7 @@ public partial record TestConstr(
     byte[] UnboundedBytesValue,
     [CborOrder(3)][CborNullable]
     CborEncodedValue? EncodedValue
-) : CborBase<TestConstr>, ICborPreserveRaw;
+) : CborBase, ICborPreserveRaw;
 
 public class TestConstrValidator : ICborValidator<TestConstr>
 {

@@ -10,7 +10,7 @@ namespace Chrysalis.Cbor.Cardano.Types.Block.Transaction.Governance;
 
 [CborSerializable]
 [CborUnion]
-public abstract partial record GovAction : CborBase<GovAction>
+public abstract partial record GovAction : CborBase
 {
 }
 

@@ -9,4 +9,4 @@ namespace Chrysalis.Cbor.Cardano.Types.Block.Transaction.Governance;
 public partial record Voter(
     [CborOrder(0)] int Tag,
     [CborOrder(1)] byte[] Hash
-) : CborBase<Voter>;
+) : CborBase;

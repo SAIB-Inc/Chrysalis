@@ -9,4 +9,4 @@ namespace Chrysalis.Cbor.Cardano.Types.Block.Transaction.Input;
 public partial record TransactionInput(
     [CborOrder(0)] byte[] TransactionId,
     [CborOrder(1)] ulong Index
-) : CborBase<TransactionInput>;
+) : CborBase;

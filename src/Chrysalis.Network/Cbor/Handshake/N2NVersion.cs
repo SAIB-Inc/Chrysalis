@@ -16,4 +16,4 @@ public static class N2NVersions
 }
 
 [CborSerializable]
-public partial record N2NVersion(int Value) : CborBase<N2NVersion>;
+public partial record N2NVersion(int Value) : CborBase;

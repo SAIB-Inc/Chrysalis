@@ -10,12 +10,12 @@ namespace Chrysalis.Cbor.Cardano.Types.Block.Transaction.Body.Certificates;
 public partial record MoveInstantaneousReward(
     [CborOrder(0)] int InstantaneousRewardSource,
     [CborOrder(1)] Target InstantaneousRewardTarget
-) : CborBase<MoveInstantaneousReward>;
+) : CborBase;
 
 
 [CborSerializable]
 [CborUnion]
-public abstract partial record Target : CborBase<Target>
+public abstract partial record Target : CborBase
 {
 }
 
