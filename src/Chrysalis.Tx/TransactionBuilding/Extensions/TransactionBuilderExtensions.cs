@@ -111,39 +111,43 @@ public static class TransactionBuilderExtensions
         var txCborBytes = CborSerializer.Serialize(builder.Build());
         var evalResult = Evaluator.EvaluateTx(txCborBytes, utxoCborBytes);
         var previousRedeemers = builder.witnessBuilder.redeemers;
-        foreach (var result in evalResult)
+
+
+        switch (previousRedeemers)
         {
-            switch (previousRedeemers)
-            {
-                case RedeemerList redeemersList:
-                    List<RedeemerEntry> updatedRedeemersList = [];
-                    foreach (var redeemer in redeemersList.Value)
+            case RedeemerList redeemersList:
+                List<RedeemerEntry> updatedRedeemersList = [];
+                foreach (var redeemer in redeemersList.Value)
+                {
+                    foreach (var result in evalResult)
                     {
-                        ExUnits exUnits = redeemer.ExUnits;
                         if (redeemer.Tag.Value == (int)result.RedeemerTag && redeemer.Index.Value == result.Index)
                         {
-                            exUnits = new(new CborUlong(result.ExUnits.Mem), new CborUlong(result.ExUnits.Steps));
+                            ExUnits exUnits = new(new CborUlong(result.ExUnits.Mem), new CborUlong(result.ExUnits.Steps));
+                            updatedRedeemersList.Add(new RedeemerEntry(redeemer.Tag, redeemer.Index, redeemer.Data, exUnits));
                         }
-                        updatedRedeemersList.Add(new RedeemerEntry(redeemer.Tag, redeemer.Index, redeemer.Data, exUnits));
                     }
-                    builder.SetRedeemers(new RedeemerList(updatedRedeemersList));
-                    break;
-                case RedeemerMap redeemersMap:
-                    Dictionary<RedeemerKey, RedeemerValue> updatedRedeemersMap = [];
-                    foreach (var kvp in redeemersMap.Value)
+                }
+                builder.SetRedeemers(new RedeemerList(updatedRedeemersList));
+                break;
+            case RedeemerMap redeemersMap:
+                Dictionary<RedeemerKey, RedeemerValue> updatedRedeemersMap = [];
+                foreach (var kvp in redeemersMap.Value)
+                {
+                    foreach (var result in evalResult)
                     {
-                        ExUnits exUnits = kvp.Value.ExUnits;
                         if (kvp.Key.Tag.Value == (int)result.RedeemerTag && kvp.Key.Index.Value == result.Index)
                         {
-                            exUnits = new(new CborUlong(result.ExUnits.Mem * 10), new CborUlong(result.ExUnits.Steps * 10));
+                            ExUnits exUnits = new(new CborUlong(140000), new CborUlong(100000000));
+                            updatedRedeemersMap.Add(new RedeemerKey(kvp.Key.Tag, kvp.Key.Index), new RedeemerValue(kvp.Value.Data, exUnits));
                         }
-                        updatedRedeemersMap.Add(new RedeemerKey(kvp.Key.Tag, kvp.Key.Index), new RedeemerValue(kvp.Value.Data, exUnits));
                     }
-                    builder.SetRedeemers(new RedeemerMap(updatedRedeemersMap));
-                    break;
-            }
-
+                }
+                builder.SetRedeemers(new RedeemerMap(updatedRedeemersMap));
+                break;
         }
+
+
         return builder;
     }
 

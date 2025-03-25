@@ -7,7 +7,7 @@ namespace Chrysalis.Tx.Cli;
 
 
 public record LockParameters(Value Amount, DatumOption Datum);
-public record UnlockParameters(TransactionInput LockedUtxoOutRef, TransactionInput ScriptRefUtxoOutref,  Redeemers Redeemer, Value Amount);
+public record UnlockParameters(TransactionInput LockedUtxoOutRef, TransactionInput ScriptRefUtxoOutref,  Redeemers Redeemer, Value Amount, ulong WithdrawalAmount, Redeemers WithdrawRedeemer);
 
 public record TransferParameters(ulong Amount, Dictionary<string, string> Parties) : IParameters{
     public ulong Amount { get; init; } = Amount;

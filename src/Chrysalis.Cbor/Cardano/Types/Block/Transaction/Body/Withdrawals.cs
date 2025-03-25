@@ -7,4 +7,5 @@ using Chrysalis.Cbor.Types;
 namespace Chrysalis.Cbor.Cardano.Types.Block.Transaction.Body;
 
 [CborConverter(typeof(MapConverter))]
+[CborOptions(IsDefinite = true)]
 public record Withdrawals(Dictionary<RewardAccount, CborUlong> Value) : CborBase;

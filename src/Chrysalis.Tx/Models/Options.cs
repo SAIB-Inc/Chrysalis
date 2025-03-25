@@ -16,7 +16,7 @@ public record InputOptions(string From, Value? MinAmount, DatumOption? Datum, Re
     public string From { get; set; } = From;
     public Value? MinAmount { get; set; } = MinAmount;
     public TransactionInput? UtxoRef { get; set; } = UtxoRef;
-    public DatumOption ? Datum { get; set; } = Datum;
+    public DatumOption? Datum { get; set; } = Datum;
     public Redeemers? Redeemer { get; set; } = Redeemer;
     public bool IsReference { get; set; } = IsReference;
 }
@@ -26,5 +26,13 @@ public class OutputOptions(string To, Value? Amount, DatumOption? Datum)
     public string To { get; set; } = To;
     public Value? Amount { get; set; } = Amount;
     public DatumOption? Datum { get; set; } = Datum;
+
+}
+
+public class WithdrawalOptions(string From, ulong Amount, Redeemers? Redeemer)
+{
+    public string From { get; set; } = From;
+    public ulong Amount { get; set; } = Amount;
+    public Redeemers? Redeemer { get; set; } = Redeemer;
 
 }
