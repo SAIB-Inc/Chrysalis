@@ -13,4 +13,4 @@ public partial record PoolVotingThresholds(
     [CborOrder(2)] CborRationalNumber CommitteeNoConfidence,
     [CborOrder(3)] CborRationalNumber HardForkInitiation,
     [CborOrder(4)] CborRationalNumber SecurityVotingThreshold
-) : CborBase<PoolVotingThresholds>;
+) : CborBase;

@@ -8,4 +8,4 @@ namespace Chrysalis.Cbor.Cardano.Types.Block.Header.Body;
 public partial record ProtocolVersion(
     [CborOrder(0)] int MajorProtocolVersion,
     [CborOrder(1)] ulong SequenceNumber
-) : CborBase<ProtocolVersion>;
+) : CborBase;

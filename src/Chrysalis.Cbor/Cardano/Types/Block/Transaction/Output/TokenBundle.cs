@@ -5,7 +5,7 @@ namespace Chrysalis.Cbor.Cardano.Types.Block.Transaction.Output;
 
 [CborSerializable]
 [CborUnion]
-public abstract partial record TokenBundle : CborBase<TokenBundle>
+public abstract partial record TokenBundle : CborBase
 {
 }
 

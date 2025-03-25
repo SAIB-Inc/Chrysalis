@@ -17,4 +17,4 @@ public partial record DRepVotingThresholds(
     [CborOrder(8)] CborRationalNumber PpTechnicalGroup,
     [CborOrder(9)] CborRationalNumber PpGovernanceGroup,
     [CborOrder(10)] CborRationalNumber TreasuryWithdrawal
-) : CborBase<DRepVotingThresholds>;
+) : CborBase;

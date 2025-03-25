@@ -5,7 +5,7 @@ namespace Chrysalis.Cbor.Types.Custom;
 
 [CborSerializable]
 [CborUnion]
-public abstract partial record CborMaybeIndefList<T> : CborBase<CborMaybeIndefList<T>>
+public abstract partial record CborMaybeIndefList<T> : CborBase
 {
 }
 

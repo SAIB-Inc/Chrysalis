@@ -8,4 +8,4 @@ namespace Chrysalis.Cbor.Cardano.Types.Block.Header.Body;
 public partial record VrfCert(
     [CborOrder(0)] byte[] Proof,
     [CborOrder(1)] byte[] Output
-) : CborBase<VrfCert>;
+) : CborBase;

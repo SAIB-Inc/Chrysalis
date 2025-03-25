@@ -4,7 +4,7 @@
 
 // [CborSerializable]
 // [CborUnion]
-// public abstract partial record Option<T> : CborBase<Option<T>>
+// public abstract partial record Option<T> : CborBase>
 // {
 //     [CborSerializable]
 //     [CborConstr(0)]

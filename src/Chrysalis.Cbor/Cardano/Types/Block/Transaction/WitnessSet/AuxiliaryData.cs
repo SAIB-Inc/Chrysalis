@@ -8,7 +8,7 @@ namespace Chrysalis.Cbor.Cardano.Types.Block.Transaction.WitnessSet;
 
 [CborSerializable]
 [CborUnion]
-public abstract partial record AuxiliaryData : CborBase<AuxiliaryData>
+public abstract partial record AuxiliaryData : CborBase
 {
 }
 

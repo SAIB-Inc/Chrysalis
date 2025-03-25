@@ -27,7 +27,7 @@ public static class CborSerializer
     /// </remarks>
     /// <exception cref="CborSerializationException">Thrown when an error occurs during serialization.</exception>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static byte[] Serialize<T>(T value) where T : CborBase<T>
+    public static byte[] Serialize<T>(T value) where T : CborBase
     {
         if (value.Raw is not null)
         {
@@ -58,7 +58,7 @@ public static class CborSerializer
     /// <exception cref="CborDeserializationException">Thrown when an error occurs during deserialization.</exception>
     /// <exception cref="CborTypeMismatchException">Thrown when the deserialized type does not match the expected type.</exception>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static T Deserialize<T>(ReadOnlyMemory<byte> data) where T : CborBase<T>
+    public static T Deserialize<T>(ReadOnlyMemory<byte> data) where T : CborBase
     {
         CborReader reader = new(data, CborConformanceMode.Lax);
         T? result = GenericSerializationUtil.Read<T>(reader);

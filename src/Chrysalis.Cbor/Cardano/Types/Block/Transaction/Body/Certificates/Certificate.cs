@@ -9,7 +9,7 @@ namespace Chrysalis.Cbor.Cardano.Types.Block.Transaction.Body.Certificates;
 
 [CborSerializable]
 [CborUnion]
-public abstract partial record Certificate : CborBase<Certificate>
+public abstract partial record Certificate : CborBase
 {
 }
 

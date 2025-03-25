@@ -4,7 +4,7 @@ namespace Chrysalis.Cbor.Types.Test;
 
 [CborSerializable]
 [CborUnion]
-public abstract partial record TestUnion : CborBase<TestUnion>
+public abstract partial record TestUnion : CborBase
 {
     [CborSerializable]
     [CborList]

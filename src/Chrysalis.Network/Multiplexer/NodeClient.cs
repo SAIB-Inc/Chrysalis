@@ -24,14 +24,23 @@ public class NodeClient : IDisposable
     /// <summary>
     /// Gets the LocalStateQuery protocol handler.
     /// </summary>
-    //public LocalStateQuery? LocalStateQuery { get; private set; }
+    public LocalStateQuery? LocalStateQuery { get; private set; }
 
     /// <summary>
     /// Gets the ChainSync protocol handler.
     /// </summary>
     public ChainSync? ChainSync { get; private set; }
-    // public LocalTxSubmit? LocalTxSubmit { get; private set; }
 
+    /// <summary>
+    /// Gets the LocalTxSubmit protocol handler
+    /// </summary>
+    public LocalTxSubmit? LocalTxSubmit { get; private set; }
+
+
+    /// <summary>
+    /// Gets the LocalTxMonitor protocol handler
+    /// </summary>
+    public LocalTxMonitor? LocalTxMonitor { get; private set; }
 
     /// <summary>
     /// Initializes a new instance of the NodeClient class.
@@ -80,7 +89,9 @@ public class NodeClient : IDisposable
         _ = _plexer.RunAsync(CancellationToken.None);
         Handshake = new(_plexer.SubscribeClient(ProtocolType.Handshake));
         ChainSync = new(_plexer.SubscribeClient(ProtocolType.ClientChainSync));
-        // LocalTxSubmit = new(_plexer.SubscribeClient(ProtocolType.LocalTxSubmission));
+        LocalTxSubmit = new(_plexer.SubscribeClient(ProtocolType.LocalTxSubmission));
+        LocalStateQuery = new(_plexer.SubscribeClient(ProtocolType.LocalStateQuery));
+        LocalTxMonitor = new(_plexer.SubscribeClient(ProtocolType.LocalTxMonitor));
     }
 
     /// <summary>

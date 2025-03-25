@@ -9,4 +9,4 @@ namespace Chrysalis.Cbor.Cardano.Types.Block.Transaction;
 public partial record Anchor(
     [CborOrder(0)] string AnchorUrl,
     [CborOrder(1)] byte[] AnchorDataHash
-) : CborBase<Anchor>;
+) : CborBase;

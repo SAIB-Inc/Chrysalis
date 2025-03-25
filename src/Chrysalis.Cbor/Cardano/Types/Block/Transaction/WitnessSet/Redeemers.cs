@@ -8,7 +8,7 @@ namespace Chrysalis.Cbor.Cardano.Types.Block.Transaction.WitnessSet;
 
 [CborSerializable]
 [CborUnion]
-public abstract partial record Redeemers : CborBase<Redeemers>
+public abstract partial record Redeemers : CborBase
 {
 }
 
@@ -25,18 +25,18 @@ public partial record RedeemerEntry(
     [CborOrder(1)] ulong Index,
     [CborOrder(2)] PlutusData Data,
     [CborOrder(3)] ExUnits ExUnits
-) : CborBase<RedeemerEntry>, ICborPreserveRaw;
+) : CborBase, ICborPreserveRaw;
 
 [CborSerializable]
 [CborList]
 public partial record RedeemerKey(
     [CborOrder(0)] int Tag,
     [CborOrder(1)] ulong Index
-) : CborBase<RedeemerKey>, ICborPreserveRaw;
+) : CborBase, ICborPreserveRaw;
 
 [CborSerializable]
 [CborList]
 public partial record RedeemerValue(
     [CborOrder(0)] PlutusData Data,
     [CborOrder(1)] ExUnits ExUnits
-) : CborBase<RedeemerValue>, ICborPreserveRaw;
+) : CborBase, ICborPreserveRaw;

@@ -33,7 +33,7 @@
 ### Special Rules
 `ICborValidator<T>` - is an interface with one function `Validate()` to tell generator that a type must be validated after deserialization or before serialization
 `ICborRaw` - is an interface with no function, this just helps the source gen to know if a validate function must be called or not
-`CborBase<T>` - is base abstract type that contains the `Raw` property and `Name` which is a helper for union types. All custom types must inherit from CborBase<T> in order for serialization to work properly
+`CborBase` - is base abstract type that contains the `Raw` property and `Name` which is a helper for union types. All custom types must inherit from CborBase in order for serialization to work properly
 
 ## Development Checklist
 
