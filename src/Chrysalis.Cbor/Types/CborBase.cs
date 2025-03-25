@@ -46,4 +46,14 @@ public abstract partial record CborBase
     }
 
     public int ConstrIndex { get; set; } = 0;
+
+    public static CborBase Read(ReadOnlyMemory<byte> data)
+    {
+        throw new NotImplementedException();
+    }
+
+    public static void Write(CborWriter writer, CborBase? data)
+    {
+        throw new NotImplementedException();
+    }
 }

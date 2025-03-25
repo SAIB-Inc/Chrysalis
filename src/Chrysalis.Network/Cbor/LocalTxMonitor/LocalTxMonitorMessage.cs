@@ -4,7 +4,7 @@ using Chrysalis.Cbor.Types.Custom;
 using Chrysalis.Network.Cbor.Common;
 using Chrysalis.Network.Cbor.LocalTxSubmit;
 
-namespace Chrysalis.Network.Cbor.Handshake;
+namespace Chrysalis.Network.Cbor.LocalTxMonitor;
 
 [CborSerializable]
 [CborUnion]
@@ -116,7 +116,7 @@ public partial record ReplyGetMeasures(
 public partial record Measures(
     [CborOrder(0)] int CurrentSize,
     [CborOrder(1)] int MaxCapacity
-);
+) : CborBase;
 
 
 

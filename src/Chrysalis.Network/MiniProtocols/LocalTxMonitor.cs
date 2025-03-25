@@ -1,4 +1,5 @@
 using Chrysalis.Network.Cbor.Handshake;
+using Chrysalis.Network.Cbor.LocalTxMonitor;
 using Chrysalis.Network.Multiplexer;
 
 namespace Chrysalis.Network.MiniProtocols;
