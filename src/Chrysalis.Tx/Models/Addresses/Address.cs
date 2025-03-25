@@ -42,7 +42,7 @@ public class Address
         CredentialType paymentType = (CredentialType)(paymentPart[0] >> 7);
         byte[] paymentHash = [.. paymentPart.Skip(1).Take(27)];
         PaymentCredential = new Credential(paymentType, paymentHash);
-        
+
         if (delegationPart != null)
         {
             CredentialType delegationType = (CredentialType)(delegationPart[0] >> 7);
@@ -217,7 +217,20 @@ public class Address
     private static AddressHeader GetAddressHeader(byte headerByte)
     {
         int typeValue = headerByte >> 4;
-        AddressType type = (AddressType)typeValue;
+        AddressType type = typeValue switch
+        {
+            0x00 => AddressType.BasePayment,
+            0x01 => AddressType.ScriptPayment,
+            0x02 => AddressType.BaseWithScriptDelegation,
+            0x03 => AddressType.ScriptWithScriptDelegation,
+            0x04 => AddressType.BaseWithPointerDelegation,
+            0x05 => AddressType.BaseWithPointerDelegation,
+            0x06 => AddressType.EnterprisePayment,
+            0x07 => AddressType.EnterpriseScriptPayment,
+            0x0e => AddressType.StakeKey,
+            0x0f => AddressType.ScriptStakeKey,
+            _ => AddressType.BasePayment
+        };
 
         NetworkType network = (headerByte & 0x0F) switch
         {

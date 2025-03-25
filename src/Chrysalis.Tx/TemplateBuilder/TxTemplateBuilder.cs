@@ -9,6 +9,9 @@ using TxAddr = Chrysalis.Tx.Models.Addresses;
 using Chrysalis.Tx.TransactionBuilding.Extensions;
 using Chrysalis.Cbor.Cardano.Types.Block.Transaction;
 using Chrysalis.Cbor.Cardano.Types.Block.Transaction.Input;
+using Chrysalis.Cbor.Cardano.Types.Block.Transaction.Body.ProposalProcedures;
+using Chrysalis.Cbor.Cardano.Types.Block.Transaction.Body;
+using Chrysalis.Cbor.Cardano.Types.Block.Transaction.WitnessSet;
 
 namespace Chrysalis.Tx.TemplateBuilder;
 
@@ -18,6 +21,8 @@ public class TxTemplateBuilder<T>
     private readonly List<Action<InputOptions, T>> inputConfigs = [];
     private readonly List<Action<OutputOptions, T>> outputConfigs = [];
     private readonly Dictionary<string, string> staticParties = [];
+
+    private readonly List<Action<WithdrawalOptions, T>> withdrawalConfigs = [];
 
     public static TxTemplateBuilder<T> Create(IProvider provider) => new TxTemplateBuilder<T>().SetProvider(provider);
 
@@ -35,6 +40,12 @@ public class TxTemplateBuilder<T>
     public TxTemplateBuilder<T> AddOutput(Action<OutputOptions, T> config)
     {
         outputConfigs.Add(config);
+        return this;
+    }
+
+    public TxTemplateBuilder<T> AddWithdrawal(Action<WithdrawalOptions, T> config)
+    {
+        withdrawalConfigs.Add(config);
         return this;
     }
     public TxTemplateBuilder<T> AddStaticParty(string partyIdent, string party)
@@ -63,13 +74,12 @@ public class TxTemplateBuilder<T>
 
             var parties = MergeParties(staticParties, additionalParties);
 
-
-
             TxAddr.Address? senderAddress = null;
             List<TransactionInput> specifiedInputs = [];
             TransactionInput? referenceInput = null;
             bool isSmartContractTx = false;
             ulong minimumLovelace = 0;
+            Dictionary<RedeemerKey, RedeemerValue> redeemers = [];
             foreach (var config in inputConfigs)
             {
                 var inputOptions = new InputOptions("", null, null, null, null);
@@ -90,7 +100,21 @@ public class TxTemplateBuilder<T>
                         txBuilder.AddInput(inputOptions.UtxoRef);
                         if (inputOptions.Redeemer is not null)
                         {
-                            txBuilder.SetRedeemers(inputOptions.Redeemer);
+                            switch (inputOptions.Redeemer)
+                            {
+                                case RedeemerMap redeemersMap:
+                                    foreach (var kvp in redeemersMap.Value)
+                                    {
+                                        redeemers[kvp.Key] = kvp.Value;
+                                    }
+                                    break;
+                                case RedeemerList redeemersList:
+                                    foreach (var redeemer in redeemersList.Value)
+                                    {
+                                        redeemers[new RedeemerKey(redeemer.Tag, redeemer.Index)] = new RedeemerValue(redeemer.Data, redeemer.ExUnits);
+                                    }
+                                    break;
+                            }
                         }
                     }
 
@@ -164,7 +188,7 @@ public class TxTemplateBuilder<T>
                 }
             }
 
-             if (collateralInput is not null && isSmartContractTx)
+            if (collateralInput is not null && isSmartContractTx)
             {
                 utxos.Remove(collateralInput);
                 txBuilder.SetCollateral(collateralInput);
@@ -201,9 +225,38 @@ public class TxTemplateBuilder<T>
 
             txBuilder.AddOutput(changeOutput, true);
 
+            Dictionary<RewardAccount, CborUlong> rewards = [];
+            foreach (var config in withdrawalConfigs)
+            {
+                var withdrawalOptions = new WithdrawalOptions("", 0, null);
+                config(withdrawalOptions, param);
+                TxAddr.Address withdrawalAddress = TxAddr.Address.FromBech32(parties[withdrawalOptions.From]);
+                rewards.Add(new RewardAccount(withdrawalAddress.ToBytes()), new CborUlong(withdrawalOptions.Amount!));
+                switch (withdrawalOptions.Redeemer)
+                {
+                    case RedeemerMap redeemersMap:
+                        foreach (var kvp in redeemersMap.Value)
+                        {
+                            redeemers[kvp.Key] = kvp.Value;
+                        }
+                        break;
+                    case RedeemerList redeemersList:
+                        foreach (var redeemer in redeemersList.Value)
+                        {
+                            redeemers[new RedeemerKey(redeemer.Tag, redeemer.Index)] = new RedeemerValue(redeemer.Data, redeemer.ExUnits);
+                        }
+                        break;
+                }
+            }
+
+            if (rewards.Count > 0)
+            {
+                txBuilder.SetWithdrawals(new Withdrawals(rewards));
+            }
 
             if (isSmartContractTx)
             {
+                txBuilder.SetRedeemers(new RedeemerMap(redeemers));
                 txBuilder.Evaluate(allUtxos);
             }
 
@@ -212,8 +265,8 @@ public class TxTemplateBuilder<T>
                 .Build();
 
             return unsignedTx;
-        }
-            ;
+        };
+
     }
 
     private Dictionary<string, string> MergeParties(
