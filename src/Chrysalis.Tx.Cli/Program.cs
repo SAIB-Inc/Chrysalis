@@ -1,4 +1,5 @@
-﻿using Chrysalis.Cbor.Cardano.Types.Block.Transaction.Input;
+﻿using System.Transactions;
+using Chrysalis.Cbor.Cardano.Types.Block.Transaction.Input;
 using Chrysalis.Cbor.Cardano.Types.Block.Transaction.Output;
 using Chrysalis.Cbor.Cardano.Types.Block.Transaction.Protocol;
 using Chrysalis.Cbor.Cardano.Types.Block.Transaction.Script;
@@ -39,21 +40,21 @@ string validatorAddress = "addr_test1wq37rysxtj0ctsgz40ds3r3x3mt8csywcf0tk9w2gc5
 // var unsignedTx = await transfer(10000000UL);
 // Console.WriteLine(Convert.ToHexString(CborSerializer.Serialize(unsignedTx)));
 
-// var lockLovelace = TxTemplateBuilder<LockParameters>.Create(provider)
-//     .AddStaticParty("rico", ricoAddress)
-//     .AddStaticParty("validator", validatorAddress)
-//     .AddInput((options, lockParams) =>
-//     {
-//         options.From = "rico";
-//         options.MinAmount = lockParams.Amount;
-//     })
-//     .AddOutput((options, lockParams) =>
-//     {
-//         options.To = "validator";
-//         options.Amount = lockParams.Amount;
-//         options.Datum = lockParams.Datum;
-//     })
-//     .Build();
+var lockLovelace = TxTemplateBuilder<LockParameters>.Create(provider)
+    .AddStaticParty("rico", ricoAddress)
+    .AddStaticParty("validator", validatorAddress)
+    .AddInput((options, lockParams) =>
+    {
+        options.From = "rico";
+        options.MinAmount = lockParams.Amount;
+    })
+    .AddOutput((options, lockParams) =>
+    {
+        options.To = "validator";
+        options.Amount = lockParams.Amount;
+        options.Datum = lockParams.Datum;
+    })
+    .Build();
 
 // var lockParams = new LockParameters(new Lovelace(10000000), new InlineDatumOption(new CborInt(1), new CborEncodedValue(Convert.FromHexString("d87980"))));
 // var unsignedLockTx = await lockLovelace(lockParams);
@@ -62,6 +63,7 @@ string validatorAddress = "addr_test1wq37rysxtj0ctsgz40ds3r3x3mt8csywcf0tk9w2gc5
 string scriptRefTxHash = "9489655981e70ab2c2df5db10d2ed11157bc2e404d02c3fabe853737366ced77";
 string lockTxHash = "ffe4c125de5d60d07413b803cc858b146c3831d44cdd81b18ee785e94fe7e43c";
 string withdrawalAddress = "stake_test17q37rysxtj0ctsgz40ds3r3x3mt8csywcf0tk9w2gc5tjqc29zef9";
+
 
 var unlockLovelace = TxTemplateBuilder<UnlockParameters>.Create(provider)
     .AddStaticParty("rico", ricoAddress)

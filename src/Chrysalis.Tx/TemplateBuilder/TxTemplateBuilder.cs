@@ -22,6 +22,10 @@ public class TxTemplateBuilder<T>
     private readonly List<Action<OutputOptions, T>> outputConfigs = [];
     private readonly Dictionary<string, string> staticParties = [];
 
+    public bool trackAssociation = false;
+
+    private Func<Dictionary<string, Dictionary<string, int>>, List<TransactionInput>, T, Dictionary<int, object>>? redeemerGenerator = null;
+
     private readonly List<Action<WithdrawalOptions, T>> withdrawalConfigs = [];
 
     public static TxTemplateBuilder<T> Create(IProvider provider) => new TxTemplateBuilder<T>().SetProvider(provider);
@@ -46,6 +50,13 @@ public class TxTemplateBuilder<T>
     public TxTemplateBuilder<T> AddWithdrawal(Action<WithdrawalOptions, T> config)
     {
         withdrawalConfigs.Add(config);
+        return this;
+    }
+
+    public TxTemplateBuilder<T> SetRedeemerGenerator(
+        Func<Dictionary<string, Dictionary<string, int>>, List<TransactionInput>, T, Dictionary<int, object>> generator)
+    {
+        redeemerGenerator = generator;
         return this;
     }
     public TxTemplateBuilder<T> AddStaticParty(string partyIdent, string party)
@@ -84,6 +95,8 @@ public class TxTemplateBuilder<T>
             {
                 var inputOptions = new InputOptions("", null, null, null, null);
                 config(inputOptions, param);
+
+              
 
                 if (inputOptions.UtxoRef is not null)
                 {
@@ -280,7 +293,5 @@ public class TxTemplateBuilder<T>
         }
         return result;
     }
-
-
 
 }

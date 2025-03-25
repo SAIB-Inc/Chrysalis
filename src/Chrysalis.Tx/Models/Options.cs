@@ -11,7 +11,7 @@ public record Outref(string TxId, ulong Index)
     public ulong Index { get; init; } = Index;
 }
 
-public record InputOptions(string From, Value? MinAmount, DatumOption? Datum, Redeemers? Redeemer, TransactionInput? UtxoRef, bool IsReference = false)
+public record InputOptions(string From, Value? MinAmount, DatumOption? Datum, Redeemers? Redeemer, TransactionInput? UtxoRef, bool IsReference = false, string? Id = null)
 {
     public string From { get; set; } = From;
     public Value? MinAmount { get; set; } = MinAmount;
@@ -19,13 +19,16 @@ public record InputOptions(string From, Value? MinAmount, DatumOption? Datum, Re
     public DatumOption? Datum { get; set; } = Datum;
     public Redeemers? Redeemer { get; set; } = Redeemer;
     public bool IsReference { get; set; } = IsReference;
+    public string? Id { get; set; } = Id;
 }
 
-public class OutputOptions(string To, Value? Amount, DatumOption? Datum)
+public class OutputOptions(string To, Value? Amount, DatumOption? Datum, string? AssociatedInputId = null, string? Role = null)
 {
     public string To { get; set; } = To;
     public Value? Amount { get; set; } = Amount;
     public DatumOption? Datum { get; set; } = Datum;
+    public string? AssociatedInputId { get; set; } = AssociatedInputId;
+    public string? Role { get; set; } = Role;
 
 }
 

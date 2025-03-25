@@ -2,7 +2,6 @@ using Chrysalis.Cbor.Cardano.Types.Block.Transaction.Body;
 using Chrysalis.Cbor.Cardano.Types.Block.Transaction.Input;
 using Chrysalis.Cbor.Cardano.Types.Block.Transaction.Output;
 using Chrysalis.Cbor.Cardano.Types.Block.Transaction;
-using Chrysalis.Cbor.Types.Custom;
 using Chrysalis.Cbor.Types.Primitives;
 using Chrysalis.Cbor.Cardano.Types.Block.Transaction.WitnessSet;
 using Chrysalis.Cbor.Cardano.Types.Block.Transaction.Governance;
@@ -14,12 +13,18 @@ namespace Chrysalis.Tx.TransactionBuilding;
 
 public class TransactionBuilder
 {
+    public ConwayTransactionBody body;
+    public PostAlonzoTransactionWitnessSet witnessSet;
     public ConwayProtocolParamUpdate? pparams;
     public readonly TransactionBodyBuilder bodyBuilder = new();
     public readonly WitnessSetBuilder witnessBuilder = new();
-    private AuxiliaryData? auxiliaryData;
+    private AuxiliaryData auxiliaryData;
 
-    public TransactionBuilder() { }
+    public TransactionBuilder() { 
+         body = default!;
+         witnessSet = default!;
+         auxiliaryData = default!;
+    }
     public static TransactionBuilder Create() => new();
     public static TransactionBuilder Create(ConwayProtocolParamUpdate pparams)
     {
@@ -30,7 +35,7 @@ public class TransactionBuilder
 
     public TransactionBuilder SetNetworkId(int networkId)
     {
-        bodyBuilder.SetNetworkId(networkId);
+        body = body with { NetworkId = new CborInt(networkId) };
         return this;
     }
 
@@ -213,8 +218,6 @@ public class TransactionBuilder
 
     public PostMaryTransaction Build()
     {
-        var body = bodyBuilder.Build();
-        var witnessSet = witnessBuilder.Build();
         return new PostMaryTransaction(body, witnessSet, new CborBool(true), new CborNullable<AuxiliaryData>(auxiliaryData));
     }
 }
