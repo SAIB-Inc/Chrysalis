@@ -7,11 +7,15 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="../Chrysalis.Tx/Chrysalis.Tx.csproj" />
     <ProjectReference Include="../Chrysalis.Cbor/Chrysalis.Cbor.csproj" />
     <ProjectReference Include="..\Chrysalis.Cbor.CodeGen\Chrysalis.Cbor.CodeGen.csproj" 
               OutputItemType="Analyzer" 
               ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Cryptography.KeyDerivation" Version="9.0.3" />
+    <PackageReference Include="CardanoSharp.Chaos" Version="0.1.0" />
   </ItemGroup>
 
 </Project>
