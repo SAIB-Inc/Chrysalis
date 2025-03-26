@@ -1,7 +1,7 @@
 using Chrysalis.Cbor.Types.Cardano.Core.Common;
 using Chrysalis.Cbor.Types.Cardano.Core.Transaction;
 using Chrysalis.Tx.Models;
-using TxAddr = Chrysalis.Tx.Models.Addresses;
+using TxAddr = Chrysalis.Wallet.Addresses;
 
 namespace Chrysalis.Tx.Utils;
 

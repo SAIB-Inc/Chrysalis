@@ -7,7 +7,7 @@ using Chrysalis.Tx.Models;
 using Chrysalis.Tx.TransactionBuilding;
 using Chrysalis.Tx.TransactionBuilding.Extensions;
 using Chrysalis.Tx.Utils;
-using TxAddr = Chrysalis.Tx.Models.Addresses;
+using TxAddr = Chrysalis.Wallet.Addresses;
 
 namespace Chrysalis.Tx.TemplateBuilder;
 
