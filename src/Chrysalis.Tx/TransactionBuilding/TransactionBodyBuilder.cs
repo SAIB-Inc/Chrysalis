@@ -12,30 +12,30 @@ namespace Chrysalis.Tx.TransactionBuilding;
 
 public class TransactionBodyBuilder
 {
-    private CborInt? networkId;
+    private int? networkId;
     public List<TransactionInput> Inputs { get; set; } = [];
     public List<(TransactionOutput, bool)> Outputs { get; set; } = [];
-    private CborUlong? fee;
-    private CborUlong? ttl;
-    private CborUlong? validityIntervalStart;
+    private ulong? fee;
+    private ulong? ttl;
+    private ulong? validityIntervalStart;
     private readonly List<Certificate> certificates = [];
     private Withdrawals? withdrawals;
-    private CborBytes? auxiliaryDataHash;
+    private byte[]? auxiliaryDataHash;
     private MultiAssetMint? mint;
-    private CborBytes? scriptDataHash;
+    private byte[]? scriptDataHash;
     public readonly List<TransactionInput> collaterals = [];
-    private readonly List<CborBytes> requiredSigners = [];
+    private readonly List<byte[]> requiredSigners = [];
     public TransactionOutput? collateralReturn;
-    public CborUlong? totalCollateral;
+    public ulong? totalCollateral;
     private readonly List<TransactionInput> referenceInputs = [];
     private VotingProcedures? votingProcedures;
     private readonly List<ProposalProcedure> proposalProcedures = [];
-    private CborUlong? treasuryValue;
-    private CborUlong? donation;
+    private ulong? treasuryValue;
+    private ulong? donation;
 
     public TransactionBodyBuilder SetNetworkId(int networkId)
     {
-        this.networkId = new CborInt(networkId);
+        this.networkId = networkId;
         return this;
     }
 
@@ -53,19 +53,19 @@ public class TransactionBodyBuilder
 
     public TransactionBodyBuilder SetFee(ulong feeAmount)
     {
-        fee = new CborUlong(feeAmount);
+        fee = feeAmount;
         return this;
     }
 
     public TransactionBodyBuilder SetTtl(ulong ttl)
     {
-        this.ttl = new CborUlong(ttl);
+        this.ttl = ttl;
         return this;
     }
 
     public TransactionBodyBuilder SetValidityIntervalStart(ulong validityStart)
     {
-        validityIntervalStart = new CborUlong(validityStart);
+        validityIntervalStart = validityStart;
         return this;
     }
 
@@ -83,7 +83,7 @@ public class TransactionBodyBuilder
 
     public TransactionBodyBuilder SetAuxiliaryDataHash(byte[] hash)
     {
-        auxiliaryDataHash = new CborBytes(hash);
+        auxiliaryDataHash = hash;
         return this;
     }
 
@@ -95,7 +95,7 @@ public class TransactionBodyBuilder
 
     public TransactionBodyBuilder SetScriptDataHash(byte[] hash)
     {
-        scriptDataHash = new CborBytes(hash);
+        scriptDataHash = hash;
         return this;
     }
 
@@ -105,7 +105,7 @@ public class TransactionBodyBuilder
         return this;
     }
 
-    public TransactionBodyBuilder AddRequiredSigner(CborBytes signer)
+    public TransactionBodyBuilder AddRequiredSigner(byte[] signer)
     {
         requiredSigners.Add(signer);
         return this;
@@ -119,7 +119,7 @@ public class TransactionBodyBuilder
 
     public TransactionBodyBuilder SetTotalCollateral(ulong totalCollateral)
     {
-        this.totalCollateral = new CborUlong(totalCollateral);
+        this.totalCollateral = totalCollateral;
         return this;
     }
 
@@ -143,13 +143,13 @@ public class TransactionBodyBuilder
 
     public TransactionBodyBuilder SetTreasuryValue(ulong treasuryValue)
     {
-        this.treasuryValue = new CborUlong(treasuryValue);
+        this.treasuryValue = treasuryValue;
         return this;
     }
 
     public TransactionBodyBuilder SetDonation(ulong donation)
     {
-        this.donation = new CborUlong(donation);
+        this.donation = donation;
         return this;
     }
 
@@ -158,7 +158,7 @@ public class TransactionBodyBuilder
         return new ConwayTransactionBody(
             new CborDefListWithTag<TransactionInput>(Inputs),
             new CborDefList<TransactionOutput>([.. Outputs.Select(o => o.Item1)]),
-            fee ?? new CborUlong(0),
+            fee ?? 0,
             ttl,
             certificates.Count != 0 ? new CborDefList<Certificate>(certificates) : null,
             withdrawals,
@@ -167,7 +167,7 @@ public class TransactionBodyBuilder
             mint,
             scriptDataHash,
             collaterals.Count != 0 ? new CborDefListWithTag<TransactionInput>(collaterals) : null,
-            requiredSigners.Count != 0 ? new CborDefList<CborBytes>(requiredSigners) : null,
+            requiredSigners.Count != 0 ? new CborDefList<byte[]>(requiredSigners) : null,
             networkId,
             collateralReturn,
             totalCollateral,

@@ -1,4 +1,4 @@
-using Chrysalis.Cbor.Cardano.Extensions;
+using Chrysalis.Cbor.Cardano.Types.Block.Transaction;
 using Chrysalis.Cbor.Cardano.Types.Block.Transaction.Input;
 using Chrysalis.Cbor.Cardano.Types.Block.Transaction.Output;
 using Chrysalis.Cbor.Cardano.Types.Block.Transaction.Protocol;
@@ -69,9 +69,51 @@ public static class SampleTransactions
         );
 
         ResolvedInput? feeInput = null;
-        foreach (var utxo in utxos.OrderByDescending(e => e.Output.Amount()!.Lovelace()))
+        foreach (var utxo in utxos.OrderByDescending(e =>
         {
-            if (utxo.Output.Amount()!.Lovelace() >= 5000000UL && utxo.Output.Amount() is Lovelace)
+            ulong amount = e.Output switch
+            {
+                AlonzoTransactionOutput alonzoTransactionOutput => alonzoTransactionOutput.Amount switch
+                {
+                    Lovelace value => value.Value,
+                    LovelaceWithMultiAsset multiAsset => multiAsset.LovelaceValue.Value,
+                    _ => 0
+                },
+                PostAlonzoTransactionOutput postAlonzoTransactionOutput => postAlonzoTransactionOutput.Amount switch
+                {
+                    Lovelace value => value.Value,
+                    LovelaceWithMultiAsset multiAsset => multiAsset.LovelaceValue.Value,
+                    _ => 0
+                },
+                _ => 0
+            };
+            return amount;
+        }))
+        {
+            ulong lovelaceValue = utxo.Output switch
+            {
+                AlonzoTransactionOutput alonzoTransactionOutput => alonzoTransactionOutput.Amount switch
+                {
+                    Lovelace value => value.Value,
+                    LovelaceWithMultiAsset multiAsset => multiAsset.LovelaceValue.Value,
+                    _ => 0
+                },
+                PostAlonzoTransactionOutput postAlonzoTransactionOutput => postAlonzoTransactionOutput.Amount switch
+                {
+                    Lovelace value => value.Value,
+                    LovelaceWithMultiAsset multiAsset => multiAsset.LovelaceValue.Value,
+                    _ => 0
+                },
+                _ => 0
+            };
+
+            Value utxoValue = utxo.Output switch
+            {
+                AlonzoTransactionOutput alonzoTransactionOutput => alonzoTransactionOutput.Amount,
+                PostAlonzoTransactionOutput postAlonzoTransactionOutput => postAlonzoTransactionOutput.Amount,
+                _ => throw new Exception("Invalid change output type")
+            };
+            if (lovelaceValue >= 5000000UL && utxoValue is Lovelace)
             {
                 feeInput = utxo;
                 break;
@@ -91,7 +133,24 @@ public static class SampleTransactions
             txBuilder.AddInput(consumed_input.Outref);
         }
 
-        var lovelaceChange = new Lovelace(coinSelectionResult.LovelaceChange + feeInput?.Output.Amount()!.Lovelace() ?? 0);
+        ulong feeLovelace = feeInput?.Output switch
+            {
+                AlonzoTransactionOutput alonzoTransactionOutput => alonzoTransactionOutput.Amount switch
+                {
+                    Lovelace value => value.Value,
+                    LovelaceWithMultiAsset multiAsset => multiAsset.LovelaceValue.Value,
+                    _ => 0
+                },
+                PostAlonzoTransactionOutput postAlonzoTransactionOutput => postAlonzoTransactionOutput.Amount switch
+                {
+                    Lovelace value => value.Value,
+                    LovelaceWithMultiAsset multiAsset => multiAsset.LovelaceValue.Value,
+                    _ => 0
+                },
+                _ => 0
+            };
+
+        var lovelaceChange = new Lovelace(coinSelectionResult.LovelaceChange + feeLovelace);
         Value changeValue = lovelaceChange;
 
         if (coinSelectionResult.AssetsChange.Count > 0)
@@ -112,7 +171,7 @@ public static class SampleTransactions
             .CalculateFee();
 
         var unsignedTx = txBuilder.Build();
-        var signedTx = unsignedTx.Sign(privateKey);
+        Transaction signedTx = unsignedTx.Sign(privateKey);
 
 
         return CborSerializer.Serialize(signedTx);
@@ -162,7 +221,7 @@ public static class SampleTransactions
         var output = new PostAlonzoTransactionOutput(
             new Address(Convert.FromHexString(scriptAddress)),
             new Lovelace(10000000UL),
-            new InlineDatumOption(new CborInt(1), new CborEncodedValue(Convert.FromHexString("d87980"))),
+            new InlineDatumOption(1, new CborEncodedValue(Convert.FromHexString("d87980"))),
             null
         );
 
@@ -210,7 +269,7 @@ public static class SampleTransactions
             .CalculateFee();
 
         var unsignedTx = txBuilder.Build();
-        var signedTx = unsignedTx.Sign(privateKey);
+        Transaction signedTx = unsignedTx.Sign(privateKey);
 
 
         return CborSerializer.Serialize(signedTx);
@@ -283,7 +342,7 @@ public static class SampleTransactions
 
         byte[] cborEncodedScript = Convert.FromHexString("8203585E585C01010029800ABA2ABA1AAB9EAAB9DAB9A4888896600264653001300600198031803800CC0180092225980099B8748008C01CDD500144C8CC892898050009805180580098041BAA0028B200C180300098019BAA0068A4D13656400401");
 
-        var refInput = new TransactionInput(new CborBytes(Convert.FromHexString(scriptRefTxHash)), new CborUlong(0));
+        var refInput = new TransactionInput(Convert.FromHexString(scriptRefTxHash), 0);
         var refOutput = new PostAlonzoTransactionOutput(
             new Address(Convert.FromHexString(scriptAddress)),
             new Lovelace(1301620UL),
@@ -292,9 +351,9 @@ public static class SampleTransactions
             );
         var refUtxo = new ResolvedInput(refInput, refOutput);
 
-        var lockedUtxoOutref = new TransactionInput(new CborBytes(Convert.FromHexString(lockedUtxoTxHash)), new CborUlong(0));
+        var lockedUtxoOutref = new TransactionInput(Convert.FromHexString(lockedUtxoTxHash), 0);
 
-        var datum = new InlineDatumOption(new CborInt(1), new CborEncodedValue(Convert.FromHexString("d87980")));
+        var datum = new InlineDatumOption(1, new CborEncodedValue(Convert.FromHexString("d87980")));
 
         //Todo Implement GetResolvedUtxo in provider
         var lockedUtxo = new ResolvedInput(
@@ -379,7 +438,7 @@ public static class SampleTransactions
             null
             );
 
-        var redeemerKey = new RedeemerKey(new CborInt(0), new CborUlong(0));
+        var redeemerKey = new RedeemerKey(0, 0);
         var redeemerValue = new RedeemerValue(new PlutusConstr([]), new ExUnits(pparams.MaxTxExUnits!.Mem, pparams.MaxTxExUnits!.Steps));
 
         var redeemers = new RedeemerMap(new Dictionary<RedeemerKey, RedeemerValue> { { redeemerKey, redeemerValue } });
@@ -398,7 +457,7 @@ public static class SampleTransactions
 
         var unsignedTx = txBuilder.Build();
 
-        var signedTx = unsignedTx
+        Transaction signedTx = unsignedTx
             .Sign(privateKey);
 
         var signedTxHash = CborSerializer.Serialize(signedTx);

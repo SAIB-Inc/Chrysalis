@@ -28,7 +28,7 @@ public static class ScriptDataHashUtil
         byte[] plutusDataBytes = [];
         if (datums != null && datums.PlutusData.Count > 0)
         {
-            plutusDataBytes = datums.ToBytes() ?? [];
+            plutusDataBytes = CborSerializer.Serialize<PlutusData>(datums);
         }
 
         byte[] redeemerBytes = CborSerializer.Serialize(redeemers) ?? [];

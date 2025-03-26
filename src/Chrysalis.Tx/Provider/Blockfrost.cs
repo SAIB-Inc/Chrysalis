@@ -39,7 +39,7 @@ public class Blockfrost : IProvider
         var parameters = JsonSerializer.Deserialize<BlockfrostProtocolParametersResponse>(content) ??
             throw new Exception("GetParameters: Could not parse response json");
 
-        Dictionary<CborInt, CborDefList<CborLong>> costMdls = new();
+        Dictionary<int, CborIndefList<long>> costMdls = [];
 
         foreach (var (key, value) in parameters.CostModelsRaw)
         {
@@ -51,39 +51,39 @@ public class Blockfrost : IProvider
                 _ => throw new ArgumentException("Invalid key", nameof(key))
             };
 
-            costMdls[new CborInt(version)] = new CborDefList<CborLong>([.. value.Select(x => new CborLong(x))]);
+            costMdls[version] = new CborIndefList<long>([.. value.Select(x => x)]);
         }
 
         return new ConwayProtocolParamUpdate(
-            new CborUlong((ulong)parameters.MinFeeA),
-            new CborUlong((ulong)parameters.MinFeeB),
-            new CborUlong((ulong)parameters.MaxBlockSize),
-            new CborUlong((ulong)parameters.MaxTxSize),
-            new CborUlong((ulong)parameters.MaxBlockHeaderSize),
-            new CborUlong(ulong.Parse(parameters.KeyDeposit)),
-            new CborUlong(ulong.Parse(parameters.PoolDeposit)),
-            new CborUlong((ulong)parameters.EMax),
-            new CborUlong((ulong)parameters.NOpt),
+            (ulong)parameters.MinFeeA,
+            (ulong)parameters.MinFeeB,
+            (ulong)parameters.MaxBlockSize,
+            (ulong)parameters.MaxTxSize,
+            (ulong)parameters.MaxBlockHeaderSize,
+            ulong.Parse(parameters.KeyDeposit),
+            ulong.Parse(parameters.PoolDeposit),
+            (ulong)parameters.EMax,
+            (ulong)parameters.NOpt,
             new CborRationalNumber((ulong)(parameters.A0 * 100), 100),
             new CborRationalNumber((ulong)(parameters.Rho * 100), 100),
             new CborRationalNumber((ulong)(parameters.Tau * 100), 100),
-            new CborUlong(ulong.Parse(parameters.MinPoolCost)),
-            new CborUlong(ulong.Parse(parameters.CoinsPerUtxoSize)),
+            ulong.Parse(parameters.MinPoolCost),
+            ulong.Parse(parameters.CoinsPerUtxoSize),
             new CostMdls(costMdls),
             new ExUnitPrices(new CborRationalNumber((ulong)(parameters.PriceMem * 1000000), 1000000), new CborRationalNumber((ulong)(parameters.PriceStep * 1000000), 1000000)),
-            new ExUnits(new CborUlong(ulong.Parse(parameters.MaxTxExMem)), new CborUlong(ulong.Parse(parameters.MaxTxExSteps))),
-            new ExUnits(new CborUlong(ulong.Parse(parameters.MaxBlockExMem)), new CborUlong(ulong.Parse(parameters.MaxBlockExSteps))),
-            new CborUlong(ulong.Parse(parameters.MaxValSize)),
-            new CborUlong((ulong)parameters.CollateralPercent),
-            new CborUlong((ulong)parameters.MaxCollateralInputs),
+            new ExUnits(ulong.Parse(parameters.MaxTxExMem), ulong.Parse(parameters.MaxTxExSteps)),
+            new ExUnits(ulong.Parse(parameters.MaxBlockExMem), ulong.Parse(parameters.MaxBlockExSteps)),
+            ulong.Parse(parameters.MaxValSize),
+            (ulong)parameters.CollateralPercent,
+            (ulong)parameters.MaxCollateralInputs,
             new PoolVotingThresholds(new CborRationalNumber(1, 1), new CborRationalNumber(1, 1), new CborRationalNumber(1, 1), new CborRationalNumber(1, 1), new CborRationalNumber(1, 1)),
             new DRepVotingThresholds(new CborRationalNumber(1, 1), new CborRationalNumber(1, 1), new CborRationalNumber(1, 1), new CborRationalNumber(1, 1), new CborRationalNumber(1, 1), new CborRationalNumber(1, 1), new CborRationalNumber(1, 1), new CborRationalNumber(1, 1), new CborRationalNumber(1, 1), new CborRationalNumber(1, 1)),
-            new CborUlong(1),
-            new CborUlong(1),
-            new CborUlong(1),
-            new CborUlong(1),
-            new CborUlong(1),
-            new CborUlong(1),
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
             new CborRationalNumber((ulong)parameters.MinFeeRefScriptCostPerByte!, 1)
         );
     }
@@ -110,7 +110,7 @@ public class Blockfrost : IProvider
             foreach (var utxo in utxos)
             {
                 ulong lovelace = 0;
-                Dictionary<CborBytes, TokenBundleOutput> assets = [];
+                Dictionary<byte[], TokenBundleOutput> assets = [];
                 foreach (var amount in utxo.Amount!)
                 {
                     if (amount.Unit == "lovelace")
@@ -119,22 +119,22 @@ public class Blockfrost : IProvider
                     }
                     else
                     {
-                        var policy = new CborBytes(Convert.FromHexString(amount.Unit![..56]));
-                        var assetName = new CborBytes(Convert.FromHexString(amount.Unit![56..]));
+                        var policy = Convert.FromHexString(amount.Unit![..56]);
+                        var assetName = Convert.FromHexString(amount.Unit![56..]);
                         if (!assets.ContainsKey(policy))
                         {
-                            assets[policy] = new TokenBundleOutput(new Dictionary<CborBytes, CborUlong>
+                            assets[policy] = new TokenBundleOutput(new Dictionary<byte[], ulong>
                             {
-                                [assetName] = new CborUlong(ulong.Parse(amount.Quantity!))
+                                [assetName] = ulong.Parse(amount.Quantity!)
                             });
                         }
                         else
                         {
-                            assets[policy].Value[assetName] = new CborUlong(ulong.Parse(amount.Quantity!));
+                            assets[policy].Value[assetName] = ulong.Parse(amount.Quantity!);
                         }
                     }
                 }
-                TransactionInput outref = new(new CborBytes(Convert.FromHexString(utxo.TxHash!)), new CborUlong((ulong)utxo.TxIndex!));
+                TransactionInput outref = new(Convert.FromHexString(utxo.TxHash!), (ulong)utxo.TxIndex!);
                 Lovelace CborLovelace = new(lovelace);
                 Value value = new Lovelace(lovelace);
                 if (assets.Count > 0)
@@ -147,14 +147,14 @@ public class Blockfrost : IProvider
 
                 if(utxo.ReferenceScriptHash is not null)
                 {
-                    var scriptRefValue = await GetScript(utxo.ReferenceScriptHash);
+                    ScriptRef scriptRefValue = await GetScript(utxo.ReferenceScriptHash);
                     scriptRef = new CborEncodedValue(CborSerializer.Serialize(scriptRefValue));
                 }
 
                 DatumOption? datum = null;
                 if (utxo.InlineDatum is not null)
                 {
-                    datum = new InlineDatumOption(new CborInt(1), new CborEncodedValue(Convert.FromHexString(utxo.InlineDatum)));
+                    datum = new InlineDatumOption(1, new CborEncodedValue(Convert.FromHexString(utxo.InlineDatum)));
                 }
 
                 TransactionOutput output = new PostAlonzoTransactionOutput(
@@ -228,7 +228,7 @@ public class Blockfrost : IProvider
             _ => throw new Exception("GetScriptRef: Unsupported script type")
         };
 
-        return new ScriptRef(new CborInt(scriptType), new CborBytes(cborBytes));
+        return new ScriptRef(scriptType, cborBytes);
     }
 
     private string GetBaseUrl()

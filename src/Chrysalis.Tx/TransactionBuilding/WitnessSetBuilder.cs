@@ -11,9 +11,9 @@ public class WitnessSetBuilder
     private readonly List<VKeyWitness> vKeyWitnesses = [];
     private readonly List<NativeScript> nativeScripts = [];
     private readonly List<BootstrapWitness> bootstrapWitnesses = [];
-    private readonly List<CborBytes> plutusV1Scripts = [];
-    private readonly List<CborBytes> plutusV2Scripts = [];
-    private readonly List<CborBytes> plutusV3Scripts = [];
+    private readonly List<byte[]> plutusV1Scripts = [];
+    private readonly List<byte[]> plutusV2Scripts = [];
+    private readonly List<byte[]> plutusV3Scripts = [];
     private readonly List<PlutusData> plutusData = [];
     public Redeemers? redeemers;
 
@@ -35,19 +35,19 @@ public class WitnessSetBuilder
         return this;
     }
 
-    public WitnessSetBuilder AddPlutusV1Script(CborBytes script)
+    public WitnessSetBuilder AddPlutusV1Script(byte[] script)
     {
         plutusV1Scripts.Add(script);
         return this;
     }
 
-    public WitnessSetBuilder AddPlutusV2Script(CborBytes script)
+    public WitnessSetBuilder AddPlutusV2Script(byte[] script)
     {
         plutusV2Scripts.Add(script);
         return this;
     }
 
-    public WitnessSetBuilder AddPlutusV3Script(CborBytes script)
+    public WitnessSetBuilder AddPlutusV3Script(byte[] script)
     {
         plutusV3Scripts.Add(script);
         return this;
@@ -71,11 +71,11 @@ public class WitnessSetBuilder
             vKeyWitnesses.Count != 0 ? new CborDefList<VKeyWitness>(vKeyWitnesses) : null,
             nativeScripts.Count != 0 ? new CborDefList<NativeScript>(nativeScripts) : null,
             bootstrapWitnesses.Count != 0 ? new CborDefList<BootstrapWitness>(bootstrapWitnesses) : null,
-            plutusV1Scripts.Count != 0 ? new CborDefList<CborBytes>(plutusV1Scripts) : null,
+            plutusV1Scripts.Count != 0 ? new CborDefList<byte[]>(plutusV1Scripts) : null,
             plutusData.Any() ? new CborDefList<PlutusData>(plutusData) : null,
             redeemers,
-            plutusV2Scripts.Any() ? new CborDefList<CborBytes>(plutusV2Scripts) : null,
-            plutusV3Scripts.Any() ? new CborDefList<CborBytes>(plutusV3Scripts) : null
+            plutusV2Scripts.Any() ? new CborDefList<byte[]>(plutusV2Scripts) : null,
+            plutusV3Scripts.Any() ? new CborDefList<byte[]>(plutusV3Scripts) : null
         );
     }
 }

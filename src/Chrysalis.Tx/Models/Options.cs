@@ -22,20 +22,27 @@ public record InputOptions(string From, Value? MinAmount, DatumOption? Datum, Re
     public string? Id { get; set; } = Id;
 }
 
-public class OutputOptions(string To, Value? Amount, DatumOption? Datum, string? AssociatedInputId = null, string? Role = null)
+public class OutputOptions(string To, Value? Amount, DatumOption? Datum, string? AssociatedInputId = null, string? Id = null)
 {
     public string To { get; set; } = To;
     public Value? Amount { get; set; } = Amount;
     public DatumOption? Datum { get; set; } = Datum;
     public string? AssociatedInputId { get; set; } = AssociatedInputId;
-    public string? Role { get; set; } = Role;
+    public string? Id { get; set; } = Id;
 
 }
 
-public class WithdrawalOptions(string From, ulong Amount, Redeemers? Redeemer)
+public record WithdrawalOptions<T>
 {
-    public string From { get; set; } = From;
-    public ulong Amount { get; set; } = Amount;
-    public Redeemers? Redeemer { get; set; } = Redeemer;
+    public string From { get; set; } 
+    public ulong Amount { get; set; }
+    public Action<Dictionary<int, Dictionary<string, int>>, T, Dictionary<RedeemerKey, RedeemerValue>>? RedeemerGenerator { get; set; }
+    public RedeemerMap? Redeemers { get; set; }
+
+     public WithdrawalOptions(string from, ulong amount)
+        {
+            From = from;
+            Amount = amount;
+        }
 
 }

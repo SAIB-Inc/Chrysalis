@@ -2,16 +2,12 @@ using Chrysalis.Cbor.Cardano.Types.Block.Transaction.Body;
 using Chrysalis.Cbor.Cardano.Types.Block.Transaction.Input;
 using Chrysalis.Cbor.Cardano.Types.Block.Transaction.Output;
 using Chrysalis.Cbor.Cardano.Types.Block.Transaction;
-<<<<<<< HEAD
-=======
-using Chrysalis.Cbor.Types.Custom;
->>>>>>> 76382dba94633c74b14200ac74333ce8d5c706c9
-using Chrysalis.Cbor.Types.Primitives;
 using Chrysalis.Cbor.Cardano.Types.Block.Transaction.WitnessSet;
 using Chrysalis.Cbor.Cardano.Types.Block.Transaction.Governance;
 using Chrysalis.Cbor.Cardano.Types.Block.Transaction.Body.Certificates;
 using Chrysalis.Cbor.Cardano.Types.Block.Transaction.Script;
 using Chrysalis.Cbor.Cardano.Types.Block.Transaction.Protocol;
+
 
 namespace Chrysalis.Tx.TransactionBuilding;
 
@@ -39,7 +35,7 @@ public class TransactionBuilder
 
     public TransactionBuilder SetNetworkId(int networkId)
     {
-        body = body with { NetworkId = new CborInt(networkId) };
+        bodyBuilder.SetNetworkId(networkId);
         return this;
     }
 
@@ -108,7 +104,7 @@ public class TransactionBuilder
         return this;
     }
 
-    public TransactionBuilder AddRequiredSigner(CborBytes signer)
+    public TransactionBuilder AddRequiredSigner(byte[] signer)
     {
         bodyBuilder.AddRequiredSigner(signer);
         return this;
@@ -178,19 +174,19 @@ public class TransactionBuilder
         return this;
     }
 
-    public TransactionBuilder AddPlutusV1Script(CborBytes script)
+    public TransactionBuilder AddPlutusV1Script(byte[] script)
     {
         witnessBuilder.AddPlutusV1Script(script);
         return this;
     }
 
-    public TransactionBuilder AddPlutusV2Script(CborBytes script)
+    public TransactionBuilder AddPlutusV2Script(byte[] script)
     {
         witnessBuilder.AddPlutusV2Script(script);
         return this;
     }
 
-    public TransactionBuilder AddPlutusV3Script(CborBytes script)
+    public TransactionBuilder AddPlutusV3Script(byte[] script)
     {
         witnessBuilder.AddPlutusV3Script(script);
         return this;
@@ -222,6 +218,8 @@ public class TransactionBuilder
 
     public PostMaryTransaction Build()
     {
-        return new PostMaryTransaction(body, witnessSet, new CborBool(true), new CborNullable<AuxiliaryData>(auxiliaryData));
+        body = bodyBuilder.Build();
+        witnessSet = witnessBuilder.Build();
+        return new PostMaryTransaction(body, witnessSet, true, auxiliaryData);
     }
 }

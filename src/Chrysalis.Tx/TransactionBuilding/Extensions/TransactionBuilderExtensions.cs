@@ -1,7 +1,7 @@
 using System.Dynamic;
 using System.Reflection.Metadata.Ecma335;
 using System.Runtime.InteropServices;
-using Chrysalis.Cbor.Cardano.Extensions;
+using Chrysalis.Cbor.Cardano.Types.Block.Transaction;
 using Chrysalis.Cbor.Cardano.Types.Block.Transaction.Input;
 using Chrysalis.Cbor.Cardano.Types.Block.Transaction.Output;
 using Chrysalis.Cbor.Cardano.Types.Block.Transaction.Protocol;
@@ -28,9 +28,9 @@ public static class TransactionBuilderExtensions
         {
             builder.SetTotalCollateral(2000000UL);
 
-            var usedLanguage = builder.pparams!.CostModelsForScriptLanguage!.Value[new CborInt(2)];
-            var costModel = new CostMdls(new Dictionary<CborInt, CborDefList<CborLong>>(){
-                 { new CborInt(2), usedLanguage }
+            var usedLanguage = builder.pparams!.CostModelsForScriptLanguage!.Value[2];
+            var costModel = new CostMdls(new Dictionary<int, CborIndefList<long>>(){
+                 { 2, usedLanguage }
             });
             var costModelBytes = CborSerializer.Serialize(costModel);
             var scriptDataHash = ScriptDataHashUtil.CalculateScriptDataHash(builder.witnessBuilder.redeemers, new PlutusList([]), costModelBytes);
@@ -46,7 +46,7 @@ public static class TransactionBuilderExtensions
         }
 
         // fee and change calculation
-        var draftTx = builder.Build();
+        Transaction draftTx = builder.Build();
         var draftTxCborBytes = CborSerializer.Serialize(draftTx);
         ulong draftTxCborLength = (ulong)draftTxCborBytes.Length;
         var fee = FeeUtil.CalculateFeeWithWitness(draftTxCborLength, builder.pparams!.MinFeeA!.Value, builder!.pparams.MinFeeB!.Value, mockWitnessFee) + scriptFee + scriptExecutionFee;
@@ -55,19 +55,64 @@ public static class TransactionBuilderExtensions
         {
             var totalCollateral = FeeUtil.CalculateRequiredCollateral(fee, builder.pparams!.CollateralPercentage!.Value);
             builder.SetTotalCollateral(totalCollateral);
+            Address address = builder.bodyBuilder.collateralReturn switch
+            {
+                AlonzoTransactionOutput alonzoTransactionOutput => alonzoTransactionOutput.Address,
+                PostAlonzoTransactionOutput postAlonzoTransactionOutput => postAlonzoTransactionOutput.Address!,
+                _ => throw new Exception("Invalid collateral return type")
+            };
+
+            ulong lovelace = builder.bodyBuilder.collateralReturn switch
+            {
+                AlonzoTransactionOutput alonzoTransactionOutput => alonzoTransactionOutput.Amount switch
+                {
+                    Lovelace value => value.Value,
+                    LovelaceWithMultiAsset multiAsset => multiAsset.LovelaceValue.Value,
+                    _ => 0
+                },
+                PostAlonzoTransactionOutput postAlonzoTransactionOutput => postAlonzoTransactionOutput.Amount switch
+                {
+                    Lovelace value => value.Value,
+                    LovelaceWithMultiAsset multiAsset => multiAsset.LovelaceValue.Value,
+                    _ => 0
+                },
+                _ => 0
+            };
             builder.SetCollateralReturn(new AlonzoTransactionOutput(
-                builder.bodyBuilder!.collateralReturn!.Address()!,
-                new Lovelace(builder.bodyBuilder!.collateralReturn!.Lovelace()!.Value - totalCollateral), null));
+                address,
+                new Lovelace(lovelace - totalCollateral), null));
         }
 
         var outputs = builder.bodyBuilder.Outputs;
         var changeOutput = outputs.Find(output => output.Item2);
 
+        Lovelace updatedChangeLovelace = changeOutput.Item1 switch
+        {
+            AlonzoTransactionOutput alonzo => alonzo.Amount switch
+            {
+                Lovelace value => new Lovelace(value.Value - fee),
+                LovelaceWithMultiAsset multiAsset => new Lovelace(multiAsset.LovelaceValue.Value - fee),
+                _ => throw new Exception("Invalid change output type")
+            },
+            PostAlonzoTransactionOutput postAlonzoChange => postAlonzoChange.Amount switch
+            {
+                Lovelace value => new Lovelace(value.Value - fee),
+                LovelaceWithMultiAsset multiAsset => new Lovelace(multiAsset.LovelaceValue.Value - fee),
+                _ => throw new Exception("Invalid change output type")
+            },
+            _ => throw new Exception("Invalid change output type")
+        };
 
-        var updatedChangeLovelace = new Lovelace((changeOutput.Item1.Amount()!.Lovelace() - fee)!.Value);
         Value changeValue = updatedChangeLovelace;
 
-        if (changeOutput.Item1.Amount() is LovelaceWithMultiAsset lovelaceWithMultiAsset)
+        Value changeOutputValue = changeOutput.Item1 switch
+        {
+            AlonzoTransactionOutput alonzo => alonzo.Amount,
+            PostAlonzoTransactionOutput postAlonzoChange => postAlonzoChange.Amount,
+            _ => throw new Exception("Invalid change output type")
+        };
+
+        if (changeOutputValue is LovelaceWithMultiAsset lovelaceWithMultiAsset)
         {
             changeValue = new LovelaceWithMultiAsset(updatedChangeLovelace, lovelaceWithMultiAsset.MultiAsset);
         }
@@ -77,9 +122,9 @@ public static class TransactionBuilderExtensions
         if (changeOutput.Item1 is AlonzoTransactionOutput change)
         {
             updatedChangeOutput = new AlonzoTransactionOutput(
-                change.Address()!,
+                change.Address,
                 changeValue,
-                change.Datum() is not null ? new CborBytes(change.Datum()!) : null
+                change.DatumHash
             );
 
             builder.bodyBuilder.Outputs.Remove(changeOutput);
@@ -88,7 +133,7 @@ public static class TransactionBuilderExtensions
         else if (changeOutput.Item1 is PostAlonzoTransactionOutput postAlonzoChange)
         {
             updatedChangeOutput = new PostAlonzoTransactionOutput(
-                postAlonzoChange.Address()!,
+                postAlonzoChange.Address!,
                 changeValue,
                 postAlonzoChange.Datum,
                 postAlonzoChange.ScriptRef
@@ -107,8 +152,11 @@ public static class TransactionBuilderExtensions
 
     public static TransactionBuilder Evaluate(this TransactionBuilder builder, List<ResolvedInput> utxos)
     {
-        var utxoCborBytes = CborSerializer.Serialize(new CborDefList<ResolvedInput>(utxos));
-        var txCborBytes = CborSerializer.Serialize(builder.Build());
+        CborDefList<ResolvedInput> utxoCbor = new(utxos);
+        var utxoCborBytes = CborSerializer.Serialize<CborMaybeIndefList<ResolvedInput>>(utxoCbor);
+        Transaction transaction = builder.Build();
+        Console.WriteLine(Convert.ToHexString(CborSerializer.Serialize(transaction)));  
+        var txCborBytes = CborSerializer.Serialize(transaction);
         var evalResult = Evaluator.EvaluateTx(txCborBytes, utxoCborBytes);
         var previousRedeemers = builder.witnessBuilder.redeemers;
 
@@ -121,9 +169,9 @@ public static class TransactionBuilderExtensions
                 {
                     foreach (var result in evalResult)
                     {
-                        if (redeemer.Tag.Value == (int)result.RedeemerTag && redeemer.Index.Value == result.Index)
+                        if (redeemer.Tag == (int)result.RedeemerTag && redeemer.Index == result.Index)
                         {
-                            ExUnits exUnits = new(new CborUlong(result.ExUnits.Mem), new CborUlong(result.ExUnits.Steps));
+                            ExUnits exUnits = new(result.ExUnits.Mem, result.ExUnits.Steps);
                             updatedRedeemersList.Add(new RedeemerEntry(redeemer.Tag, redeemer.Index, redeemer.Data, exUnits));
                         }
                     }
@@ -136,9 +184,9 @@ public static class TransactionBuilderExtensions
                 {
                     foreach (var result in evalResult)
                     {
-                        if (kvp.Key.Tag.Value == (int)result.RedeemerTag && kvp.Key.Index.Value == result.Index)
+                        if (kvp.Key.Tag == (int)result.RedeemerTag && kvp.Key.Index == result.Index)
                         {
-                            ExUnits exUnits = new(new CborUlong(140000), new CborUlong(100000000));
+                            ExUnits exUnits = new(140000, 100000000);
                             updatedRedeemersMap.Add(new RedeemerKey(kvp.Key.Tag, kvp.Key.Index), new RedeemerValue(kvp.Value.Data, exUnits));
                         }
                     }

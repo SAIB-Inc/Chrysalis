@@ -71,8 +71,8 @@ public static class FeeUtil
          ulong scriptFee = 0;
          exUnits.ForEach(exUnit => 
          {
-             ulong memCost = exUnit.Mem.Value * exUnitPriceStep.Numerator / exUnitPriceStep.Denominator;
-             ulong stepCost = exUnit.Steps.Value * exUnitPriceMem.Numerator / exUnitPriceMem.Denominator;
+             ulong memCost = exUnit.Mem * exUnitPriceStep.Numerator / exUnitPriceStep.Denominator;
+             ulong stepCost = exUnit.Steps * exUnitPriceMem.Numerator / exUnitPriceMem.Denominator;
              
              scriptFee += memCost + stepCost;
          });
