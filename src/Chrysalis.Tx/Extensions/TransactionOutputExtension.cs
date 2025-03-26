@@ -1,4 +1,5 @@
-using Chrysalis.Cbor.Cardano.Types.Block.Transaction.Output;
+using Chrysalis.Cbor.Types.Cardano.Core.Common;
+using Chrysalis.Cbor.Types.Cardano.Core.Transaction;
 
 namespace Chrysalis.Tx.Extensions;
 

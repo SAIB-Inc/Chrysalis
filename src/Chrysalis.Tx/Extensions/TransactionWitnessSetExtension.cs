@@ -1,5 +1,5 @@
-using Chrysalis.Cbor.Cardano.Types.Block.Transaction.WitnessSet;
-using Chrysalis.Cbor.Types.Custom;
+using Chrysalis.Cbor.Types;
+using Chrysalis.Cbor.Types.Cardano.Core.TransactionWitness;
 
 namespace Chrysalis.Tx.Extensions;
 
