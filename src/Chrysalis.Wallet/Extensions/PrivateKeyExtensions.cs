@@ -1,8 +1,8 @@
 using System.Security.Cryptography;
 using Chaos.NaCl;
+using Chrysalis.Wallet.Common;
+using Chrysalis.Wallet.Keys;
 using Chrysalis.Wallet.Models.Enums;
-using Chrysalis.Wallet.Models.Keys;
-using Chrysalis.Wallet.Services;
 using Chrysalis.Wallet.Utils;
 
 namespace Chrysalis.Wallet.Extensions;

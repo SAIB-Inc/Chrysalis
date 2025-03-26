@@ -1,4 +1,4 @@
-using Chrysalis.Wallet.Models.Addresses;
+using Chrysalis.Wallet.Addresses;
 using Chrysalis.Wallet.Models.Enums;
 
 namespace Chrysalis.Wallet.Extensions;

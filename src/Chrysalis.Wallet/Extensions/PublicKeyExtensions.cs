@@ -1,5 +1,5 @@
 using Chaos.NaCl;
-using Chrysalis.Wallet.Models.Keys;
+using Chrysalis.Wallet.Keys;
 
 namespace Chrysalis.Wallet.Extensions;
 
