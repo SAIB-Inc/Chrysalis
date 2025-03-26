@@ -5,6 +5,10 @@ using Chrysalis.Cbor.Types.Cardano.Core;
 using Chrysalis.Cbor.Types.Cardano.Core.Certificates;
 using Chrysalis.Cbor.Types.Cardano.Core.Common;
 using Chrysalis.Cbor.Types.Cardano.Core.Governance;
+using Chrysalis.Cbor.Types;
+using Chrysalis.Tx.Extensions;
+using Chrysalis.Cbor.Types.Cardano.Core.Header;
+using Chrysalis.Tx.Utils;
 
 namespace Chrysalis.Tx.TransactionBuilding;
 
@@ -13,139 +17,157 @@ public class TransactionBuilder
     public ConwayTransactionBody body;
     public PostAlonzoTransactionWitnessSet witnessSet;
     public ConwayProtocolParamUpdate? pparams;
-    public readonly TransactionBodyBuilder bodyBuilder = new();
-    public readonly WitnessSetBuilder witnessBuilder = new();
-    private AuxiliaryData auxiliaryData;
+    public TransactionOutput? changeOutput;
+    private AuxiliaryData? auxiliaryData;
 
-    public TransactionBuilder() { 
-         body = default!;
-         witnessSet = default!;
-         auxiliaryData = default!;
+    public TransactionBuilder()
+    {
+        body = Defaults.TransactionBody;
+        witnessSet = Defaults.TransactionWitnessSet;
+        auxiliaryData = null;
     }
     public static TransactionBuilder Create() => new();
     public static TransactionBuilder Create(ConwayProtocolParamUpdate pparams)
     {
-        return new TransactionBuilder { pparams = pparams };
+        return new TransactionBuilder() { pparams = pparams };
     }
 
     #region Transaction Body Methods
 
     public TransactionBuilder SetNetworkId(int networkId)
     {
-        bodyBuilder.SetNetworkId(networkId);
+        body = body with { NetworkId = networkId };
         return this;
     }
 
     public TransactionBuilder AddInput(TransactionInput input)
     {
-        bodyBuilder.AddInput(input);
+        body = body with { Inputs = new CborDefListWithTag<TransactionInput>([.. body.Inputs.Value(), input]) };
+        return this;
+    }
+
+    public TransactionBuilder SetInputs(List<TransactionInput> inputs)
+    {
+        body = body with { Inputs = new CborDefListWithTag<TransactionInput>(inputs) };
         return this;
     }
 
     public TransactionBuilder AddOutput(TransactionOutput output, bool isChange = false)
     {
-        bodyBuilder.AddOutput((output, isChange));
+        if (isChange)
+        {
+            changeOutput = output;
+        }
+
+        body = body with { Outputs = new CborDefList<TransactionOutput>([.. body.Outputs.Value(), output]) };
+
+        return this;
+    }
+
+    public TransactionBuilder SetOutputs(List<TransactionOutput> outputs)
+    {
+        body = body with { Outputs = new CborDefList<TransactionOutput>(outputs) };
         return this;
     }
 
     public TransactionBuilder SetFee(ulong feeAmount)
     {
-        bodyBuilder.SetFee(feeAmount);
+        body = body with { Fee = feeAmount };
         return this;
     }
 
     public TransactionBuilder SetTtl(ulong ttl)
     {
-        bodyBuilder.SetTtl(ttl);
+        body = body with { TimeToLive = ttl };
         return this;
     }
     public TransactionBuilder SetValidityIntervalStart(ulong validityStart)
     {
-        bodyBuilder.SetValidityIntervalStart(validityStart);
+        body = body with { ValidityIntervalStart = validityStart };
         return this;
     }
 
     public TransactionBuilder AddCertificate(Certificate certificate)
     {
-        bodyBuilder.AddCertificate(certificate);
+        body = body with { Certificates = new CborDefListWithTag<Certificate>([.. body.Certificates.Value(), certificate]) };
         return this;
     }
 
     public TransactionBuilder SetWithdrawals(Withdrawals withdrawals)
     {
-        bodyBuilder.SetWithdrawals(withdrawals);
+        body = body with { Withdrawals = withdrawals };
         return this;
     }
 
     public TransactionBuilder SetAuxiliaryDataHash(byte[] hash)
     {
-        bodyBuilder.SetAuxiliaryDataHash(hash);
+        body = body with { AuxiliaryDataHash = hash };
         return this;
     }
 
     public TransactionBuilder SetMint(MultiAssetMint mint)
     {
-        bodyBuilder.SetMint(mint);
+        body = body with { Mint = mint };
         return this;
     }
 
     public TransactionBuilder SetScriptDataHash(byte[] hash)
     {
-        bodyBuilder.SetScriptDataHash(hash);
+        body = body with { ScriptDataHash = hash };
         return this;
     }
 
     public TransactionBuilder AddCollateral(TransactionInput collateral)
     {
-        bodyBuilder.AddCollateral(collateral);
+        body = body with { Collateral = new CborDefList<TransactionInput>([.. body.Collateral.Value(), collateral]) };
         return this;
     }
 
     public TransactionBuilder AddRequiredSigner(byte[] signer)
     {
-        bodyBuilder.AddRequiredSigner(signer);
+        body = body with { RequiredSigners = new CborDefListWithTag<byte[]>([.. body.RequiredSigners.Value(), signer]) };
         return this;
     }
 
     public TransactionBuilder SetCollateralReturn(TransactionOutput collateralReturn)
     {
-        bodyBuilder.SetCollateralReturn(collateralReturn);
+        body = body with { CollateralReturn = collateralReturn };
         return this;
     }
 
     public TransactionBuilder SetTotalCollateral(ulong totalCollateral)
     {
-        bodyBuilder.SetTotalCollateral(totalCollateral);
+        body = body with { TotalCollateral = totalCollateral };
         return this;
     }
 
     public TransactionBuilder AddReferenceInput(TransactionInput referenceInput)
     {
-        bodyBuilder.AddReferenceInput(referenceInput);
+        body = body with { ReferenceInputs = new CborDefListWithTag<TransactionInput>([.. body.ReferenceInputs.Value(), referenceInput]) };
         return this;
     }
 
     public TransactionBuilder SetVotingProcedures(VotingProcedures votingProcedures)
     {
-        bodyBuilder.SetVotingProcedures(votingProcedures);
+        body = body with { VotingProcedures = votingProcedures };
         return this;
     }
 
     public TransactionBuilder AddProposalProcedure(ProposalProcedure proposal)
     {
-        bodyBuilder.AddProposalProcedure(proposal);
+        body = body with { ProposalProcedures = new CborDefListWithTag<ProposalProcedure>([.. body.ProposalProcedures.Value(), proposal]) };
         return this;
     }
 
     public TransactionBuilder SetTreasuryValue(ulong treasuryValue)
     {
-        bodyBuilder.SetTreasuryValue(treasuryValue);
+        body = body with { TreasuryValue = treasuryValue };
         return this;
     }
 
     public TransactionBuilder SetDonation(ulong donation)
     {
-        bodyBuilder.SetDonation(donation);
+        body = body with { Donation = donation };
         return this;
     }
 
@@ -155,49 +177,49 @@ public class TransactionBuilder
 
     public TransactionBuilder AddVKeyWitness(VKeyWitness witness)
     {
-        witnessBuilder.AddVKeyWitness(witness);
+        witnessSet = witnessSet with { VKeyWitnessSet = new CborDefListWithTag<VKeyWitness>([.. witnessSet.VKeyWitnessSet.Value(), witness]) };
         return this;
     }
 
     public TransactionBuilder AddNativeScript(NativeScript script)
     {
-        witnessBuilder.AddNativeScript(script);
+        witnessSet = witnessSet with { NativeScriptSet = new CborDefListWithTag<NativeScript>([.. witnessSet.NativeScriptSet.Value(), script]) };
         return this;
     }
 
     public TransactionBuilder AddBootstrapWitness(BootstrapWitness witness)
     {
-        witnessBuilder.AddBootstrapWitness(witness);
+        witnessSet = witnessSet with { BootstrapWitnessSet = new CborDefListWithTag<BootstrapWitness>([.. witnessSet.BootstrapWitnessSet.Value(), witness]) };
         return this;
     }
 
     public TransactionBuilder AddPlutusV1Script(byte[] script)
     {
-        witnessBuilder.AddPlutusV1Script(script);
+        witnessSet = witnessSet with { PlutusV1ScriptSet = new CborDefListWithTag<byte[]>([.. witnessSet.PlutusV1ScriptSet.Value(), script]) };
         return this;
     }
 
     public TransactionBuilder AddPlutusV2Script(byte[] script)
     {
-        witnessBuilder.AddPlutusV2Script(script);
+        witnessSet = witnessSet with { PlutusV2ScriptSet = new CborDefListWithTag<byte[]>([.. witnessSet.PlutusV2ScriptSet.Value(), script]) };
         return this;
     }
 
     public TransactionBuilder AddPlutusV3Script(byte[] script)
     {
-        witnessBuilder.AddPlutusV3Script(script);
+        witnessSet = witnessSet with { PlutusV3ScriptSet = new CborDefListWithTag<byte[]>([.. witnessSet.PlutusV3ScriptSet.Value(), script]) };
         return this;
     }
 
     public TransactionBuilder AddPlutusData(PlutusData data)
     {
-        witnessBuilder.AddPlutusData(data);
+        witnessSet = witnessSet with { PlutusDataSet = new CborDefListWithTag<PlutusData>([.. witnessSet.PlutusDataSet.Value(), data]) };
         return this;
     }
 
     public TransactionBuilder SetRedeemers(Redeemers redeemers)
     {
-        witnessBuilder.SetRedeemers(redeemers);
+        witnessSet = witnessSet with { Redeemers = redeemers };
         return this;
     }
 
@@ -215,13 +237,7 @@ public class TransactionBuilder
 
     public PostMaryTransaction Build()
     {
-        body = bodyBuilder.Build();
-        witnessSet = witnessBuilder.Build();
         return new PostMaryTransaction(body, witnessSet, true, auxiliaryData);
     }
 
-    internal void SetRedeemers(RedeemerMap redeemerMap)
-    {
-        throw new NotImplementedException();
-    }
 }

@@ -9,13 +9,13 @@ public record Outref(string TxId, ulong Index)
     public ulong Index { get; init; } = Index;
 }
 
-public record InputOptions(string From, Value? MinAmount, DatumOption? Datum, Redeemers? Redeemer, TransactionInput? UtxoRef, bool IsReference = false, string? Id = null)
+public record InputOptions(string From, Value? MinAmount, DatumOption? Datum, RedeemerMap? Redeemer, TransactionInput? UtxoRef, bool IsReference = false, string? Id = null)
 {
     public string From { get; set; } = From;
     public Value? MinAmount { get; set; } = MinAmount;
     public TransactionInput? UtxoRef { get; set; } = UtxoRef;
     public DatumOption? Datum { get; set; } = Datum;
-    public Redeemers? Redeemer { get; set; } = Redeemer;
+    public RedeemerMap? RedeemerMap { get; set; } = Redeemer;
     public bool IsReference { get; set; } = IsReference;
     public string? Id { get; set; } = Id;
 }

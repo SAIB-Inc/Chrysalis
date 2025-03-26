@@ -1,11 +1,11 @@
 ﻿using Chrysalis.Cbor.Serialization;
 using Chrysalis.Cbor.Types.Cardano.Core.Common;
-using Chrysalis.Tx.Extensions;
-using Chrysalis.Tx.Models.Enums;
-using Chrysalis.Tx.Models.Keys;
 using Chrysalis.Tx.Provider;
 using Chrysalis.Tx.TemplateBuilder;
 using Chrysalis.Tx.Words;
+using Chrysalis.Wallet.Extensions;
+using Chrysalis.Wallet.Keys;
+using Chrysalis.Wallet.Models.Enums;
 
 // byte[] sendLovelaceSignedTx = await SampleTransactions.SendLovelaceAsync();
 // Console.WriteLine(Convert.ToHexString(sendLovelaceSignedTx));
@@ -40,7 +40,7 @@ var provider = new Blockfrost("previewajMhMPYerz9Pd3GsqjayLwP5mgnNnZCC");
 string ricoAddress = "addr_test1qpw9cvvdq8mjncs9e90trvpdvg7azrncafv0wtgvz0uf9vhgjp8dc6v79uxw0detul8vnywlv5dzyt32ayjyadvhtjaqyl2gur";
 string validatorAddress = "addr_test1wrffnmkn0pds0tmka6lsce88l5c9mtd90jv2u2vkfguu3rg7k7a60";
 
-var transfer = TxTemplateBuilder<ulong>.Create(provider)
+var transfer = TransactionTemplateBuilder<ulong>.Create(provider)
     .AddStaticParty("rico", ricoAddress)
     .AddStaticParty("rico", ricoAddress)
     .AddInput((options, amount) =>
