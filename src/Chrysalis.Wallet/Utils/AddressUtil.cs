@@ -1,12 +1,11 @@
-using Chrysalis.Tx.Models.Addresses;
-using Chrysalis.Tx.Models.Enums;
-using Chrysalis.Tx.Models.Keys;
-using Chrysalis.Tx.Models.Network;
+using Chrysalis.Wallet.Models.Enums;
+using Chrysalis.Wallet.Models;
 
-namespace Chrysalis.Tx.Utils;
+namespace Chrysalis.Wallet.Utils;
 
- public static class AddressUtil
- {
+// To be deleted
+public static class AddressUtil
+{
     public static byte GetHeader(NetworkInfo networkInfo, AddressType addressType) =>
         addressType switch
         {
@@ -34,7 +33,7 @@ namespace Chrysalis.Tx.Utils;
         };
 
     public static string GetPrefix(AddressType addressType, NetworkType networkType) => $"{GetPrefixHeader(addressType)}{GetPrefixTail(networkType)}";
-    
+
     public static string GetPrefixHeader(AddressType addressType) =>
         addressType switch
         {
@@ -49,30 +48,7 @@ namespace Chrysalis.Tx.Utils;
             NetworkType.Testnet => "_test",
             NetworkType.Preview => "_test",
             NetworkType.Preprod => "_test",
-            NetworkType.Mainnet => "",
+            NetworkType.Mainnet => string.Empty,
             _ => throw new Exception("Unknown network type")
         };
-
-    // public static Address GetBaseAddress(PublicKey payment, PublicKey stake, NetworkType networkType)
-    // {
-    //     byte[] paymentEncoded = HashUtil.Blake2b224(payment.Key);
-    //     byte[] stakeEncoded = HashUtil.Blake2b224(stake.Key);
-    //     return GetBaseAddress(paymentEncoded, stakeEncoded, networkType);
-    // }
-
-    // public static Address GetBaseAddress(byte[] paymentEncoded, byte[] stakeEncoded, NetworkType networkType)
-    // {
-    //     AddressType addressType = AddressType.BasePayment;
-
-    //     //get prefix
-    //     string prefix = GetPrefix(addressType, NetworkType.Testnet);
-
-    //     //get body
-    //     byte[] addressBody = new byte[1 + paymentEncoded.Length + stakeEncoded.Length];
-    //     addressBody[0] = GetHeader(GetNetworkInfo(networkType), AddressType.BasePayment);
-    //     Buffer.BlockCopy(paymentEncoded, 0, addressBody, 1, paymentEncoded.Length);
-    //     Buffer.BlockCopy(stakeEncoded, 0, addressBody, 1 + paymentEncoded.Length, stakeEncoded.Length);
-
-    //     return new Address(prefix, addressBody);
-    // }
- }
+}

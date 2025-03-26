@@ -1,5 +1,4 @@
 using System.Text;
-using Chrysalis.Wallet.Models.Enums;
 
 namespace Chrysalis.Wallet.Utils;
 
