@@ -1,11 +1,9 @@
-using Chrysalis.Cbor.Cardano.Types.Block.Transaction;
-using Chrysalis.Cbor.Cardano.Types.Block.Transaction.Input;
-using Chrysalis.Cbor.Cardano.Types.Block.Transaction.Output;
-using Chrysalis.Cbor.Cardano.Types.Block.Transaction.Protocol;
-using Chrysalis.Cbor.Cardano.Types.Block.Transaction.Script;
-using Chrysalis.Cbor.Cardano.Types.Block.Transaction.WitnessSet;
 using Chrysalis.Cbor.Serialization;
-using Chrysalis.Cbor.Types.Primitives;
+using Chrysalis.Cbor.Types;
+using Chrysalis.Cbor.Types.Cardano.Core.Common;
+using Chrysalis.Cbor.Types.Cardano.Core.Protocol;
+using Chrysalis.Cbor.Types.Cardano.Core.Transaction;
+using Chrysalis.Cbor.Types.Cardano.Core.TransactionWitness;
 using Chrysalis.Tx.Extensions;
 using Chrysalis.Tx.Models;
 using Chrysalis.Tx.Models.Enums;

@@ -1,8 +1,6 @@
-using Chrysalis.Cbor.Cardano.Types.Block.Transaction.Input;
-using Chrysalis.Cbor.Cardano.Types.Block.Transaction.Output;
-using Chrysalis.Cbor.Cardano.Types.Block.Transaction.WitnessSet;
-using Chrysalis.Cbor.Types;
-using Chrysalis.Cbor.Types.Primitives;
+using Chrysalis.Cbor.Types.Cardano.Core.Common;
+using Chrysalis.Cbor.Types.Cardano.Core.Transaction;
+using Chrysalis.Cbor.Types.Cardano.Core.TransactionWitness;
 namespace Chrysalis.Tx.Models;
 
 public record Outref(string TxId, ulong Index)

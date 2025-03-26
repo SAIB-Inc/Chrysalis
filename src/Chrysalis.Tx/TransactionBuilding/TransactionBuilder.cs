@@ -1,13 +1,10 @@
-using Chrysalis.Cbor.Cardano.Types.Block.Transaction.Body;
-using Chrysalis.Cbor.Cardano.Types.Block.Transaction.Input;
-using Chrysalis.Cbor.Cardano.Types.Block.Transaction.Output;
-using Chrysalis.Cbor.Cardano.Types.Block.Transaction;
-using Chrysalis.Cbor.Cardano.Types.Block.Transaction.WitnessSet;
-using Chrysalis.Cbor.Cardano.Types.Block.Transaction.Governance;
-using Chrysalis.Cbor.Cardano.Types.Block.Transaction.Body.Certificates;
-using Chrysalis.Cbor.Cardano.Types.Block.Transaction.Script;
-using Chrysalis.Cbor.Cardano.Types.Block.Transaction.Protocol;
-
+using Chrysalis.Cbor.Types.Cardano.Core.TransactionWitness;
+using Chrysalis.Cbor.Types.Cardano.Core.Transaction;
+using Chrysalis.Cbor.Types.Cardano.Core.Protocol;
+using Chrysalis.Cbor.Types.Cardano.Core;
+using Chrysalis.Cbor.Types.Cardano.Core.Certificates;
+using Chrysalis.Cbor.Types.Cardano.Core.Common;
+using Chrysalis.Cbor.Types.Cardano.Core.Governance;
 
 namespace Chrysalis.Tx.TransactionBuilding;
 
@@ -221,5 +218,10 @@ public class TransactionBuilder
         body = bodyBuilder.Build();
         witnessSet = witnessBuilder.Build();
         return new PostMaryTransaction(body, witnessSet, true, auxiliaryData);
+    }
+
+    internal void SetRedeemers(RedeemerMap redeemerMap)
+    {
+        throw new NotImplementedException();
     }
 }

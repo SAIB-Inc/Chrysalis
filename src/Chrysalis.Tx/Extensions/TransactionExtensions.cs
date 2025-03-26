@@ -1,7 +1,7 @@
-using Chrysalis.Cbor.Cardano.Types.Block.Transaction;
-using Chrysalis.Cbor.Cardano.Types.Block.Transaction.WitnessSet;
 using Chrysalis.Cbor.Serialization;
-using Chrysalis.Cbor.Types.Custom;
+using Chrysalis.Cbor.Types;
+using Chrysalis.Cbor.Types.Cardano.Core.Transaction;
+using Chrysalis.Cbor.Types.Cardano.Core.TransactionWitness;
 using Chrysalis.Tx.Models.Keys;
 using Chrysalis.Tx.Utils;
 

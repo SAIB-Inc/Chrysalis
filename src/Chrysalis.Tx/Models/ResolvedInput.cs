@@ -1,9 +1,6 @@
-
-
-using Chrysalis.Cbor.Cardano.Types.Block.Transaction.Input;
-using Chrysalis.Cbor.Cardano.Types.Block.Transaction.Output;
 using Chrysalis.Cbor.Serialization.Attributes;
 using Chrysalis.Cbor.Types;
+using Chrysalis.Cbor.Types.Cardano.Core.Transaction;
 
 namespace Chrysalis.Tx.Models;
 [CborSerializable]

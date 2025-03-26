@@ -1,11 +1,9 @@
-using System.Security.Cryptography.X509Certificates;
-using Chrysalis.Cbor.Cardano.Types.Block.Transaction.Body;
-using Chrysalis.Cbor.Cardano.Types.Block.Transaction.Body.Certificates;
-using Chrysalis.Cbor.Cardano.Types.Block.Transaction.Governance;
-using Chrysalis.Cbor.Cardano.Types.Block.Transaction.Input;
-using Chrysalis.Cbor.Cardano.Types.Block.Transaction.Output;
-using Chrysalis.Cbor.Types.Custom;
-using Chrysalis.Cbor.Types.Primitives;
+using Chrysalis.Cbor.Types;
+using Chrysalis.Cbor.Types.Cardano.Core.Certificates;
+using Chrysalis.Cbor.Types.Cardano.Core.Common;
+using Chrysalis.Cbor.Types.Cardano.Core.Governance;
+using Chrysalis.Cbor.Types.Cardano.Core.Transaction;
+
 
 namespace Chrysalis.Tx.TransactionBuilding;
 

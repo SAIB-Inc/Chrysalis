@@ -1,9 +1,7 @@
-﻿using Chrysalis.Cbor.Cardano.Types.Block.Transaction;
-using Chrysalis.Cbor.Cardano.Types.Block.Transaction.Body;
-using Chrysalis.Cbor.Cardano.Types.Block.Transaction.Body.ProposalProcedures;
-using Chrysalis.Cbor.Cardano.Types.Block.Transaction.Input;
-using Chrysalis.Cbor.Cardano.Types.Block.Transaction.Output;
-using Chrysalis.Cbor.Cardano.Types.Block.Transaction.WitnessSet;
+﻿using Chrysalis.Cbor.Types.Cardano.Core.Certificates;
+using Chrysalis.Cbor.Types.Cardano.Core.Common;
+using Chrysalis.Cbor.Types.Cardano.Core.Transaction;
+using Chrysalis.Cbor.Types.Cardano.Core.TransactionWitness;
 using Chrysalis.Tx.Extensions;
 using Chrysalis.Tx.Models;
 using Chrysalis.Tx.TransactionBuilding;
@@ -92,7 +90,7 @@ public class TxTemplateBuilder<T>
             TxTemplateBuilder<T>.AddCollateralIfNeeded(txBuilder, utxos, txContext.IsSmartContractTx);
             
             var coinSelectionResult = TxTemplateBuilder<T>.PerformCoinSelection(utxos, txContext);
-            
+
             TxTemplateBuilder<T>.AddSelectedCoins(txBuilder, coinSelectionResult);
             
             var changeOutput = TxTemplateBuilder<T>.CreateChangeOutput(coinSelectionResult, txContext);
