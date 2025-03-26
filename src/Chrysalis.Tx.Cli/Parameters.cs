@@ -1,6 +1,6 @@
-using Chrysalis.Cbor.Cardano.Types.Block.Transaction.Input;
-using Chrysalis.Cbor.Cardano.Types.Block.Transaction.Output;
-using Chrysalis.Cbor.Cardano.Types.Block.Transaction.WitnessSet;
+using Chrysalis.Cbor.Types.Cardano.Core.Common;
+using Chrysalis.Cbor.Types.Cardano.Core.Transaction;
+using Chrysalis.Cbor.Types.Cardano.Core.TransactionWitness;
 using Chrysalis.Tx.Models;
 
 namespace Chrysalis.Tx.Cli;

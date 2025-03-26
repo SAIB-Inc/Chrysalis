@@ -1,5 +1,5 @@
-using Chrysalis.Cbor.Cardano.Types.Block.Transaction.Output;
-using Chrysalis.Cbor.Types.Primitives;
+using Chrysalis.Cbor.Types.Cardano.Core.Common;
+using Chrysalis.Cbor.Types.Cardano.Core.Transaction;
 using Chrysalis.Tx.Models;
 using TxAddr = Chrysalis.Tx.Models.Addresses;
 

@@ -1,4 +1,4 @@
-using Chrysalis.Cbor.Cardano.Types.Block.Transaction.Input;
+using Chrysalis.Cbor.Types.Cardano.Core.Transaction;
 
 namespace Chrysalis.Tx.Utils;
 
