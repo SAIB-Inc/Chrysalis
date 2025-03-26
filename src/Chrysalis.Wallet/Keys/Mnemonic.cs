@@ -1,9 +1,9 @@
 using System.Security.Cryptography;
 using System.Text;
 
-namespace Chrysalis.Tx.Models.Keys;
+namespace Chrysalis.Wallet.Keys;
 
-public class Mnemonic
+public record Mnemonic
 {
     public string[] Words { get; private set; }
     public byte[] Entropy { get; private set; }

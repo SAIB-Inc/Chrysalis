@@ -7,7 +7,7 @@ using Chrysalis.Cbor.Types.Cardano.Core.Governance;
 using Chrysalis.Cbor.Types.Cardano.Core.Protocol;
 using Chrysalis.Cbor.Types.Cardano.Core.Transaction;
 using Chrysalis.Tx.Models;
-using TxAddr = Chrysalis.Tx.Models.Addresses;
+using TxAddr = Chrysalis.Wallet.Addresses;
 
 namespace Chrysalis.Tx.Provider;
 

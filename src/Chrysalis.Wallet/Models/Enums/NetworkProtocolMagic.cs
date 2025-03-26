@@ -1,4 +1,4 @@
-namespace Chrysalis.Tx.Models.Enums;
+namespace Chrysalis.Wallet.Models.Enums;
 
 public enum NetworkProtocolMagic
 {

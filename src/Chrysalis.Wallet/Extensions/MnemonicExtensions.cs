@@ -1,7 +1,8 @@
-using Chrysalis.Tx.Models.Keys;
+using Chrysalis.Wallet.Keys;
+using Chrysalis.Wallet.Models.Enums;
 using Microsoft.AspNetCore.Cryptography.KeyDerivation;
 
-namespace Chrysalis.Tx.Extensions;
+namespace Chrysalis.Wallet.Extensions;
 
 public static class MnemonicExtensions
 {
@@ -17,4 +18,11 @@ public static class MnemonicExtensions
 
         return new PrivateKey(rootKey.Slice(0, 64), rootKey.Slice(64));
     }
+
+    public static PrivateKey GetAccountKey(this Mnemonic mnemonic, int accountIndex = 0)
+        => mnemonic
+            .GetRootKey()
+            .Derive(PurposeType.Shelley, DerivationType.HARD)
+            .Derive(CoinType.Ada, DerivationType.HARD)
+            .Derive(accountIndex, DerivationType.HARD);
 }

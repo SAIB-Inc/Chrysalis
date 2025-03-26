@@ -1,5 +1,4 @@
-using System.Security.Cryptography;
-using dotnetstandard_bip39.System.Security.Cryptography;
+namespace Chrysalis.Wallet.Extensions;
 
 public static class ByteArrayExtension
 {
@@ -122,72 +121,5 @@ public static class ByteArrayExtension
     public static T[] Slice<T>(this T[] source, int start)
     {
         return Slice<T>(source, start, -1);
-    }
-
-    public static byte[] NewEncrypt(
-        this byte[] message,
-        string password,
-        int keySize = 256,
-        int blockSize = 128,
-        int derivationIterations = 1000,
-        int saltSize = 16
-    )
-    {
-        byte[] salt;
-        using (RandomNumberGenerator rng = RandomNumberGenerator.Create())
-        {
-            salt = new byte[saltSize];
-            rng.GetBytes(salt);
-        }
-
-        using Rfc2898DeriveBytesExtended keyDerivationFunction = new(password, salt, derivationIterations);
-        using Aes aesAlg = Aes.Create();
-        aesAlg.KeySize = keySize;
-        aesAlg.BlockSize = blockSize;
-        aesAlg.Key = keyDerivationFunction.GetBytes(keySize / 8);
-        aesAlg.IV = keyDerivationFunction.GetBytes(blockSize / 8);
-        aesAlg.Padding = PaddingMode.PKCS7;
-
-        using ICryptoTransform encryptor = aesAlg.CreateEncryptor(aesAlg.Key, aesAlg.IV);
-        using MemoryStream msEncrypt = new();
-        msEncrypt.Write(salt, 0, saltSize);
-
-        using (CryptoStream csEncrypt = new(msEncrypt, encryptor, CryptoStreamMode.Write))
-        {
-            csEncrypt.Write(message, 0, message.Length);
-        }
-
-        return msEncrypt.ToArray();
-    }
-
-    public static byte[] NewDecrypt(
-        this byte[] encryptedMessageWithSalt,
-        string password,
-        int keySize = 256,
-        int blockSize = 128,
-        int derivationIterations = 1000,
-        int saltSize = 16
-    )
-    {
-        byte[] salt = new byte[saltSize];
-        Array.Copy(encryptedMessageWithSalt, 0, salt, 0, saltSize);
-
-        byte[] encryptedMessage = new byte[encryptedMessageWithSalt.Length - saltSize];
-        Array.Copy(encryptedMessageWithSalt, saltSize, encryptedMessage, 0, encryptedMessage.Length);
-
-        using Rfc2898DeriveBytesExtended keyDerivationFunction = new(password, salt, derivationIterations);
-        using Aes aesAlg = Aes.Create();
-        aesAlg.KeySize = keySize;
-        aesAlg.BlockSize = blockSize;
-        aesAlg.Key = keyDerivationFunction.GetBytes(keySize / 8);
-        aesAlg.IV = keyDerivationFunction.GetBytes(blockSize / 8);
-        aesAlg.Padding = PaddingMode.PKCS7;
-
-        using ICryptoTransform decryptor = aesAlg.CreateDecryptor(aesAlg.Key, aesAlg.IV);
-        using MemoryStream msDecrypt = new(encryptedMessage);
-        using CryptoStream csDecrypt = new(msDecrypt, decryptor, CryptoStreamMode.Read);
-        using MemoryStream msResult = new();
-        csDecrypt.CopyTo(msResult);
-        return msResult.ToArray();
     }
 }

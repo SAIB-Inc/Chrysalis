@@ -1,16 +1,16 @@
-namespace Chrysalis.Tx.Models.Keys;
+namespace Chrysalis.Wallet.Keys;
 
-public class PublicKey(byte[] key, byte[] chaincode)
+public class PrivateKey(byte[] key, byte[] chaincode)
 {
-    public byte[] Key { get; set; } = key;
-    public byte[] Chaincode { get; set; } = chaincode;
+    public byte[] Key { get; } = key;
+    public byte[] Chaincode { get; } = chaincode;
 
     public override bool Equals(object? obj)
     {
         if (obj == null || GetType() != obj.GetType())
-                return false;
+            return false;
 
-        var other = (PublicKey)obj;
+        PrivateKey other = (PrivateKey)obj;
         return Key.SequenceEqual(other.Key) && Chaincode.SequenceEqual(other.Chaincode);
     }
 

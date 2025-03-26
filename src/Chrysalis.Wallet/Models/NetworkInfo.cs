@@ -1,3 +1,3 @@
-namespace Chrysalis.Tx.Models.Network;
+namespace Chrysalis.Wallet.Models;
 
 public record NetworkInfo(int NetworkId, int NetworkMagic);

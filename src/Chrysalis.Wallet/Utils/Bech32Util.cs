@@ -1,9 +1,8 @@
 using System.Text;
-using Chrysalis.Tx.Models.Enums;
 
-namespace Chrysalis.Tx.Services.Encoding;
+namespace Chrysalis.Wallet.Utils;
 
-public static class Bech32Codec
+public static class Bech32Util
 {
     private const int CheckSumSize = 6;
     private const int HrpMinLength = 1;
@@ -28,7 +27,7 @@ public static class Bech32Codec
     public static string Encode(byte[] data, string hrp)
     {
         // Check if HRP is valid
-        if (string.IsNullOrEmpty(hrp) || hrp.Length > HrpMaxLength || hrp.Any(c => c < HrpMinValue || c > HrpMaxValue))
+        if (string.IsNullOrEmpty(hrp) || hrp.Length < HrpMinLength || hrp.Length > HrpMaxLength || hrp.Any(c => c < HrpMinValue || c > HrpMaxValue))
         {
             throw new ArgumentException("Invalid HRP");
         }
@@ -39,17 +38,17 @@ public static class Bech32Codec
         // Create checksum
         byte[] checksum = CreateChecksum(hrp, values);
 
+        // Combine 'values' and 'checksum' into one array
+        byte[] combined = new byte[values.Length + checksum.Length];
+        Buffer.BlockCopy(values, 0, combined, 0, values.Length);
+        Buffer.BlockCopy(checksum, 0, combined, values.Length, checksum.Length);
+
         // Combine everything and encode
         StringBuilder result = new(hrp.Length + values.Length + checksum.Length + 1);
         result.Append(hrp);
         result.Append(Separator); // Separator
 
-        foreach (byte b in values)
-        {
-            result.Append(Charset[b]);
-        }
-
-        foreach (byte b in checksum)
+        foreach (byte b in combined)
         {
             result.Append(Charset[b]);
         }
@@ -275,24 +274,4 @@ public static class Bech32Codec
 
         return (paymentPart, delegationPart);
     }
-}
-
-public record ExtendedAddressInfo : AddressInfo
-{
-    public byte[]? PaymentKeyHash { get; set; }
-    public byte[]? StakingKeyHash { get; set; }
-    public bool HasStakingCredential { get; set; }
-}
-
-public record AddressInfo
-{
-    public string OriginalAddress { get; set; } = default!;
-    public AddressEra Era { get; set; }
-    public AddressType Type { get; set; }
-    public NetworkType Network { get; set; }
-    public byte[] HeaderBytes { get; set; } = default!;
-    public byte[] PaymentPart { get; set; } = default!;
-    public byte[] StakePart { get; set; } = default!;
-    public byte[] Hash { get; set; } = default!;
-    public string Hrp { get; set; } = default!;
 }

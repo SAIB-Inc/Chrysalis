@@ -1,7 +1,7 @@
 using Chaos.NaCl;
-using Chrysalis.Tx.Models.Keys;
+using Chrysalis.Wallet.Keys;
 
-namespace Chrysalis.Tx.Extensions;
+namespace Chrysalis.Wallet.Extensions;
 
 public static class PublicKeyExtensions
 {

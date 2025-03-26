@@ -1,9 +1,9 @@
-using Chrysalis.Tx.Extensions;
-using Chrysalis.Tx.Models.Enums;
-using Chrysalis.Tx.Models.Network;
-using Chrysalis.Tx.Services.Encoding;
+using Chrysalis.Wallet.Extensions;
+using Chrysalis.Wallet.Models;
+using Chrysalis.Wallet.Models.Enums;
+using Chrysalis.Wallet.Utils;
 
-namespace Chrysalis.Tx.Models.Addresses;
+namespace Chrysalis.Wallet.Addresses;
 
 public class Address
 {
@@ -21,7 +21,7 @@ public class Address
 
     public Address(string encodedAddress)
     {
-        (string prefix, byte[] bytes) = Bech32Codec.Decode(encodedAddress);
+        (string prefix, byte[] bytes) = Bech32Util.Decode(encodedAddress);
         _addressBytes = bytes;
         AddressHeader = GetAddressHeader(bytes[0]);
         ValidatePrefix(prefix, AddressHeader.Network);
@@ -50,7 +50,6 @@ public class Address
             StakeCredential = new Credential(delegationType, delegationHash);
         }
         _addressBytes = ConstructAddressBytes(type, network, PaymentCredential, StakeCredential);
-
     }
 
     public static Address FromBytes(byte[] bytes)
@@ -64,7 +63,7 @@ public class Address
     }
 
     public byte[] ToBytes() => _addressBytes;
-    public string ToBech32() => Bech32Codec.Encode(_addressBytes, AddressHeader.GetPrefix());
+    public string ToBech32() => Bech32Util.Encode(_addressBytes, AddressHeader.GetPrefix());
 
     private static void ValidatePrefix(string prefix, NetworkType network)
     {

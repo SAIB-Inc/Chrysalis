@@ -1,7 +1,7 @@
-using Chrysalis.Tx.Models.Addresses;
-using Chrysalis.Tx.Models.Enums;
+using Chrysalis.Wallet.Addresses;
+using Chrysalis.Wallet.Models.Enums;
 
-namespace Chrysalis.Tx.Extensions;
+namespace Chrysalis.Wallet.Extensions;
 
 public static class AddressHeaderExtensions
 {

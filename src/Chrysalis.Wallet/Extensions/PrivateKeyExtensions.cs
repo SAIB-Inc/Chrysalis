@@ -1,11 +1,11 @@
 using System.Security.Cryptography;
 using Chaos.NaCl;
-using Chrysalis.Tx.Models.Enums;
-using Chrysalis.Tx.Models.Keys;
-using Chrysalis.Tx.Services;
-using Chrysalis.Tx.Utils;
+using Chrysalis.Wallet.Common;
+using Chrysalis.Wallet.Keys;
+using Chrysalis.Wallet.Models.Enums;
+using Chrysalis.Wallet.Utils;
 
-namespace Chrysalis.Tx.Extensions;
+namespace Chrysalis.Wallet.Extensions;
 
 public static class PrivateKeyExtensions
 {

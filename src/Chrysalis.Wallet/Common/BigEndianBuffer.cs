@@ -1,4 +1,4 @@
-namespace Chrysalis.Tx.Services;
+namespace Chrysalis.Wallet.Common;
 
 public class BigEndianBuffer
 {

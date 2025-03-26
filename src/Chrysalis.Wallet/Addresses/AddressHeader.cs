@@ -1,6 +1,6 @@
-using Chrysalis.Tx.Models.Enums;
+using Chrysalis.Wallet.Models.Enums;
 
-namespace Chrysalis.Tx.Models.Addresses;
+namespace Chrysalis.Wallet.Addresses;
 
 public record AddressHeader(
     AddressType Type,

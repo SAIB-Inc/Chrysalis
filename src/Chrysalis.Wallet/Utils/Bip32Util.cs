@@ -1,11 +1,8 @@
-using System.Security.Cryptography;
 using Chaos.NaCl;
-using Chrysalis.Tx.Extensions;
-using Chrysalis.Tx.Models.Enums;
-using Chrysalis.Tx.Models.Keys;
-using Chrysalis.Tx.Services;
+using Chrysalis.Wallet.Extensions;
+using Chrysalis.Wallet.Models.Enums;
 
-namespace Chrysalis.Tx.Utils;
+namespace Chrysalis.Wallet.Utils;
 
 public static class Bip32Util
 {
