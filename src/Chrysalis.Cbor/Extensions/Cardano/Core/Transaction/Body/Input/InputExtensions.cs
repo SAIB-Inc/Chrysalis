@@ -19,7 +19,7 @@ public static class InputExtensions
     {
         int txBodyIndex = block.TransactionBodies()
             .Select((tb, index) => new { tb, index })
-            .Where(x => x.tb.Inputs().Any(i => i.TransactionId() == self.TransactionId()))
+            .Where(x => x.tb.Inputs().Any(i => i.TransactionId() == self.TransactionId() && i.Index() == self.Index()))
             .Select(x => x.index)
             .FirstOrDefault();
 
@@ -27,11 +27,12 @@ public static class InputExtensions
             .Select((tb, index) => new { tb, index })
             .Where(e => e.index == txBodyIndex)
             .Select(e => e.tb.Inputs()
-                .Select((input, inputIndex) => new { input, inputIndex })
-                .Where(e => e.input.TransactionId() == self.TransactionId())
-                .Select(e => (ulong)e.inputIndex)
-                .FirstOrDefault()
-            )
+                .OrderBy(e => (Convert.ToHexString(e.TransactionId()) + e.Index()).ToLowerInvariant()))
+                .Select(g => g
+                    .Select((input, inputIndex) => new { input, inputIndex })
+                    .Where(e => e.input.TransactionId() == self.TransactionId())
+                    .Select(e => (ulong)e.inputIndex)
+                    .FirstOrDefault())
             .FirstOrDefault();
 
         TransactionWitnessSet? witnessSet = block.TransactionWitnessSets()

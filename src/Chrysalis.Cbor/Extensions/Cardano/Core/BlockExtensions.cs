@@ -18,35 +18,16 @@ public static class BlockExtensions
             _ => throw new NotSupportedException()
         };
 
-    public static IEnumerable<TransactionBody> TransactionBodies(this CBlock self) =>
-        self switch
+    public static IEnumerable<TransactionBody> TransactionBodies(this CBlock self)
+    {
+        return self switch
         {
-            AlonzoCompatibleBlock alonzoCompatibleBlock => alonzoCompatibleBlock.TransactionBodies switch
-            {
-                CborDefList<AlonzoTransactionBody> defList => defList.Value,
-                CborIndefList<AlonzoTransactionBody> indefList => indefList.Value,
-                CborDefListWithTag<AlonzoTransactionBody> defListWithTag => defListWithTag.Value,
-                CborIndefListWithTag<AlonzoTransactionBody> indefListWithTag => indefListWithTag.Value,
-                _ => []
-            },
-            BabbageBlock babbageBlock => babbageBlock.TransactionBodies switch
-            {
-                CborDefList<BabbageTransactionBody> defList => defList.Value,
-                CborIndefList<BabbageTransactionBody> indefList => indefList.Value,
-                CborDefListWithTag<BabbageTransactionBody> defListWithTag => defListWithTag.Value,
-                CborIndefListWithTag<BabbageTransactionBody> indefListWithTag => indefListWithTag.Value,
-                _ => []
-            },
-            ConwayBlock conwayBlock => conwayBlock.TransactionBodies switch
-            {
-                CborDefList<ConwayTransactionBody> defList => defList.Value,
-                CborIndefList<ConwayTransactionBody> indefList => indefList.Value,
-                CborDefListWithTag<ConwayTransactionBody> defListWithTag => defListWithTag.Value,
-                CborIndefListWithTag<ConwayTransactionBody> indefListWithTag => indefListWithTag.Value,
-                _ => []
-            },
+            AlonzoCompatibleBlock alonzoCompatibleBlock => alonzoCompatibleBlock.TransactionBodies.GetValue(),
+            BabbageBlock babbageBlock => babbageBlock.TransactionBodies.GetValue(),
+            ConwayBlock conwayBlock => conwayBlock.TransactionBodies.GetValue(),
             _ => []
         };
+    }
 
     public static IEnumerable<TransactionWitnessSet> TransactionWitnessSets(this CBlock self) =>
         self switch
