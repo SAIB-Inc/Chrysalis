@@ -3,8 +3,7 @@ using System.Collections.Concurrent;
 using System.Formats.Cbor;
 using System.Reflection;
 using System.Runtime.CompilerServices;
-using Chrysalis.Cbor.Types.Primitives;
-
+using Chrysalis.Cbor.Types;
 namespace Chrysalis.Cbor.Serialization.Utils;
 
 public delegate T ReadDelegate<T>(ReadOnlyMemory<byte> data);

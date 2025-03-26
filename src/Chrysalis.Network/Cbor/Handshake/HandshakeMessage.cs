@@ -1,4 +1,3 @@
-using Chrysalis.Cbor.Cardano.Types.Block.Transaction.Output;
 using Chrysalis.Cbor.Serialization.Attributes;
 using Chrysalis.Cbor.Types;
 using Chrysalis.Network.Cbor.Common;
