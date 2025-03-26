@@ -6,14 +6,15 @@ using Chrysalis.Cbor.Types.Cardano.Core.Transaction;
 using Chrysalis.Cbor.Types.Cardano.Core.TransactionWitness;
 using Chrysalis.Tx.Extensions;
 using Chrysalis.Tx.Models;
-using Chrysalis.Tx.Models.Enums;
-using Chrysalis.Tx.Models.Keys;
 using Chrysalis.Tx.Provider;
-using Chrysalis.Tx.Services.Encoding;
 using Chrysalis.Tx.TransactionBuilding;
 using Chrysalis.Tx.TransactionBuilding.Extensions;
 using Chrysalis.Tx.Utils;
 using Chrysalis.Tx.Words;
+using Chrysalis.Wallet.Extensions;
+using Chrysalis.Wallet.Keys;
+using Chrysalis.Wallet.Models.Enums;
+using Chrysalis.Wallet.Utils;
 
 namespace Chrysalis.Tx.Cli;
 
@@ -52,7 +53,7 @@ public static class SampleTransactions
         byte header = AddressUtil.GetHeader(AddressUtil.GetNetworkInfo(NetworkType.Testnet), AddressType.BasePayment);
         string prefix = AddressUtil.GetPrefix(AddressType.BasePayment, NetworkType.Testnet);
 
-        string address = Bech32Codec.Encode([header, .. addressBody], prefix);
+        string address = Bech32Util.Encode([header, .. addressBody], prefix);
 
         var utxos = await provider.GetUtxosAsync(address);
         var pparams = await provider.GetParametersAsync();
@@ -207,7 +208,7 @@ public static class SampleTransactions
         byte header = AddressUtil.GetHeader(AddressUtil.GetNetworkInfo(NetworkType.Testnet), AddressType.BasePayment);
         string prefix = AddressUtil.GetPrefix(AddressType.BasePayment, NetworkType.Testnet);
 
-        string address = Bech32Codec.Encode([header, .. addressBody], prefix);
+        string address = Bech32Util.Encode([header, .. addressBody], prefix);
 
         var scriptAddress = "70d27ccc13fab5b782984a3d1f99353197ca1a81be069941ffc003ee75";
 
@@ -309,7 +310,7 @@ public static class SampleTransactions
         byte header = AddressUtil.GetHeader(AddressUtil.GetNetworkInfo(NetworkType.Testnet), AddressType.BasePayment);
         string prefix = AddressUtil.GetPrefix(AddressType.BasePayment, NetworkType.Testnet);
 
-        string address = Bech32Codec.Encode([header, .. addressBody], prefix);
+        string address = Bech32Util.Encode([header, .. addressBody], prefix);
 
         string scriptRefTxHash = "6ba7ea1e216dfc0d47ae9d5ba2045acffdc52c592a0f1efd1ad5dedf4bdc8cea";
 

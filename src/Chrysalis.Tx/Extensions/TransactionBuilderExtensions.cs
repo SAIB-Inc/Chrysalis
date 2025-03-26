@@ -5,6 +5,7 @@ using Chrysalis.Cbor.Types.Cardano.Core.Protocol;
 using Chrysalis.Cbor.Types.Cardano.Core.Transaction;
 using Chrysalis.Cbor.Types.Cardano.Core.TransactionWitness;
 using Chrysalis.Plutus.VM.EvalTx;
+using Chrysalis.Tx.Extensions;
 using Chrysalis.Tx.Models;
 using Chrysalis.Tx.Utils;
 
@@ -18,7 +19,7 @@ public static class TransactionBuilderExtensions
         ulong scriptFee = 0;
         ulong scriptExecutionFee = 0;
         // Script data hash calculation and script fee calculation
-        if (builder.witnessBuilder.redeemers is not null)
+        if (builder.witnessSet.Redeemers is not null)
         {
             builder.SetTotalCollateral(2000000UL);
 
@@ -27,7 +28,7 @@ public static class TransactionBuilderExtensions
                  { 2, usedLanguage }
             });
             var costModelBytes = CborSerializer.Serialize(costModel);
-            var scriptDataHash = ScriptDataHashUtil.CalculateScriptDataHash(builder.witnessBuilder.redeemers, new PlutusList([]), costModelBytes);
+            var scriptDataHash = ScriptDataHashUtil.CalculateScriptDataHash(builder.witnessSet.Redeemers, new PlutusList([]), costModelBytes);
             builder.SetScriptDataHash(scriptDataHash);
 
             ulong scriptCostPerByte = builder.pparams!.MinFeeRefScriptCostPerByte!.Numerator / builder.pparams.MinFeeRefScriptCostPerByte!.Denominator;
@@ -35,7 +36,7 @@ public static class TransactionBuilderExtensions
 
             RationalNumber memUnitsCost = new(builder.pparams!.ExecutionCosts!.MemPrice!.Numerator!, builder.pparams.ExecutionCosts!.MemPrice!.Denominator!);
             RationalNumber stepUnitsCost = new(builder.pparams.ExecutionCosts!.StepPrice!.Numerator!, builder.pparams.ExecutionCosts!.StepPrice!.Denominator!);
-            scriptExecutionFee = FeeUtil.CalculateScriptExecutionFee(builder.witnessBuilder.redeemers, memUnitsCost, stepUnitsCost);
+            scriptExecutionFee = FeeUtil.CalculateScriptExecutionFee(builder.witnessSet.Redeemers, memUnitsCost, stepUnitsCost);
 
         }
 
@@ -45,42 +46,27 @@ public static class TransactionBuilderExtensions
         ulong draftTxCborLength = (ulong)draftTxCborBytes.Length;
         var fee = FeeUtil.CalculateFeeWithWitness(draftTxCborLength, builder.pparams!.MinFeeA!.Value, builder!.pparams.MinFeeB!.Value, mockWitnessFee) + scriptFee + scriptExecutionFee;
 
-        if (builder.bodyBuilder.totalCollateral is not null)
+        if (builder.body.TotalCollateral is not null)
         {
             var totalCollateral = FeeUtil.CalculateRequiredCollateral(fee, builder.pparams!.CollateralPercentage!.Value);
             builder.SetTotalCollateral(totalCollateral);
-            Address address = builder.bodyBuilder.collateralReturn switch
+            Address address = builder.body.CollateralReturn switch
             {
                 AlonzoTransactionOutput alonzoTransactionOutput => alonzoTransactionOutput.Address,
                 PostAlonzoTransactionOutput postAlonzoTransactionOutput => postAlonzoTransactionOutput.Address!,
                 _ => throw new Exception("Invalid collateral return type")
             };
 
-            ulong lovelace = builder.bodyBuilder.collateralReturn switch
-            {
-                AlonzoTransactionOutput alonzoTransactionOutput => alonzoTransactionOutput.Amount switch
-                {
-                    Lovelace value => value.Value,
-                    LovelaceWithMultiAsset multiAsset => multiAsset.LovelaceValue.Value,
-                    _ => 0
-                },
-                PostAlonzoTransactionOutput postAlonzoTransactionOutput => postAlonzoTransactionOutput.Amount switch
-                {
-                    Lovelace value => value.Value,
-                    LovelaceWithMultiAsset multiAsset => multiAsset.LovelaceValue.Value,
-                    _ => 0
-                },
-                _ => 0
-            };
+            ulong lovelace = builder.body.CollateralReturn.Lovelace();
             builder.SetCollateralReturn(new AlonzoTransactionOutput(
                 address,
                 new Lovelace(lovelace - totalCollateral), null));
         }
 
-        var outputs = builder.bodyBuilder.Outputs;
-        var changeOutput = outputs.Find(output => output.Item2);
+        var outputs = builder.body.Outputs.Value();
 
-        Lovelace updatedChangeLovelace = changeOutput.Item1 switch
+
+        Lovelace updatedChangeLovelace = builder.changeOutput switch
         {
             AlonzoTransactionOutput alonzo => alonzo.Amount switch
             {
@@ -99,7 +85,7 @@ public static class TransactionBuilderExtensions
 
         Value changeValue = updatedChangeLovelace;
 
-        Value changeOutputValue = changeOutput.Item1 switch
+        Value changeOutputValue = builder.changeOutput switch
         {
             AlonzoTransactionOutput alonzo => alonzo.Amount,
             PostAlonzoTransactionOutput postAlonzoChange => postAlonzoChange.Amount,
@@ -113,7 +99,7 @@ public static class TransactionBuilderExtensions
 
         TransactionOutput? updatedChangeOutput = null;
 
-        if (changeOutput.Item1 is AlonzoTransactionOutput change)
+        if (builder.changeOutput is AlonzoTransactionOutput change)
         {
             updatedChangeOutput = new AlonzoTransactionOutput(
                 change.Address,
@@ -121,10 +107,8 @@ public static class TransactionBuilderExtensions
                 change.DatumHash
             );
 
-            builder.bodyBuilder.Outputs.Remove(changeOutput);
-            builder.AddOutput(updatedChangeOutput, true);
         }
-        else if (changeOutput.Item1 is PostAlonzoTransactionOutput postAlonzoChange)
+        else if (builder.changeOutput is PostAlonzoTransactionOutput postAlonzoChange)
         {
             updatedChangeOutput = new PostAlonzoTransactionOutput(
                 postAlonzoChange.Address!,
@@ -132,10 +116,13 @@ public static class TransactionBuilderExtensions
                 postAlonzoChange.Datum,
                 postAlonzoChange.ScriptRef
             );
+        }
 
-            builder.bodyBuilder.Outputs.Remove(changeOutput);
-            builder.AddOutput(updatedChangeOutput, true);
-
+        if (updatedChangeOutput is not null)
+        {
+            outputs.RemoveAt(outputs.Count - 1);
+            outputs.Add(updatedChangeOutput);
+            builder.SetOutputs(outputs);
         }
 
         builder.SetFee(fee);
@@ -149,10 +136,10 @@ public static class TransactionBuilderExtensions
         CborDefList<ResolvedInput> utxoCbor = new(utxos);
         var utxoCborBytes = CborSerializer.Serialize<CborMaybeIndefList<ResolvedInput>>(utxoCbor);
         Transaction transaction = builder.Build();
-        Console.WriteLine(Convert.ToHexString(CborSerializer.Serialize(transaction)));  
+        Console.WriteLine(Convert.ToHexString(CborSerializer.Serialize(transaction)));
         var txCborBytes = CborSerializer.Serialize(transaction);
         var evalResult = Evaluator.EvaluateTx(txCborBytes, utxoCborBytes);
-        var previousRedeemers = builder.witnessBuilder.redeemers;
+        var previousRedeemers = builder.witnessSet.Redeemers;
 
 
         switch (previousRedeemers)
@@ -195,8 +182,8 @@ public static class TransactionBuilderExtensions
 
     public static TransactionBuilder SetCollateral(this TransactionBuilder builder, ResolvedInput collateral)
     {
-        builder.bodyBuilder.AddCollateral(collateral.Outref);
-        builder.bodyBuilder.SetCollateralReturn(collateral.Output);
+        builder.AddCollateral(collateral.Outref);
+        builder.SetCollateralReturn(collateral.Output);
         return builder;
     }
 
