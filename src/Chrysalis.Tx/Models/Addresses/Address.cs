@@ -9,31 +9,37 @@ namespace Chrysalis.Tx.Models.Addresses;
 public class Address
 {
     private readonly byte[] _addressBytes;
-    public AddressHeader AddressHeader { get; }
     public Credential PaymentCredential { get; init; }
     public Credential? StakeCredential { get; init; }
+    public AddressType Type { get; init; }
+    NetworkType Network { get; init; }
 
     public Address(byte[] addressBytes)
     {
         _addressBytes = addressBytes;
-        AddressHeader = GetAddressHeader(addressBytes[0]);
+        AddressHeader addressHeader = GetAddressHeader(addressBytes[0]);
+        Type = addressHeader.Type;
+        Network = addressHeader.Network;
         (PaymentCredential, StakeCredential) = ExtractCredentialsFromBytes(addressBytes);
     }
 
     public Address(string bech32Address)
     {
         (_, byte[] addressBytes) = Bech32Codec.Decode(bech32Address);
-        AddressHeader = AddressHeader.FromByte(addressBytes[0]);
+        AddressHeader addressHeader = GetAddressHeader(addressBytes[0]);
+        Type = addressHeader.Type;
+        Network = addressHeader.Network;
         _addressBytes = addressBytes;
         (PaymentCredential, StakeCredential) = ExtractCredentialsFromBytes(addressBytes);
     }
 
     public Address(NetworkType networkType, AddressType addressType, Credential payment, Credential? stake)
     {
-        AddressHeader = new AddressHeader(addressType, networkType);
+        Type = addressType;
+        Network = networkType;
         PaymentCredential = payment;
         StakeCredential = stake;
-        _addressBytes = ConstructAddressBytes(AddressHeader, payment, stake);
+        _addressBytes = ConstructAddressBytes(new(addressType, networkType), payment, stake);
     }
 
     public static Address FromBytes(byte[] bytes)
@@ -47,7 +53,11 @@ public class Address
     }
 
     public byte[] ToBytes() => _addressBytes;
-    public string ToBech32() => Bech32Codec.Encode(_addressBytes, AddressHeader.GetPrefix());
+    public string ToBech32()
+    {
+        AddressHeader addressHeader = new(Type, Network);
+        return Bech32Codec.Encode(_addressBytes, addressHeader.GetPrefix());
+    }
     public string ToHex() => Convert.ToHexStringLower(_addressBytes);
 
     // TODO: Handle other AddressTypes properly
@@ -73,6 +83,7 @@ public class Address
                 // Add stake credential
                 return addressBytes.ConcatFast(stake.Hash.Value);
 
+            // TODO:
             // Pointer addresses: header + payment credential + pointer
             case AddressType.BaseWithPointerDelegation:
             case AddressType.ScriptWithPointerDelegation:
@@ -116,7 +127,7 @@ public class Address
                     ExtractCredential(bytes, 29)
                 );
 
-            // TODO: Implement Pointer properly base on Blaze
+            // TODO: Implement Pointer properly base on CIP19
             case AddressType.BaseWithPointerDelegation:
             case AddressType.ScriptWithPointerDelegation:
                 if (bytes.Length < 29) // 1 byte header + 28 bytes payment credential

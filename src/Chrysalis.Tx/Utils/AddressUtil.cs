@@ -1,6 +1,5 @@
 using Chrysalis.Tx.Models.Addresses;
 using Chrysalis.Tx.Models.Enums;
-using Chrysalis.Tx.Models.Keys;
 using Chrysalis.Tx.Models.Network;
 
 namespace Chrysalis.Tx.Utils;

@@ -1,4 +1,3 @@
-
 using Chrysalis.Cbor.Cardano.Types.Block.Transaction.Script;
 using Chrysalis.Cbor.Cardano.Types.Block.Transaction.WitnessSet;
 
