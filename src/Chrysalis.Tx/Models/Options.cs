@@ -15,7 +15,7 @@ public record InputOptions(string From, Value? MinAmount, DatumOption? Datum, Re
     public Value? MinAmount { get; set; } = MinAmount;
     public TransactionInput? UtxoRef { get; set; } = UtxoRef;
     public DatumOption? Datum { get; set; } = Datum;
-    public RedeemerMap? RedeemerMap { get; set; } = Redeemer;
+    public RedeemerMap? Redeemer { get; set; } = Redeemer;
     public bool IsReference { get; set; } = IsReference;
     public string? Id { get; set; } = Id;
 }

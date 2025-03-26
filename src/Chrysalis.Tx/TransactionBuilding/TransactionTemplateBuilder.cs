@@ -4,17 +4,11 @@ using Chrysalis.Cbor.Types.Cardano.Core.Transaction;
 using Chrysalis.Cbor.Types.Cardano.Core.TransactionWitness;
 using Chrysalis.Tx.Extensions;
 using Chrysalis.Tx.Models;
-using Chrysalis.Tx.TransactionBuilding;
 using Chrysalis.Tx.TransactionBuilding.Extensions;
 using Chrysalis.Tx.Utils;
-using TxAddr = Chrysalis.Wallet.Addresses;
+using ChrysalisWallet = Chrysalis.Wallet.Addresses;
 
-namespace Chrysalis.Tx.TemplateBuilder;
-
-/// <summary>
-/// Builder for creating transaction templates using a fluent API.
-/// </summary>
-/// <typeparam name="T">The type of the parameter that will be used when building the transaction.</typeparam>
+namespace Chrysalis.Tx.TransactionBuilding;
 public class TransactionTemplateBuilder<T>
 {
     private IProvider? _provider;
@@ -83,7 +77,7 @@ public class TransactionTemplateBuilder<T>
             Dictionary<string, TransactionInput> inputsById = [];
             Dictionary<string, Dictionary<string, int>> associationsByInputId = [];
 
-            TxAddr.Address? senderAddress = null;
+            ChrysalisWallet.Address? senderAddress = null;
             List<TransactionInput> specifiedInputs = [];
             TransactionInput? referenceInput = null;
             bool isSmartContractTx = false;
@@ -113,6 +107,7 @@ public class TransactionTemplateBuilder<T>
                     else
                     {
                         specifiedInputs.Add(inputOptions.UtxoRef);
+                        senderAddress = ChrysalisWallet.Address.FromBech32(parties[inputOptions.From]);
                         txBuilder.AddInput(inputOptions.UtxoRef);
 
                         if (inputOptions.Redeemer is not null)
@@ -134,11 +129,11 @@ public class TransactionTemplateBuilder<T>
 
                 if (!string.IsNullOrEmpty(inputOptions.From))
                 {
-                    senderAddress = TxAddr.Address.FromBech32(parties[inputOptions.From]);
+                    senderAddress = ChrysalisWallet.Address.FromBech32(parties[inputOptions.From]);
                 }
             }
 
-            TxAddr.Address changeAddress = senderAddress!;
+            ChrysalisWallet.Address changeAddress = senderAddress!;
 
             List<Value> requiredAmount = [];
             int outputIndex = 0;
@@ -160,7 +155,7 @@ public class TransactionTemplateBuilder<T>
 
                 if (isSmartContractTx && !string.IsNullOrEmpty(outputOptions.To))
                 {
-                    changeAddress = TxAddr.Address.FromBech32(parties[outputOptions.To]);
+                    changeAddress = ChrysalisWallet.Address.FromBech32(parties[outputOptions.To]);
                 }
 
                 changeIndex++;
@@ -294,7 +289,7 @@ public class TransactionTemplateBuilder<T>
                 var withdrawalOptions = new WithdrawalOptions<T>("", 0);
                 config(withdrawalOptions, param);
 
-                TxAddr.Address withdrawalAddress = TxAddr.Address.FromBech32(parties[withdrawalOptions.From]);
+                ChrysalisWallet.Address withdrawalAddress = ChrysalisWallet.Address.FromBech32(parties[withdrawalOptions.From]);
                 rewards.Add(new RewardAccount(withdrawalAddress.ToBytes()), withdrawalOptions.Amount!);
 
                 if (withdrawalOptions.Redeemers is not null)
