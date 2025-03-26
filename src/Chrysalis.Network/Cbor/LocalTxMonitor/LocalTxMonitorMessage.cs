@@ -1,6 +1,5 @@
 using Chrysalis.Cbor.Serialization.Attributes;
 using Chrysalis.Cbor.Types;
-using Chrysalis.Cbor.Types.Custom;
 using Chrysalis.Network.Cbor.Common;
 using Chrysalis.Network.Cbor.LocalTxSubmit;
 

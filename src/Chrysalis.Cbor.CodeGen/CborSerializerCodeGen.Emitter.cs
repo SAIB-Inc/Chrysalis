@@ -15,7 +15,7 @@ public sealed partial class CborSerializerCodeGen
     private static partial class Emitter
     {
         public const string GenericSerializationUtilFullname = "global::Chrysalis.Cbor.Serialization.Utils.GenericSerializationUtil";
-        public const string CborEncodeValueFullName = "global::Chrysalis.Cbor.Types.Primitives.CborEncodedValue";
+        public const string CborEncodeValueFullName = "global::Chrysalis.Cbor.Types.CborEncodedValue";
 
         public static void EmitSerializerAndMetadata(SourceProductionContext context, SerializableTypeMetadata metadata)
         {
@@ -25,7 +25,7 @@ public sealed partial class CborSerializerCodeGen
             // Serializer emission
             StringBuilder sb = new();
             sb.AppendLine("// Automatically generated file");
-            sb.AppendLine("#pragma warning disable CS0109");
+            sb.AppendLine("#pragma warning disable CS0109, CS8669");
             sb.AppendLine();
             sb.AppendLine("using System.Formats.Cbor;");
             sb.AppendLine();
@@ -101,7 +101,7 @@ public sealed partial class CborSerializerCodeGen
 
             sb.AppendLine("}");
             sb.AppendLine();
-            sb.AppendLine("#pragma warning restore CS0109");
+            sb.AppendLine("#pragma warning restore CS0109, CS8669");
 
             context.AddSource($"{metadata?.FullyQualifiedName.Replace("<", "`").Replace(">", "`")}.Serializer.g.cs", sb.ToString());
         }

@@ -20,21 +20,16 @@ public abstract partial record CborBase
 
             if (type.IsGenericType)
             {
-                // Get the generic type definition
                 Type genericTypeDef = type.GetGenericTypeDefinition();
-
-                // Get the namespace and simple type name
                 string ns = type.Namespace ?? "";
                 string baseName = type.Name;
 
-                // Remove the `n and everything after it from the name
                 int backtickIndex = baseName.IndexOf('`');
                 if (backtickIndex > 0)
                 {
                     baseName = baseName[..backtickIndex];
                 }
 
-                // Get the generic parameter names from the type definition
                 Type[] genericParams = genericTypeDef.GetGenericArguments();
                 string typeParams = string.Join(", ", genericParams.Select(p => p.Name));
 
