@@ -1,4 +1,4 @@
-namespace Chrysalis.Tx.Models.Keys;
+namespace Chrysalis.Wallet.Keys;
 
 public class PrivateKey(byte[] key, byte[] chaincode)
 {
