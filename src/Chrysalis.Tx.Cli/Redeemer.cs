@@ -1,8 +1,5 @@
-
-
 using Chrysalis.Cbor.Serialization.Attributes;
 using Chrysalis.Cbor.Types;
-using Chrysalis.Cbor.Types.Custom;
 
 namespace Chrysalis.Tx.Cli;
 [CborSerializable]

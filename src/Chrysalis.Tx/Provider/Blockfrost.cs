@@ -1,12 +1,11 @@
 using System.Net.Http.Headers;
 using System.Text.Json;
-using Chrysalis.Cbor.Cardano.Types.Block.Transaction.Governance;
-using Chrysalis.Cbor.Cardano.Types.Block.Transaction.Input;
-using Chrysalis.Cbor.Cardano.Types.Block.Transaction.Output;
-using Chrysalis.Cbor.Cardano.Types.Block.Transaction.Protocol;
 using Chrysalis.Cbor.Serialization;
-using Chrysalis.Cbor.Types.Custom;
-using Chrysalis.Cbor.Types.Primitives;
+using Chrysalis.Cbor.Types;
+using Chrysalis.Cbor.Types.Cardano.Core.Common;
+using Chrysalis.Cbor.Types.Cardano.Core.Governance;
+using Chrysalis.Cbor.Types.Cardano.Core.Protocol;
+using Chrysalis.Cbor.Types.Cardano.Core.Transaction;
 using Chrysalis.Tx.Models;
 using TxAddr = Chrysalis.Tx.Models.Addresses;
 

@@ -1,5 +1,4 @@
-
-using Chrysalis.Cbor.Cardano.Types.Block.Transaction.Protocol;
+using Chrysalis.Cbor.Types.Cardano.Core.Protocol;
 
 namespace Chrysalis.Tx.Models;
 
