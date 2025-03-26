@@ -23,8 +23,8 @@ public record AddressHeader(AddressType Type, NetworkType Network, CredentialTyp
     public static AddressHeader FromByte(byte headerByte)
     {
         // Extract type and network from the header byte
-        var type = (AddressType)(headerByte >> 4);
-        var network = (NetworkType)(headerByte & 0x0F);
+        AddressType type = (AddressType)(headerByte >> 4);
+        NetworkType network = (NetworkType)(headerByte & 0x0F);
 
         // Extract CredentialType (0x0E = StakeKeyHash, 0x0F = ScriptHash)
         CredentialType? stakeCredentialType = null;

@@ -57,7 +57,7 @@ public class Address
         Credential? stakeCredential = null;
         if (stakeBytes is not null)
             stakeCredential = ExtractCredential(stakeBytes, 1);
-        
+
         return new Address(networkType, addressType, paymentCredential, stakeCredential);
     }
 
