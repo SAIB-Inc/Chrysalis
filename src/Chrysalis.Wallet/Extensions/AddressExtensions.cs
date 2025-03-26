@@ -61,4 +61,11 @@ public static class AddressExtensions
             _ => null,
         };
     }
+
+    public static string GetPrefix(this Address self)
+    {
+        byte[] addressBytes = self.ToBytes();
+        AddressHeader header = Address.GetAddressHeader(addressBytes[0]);
+        return header.GetPrefix();
+    }
 }
