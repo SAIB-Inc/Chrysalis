@@ -2,7 +2,7 @@ using CBlock = Chrysalis.Cbor.Types.Cardano.Core.Block;
 using Chrysalis.Cbor.Types.Cardano.Core.Transaction;
 using Chrysalis.Cbor.Types.Cardano.Core.TransactionWitness;
 using Redeemer = Chrysalis.Cbor.Types.Cardano.Core.TransactionWitness.RedeemerEntry;
-using Chrysalis.Cbor.Extensions.Block.Transaction.WitnessSet;
+using Chrysalis.Cbor.Extensions.Cardano.Core.Transaction.WitnessSet;
 
 namespace Chrysalis.Cbor.Extensions.Cardano.Core.Transaction.Body.Input;
 

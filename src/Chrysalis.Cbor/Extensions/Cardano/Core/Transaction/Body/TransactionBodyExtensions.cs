@@ -1,4 +1,3 @@
-using Chrysalis.Cbor.Types;
 using Chrysalis.Cbor.Types.Cardano.Core.Certificates;
 using Chrysalis.Cbor.Types.Cardano.Core.Common;
 using CProposalProcedure = Chrysalis.Cbor.Types.Cardano.Core.Governance.ProposalProcedure;
@@ -13,60 +12,18 @@ public static class TransactionBodyExtensions
     public static IEnumerable<TransactionInput> Inputs(this TransactionBody self) =>
         self switch
         {
-            AlonzoTransactionBody alonzoTxBody => alonzoTxBody.Inputs switch
-            {
-                CborDefList<TransactionInput> defList => defList.Value,
-                CborIndefList<TransactionInput> indefList => indefList.Value,
-                CborDefListWithTag<TransactionInput> defListWithTag => defListWithTag.Value,
-                CborIndefListWithTag<TransactionInput> indefListWithTag => indefListWithTag.Value,
-                _ => throw new NotImplementedException()
-            },
-            BabbageTransactionBody babbageTxBody => babbageTxBody.Inputs switch
-            {
-                CborDefList<TransactionInput> defList => defList.Value,
-                CborIndefList<TransactionInput> indefList => indefList.Value,
-                CborDefListWithTag<TransactionInput> defListWithTag => defListWithTag.Value,
-                CborIndefListWithTag<TransactionInput> indefListWithTag => indefListWithTag.Value,
-                _ => throw new NotImplementedException()
-            },
-            ConwayTransactionBody conwayTxBody => conwayTxBody.Inputs switch
-            {
-                CborDefList<TransactionInput> defList => defList.Value,
-                CborIndefList<TransactionInput> indefList => indefList.Value,
-                CborDefListWithTag<TransactionInput> defListWithTag => defListWithTag.Value,
-                CborIndefListWithTag<TransactionInput> indefListWithTag => indefListWithTag.Value,
-                _ => throw new NotImplementedException()
-            },
+            AlonzoTransactionBody alonzoTxBody => alonzoTxBody.Inputs.GetValue(),
+            BabbageTransactionBody babbageTxBody => babbageTxBody.Inputs.GetValue(),
+            ConwayTransactionBody conwayTxBody => conwayTxBody.Inputs.GetValue(),
             _ => []
         };
 
     public static IEnumerable<TransactionOutput> Outputs(this TransactionBody self) =>
         self switch
         {
-            AlonzoTransactionBody alonzoTxBody => alonzoTxBody.Outputs switch
-            {
-                CborDefList<AlonzoTransactionOutput> defList => defList.Value,
-                CborIndefList<AlonzoTransactionOutput> indefList => indefList.Value,
-                CborDefListWithTag<AlonzoTransactionOutput> defListWithTag => defListWithTag.Value,
-                CborIndefListWithTag<AlonzoTransactionOutput> indefListWithTag => indefListWithTag.Value,
-                _ => throw new NotImplementedException()
-            },
-            BabbageTransactionBody babbageTxBody => babbageTxBody.Outputs switch
-            {
-                CborDefList<TransactionOutput> defList => defList.Value,
-                CborIndefList<TransactionOutput> indefList => indefList.Value,
-                CborDefListWithTag<TransactionOutput> defListWithTag => defListWithTag.Value,
-                CborIndefListWithTag<TransactionOutput> indefListWithTag => indefListWithTag.Value,
-                _ => throw new NotImplementedException()
-            },
-            ConwayTransactionBody conwayTxBody => conwayTxBody.Outputs switch
-            {
-                CborDefList<TransactionOutput> defList => defList.Value,
-                CborIndefList<TransactionOutput> indefList => indefList.Value,
-                CborDefListWithTag<TransactionOutput> defListWithTag => defListWithTag.Value,
-                CborIndefListWithTag<TransactionOutput> indefListWithTag => indefListWithTag.Value,
-                _ => throw new NotImplementedException()
-            },
+            AlonzoTransactionBody alonzoTxBody => alonzoTxBody.Outputs.GetValue(),
+            BabbageTransactionBody babbageTxBody => babbageTxBody.Outputs.GetValue(),
+            ConwayTransactionBody conwayTxBody => conwayTxBody.Outputs.GetValue(),
             _ => []
         };
 
@@ -100,30 +57,9 @@ public static class TransactionBodyExtensions
     public static IEnumerable<CCertificate>? Certificates(this TransactionBody self) =>
         self switch
         {
-            AlonzoTransactionBody alonzoTxBody => alonzoTxBody.Certificates switch
-            {
-                CborDefList<CCertificate> defList => defList.Value,
-                CborIndefList<CCertificate> indefList => indefList.Value,
-                CborDefListWithTag<CCertificate> defListWithTag => defListWithTag.Value,
-                CborIndefListWithTag<CCertificate> indefListWithTag => indefListWithTag.Value,
-                _ => null
-            },
-            BabbageTransactionBody babbageTxBody => babbageTxBody.Certificates switch
-            {
-                CborDefList<CCertificate> defList => defList.Value,
-                CborIndefList<CCertificate> indefList => indefList.Value,
-                CborDefListWithTag<CCertificate> defListWithTag => defListWithTag.Value,
-                CborIndefListWithTag<CCertificate> indefListWithTag => indefListWithTag.Value,
-                _ => null
-            },
-            ConwayTransactionBody conwayTxBody => conwayTxBody.Certificates switch
-            {
-                CborDefList<CCertificate> defList => defList.Value,
-                CborIndefList<CCertificate> indefList => indefList.Value,
-                CborDefListWithTag<CCertificate> defListWithTag => defListWithTag.Value,
-                CborIndefListWithTag<CCertificate> indefListWithTag => indefListWithTag.Value,
-                _ => null
-            },
+            AlonzoTransactionBody alonzoTxBody => alonzoTxBody.Certificates?.GetValue(),
+            BabbageTransactionBody babbageTxBody => babbageTxBody.Certificates?.GetValue(),
+            ConwayTransactionBody conwayTxBody => conwayTxBody.Certificates?.GetValue(),
             _ => null
         };
 
@@ -166,60 +102,18 @@ public static class TransactionBodyExtensions
     public static IEnumerable<TransactionInput>? Collateral(this TransactionBody self) =>
         self switch
         {
-            AlonzoTransactionBody alonzoTxBody => alonzoTxBody.Collateral switch
-            {
-                CborDefList<TransactionInput> defList => defList.Value,
-                CborIndefList<TransactionInput> indefList => indefList.Value,
-                CborDefListWithTag<TransactionInput> defListWithTag => defListWithTag.Value,
-                CborIndefListWithTag<TransactionInput> indefListWithTag => indefListWithTag.Value,
-                _ => null
-            },
-            BabbageTransactionBody babbageTxBody => babbageTxBody.Collateral switch
-            {
-                CborDefList<TransactionInput> defList => defList.Value,
-                CborIndefList<TransactionInput> indefList => indefList.Value,
-                CborDefListWithTag<TransactionInput> defListWithTag => defListWithTag.Value,
-                CborIndefListWithTag<TransactionInput> indefListWithTag => indefListWithTag.Value,
-                _ => null
-            },
-            ConwayTransactionBody conwayTxBody => conwayTxBody.Collateral switch
-            {
-                CborDefList<TransactionInput> defList => defList.Value,
-                CborIndefList<TransactionInput> indefList => indefList.Value,
-                CborDefListWithTag<TransactionInput> defListWithTag => defListWithTag.Value,
-                CborIndefListWithTag<TransactionInput> indefListWithTag => indefListWithTag.Value,
-                _ => null
-            },
+            AlonzoTransactionBody alonzoTxBody => alonzoTxBody.Collateral?.GetValue(),
+            BabbageTransactionBody babbageTxBody => babbageTxBody.Collateral?.GetValue(),
+            ConwayTransactionBody conwayTxBody => conwayTxBody.Collateral?.GetValue(),
             _ => null
         };
 
     public static IEnumerable<byte[]>? RequiredSigners(this TransactionBody self) =>
         self switch
         {
-            AlonzoTransactionBody alonzoTxBody => alonzoTxBody.RequiredSigners switch
-            {
-                CborDefList<byte[]> defList => defList.Value,
-                CborIndefList<byte[]> indefList => indefList.Value,
-                CborDefListWithTag<byte[]> defListWithTag => defListWithTag.Value,
-                CborIndefListWithTag<byte[]> indefListWithTag => indefListWithTag.Value,
-                _ => null
-            },
-            BabbageTransactionBody babbageTxBody => babbageTxBody.RequiredSigners switch
-            {
-                CborDefList<byte[]> defList => defList.Value,
-                CborIndefList<byte[]> indefList => indefList.Value,
-                CborDefListWithTag<byte[]> defListWithTag => defListWithTag.Value,
-                CborIndefListWithTag<byte[]> indefListWithTag => indefListWithTag.Value,
-                _ => null
-            },
-            ConwayTransactionBody conwayTxBody => conwayTxBody.RequiredSigners switch
-            {
-                CborDefList<byte[]> defList => defList.Value,
-                CborIndefList<byte[]> indefList => indefList.Value,
-                CborDefListWithTag<byte[]> defListWithTag => defListWithTag.Value,
-                CborIndefListWithTag<byte[]> indefListWithTag => indefListWithTag.Value,
-                _ => null
-            },
+            AlonzoTransactionBody alonzoTxBody => alonzoTxBody.RequiredSigners?.GetValue(),
+            BabbageTransactionBody babbageTxBody => babbageTxBody.RequiredSigners?.GetValue(),
+            ConwayTransactionBody conwayTxBody => conwayTxBody.RequiredSigners?.GetValue(),
             _ => null
         };
 
@@ -250,22 +144,8 @@ public static class TransactionBodyExtensions
     public static IEnumerable<TransactionInput>? ReferenceInputs(this TransactionBody self) =>
         self switch
         {
-                BabbageTransactionBody babbageTxBody => babbageTxBody.ReferenceInputs switch
-                {
-                    CborDefList<TransactionInput> defList => defList.Value,
-                    CborIndefList<TransactionInput> indefList => indefList.Value,
-                    CborDefListWithTag<TransactionInput> defListWithTag => defListWithTag.Value,
-                    CborIndefListWithTag<TransactionInput> indefListWithTag => indefListWithTag.Value,
-                    _ => null
-                },
-                ConwayTransactionBody conwayTxBody => conwayTxBody.ReferenceInputs switch
-                {
-                    CborDefList<TransactionInput> defList => defList.Value,
-                    CborIndefList<TransactionInput> indefList => indefList.Value,
-                    CborDefListWithTag<TransactionInput> defListWithTag => defListWithTag.Value,
-                    CborIndefListWithTag<TransactionInput> indefListWithTag => indefListWithTag.Value,
-                    _ => null
-                },
+                BabbageTransactionBody babbageTxBody => babbageTxBody.ReferenceInputs?.GetValue(),
+                ConwayTransactionBody conwayTxBody => conwayTxBody.ReferenceInputs?.GetValue(),
                 _ => null
         };
 
@@ -279,14 +159,7 @@ public static class TransactionBodyExtensions
     public static IEnumerable<CProposalProcedure>? ProposalProcedures(this TransactionBody self) =>
         self switch
         {
-            ConwayTransactionBody conwayTxBody => conwayTxBody.ProposalProcedures switch
-            {
-                CborDefList<CProposalProcedure> defList => defList.Value,
-                CborIndefList<CProposalProcedure> indefList => indefList.Value,
-                CborDefListWithTag<CProposalProcedure> defListWithTag => defListWithTag.Value,
-                CborIndefListWithTag<CProposalProcedure> indefListWithTag => indefListWithTag.Value,
-                _ => null
-            },
+            ConwayTransactionBody conwayTxBody => conwayTxBody.ProposalProcedures?.GetValue(),
             _ => null
         };
 

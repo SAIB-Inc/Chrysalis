@@ -4,7 +4,7 @@ namespace Chrysalis.Cbor.Extensions.Cardano.Core;
 
 public static class CborMaybeIndefListExtensions
 {
-    public static IEnumerable<T> GetValue<T>(this CborMaybeIndefList<T> self) where T : CborBase =>
+    public static IEnumerable<T> GetValue<T>(this CborMaybeIndefList<T> self) =>
         self switch
         {
             CborDefList<T> defList => defList.Value,

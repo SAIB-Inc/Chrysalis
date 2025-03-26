@@ -2,7 +2,7 @@ using Chrysalis.Cbor.Types;
 using Chrysalis.Cbor.Types.Cardano.Core.Common;
 using CNativeScript = Chrysalis.Cbor.Types.Cardano.Core.Common.NativeScript;
 
-namespace Chrysalis.Cbor.Extensions.Block.Transaction.Script.NativeScript;
+namespace Chrysalis.Cbor.Extensions.Cardano.Core.Transaction.Script.NativeScript;
 
 public static class NativeScriptExtensions
 {

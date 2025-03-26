@@ -1,6 +1,6 @@
 using Chrysalis.Cbor.Types.Cardano.Core.Governance;
 
-namespace Chrysalis.Cbor.Extensions.Block.Transaction.Governance;
+namespace Chrysalis.Cbor.Extensions.Cardano.Core.Transaction.Governance;
 
 public static class GovActionIdExtensions
 {

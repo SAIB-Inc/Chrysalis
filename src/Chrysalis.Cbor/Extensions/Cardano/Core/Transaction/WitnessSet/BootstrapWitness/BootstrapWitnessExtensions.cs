@@ -1,6 +1,6 @@
 using CBootstrapWitness = Chrysalis.Cbor.Types.Cardano.Core.TransactionWitness.BootstrapWitness;
 
-namespace Chrysalis.Cbor.Extensions.Block.Transaction.WitnessSet.BootstrapWitness;
+namespace Chrysalis.Cbor.Extensions.Cardano.Core.Transaction.WitnessSet.BootstrapWitness;
 
 public static class BootstrapWitnessExtensions
 {

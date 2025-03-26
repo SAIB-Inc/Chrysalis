@@ -1,6 +1,6 @@
 using CVKeyWitness = Chrysalis.Cbor.Types.Cardano.Core.TransactionWitness.VKeyWitness;
 
-namespace Chrysalis.Cbor.Extensions.Block.Transaction.WitnessSet.VKeyWitness;
+namespace Chrysalis.Cbor.Extensions.Cardano.Core.Transaction.WitnessSet.VKeyWitness;
 
 public static class VKeyWitnessExtensions
 {

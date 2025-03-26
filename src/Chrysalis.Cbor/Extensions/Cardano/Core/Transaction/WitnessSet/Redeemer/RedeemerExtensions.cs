@@ -1,6 +1,6 @@
 using Chrysalis.Cbor.Types.Cardano.Core.TransactionWitness;
 
-namespace Chrysalis.Cbor.Extensions.Block.Transaction.WitnessSet.Redeemer;
+namespace Chrysalis.Cbor.Extensions.Cardano.Core.Transaction.WitnessSet.Redeemer;
 
 public static class RedeemerExtensions
 {
