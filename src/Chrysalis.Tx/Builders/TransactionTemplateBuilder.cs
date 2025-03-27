@@ -182,7 +182,6 @@ public class TransactionTemplateBuilder<T>
 
             List<ResolvedInput> utxos = await _provider!.GetUtxosAsync(parties[_changeAddress]);
 
-
             var allUtxos = new List<ResolvedInput>(utxos);
 
             foreach (string address in inputAddresses.Distinct())
