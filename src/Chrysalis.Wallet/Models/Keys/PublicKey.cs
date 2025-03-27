@@ -1,4 +1,6 @@
-namespace Chrysalis.Wallet.Keys;
+using Chaos.NaCl;
+
+namespace Chrysalis.Wallet.Models.Keys;
 
 public class PublicKey(byte[] key, byte[] chaincode)
 {
@@ -15,4 +17,12 @@ public class PublicKey(byte[] key, byte[] chaincode)
     }
 
     public override int GetHashCode() => HashCode.Combine(Convert.ToHexString(Key), Convert.ToHexString(Chaincode));
+}
+
+public static class PublicKeyExtensions
+{
+    public static bool Verify(this PublicKey publicKey, byte[] message, byte[] signature)
+    {
+        return Ed25519.Verify(signature, message, publicKey.Key);
+    }
 }

@@ -1,15 +1,31 @@
+using System.Buffers.Binary;
 using System.Security.Cryptography;
 using Chaos.NaCl;
-using Chrysalis.Wallet.Common;
-using Chrysalis.Wallet.Keys;
 using Chrysalis.Wallet.Models.Enums;
 using Chrysalis.Wallet.Utils;
 
-namespace Chrysalis.Wallet.Extensions;
+namespace Chrysalis.Wallet.Models.Keys;
+
+public class PrivateKey(byte[] key, byte[] chaincode)
+{
+    public byte[] Key { get; } = key;
+    public byte[] Chaincode { get; } = chaincode;
+
+    public override bool Equals(object? obj)
+    {
+        if (obj == null || GetType() != obj.GetType())
+            return false;
+
+        PrivateKey other = (PrivateKey)obj;
+        return Key.SequenceEqual(other.Key) && Chaincode.SequenceEqual(other.Chaincode);
+    }
+
+    public override int GetHashCode() => HashCode.Combine(Convert.ToHexString(Key), Convert.ToHexString(Chaincode));
+}
 
 public static class PrivateKeyExtensions
 {
-    const uint MinHardIndex = 0x80000000;
+    private static readonly uint MinHardIndex = 0x80000000;
 
     public static PublicKey GetPublicKey(this PrivateKey privateKey)
     {
@@ -17,18 +33,16 @@ public static class PrivateKeyExtensions
         Buffer.BlockCopy(privateKey.Key, 0, sk, 0, privateKey.Key.Length);
         byte[] pk = Ed25519.GetPublicKey(sk);
 
-        BigEndianBuffer buffer = new();
+        byte[] buffer = new byte[pk.Length];
+        pk.CopyTo(buffer, 0);
 
-        buffer.Write(pk);
-
-        return new PublicKey(buffer.ToArray(), privateKey.Chaincode);
+        return new PublicKey([.. buffer], privateKey.Chaincode);
     }
 
     public static PrivateKey Derive(this PrivateKey privateKey, int index, DerivationType type = DerivationType.SOFT)
     {
-        if (privateKey is null)
-            throw new ArgumentNullException(nameof(privateKey));
-        
+        ArgumentNullException.ThrowIfNull(privateKey);
+
         uint derivationIndex = (uint)index;
 
         // Adjust index based on the derivation type
@@ -36,7 +50,7 @@ public static class PrivateKeyExtensions
             derivationIndex |= MinHardIndex; // Hardened derivation requires adding the MinHardIndex offset
 
         // Derive the child key using the BIP32 method
-        PrivateKey newPrivateKey = privateKey.GetChildKeyDerivation(derivationIndex);
+        PrivateKey newPrivateKey = GetChildKeyDerivation(privateKey, derivationIndex);
 
         // Return the derived key to allow method chaining
         return newPrivateKey;
@@ -55,35 +69,37 @@ public static class PrivateKeyExtensions
         byte[] i = new byte[64];
         byte[] seri = Bip32Util.Le32(index);
 
-        BigEndianBuffer zBuffer = new();
-        BigEndianBuffer iBuffer = new();
+        BinaryPrimitives.WriteUInt32BigEndian(seri, (uint)index);
+
+        byte[] zBuffer = new byte[1 + privateKey.Key.Length + seri.Length];
+        byte[] iBuffer = new byte[1 + privateKey.Key.Length + seri.Length];
         if (Bip32Util.FromIndex(index) == DerivationType.HARD)
         {
-            zBuffer.Write([0x00]); //constant or enum?
-            zBuffer.Write(privateKey.Key);
-            zBuffer.Write(seri);
+            zBuffer[0] = 0x00; //constant or enum?
+            privateKey.Key.CopyTo(zBuffer, 1);
+            seri.CopyTo(zBuffer, 1 + privateKey.Key.Length);
 
-            iBuffer.Write([0x01]); //constant or enum?
-            iBuffer.Write(privateKey.Key);
-            iBuffer.Write(seri);
+            iBuffer[0] = 0x01; //constant or enum?
+            privateKey.Key.CopyTo(iBuffer, 1);
+            seri.CopyTo(iBuffer, 1 + privateKey.Key.Length);
         }
         else
         {
-            PublicKey pk = privateKey.GetPublicKey();
-            zBuffer.Write([0x02]); //constant or enum?
-            zBuffer.Write(pk.Key);
-            zBuffer.Write(seri);
+            PublicKey pk = GetPublicKey(privateKey);
+            zBuffer[0] = 0x02; //constant or enum?
+            pk.Key.CopyTo(zBuffer, 1);
+            seri.CopyTo(zBuffer, 1 + pk.Key.Length);
 
-            iBuffer.Write([0x03]); //constant or enum?
-            iBuffer.Write(pk.Key);
-            iBuffer.Write(seri);
+            iBuffer[0] = 0x03; //constant or enum?
+            pk.Key.CopyTo(iBuffer, 1);
+            seri.CopyTo(iBuffer, 1 + pk.Key.Length);
         }
 
         using (HMACSHA512 hmacSha512 = new(privateKey.Chaincode))
         {
-            z = hmacSha512.ComputeHash(zBuffer.ToArray());
-            zl = z.Slice(0, 32);
-            zr = z.Slice(32);
+            z = hmacSha512.ComputeHash([.. zBuffer]);
+            zl = z[..32];
+            zr = z[32..];
         }
 
         // left = kl + 8 * trunc28(zl)
@@ -100,8 +116,8 @@ public static class PrivateKeyExtensions
         byte[] cc;
         using (HMACSHA512 hmacSha512 = new(privateKey.Chaincode))
         {
-            i = hmacSha512.ComputeHash(iBuffer.ToArray());
-            cc = i.Slice(32);
+            i = hmacSha512.ComputeHash([.. iBuffer]);
+            cc = i[32..];
         }
 
         return new PrivateKey(key, cc);
@@ -126,7 +142,7 @@ public static class PrivateKeyExtensions
     public static PrivateKey Derive(this PrivateKey privateKey, PurposeType purposeType, DerivationType type = DerivationType.SOFT)
     {
         int index = (int)purposeType;
-        return privateKey.Derive(index, type);
+        return Derive(privateKey, index, type);
     }
     
     /// <summary>
@@ -135,7 +151,7 @@ public static class PrivateKeyExtensions
     public static PrivateKey Derive(this PrivateKey privateKey, CoinType coinType, DerivationType type = DerivationType.SOFT)
     {
         int index = (int)coinType;
-        return privateKey.Derive(index, type);
+        return Derive(privateKey, index, type);
     }
     
     /// <summary>
@@ -144,6 +160,6 @@ public static class PrivateKeyExtensions
     public static PrivateKey Derive(this PrivateKey privateKey, RoleType roleType, DerivationType type = DerivationType.SOFT)
     {
         int index = (int)roleType;
-        return privateKey.Derive(index, type);
+        return Derive(privateKey, index, type);
     }
 }

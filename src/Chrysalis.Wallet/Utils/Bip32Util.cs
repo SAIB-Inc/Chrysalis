@@ -66,7 +66,7 @@ public static class Bip32Util
     public static byte[] Le32(ulong i) => [(byte)i, (byte)(i >> 8), (byte)(i >> 16), (byte)(i >> 24)];
 
     public static bool IsValidPath(string path) => 
-        !path.Split('/').Slice(1).Select(a => a.Replace("'", "")).Any(a => !int.TryParse(a, out _));
+        !path.Split('/').Skip(1).Select(a => a.Replace("'", "")).Any(a => !int.TryParse(a, out _));
 
     public static DerivationType FromIndex(ulong index) => index >= 0x80000000 ? DerivationType.HARD : DerivationType.SOFT;
 }
