@@ -4,6 +4,7 @@ using CProposalProcedure = Chrysalis.Cbor.Types.Cardano.Core.Governance.Proposal
 using Chrysalis.Cbor.Types.Cardano.Core.Transaction;
 using CCertificate = Chrysalis.Cbor.Types.Cardano.Core.Certificates.Certificate;
 using Chrysalis.Cbor.Types.Cardano.Core.Governance;
+using Blake2Fast;
 
 namespace Chrysalis.Cbor.Extensions.Cardano.Core.Transaction.Body;
 
@@ -176,4 +177,11 @@ public static class TransactionBodyExtensions
             ConwayTransactionBody conwayTxBody => conwayTxBody.Donation,
             _ => null
         };
+
+    public static string? Hash(this TransactionBody self)
+    {
+        if (!self.Raw.HasValue) return null;
+
+        return Convert.ToHexString(Blake2b.ComputeHash(self.Raw.Value.ToArray()));
+    }
 }
