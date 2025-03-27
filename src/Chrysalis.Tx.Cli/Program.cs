@@ -21,7 +21,7 @@ using Chrysalis.Wallet.Words;
 //     .UnlockLovelaceAsync();
 // Console.WriteLine(Convert.ToHexString(signedTx));
 
-string words = "mosquito creek harbor detail change secret design mistake next labor bench mule elite vapor menu hurdle what tobacco improve caught anger aware legal project";
+string words = "";
 
 Mnemonic mnemonic = Mnemonic.Restore(words, English.Words);
 
