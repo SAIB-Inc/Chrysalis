@@ -1,7 +1,6 @@
 using System.Buffers.Binary;
 using System.Security.Cryptography;
 using Chaos.NaCl;
-using Chrysalis.Wallet.Extensions;
 using Chrysalis.Wallet.Models.Enums;
 using Chrysalis.Wallet.Utils;
 
@@ -139,7 +138,7 @@ public static class PrivateKeyExtensions
         Buffer.BlockCopy(right, 0, key, left.Length, right.Length);
 
         // Compute chaincode from iBufferArr.
-        using (HMACSHA512 hmacSha512 = new HMACSHA512(privateKey.Chaincode))
+        using (HMACSHA512 hmacSha512 = new(privateKey.Chaincode))
         {
             i = hmacSha512.ComputeHash(iBufferArr);
         }
@@ -169,7 +168,6 @@ public static class PrivateKeyExtensions
         int index = (int)purposeType;
         return Derive(privateKey, index, type);
     }
-
     /// <summary>
     /// Derives a child private key using a coin type enum
     /// </summary>
@@ -178,7 +176,6 @@ public static class PrivateKeyExtensions
         int index = (int)coinType;
         return Derive(privateKey, index, type);
     }
-
     /// <summary>
     /// Derives a child private key using a role type enum
     /// </summary>
