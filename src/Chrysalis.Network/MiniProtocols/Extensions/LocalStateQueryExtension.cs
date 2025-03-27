@@ -40,8 +40,7 @@ public static class LocalStateQueryExtension
         this LocalStateQuery localStateQuery,
         List<byte[]> addresses)
     {
-        Result queryResult = await localStateQuery.QueryAsync(null, RawQueries.GetUtxoByAddress(addresses),
-            default);
+        Result queryResult = await localStateQuery.QueryAsync(null, RawQueries.GetUtxoByAddress(addresses), default);
         byte[] rawBytes = await ExtractRawBytesAsync(queryResult);
         return await DeserializeResponseAsync<UtxoByAddressResponse>(rawBytes);
     }
@@ -57,8 +56,7 @@ public static class LocalStateQueryExtension
         this LocalStateQuery localStateQuery,
         List<TransactionInput> txIns)
     {
-        Result queryResult = await localStateQuery.QueryAsync(null, RawQueries.GetUtxoByTxIns(txIns),
-            default);
+        Result queryResult = await localStateQuery.QueryAsync(null, RawQueries.GetUtxoByTxIns(txIns), default);
         byte[] rawBytes = await ExtractRawBytesAsync(queryResult);
         return await DeserializeResponseAsync<UtxoByAddressResponse>(rawBytes);
     }
