@@ -1,0 +1,21 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Chrysalis.Wallet/Chrysalis.Wallet.csproj" />
+    <ProjectReference Include="../Chrysalis.Cbor/Chrysalis.Cbor.csproj" />
+    <ProjectReference Include="..\Chrysalis.Cbor.CodeGen\Chrysalis.Cbor.CodeGen.csproj" 
+              OutputItemType="Analyzer" 
+              ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
+    <ItemGroup>
+    <ProjectReference Include="../Chrysalis.Plutus/Chrysalis.Plutus.csproj" />
+  </ItemGroup>
+
+</Project>
