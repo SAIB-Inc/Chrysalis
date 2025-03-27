@@ -41,7 +41,8 @@ public static class PrivateKeyExtensions
 
     public static PrivateKey Derive(this PrivateKey privateKey, int index, DerivationType type = DerivationType.SOFT)
     {
-        ArgumentNullException.ThrowIfNull(privateKey);
+        if (privateKey is null)
+            throw new ArgumentNullException(nameof(privateKey));
 
         uint derivationIndex = (uint)index;
 
@@ -58,46 +59,71 @@ public static class PrivateKeyExtensions
 
     public static PrivateKey GetChildKeyDerivation(this PrivateKey privateKey, ulong index)
     {
+        // Split the 64-byte private key into two 32-byte halves.
         byte[] kl = new byte[32];
         Buffer.BlockCopy(privateKey.Key, 0, kl, 0, 32);
         byte[] kr = new byte[32];
         Buffer.BlockCopy(privateKey.Key, 32, kr, 0, 32);
 
-        byte[] z = new byte[64];
-        byte[] zl = new byte[32];
-        byte[] zr = new byte[32];
-        byte[] i = new byte[64];
+        byte[] z;   // HMAC result for z (64 bytes)
+        byte[] zl = new byte[32];  // first half of z
+        byte[] zr = new byte[32];  // second half of z
+        byte[] i;   // HMAC result for i (64 bytes)
         byte[] seri = Bip32Util.Le32(index);
 
-        BinaryPrimitives.WriteUInt32BigEndian(seri, (uint)index);
+        byte[] zBufferArr;
+        byte[] iBufferArr;
+        // We use a temporary 2-byte span for BinaryPrimitives writes.
+        Span<byte> temp = stackalloc byte[2];
 
-        byte[] zBuffer = new byte[1 + privateKey.Key.Length + seri.Length];
-        byte[] iBuffer = new byte[1 + privateKey.Key.Length + seri.Length];
         if (Bip32Util.FromIndex(index) == DerivationType.HARD)
         {
-            zBuffer[0] = 0x00; //constant or enum?
-            privateKey.Key.CopyTo(zBuffer, 1);
-            seri.CopyTo(zBuffer, 1 + privateKey.Key.Length);
+            // Buffer layout: 1 byte constant || privateKey.Key || seri
+            int totalLen = 1 + privateKey.Key.Length + seri.Length;
+            zBufferArr = new byte[totalLen];
+            iBufferArr = new byte[totalLen];
 
-            iBuffer[0] = 0x01; //constant or enum?
-            privateKey.Key.CopyTo(iBuffer, 1);
-            seri.CopyTo(iBuffer, 1 + privateKey.Key.Length);
+            // Write constant using BinaryPrimitives:
+            // Write 0x0000 as a 16-bit big-endian number and take the low-order byte.
+            BinaryPrimitives.WriteUInt16BigEndian(temp, 0x0000);
+            zBufferArr[0] = temp[1];
+
+            BinaryPrimitives.WriteUInt16BigEndian(temp, 0x0001);
+            iBufferArr[0] = temp[1];
+
+            // Append privateKey.Key after the constant.
+            Buffer.BlockCopy(privateKey.Key, 0, zBufferArr, 1, privateKey.Key.Length);
+            Buffer.BlockCopy(privateKey.Key, 0, iBufferArr, 1, privateKey.Key.Length);
+
+            // Append seri after the key.
+            Buffer.BlockCopy(seri, 0, zBufferArr, 1 + privateKey.Key.Length, seri.Length);
+            Buffer.BlockCopy(seri, 0, iBufferArr, 1 + privateKey.Key.Length, seri.Length);
         }
         else
         {
-            PublicKey pk = GetPublicKey(privateKey);
-            zBuffer[0] = 0x02; //constant or enum?
-            pk.Key.CopyTo(zBuffer, 1);
-            seri.CopyTo(zBuffer, 1 + pk.Key.Length);
+            // Soft derivation: use the public key instead.
+            PublicKey pk = privateKey.GetPublicKey();
+            int totalLen = 1 + pk.Key.Length + seri.Length;
+            zBufferArr = new byte[totalLen];
+            iBufferArr = new byte[totalLen];
 
-            iBuffer[0] = 0x03; //constant or enum?
-            pk.Key.CopyTo(iBuffer, 1);
-            seri.CopyTo(iBuffer, 1 + pk.Key.Length);
+            BinaryPrimitives.WriteUInt16BigEndian(temp, 0x0002);
+            zBufferArr[0] = temp[1]; // 0x02
+
+            BinaryPrimitives.WriteUInt16BigEndian(temp, 0x0003);
+            iBufferArr[0] = temp[1]; // 0x03
+
+            Buffer.BlockCopy(pk.Key, 0, zBufferArr, 1, pk.Key.Length);
+            Buffer.BlockCopy(pk.Key, 0, iBufferArr, 1, pk.Key.Length);
+
+            Buffer.BlockCopy(seri, 0, zBufferArr, 1 + pk.Key.Length, seri.Length);
+            Buffer.BlockCopy(seri, 0, iBufferArr, 1 + pk.Key.Length, seri.Length);
         }
 
-        using (HMACSHA512 hmacSha512 = new(privateKey.Chaincode))
+        // Compute z = HMACSHA512(zBufferArr)
+        using (HMACSHA512 hmacSha512 = new HMACSHA512(privateKey.Chaincode))
         {
-            z = hmacSha512.ComputeHash([.. zBuffer]);
+            z = hmacSha512.ComputeHash(zBufferArr);
             zl = z[..32];
             zr = z[32..];
         }
@@ -111,14 +137,12 @@ public static class PrivateKeyExtensions
         Buffer.BlockCopy(left, 0, key, 0, left.Length);
         Buffer.BlockCopy(right, 0, key, left.Length, right.Length);
 
-        //chaincode
-
-        byte[] cc;
+        // Compute chaincode from iBufferArr.
         using (HMACSHA512 hmacSha512 = new(privateKey.Chaincode))
         {
-            i = hmacSha512.ComputeHash([.. iBuffer]);
-            cc = i[32..];
+            i = hmacSha512.ComputeHash(iBufferArr);
         }
+        byte[] cc = i[32..];
 
         return new PrivateKey(key, cc);
     }
@@ -144,7 +168,6 @@ public static class PrivateKeyExtensions
         int index = (int)purposeType;
         return Derive(privateKey, index, type);
     }
-    
     /// <summary>
     /// Derives a child private key using a coin type enum
     /// </summary>
@@ -153,7 +176,6 @@ public static class PrivateKeyExtensions
         int index = (int)coinType;
         return Derive(privateKey, index, type);
     }
-    
     /// <summary>
     /// Derives a child private key using a role type enum
     /// </summary>
