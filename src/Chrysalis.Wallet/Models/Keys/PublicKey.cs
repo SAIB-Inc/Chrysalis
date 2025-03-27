@@ -7,6 +7,11 @@ public class PublicKey(byte[] key, byte[] chaincode)
     public byte[] Key { get; set; } = key;
     public byte[] Chaincode { get; set; } = chaincode;
 
+    public bool Verify(byte[] message, byte[] signature)
+    {
+        return Ed25519.Verify(signature, message, Key);
+    }
+
     public override bool Equals(object? obj)
     {
         if (obj == null || GetType() != obj.GetType())
@@ -17,12 +22,4 @@ public class PublicKey(byte[] key, byte[] chaincode)
     }
 
     public override int GetHashCode() => HashCode.Combine(Convert.ToHexString(Key), Convert.ToHexString(Chaincode));
-}
-
-public static class PublicKeyExtensions
-{
-    public static bool Verify(this PublicKey publicKey, byte[] message, byte[] signature)
-    {
-        return Ed25519.Verify(signature, message, publicKey.Key);
-    }
 }

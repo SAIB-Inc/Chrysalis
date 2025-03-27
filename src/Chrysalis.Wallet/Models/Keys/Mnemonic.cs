@@ -8,8 +8,23 @@ namespace Chrysalis.Wallet.Models.Keys;
 
 public record Mnemonic
 {
+    #region Properties
+
     public string[] Words { get; private set; }
     public byte[] Entropy { get; private set; }
+
+    #endregion
+
+    #region Constants and Fields
+
+    private static readonly int[] _allowedEntropyLengths = [12, 16, 20, 24, 28, 32];
+    private static readonly int[] _allowedWordLengths = [9, 12, 15, 18, 21, 24];
+    private const int _allWordsLength = 2048; // 1111 1111 111 -> 0..2047
+    private const int _bitsPerWord = 11;
+
+    #endregion
+
+    #region Constructors
 
     private Mnemonic(string[] words, byte[] entropy)
     {
@@ -17,11 +32,13 @@ public record Mnemonic
         Entropy = entropy;
     }
 
-    private static readonly int[] _allowedEntropyLengths = [12, 16, 20, 24, 28, 32];
-    private static readonly int[] _allowedWordLengths = [9, 12, 15, 18, 21, 24];
-    private const int _allWordsLength = 2048; // 1111 1111 111 -> 0..2047
-    private const int _bitsPerWord = 11;
+    #endregion
 
+    #region Mnemonic Generation and Restoration
+
+    /// <summary>
+    /// Generates a new mnemonic from a given word list and word length.
+    /// </summary>
     public static Mnemonic Generate(string[] wordLists, int wordLength = 12)
     {
         if (wordLists.Length is not _allWordsLength)
@@ -43,21 +60,26 @@ public record Mnemonic
                 $"Invalid derived entropy size: {entropySize}. Must be one of ({string.Join(", ", _allowedEntropyLengths)})."
             );
 
-        // Generate cryptographically secure random bytes for entropy
         byte[] entropy = new byte[entropySize];
-        using RandomNumberGenerator randomNumberGenerator = RandomNumberGenerator.Create();
-        randomNumberGenerator.GetBytes(entropy);
+        using RandomNumberGenerator rng = RandomNumberGenerator.Create();
+        rng.GetBytes(entropy);
 
         return CreateMnemonicFromEntropy(entropy, wordLists);
     }
 
+    /// <summary>
+    /// Restores a mnemonic from a space-separated string.
+    /// </summary>
     public static Mnemonic Restore(string mnemonic, string[] wordLists)
     {
         string[] wordArr = mnemonic.Split(' ');
         return Restore(wordArr, wordLists);
     }
 
-    public static Mnemonic Restore(string[] mnemonic, string[] wordLists)
+    /// <summary>
+    /// Restores a mnemonic from an array of words.
+    /// </summary>
+    public static Mnemonic Restore(string[] mnemonicWords, string[] wordLists)
     {
         // Validate wordLists has the correct number of words
         if (wordLists.Length is not _allWordsLength)
@@ -67,85 +89,68 @@ public record Mnemonic
             );
 
         // Validate all mnemonic words exist in wordLists
-        if (!mnemonic.All(x => wordLists.Contains(x)))
-            throw new ArgumentException(nameof(mnemonic), "Seed has invalid words.");
+        if (!mnemonicWords.All(x => wordLists.Contains(x)))
+            throw new ArgumentException(nameof(mnemonicWords), "Seed has invalid words.");
 
         // Validate mnemonic length is one of the allowed lengths
-        if (!_allowedWordLengths.Contains(mnemonic.Length))
+        if (!_allowedWordLengths.Contains(mnemonicWords.Length))
             throw new FormatException($"Invalid seed length. It must be one of the following values ({string.Join(", ", _allowedWordLengths)})");
 
-        // Calculate derived entropy length based on the mnemonic word count
-        int entropyBitLength = mnemonic.Length * _bitsPerWord * 32 / 33; // (mnemonic length * 11) * (32/33) to account for checksum
+        // Calculate effective entropy length (accounting for checksum)
+        int entropyBitLength = mnemonicWords.Length * _bitsPerWord * 32 / 33;
         int entropyByteLength = entropyBitLength / 8;
 
-        // Validate the calculated entropy length
         if (!_allowedEntropyLengths.Contains(entropyByteLength))
             throw new ArgumentException($"Invalid entropy length derived from mnemonic: {entropyByteLength} bytes.");
 
-        // Calculate checksum bit length
-        int checksumBitLength = mnemonic.Length * _bitsPerWord - entropyBitLength;
-
-        // Initialize entropy bytes array
+        int checksumBitLength = mnemonicWords.Length * _bitsPerWord - entropyBitLength;
         byte[] entropy = new byte[entropyByteLength];
 
-        // Convert mnemonic words to indices in the wordLists
-        int[] indices = [.. mnemonic.Select(word => Array.IndexOf(wordLists, word))];
+        // Convert each mnemonic word to its index in the word list.
+        int[] indices = [.. mnemonicWords.Select(word => Array.IndexOf(wordLists, word))];
 
-        // Recreate the combined entropy and checksum bits
+        // Recreate the entropy bits (ignoring the checksum portion)
         for (int i = 0; i < indices.Length; i++)
         {
             int wordIndex = indices[i];
-
-            // For each bit in the current word index
             for (int j = 0; j < _bitsPerWord; j++)
             {
-                // Calculate the overall bit position
                 int bitPosition = i * _bitsPerWord + j;
-
-                // Extract the bit from the word index (MSB first)
-                bool bitValue = ((wordIndex >> (_bitsPerWord - 1 - j)) & 1) == 1;
-
-                // If this is an entropy bit (not a checksum bit), set it in the entropy array
                 if (bitPosition < entropyBitLength)
                 {
-                    int byteIndex = bitPosition / 8;
-                    int bitIndexInByte = 7 - (bitPosition % 8); // MSB first
-
+                    bool bitValue = ((wordIndex >> (_bitsPerWord - 1 - j)) & 1) == 1;
                     if (bitValue)
                     {
+                        int byteIndex = bitPosition / 8;
+                        int bitIndexInByte = 7 - (bitPosition % 8);
                         entropy[byteIndex] |= (byte)(1 << bitIndexInByte);
                     }
                 }
             }
         }
 
-        // Verify the checksum
+        // Verify checksum against SHA256 hash of the entropy.
         byte[] hash = SHA256.HashData(entropy);
-
-        // Verify each checksum bit
         for (int i = 0; i < checksumBitLength; i++)
         {
             int entropyBitPosition = entropyBitLength + i;
             int wordIndex = entropyBitPosition / _bitsPerWord;
             int bitIndexInWord = entropyBitPosition % _bitsPerWord;
 
-            // Get the expected checksum bit from the mnemonic
             bool expectedBit = ((indices[wordIndex] >> (_bitsPerWord - 1 - bitIndexInWord)) & 1) == 1;
-
-            // Get the actual checksum bit from the hash
             int hashBitIndex = i % 8;
             bool actualBit = ((hash[i / 8] >> (7 - hashBitIndex)) & 1) == 1;
 
-            // If checksums don't match, throw an exception
             if (expectedBit != actualBit)
                 throw new FormatException("Invalid mnemonic checksum.");
         }
 
-        // Return the restored MnemonicKey with the original words and derived entropy
-        return new Mnemonic(mnemonic, entropy);
+        return new Mnemonic(mnemonicWords, entropy);
     }
 
-    // This should be private
+    /// <summary>
+    /// Creates a mnemonic from entropy by calculating the checksum and mapping bits to words.
+    /// </summary>
     public static Mnemonic CreateMnemonicFromEntropy(byte[] entropy, string[] wordList)
     {
         // Calculate checksum length in bits (entropy length in bits / 32)
@@ -169,6 +174,48 @@ public record Mnemonic
 
         return new(words, entropy);
     }
+
+    /// <summary>
+    /// Derives the root private key from a mnemonic phrase, applying Ed25519 scalar clamping to ensure key compliance.
+    /// </summary>
+    /// <param name="mnemonic">The mnemonic phrase used to generate the root key</param>
+    /// <param name="password">Optional password for additional key derivation security (default is empty string)</param>
+    /// <returns>A PrivateKey instance with the derived and clamped root key</returns>
+    /// <remarks>
+    /// Scalar clamping is a critical cryptographic process that ensures the generated private key 
+    /// is suitable for use with Ed25519 signatures. It involves three specific bit manipulations:
+    /// 
+    /// 1. Clear the lowest 3 bits (rootKey[0] &= 0b1111_1000):
+    ///    - Ensures the scalar is a multiple of 8, improving performance
+    ///    - Prevents small-subgroup attacks by restricting the scalar's range
+    /// 
+    /// 2. Clear the highest 3 bits (rootKey[31] &= 0b0001_1111):
+    ///    - Prevents potential side-channel attacks
+    ///    - Limits the scalar's magnitude to prevent overflow
+    /// 
+    /// 3. Set the second-highest bit (rootKey[31] |= 0b0100_0000):
+    ///    - Guarantees the scalar is within a specific range
+    ///    - Provides additional cryptographic hardening
+    /// </remarks>
+    public PrivateKey GetRootKey(string password = "")
+    {
+        byte[] rootKey = KeyDerivation.Pbkdf2(password, Entropy, KeyDerivationPrf.HMACSHA512, 4096, 96);
+        rootKey[0] &= 0b1111_1000;
+        rootKey[31] &= 0b0001_1111;
+        rootKey[31] |= 0b0100_0000;
+
+        byte[] key = new byte[64];
+        byte[] chaincode = new byte[32];
+
+        Array.Copy(rootKey, 0, key, 0, 64);
+        Array.Copy(rootKey, 64, chaincode, 0, 32);
+
+        return new PrivateKey(key, chaincode);
+    }
+
+    #endregion
+
+    #region Bit Utilities
 
     /// <summary>
     /// Extracts 11 bits (BIP39 standard) from the combined entropy and checksum,
@@ -203,45 +250,6 @@ public record Mnemonic
         int bitIndex = 7 - (bitPosition % 8); // MSB first
         return ((data[byteIndex] >> bitIndex) & 1) == 1;
     }
+
+    #endregion
 };
-
-public static class MnemonicExtensions
-{
-    /// <summary>
-    /// Derives the root private key from a mnemonic phrase, applying Ed25519 scalar clamping to ensure key compliance.
-    /// </summary>
-    /// <param name="mnemonic">The mnemonic phrase used to generate the root key</param>
-    /// <param name="password">Optional password for additional key derivation security (default is empty string)</param>
-    /// <returns>A PrivateKey instance with the derived and clamped root key</returns>
-    /// <remarks>
-    /// Scalar clamping is a critical cryptographic process that ensures the generated private key 
-    /// is suitable for use with Ed25519 signatures. It involves three specific bit manipulations:
-    /// 
-    /// 1. Clear the lowest 3 bits (rootKey[0] &= 0b1111_1000):
-    ///    - Ensures the scalar is a multiple of 8, improving performance
-    ///    - Prevents small-subgroup attacks by restricting the scalar's range
-    /// 
-    /// 2. Clear the highest 3 bits (rootKey[31] &= 0b0001_1111):
-    ///    - Prevents potential side-channel attacks
-    ///    - Limits the scalar's magnitude to prevent overflow
-    /// 
-    /// 3. Set the second-highest bit (rootKey[31] |= 0b0100_0000):
-    ///    - Guarantees the scalar is within a specific range
-    ///    - Provides additional cryptographic hardening
-    /// </remarks>
-    public static PrivateKey GetRootKey(this Mnemonic mnemonic, string password = "")
-    {
-        byte[] rootKey = KeyDerivation.Pbkdf2(password, mnemonic.Entropy, KeyDerivationPrf.HMACSHA512, 4096, 96);
-        rootKey[0] &= 0b1111_1000;
-        rootKey[31] &= 0b0001_1111;
-        rootKey[31] |= 0b0100_0000;
-
-        byte[] key = new byte[64];
-        byte[] chaincode = new byte[32];
-
-        Array.Copy(rootKey, 0, key, 0, 64);
-        Array.Copy(rootKey, 64, chaincode, 0, 32);
-
-        return new PrivateKey(key, chaincode);
-    }
-}
