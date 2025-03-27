@@ -1,3 +1,4 @@
+using Chrysalis.Cbor.Serialization;
 using Chrysalis.Cbor.Serialization.Attributes;
 using Chrysalis.Cbor.Types.Cardano.Core.Certificates;
 using Chrysalis.Cbor.Types.Cardano.Core.Common;
@@ -26,7 +27,7 @@ public partial record AlonzoTransactionBody(
         [CborProperty(13)] CborMaybeIndefList<TransactionInput>? Collateral,
         [CborProperty(14)] CborMaybeIndefList<byte[]>? RequiredSigners,
         [CborProperty(15)] int? NetworkId
-    ) : TransactionBody;
+    ) : TransactionBody, ICborPreserveRaw;
 
 [CborSerializable]
 [CborMap]
@@ -48,7 +49,7 @@ public partial record BabbageTransactionBody(
     [CborProperty(16)] TransactionOutput? CollateralReturn,
     [CborProperty(17)] ulong? TotalCollateral,
     [CborProperty(18)] CborMaybeIndefList<TransactionInput>? ReferenceInputs
-) : TransactionBody;
+) : TransactionBody, ICborPreserveRaw;
 
 
 [CborSerializable]
@@ -74,5 +75,5 @@ public partial record ConwayTransactionBody(
     [CborProperty(20)] CborMaybeIndefList<ProposalProcedure>? ProposalProcedures,
     [CborProperty(21)] ulong? TreasuryValue,
     [CborProperty(22)] ulong? Donation
-) : TransactionBody;
+) : TransactionBody, ICborPreserveRaw;
 
