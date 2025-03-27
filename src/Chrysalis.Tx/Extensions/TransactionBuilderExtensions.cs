@@ -6,11 +6,10 @@ using Chrysalis.Cbor.Types.Cardano.Core.Transaction;
 using Chrysalis.Cbor.Types.Cardano.Core.TransactionWitness;
 using Chrysalis.Plutus.VM.EvalTx;
 using Chrysalis.Tx.Builders;
-using Chrysalis.Tx.Extensions;
 using Chrysalis.Tx.Models;
 using Chrysalis.Tx.Utils;
 
-namespace Chrysalis.Tx.TransactionBuilding.Extensions;
+namespace Chrysalis.Tx.Extensions;
 
 public static class TransactionBuilderExtensions
 {
@@ -19,7 +18,6 @@ public static class TransactionBuilderExtensions
 
         ulong scriptFee = 0;
         ulong scriptExecutionFee = 0;
-        // Script data hash calculation and script fee calculation
         if (builder.witnessSet.Redeemers is not null)
         {
             builder.SetTotalCollateral(2000000UL);
@@ -43,7 +41,6 @@ public static class TransactionBuilderExtensions
         builder.SetFee(2000000UL);
         // fee and change calculation
         Transaction draftTx = builder.Build();
-        Console.WriteLine(Convert.ToHexString(CborSerializer.Serialize(draftTx)));
         var draftTxCborBytes = CborSerializer.Serialize(draftTx);
         ulong draftTxCborLength = (ulong)draftTxCborBytes.Length;
 
@@ -68,7 +65,6 @@ public static class TransactionBuilderExtensions
 
         var outputs = builder.body.Outputs.Value();
 
-
         Lovelace updatedChangeLovelace = builder.changeOutput switch
         {
             AlonzoTransactionOutput alonzo => alonzo.Amount switch
@@ -87,6 +83,7 @@ public static class TransactionBuilderExtensions
         };
 
         Value changeValue = updatedChangeLovelace;
+
 
         Value changeOutputValue = builder.changeOutput switch
         {
@@ -139,7 +136,6 @@ public static class TransactionBuilderExtensions
         CborDefList<ResolvedInput> utxoCbor = new(utxos);
         var utxoCborBytes = CborSerializer.Serialize<CborMaybeIndefList<ResolvedInput>>(utxoCbor);
         Transaction transaction = builder.Build();
-        Console.WriteLine(Convert.ToHexString(CborSerializer.Serialize(transaction)));
         var txCborBytes = CborSerializer.Serialize(transaction);
         var evalResult = Evaluator.EvaluateTx(txCborBytes, utxoCborBytes);
         var previousRedeemers = builder.witnessSet.Redeemers;
@@ -182,14 +178,4 @@ public static class TransactionBuilderExtensions
 
         return builder;
     }
-
-
-    //Remove
-    public static TransactionBuilder SetCollateral(this TransactionBuilder builder, ResolvedInput collateral)
-    {
-        builder.AddCollateral(collateral.Outref);
-        builder.SetCollateralReturn(collateral.Output);
-        return builder;
-    }
-
 }
