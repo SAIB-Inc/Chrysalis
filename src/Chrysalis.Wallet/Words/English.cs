@@ -1,4 +1,4 @@
-namespace Chrysalis.Tx.Words;
+namespace Chrysalis.Wallet.Words;
 
 public static class English
 {

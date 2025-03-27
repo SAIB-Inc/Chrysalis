@@ -1,7 +1,7 @@
 using Chrysalis.Wallet.Extensions;
 using Chrysalis.Wallet.Models.Enums;
 
-namespace Chrysalis.Wallet.Addresses;
+namespace Chrysalis.Wallet.Models.Addresses;
 
 public record AddressHeader(AddressType Type, NetworkType Network, CredentialType? StakeCredentialType = null)
 {
@@ -11,7 +11,7 @@ public record AddressHeader(AddressType Type, NetworkType Network, CredentialTyp
         byte header = (byte)(((byte)Type << 4) | (byte)Network);
 
         // Optionally, modify the header byte if it's a stake address
-        if (StakeCredentialType != null)
+        if (StakeCredentialType is not null)
         {
             // Set the top 4 bits for stake address type
             header |= (byte)((StakeCredentialType == CredentialType.KeyHash) ? 0x0E : 0x0F);
@@ -42,7 +42,7 @@ public record AddressHeader(AddressType Type, NetworkType Network, CredentialTyp
 
     public string GetPrefix()
     {
-        string prefixCore = Type.IsRewardAddress() ? "stake" : "addr";
+        string prefixCore = Type == AddressType.StakeKey ? "stake" : "addr";
         string networkSuffix = Network == NetworkType.Mainnet ? string.Empty : "_test";
         return prefixCore + networkSuffix;
     }

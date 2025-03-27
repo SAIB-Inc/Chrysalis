@@ -1,7 +1,10 @@
 using System.Security.Cryptography;
 using System.Text;
+using Chrysalis.Wallet.Extensions;
+using Chrysalis.Wallet.Models.Enums;
+using Microsoft.AspNetCore.Cryptography.KeyDerivation;
 
-namespace Chrysalis.Wallet.Keys;
+namespace Chrysalis.Wallet.Models.Keys;
 
 public record Mnemonic
 {
@@ -201,3 +204,44 @@ public record Mnemonic
         return ((data[byteIndex] >> bitIndex) & 1) == 1;
     }
 };
+
+public static class MnemonicExtensions
+{
+    /// <summary>
+    /// Derives the root private key from a mnemonic phrase, applying Ed25519 scalar clamping to ensure key compliance.
+    /// </summary>
+    /// <param name="mnemonic">The mnemonic phrase used to generate the root key</param>
+    /// <param name="password">Optional password for additional key derivation security (default is empty string)</param>
+    /// <returns>A PrivateKey instance with the derived and clamped root key</returns>
+    /// <remarks>
+    /// Scalar clamping is a critical cryptographic process that ensures the generated private key 
+    /// is suitable for use with Ed25519 signatures. It involves three specific bit manipulations:
+    /// 
+    /// 1. Clear the lowest 3 bits (rootKey[0] &= 0b1111_1000):
+    ///    - Ensures the scalar is a multiple of 8, improving performance
+    ///    - Prevents small-subgroup attacks by restricting the scalar's range
+    /// 
+    /// 2. Clear the highest 3 bits (rootKey[31] &= 0b0001_1111):
+    ///    - Prevents potential side-channel attacks
+    ///    - Limits the scalar's magnitude to prevent overflow
+    /// 
+    /// 3. Set the second-highest bit (rootKey[31] |= 0b0100_0000):
+    ///    - Guarantees the scalar is within a specific range
+    ///    - Provides additional cryptographic hardening
+    /// </remarks>
+    public static PrivateKey GetRootKey(this Mnemonic mnemonic, string password = "")
+    {
+        byte[] rootKey = KeyDerivation.Pbkdf2(password, mnemonic.Entropy, KeyDerivationPrf.HMACSHA512, 4096, 96);
+        rootKey[0] &= 0b1111_1000;
+        rootKey[31] &= 0b0001_1111;
+        rootKey[31] |= 0b0100_0000;
+
+        byte[] key = new byte[64];
+        byte[] chaincode = new byte[32];
+
+        Array.Copy(rootKey, 0, key, 0, 64);
+        Array.Copy(rootKey, 64, chaincode, 0, 32);
+
+        return new PrivateKey(key, chaincode);
+    }
+}

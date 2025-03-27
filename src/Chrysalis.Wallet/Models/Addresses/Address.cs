@@ -3,7 +3,7 @@ using Chrysalis.Wallet.Extensions;
 using Chrysalis.Wallet.Models.Enums;
 using Chrysalis.Wallet.Utils;
 
-namespace Chrysalis.Wallet.Addresses;
+namespace Chrysalis.Wallet.Models.Addresses;
 
 public class Address
 {
@@ -69,6 +69,34 @@ public class Address
     }
 
     public string ToHex() => Convert.ToHexStringLower(_addressBytes);
+
+    public static AddressHeader GetAddressHeader(byte headerByte)
+    {
+        int typeValue = (headerByte & 0xF0) >> 4;
+        AddressType type = typeValue switch
+        {
+            0x00 => AddressType.BasePayment,
+            0x01 => AddressType.ScriptPayment,
+            0x02 => AddressType.BaseWithScriptDelegation,
+            0x03 => AddressType.ScriptWithScriptDelegation,
+            0x04 => AddressType.BaseWithPointerDelegation,
+            0x05 => AddressType.BaseWithPointerDelegation,
+            0x06 => AddressType.EnterprisePayment,
+            0x07 => AddressType.EnterpriseScriptPayment,
+            0x0e => AddressType.StakeKey,
+            0x0f => AddressType.ScriptStakeKey,
+            _ => AddressType.BasePayment
+        };
+
+        NetworkType network = (headerByte & 0x0F) switch
+        {
+            0x0 => NetworkType.Testnet,
+            0x1 => NetworkType.Mainnet,
+            _ => throw new ArgumentOutOfRangeException("Network type not supported in header")
+        };
+
+        return new AddressHeader(type, network);
+    }
 
     // TODO: Handle other AddressTypes properly
     private static byte[] ConstructAddressBytes(AddressHeader header, Credential payment, Credential? stake)
@@ -176,32 +204,71 @@ public class Address
 
         return credential;
     }
+}
 
-    public static AddressHeader GetAddressHeader(byte headerByte)
+public static class AddressExtensions
+{
+    public static string GetPrefix(this Address self)
     {
-        int typeValue = (headerByte & 0xF0) >> 4;
-        AddressType type = typeValue switch
-        {
-            0x00 => AddressType.BasePayment,
-            0x01 => AddressType.ScriptPayment,
-            0x02 => AddressType.BaseWithScriptDelegation,
-            0x03 => AddressType.ScriptWithScriptDelegation,
-            0x04 => AddressType.BaseWithPointerDelegation,
-            0x05 => AddressType.BaseWithPointerDelegation,
-            0x06 => AddressType.EnterprisePayment,
-            0x07 => AddressType.EnterpriseScriptPayment,
-            0x0e => AddressType.StakeKey,
-            0x0f => AddressType.ScriptStakeKey,
-            _ => AddressType.BasePayment
-        };
+        byte[] addressBytes = self.ToBytes();
+        AddressHeader header = Address.GetAddressHeader(addressBytes[0]);
+        return header.GetPrefix();
+    }
 
-        NetworkType network = (headerByte & 0x0F) switch
-        {
-            0x0 => NetworkType.Testnet,
-            0x1 => NetworkType.Mainnet,
-            _ => throw new ArgumentOutOfRangeException("Network type not supported in header")
-        };
+    public static byte[]? GetPkh(this Address self)
+    {
+        byte[] addressBytes = self.ToBytes();
 
-        return new AddressHeader(type, network);
+        if (addressBytes == null || addressBytes.Length < 2)
+            return null;
+
+        AddressHeader header = Address.GetAddressHeader(addressBytes[0]);
+
+        // Helper method to extract the pkh from addressBytes.
+        byte[]? ExtractPkh(int offset, int length)
+        {
+            if (addressBytes.Length < offset + length) return null;
+            byte[] pkh = new byte[length];
+            Buffer.BlockCopy(addressBytes, offset, pkh, 0, length);
+            return pkh;
+        }
+
+        // Determine pkh based on address type.
+        return header.Type switch
+        {
+            // base key-key
+            AddressType.BasePayment or AddressType.BaseWithScriptDelegation or AddressType.BaseWithPointerDelegation or AddressType.EnterprisePayment => ExtractPkh(1, 28),
+            // base script-key
+            AddressType.ScriptPayment or AddressType.ScriptWithScriptDelegation or AddressType.ScriptWithPointerDelegation or AddressType.EnterpriseScriptPayment => null,
+            _ => null,
+        };
+    }
+
+    public static byte[]? GetSkh(this Address self)
+    {
+        byte[] addressBytes = self.ToBytes();
+
+        if (addressBytes == null || addressBytes.Length < 57)
+            return null;
+
+        AddressHeader header = Address.GetAddressHeader(addressBytes[0]);
+
+        // Helper method to extract the pkh from addressBytes.
+        byte[]? ExtractSkh(int offset, int length)
+        {
+            byte[] skh = new byte[length];
+            Buffer.BlockCopy(addressBytes, offset, skh, 0, length);
+            return skh;
+        }
+
+        // Determine pkh based on address type.
+        return header.Type switch
+        {
+            // base key-key
+            AddressType.BasePayment or AddressType.BaseWithScriptDelegation => ExtractSkh(1 + 28, 28),
+            // base script-key
+            AddressType.ScriptPayment or AddressType.ScriptWithScriptDelegation or AddressType.ScriptWithPointerDelegation or AddressType.EnterpriseScriptPayment => null,
+            _ => null,
+        };
     }
 }
