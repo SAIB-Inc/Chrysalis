@@ -19,7 +19,7 @@ public static class RawQueries
     public static BlockQuery CreateBlockQuery(BlockQuery query) => new BaseBlockQuery(0, new BaseBlockQuery(0, new BaseBlockQuery((int)QueryEra.Conway, query)));
     public static BlockQuery GetCurrentEra => new BaseBlockQuery(0, new BaseBlockQuery(2, null));
     public static BlockQuery GetTip => CreateBlockQuery(new BaseBlockQuery(0, null));
-    public static BlockQuery GetUtxoByAddress(List<byte[]> addresses) => CreateBlockQuery(new UtxoByAddressQuery(6, new Addresses(addresses)));
+    public static BlockQuery GetUtxoByAddress(List<byte[]> addresses) => CreateBlockQuery(new UtxoByAddressQuery(6, new(addresses)));
     public static BlockQuery GetUtxoByTxIns(List<TransactionInput> txIns) => CreateBlockQuery(new UtxoByTxInQuery(15, new(txIns)));
 }
 
@@ -42,7 +42,7 @@ public partial record BaseBlockQuery(
 [CborList]
 public partial record UtxoByAddressQuery(
     [CborOrder(0)] ulong Idx,
-    [CborOrder(1)] Addresses Addresses
+    [CborOrder(1)] CborDefList<byte[]> Addresses
 ) : BlockQuery;
 
 [CborSerializable]
@@ -51,7 +51,3 @@ public partial record UtxoByTxInQuery(
     [CborOrder(0)] ulong Idx,
     [CborOrder(1)] CborDefList<TransactionInput> TxIns
 ) : BlockQuery;
-
-[CborSerializable]
-[CborList]
-public partial record Addresses(List<byte[]> Addrs) : BlockQuery;
