@@ -7,10 +7,9 @@ using Chrysalis.Cbor.Types.Cardano.Core.Common;
 using Chrysalis.Cbor.Types.Cardano.Core.Governance;
 using Chrysalis.Cbor.Types;
 using Chrysalis.Tx.Extensions;
-using Chrysalis.Cbor.Types.Cardano.Core.Header;
 using Chrysalis.Tx.Utils;
 
-namespace Chrysalis.Tx.TransactionBuilding;
+namespace Chrysalis.Tx.Builders;
 
 public class TransactionBuilder
 {
@@ -22,11 +21,10 @@ public class TransactionBuilder
 
     public TransactionBuilder()
     {
-        body = Defaults.TransactionBody;
-        witnessSet = Defaults.TransactionWitnessSet;
+        body = CborTypeDefaults.TransactionBody;
+        witnessSet = CborTypeDefaults.TransactionWitnessSet;
         auxiliaryData = null;
     }
-    public static TransactionBuilder Create() => new();
     public static TransactionBuilder Create(ConwayProtocolParamUpdate pparams)
     {
         return new TransactionBuilder() { pparams = pparams };
@@ -105,6 +103,15 @@ public class TransactionBuilder
         return this;
     }
 
+    public TransactionBuilder AddMint(MultiAssetMint mint)
+    {
+        foreach (var asset in mint.Value)
+        {
+            body = body with { Mint = new MultiAssetMint(new Dictionary<byte[], TokenBundleMint>(mint.Value) { { asset.Key, asset.Value } }) };
+        }
+        return this;
+    }
+
     public TransactionBuilder SetMint(MultiAssetMint mint)
     {
         body = body with { Mint = mint };
@@ -119,7 +126,7 @@ public class TransactionBuilder
 
     public TransactionBuilder AddCollateral(TransactionInput collateral)
     {
-        body = body with { Collateral = new CborDefList<TransactionInput>([.. body.Collateral.Value(), collateral]) };
+        body = body with { Collateral = new CborDefListWithTag<TransactionInput>([.. body.Collateral.Value(), collateral]) };
         return this;
     }
 

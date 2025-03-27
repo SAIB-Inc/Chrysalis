@@ -1,33 +1,35 @@
-﻿using Chrysalis.Cbor.Types.Cardano.Core.Certificates;
+﻿using System.Runtime.CompilerServices;
+using Chrysalis.Cbor.Types.Cardano.Core.Certificates;
 using Chrysalis.Cbor.Types.Cardano.Core.Common;
+using Chrysalis.Cbor.Types.Cardano.Core.Protocol;
 using Chrysalis.Cbor.Types.Cardano.Core.Transaction;
 using Chrysalis.Cbor.Types.Cardano.Core.TransactionWitness;
 using Chrysalis.Tx.Extensions;
 using Chrysalis.Tx.Models;
 using Chrysalis.Tx.TransactionBuilding.Extensions;
 using Chrysalis.Tx.Utils;
-using ChrysalisWallet = Chrysalis.Wallet.Addresses;
+using ChrysalisWallet = Chrysalis.Wallet.Models.Addresses;
 
-namespace Chrysalis.Tx.TransactionBuilding;
+namespace Chrysalis.Tx.Builders;
 public class TransactionTemplateBuilder<T>
 {
-    private IProvider? _provider;
-    private readonly List<Action<InputOptions, T>> _inputConfigs = [];
-    private readonly List<Action<OutputOptions, T>> _outputConfigs = [];
+    private ICardanoDataProvider? _provider;
+    private string? _changeAddress;
     private readonly Dictionary<string, string> _staticParties = [];
+    private readonly List<Action<InputOptions<T>, T>> _inputConfigs = [];
+    private readonly List<Action<OutputOptions, T>> _outputConfigs = [];
+    private readonly List<Action<MintOptions, T>> _mintConfigs = [];
     private readonly List<Action<WithdrawalOptions<T>, T>> _withdrawalConfigs = [];
 
-    private Action<Dictionary<int, Dictionary<string, int>>, T, Dictionary<RedeemerKey, RedeemerValue>>? _redeemerGenerator;
+    public static TransactionTemplateBuilder<T> Create(ICardanoDataProvider provider) => new TransactionTemplateBuilder<T>().SetProvider(provider);
 
-    public static TransactionTemplateBuilder<T> Create(IProvider provider) => new TransactionTemplateBuilder<T>().SetProvider(provider);
-
-    private TransactionTemplateBuilder<T> SetProvider(IProvider provider)
+    private TransactionTemplateBuilder<T> SetProvider(ICardanoDataProvider provider)
     {
         _provider = provider;
         return this;
     }
 
-    public TransactionTemplateBuilder<T> AddInput(Action<InputOptions, T> config)
+    public TransactionTemplateBuilder<T> AddInput(Action<InputOptions<T>, T> config)
     {
         _inputConfigs.Add(config);
         return this;
@@ -39,6 +41,12 @@ public class TransactionTemplateBuilder<T>
         return this;
     }
 
+    public TransactionTemplateBuilder<T> AddMint(Action<MintOptions, T> config)
+    {
+        _mintConfigs.Add(config);
+        return this;
+    }
+
     public TransactionTemplateBuilder<T> AddWithdrawal(Action<WithdrawalOptions<T>, T> config)
     {
         _withdrawalConfigs.Add(config);
@@ -46,14 +54,12 @@ public class TransactionTemplateBuilder<T>
     }
 
 
-    public TransactionTemplateBuilder<T> SetRedeemerGenerator(Action<Dictionary<int, Dictionary<string, int>>, T, Dictionary<RedeemerKey, RedeemerValue>>? generator)
+    public TransactionTemplateBuilder<T> AddStaticParty(string partyIdent, string party, bool isChange = false)
     {
-        _redeemerGenerator = generator;
-        return this;
-    }
-
-    public TransactionTemplateBuilder<T> AddStaticParty(string partyIdent, string party)
-    {
+        if (isChange)
+        {
+            _changeAddress = partyIdent;
+        }
         _staticParties[partyIdent] = party;
         return this;
     }
@@ -63,21 +69,28 @@ public class TransactionTemplateBuilder<T>
     {
         return async param =>
         {
-            var pparams = await _provider!.GetParametersAsync();
-            var txBuilder = TransactionBuilder.Create(pparams);
+            ConwayProtocolParamUpdate pparams = await _provider!.GetParametersAsync();
+            TransactionBuilder txBuilder = TransactionBuilder.Create(pparams);
 
             int changeIndex = 0;
 
-            var additionalParties = param is IParameters parameters
+            Dictionary<string, (string address, bool isChange)> additionalParties = param is ITransactionParameters parameters
                 ? parameters.Parties ?? []
                 : [];
 
-            var parties = MergeParties(_staticParties, additionalParties);
+            Dictionary<string, string> parties = MergeParties(_staticParties, additionalParties);
 
             Dictionary<string, TransactionInput> inputsById = [];
             Dictionary<string, Dictionary<string, int>> associationsByInputId = [];
 
-            ChrysalisWallet.Address? senderAddress = null;
+            if (_changeAddress is null)
+            {
+                throw new InvalidOperationException("Change address not set");
+            }
+
+            ChrysalisWallet.Address changeAddress = ChrysalisWallet.Address.FromBech32(parties[_changeAddress]);
+
+            List<string> inputAddresses = [];
             List<TransactionInput> specifiedInputs = [];
             TransactionInput? referenceInput = null;
             bool isSmartContractTx = false;
@@ -86,7 +99,7 @@ public class TransactionTemplateBuilder<T>
 
             foreach (var config in _inputConfigs)
             {
-                var inputOptions = new InputOptions("", null, null, null, null);
+                var inputOptions = new InputOptions<T>("", null, null, null, null, null, null);
                 config(inputOptions, param);
 
                 if (!string.IsNullOrEmpty(inputOptions.Id) && inputOptions.UtxoRef != null)
@@ -107,7 +120,6 @@ public class TransactionTemplateBuilder<T>
                     else
                     {
                         specifiedInputs.Add(inputOptions.UtxoRef);
-                        senderAddress = ChrysalisWallet.Address.FromBech32(parties[inputOptions.From]);
                         txBuilder.AddInput(inputOptions.UtxoRef);
 
                         if (inputOptions.Redeemer is not null)
@@ -116,7 +128,6 @@ public class TransactionTemplateBuilder<T>
                             {
                                 redeemers[kvp.Key] = kvp.Value;
                             }
-                            break;
 
                         }
                     }
@@ -129,11 +140,23 @@ public class TransactionTemplateBuilder<T>
 
                 if (!string.IsNullOrEmpty(inputOptions.From))
                 {
-                    senderAddress = ChrysalisWallet.Address.FromBech32(parties[inputOptions.From]);
+                    inputAddresses.Add(inputOptions.From);
                 }
             }
 
-            ChrysalisWallet.Address changeAddress = senderAddress!;
+            foreach (var config in _mintConfigs)
+            {
+                var mintOptions = new MintOptions("", []);
+                config(mintOptions, param);
+
+                foreach (var (assetName, amount) in mintOptions.Assets)
+                {
+                    txBuilder.AddMint(new MultiAssetMint(new Dictionary<byte[], TokenBundleMint>
+                    {
+                        { Convert.FromHexString(mintOptions.Policy), new TokenBundleMint(new Dictionary<byte[], long> { { Convert.FromHexString(assetName), (long)amount } }) }
+                    }));
+                }
+            }
 
             List<Value> requiredAmount = [];
             int outputIndex = 0;
@@ -151,23 +174,31 @@ public class TransactionTemplateBuilder<T>
                 }
 
                 requiredAmount.Add(outputOptions.Amount!);
-                txBuilder.AddOutput(OutputUtils.BuildOutput(outputOptions, parties));
-
-                if (isSmartContractTx && !string.IsNullOrEmpty(outputOptions.To))
-                {
-                    changeAddress = ChrysalisWallet.Address.FromBech32(parties[outputOptions.To]);
-                }
+                txBuilder.AddOutput(outputOptions.BuildOutput(parties));
 
                 changeIndex++;
                 outputIndex++;
             }
 
-            List<ResolvedInput> utxos = await _provider!.GetUtxosAsync(senderAddress!.ToBech32());
+            List<ResolvedInput> utxos = await _provider!.GetUtxosAsync(parties[_changeAddress]);
+
+
+            var allUtxos = new List<ResolvedInput>(utxos);
+
+            foreach (string address in inputAddresses.Distinct())
+            {
+                Console.WriteLine(changeAddress);
+                if (address != _changeAddress)
+                {
+                    var addressUtxos = await _provider!.GetUtxosAsync(parties[address]);
+                    allUtxos.AddRange(addressUtxos);
+                }
+            }
 
             byte[] scriptCborBytes = [];
             if (isSmartContractTx && referenceInput != null)
             {
-                foreach (var utxo in utxos)
+                foreach (var utxo in allUtxos)
                 {
                     if (Convert.ToHexString(utxo.Outref.TransactionId) == Convert.ToHexString(referenceInput.TransactionId) &&
                         utxo.Outref.Index == referenceInput.Index)
@@ -175,21 +206,12 @@ public class TransactionTemplateBuilder<T>
                         scriptCborBytes = utxo.Output switch
                         {
                             PostAlonzoTransactionOutput postAlonzoOutput =>
-                                postAlonzoOutput.ScriptRef?.Value ?? Array.Empty<byte>(),
+                                postAlonzoOutput.ScriptRef?.Value ?? [],
                             _ => throw new InvalidOperationException($"Invalid output type: {utxo.Output.GetType().Name}")
                         };
                         break;
                     }
                 }
-            }
-
-            var allUtxos = new List<ResolvedInput>(utxos);
-
-            if (senderAddress!.ToBech32() != changeAddress.ToBech32())
-            {
-                List<ResolvedInput> changeAddressUtxos = await _provider!.GetUtxosAsync(changeAddress.ToBech32());
-                allUtxos.AddRange(changeAddressUtxos);
-                utxos = changeAddressUtxos;
             }
 
             ResolvedInput? feeInput = utxos
@@ -217,6 +239,7 @@ public class TransactionTemplateBuilder<T>
             List<ResolvedInput> specifiedInputsUtxos = [];
             foreach (var input in specifiedInputs)
             {
+
                 ResolvedInput specifiedInputUtxo = allUtxos.First(e =>
                     Convert.ToHexString(e.Outref.TransactionId) == Convert.ToHexString(input.TransactionId) &&
                     e.Outref.Index == input.Index);
@@ -225,7 +248,8 @@ public class TransactionTemplateBuilder<T>
                 utxos.Remove(specifiedInputUtxo);
             }
 
-            var coinSelectionResult = CoinSelectionAlgorithm.LargestFirstAlgorithm(
+
+            var coinSelectionResult = CoinSelectionUtil.LargestFirstAlgorithm(
                 utxos,
                 requiredAmount,
                 specifiedInputs: specifiedInputsUtxos,
@@ -286,7 +310,7 @@ public class TransactionTemplateBuilder<T>
             Dictionary<RewardAccount, ulong> rewards = [];
             foreach (var config in _withdrawalConfigs)
             {
-                var withdrawalOptions = new WithdrawalOptions<T>("", 0);
+                var withdrawalOptions = new WithdrawalOptions<T>("", 0, null, null);
                 config(withdrawalOptions, param);
 
                 ChrysalisWallet.Address withdrawalAddress = ChrysalisWallet.Address.FromBech32(parties[withdrawalOptions.From]);
@@ -301,9 +325,9 @@ public class TransactionTemplateBuilder<T>
                     continue;
                 }
 
-                if (withdrawalOptions.RedeemerGenerator is not null)
+                if (withdrawalOptions.RedeemerBuilder is not null)
                 {
-                    withdrawalOptions.RedeemerGenerator(indexedAssociations, param, redeemers);
+                    withdrawalOptions.RedeemerBuilder(indexedAssociations, param, redeemers);
                 }
             }
 
@@ -329,12 +353,16 @@ public class TransactionTemplateBuilder<T>
 
     private Dictionary<string, string> MergeParties(
         Dictionary<string, string> staticParties,
-        Dictionary<string, string> dynamicParties)
+        Dictionary<string, (string address, bool isChange)> dynamicParties)
     {
         var result = new Dictionary<string, string>(staticParties);
         foreach (var (key, value) in dynamicParties)
         {
-            result[key] = value;
+            if (value.isChange)
+            {
+                _changeAddress = value.address;
+            }
+            result[key] = value.address;
         }
         return result;
     }

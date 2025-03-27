@@ -4,17 +4,18 @@ using Chrysalis.Cbor.Types.Cardano.Core.Common;
 using Chrysalis.Cbor.Types.Cardano.Core.Protocol;
 using Chrysalis.Cbor.Types.Cardano.Core.Transaction;
 using Chrysalis.Cbor.Types.Cardano.Core.TransactionWitness;
+using Chrysalis.Tx.Builders;
 using Chrysalis.Tx.Extensions;
 using Chrysalis.Tx.Models;
-using Chrysalis.Tx.Provider;
-using Chrysalis.Tx.TransactionBuilding;
+using Chrysalis.Tx.Providers;
 using Chrysalis.Tx.TransactionBuilding.Extensions;
 using Chrysalis.Tx.Utils;
-using Chrysalis.Tx.Words;
-using Chrysalis.Wallet.Extensions;
-using Chrysalis.Wallet.Keys;
+using Chrysalis.Wallet.Models.Addresses;
 using Chrysalis.Wallet.Models.Enums;
+using Chrysalis.Wallet.Models.Keys;
 using Chrysalis.Wallet.Utils;
+using Chrysalis.Wallet.Words;
+using Address = Chrysalis.Cbor.Types.Cardano.Core.Common.Address;
 
 namespace Chrysalis.Tx.Cli;
 
@@ -50,10 +51,8 @@ public static class SampleTransactions
                     .GetPublicKey();
 
         byte[] addressBody = [.. HashUtil.Blake2b224(pkPub.Key), .. HashUtil.Blake2b224(skPub.Key)];
-        byte header = AddressUtil.GetHeader(AddressUtil.GetNetworkInfo(NetworkType.Testnet), AddressType.BasePayment);
-        string prefix = AddressUtil.GetPrefix(AddressType.BasePayment, NetworkType.Testnet);
-
-        string address = Bech32Util.Encode([header, .. addressBody], prefix);
+        AddressHeader header = new(AddressType.BasePayment, NetworkType.Testnet);
+        string address = Bech32Util.Encode([header.ToByte(), .. addressBody], header.GetPrefix());
 
         var utxos = await provider.GetUtxosAsync(address);
         var pparams = await provider.GetParametersAsync();
@@ -125,7 +124,7 @@ public static class SampleTransactions
             txBuilder.AddInput(feeInput.Outref);
         }
 
-        var coinSelectionResult = CoinSelectionAlgorithm.LargestFirstAlgorithm(utxos, [output.Amount]);
+        var coinSelectionResult = CoinSelectionUtil.LargestFirstAlgorithm(utxos, [output.Amount]);
 
         foreach (var consumed_input in coinSelectionResult.Inputs)
         {
@@ -133,21 +132,21 @@ public static class SampleTransactions
         }
 
         ulong feeLovelace = feeInput?.Output switch
+        {
+            AlonzoTransactionOutput alonzoTransactionOutput => alonzoTransactionOutput.Amount switch
             {
-                AlonzoTransactionOutput alonzoTransactionOutput => alonzoTransactionOutput.Amount switch
-                {
-                    Lovelace value => value.Value,
-                    LovelaceWithMultiAsset multiAsset => multiAsset.LovelaceValue.Value,
-                    _ => 0
-                },
-                PostAlonzoTransactionOutput postAlonzoTransactionOutput => postAlonzoTransactionOutput.Amount switch
-                {
-                    Lovelace value => value.Value,
-                    LovelaceWithMultiAsset multiAsset => multiAsset.LovelaceValue.Value,
-                    _ => 0
-                },
+                Lovelace value => value.Value,
+                LovelaceWithMultiAsset multiAsset => multiAsset.LovelaceValue.Value,
                 _ => 0
-            };
+            },
+            PostAlonzoTransactionOutput postAlonzoTransactionOutput => postAlonzoTransactionOutput.Amount switch
+            {
+                Lovelace value => value.Value,
+                LovelaceWithMultiAsset multiAsset => multiAsset.LovelaceValue.Value,
+                _ => 0
+            },
+            _ => 0
+        };
 
         var lovelaceChange = new Lovelace(coinSelectionResult.LovelaceChange + feeLovelace);
         Value changeValue = lovelaceChange;
@@ -205,10 +204,9 @@ public static class SampleTransactions
                     .GetPublicKey();
 
         byte[] addressBody = [.. HashUtil.Blake2b224(pkPub.Key), .. HashUtil.Blake2b224(skPub.Key)];
-        byte header = AddressUtil.GetHeader(AddressUtil.GetNetworkInfo(NetworkType.Testnet), AddressType.BasePayment);
-        string prefix = AddressUtil.GetPrefix(AddressType.BasePayment, NetworkType.Testnet);
+        AddressHeader header = new(AddressType.BasePayment, NetworkType.Testnet);
+        string address = Bech32Util.Encode([header.ToByte(), .. addressBody], header.GetPrefix());
 
-        string address = Bech32Util.Encode([header, .. addressBody], prefix);
 
         var scriptAddress = "70d27ccc13fab5b782984a3d1f99353197ca1a81be069941ffc003ee75";
 
@@ -240,7 +238,7 @@ public static class SampleTransactions
             txBuilder.AddInput(feeInput.Outref);
         }
 
-        var coinSelectionResult = CoinSelectionAlgorithm.LargestFirstAlgorithm(utxos, [output.Amount]);
+        var coinSelectionResult = CoinSelectionUtil.LargestFirstAlgorithm(utxos, [output.Amount]);
 
         foreach (var consumed_input in coinSelectionResult.Inputs)
         {
@@ -307,10 +305,8 @@ public static class SampleTransactions
                     .GetPublicKey();
 
         byte[] addressBody = [.. HashUtil.Blake2b224(pkPub.Key), .. HashUtil.Blake2b224(skPub.Key)];
-        byte header = AddressUtil.GetHeader(AddressUtil.GetNetworkInfo(NetworkType.Testnet), AddressType.BasePayment);
-        string prefix = AddressUtil.GetPrefix(AddressType.BasePayment, NetworkType.Testnet);
-
-        string address = Bech32Util.Encode([header, .. addressBody], prefix);
+        AddressHeader header = new(AddressType.BasePayment, NetworkType.Testnet);
+        string address = Bech32Util.Encode([header.ToByte(), .. addressBody], header.GetPrefix());
 
         string scriptRefTxHash = "6ba7ea1e216dfc0d47ae9d5ba2045acffdc52c592a0f1efd1ad5dedf4bdc8cea";
 

@@ -19,9 +19,9 @@ public record UnlockParameters(
     RedeemerMap WithdrawRedeemer
 );
 
-public record TransferParameters(ulong Amount, Dictionary<string, string> Parties) : IParameters
+public record TransferParameters(ulong Amount, Dictionary<string, (string address, bool isChange)> Parties) : ITransactionParameters
 {
     public ulong Amount { get; init; } = Amount;
 
-    public Dictionary<string, string> Parties { get; set; } = Parties;
+    public Dictionary<string, (string address, bool isChange)> Parties { get; set; } = Parties;
 }

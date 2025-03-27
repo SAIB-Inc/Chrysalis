@@ -1,16 +1,16 @@
 using Chrysalis.Cbor.Types.Cardano.Core.Common;
 using Chrysalis.Cbor.Types.Cardano.Core.Transaction;
-using Chrysalis.Tx.Extension;
 using Chrysalis.Tx.Extensions;
 using Chrysalis.Tx.Models;
 
 namespace Chrysalis.Tx.Utils;
 
-public class CoinSelectionAlgorithm : ICoinSelection
+//@TODO: Unit Tests
+public static class CoinSelectionUtil
 {
     public static CoinSelectionResult LargestFirstAlgorithm(List<ResolvedInput> self, List<Value> requestedAmount, Value? minimumAmount = null, List<ResolvedInput>? specifiedInputs = null, int maxInputs = 20)
     {
-        if (self == null || !self.Any())
+        if (self == null || self.Count == 0)
             throw new InvalidOperationException("UTxO Balance Insufficient");
 
         if (requestedAmount.Count <= 0)
@@ -28,7 +28,7 @@ public class CoinSelectionAlgorithm : ICoinSelection
             if (value is LovelaceWithMultiAsset lovelaceWithMultiAsset)
             {
                 List<string> policies = lovelaceWithMultiAsset.MultiAsset.PolicyId()?.ToList() ?? [];
-                if (policies.Any())
+                if (policies.Count != 0)
                 {
                     foreach (string policy in policies)
                     {
@@ -44,14 +44,14 @@ public class CoinSelectionAlgorithm : ICoinSelection
         }
 
         ulong specifiedInputsLovelace = 0;
-        if(specifiedInputs != null)
+        if (specifiedInputs != null)
         {
             foreach (var utxo in specifiedInputs)
             {
                 specifiedInputsLovelace += utxo.Output.Amount().Lovelace();
             }
         }
-        
+
 
         ulong requestedLovelace = (ulong)requestedAmount.Select(x => (decimal)x.Lovelace()).Sum() - specifiedInputsLovelace;
         int iterCount = 0;
@@ -64,7 +64,7 @@ public class CoinSelectionAlgorithm : ICoinSelection
             if (totalLovelaceSelected >= requestedLovelace && requiredAssets.Count == 0)
                 break;
 
-            if (!sortedUtxos.Any())
+            if (sortedUtxos.Count == 0)
                 throw new InvalidOperationException("UTxO Balance Insufficient");
 
             // Remove from head and add to selected set
@@ -173,47 +173,9 @@ public class CoinSelectionAlgorithm : ICoinSelection
     }
 }
 
-public record Asset
-{
-    public required string PolicyId { get; set; }
-    public required string Name { get; set; }
-    public ulong Quantity { get; set; }
-}
-
-public interface ICoinSelection { };
-
 public record CoinSelectionResult
 {
     public List<ResolvedInput> Inputs { get; set; } = [];
     public ulong LovelaceChange { get; set; }
     public Dictionary<byte[], TokenBundleOutput> AssetsChange { get; set; } = [];
 }
-
-public enum SortingOrder
-{
-    Ascending,
-    Descending
-}
-
-public record CoinSelectionV2
-{
-    public List<TransactionOutput> SelectedUTxOs { get; set; } = [];
-    public List<TransactionOutput> Inputs { get; set; } = [];
-    public Value Change { get; set; } = default!;
-}
-
-public record CoinSelection
-{
-    public List<UnspentTransactionOutput> SelectedUTxOs { get; set; } = [];
-    public List<UnspentTransactionOutput> Inputs { get; set; } = [];
-    public Value Change { get; set; } = default!;
-}
-
-public record UnspentTransactionOutput
-{
-    public string TxHash { get; set; } = default!;
-    public string TxIndex { get; set; } = default!;
-    public string Address { get; set; } = default!;
-    public Value Amount { get; set; } = default!;
-    public string? ScriptRef { get; set; }
-};

@@ -4,14 +4,15 @@ using Chrysalis.Cbor.Types.Cardano.Core.Common;
 using Chrysalis.Cbor.Types.Cardano.Core.Protocol;
 using Chrysalis.Cbor.Types.Cardano.Core.Transaction;
 using Chrysalis.Cbor.Types.Cardano.Core.TransactionWitness;
+using Chrysalis.Tx.Builders;
 using Chrysalis.Tx.Cli;
 using Chrysalis.Tx.Extensions;
-using Chrysalis.Tx.Provider;
+using Chrysalis.Tx.Providers;
 using Chrysalis.Tx.TransactionBuilding;
-using Chrysalis.Tx.Words;
 using Chrysalis.Wallet.Extensions;
-using Chrysalis.Wallet.Keys;
 using Chrysalis.Wallet.Models.Enums;
+using Chrysalis.Wallet.Models.Keys;
+using Chrysalis.Wallet.Words;
 
 // byte[] sendLovelaceSignedTx = await SampleTransactions.SendLovelaceAsync();
 // Console.WriteLine(Convert.ToHexString(sendLovelaceSignedTx));
@@ -46,9 +47,10 @@ var provider = new Blockfrost("previewajMhMPYerz9Pd3GsqjayLwP5mgnNnZCC");
 string ricoAddress = "addr_test1qpw9cvvdq8mjncs9e90trvpdvg7azrncafv0wtgvz0uf9vhgjp8dc6v79uxw0detul8vnywlv5dzyt32ayjyadvhtjaqyl2gur";
 string validatorAddress = "addr_test1wrffnmkn0pds0tmka6lsce88l5c9mtd90jv2u2vkfguu3rg7k7a60";
 
+    
+
 // var transfer = TransactionTemplateBuilder<ulong>.Create(provider)
-//     .AddStaticParty("rico", ricoAddress)
-//     .AddStaticParty("rico", ricoAddress)
+//     .AddStaticParty("rico", ricoAddress, true)
 //     .AddInput((options, amount) =>
 //     {
 //         options.From = "rico";
@@ -89,7 +91,7 @@ string validatorAddress = "addr_test1wrffnmkn0pds0tmka6lsce88l5c9mtd90jv2u2vkfgu
 Action<Dictionary<int, Dictionary<string, int>>, UnlockParameters, Dictionary<RedeemerKey, RedeemerValue>> redeemerBuilder =
     (inputOutputAssosciations, parameters, redeemers) =>
     {
-        List<PlutusData> actions = new();
+        List<PlutusData> actions = [];
         foreach (var assoc in inputOutputAssosciations)
         {
             List<PlutusData> outputIndicesData = [];
@@ -111,15 +113,15 @@ Action<Dictionary<int, Dictionary<string, int>>, UnlockParameters, Dictionary<Re
         {
             ConstrIndex = 121
         };
-        redeemers.Add(new RedeemerKey(3, 0), new RedeemerValue(withdrawRedeemer, new ExUnits(140000, 100000000)));
+        redeemers.Add(new RedeemerKey(3, 0), new RedeemerValue(withdrawRedeemer, new ExUnits(1400000, 100000000)));
     };
 
 string scriptRefTxHash = "54ffbc45dd2518ca808f16e516e9521023a546625ebd3d9047c5f98f312b5c4e";
-string lockTxHash = "7822c1fade8578c11aa95432f8c1c143b562fe14a65a76e2de372661f9a4a958";
+string lockTxHash = "ecc54f49f098794ce8bcabd2f9788b4b70046c600a95b34ea43847f80d68895a";
 string withdrawalAddress = "stake_test17rffnmkn0pds0tmka6lsce88l5c9mtd90jv2u2vkfguu3rg77q9d9";
 
 var unlockLovelace = TransactionTemplateBuilder<UnlockParameters>.Create(provider)
-    .AddStaticParty("rico", ricoAddress)
+    .AddStaticParty("rico", ricoAddress, true)
     .AddStaticParty("validator", validatorAddress)
     .AddStaticParty("withdrawal", withdrawalAddress)
     .AddInput((options, unlockParams) =>
@@ -163,7 +165,7 @@ var unlockLovelace = TransactionTemplateBuilder<UnlockParameters>.Create(provide
     {
         options.From = "withdrawal";
         options.Amount = unlockParams.WithdrawalAmount;
-        options.RedeemerGenerator = redeemerBuilder;
+        options.RedeemerBuilder = redeemerBuilder;
     })
     .Build();
 
@@ -173,12 +175,12 @@ PlutusConstr plutusConstr = new([])
     ConstrIndex = 121
 };
 
-var spendRedeemerKey = new RedeemerKey(0, 0);
-var spendRedeemerValue = new RedeemerValue(plutusConstr, new ExUnits(140000, 100000000));
+var spendRedeemerKey = new RedeemerKey(0, 2);
+var spendRedeemerValue = new RedeemerValue(plutusConstr, new ExUnits(1400000, 100000000));
 
 var withdrawRedeemerKey = new RedeemerKey(3, 0);
 
-var withdrawRedeemerValue = new RedeemerValue(plutusConstr, new ExUnits(14000000, 10000000000));
+var withdrawRedeemerValue = new RedeemerValue(plutusConstr, new ExUnits(140000000, 10000000000));
 
 PlutusData withdrawRedeemer = CborSerializer.Deserialize<PlutusData>(Convert.FromHexString("D8799FD8799F01D8799F000102FFFFFF"));
 

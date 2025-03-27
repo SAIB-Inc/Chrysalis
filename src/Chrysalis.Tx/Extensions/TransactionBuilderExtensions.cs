@@ -5,6 +5,7 @@ using Chrysalis.Cbor.Types.Cardano.Core.Protocol;
 using Chrysalis.Cbor.Types.Cardano.Core.Transaction;
 using Chrysalis.Cbor.Types.Cardano.Core.TransactionWitness;
 using Chrysalis.Plutus.VM.EvalTx;
+using Chrysalis.Tx.Builders;
 using Chrysalis.Tx.Extensions;
 using Chrysalis.Tx.Models;
 using Chrysalis.Tx.Utils;
@@ -28,7 +29,7 @@ public static class TransactionBuilderExtensions
                  { 2, usedLanguage }
             });
             var costModelBytes = CborSerializer.Serialize(costModel);
-            var scriptDataHash = ScriptDataHashUtil.CalculateScriptDataHash(builder.witnessSet.Redeemers, new PlutusList([]), costModelBytes);
+            var scriptDataHash = DataHashUtil.CalculateScriptDataHash(builder.witnessSet.Redeemers, new PlutusList([]), costModelBytes);
             builder.SetScriptDataHash(scriptDataHash);
 
             ulong scriptCostPerByte = builder.pparams!.MinFeeRefScriptCostPerByte!.Numerator / builder.pparams.MinFeeRefScriptCostPerByte!.Denominator;
@@ -39,11 +40,13 @@ public static class TransactionBuilderExtensions
             scriptExecutionFee = FeeUtil.CalculateScriptExecutionFee(builder.witnessSet.Redeemers, memUnitsCost, stepUnitsCost);
 
         }
-
+        builder.SetFee(2000000UL);
         // fee and change calculation
         Transaction draftTx = builder.Build();
+        Console.WriteLine(Convert.ToHexString(CborSerializer.Serialize(draftTx)));
         var draftTxCborBytes = CborSerializer.Serialize(draftTx);
         ulong draftTxCborLength = (ulong)draftTxCborBytes.Length;
+
         var fee = FeeUtil.CalculateFeeWithWitness(draftTxCborLength, builder.pparams!.MinFeeA!.Value, builder!.pparams.MinFeeB!.Value, mockWitnessFee) + scriptFee + scriptExecutionFee;
 
         if (builder.body.TotalCollateral is not null)
@@ -180,6 +183,8 @@ public static class TransactionBuilderExtensions
         return builder;
     }
 
+
+    //Remove
     public static TransactionBuilder SetCollateral(this TransactionBuilder builder, ResolvedInput collateral)
     {
         builder.AddCollateral(collateral.Outref);
