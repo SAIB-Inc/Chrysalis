@@ -1,5 +1,4 @@
-﻿using System.Runtime.CompilerServices;
-using Chrysalis.Cbor.Types.Cardano.Core.Certificates;
+﻿using Chrysalis.Cbor.Types.Cardano.Core.Certificates;
 using Chrysalis.Cbor.Types.Cardano.Core.Common;
 using Chrysalis.Cbor.Types.Cardano.Core.Protocol;
 using Chrysalis.Cbor.Types.Cardano.Core.Transaction;
