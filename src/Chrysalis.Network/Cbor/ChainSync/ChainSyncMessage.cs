@@ -64,7 +64,6 @@ public partial record MessageIntersectFound(
 [CborList]
 public partial record MessageIntersectNotFound(
     [CborOrder(0)] Value6 Idx,
-    [CborOrder(1)] Point Point,
     [CborOrder(2)] Tip Tip
 ) : MessageIntersectResult;
 

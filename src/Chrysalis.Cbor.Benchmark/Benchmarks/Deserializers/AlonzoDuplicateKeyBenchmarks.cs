@@ -4,7 +4,7 @@ extern alias New;
 using BenchmarkDotNet.Attributes;
 using NewSerializer = New::Chrysalis.Cbor.Serialization.CborSerializer;
 using OldSerializer = Old::Chrysalis.Cbor.Converters.CborSerializer;
-using NewBlock = New::Chrysalis.Cbor.Cardano.Types.Block.AlonzoCompatibleBlock;
+using NewBlock = New::Chrysalis.Cbor.Types.Cardano.Core.Block;
 using OldBlock = Old::Chrysalis.Cardano.Core.Types.Block.AlonzoCompatibleBlock;
 
 namespace Chrysalis.Cbor.Benchmark.Benchmarks.Deserializers;

@@ -6,7 +6,9 @@ namespace Chrysalis.Cbor.Types.Cardano.Core.Transaction;
 
 [CborSerializable]
 [CborUnion]
-public abstract partial record Transaction : CborBase { }
+public abstract partial record Transaction : CborBase
+{
+}
 
 [CborSerializable]
 [CborList]

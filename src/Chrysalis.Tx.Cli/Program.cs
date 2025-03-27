@@ -8,8 +8,6 @@ using Chrysalis.Tx.Builders;
 using Chrysalis.Tx.Cli;
 using Chrysalis.Tx.Extensions;
 using Chrysalis.Tx.Providers;
-using Chrysalis.Tx.TransactionBuilding;
-using Chrysalis.Wallet.Extensions;
 using Chrysalis.Wallet.Models.Enums;
 using Chrysalis.Wallet.Models.Keys;
 using Chrysalis.Wallet.Words;
@@ -21,7 +19,7 @@ using Chrysalis.Wallet.Words;
 //     .UnlockLovelaceAsync();
 // Console.WriteLine(Convert.ToHexString(signedTx));
 
-string words = "mosquito creek harbor detail change secret design mistake next labor bench mule elite vapor menu hurdle what tobacco improve caught anger aware legal project";
+string words = "";
 
 Mnemonic mnemonic = Mnemonic.Restore(words, English.Words);
 

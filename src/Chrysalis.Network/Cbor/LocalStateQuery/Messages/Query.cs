@@ -9,12 +9,12 @@ namespace Chrysalis.Network.Cbor.LocalStateQuery.Messages;
 [CborList]
 public partial record Query(
     [CborOrder(0)] Value3 Idx,
-    [CborOrder(1)] CborBase QueryRequest
+    [CborOrder(1)] BlockQuery QueryRequest
 ) : LocalStateQueryMessage;
 
 public class QueryRequest
 {
-    public static Query New(CborBase queryRequest)
+    public static Query New(BlockQuery queryRequest)
     {
         return new Query(new Value3(3), queryRequest);
     }

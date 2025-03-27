@@ -1,6 +1,5 @@
 using System.Formats.Cbor;
-using Chrysalis.Cbor.Cardano.Types.Block;
-using Chrysalis.Cbor.Serialization;
+using Chrysalis.Cbor.Types.Cardano.Core;
 
 namespace Chrysalis.Network.Cli;
 

@@ -1,11 +1,14 @@
 using System.Formats.Cbor;
-using Chrysalis.Cbor.Cardano.Types.Block;
-using Chrysalis.Cbor.Cardano.Types.Block.Header.Body;
+using System.Text.Json;
+using Chrysalis.Cbor.Types.Cardano.Core;
+using Chrysalis.Cbor.Types.Cardano.Core.Header;
 using Chrysalis.Network.Cbor.ChainSync;
 using Chrysalis.Network.Cbor.Common;
 using Chrysalis.Network.Cbor.Handshake;
 using Chrysalis.Network.Cli;
+using Chrysalis.Network.MiniProtocols.Extensions;
 using Chrysalis.Network.Multiplexer;
+
 
 NodeClient client = await NodeClient.ConnectAsync("/home/rjlacanlale/cardano/ipc/node.socket");
 client.Start();
@@ -122,7 +125,7 @@ while (true)
                             throw new NotSupportedException($"Unsupported block type: {block?.GetType()}");
                     }
 
-                    // await BlockDbHelper.InsertBlockAsync(blockNumber, blockSlot, blockHash);
+                    await BlockDbHelper.InsertBlockAsync(blockNumber, blockSlot, blockHash);
                 }
                 catch
                 {
@@ -153,3 +156,5 @@ while (true)
         throw;
     }
 }
+
+public record CPoint(string Hash, ulong Slot);
