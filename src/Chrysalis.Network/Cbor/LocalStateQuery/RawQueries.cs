@@ -16,9 +16,9 @@ public enum QueryEra
 
 public static class RawQueries
 {
-    public static BlockQuery CreateBlockQuery(CborBase query) => new(0, new BlockQuery(0, new BlockQuery((int)QueryEra.Conway, query)));
-    public static BlockQuery GetCurrentEra => new(0, new BlockQuery(2, null));
-    public static BlockQuery GetTip => CreateBlockQuery(new BlockQuery(0, null));
+    public static BlockQuery CreateBlockQuery(BlockQuery query) => new BaseBlockQuery(0, new BaseBlockQuery(0, new BaseBlockQuery((int)QueryEra.Conway, query)));
+    public static BlockQuery GetCurrentEra => new BaseBlockQuery(0, new BaseBlockQuery(2, null));
+    public static BlockQuery GetTip => CreateBlockQuery(new BaseBlockQuery(0, null));
     public static BlockQuery GetUtxoByAddress(List<byte[]> addresses) => CreateBlockQuery(new UtxoByAddressQuery(6, new Addresses(addresses)));
     public static BlockQuery GetUtxoByTxIns(List<TransactionInput> txIns) => CreateBlockQuery(new UtxoByTxInQuery(15, new(txIns)));
 }
@@ -28,26 +28,30 @@ public static class RawQueries
 public partial record BasicQuery([CborOrder(0)] ulong Idx) : CborBase;
 
 [CborSerializable]
+[CborUnion]
+public abstract partial record BlockQuery : CborBase;
+
+[CborSerializable]
 [CborList]
-public partial record BlockQuery(
+public partial record BaseBlockQuery(
     [CborOrder(0)] int Query,
-    [CborOrder(1)] CborBase? InnerQuery
-) : CborBase;
+    [CborOrder(1)] BlockQuery? InnerQuery
+) : BlockQuery;
 
 [CborSerializable]
 [CborList]
 public partial record UtxoByAddressQuery(
     [CborOrder(0)] ulong Idx,
     [CborOrder(1)] Addresses Addresses
-) : CborBase;
+) : BlockQuery;
 
 [CborSerializable]
 [CborList]
 public partial record UtxoByTxInQuery(
     [CborOrder(0)] ulong Idx,
     [CborOrder(1)] CborDefList<TransactionInput> TxIns
-) : CborBase;
+) : BlockQuery;
 
 [CborSerializable]
 [CborList]
-public partial record Addresses(List<byte[]> Addrs) : CborBase;
+public partial record Addresses(List<byte[]> Addrs) : BlockQuery;

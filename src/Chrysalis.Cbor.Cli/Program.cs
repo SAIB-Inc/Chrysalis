@@ -1,6 +1,5 @@
-﻿using Chrysalis.Cbor.Cardano.Extensions;
-using Chrysalis.Cbor.Cardano.Types.Block;
-using Chrysalis.Cbor.Serialization;
+﻿using Chrysalis.Cbor.Serialization;
+using Chrysalis.Cbor.Types.Cardano.Core;
 
 if (Console.IsInputRedirected)
 {
@@ -49,7 +48,7 @@ if (Console.IsInputRedirected)
         }
 
         //Console.Out.WriteLine(Convert.ToHexString(blockBuffer));
-        CborSerializer.Deserialize<BlockWithEra<Block>>(blockBuffer);
+        CborSerializer.Deserialize<BlockWithEra>(blockBuffer);
         //Console.Out.WriteLine(block.Block.Slot());
     }
 }
