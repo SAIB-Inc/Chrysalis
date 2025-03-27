@@ -186,12 +186,6 @@ public class Blockfrost : ICardanoDataProvider
         }
         return results;
     }
-
-    public Task<List<ResolvedInput>> GetUtxosByTxIns(List<TransactionInput> outrefs)
-    {
-        // TODO: implement
-        throw new NotImplementedException();
-    }
     
     public async Task<ScriptRef> GetScript(string scriptHash)
     {

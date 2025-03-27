@@ -38,17 +38,5 @@ public class Ouroboros(string socketPath) : ICardanoDataProvider
 
         return [.. utxos.Utxos.Select(x => new ResolvedInput(new CborTransactionInput(x.Key.TxHash, x.Key.Index), x.Value))];
     }
-
-    public async Task<List<ResolvedInput>> GetUtxosByTxIns(List<CborTransactionInput> outrefs)
-    {
-        NodeClient client = await NodeClient.ConnectAsync(_socketPath);
-        client.Start();
-
-        ProposeVersions proposeVersion = HandshakeMessages.ProposeVersions(VersionTables.N2C_V10_AND_ABOVE);
-        await client.Handshake!.SendAsync(proposeVersion, CancellationToken.None);
-
-        UtxoByAddressResponse utxos = await client.LocalStateQuery!.GetUtxosByTxInAsync([.. outrefs.Select(x => new TransactionInput(x.TransactionId, x.Index))]);
-
-        return [.. utxos.Utxos.Select(x => new ResolvedInput(new CborTransactionInput(x.Key.TxHash, x.Key.Index), x.Value))];
-    }
+    
 }
