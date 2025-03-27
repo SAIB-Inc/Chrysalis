@@ -21,6 +21,7 @@ public static class RawQueries
     public static BlockQuery GetTip => CreateBlockQuery(new BaseBlockQuery(0, null));
     public static BlockQuery GetUtxoByAddress(List<byte[]> addresses) => CreateBlockQuery(new UtxoByAddressQuery(6, new(addresses)));
     public static BlockQuery GetUtxoByTxIns(List<TransactionInput> txIns) => CreateBlockQuery(new UtxoByTxInQuery(15, new(txIns)));
+    public static BlockQuery GetCurrentProtocolParams => CreateBlockQuery(new BaseBlockQuery(3, null));
 }
 
 [CborSerializable]
