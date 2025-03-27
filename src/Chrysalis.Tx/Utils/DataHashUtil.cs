@@ -4,7 +4,7 @@ using Chrysalis.Cbor.Types.Cardano.Core.TransactionWitness;
 
 namespace Chrysalis.Tx.Utils;
 
-public static class ScriptDataHashUtil
+public static class DataHashUtil
 {
     // Code inspired from CardanoSharp-Wallet: 
     // https://github.com/SAIB-Inc/cardanosharp-wallet/blob/6b35a43e97f10d33c31f690786120b567f382a40/CardanoSharp.Wallet/Utilities/ScriptUtility.cs#L12
@@ -31,8 +31,8 @@ public static class ScriptDataHashUtil
         }
 
         byte[] redeemerBytes = CborSerializer.Serialize(redeemers) ?? [];
-        
-        if(redeemerBytes.Length <= 0)
+
+        if (redeemerBytes.Length <= 0)
         {
             /**
             ; Finally, note that in the case that a transaction includes datums but does not

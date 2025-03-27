@@ -1,6 +1,6 @@
 using Chrysalis.Cbor.Types.Cardano.Core.Common;
 
-namespace Chrysalis.Tx.Extension;
+namespace Chrysalis.Tx.Extensions;
 
 public static class MultiAssetExtension
 {

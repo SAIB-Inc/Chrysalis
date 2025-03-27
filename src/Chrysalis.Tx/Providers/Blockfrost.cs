@@ -7,11 +7,12 @@ using Chrysalis.Cbor.Types.Cardano.Core.Governance;
 using Chrysalis.Cbor.Types.Cardano.Core.Protocol;
 using Chrysalis.Cbor.Types.Cardano.Core.Transaction;
 using Chrysalis.Tx.Models;
-using TxAddr = Chrysalis.Wallet.Addresses;
+using Chrysalis.Tx.Models.Cbor;
+using ChrysalisWallet = Chrysalis.Wallet.Models.Addresses;
 
-namespace Chrysalis.Tx.Provider;
+namespace Chrysalis.Tx.Providers;
 
-public class Blockfrost : IProvider
+public class Blockfrost : ICardanoDataProvider
 {
     private readonly HttpClient _httpClient;
     private readonly string _baseUrl;
@@ -40,7 +41,7 @@ public class Blockfrost : IProvider
 
         Dictionary<int, CborIndefList<long>> costMdls = [];
 
-        foreach (var (key, value) in parameters.CostModelsRaw)
+        foreach (var (key, value) in parameters.CostModelsRaw ?? [])
         {
             int version = key switch
             {
@@ -54,19 +55,19 @@ public class Blockfrost : IProvider
         }
 
         return new ConwayProtocolParamUpdate(
-            (ulong)parameters.MinFeeA,
-            (ulong)parameters.MinFeeB,
-            (ulong)parameters.MaxBlockSize,
-            (ulong)parameters.MaxTxSize,
-            (ulong)parameters.MaxBlockHeaderSize,
-            ulong.Parse(parameters.KeyDeposit),
-            ulong.Parse(parameters.PoolDeposit),
-            (ulong)parameters.EMax,
-            (ulong)parameters.NOpt,
-            new CborRationalNumber((ulong)(parameters.A0 * 100), 100),
-            new CborRationalNumber((ulong)(parameters.Rho * 100), 100),
-            new CborRationalNumber((ulong)(parameters.Tau * 100), 100),
-            ulong.Parse(parameters.MinPoolCost),
+            (ulong)(parameters.MinFeeA ?? 0),
+            (ulong)(parameters.MinFeeB ?? 0),
+            (ulong)(parameters.MaxBlockSize ?? 0),
+            (ulong)(parameters.MaxTxSize ?? 0),
+            (ulong)(parameters.MaxBlockHeaderSize ?? 0),
+            ulong.Parse(parameters.KeyDeposit ?? "0"),
+            ulong.Parse(parameters.PoolDeposit ?? "0"),
+            (ulong)(parameters.EMax ?? 0),
+            (ulong)(parameters.NOpt ?? 0),
+            new CborRationalNumber((ulong)((parameters.A0 ?? 0) * 100), 100),
+            new CborRationalNumber((ulong)((parameters.Rho ?? 0) * 100), 100),
+            new CborRationalNumber((ulong)((parameters.Tau ?? 0) * 100), 100),
+            ulong.Parse(parameters.MinPoolCost ?? "0"),
             ulong.Parse(parameters.CoinsPerUtxoSize),
             new CostMdls(costMdls),
             new ExUnitPrices(new CborRationalNumber((ulong)(parameters.PriceMem * 1000000), 1000000), new CborRationalNumber((ulong)(parameters.PriceStep * 1000000), 1000000)),
@@ -141,10 +142,10 @@ public class Blockfrost : IProvider
                     value = new LovelaceWithMultiAsset(CborLovelace, new MultiAssetOutput(assets));
                 }
 
-                TxAddr.Address outputAddress = TxAddr.Address.FromBech32(utxo.Address!);
+                ChrysalisWallet.Address outputAddress = ChrysalisWallet.Address.FromBech32(utxo.Address!);
                 CborEncodedValue? scriptRef = null;
 
-                if(utxo.ReferenceScriptHash is not null)
+                if (utxo.ReferenceScriptHash is not null)
                 {
                     ScriptRef scriptRefValue = await GetScript(utxo.ReferenceScriptHash);
                     scriptRef = new CborEncodedValue(CborSerializer.Serialize(scriptRefValue));
@@ -189,11 +190,7 @@ public class Blockfrost : IProvider
             throw new Exception("GetScriptRef: Could not parse response json");
         }
 
-        var type = typeElement.GetString();
-        if (type == null)
-        {
-            throw new Exception("GetScriptRef: Could not parse type from response");
-        }
+        var type = typeElement.GetString() ?? throw new Exception("GetScriptRef: Could not parse type from response");
 
         if (type == "timelock")
         {
@@ -212,11 +209,7 @@ public class Blockfrost : IProvider
             throw new Exception("GetScriptRef: Could not parse response json");
         }
 
-        var cborHex = cborElement.GetString();
-        if (cborHex == null)
-        {
-            throw new Exception("GetScriptRef: Could not parse CBOR from response");
-        }
+        var cborHex = cborElement.GetString() ?? throw new Exception("GetScriptRef: Could not parse CBOR from response");
 
         byte[] cborBytes = Convert.FromHexString(cborHex);
         int scriptType = type switch
