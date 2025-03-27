@@ -9,6 +9,7 @@
   <ItemGroup>
     <ProjectReference Include="../Chrysalis.Wallet/Chrysalis.Wallet.csproj" />
     <ProjectReference Include="../Chrysalis.Cbor/Chrysalis.Cbor.csproj" />
+    <ProjectReference Include="../Chrysalis.Network/Chrysalis.Network.csproj" />
     <ProjectReference Include="..\Chrysalis.Cbor.CodeGen\Chrysalis.Cbor.CodeGen.csproj" 
               OutputItemType="Analyzer" 
               ReferenceOutputAssembly="false" />

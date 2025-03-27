@@ -55,8 +55,8 @@ public static class SampleTransactions
         AddressHeader header = new(AddressType.BasePayment, NetworkType.Testnet);
         string address = Bech32Util.Encode([header.ToByte(), .. addressBody], header.GetPrefix());
 
-        var utxos = await provider.GetUtxosAsync(address);
-        var pparams = await provider.GetParametersAsync();
+        var utxos = await provider.GetUtxosByAddressAsync(address);
+        var pparams = await provider.GetProtocolParametersAsync();
         var txBuilder = TransactionBuilder.Create(pparams);
 
 
@@ -211,8 +211,8 @@ public static class SampleTransactions
 
         var scriptAddress = "70d27ccc13fab5b782984a3d1f99353197ca1a81be069941ffc003ee75";
 
-        var utxos = await provider.GetUtxosAsync(address);
-        var pparams = await provider.GetParametersAsync();
+        var utxos = await provider.GetUtxosByAddressAsync(address);
+        var pparams = await provider.GetProtocolParametersAsync();
         var txBuilder = TransactionBuilder.Create(pparams);
 
 
@@ -311,9 +311,9 @@ public static class SampleTransactions
 
         string scriptRefTxHash = "6ba7ea1e216dfc0d47ae9d5ba2045acffdc52c592a0f1efd1ad5dedf4bdc8cea";
 
-        var utxos = await provider.GetUtxosAsync(address);
+        var utxos = await provider.GetUtxosByAddressAsync(address);
         var utxos_copy = new List<ResolvedInput>(utxos);
-        var pparams = await provider.GetParametersAsync();
+        var pparams = await provider.GetProtocolParametersAsync();
 
         var txBuilder = TransactionBuilder.Create(pparams);
 

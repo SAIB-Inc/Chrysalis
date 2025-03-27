@@ -79,7 +79,7 @@ public class TransactionTemplateBuilder<T>
         {
             var context = new BuildContext
             {
-                TxBuilder = TransactionBuilder.Create(await _provider!.GetParametersAsync())
+                TxBuilder = TransactionBuilder.Create(await _provider!.GetProtocolParametersAsync())
             };
             var parties = ResolveParties(param);
 
@@ -97,13 +97,13 @@ public class TransactionTemplateBuilder<T>
             int changeIndex = 0;
             ProcessOutputs(param, context, parties, requiredAmount, ref changeIndex);
 
-            List<ResolvedInput> utxos = await _provider!.GetUtxosAsync(parties[_changeAddress]);
+            List<ResolvedInput> utxos = await _provider!.GetUtxosByAddressAsync([parties[_changeAddress]]);
             var allUtxos = new List<ResolvedInput>(utxos);
             foreach (string address in context.InputAddresses.Distinct())
             {
                 if (address != _changeAddress)
                 {
-                    allUtxos.AddRange(await _provider!.GetUtxosAsync(parties[address]));
+                    allUtxos.AddRange(await _provider!.GetUtxosByAddressAsync([parties[address]]));
                 }
             }
 

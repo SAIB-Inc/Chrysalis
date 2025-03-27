@@ -25,18 +25,18 @@ public class Blockfrost : ICardanoDataProvider
         _httpClient.DefaultRequestHeaders.Add("project_id", apiKey);
     }
 
-    public async Task<ConwayProtocolParamUpdate> GetParametersAsync()
+    public async Task<ConwayProtocolParamUpdate> GetProtocolParametersAsync()
     {
-        const string query = "/epochs/latest/parameters";
-        var response = await _httpClient.GetAsync($"{_baseUrl}{query}");
+        string query = "/epochs/latest/parameters";
+        HttpResponseMessage response = await _httpClient.GetAsync($"{_baseUrl}{query}");
 
         if (!response.IsSuccessStatusCode)
         {
             throw new Exception($"GetParameters: HTTP error {response.StatusCode}");
         }
 
-        var content = await response.Content.ReadAsStringAsync();
-        var parameters = JsonSerializer.Deserialize<BlockfrostProtocolParametersResponse>(content) ??
+        string content = await response.Content.ReadAsStringAsync();
+        BlockfrostProtocolParametersResponse parameters = JsonSerializer.Deserialize<BlockfrostProtocolParametersResponse>(content) ??
             throw new Exception("GetParameters: Could not parse response json");
 
         Dictionary<int, CborIndefList<long>> costMdls = [];
@@ -88,30 +88,41 @@ public class Blockfrost : ICardanoDataProvider
         );
     }
 
-    public async Task<List<ResolvedInput>> GetUtxosAsync(string address)
+    public async Task<List<ResolvedInput>> GetUtxosByAddressAsync(List<string> bech32Address)
+    {
+        List<ResolvedInput> results = [];
+        foreach (var address in bech32Address)
+        {
+            var utxos = await GetUtxosByAddressAsync(address);
+            results.AddRange(utxos);
+        }
+        return results;
+    }
+
+    public async Task<List<ResolvedInput>> GetUtxosByAddressAsync(string address)
     {
 
-        const int maxPageCount = 100; // Blockfrost limit
-        var page = 1;
-        var results = new List<ResolvedInput>();
+        int maxPageCount = 100;
+        int page = 1;
+        List<ResolvedInput> results = [];
 
         while (true)
         {
-            var pagination = $"count={maxPageCount}&page={page}";
-            var query = $"/addresses/{address}/utxos?{pagination}";
-            var response = await _httpClient.GetAsync($"{_baseUrl}{query}");
+            string pagination = $"count={maxPageCount}&page={page}";
+            string query = $"/addresses/{address}/utxos?{pagination}";
+            HttpResponseMessage response = await _httpClient.GetAsync($"{_baseUrl}{query}");
 
 
-            var content = await response.Content.ReadAsStringAsync();
-            var utxos = JsonSerializer.Deserialize<List<BlockfrostUtxo>>(content);
+            string content = await response.Content.ReadAsStringAsync();
+            List<BlockfrostUtxo> utxos = JsonSerializer.Deserialize<List<BlockfrostUtxo>>(content) ?? [];
 
             if (utxos == null || utxos.Count == 0)
                 break;
-            foreach (var utxo in utxos)
+            foreach (BlockfrostUtxo utxo in utxos)
             {
                 ulong lovelace = 0;
                 Dictionary<byte[], TokenBundleOutput> assets = [];
-                foreach (var amount in utxo.Amount!)
+                foreach (Amount amount in utxo.Amount!)
                 {
                     if (amount.Unit == "lovelace")
                     {
@@ -119,8 +130,8 @@ public class Blockfrost : ICardanoDataProvider
                     }
                     else
                     {
-                        var policy = Convert.FromHexString(amount.Unit![..56]);
-                        var assetName = Convert.FromHexString(amount.Unit![56..]);
+                        byte[] policy = Convert.FromHexString(amount.Unit![..56]);
+                        byte[] assetName = Convert.FromHexString(amount.Unit![56..]);
                         if (!assets.ContainsKey(policy))
                         {
                             assets[policy] = new TokenBundleOutput(new Dictionary<byte[], ulong>
@@ -178,12 +189,12 @@ public class Blockfrost : ICardanoDataProvider
 
     public async Task<ScriptRef> GetScript(string scriptHash)
     {
-        var typeQuery = $"/scripts/{scriptHash}";
-        var typeResponse = await _httpClient.GetAsync($"{_baseUrl}{typeQuery}");
-        var typeContent = await typeResponse.Content.ReadAsStringAsync();
+        string typeQuery = $"/scripts/{scriptHash}";
+        HttpResponseMessage typeResponse = await _httpClient.GetAsync($"{_baseUrl}{typeQuery}");
+        string typeContent = await typeResponse.Content.ReadAsStringAsync();
 
-        using var typeDoc = JsonDocument.Parse(typeContent);
-        var root = typeDoc.RootElement;
+        using JsonDocument typeDoc = JsonDocument.Parse(typeContent);
+        JsonElement root = typeDoc.RootElement;
 
         if (!root.TryGetProperty("type", out var typeElement))
         {
@@ -197,11 +208,11 @@ public class Blockfrost : ICardanoDataProvider
             throw new Exception("GetScriptRef: Native scripts are not yet supported.");
         }
 
-        var cborQuery = $"/scripts/{scriptHash}/cbor";
-        var cborResponse = await _httpClient.GetAsync($"{_baseUrl}{cborQuery}");
-        var cborContent = await cborResponse.Content.ReadAsStringAsync();
+        string cborQuery = $"/scripts/{scriptHash}/cbor";
+        HttpResponseMessage cborResponse = await _httpClient.GetAsync($"{_baseUrl}{cborQuery}");
+        string cborContent = await cborResponse.Content.ReadAsStringAsync();
 
-        using var cborDoc = JsonDocument.Parse(cborContent);
+        using JsonDocument cborDoc = JsonDocument.Parse(cborContent);
         root = cborDoc.RootElement;
 
         if (!root.TryGetProperty("cbor", out var cborElement))
@@ -209,7 +220,7 @@ public class Blockfrost : ICardanoDataProvider
             throw new Exception("GetScriptRef: Could not parse response json");
         }
 
-        var cborHex = cborElement.GetString() ?? throw new Exception("GetScriptRef: Could not parse CBOR from response");
+        string cborHex = cborElement.GetString() ?? throw new Exception("GetScriptRef: Could not parse CBOR from response");
 
         byte[] cborBytes = Convert.FromHexString(cborHex);
         int scriptType = type switch
@@ -222,13 +233,15 @@ public class Blockfrost : ICardanoDataProvider
 
         return new ScriptRef(scriptType, cborBytes);
     }
-
+    public Task<List<ResolvedInput>> GetUtxosByTxIns(List<TransactionInput> outrefs)
+    {
+        // TODO: implement
+        throw new NotImplementedException();
+    }
     private string GetBaseUrl()
     {
         //TODO: implement network specific base url
         return "https://cardano-preview.blockfrost.io/api/v0";
     }
-
-
 
 }
