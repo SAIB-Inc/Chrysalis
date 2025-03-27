@@ -4,7 +4,6 @@ using Chrysalis.Cbor.Types.Cardano.Core.Transaction;
 using Chrysalis.Cbor.Types.Cardano.Core.TransactionWitness;
 using Chrysalis.Tx.Extensions;
 using Chrysalis.Tx.Models;
-using Chrysalis.Tx.TransactionBuilding.Extensions;
 using Chrysalis.Tx.Utils;
 using ChrysalisWallet = Chrysalis.Wallet.Models.Addresses;
 
