@@ -1,4 +1,3 @@
-
 using Chrysalis.Cbor.Serialization.Attributes;
 using Chrysalis.Cbor.Serialization;
 using Chrysalis.Cbor.Types.Cardano.Core.TransactionWitness;
