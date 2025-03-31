@@ -6,6 +6,9 @@ using Chrysalis.Network.MiniProtocols.Extensions;
 using Chrysalis.Network.Multiplexer;
 using Chrysalis.Tx.Models;
 using Chrysalis.Wallet.Models.Addresses;
+using Chrysalis.Cbor.Types.Cardano.Core.Transaction;
+using Chrysalis.Cbor.Extensions.Cardano.Core.Transaction;
+using Chrysalis.Cbor.Types;
 using Chrysalis.Tx.Extensions;
 
 namespace Chrysalis.Tx.Providers;
@@ -36,7 +39,23 @@ public class Ouroboros(string socketPath) : ICardanoDataProvider
 
         UtxoByAddressResponse utxos = await client.LocalStateQuery!.GetUtxosByAddressAsync(bech32Address.Select(x => Address.FromBech32(x).ToBytes()).ToList());
 
-        return [.. utxos.Utxos.Select(x => new ResolvedInput(new CborTransactionInput(x.Key.TxHash, x.Key.Index), x.Value))];
+        List<ResolvedInput> resolvedInputs = [];
+        foreach (var (key, value) in utxos.Utxos)
+        {
+            byte[] txHash = key.TxHash;
+            ulong index = key.Index;
+
+            TransactionOutput output = new PostAlonzoTransactionOutput(
+                new Cbor.Types.Cardano.Core.Common.Address(value.Address()),
+                value.Amount(),
+                value.DatumOption(),
+                value.ScriptRef() is not null ? new CborEncodedValue(value.ScriptRef()!) : null
+            );
+
+            resolvedInputs.Add(new ResolvedInput(new CborTransactionInput(txHash, index), output));
+            
+        }
+        return resolvedInputs;
     }
-    
+
 }
