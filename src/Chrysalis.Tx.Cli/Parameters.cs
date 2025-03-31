@@ -10,13 +10,13 @@ public record LockParameters(Value Amount, DatumOption Datum);
 public record UnlockParameters(
     TransactionInput LockedUtxoOutRef,
     TransactionInput ScriptRefUtxoOutref,
-    RedeemerMap Redeemer, Value MainAmount,
+    RedeemerMap? Redeemer, Value MainAmount,
     Value FeeAmount, Value ChangeAmount,
     ulong WithdrawalAmount,
     InlineDatumOption MainDatum,
     InlineDatumOption FeeDatum,
     InlineDatumOption ChangeDatum,
-    RedeemerMap WithdrawRedeemer
+    RedeemerMap? WithdrawRedeemer
 );
 
 public record TransferParameters(ulong Amount, Dictionary<string, (string address, bool isChange)> Parties) : ITransactionParameters

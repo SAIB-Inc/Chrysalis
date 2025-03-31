@@ -8,8 +8,6 @@ using Chrysalis.Tx.Builders;
 using Chrysalis.Tx.Cli;
 using Chrysalis.Tx.Extensions;
 using Chrysalis.Tx.Providers;
-using Chrysalis.Tx.TransactionBuilding;
-using Chrysalis.Wallet.Extensions;
 using Chrysalis.Wallet.Models.Enums;
 using Chrysalis.Wallet.Models.Keys;
 using Chrysalis.Wallet.Words;
@@ -47,7 +45,7 @@ var provider = new Blockfrost("previewajMhMPYerz9Pd3GsqjayLwP5mgnNnZCC");
 string ricoAddress = "addr_test1qpw9cvvdq8mjncs9e90trvpdvg7azrncafv0wtgvz0uf9vhgjp8dc6v79uxw0detul8vnywlv5dzyt32ayjyadvhtjaqyl2gur";
 string validatorAddress = "addr_test1wrffnmkn0pds0tmka6lsce88l5c9mtd90jv2u2vkfguu3rg7k7a60";
 
-    
+
 
 // var transfer = TransactionTemplateBuilder<ulong>.Create(provider)
 //     .AddStaticParty("rico", ricoAddress, true)
@@ -92,9 +90,11 @@ Action<Dictionary<int, Dictionary<string, int>>, UnlockParameters, Dictionary<Re
     (inputOutputAssosciations, parameters, redeemers) =>
     {
         List<PlutusData> actions = [];
+        List<ulong> spendIndices = [];
         foreach (var assoc in inputOutputAssosciations)
         {
             List<PlutusData> outputIndicesData = [];
+            spendIndices.Add((ulong)assoc.Key);
             foreach (var outputIndex in assoc.Value)
             {
                 outputIndicesData.Add(new PlutusInt64(outputIndex.Value));
@@ -113,17 +113,29 @@ Action<Dictionary<int, Dictionary<string, int>>, UnlockParameters, Dictionary<Re
         {
             ConstrIndex = 121
         };
+
+        PlutusConstr emptyConstr = new([])
+        {
+            ConstrIndex = 121
+        };
+
+        foreach (var inputIndex in spendIndices)
+        {
+            redeemers.Add(new RedeemerKey(0, inputIndex), new RedeemerValue(emptyConstr, new ExUnits(1400000, 100000000)));
+        }
+
         redeemers.Add(new RedeemerKey(3, 0), new RedeemerValue(withdrawRedeemer, new ExUnits(1400000, 100000000)));
     };
 
 string scriptRefTxHash = "54ffbc45dd2518ca808f16e516e9521023a546625ebd3d9047c5f98f312b5c4e";
-string lockTxHash = "ecc54f49f098794ce8bcabd2f9788b4b70046c600a95b34ea43847f80d68895a";
+string lockTxHash = "f4103fddda67074659c43cdbd3b59fb75842cec9818c2f745e471a22e191ec6d";
 string withdrawalAddress = "stake_test17rffnmkn0pds0tmka6lsce88l5c9mtd90jv2u2vkfguu3rg77q9d9";
 
 var unlockLovelace = TransactionTemplateBuilder<UnlockParameters>.Create(provider)
     .AddStaticParty("rico", ricoAddress, true)
     .AddStaticParty("validator", validatorAddress)
     .AddStaticParty("withdrawal", withdrawalAddress)
+    .SetRedeemerBuilder(redeemerBuilder)
     .AddInput((options, unlockParams) =>
     {
         options.From = "validator";
@@ -134,7 +146,6 @@ var unlockLovelace = TransactionTemplateBuilder<UnlockParameters>.Create(provide
     {
         options.From = "validator";
         options.UtxoRef = unlockParams.LockedUtxoOutRef;
-        options.Redeemer = unlockParams.Redeemer;
         options.Id = "borrow";
     })
     .AddOutput((options, unlockParams) =>
@@ -165,29 +176,16 @@ var unlockLovelace = TransactionTemplateBuilder<UnlockParameters>.Create(provide
     {
         options.From = "withdrawal";
         options.Amount = unlockParams.WithdrawalAmount;
-        options.RedeemerBuilder = redeemerBuilder;
     })
     .Build();
 
 
-PlutusConstr plutusConstr = new([])
-{
-    ConstrIndex = 121
-};
 
-var spendRedeemerKey = new RedeemerKey(0, 2);
-var spendRedeemerValue = new RedeemerValue(plutusConstr, new ExUnits(1400000, 100000000));
-
-var withdrawRedeemerKey = new RedeemerKey(3, 0);
-
-var withdrawRedeemerValue = new RedeemerValue(plutusConstr, new ExUnits(140000000, 10000000000));
-
-PlutusData withdrawRedeemer = CborSerializer.Deserialize<PlutusData>(Convert.FromHexString("D8799FD8799F01D8799F000102FFFFFF"));
 
 UnlockParameters unlockParams = new(
     new TransactionInput(Convert.FromHexString(lockTxHash), 0),
     new TransactionInput(Convert.FromHexString(scriptRefTxHash), 0),
-    new RedeemerMap(new Dictionary<RedeemerKey, RedeemerValue> { { spendRedeemerKey, spendRedeemerValue } }),
+    null,
     new Lovelace(20000000),
     new Lovelace(10000000),
     new Lovelace(5000000),
@@ -195,7 +193,7 @@ UnlockParameters unlockParams = new(
     new InlineDatumOption(1, new CborEncodedValue(Convert.FromHexString("446D61696E"))),
     new InlineDatumOption(1, new CborEncodedValue(Convert.FromHexString("43666565"))),
     new InlineDatumOption(1, new CborEncodedValue(Convert.FromHexString("466368616E6765"))),
-   new RedeemerMap(new Dictionary<RedeemerKey, RedeemerValue> { { withdrawRedeemerKey, withdrawRedeemerValue } })
+   null
 );
 
 

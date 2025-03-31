@@ -1,3 +1,5 @@
+using Chrysalis.Cbor.Extensions.Cardano.Core.Common;
+using Chrysalis.Cbor.Extensions.Cardano.Core.Transaction;
 using Chrysalis.Cbor.Types.Cardano.Core.Common;
 using Chrysalis.Cbor.Types.Cardano.Core.Transaction;
 using Chrysalis.Tx.Extensions;
@@ -27,7 +29,8 @@ public static class CoinSelectionUtil
         {
             if (value is LovelaceWithMultiAsset lovelaceWithMultiAsset)
             {
-                List<string> policies = lovelaceWithMultiAsset.MultiAsset.PolicyId()?.ToList() ?? [];
+                MultiAssetOutput multiAsset = new(lovelaceWithMultiAsset.MultiAsset());
+                List<string> policies = multiAsset.PolicyId()?.ToList() ?? [];
                 if (policies.Count != 0)
                 {
                     foreach (string policy in policies)
@@ -72,16 +75,17 @@ public static class CoinSelectionUtil
             sortedUtxos.RemoveAt(0);
 
             // Skip UTXOs with null amount or zero value
-            ulong lovelace = utxo.Output.Lovelace();
+            ulong lovelace = utxo.Output.Amount().Lovelace();
             if (lovelace == 0) continue;
             if (lovelace < (minimumAmount?.Lovelace() ?? 0)) continue;
 
             bool isAssetPresent = false;
             foreach (var asset in requiredAssets)
             {
-                var policy = asset.Key[..56];
-                var name = asset.Key[56..];
-                var matchedPolicy = utxo.Output.Amount()?.MultiAssetOutput()?.TokenBundleByPolicyId(policy);
+                string policy = asset.Key[..56];
+                string name = asset.Key[56..];
+                MultiAssetOutput? multiAsset = new(utxo.Output.Amount().MultiAsset());
+                var matchedPolicy = multiAsset.TokenBundleByPolicyId(policy);
                 ulong amount = 0;
                 foreach (var item in matchedPolicy ?? [])
                 {
@@ -105,7 +109,7 @@ public static class CoinSelectionUtil
 
             if (utxo.Output.Amount() is LovelaceWithMultiAsset)
             {
-                var utxoOutput = utxo.Output.Amount()!.MultiAssetOutput()!;
+                MultiAssetOutput utxoOutput = new(utxo.Output.Amount()!.MultiAsset());
                 List<string> policies = utxoOutput.PolicyId()?.ToList()!;
                 foreach (string policy in policies)
                 {

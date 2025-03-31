@@ -1,4 +1,6 @@
-﻿using Chrysalis.Cbor.Types.Cardano.Core.Certificates;
+﻿using Chrysalis.Cbor.Extensions.Cardano.Core.Common;
+using Chrysalis.Cbor.Extensions.Cardano.Core.Transaction;
+using Chrysalis.Cbor.Types.Cardano.Core.Certificates;
 using Chrysalis.Cbor.Types.Cardano.Core.Common;
 using Chrysalis.Cbor.Types.Cardano.Core.Transaction;
 using Chrysalis.Cbor.Types.Cardano.Core.TransactionWitness;
@@ -18,6 +20,7 @@ public class TransactionTemplateBuilder<T>
     private readonly List<Action<OutputOptions, T>> _outputConfigs = [];
     private readonly List<Action<MintOptions, T>> _mintConfigs = [];
     private readonly List<Action<WithdrawalOptions<T>, T>> _withdrawalConfigs = [];
+    private Action<Dictionary<int, Dictionary<string, int>>, T, Dictionary<RedeemerKey, RedeemerValue>>? RedeemerBuilder;
 
     public static TransactionTemplateBuilder<T> Create(ICardanoDataProvider provider) => new TransactionTemplateBuilder<T>().SetProvider(provider);
 
@@ -32,6 +35,14 @@ public class TransactionTemplateBuilder<T>
         _inputConfigs.Add(config);
         return this;
     }
+
+    public TransactionTemplateBuilder<T> SetRedeemerBuilder(
+        Action<Dictionary<int, Dictionary<string, int>>, T, Dictionary<RedeemerKey, RedeemerValue>>? builder)
+    {
+        RedeemerBuilder = builder;
+        return this;
+    }
+
 
     public TransactionTemplateBuilder<T> AddOutput(Action<OutputOptions, T> config)
     {
@@ -145,6 +156,10 @@ public class TransactionTemplateBuilder<T>
 
             if (context.IsSmartContractTx)
             {
+                if (RedeemerBuilder is not null)
+                {
+                    RedeemerBuilder(indexedAssociations, param, context.Redeemers);
+                }
                 context.TxBuilder.SetRedeemers(new RedeemerMap(context.Redeemers));
                 // @TODO: Uncomment when Evaluate is fixed
                 // context.TxBuilder.Evaluate(allUtxos);
@@ -265,10 +280,6 @@ public class TransactionTemplateBuilder<T>
                 {
                     context.Redeemers[kvp.Key] = kvp.Value;
                 }
-            }
-            else if (withdrawalOptions.RedeemerBuilder is not null)
-            {
-                withdrawalOptions.RedeemerBuilder(indexedAssociations, param, context.Redeemers);
             }
         }
 

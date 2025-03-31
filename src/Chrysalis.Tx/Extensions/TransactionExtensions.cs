@@ -1,3 +1,4 @@
+using Chrysalis.Cbor.Extensions.Cardano.Core.TransactionWitness;
 using Chrysalis.Cbor.Serialization;
 using Chrysalis.Cbor.Types;
 using Chrysalis.Cbor.Types.Cardano.Core.Transaction;
@@ -14,7 +15,9 @@ public static class TransactionExtension
         var txBodyBytes = CborSerializer.Serialize(self.TransactionBody);
         var signature = privateKey.Sign(HashUtil.Blake2b256(txBodyBytes));
         var vkeyWitness = new VKeyWitness(privateKey.GetPublicKey().Key, signature);
-        var vKeyWitnesses = self.TransactionWitnessSet.VkeyWitnessSet()?.ToList() ?? [];
+        var vKeyWitnesses = self.TransactionWitnessSet.VKeyWitnessSet() is not null ?
+            self.TransactionWitnessSet.VKeyWitnessSet()!.ToList() : [];
+            
         vKeyWitnesses.Add(vkeyWitness);
 
         return self with
@@ -36,7 +39,8 @@ public static class TransactionExtension
 
     public static PostMaryTransaction Sign(this PostMaryTransaction self, List<VKeyWitness> vKeyWitnesses)
     {
-        var vkeyWitnessSet = self.TransactionWitnessSet.VkeyWitnessSet()?.ToList() ?? [];
+        var vkeyWitnessSet = self.TransactionWitnessSet.VKeyWitnessSet() is not null ?
+            self.TransactionWitnessSet.VKeyWitnessSet()!.ToList() : [];
         vkeyWitnessSet.AddRange(vKeyWitnesses);
 
         return self with

@@ -19,7 +19,6 @@ public record InputOptions<T>(
     public TransactionInput? UtxoRef { get; set; } = UtxoRef;
     public DatumOption? Datum { get; set; } = Datum;
     public RedeemerMap? Redeemer { get; set; } = Redeemer;
-    public Action<Dictionary<int, Dictionary<string, int>>, T, Dictionary<RedeemerKey, RedeemerValue>>? RedeemerBuilder { get; set; } = RedeemerBuilder;
     public bool IsReference { get; set; } = IsReference;
     public string? Id { get; set; } = Id;
 }
@@ -49,7 +48,6 @@ public record WithdrawalOptions<T>(
 {
     public string From { get; set; } = From;
     public ulong Amount { get; set; } = Amount;
-    public Action<Dictionary<int, Dictionary<string, int>>, T, Dictionary<RedeemerKey, RedeemerValue>>? RedeemerBuilder { get; set; } = RedeemerBuilder;
     public RedeemerMap? Redeemers { get; set; } = Redeemers;
 
 }

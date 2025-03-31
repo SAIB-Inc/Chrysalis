@@ -1,3 +1,5 @@
+using Chrysalis.Cbor.Extensions.Cardano.Core.Common;
+using Chrysalis.Cbor.Extensions.Cardano.Core.Transaction;
 using Chrysalis.Cbor.Serialization;
 using Chrysalis.Cbor.Types;
 using Chrysalis.Cbor.Types.Cardano.Core.Common;
@@ -8,7 +10,6 @@ using Chrysalis.Tx.Builders;
 using Chrysalis.Tx.Extensions;
 using Chrysalis.Tx.Models;
 using Chrysalis.Tx.Providers;
-using Chrysalis.Tx.TransactionBuilding.Extensions;
 using Chrysalis.Tx.Utils;
 using Chrysalis.Wallet.Models.Addresses;
 using Chrysalis.Wallet.Models.Enums;

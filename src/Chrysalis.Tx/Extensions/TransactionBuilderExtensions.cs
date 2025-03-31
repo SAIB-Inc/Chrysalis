@@ -1,3 +1,5 @@
+using Chrysalis.Cbor.Extensions.Cardano.Core.Common;
+using Chrysalis.Cbor.Extensions.Cardano.Core.Transaction;
 using Chrysalis.Cbor.Serialization;
 using Chrysalis.Cbor.Types;
 using Chrysalis.Cbor.Types.Cardano.Core.Common;
@@ -57,7 +59,7 @@ public static class TransactionBuilderExtensions
                 _ => throw new Exception("Invalid collateral return type")
             };
 
-            ulong lovelace = builder.body.CollateralReturn.Lovelace();
+            ulong lovelace = builder.body.CollateralReturn.Amount().Lovelace();
             builder.SetCollateralReturn(new AlonzoTransactionOutput(
                 address,
                 new Lovelace(lovelace - totalCollateral), null));
