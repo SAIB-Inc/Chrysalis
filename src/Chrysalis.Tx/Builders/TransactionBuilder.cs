@@ -8,6 +8,7 @@ using Chrysalis.Cbor.Types.Cardano.Core.Governance;
 using Chrysalis.Cbor.Types;
 using Chrysalis.Tx.Extensions;
 using Chrysalis.Tx.Utils;
+using Chrysalis.Cbor.Extensions;
 
 namespace Chrysalis.Tx.Builders;
 
@@ -40,7 +41,7 @@ public class TransactionBuilder
 
     public TransactionBuilder AddInput(TransactionInput input)
     {
-        body = body with { Inputs = new CborDefListWithTag<TransactionInput>([.. body.Inputs.Value(), input]) };
+        body = body with { Inputs = new CborDefListWithTag<TransactionInput>([.. body.Inputs is not null ? body.Inputs.GetValue() : [], input]) };
         return this;
     }
 
@@ -57,7 +58,7 @@ public class TransactionBuilder
             changeOutput = output;
         }
 
-        body = body with { Outputs = new CborDefList<TransactionOutput>([.. body.Outputs.Value(), output]) };
+        body = body with { Outputs = new CborDefList<TransactionOutput>([.. body.Outputs is not null ? body.Outputs.GetValue() : [], output]) };
 
         return this;
     }
@@ -87,7 +88,7 @@ public class TransactionBuilder
 
     public TransactionBuilder AddCertificate(Certificate certificate)
     {
-        body = body with { Certificates = new CborDefListWithTag<Certificate>([.. body.Certificates.Value(), certificate]) };
+        body = body with { Certificates = new CborDefListWithTag<Certificate>([.. body.Certificates is not null ? body.Certificates.GetValue() : [], certificate]) };
         return this;
     }
 
@@ -126,13 +127,13 @@ public class TransactionBuilder
 
     public TransactionBuilder AddCollateral(TransactionInput collateral)
     {
-        body = body with { Collateral = new CborDefListWithTag<TransactionInput>([.. body.Collateral.Value(), collateral]) };
+        body = body with { Collateral = new CborDefListWithTag<TransactionInput>([.. body.Collateral is not null ? body.Collateral.GetValue() : [], collateral]) };
         return this;
     }
 
     public TransactionBuilder AddRequiredSigner(byte[] signer)
     {
-        body = body with { RequiredSigners = new CborDefListWithTag<byte[]>([.. body.RequiredSigners.Value(), signer]) };
+        body = body with { RequiredSigners = new CborDefListWithTag<byte[]>([.. body.RequiredSigners is not null ? body.RequiredSigners.GetValue() : [], signer]) };
         return this;
     }
 
@@ -150,7 +151,7 @@ public class TransactionBuilder
 
     public TransactionBuilder AddReferenceInput(TransactionInput referenceInput)
     {
-        body = body with { ReferenceInputs = new CborDefListWithTag<TransactionInput>([.. body.ReferenceInputs.Value(), referenceInput]) };
+        body = body with { ReferenceInputs = new CborDefListWithTag<TransactionInput>([.. body.ReferenceInputs is not null ? body.ReferenceInputs.GetValue() : [], referenceInput]) };
         return this;
     }
 
@@ -162,7 +163,7 @@ public class TransactionBuilder
 
     public TransactionBuilder AddProposalProcedure(ProposalProcedure proposal)
     {
-        body = body with { ProposalProcedures = new CborDefListWithTag<ProposalProcedure>([.. body.ProposalProcedures.Value(), proposal]) };
+        body = body with { ProposalProcedures = new CborDefListWithTag<ProposalProcedure>([.. body.ProposalProcedures is not null ? body.ProposalProcedures.GetValue() : [], proposal]) };
         return this;
     }
 
@@ -184,43 +185,43 @@ public class TransactionBuilder
 
     public TransactionBuilder AddVKeyWitness(VKeyWitness witness)
     {
-        witnessSet = witnessSet with { VKeyWitnessSet = new CborDefListWithTag<VKeyWitness>([.. witnessSet.VKeyWitnessSet.Value(), witness]) };
+        witnessSet = witnessSet with { VKeyWitnessSet = new CborDefListWithTag<VKeyWitness>([.. witnessSet.VKeyWitnessSet is not null ? witnessSet.VKeyWitnessSet.GetValue() : [], witness]) };
         return this;
     }
 
     public TransactionBuilder AddNativeScript(NativeScript script)
     {
-        witnessSet = witnessSet with { NativeScriptSet = new CborDefListWithTag<NativeScript>([.. witnessSet.NativeScriptSet.Value(), script]) };
+        witnessSet = witnessSet with { NativeScriptSet = new CborDefListWithTag<NativeScript>([.. witnessSet.NativeScriptSet is not null ? witnessSet.NativeScriptSet.GetValue() : [], script]) };
         return this;
     }
 
     public TransactionBuilder AddBootstrapWitness(BootstrapWitness witness)
     {
-        witnessSet = witnessSet with { BootstrapWitnessSet = new CborDefListWithTag<BootstrapWitness>([.. witnessSet.BootstrapWitnessSet.Value(), witness]) };
+        witnessSet = witnessSet with { BootstrapWitnessSet = new CborDefListWithTag<BootstrapWitness>([.. witnessSet.BootstrapWitnessSet is not null ? witnessSet.BootstrapWitnessSet.GetValue() : [], witness]) };
         return this;
     }
 
     public TransactionBuilder AddPlutusV1Script(byte[] script)
     {
-        witnessSet = witnessSet with { PlutusV1ScriptSet = new CborDefListWithTag<byte[]>([.. witnessSet.PlutusV1ScriptSet.Value(), script]) };
+        witnessSet = witnessSet with { PlutusV1ScriptSet = new CborDefListWithTag<byte[]>([.. witnessSet.PlutusV1ScriptSet is not null ? witnessSet.PlutusV1ScriptSet.GetValue() : [], script]) };
         return this;
     }
 
     public TransactionBuilder AddPlutusV2Script(byte[] script)
     {
-        witnessSet = witnessSet with { PlutusV2ScriptSet = new CborDefListWithTag<byte[]>([.. witnessSet.PlutusV2ScriptSet.Value(), script]) };
+        witnessSet = witnessSet with { PlutusV2ScriptSet = new CborDefListWithTag<byte[]>([.. witnessSet.PlutusV2ScriptSet is not null ? witnessSet.PlutusV2ScriptSet.GetValue() : [], script]) };
         return this;
     }
 
     public TransactionBuilder AddPlutusV3Script(byte[] script)
     {
-        witnessSet = witnessSet with { PlutusV3ScriptSet = new CborDefListWithTag<byte[]>([.. witnessSet.PlutusV3ScriptSet.Value(), script]) };
+        witnessSet = witnessSet with { PlutusV3ScriptSet = new CborDefListWithTag<byte[]>([.. witnessSet.PlutusV3ScriptSet is not null ? witnessSet.PlutusV3ScriptSet.GetValue() : [], script]) };
         return this;
     }
 
     public TransactionBuilder AddPlutusData(PlutusData data)
     {
-        witnessSet = witnessSet with { PlutusDataSet = new CborDefListWithTag<PlutusData>([.. witnessSet.PlutusDataSet.Value(), data]) };
+        witnessSet = witnessSet with { PlutusDataSet = new CborDefListWithTag<PlutusData>([.. witnessSet.PlutusDataSet is not null ? witnessSet.PlutusDataSet.GetValue() : [], data]) };
         return this;
     }
 

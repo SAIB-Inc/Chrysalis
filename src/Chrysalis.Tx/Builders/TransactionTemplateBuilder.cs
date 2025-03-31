@@ -1,4 +1,5 @@
-﻿using Chrysalis.Cbor.Extensions.Cardano.Core.Common;
+﻿using Chrysalis.Cbor.Extensions;
+using Chrysalis.Cbor.Extensions.Cardano.Core.Common;
 using Chrysalis.Cbor.Extensions.Cardano.Core.Transaction;
 using Chrysalis.Cbor.Types.Cardano.Core.Certificates;
 using Chrysalis.Cbor.Types.Cardano.Core.Common;
@@ -146,7 +147,7 @@ public class TransactionTemplateBuilder<T>
             var changeOutput = new AlonzoTransactionOutput(new Address(changeAddress.ToBytes()), changeValue, null);
             context.TxBuilder.AddOutput(changeOutput, true);
 
-            List<TransactionInput> sortedInputs = [.. context.TxBuilder.body.Inputs.Value().OrderBy(e => Convert.ToHexString(e.TransactionId)).ThenBy(e => e.Index)];
+            List<TransactionInput> sortedInputs = [.. context.TxBuilder.body.Inputs.GetValue().OrderBy(e => Convert.ToHexString(e.TransactionId)).ThenBy(e => e.Index)];
             context.TxBuilder.SetInputs(sortedInputs);
 
             var inputIdToOrderedIndex = GetInputIdToOrderedIndex(context.InputsById, sortedInputs);

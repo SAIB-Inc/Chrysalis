@@ -1,3 +1,4 @@
+using Chrysalis.Cbor.Extensions;
 using Chrysalis.Cbor.Extensions.Cardano.Core.Common;
 using Chrysalis.Cbor.Extensions.Cardano.Core.Transaction;
 using Chrysalis.Cbor.Serialization;
@@ -65,7 +66,7 @@ public static class TransactionBuilderExtensions
                 new Lovelace(lovelace - totalCollateral), null));
         }
 
-        var outputs = builder.body.Outputs.Value();
+        List<TransactionOutput> outputs = [.. builder.body.Outputs.GetValue()];
 
         Lovelace updatedChangeLovelace = builder.changeOutput switch
         {
