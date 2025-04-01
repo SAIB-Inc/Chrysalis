@@ -13,7 +13,7 @@ using Chrysalis.Network.Multiplexer;
 NodeClient client = await NodeClient.ConnectAsync("/home/rjlacanlale/cardano/ipc/node.socket");
 client.Start();
 
-ProposeVersions proposeVersion = HandshakeMessages.ProposeVersions(VersionTables.N2C_V10_AND_ABOVE);
+ProposeVersions proposeVersion = HandshakeMessages.ProposeVersions(VersionTables.N2C_V10_AND_ABOVE());
 CborWriter writer = new();
 ProposeVersions.Write(writer, proposeVersion);
 string serialized = Convert.ToHexString(writer.Encode());
