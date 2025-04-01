@@ -13,7 +13,7 @@
 **/obj-debug/
 .DS_Store
 **/target
-
+nuget.config
 out
 CLAUDE.md
 build
