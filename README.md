@@ -1,160 +1,364 @@
-<div align="center">
-    <h1 style="font-size: 3em;">Chrysalis: Cardano Serialization Library for .NET 🦋</h1>
-    <h4>A .NET Serialization Library for Cardano</h4>
+
+<div align="center">    
+  <h1 style="font-size: 3em;">Chrysalis 🦋</h1>
 </div>
 
-<div align="center">
+<p align="center">
+  <a href="https://github.com/yourusername/chrysalis/releases"><img src="https://img.shields.io/badge/status-beta-orange" alt="Status"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License"></a>
+  <a href="https://github.com/SAIB-Inc/chrysalis/issues"><img src="https://img.shields.io/github/issues/SAIB-Inc/chrysalis" alt="Issues"></a>
+</p>
 
-![Forks](https://img.shields.io/github/forks/SAIB-Inc/Chrysalis.svg?style=social) 
-![Stars](https://img.shields.io/github/stars/SAIB-Inc/Chrysalis.svg?style=social) 
-![License](https://img.shields.io/badge/License-MIT-blue.svg)
-![Contributors](https://img.shields.io/github/contributors/SAIB-Inc/Chrysalis.svg?label=Contributors)
-![Issues](https://img.shields.io/github/issues/SAIB-Inc/Chrysalis.svg?label=Open%20Issues)
-![Issues Closed](https://img.shields.io/github/issues-closed/SAIB-Inc/Chrysalis.svg?label=Closed%20Issues)
+<p align="center">
+  A comprehensive .NET framework for Cardano blockchain development
+</p>
 
+## 📖 Overview
 
-<a href="https://www.nuget.org/packages/Chrysalis">
-    <img src="https://img.shields.io/nuget/v/Chrysalis.svg" alt="NuGet">
-</a>
+Chrysalis is a suite of .NET libraries designed to simplify Cardano blockchain development. From CBOR serialization to transaction building, Chrysalis provides everything developers need to build applications on Cardano.
 
-![C#](https://img.shields.io/badge/C%23-purple.svg)
+## ✨ Features
 
-</div>
+- 🚀 **Modern C# API** - Utilizing the latest features of C# and .NET Core
+- 🔄 **Full Cardano Support** - Compatible with the latest Cardano network 
+- 🧩 **Modular Architecture** - Use only the components you need
+- ⚡ **High Performance** - Optimized for speed and efficiency
+- 🔒 **Type Safety** - Strong typing for Cardano-specific data structures
+- 🛠️ **Comprehensive Tools** - Everything needed for dApp development
 
+## 📚 Table of Contents
 
-Chrysalis is an open-source .NET library designed to help you create, build, and sign Cardano transactions. As a C# serialization library, Chrysalis facilitates the serialization and deserialization of Cardano blockchain data structures. With a strong focus on adhering to the Cardano standards and enhancing the .NET Cardano developer ecosystem, Chrysalis aims to provide developers with a reliable and consistent toolkit for working with Cardano. 
+- [Installation](#-installation)
+- [Project Structure](#-project-structure)
+- [Usage Examples](#-usage-examples)
+- [Documentation](#-documentation)
+- [Contributing](#-contributing)
+- [License](#-license)
+- [Contact](#-contact)
 
-🚧 **NOTE:** This library is currently a work in progress. Feedback and contributions are welcome!
+## 📥 Installation
 
-## Features ✨
+Each Chrysalis component can be installed separately as needed:
 
-- **Cardano Serialization**: Convert Cardano blockchain data structures to and from CBOR (Concise Binary Object Representation), allowing seamless and efficient data exchanges while reducing manual handling. 
-- **Utility functions**: Use provided functions to intuitively interact with the Cardano data types and serialization formats.
-    - **Bech32 Address Encoding/Decoding**: Simplifies the encoding and decoding of Cardano addresses, ensuring compatibility with widely used formats. This allows you to handle Cardano addresses seamlessly.
-- **Extension Functions**: Simplifies the retrieval of values from Cardano data types by providing functions to access various variables within the data structures.
-- **Extensive Data Model Support**: Use a wide range of pre-built Cardano data types, including Transactions, Assets, MultiAssets, and more.
-- **Smart Contract Interaction**: Utilize Chrysalis' Cbor types in Datum creation and interact with Cardano smart contracts.
-- **Cross-Platform Compatibility**: Use Chrysalis in any .NET project, including .NET Core, .NET Framework, Xamarin, and more. This not only allows you to assemble Cardano data through C# but other .NEt languages such as F# or VB.NET.
+```bash
+# Install the CBOR serialization and source generation libraries
+dotnet add package Chrysalis.Cbor
+dotnet add package Chrysalis.Cbor.Codegen
 
+# Install the Network library for Ouroboros mini-protocols
+dotnet add package Chrysalis.Network
 
-## Roadmap 🚀
+# Install the Transaction building library
+dotnet add package Chrysalis.Tx
 
-1. **(De)serialization Support**: Achieve complete serialization and deserialization for any Cardano data type described in CDDL https://github.com/IntersectMBO/cardano-ledger/blob/master/eras/conway/impl/cddl-files/conway.cddl.
-2. **Transaction Handling**: Introduce capabilities for building and signing Cardano transactions.
-3. **Advanced Address Management**: Implement address generation, derivation, and other associated functionalities.
+# Install the Plutus smart contract evaluation library
+dotnet add package Chrysalis.Plutus
 
-## Getting Started 📦
-
-To use Chrysalis in your .NET project:
-
-1. You can install Chrysalis via NuGet:
-    `dotnet add package Chrysalis`
-
-2. Example Usage 🧑‍💻
-    
-    CBOR (De)serialization
-    ```csharp
-        var serializedTransaction = CborSerializer.Serialize(originalTransaction);
-        var deserializedTransaction = CborSerializer.Deserialize<TransactionBody>(serializedTransaction);
-    ```
-
-    Block Deserialization and Serialization
-    ```csharp
-        byte[] serializedBlock = CborSerializer.Serialize(originalBlock);
-        BlockEntity deserializedBlock = CborSerializer.Deserialize<BlockEntity>(serializedBlock);
-    ```
-
-    Access Deserialized Transactions, Transaction Inputs, and Transaction Outputs from a Deserialized Block
-    ```csharp
-        IEnumerable<TransactionBody> transactions = originalBlock.TransactionBodies();
-        foreach (TransactionBody tx in transactions)
-        {
-            IEnumerable<TransactionInput> inputs = tx.Inputs();
-            IEnumerable<TransactionOutput> outputs = tx.Outputs();    
-        }
-    ```
-
-    Access a Transaction Input's Transaction Id and Index
-    ```csharp
-        foreach (TransactionInput input in tx.Inputs())
-        {
-            string id = input.TransacationId();
-            ulong index = input.Index();
-        }
-    ```
-
-    Access a Transaction Output's Address and Balance
-    ```csharp
-        foreach (TransactionOutput output in tx.Outputs())
-        {
-            string addr = output.Address().Value.ToBech32();
-            Value balance = output.Amount();
-            ulong lovelace = balance.Lovelace();
-            MultiAssetOutput multiasset = balance.MultiAsset();
-        }
-    ```
-
-    Serialize Transactions in a Block
-    ```csharp
-        for (uint x = 0; x < transactions.Count(); x++)
-        {
-            CborSerializer.Serialize(transactions.ElementAt((int)x))
-        }
-    ```
-
-    Bech32 Address Encoding or Decoding
-    ```csharp
-        var addressBech32 = "addr...";
-        var addressObject = Address.FromBech32(addressBech32);
-        var addressBech32Again = addressObject.ToBech32();
-        var paymentKeyHash = addressObject.GetPaymentKeyHash();
-        var stakeKeyHash = addressObject.GetStakeKeyHash();
-    ```
-
-## Smart Contract Datums 📝
-Cbor Types
-![Example Image](CborTypes.png)
-
-Datum Example
-```csharp
-    public record AssetClass(CborBytes[] Value) : CborIndefiniteList<CborBytes>(Value);
-    public record AssetClassTuple(AssetClass[] Value) : CborIndefiniteList<AssetClass>(Value);
-
-    [CborSerializable(CborType.Constr, Index = 0)]
-    public record SundaeSwapLiquidityPool(
-        [CborProperty(0)]
-        CborBytes Identifier,
-        
-        [CborProperty(1)]
-        AssetClassTuple Assets,
-        
-        [CborProperty(2)]
-        CborUlong CirculatingLp,
-        
-        [CborProperty(3)]
-        CborUlong BidFeesPer10Thousand,
-        
-        [CborProperty(4)]
-        CborUlong AskFeesPer10Thousand,
-        
-        [CborProperty(5)]
-        Option<MultisigScript> FeeManager,
-        
-        [CborProperty(6)]
-        CborUlong MarketOpen,
-        
-        [CborProperty(7)]
-        CborUlong ProtocolFees
-    ) : RawCbor;
+# Install the Wallet library
+dotnet add package Chrysalis.Wallet
 ```
 
-## How to Contribute 🤝
+## 🧩 Project Structure
 
-Interested in contributing to Chrysalis? Great! We appreciate any help, be it in the form of code contributions, documentation, or even bug reports.
+Chrysalis consists of several specialized libraries that work together:
 
-- **Fork and Clone**: Fork this repository, clone it locally, and set up the necessary development environment.
-- **Branch**: Always create a new branch for your work.
-- **Pull Request**: Submit a pull request once you're ready. Ensure you describe your changes clearly.
-- **Feedback**: Wait for feedback and address any comments or suggestions.
+### Chrysalis.Cbor
+
+A CBOR serialization library designed for Cardano data structures. Uses source generation instead of reflection for improved performance.
+
+**Key Features:**
+- Attribute-based serialization rules
+- Source generation via `Chrysalis.Cbor.CodeGen`
+- High-performance cbor encoding/decoding
+
+### Chrysalis.Network
+
+Implementation of Ouroboros mini-protocols following the Cardano network specification.
+
+**Key Features:**
+- Full implementation of Cardano network protocols
+- Connection management with Cardano nodes
+- Protocol message handling
+
+### Chrysalis.Tx
+
+Transaction building library with both low-level and high-level APIs.
+
+**Key Features:**
+- Low-level transaction builder for full flexibility
+- Template transaction builder makes building transaction so much simpler by reducing boilerplate codes
+- Multiple supported providers (Ouroboros, Blockfrost, etc.)
+
+### Chrysalis.Plutus
+
+.NET port of the Pallas library, focusing on Phase-2 validation for smart contract transactions.
+
+**Key Features:**
+- Smart contract evaluation
+- ExUnit calculation
+- Script validation
+
+### Chrysalis.Wallet
+
+Wallet management library for Cardano.
+
+**Key Features:**
+- Mnemonic generation and recovery
+- Key derivation 
+- Address generation and validation
+- Cryptographic utilities
+
+## 🚀 Usage Examples
+
+### Defining a CBOR Serializable Type
+```csharp
+/*
+cbor hex: d8799f581cc05cb5c5f43aac9d9e057286e094f60d09ae61e8962ad5c42196180c9f4040ff1a00989680ff
+diagnostic:
+121_0([_
+    h'c05cb5c5f43aac9d9e057286e094f60d09ae61e8962ad5c42196180c',
+    [_ h'', h''],
+    10000000_2,
+])
+*/
+[CborSerializable]
+[CborConstr(0)]
+public partial record MyTestCborType(
+    [CborOrder(0)] byte[] address,
+    [CborOrder(1)] AssetClass asset,
+    [CborOrder(2)] ulong amount 
+): CborBase;
+
+[CborSerializable]
+[CborList]
+public partial record AssetClass(
+    [CborOrder(0)] byte[] PolicyId,
+    [CborOrder(1)] byte[] AssetName
+) : CborBase
 
 
+// main.cs
+var data = "d8799f581cc05cb5c5f43aac9d9e057286e094f60d09ae61e8962ad5c42196180c9f4040ff1a00989680ff";
+MyTestCborType myType = CborSerializer.Deserialize<MyTestCborType>(data);
+
+// back to cbor
+var myTypeCbor = CborSerializer.Serialize(myType);
+```
+
+### Working with the Wallet
+
+```csharp
+using Chrysalis.Wallet.Words;
+using Chrysalis.Wallet.Models.Enums;
+using Chrysalis.Wallet.Models.Keys;
+
+// Restore wallet from mnemonic
+string words = "address address address address address address address address address address address address";
+Mnemonic mnemonic = Mnemonic.Restore(words, English.Words);
+
+// Derive account key
+PrivateKey accountKey = mnemonic
+    .GetRootKey()
+    .Derive(PurposeType.Shelley, DerivationType.HARD)
+    .Derive(CoinType.Ada, DerivationType.HARD)
+    .Derive(0, DerivationType.HARD);
+
+// Get payment key
+PrivateKey paymentKey = accountKey
+    .Derive(RoleType.ExternalChain)
+    .Derive(0);
+
+// Get staking key
+PrivateKey stakingKey = accountKey
+    .Derive(RoleType.Staking)
+    .Derive(0);
+
+// Generate public keys
+PublicKey paymentPubKey = paymentKey.GetPublicKey();
+PublicKey stakingPubKey = stakingKey.GetPublicKey();
+
+// Create an address instance from the pub and priv key
+Address address = new(NetworkType.Testnet, AddressType.BasePayment, paymentPubKey, stakingPubKey);
+
+// Get the bech32 encoding of the address
+string bech32Address = address.ToBech32();
+```
+
+### Connecting to a Cardano Node
+
+```csharp
+// Create a connection to a Cardano node
+NodeClient client = await NodeClient.ConnectAsync("/ipc/node.socket");
+client.Start();
+
+// Query Utxos
+byte[] addr = Convert.FromHexString("00a7e1d2e57b1f9aa851b08c8934a315ffd97397fa997bb3851c626d3bb8d804d91fa134757d1a41b0b12762f8922fe4b4c6faa5ffec1bc9cf");
+var utxos = await client.LocalStateQuery.GetUtxosByAddressAsync([addr]);
+```
+
+### Building a Simple Transaction with Low-level API
+
+```csharp
+var provider = new Blockfrost("previewajMhMPYerz9Pd3GsqjayLwP5mgnNnZCC");
+var utxos = await provider.GetUtxosAsync(address.ToBech32());
+var pparams = await provider.GetParametersAsync();
+var txBuilder = TransactionBuilder.Create(pparams);
+
+var output = new PostAlonzoTransactionOutput(
+    new CborAddress(address.ToBytes()),
+    new Lovelace(10000000UL),
+    null,
+    null
+);
+
+ResolvedInput? feeInput = null;
+foreach (var utxo in utxos.OrderByDescending(e => e.Output.Amount().Lovelace()))
+{
+    if (utxo.Output.Amount().Lovelace() >= 5000000UL && utxo.Output.Amount() is Lovelace)
+    {
+        feeInput = utxo;
+        break;
+    }
+}
+
+if (feeInput is not null)
+{
+    utxos.Remove(feeInput);
+    txBuilder.AddInput(feeInput.Outref);
+}
+
+var coinSelectionResult = CoinSelectionUtil.LargestFirstAlgorithm(utxos, [output.Amount]);
+
+foreach (var consumed_input in coinSelectionResult.Inputs)
+{
+    txBuilder.AddInput(consumed_input.Outref);
+}
+
+ulong feeInputLovelace = feeInput?.Output.Amount()!.Lovelace() ?? 0;
+
+Lovelace lovelaceChange = new(coinSelectionResult.LovelaceChange + feeInputLovelace);
+
+Value changeValue = lovelaceChange;
+
+if (coinSelectionResult.AssetsChange.Count > 0)
+{
+    changeValue = new LovelaceWithMultiAsset(lovelaceChange, new MultiAssetOutput(coinSelectionResult.AssetsChange));
+}
+
+var changeOutput = new PostAlonzoTransactionOutput(
+    new CborAddress(address.ToBytes()),
+    changeValue,
+    null,
+    null
+);
+
+txBuilder
+    .AddOutput(output)
+    .AddOutput(changeOutput, true)
+    .CalculateFee();
+
+var unsignedTx = txBuilder.Build();
+Transaction signedTx = unsignedTx.Sign(privateKey);
+```
+
+### Building a Simple Transaction using Templates
+```csharp
+var provider = new Blockfrost("previewajMhMPYerz9Pd3GsqjayLwP5mgnNnZCC");
+string testSender = "addr_test1qpw9cvvdq8mjncs9e90trvpdvg7azrncafv0wtgvz0uf9vhgjp8dc6v79uxw0detul8vnywlv5dzyt32ayjyadvhtjaqyl2gur";
+string testReceiver = "addr_test1qpw9cvadq8mjncs9e90trvpdvg7azrncafv0wtgvz0uf9vhgjp8dc6v79uxw0detul8vnywlv5dzyt32ayjyadvhtjaqyl2auv";
+
+var transfer = TransactionTemplateBuilder<ulong>.Create(provider)
+.AddStaticParty("test_sender", testSender, true) // isChange is set to true, this address will receive any change from this tx
+.AddStaticParty("test_receiver", testReceiver)
+.AddInput((options, amount) =>
+{
+    options.From = "test_sender";
+})
+.AddOutput((options, amount) =>
+{
+    options.To = "test_receiver";
+    options.Amount = new Lovelace(amount);
+
+})
+.Build();
+
+Transaction unlockUnsignedTx = await transfer(10000000UL);
+Transaction unlockSignedTx = unlockUnsignedTx.Sign(privateKey);
+```
+
+### Building a Smart Contract Transaction using Templates
+```csharp
+var provider = new Blockfrost("previewajMhMPYerz9Pd3GsqjayLwP5mgnNnZCC");
+string myAddress = "addr_test1qpw9cvvdq8mjncs9e90trvpdvg7azrncafv0wtgvz0uf9vhgjp8dc6v79uxw0detul8vnywlv5dzyt32ayjyadvhtjaqyl2gur";
+string validatorAddress = "addr_test1wrf8enqnl26m0q5cfg73lxf4xxtu5x5phcrfjs0lcqp7uagh2hm3k";
+
+
+string scriptRefTxHash = "c2609532a76c3f1d38a9e7192bb32946f9ca8ab47c635d99dffa3a3da7c9a218";
+string lockUtxoTxHash = "0e2c71f1650c55be158b27ba8a03ff4f7c60ae6ba6706aba30fb5a918e91c25c";
+
+var unlockLovelace = TransactionTemplateBuilder<UnlockParameters>.Create(provider)
+    .AddStaticParty("rico", myAddress, true)
+    .AddStaticParty("validator", validatorAddress)
+    .AddInput((options, unlockParams) =>
+    {
+        options.From = "validator";
+        options.UtxoRef = new TransactionInput(Convert.FromHexString(scriptRefTxHash), 0);
+        options.IsReference = true;
+    })
+    .AddInput((options, unlockParams) =>
+    {
+        options.From = "validator";
+        options.UtxoRef = new TransactionInput(Convert.FromHexString(lockUtxoTxHash), 0);
+        options.Redeemer = unlockParams.Redeemer;
+    })
+    .AddOutput((options, unlockParams) =>
+    {
+        options.To = "rico";
+        options.Amount = unlockParams.Amount;
+    })
+    .Build();
+
+
+UnlockParameters unlockParams = new(
+    new TransactionInput(Convert.FromHexString(lockUtxoTxHash), 0),
+    new TransactionInput(Convert.FromHexString(scriptRefTxHash), 0),
+    new Lovelace(20000000),
+    new RedeemerMap(new Dictionary<RedeemerKey, RedeemerValue>() { { new RedeemerKey(0, 0), new RedeemerValue(new PlutusConstr([]){ConstrIndex = 121}, new ExUnits(1400000, 100000000)) } }
+));
+
+Transaction unlockUnsignedTx = await unlockLovelace(unlockParams);
+Transaction unlockSignedTx = unlockUnsignedTx.Sign(privateKey);
+```
+
+## 📖 Documentation
+
+For more detailed information, please refer to the following resources:
+
+- [Chrysalis.CBOR Documentation](./CBOR.md)
+
+
+## 🤝 Contributing
+
+Contributions are welcome! Here's how you can help:
+
+1. Fork the repository
+2. Create a feature branch: `git checkout -b feat/amazing-feature`
+3. Commit your changes: `git commit -m 'feat: add amazing feature'`
+4. Push to the branch: `git push origin feature/amazing-feature`
+5. Open a Pull Request
+
+Please make sure to update tests as appropriate.
+
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## 📞 Contact
+
+[Your Contact Information]
+
+---
+
+<p align="center">
+  Made with ❤️ for the Cardano community
+</p>
