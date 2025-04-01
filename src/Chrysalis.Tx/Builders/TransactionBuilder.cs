@@ -6,7 +6,6 @@ using Chrysalis.Cbor.Types.Cardano.Core.Certificates;
 using Chrysalis.Cbor.Types.Cardano.Core.Common;
 using Chrysalis.Cbor.Types.Cardano.Core.Governance;
 using Chrysalis.Cbor.Types;
-using Chrysalis.Tx.Extensions;
 using Chrysalis.Tx.Utils;
 using Chrysalis.Cbor.Extensions;
 
@@ -41,7 +40,7 @@ public class TransactionBuilder
 
     public TransactionBuilder AddInput(TransactionInput input)
     {
-        body = body with { Inputs = new CborDefListWithTag<TransactionInput>([.. body.Inputs is not null ? body.Inputs.GetValue() : [], input]) };
+        body = body with { Inputs = new CborDefListWithTag<TransactionInput>([.. body.Inputs.GetValue(), input]) };
         return this;
     }
 
@@ -58,7 +57,7 @@ public class TransactionBuilder
             changeOutput = output;
         }
 
-        body = body with { Outputs = new CborDefList<TransactionOutput>([.. body.Outputs is not null ? body.Outputs.GetValue() : [], output]) };
+        body = body with { Outputs = new CborDefList<TransactionOutput>([.. body.Outputs.GetValue(), output]) };
 
         return this;
     }
