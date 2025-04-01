@@ -1,8 +1,11 @@
 ﻿using Chrysalis.Cbor.Extensions;
 using Chrysalis.Cbor.Extensions.Cardano.Core.Common;
 using Chrysalis.Cbor.Extensions.Cardano.Core.Transaction;
+using Chrysalis.Cbor.Serialization;
+using Chrysalis.Cbor.Types;
 using Chrysalis.Cbor.Types.Cardano.Core.Certificates;
 using Chrysalis.Cbor.Types.Cardano.Core.Common;
+using Chrysalis.Cbor.Types.Cardano.Core.Protocol;
 using Chrysalis.Cbor.Types.Cardano.Core.Transaction;
 using Chrysalis.Cbor.Types.Cardano.Core.TransactionWitness;
 using Chrysalis.Tx.Extensions;
@@ -19,10 +22,8 @@ public class TransactionTemplateBuilder<T>
     private readonly Dictionary<string, string> _staticParties = [];
     private readonly List<Action<InputOptions<T>, T>> _inputConfigs = [];
     private readonly List<Action<OutputOptions, T>> _outputConfigs = [];
-    private readonly List<Action<MintOptions, T>> _mintConfigs = [];
+    private readonly List<Action<MintOptions<T>, T>> _mintConfigs = [];
     private readonly List<Action<WithdrawalOptions<T>, T>> _withdrawalConfigs = [];
-    private Action<Dictionary<int, Dictionary<string, int>>, T, Dictionary<RedeemerKey, RedeemerValue>>? RedeemerBuilder;
-
     public static TransactionTemplateBuilder<T> Create(ICardanoDataProvider provider) => new TransactionTemplateBuilder<T>().SetProvider(provider);
 
     private TransactionTemplateBuilder<T> SetProvider(ICardanoDataProvider provider)
@@ -37,21 +38,13 @@ public class TransactionTemplateBuilder<T>
         return this;
     }
 
-    public TransactionTemplateBuilder<T> SetRedeemerBuilder(
-        Action<Dictionary<int, Dictionary<string, int>>, T, Dictionary<RedeemerKey, RedeemerValue>>? builder)
-    {
-        RedeemerBuilder = builder;
-        return this;
-    }
-
-
     public TransactionTemplateBuilder<T> AddOutput(Action<OutputOptions, T> config)
     {
         _outputConfigs.Add(config);
         return this;
     }
 
-    public TransactionTemplateBuilder<T> AddMint(Action<MintOptions, T> config)
+    public TransactionTemplateBuilder<T> AddMint(Action<MintOptions<T>, T> config)
     {
         _mintConfigs.Add(config);
         return this;
@@ -73,7 +66,7 @@ public class TransactionTemplateBuilder<T>
         return this;
     }
 
-    public Func<T, Task<PostMaryTransaction>> Build()
+    public Func<T, Task<Transaction>> Build()
     {
         return async param =>
         {
@@ -125,11 +118,11 @@ public class TransactionTemplateBuilder<T>
             }
 
             List<ResolvedInput> specifiedInputsUtxos = GetSpecifiedInputsUtxos(context.SpecifiedInputs, allUtxos);
+
             var coinSelectionResult = CoinSelectionUtil.LargestFirstAlgorithm(
                 utxos,
                 requiredAmount,
-                specifiedInputs: specifiedInputsUtxos,
-                minimumAmount: new Lovelace(context.MinimumLovelace)
+                specifiedInputs: specifiedInputsUtxos
             );
 
             foreach (var consumedInput in coinSelectionResult.Inputs)
@@ -151,17 +144,60 @@ public class TransactionTemplateBuilder<T>
             context.TxBuilder.SetInputs(sortedInputs);
 
             var inputIdToOrderedIndex = GetInputIdToOrderedIndex(context.InputsById, sortedInputs);
-            var indexedAssociations = GetIndexedAssociations(context.AssociationsByInputId, inputIdToOrderedIndex);
+            var intIndexedAssociations = new Dictionary<int, Dictionary<string, int>>();
+            var stringIndexedAssociations = GetIndexedAssociations(context.AssociationsByInputId, inputIdToOrderedIndex);
 
-            ProcessWithdrawals(param, context, parties, indexedAssociations);
+            foreach (var (inputId, data) in stringIndexedAssociations)
+            {
+                if (int.TryParse(inputId, out int intKey))
+                {
+                    intIndexedAssociations[intKey] = data.outputIndices;
+                }
+            }
+
+            ProcessWithdrawals(param, context, parties, intIndexedAssociations);
 
             if (context.IsSmartContractTx)
             {
-                if (RedeemerBuilder is not null)
+                var inputIdToIndex = new Dictionary<string, ulong>();
+                var outputMappings = new Dictionary<string, Dictionary<string, ulong>>();
+
+                foreach (var (inputId, input) in context.InputsById)
                 {
-                    RedeemerBuilder(indexedAssociations, param, context.Redeemers);
+                    for (int i = 0; i < sortedInputs.Count; i++)
+                    {
+                        if (Convert.ToHexString(sortedInputs[i].TransactionId) == Convert.ToHexString(input.TransactionId) &&
+                            sortedInputs[i].Index == input.Index)
+                        {
+                            inputIdToIndex[inputId] = (ulong)i;
+                            break;
+                        }
+                    }
                 }
-                context.TxBuilder.SetRedeemers(new RedeemerMap(context.Redeemers));
+
+                foreach (var (inputId, associations) in context.AssociationsByInputId)
+                {
+                    if (!outputMappings.ContainsKey(inputId))
+                    {
+                        outputMappings[inputId] = new Dictionary<string, ulong>();
+                    }
+
+                    foreach (var (outputId, outputIndex) in associations)
+                    {
+                        outputMappings[inputId][outputId] = (ulong)outputIndex;
+                    }
+                }
+
+                BuildRedeemers(context, param, inputIdToIndex, outputMappings);
+
+                if (context.Redeemers.Count > 0)
+                {
+                    var redeemerMap = new RedeemerMap(context.Redeemers);
+                    var serialized = CborSerializer.Serialize(redeemerMap);
+
+                    context.TxBuilder.SetRedeemers(redeemerMap);
+                }
+
                 // @TODO: Uncomment when Evaluate is fixed
                 // context.TxBuilder.Evaluate(allUtxos);
             }
@@ -178,11 +214,150 @@ public class TransactionTemplateBuilder<T>
         return MergeParties(_staticParties, additionalParties);
     }
 
+    private void BuildRedeemers(BuildContext buildContext, T param, Dictionary<string, ulong> inputIdToIndex, Dictionary<string, Dictionary<string, ulong>> outputMappings)
+    {
+        var mapping = new InputOutputMapping();
+
+        foreach (var (inputId, inputIndex) in inputIdToIndex)
+        {
+            mapping.AddInput(inputId, inputIndex);
+        }
+
+        foreach (var (inputId, outputsDict) in outputMappings)
+        {
+            foreach (var (outputId, outputIndex) in outputsDict)
+            {
+                mapping.AddOutput(inputId, outputId, outputIndex);
+            }
+        }
+
+        foreach (var config in _inputConfigs)
+        {
+            var inputOptions = new InputOptions<T> { From = "", Id = null, IsReference = false };
+            config(inputOptions, param);
+
+            if (string.IsNullOrEmpty(inputOptions.Id) || !inputIdToIndex.TryGetValue(inputOptions.Id, out var inputIndex))
+                continue;
+
+            if(inputOptions.Redeemer != null){
+                foreach(RedeemerKey key in inputOptions.Redeemer.Value.Keys)
+                {
+                   buildContext.Redeemers[key] = inputOptions.Redeemer.Value[key];
+                }
+            }
+
+            if (inputOptions.RedeemerBuilder != null)
+            {
+                var redeemerObj = inputOptions.RedeemerBuilder(mapping, param);
+
+                if (redeemerObj != null)
+                {
+                    ProcessRedeemer(buildContext, redeemerObj, inputIndex);
+                }
+            }
+        }
+
+        int withdrawalIndex = 0;
+        foreach (var config in _withdrawalConfigs)
+        {
+            var withdrawalOptions = new WithdrawalOptions<T> { From = "", Amount = 0 };
+            config(withdrawalOptions, param);
+            
+
+            if(withdrawalOptions.Redeemer != null){
+                foreach(RedeemerKey key in withdrawalOptions.Redeemer.Value.Keys)
+                {
+                   buildContext.Redeemers[key] = withdrawalOptions.Redeemer.Value[key];
+                }
+            }
+
+            if (withdrawalOptions.RedeemerBuilder != null)
+            {
+                var redeemerObj = withdrawalOptions.RedeemerBuilder(mapping, param);
+
+                if (redeemerObj != null)
+                {
+                    ProcessRedeemer(buildContext, redeemerObj, (ulong)withdrawalIndex);
+                }
+            }
+
+            withdrawalIndex++;
+        }
+
+        int policyIndex = 0;
+        foreach (var config in _mintConfigs)
+        {
+            var mintOptions = new MintOptions<T> { Policy = "", Assets = [] };
+            config(mintOptions, param);
+
+            if(mintOptions.Redeemer != null){
+                foreach(RedeemerKey key in mintOptions.Redeemer.Value.Keys)
+                {
+                   buildContext.Redeemers[key] = mintOptions.Redeemer.Value[key];
+                }
+            }
+
+            if (mintOptions.RedeemerBuilder != null)
+            {
+                Redeemer<CborBase> redeemer = mintOptions.RedeemerBuilder(mapping, param);
+
+                if (redeemer != null)
+                {
+                    ProcessRedeemer(buildContext, redeemer, (ulong)policyIndex);
+                }
+            }
+
+            policyIndex++;
+        }
+    }
+
+    private void ProcessRedeemer(BuildContext buildContext, object redeemerObj, ulong index)
+    {
+        try
+        {
+            dynamic redeemer = redeemerObj;
+            RedeemerTag redeemerTag;
+            PlutusData redeemerData;
+            ExUnits redeemerExUnits;
+
+            try
+            {
+                redeemerTag = redeemer.Tag;
+
+                var dataObj = redeemer.Data;
+                if (dataObj is PlutusData pd)
+                {
+                    redeemerData = pd;
+                }
+                else
+                {
+                    byte[] dataBytes = CborSerializer.Serialize(dataObj);
+                    redeemerData = CborSerializer.Deserialize<PlutusData>(dataBytes);
+                }
+
+                redeemerExUnits = redeemer.ExUnits;
+
+                var key = new RedeemerKey((int)redeemerTag, index);
+
+                var value = new RedeemerValue(redeemerData, redeemerExUnits);
+
+                buildContext.Redeemers[key] = value;
+            }
+            catch (Exception innerEx)
+            {
+                Console.WriteLine($"Error extracting redeemer properties: {innerEx.Message}");
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error processing redeemer: {ex.Message}");
+        }
+    }
     private void ProcessInputs(T param, BuildContext context)
     {
         foreach (var config in _inputConfigs)
         {
-            var inputOptions = new InputOptions<T>("", null, null, null, null, null, null);
+            var inputOptions = new InputOptions<T> { From = "", Id = null, IsReference = false };
             config(inputOptions, param);
 
             if (!string.IsNullOrEmpty(inputOptions.Id) && inputOptions.UtxoRef != null)
@@ -203,13 +378,6 @@ public class TransactionTemplateBuilder<T>
                 {
                     context.SpecifiedInputs.Add(inputOptions.UtxoRef);
                     context.TxBuilder.AddInput(inputOptions.UtxoRef);
-                    if (inputOptions.Redeemer is not null)
-                    {
-                        foreach (var kvp in inputOptions.Redeemer.Value)
-                        {
-                            context.Redeemers[kvp.Key] = kvp.Value;
-                        }
-                    }
                 }
             }
 
@@ -229,11 +397,17 @@ public class TransactionTemplateBuilder<T>
     {
         foreach (var config in _mintConfigs)
         {
-            var mintOptions = new MintOptions("", []);
+            var mintOptions = new MintOptions<T> { Policy = "", Assets = new Dictionary<string, ulong>() };
             config(mintOptions, param);
+
+            if (!context.Mints.ContainsKey(mintOptions.Policy))
+            {
+                context.Mints[mintOptions.Policy] = [];
+            }
 
             foreach (var (assetName, amount) in mintOptions.Assets)
             {
+                context.Mints[mintOptions.Policy][assetName] = (long)amount;
                 context.TxBuilder.AddMint(new MultiAssetMint(new Dictionary<byte[], TokenBundleMint>
                 {
                     { Convert.FromHexString(mintOptions.Policy), new TokenBundleMint(new Dictionary<byte[], long> { { Convert.FromHexString(assetName), (long)amount } }) }
@@ -247,7 +421,7 @@ public class TransactionTemplateBuilder<T>
         int outputIndex = 0;
         foreach (var config in _outputConfigs)
         {
-            var outputOptions = new OutputOptions("", null, null);
+            var outputOptions = new OutputOptions { To = "", Amount = null, Datum = null };
             config(outputOptions, param);
 
             if (!string.IsNullOrEmpty(outputOptions.AssociatedInputId) &&
@@ -269,19 +443,15 @@ public class TransactionTemplateBuilder<T>
         Dictionary<RewardAccount, ulong> rewards = [];
         foreach (var config in _withdrawalConfigs)
         {
-            var withdrawalOptions = new WithdrawalOptions<T>("", 0, null, null);
+            var withdrawalOptions = new WithdrawalOptions<T> { From = "", Amount = 0 };
             config(withdrawalOptions, param);
 
             ChrysalisWallet.Address withdrawalAddress = ChrysalisWallet.Address.FromBech32(parties[withdrawalOptions.From]);
             rewards.Add(new RewardAccount(withdrawalAddress.ToBytes()), withdrawalOptions.Amount!);
 
-            if (withdrawalOptions.Redeemers is not null)
-            {
-                foreach (var kvp in withdrawalOptions.Redeemers.Value)
-                {
-                    context.Redeemers[kvp.Key] = kvp.Value;
-                }
-            }
+            // Redeemers for withdrawals will be handled in the BuildRedeemers method
+
+            // The new redeemer approach doesn't use the RedeemerBuilder
         }
 
         if (rewards.Count > 0)
@@ -358,14 +528,14 @@ public class TransactionTemplateBuilder<T>
         return inputIdToOrderedIndex;
     }
 
-    private Dictionary<int, Dictionary<string, int>> GetIndexedAssociations(Dictionary<string, Dictionary<string, int>> associationsByInputId, Dictionary<string, int> inputIdToOrderedIndex)
+    private Dictionary<string, (ulong inputIndex, Dictionary<string, int> outputIndices)> GetIndexedAssociations(Dictionary<string, Dictionary<string, int>> associationsByInputId, Dictionary<string, int> inputIdToOrderedIndex)
     {
-        Dictionary<int, Dictionary<string, int>> indexedAssociations = [];
+        Dictionary<string, (ulong inputIndex, Dictionary<string, int> outputIndices)> indexedAssociations = [];
         foreach (var (inputId, roleToOutputIndex) in associationsByInputId)
         {
             if (inputIdToOrderedIndex.TryGetValue(inputId, out int inputIndex))
             {
-                indexedAssociations[inputIndex] = new Dictionary<string, int>(roleToOutputIndex);
+                indexedAssociations[inputId] = ((ulong)inputIndex, new Dictionary<string, int>(roleToOutputIndex));
             }
         }
         return indexedAssociations;
@@ -396,5 +566,6 @@ public class TransactionTemplateBuilder<T>
         public List<string> InputAddresses { get; } = [];
         public List<TransactionInput> SpecifiedInputs { get; } = [];
         public Dictionary<RedeemerKey, RedeemerValue> Redeemers { get; } = [];
+        public Dictionary<string, Dictionary<string, long>> Mints { get; } = [];
     }
 }

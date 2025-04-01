@@ -16,15 +16,22 @@ public static class MultiAssetExtension
         return policies;
     }
 
-    public static Dictionary<string, ulong> TokenBundleByPolicyId(this MultiAsset self, string policyId)
+    public static Dictionary<string, ulong>? TokenBundleByPolicyId(this MultiAsset self, string policyId)
     {
-        Dictionary<string, ulong> tokenBundle = self switch
+        try
         {
-            MultiAssetOutput multiAssetOutput => multiAssetOutput.Value[Convert.FromHexString(policyId)].Value.Select(x => (Convert.ToHexString(x.Key), x.Value)).ToDictionary(x => x.Item1, x => x.Value),
-            MultiAssetMint multiAssetMint => multiAssetMint.Value[Convert.FromHexString(policyId)].Value.Select(x => (Convert.ToHexString(x.Key), x.Value)).ToDictionary(x => x.Item1, x => (ulong)x.Value),
-            _ => throw new Exception("Unknown multi asset type")
-        };
+            Dictionary<string, ulong> tokenBundle = self switch
+            {
+                MultiAssetOutput multiAssetOutput => multiAssetOutput.Value[Convert.FromHexString(policyId)].Value.Select(x => (Convert.ToHexString(x.Key), x.Value)).ToDictionary(x => x.Item1, x => x.Value),
+                MultiAssetMint multiAssetMint => multiAssetMint.Value[Convert.FromHexString(policyId)].Value.Select(x => (Convert.ToHexString(x.Key), x.Value)).ToDictionary(x => x.Item1, x => (ulong)x.Value),
+                _ => throw new Exception("Unknown multi asset type")
+            };
 
-        return tokenBundle;
+            return tokenBundle;
+        }
+        catch
+        {
+            return null;
+        }
     }
 }

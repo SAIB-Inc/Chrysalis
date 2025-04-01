@@ -1,7 +1,6 @@
 using Chrysalis.Cbor.Extensions.Cardano.Core.Common;
 using Chrysalis.Cbor.Extensions.Cardano.Core.Transaction;
 using Chrysalis.Cbor.Types.Cardano.Core.Common;
-using Chrysalis.Cbor.Types.Cardano.Core.Transaction;
 using Chrysalis.Tx.Extensions;
 using Chrysalis.Tx.Models;
 
@@ -70,11 +69,9 @@ public static class CoinSelectionUtil
             if (sortedUtxos.Count == 0)
                 throw new InvalidOperationException("UTxO Balance Insufficient");
 
-            // Remove from head and add to selected set
             ResolvedInput utxo = sortedUtxos[0];
             sortedUtxos.RemoveAt(0);
 
-            // Skip UTXOs with null amount or zero value
             ulong lovelace = utxo.Output.Amount().Lovelace();
             if (lovelace == 0) continue;
             if (lovelace < (minimumAmount?.Lovelace() ?? 0)) continue;
