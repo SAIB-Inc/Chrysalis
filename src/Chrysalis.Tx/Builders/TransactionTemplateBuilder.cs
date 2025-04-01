@@ -6,6 +6,7 @@ using Chrysalis.Tx.Extensions;
 using Chrysalis.Tx.Models;
 using Chrysalis.Tx.Utils;
 using ChrysalisWallet = Chrysalis.Wallet.Models.Addresses;
+using WalletAddress = Chrysalis.Wallet.Models.Addresses.Address;
 
 namespace Chrysalis.Tx.Builders;
 
@@ -18,7 +19,7 @@ public class TransactionTemplateBuilder<T>
     private readonly List<Action<OutputOptions, T>> _outputConfigs = [];
     private readonly List<Action<MintOptions, T>> _mintConfigs = [];
     private readonly List<Action<WithdrawalOptions<T>, T>> _withdrawalConfigs = [];
-    private readonly List<byte[]> requiredSigners = [];
+    private readonly List<string> requiredSigners = [];
 
     public static TransactionTemplateBuilder<T> Create(ICardanoDataProvider provider) => new TransactionTemplateBuilder<T>().SetProvider(provider);
 
@@ -54,7 +55,7 @@ public class TransactionTemplateBuilder<T>
 
     public TransactionTemplateBuilder<T> AddRequiredSigner(string signer)
     {
-        requiredSigners.Add(Convert.FromHexString(signer));
+        requiredSigners.Add(signer);
         return this;
     }
 
@@ -159,9 +160,10 @@ public class TransactionTemplateBuilder<T>
 
             if (requiredSigners.Count > 0)
             {
-                foreach (byte[] signer in requiredSigners)
+                foreach (string signer in requiredSigners)
                 {
-                    context.TxBuilder.AddRequiredSigner(signer);
+                    WalletAddress address = WalletAddress.FromBech32(parties[signer]);
+                    context.TxBuilder.AddRequiredSigner(address.ToBytes());
                 }
             }
 
