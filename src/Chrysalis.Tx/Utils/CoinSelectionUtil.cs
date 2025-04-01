@@ -29,7 +29,7 @@ public static class CoinSelectionUtil
 
             if (value is LovelaceWithMultiAsset lovelaceWithMultiAsset)
             {
-                ExtractRequiredAssets(lovelaceWithMultiAsset.MultiAsset, requiredAssets);
+                ExtractAssets(lovelaceWithMultiAsset.MultiAsset, requiredAssets);
 
                 if (requiredAssets.Count > 0)
                 {
@@ -50,7 +50,7 @@ public static class CoinSelectionUtil
             if (!isLovelaceOnly)
             {
                 var lovelaceWithMultiAsset = (LovelaceWithMultiAsset)utxo.Output.Amount();
-                ExtractRequiredAssets(lovelaceWithMultiAsset.MultiAsset, utxoAssets);
+                ExtractAssets(lovelaceWithMultiAsset.MultiAsset, utxoAssets);
 
                 foreach (var requiredAsset in requiredAssets)
                 {
@@ -147,7 +147,7 @@ public static class CoinSelectionUtil
         };
     }
 
-    private static void ExtractRequiredAssets(
+    private static void ExtractAssets(
         MultiAssetOutput multiAsset,
         Dictionary<string, decimal> assetDict)
     {
