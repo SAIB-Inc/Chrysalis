@@ -1,12 +1,11 @@
 ﻿using Chrysalis.Cbor.Serialization;
 using Chrysalis.Cbor.Types;
 using Chrysalis.Cbor.Types.Cardano.Core.Common;
-using Chrysalis.Cbor.Types.Cardano.Core.Protocol;
 using Chrysalis.Cbor.Types.Cardano.Core.Transaction;
-using Chrysalis.Cbor.Types.Cardano.Core.TransactionWitness;
 using Chrysalis.Tx.Builders;
 using Chrysalis.Tx.Cli;
 using Chrysalis.Tx.Extensions;
+using Chrysalis.Tx.Models;
 using Chrysalis.Tx.Providers;
 using Chrysalis.Wallet.Models.Enums;
 using Chrysalis.Wallet.Models.Keys;
@@ -45,24 +44,53 @@ var provider = new Blockfrost("previewajMhMPYerz9Pd3GsqjayLwP5mgnNnZCC");
 string ricoAddress = "addr_test1qpw9cvvdq8mjncs9e90trvpdvg7azrncafv0wtgvz0uf9vhgjp8dc6v79uxw0detul8vnywlv5dzyt32ayjyadvhtjaqyl2gur";
 string validatorAddress = "addr_test1wrffnmkn0pds0tmka6lsce88l5c9mtd90jv2u2vkfguu3rg7k7a60";
 
-    
+
 
 // var transfer = TransactionTemplateBuilder<ulong>.Create(provider)
 //     .AddStaticParty("rico", ricoAddress, true)
 //     .AddInput((options, amount) =>
 //     {
 //         options.From = "rico";
-//         options.MinAmount = new Lovelace(amount);
 //     })
 //     .AddOutput((options, amount) =>
 //     {
 //         options.To = "rico";
-//         options.Amount = new Lovelace(amount);
+//         options.Amount = new LovelaceWithMultiAsset(
+//             new Lovelace(10000000UL),
+//             new MultiAssetOutput(
+//                 new Dictionary<byte[], TokenBundleOutput>
+//                 {
+//                     { Convert.FromHexString("0401ce1fb4da93ce46ed4a22c95d3502a59c76476649a41e7bafa9da"), new TokenBundleOutput(new Dictionary<byte[], ulong>(){
+//                         { Convert.FromHexString("494147"), amount }
+//                     }) }
+//                 }
+//             )
+//         );
 //     })
 //     .Build();
 
-// var unsignedTx = await transfer(10000000UL);
-// Console.WriteLine(Convert.ToHexString(CborSerializer.Serialize(unsignedTx)));
+// var provider = new Blockfrost("previewajMhMPYerz9Pd3GsqjayLwP5mgnNnZCC");
+// string ricoAddress = "addr_test1qpw9cvvdq8mjncs9e90trvpdvg7azrncafv0wtgvz0uf9vhgjp8dc6v79uxw0detul8vnywlv5dzyt32ayjyadvhtjaqyl2gur";
+
+// var transfer = TransactionTemplateBuilder<ulong>.Create(provider)
+// .AddStaticParty("rico", ricoAddress, true)
+// .AddInput((options, amount) =>
+// {
+//     options.From = "rico";
+// })
+// .AddOutput((options, amount) =>
+// {
+//     options.To = "rico";
+//     options.Amount = new Lovelace(amount);
+
+// })
+// .Build();
+
+// Transaction unlockUnsignedTx = await transfer(10000000UL);
+// Transaction unlockSignedTx = unlockUnsignedTx.Sign(privateKey);
+// Console.WriteLine(Convert.ToHexString(CborSerializer.Serialize(unlockSignedTx)));
+
+// Console.WriteLine(Convert.ToHexString(await SampleTransactions.SendLovelaceAsync()));
 
 // var lockLovelace = TransactionTemplateBuilder<LockParameters>.Create(provider)
 //     .AddStaticParty("rico", ricoAddress)
@@ -86,36 +114,38 @@ string validatorAddress = "addr_test1wrffnmkn0pds0tmka6lsce88l5c9mtd90jv2u2vkfgu
 // Console.WriteLine(Convert.ToHexString(await SampleTransactions.SendLovelaceAsync()));
 
 
-Action<Dictionary<int, Dictionary<string, int>>, UnlockParameters, Dictionary<RedeemerKey, RedeemerValue>> redeemerBuilder =
-    (inputOutputAssosciations, parameters, redeemers) =>
+
+
+RedeemerDataBuilder<UnlockParameters, CborIndefList<Indices>> withdrawRedeemerBuilder = (mapping, parameters) =>
+{
+    List<PlutusData> actions = [];
+    var (inputIndex, outputIndices) = mapping.GetInput("borrow");
+
+    List<ulong> outputIndicesData = [];
+    foreach (var (_, outputIndex) in outputIndices)
     {
-        List<PlutusData> actions = [];
-        foreach (var assoc in inputOutputAssosciations)
-        {
-            List<PlutusData> outputIndicesData = [];
-            foreach (var outputIndex in assoc.Value)
-            {
-                outputIndicesData.Add(new PlutusInt64(outputIndex.Value));
-            }
-            PlutusConstr outputIndicesPlutusData = new(outputIndicesData)
-            {
-                ConstrIndex = 121
-            };
-            PlutusConstr actionPlutusData = new([new PlutusInt64(assoc.Key), outputIndicesPlutusData])
-            {
-                ConstrIndex = 121
-            };
-            actions.Add(actionPlutusData);
-        }
-        PlutusList withdrawRedeemer = new(actions)
-        {
-            ConstrIndex = 121
-        };
-        redeemers.Add(new RedeemerKey(3, 0), new RedeemerValue(withdrawRedeemer, new ExUnits(1400000, 100000000)));
+        outputIndicesData.Add(outputIndex);
+    }
+    
+    Indices indices = new Indices(
+        inputIndex,
+        new OutputIndices(outputIndices["main"], outputIndices["fee"], outputIndices["change"])
+    );
+
+    return new CborIndefList<Indices>([indices]);
+};
+
+
+RedeemerDataBuilder<UnlockParameters, PlutusData> spendRedeemerBuilder = (mapping, parameters) =>
+{
+    return new PlutusConstr([])
+    {
+        ConstrIndex = 121
     };
+};
 
 string scriptRefTxHash = "54ffbc45dd2518ca808f16e516e9521023a546625ebd3d9047c5f98f312b5c4e";
-string lockTxHash = "ecc54f49f098794ce8bcabd2f9788b4b70046c600a95b34ea43847f80d68895a";
+string lockTxHash = "6b0232f053d486ce8fe7dc9a8f19e75b4c0443298240dfbfe778f55a4d107006";
 string withdrawalAddress = "stake_test17rffnmkn0pds0tmka6lsce88l5c9mtd90jv2u2vkfguu3rg77q9d9";
 
 var unlockLovelace = TransactionTemplateBuilder<UnlockParameters>.Create(provider)
@@ -132,8 +162,8 @@ var unlockLovelace = TransactionTemplateBuilder<UnlockParameters>.Create(provide
     {
         options.From = "validator";
         options.UtxoRef = unlockParams.LockedUtxoOutRef;
-        options.Redeemer = unlockParams.Redeemer;
         options.Id = "borrow";
+        options.SetRedeemerBuilder(spendRedeemerBuilder);
     })
     .AddOutput((options, unlockParams) =>
     {
@@ -163,29 +193,18 @@ var unlockLovelace = TransactionTemplateBuilder<UnlockParameters>.Create(provide
     {
         options.From = "withdrawal";
         options.Amount = unlockParams.WithdrawalAmount;
-        options.RedeemerBuilder = redeemerBuilder;
+        options.Id = "withdrawal";
+        options.SetRedeemerFactory(withdrawRedeemerBuilder);
     })
     .Build();
 
 
-PlutusConstr plutusConstr = new([])
-{
-    ConstrIndex = 121
-};
 
-var spendRedeemerKey = new RedeemerKey(0, 2);
-var spendRedeemerValue = new RedeemerValue(plutusConstr, new ExUnits(1400000, 100000000));
-
-var withdrawRedeemerKey = new RedeemerKey(3, 0);
-
-var withdrawRedeemerValue = new RedeemerValue(plutusConstr, new ExUnits(140000000, 10000000000));
-
-PlutusData withdrawRedeemer = CborSerializer.Deserialize<PlutusData>(Convert.FromHexString("D8799FD8799F01D8799F000102FFFFFF"));
 
 UnlockParameters unlockParams = new(
     new TransactionInput(Convert.FromHexString(lockTxHash), 0),
     new TransactionInput(Convert.FromHexString(scriptRefTxHash), 0),
-    new RedeemerMap(new Dictionary<RedeemerKey, RedeemerValue> { { spendRedeemerKey, spendRedeemerValue } }),
+    null,
     new Lovelace(20000000),
     new Lovelace(10000000),
     new Lovelace(5000000),
@@ -193,11 +212,60 @@ UnlockParameters unlockParams = new(
     new InlineDatumOption(1, new CborEncodedValue(Convert.FromHexString("446D61696E"))),
     new InlineDatumOption(1, new CborEncodedValue(Convert.FromHexString("43666565"))),
     new InlineDatumOption(1, new CborEncodedValue(Convert.FromHexString("466368616E6765"))),
-   new RedeemerMap(new Dictionary<RedeemerKey, RedeemerValue> { { withdrawRedeemerKey, withdrawRedeemerValue } })
+   null
 );
 
 
-PostMaryTransaction unlockUnsignedTx = await unlockLovelace(unlockParams);
-PostMaryTransaction unlockSignedTx = unlockUnsignedTx.Sign(privateKey);
+Transaction unlockUnsignedTx = await unlockLovelace(unlockParams);
+// Console.WriteLine(Convert.ToHexString(CborSerializer.Serialize(unlockUnsignedTx)));
+Transaction unlockSignedTx = unlockUnsignedTx.Sign(privateKey);
 Console.WriteLine(Convert.ToHexString(CborSerializer.Serialize(unlockSignedTx)));
+
+
+
+// var provider = new Blockfrost("previewajMhMPYerz9Pd3GsqjayLwP5mgnNnZCC");
+// string ricoAddress = "addr_test1qpw9cvvdq8mjncs9e90trvpdvg7azrncafv0wtgvz0uf9vhgjp8dc6v79uxw0detul8vnywlv5dzyt32ayjyadvhtjaqyl2gur";
+// string validatorAddress = "addr_test1wrf8enqnl26m0q5cfg73lxf4xxtu5x5phcrfjs0lcqp7uagh2hm3k";
+
+// string scriptRefTxHash = "c2609532a76c3f1d38a9e7192bb32946f9ca8ab47c635d99dffa3a3da7c9a218";
+// string lockUtxoTxHash = "b31ad99b554d56dc51c73dd98f947533b6ef4210314060a3ea17ad4eca5d3d38";
+
+// var unlockLovelace = TransactionTemplateBuilder<UnlockParameters>.Create(provider)
+//     .AddStaticParty("rico", ricoAddress, true)
+//     .AddStaticParty("validator", validatorAddress)
+//     .AddInput((options, unlockParams) =>
+//     {
+//         options.From = "validator";
+//         options.UtxoRef = new TransactionInput(Convert.FromHexString(scriptRefTxHash), 0);
+//         options.IsReference = true;
+//     })
+//     .AddInput((options, unlockParams) =>
+//     {
+//         options.From = "validator";
+//         options.UtxoRef = new TransactionInput(Convert.FromHexString(lockUtxoTxHash), 0);
+//         options.Redeemer = unlockParams.Redeemer;
+//     })
+//     .AddOutput((options, unlockParams) =>
+//     {
+//         options.To = "rico";
+//         options.Amount = unlockParams.Amount;
+//     })
+//     .Build();
+
+
+// // UnlockParameters unlockParams = new(
+// //     new TransactionInput(Convert.FromHexString(lockUtxoTxHash), 0),
+// //     new TransactionInput(Convert.FromHexString(scriptRefTxHash), 0),
+// //     new Lovelace(20000000),
+// //     new RedeemerMap(new Dictionary<RedeemerKey, RedeemerValue>() { { new RedeemerKey(0, 0), new RedeemerValue(new PlutusConstr([]) { ConstrIndex = 121 }, new ExUnits(1400000, 100000000)) } }
+// // ));
+
+// Transaction unlockUnsignedTx = await unlockLovelace(unlockParams);
+// Transaction unlockSignedTx = unlockUnsignedTx.Sign(privateKey);
+
+// Example using the improved redeemer handling approach
+// Console.WriteLine("\nImproved redeemer approach result:");
+// byte[] improvedRedeemerResult = await ImprovedRedeemerSample.UnlockLovelaceWithImprovedRedeemerAsync();
+// Console.WriteLine(Convert.ToHexString(improvedRedeemerResult));
+// Console.WriteLine(Convert.ToHexString(CborSerializer.Serialize(unlockSignedTx)));
 

@@ -1,3 +1,6 @@
+using Chrysalis.Cbor.Extensions;
+using Chrysalis.Cbor.Extensions.Cardano.Core.Common;
+using Chrysalis.Cbor.Extensions.Cardano.Core.Transaction;
 using Chrysalis.Cbor.Serialization;
 using Chrysalis.Cbor.Types;
 using Chrysalis.Cbor.Types.Cardano.Core.Common;
@@ -23,11 +26,11 @@ public static class TransactionBuilderExtensions
             builder.SetTotalCollateral(2000000UL);
 
             var usedLanguage = builder.pparams!.CostModelsForScriptLanguage!.Value[2];
-            var costModel = new CostMdls(new Dictionary<int, CborIndefList<long>>(){
+            var costModel = new CostMdls(new Dictionary<int, CborDefList<long>>(){
                  { 2, usedLanguage }
             });
             var costModelBytes = CborSerializer.Serialize(costModel);
-            var scriptDataHash = DataHashUtil.CalculateScriptDataHash(builder.witnessSet.Redeemers, new PlutusList([]), costModelBytes);
+            var scriptDataHash = DataHashUtil.CalculateScriptDataHash(builder.witnessSet.Redeemers, builder.witnessSet.PlutusDataSet?.GetValue() as PlutusList, costModelBytes);
             builder.SetScriptDataHash(scriptDataHash);
 
             ulong scriptCostPerByte = builder.pparams!.MinFeeRefScriptCostPerByte!.Numerator / builder.pparams.MinFeeRefScriptCostPerByte!.Denominator;
@@ -57,13 +60,13 @@ public static class TransactionBuilderExtensions
                 _ => throw new Exception("Invalid collateral return type")
             };
 
-            ulong lovelace = builder.body.CollateralReturn.Lovelace();
+            ulong lovelace = builder.body.CollateralReturn.Amount().Lovelace();
             builder.SetCollateralReturn(new AlonzoTransactionOutput(
                 address,
                 new Lovelace(lovelace - totalCollateral), null));
         }
 
-        var outputs = builder.body.Outputs.Value();
+        List<TransactionOutput> outputs = [.. builder.body.Outputs.GetValue()];
 
         Lovelace updatedChangeLovelace = builder.changeOutput switch
         {

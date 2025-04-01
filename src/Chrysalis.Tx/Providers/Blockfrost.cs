@@ -39,7 +39,7 @@ public class Blockfrost : ICardanoDataProvider
         var parameters = JsonSerializer.Deserialize<BlockfrostProtocolParametersResponse>(content) ??
             throw new Exception("GetParameters: Could not parse response json");
 
-        Dictionary<int, CborIndefList<long>> costMdls = [];
+        Dictionary<int, CborDefList<long>> costMdls = [];
 
         foreach (var (key, value) in parameters.CostModelsRaw ?? [])
         {
@@ -51,7 +51,7 @@ public class Blockfrost : ICardanoDataProvider
                 _ => throw new ArgumentException("Invalid key", nameof(key))
             };
 
-            costMdls[version] = new CborIndefList<long>([.. value.Select(x => x)]);
+            costMdls[version] = new CborDefList<long>([.. value.Select(x => x)]);
         }
 
         return new ConwayProtocolParamUpdate(

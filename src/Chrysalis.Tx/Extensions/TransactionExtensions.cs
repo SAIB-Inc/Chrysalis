@@ -1,3 +1,4 @@
+using Chrysalis.Cbor.Extensions.Cardano.Core.TransactionWitness;
 using Chrysalis.Cbor.Serialization;
 using Chrysalis.Cbor.Types;
 using Chrysalis.Cbor.Types.Cardano.Core.Transaction;
@@ -8,17 +9,24 @@ using Chrysalis.Wallet.Utils;
 namespace Chrysalis.Tx.Extensions;
 public static class TransactionExtension
 {
-    public static PostMaryTransaction Sign(this PostMaryTransaction self, PrivateKey privateKey)
+    public static Transaction Sign(this Transaction self, PrivateKey privateKey)
     {
-        var txBodyBytes = CborSerializer.Serialize(self.TransactionBody);
-        var signature = privateKey.Sign(HashUtil.Blake2b256(txBodyBytes));
-        var vkeyWitness = new VKeyWitness(privateKey.GetPublicKey().Key, signature);
-        var vKeyWitnesses = self.TransactionWitnessSet.VkeyWitnessSet()?.ToList() ?? [];
+        PostMaryTransaction tx = self switch
+        {
+            PostMaryTransaction postMaryTransaction => postMaryTransaction,
+            _ => throw new Exception("Transaction type not supported")
+        };
+        byte[] txBodyBytes = CborSerializer.Serialize(tx.TransactionBody);
+        byte[] signature = privateKey.Sign(HashUtil.Blake2b256(txBodyBytes));
+        VKeyWitness vkeyWitness = new(privateKey.GetPublicKey().Key, signature);
+        List<VKeyWitness> vKeyWitnesses = tx.TransactionWitnessSet.VKeyWitnessSet() is not null ?
+            [.. tx.TransactionWitnessSet.VKeyWitnessSet()!] : [];
+
         vKeyWitnesses.Add(vkeyWitness);
 
-        return self with
+        return tx with
         {
-            TransactionWitnessSet = self.TransactionWitnessSet switch
+            TransactionWitnessSet = tx.TransactionWitnessSet switch
             {
                 AlonzoTransactionWitnessSet alonzoTransactionWitnessSet => alonzoTransactionWitnessSet with
                 {
@@ -33,14 +41,20 @@ public static class TransactionExtension
         };
     }
 
-    public static PostMaryTransaction Sign(this PostMaryTransaction self, List<VKeyWitness> vKeyWitnesses)
+    public static Transaction Sign(this Transaction self, List<VKeyWitness> vKeyWitnesses)
     {
-        var vkeyWitnessSet = self.TransactionWitnessSet.VkeyWitnessSet()?.ToList() ?? [];
+        PostMaryTransaction tx = self switch
+        {
+            PostMaryTransaction postMaryTransaction => postMaryTransaction,
+            _ => throw new Exception("Transaction type not supported")
+        };
+        var vkeyWitnessSet = tx.TransactionWitnessSet.VKeyWitnessSet() is not null ?
+            tx.TransactionWitnessSet.VKeyWitnessSet()!.ToList() : [];
         vkeyWitnessSet.AddRange(vKeyWitnesses);
 
-        return self with
+        return tx with
         {
-            TransactionWitnessSet = self.TransactionWitnessSet switch
+            TransactionWitnessSet = tx.TransactionWitnessSet switch
             {
                 AlonzoTransactionWitnessSet alonzoTransactionWitnessSet => alonzoTransactionWitnessSet with
                 {
