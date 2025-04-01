@@ -237,13 +237,9 @@ public sealed partial class CborSerializerCodeGen
         {
             if (tag.HasValue)
             {
-                if (tag.Value == -1)
+                sb.AppendLine($"var {propertyName} = (int)reader.ReadTag();");
+                if (tag.Value >= 0)
                 {
-                    sb.AppendLine("reader.ReadTag();");
-                }
-                else
-                {
-                    sb.AppendLine($"var {propertyName} = (int)reader.ReadTag();");
                     sb.AppendLine($"if ({propertyName} != {tag}) throw new Exception(\"Invalid tag\");");
                 }
             }
@@ -296,7 +292,7 @@ public sealed partial class CborSerializerCodeGen
             return sb;
         }
 
-        public static StringBuilder EmitCustomListReader(StringBuilder sb, SerializableTypeMetadata metadata)
+        public static StringBuilder EmitCustomListReader(StringBuilder sb, SerializableTypeMetadata metadata, int? constrIndex = null)
         {
             Dictionary<string, string> propMapping = [];
 
@@ -340,6 +336,11 @@ public sealed partial class CborSerializerCodeGen
         public static StringBuilder EmitReaderValidationAndResult(StringBuilder sb, SerializableTypeMetadata metadata, string resultName)
         {
             EmitSerializableTypeValidatorReader(sb, metadata, resultName);
+
+            if (metadata.SerializationType == SerializationType.Constr)
+            {
+                sb.AppendLine($"{resultName}.ConstrIndex = constrIndex;");
+            }
 
             if (metadata.ShouldPreserveRaw)
             {
