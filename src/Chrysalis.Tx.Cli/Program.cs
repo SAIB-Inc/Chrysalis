@@ -72,23 +72,23 @@ string validatorAddress = "addr_test1wrffnmkn0pds0tmka6lsce88l5c9mtd90jv2u2vkfgu
 // var provider = new Blockfrost("previewajMhMPYerz9Pd3GsqjayLwP5mgnNnZCC");
 // string ricoAddress = "addr_test1qpw9cvvdq8mjncs9e90trvpdvg7azrncafv0wtgvz0uf9vhgjp8dc6v79uxw0detul8vnywlv5dzyt32ayjyadvhtjaqyl2gur";
 
-var transfer = TransactionTemplateBuilder<ulong>.Create(provider)
-.AddStaticParty("rico", ricoAddress, true)
-.AddInput((options, amount) =>
-{
-    options.From = "rico";
-})
-.AddOutput((options, amount) =>
-{
-    options.To = "rico";
-    options.Amount = new Lovelace(amount);
+// var transfer = TransactionTemplateBuilder<ulong>.Create(provider)
+// .AddStaticParty("rico", ricoAddress, true)
+// .AddInput((options, amount) =>
+// {
+//     options.From = "rico";
+// })
+// .AddOutput((options, amount) =>
+// {
+//     options.To = "rico";
+//     options.Amount = new Lovelace(amount);
 
-})
-.Build();
+// })
+// .Build();
 
-Transaction unlockUnsignedTx = await transfer(10000000UL);
-Transaction unlockSignedTx = unlockUnsignedTx.Sign(privateKey);
-Console.WriteLine(Convert.ToHexString(CborSerializer.Serialize(unlockSignedTx)));
+// Transaction unlockUnsignedTx = await transfer(10000000UL);
+// Transaction unlockSignedTx = unlockUnsignedTx.Sign(privateKey);
+// Console.WriteLine(Convert.ToHexString(CborSerializer.Serialize(unlockSignedTx)));
 
 // Console.WriteLine(Convert.ToHexString(await SampleTransactions.SendLovelaceAsync()));
 
@@ -117,7 +117,7 @@ Console.WriteLine(Convert.ToHexString(CborSerializer.Serialize(unlockSignedTx)))
 // Define a redeemer data factory for the withdrawal action
 
 
-RedeemerDataBuilder<UnlockParameters, Indices> withdrawRedeemerFactory = (mapping, parameters) =>
+RedeemerDataBuilder<UnlockParameters, Indices> withdrawRedeemerBuilder = (mapping, parameters) =>
 {
     List<PlutusData> actions = [];
     var (inputIndex, outputIndices) = mapping.GetInput("borrow");
@@ -133,12 +133,18 @@ RedeemerDataBuilder<UnlockParameters, Indices> withdrawRedeemerFactory = (mappin
         new CborIndefList<ulong>(outputIndicesData)
     );
 
+    byte[] serializedIndices = CborSerializer.Serialize(indices);
+
+    Console.WriteLine(Convert.ToHexString(serializedIndices));
+    PlutusData data = CborSerializer.Deserialize<PlutusData>(serializedIndices);
+    Console.WriteLine(Convert.ToHexString(CborSerializer.Serialize(data)));
+
     return indices;
 };
 
 
 // Define a redeemer data factory for the spend action
-RedeemerDataBuilder<UnlockParameters, PlutusData> spendRedeemerFactory = (mapping, parameters) =>
+RedeemerDataBuilder<UnlockParameters, PlutusData> spendRedeemerBuilder = (mapping, parameters) =>
 {
     return new PlutusConstr([])
     {
@@ -165,7 +171,7 @@ var unlockLovelace = TransactionTemplateBuilder<UnlockParameters>.Create(provide
         options.From = "validator";
         options.UtxoRef = unlockParams.LockedUtxoOutRef;
         options.Id = "borrow";
-        options.SetRedeemerBuilder(spendRedeemerFactory);
+        options.SetRedeemerBuilder(spendRedeemerBuilder);
     })
     .AddOutput((options, unlockParams) =>
     {
@@ -196,7 +202,7 @@ var unlockLovelace = TransactionTemplateBuilder<UnlockParameters>.Create(provide
         options.From = "withdrawal";
         options.Amount = unlockParams.WithdrawalAmount;
         options.Id = "withdrawal";
-        options.SetRedeemerFactory(withdrawRedeemerFactory);
+        options.SetRedeemerFactory(withdrawRedeemerBuilder);
     })
     .Build();
 
@@ -218,8 +224,9 @@ UnlockParameters unlockParams = new(
 );
 
 
-// Transaction unlockUnsignedTx = await unlockLovelace(unlockParams);
-// Transaction unlockSignedTx = unlockUnsignedTx.Sign(privateKey);
+Transaction unlockUnsignedTx = await unlockLovelace(unlockParams);
+Console.WriteLine(Convert.ToHexString(CborSerializer.Serialize(unlockUnsignedTx)));
+Transaction unlockSignedTx = unlockUnsignedTx.Sign(privateKey);
 // Console.WriteLine(Convert.ToHexString(CborSerializer.Serialize(unlockSignedTx)));
 
 

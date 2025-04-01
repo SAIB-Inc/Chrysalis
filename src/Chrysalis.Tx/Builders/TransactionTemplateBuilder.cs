@@ -302,7 +302,7 @@ public class TransactionTemplateBuilder<T>
             withdrawalIndex++;
         }
 
-        int policyIndex = 0;
+        int mintIndex = 0;
         foreach (var config in _mintConfigs)
         {
             var mintOptions = new MintOptions<T> { Policy = "", Assets = [] };
@@ -321,11 +321,11 @@ public class TransactionTemplateBuilder<T>
 
                 if (redeemer != null)
                 {
-                    ProcessRedeemer(buildContext, redeemer, (ulong)policyIndex);
+                    ProcessRedeemer(buildContext, redeemer, (ulong)mintIndex);
                 }
             }
 
-            policyIndex++;
+            mintIndex++;
         }
     }
 
@@ -464,12 +464,8 @@ public class TransactionTemplateBuilder<T>
             var withdrawalOptions = new WithdrawalOptions<T> { From = "", Amount = 0 };
             config(withdrawalOptions, param);
 
-            ChrysalisWallet.Address withdrawalAddress = ChrysalisWallet.Address.FromBech32(parties[withdrawalOptions.From]);
+            WalletAddress withdrawalAddress = WalletAddress.FromBech32(parties[withdrawalOptions.From]);
             rewards.Add(new RewardAccount(withdrawalAddress.ToBytes()), withdrawalOptions.Amount!);
-
-            // Redeemers for withdrawals will be handled in the BuildRedeemers method
-
-            // The new redeemer approach doesn't use the RedeemerBuilder
         }
 
         if (rewards.Count > 0)
