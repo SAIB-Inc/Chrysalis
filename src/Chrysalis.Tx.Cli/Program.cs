@@ -114,10 +114,9 @@ string validatorAddress = "addr_test1wrffnmkn0pds0tmka6lsce88l5c9mtd90jv2u2vkfgu
 // Console.WriteLine(Convert.ToHexString(await SampleTransactions.SendLovelaceAsync()));
 
 
-// Define a redeemer data factory for the withdrawal action
 
 
-RedeemerDataBuilder<UnlockParameters, Indices> withdrawRedeemerBuilder = (mapping, parameters) =>
+RedeemerDataBuilder<UnlockParameters, CborIndefList<Indices>> withdrawRedeemerBuilder = (mapping, parameters) =>
 {
     List<PlutusData> actions = [];
     var (inputIndex, outputIndices) = mapping.GetInput("borrow");
@@ -127,23 +126,16 @@ RedeemerDataBuilder<UnlockParameters, Indices> withdrawRedeemerBuilder = (mappin
     {
         outputIndicesData.Add(outputIndex);
     }
-
+    
     Indices indices = new Indices(
         inputIndex,
-        new CborIndefList<ulong>(outputIndicesData)
+        new OutputIndices(outputIndices["main"], outputIndices["fee"], outputIndices["change"])
     );
 
-    byte[] serializedIndices = CborSerializer.Serialize(indices);
-
-    Console.WriteLine(Convert.ToHexString(serializedIndices));
-    PlutusData data = CborSerializer.Deserialize<PlutusData>(serializedIndices);
-    Console.WriteLine(Convert.ToHexString(CborSerializer.Serialize(data)));
-
-    return indices;
+    return new CborIndefList<Indices>([indices]);
 };
 
 
-// Define a redeemer data factory for the spend action
 RedeemerDataBuilder<UnlockParameters, PlutusData> spendRedeemerBuilder = (mapping, parameters) =>
 {
     return new PlutusConstr([])
@@ -225,9 +217,9 @@ UnlockParameters unlockParams = new(
 
 
 Transaction unlockUnsignedTx = await unlockLovelace(unlockParams);
-Console.WriteLine(Convert.ToHexString(CborSerializer.Serialize(unlockUnsignedTx)));
+// Console.WriteLine(Convert.ToHexString(CborSerializer.Serialize(unlockUnsignedTx)));
 Transaction unlockSignedTx = unlockUnsignedTx.Sign(privateKey);
-// Console.WriteLine(Convert.ToHexString(CborSerializer.Serialize(unlockSignedTx)));
+Console.WriteLine(Convert.ToHexString(CborSerializer.Serialize(unlockSignedTx)));
 
 
 

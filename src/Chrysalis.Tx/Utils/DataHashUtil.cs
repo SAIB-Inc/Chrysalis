@@ -11,7 +11,7 @@ public static class DataHashUtil
     // https://github.com/SAIB-Inc/cardanosharp-wallet/blob/6b35a43e97f10d33c31f690786120b567f382a40/CardanoSharp.Wallet/Utilities/ScriptUtility.cs#L12
     public static byte[] CalculateScriptDataHash(
         Redeemers redeemers,
-        PlutusList datums,
+        PlutusList? datums,
         byte[] languageViews
     )
     {

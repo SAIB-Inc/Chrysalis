@@ -26,11 +26,11 @@ public static class TransactionBuilderExtensions
             builder.SetTotalCollateral(2000000UL);
 
             var usedLanguage = builder.pparams!.CostModelsForScriptLanguage!.Value[2];
-            var costModel = new CostMdls(new Dictionary<int, CborIndefList<long>>(){
+            var costModel = new CostMdls(new Dictionary<int, CborDefList<long>>(){
                  { 2, usedLanguage }
             });
             var costModelBytes = CborSerializer.Serialize(costModel);
-            var scriptDataHash = DataHashUtil.CalculateScriptDataHash(builder.witnessSet.Redeemers, new PlutusList([]), costModelBytes);
+            var scriptDataHash = DataHashUtil.CalculateScriptDataHash(builder.witnessSet.Redeemers, builder.witnessSet.PlutusDataSet?.GetValue() as PlutusList, costModelBytes);
             builder.SetScriptDataHash(scriptDataHash);
 
             ulong scriptCostPerByte = builder.pparams!.MinFeeRefScriptCostPerByte!.Numerator / builder.pparams.MinFeeRefScriptCostPerByte!.Denominator;
