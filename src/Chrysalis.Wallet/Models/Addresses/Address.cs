@@ -117,12 +117,12 @@ public class Address
 
     public string GetPrefix() => GetAddressHeader(_addressBytes[0]).GetPrefix();
 
-    public byte[]? GetPkh() =>
+    public byte[]? GetPaymentKeyHash() =>
         Type is AddressType.StakeKey or AddressType.ScriptStakeKey
             ? null
             : _addressBytes.Length >= 29 ? _addressBytes[1..29] : null;
 
-    public byte[]? GetSkh() => Type switch
+    public byte[]? GetStakeKeyHash() => Type switch
     {
         // Payment (28 bytes) + Stake (28 bytes)
         AddressType.BasePayment
