@@ -52,16 +52,31 @@ public class Address
 
     #region Public Static Factory Methods
 
+    /// <summary>
+    /// Creates an <see cref="Address"/> instance directly from raw address bytes.
+    /// </summary>
+    /// <param name="addressBytes">The raw byte representation of the address.</param>
+    /// <returns>An <see cref="Address"/> instance.</returns>
     public static Address FromBytes(byte[] addressBytes)
     {
         return new Address(addressBytes);
     }
 
-    public static Address FromBech32(string bech32String)
-    {
-        return new Address(bech32String);
-    }
+    /// <summary>
+    /// Creates an <see cref="Address"/> instance from a Bech32-encoded address string.
+    /// </summary>
+    /// <param name="bech32String">The Bech32-encoded Cardano address string.</param>
+    /// <returns>An <see cref="Address"/> instance.</returns>
+    public static Address FromBech32(string bech32String) => new(bech32String);
 
+    /// <summary>
+    /// Creates an <see cref="Address"/> instance from payment and optional stake credentials.
+    /// </summary>
+    /// <param name="networkType">The Cardano network type (e.g., Mainnet or Testnet).</param>
+    /// <param name="addressType">The type of address being created.</param>
+    /// <param name="paymentBytes">The payment credential bytes (e.g., PaymentKeyHash).</param>
+    /// <param name="stakeBytes">Optional stake credential bytes (e.g., StakeKeyHash).</param>
+    /// <returns>An <see cref="Address"/> instance.</returns>
     public static Address FromCredentials(NetworkType networkType, AddressType addressType, byte[] paymentBytes, byte[]? stakeBytes)
     {
         Credential paymentCredential = ExtractCredential(paymentBytes, 1);
@@ -72,12 +87,19 @@ public class Address
         return new Address(networkType, addressType, paymentCredential, stakeCredential);
     }
 
-    public static Address FromPublicKey(NetworkType networkType, AddressType addressType, PublicKey paymentPub, PublicKey stakePub)
+    /// <summary>
+    /// Creates an <see cref="Address"/> from public key(s).
+    /// </summary>
+    /// <param name="networkType">The Cardano network type (e.g., Mainnet or Testnet).</param>
+    /// <param name="addressType">The type of address to create.</param>
+    /// <param name="paymentPub">The public key for the payment part.</param>
+    /// <param name="stakePub">Optional public key for the stake delegation part.</param>
+    public static Address FromPublicKeys(NetworkType networkType, AddressType addressType, PublicKey paymentPub, PublicKey? stakePub = null)
     {
-        byte[] addressBody = [.. HashUtil.Blake2b224(paymentPub.Key), .. HashUtil.Blake2b224(stakePub.Key)];
-        AddressHeader header = new(addressType, networkType);
+        byte[] paymentHash = HashUtil.Blake2b224(paymentPub.Key);
+        byte[]? stakeHash = stakePub?.Key is not null ? HashUtil.Blake2b224(stakePub.Key) : null;
 
-        return new Address([header.ToByte(), .. addressBody]);
+        return FromCredentials(networkType, addressType, paymentHash, stakeHash);
     }
 
     #endregion
@@ -95,50 +117,27 @@ public class Address
 
     public string GetPrefix() => GetAddressHeader(_addressBytes[0]).GetPrefix();
 
-    public byte[]? GetPkh()
+    public byte[]? GetPkh() =>
+        Type is AddressType.StakeKey or AddressType.ScriptStakeKey
+            ? null
+            : _addressBytes.Length >= 29 ? _addressBytes[1..29] : null;
+
+    public byte[]? GetSkh() => Type switch
     {
-        AddressHeader header = GetAddressHeader(_addressBytes[0]);
-        int offset = 1;
+        // Payment (28 bytes) + Stake (28 bytes)
+        AddressType.BasePayment
+        or AddressType.ScriptPayment
+        or AddressType.BaseWithScriptDelegation
+        or AddressType.ScriptWithScriptDelegation
+            => _addressBytes.Length >= 57 ? _addressBytes[29..57] : null,
 
-        return header.Type switch
-        {
-            AddressType.StakeKey or
-            AddressType.ScriptStakeKey => null,
-            _ => _addressBytes[offset..(offset + 28)],
-        };
-    }
+        // Stake-only addresses (stake hash at offset 1)
+        AddressType.StakeKey
+        or AddressType.ScriptStakeKey
+            => _addressBytes.Length >= 29 ? _addressBytes[1..29] : null,
 
-    public byte[]? GetSkh()
-    {
-        AddressHeader header = GetAddressHeader(_addressBytes[0]);
-        int offset = 1;
-
-        return header.Type switch
-        {
-            // StakeKeyHash directly follows PaymentKeyHash (offset + 28)
-            AddressType.BasePayment => _addressBytes.Length >= offset + 56
-                ? _addressBytes[(offset + 28)..(offset + 56)]
-                : null,
-
-            // StakeKeyHash directly follows ScriptHash (offset + 28)
-            AddressType.BaseWithScriptDelegation => _addressBytes.Length >= offset + 56
-                ? _addressBytes[(offset + 28)..(offset + 56)]
-                : null,
-
-            // PaymentKeyHash + ScriptHash (delegation part)
-            AddressType.BaseWithPointerDelegation => null, // No StakeKeyHash, only pointer reference
-
-            // Enterprise addresses have no delegation part
-            AddressType.EnterprisePayment => null,
-
-            // Stake-only addresses
-            AddressType.StakeKey => _addressBytes.Length >= offset + 28
-                ? _addressBytes[offset..(offset + 28)]
-                : null,
-
-            _ => null
-        };
-    }
+        _ => null
+    };
 
     public static AddressHeader GetAddressHeader(byte headerByte)
     {
