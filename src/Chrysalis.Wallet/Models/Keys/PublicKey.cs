@@ -19,7 +19,7 @@ public class PublicKey(byte[] key, byte[] chaincode)
     public override bool Equals(object? obj)
     {
         if (obj == null || GetType() != obj.GetType())
-                return false;
+            return false;
 
         var other = (PublicKey)obj;
         return Key.SequenceEqual(other.Key) && Chaincode.SequenceEqual(other.Chaincode);

@@ -77,7 +77,7 @@ public class Address
         byte[] addressBody = [.. HashUtil.Blake2b224(paymentPub.Key), .. HashUtil.Blake2b224(stakePub.Key)];
         AddressHeader header = new(addressType, networkType);
 
-        return new Address([header.ToByte(),  ..addressBody]);
+        return new Address([header.ToByte(), .. addressBody]);
     }
 
     #endregion
