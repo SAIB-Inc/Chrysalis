@@ -3,8 +3,8 @@ using Chrysalis.Cbor.Serialization;
 using Chrysalis.Cbor.Types;
 using Chrysalis.Cbor.Types.Cardano.Core.Transaction;
 using Chrysalis.Cbor.Types.Cardano.Core.TransactionWitness;
-using Chrysalis.Tx.Utils;
 using Chrysalis.Wallet.Models.Keys;
+using Chrysalis.Wallet.Utils;
 
 namespace Chrysalis.Tx.Extensions;
 public static class TransactionExtension

@@ -45,7 +45,7 @@ public partial record BabbageTransactionBody(
     [CborProperty(11)] byte[]? ScriptDataHash,
     [CborProperty(13)] CborMaybeIndefList<TransactionInput>? Collateral,
     [CborProperty(14)] CborMaybeIndefList<byte[]>? RequiredSigners,
-    [CborProperty(15)] byte[]? NetworkId,
+    [CborProperty(15)] int? NetworkId,
     [CborProperty(16)] TransactionOutput? CollateralReturn,
     [CborProperty(17)] ulong? TotalCollateral,
     [CborProperty(18)] CborMaybeIndefList<TransactionInput>? ReferenceInputs
