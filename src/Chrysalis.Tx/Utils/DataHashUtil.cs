@@ -1,6 +1,7 @@
 using Chrysalis.Cbor.Serialization;
 using Chrysalis.Cbor.Types.Cardano.Core.Common;
 using Chrysalis.Cbor.Types.Cardano.Core.TransactionWitness;
+using Chrysalis.Wallet.Utils;
 
 namespace Chrysalis.Tx.Utils;
 
