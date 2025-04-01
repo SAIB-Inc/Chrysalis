@@ -128,10 +128,11 @@ public class TransactionTemplateBuilder<T>
 
             List<ResolvedInput> specifiedInputsUtxos = GetSpecifiedInputsUtxos(context.SpecifiedInputs, allUtxos);
 
-            var coinSelectionResult = CoinSelectionUtil.LargestFirstAlgorithm(
+            var coinSelectionResult = PerformCoinSelection(
                 utxos,
                 requiredAmount,
-                specifiedInputs: specifiedInputsUtxos
+                specifiedInputsUtxos,
+                context
             );
 
             foreach (var consumedInput in coinSelectionResult.Inputs)
@@ -232,6 +233,142 @@ public class TransactionTemplateBuilder<T>
         return MergeParties(_staticParties, additionalParties);
     }
 
+    private CoinSelectionResult PerformCoinSelection(
+    List<ResolvedInput> utxos,
+    List<Value> requiredAmount,
+    List<ResolvedInput> specifiedInputsUtxos,
+    BuildContext context
+)
+    {
+        ulong requestedLovelace = 0;
+        Dictionary<string, decimal> requestedAssets = [];
+        foreach (var amount in requiredAmount)
+        {
+            requestedLovelace += amount.Lovelace();
+
+            if (amount is LovelaceWithMultiAsset lovelaceWithMultiAsset)
+            {
+                ExtractAssets(lovelaceWithMultiAsset.MultiAsset, requestedAssets);
+            }
+        }
+
+        ulong specifiedInputsLovelace = 0;
+        Dictionary<string, decimal> specifiedInputsAssets = [];
+
+        foreach (var utxo in specifiedInputsUtxos)
+        {
+            specifiedInputsLovelace += utxo.Output.Amount().Lovelace();
+
+            if (utxo.Output.Amount() is LovelaceWithMultiAsset lovelaceWithMultiAsset)
+            {
+                ExtractAssets(lovelaceWithMultiAsset.MultiAsset, specifiedInputsAssets);
+            }
+        }
+
+        requestedLovelace = requestedLovelace > specifiedInputsLovelace ? requestedLovelace - specifiedInputsLovelace : 0;
+
+
+        foreach (var asset in specifiedInputsAssets)
+        {
+            if (requestedAssets.ContainsKey(asset.Key))
+            {
+                requestedAssets[asset.Key] -= asset.Value;
+                if (requestedAssets[asset.Key] <= 0)
+                {
+                    requestedAssets.Remove(asset.Key);
+                }
+            }
+        }
+
+        foreach (var mint in context.Mints)
+        {
+            foreach (var asset in mint.Value)
+            {
+                string assetKey = mint.Key + asset.Key;
+                if (requestedAssets.ContainsKey(assetKey))
+                {
+                    requestedAssets[assetKey] -= asset.Value;
+                    if (requestedAssets[assetKey] <= 0)
+                    {
+                        requestedAssets.Remove(assetKey);
+                    }
+                }
+            }
+        }
+
+
+        List<Value> updatedRequiredAmounts = [];
+
+        Lovelace updatedRequestedLovelace = new(requestedLovelace);
+
+        if (requestedAssets.Count == 0)
+        {
+            updatedRequiredAmounts.Add(updatedRequestedLovelace);
+        }
+        else
+        {
+            Dictionary<byte[], TokenBundleOutput> multiAssetDict = [];
+
+            var assetsByPolicy = requestedAssets
+                .GroupBy(a => a.Key[..56])
+                .ToDictionary(g => g.Key, g => g.ToList());
+
+            foreach (var policy in assetsByPolicy)
+            {
+                var policyId = Convert.FromHexString(policy.Key);
+
+                Dictionary<byte[], ulong> tokenBundle = [];
+
+                foreach (var asset in policy.Value)
+                {
+                    var assetName = Convert.FromHexString(asset.Key[56..]);
+                    tokenBundle[assetName] = (ulong)asset.Value;
+                }
+
+                multiAssetDict[policyId] = new TokenBundleOutput(tokenBundle);
+            }
+
+            var multiAssetOutput = new MultiAssetOutput(multiAssetDict);
+
+            var lovelaceWithAssets = new LovelaceWithMultiAsset(updatedRequestedLovelace, multiAssetOutput);
+            updatedRequiredAmounts.Add(lovelaceWithAssets);
+        }
+
+        return CoinSelectionUtil.LargestFirstAlgorithm(
+            utxos,
+            updatedRequiredAmounts
+        );
+    }
+
+    private static void ExtractAssets(
+        MultiAssetOutput multiAsset,
+        Dictionary<string, decimal> assetDict)
+    {
+        if (multiAsset == null || multiAsset.Value == null)
+            return;
+
+        List<string> policies = multiAsset.PolicyId()?.ToList() ?? [];
+
+        foreach (string policy in policies)
+        {
+            Dictionary<string, ulong> tokenBundle = multiAsset.TokenBundleByPolicyId(policy) ?? [];
+
+            foreach (var token in tokenBundle)
+            {
+                string assetKey = policy + token.Key;
+
+                if (!assetDict.ContainsKey(assetKey))
+                {
+                    assetDict[assetKey] = token.Value;
+                }
+                else if (assetDict.ContainsKey(assetKey))
+                {
+                    assetDict[assetKey] += token.Value;
+                }
+            }
+        }
+    }
+
     private void BuildRedeemers(BuildContext buildContext, T param, Dictionary<string, ulong> inputIdToIndex, Dictionary<string, Dictionary<string, ulong>> outputMappings)
     {
         var mapping = new InputOutputMapping();
@@ -257,10 +394,11 @@ public class TransactionTemplateBuilder<T>
             if (string.IsNullOrEmpty(inputOptions.Id) || !inputIdToIndex.TryGetValue(inputOptions.Id, out var inputIndex))
                 continue;
 
-            if(inputOptions.Redeemer != null){
-                foreach(RedeemerKey key in inputOptions.Redeemer.Value.Keys)
+            if (inputOptions.Redeemer != null)
+            {
+                foreach (RedeemerKey key in inputOptions.Redeemer.Value.Keys)
                 {
-                   buildContext.Redeemers[key] = inputOptions.Redeemer.Value[key];
+                    buildContext.Redeemers[key] = inputOptions.Redeemer.Value[key];
                 }
             }
 
@@ -280,12 +418,13 @@ public class TransactionTemplateBuilder<T>
         {
             var withdrawalOptions = new WithdrawalOptions<T> { From = "", Amount = 0 };
             config(withdrawalOptions, param);
-            
 
-            if(withdrawalOptions.Redeemer != null){
-                foreach(RedeemerKey key in withdrawalOptions.Redeemer.Value.Keys)
+
+            if (withdrawalOptions.Redeemer != null)
+            {
+                foreach (RedeemerKey key in withdrawalOptions.Redeemer.Value.Keys)
                 {
-                   buildContext.Redeemers[key] = withdrawalOptions.Redeemer.Value[key];
+                    buildContext.Redeemers[key] = withdrawalOptions.Redeemer.Value[key];
                 }
             }
 
@@ -308,10 +447,11 @@ public class TransactionTemplateBuilder<T>
             var mintOptions = new MintOptions<T> { Policy = "", Assets = [] };
             config(mintOptions, param);
 
-            if(mintOptions.Redeemer != null){
-                foreach(RedeemerKey key in mintOptions.Redeemer.Value.Keys)
+            if (mintOptions.Redeemer != null)
+            {
+                foreach (RedeemerKey key in mintOptions.Redeemer.Value.Keys)
                 {
-                   buildContext.Redeemers[key] = mintOptions.Redeemer.Value[key];
+                    buildContext.Redeemers[key] = mintOptions.Redeemer.Value[key];
                 }
             }
 

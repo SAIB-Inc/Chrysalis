@@ -16,22 +16,51 @@ public static class MultiAssetExtension
         return policies;
     }
 
+
     public static Dictionary<string, ulong>? TokenBundleByPolicyId(this MultiAsset self, string policyId)
     {
         try
         {
-            Dictionary<string, ulong> tokenBundle = self switch
+            return self switch
             {
-                MultiAssetOutput multiAssetOutput => multiAssetOutput.Value[Convert.FromHexString(policyId)].Value.Select(x => (Convert.ToHexString(x.Key), x.Value)).ToDictionary(x => x.Item1, x => x.Value),
-                MultiAssetMint multiAssetMint => multiAssetMint.Value[Convert.FromHexString(policyId)].Value.Select(x => (Convert.ToHexString(x.Key), x.Value)).ToDictionary(x => x.Item1, x => (ulong)x.Value),
-                _ => throw new Exception("Unknown multi asset type")
-            };
+                MultiAssetOutput multiAssetOutput =>
+                    FindTokenBundle(
+                        multiAssetOutput.Value,
+                        policyId,
+                        (bundle) => bundle.Value.ToDictionary(x => Convert.ToHexString(x.Key).ToLowerInvariant(), x => x.Value)
+                    ),
 
-            return tokenBundle;
+                MultiAssetMint multiAssetMint =>
+                    FindTokenBundle(
+                        multiAssetMint.Value,
+                        policyId,
+                        (bundle) => bundle.Value.ToDictionary(x => Convert.ToHexString(x.Key).ToLowerInvariant(), x => (ulong)x.Value)
+                    ),
+
+                _ => null
+            };
         }
         catch
         {
             return null;
         }
+    }
+
+    private static Dictionary<string, ulong>? FindTokenBundle<TBundle>(
+        Dictionary<byte[], TBundle> bundles,
+        string policyId,
+        Func<TBundle, Dictionary<string, ulong>> converter)
+    {
+        policyId = policyId.ToLowerInvariant();
+        foreach (var kvp in bundles)
+        {
+            string currentPolicyId = Convert.ToHexString(kvp.Key).ToLowerInvariant();
+            if (currentPolicyId == policyId)
+            {
+                return converter(kvp.Value);
+            }
+        }
+
+        return null;
     }
 }

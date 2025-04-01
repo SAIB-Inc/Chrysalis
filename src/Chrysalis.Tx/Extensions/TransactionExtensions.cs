@@ -30,11 +30,11 @@ public static class TransactionExtension
             {
                 AlonzoTransactionWitnessSet alonzoTransactionWitnessSet => alonzoTransactionWitnessSet with
                 {
-                    VKeyWitnessSet = new CborDefList<VKeyWitness>(vKeyWitnesses)
+                    VKeyWitnessSet = new CborDefListWithTag<VKeyWitness>(vKeyWitnesses)
                 },
                 PostAlonzoTransactionWitnessSet postAlonzoTransactionWitnessSet => postAlonzoTransactionWitnessSet with
                 {
-                    VKeyWitnessSet = new CborDefList<VKeyWitness>(vKeyWitnesses)
+                    VKeyWitnessSet = new CborDefListWithTag<VKeyWitness>(vKeyWitnesses)
                 },
                 _ => throw new Exception("Unknown transaction witness set type")
             }
@@ -58,11 +58,11 @@ public static class TransactionExtension
             {
                 AlonzoTransactionWitnessSet alonzoTransactionWitnessSet => alonzoTransactionWitnessSet with
                 {
-                    VKeyWitnessSet = new CborDefList<VKeyWitness>(vkeyWitnessSet)
+                    VKeyWitnessSet = new CborDefListWithTag<VKeyWitness>(vkeyWitnessSet)
                 },
                 PostAlonzoTransactionWitnessSet postAlonzoTransactionWitnessSet => postAlonzoTransactionWitnessSet with
                 {
-                    VKeyWitnessSet = new CborDefList<VKeyWitness>(vkeyWitnessSet)
+                    VKeyWitnessSet = new CborDefListWithTag<VKeyWitness>(vkeyWitnessSet)
                 },
                 _ => throw new Exception("Unknown transaction witness set type")
             }
