@@ -12,6 +12,10 @@ public class PublicKey(byte[] key, byte[] chaincode)
         return Ed25519.Verify(signature, message, Key);
     }
 
+    public string ToHex() => Convert.ToHexString(Key);
+
+    public byte[] ToBlake2b224() => Blake2Fast.Blake2b.ComputeHash(28, Key);
+
     public override bool Equals(object? obj)
     {
         if (obj == null || GetType() != obj.GetType())

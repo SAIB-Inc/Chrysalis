@@ -1,6 +1,7 @@
 using Chrysalis.Cbor.Types.Plutus.Address;
 using Chrysalis.Wallet.Extensions;
 using Chrysalis.Wallet.Models.Enums;
+using Chrysalis.Wallet.Models.Keys;
 using Chrysalis.Wallet.Utils;
 
 namespace Chrysalis.Wallet.Models.Addresses;
@@ -71,6 +72,14 @@ public class Address
         return new Address(networkType, addressType, paymentCredential, stakeCredential);
     }
 
+    public static Address FromPublicKey(NetworkType networkType, AddressType addressType, PublicKey paymentPub, PublicKey stakePub)
+    {
+        byte[] addressBody = [.. HashUtil.Blake2b224(paymentPub.Key), .. HashUtil.Blake2b224(stakePub.Key)];
+        AddressHeader header = new(addressType, networkType);
+
+        return new Address([header.ToByte(),  ..addressBody]);
+    }
+
     #endregion
 
     #region Public Instance Methods
@@ -89,34 +98,45 @@ public class Address
     public byte[]? GetPkh()
     {
         AddressHeader header = GetAddressHeader(_addressBytes[0]);
-
-        byte[]? ExtractPkh(int offset, int length) =>
-            _addressBytes.Length >= offset + length ? _addressBytes[offset..(offset + length)] : null;
+        int offset = 1;
 
         return header.Type switch
         {
-            AddressType.BasePayment or
-            AddressType.BaseWithScriptDelegation or
-            AddressType.BaseWithPointerDelegation or
-            AddressType.EnterprisePayment => ExtractPkh(1, 28),
-            _ => null,
+            AddressType.StakeKey or
+            AddressType.ScriptStakeKey => null,
+            _ => _addressBytes[offset..(offset + 28)],
         };
     }
 
     public byte[]? GetSkh()
     {
         AddressHeader header = GetAddressHeader(_addressBytes[0]);
-
-        byte[] ExtractSkh(int offset, int length)
-        {
-            return _addressBytes.Length >= offset + length ? _addressBytes[offset..(offset + length)] : [];
-        }
+        int offset = 1;
 
         return header.Type switch
         {
-            AddressType.BasePayment or AddressType.BaseWithScriptDelegation =>
-                ExtractSkh(1 + 28, 28),
-            _ => null,
+            // StakeKeyHash directly follows PaymentKeyHash (offset + 28)
+            AddressType.BasePayment => _addressBytes.Length >= offset + 56
+                ? _addressBytes[(offset + 28)..(offset + 56)]
+                : null,
+
+            // StakeKeyHash directly follows ScriptHash (offset + 28)
+            AddressType.BaseWithScriptDelegation => _addressBytes.Length >= offset + 56
+                ? _addressBytes[(offset + 28)..(offset + 56)]
+                : null,
+
+            // PaymentKeyHash + ScriptHash (delegation part)
+            AddressType.BaseWithPointerDelegation => null, // No StakeKeyHash, only pointer reference
+
+            // Enterprise addresses have no delegation part
+            AddressType.EnterprisePayment => null,
+
+            // Stake-only addresses
+            AddressType.StakeKey => _addressBytes.Length >= offset + 28
+                ? _addressBytes[offset..(offset + 28)]
+                : null,
+
+            _ => null
         };
     }
 
