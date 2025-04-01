@@ -1,4 +1,4 @@
-namespace Chrysalis.Tx.Utils;
+namespace Chrysalis.Wallet.Utils;
 
 public static class HashUtil
 {
