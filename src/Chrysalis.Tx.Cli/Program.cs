@@ -8,8 +8,6 @@ using Chrysalis.Tx.Builders;
 using Chrysalis.Tx.Cli;
 using Chrysalis.Tx.Extensions;
 using Chrysalis.Tx.Providers;
-using Chrysalis.Tx.TransactionBuilding;
-using Chrysalis.Wallet.Extensions;
 using Chrysalis.Wallet.Models.Enums;
 using Chrysalis.Wallet.Models.Keys;
 using Chrysalis.Wallet.Words;
