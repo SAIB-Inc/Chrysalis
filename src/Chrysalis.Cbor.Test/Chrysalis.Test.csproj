@@ -11,6 +11,11 @@
 
   <ItemGroup>
     <PackageReference Include="BenchmarkDotNet" Version="0.14.0" />
+    <PackageReference Include="Chrysalis.Cbor" Version="1.0.0" />
+    <PackageReference Include="Chrysalis.Cbor.CodeGen" Version="0.1.0">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
     <PackageReference Include="Microsoft.CodeAnalysis.Analyzers" Version="3.11.0">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
@@ -29,10 +34,4 @@
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
   </ItemGroup>
-
-  <ItemGroup>
-    <ProjectReference Include="../Chrysalis.Cbor/Chrysalis.Cbor.csproj" />
-    <ProjectReference Include="..\Chrysalis.Cbor.Generators\Chrysalis.Cbor.Generators.csproj" />
-  </ItemGroup>
-
 </Project>
