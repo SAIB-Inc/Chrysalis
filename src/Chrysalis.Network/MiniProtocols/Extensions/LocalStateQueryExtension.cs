@@ -36,6 +36,13 @@ public static class LocalStateQueryExtension
         return await DeserializeResponseAsync<CurrentProtocolParamsResponse>(rawBytes);
     }
 
+    public static async Task<CurrentEra> GetCurrentEraAsync(this LocalStateQuery localStateQuery)
+    {
+        Result queryResult = await localStateQuery.QueryAsync(null, RawQueries.GetCurrentEra, default);
+        byte[] rawBytes = await ExtractRawBytesAsync(queryResult);
+        return await DeserializeResponseAsync<CurrentEra>(rawBytes);
+    }
+
     /// <summary>
     /// Gets UTxOs by address
     /// </summary>
