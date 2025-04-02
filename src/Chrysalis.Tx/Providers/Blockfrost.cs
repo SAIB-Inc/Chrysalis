@@ -223,12 +223,42 @@ public class Blockfrost : ICardanoDataProvider
         return new ScriptRef(scriptType, cborBytes);
     }
 
+    public Task<List<ResolvedInput>> GetUtxosAsync(List<string> address)
+    {
+        List<ResolvedInput> resolvedInputs = [];
+        foreach (var addr in address)
+        {
+            var utxos = GetUtxosAsync(addr).Result;
+            resolvedInputs.AddRange(utxos);
+        }
+        return Task.FromResult(resolvedInputs);
+    }
+
+    public async Task<string> SubmitTransactionAsync(Transaction tx)
+    {
+        string query = _baseUrl + "/tx/submit";
+
+        var content = new ByteArrayContent(CborSerializer.Serialize(tx));
+        content.Headers.ContentType = new MediaTypeHeaderValue("application/cbor");
+
+        HttpResponseMessage response = await _httpClient.PostAsync(query, content);
+
+        if (!response.IsSuccessStatusCode)
+        {
+            string error = await response.Content.ReadAsStringAsync();
+            throw new Exception($"PostTransactionToChain: failed to submit transaction to Blockfrost endpoint.\nError {error}");
+        }
+
+        string txId = await response.Content.ReadAsStringAsync();
+        txId = JsonSerializer.Deserialize<string>(txId) ??
+            throw new Exception("PostTransactionToChain: Could not parse transaction ID from response");
+
+        return txId;
+    }
     private string GetBaseUrl()
     {
         //TODO: implement network specific base url
         return "https://cardano-preview.blockfrost.io/api/v0";
     }
-
-
 
 }

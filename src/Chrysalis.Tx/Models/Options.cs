@@ -38,10 +38,11 @@ public record OutputOptions
     public DatumOption? Datum { get; set; }
     public string? AssociatedInputId { get; set; }
     public string? Id { get; set; }
+    public string? Script { get; set; }
     public TransactionOutput BuildOutput(Dictionary<string, string> parties)
     {
         var address = Wallet.Models.Addresses.Address.FromBech32(parties[To]);
-        return new PostAlonzoTransactionOutput(new Address(address.ToBytes()), Amount!, Datum, null);
+        return new PostAlonzoTransactionOutput(new Address(address.ToBytes()), Amount!, Datum, Script is not null ? new CborEncodedValue(Convert.FromHexString(Script)) : null);
     }
 }
 

@@ -29,6 +29,13 @@ public static class LocalStateQueryExtension
         return await DeserializeResponseAsync<Tip>(rawBytes);
     }
 
+    public static async Task<CurrentEraQueryResponse> GetCurrentEraAsync(this LocalStateQuery localStateQuery)
+    {
+        Result queryResult = await localStateQuery.QueryAsync(null, RawQueries.GetCurrentEra, default);
+        byte[] rawBytes = await ExtractRawBytesAsync(queryResult);
+        return await DeserializeResponseAsync<CurrentEraQueryResponse>(rawBytes);
+    }
+
     public static async Task<CurrentProtocolParamsResponse> GetCurrentProtocolParamsAsync(this LocalStateQuery localStateQuery)
     {
         Result queryResult = await localStateQuery.QueryAsync(null, RawQueries.GetCurrentProtocolParams, default);
