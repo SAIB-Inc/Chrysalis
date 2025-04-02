@@ -128,10 +128,11 @@ public class TransactionTemplateBuilder<T>
 
             List<ResolvedInput> specifiedInputsUtxos = GetSpecifiedInputsUtxos(context.SpecifiedInputs, allUtxos);
 
-            var coinSelectionResult = CoinSelectionUtil.LargestFirstAlgorithm(
+            var coinSelectionResult = PerformCoinSelection(
                 utxos,
                 requiredAmount,
-                specifiedInputs: specifiedInputsUtxos
+                specifiedInputsUtxos,
+                context
             );
 
             foreach (var consumedInput in coinSelectionResult.Inputs)
@@ -188,7 +189,7 @@ public class TransactionTemplateBuilder<T>
                 {
                     if (!outputMappings.ContainsKey(inputId))
                     {
-                        outputMappings[inputId] = new Dictionary<string, ulong>();
+                        outputMappings[inputId] = [];
                     }
 
                     foreach (var (outputId, outputIndex) in associations)
@@ -232,6 +233,196 @@ public class TransactionTemplateBuilder<T>
         return MergeParties(_staticParties, additionalParties);
     }
 
+    private CoinSelectionResult PerformCoinSelection(
+    List<ResolvedInput> utxos,
+    List<Value> requiredAmount,
+    List<ResolvedInput> specifiedInputsUtxos,
+    BuildContext context
+)
+    {
+        ulong requestedLovelace = 0;
+        Dictionary<string, decimal> requestedAssets = [];
+        foreach (var amount in requiredAmount)
+        {
+            requestedLovelace += amount.Lovelace();
+
+            if (amount is LovelaceWithMultiAsset lovelaceWithMultiAsset)
+            {
+                ExtractAssets(lovelaceWithMultiAsset.MultiAsset, requestedAssets);
+            }
+        }
+
+        ulong originalRequestedLovelace = requestedLovelace;
+
+        ulong specifiedInputsLovelace = 0;
+        Dictionary<string, decimal> specifiedInputsAssets = [];
+
+        foreach (var utxo in specifiedInputsUtxos)
+        {
+            specifiedInputsLovelace += utxo.Output.Amount().Lovelace();
+
+            if (utxo.Output.Amount() is LovelaceWithMultiAsset lovelaceWithMultiAsset)
+            {
+                ExtractAssets(lovelaceWithMultiAsset.MultiAsset, specifiedInputsAssets);
+            }
+        }
+
+        Dictionary<string, decimal> originalSpecifiedInputsAssets = new(specifiedInputsAssets);
+
+        requestedLovelace = requestedLovelace > specifiedInputsLovelace ? requestedLovelace - specifiedInputsLovelace : 0;
+
+        foreach (var asset in specifiedInputsAssets)
+        {
+            if (requestedAssets.ContainsKey(asset.Key))
+            {
+                requestedAssets[asset.Key] -= asset.Value;
+                if (requestedAssets[asset.Key] <= 0)
+                {
+                    requestedAssets.Remove(asset.Key);
+                }
+            }
+        }
+
+        Dictionary<string, decimal> mintedAssets = [];
+
+        foreach (var policy in context.Mints)
+        {
+            foreach (var asset in policy.Value)
+            {
+                string assetKey = policy.Key + asset.Key;
+                if (!mintedAssets.ContainsKey(assetKey))
+                {
+                    mintedAssets[assetKey] = asset.Value;
+                }
+                else
+                {
+                    mintedAssets[assetKey] += asset.Value;
+                }
+            }
+        }
+
+        foreach (var asset in mintedAssets)
+        {
+            if (asset.Value > 0 && requestedAssets.ContainsKey(asset.Key))
+            {
+                requestedAssets[asset.Key] -= asset.Value;
+                if (requestedAssets[asset.Key] <= 0)
+                {
+                    requestedAssets.Remove(asset.Key);
+                }
+            }
+        }
+
+        List<Value> updatedRequiredAmounts = [];
+        Lovelace updatedRequestedLovelace = new(requestedLovelace);
+
+        if (requestedAssets.Count == 0)
+        {
+            updatedRequiredAmounts.Add(updatedRequestedLovelace);
+        }
+        else
+        {
+            Dictionary<byte[], TokenBundleOutput> multiAssetDict = [];
+
+            var assetsByPolicy = requestedAssets
+                .GroupBy(a => a.Key[..56])
+                .ToDictionary(g => g.Key, g => g.ToList());
+
+            foreach (var policy in assetsByPolicy)
+            {
+                var policyId = Convert.FromHexString(policy.Key);
+                Dictionary<byte[], ulong> tokenBundle = [];
+
+                foreach (var asset in policy.Value)
+                {
+                    var assetName = Convert.FromHexString(asset.Key[56..]);
+                    tokenBundle[assetName] = (ulong)asset.Value;
+                }
+
+                multiAssetDict[policyId] = new TokenBundleOutput(tokenBundle);
+            }
+
+            var multiAssetOutput = new MultiAssetOutput(multiAssetDict);
+            var lovelaceWithAssets = new LovelaceWithMultiAsset(updatedRequestedLovelace, multiAssetOutput);
+            updatedRequiredAmounts.Add(lovelaceWithAssets);
+        }
+
+        CoinSelectionResult selection = CoinSelectionUtil.LargestFirstAlgorithm(
+            utxos,
+            updatedRequiredAmounts
+        );
+
+        if (specifiedInputsLovelace > originalRequestedLovelace)
+        {
+            ulong excessLovelace = specifiedInputsLovelace - originalRequestedLovelace;
+
+            selection.LovelaceChange += excessLovelace;
+        }
+
+        foreach (var mintAsset in mintedAssets.Where(a => a.Value > 0))
+        {
+            if (!requestedAssets.ContainsKey(mintAsset.Key))
+            {
+                string policyId = mintAsset.Key[..56];
+                string assetName = mintAsset.Key[56..];
+
+                byte[] policyIdBytes = Convert.FromHexString(policyId);
+                byte[] assetNameBytes = Convert.FromHexString(assetName);
+
+                AddAssetToChange(selection.AssetsChange, policyIdBytes, assetNameBytes, (ulong)mintAsset.Value);
+            }
+        }
+
+        foreach (var inputAsset in originalSpecifiedInputsAssets)
+        {
+            if (!requestedAssets.ContainsKey(inputAsset.Key))
+            {
+                string policyId = inputAsset.Key[..56];
+                string assetName = inputAsset.Key[56..];
+
+                byte[] policyIdBytes = Convert.FromHexString(policyId);
+                byte[] assetNameBytes = Convert.FromHexString(assetName);
+
+                if (mintedAssets.ContainsKey(inputAsset.Key) && mintedAssets[inputAsset.Key] > 0)
+                {
+                    continue;
+                }
+                AddAssetToChange(selection.AssetsChange, policyIdBytes, assetNameBytes, (ulong)inputAsset.Value);
+            }
+        }
+
+        return selection;
+    }
+
+    private static void ExtractAssets(
+        MultiAssetOutput multiAsset,
+        Dictionary<string, decimal> assetDict)
+    {
+        if (multiAsset == null || multiAsset.Value == null)
+            return;
+
+        List<string> policies = multiAsset.PolicyId()?.ToList() ?? [];
+
+        foreach (string policy in policies)
+        {
+            Dictionary<string, ulong> tokenBundle = multiAsset.TokenBundleByPolicyId(policy) ?? [];
+
+            foreach (var token in tokenBundle)
+            {
+                string assetKey = (policy + token.Key).ToLowerInvariant();
+
+                if (!assetDict.ContainsKey(assetKey))
+                {
+                    assetDict[assetKey] = token.Value;
+                }
+                else if (assetDict.ContainsKey(assetKey))
+                {
+                    assetDict[assetKey] += token.Value;
+                }
+            }
+        }
+    }
+
     private void BuildRedeemers(BuildContext buildContext, T param, Dictionary<string, ulong> inputIdToIndex, Dictionary<string, Dictionary<string, ulong>> outputMappings)
     {
         var mapping = new InputOutputMapping();
@@ -254,23 +445,25 @@ public class TransactionTemplateBuilder<T>
             var inputOptions = new InputOptions<T> { From = "", Id = null, IsReference = false };
             config(inputOptions, param);
 
-            if (string.IsNullOrEmpty(inputOptions.Id) || !inputIdToIndex.TryGetValue(inputOptions.Id, out var inputIndex))
-                continue;
-
-            if(inputOptions.Redeemer != null){
-                foreach(RedeemerKey key in inputOptions.Redeemer.Value.Keys)
+            if (inputOptions.Redeemer != null)
+            {
+                foreach (RedeemerKey key in inputOptions.Redeemer.Value.Keys)
                 {
-                   buildContext.Redeemers[key] = inputOptions.Redeemer.Value[key];
+                    buildContext.Redeemers[key] = inputOptions.Redeemer.Value[key];
                 }
             }
 
             if (inputOptions.RedeemerBuilder != null)
             {
-                var redeemerObj = inputOptions.RedeemerBuilder(mapping, param);
-
-                if (redeemerObj != null)
+                if (inputOptions.Id is not null)
                 {
-                    ProcessRedeemer(buildContext, redeemerObj, inputIndex);
+                    var inputIndex = inputIdToIndex[inputOptions.Id];
+                    var redeemerObj = inputOptions.RedeemerBuilder(mapping, param);
+
+                    if (redeemerObj != null)
+                    {
+                        ProcessRedeemer(buildContext, redeemerObj, inputIndex);
+                    }
                 }
             }
         }
@@ -280,12 +473,12 @@ public class TransactionTemplateBuilder<T>
         {
             var withdrawalOptions = new WithdrawalOptions<T> { From = "", Amount = 0 };
             config(withdrawalOptions, param);
-            
 
-            if(withdrawalOptions.Redeemer != null){
-                foreach(RedeemerKey key in withdrawalOptions.Redeemer.Value.Keys)
+            if (withdrawalOptions.Redeemer != null)
+            {
+                foreach (RedeemerKey key in withdrawalOptions.Redeemer.Value.Keys)
                 {
-                   buildContext.Redeemers[key] = withdrawalOptions.Redeemer.Value[key];
+                    buildContext.Redeemers[key] = withdrawalOptions.Redeemer.Value[key];
                 }
             }
 
@@ -308,10 +501,11 @@ public class TransactionTemplateBuilder<T>
             var mintOptions = new MintOptions<T> { Policy = "", Assets = [] };
             config(mintOptions, param);
 
-            if(mintOptions.Redeemer != null){
-                foreach(RedeemerKey key in mintOptions.Redeemer.Value.Keys)
+            if (mintOptions.Redeemer != null)
+            {
+                foreach (RedeemerKey key in mintOptions.Redeemer.Value.Keys)
                 {
-                   buildContext.Redeemers[key] = mintOptions.Redeemer.Value[key];
+                    buildContext.Redeemers[key] = mintOptions.Redeemer.Value[key];
                 }
             }
 
@@ -415,7 +609,7 @@ public class TransactionTemplateBuilder<T>
     {
         foreach (var config in _mintConfigs)
         {
-            var mintOptions = new MintOptions<T> { Policy = "", Assets = new Dictionary<string, ulong>() };
+            var mintOptions = new MintOptions<T> { Policy = "", Assets = [] };
             config(mintOptions, param);
 
             if (!context.Mints.ContainsKey(mintOptions.Policy))
@@ -553,6 +747,56 @@ public class TransactionTemplateBuilder<T>
             }
         }
         return indexedAssociations;
+    }
+
+    private void AddAssetToChange(
+        Dictionary<byte[], TokenBundleOutput> assetsChange,
+        byte[] policyId,
+        byte[] assetName,
+        ulong amount
+    )
+    {
+        KeyValuePair<byte[], TokenBundleOutput>? matchingPolicy = null;
+        foreach (var policy in assetsChange)
+        {
+            if (policy.Key.SequenceEqual(policyId))
+            {
+                matchingPolicy = policy;
+                break;
+            }
+        }
+
+        if (matchingPolicy == null)
+        {
+            Dictionary<byte[], ulong> tokenBundle = new()
+        {
+            { assetName, amount }
+        };
+            assetsChange[policyId] = new TokenBundleOutput(tokenBundle);
+        }
+        else
+        {
+            var tokenBundle = matchingPolicy.Value.Value.Value;
+
+            KeyValuePair<byte[], ulong>? matchingToken = null;
+            foreach (var token in tokenBundle)
+            {
+                if (token.Key.SequenceEqual(assetName))
+                {
+                    matchingToken = token;
+                    break;
+                }
+            }
+
+            if (matchingToken == null)
+            {
+                tokenBundle[assetName] = amount;
+            }
+            else
+            {
+                tokenBundle[matchingToken.Value.Key] += amount;
+            }
+        }
     }
 
     private Dictionary<string, string> MergeParties(Dictionary<string, string> staticParties, Dictionary<string, (string address, bool isChange)> dynamicParties)

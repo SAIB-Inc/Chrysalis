@@ -16,22 +16,52 @@ public static class MultiAssetExtension
         return policies;
     }
 
+
     public static Dictionary<string, ulong>? TokenBundleByPolicyId(this MultiAsset self, string policyId)
     {
         try
         {
-            Dictionary<string, ulong> tokenBundle = self switch
-            {
-                MultiAssetOutput multiAssetOutput => multiAssetOutput.Value[Convert.FromHexString(policyId)].Value.Select(x => (Convert.ToHexString(x.Key), x.Value)).ToDictionary(x => x.Item1, x => x.Value),
-                MultiAssetMint multiAssetMint => multiAssetMint.Value[Convert.FromHexString(policyId)].Value.Select(x => (Convert.ToHexString(x.Key), x.Value)).ToDictionary(x => x.Item1, x => (ulong)x.Value),
-                _ => throw new Exception("Unknown multi asset type")
-            };
+            var policyIdBytes = Convert.FromHexString(policyId);
 
-            return tokenBundle;
+            return self switch
+            {
+                MultiAssetOutput multiAssetOutput => FindTokenBundle(
+                    multiAssetOutput.Value,
+                    policyIdBytes,
+                    bundle => bundle.Value.ToDictionary(
+                        x => Convert.ToHexString(x.Key),
+                        x => x.Value)
+                ),
+
+                MultiAssetMint multiAssetMint => FindTokenBundle(
+                    multiAssetMint.Value,
+                    policyIdBytes,
+                    bundle => bundle.Value.ToDictionary(
+                        x => Convert.ToHexString(x.Key),
+                        x => (ulong)x.Value)
+                ),
+
+                _ => null
+            };
         }
         catch
         {
             return null;
         }
+    }
+    private static Dictionary<string, ulong>? FindTokenBundle<TBundle>(
+        Dictionary<byte[], TBundle> bundles,
+        byte[] policyId,
+        Func<TBundle, Dictionary<string, ulong>> converter)
+    {
+        foreach (var kvp in bundles)
+        {
+            if (kvp.Key.SequenceEqual(policyId))
+            {
+                return converter(kvp.Value);
+            }
+        }
+
+        return null;
     }
 }

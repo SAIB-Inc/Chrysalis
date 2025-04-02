@@ -9,168 +9,298 @@ namespace Chrysalis.Tx.Utils;
 //@TODO: Unit Tests
 public static class CoinSelectionUtil
 {
-    public static CoinSelectionResult LargestFirstAlgorithm(List<ResolvedInput> self, List<Value> requestedAmount, Value? minimumAmount = null, List<ResolvedInput>? specifiedInputs = null, int maxInputs = 20)
+    public static CoinSelectionResult LargestFirstAlgorithm(
+    List<ResolvedInput> availableUtxos,
+    List<Value> requestedAmount,
+    int maxInputs = int.MaxValue
+    )
     {
-        if (self == null || self.Count == 0)
+        if (availableUtxos == null || availableUtxos.Count == 0)
             throw new InvalidOperationException("UTxO Balance Insufficient");
 
-        if (requestedAmount.Count <= 0)
+        if (requestedAmount == null || requestedAmount.Count <= 0)
             throw new ArgumentException("Requested amount must be greater than zero", nameof(requestedAmount));
 
-        if (maxInputs <= 0)
-            throw new ArgumentException("Maximum inputs must be greater than zero", nameof(maxInputs));
-
-        List<ResolvedInput> sortedUtxos = [.. self.OrderByDescending(u => u.Output.Amount().Lovelace())];
-        List<ResolvedInput> selectedUtxos = [];
-
+        ulong requestedLovelace = 0;
         Dictionary<string, decimal> requiredAssets = [];
+        bool isLovelaceOnlyRequest = true;
+
         foreach (Value value in requestedAmount)
         {
+            requestedLovelace += value.Lovelace();
+
             if (value is LovelaceWithMultiAsset lovelaceWithMultiAsset)
             {
-                MultiAssetOutput multiAsset = new(lovelaceWithMultiAsset.MultiAsset());
-                List<string> policies = multiAsset.PolicyId()?.ToList() ?? [];
-                if (policies.Count != 0)
-                {
-                    foreach (string policy in policies)
-                    {
-                        Dictionary<string, ulong> tokenBundle = lovelaceWithMultiAsset.MultiAsset.TokenBundleByPolicyId(policy) ?? [];
+                ExtractAssets(lovelaceWithMultiAsset.MultiAsset, requiredAssets);
 
-                        foreach (var token in tokenBundle)
+                if (requiredAssets.Count > 0)
+                {
+                    isLovelaceOnlyRequest = false;
+                }
+            }
+        }
+
+        List<ResolvedInput> selectedUtxos = [];
+
+        var utxoInfo = availableUtxos.Select(utxo =>
+        {
+            bool isLovelaceOnly = !(utxo.Output.Amount() is LovelaceWithMultiAsset);
+
+            int assetsCovered = 0;
+            Dictionary<string, decimal> utxoAssets = [];
+
+            if (!isLovelaceOnly)
+            {
+                var lovelaceWithMultiAsset = (LovelaceWithMultiAsset)utxo.Output.Amount();
+                ExtractAssets(lovelaceWithMultiAsset.MultiAsset, utxoAssets);
+
+                foreach (var requiredAsset in requiredAssets)
+                {
+                    if (utxoAssets.ContainsKey(requiredAsset.Key) &&
+                        utxoAssets[requiredAsset.Key] > 0)
+                    {
+                        assetsCovered++;
+                    }
+                }
+            }
+
+            return new
+            {
+                Utxo = utxo,
+                Lovelace = utxo.Output.Amount().Lovelace(),
+                IsLovelaceOnly = isLovelaceOnly,
+                AssetsCovered = assetsCovered,
+                Assets = utxoAssets
+            };
+        }).ToList();
+
+        if (isLovelaceOnlyRequest)
+        {
+            utxoInfo.Sort((a, b) =>
+            {
+                if (a.IsLovelaceOnly != b.IsLovelaceOnly)
+                {
+                    return a.IsLovelaceOnly ? -1 : 1;
+                }
+
+                return b.Lovelace.CompareTo(a.Lovelace);
+            });
+        }
+        else
+        {
+            utxoInfo.Sort((a, b) =>
+            {
+                int assetCompare = b.AssetsCovered.CompareTo(a.AssetsCovered);
+                if (assetCompare != 0) return assetCompare;
+
+                return b.Lovelace.CompareTo(a.Lovelace);
+            });
+        }
+
+        ulong selectedLovelace = 0;
+        int selectedCount = 0;
+        foreach (var info in utxoInfo)
+        {
+            if (selectedCount >= maxInputs)
+                break;
+
+            if (selectedLovelace >= requestedLovelace && requiredAssets.Count == 0)
+                break;
+
+            if (info.AssetsCovered == 0 && selectedLovelace >= requestedLovelace)
+                continue;
+
+            selectedUtxos.Add(info.Utxo);
+            selectedLovelace += info.Lovelace;
+
+            if (info.AssetsCovered > 0)
+            {
+                foreach (var asset in info.Assets)
+                {
+                    if (requiredAssets.ContainsKey(asset.Key))
+                    {
+                        requiredAssets[asset.Key] -= asset.Value;
+                        if (requiredAssets[asset.Key] <= 0)
                         {
-                            requiredAssets[policy + token.Key] = token.Value;
+                            requiredAssets.Remove(asset.Key);
+                        }
+                    }
+                }
+            }
+            selectedCount++;
+        }
+
+        if (selectedLovelace < requestedLovelace)
+        {
+            throw new InvalidOperationException($"UTxO Balance Insufficient - need {requestedLovelace} lovelace but only found {selectedLovelace}");
+        }
+
+        if (requiredAssets.Count > 0)
+        {
+            throw new InvalidOperationException($"UTxO Balance Insufficient - missing assets: {string.Join(", ", requiredAssets.Keys)}");
+        }
+
+        ulong lovelaceChange = selectedLovelace - requestedLovelace;
+        Dictionary<byte[], TokenBundleOutput> assetsChange = CalculateAssetsChange(selectedUtxos, requestedAmount);
+
+        return new CoinSelectionResult
+        {
+            Inputs = selectedUtxos,
+            LovelaceChange = lovelaceChange,
+            AssetsChange = assetsChange
+        };
+    }
+
+    private static void ExtractAssets(
+        MultiAssetOutput multiAsset,
+        Dictionary<string, decimal> assetDict)
+    {
+        if (multiAsset == null || multiAsset.Value == null)
+            return;
+
+        List<string> policies = multiAsset.PolicyId()?.ToList() ?? [];
+
+        foreach (string policy in policies)
+        {
+            Dictionary<string, ulong> tokenBundle = multiAsset.TokenBundleByPolicyId(policy) ?? [];
+
+            foreach (var token in tokenBundle)
+            {
+                string assetKey = policy + token.Key;
+
+                if (!assetDict.ContainsKey(assetKey))
+                {
+                    assetDict[assetKey] = token.Value;
+                }
+                else
+                {
+                    assetDict[assetKey] += token.Value;
+                }
+            }
+        }
+    }
+
+    private static Dictionary<byte[], TokenBundleOutput> CalculateAssetsChange(
+        List<ResolvedInput> selectedUtxos,
+        List<Value> requestedAmounts)
+    {
+        Dictionary<string, Dictionary<string, decimal>> selectedAssetsByPolicy = [];
+
+        foreach (var utxo in selectedUtxos)
+        {
+            if (utxo.Output.Amount() is LovelaceWithMultiAsset lovelaceWithMultiAsset)
+            {
+                var multiAsset = lovelaceWithMultiAsset.MultiAsset;
+                if (multiAsset == null || multiAsset.Value == null) continue;
+
+                foreach (var policyEntry in multiAsset.Value)
+                {
+                    string policyId = Convert.ToHexString(policyEntry.Key).ToLowerInvariant();
+                    var tokenBundle = policyEntry.Value;
+
+                    if (!selectedAssetsByPolicy.ContainsKey(policyId))
+                    {
+                        selectedAssetsByPolicy[policyId] = [];
+                    }
+
+                    foreach (var assetEntry in tokenBundle.Value)
+                    {
+                        string assetName = Convert.ToHexString(assetEntry.Key).ToLowerInvariant();
+                        decimal amount = assetEntry.Value;
+
+                        if (!selectedAssetsByPolicy[policyId].ContainsKey(assetName))
+                        {
+                            selectedAssetsByPolicy[policyId][assetName] = amount;
+                        }
+                        else
+                        {
+                            selectedAssetsByPolicy[policyId][assetName] += amount;
                         }
                     }
                 }
             }
         }
 
-        ulong specifiedInputsLovelace = 0;
-        if (specifiedInputs != null)
+        Dictionary<string, Dictionary<string, decimal>> requestedAssetsByPolicy = [];
+
+        foreach (Value value in requestedAmounts)
         {
-            foreach (var utxo in specifiedInputs)
+            if (value is LovelaceWithMultiAsset lovelaceWithMultiAsset)
             {
-                specifiedInputsLovelace += utxo.Output.Amount().Lovelace();
-            }
-        }
+                var multiAsset = lovelaceWithMultiAsset.MultiAsset;
+                if (multiAsset == null || multiAsset.Value == null) continue;
 
-
-        ulong requestedLovelace = (ulong)requestedAmount.Select(x => (decimal)x.Lovelace()).Sum() - specifiedInputsLovelace;
-        int iterCount = 0;
-        ulong totalLovelaceSelected = 0;
-        Dictionary<string, decimal> coinSelectedAssets = new(requiredAssets);
-        while (true)
-        {
-            if (iterCount >= self.Count)
-                break;
-            if (totalLovelaceSelected >= requestedLovelace && requiredAssets.Count == 0)
-                break;
-
-            if (sortedUtxos.Count == 0)
-                throw new InvalidOperationException("UTxO Balance Insufficient");
-
-            ResolvedInput utxo = sortedUtxos[0];
-            sortedUtxos.RemoveAt(0);
-
-            ulong lovelace = utxo.Output.Amount().Lovelace();
-            if (lovelace == 0) continue;
-            if (lovelace < (minimumAmount?.Lovelace() ?? 0)) continue;
-
-            bool isAssetPresent = false;
-            foreach (var asset in requiredAssets)
-            {
-                string policy = asset.Key[..56];
-                string name = asset.Key[56..];
-                MultiAssetOutput? multiAsset = new(utxo.Output.Amount().MultiAsset());
-                var matchedPolicy = multiAsset.TokenBundleByPolicyId(policy);
-                ulong amount = 0;
-                foreach (var item in matchedPolicy ?? [])
+                foreach (var policyEntry in multiAsset.Value)
                 {
-                    if (item.Key == name)
+                    string policyId = Convert.ToHexString(policyEntry.Key).ToLowerInvariant();
+                    var tokenBundle = policyEntry.Value;
+
+                    if (!requestedAssetsByPolicy.ContainsKey(policyId))
                     {
-                        amount = item.Value;
-                        break;
+                        requestedAssetsByPolicy[policyId] = [];
                     }
-                }
-                if (amount == 0) continue;
-                isAssetPresent = true;
-                requiredAssets[asset.Key] -= amount;
-                if (requiredAssets[asset.Key] <= 0)
-                {
-                    coinSelectedAssets[asset.Key] = requiredAssets[asset.Key];
-                    requiredAssets.Remove(asset.Key);
-                }
-            }
 
-            if (!isAssetPresent && totalLovelaceSelected >= requestedLovelace) continue;
-
-            if (utxo.Output.Amount() is LovelaceWithMultiAsset)
-            {
-                MultiAssetOutput utxoOutput = new(utxo.Output.Amount()!.MultiAsset());
-                List<string> policies = utxoOutput.PolicyId()?.ToList()!;
-                foreach (string policy in policies)
-                {
-                    Dictionary<string, ulong> tokenBundle = utxoOutput.TokenBundleByPolicyId(policy)!;
-
-                    foreach (var token in tokenBundle)
+                    foreach (var assetEntry in tokenBundle.Value)
                     {
-                        var subject = policy + token.Key;
-                        if (coinSelectedAssets.ContainsKey(subject)) continue;
-                        coinSelectedAssets[subject] = token.Value;
+                        string assetName = Convert.ToHexString(assetEntry.Key).ToLowerInvariant();
+                        decimal amount = assetEntry.Value;
 
+                        if (!requestedAssetsByPolicy[policyId].ContainsKey(assetName))
+                        {
+                            requestedAssetsByPolicy[policyId][assetName] = amount;
+                        }
+                        else
+                        {
+                            requestedAssetsByPolicy[policyId][assetName] += amount;
+                        }
                     }
                 }
             }
-
-            selectedUtxos.Add(utxo);
-            totalLovelaceSelected += lovelace;
         }
 
-        ulong lovelacechange = totalLovelaceSelected - requestedLovelace;
         Dictionary<byte[], TokenBundleOutput> assetsChange = [];
 
-        Dictionary<string, Dictionary<string, decimal>> assetChangeMap = [];
-
-        foreach (var asset in coinSelectedAssets)
+        foreach (var policyEntry in selectedAssetsByPolicy)
         {
-            var policy = asset.Key[..56];
-            var name = asset.Key[56..];
+            string policyId = policyEntry.Key;
+            var selectedAssets = policyEntry.Value;
+
+            Dictionary<string, ulong> assetChangesByName = [];
+            bool hasChange = false;
+
+            foreach (var assetEntry in selectedAssets)
             {
-                if (!assetChangeMap.ContainsKey(policy))
+                string assetName = assetEntry.Key;
+                decimal selectedAmount = assetEntry.Value;
+
+                decimal requestedAssetAmount = 0;
+                if (requestedAssetsByPolicy.ContainsKey(policyId) &&
+                    requestedAssetsByPolicy[policyId].ContainsKey(assetName))
                 {
-                    assetChangeMap[policy] = new()
-                    {
-                        { name, Math.Abs(asset.Value) }
-                    };
+                    requestedAssetAmount = requestedAssetsByPolicy[policyId][assetName];
                 }
-                else
+
+                decimal change = selectedAmount - requestedAssetAmount;
+                if (change > 0)
                 {
-                    if (!assetChangeMap[policy].ContainsKey(name))
-                    {
-                        assetChangeMap[policy][name] = Math.Abs(asset.Value);
-                    }
-                    else
-                    {
-                        assetChangeMap[policy][name] += Math.Abs(asset.Value);
-                    }
+                    assetChangesByName[assetName] = (ulong)change;
+                    hasChange = true;
                 }
+            }
+
+            if (hasChange)
+            {
+                Dictionary<byte[], ulong> assetChanges = [];
+                foreach (var change in assetChangesByName)
+                {
+                    assetChanges[Convert.FromHexString(change.Key)] = change.Value;
+                }
+
+                assetsChange[Convert.FromHexString(policyId)] = new TokenBundleOutput(assetChanges);
             }
         }
 
-
-        foreach (var asset in assetChangeMap)
-        {
-            var policyIdBytes = Convert.FromHexString(asset.Key);
-            var tokenBundle = new TokenBundleOutput(asset.Value.ToDictionary(x => Convert.FromHexString(x.Key), x => (ulong)x.Value));
-            assetsChange[policyIdBytes] = tokenBundle;
-        }
-
-        return new CoinSelectionResult
-        {
-            Inputs = selectedUtxos,
-            LovelaceChange = lovelacechange,
-            AssetsChange = assetsChange
-        };
+        return assetsChange;
     }
 }
 
