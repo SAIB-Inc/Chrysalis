@@ -8,9 +8,8 @@ using Chrysalis.Cbor.Types.Cardano.Core.Transaction;
 namespace Chrysalis.Network.Cbor.LocalStateQuery;
 
 [CborSerializable]
-[CborList]
 public partial record CurrentEraQueryResponse(
-    [CborOrder(0)] ulong CurrentEra
+    ulong CurrentEra
 ) : CborBase;
 
 [CborSerializable]
