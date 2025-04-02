@@ -146,7 +146,7 @@ public class Blockfrost : ICardanoDataProvider
 
                 if (utxo.ReferenceScriptHash is not null)
                 {
-                    ScriptRef scriptRefValue = await GetScript(utxo.ReferenceScriptHash);
+                    Script scriptRefValue = await GetScript(utxo.ReferenceScriptHash);
                     scriptRef = new CborEncodedValue(CborSerializer.Serialize(scriptRefValue));
                 }
 
@@ -175,7 +175,7 @@ public class Blockfrost : ICardanoDataProvider
         return results;
     }
 
-    public async Task<ScriptRef> GetScript(string scriptHash)
+    public async Task<Script> GetScript(string scriptHash)
     {
         var typeQuery = $"/scripts/{scriptHash}";
         var typeResponse = await _httpClient.GetAsync($"{_baseUrl}{typeQuery}");
@@ -211,15 +211,15 @@ public class Blockfrost : ICardanoDataProvider
         var cborHex = cborElement.GetString() ?? throw new Exception("GetScriptRef: Could not parse CBOR from response");
 
         byte[] cborBytes = Convert.FromHexString(cborHex);
-        int scriptType = type switch
+        Script script = type switch
         {
-            "plutusV1" => 1,
-            "plutusV2" => 2,
-            "plutusV3" => 3,
+            "plutusV1" => new PlutusV1Script(new Value1(0), cborBytes),
+            "plutusV2" => new PlutusV2Script(new Value2(1), cborBytes),
+            "plutusV3" => new PlutusV3Script(new Value3(2), cborBytes),
             _ => throw new Exception("GetScriptRef: Unsupported script type")
         };
 
-        return new ScriptRef(scriptType, cborBytes);
+        return script;
     }
 
     public async Task<List<ResolvedInput>> GetUtxosAsync(List<string> addresses)

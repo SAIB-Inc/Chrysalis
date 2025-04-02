@@ -1,8 +1,12 @@
+using Chrysalis.Cbor.Extensions.Cardano.Core.Common;
+using Chrysalis.Cbor.Serialization;
 using Chrysalis.Cbor.Types;
 using Chrysalis.Cbor.Types.Cardano.Core.Common;
 using Chrysalis.Cbor.Types.Cardano.Core.Protocol;
 using Chrysalis.Cbor.Types.Cardano.Core.Transaction;
 using Chrysalis.Cbor.Types.Cardano.Core.TransactionWitness;
+using Chrysalis.Tx.Utils;
+using WalletAddress = Chrysalis.Wallet.Models.Addresses.Address;
 
 
 namespace Chrysalis.Tx.Models;
@@ -38,11 +42,32 @@ public record OutputOptions
     public DatumOption? Datum { get; set; }
     public string? AssociatedInputId { get; set; }
     public string? Id { get; set; }
-    public string? Script { get; set; }
-    public TransactionOutput BuildOutput(Dictionary<string, string> parties)
+    public Script? Script { get; set; }
+    public TransactionOutput BuildOutput(Dictionary<string, string> parties, ulong adaPerUtxoByte)
     {
-        var address = Wallet.Models.Addresses.Address.FromBech32(parties[To]);
-        return new PostAlonzoTransactionOutput(new Address(address.ToBytes()), Amount!, Datum, Script is not null ? new CborEncodedValue(Convert.FromHexString(Script)) : null);
+        Address address = new(WalletAddress.FromBech32(parties[To]).ToBytes());
+        CborEncodedValue? script = Script is not null ? new CborEncodedValue(CborSerializer.Serialize(Script)) : null;
+        PostAlonzoTransactionOutput output = new(address, Amount ?? new Lovelace(2000000), Datum, script);
+        ulong minLovelace = FeeUtil.CalculateMinimumLovelace(adaPerUtxoByte, CborSerializer.Serialize(output));
+        Value minLovelaceValue = new Lovelace(minLovelace);
+
+        if (Amount is not null)
+        {
+            minLovelaceValue = Amount switch
+            {
+                LovelaceWithMultiAsset multiAsset => multiAsset.Lovelace() >= minLovelace
+                    ? multiAsset
+                    : new LovelaceWithMultiAsset(new Lovelace(minLovelace), multiAsset.MultiAsset),
+                _ => Amount.Lovelace() >= minLovelace
+                    ? Amount
+                    : new Lovelace(minLovelace)
+            };
+        }
+
+        return Datum is null && Script is null
+            ? new AlonzoTransactionOutput(address, minLovelaceValue, null)
+            : new PostAlonzoTransactionOutput(address, minLovelaceValue, Datum, script);
+
     }
 }
 
