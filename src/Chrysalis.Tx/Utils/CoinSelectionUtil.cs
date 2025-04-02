@@ -97,10 +97,8 @@ public static class CoinSelectionUtil
 
         ulong selectedLovelace = 0;
 
-        for (int i = 0; i < utxoInfo.Count; i++)
+        foreach (var info in utxoInfo)
         {
-            var info = utxoInfo[i];
-
             if (selectedLovelace >= requestedLovelace && requiredAssets.Count == 0)
                 break;
 
