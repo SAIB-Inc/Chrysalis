@@ -67,3 +67,6 @@ public partial record ProtocolParams(
 public partial record CurrentProtocolParamsResponse(
     [CborOrder(0)] ProtocolParams ProtocolParams
 ) : CborBase;
+
+[CborSerializable]
+public partial record CurrentEra(ulong Era) : CborBase;

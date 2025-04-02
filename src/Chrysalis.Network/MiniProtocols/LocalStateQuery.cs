@@ -10,14 +10,22 @@ public class LocalStateQuery(AgentChannel channel)
 {
     private readonly ChannelBuffer _buffer = new(channel);
 
-    public async Task<Result> QueryAsync(Point? point, BlockQuery query, CancellationToken cancellationToken)
-    {
-        await _buffer.SendFullMessageAsync(AcquireTypes.Default(point), cancellationToken);
-        LocalStateQueryMessage acquireResponse = await _buffer.ReceiveFullMessageAsync<LocalStateQueryMessage>(cancellationToken);
+    // States
+    private bool IsAcquired = false;
 
-        if (acquireResponse is not Acquired)
+    public async Task<Result> QueryAsync(Point? point, QueryReq query, CancellationToken cancellationToken)
+    {
+        if (!IsAcquired)
         {
-            throw new Exception("Failed to acquire");
+            await _buffer.SendFullMessageAsync(AcquireTypes.Default(point), cancellationToken);
+            LocalStateQueryMessage acquireResponse = await _buffer.ReceiveFullMessageAsync<LocalStateQueryMessage>(cancellationToken);
+
+            if (acquireResponse is not Acquired)
+            {
+                throw new Exception("Failed to acquire");
+            }
+
+            IsAcquired = true;
         }
 
         await _buffer.SendFullMessageAsync(QueryRequest.New(query), cancellationToken);
