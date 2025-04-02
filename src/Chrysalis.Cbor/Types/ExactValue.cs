@@ -1,8 +1,7 @@
 using Chrysalis.Cbor.Serialization;
 using Chrysalis.Cbor.Serialization.Attributes;
-using Chrysalis.Cbor.Types;
 
-namespace Chrysalis.Network.Cbor.Common;
+namespace Chrysalis.Cbor.Types;
 
 [CborSerializable]
 public partial record Value0(int Value) : CborBase;

@@ -7,7 +7,6 @@ using Chrysalis.Cbor.Types.Cardano.Core.Governance;
 using Chrysalis.Cbor.Types.Cardano.Core.Protocol;
 using Chrysalis.Cbor.Types.Cardano.Core.Transaction;
 using Chrysalis.Tx.Models;
-using Chrysalis.Tx.Models.Cbor;
 using ChrysalisWallet = Chrysalis.Wallet.Models.Addresses;
 
 namespace Chrysalis.Tx.Providers;
@@ -223,15 +222,11 @@ public class Blockfrost : ICardanoDataProvider
         return new ScriptRef(scriptType, cborBytes);
     }
 
-    public Task<List<ResolvedInput>> GetUtxosAsync(List<string> address)
+    public async Task<List<ResolvedInput>> GetUtxosAsync(List<string> addresses)
     {
-        List<ResolvedInput> resolvedInputs = [];
-        foreach (var addr in address)
-        {
-            var utxos = GetUtxosAsync(addr).Result;
-            resolvedInputs.AddRange(utxos);
-        }
-        return Task.FromResult(resolvedInputs);
+        var tasks = addresses.Select(GetUtxosAsync);
+        var results = await Task.WhenAll(tasks);
+        return [.. results.SelectMany(utxos => utxos)];
     }
 
     public async Task<string> SubmitTransactionAsync(Transaction tx)
