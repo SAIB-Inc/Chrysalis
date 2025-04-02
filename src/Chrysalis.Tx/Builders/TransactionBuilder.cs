@@ -105,10 +105,14 @@ public class TransactionBuilder
 
     public TransactionBuilder AddMint(MultiAssetMint mint)
     {
-        foreach (var asset in mint.Value)
+        if (body.Mint == null)
         {
-            body = body with { Mint = new MultiAssetMint(new Dictionary<byte[], TokenBundleMint>(mint.Value) { { asset.Key, asset.Value } }) };
+            body = body with { Mint = mint };
+            return this;
         }
+        MultiAssetMint mergedMint = MergeMints(body.Mint, mint);
+
+        body = body with { Mint = mergedMint };
         return this;
     }
 
@@ -245,6 +249,64 @@ public class TransactionBuilder
     public PostMaryTransaction Build()
     {
         return new PostMaryTransaction(body, witnessSet, true, auxiliaryData);
+    }
+
+    private MultiAssetMint MergeMints(MultiAssetMint existingMint, MultiAssetMint newMint)
+    {
+        Dictionary<byte[], TokenBundleMint> result = [];
+
+        foreach (var policyEntry in existingMint.Value)
+        {
+            result[policyEntry.Key] = policyEntry.Value;
+        }
+
+        foreach (var policyEntry in newMint.Value)
+        {
+            string policyIdString = Convert.ToHexString(policyEntry.Key);
+            bool policyFound = false;
+
+            foreach (var existingPolicy in result.ToList())
+            {
+                if (policyIdString == Convert.ToHexString(existingPolicy.Key))
+                {
+                    Dictionary<byte[], long> mergedTokens = [];
+
+                    foreach (var token in existingPolicy.Value.Value)
+                    {
+                        mergedTokens[token.Key] = token.Value;
+                    }
+
+                    foreach (var tokenEntry in policyEntry.Value.Value)
+                    {
+                        string tokenNameString = Convert.ToHexString(tokenEntry.Key);
+                        bool tokenFound = false;
+
+                        foreach (var existingToken in mergedTokens.ToList())
+                        {
+                            if (tokenNameString == Convert.ToHexString(existingToken.Key))
+                            {
+                                mergedTokens[existingToken.Key] = existingToken.Value + tokenEntry.Value;
+                                tokenFound = true;
+                                break;
+                            }
+                        }
+                        if (!tokenFound)
+                        {
+                            mergedTokens[tokenEntry.Key] = tokenEntry.Value;
+                        }
+                    }
+                    result[existingPolicy.Key] = new TokenBundleMint(mergedTokens);
+                    policyFound = true;
+                    break;
+                }
+            }
+            if (!policyFound)
+            {
+                result[policyEntry.Key] = policyEntry.Value;
+            }
+        }
+
+        return new MultiAssetMint(result);
     }
 
 }
