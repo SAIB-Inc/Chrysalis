@@ -301,6 +301,6 @@ public static class CoinSelectionUtil
 public record CoinSelectionResult
 {
     public List<ResolvedInput> Inputs { get; set; } = [];
-    public ulong LovelaceChange { get; set; } = 0;
+    public ulong LovelaceChange { get; set; }
     public Dictionary<byte[], TokenBundleOutput> AssetsChange { get; set; } = [];
 }
