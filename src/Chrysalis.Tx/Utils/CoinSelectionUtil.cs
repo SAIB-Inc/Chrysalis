@@ -11,7 +11,9 @@ public static class CoinSelectionUtil
 {
     public static CoinSelectionResult LargestFirstAlgorithm(
     List<ResolvedInput> availableUtxos,
-    List<Value> requestedAmount)
+    List<Value> requestedAmount,
+    int maxInputs = int.MaxValue
+    )
     {
         if (availableUtxos == null || availableUtxos.Count == 0)
             throw new InvalidOperationException("UTxO Balance Insufficient");
@@ -96,9 +98,12 @@ public static class CoinSelectionUtil
         }
 
         ulong selectedLovelace = 0;
-
+        int selectedCount = 0;
         foreach (var info in utxoInfo)
         {
+            if (selectedCount >= maxInputs)
+                break;
+
             if (selectedLovelace >= requestedLovelace && requiredAssets.Count == 0)
                 break;
 
@@ -122,6 +127,7 @@ public static class CoinSelectionUtil
                     }
                 }
             }
+            selectedCount++;
         }
 
         if (selectedLovelace < requestedLovelace)

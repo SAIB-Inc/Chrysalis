@@ -262,15 +262,12 @@ public class TransactionBuilder
 
         foreach (var policyEntry in newMint.Value)
         {
-            string policyIdString = Convert.ToHexString(policyEntry.Key);
             bool policyFound = false;
-
             foreach (var existingPolicy in result.ToList())
             {
-                if (policyIdString == Convert.ToHexString(existingPolicy.Key))
+                if (policyEntry.Key.SequenceEqual(existingPolicy.Key))
                 {
                     Dictionary<byte[], long> mergedTokens = [];
-
                     foreach (var token in existingPolicy.Value.Value)
                     {
                         mergedTokens[token.Key] = token.Value;
@@ -278,12 +275,10 @@ public class TransactionBuilder
 
                     foreach (var tokenEntry in policyEntry.Value.Value)
                     {
-                        string tokenNameString = Convert.ToHexString(tokenEntry.Key);
                         bool tokenFound = false;
-
                         foreach (var existingToken in mergedTokens.ToList())
                         {
-                            if (tokenNameString == Convert.ToHexString(existingToken.Key))
+                            if (tokenEntry.Key.SequenceEqual(existingToken.Key))
                             {
                                 mergedTokens[existingToken.Key] = existingToken.Value + tokenEntry.Value;
                                 tokenFound = true;

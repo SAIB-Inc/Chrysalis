@@ -21,21 +21,25 @@ public static class MultiAssetExtension
     {
         try
         {
+            var policyIdBytes = Convert.FromHexString(policyId);
+
             return self switch
             {
-                MultiAssetOutput multiAssetOutput =>
-                    FindTokenBundle(
-                        multiAssetOutput.Value,
-                        policyId,
-                        (bundle) => bundle.Value.ToDictionary(x => Convert.ToHexString(x.Key).ToLowerInvariant(), x => x.Value)
-                    ),
+                MultiAssetOutput multiAssetOutput => FindTokenBundle(
+                    multiAssetOutput.Value,
+                    policyIdBytes,
+                    bundle => bundle.Value.ToDictionary(
+                        x => Convert.ToHexString(x.Key),
+                        x => x.Value)
+                ),
 
-                MultiAssetMint multiAssetMint =>
-                    FindTokenBundle(
-                        multiAssetMint.Value,
-                        policyId,
-                        (bundle) => bundle.Value.ToDictionary(x => Convert.ToHexString(x.Key).ToLowerInvariant(), x => (ulong)x.Value)
-                    ),
+                MultiAssetMint multiAssetMint => FindTokenBundle(
+                    multiAssetMint.Value,
+                    policyIdBytes,
+                    bundle => bundle.Value.ToDictionary(
+                        x => Convert.ToHexString(x.Key),
+                        x => (ulong)x.Value)
+                ),
 
                 _ => null
             };
@@ -45,17 +49,14 @@ public static class MultiAssetExtension
             return null;
         }
     }
-
     private static Dictionary<string, ulong>? FindTokenBundle<TBundle>(
         Dictionary<byte[], TBundle> bundles,
-        string policyId,
+        byte[] policyId,
         Func<TBundle, Dictionary<string, ulong>> converter)
     {
-        policyId = policyId.ToLowerInvariant();
         foreach (var kvp in bundles)
         {
-            string currentPolicyId = Convert.ToHexString(kvp.Key).ToLowerInvariant();
-            if (currentPolicyId == policyId)
+            if (kvp.Key.SequenceEqual(policyId))
             {
                 return converter(kvp.Value);
             }

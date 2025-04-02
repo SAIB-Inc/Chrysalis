@@ -189,7 +189,7 @@ public class TransactionTemplateBuilder<T>
                 {
                     if (!outputMappings.ContainsKey(inputId))
                     {
-                        outputMappings[inputId] = new Dictionary<string, ulong>();
+                        outputMappings[inputId] = [];
                     }
 
                     foreach (var (outputId, outputIndex) in associations)
@@ -267,7 +267,7 @@ public class TransactionTemplateBuilder<T>
             }
         }
 
-        Dictionary<string, decimal> originalSpecifiedInputsAssets = new Dictionary<string, decimal>(specifiedInputsAssets);
+        Dictionary<string, decimal> originalSpecifiedInputsAssets = new(specifiedInputsAssets);
 
         requestedLovelace = requestedLovelace > specifiedInputsLovelace ? requestedLovelace - specifiedInputsLovelace : 0;
 
@@ -609,7 +609,7 @@ public class TransactionTemplateBuilder<T>
     {
         foreach (var config in _mintConfigs)
         {
-            var mintOptions = new MintOptions<T> { Policy = "", Assets = new Dictionary<string, ulong>() };
+            var mintOptions = new MintOptions<T> { Policy = "", Assets = [] };
             config(mintOptions, param);
 
             if (!context.Mints.ContainsKey(mintOptions.Policy))
@@ -750,18 +750,16 @@ public class TransactionTemplateBuilder<T>
     }
 
     private void AddAssetToChange(
-    Dictionary<byte[], TokenBundleOutput> assetsChange,
-    byte[] policyId,
-    byte[] assetName,
-    ulong amount)
+        Dictionary<byte[], TokenBundleOutput> assetsChange,
+        byte[] policyId,
+        byte[] assetName,
+        ulong amount
+    )
     {
-        string policyIdString = Convert.ToHexString(policyId).ToLowerInvariant();
-        string assetNameString = Convert.ToHexString(assetName).ToLowerInvariant();
-
         KeyValuePair<byte[], TokenBundleOutput>? matchingPolicy = null;
         foreach (var policy in assetsChange)
         {
-            if (Convert.ToHexString(policy.Key).Equals(policyIdString, StringComparison.InvariantCultureIgnoreCase))
+            if (policy.Key.SequenceEqual(policyId))
             {
                 matchingPolicy = policy;
                 break;
@@ -783,7 +781,7 @@ public class TransactionTemplateBuilder<T>
             KeyValuePair<byte[], ulong>? matchingToken = null;
             foreach (var token in tokenBundle)
             {
-                if (Convert.ToHexString(token.Key).Equals(assetNameString, StringComparison.InvariantCultureIgnoreCase))
+                if (token.Key.SequenceEqual(assetName))
                 {
                     matchingToken = token;
                     break;
