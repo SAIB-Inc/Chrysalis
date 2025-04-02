@@ -16,39 +16,41 @@ public enum QueryEra
 
 public static class RawQueries
 {
-    public static BlockQuery CreateBlockQuery(BlockQuery query) => new BaseBlockQuery(0, new BaseBlockQuery(0, new BaseBlockQuery((int)QueryEra.Conway, query)));
-    public static BlockQuery GetCurrentEra => new BaseBlockQuery(0, new BaseBlockQuery(2, null));
-    public static BlockQuery GetTip => CreateBlockQuery(new BaseBlockQuery(0, null));
-    public static BlockQuery GetUtxoByAddress(List<byte[]> addresses) => CreateBlockQuery(new UtxoByAddressQuery(6, new(addresses)));
-    public static BlockQuery GetUtxoByTxIns(List<TransactionInput> txIns) => CreateBlockQuery(new UtxoByTxInQuery(15, new(txIns)));
-    public static BlockQuery GetCurrentProtocolParams => CreateBlockQuery(new BaseBlockQuery(3, null));
+    public static QueryReq GetCurrentEra => new BaseQuery(0, new BaseQuery(2, new GlobalQuery(1)));
+    public static QueryReq GetTip => CreateBlockQuery(new GlobalQuery(0));
+    public static QueryReq GetCurrentProtocolParams => CreateBlockQuery(new GlobalQuery(3));
+
+    public static QueryReq CreateBlockQuery(QueryReq query) => new BaseQuery(0, new BaseQuery(0, new BaseQuery((int)QueryEra.Conway, query)));
+    public static QueryReq GetUtxoByAddress(List<byte[]> addresses) => CreateBlockQuery(new UtxoByAddressQuery(6, new(addresses)));
+    public static QueryReq GetUtxoByTxIns(List<TransactionInput> txIns) => CreateBlockQuery(new UtxoByTxInQuery(15, new(txIns)));
 }
 
-[CborSerializable]
-[CborList]
-public partial record BasicQuery([CborOrder(0)] ulong Idx) : CborBase;
 
 [CborSerializable]
 [CborUnion]
-public abstract partial record BlockQuery : CborBase;
+public abstract partial record QueryReq : CborBase;
 
 [CborSerializable]
 [CborList]
-public partial record BaseBlockQuery(
+public partial record BaseQuery(
     [CborOrder(0)] int Query,
-    [CborOrder(1)] BlockQuery? InnerQuery
-) : BlockQuery;
+    [CborOrder(1)] QueryReq? InnerQuery
+) : QueryReq;
 
 [CborSerializable]
 [CborList]
 public partial record UtxoByAddressQuery(
     [CborOrder(0)] ulong Idx,
     [CborOrder(1)] CborDefList<byte[]> Addresses
-) : BlockQuery;
+) : QueryReq;
 
 [CborSerializable]
 [CborList]
 public partial record UtxoByTxInQuery(
     [CborOrder(0)] ulong Idx,
     [CborOrder(1)] CborDefList<TransactionInput> TxIns
-) : BlockQuery;
+) : QueryReq;
+
+[CborSerializable]
+[CborList]
+public partial record GlobalQuery([CborOrder(0)] ulong Query) : QueryReq;
