@@ -233,7 +233,7 @@ public class Blockfrost : ICardanoDataProvider
     {
         string query = _baseUrl + "/tx/submit";
 
-        var content = new ByteArrayContent(CborSerializer.Serialize(tx));
+        ByteArrayContent content = new(CborSerializer.Serialize(tx));
         content.Headers.ContentType = new MediaTypeHeaderValue("application/cbor");
 
         HttpResponseMessage response = await _httpClient.PostAsync(query, content);
@@ -241,12 +241,12 @@ public class Blockfrost : ICardanoDataProvider
         if (!response.IsSuccessStatusCode)
         {
             string error = await response.Content.ReadAsStringAsync();
-            throw new Exception($"PostTransactionToChain: failed to submit transaction to Blockfrost endpoint.\nError {error}");
+            throw new Exception($"SubmitTransactionAsync: failed to submit transaction to Blockfrost endpoint.\nError {error}");
         }
 
         string txId = await response.Content.ReadAsStringAsync();
         txId = JsonSerializer.Deserialize<string>(txId) ??
-            throw new Exception("PostTransactionToChain: Could not parse transaction ID from response");
+            throw new Exception("SubmitTransactionAsync: Could not parse transaction ID from response");
 
         return txId;
     }

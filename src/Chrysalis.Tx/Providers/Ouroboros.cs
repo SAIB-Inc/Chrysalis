@@ -11,7 +11,6 @@ using Chrysalis.Cbor.Extensions.Cardano.Core.Transaction;
 using Chrysalis.Cbor.Types;
 using Chrysalis.Tx.Extensions;
 using Chrysalis.Network.Cbor.LocalTxSubmit;
-using Chrysalis.Network.Cbor.Common;
 using Chrysalis.Cbor.Serialization;
 using Chrysalis.Wallet.Utils;
 
