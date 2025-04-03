@@ -1,6 +1,4 @@
-using Chrysalis.Cbor.Types.Cardano.Core.Protocol;
 using CborTransactionInput = Chrysalis.Cbor.Types.Cardano.Core.Transaction.TransactionInput;
-using Chrysalis.Network.Cbor.Handshake;
 using Chrysalis.Network.Cbor.LocalStateQuery;
 using Chrysalis.Network.MiniProtocols.Extensions;
 using Chrysalis.Network.Multiplexer;
@@ -9,7 +7,6 @@ using Chrysalis.Wallet.Models.Addresses;
 using Chrysalis.Cbor.Types.Cardano.Core.Transaction;
 using Chrysalis.Cbor.Extensions.Cardano.Core.Transaction;
 using Chrysalis.Cbor.Types;
-using Chrysalis.Tx.Extensions;
 using Chrysalis.Network.Cbor.LocalTxSubmit;
 using Chrysalis.Cbor.Serialization;
 using Chrysalis.Wallet.Utils;
@@ -25,7 +22,7 @@ public class Ouroboros(string socketPath, ulong networkMagic = 2) : ICardanoData
         NodeClient client = await NodeClient.ConnectAsync(_socketPath);
         await client.StartAsync(_networkMagic);
 
-        CurrentProtocolParamsResponse currentProtocolParams = await client.LocalStateQuery!.GetCurrentProtocolParamsAsync();
+        CurrentProtocolParamsResponse currentProtocolParams = await client.LocalStateQuery.GetCurrentProtocolParamsAsync();
 
         return currentProtocolParams.ProtocolParams;
     }
@@ -36,7 +33,7 @@ public class Ouroboros(string socketPath, ulong networkMagic = 2) : ICardanoData
         NodeClient client = await NodeClient.ConnectAsync(_socketPath);
         await client.StartAsync(_networkMagic);
 
-        UtxoByAddressResponse utxos = await client.LocalStateQuery!.GetUtxosByAddressAsync(bech32Address.Select(x => Address.FromBech32(x).ToBytes()).ToList());
+        UtxoByAddressResponse utxos = await client.LocalStateQuery.GetUtxosByAddressAsync(bech32Address.Select(x => Address.FromBech32(x).ToBytes()).ToList());
 
         List<ResolvedInput> resolvedInputs = [];
         foreach (var (key, value) in utxos.Utxos)
@@ -67,7 +64,7 @@ public class Ouroboros(string socketPath, ulong networkMagic = 2) : ICardanoData
         byte[] txBody = CborSerializer.Serialize(postMaryTx.TransactionBody);
 
         EraTx eraTx = new(6, new CborEncodedValue(Convert.FromHexString(txHex)));
-        LocalTxSubmissionMessage result = await client.LocalTxSubmit!.SubmitTxAsync(new SubmitTx(new Value0(0), eraTx), CancellationToken.None);
+        LocalTxSubmissionMessage result = await client.LocalTxSubmit.SubmitTxAsync(new SubmitTx(new Value0(0), eraTx), CancellationToken.None);
 
         string txHash = result switch
         {
