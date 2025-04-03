@@ -8,7 +8,7 @@ public static class ScriptExtension
     {
         return script switch
         {
-            NativeScriptWrapper => 0,
+            MultiSigScript => 0,
             PlutusV1Script => 1,
             PlutusV2Script => 2,
             PlutusV3Script => 3,

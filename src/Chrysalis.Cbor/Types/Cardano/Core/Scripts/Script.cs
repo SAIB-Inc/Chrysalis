@@ -8,7 +8,7 @@ public abstract partial record Script : CborBase { }
 
 [CborSerializable]
 [CborList]
-public partial record NativeScriptWrapper(
+public partial record MultiSigScript(
     [CborOrder(0)] Value0 Version,
     [CborOrder(1)] NativeScript Script
 ) : Script;
