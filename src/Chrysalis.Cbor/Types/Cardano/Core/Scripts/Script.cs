@@ -8,13 +8,6 @@ public abstract partial record Script : CborBase { }
 
 [CborSerializable]
 [CborList]
-public partial record NativeScriptWrapper(
-    [CborOrder(0)] Value0 Version,
-    [CborOrder(1)] byte[] ScriptBytes
-) : Script;
-
-[CborSerializable]
-[CborList]
 public partial record PlutusV1Script(
     [CborOrder(0)] Value1 Version,
     [CborOrder(1)] byte[] ScriptBytes

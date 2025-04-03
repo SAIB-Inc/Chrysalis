@@ -4,7 +4,7 @@ namespace Chrysalis.Cbor.Types.Cardano.Core.Common;
 
 [CborSerializable]
 [CborUnion]
-public abstract partial record NativeScript : CborBase { }
+public abstract partial record NativeScript : Script { }
 
 [CborSerializable]
 [CborList]
