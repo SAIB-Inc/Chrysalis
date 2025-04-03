@@ -1,3 +1,4 @@
+using Chrysalis.Network.Cbor.Handshake;
 using Chrysalis.Network.Core;
 using Chrysalis.Network.MiniProtocols;
 
@@ -8,13 +9,9 @@ namespace Chrysalis.Network.Multiplexer;
 /// </summary>
 public class NodeClient : IDisposable
 {
+    public ulong NetworkMagic { get; set; } = 2;
+
     private readonly Plexer _plexer;
-
-    /// <summary>
-    /// Gets the LocalTxSubmit protocol handler.
-    /// </summary>
-
-    // public LocalTxSubmit? LocalTxSubmit { get; private set; }
 
     /// <summary>
     /// Gets the Handshake protocol handler.
@@ -35,7 +32,6 @@ public class NodeClient : IDisposable
     /// Gets the LocalTxSubmit protocol handler
     /// </summary>
     public LocalTxSubmit LocalTxSubmit { get; private set; } = default!;
-
 
     /// <summary>
     /// Gets the LocalTxMonitor protocol handler
@@ -84,7 +80,7 @@ public class NodeClient : IDisposable
     /// </summary>
     /// <param name="cancellationToken">A token to cancel the start operation.</param>
     /// <exception cref="InvalidOperationException">Thrown if the client is already started.</exception>
-    public void Start()
+    public async Task StartAsync(ulong networkMagic = 2)
     {
         _ = _plexer.RunAsync(CancellationToken.None);
         Handshake = new(_plexer.SubscribeClient(ProtocolType.Handshake));
@@ -92,6 +88,16 @@ public class NodeClient : IDisposable
         LocalTxSubmit = new(_plexer.SubscribeClient(ProtocolType.LocalTxSubmission));
         LocalStateQuery = new(_plexer.SubscribeClient(ProtocolType.LocalStateQuery));
         LocalTxMonitor = new(_plexer.SubscribeClient(ProtocolType.LocalTxMonitor));
+
+        NetworkMagic = networkMagic;
+
+        ProposeVersions proposeVersion = HandshakeMessages.ProposeVersions(VersionTables.N2C_V10_AND_ABOVE(networkMagic));
+        HandshakeMessage handshakeResponse = await Handshake.SendAsync(proposeVersion, CancellationToken.None);
+
+        if (handshakeResponse is not AcceptVersion)
+        {
+            throw new InvalidOperationException("Handshake failed");
+        }
     }
 
     /// <summary>
