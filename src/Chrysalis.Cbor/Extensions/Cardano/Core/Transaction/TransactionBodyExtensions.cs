@@ -55,7 +55,7 @@ public static class TransactionBodyExtensions
             ConwayTransactionBody conwayTxBody => conwayTxBody.TimeToLive,
             _ => null
         };
-    
+
     public static IEnumerable<CCertificate>? Certificates(this TransactionBody self) =>
         self switch
         {
@@ -146,9 +146,9 @@ public static class TransactionBodyExtensions
     public static IEnumerable<TransactionInput>? ReferenceInputs(this TransactionBody self) =>
         self switch
         {
-                BabbageTransactionBody babbageTxBody => babbageTxBody.ReferenceInputs?.GetValue(),
-                ConwayTransactionBody conwayTxBody => conwayTxBody.ReferenceInputs?.GetValue(),
-                _ => null
+            BabbageTransactionBody babbageTxBody => babbageTxBody.ReferenceInputs?.GetValue(),
+            ConwayTransactionBody conwayTxBody => conwayTxBody.ReferenceInputs?.GetValue(),
+            _ => null
         };
 
     public static Dictionary<Voter, GovActionIdVotingProcedure>? VotingProcedures(this TransactionBody self) =>
@@ -183,6 +183,6 @@ public static class TransactionBodyExtensions
     {
         Blake2b algorithm = HashAlgorithm.Blake2b_256;
         byte[] raw = self.Raw is null ? CborSerializer.Serialize(self) : self.Raw.Value.ToArray();
-        return Convert.ToHexString(algorithm.Hash(raw));
+        return Convert.ToHexString(algorithm.Hash(raw)).ToLowerInvariant();
     }
 }
