@@ -1,3 +1,4 @@
+using System.Formats.Cbor;
 using System.Runtime.CompilerServices;
 using Chrysalis.Network.Cbor.ChainSync;
 using Chrysalis.Network.Cbor.Common;
@@ -16,11 +17,7 @@ namespace Chrysalis.Network.MiniProtocols;
 /// <param name="channel">The channel for protocol communication.</param>
 public class ChainSync(AgentChannel channel) : IMiniProtocol
 {
-    /// <summary>
-    /// Gets the protocol type identifier.
-    /// </summary>
     public static ProtocolType ProtocolType => ProtocolType.ClientChainSync;
-
     private readonly ChannelBuffer _buffer = new(channel);
     private readonly ChainSyncMessage _nextRequest = ChainSyncMessages.NextRequest();
 
@@ -42,7 +39,7 @@ public class ChainSync(AgentChannel channel) : IMiniProtocol
     public async Task<MessageNextResponse?> NextRequestAsync(CancellationToken cancellationToken)
     {
         await _buffer.SendFullMessageAsync(_nextRequest, cancellationToken);
-        return await _buffer.ReceiveFullMessageAsync<ChainSyncMessage>(cancellationToken) as MessageNextResponse;
+        return await _buffer.ReceiveFullMessageAsync<MessageNextResponse>(cancellationToken);
     }
 }
 
