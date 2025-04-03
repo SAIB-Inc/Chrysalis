@@ -109,7 +109,7 @@ public class TransactionTemplateBuilder<T>
                 }
             }
 
-            byte[] scriptCborBytes = GetScriptCborBytes(context.IsSmartContractTx, context.ReferenceInput, allUtxos);
+            Script? script = GetScript(context.IsSmartContractTx, context.ReferenceInput, allUtxos);
 
             ResolvedInput? feeInput = SelectFeeInput(utxos);
             if (feeInput is not null)
@@ -221,7 +221,7 @@ public class TransactionTemplateBuilder<T>
                 }
             }
 
-            return context.TxBuilder.CalculateFee(scriptCborBytes).Build();
+            return context.TxBuilder.CalculateFee(script).Build();
         };
     }
 
@@ -669,7 +669,7 @@ public class TransactionTemplateBuilder<T>
         }
     }
 
-    private byte[] GetScriptCborBytes(bool isSmartContractTx, TransactionInput? referenceInput, List<ResolvedInput> allUtxos)
+    private Script? GetScript(bool isSmartContractTx, TransactionInput? referenceInput, List<ResolvedInput> allUtxos)
     {
         if (isSmartContractTx && referenceInput != null)
         {
@@ -680,13 +680,13 @@ public class TransactionTemplateBuilder<T>
                 {
                     return utxo.Output switch
                     {
-                        PostAlonzoTransactionOutput postAlonzoOutput => postAlonzoOutput.ScriptRef?.Value ?? [],
+                        PostAlonzoTransactionOutput postAlonzoOutput => postAlonzoOutput.ScriptRef is not null ? CborSerializer.Deserialize<Script>(postAlonzoOutput.ScriptRef?.Value) : null,
                         _ => throw new InvalidOperationException($"Invalid output type: {utxo.Output.GetType().Name}")
                     };
                 }
             }
         }
-        return [];
+        return null;
     }
 
     private ResolvedInput? SelectFeeInput(List<ResolvedInput> utxos)

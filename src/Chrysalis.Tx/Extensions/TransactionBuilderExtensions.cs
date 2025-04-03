@@ -16,7 +16,7 @@ namespace Chrysalis.Tx.Extensions;
 
 public static class TransactionBuilderExtensions
 {
-    public static TransactionBuilder CalculateFee(this TransactionBuilder builder, byte[] scriptBytes = default!, int mockWitnessFee = 1)
+    public static TransactionBuilder CalculateFee(this TransactionBuilder builder, Script? script = null, int mockWitnessFee = 1)
     {
 
         ulong scriptFee = 0;
@@ -25,16 +25,21 @@ public static class TransactionBuilderExtensions
         {
             builder.SetTotalCollateral(2000000UL);
 
-            var usedLanguage = builder.pparams!.CostModelsForScriptLanguage!.Value[2];
+            if (script is null)
+            {
+                throw new ArgumentNullException(nameof(script), "Missing script");
+            }
+
+            var usedLanguage = builder.pparams!.CostModelsForScriptLanguage!.Value[script.Version() - 1];
             var costModel = new CostMdls(new Dictionary<int, CborDefList<long>>(){
-                 { 2, usedLanguage }
+                 { script.Version() - 1, usedLanguage }
             });
             var costModelBytes = CborSerializer.Serialize(costModel);
             var scriptDataHash = DataHashUtil.CalculateScriptDataHash(builder.witnessSet.Redeemers, builder.witnessSet.PlutusDataSet?.GetValue() as PlutusList, costModelBytes);
             builder.SetScriptDataHash(scriptDataHash);
 
             ulong scriptCostPerByte = builder.pparams!.MinFeeRefScriptCostPerByte!.Numerator / builder.pparams.MinFeeRefScriptCostPerByte!.Denominator;
-            scriptFee = FeeUtil.CalculateReferenceScriptFee(scriptBytes, scriptCostPerByte);
+            scriptFee = FeeUtil.CalculateReferenceScriptFee(script.Bytes(), scriptCostPerByte);
 
             RationalNumber memUnitsCost = new(builder.pparams!.ExecutionCosts!.MemPrice!.Numerator!, builder.pparams.ExecutionCosts!.MemPrice!.Denominator!);
             RationalNumber stepUnitsCost = new(builder.pparams.ExecutionCosts!.StepPrice!.Numerator!, builder.pparams.ExecutionCosts!.StepPrice!.Denominator!);
