@@ -90,7 +90,7 @@ public class TransactionTemplateBuilder<T>
                 throw new InvalidOperationException("Change address not set");
             }
 
-            ChrysalisWallet.Address changeAddress = ChrysalisWallet.Address.FromBech32(parties[_changeAddress]);
+            WalletAddress changeAddress = WalletAddress.FromBech32(parties[_changeAddress]);
 
             ProcessInputs(param, context);
             ProcessMints(param, context);
@@ -643,8 +643,9 @@ public class TransactionTemplateBuilder<T>
                 associations[outputOptions.Id] = outputIndex;
             }
 
+            context.TxBuilder.AddOutput(outputOptions.BuildOutput(parties, context.TxBuilder.pparams?.AdaPerUTxOByte ?? 4310));
             requiredAmount.Add(outputOptions.Amount!);
-            context.TxBuilder.AddOutput(outputOptions.BuildOutput(parties));
+
             changeIndex++;
             outputIndex++;
         }

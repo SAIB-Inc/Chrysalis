@@ -64,9 +64,11 @@ public record OutputOptions
             };
         }
 
+        Amount = minLovelaceValue;
+
         return Datum is null && Script is null
-            ? new AlonzoTransactionOutput(address, minLovelaceValue, null)
-            : new PostAlonzoTransactionOutput(address, minLovelaceValue, Datum, script);
+            ? new AlonzoTransactionOutput(address, Amount, null)
+            : new PostAlonzoTransactionOutput(address, Amount, Datum, script);
 
     }
 }

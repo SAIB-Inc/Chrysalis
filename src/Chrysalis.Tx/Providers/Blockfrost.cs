@@ -213,9 +213,9 @@ public class Blockfrost : ICardanoDataProvider
         byte[] cborBytes = Convert.FromHexString(cborHex);
         Script script = type switch
         {
-            "plutusV1" => new PlutusV1Script(new Value1(0), cborBytes),
-            "plutusV2" => new PlutusV2Script(new Value2(1), cborBytes),
-            "plutusV3" => new PlutusV3Script(new Value3(2), cborBytes),
+            "plutusV1" => new PlutusV1Script(new Value1(1), cborBytes),
+            "plutusV2" => new PlutusV2Script(new Value2(2), cborBytes),
+            "plutusV3" => new PlutusV3Script(new Value3(3), cborBytes),
             _ => throw new Exception("GetScriptRef: Unsupported script type")
         };
 
