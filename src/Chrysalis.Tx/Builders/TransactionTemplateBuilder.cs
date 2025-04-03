@@ -11,7 +11,6 @@ using Chrysalis.Cbor.Types.Cardano.Core.TransactionWitness;
 using Chrysalis.Tx.Extensions;
 using Chrysalis.Tx.Models;
 using Chrysalis.Tx.Utils;
-using ChrysalisWallet = Chrysalis.Wallet.Models.Addresses;
 using WalletAddress = Chrysalis.Wallet.Models.Addresses.Address;
 
 namespace Chrysalis.Tx.Builders;
@@ -90,7 +89,7 @@ public class TransactionTemplateBuilder<T>
                 throw new InvalidOperationException("Change address not set");
             }
 
-            ChrysalisWallet.Address changeAddress = ChrysalisWallet.Address.FromBech32(parties[_changeAddress]);
+            WalletAddress changeAddress = WalletAddress.FromBech32(parties[_changeAddress]);
 
             ProcessInputs(param, context);
             ProcessMints(param, context);
@@ -99,17 +98,17 @@ public class TransactionTemplateBuilder<T>
             int changeIndex = 0;
             ProcessOutputs(param, context, parties, requiredAmount, ref changeIndex);
 
-            List<ResolvedInput> utxos = await _provider!.GetUtxosAsync(parties[_changeAddress]);
+            List<ResolvedInput> utxos = await _provider!.GetUtxosAsync([parties[_changeAddress]]);
             var allUtxos = new List<ResolvedInput>(utxos);
             foreach (string address in context.InputAddresses.Distinct())
             {
                 if (address != _changeAddress)
                 {
-                    allUtxos.AddRange(await _provider!.GetUtxosAsync(parties[address]));
+                    allUtxos.AddRange(await _provider!.GetUtxosAsync([parties[address]]));
                 }
             }
 
-            byte[] scriptCborBytes = GetScriptCborBytes(context.IsSmartContractTx, context.ReferenceInput, allUtxos);
+            Script? script = GetScript(context.IsSmartContractTx, context.ReferenceInput, allUtxos);
 
             ResolvedInput? feeInput = SelectFeeInput(utxos);
             if (feeInput is not null)
@@ -221,7 +220,7 @@ public class TransactionTemplateBuilder<T>
                 }
             }
 
-            return context.TxBuilder.CalculateFee(scriptCborBytes).Build();
+            return context.TxBuilder.CalculateFee(script).Build();
         };
     }
 
@@ -643,8 +642,9 @@ public class TransactionTemplateBuilder<T>
                 associations[outputOptions.Id] = outputIndex;
             }
 
+            context.TxBuilder.AddOutput(outputOptions.BuildOutput(parties, context.TxBuilder.pparams?.AdaPerUTxOByte ?? 4310));
             requiredAmount.Add(outputOptions.Amount!);
-            context.TxBuilder.AddOutput(outputOptions.BuildOutput(parties));
+
             changeIndex++;
             outputIndex++;
         }
@@ -668,7 +668,7 @@ public class TransactionTemplateBuilder<T>
         }
     }
 
-    private byte[] GetScriptCborBytes(bool isSmartContractTx, TransactionInput? referenceInput, List<ResolvedInput> allUtxos)
+    private Script? GetScript(bool isSmartContractTx, TransactionInput? referenceInput, List<ResolvedInput> allUtxos)
     {
         if (isSmartContractTx && referenceInput != null)
         {
@@ -679,13 +679,13 @@ public class TransactionTemplateBuilder<T>
                 {
                     return utxo.Output switch
                     {
-                        PostAlonzoTransactionOutput postAlonzoOutput => postAlonzoOutput.ScriptRef?.Value ?? [],
+                        PostAlonzoTransactionOutput postAlonzoOutput => postAlonzoOutput.ScriptRef is not null ? CborSerializer.Deserialize<Script>(postAlonzoOutput.ScriptRef?.Value) : null,
                         _ => throw new InvalidOperationException($"Invalid output type: {utxo.Output.GetType().Name}")
                     };
                 }
             }
         }
-        return [];
+        return null;
     }
 
     private ResolvedInput? SelectFeeInput(List<ResolvedInput> utxos)

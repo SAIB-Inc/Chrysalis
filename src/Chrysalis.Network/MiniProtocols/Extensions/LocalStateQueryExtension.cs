@@ -1,5 +1,6 @@
 using Chrysalis.Cbor.Serialization;
 using Chrysalis.Cbor.Types;
+using Chrysalis.Cbor.Types.Cardano.Core.Transaction;
 using Chrysalis.Network.Cbor.Common;
 using Chrysalis.Network.Cbor.LocalStateQuery;
 using Chrysalis.Network.Cbor.LocalStateQuery.Messages;
@@ -29,18 +30,18 @@ public static class LocalStateQueryExtension
         return await DeserializeResponseAsync<Tip>(rawBytes);
     }
 
+    public static async Task<CurrentEraQueryResponse> GetCurrentEraAsync(this LocalStateQuery localStateQuery)
+    {
+        Result queryResult = await localStateQuery.QueryAsync(null, RawQueries.GetCurrentEra, default);
+        byte[] rawBytes = await ExtractRawBytesAsync(queryResult);
+        return await DeserializeResponseAsync<CurrentEraQueryResponse>(rawBytes);
+    }
+
     public static async Task<CurrentProtocolParamsResponse> GetCurrentProtocolParamsAsync(this LocalStateQuery localStateQuery)
     {
         Result queryResult = await localStateQuery.QueryAsync(null, RawQueries.GetCurrentProtocolParams, default);
         byte[] rawBytes = await ExtractRawBytesAsync(queryResult);
         return await DeserializeResponseAsync<CurrentProtocolParamsResponse>(rawBytes);
-    }
-
-    public static async Task<CurrentEra> GetCurrentEraAsync(this LocalStateQuery localStateQuery)
-    {
-        Result queryResult = await localStateQuery.QueryAsync(null, RawQueries.GetCurrentEra, default);
-        byte[] rawBytes = await ExtractRawBytesAsync(queryResult);
-        return await DeserializeResponseAsync<CurrentEra>(rawBytes);
     }
 
     /// <summary>

@@ -4,10 +4,11 @@ using Chrysalis.Cbor.Serialization;
 using Chrysalis.Cbor.Types;
 using Chrysalis.Cbor.Types.Cardano.Core.Common;
 using Chrysalis.Cbor.Types.Cardano.Core.Governance;
+using Chrysalis.Cbor.Types.Cardano.Core.Header;
 using Chrysalis.Cbor.Types.Cardano.Core.Protocol;
 using Chrysalis.Cbor.Types.Cardano.Core.Transaction;
+using Chrysalis.Network.Cbor.LocalStateQuery;
 using Chrysalis.Tx.Models;
-using Chrysalis.Tx.Models.Cbor;
 using ChrysalisWallet = Chrysalis.Wallet.Models.Addresses;
 
 namespace Chrysalis.Tx.Providers;
@@ -25,7 +26,7 @@ public class Blockfrost : ICardanoDataProvider
         _httpClient.DefaultRequestHeaders.Add("project_id", apiKey);
     }
 
-    public async Task<ConwayProtocolParamUpdate> GetParametersAsync()
+    public async Task<ProtocolParams> GetParametersAsync()
     {
         const string query = "/epochs/latest/parameters";
         var response = await _httpClient.GetAsync($"{_baseUrl}{query}");
@@ -54,7 +55,7 @@ public class Blockfrost : ICardanoDataProvider
             costMdls[version] = new CborDefList<long>([.. value.Select(x => x)]);
         }
 
-        return new ConwayProtocolParamUpdate(
+        return new ProtocolParams(
             (ulong)(parameters.MinFeeA ?? 0),
             (ulong)(parameters.MinFeeB ?? 0),
             (ulong)(parameters.MaxBlockSize ?? 0),
@@ -67,6 +68,7 @@ public class Blockfrost : ICardanoDataProvider
             new CborRationalNumber((ulong)((parameters.A0 ?? 0) * 100), 100),
             new CborRationalNumber((ulong)((parameters.Rho ?? 0) * 100), 100),
             new CborRationalNumber((ulong)((parameters.Tau ?? 0) * 100), 100),
+            new ProtocolVersion(9, 0),
             ulong.Parse(parameters.MinPoolCost ?? "0"),
             ulong.Parse(parameters.CoinsPerUtxoSize),
             new CostMdls(costMdls),
@@ -147,7 +149,7 @@ public class Blockfrost : ICardanoDataProvider
 
                 if (utxo.ReferenceScriptHash is not null)
                 {
-                    ScriptRef scriptRefValue = await GetScript(utxo.ReferenceScriptHash);
+                    Script scriptRefValue = await GetScript(utxo.ReferenceScriptHash);
                     scriptRef = new CborEncodedValue(CborSerializer.Serialize(scriptRefValue));
                 }
 
@@ -176,7 +178,7 @@ public class Blockfrost : ICardanoDataProvider
         return results;
     }
 
-    public async Task<ScriptRef> GetScript(string scriptHash)
+    public async Task<Script> GetScript(string scriptHash)
     {
         var typeQuery = $"/scripts/{scriptHash}";
         var typeResponse = await _httpClient.GetAsync($"{_baseUrl}{typeQuery}");
@@ -212,23 +214,49 @@ public class Blockfrost : ICardanoDataProvider
         var cborHex = cborElement.GetString() ?? throw new Exception("GetScriptRef: Could not parse CBOR from response");
 
         byte[] cborBytes = Convert.FromHexString(cborHex);
-        int scriptType = type switch
+        Script script = type switch
         {
-            "plutusV1" => 1,
-            "plutusV2" => 2,
-            "plutusV3" => 3,
+            "plutusV1" => new PlutusV1Script(new Value1(1), cborBytes),
+            "plutusV2" => new PlutusV2Script(new Value2(2), cborBytes),
+            "plutusV3" => new PlutusV3Script(new Value3(3), cborBytes),
             _ => throw new Exception("GetScriptRef: Unsupported script type")
         };
 
-        return new ScriptRef(scriptType, cborBytes);
+        return script;
     }
 
+    public async Task<List<ResolvedInput>> GetUtxosAsync(List<string> addresses)
+    {
+        var tasks = addresses.Select(GetUtxosAsync);
+        var results = await Task.WhenAll(tasks);
+        return [.. results.SelectMany(utxos => utxos)];
+    }
+
+    public async Task<string> SubmitTransactionAsync(Transaction tx)
+    {
+        string query = _baseUrl + "/tx/submit";
+
+        ByteArrayContent content = new(CborSerializer.Serialize(tx));
+        content.Headers.ContentType = new MediaTypeHeaderValue("application/cbor");
+
+        HttpResponseMessage response = await _httpClient.PostAsync(query, content);
+
+        if (!response.IsSuccessStatusCode)
+        {
+            string error = await response.Content.ReadAsStringAsync();
+            throw new Exception($"SubmitTransactionAsync: failed to submit transaction to Blockfrost endpoint.\nError {error}");
+        }
+
+        string txId = await response.Content.ReadAsStringAsync();
+        txId = JsonSerializer.Deserialize<string>(txId) ??
+            throw new Exception("SubmitTransactionAsync: Could not parse transaction ID from response");
+
+        return txId;
+    }
     private string GetBaseUrl()
     {
         //TODO: implement network specific base url
         return "https://cardano-preview.blockfrost.io/api/v0";
     }
-
-
 
 }

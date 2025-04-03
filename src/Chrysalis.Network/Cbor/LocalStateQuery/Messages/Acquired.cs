@@ -1,5 +1,5 @@
 using Chrysalis.Cbor.Serialization.Attributes;
-using Chrysalis.Network.Cbor.Common;
+using Chrysalis.Cbor.Types;
 
 namespace Chrysalis.Network.Cbor.LocalStateQuery.Messages;
 
