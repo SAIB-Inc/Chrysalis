@@ -1,5 +1,6 @@
 using Chrysalis.Cbor.Serialization;
 using Chrysalis.Cbor.Types;
+using Chrysalis.Cbor.Types.Cardano.Core.Transaction;
 using Chrysalis.Network.Cbor.Common;
 using Chrysalis.Network.Cbor.LocalStateQuery;
 using Chrysalis.Network.Cbor.LocalStateQuery.Messages;

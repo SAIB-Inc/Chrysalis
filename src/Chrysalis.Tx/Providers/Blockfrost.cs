@@ -4,8 +4,10 @@ using Chrysalis.Cbor.Serialization;
 using Chrysalis.Cbor.Types;
 using Chrysalis.Cbor.Types.Cardano.Core.Common;
 using Chrysalis.Cbor.Types.Cardano.Core.Governance;
+using Chrysalis.Cbor.Types.Cardano.Core.Header;
 using Chrysalis.Cbor.Types.Cardano.Core.Protocol;
 using Chrysalis.Cbor.Types.Cardano.Core.Transaction;
+using Chrysalis.Network.Cbor.LocalStateQuery;
 using Chrysalis.Tx.Models;
 using ChrysalisWallet = Chrysalis.Wallet.Models.Addresses;
 
@@ -24,7 +26,7 @@ public class Blockfrost : ICardanoDataProvider
         _httpClient.DefaultRequestHeaders.Add("project_id", apiKey);
     }
 
-    public async Task<ConwayProtocolParamUpdate> GetParametersAsync()
+    public async Task<ProtocolParams> GetParametersAsync()
     {
         const string query = "/epochs/latest/parameters";
         var response = await _httpClient.GetAsync($"{_baseUrl}{query}");
@@ -53,7 +55,7 @@ public class Blockfrost : ICardanoDataProvider
             costMdls[version] = new CborDefList<long>([.. value.Select(x => x)]);
         }
 
-        return new ConwayProtocolParamUpdate(
+        return new ProtocolParams(
             (ulong)(parameters.MinFeeA ?? 0),
             (ulong)(parameters.MinFeeB ?? 0),
             (ulong)(parameters.MaxBlockSize ?? 0),
@@ -66,6 +68,7 @@ public class Blockfrost : ICardanoDataProvider
             new CborRationalNumber((ulong)((parameters.A0 ?? 0) * 100), 100),
             new CborRationalNumber((ulong)((parameters.Rho ?? 0) * 100), 100),
             new CborRationalNumber((ulong)((parameters.Tau ?? 0) * 100), 100),
+            new ProtocolVersion(9, 0),
             ulong.Parse(parameters.MinPoolCost ?? "0"),
             ulong.Parse(parameters.CoinsPerUtxoSize),
             new CostMdls(costMdls),

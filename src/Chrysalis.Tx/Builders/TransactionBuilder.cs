@@ -1,6 +1,5 @@
 using Chrysalis.Cbor.Types.Cardano.Core.TransactionWitness;
 using Chrysalis.Cbor.Types.Cardano.Core.Transaction;
-using Chrysalis.Cbor.Types.Cardano.Core.Protocol;
 using Chrysalis.Cbor.Types.Cardano.Core;
 using Chrysalis.Cbor.Types.Cardano.Core.Certificates;
 using Chrysalis.Cbor.Types.Cardano.Core.Common;
@@ -8,6 +7,7 @@ using Chrysalis.Cbor.Types.Cardano.Core.Governance;
 using Chrysalis.Cbor.Types;
 using Chrysalis.Tx.Utils;
 using Chrysalis.Cbor.Extensions;
+using Chrysalis.Network.Cbor.LocalStateQuery;
 
 namespace Chrysalis.Tx.Builders;
 
@@ -15,7 +15,7 @@ public class TransactionBuilder
 {
     public ConwayTransactionBody body;
     public PostAlonzoTransactionWitnessSet witnessSet;
-    public ConwayProtocolParamUpdate? pparams;
+    public ProtocolParams? pparams;
     public TransactionOutput? changeOutput;
     private AuxiliaryData? auxiliaryData;
 
@@ -25,7 +25,7 @@ public class TransactionBuilder
         witnessSet = CborTypeDefaults.TransactionWitnessSet;
         auxiliaryData = null;
     }
-    public static TransactionBuilder Create(ConwayProtocolParamUpdate pparams)
+    public static TransactionBuilder Create(ProtocolParams pparams)
     {
         return new TransactionBuilder() { pparams = pparams };
     }

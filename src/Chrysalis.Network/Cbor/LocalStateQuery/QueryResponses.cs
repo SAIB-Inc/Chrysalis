@@ -20,13 +20,6 @@ public partial record UtxoByAddressResponse(
 
 [CborSerializable]
 [CborList]
-public partial record TransactionInput(
-    [CborOrder(0)] byte[] TxHash,
-    [CborOrder(1)] ulong Index
-) : CborBase;
-
-[CborSerializable]
-[CborList]
 public partial record ProtocolParams(
     [CborOrder(0)] ulong? MinFeeA,
     [CborOrder(1)] ulong? MinFeeB,

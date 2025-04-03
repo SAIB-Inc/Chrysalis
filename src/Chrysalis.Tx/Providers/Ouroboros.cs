@@ -20,14 +20,14 @@ public class Ouroboros(string socketPath, ulong networkMagic = 2) : ICardanoData
     private readonly string _socketPath = socketPath ?? throw new ArgumentNullException(nameof(socketPath));
     private readonly ulong _networkMagic = networkMagic;
 
-    public async Task<ConwayProtocolParamUpdate> GetParametersAsync()
+    public async Task<ProtocolParams> GetParametersAsync()
     {
         NodeClient client = await NodeClient.ConnectAsync(_socketPath);
         await client.StartAsync(_networkMagic);
 
         CurrentProtocolParamsResponse currentProtocolParams = await client.LocalStateQuery!.GetCurrentProtocolParamsAsync();
 
-        return currentProtocolParams.ProtocolParams.Conway();
+        return currentProtocolParams.ProtocolParams;
     }
 
 
@@ -41,7 +41,7 @@ public class Ouroboros(string socketPath, ulong networkMagic = 2) : ICardanoData
         List<ResolvedInput> resolvedInputs = [];
         foreach (var (key, value) in utxos.Utxos)
         {
-            byte[] txHash = key.TxHash;
+            byte[] txHash = key.TransactionId;
             ulong index = key.Index;
 
             TransactionOutput output = new PostAlonzoTransactionOutput(
