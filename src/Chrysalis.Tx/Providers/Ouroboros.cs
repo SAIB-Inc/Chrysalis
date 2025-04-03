@@ -15,17 +15,15 @@ using Chrysalis.Cbor.Serialization;
 using Chrysalis.Wallet.Utils;
 
 namespace Chrysalis.Tx.Providers;
-public class Ouroboros(string socketPath) : ICardanoDataProvider
+public class Ouroboros(string socketPath, ulong networkMagic = 2) : ICardanoDataProvider
 {
     private readonly string _socketPath = socketPath ?? throw new ArgumentNullException(nameof(socketPath));
+    private readonly ulong _networkMagic = networkMagic;
 
     public async Task<ConwayProtocolParamUpdate> GetParametersAsync()
     {
         NodeClient client = await NodeClient.ConnectAsync(_socketPath);
-        client.Start();
-
-        ProposeVersions proposeVersion = HandshakeMessages.ProposeVersions(VersionTables.N2C_V10_AND_ABOVE());
-        await client.Handshake!.SendAsync(proposeVersion, CancellationToken.None);
+        await client.StartAsync(_networkMagic);
 
         CurrentProtocolParamsResponse currentProtocolParams = await client.LocalStateQuery!.GetCurrentProtocolParamsAsync();
 
@@ -36,10 +34,7 @@ public class Ouroboros(string socketPath) : ICardanoDataProvider
     public async Task<List<ResolvedInput>> GetUtxosAsync(List<string> bech32Address)
     {
         NodeClient client = await NodeClient.ConnectAsync(_socketPath);
-        client.Start();
-
-        ProposeVersions proposeVersion = HandshakeMessages.ProposeVersions(VersionTables.N2C_V10_AND_ABOVE());
-        await client.Handshake!.SendAsync(proposeVersion, CancellationToken.None);
+        await client.StartAsync(_networkMagic);
 
         UtxoByAddressResponse utxos = await client.LocalStateQuery!.GetUtxosByAddressAsync(bech32Address.Select(x => Address.FromBech32(x).ToBytes()).ToList());
 
@@ -65,10 +60,7 @@ public class Ouroboros(string socketPath) : ICardanoDataProvider
     public async Task<string> SubmitTransactionAsync(Transaction tx)
     {
         NodeClient client = await NodeClient.ConnectAsync(_socketPath);
-        client.Start();
-
-        ProposeVersions proposeVersion = HandshakeMessages.ProposeVersions(VersionTables.N2C_V10_AND_ABOVE());
-        await client.Handshake!.SendAsync(proposeVersion, CancellationToken.None);
+        await client.StartAsync(_networkMagic);
 
         string txHex = Convert.ToHexString(CborSerializer.Serialize(tx));
         PostMaryTransaction postMaryTx = (PostMaryTransaction)tx;
