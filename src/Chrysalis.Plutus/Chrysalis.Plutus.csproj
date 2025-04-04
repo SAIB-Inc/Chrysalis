@@ -6,11 +6,6 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <Nullable>enable</Nullable>
     <Version>0.1.0</Version>
-    <PackageId>Chrysalis.Plutus</PackageId>
-    <Authors>ricoquiblat@saib.dev</Authors>
-    <Company>SAIB Inc</Company>
-    <PackageReadmeFile>README.md</PackageReadmeFile>
-    <PackageLicenseFile>LICENSE.md</PackageLicenseFile>
   </PropertyGroup>
 
   <Target Name="PreBuild" BeforeTargets="PreBuildEvent">

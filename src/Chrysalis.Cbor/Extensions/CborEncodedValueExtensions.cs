@@ -1,7 +1,7 @@
 using System.Formats.Cbor;
 using Chrysalis.Cbor.Types;
 
-namespace CHrysalis.Cbor.Extensions;
+namespace Chrysalis.Cbor.Extensions;
 
 public static class CborEncodedValueExtensions
 {

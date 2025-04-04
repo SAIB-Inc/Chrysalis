@@ -43,7 +43,7 @@ jobs:
       working-directory: ./src/Chrysalis
 
     - name: Pack
-      run: dotnet pack --no-build -c Release -o out
+      run: dotnet pack -c Release -o out
       working-directory: ./src/Chrysalis
 
     - name: Push to NuGet
