@@ -174,7 +174,7 @@ public static class TransactionBuilderExtensions
                     {
                         if (kvp.Key.Tag == (int)result.RedeemerTag && kvp.Key.Index == result.Index)
                         {
-                            ExUnits exUnits = new(140000, 100000000);
+                            ExUnits exUnits = new(result.ExUnits.Mem, result.ExUnits.Steps);
                             updatedRedeemersMap.Add(new RedeemerKey(kvp.Key.Tag, kvp.Key.Index), new RedeemerValue(kvp.Value.Data, exUnits));
                         }
                     }
