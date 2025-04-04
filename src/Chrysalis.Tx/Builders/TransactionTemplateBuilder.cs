@@ -216,7 +216,7 @@ public class TransactionTemplateBuilder<T>
                 foreach (string signer in requiredSigners)
                 {
                     WalletAddress address = WalletAddress.FromBech32(parties[signer]);
-                    context.TxBuilder.AddRequiredSigner(address.ToBytes());
+                    context.TxBuilder.AddRequiredSigner(address.GetPaymentKeyHash()!);
                 }
             }
 
