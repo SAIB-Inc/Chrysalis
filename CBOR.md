@@ -21,8 +21,7 @@ The library features:
 ### Installation
 
 ```bash
-dotnet add package Chrysalis.Cbor
-dotnet add package Chrysalis.Cbor.CodeGen
+dotnet add package Chrysalis --version 0.7.2
 ```
 
 ### Basic Usage
