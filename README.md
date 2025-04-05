@@ -34,7 +34,6 @@ Chrysalis is a suite of .NET libraries designed to simplify Cardano blockchain d
 - [Documentation](#-documentation)
 - [Contributing](#-contributing)
 - [License](#-license)
-- [Contact](#-contact)
 
 ## 📥 Installation
 
@@ -333,10 +332,6 @@ Please make sure to update tests as appropriate.
 ## 📄 License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## 📞 Contact
-
-[Your Contact Information]
 
 ---
 
