@@ -41,21 +41,7 @@ Chrysalis is a suite of .NET libraries designed to simplify Cardano blockchain d
 Each Chrysalis component can be installed separately as needed:
 
 ```bash
-# Install the CBOR serialization and source generation libraries
-dotnet add package Chrysalis.Cbor
-dotnet add package Chrysalis.Cbor.Codegen
-
-# Install the Network library for Ouroboros mini-protocols
-dotnet add package Chrysalis.Network
-
-# Install the Transaction building library
-dotnet add package Chrysalis.Tx
-
-# Install the Plutus smart contract evaluation library
-dotnet add package Chrysalis.Plutus
-
-# Install the Wallet library
-dotnet add package Chrysalis.Wallet
+dotnet add package Chrysalis --version 0.7.2
 ```
 
 ## 🧩 Project Structure
@@ -148,12 +134,8 @@ var myTypeCbor = CborSerializer.Serialize(myType);
 ### Working with the Wallet
 
 ```csharp
-using Chrysalis.Wallet.Words;
-using Chrysalis.Wallet.Models.Enums;
-using Chrysalis.Wallet.Models.Keys;
-
 // Restore wallet from mnemonic
-string words = "address address address address address address address address address address address address";
+string words = "your mnemonic here";
 Mnemonic mnemonic = Mnemonic.Restore(words, English.Words);
 
 // Derive account key
@@ -189,7 +171,7 @@ string bech32Address = address.ToBech32();
 ```csharp
 // Create a connection to a Cardano node
 NodeClient client = await NodeClient.ConnectAsync("/ipc/node.socket");
-client.Start();
+await client.StartAsync(networkMagic: 2);
 
 // Query Utxos
 byte[] addr = Convert.FromHexString("00a7e1d2e57b1f9aa851b08c8934a315ffd97397fa997bb3851c626d3bb8d804d91fa134757d1a41b0b12762f8922fe4b4c6faa5ffec1bc9cf");
@@ -291,7 +273,6 @@ Transaction unlockSignedTx = unlockUnsignedTx.Sign(privateKey);
 var provider = new Blockfrost("previewajMhMPYerz9Pd3GsqjayLwP5mgnNnZCC");
 string myAddress = "addr_test1qpw9cvvdq8mjncs9e90trvpdvg7azrncafv0wtgvz0uf9vhgjp8dc6v79uxw0detul8vnywlv5dzyt32ayjyadvhtjaqyl2gur";
 string validatorAddress = "addr_test1wrf8enqnl26m0q5cfg73lxf4xxtu5x5phcrfjs0lcqp7uagh2hm3k";
-
 
 string scriptRefTxHash = "c2609532a76c3f1d38a9e7192bb32946f9ca8ab47c635d99dffa3a3da7c9a218";
 string lockUtxoTxHash = "0e2c71f1650c55be158b27ba8a03ff4f7c60ae6ba6706aba30fb5a918e91c25c";
