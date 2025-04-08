@@ -315,6 +315,7 @@ Transaction unlockSignedTx = unlockUnsignedTx.Sign(privateKey);
 For more detailed information, please refer to the following resources:
 
 - [Chrysalis.CBOR Documentation](./CBOR.md)
+- [Chrysalis.Tx Documentation](./TX.md)
 
 
 ## 🤝 Contributing
