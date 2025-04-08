@@ -113,7 +113,7 @@ RedeemerDataBuilder<UnlockParams, SampleRedeemer> spendRedeemerBuilder = (mappin
     // This is a simple placeholder - in a real scenario, you'd create the appropriate
     // data structure required by your specific Plutus script
     
-    return new SampleRedeemer(0);
+    return new SampleRedeemer(42);
 };
 
 // The mapping parameter provides access to input-output associations:
