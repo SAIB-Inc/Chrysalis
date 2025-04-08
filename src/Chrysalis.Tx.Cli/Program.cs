@@ -93,11 +93,10 @@ var unlockLovelace = TransactionTemplateBuilder<UnlockParameters>.Create(provide
     .AddStaticParty("rico", ricoAddress, true)
     .AddStaticParty("validator", validatorAddress)
     .AddStaticParty("withdrawal", withdrawalAddress)
-    .AddInput((options, unlockParams) =>
+    .AddReferenceInput((options, unlockParams) =>
     {
         options.From = "validator";
         options.UtxoRef = unlockParams.ScriptRefUtxoOutref;
-        options.IsReference = true;
     })
     .AddInput((options, unlockParams) =>
     {

@@ -18,7 +18,6 @@ public record InputOptions<T>
     public TransactionInput? UtxoRef { get; set; }
     public DatumOption? Datum { get; set; }
     public string? Id { get; set; }
-    public bool IsReference { get; set; }
     public RedeemerMap? Redeemer { get; set; }
 
     public Func<InputOutputMapping, T, Redeemer<CborBase>>? RedeemerBuilder { get; set; }
@@ -34,6 +33,14 @@ public record InputOptions<T>
         return this;
     }
 }
+
+public record ReferenceInputOptions
+{
+    public string From { get; set; } = string.Empty;
+    public TransactionInput? UtxoRef { get; set; }
+    public string? Id { get; set; }
+}
+
 
 public record OutputOptions
 {
