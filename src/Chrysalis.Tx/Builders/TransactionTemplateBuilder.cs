@@ -25,7 +25,7 @@ public class TransactionTemplateBuilder<T>
     private readonly List<Action<MintOptions<T>, T>> _mintConfigs = [];
     private readonly List<Action<WithdrawalOptions<T>, T>> _withdrawalConfigs = [];
     private readonly List<string> requiredSigners = [];
-    private ulong _validFrom = default;
+    private ulong _validFrom;
     
     public static TransactionTemplateBuilder<T> Create(ICardanoDataProvider provider) => new TransactionTemplateBuilder<T>().SetProvider(provider);
 
