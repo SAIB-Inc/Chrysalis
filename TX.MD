@@ -47,7 +47,7 @@ var transaction = txBuilder.Build();
 - Full support for certificates, withdrawals, and minting operations
 - Complete witness management (VKey witnesses, native scripts, Plutus scripts)
 
-## 📝 Template Transaction Builder
+## Template Transaction Builder
 
 The TransactionTemplateBuilder<T> offers a higher-level abstraction for creating reusable transaction templates.
 
@@ -159,9 +159,8 @@ mapping["inputId2"].OutputIndexes["outputName"];
 ```
 - **Script optimization**: This is particularly valuable for smart contracts that need to reference specific UTXOs or outputs, enabling precise control over redeemer data based on the actual transaction structure.
 
-**Example scenario**: A smart contract that requires a redeemer to reference both its input position and a specific output:
+**Example scenario**: A smart contract that requires a redeemer to reference both its input position and a specific output index:
 
-indices:
 ```csharp
 RedeemerDataBuilder<ContractParams, PlutusData> complexRedeemerBuilder = (mapping, parameters) =>
 {
