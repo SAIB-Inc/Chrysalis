@@ -632,6 +632,10 @@ public class TransactionTemplateBuilder<T>
                 context.TxBuilder.AddInput(inputOptions.UtxoRef);
 
             }
+            if (inputOptions.Redeemer is not null || inputOptions.RedeemerBuilder is not null)
+            {
+                context.IsSmartContractTx = true;
+            }
 
             if (inputOptions.MinAmount is not null)
             {
@@ -658,7 +662,6 @@ public class TransactionTemplateBuilder<T>
                 context.InputAddresses.Add(referenceInputOptions.From);
                 context.ReferenceInput = referenceInputOptions.UtxoRef;
                 context.TxBuilder.AddReferenceInput(referenceInputOptions.UtxoRef);
-                context.IsSmartContractTx = true;
             }
             else
             {
