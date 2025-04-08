@@ -21,13 +21,14 @@ public class TransactionTemplateBuilder<T>
     private string? _changeAddress;
     private readonly Dictionary<string, string> _staticParties = [];
     private readonly List<Action<InputOptions<T>, T>> _inputConfigs = [];
+    private readonly List<Action<ReferenceInputOptions, T>> _referenceInputConfigs = [];
     private readonly List<Action<OutputOptions, T>> _outputConfigs = [];
     private readonly List<Action<MintOptions<T>, T>> _mintConfigs = [];
     private readonly List<Action<WithdrawalOptions<T>, T>> _withdrawalConfigs = [];
     private readonly List<string> requiredSigners = [];
     private ulong _validFrom;
     private ulong _validTo;
-    
+
     public static TransactionTemplateBuilder<T> Create(ICardanoDataProvider provider) => new TransactionTemplateBuilder<T>().SetProvider(provider);
 
     private TransactionTemplateBuilder<T> SetProvider(ICardanoDataProvider provider)
@@ -39,6 +40,12 @@ public class TransactionTemplateBuilder<T>
     public TransactionTemplateBuilder<T> AddInput(Action<InputOptions<T>, T> config)
     {
         _inputConfigs.Add(config);
+        return this;
+    }
+
+    public TransactionTemplateBuilder<T> AddReferenceInput(Action<ReferenceInputOptions, T> config)
+    {
+        _referenceInputConfigs.Add(config);
         return this;
     }
 
@@ -166,9 +173,20 @@ public class TransactionTemplateBuilder<T>
             List<TransactionInput> sortedInputs = [.. context.TxBuilder.body.Inputs.GetValue().OrderBy(e => Convert.ToHexString(e.TransactionId)).ThenBy(e => e.Index)];
             context.TxBuilder.SetInputs(sortedInputs);
 
+            List<TransactionInput> sortedRefInputs = [];
+            if (context.TxBuilder.body.ReferenceInputs?.GetValue() != null)
+            {
+                sortedRefInputs = [.. context.TxBuilder.body.ReferenceInputs.GetValue()
+                .OrderBy(e => Convert.ToHexString(e.TransactionId))
+                .ThenBy(e => e.Index)];
+
+                context.TxBuilder.SetReferenceInputs(sortedRefInputs);
+            }
+
             var inputIdToOrderedIndex = GetInputIdToOrderedIndex(context.InputsById, sortedInputs);
             var intIndexedAssociations = new Dictionary<int, Dictionary<string, int>>();
             var stringIndexedAssociations = GetIndexedAssociations(context.AssociationsByInputId, inputIdToOrderedIndex);
+            var refInputIdToOrderedIndex = GetRefInputIdToOrderedIndex(context.ReferenceInputsById, sortedRefInputs);
 
             foreach (var (inputId, data) in stringIndexedAssociations)
             {
@@ -211,7 +229,7 @@ public class TransactionTemplateBuilder<T>
                     }
                 }
 
-                BuildRedeemers(context, param, inputIdToIndex, outputMappings);
+                BuildRedeemers(context, param, inputIdToIndex, refInputIdToOrderedIndex ,outputMappings);
 
                 if (context.Redeemers.Count > 0)
                 {
@@ -236,7 +254,7 @@ public class TransactionTemplateBuilder<T>
 
             if (_validFrom > 0)
                 context.TxBuilder.SetValidityIntervalStart(_validFrom);
-            
+
             if (_validTo > 0)
                 context.TxBuilder.SetTtl(_validTo);
 
@@ -442,13 +460,23 @@ public class TransactionTemplateBuilder<T>
         }
     }
 
-    private void BuildRedeemers(BuildContext buildContext, T param, Dictionary<string, ulong> inputIdToIndex, Dictionary<string, Dictionary<string, ulong>> outputMappings)
+    private void BuildRedeemers(
+        BuildContext buildContext,
+        T param,
+        Dictionary<string, ulong> inputIdToIndex,
+        Dictionary<string, ulong> refInputIdToIndex,
+        Dictionary<string, Dictionary<string, ulong>> outputMappings)
     {
         var mapping = new InputOutputMapping();
 
         foreach (var (inputId, inputIndex) in inputIdToIndex)
         {
             mapping.AddInput(inputId, inputIndex);
+        }
+
+        foreach (var (refInputId, refInputIndex) in refInputIdToIndex)
+        {
+            mapping.AddReferenceInput(refInputId, refInputIndex);
         }
 
         foreach (var (inputId, outputsDict) in outputMappings)
@@ -461,7 +489,7 @@ public class TransactionTemplateBuilder<T>
 
         foreach (var config in _inputConfigs)
         {
-            var inputOptions = new InputOptions<T> { From = "", Id = null, IsReference = false };
+            var inputOptions = new InputOptions<T> { From = "", Id = null };
             config(inputOptions, param);
 
             if (inputOptions.Redeemer != null)
@@ -588,7 +616,7 @@ public class TransactionTemplateBuilder<T>
     {
         foreach (var config in _inputConfigs)
         {
-            var inputOptions = new InputOptions<T> { From = "", Id = null, IsReference = false };
+            var inputOptions = new InputOptions<T> { From = "", Id = null };
             config(inputOptions, param);
 
             if (!string.IsNullOrEmpty(inputOptions.Id) && inputOptions.UtxoRef != null)
@@ -599,17 +627,10 @@ public class TransactionTemplateBuilder<T>
 
             if (inputOptions.UtxoRef is not null)
             {
-                if (inputOptions.IsReference)
-                {
-                    context.TxBuilder.AddReferenceInput(inputOptions.UtxoRef);
-                    context.ReferenceInput = inputOptions.UtxoRef;
-                    context.IsSmartContractTx = true;
-                }
-                else
-                {
-                    context.SpecifiedInputs.Add(inputOptions.UtxoRef);
-                    context.TxBuilder.AddInput(inputOptions.UtxoRef);
-                }
+
+                context.SpecifiedInputs.Add(inputOptions.UtxoRef);
+                context.TxBuilder.AddInput(inputOptions.UtxoRef);
+
             }
 
             if (inputOptions.MinAmount is not null)
@@ -622,6 +643,29 @@ public class TransactionTemplateBuilder<T>
                 context.InputAddresses.Add(inputOptions.From);
             }
         }
+
+        foreach (var config in _referenceInputConfigs)
+        {
+            var referenceInputOptions = new ReferenceInputOptions { From = "", UtxoRef = null, Id = null };
+            config(referenceInputOptions, param);
+
+            if (referenceInputOptions.UtxoRef is not null)
+            {
+                if (!string.IsNullOrEmpty(referenceInputOptions.Id))
+                {
+                    context.ReferenceInputsById[referenceInputOptions.Id] = referenceInputOptions.UtxoRef;
+                }
+                context.InputAddresses.Add(referenceInputOptions.From);
+                context.ReferenceInput = referenceInputOptions.UtxoRef;
+                context.TxBuilder.AddReferenceInput(referenceInputOptions.UtxoRef);
+                context.IsSmartContractTx = true;
+            }
+            else
+            {
+                throw new Exception($"Reference input not found for {referenceInputOptions.From}");
+            }
+        }
+
     }
 
     private void ProcessMints(T param, BuildContext context)
@@ -756,6 +800,26 @@ public class TransactionTemplateBuilder<T>
         return inputIdToOrderedIndex;
     }
 
+    private Dictionary<string, ulong> GetRefInputIdToOrderedIndex(
+    Dictionary<string, TransactionInput> refInputsById,
+    List<TransactionInput> sortedRefInputs)
+    {
+        Dictionary<string, ulong> refInputIdToOrderedIndex = [];
+        foreach (var (refInputId, refInput) in refInputsById)
+        {
+            for (int i = 0; i < sortedRefInputs.Count; i++)
+            {
+                if (Convert.ToHexString(sortedRefInputs[i].TransactionId) == Convert.ToHexString(refInput.TransactionId) &&
+                    sortedRefInputs[i].Index == refInput.Index)
+                {
+                    refInputIdToOrderedIndex[refInputId] = (ulong)i;
+                    break;
+                }
+            }
+        }
+        return refInputIdToOrderedIndex;
+    }
+
     private Dictionary<string, (ulong inputIndex, Dictionary<string, int> outputIndices)> GetIndexedAssociations(Dictionary<string, Dictionary<string, int>> associationsByInputId, Dictionary<string, int> inputIdToOrderedIndex)
     {
         Dictionary<string, (ulong inputIndex, Dictionary<string, int> outputIndices)> indexedAssociations = [];
@@ -840,6 +904,7 @@ public class TransactionTemplateBuilder<T>
         public TransactionInput? ReferenceInput { get; set; }
         public ulong MinimumLovelace { get; set; }
         public Dictionary<string, TransactionInput> InputsById { get; } = [];
+        public Dictionary<string, TransactionInput> ReferenceInputsById { get; } = [];
         public Dictionary<string, Dictionary<string, int>> AssociationsByInputId { get; } = [];
         public List<string> InputAddresses { get; } = [];
         public List<TransactionInput> SpecifiedInputs { get; } = [];
