@@ -117,7 +117,7 @@ RedeemerDataBuilder<UnlockParams, SampleRedeemer> spendRedeemerBuilder = (mappin
 };
 
 // The mapping parameter provides access to input-output associations:
-// mapping: Dictionary<string, (ulong InputIndex, Dictionary<string, ulong> OutputIndexes)>
+// mapping: Dictionary<string, (ulong InputIndex, Dictionary<string, ulong> OutputIndices)>
 // This lets you reference specific transaction components by index
 // For example, to access the first input's index: mapping[0]["input"]
 
@@ -155,14 +155,14 @@ Transaction tx = await unlock(new UnlockParams(
 - **Transaction context access**: The mapping parameter exposes a dictionary structure that provides access to all input and output indices:
 
 ```csharp
-// Structure: Dictionary<string, (ulong InputIndex, Dictionary<string, ulong> OutputIndexes)>
+// Structure: Dictionary<string, (ulong InputIndex, Dictionary<string, ulong> OutputIndices)>
 // Where the key is the party name, and the value contains:
 // - InputIndex: The index of the input associated with this party
-// - OutputIndexes: A dictionary mapping output names to their indices
+// - OutputIndices: A dictionary mapping output names to their indices
 
 // Example: referencing specific transaction components
 mapping["inputId1"].InputIndex;
-mapping["inputId2"].OutputIndexes["outputName"];
+mapping["inputId2"].OutputIndices["outputName"];
 ```
 
 - **Script optimization**: This is particularly valuable for smart contracts that need to reference specific UTXOs or outputs, enabling precise control over redeemer data based on the actual transaction structure.
@@ -186,7 +186,7 @@ RedeemerDataBuilder<ContractParams, SampleRedeemer> complexRedeemerBuilder = (ma
     ulong inputIndex = mapping["user"].InputIndex;
 
     // Get the index of a specific output
-    ulong outputIndex = mapping["user"].OutputIndexes["change"];
+    ulong outputIndex = mapping["user"].OutputIndices["change"];
 
     // Create a redeemer that references these specific transaction components
     return new SampleRedeemer(inputIndex, outputIndex)
