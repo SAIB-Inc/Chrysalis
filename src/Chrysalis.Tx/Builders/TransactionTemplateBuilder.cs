@@ -129,7 +129,7 @@ public class TransactionTemplateBuilder<T>
                 }
             }
 
-            Script? script = GetScript(context.IsSmartContractTx, context.ReferenceInput, allUtxos);
+            List<Script> script = GetScripts(context.IsSmartContractTx, context.ReferenceInputs, allUtxos);
 
             ResolvedInput? feeInput = SelectFeeInput(utxos);
             if (feeInput is not null)
@@ -162,7 +162,82 @@ public class TransactionTemplateBuilder<T>
 
             ulong totalLovelaceChange = coinSelectionResult.LovelaceChange;
             Dictionary<byte[], TokenBundleOutput> assetsChange = coinSelectionResult.AssetsChange;
+
             var lovelaceChange = new Lovelace(totalLovelaceChange + (feeInput?.Output.Amount().Lovelace() ?? 0));
+            if (feeInput!.Output.Amount() is LovelaceWithMultiAsset lovelaceWithMultiAsset)
+            {
+                Dictionary<byte[], Dictionary<byte[], ulong>> existingAssetsChange = [];
+                Dictionary<byte[], Dictionary<byte[], ulong>> feeInputAssetsChange = [];
+
+                foreach (var asset in assetsChange)
+                {
+                    existingAssetsChange.Add(asset.Key, asset.Value.Value);
+                }
+
+                foreach (var asset in lovelaceWithMultiAsset.MultiAsset.Value)
+                {
+                    feeInputAssetsChange.Add(asset.Key, asset.Value.Value);
+                }
+
+                Dictionary<byte[], Dictionary<byte[], ulong>> combinedAssets = new(existingAssetsChange);
+
+                foreach (var asset in feeInputAssetsChange)
+                {
+                    byte[]? matchingKey = null;
+                    foreach (var existingKey in combinedAssets.Keys)
+                    {
+                        if (existingKey.SequenceEqual(asset.Key))
+                        {
+                            matchingKey = existingKey;
+                            break;
+                        }
+                    }
+                    
+                    if (matchingKey != null)
+                    {
+                        var existingTokens = combinedAssets[matchingKey];
+
+                        foreach (var token in asset.Value)
+                        {
+                            byte[]? matchingTokenKey = null;
+                            foreach (var existingTokenKey in existingTokens.Keys)
+                            {
+                                if (existingTokenKey.SequenceEqual(token.Key))
+                                {
+                                    matchingTokenKey = existingTokenKey;
+                                    break;
+                                }
+                            }
+
+                            if (matchingTokenKey != null)
+                            {
+                                existingTokens[matchingTokenKey] += token.Value;
+                            }
+                            else
+                            {
+                                existingTokens.Add(token.Key, token.Value);
+                            }
+                        }
+                    }
+                    else
+                    {
+                        combinedAssets.Add(asset.Key, new Dictionary<byte[], ulong>(asset.Value));
+                    }
+
+                }
+
+
+                Dictionary<byte[], TokenBundleOutput> convertedAssetsChange = [];
+
+                foreach (var asset in combinedAssets)
+                {
+                    TokenBundleOutput tokenBundle = new(asset.Value);
+                    convertedAssetsChange.Add(asset.Key, tokenBundle);
+                }
+
+                assetsChange = convertedAssetsChange;
+
+            }
             Value changeValue = assetsChange.Count > 0
                 ? new LovelaceWithMultiAsset(lovelaceChange, new MultiAssetOutput(assetsChange))
                 : lovelaceChange;
@@ -229,7 +304,7 @@ public class TransactionTemplateBuilder<T>
                     }
                 }
 
-                BuildRedeemers(context, param, inputIdToIndex, refInputIdToOrderedIndex ,outputMappings);
+                BuildRedeemers(context, param, inputIdToIndex, refInputIdToOrderedIndex, outputMappings);
 
                 if (context.Redeemers.Count > 0)
                 {
@@ -259,7 +334,8 @@ public class TransactionTemplateBuilder<T>
                 context.TxBuilder.SetTtl(_validTo);
 
             return context.TxBuilder.CalculateFee(script).Build();
-        };
+        }
+            ;
     }
 
     private Dictionary<string, string> ResolveParties(T param)
@@ -660,7 +736,7 @@ public class TransactionTemplateBuilder<T>
                     context.ReferenceInputsById[referenceInputOptions.Id] = referenceInputOptions.UtxoRef;
                 }
                 context.InputAddresses.Add(referenceInputOptions.From);
-                context.ReferenceInput = referenceInputOptions.UtxoRef;
+                context.ReferenceInputs.Add(referenceInputOptions.UtxoRef);
                 context.TxBuilder.AddReferenceInput(referenceInputOptions.UtxoRef);
             }
             else
@@ -735,40 +811,50 @@ public class TransactionTemplateBuilder<T>
         }
     }
 
-    private Script? GetScript(bool isSmartContractTx, TransactionInput? referenceInput, List<ResolvedInput> allUtxos)
+    private List<Script> GetScripts(bool isSmartContractTx, List<TransactionInput> referenceInputs, List<ResolvedInput> allUtxos)
     {
-        if (isSmartContractTx && referenceInput != null)
+        if (isSmartContractTx && referenceInputs != null && referenceInputs.Any())
         {
-            foreach (var utxo in allUtxos)
+            List<Script> scripts = [];
+
+            foreach (var referenceInput in referenceInputs)
             {
-                if (Convert.ToHexString(utxo.Outref.TransactionId) == Convert.ToHexString(referenceInput.TransactionId) &&
-                    utxo.Outref.Index == referenceInput.Index)
+                foreach (var utxo in allUtxos)
                 {
-                    return utxo.Output switch
+                    if (Convert.ToHexString(utxo.Outref.TransactionId) == Convert.ToHexString(referenceInput.TransactionId) &&
+                        utxo.Outref.Index == referenceInput.Index)
                     {
-                        PostAlonzoTransactionOutput postAlonzoOutput => postAlonzoOutput.ScriptRef is not null ? CborSerializer.Deserialize<Script>(postAlonzoOutput.ScriptRef?.Value) : null,
-                        _ => throw new InvalidOperationException($"Invalid output type: {utxo.Output.GetType().Name}")
-                    };
+                        if (utxo.Output is PostAlonzoTransactionOutput postAlonzoOutput &&
+                            postAlonzoOutput.ScriptRef is not null)
+                        {
+                            Script script = CborSerializer.Deserialize<Script>(postAlonzoOutput.ScriptRef.Value);
+                            scripts.Add(script);
+                        }
+                    }
                 }
             }
+
+            return scripts;
         }
-        return null;
+
+        return [];
     }
 
     private ResolvedInput? SelectFeeInput(List<ResolvedInput> utxos)
     {
-        return utxos
-            .Where(e => e.Output.Amount().Lovelace() >= 5_000_000UL && e.Output.Amount() is Lovelace)
-            .OrderByDescending(e => e.Output.Amount().Lovelace())
-            .FirstOrDefault();
+        var sortedUtxos =  utxos
+            .Where(e => e.Output.Amount().Lovelace() >= 5_000_000UL)
+            .OrderBy(e => e.Output.Amount().Lovelace());
+
+        return sortedUtxos.FirstOrDefault();
     }
 
     private ResolvedInput? SelectCollateralInput(List<ResolvedInput> utxos, bool isSmartContractTx)
     {
         if (!isSmartContractTx) return null;
         return utxos
-            .Where(e => e.Output.Amount().Lovelace() >= 5_000_000UL && e.Output.Amount() is Lovelace)
-            .OrderByDescending(e => e.Output.Amount().Lovelace())
+            .Where(e => e.Output.Amount().Lovelace() >= 5_000_000UL)
+            .OrderBy(e => e.Output.Amount().Lovelace())
             .FirstOrDefault();
     }
 
@@ -904,7 +990,7 @@ public class TransactionTemplateBuilder<T>
     {
         public TransactionBuilder TxBuilder { get; set; } = null!;
         public bool IsSmartContractTx { get; set; }
-        public TransactionInput? ReferenceInput { get; set; }
+        public List<TransactionInput> ReferenceInputs { get; set; } = [];
         public ulong MinimumLovelace { get; set; }
         public Dictionary<string, TransactionInput> InputsById { get; } = [];
         public Dictionary<string, TransactionInput> ReferenceInputsById { get; } = [];
