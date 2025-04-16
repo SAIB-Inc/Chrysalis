@@ -114,7 +114,7 @@ public record WithdrawalOptions<T>
         RedeemerBuilder = (mapping, context) =>
         {
             TData data = factory(mapping, context);
-            return new Redeemer<CborBase>(RedeemerTag.Reward, 0, data, new ExUnits(1400000, 100000000));
+            return new Redeemer<CborBase>(RedeemerTag.Reward, 0, data, new ExUnits(1400000, 1000000000));
         };
         return this;
     }
