@@ -11,5 +11,9 @@ crate-type = ["cdylib"]
 hex = "0.4"
 chrono = "0.4.39"
 
-pallas = { git = "https://github.com/txpipe/pallas.git", features = ["phase-two"] }
-# pallas = { path = "../../../../../pallas/pallas", features = ["phase-two"] }
+pallas = "0.32.0"
+# pallas = { git = "https://github.com/txpipe/pallas.git", features = ["phase-two"] }
+# pallas = { path = "../../../../../pallas/pallas"}
+
+uplc = "1.1.15"
+# uplc = {path = "../../../../../aiken/crates/uplc"}
