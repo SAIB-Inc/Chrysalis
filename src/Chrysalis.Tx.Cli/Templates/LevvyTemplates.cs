@@ -322,4 +322,95 @@ public class LevvyTemplates
 
     public Func<LockProtocolParamsParameters, Task<Transaction>> LockPparams => templates["lock"];
 
+    public Func<RepayParams, Task<Transaction>> Repay()
+    {
+        string mainValidatorAddress = "addr_test1wra8f56lfvx53trz3zk9e6n3728gqat945ycg53j7g5kvrc5qqfl0";
+        string mainValidatorScriptRef = "5d84910a2e0ece53b64fe2bf0f0d3cdc8f32993d3a5b3fee7c15a8e237fc9e16";
+    
+        string repayValidatorAddress = "addr_test1wqhgytp55nvs57me5d64llpqwph2pam8d5sp8x9t64mr5qsr7y9aj";
+        string repayValidatorScriptRef = "2e822c34a4d90a7b79a3755ffc20706ea0f7676d201398abd5763a02";
+        string repayValidatorRewardAddress = "stake_test17qhgytp55nvs57me5d64llpqwph2pam8d5sp8x9t64mr5qsrk6a2c";
+
+        string protocolParamsAddress = "addr_test1wr00dqehse7tfu0etd4cz8ldhlxaw7qdzz54esrjqacg36sp45dt3";
+
+        RedeemerDataBuilder<RepayParams, LevvyAction> repayRedeemerBuilder = (mapping, parameters) =>
+        {
+            var (InputIndex, OutputIndexes) = mapping.GetInput("lockedUtxo1");
+            InputIndices inputIndices = new((int)InputIndex, new None<int>());
+            LevvyOutputIndices outputIndices = new((int)OutputIndexes["repayOutput1"], new None<int>(), new None<int>(), new None<int>());
+            ActionParams actionParams = new(inputIndices, new Some<int>((int)mapping.GetReferenceInput("protocolParams")), new None<int>(), outputIndices, new Token());
+
+            return new BorrowAction(actionParams);
+        };
+
+        RedeemerDataBuilder<RepayParams, CborIndefList<Outref>> withdrawRedeemer = (mapping, parameters) =>
+        {
+            Outref outref1 = new(Convert.FromHexString("25e615156cd9e10be59d9a17776ef7958d46d1f57919a5fc58a616902f0e185c"), 0);
+            CborIndefList<Outref> outrefs = new([outref1]);
+
+            return outrefs;
+        };
+
+        var repay = TransactionTemplateBuilder<RepayParams>.Create(provider)
+            .AddStaticParty("change", ChangeAddress, true)
+            .AddStaticParty("mainValidator", mainValidatorAddress)
+            .AddStaticParty("repayValidator", repayValidatorAddress)
+            .AddStaticParty("repayValidatorRewardAddress", repayValidatorRewardAddress)
+            .AddReferenceInput((options, parameters) =>
+            {
+                options.From = "mainValidator";
+                options.UtxoRef = new TransactionInput(
+                   Convert.FromHexString(mainValidatorScriptRef), 0
+                );
+                options.Id = "mainValidator";
+            })
+            .AddReferenceInput((options, parameters) =>
+            {
+                options.From = "repayValidator";
+                options.UtxoRef = new TransactionInput(
+                   Convert.FromHexString(repayValidatorScriptRef), 0
+                );
+                options.Id = "repayValidator";
+            })
+            .AddInput((options, parameters) =>
+            {
+                options.From = "change";
+                options.Id = "changeAddress";
+            })
+            .AddInput((options, parameters) =>
+            {
+                options.From = "mainValidator";
+                options.UtxoRef = parameters.LockedUtxos[0];
+                options.Id = "lockedUtxo1";
+                options.SetRedeemerBuilder(repayRedeemerBuilder);
+            })
+            .AddOutput((options, parameters) =>
+            {
+                options.To = "mainValidator";
+                options.Amount = new LovelaceWithMultiAsset(
+                    new Lovelace(2000000),
+                    new MultiAssetOutput(
+                        new Dictionary<byte[], TokenBundleOutput>
+                        {{
+                            Convert.FromHexString(""),
+                            new TokenBundleOutput(
+                                new Dictionary<byte[], ulong>{{ Convert.FromHexString(""), 8000000 }}
+                            )
+                        }}
+                    )
+                );
+                options.Datum = new InlineDatumOption(1, new CborEncodedValue(CborSerializer.Serialize(CborSerializer.Deserialize<PlutusData>(CborSerializer.Serialize(parameters.RepayDatum)))));
+                options.AssociatedInputId = "lockedUtxo1"; 
+                options.Id = "repayOutput1";
+            })
+            .AddWithdrawal((options, parameters) =>
+            {
+                options.From = "repayValidatorRewardAddress";
+                options.Amount = 0;
+                options.SetRedeemerFactory(withdrawRedeemer);
+            })
+            .Build();
+
+            return repay;
+    }
 }
