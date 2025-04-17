@@ -19,6 +19,17 @@
             "console": "integratedTerminal"
         },
         {
+            "name": "Chrysalis.Tx.Cli",
+            "type": "coreclr",
+            "request": "launch",
+            "preLaunchTask": "build:tx:cli",
+            "program": "${workspaceFolder}/src/Chrysalis.Tx.Cli/bin/Debug/net9.0/Chrysalis.Tx.Cli.dll",
+            "args": [],
+            "cwd": "${workspaceFolder}",
+            "stopAtEntry": false,
+            "console": "integratedTerminal"
+        },
+        {
             // Use IntelliSense to find out which attributes exist for C# debugging
             // Use hover for the description of the existing attributes
             // For further information visit https://github.com/dotnet/vscode-csharp/blob/main/debugger-launchjson.md
