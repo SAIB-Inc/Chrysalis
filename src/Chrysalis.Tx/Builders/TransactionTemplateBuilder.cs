@@ -141,6 +141,7 @@ public class TransactionTemplateBuilder<T>
             ResolvedInput? collateralInput = SelectCollateralInput(utxos, context.IsSmartContractTx);
             if (collateralInput is not null)
             {
+                Console.WriteLine("here!!!");
                 utxos.Remove(collateralInput);
                 context.TxBuilder.AddCollateral(collateralInput.Outref);
                 context.TxBuilder.SetCollateralReturn(collateralInput.Output);

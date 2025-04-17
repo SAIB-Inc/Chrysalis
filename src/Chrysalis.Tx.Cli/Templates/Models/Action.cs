@@ -65,11 +65,11 @@ public partial record OutputIndices(
     int SelfOutputIndex,
 
     [CborOrder(1)]
-    Option<int> NftOutputIndex,
-
-    [CborOrder(2)]
     Option<int> FeeOutputIndex,
 
+    [CborOrder(2)]
+    Option<int> ChangeOutputIndex,
+
     [CborOrder(3)]
-    Option<int> ChangeOutputIndex
+    Option<int> NftOutputIndex
 ) : CborBase;

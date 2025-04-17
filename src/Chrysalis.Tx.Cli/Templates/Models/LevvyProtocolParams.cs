@@ -24,28 +24,44 @@ public partial record Ration(
 public partial record PoolDetails(
     [CborOrder(0)] Subject PrincipalAsset,
     [CborOrder(1)] Subject CollateralAsset
-): CborBase;
+) : CborBase;
 
 [CborSerializable]
 [CborConstr(0)]
 public partial record LevvyGlobalProtocolParams(
     [CborOrder(0)] GlobalParamsDetails GlobalParamsDetails
-): CborBase;
+) : CborBase;
 
 [CborSerializable]
 [CborConstr(1)]
 public partial record LevvyPoolProtocolParams(
     [CborOrder(0)] PoolParamsDetails PoolParamsDetails
-): CborBase;
+) : CborBase;
 
 
 [CborSerializable]
 [CborConstr(0)]
- public partial record GlobalParamsDetails(
-    [CborOrder(0)] Rational Fee,
-    [CborOrder(1)] Address FeeAddress,
-    [CborOrder(2)] MultisigScript Admin,
-    [CborOrder(3)] byte[] PoolParamsPolicy
+public partial record GlobalParamsDetails(
+    [CborOrder(0)]
+    Rational Fee,
+
+    [CborOrder(1)]
+    Address FeeAddress,
+
+    [CborOrder(2)]
+    MultisigScript Admin,
+
+    [CborOrder(3)]
+    byte[] PoolParamsPolicy,
+
+    [CborOrder(4)]
+    byte[] NftPositionPrefix,
+
+    [CborOrder(5)]
+    byte[] NftImage,
+
+    [CborOrder(6)]
+    byte[] ForeclosedNftImage
  ) : CborBase;
 
 [CborSerializable]
@@ -59,7 +75,7 @@ public partial record PoolParamsDetails(
 
 [CborSerializable]
 [CborConstr(0)]
- public partial record Rational(
+public partial record Rational(
     [CborOrder(0)] ulong Numerator,
     [CborOrder(1)] ulong Denominator
  ) : CborBase;
