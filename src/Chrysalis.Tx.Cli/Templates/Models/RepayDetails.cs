@@ -27,5 +27,5 @@ public partial record RepayDetails(
 ) : CborBase;
 
 [CborSerializable]
-[CborConstr(1)]
+[CborConstr(2)]
 public partial record RepayDatum(RepayDetails RepayDetails) : LevvyDatum;

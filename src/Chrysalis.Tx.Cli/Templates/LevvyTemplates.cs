@@ -328,7 +328,7 @@ public class LevvyTemplates
         string mainValidatorScriptRef = "5d84910a2e0ece53b64fe2bf0f0d3cdc8f32993d3a5b3fee7c15a8e237fc9e16";
     
         string repayValidatorAddress = "addr_test1wqhgytp55nvs57me5d64llpqwph2pam8d5sp8x9t64mr5qsr7y9aj";
-        string repayValidatorScriptRef = "2e822c34a4d90a7b79a3755ffc20706ea0f7676d201398abd5763a02";
+        string repayValidatorScriptRef = "2e9a2f7ff63a0445b91f9ad68736a6567cc299df220921e420a27e52f16bcd03";
         string repayValidatorRewardAddress = "stake_test17qhgytp55nvs57me5d64llpqwph2pam8d5sp8x9t64mr5qsrk6a2c";
 
         string protocolParamsAddress = "addr_test1wr00dqehse7tfu0etd4cz8ldhlxaw7qdzz54esrjqacg36sp45dt3";
@@ -387,18 +387,7 @@ public class LevvyTemplates
             .AddOutput((options, parameters) =>
             {
                 options.To = "mainValidator";
-                options.Amount = new LovelaceWithMultiAsset(
-                    new Lovelace(2000000),
-                    new MultiAssetOutput(
-                        new Dictionary<byte[], TokenBundleOutput>
-                        {{
-                            Convert.FromHexString(""),
-                            new TokenBundleOutput(
-                                new Dictionary<byte[], ulong>{{ Convert.FromHexString(""), 8000000 }}
-                            )
-                        }}
-                    )
-                );
+                options.Amount = new Lovelace(8_000_000);
                 options.Datum = new InlineDatumOption(1, new CborEncodedValue(CborSerializer.Serialize(CborSerializer.Deserialize<PlutusData>(CborSerializer.Serialize(parameters.RepayDatum)))));
                 options.AssociatedInputId = "lockedUtxo1"; 
                 options.Id = "repayOutput1";

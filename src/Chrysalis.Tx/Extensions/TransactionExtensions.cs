@@ -68,4 +68,6 @@ public static class TransactionExtension
             }
         };
     }
+
+    public static string ToCborHex(this Transaction self) => Convert.ToHexStringLower(CborSerializer.Serialize(self));
 }

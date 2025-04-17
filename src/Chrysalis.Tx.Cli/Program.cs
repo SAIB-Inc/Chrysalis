@@ -304,5 +304,6 @@ RepayParams repayParams = new([repayLockedUtxo1], repayDatum);
 var repay = levvyTemplates.Repay();
 Transaction unsignedRepayTx = await repay(repayParams);
 Transaction signedRepayTx = unsignedRepayTx.Sign(privateKey);
+Console.WriteLine(signedRepayTx.ToCborHex());
 string txId = await provider.SubmitTransactionAsync(signedRepayTx);
 Console.WriteLine($"Transaction Id: {txId}");
