@@ -1,6 +1,7 @@
 using Chrysalis.Cbor.Serialization.Attributes;
 using Chrysalis.Cbor.Types;
 using Chrysalis.Cbor.Types.Cardano.Core.Common;
+using Chrysalis.Tx.Cli.Templates.Models.Common;
 
 namespace Chrysalis.Tx.Cli.Templates.Models;
 
@@ -25,7 +26,3 @@ public partial record RepayDetails(
     [CborOrder(5)]
     byte[] Tag
 ) : CborBase;
-
-[CborSerializable]
-[CborConstr(2)]
-public partial record RepayDatum(RepayDetails RepayDetails) : LevvyDatum;

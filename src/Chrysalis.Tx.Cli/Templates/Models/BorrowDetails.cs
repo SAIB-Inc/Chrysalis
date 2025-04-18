@@ -1,6 +1,7 @@
 using Chrysalis.Cbor.Serialization.Attributes;
 using Chrysalis.Cbor.Types;
 using Chrysalis.Cbor.Types.Cardano.Core.Common;
+using Chrysalis.Tx.Cli.Templates.Models.Common;
 
 namespace Chrysalis.Tx.Cli.Templates.Models;
 
@@ -31,7 +32,3 @@ public partial record BorrowDetails(
     [CborOrder(7)]
     byte[] Tag
 ) : CborBase;
-
-[CborSerializable]
-[CborConstr(1)]
-public partial record BorrowDatum(BorrowDetails BorrowDetails) : LevvyDatum;

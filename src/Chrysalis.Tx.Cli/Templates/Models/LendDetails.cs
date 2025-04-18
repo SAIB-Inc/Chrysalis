@@ -1,6 +1,7 @@
 using Chrysalis.Cbor.Serialization.Attributes;
 using Chrysalis.Cbor.Types;
 using Chrysalis.Cbor.Types.Cardano.Core.Common;
+using Chrysalis.Tx.Cli.Templates.Models.Common;
 
 namespace Chrysalis.Tx.Cli.Templates.Models;
 
@@ -53,13 +54,4 @@ public partial record Token : LevvyType;
 [CborSerializable]
 [CborConstr(1)]
 public partial record Nft : LevvyType;
-
-
-[CborSerializable]
-[CborUnion]
-public abstract partial record LevvyDatum : CborBase;
-
-[CborSerializable]
-[CborConstr(0)]
-public partial record LendDatum(LendDetails LendDetails) : LevvyDatum;
 

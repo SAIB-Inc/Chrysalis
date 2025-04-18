@@ -1,7 +1,7 @@
 using Chrysalis.Cbor.Serialization.Attributes;
 using Chrysalis.Cbor.Types;
 
-namespace Chrysalis.Tx.Cli.Templates.Models;
+namespace Chrysalis.Tx.Cli.Templates.Models.Common;
 
 [CborSerializable]
 [CborUnion]

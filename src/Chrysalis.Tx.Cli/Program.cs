@@ -13,6 +13,7 @@ using WalletAddress = Chrysalis.Wallet.Models.Addresses.Address;
 using PlutusCredential = Chrysalis.Cbor.Types.Plutus.Address.Credential;
 using Chrysalis.Cbor.Serialization;
 using Chrysalis.Cbor.Types.Cardano.Core.Common;
+using Chrysalis.Tx.Cli.Templates.Models.Common;
 
 string words = "lock drive scheme smooth staff gym laptop identify client pigeon annual run below boat perfect resource april laundry upset potato sorry inhale planet hedgehog";
 
@@ -189,25 +190,25 @@ LevvyTemplates levvyTemplates = new(provider, tanAddress);
 
 // )
 
-string policyId = "def68337867cb4f1f95b6b811fedbfcdd7780d10a95cc072077088ea";
-string assetName = "706172616d7331";
-string paramsValidatorAddress = "addr_test1wr00dqehse7tfu0etd4cz8ldhlxaw7qdzz54esrjqacg36sp45dt3";
+// string policyId = "def68337867cb4f1f95b6b811fedbfcdd7780d10a95cc072077088ea";
+// string assetName = "706172616d7331";
+// string paramsValidatorAddress = "addr_test1wr00dqehse7tfu0etd4cz8ldhlxaw7qdzz54esrjqacg36sp45dt3";
 
-WalletAddress tanMainAddress = new(tanAddress);
+// WalletAddress tanMainAddress = new(tanAddress);
 
-LevvyGlobalProtocolParams levvyGlobalProtocolParams = new(
-    new GlobalParamsDetails(
-        new Rational(5, 100), 
-        new Chrysalis.Cbor.Types.Plutus.Address.Address(new VerificationKey(tanMainAddress.GetPaymentKeyHash()!), new None<Inline<PlutusCredential>>()),
-        new Signature(tanMainAddress.GetPaymentKeyHash()!),
-        Convert.FromHexString(policyId),
-        [],
-        [],
-        []
-    )
-    );
+// LevvyGlobalProtocolParams levvyGlobalProtocolParams = new(
+//     new GlobalParamsDetails(
+//         new Rational(5, 100), 
+//         new Chrysalis.Cbor.Types.Plutus.Address.Address(new VerificationKey(tanMainAddress.GetPaymentKeyHash()!), new None<Inline<PlutusCredential>>()),
+//         new Signature(tanMainAddress.GetPaymentKeyHash()!),
+//         Convert.FromHexString(policyId),
+//         [],
+//         [],
+//         []
+//     )
+//     );
 
-LockProtocolParamsParameters lockParams = new(paramsValidatorAddress, policyId, assetName, levvyGlobalProtocolParams, null);
+// LockProtocolParamsParameters lockParams = new(paramsValidatorAddress, policyId, assetName, levvyGlobalProtocolParams, null);
 
 // Transaction lockUnsignedTx = await levvyTemplates.LockPparams(lockParams);
 // Transaction lockSignedTx = lockUnsignedTx.Sign(privateKey);
@@ -307,7 +308,7 @@ LockProtocolParamsParameters lockParams = new(paramsValidatorAddress, policyId, 
 // // Claim Sample Tx
 // LevvyIdentifier lender = new Multisig(new Signature(tanMainAddress.GetPaymentKeyHash()!));
 
-// TransactionInput claimLockedUtxo1 = new(Convert.FromHexString("837a661fa7291967cc69a5100e4f015c03d49d0a24245beafa97cb53e7a700f3"), 0);
+// TransactionInput claimLockedUtxo1 = new(Convert.FromHexString("1117aa1b22088baf1987aa01c8ac661eb872be0e1ee7eb164526aeb5503d97cf"), 0);
 
 // ClaimParams claimParams = new([claimLockedUtxo1]);
 
@@ -320,33 +321,72 @@ LockProtocolParamsParameters lockParams = new(paramsValidatorAddress, policyId, 
 
 
 // Foreclose Sample Tx
-LevvyIdentifier lender = new Multisig(new Signature(tanMainAddress.GetPaymentKeyHash()!));
-LevvyIdentifier borrower = new Multisig(new Signature(tanMainAddress.GetPaymentKeyHash()!));
+// LevvyIdentifier lender = new Multisig(new Signature(tanMainAddress.GetPaymentKeyHash()!));
+// LevvyIdentifier borrower = new Multisig(new Signature(tanMainAddress.GetPaymentKeyHash()!));
 
-var principalDetails = new AssetDetails([], [], 5000000);
+// var principalDetails = new AssetDetails([], [], 5000000);
+// var collateralDetails = new AssetDetails([], [], 5000000);
+// var interestDetails = new AssetDetails([], [], 3000000);
+
+// RepayDetails repayDetails = new(
+//     lender,
+//     borrower,
+//     collateralDetails,
+//     principalDetails,
+//     interestDetails,
+//     Convert.FromHexString("4E84F70A72D75F9462FEC04A842CF7399F430BD46FB1EA419732C2130B449609")
+// );
+// RepayDatum repayDatum = new(repayDetails);
+
+// TransactionInput lockedUtxo1 = new(
+//     Convert.FromHexString("009c44e4c96920a78e30ba0b81112fc5705880b59b27cf37725bcbc3edb5aec3"),
+//     0
+// );
+
+// ForecloseParams forecloseParams = new([lockedUtxo1], repayDatum);
+
+// var foreclose = levvyTemplates.Foreclose();
+// Transaction unsignedForecloseTx = await foreclose(forecloseParams);
+// Console.WriteLine(unsignedForecloseTx.ToCborHex());
+// Transaction signedForecloseTx = unsignedForecloseTx.Sign(privateKey);
+// string txId = await provider.SubmitTransactionAsync(signedForecloseTx);
+// Console.WriteLine($"Transaction Id: {txId}");
+
+
+// -------------------------------------------------//
+// CIP 68 Lend Sample Tx
+string mainValidatorAddress = "addr_test1wra8f56lfvx53trz3zk9e6n3728gqat945ycg53j7g5kvrc5qqfl0";
+Outref input = new(
+    Convert.FromHexString("0fec1feedd84eb271d0d24bc5d4a5017b0ff7f58cccfb34f628029274bfa45f7"),
+    2
+);
+
+var policyId = "fa74d35f4b0d48ac6288ac5cea71f28e807565ad09845232f229660f";
+var assetName = "";
+
+
+var principalDetails = new AssetDetails(
+    Convert.FromHexString("8b05e87a51c1d4a0fa888d2bb14dbc25e8c343ea379a171b63aa84a0"), 
+    Convert.FromHexString("434e4354"),
+    5000
+);
+
 var collateralDetails = new AssetDetails([], [], 5000000);
-var interestDetails = new AssetDetails([], [], 3000000);
-
-RepayDetails repayDetails = new(
-    lender,
-    borrower,
-    collateralDetails,
-    principalDetails,
-    interestDetails,
-    Convert.FromHexString("4E84F70A72D75F9462FEC04A842CF7399F430BD46FB1EA419732C2130B449609")
-);
-RepayDatum repayDatum = new(repayDetails);
-
-TransactionInput lockedUtxo1 = new(
-    Convert.FromHexString("009c44e4c96920a78e30ba0b81112fc5705880b59b27cf37725bcbc3edb5aec3"),
-    0
+var interestDetails = new AssetDetails(
+    Convert.FromHexString("8b05e87a51c1d4a0fa888d2bb14dbc25e8c343ea379a171b63aa84a0"), 
+    Convert.FromHexString("434e4354"),
+    3000
 );
 
-ForecloseParams forecloseParams = new([lockedUtxo1], repayDatum);
+// LendDetails lendDetails = new(lender, principalDetails, collateralDetails, interestDetails, new PosixTime(0), new Token());
+// LendDatum lendDatum = new(lendDetails);
+// LendParams lendParams = new(lendDatum, mainValidatorAddress);
 
-var foreclose = levvyTemplates.Foreclose();
-Transaction unsignedForecloseTx = await foreclose(forecloseParams);
-Console.WriteLine(unsignedForecloseTx.ToCborHex());
-Transaction signedForecloseTx = unsignedForecloseTx.Sign(privateKey);
-string txId = await provider.SubmitTransactionAsync(signedForecloseTx);
-Console.WriteLine($"Transaction Id: {txId}");
+// var multiSigLend = levvyTemplates.MultiSigLend();
+// Transaction lockUnsignedTx = await multiSigLend(lendParams);
+// Transaction lockSignedTx = lockUnsignedTx.Sign(privateKey);
+// Console.WriteLine(Convert.ToHexString(CborSerializer.Serialize(lockSignedTx)));
+// string lendTxHash = await provider.SubmitTransactionAsync(lockSignedTx);
+// Console.WriteLine($"Lend Params Tx Hash: {lendTxHash}");
+
+// -------------------------------------------------//

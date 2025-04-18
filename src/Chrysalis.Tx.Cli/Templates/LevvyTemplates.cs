@@ -430,7 +430,7 @@ public class LevvyTemplates
 
         RedeemerDataBuilder<ClaimParams, CborIndefList<Outref>> withdrawRedeemer = (mapping, parameters) =>
         {
-            Outref outref1 = new(Convert.FromHexString("837a661fa7291967cc69a5100e4f015c03d49d0a24245beafa97cb53e7a700f3"), 0);
+            Outref outref1 = new(Convert.FromHexString("1117aa1b22088baf1987aa01c8ac661eb872be0e1ee7eb164526aeb5503d97cf"), 0);
             CborIndefList<Outref> outrefs = new([outref1]);
 
             return outrefs;
@@ -492,7 +492,7 @@ public class LevvyTemplates
                 options.Amount = new Lovelace(2000000);
                 options.AssociatedInputId = "lockedUtxo1";
                 options.Id = "feeOutput";
-                options.Datum = new InlineDatumOption(1, new CborEncodedValue(Convert.FromHexString("F37F7B70880440EB8EBBDDA55FA3BB76BD5CE9B729F03E8E11C6E09DEDD9CFCB")));
+                options.Datum = new InlineDatumOption(1, new CborEncodedValue(Convert.FromHexString("5B44EDE0C52C0A0331C01C5BDA4C58D73638657BD9FDB56140D969654F3A752C")));
             })
             .AddWithdrawal((options, parameters) =>
             {
@@ -500,7 +500,6 @@ public class LevvyTemplates
                 options.Amount = 0;
                 options.SetRedeemerFactory(withdrawRedeemer);
             })
-            .SetValidFrom(1000)
             .Build();
 
         return claim;
@@ -570,7 +569,7 @@ public class LevvyTemplates
             .AddOutput((options, parameters) =>
             {
                 options.To = "mainValidator";
-                options.Amount = new Lovelace(8000000);
+                options.Amount = new Lovelace(5000000);
                 options.Datum = new InlineDatumOption(1, new CborEncodedValue(CborSerializer.Serialize(CborSerializer.Deserialize<PlutusData>(CborSerializer.Serialize(parameters.RepayDatum)))));
                 options.AssociatedInputId = "lockedUtxo1"; 
                 options.Id = "forecloseOutput1";
