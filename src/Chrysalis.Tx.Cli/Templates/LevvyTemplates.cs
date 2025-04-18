@@ -11,6 +11,7 @@ using WalletAddress = Chrysalis.Wallet.Models.Addresses.Address;
 using LevvyOutputIndices = Chrysalis.Tx.Cli.Templates.Models.OutputIndices;
 using LevvyAction = Chrysalis.Tx.Cli.Templates.Models.Action;
 using Chrysalis.Wallet.Utils;
+using Chrysalis.Cbor.Types.Plutus.Address;
 
 namespace Chrysalis.Tx.Cli.Templates;
 public class LevvyTemplates
@@ -244,7 +245,7 @@ public class LevvyTemplates
 
         RedeemerDataBuilder<BorrowParams, CborIndefList<Outref>> withdrawRedeemer = (mapping, parameters) =>
         {
-            Outref outref1 = new(Convert.FromHexString("1a41ac32a4cf1dd9dfe2ecd812cc6851efbd1e1ee19457b9d6684e7c3ec61353"), 0);
+            Outref outref1 = new(Convert.FromHexString("2902357749fb52f0bb16de59e810bb1fc28c81ff26d965a38b76d19dbaaf0d89"), 0);
             CborIndefList<Outref> outrefs = new([outref1]);
 
             return outrefs;
@@ -306,7 +307,7 @@ public class LevvyTemplates
                 options.Amount = new Lovelace(2000000);
                 options.AssociatedInputId = "lockedUtxo1";
                 options.Id = "feeOutput";
-                options.Datum = new InlineDatumOption(1, new CborEncodedValue(Convert.FromHexString("81D02C4C5EF5F54D324FD0EA86D242CEE83002779ACA9D0D1BF66D82EC5939AA")));
+                options.Datum = new InlineDatumOption(1, new CborEncodedValue(Convert.FromHexString("3AD4A2909AFA3B3A4C2DB072F9C9C5C9001027F25D971C9E11CA01CE9D3075DE")));
             })
             .AddWithdrawal((options, parameters) =>
             {
@@ -338,9 +339,9 @@ public class LevvyTemplates
             var (InputIndex, OutputIndexes) = mapping.GetInput("lockedUtxo1");
             InputIndices inputIndices = new((int)InputIndex, new None<int>());
             LevvyOutputIndices outputIndices = new((int)OutputIndexes["repayOutput1"], new None<int>(), new None<int>(), new None<int>());
-            ActionParams actionParams = new(inputIndices, new Some<int>((int)mapping.GetReferenceInput("protocolParams")), new None<int>(), outputIndices, new Token());
+            ActionParams actionParams = new(inputIndices, new None<int>(), new None<int>(), outputIndices, new Token());
 
-            return new BorrowAction(actionParams);
+            return new RepayAction(actionParams);
         };
 
         RedeemerDataBuilder<RepayParams, CborIndefList<Outref>> withdrawRedeemer = (mapping, parameters) =>
@@ -352,10 +353,11 @@ public class LevvyTemplates
         };
 
         var repay = TransactionTemplateBuilder<RepayParams>.Create(provider)
-            .AddStaticParty("change", ChangeAddress, true)
+            .AddStaticParty("borrower", ChangeAddress, true)
             .AddStaticParty("mainValidator", mainValidatorAddress)
             .AddStaticParty("repayValidator", repayValidatorAddress)
             .AddStaticParty("repayValidatorRewardAddress", repayValidatorRewardAddress)
+            .AddRequiredSigner("borrower")
             .AddReferenceInput((options, parameters) =>
             {
                 options.From = "mainValidator";
@@ -374,8 +376,8 @@ public class LevvyTemplates
             })
             .AddInput((options, parameters) =>
             {
-                options.From = "change";
-                options.Id = "changeAddress";
+                options.From = "borrower";
+                options.Id = "borrowerAddress";
             })
             .AddInput((options, parameters) =>
             {
@@ -398,8 +400,190 @@ public class LevvyTemplates
                 options.Amount = 0;
                 options.SetRedeemerFactory(withdrawRedeemer);
             })
+            .SetValidFrom(1001)
             .Build();
 
             return repay;
+    }
+
+    public Func<ClaimParams, Task<Transaction>> Claim()
+    {
+        string mainValidatorAddress = "addr_test1wra8f56lfvx53trz3zk9e6n3728gqat945ycg53j7g5kvrc5qqfl0";
+        string mainValidatorScriptRef = "5d84910a2e0ece53b64fe2bf0f0d3cdc8f32993d3a5b3fee7c15a8e237fc9e16";
+    
+        string claimValidatorAddress = "addr_test1wqrwjf8w3av29d63rnxkvlgh7m5588dx5jq4ffptx269k5gym574e";
+        string claimValidatorScriptRef = "9670b90d43da00a7a7d1bd6b8d89ddc89692033f43dc5b68c10e2c6d2ac1e6e6";
+        string claimValidatorRewardAddress = "stake_test17qrwjf8w3av29d63rnxkvlgh7m5588dx5jq4ffptx269k5gyn2xzn";
+
+        string protocolParamsAddress = "addr_test1wr00dqehse7tfu0etd4cz8ldhlxaw7qdzz54esrjqacg36sp45dt3";
+        string globalProtocolParamsScriptRef = "1699fe1b10c18cd97f56836fff92b042d239a413c227b3786842012aa238895c";
+
+        RedeemerDataBuilder<ClaimParams, LevvyAction> claimRedeemerBuilder = (mapping, parameters) =>
+        {
+            var (InputIndex, OutputIndexes) = mapping.GetInput("lockedUtxo1");
+            InputIndices inputIndices = new((int)InputIndex, new None<int>());
+            LevvyOutputIndices outputIndices = new((int)OutputIndexes["claimOutput1"], new Some<int>((int)OutputIndexes["feeOutput"]), new None<int>(), new None<int>());
+            ActionParams actionParams = new(inputIndices, new Some<int>((int)mapping.GetReferenceInput("globalProtocolParams")),new None<int>(), outputIndices, new Token());
+
+            return new ClaimAction(actionParams);
+        };
+
+        RedeemerDataBuilder<ClaimParams, CborIndefList<Outref>> withdrawRedeemer = (mapping, parameters) =>
+        {
+            Outref outref1 = new(Convert.FromHexString("837a661fa7291967cc69a5100e4f015c03d49d0a24245beafa97cb53e7a700f3"), 0);
+            CborIndefList<Outref> outrefs = new([outref1]);
+
+            return outrefs;
+        };
+
+        var claim = TransactionTemplateBuilder<ClaimParams>.Create(provider)
+            .AddStaticParty("change", ChangeAddress, true)
+            .AddStaticParty("mainValidator", mainValidatorAddress)
+            .AddStaticParty("claimValidator", claimValidatorAddress)
+            .AddStaticParty("claimValidatorRewardAddress", claimValidatorRewardAddress)
+            .AddStaticParty("protocolParamsAddress", protocolParamsAddress)
+            .AddRequiredSigner("change")
+            .AddReferenceInput((options, parameters) =>
+            {
+                options.From = "mainValidator";
+                options.UtxoRef = new TransactionInput(
+                   Convert.FromHexString(mainValidatorScriptRef), 0
+                );
+                options.Id = "mainValidator";
+            })
+            .AddReferenceInput((options, parameters) =>
+            {
+                options.From = "claimValidator";
+                options.UtxoRef = new TransactionInput(
+                   Convert.FromHexString(claimValidatorScriptRef), 0
+                );
+                options.Id = "claimValidator";
+            })
+            .AddReferenceInput((options, parameters) =>
+            {
+                options.From = "protocolParamsAddress";
+                options.UtxoRef = new TransactionInput(
+                   Convert.FromHexString(globalProtocolParamsScriptRef), 0
+                );
+                options.Id = "globalProtocolParams";
+            })
+            .AddInput((options, parameters) =>
+            {
+                options.From = "change";
+                options.Id = "changeAddress";
+            })
+            .AddInput((options, parameters) =>
+            {
+                options.From = "mainValidator";
+                options.UtxoRef = parameters.LockedUtxos[0];
+                options.Id = "lockedUtxo1";
+                options.SetRedeemerBuilder(claimRedeemerBuilder);
+            })
+            .AddOutput((options, parameters) =>
+            {
+                options.To = "change";
+                options.Amount = new Lovelace(8000000);
+                options.AssociatedInputId = "lockedUtxo1"; 
+                options.Id = "claimOutput1";
+            })
+            .AddOutput((options, parameters) =>
+            {
+                options.To = "change";
+                options.Amount = new Lovelace(2000000);
+                options.AssociatedInputId = "lockedUtxo1";
+                options.Id = "feeOutput";
+                options.Datum = new InlineDatumOption(1, new CborEncodedValue(Convert.FromHexString("F37F7B70880440EB8EBBDDA55FA3BB76BD5CE9B729F03E8E11C6E09DEDD9CFCB")));
+            })
+            .AddWithdrawal((options, parameters) =>
+            {
+                options.From = "claimValidatorRewardAddress";
+                options.Amount = 0;
+                options.SetRedeemerFactory(withdrawRedeemer);
+            })
+            .SetValidFrom(1000)
+            .Build();
+
+        return claim;
+    }
+
+    public Func<ForecloseParams, Task<Transaction>> Foreclose()
+    {
+        string mainValidatorAddress = "addr_test1wra8f56lfvx53trz3zk9e6n3728gqat945ycg53j7g5kvrc5qqfl0";
+        string mainValidatorScriptRef = "5d84910a2e0ece53b64fe2bf0f0d3cdc8f32993d3a5b3fee7c15a8e237fc9e16";
+    
+        string forecloseValidatorAddress = "addr_test1wz2lknk3cg99jeefr675x84uxun4hfjhdw0zfaak9tfkklgws844u";
+        string forecloseValidatorScriptRef = "6df461d32dc124f3506503421708f54736365c528b639c5add6ca84ae03385d2";
+        string forecloseValidatorRewardAddress = "stake_test17z2lknk3cg99jeefr675x84uxun4hfjhdw0zfaak9tfkklgwcedzk";
+
+        RedeemerDataBuilder<ForecloseParams, LevvyAction> forecloseRedeemerBuilder = (mapping, parameters) =>
+        {
+            var (InputIndex, OutputIndexes) = mapping.GetInput("lockedUtxo1");
+            InputIndices inputIndices = new((int)InputIndex, new None<int>());
+            LevvyOutputIndices outputIndices = new((int)OutputIndexes["forecloseOutput1"], new None<int>(), new None<int>(), new None<int>());
+            ActionParams actionParams = new(inputIndices, new None<int>(), new None<int>(), outputIndices, new Token());
+
+            return new ForecloseAction(actionParams);
+        };
+
+        RedeemerDataBuilder<ForecloseParams, CborIndefList<Outref>> withdrawRedeemer = (mapping, parameters) =>
+        {
+            Outref outref1 = new(Convert.FromHexString("009c44e4c96920a78e30ba0b81112fc5705880b59b27cf37725bcbc3edb5aec3"), 0);
+            CborIndefList<Outref> outrefs = new([outref1]);
+
+            return outrefs;
+        };
+
+        var foreclose = TransactionTemplateBuilder<ForecloseParams>.Create(provider)
+            .AddStaticParty("change", ChangeAddress, true)
+            .AddStaticParty("mainValidator", mainValidatorAddress)
+            .AddStaticParty("forecloseValidator", forecloseValidatorAddress)
+            .AddStaticParty("forecloseValidatorRewardAddress", forecloseValidatorRewardAddress)
+            .AddRequiredSigner("change")
+            .AddReferenceInput((options, parameters) =>
+            {
+                options.From = "mainValidator";
+                options.UtxoRef = new TransactionInput(
+                   Convert.FromHexString(mainValidatorScriptRef), 0
+                );
+                options.Id = "mainValidator";
+            })
+            .AddReferenceInput((options, parameters) =>
+            {
+                options.From = "forecloseValidator";
+                options.UtxoRef = new TransactionInput(
+                   Convert.FromHexString(forecloseValidatorScriptRef), 0
+                );
+                options.Id = "forecloseValidator";
+            })
+            .AddInput((options, parameters) =>
+            {
+                options.From = "change";
+                options.Id = "changeAddress";
+            })
+            .AddInput((options, parameters) =>
+            {
+                options.From = "mainValidator";
+                options.UtxoRef = parameters.LockedUtxos[0];
+                options.Id = "lockedUtxo1";
+                options.SetRedeemerBuilder(forecloseRedeemerBuilder);
+            })
+            .AddOutput((options, parameters) =>
+            {
+                options.To = "mainValidator";
+                options.Amount = new Lovelace(8000000);
+                options.Datum = new InlineDatumOption(1, new CborEncodedValue(CborSerializer.Serialize(CborSerializer.Deserialize<PlutusData>(CborSerializer.Serialize(parameters.RepayDatum)))));
+                options.AssociatedInputId = "lockedUtxo1"; 
+                options.Id = "forecloseOutput1";
+            })
+            .AddWithdrawal((options, parameters) =>
+            {
+                options.From = "forecloseValidatorRewardAddress";
+                options.Amount = 0;
+                options.SetRedeemerFactory(withdrawRedeemer);
+            })
+            .SetValidFrom(1000)
+            .Build();
+
+        return foreclose;
     }
 }
