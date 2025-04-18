@@ -22,4 +22,4 @@ public partial record RepayDatum(RepayDetails RepayDetails) : LevvyDatum;
 
 [CborSerializable]
 [CborConstr(3)]
-public partial record NftPosition(Cip68<LevvyDatum> Cip68NftPosition) : LevvyDatum;
+public partial record NftPositionDatum(Cip68<LevvyDatum> Cip68NftPosition) : LevvyDatum;

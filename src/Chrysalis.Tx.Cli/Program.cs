@@ -14,6 +14,9 @@ using PlutusCredential = Chrysalis.Cbor.Types.Plutus.Address.Credential;
 using Chrysalis.Cbor.Serialization;
 using Chrysalis.Cbor.Types.Cardano.Core.Common;
 using Chrysalis.Tx.Cli.Templates.Models.Common;
+using Chrysalis.Tx.Cli.Utils;
+using Chrysalis.Cbor.Types.Plutus;
+using Chrysalis.Tx.Cli.Templates.Parameters.NftPosition;
 
 string words = "lock drive scheme smooth staff gym laptop identify client pigeon annual run below boat perfect resource april laundry upset potato sorry inhale planet hedgehog";
 
@@ -184,6 +187,7 @@ string protocolParamsAddress = "addr_test1wpr6c5g3nj3p22cq3m0q35lyzvf0ccgrajl228
 
 
 LevvyTemplates levvyTemplates = new(provider, tanAddress);
+LevvyNftTemplates levvyNftTemplates = new(provider, tanAddress);
 
 // LockProtocolParamsParameters lockParams = new(
 //     levvyParamsAddress,
@@ -202,7 +206,7 @@ LevvyTemplates levvyTemplates = new(provider, tanAddress);
 //         new Chrysalis.Cbor.Types.Plutus.Address.Address(new VerificationKey(tanMainAddress.GetPaymentKeyHash()!), new None<Inline<PlutusCredential>>()),
 //         new Signature(tanMainAddress.GetPaymentKeyHash()!),
 //         Convert.FromHexString(policyId),
-//         [],
+//         Convert.FromHexString("54657374"),
 //         [],
 //         []
 //     )
@@ -356,36 +360,56 @@ LevvyTemplates levvyTemplates = new(provider, tanAddress);
 // -------------------------------------------------//
 // CIP 68 Lend Sample Tx
 string mainValidatorAddress = "addr_test1wra8f56lfvx53trz3zk9e6n3728gqat945ycg53j7g5kvrc5qqfl0";
-Outref input = new(
+Outref inputOutRef = new(
     Convert.FromHexString("0fec1feedd84eb271d0d24bc5d4a5017b0ff7f58cccfb34f628029274bfa45f7"),
     2
 );
 
 var policyId = "fa74d35f4b0d48ac6288ac5cea71f28e807565ad09845232f229660f";
-var assetName = "";
+var userAssetName = "000de14000bcdfe181ec823b7fc0500b8440bd07f097e9939603497df23b5ea5";
+var referenceAssetName = "000643b000bcdfe181ec823b7fc0500b8440bd07f097e9939603497df23b5ea5";
 
+var principalDetails = new AssetDetails([], [], 5_000_000);
+var collateralDetails = new AssetDetails([], [], 5_000_000);
+var interestDetails = new AssetDetails([], [], 3_000_000);
 
-var principalDetails = new AssetDetails(
-    Convert.FromHexString("8b05e87a51c1d4a0fa888d2bb14dbc25e8c343ea379a171b63aa84a0"), 
-    Convert.FromHexString("434e4354"),
-    5000
+LevvyIdentifier lender = new NftPosition(new Subject(
+    Convert.FromHexString(policyId),
+    Convert.FromHexString(userAssetName)
+));
+
+LendDetails lendDetails = new(lender, principalDetails, collateralDetails, interestDetails, new PosixTime(0), new Token());
+
+Dictionary<PlutusData, PlutusData> metadata = new()
+{
+    {
+        new PlutusBoundedBytes(Convert.FromHexString("6e616d65")),
+        new PlutusBoundedBytes(Convert.FromHexString("54657374") )
+    },
+    {
+        new PlutusBoundedBytes(Convert.FromHexString("696d616765")),
+        new PlutusBoundedBytes(Convert.FromHexString(""))
+    }
+};
+
+Cip68<LevvyDatum> cip68Metadata = new(new PlutusMap(metadata), 1, new LendDatum(lendDetails));
+NftPositionDatum nftPositionDatum = new(cip68Metadata);
+LendMintParams lendMintParams = new(
+    NftPositionDatum: nftPositionDatum,
+    MintOutRef: new(
+        Convert.FromHexString("0fec1feedd84eb271d0d24bc5d4a5017b0ff7f58cccfb34f628029274bfa45f7"),
+        0
+    ),
+    ValidatorAddress: mainValidatorAddress,
+    MintPolicy: policyId,
+    UserAssetName: userAssetName,
+    ReferenceAssetName: referenceAssetName
 );
 
-var collateralDetails = new AssetDetails([], [], 5000000);
-var interestDetails = new AssetDetails(
-    Convert.FromHexString("8b05e87a51c1d4a0fa888d2bb14dbc25e8c343ea379a171b63aa84a0"), 
-    Convert.FromHexString("434e4354"),
-    3000
-);
-
-// LendDetails lendDetails = new(lender, principalDetails, collateralDetails, interestDetails, new PosixTime(0), new Token());
-// LendDatum lendDatum = new(lendDetails);
-// LendParams lendParams = new(lendDatum, mainValidatorAddress);
-
-// var multiSigLend = levvyTemplates.MultiSigLend();
-// Transaction lockUnsignedTx = await multiSigLend(lendParams);
-// Transaction lockSignedTx = lockUnsignedTx.Sign(privateKey);
-// Console.WriteLine(Convert.ToHexString(CborSerializer.Serialize(lockSignedTx)));
+var lendNftPosition = levvyNftTemplates.Lend();
+Transaction lockUnsignedTx = await lendNftPosition(lendMintParams);
+Transaction lockSignedTx = lockUnsignedTx.Sign(privateKey);
+Console.WriteLine(lockSignedTx.ToCborHex());
 // string lendTxHash = await provider.SubmitTransactionAsync(lockSignedTx);
 // Console.WriteLine($"Lend Params Tx Hash: {lendTxHash}");
 

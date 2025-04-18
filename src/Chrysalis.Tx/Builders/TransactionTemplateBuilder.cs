@@ -759,6 +759,14 @@ public class TransactionTemplateBuilder<T>
             {
                 context.Mints[mintOptions.Policy] = [];
             }
+            if (!string.IsNullOrEmpty(mintOptions.Id))
+            {
+                context.AssociationsByMintId[mintOptions.Id] = [];
+            }
+            if (mintOptions.RedeemerBuilder != null || mintOptions.Redeemer is not null)
+            {
+                context.IsSmartContractTx = true;
+            }
 
             foreach (var (assetName, amount) in mintOptions.Assets)
             {
@@ -996,6 +1004,7 @@ public class TransactionTemplateBuilder<T>
         public Dictionary<string, TransactionInput> InputsById { get; } = [];
         public Dictionary<string, TransactionInput> ReferenceInputsById { get; } = [];
         public Dictionary<string, Dictionary<string, int>> AssociationsByInputId { get; } = [];
+        public Dictionary<string, Dictionary<string, int>> AssociationsByMintId { get; } = [];
         public List<string> InputAddresses { get; } = [];
         public List<TransactionInput> SpecifiedInputs { get; } = [];
         public Dictionary<RedeemerKey, RedeemerValue> Redeemers { get; } = [];
