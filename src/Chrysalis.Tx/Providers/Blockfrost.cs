@@ -123,19 +123,48 @@ public class Blockfrost : ICardanoDataProvider
                     {
                         var policy = Convert.FromHexString(amount.Unit![..56]);
                         var assetName = Convert.FromHexString(amount.Unit![56..]);
-                        if (!assets.ContainsKey(policy))
+
+                        // Find matching policy using SequenceEqual
+                        var policyExists = false;
+                        foreach (var existingPolicy in assets.Keys.ToList())
+                        {
+                            if (existingPolicy.SequenceEqual(policy))
+                            {
+                                // Found matching policy, update asset
+                                policyExists = true;
+
+                                // Check if asset name exists
+                                var assetExists = false;
+                                foreach (var existingAssetName in assets[existingPolicy].Value.Keys.ToList())
+                                {
+                                    if (existingAssetName.SequenceEqual(assetName))
+                                    {
+                                        // Update existing asset
+                                        assets[existingPolicy].Value[existingAssetName] = ulong.Parse(amount.Quantity!);
+                                        assetExists = true;
+                                        break;
+                                    }
+                                }
+
+                                if (!assetExists)
+                                {
+                                    assets[existingPolicy].Value[assetName] = ulong.Parse(amount.Quantity!);
+                                }
+
+                                break;
+                            }
+                        }
+
+                        if (!policyExists)
                         {
                             assets[policy] = new TokenBundleOutput(new Dictionary<byte[], ulong>
                             {
                                 [assetName] = ulong.Parse(amount.Quantity!)
                             });
                         }
-                        else
-                        {
-                            assets[policy].Value[assetName] = ulong.Parse(amount.Quantity!);
-                        }
                     }
                 }
+
                 TransactionInput outref = new(Convert.FromHexString(utxo.TxHash!), (ulong)utxo.TxIndex!);
                 Lovelace CborLovelace = new(lovelace);
                 Value value = new Lovelace(lovelace);
@@ -163,7 +192,6 @@ public class Blockfrost : ICardanoDataProvider
                     // Address Utility is not yet implemented so hardcoded for now
                     new Address(outputAddress.ToBytes())
                     , value, datum, scriptRef);
-
 
                 results.Add(new ResolvedInput(outref, output));
             }

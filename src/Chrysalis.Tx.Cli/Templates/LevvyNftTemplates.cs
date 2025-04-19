@@ -24,7 +24,7 @@ public class LevvyNftTemplates
         templates = [];
         ChangeAddress = bech32ChangeAddress;
     }
-    
+
     public Func<LendMintParams, Task<Transaction>> Lend()
     {
         string mainValidatorAddress = "addr_test1wra8f56lfvx53trz3zk9e6n3728gqat945ycg53j7g5kvrc5qqfl0";
@@ -145,10 +145,13 @@ public class LevvyNftTemplates
         string cancelValidatorScriptRef = "4af67781d38bbbc481538810889bd97c5888d9a19aa7122d27e435204003f4d7";
         string cancelValidatorRewardAddress = "stake_test17zgvnetp806a7ff5v3cerwqk5pcwe7axax7uc424mpzm4ns004wv7";
 
+        string mintValidatorAddress = "addr_test1wrmdu7kq9kf3azpley0gx5cn6sjw7gdqs2az5zj9dnwu7dcde0xmg";
+        string mintValidatorScriptRef = "491f084536901de3dcae4e066a9f3ccbbb9fa3fa21786db5978202c4736b9b98";
+        string mintValidatorRewardAddress = "stake_test17rmdu7kq9kf3azpley0gx5cn6sjw7gdqs2az5zj9dnwu7dcd337vz";
         RedeemerDataBuilder<CancelMintParams, LevvyAction> cancelRedeemerBuilder1 = (mapping, parameters) =>
         {
             var (InputIndex, OutputIndexes) = mapping.GetInput("lockedUtxo1");
-            InputIndices inputIndices = new((int)InputIndex, new None<int>());
+            InputIndices inputIndices = new((int)InputIndex, new Some<int>(0));
             LevvyOutputIndices outputIndices = new((int)OutputIndexes["cancelOutput1"], new None<int>(), new None<int>(), new None<int>());
 
             ActionParams actionParams = new(inputIndices, new None<int>(), new None<int>(), outputIndices, new Token());
@@ -165,11 +168,16 @@ public class LevvyNftTemplates
 
         RedeemerDataBuilder<CancelMintParams, CborIndefList<Outref>> withdrawRedeemer = (mapping, parameters) =>
         {
-            Outref outref1 = new(Convert.FromHexString("06de79b9e917b4f075eeb15a911620ee037c46fe297de1da4176d6eef551d928"), 0);
-            CborIndefList<Outref> outrefs = new([outref1]);
+            Outref outref1 = new(Convert.FromHexString("839857a9581d171210cf369eed0ed8d81fc7e2007658324ba76eb054fe219afc"), 0);
+            Outref outref2 = new(Convert.FromHexString("839857a9581d171210cf369eed0ed8d81fc7e2007658324ba76eb054fe219afc"), 1);
+            Outref outref3 = new(Convert.FromHexString("839857a9581d171210cf369eed0ed8d81fc7e2007658324ba76eb054fe219afc"), 2);
+
+            CborIndefList<Outref> outrefs = new([outref1, outref2, outref3]);
 
             return outrefs;
         };
+
+        RedeemerDataBuilder<CancelMintParams, PolicyId> mintWithdrawRedeemer = (mapping, parameters) => new PolicyId(Convert.FromHexString(parameters.MintPolicy));
 
         Console.WriteLine(ChangeAddress);
         var cancel = TransactionTemplateBuilder<CancelMintParams>.Create(provider)
@@ -177,6 +185,8 @@ public class LevvyNftTemplates
             .AddStaticParty("mainValidator", mainValidatorAddress)
             .AddStaticParty("cancelValidator", cancelValidatorAddress)
             .AddStaticParty("cancelValidatorRewardAddress", cancelValidatorRewardAddress)
+            .AddStaticParty("mintValidator", mintValidatorAddress)
+            .AddStaticParty("mintValidatorRewardAddress", mintValidatorRewardAddress)
             .AddRequiredSigner("change")
             .AddReferenceInput((options, parameters) =>
             {
@@ -193,6 +203,14 @@ public class LevvyNftTemplates
                    Convert.FromHexString(cancelValidatorScriptRef), 0
                 );
                 options.Id = "cancelValidator";
+            })
+             .AddReferenceInput((options, parameters) =>
+            {
+                options.From = "mintValidator";
+                options.UtxoRef = new TransactionInput(
+                   Convert.FromHexString(mintValidatorScriptRef), 0
+                );
+                options.Id = "mintValidator";
             })
             .AddMint((options, parameters) =>
             {
@@ -227,6 +245,12 @@ public class LevvyNftTemplates
                 options.From = "cancelValidatorRewardAddress";
                 options.Amount = 0;
                 options.SetRedeemerFactory(withdrawRedeemer);
+            })
+            .AddWithdrawal((options, parameters) =>
+            {
+                options.From = "mintValidatorRewardAddress";
+                options.Amount = 0;
+                options.SetRedeemerFactory(mintWithdrawRedeemer);
             })
             .Build();
 
