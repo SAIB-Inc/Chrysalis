@@ -276,7 +276,7 @@ public class LevvyNftTemplates
         {
             var (InputIndex, OutputIndexes) = mapping.GetInput("lockedUtxo1");
             InputIndices inputIndices = new((int)InputIndex, new None<int>());
-            LevvyOutputIndices outputIndices = new((int)OutputIndexes["borrowOutput1"], new Some<int>((int)OutputIndexes["feeOutput"]), new None<int>(), new Some<int>((int)OutputIndexes["borrowOutput1"]));
+            LevvyOutputIndices outputIndices = new(0, new Some<int>((int)OutputIndexes["feeOutput"]), new None<int>(), new Some<int>((int)OutputIndexes["borrowOutput1"]));
             ActionParams actionParams = new(inputIndices, new Some<int>((int)mapping.GetReferenceInput("protocolParams")), new None<int>(), outputIndices, new Token());
 
             return new BorrowAction(actionParams);
@@ -294,7 +294,7 @@ public class LevvyNftTemplates
         {
             byte[] policyId = Convert.FromHexString(parameters.MintPolicy ?? string.Empty);
 
-            return new MintRedeemer(policyId, new Some<int>((int)mapping.GetReferenceInput("protocolParams")), new Some<MintOutputIndices>(new([1])));
+            return new MintRedeemer(policyId, new Some<int>((int)mapping.GetReferenceInput("protocolParams")), new None<MintOutputIndices>());
         };
 
         RedeemerDataBuilder<BorrowMintParams, PolicyId> mintWithdrawRedeemer = (mapping, parameters) => new PolicyId(Convert.FromHexString(parameters.MintPolicy));
@@ -366,7 +366,7 @@ public class LevvyNftTemplates
             {
                 options.To = "mainValidator";
                 options.Amount = new LovelaceWithMultiAsset(
-                    new Lovelace(2_000_000),
+                    new Lovelace(5_000_000),
                     new MultiAssetOutput(new Dictionary<byte[], TokenBundleOutput>
                     {
                         {
@@ -400,6 +400,23 @@ public class LevvyNftTemplates
                 options.AssociatedInputId = "lockedUtxo1";
                 options.Id = "borrowOutput1";
             })
+            // .AddOutput((options, parameters) =>
+            // {
+            //     options.To = "change";
+            //     options.Amount = new LovelaceWithMultiAsset(
+            //         new Lovelace(2_000_000),
+            //         new MultiAssetOutput(new Dictionary<byte[], TokenBundleOutput>
+            //         {
+            //             {
+            //                 Convert.FromHexString(parameters.MintPolicy),
+            //                 new TokenBundleOutput(new Dictionary<byte[], ulong>
+            //                 {
+            //                     { Convert.FromHexString(parameters.UserAssetName), 1 }
+            //                 })
+            //             }
+            //         })
+            //     );
+            // })
             .AddOutput((options, parameters) =>
             {
                 options.To = "change";
