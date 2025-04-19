@@ -13,5 +13,5 @@ public partial record MintRedeemer(
     Option<int> GlobalParamsRefIndex,
 
     [CborOrder(2)]
-    Option<IEnumerable<int>> MintOutputIndices
+    Option<MintOutputIndices> MintOutputIndices
 ) : CborBase;

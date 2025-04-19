@@ -50,6 +50,7 @@ public record OutputOptions
     public string? AssociatedInputId { get; set; }
     public string? Id { get; set; }
     public Script? Script { get; set; }
+    public bool IsMintOutput { get; set; }
     public TransactionOutput BuildOutput(Dictionary<string, string> parties, ulong adaPerUtxoByte)
     {
         Address address = new(WalletAddress.FromBech32(parties[To]).ToBytes());
@@ -83,7 +84,7 @@ public record OutputOptions
 public record MintOptions<T>
 {
     public string Policy { get; set; } = string.Empty;
-    public Dictionary<string, ulong> Assets { get; set; } = [];
+    public Dictionary<string, int> Assets { get; set; } = [];
     public RedeemerMap? Redeemer { get; set; }
     public Func<InputOutputMapping, T, Redeemer<CborBase>>? RedeemerBuilder { get; set; }
     public MintOptions<T> SetRedeemerBuilder<TData>(RedeemerDataBuilder<T, TData> factory)

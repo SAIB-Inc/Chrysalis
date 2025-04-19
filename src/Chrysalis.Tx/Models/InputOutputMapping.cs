@@ -18,6 +18,19 @@ public class InputOutputMapping
         }
     }
 
+    public void AddMint(string mintId, ulong mintIndex)
+    {
+        if (!_inputOutputMapping.ContainsKey(mintId))
+        {
+            _inputOutputMapping[mintId] = (mintIndex, new Dictionary<string, ulong>());
+        }
+        else
+        {
+            var (_, outputs) = _inputOutputMapping[mintId];
+            _inputOutputMapping[mintId] = (mintIndex, outputs);
+        }
+    }
+
     public void AddReferenceInput(string inputId, ulong inputIndex)
     {
         _referenceInputs[inputId] = inputIndex;

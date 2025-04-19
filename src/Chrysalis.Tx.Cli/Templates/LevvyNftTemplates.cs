@@ -7,6 +7,8 @@ using Chrysalis.Tx.Cli.Templates.Parameters;
 using Chrysalis.Tx.Models;
 using Chrysalis.Tx.Cli.Templates.Models;
 using Chrysalis.Tx.Cli.Templates.Parameters.NftPosition;
+using LevvyAction = Chrysalis.Tx.Cli.Templates.Models.Action;
+using LevvyOutputIndices = Chrysalis.Tx.Cli.Templates.Models.OutputIndices;
 
 namespace Chrysalis.Tx.Cli.Templates;
 
@@ -26,31 +28,31 @@ public class LevvyNftTemplates
     public Func<LendMintParams, Task<Transaction>> Lend()
     {
         string mainValidatorAddress = "addr_test1wra8f56lfvx53trz3zk9e6n3728gqat945ycg53j7g5kvrc5qqfl0";
+        string mainValidatorScriptRef = "5d84910a2e0ece53b64fe2bf0f0d3cdc8f32993d3a5b3fee7c15a8e237fc9e16";
 
         string mintValidatorAddress = "addr_test1wrmdu7kq9kf3azpley0gx5cn6sjw7gdqs2az5zj9dnwu7dcde0xmg";
         string mintValidatorScriptRef = "491f084536901de3dcae4e066a9f3ccbbb9fa3fa21786db5978202c4736b9b98";
 
         string protocolParamsAddress = "addr_test1wr00dqehse7tfu0etd4cz8ldhlxaw7qdzz54esrjqacg36sp45dt3";
 
+        string withdrawalAddress = "stake_test17rmdu7kq9kf3azpley0gx5cn6sjw7gdqs2az5zj9dnwu7dcd337vz";
+
         RedeemerDataBuilder<LendMintParams, MintRedeemer> mintRedeemerBuilder = (mapping, parameters) =>
         {
             byte[] policyId = Convert.FromHexString(parameters.MintPolicy ?? string.Empty);
             var mappings = mapping.GetMappings();
-            var output_indexes = mappings
-                .SelectMany(e => e.Value.OutputIndexes)
-                .ToDictionary();
-            int mintOutputIndex1 = (int)output_indexes["mintOutput1"];
-            int mintOutputIndex2 = (int)output_indexes["mintOutput2"];
 
-            return new MintRedeemer(policyId, new Some<int>((int)mapping.GetReferenceInput("protocolParams")), new Some<IEnumerable<int>>([mintOutputIndex1, mintOutputIndex2]));
+            return new MintRedeemer(policyId, new Some<int>((int)mapping.GetReferenceInput("protocolParams")), new Some<MintOutputIndices>(new([0])));
         };
+
+        RedeemerDataBuilder<LendMintParams, PolicyId> withdrawRedeemer = (mapping, parameters) => new PolicyId(Convert.FromHexString(parameters.MintPolicy));
 
         var multiSigLend = TransactionTemplateBuilder<LendMintParams>.Create(provider)
             .AddStaticParty("change", ChangeAddress, true)
             .AddStaticParty("mainValidator", mainValidatorAddress)
             .AddStaticParty("mintValidator", mintValidatorAddress)
             .AddStaticParty("protocolParams", protocolParamsAddress)
-            .AddRequiredSigner("mintValidator")
+            .AddStaticParty("withdrawal", withdrawalAddress)
             .AddReferenceInput((options, parameters) =>
             {
                 options.From = "protocolParams";
@@ -68,22 +70,27 @@ public class LevvyNftTemplates
                     0
                 );
             })
+            .AddReferenceInput((options, parameters) =>
+            {
+                options.From = "mainValidator";
+                options.UtxoRef = new(
+                    Convert.FromHexString(mainValidatorScriptRef),
+                    0
+                );
+            })
             .AddInput((options, parameters) =>
             {
                 options.From = "change";
-                options.UtxoRef = parameters.MintOutRef;
-                options.Id = "mint";
             })
             .AddMint((options, parameters) =>
             {
                 options.Policy = parameters.MintPolicy ?? string.Empty;
-                options.Assets = new Dictionary<string, ulong>
+                options.Assets = new Dictionary<string, int>
                 {
                     { parameters.UserAssetName ?? string.Empty, 1 },
                     { parameters.ReferenceAssetName ?? string.Empty, 1 }
                 };
                 options.SetRedeemerBuilder(mintRedeemerBuilder);
-                options.Id = "mint";
             })
             .AddOutput((options, parameters) =>
             {
@@ -101,8 +108,6 @@ public class LevvyNftTemplates
                     )
                 );
                 options.Datum = new InlineDatumOption(1, new CborEncodedValue(CborSerializer.Serialize(CborSerializer.Deserialize<PlutusData>(CborSerializer.Serialize(parameters.NftPositionDatum)))));
-                options.Id = "mintOutput1";
-                options.AssociatedInputId = "mint";
             })
             .AddOutput((options, parameters) =>
             {
@@ -119,11 +124,112 @@ public class LevvyNftTemplates
                         }}
                     )
                 );
-                options.Id = "mintOutput2";
-                options.AssociatedInputId = "mint";
+            })
+            .AddWithdrawal((options, parameters) =>
+            {
+                options.From = "withdrawal";
+                options.Amount = 0;
+                options.SetRedeemerFactory(withdrawRedeemer);
             })
             .Build();
 
         return multiSigLend;
+    }
+
+    public Func<CancelMintParams, Task<Transaction>> Cancel()
+    {
+        string mainValidatorAddress = "addr_test1wra8f56lfvx53trz3zk9e6n3728gqat945ycg53j7g5kvrc5qqfl0";
+        string mainValidatorScriptRef = "5d84910a2e0ece53b64fe2bf0f0d3cdc8f32993d3a5b3fee7c15a8e237fc9e16";
+
+        string cancelValidatorAddress = "addr_test1wzgvnetp806a7ff5v3cerwqk5pcwe7axax7uc424mpzm4ns08tkm5";
+        string cancelValidatorScriptRef = "4af67781d38bbbc481538810889bd97c5888d9a19aa7122d27e435204003f4d7";
+        string cancelValidatorRewardAddress = "stake_test17zgvnetp806a7ff5v3cerwqk5pcwe7axax7uc424mpzm4ns004wv7";
+
+        RedeemerDataBuilder<CancelMintParams, LevvyAction> cancelRedeemerBuilder1 = (mapping, parameters) =>
+        {
+            var (InputIndex, OutputIndexes) = mapping.GetInput("lockedUtxo1");
+            InputIndices inputIndices = new((int)InputIndex, new None<int>());
+            LevvyOutputIndices outputIndices = new((int)OutputIndexes["cancelOutput1"], new None<int>(), new None<int>(), new None<int>());
+
+            ActionParams actionParams = new(inputIndices, new None<int>(), new None<int>(), outputIndices, new Token());
+
+            return new CancelAction(actionParams);
+        };
+
+        RedeemerDataBuilder<CancelMintParams, MintRedeemer> mintRedeemerBuilder = (mapping, parameters) =>
+        {
+            byte[] policyId = Convert.FromHexString(parameters.MintPolicy ?? string.Empty);
+
+            return new MintRedeemer(policyId, new None<int>(), new None<MintOutputIndices>());
+        };
+
+        RedeemerDataBuilder<CancelMintParams, CborIndefList<Outref>> withdrawRedeemer = (mapping, parameters) =>
+        {
+            Outref outref1 = new(Convert.FromHexString("06de79b9e917b4f075eeb15a911620ee037c46fe297de1da4176d6eef551d928"), 0);
+            CborIndefList<Outref> outrefs = new([outref1]);
+
+            return outrefs;
+        };
+
+        Console.WriteLine(ChangeAddress);
+        var cancel = TransactionTemplateBuilder<CancelMintParams>.Create(provider)
+            .AddStaticParty("change", ChangeAddress, true)
+            .AddStaticParty("mainValidator", mainValidatorAddress)
+            .AddStaticParty("cancelValidator", cancelValidatorAddress)
+            .AddStaticParty("cancelValidatorRewardAddress", cancelValidatorRewardAddress)
+            .AddRequiredSigner("change")
+            .AddReferenceInput((options, parameters) =>
+            {
+                options.From = "mainValidator";
+                options.UtxoRef = new TransactionInput(
+                   Convert.FromHexString(mainValidatorScriptRef), 0
+                );
+                options.Id = "mainValidator";
+            })
+            .AddReferenceInput((options, parameters) =>
+            {
+                options.From = "cancelValidator";
+                options.UtxoRef = new TransactionInput(
+                   Convert.FromHexString(cancelValidatorScriptRef), 0
+                );
+                options.Id = "cancelValidator";
+            })
+            .AddMint((options, parameters) =>
+            {
+                options.Policy = parameters.MintPolicy ?? string.Empty;
+                options.Assets = new Dictionary<string, int>
+                {
+                    { parameters.UserAssetName ?? string.Empty, -1 },
+                    { parameters.ReferenceAssetName ?? string.Empty, -1 }
+                };
+                options.SetRedeemerBuilder(mintRedeemerBuilder);
+            })
+            .AddInput((options, parameters) =>
+            {
+                options.From = "change";
+            })
+            .AddInput((options, parameters) =>
+            {
+                options.From = "mainValidator";
+                options.UtxoRef = parameters.lockedUtxos[0];
+                options.Id = "lockedUtxo1";
+                options.SetRedeemerBuilder(cancelRedeemerBuilder1);
+            })
+            .AddOutput((options, parameters) =>
+            {
+                options.To = "change";
+                options.Amount = parameters.principalAmount;
+                options.AssociatedInputId = "lockedUtxo1";
+                options.Id = "cancelOutput1";
+            })
+            .AddWithdrawal((options, parameters) =>
+            {
+                options.From = "cancelValidatorRewardAddress";
+                options.Amount = 0;
+                options.SetRedeemerFactory(withdrawRedeemer);
+            })
+            .Build();
+
+        return cancel;
     }
 }

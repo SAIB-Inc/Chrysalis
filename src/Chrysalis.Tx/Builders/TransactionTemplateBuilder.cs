@@ -473,19 +473,19 @@ public class TransactionTemplateBuilder<T>
             selection.LovelaceChange += excessLovelace;
         }
 
-        foreach (var mintAsset in mintedAssets.Where(a => a.Value > 0))
-        {
-            if (!requestedAssets.ContainsKey(mintAsset.Key))
-            {
-                string policyId = mintAsset.Key[..56];
-                string assetName = mintAsset.Key[56..];
+        // foreach (var mintAsset in mintedAssets.Where(a => a.Value > 0))
+        // {
+        //     if (!requestedAssets.ContainsKey(mintAsset.Key))
+        //     {
+        //         string policyId = mintAsset.Key[..56];
+        //         string assetName = mintAsset.Key[56..];
 
-                byte[] policyIdBytes = Convert.FromHexString(policyId);
-                byte[] assetNameBytes = Convert.FromHexString(assetName);
+        //         byte[] policyIdBytes = Convert.FromHexString(policyId);
+        //         byte[] assetNameBytes = Convert.FromHexString(assetName);
 
-                AddAssetToChange(selection.AssetsChange, policyIdBytes, assetNameBytes, (ulong)mintAsset.Value);
-            }
-        }
+        //         AddAssetToChange(selection.AssetsChange, policyIdBytes, assetNameBytes, (ulong)mintAsset.Value);
+        //     }
+        // }
 
         foreach (var inputAsset in originalSpecifiedInputsAssets)
         {
@@ -787,9 +787,20 @@ public class TransactionTemplateBuilder<T>
             var outputOptions = new OutputOptions { To = "", Amount = null, Datum = null };
             config(outputOptions, param);
 
-            if (!string.IsNullOrEmpty(outputOptions.AssociatedInputId) &&
+            if (outputOptions.IsMintOutput && 
+                !string.IsNullOrEmpty(outputOptions.AssociatedInputId) &&
                 !string.IsNullOrEmpty(outputOptions.Id) &&
-                context.AssociationsByInputId.TryGetValue(outputOptions.AssociatedInputId, out var associations))
+                context.AssociationsByMintId.TryGetValue(outputOptions.AssociatedInputId, out var mintAssociations)
+            )
+            {
+                mintAssociations[outputOptions.AssociatedInputId] = outputIndex;
+            }
+
+            else if (!outputOptions.IsMintOutput &&
+                !string.IsNullOrEmpty(outputOptions.AssociatedInputId) &&
+                !string.IsNullOrEmpty(outputOptions.Id) &&
+                context.AssociationsByInputId.TryGetValue(outputOptions.AssociatedInputId, out var associations)
+            )
             {
                 associations[outputOptions.Id] = outputIndex;
             }
