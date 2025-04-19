@@ -403,23 +403,6 @@ public class LevvyNftTemplates
             .AddOutput((options, parameters) =>
             {
                 options.To = "change";
-                options.Amount = new LovelaceWithMultiAsset(
-                    new Lovelace(2_000_000),
-                    new MultiAssetOutput(new Dictionary<byte[], TokenBundleOutput>
-                    {
-                        {
-                            Convert.FromHexString(parameters.MintPolicy),
-                            new TokenBundleOutput(new Dictionary<byte[], ulong>
-                            {
-                                { Convert.FromHexString(parameters.UserAssetName), 1 }
-                            })
-                        }
-                    })
-                );
-            })
-            .AddOutput((options, parameters) =>
-            {
-                options.To = "change";
                 options.Amount = new Lovelace(2_000_000);
                 options.AssociatedInputId = "lockedUtxo1";
                 options.Id = "feeOutput";

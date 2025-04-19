@@ -120,7 +120,7 @@ public class TransactionTemplateBuilder<T>
             ProcessOutputs(param, context, parties, requiredAmount, ref changeIndex);
 
             List<ResolvedInput> utxos = await _provider!.GetUtxosAsync([parties[_changeAddress]]);
-           
+
             var allUtxos = new List<ResolvedInput>(utxos);
             foreach (string address in context.InputAddresses.Distinct())
             {
@@ -142,7 +142,6 @@ public class TransactionTemplateBuilder<T>
             ResolvedInput? collateralInput = SelectCollateralInput(utxos, context.IsSmartContractTx);
             if (collateralInput is not null)
             {
-                Console.WriteLine("here!!!");
                 utxos.Remove(collateralInput);
                 context.TxBuilder.AddCollateral(collateralInput.Outref);
                 context.TxBuilder.SetCollateralReturn(collateralInput.Output);
@@ -335,7 +334,7 @@ public class TransactionTemplateBuilder<T>
             if (_validTo > 0)
                 context.TxBuilder.SetTtl(_validTo);
 
-            return context.TxBuilder.CalculateFee(script).Build();
+            return context.TxBuilder.CalculateFee(script, 5).Build();
         }
             ;
     }
@@ -349,14 +348,15 @@ public class TransactionTemplateBuilder<T>
     }
 
     private CoinSelectionResult PerformCoinSelection(
-    List<ResolvedInput> utxos,
-    List<Value> requiredAmount,
-    List<ResolvedInput> specifiedInputsUtxos,
-    BuildContext context
-)
+        List<ResolvedInput> utxos,
+        List<Value> requiredAmount,
+        List<ResolvedInput> specifiedInputsUtxos,
+        BuildContext context
+    )
     {
         ulong requestedLovelace = 0;
         Dictionary<string, decimal> requestedAssets = [];
+
         foreach (var amount in requiredAmount)
         {
             requestedLovelace += amount.Lovelace();
@@ -368,6 +368,7 @@ public class TransactionTemplateBuilder<T>
         }
 
         ulong originalRequestedLovelace = requestedLovelace;
+        Dictionary<string, decimal> originalRequestedAssets = new(requestedAssets);
 
         ulong specifiedInputsLovelace = 0;
         Dictionary<string, decimal> specifiedInputsAssets = [];
@@ -384,10 +385,7 @@ public class TransactionTemplateBuilder<T>
 
         Dictionary<string, decimal> originalSpecifiedInputsAssets = new(specifiedInputsAssets);
 
-        requestedLovelace = requestedLovelace > specifiedInputsLovelace ? requestedLovelace - specifiedInputsLovelace : 0;
-
         Dictionary<string, decimal> mintedAssets = [];
-
         foreach (var policy in context.Mints)
         {
             foreach (var asset in policy.Value)
@@ -404,31 +402,10 @@ public class TransactionTemplateBuilder<T>
             }
         }
 
-        foreach (var asset in mintedAssets)
-        {
-            if (asset.Value > 0)
-            {
-                if (requestedAssets.ContainsKey(asset.Key))
-                {
-                    requestedAssets[asset.Key] -= asset.Value;
-                    if (requestedAssets[asset.Key] <= 0)
-                    {
-                        requestedAssets.Remove(asset.Key);
-                    }
-                }
-            }
-            else
-            {
-                if (!requestedAssets.ContainsKey(asset.Key))
-                {
-                    requestedAssets[asset.Key] = Math.Abs(asset.Value);
-                }
-                else
-                {
-                    requestedAssets[asset.Key] += Math.Abs(asset.Value);
-                }
-            }
-        }
+        Dictionary<string, decimal> originalMintedAssets = new(mintedAssets);
+
+
+        requestedLovelace = requestedLovelace > specifiedInputsLovelace ? requestedLovelace - specifiedInputsLovelace : 0;
 
         foreach (var asset in specifiedInputsAssets)
         {
@@ -442,6 +419,31 @@ public class TransactionTemplateBuilder<T>
             }
         }
 
+        foreach (var asset in mintedAssets)
+        {
+            if (asset.Value > 0) 
+            {
+                if (requestedAssets.ContainsKey(asset.Key))
+                {
+                    requestedAssets[asset.Key] -= asset.Value;
+                    if (requestedAssets[asset.Key] <= 0)
+                    {
+                        requestedAssets.Remove(asset.Key);
+                    }
+                }
+            }
+            else 
+            {
+                if (!requestedAssets.ContainsKey(asset.Key))
+                {
+                    requestedAssets[asset.Key] = Math.Abs(asset.Value);
+                }
+                else
+                {
+                    requestedAssets[asset.Key] += Math.Abs(asset.Value);
+                }
+            }
+        }
 
         List<Value> updatedRequiredAmounts = [];
         Lovelace updatedRequestedLovelace = new(requestedLovelace);
@@ -476,6 +478,7 @@ public class TransactionTemplateBuilder<T>
             var lovelaceWithAssets = new LovelaceWithMultiAsset(updatedRequestedLovelace, multiAssetOutput);
             updatedRequiredAmounts.Add(lovelaceWithAssets);
         }
+
         CoinSelectionResult selection = CoinSelectionUtil.LargestFirstAlgorithm(
             utxos,
             updatedRequiredAmounts
@@ -484,54 +487,91 @@ public class TransactionTemplateBuilder<T>
         if (specifiedInputsLovelace > originalRequestedLovelace)
         {
             ulong excessLovelace = specifiedInputsLovelace - originalRequestedLovelace;
-
             selection.LovelaceChange += excessLovelace;
         }
 
-        foreach (var inputAsset in originalSpecifiedInputsAssets)
+  
+        foreach (var assetEntry in originalSpecifiedInputsAssets)
         {
-            if (!requestedAssets.ContainsKey(inputAsset.Key))
+            string assetKey = assetEntry.Key;
+            decimal amount = assetEntry.Value;
+            bool consumedByOutput = originalRequestedAssets.ContainsKey(assetKey);
+            bool mintRelated = mintedAssets.ContainsKey(assetKey);
+
+            if (consumedByOutput)
             {
-                string policyId = inputAsset.Key[..56];
-                string assetName = inputAsset.Key[56..];
+      
+                if (originalRequestedAssets[assetKey] < amount)
+                {
+                    decimal changeAmount = amount - originalRequestedAssets[assetKey];
 
-                byte[] policyIdBytes = Convert.FromHexString(policyId);
-                byte[] assetNameBytes = Convert.FromHexString(assetName);
+                    string policyId = assetKey[..56];
+                    string assetName = assetKey[56..];
+                    byte[] policyIdBytes = Convert.FromHexString(policyId);
+                    byte[] assetNameBytes = Convert.FromHexString(assetName);
 
-                if (mintedAssets.ContainsKey(inputAsset.Key) && mintedAssets[inputAsset.Key] > 0)
+                    AddAssetToChange(selection.AssetsChange, policyIdBytes, assetNameBytes, (int)changeAmount);
+                }
+            }
+            else if (mintRelated)
+            {
+                if (mintedAssets[assetKey] < 0)
                 {
                     continue;
                 }
-                AddAssetToChange(selection.AssetsChange, policyIdBytes, assetNameBytes, (int)inputAsset.Value);
-            }
-        }
 
-        foreach (var mintAsset in mintedAssets)
-        {
-            if (!requestedAssets.ContainsKey(mintAsset.Key))
-            {
-                string policyId = mintAsset.Key[..56];
-                string assetName = mintAsset.Key[56..];
-
+                string policyId = assetKey[..56];
+                string assetName = assetKey[56..];
                 byte[] policyIdBytes = Convert.FromHexString(policyId);
                 byte[] assetNameBytes = Convert.FromHexString(assetName);
 
-                AddAssetToChange(selection.AssetsChange, policyIdBytes, assetNameBytes, (int)mintAsset.Value);
+                AddAssetToChange(selection.AssetsChange, policyIdBytes, assetNameBytes, (int)amount);
+            }
+            else
+            {
+                string policyId = assetKey[..56];
+                string assetName = assetKey[56..];
+                byte[] policyIdBytes = Convert.FromHexString(policyId);
+                byte[] assetNameBytes = Convert.FromHexString(assetName);
+
+                AddAssetToChange(selection.AssetsChange, policyIdBytes, assetNameBytes, (int)amount);
             }
         }
 
-        foreach (var token in selection.AssetsChange)
+        foreach (var assetEntry in mintedAssets)
+        {
+            string assetKey = assetEntry.Key;
+            decimal amount = assetEntry.Value;
+
+            if (amount <= 0)
+                continue;
+
+            decimal requiredExcessAmount = originalRequestedAssets.ContainsKey(assetKey) ?
+                originalRequestedAssets[assetKey] : 0;
+
+            decimal excessAmount = amount - requiredExcessAmount;
+
+            if (excessAmount > 0)
+            {
+                string policyId = assetKey[..56];
+                string assetName = assetKey[56..];
+                byte[] policyIdBytes = Convert.FromHexString(policyId);
+                byte[] assetNameBytes = Convert.FromHexString(assetName);
+
+                AddAssetToChange(selection.AssetsChange, policyIdBytes, assetNameBytes, (int)excessAmount);
+            }
+        }
+
+        foreach (var token in selection.AssetsChange.ToList())
         {
             if (token.Value.Value.Count == 0)
             {
                 selection.AssetsChange.Remove(token.Key);
             }
-
         }
 
         return selection;
     }
-
     private static void ExtractAssets(
         MultiAssetOutput multiAsset,
         Dictionary<string, decimal> assetDict)
