@@ -358,16 +358,11 @@ LevvyNftTemplates levvyNftTemplates = new(provider, tanAddress);
 
 
 // -------------------------------------------------//
-// CIP 68 Lend Sample Tx
+// Lend Nft Position Sample Tx
 // string mainValidatorAddress = "addr_test1wra8f56lfvx53trz3zk9e6n3728gqat945ycg53j7g5kvrc5qqfl0";
-// Outref inputOutRef = new(
-//     Convert.FromHexString("0fec1feedd84eb271d0d24bc5d4a5017b0ff7f58cccfb34f628029274bfa45f7"),
-//     0
-// );
-
 // var policyId = "fa74d35f4b0d48ac6288ac5cea71f28e807565ad09845232f229660f";
-// var userAssetName = "000de140008b79d23db47ceea50f8ca851b9c94f26cedb1ba33b0a030199e8b1";
-// var referenceAssetName = "000643b0008b79d23db47ceea50f8ca851b9c94f26cedb1ba33b0a030199e8b1";
+// var userAssetName = "000DE1400067A2D9BD20033FB935C2839FE1C7F6BEFACCDAB98F3D645B8FE262".ToLowerInvariant();
+// var referenceAssetName = "000643B00067A2D9BD20033FB935C2839FE1C7F6BEFACCDAB98F3D645B8FE262".ToLowerInvariant();
 
 // var principalDetails = new AssetDetails([], [], 5_000_000);
 // var collateralDetails = new AssetDetails([], [], 5_000_000);
@@ -396,10 +391,7 @@ LevvyNftTemplates levvyNftTemplates = new(provider, tanAddress);
 // NftPositionDatum nftPositionDatum = new(cip68Metadata);
 // LendMintParams lendMintParams = new(
 //     NftPositionDatum: nftPositionDatum,
-//     MintOutRef: new(
-//         Convert.FromHexString("0fec1feedd84eb271d0d24bc5d4a5017b0ff7f58cccfb34f628029274bfa45f7"),
-//         0
-//     ),
+//     PrincipalDetails: principalDetails,
 //     ValidatorAddress: mainValidatorAddress,
 //     MintPolicy: policyId,
 //     UserAssetName: userAssetName,
@@ -414,25 +406,93 @@ LevvyNftTemplates levvyNftTemplates = new(provider, tanAddress);
 // Console.WriteLine($"Sample Lend Tx Hash: {lendTxHash}");
 
 // -------------------------------------------------//
-var cancel = levvyNftTemplates.Cancel();
-TransactionInput cancelLockedUtxo1 = new(Convert.FromHexString("839857a9581d171210cf369eed0ed8d81fc7e2007658324ba76eb054fe219afc"), 0);
+// // Cancel Lend Nft Position Sample Tx
+// var cancel = levvyNftTemplates.Cancel();
+// TransactionInput cancelLockedUtxo1 = new(Convert.FromHexString("839857a9581d171210cf369eed0ed8d81fc7e2007658324ba76eb054fe219afc"), 0);
 
-string mintPolicy = "fa74d35f4b0d48ac6288ac5cea71f28e807565ad09845232f229660f";
-string referenceAssetName = "000643b0008b79d23db47ceea50f8ca851b9c94f26cedb1ba33b0a030199e8b1";
-string userAssetName = "000de140008b79d23db47ceea50f8ca851b9c94f26cedb1ba33b0a030199e8b1";
+// string mintPolicy = "fa74d35f4b0d48ac6288ac5cea71f28e807565ad09845232f229660f";
+// string referenceAssetName = "000643b0008b79d23db47ceea50f8ca851b9c94f26cedb1ba33b0a030199e8b1";
+// string userAssetName = "000de140008b79d23db47ceea50f8ca851b9c94f26cedb1ba33b0a030199e8b1";
 
-Value principalAmount = new Lovelace(2_000_000);
+// Value principalAmount = new Lovelace(2_000_000);
 
-CancelMintParams cancelMintParams = new(
-    [cancelLockedUtxo1],
-    principalAmount,
-    mintPolicy,
-    referenceAssetName,
-    userAssetName
+// CancelMintParams cancelMintParams = new(
+//     [cancelLockedUtxo1],
+//     principalAmount,
+//     mintPolicy,
+//     referenceAssetName,
+//     userAssetName
+// );
+
+// Transaction cancelUnsignedTx = await cancel(cancelMintParams);
+// Transaction cancelSignedTx = cancelUnsignedTx.Sign(privateKey);
+// Console.WriteLine(Convert.ToHexString(CborSerializer.Serialize(cancelSignedTx)));
+// string cancelTxHash = await provider.SubmitTransactionAsync(cancelSignedTx);
+// Console.WriteLine($"Cancel Tx Hash: {cancelTxHash}");
+// -------------------------------------------------//
+// Borrow Lend Nft Position Sample Tx
+var policyId = "fa74d35f4b0d48ac6288ac5cea71f28e807565ad09845232f229660f";
+var lockedUserAssetName = "000DE1400067A2D9BD20033FB935C2839FE1C7F6BEFACCDAB98F3D645B8FE262".ToLowerInvariant();
+var lockedReferenceAssetName = "000643B00067A2D9BD20033FB935C2839FE1C7F6BEFACCDAB98F3D645B8FE262".ToLowerInvariant();
+
+var userAssetName = "000DE140002DA58A063A84F5D6CE1B9B5148EBBCCF54EFCC1B4FE157FBABFFB6".ToLowerInvariant();
+var referenceAssetName = "000643B0002DA58A063A84F5D6CE1B9B5148EBBCCF54EFCC1B4FE157FBABFFB6".ToLowerInvariant();
+
+LevvyIdentifier lender = new NftPosition(new Subject(
+    Convert.FromHexString(policyId),
+    Convert.FromHexString(lockedUserAssetName)
+));
+LevvyIdentifier borrower = new NftPosition(new Subject(
+    Convert.FromHexString(policyId),
+    Convert.FromHexString(userAssetName)
+));
+
+var principalDetails = new AssetDetails([], [], 5000000);
+var collateralDetails = new AssetDetails([], [], 5000000);
+var interestDetails = new AssetDetails([], [], 3000000);
+
+BorrowDetails borrowDetails = new(
+    lender,
+    borrower,
+    principalDetails,
+    collateralDetails,
+    interestDetails,
+    new PosixTime(0),
+    new Token(),
+    Convert.FromHexString("2DA58A063A84F5D6CE1B9B5148EBBCCF54EFCC1B4FE157FBABFFB6F59A5ECFF6")
 );
 
-Transaction cancelUnsignedTx = await cancel(cancelMintParams);
-Transaction cancelSignedTx = cancelUnsignedTx.Sign(privateKey);
-Console.WriteLine(Convert.ToHexString(CborSerializer.Serialize(cancelSignedTx)));
-string cancelTxHash = await provider.SubmitTransactionAsync(cancelSignedTx);
-Console.WriteLine($"Cancel Tx Hash: {cancelTxHash}");
+Dictionary<PlutusData, PlutusData> metadata = new()
+{
+    {
+        new PlutusBoundedBytes(Convert.FromHexString("6e616d65")),
+        new PlutusBoundedBytes(Convert.FromHexString("54657374") )
+    },
+    {
+        new PlutusBoundedBytes(Convert.FromHexString("696d616765")),
+        new PlutusBoundedBytes(Convert.FromHexString(""))
+    }
+};
+
+Cip68<LevvyDatum> cip68Metadata = new(new PlutusMap(metadata), 1, new BorrowDatum(borrowDetails));
+NftPositionDatum nftPositionDatum = new(cip68Metadata);
+
+TransactionInput borrowLockedUtxo1 = new(Convert.FromHexString("591b38da8316a9f2f331f7ef37c510f8baedf09b37a03b1ccad751897d1e6199"), 0);
+
+BorrowMintParams borrowMintParams = new(
+    LockedUtxos: [borrowLockedUtxo1],
+    NftPositionDatum: nftPositionDatum,
+    PrincipalDetails: principalDetails,
+    CollateralDetails: collateralDetails,
+    LockedReferenceAssetName: lockedReferenceAssetName,
+    MintPolicy: policyId,
+    ReferenceAssetName: referenceAssetName,
+    UserAssetName: userAssetName
+);
+
+var borrow = levvyNftTemplates.Borrow();
+Transaction unsignedTx = await borrow(borrowMintParams);
+Transaction signedTx = unsignedTx.Sign(privateKey);
+Console.WriteLine(signedTx.ToCborHex());
+string borrowTxHash = await provider.SubmitTransactionAsync(signedTx);
+Console.WriteLine($"Transaction Id: {borrowTxHash}");
