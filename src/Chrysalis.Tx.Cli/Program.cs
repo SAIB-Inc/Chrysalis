@@ -431,35 +431,166 @@ LevvyNftTemplates levvyNftTemplates = new(provider, tanAddress);
 // Console.WriteLine($"Cancel Tx Hash: {cancelTxHash}");
 // -------------------------------------------------//
 // Borrow Lend Nft Position Sample Tx
-var policyId = "fa74d35f4b0d48ac6288ac5cea71f28e807565ad09845232f229660f";
-var lockedUserAssetName = "000DE1400067A2D9BD20033FB935C2839FE1C7F6BEFACCDAB98F3D645B8FE262".ToLowerInvariant();
-var lockedReferenceAssetName = "000643B00067A2D9BD20033FB935C2839FE1C7F6BEFACCDAB98F3D645B8FE262".ToLowerInvariant();
+// var policyId = "fa74d35f4b0d48ac6288ac5cea71f28e807565ad09845232f229660f";
+// var lockedUserAssetName = "000DE1400067A2D9BD20033FB935C2839FE1C7F6BEFACCDAB98F3D645B8FE262".ToLowerInvariant();
+// var lockedReferenceAssetName = "000643B00067A2D9BD20033FB935C2839FE1C7F6BEFACCDAB98F3D645B8FE262".ToLowerInvariant();
 
-var userAssetName = "000DE140002DA58A063A84F5D6CE1B9B5148EBBCCF54EFCC1B4FE157FBABFFB6".ToLowerInvariant();
-var referenceAssetName = "000643B0002DA58A063A84F5D6CE1B9B5148EBBCCF54EFCC1B4FE157FBABFFB6".ToLowerInvariant();
+// var userAssetName = "000DE140002DA58A063A84F5D6CE1B9B5148EBBCCF54EFCC1B4FE157FBABFFB6".ToLowerInvariant();
+// var referenceAssetName = "000643B0002DA58A063A84F5D6CE1B9B5148EBBCCF54EFCC1B4FE157FBABFFB6".ToLowerInvariant();
+
+// LevvyIdentifier lender = new NftPosition(new Subject(
+//     Convert.FromHexString(policyId),
+//     Convert.FromHexString(lockedUserAssetName)
+// ));
+// LevvyIdentifier borrower = new NftPosition(new Subject(
+//     Convert.FromHexString(policyId),
+//     Convert.FromHexString(userAssetName)
+// ));
+
+// var principalDetails = new AssetDetails([], [], 5000000);
+// var collateralDetails = new AssetDetails([], [], 5000000);
+// var interestDetails = new AssetDetails([], [], 3000000);
+
+// BorrowDetails borrowDetails = new(
+//     lender,
+//     borrower,
+//     principalDetails,
+//     collateralDetails,
+//     interestDetails,
+//     new PosixTime(0),
+//     new Token(),
+//     Convert.FromHexString("2DA58A063A84F5D6CE1B9B5148EBBCCF54EFCC1B4FE157FBABFFB6F59A5ECFF6")
+// );
+
+// Dictionary<PlutusData, PlutusData> metadata = new()
+// {
+//     {
+//         new PlutusBoundedBytes(Convert.FromHexString("6e616d65")),
+//         new PlutusBoundedBytes(Convert.FromHexString("54657374") )
+//     },
+//     {
+//         new PlutusBoundedBytes(Convert.FromHexString("696d616765")),
+//         new PlutusBoundedBytes(Convert.FromHexString(""))
+//     }
+// };
+
+// Cip68<LevvyDatum> cip68Metadata = new(new PlutusMap(metadata), 1, new BorrowDatum(borrowDetails));
+// NftPositionDatum nftPositionDatum = new(cip68Metadata);
+
+// TransactionInput borrowLockedUtxo1 = new(Convert.FromHexString("591b38da8316a9f2f331f7ef37c510f8baedf09b37a03b1ccad751897d1e6199"), 0);
+
+// BorrowMintParams borrowMintParams = new(
+//     LockedUtxos: [borrowLockedUtxo1],
+//     NftPositionDatum: nftPositionDatum,
+//     PrincipalDetails: principalDetails,
+//     CollateralDetails: collateralDetails,
+//     LockedReferenceAssetName: lockedReferenceAssetName,
+//     MintPolicy: policyId,
+//     ReferenceAssetName: referenceAssetName,
+//     UserAssetName: userAssetName
+// );
+
+// var borrow = levvyNftTemplates.Borrow();
+// Transaction unsignedTx = await borrow(borrowMintParams);
+// Transaction signedTx = unsignedTx.Sign(privateKey);
+// Console.WriteLine(signedTx.ToCborHex());
+// string borrowTxHash = await provider.SubmitTransactionAsync(signedTx);
+// Console.WriteLine($"Transaction Id: {borrowTxHash}");
+
+// -------------------------------------------------//
+// Repay Lend Nft Position Sample Tx
+// TransactionInput repayLockedUtxo1 = new(Convert.FromHexString("3c7369e9b37b903d934bdc7198be2b2daa9527d649c59baf7f6eb2482882cb7e"), 1);
+
+// var policyId = "fa74d35f4b0d48ac6288ac5cea71f28e807565ad09845232f229660f";
+
+// LevvyIdentifier lender = new NftPosition(new Subject(
+//     Convert.FromHexString(policyId),
+//     Convert.FromHexString("000de1400067a2d9bd20033fb935c2839fe1c7f6befaccdab98f3d645b8fe262")
+// ));
+// LevvyIdentifier borrower = new NftPosition(new Subject(
+//     Convert.FromHexString(policyId),
+//     Convert.FromHexString("000de140002da58a063a84f5d6ce1b9b5148ebbccf54efcc1b4fe157fbabffb6")
+// ));
+
+// var principalDetails = new AssetDetails([], [], 5000000);
+// var collateralDetails = new AssetDetails([], [], 5000000);
+// var interestDetails = new AssetDetails([], [], 3000000);
+
+// RepayDetails repayDetails = new(
+//     lender,
+//     borrower,
+//     principalDetails,
+//     collateralDetails,
+//     interestDetails,
+//     Convert.FromHexString("67DD99A063950CDA7550CB32A589461AE06B4A5B2BB991DB2CF9D870F44A9913")
+// );
+
+// Dictionary<PlutusData, PlutusData> metadata = new()
+// {
+//     {
+//         new PlutusBoundedBytes(Convert.FromHexString("6e616d65")),
+//         new PlutusBoundedBytes(Convert.FromHexString("54657374") )
+//     },
+//     {
+//         new PlutusBoundedBytes(Convert.FromHexString("696d616765")),
+//         new PlutusBoundedBytes(Convert.FromHexString(""))
+//     }
+// };
+
+// Cip68<LevvyDatum> cip68Metadata = new(new PlutusMap(metadata), 1, new RepayDatum(repayDetails));
+// NftPositionDatum nftPositionDatum = new(cip68Metadata);
+
+// RepayMintParams repayMintParams = new(
+//     LockedUtxos: [repayLockedUtxo1],
+//     NftPositionDatum: nftPositionDatum,
+//     CollateralDetails: collateralDetails,
+//     InterestDetails: interestDetails,
+//     UserNftOutRef: new TransactionInput(
+//         Convert.FromHexString("3c7369e9b37b903d934bdc7198be2b2daa9527d649c59baf7f6eb2482882cb7e"),
+//         3
+//     ),
+//     LockedReferenceAssetName: "000643b0002da58a063a84f5d6ce1b9b5148ebbccf54efcc1b4fe157fbabffb6",
+//     MintPolicy: policyId,
+//     UserAssetName: "000de140002da58a063a84f5d6ce1b9b5148ebbccf54efcc1b4fe157fbabffb6"
+// );
+
+// var repay = levvyNftTemplates.Repay();
+// Transaction unsignedTx = await repay(repayMintParams);
+// Console.WriteLine(unsignedTx.ToCborHex());
+// Transaction signedTx = unsignedTx.Sign(privateKey);
+// Console.WriteLine(signedTx.ToCborHex());
+// string repayTxHash = await provider.SubmitTransactionAsync(signedTx);
+// Console.WriteLine($"Transaction Id: {repayTxHash}");
+
+// -------------------------------------------------//
+// Foreclose Lend Nft Position Sample Tx
+TransactionInput lockedForecloseUtxo1 = new(
+    Convert.FromHexString("3c7369e9b37b903d934bdc7198be2b2daa9527d649c59baf7f6eb2482882cb7e"),
+    1
+);
+
+var policyId = "fa74d35f4b0d48ac6288ac5cea71f28e807565ad09845232f229660f";
 
 LevvyIdentifier lender = new NftPosition(new Subject(
     Convert.FromHexString(policyId),
-    Convert.FromHexString(lockedUserAssetName)
+    Convert.FromHexString("000de1400067a2d9bd20033fb935c2839fe1c7f6befaccdab98f3d645b8fe262")
 ));
 LevvyIdentifier borrower = new NftPosition(new Subject(
     Convert.FromHexString(policyId),
-    Convert.FromHexString(userAssetName)
+    Convert.FromHexString("000de140002da58a063a84f5d6ce1b9b5148ebbccf54efcc1b4fe157fbabffb6")
 ));
 
 var principalDetails = new AssetDetails([], [], 5000000);
 var collateralDetails = new AssetDetails([], [], 5000000);
 var interestDetails = new AssetDetails([], [], 3000000);
 
-BorrowDetails borrowDetails = new(
+RepayDetails repayDetails = new(
     lender,
     borrower,
     principalDetails,
     collateralDetails,
     interestDetails,
-    new PosixTime(0),
-    new Token(),
-    Convert.FromHexString("2DA58A063A84F5D6CE1B9B5148EBBCCF54EFCC1B4FE157FBABFFB6F59A5ECFF6")
+    Convert.FromHexString("67DD99A063950CDA7550CB32A589461AE06B4A5B2BB991DB2CF9D870F44A9913")
 );
 
 Dictionary<PlutusData, PlutusData> metadata = new()
@@ -474,25 +605,27 @@ Dictionary<PlutusData, PlutusData> metadata = new()
     }
 };
 
-Cip68<LevvyDatum> cip68Metadata = new(new PlutusMap(metadata), 1, new BorrowDatum(borrowDetails));
+Cip68<LevvyDatum> cip68Metadata = new(new PlutusMap(metadata), 1, new RepayDatum(repayDetails));
 NftPositionDatum nftPositionDatum = new(cip68Metadata);
 
-TransactionInput borrowLockedUtxo1 = new(Convert.FromHexString("591b38da8316a9f2f331f7ef37c510f8baedf09b37a03b1ccad751897d1e6199"), 0);
-
-BorrowMintParams borrowMintParams = new(
-    LockedUtxos: [borrowLockedUtxo1],
+ForecloseMintParams forecloseMintParams = new(
+    LockedUtxos: [lockedForecloseUtxo1],
     NftPositionDatum: nftPositionDatum,
-    PrincipalDetails: principalDetails,
     CollateralDetails: collateralDetails,
-    LockedReferenceAssetName: lockedReferenceAssetName,
+    InterestDetails: interestDetails,
+    UserNftOutRef: new TransactionInput(
+        Convert.FromHexString("3c7369e9b37b903d934bdc7198be2b2daa9527d649c59baf7f6eb2482882cb7e"),
+        3
+    ),
+    LockedReferenceAssetName: "000643b0002da58a063a84f5d6ce1b9b5148ebbccf54efcc1b4fe157fbabffb6",
     MintPolicy: policyId,
-    ReferenceAssetName: referenceAssetName,
-    UserAssetName: userAssetName
+    UserAssetName: "000de140002da58a063a84f5d6ce1b9b5148ebbccf54efcc1b4fe157fbabffb6"
 );
 
-var borrow = levvyNftTemplates.Borrow();
-Transaction unsignedTx = await borrow(borrowMintParams);
-Transaction signedTx = unsignedTx.Sign(privateKey);
-Console.WriteLine(signedTx.ToCborHex());
-string borrowTxHash = await provider.SubmitTransactionAsync(signedTx);
-Console.WriteLine($"Transaction Id: {borrowTxHash}");
+var foreclose = levvyNftTemplates.Foreclose();
+Transaction unsignedTx = await foreclose(forecloseMintParams);
+Console.WriteLine(unsignedTx.ToCborHex());
+// Transaction signedTx = unsignedTx.Sign(privateKey);
+// Console.WriteLine(signedTx.ToCborHex());
+// string repayTxHash = await provider.SubmitTransactionAsync(signedTx);
+// Console.WriteLine($"Transaction Id: {repayTxHash}");
