@@ -675,4 +675,149 @@ public class LevvyNftTemplates
 
         return foreclose;
     }
+
+    public Func<ClaimMintParams, Task<Transaction>> Claim()
+    {
+        string mainValidatorAddress = "addr_test1wra8f56lfvx53trz3zk9e6n3728gqat945ycg53j7g5kvrc5qqfl0";
+        string mainValidatorScriptRef = "5d84910a2e0ece53b64fe2bf0f0d3cdc8f32993d3a5b3fee7c15a8e237fc9e16";
+    
+        string mintValidatorAddress = "addr_test1wrmdu7kq9kf3azpley0gx5cn6sjw7gdqs2az5zj9dnwu7dcde0xmg";
+        string mintValidatorScriptRef = "491f084536901de3dcae4e066a9f3ccbbb9fa3fa21786db5978202c4736b9b98";
+        string mintValidatorRewardAddress = "stake_test17rmdu7kq9kf3azpley0gx5cn6sjw7gdqs2az5zj9dnwu7dcd337vz";
+
+        string claimValidatorAddress = "addr_test1wqrwjf8w3av29d63rnxkvlgh7m5588dx5jq4ffptx269k5gym574e";
+        string claimValidatorScriptRef = "9670b90d43da00a7a7d1bd6b8d89ddc89692033f43dc5b68c10e2c6d2ac1e6e6";
+        string claimValidatorRewardAddress = "stake_test17qrwjf8w3av29d63rnxkvlgh7m5588dx5jq4ffptx269k5gyn2xzn";
+
+        string protocolParamsAddress = "addr_test1wr00dqehse7tfu0etd4cz8ldhlxaw7qdzz54esrjqacg36sp45dt3";
+        string globalProtocolParamsScriptRef = "1699fe1b10c18cd97f56836fff92b042d239a413c227b3786842012aa238895c";
+
+        RedeemerDataBuilder<ClaimMintParams, LevvyAction> claimRedeemerBuilder = (mapping, parameters) =>
+        {
+            var (InputIndex, OutputIndexes) = mapping.GetInput("lockedUtxo1");
+            InputIndices inputIndices = new((int)InputIndex, new None<int>());
+            LevvyOutputIndices outputIndices = new((int)OutputIndexes["claimOutput1"], new Some<int>((int)OutputIndexes["feeOutput"]), new None<int>(), new None<int>());
+            ActionParams actionParams = new(inputIndices, new Some<int>((int)mapping.GetReferenceInput("globalProtocolParams")),new None<int>(), outputIndices, new Token());
+
+            return new ClaimAction(actionParams);
+        };
+
+        RedeemerDataBuilder<ClaimMintParams, CborIndefList<Outref>> withdrawRedeemer = (mapping, parameters) =>
+        {
+            Outref outref1 = new(Convert.FromHexString("1117aa1b22088baf1987aa01c8ac661eb872be0e1ee7eb164526aeb5503d97cf"), 0);
+            CborIndefList<Outref> outrefs = new([outref1]);
+
+            return outrefs;
+        };
+
+        RedeemerDataBuilder<ClaimMintParams, MintRedeemer> mintRedeemerBuilder = (mapping, parameters) =>
+        {
+            byte[] policyId = Convert.FromHexString(parameters.MintPolicy ?? string.Empty);
+
+            return new MintRedeemer(policyId, new Some<int>((int)mapping.GetReferenceInput("globalProtocolParams")), new None<MintOutputIndices>());
+        };
+
+        RedeemerDataBuilder<ClaimMintParams, PolicyId> mintWithdrawRedeemer = (mapping, parameters) => new PolicyId(Convert.FromHexString(parameters.MintPolicy));
+
+        var claim = TransactionTemplateBuilder<ClaimMintParams>.Create(provider)
+            .AddStaticParty("change", ChangeAddress, true)
+            .AddStaticParty("mainValidator", mainValidatorAddress)
+            .AddStaticParty("claimValidator", claimValidatorAddress)
+            .AddStaticParty("claimValidatorRewardAddress", claimValidatorRewardAddress)
+            .AddStaticParty("protocolParamsAddress", protocolParamsAddress)
+            .AddStaticParty("mintValidator", mintValidatorAddress)
+            .AddStaticParty("mintValidatorRewardAddress", mintValidatorRewardAddress)
+            .AddRequiredSigner("change")
+            .AddReferenceInput((options, parameters) =>
+            {
+                options.From = "mainValidator";
+                options.UtxoRef = new TransactionInput(
+                   Convert.FromHexString(mainValidatorScriptRef), 0
+                );
+                options.Id = "mainValidator";
+            })
+            .AddReferenceInput((options, parameters) =>
+            {
+                options.From = "mintValidator";
+                options.UtxoRef = new TransactionInput(
+                    Convert.FromHexString(mintValidatorScriptRef),
+                    0
+                );
+                options.Id = "mintValidator";
+            })
+            .AddReferenceInput((options, parameters) =>
+            {
+                options.From = "claimValidator";
+                options.UtxoRef = new TransactionInput(
+                   Convert.FromHexString(claimValidatorScriptRef), 0
+                );
+                options.Id = "claimValidator";
+            })
+            .AddReferenceInput((options, parameters) =>
+            {
+                options.From = "protocolParamsAddress";
+                options.UtxoRef = new TransactionInput(
+                   Convert.FromHexString(globalProtocolParamsScriptRef), 0
+                );
+                options.Id = "globalProtocolParams";
+            })
+            .AddInput((options, parameters) =>
+            {
+                options.From = "change";
+                options.UtxoRef = parameters.UserNftOutRef;
+                options.Id = "changeAddress";
+            })
+            .AddInput((options, parameters) =>
+            {
+                options.From = "change";
+                options.Id = "changeAddress";
+            })
+            .AddInput((options, parameters) =>
+            {
+                options.From = "mainValidator";
+                options.UtxoRef = parameters.LockedUtxos[0];
+                options.Id = "lockedUtxo1";
+                options.SetRedeemerBuilder(claimRedeemerBuilder);
+            })
+            .AddOutput((options, parameters) =>
+            {
+                options.To = "change";
+                options.Amount = new Lovelace(parameters.CollateralDetails.Amount + parameters.InterestDetails.Amount);
+                options.AssociatedInputId = "lockedUtxo1"; 
+                options.Id = "claimOutput1";
+            })
+            .AddMint((options, parameters) =>
+            {
+                options.Policy = parameters.MintPolicy ?? string.Empty;
+                options.Assets = new Dictionary<string, int>
+                {
+                    { parameters.UserAssetName ?? string.Empty, -1 },
+                    { parameters.LockedReferenceAssetName ?? string.Empty, -1 }
+                };
+                options.SetRedeemerBuilder(mintRedeemerBuilder);
+            })
+            .AddOutput((options, parameters) =>
+            {
+                options.To = "change";
+                options.Amount = new Lovelace(2000000);
+                options.AssociatedInputId = "lockedUtxo1";
+                options.Id = "feeOutput";
+                options.Datum = new InlineDatumOption(1, new CborEncodedValue(Convert.FromHexString(parameters.DatumTag)));
+            })
+            .AddWithdrawal((options, parameters) =>
+            {
+                options.From = "claimValidatorRewardAddress";
+                options.Amount = 0;
+                options.SetRedeemerFactory(withdrawRedeemer);
+            })
+            .AddWithdrawal((options, parameters) =>
+            {
+                options.From = "mintValidatorRewardAddress";
+                options.Amount = 0;
+                options.SetRedeemerFactory(mintWithdrawRedeemer);
+            })
+            .Build();
+
+        return claim;
+    }
 }
