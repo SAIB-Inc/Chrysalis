@@ -130,7 +130,7 @@ public class TransactionTemplateBuilder<T>
                 }
             }
 
-            List<Script> script = GetScripts(context.IsSmartContractTx, context.ReferenceInputs, allUtxos);
+            List<Script> scripts = GetScripts(context.IsSmartContractTx, context.ReferenceInputs, allUtxos);
 
             ResolvedInput? feeInput = SelectFeeInput(utxos);
             if (feeInput is not null)
@@ -334,9 +334,8 @@ public class TransactionTemplateBuilder<T>
             if (_validTo > 0)
                 context.TxBuilder.SetTtl(_validTo);
 
-            return context.TxBuilder.CalculateFee(script, 5).Build();
-        }
-            ;
+            return context.TxBuilder.CalculateFee(scripts, 5).Build();
+        };
     }
 
     private Dictionary<string, string> ResolveParties(T param)
