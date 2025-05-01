@@ -335,7 +335,7 @@ public sealed partial class CborSerializerCodeGen
         {
             sb.AppendLine($"if (data.Raw is not null)");
             sb.AppendLine("{");
-            sb.AppendLine($"writer.WriteByteString(data.Raw?.ToArray());");
+            sb.AppendLine($"writer.WriteEncodedValue(data.Raw?.ToArray());");
             sb.AppendLine("return;");
             sb.AppendLine("}");
             return sb;
