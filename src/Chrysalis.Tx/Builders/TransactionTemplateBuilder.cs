@@ -111,7 +111,7 @@ public class TransactionTemplateBuilder<T>
                 throw new InvalidOperationException("Change address not set");
             }
 
-            WalletAddress changeAddress = WalletAddress.FromBech32(parties[_changeAddress]);
+            WalletAddress changeAddress = WalletAddress.FromBech32(parties["change"]);
 
             ProcessInputs(param, context);
             ProcessMints(param, context);
@@ -120,7 +120,7 @@ public class TransactionTemplateBuilder<T>
             int changeIndex = 0;
             ProcessOutputs(param, context, parties, requiredAmount, ref changeIndex);
 
-            List<ResolvedInput> utxos = await _provider!.GetUtxosAsync([parties[_changeAddress]]);
+            List<ResolvedInput> utxos = await _provider!.GetUtxosAsync([parties["change"]]);
 
             var allUtxos = new List<ResolvedInput>(utxos);
             foreach (string address in context.InputAddresses.Distinct())
