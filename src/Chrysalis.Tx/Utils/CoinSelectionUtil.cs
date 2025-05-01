@@ -2,7 +2,7 @@ using Chrysalis.Cbor.Extensions.Cardano.Core.Common;
 using Chrysalis.Cbor.Extensions.Cardano.Core.Transaction;
 using Chrysalis.Cbor.Types.Cardano.Core.Common;
 using Chrysalis.Tx.Extensions;
-using Chrysalis.Tx.Models;
+using Chrysalis.Tx.Models.Cbor;
 
 namespace Chrysalis.Tx.Utils;
 

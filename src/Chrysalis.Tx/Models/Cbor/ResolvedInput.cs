@@ -2,7 +2,7 @@ using Chrysalis.Cbor.Serialization.Attributes;
 using Chrysalis.Cbor.Types;
 using Chrysalis.Cbor.Types.Cardano.Core.Transaction;
 
-namespace Chrysalis.Tx.Models;
+namespace Chrysalis.Tx.Models.Cbor;
 [CborSerializable]
 [CborList]
 public partial record ResolvedInput(

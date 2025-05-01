@@ -10,6 +10,7 @@ using Chrysalis.Cbor.Types.Cardano.Core.TransactionWitness;
 using Chrysalis.Plutus.VM.EvalTx;
 using Chrysalis.Tx.Builders;
 using Chrysalis.Tx.Models;
+using Chrysalis.Tx.Models.Cbor;
 using Chrysalis.Tx.Utils;
 
 namespace Chrysalis.Tx.Extensions;

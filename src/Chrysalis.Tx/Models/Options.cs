@@ -50,6 +50,11 @@ public record OutputOptions
     public string? AssociatedInputId { get; set; }
     public string? Id { get; set; }
     public Script? Script { get; set; }
+    public void SetDatum<T>(T datum)
+        where T : CborBase
+    {
+        Datum = new InlineDatumOption(1, new CborEncodedValue(CborSerializer.Serialize(CborSerializer.Deserialize<PlutusData>(CborSerializer.Serialize(datum)))));
+    }
     public TransactionOutput BuildOutput(Dictionary<string, string> parties, ulong adaPerUtxoByte)
     {
         Address address = new(WalletAddress.FromBech32(parties[To]).ToBytes());
@@ -108,7 +113,7 @@ public record WithdrawalOptions<T>
     public string? Id { get; set; }
     public RedeemerMap? Redeemer { get; set; }
     public Func<InputOutputMapping, T, Redeemer<CborBase>>? RedeemerBuilder { get; set; }
-    public WithdrawalOptions<T> SetRedeemerFactory<TData>(RedeemerDataBuilder<T, TData> factory, ExUnits? exUnits = null)
+    public WithdrawalOptions<T> SetRedeemerBuilder<TData>(RedeemerDataBuilder<T, TData> factory, ExUnits? exUnits = null)
         where TData : CborBase
     {
         RedeemerBuilder = (mapping, context) =>
