@@ -26,6 +26,7 @@ public class TransactionTemplateBuilder<T>
     private readonly List<Action<OutputOptions, T>> _outputConfigs = [];
     private readonly List<Action<MintOptions<T>, T>> _mintConfigs = [];
     private readonly List<Action<WithdrawalOptions<T>, T>> _withdrawalConfigs = [];
+    private readonly List<Func<T, IEnumerable<Action<InputOptions<T>, T>>>> _inputGenerators = [];
     private readonly List<string> requiredSigners = [];
     private ulong _validFrom;
     private ulong _validTo;
@@ -43,6 +44,13 @@ public class TransactionTemplateBuilder<T>
         _inputConfigs.Add(config);
         return this;
     }
+
+    public TransactionTemplateBuilder<T> AddInputs(Func<T, IEnumerable<Action<InputOptions<T>, T>>> inputsGenerator)
+    {
+        _inputGenerators.Add(inputsGenerator);
+        return this;
+    }
+
 
     public TransactionTemplateBuilder<T> AddReferenceInput(Action<ReferenceInputOptions, T> config)
     {
@@ -113,6 +121,15 @@ public class TransactionTemplateBuilder<T>
 
             WalletAddress changeAddress = WalletAddress.FromBech32(parties[_changeAddress]);
 
+            foreach (var generator in _inputGenerators)
+            {
+                var dynamicConfigs = generator(param);
+                foreach (var config in dynamicConfigs)
+                {
+                    _inputConfigs.Add(config);
+                }
+            }
+
             ProcessInputs(param, context);
             ProcessMints(param, context);
 
@@ -164,7 +181,7 @@ public class TransactionTemplateBuilder<T>
 
             ulong totalLovelaceChange = coinSelectionResult.LovelaceChange;
             Dictionary<byte[], TokenBundleOutput> assetsChange = coinSelectionResult.AssetsChange;
-
+            
             var lovelaceChange = new Lovelace(totalLovelaceChange + (feeInput?.Output.Amount().Lovelace() ?? 0));
             if (feeInput!.Output.Amount() is LovelaceWithMultiAsset lovelaceWithMultiAsset)
             {
