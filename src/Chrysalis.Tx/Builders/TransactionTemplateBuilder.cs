@@ -230,7 +230,7 @@ public class TransactionTemplateBuilder<T>
                     }
                 }
 
-                BuildRedeemers(context, param, inputIdToIndex, refInputIdToOrderedIndex ,outputMappings);
+                BuildRedeemers(context, param, inputIdToIndex, refInputIdToOrderedIndex, outputMappings);
 
                 if (context.Redeemers.Count > 0)
                 {
@@ -700,7 +700,7 @@ public class TransactionTemplateBuilder<T>
         int outputIndex = 0;
         foreach (var config in _outputConfigs)
         {
-            var outputOptions = new OutputOptions { To = "", Amount = null, Datum = null};
+            var outputOptions = new OutputOptions { To = "", Amount = null, Datum = null };
             config(outputOptions, param);
 
             if (!string.IsNullOrEmpty(outputOptions.AssociatedInputId) &&
