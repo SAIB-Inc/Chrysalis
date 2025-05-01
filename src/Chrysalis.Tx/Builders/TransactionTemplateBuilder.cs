@@ -700,7 +700,7 @@ public class TransactionTemplateBuilder<T>
         int outputIndex = 0;
         foreach (var config in _outputConfigs)
         {
-            var outputOptions = new OutputOptions { To = "", Amount = null};
+            var outputOptions = new OutputOptions { To = "", Amount = null, Datum = null};
             config(outputOptions, param);
 
             if (!string.IsNullOrEmpty(outputOptions.AssociatedInputId) &&
