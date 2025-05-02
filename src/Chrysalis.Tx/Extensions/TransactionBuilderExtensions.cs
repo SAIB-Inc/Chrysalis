@@ -10,13 +10,14 @@ using Chrysalis.Cbor.Types.Cardano.Core.TransactionWitness;
 using Chrysalis.Plutus.VM.EvalTx;
 using Chrysalis.Tx.Builders;
 using Chrysalis.Tx.Models;
+using Chrysalis.Tx.Models.Cbor;
 using Chrysalis.Tx.Utils;
 
 namespace Chrysalis.Tx.Extensions;
 
 public static class TransactionBuilderExtensions
 {
-    public static TransactionBuilder CalculateFee(this TransactionBuilder builder, Script? script = null, int mockWitnessFee = 1)
+    public static TransactionBuilder CalculateFee(this TransactionBuilder builder, List<Script> scripts, int mockWitnessFee = 1)
     {
 
         ulong scriptFee = 0;
@@ -25,21 +26,21 @@ public static class TransactionBuilderExtensions
         {
             builder.SetTotalCollateral(2000000UL);
 
-            if (script is null)
+            if (scripts.Count <= 0)
             {
-                throw new ArgumentNullException(nameof(script), "Missing script");
+                throw new ArgumentNullException(nameof(scripts), "Missing script");
             }
 
-            var usedLanguage = builder.pparams!.CostModelsForScriptLanguage!.Value[script.Version() - 1];
+            var usedLanguage = builder.pparams!.CostModelsForScriptLanguage!.Value[scripts[0].Version() - 1];
             var costModel = new CostMdls(new Dictionary<int, CborDefList<long>>(){
-                 { script.Version() - 1, usedLanguage }
+                 { scripts[0].Version() - 1, usedLanguage }
             });
             var costModelBytes = CborSerializer.Serialize(costModel);
             var scriptDataHash = DataHashUtil.CalculateScriptDataHash(builder.witnessSet.Redeemers, builder.witnessSet.PlutusDataSet?.GetValue() as PlutusList, costModelBytes);
             builder.SetScriptDataHash(scriptDataHash);
 
             ulong scriptCostPerByte = builder.pparams!.MinFeeRefScriptCostPerByte!.Numerator / builder.pparams.MinFeeRefScriptCostPerByte!.Denominator;
-            scriptFee = FeeUtil.CalculateReferenceScriptFee(script.Bytes(), scriptCostPerByte);
+            scriptFee = (ulong)scripts.Sum(script => (decimal)FeeUtil.CalculateReferenceScriptFee(script.Bytes(), scriptCostPerByte));
 
             RationalNumber memUnitsCost = new(builder.pparams!.ExecutionCosts!.MemPrice!.Numerator!, builder.pparams.ExecutionCosts!.MemPrice!.Denominator!);
             RationalNumber stepUnitsCost = new(builder.pparams.ExecutionCosts!.StepPrice!.Numerator!, builder.pparams.ExecutionCosts!.StepPrice!.Denominator!);
@@ -58,6 +59,8 @@ public static class TransactionBuilderExtensions
         {
             var totalCollateral = FeeUtil.CalculateRequiredCollateral(fee, builder.pparams!.CollateralPercentage!.Value);
             builder.SetTotalCollateral(totalCollateral);
+
+            Console.WriteLine(builder.body.CollateralReturn);
             Address address = builder.body.CollateralReturn switch
             {
                 AlonzoTransactionOutput alonzoTransactionOutput => alonzoTransactionOutput.Address,

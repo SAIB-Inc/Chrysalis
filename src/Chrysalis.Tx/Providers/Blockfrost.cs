@@ -9,6 +9,7 @@ using Chrysalis.Cbor.Types.Cardano.Core.Protocol;
 using Chrysalis.Cbor.Types.Cardano.Core.Transaction;
 using Chrysalis.Network.Cbor.LocalStateQuery;
 using Chrysalis.Tx.Models;
+using Chrysalis.Tx.Models.Cbor;
 using ChrysalisWallet = Chrysalis.Wallet.Models.Addresses;
 
 namespace Chrysalis.Tx.Providers;

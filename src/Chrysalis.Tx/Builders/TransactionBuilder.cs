@@ -158,6 +158,12 @@ public class TransactionBuilder
         return this;
     }
 
+    public TransactionBuilder SetReferenceInputs(List<TransactionInput> referenceInputs)
+    {
+        body = body with { ReferenceInputs = new CborDefListWithTag<TransactionInput>(referenceInputs) };
+        return this;
+    }
+   
     public TransactionBuilder SetVotingProcedures(VotingProcedures votingProcedures)
     {
         body = body with { VotingProcedures = votingProcedures };
