@@ -27,6 +27,7 @@ public class TransactionTemplateBuilder<T>
     private readonly List<Action<MintOptions<T>, T>> _mintConfigs = [];
     private readonly List<Action<WithdrawalOptions<T>, T>> _withdrawalConfigs = [];
     private readonly List<Func<T, IEnumerable<(Action<InputOptions<T>, T>, List<Action<OutputOptions, T>>)>>> _inputGenerators = [];
+    private readonly List<Action<TransactionBuilder, InputOutputMapping>> _preBuildHooks = [];
     private readonly List<string> requiredSigners = [];
     private ulong _validFrom;
     private ulong _validTo;
@@ -39,6 +40,11 @@ public class TransactionTemplateBuilder<T>
         return this;
     }
 
+    public TransactionTemplateBuilder<T> SetPreBuildHook(Action<TransactionBuilder, InputOutputMapping> preBuildHook)
+    {
+        _preBuildHooks.Add(preBuildHook);
+        return this;
+    }
     public TransactionTemplateBuilder<T> AddInput(Action<InputOptions<T>, T> config)
     {
         _inputConfigs.Add(config);
@@ -55,13 +61,13 @@ public class TransactionTemplateBuilder<T>
         return this;
     }
 
+
     public TransactionTemplateBuilder<T> AddInputs(
     Func<T, IEnumerable<(Action<InputOptions<T>, T> inputConfig, List<Action<OutputOptions, T>> outputConfigs)>> configGenerator)
     {
         _inputGenerators.Add(configGenerator);
         return this;
     }
-
 
     public TransactionTemplateBuilder<T> AddReferenceInput(Action<ReferenceInputOptions, T> config)
     {
@@ -129,6 +135,12 @@ public class TransactionTemplateBuilder<T>
             {
                 throw new InvalidOperationException("Change address not set");
             }
+
+            if (_validFrom > 0)
+                context.TxBuilder.SetValidityIntervalStart(_validFrom);
+
+            if (_validTo > 0)
+                context.TxBuilder.SetTtl(_validTo);
 
             WalletAddress changeAddress = WalletAddress.FromBech32(parties["change"]);
 
@@ -347,7 +359,6 @@ public class TransactionTemplateBuilder<T>
 
                     context.TxBuilder.SetRedeemers(redeemerMap);
                 }
-                context.TxBuilder.Evaluate(allUtxos);
             }
 
             if (requiredSigners.Count > 0)
@@ -358,12 +369,35 @@ public class TransactionTemplateBuilder<T>
                     context.TxBuilder.AddRequiredSigner(address.GetPaymentKeyHash()!);
                 }
             }
+            // if (context.IsSmartContractTx)
+            // {
+            //     context.TxBuilder.Evaluate(allUtxos);
+            // }
 
-            if (_validFrom > 0)
-                context.TxBuilder.SetValidityIntervalStart(_validFrom);
+            foreach (var hook in _preBuildHooks)
+            {
+                var mapping = new InputOutputMapping();
 
-            if (_validTo > 0)
-                context.TxBuilder.SetTtl(_validTo);
+                foreach (var (inputId, index) in inputIdToOrderedIndex)
+                {
+                    mapping.AddInput(inputId, (ulong)index);
+                }
+
+                foreach (var (refInputId, refInputIndex) in refInputIdToOrderedIndex)
+                {
+                    mapping.AddReferenceInput(refInputId, refInputIndex);
+                }
+
+                foreach (var (inputId, outputsDict) in stringIndexedAssociations)
+                {
+                    foreach (var (outputId, outputIndex) in outputsDict.outputIndices)
+                    {
+                        mapping.AddOutput(inputId, outputId, (ulong)outputIndex);
+                    }
+                }
+
+                hook(context.TxBuilder, mapping);
+            }
 
             return context.TxBuilder.CalculateFee(scripts, 5).Build();
         };
