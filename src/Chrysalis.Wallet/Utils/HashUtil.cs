@@ -1,3 +1,5 @@
+using NSec.Cryptography;
+
 namespace Chrysalis.Wallet.Utils;
 
 public static class HashUtil
@@ -15,8 +17,10 @@ public static class HashUtil
 
         if (digestSize <= 0)
             throw new ArgumentOutOfRangeException(nameof(digestSize), "Digest size must be greater than 0.");
+        
+        Blake2b blake2b = new(digestSize);
 
-        return Blake2Fast.Blake2b.ComputeHash(digestSize, data);
+        return blake2b.Hash(data);
     }
 
     /// <summary>
