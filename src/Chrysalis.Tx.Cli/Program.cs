@@ -134,7 +134,7 @@ var unlockLovelace = TransactionTemplateBuilder<UnlockParameters>.Create(provide
         options.From = "withdrawal";
         options.Amount = unlockParams.WithdrawalAmount;
         options.Id = "withdrawal";
-        options.SetRedeemerFactory(withdrawRedeemerBuilder);
+        options.SetRedeemerBuilder(withdrawRedeemerBuilder);
     })
     .Build();
 
