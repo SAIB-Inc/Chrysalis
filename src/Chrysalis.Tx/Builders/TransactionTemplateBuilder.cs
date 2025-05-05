@@ -26,6 +26,7 @@ public class TransactionTemplateBuilder<T>
     private readonly List<Action<OutputOptions, T>> _outputConfigs = [];
     private readonly List<Action<MintOptions<T>, T>> _mintConfigs = [];
     private readonly List<Action<WithdrawalOptions<T>, T>> _withdrawalConfigs = [];
+    private readonly List<Func<T, IEnumerable<(Action<InputOptions<T>, T>, List<Action<OutputOptions, T>>)>>> _inputGenerators = [];
     private readonly List<string> requiredSigners = [];
     private ulong _validFrom;
     private ulong _validTo;
@@ -43,6 +44,24 @@ public class TransactionTemplateBuilder<T>
         _inputConfigs.Add(config);
         return this;
     }
+
+    public TransactionTemplateBuilder<T> AddInputs(Func<T, IEnumerable<Action<InputOptions<T>, T>>> inputsGenerator)
+    {
+        _inputGenerators.Add((param) =>
+        {
+            var inputs = inputsGenerator(param);
+            return inputs.Select(input => (input, new List<Action<OutputOptions, T>>()));
+        });
+        return this;
+    }
+
+    public TransactionTemplateBuilder<T> AddInputs(
+    Func<T, IEnumerable<(Action<InputOptions<T>, T> inputConfig, List<Action<OutputOptions, T>> outputConfigs)>> configGenerator)
+    {
+        _inputGenerators.Add(configGenerator);
+        return this;
+    }
+
 
     public TransactionTemplateBuilder<T> AddReferenceInput(Action<ReferenceInputOptions, T> config)
     {
@@ -112,6 +131,19 @@ public class TransactionTemplateBuilder<T>
             }
 
             WalletAddress changeAddress = WalletAddress.FromBech32(parties["change"]);
+
+            foreach (var generator in _inputGenerators)
+            {
+                var dynamicConfigs = generator(param);
+                foreach (var (inputConfig, outputConfigs) in dynamicConfigs)
+                {
+                    _inputConfigs.Add(inputConfig);
+                    foreach (var outputConfig in outputConfigs)
+                    {
+                        _outputConfigs.Add(outputConfig);
+                    }
+                }
+            }
 
             ProcessInputs(param, context);
             ProcessMints(param, context);
