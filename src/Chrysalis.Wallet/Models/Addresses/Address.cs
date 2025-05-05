@@ -1,3 +1,4 @@
+using Chrysalis.Cbor.Serialization;
 using Chrysalis.Cbor.Types.Plutus.Address;
 using Chrysalis.Wallet.Extensions;
 using Chrysalis.Wallet.Models.Enums;
@@ -186,15 +187,15 @@ public class Address
             case AddressType.ScriptWithScriptDelegation:
                 if (stake == null)
                     throw new ArgumentNullException(nameof(stake), "Stake credential cannot be null for Base addresses");
-                addressBytes = addressBytes.ConcatFast(payment.Raw!.Value.ToArray());
-                return addressBytes.ConcatFast(stake.Raw!.Value.ToArray());
+                addressBytes = addressBytes.ConcatFast(payment.Raw.HasValue ? payment.Raw!.Value.ToArray() : CborSerializer.Serialize(payment));
+                return addressBytes.ConcatFast(stake.Raw.HasValue ? stake.Raw.Value.ToArray() : CborSerializer.Serialize(stake));
 
             // TODO:
             // Pointer addresses: header + payment credential + pointer
             case AddressType.BaseWithPointerDelegation:
             case AddressType.ScriptWithPointerDelegation:
                 // Add payment credential
-                addressBytes = addressBytes.ConcatFast(payment.Raw!.Value.ToArray());
+                addressBytes = addressBytes.ConcatFast(payment.Raw.HasValue ? payment.Raw.Value.ToArray() : CborSerializer.Serialize(payment));
 
                 // TODO: Add proper pointer implementation
                 // For now, just return with payment credential
@@ -203,18 +204,20 @@ public class Address
             // Enterprise addresses: header + payment credential
             case AddressType.EnterprisePayment:
             case AddressType.EnterpriseScriptPayment:
-                return addressBytes.ConcatFast(payment.Raw!.Value.ToArray());
+                return addressBytes.ConcatFast(payment.Raw.HasValue ? payment.Raw.Value.ToArray() : CborSerializer.Serialize(payment));
 
             // Stake addresses: header + stake credential
             case AddressType.StakeKey:
             case AddressType.ScriptStakeKey:
-                return addressBytes.ConcatFast(stake?.Raw!.Value.ToArray() ?? []);
+                return addressBytes.ConcatFast(stake!.Raw.HasValue ? stake.Raw.Value.ToArray() : CborSerializer.Serialize(stake));
 
             default:
                 throw new NotSupportedException($"Address type {header.Type} is not supported");
         }
     }
 
+
+    // TODO
     private static (Credential payment, Credential? stake) ExtractCredentialsFromBytes(byte[] addressBytes)
     {
         AddressHeader header = GetAddressHeader(addressBytes[0]);
