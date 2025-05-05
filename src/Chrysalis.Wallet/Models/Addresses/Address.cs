@@ -1,3 +1,4 @@
+using Chrysalis.Cbor.Serialization;
 using Chrysalis.Cbor.Types.Plutus.Address;
 using Chrysalis.Wallet.Extensions;
 using Chrysalis.Wallet.Models.Enums;
@@ -81,8 +82,7 @@ public class Address
     {
         Credential paymentCredential = ExtractCredential(paymentBytes, 1);
         Credential? stakeCredential = null;
-        if (stakeBytes is not null)
-            stakeCredential = ExtractCredential(stakeBytes, 1);
+        if (stakeBytes is not null) stakeCredential = ExtractCredential(stakeBytes, 1);
 
         return new Address(networkType, addressType, paymentCredential, stakeCredential);
     }
@@ -186,15 +186,15 @@ public class Address
             case AddressType.ScriptWithScriptDelegation:
                 if (stake == null)
                     throw new ArgumentNullException(nameof(stake), "Stake credential cannot be null for Base addresses");
-                addressBytes = addressBytes.ConcatFast(payment.Raw!.Value.ToArray());
-                return addressBytes.ConcatFast(stake.Raw!.Value.ToArray());
+                addressBytes = addressBytes.ConcatFast(payment.Raw.HasValue ? payment.Raw!.Value.ToArray() : GetKeyHash(payment));
+                return addressBytes.ConcatFast(stake.Raw.HasValue ? stake.Raw.Value.ToArray() : GetKeyHash(stake));
 
             // TODO:
             // Pointer addresses: header + payment credential + pointer
             case AddressType.BaseWithPointerDelegation:
             case AddressType.ScriptWithPointerDelegation:
                 // Add payment credential
-                addressBytes = addressBytes.ConcatFast(payment.Raw!.Value.ToArray());
+                addressBytes = addressBytes.ConcatFast(payment.Raw.HasValue ? payment.Raw.Value.ToArray() : GetKeyHash(payment));
 
                 // TODO: Add proper pointer implementation
                 // For now, just return with payment credential
@@ -203,18 +203,20 @@ public class Address
             // Enterprise addresses: header + payment credential
             case AddressType.EnterprisePayment:
             case AddressType.EnterpriseScriptPayment:
-                return addressBytes.ConcatFast(payment.Raw!.Value.ToArray());
+                return addressBytes.ConcatFast(payment.Raw.HasValue ? payment.Raw.Value.ToArray() : GetKeyHash(payment));
 
             // Stake addresses: header + stake credential
             case AddressType.StakeKey:
             case AddressType.ScriptStakeKey:
-                return addressBytes.ConcatFast(stake?.Raw!.Value.ToArray() ?? []);
+                return addressBytes.ConcatFast(stake!.Raw.HasValue ? stake.Raw.Value.ToArray() : GetKeyHash(stake));
 
             default:
                 throw new NotSupportedException($"Address type {header.Type} is not supported");
         }
     }
 
+
+    // TODO
     private static (Credential payment, Credential? stake) ExtractCredentialsFromBytes(byte[] addressBytes)
     {
         AddressHeader header = GetAddressHeader(addressBytes[0]);
@@ -228,8 +230,8 @@ public class Address
         (Credential payment, Credential? stake) ExtractPaymentAndStakeCredentials()
         {
             return (
-                ExtractCredential(addressBytes, 1),
-                ExtractCredential(addressBytes, 29)
+                ExtractCredential(addressBytes, 0),
+                ExtractCredential(addressBytes, 28)
             );
         }
 
@@ -262,11 +264,11 @@ public class Address
 
     private static Credential ExtractCredential(byte[] bytes, int offset)
     {
-        if (bytes.Length < offset + 28)
+        if (bytes.Length < 28)
             throw new ArgumentException("Not enough bytes to extract credential");
 
         CredentialType credType = (CredentialType)(bytes[offset] >> 7);
-        byte[] hash = [.. bytes.Skip(offset + 1).Take(27)];
+        byte[] hash = [.. bytes.Skip(offset).Take(29)];
 
         Credential credential = credType switch
         {
@@ -277,6 +279,13 @@ public class Address
 
         return credential;
     }
+
+    private static byte[] GetKeyHash(Credential self) => self switch
+    {
+        VerificationKey vkey => vkey.VerificationKeyHash,
+        Script script => script.ScriptHash,
+        _ => throw new Exception("Invalid credential")
+    };
 
     #endregion
 }

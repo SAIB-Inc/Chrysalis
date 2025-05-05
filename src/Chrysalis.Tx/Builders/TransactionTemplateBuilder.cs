@@ -157,6 +157,19 @@ public class TransactionTemplateBuilder<T>
                 }
             }
 
+            foreach (var generator in _inputGenerators)
+            {
+                var dynamicConfigs = generator(param);
+                foreach (var (inputConfig, outputConfigs) in dynamicConfigs)
+                {
+                    _inputConfigs.Add(inputConfig);
+                    foreach (var outputConfig in outputConfigs)
+                    {
+                        _outputConfigs.Add(outputConfig);
+                    }
+                }
+            }
+
             ProcessInputs(param, context);
             ProcessMints(param, context);
 
