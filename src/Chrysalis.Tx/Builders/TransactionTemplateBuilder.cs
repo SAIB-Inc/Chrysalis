@@ -121,7 +121,7 @@ public class TransactionTemplateBuilder<T>
         return this;
     }
 
-    public Func<T, Task<Transaction>> Build()
+    public Func<T, Task<Transaction>> Build(bool Eval = true)
     {
         return async param =>
         {
@@ -143,19 +143,6 @@ public class TransactionTemplateBuilder<T>
                 context.TxBuilder.SetTtl(_validTo);
 
             WalletAddress changeAddress = WalletAddress.FromBech32(parties["change"]);
-
-            foreach (var generator in _inputGenerators)
-            {
-                var dynamicConfigs = generator(param);
-                foreach (var (inputConfig, outputConfigs) in dynamicConfigs)
-                {
-                    _inputConfigs.Add(inputConfig);
-                    foreach (var outputConfig in outputConfigs)
-                    {
-                        _outputConfigs.Add(outputConfig);
-                    }
-                }
-            }
 
             foreach (var generator in _inputGenerators)
             {
@@ -382,11 +369,7 @@ public class TransactionTemplateBuilder<T>
                     context.TxBuilder.AddRequiredSigner(address.GetPaymentKeyHash()!);
                 }
             }
-            // if (context.IsSmartContractTx)
-            // {
-            //     context.TxBuilder.Evaluate(allUtxos);
-            // }
-
+           
             foreach (var hook in _preBuildHooks)
             {
                 var mapping = new InputOutputMapping();
@@ -411,6 +394,12 @@ public class TransactionTemplateBuilder<T>
 
                 hook(context.TxBuilder, mapping);
             }
+
+             if (context.IsSmartContractTx && Eval)
+            {
+                context.TxBuilder.Evaluate(allUtxos);
+            }
+
 
             return context.TxBuilder.CalculateFee(scripts, 5).Build();
         };

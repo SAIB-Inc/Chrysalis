@@ -148,7 +148,6 @@ public static class TransactionBuilderExtensions
         var utxoCborBytes = CborSerializer.Serialize<CborMaybeIndefList<ResolvedInput>>(utxoCbor);
         Transaction transaction = builder.Build();
         var txCborBytes = CborSerializer.Serialize(transaction);
-        // Console.WriteLine(Convert.ToHexString(txCborBytes));
         var evalResult = Evaluator.EvaluateTx(txCborBytes, utxoCborBytes);
         var previousRedeemers = builder.witnessSet.Redeemers;
 
