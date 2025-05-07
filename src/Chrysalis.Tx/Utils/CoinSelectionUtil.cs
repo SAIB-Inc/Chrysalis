@@ -166,7 +166,7 @@ public static class CoinSelectionUtil
 
             foreach (var token in tokenBundle)
             {
-                string assetKey = policy + token.Key;
+                string assetKey = (policy + token.Key).ToLowerInvariant();
 
                 if (!assetDict.ContainsKey(assetKey))
                 {

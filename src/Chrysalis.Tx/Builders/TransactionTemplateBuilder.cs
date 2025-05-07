@@ -26,8 +26,8 @@ public class TransactionTemplateBuilder<T>
     private readonly List<Action<OutputOptions, T>> _outputConfigs = [];
     private readonly List<Action<MintOptions<T>, T>> _mintConfigs = [];
     private readonly List<Action<WithdrawalOptions<T>, T>> _withdrawalConfigs = [];
-    private readonly List<Func<T, IEnumerable<(Action<InputOptions<T>, T>, List<Action<MintOptions<T>, T>> ,List<Action<OutputOptions, T>>)>>> _inputGenerators = [];
-    private readonly List<Action<TransactionBuilder, InputOutputMapping>> _preBuildHooks = [];
+    private readonly List<Func<T, IEnumerable<(Action<InputOptions<T>, T>, List<Action<MintOptions<T>, T>>, List<Action<OutputOptions, T>>)>>> _inputGenerators = [];
+    private readonly List<Action<TransactionBuilder, InputOutputMapping, T>> _preBuildHooks = [];
     private readonly List<string> requiredSigners = [];
     private ulong _validFrom;
     private ulong _validTo;
@@ -40,7 +40,7 @@ public class TransactionTemplateBuilder<T>
         return this;
     }
 
-    public TransactionTemplateBuilder<T> SetPreBuildHook(Action<TransactionBuilder, InputOutputMapping> preBuildHook)
+    public TransactionTemplateBuilder<T> SetPreBuildHook(Action<TransactionBuilder, InputOutputMapping, T> preBuildHook)
     {
         _preBuildHooks.Add(preBuildHook);
         return this;
@@ -52,7 +52,7 @@ public class TransactionTemplateBuilder<T>
     }
 
     public TransactionTemplateBuilder<T> AddInputs(
-    Func<T, IEnumerable<(Action<InputOptions<T>, T> inputConfig,List<Action<MintOptions<T>, T>> ,List<Action<OutputOptions, T>> outputConfigs)>> configGenerator)
+    Func<T, IEnumerable<(Action<InputOptions<T>, T> inputConfig, List<Action<MintOptions<T>, T>>, List<Action<OutputOptions, T>> outputConfigs)>> configGenerator)
     {
         _inputGenerators.Add(configGenerator);
         return this;
@@ -154,16 +154,7 @@ public class TransactionTemplateBuilder<T>
 
             var allUtxos = new List<ResolvedInput>(utxos);
 
-
-            ResolvedInput? feeInput = SelectFeeInput(utxos);
-            if (feeInput is not null)
-            {
-                utxos.Remove(feeInput);
-                context.InputsById["fee"] = feeInput.Outref;
-                context.AssociationsByInputId["fee"] = [];
-                context.TxBuilder.AddInput(feeInput.Outref);
-            }
-
+            context.AssociationsByInputId["fee"] = [];
 
             ProcessInputs(param, context);
             ProcessMints(param, context);
@@ -203,6 +194,15 @@ public class TransactionTemplateBuilder<T>
             {
                 context.TxBuilder.AddInput(consumedInput.Outref);
             }
+
+            ResolvedInput? feeInput = SelectFeeInput(utxos, coinSelectionResult.Inputs);
+            if (feeInput is not null)
+            {
+                utxos.Remove(feeInput);
+                context.InputsById["fee"] = feeInput.Outref;
+                context.TxBuilder.AddInput(feeInput.Outref);
+            }
+
 
             ulong totalLovelaceChange = coinSelectionResult.LovelaceChange;
             Dictionary<byte[], TokenBundleOutput> assetsChange = coinSelectionResult.AssetsChange;
@@ -390,7 +390,7 @@ public class TransactionTemplateBuilder<T>
                     }
                 }
 
-                hook(context.TxBuilder, mapping);
+                hook(context.TxBuilder, mapping, param);
             }
 
             if (context.IsSmartContractTx && Eval)
@@ -472,7 +472,7 @@ public class TransactionTemplateBuilder<T>
 
         requestedLovelace = requestedLovelace > specifiedInputsLovelace ? requestedLovelace - specifiedInputsLovelace : 0;
 
-        
+
         foreach (var asset in mintedAssets)
         {
             if (asset.Value > 0)
@@ -511,7 +511,7 @@ public class TransactionTemplateBuilder<T>
             }
         }
 
-         
+
 
         List<Value> updatedRequiredAmounts = [];
         Lovelace updatedRequestedLovelace = new(requestedLovelace);
@@ -978,10 +978,13 @@ public class TransactionTemplateBuilder<T>
         return [];
     }
 
-    private ResolvedInput? SelectFeeInput(List<ResolvedInput> utxos)
+    private ResolvedInput? SelectFeeInput(List<ResolvedInput> utxos, List<ResolvedInput> selectedInputs)
     {
         var sortedUtxos = utxos
             .Where(e => e.Output.Amount().Lovelace() >= 5_000_000UL)
+            .Where(e => !selectedInputs.Any(input =>
+                Convert.ToHexString(input.Outref.TransactionId) == Convert.ToHexString(e.Outref.TransactionId) &&
+                input.Outref.Index == e.Outref.Index))
             .OrderBy(e => e.Output.Amount().Lovelace());
 
         return sortedUtxos.FirstOrDefault();

@@ -36,6 +36,7 @@ public static class TransactionBuilderExtensions
                  { scripts[0].Version() - 1, usedLanguage }
             });
             var costModelBytes = CborSerializer.Serialize(costModel);
+            Console.WriteLine(Convert.ToHexString(costModelBytes));
             var scriptDataHash = DataHashUtil.CalculateScriptDataHash(builder.witnessSet.Redeemers, builder.witnessSet.PlutusDataSet?.GetValue() as PlutusList, costModelBytes);
             builder.SetScriptDataHash(scriptDataHash);
 
