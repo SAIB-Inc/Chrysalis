@@ -347,9 +347,7 @@ public class TransactionTemplateBuilder<T>
 
                     context.TxBuilder.SetRedeemers(redeemerMap);
                 }
-
-                // @TODO: Uncomment when Evaluate is fixed
-                // context.TxBuilder.Evaluate(allUtxos);
+                context.TxBuilder.Evaluate(allUtxos);
             }
 
             if (requiredSigners.Count > 0)
