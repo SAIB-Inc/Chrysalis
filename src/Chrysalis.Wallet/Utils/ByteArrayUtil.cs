@@ -28,4 +28,19 @@ public static class ByteArrayUtil
 
         return result;
     }
+
+    public static byte[] ConcatByteArrays(params byte[][] arrays)
+    {
+        int totalLength = arrays.Sum(a => a.Length);
+        byte[] result = new byte[totalLength];
+
+        int offset = 0;
+        foreach (byte[] array in arrays)
+        {
+            Buffer.BlockCopy(array, 0, result, offset, array.Length);
+            offset += array.Length;
+        }
+
+        return result;
+    }
 }

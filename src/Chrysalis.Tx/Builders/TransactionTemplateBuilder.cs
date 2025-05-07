@@ -26,7 +26,7 @@ public class TransactionTemplateBuilder<T>
     private readonly List<Action<OutputOptions, T>> _outputConfigs = [];
     private readonly List<Action<MintOptions<T>, T>> _mintConfigs = [];
     private readonly List<Action<WithdrawalOptions<T>, T>> _withdrawalConfigs = [];
-    private readonly List<Func<T, IEnumerable<(Action<InputOptions<T>, T>, List<Action<OutputOptions, T>>)>>> _inputGenerators = [];
+    private readonly List<Func<T, IEnumerable<(Action<InputOptions<T>, T>, List<Action<MintOptions<T>, T>> ,List<Action<OutputOptions, T>>)>>> _inputGenerators = [];
     private readonly List<Action<TransactionBuilder, InputOutputMapping>> _preBuildHooks = [];
     private readonly List<string> requiredSigners = [];
     private ulong _validFrom;
@@ -51,19 +51,8 @@ public class TransactionTemplateBuilder<T>
         return this;
     }
 
-    public TransactionTemplateBuilder<T> AddInputs(Func<T, IEnumerable<Action<InputOptions<T>, T>>> inputsGenerator)
-    {
-        _inputGenerators.Add((param) =>
-        {
-            var inputs = inputsGenerator(param);
-            return inputs.Select(input => (input, new List<Action<OutputOptions, T>>()));
-        });
-        return this;
-    }
-
-
     public TransactionTemplateBuilder<T> AddInputs(
-    Func<T, IEnumerable<(Action<InputOptions<T>, T> inputConfig, List<Action<OutputOptions, T>> outputConfigs)>> configGenerator)
+    Func<T, IEnumerable<(Action<InputOptions<T>, T> inputConfig,List<Action<MintOptions<T>, T>> ,List<Action<OutputOptions, T>> outputConfigs)>> configGenerator)
     {
         _inputGenerators.Add(configGenerator);
         return this;
@@ -147,15 +136,34 @@ public class TransactionTemplateBuilder<T>
             foreach (var generator in _inputGenerators)
             {
                 var dynamicConfigs = generator(param);
-                foreach (var (inputConfig, outputConfigs) in dynamicConfigs)
+                foreach (var (inputConfig, mintConfigs, outputConfigs) in dynamicConfigs)
                 {
                     _inputConfigs.Add(inputConfig);
+                    foreach (var mintConfig in mintConfigs)
+                    {
+                        _mintConfigs.Add(mintConfig);
+                    }
                     foreach (var outputConfig in outputConfigs)
                     {
                         _outputConfigs.Add(outputConfig);
                     }
                 }
             }
+
+            List<ResolvedInput> utxos = await _provider!.GetUtxosAsync([parties["change"]]);
+
+            var allUtxos = new List<ResolvedInput>(utxos);
+
+
+            ResolvedInput? feeInput = SelectFeeInput(utxos);
+            if (feeInput is not null)
+            {
+                utxos.Remove(feeInput);
+                context.InputsById["fee"] = feeInput.Outref;
+                context.AssociationsByInputId["fee"] = [];
+                context.TxBuilder.AddInput(feeInput.Outref);
+            }
+
 
             ProcessInputs(param, context);
             ProcessMints(param, context);
@@ -164,9 +172,6 @@ public class TransactionTemplateBuilder<T>
             int changeIndex = 0;
             ProcessOutputs(param, context, parties, requiredAmount, ref changeIndex);
 
-            List<ResolvedInput> utxos = await _provider!.GetUtxosAsync([parties["change"]]);
-
-            var allUtxos = new List<ResolvedInput>(utxos);
             foreach (string address in context.InputAddresses.Distinct())
             {
                 if (address != _changeAddress)
@@ -176,13 +181,6 @@ public class TransactionTemplateBuilder<T>
             }
 
             List<Script> scripts = GetScripts(context.IsSmartContractTx, context.ReferenceInputs, allUtxos);
-
-            ResolvedInput? feeInput = SelectFeeInput(utxos);
-            if (feeInput is not null)
-            {
-                utxos.Remove(feeInput);
-                context.TxBuilder.AddInput(feeInput.Outref);
-            }
 
             ResolvedInput? collateralInput = SelectCollateralInput(utxos, context.IsSmartContractTx);
             if (collateralInput is not null)
@@ -369,7 +367,7 @@ public class TransactionTemplateBuilder<T>
                     context.TxBuilder.AddRequiredSigner(address.GetPaymentKeyHash()!);
                 }
             }
-           
+
             foreach (var hook in _preBuildHooks)
             {
                 var mapping = new InputOutputMapping();
@@ -395,7 +393,7 @@ public class TransactionTemplateBuilder<T>
                 hook(context.TxBuilder, mapping);
             }
 
-             if (context.IsSmartContractTx && Eval)
+            if (context.IsSmartContractTx && Eval)
             {
                 context.TxBuilder.Evaluate(allUtxos);
             }
@@ -452,11 +450,12 @@ public class TransactionTemplateBuilder<T>
         Dictionary<string, decimal> originalSpecifiedInputsAssets = new(specifiedInputsAssets);
 
         Dictionary<string, decimal> mintedAssets = [];
+
         foreach (var policy in context.Mints)
         {
             foreach (var asset in policy.Value)
             {
-                string assetKey = policy.Key + asset.Key;
+                string assetKey = (policy.Key + asset.Key).ToLowerInvariant();
                 if (!mintedAssets.ContainsKey(assetKey))
                 {
                     mintedAssets[assetKey] = asset.Value;
@@ -473,18 +472,7 @@ public class TransactionTemplateBuilder<T>
 
         requestedLovelace = requestedLovelace > specifiedInputsLovelace ? requestedLovelace - specifiedInputsLovelace : 0;
 
-        foreach (var asset in specifiedInputsAssets)
-        {
-            if (requestedAssets.ContainsKey(asset.Key))
-            {
-                requestedAssets[asset.Key] -= asset.Value;
-                if (requestedAssets[asset.Key] <= 0)
-                {
-                    requestedAssets.Remove(asset.Key);
-                }
-            }
-        }
-
+        
         foreach (var asset in mintedAssets)
         {
             if (asset.Value > 0)
@@ -502,7 +490,7 @@ public class TransactionTemplateBuilder<T>
             {
                 if (!requestedAssets.ContainsKey(asset.Key))
                 {
-                    requestedAssets[asset.Key] = Math.Abs(asset.Value);
+                    requestedAssets[asset.Key.ToLowerInvariant()] = Math.Abs(asset.Value);
                 }
                 else
                 {
@@ -510,6 +498,20 @@ public class TransactionTemplateBuilder<T>
                 }
             }
         }
+
+        foreach (var asset in specifiedInputsAssets)
+        {
+            if (requestedAssets.ContainsKey(asset.Key))
+            {
+                requestedAssets[asset.Key] -= asset.Value;
+                if (requestedAssets[asset.Key] <= 0)
+                {
+                    requestedAssets.Remove(asset.Key);
+                }
+            }
+        }
+
+         
 
         List<Value> updatedRequiredAmounts = [];
         Lovelace updatedRequestedLovelace = new(requestedLovelace);

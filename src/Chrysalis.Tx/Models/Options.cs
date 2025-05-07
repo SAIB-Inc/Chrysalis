@@ -59,7 +59,15 @@ public record OutputOptions
     {
         Address address = new(WalletAddress.FromBech32(parties[To]).ToBytes());
         CborEncodedValue? script = Script is not null ? new CborEncodedValue(CborSerializer.Serialize(Script)) : null;
-        PostAlonzoTransactionOutput output = new(address, Amount ?? new Lovelace(2000000), Datum, script);
+        Value amount = Amount switch
+        {
+            Lovelace lovelace => lovelace.Value > 20000000 ? lovelace : new Lovelace(2000000),
+            LovelaceWithMultiAsset multiAsset => multiAsset.Lovelace() > 20000000 ? multiAsset : new LovelaceWithMultiAsset(new Lovelace(2000000), multiAsset.MultiAsset),
+            _ => Amount ?? new Lovelace(2000000)
+        };
+
+        PostAlonzoTransactionOutput output = new(address, amount ?? new Lovelace(2000000), Datum, script);
+
         ulong minLovelace = FeeUtil.CalculateMinimumLovelace(adaPerUtxoByte, CborSerializer.Serialize(output));
         Value minLovelaceValue = new Lovelace(minLovelace);
 
@@ -88,7 +96,7 @@ public record OutputOptions
 public record MintOptions<T>
 {
     public string Policy { get; set; } = string.Empty;
-    public Dictionary<string, ulong> Assets { get; set; } = [];
+    public Dictionary<string, int> Assets { get; set; } = [];
     public RedeemerMap? Redeemer { get; set; }
     public Func<InputOutputMapping, T, Redeemer<CborBase>>? RedeemerBuilder { get; set; }
     public MintOptions<T> SetRedeemerBuilder<TData>(RedeemerDataBuilder<T, TData> factory)
