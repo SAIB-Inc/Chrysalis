@@ -994,7 +994,7 @@ public class TransactionTemplateBuilder<T>
     {
         if (!isSmartContractTx) return null;
         return utxos
-            .Where(e => e.Output.Amount().Lovelace() >= 5_000_000UL && e.Output.Amount() is Lovelace)
+            .Where(e => e.Output.Amount().Lovelace() >= 6_000_000UL && e.Output.Amount() is Lovelace)
             .OrderBy(e => e.Output.Amount().Lovelace())
             .FirstOrDefault();
     }
