@@ -27,12 +27,18 @@ public class TransactionTemplateBuilder<T>
     private readonly List<Action<MintOptions<T>, T>> _mintConfigs = [];
     private readonly List<Action<WithdrawalOptions<T>, T>> _withdrawalConfigs = [];
     private readonly List<Func<T, IEnumerable<(Action<InputOptions<T>, T>, List<Action<OutputOptions, T>>)>>> _inputGenerators = [];
+    private readonly List<Action<TransactionBuilder, InputOutputMapping, T>> _preBuildHooks = [];
     private readonly List<string> requiredSigners = [];
     private ulong _validFrom;
     private ulong _validTo;
 
     public static TransactionTemplateBuilder<T> Create(ICardanoDataProvider provider) => new TransactionTemplateBuilder<T>().SetProvider(provider);
 
+    public TransactionTemplateBuilder<T> SetPreBuildHook(Action<TransactionBuilder, InputOutputMapping, T> preBuildHook)
+    {
+        _preBuildHooks.Add(preBuildHook);
+        return this;
+    }
     private TransactionTemplateBuilder<T> SetProvider(ICardanoDataProvider provider)
     {
         _provider = provider;
@@ -115,7 +121,7 @@ public class TransactionTemplateBuilder<T>
         return this;
     }
 
-    public Func<T, Task<Transaction>> Build()
+    public Func<T, Task<Transaction>> Build(bool Eval = true)
     {
         return async param =>
         {
@@ -129,6 +135,12 @@ public class TransactionTemplateBuilder<T>
             {
                 throw new InvalidOperationException("Change address not set");
             }
+
+            if (_validFrom > 0)
+                context.TxBuilder.SetValidityIntervalStart(_validFrom);
+
+            if (_validTo > 0)
+                context.TxBuilder.SetTtl(_validTo);
 
             WalletAddress changeAddress = WalletAddress.FromBech32(parties["change"]);
 
@@ -307,6 +319,15 @@ public class TransactionTemplateBuilder<T>
 
             ProcessWithdrawals(param, context, parties, intIndexedAssociations);
 
+            if (requiredSigners.Count > 0)
+            {
+                foreach (string signer in requiredSigners)
+                {
+                    WalletAddress address = WalletAddress.FromBech32(parties[signer]);
+                    context.TxBuilder.AddRequiredSigner(address.GetPaymentKeyHash()!);
+                }
+            }
+
             if (context.IsSmartContractTx)
             {
                 var inputIdToIndex = new Dictionary<string, ulong>();
@@ -324,6 +345,7 @@ public class TransactionTemplateBuilder<T>
                         }
                     }
                 }
+
 
                 foreach (var (inputId, associations) in context.AssociationsByInputId)
                 {
@@ -350,20 +372,36 @@ public class TransactionTemplateBuilder<T>
                 context.TxBuilder.Evaluate(allUtxos);
             }
 
-            if (requiredSigners.Count > 0)
+            foreach (var hook in _preBuildHooks)
             {
-                foreach (string signer in requiredSigners)
+                var mapping = new InputOutputMapping();
+
+                foreach (var (inputId, index) in inputIdToOrderedIndex)
                 {
-                    WalletAddress address = WalletAddress.FromBech32(parties[signer]);
-                    context.TxBuilder.AddRequiredSigner(address.GetPaymentKeyHash()!);
+                    mapping.AddInput(inputId, (ulong)index);
                 }
+
+                foreach (var (refInputId, refInputIndex) in refInputIdToOrderedIndex)
+                {
+                    mapping.AddReferenceInput(refInputId, refInputIndex);
+                }
+
+                foreach (var (inputId, outputsDict) in stringIndexedAssociations)
+                {
+                    foreach (var (outputId, outputIndex) in outputsDict.outputIndices)
+                    {
+                        mapping.AddOutput(inputId, outputId, (ulong)outputIndex);
+                    }
+                }
+
+                hook(context.TxBuilder, mapping, param);
             }
 
-            if (_validFrom > 0)
-                context.TxBuilder.SetValidityIntervalStart(_validFrom);
+            if (context.IsSmartContractTx && Eval)
+            {
+                context.TxBuilder.Evaluate(allUtxos);
+            }
 
-            if (_validTo > 0)
-                context.TxBuilder.SetTtl(_validTo);
 
             return context.TxBuilder.CalculateFee(scripts, 5).Build();
         };
