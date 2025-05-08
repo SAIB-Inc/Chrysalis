@@ -124,7 +124,9 @@ public class Blockfrost : ICardanoDataProvider
                     {
                         var policy = Convert.FromHexString(amount.Unit![..56]);
                         var assetName = Convert.FromHexString(amount.Unit![56..]);
-                        if (!assets.ContainsKey(policy))
+
+                        var existingkey = assets.Keys.FirstOrDefault(x => x.SequenceEqual(policy));
+                        if (existingkey is null)
                         {
                             assets[policy] = new TokenBundleOutput(new Dictionary<byte[], ulong>
                             {
@@ -133,7 +135,7 @@ public class Blockfrost : ICardanoDataProvider
                         }
                         else
                         {
-                            assets[policy].Value[assetName] = ulong.Parse(amount.Quantity!);
+                            assets[existingkey].Value[assetName] = ulong.Parse(amount.Quantity!);
                         }
                     }
                 }
@@ -161,7 +163,6 @@ public class Blockfrost : ICardanoDataProvider
                 }
 
                 TransactionOutput output = new PostAlonzoTransactionOutput(
-                    // Address Utility is not yet implemented so hardcoded for now
                     new Address(outputAddress.ToBytes())
                     , value, datum, scriptRef);
 
