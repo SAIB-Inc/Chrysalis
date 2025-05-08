@@ -51,7 +51,7 @@ public class TransactionTemplateBuilder<T>
         return this;
     }
 
-    public TransactionTemplateBuilder<T> AddInputs(
+    public TransactionTemplateBuilder<T> AddConfigGenerator(
      Func<T, IEnumerable<(Action<InputOptions<T>, T> inputConfig, List<Action<MintOptions<T>, T>>, List<Action<OutputOptions, T>> outputConfigs)>> configGenerator)
     {
         _configGenerators.Add(configGenerator);
