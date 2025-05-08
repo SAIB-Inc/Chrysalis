@@ -28,7 +28,7 @@ public record InputOptions<T>
         RedeemerBuilder = (mapping, context) =>
         {
             TData data = factory(mapping, context);
-            return new Redeemer<CborBase>(tag, 0, data, new(1400000, 100000000));
+            return new Redeemer<CborBase>(tag, 0, data, new(157374, 49443675));
         };
         return this;
     }
@@ -97,7 +97,7 @@ public record MintOptions<T>
         RedeemerBuilder = (mapping, context) =>
         {
             TData data = factory(mapping, context);
-            return new Redeemer<CborBase>(RedeemerTag.Mint, 0, data, new(1400000, 100000000));
+            return new Redeemer<CborBase>(RedeemerTag.Mint, 0, data, new(98397, 25938682));
         };
         return this;
     }
@@ -119,7 +119,7 @@ public record WithdrawalOptions<T>
         RedeemerBuilder = (mapping, context) =>
         {
             TData data = factory(mapping, context);
-            return new Redeemer<CborBase>(RedeemerTag.Reward, 0, data, new ExUnits(1400000, 100000000));
+            return new Redeemer<CborBase>(RedeemerTag.Reward, 0, data, new ExUnits(1648071, 497378507));
         };
         return this;
     }
