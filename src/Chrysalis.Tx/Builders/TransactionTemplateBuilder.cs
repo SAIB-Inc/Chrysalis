@@ -368,7 +368,6 @@ public class TransactionTemplateBuilder<T>
 
                     context.TxBuilder.SetRedeemers(redeemerMap);
                 }
-                context.TxBuilder.Evaluate(allUtxos);
             }
 
             foreach (PreBuildHook<T> hook in _preBuildHooks)
