@@ -21,20 +21,20 @@ public class TransactionTemplateBuilder<T>
     private ICardanoDataProvider? _provider;
     private string? _changeAddress;
     private readonly Dictionary<string, string> _staticParties = [];
-    private readonly List<Action<InputOptions<T>, T>> _inputConfigs = [];
-    private readonly List<Action<ReferenceInputOptions, T>> _referenceInputConfigs = [];
-    private readonly List<Action<OutputOptions, T>> _outputConfigs = [];
-    private readonly List<Action<MintOptions<T>, T>> _mintConfigs = [];
-    private readonly List<Action<WithdrawalOptions<T>, T>> _withdrawalConfigs = [];
-    private readonly List<Func<T, IEnumerable<(Action<InputOptions<T>, T>, List<Action<MintOptions<T>, T>>, List<Action<OutputOptions, T>>)>>> _configGenerators = [];
-    private readonly List<Action<TransactionBuilder, InputOutputMapping, T>> _preBuildHooks = [];
+    private readonly List<InputConfig<T>> _inputConfigs = [];
+    private readonly List<ReferenceInputConfig<T>> _referenceInputConfigs = [];
+    private readonly List<OutputConfig<T>> _outputConfigs = [];
+    private readonly List<MintConfig<T>> _mintConfigs = [];
+    private readonly List<WithdrawalConfig<T>> _withdrawalConfigs = [];
+    private readonly List<ConfigGenerator<T>> _configGenerators = [];
+    private readonly List<PreBuildHook<T>> _preBuildHooks = [];
     private readonly List<string> requiredSigners = [];
     private ulong _validFrom;
     private ulong _validTo;
 
     public static TransactionTemplateBuilder<T> Create(ICardanoDataProvider provider) => new TransactionTemplateBuilder<T>().SetProvider(provider);
 
-    public TransactionTemplateBuilder<T> SetPreBuildHook(Action<TransactionBuilder, InputOutputMapping, T> preBuildHook)
+    public TransactionTemplateBuilder<T> SetPreBuildHook(PreBuildHook<T> preBuildHook)
     {
         _preBuildHooks.Add(preBuildHook);
         return this;
@@ -45,39 +45,39 @@ public class TransactionTemplateBuilder<T>
         return this;
     }
 
-    public TransactionTemplateBuilder<T> AddInput(Action<InputOptions<T>, T> config)
+    public TransactionTemplateBuilder<T> AddInput(InputConfig<T> config)
     {
         _inputConfigs.Add(config);
         return this;
     }
 
     public TransactionTemplateBuilder<T> AddConfigGenerator(
-     Func<T, IEnumerable<(Action<InputOptions<T>, T> inputConfig, List<Action<MintOptions<T>, T>>, List<Action<OutputOptions, T>> outputConfigs)>> configGenerator)
+     ConfigGenerator<T> configGenerator)
     {
         _configGenerators.Add(configGenerator);
         return this;
     }
 
 
-    public TransactionTemplateBuilder<T> AddReferenceInput(Action<ReferenceInputOptions, T> config)
+    public TransactionTemplateBuilder<T> AddReferenceInput(ReferenceInputConfig<T> config)
     {
         _referenceInputConfigs.Add(config);
         return this;
     }
 
-    public TransactionTemplateBuilder<T> AddOutput(Action<OutputOptions, T> config)
+    public TransactionTemplateBuilder<T> AddOutput(OutputConfig<T> config)
     {
         _outputConfigs.Add(config);
         return this;
     }
 
-    public TransactionTemplateBuilder<T> AddMint(Action<MintOptions<T>, T> config)
+    public TransactionTemplateBuilder<T> AddMint(MintConfig<T> config)
     {
         _mintConfigs.Add(config);
         return this;
     }
 
-    public TransactionTemplateBuilder<T> AddWithdrawal(Action<WithdrawalOptions<T>, T> config)
+    public TransactionTemplateBuilder<T> AddWithdrawal(WithdrawalConfig<T> config)
     {
         _withdrawalConfigs.Add(config);
         return this;
@@ -115,11 +115,12 @@ public class TransactionTemplateBuilder<T>
     {
         return async param =>
         {
-            var context = new BuildContext
+            BuildContext context = new()
             {
                 TxBuilder = TransactionBuilder.Create(await _provider!.GetParametersAsync())
             };
-            var parties = ResolveParties(param);
+
+            Dictionary<string, string> parties = ResolveParties(param);
 
             if (_changeAddress is null)
             {
@@ -134,17 +135,17 @@ public class TransactionTemplateBuilder<T>
 
             WalletAddress changeAddress = WalletAddress.FromBech32(parties["change"]);
 
-            foreach (var generator in _configGenerators)
+            foreach (ConfigGenerator<T> generator in _configGenerators)
             {
                 var dynamicConfigs = generator(param);
                 foreach (var (inputConfig, mintConfigs, outputConfigs) in dynamicConfigs)
                 {
                     _inputConfigs.Add(inputConfig);
-                    foreach (var mintConfig in mintConfigs)
+                    foreach (MintConfig<T> mintConfig in mintConfigs)
                     {
                         _mintConfigs.Add(mintConfig);
                     }
-                    foreach (var outputConfig in outputConfigs)
+                    foreach (OutputConfig<T> outputConfig in outputConfigs)
                     {
                         _outputConfigs.Add(outputConfig);
                     }
@@ -162,7 +163,7 @@ public class TransactionTemplateBuilder<T>
 
             List<ResolvedInput> utxos = await _provider!.GetUtxosAsync([parties["change"]]);
 
-            var allUtxos = new List<ResolvedInput>(utxos);
+            List<ResolvedInput> allUtxos = [.. utxos];
             foreach (string address in context.InputAddresses.Distinct())
             {
                 if (address != _changeAddress)
@@ -183,14 +184,14 @@ public class TransactionTemplateBuilder<T>
 
             List<ResolvedInput> specifiedInputsUtxos = GetSpecifiedInputsUtxos(context.SpecifiedInputs, allUtxos);
 
-            var coinSelectionResult = PerformCoinSelection(
+            CoinSelectionResult coinSelectionResult = PerformCoinSelection(
                 utxos,
                 requiredAmount,
                 specifiedInputsUtxos,
                 context
             );
 
-            foreach (var consumedInput in coinSelectionResult.Inputs)
+            foreach (ResolvedInput consumedInput in coinSelectionResult.Inputs)
             {
                 context.TxBuilder.AddInput(consumedInput.Outref);
             }
@@ -207,7 +208,7 @@ public class TransactionTemplateBuilder<T>
             ulong totalLovelaceChange = coinSelectionResult.LovelaceChange;
             Dictionary<byte[], TokenBundleOutput> assetsChange = coinSelectionResult.AssetsChange;
 
-            var lovelaceChange = new Lovelace(totalLovelaceChange + (feeInput?.Output.Amount().Lovelace() ?? 0));
+            Lovelace lovelaceChange = new(totalLovelaceChange + (feeInput?.Output.Amount().Lovelace() ?? 0));
             if (feeInput!.Output.Amount() is LovelaceWithMultiAsset lovelaceWithMultiAsset)
             {
                 Dictionary<byte[], Dictionary<byte[], ulong>> existingAssetsChange = [];
@@ -286,7 +287,7 @@ public class TransactionTemplateBuilder<T>
                 ? new LovelaceWithMultiAsset(lovelaceChange, new MultiAssetOutput(assetsChange))
                 : lovelaceChange;
 
-            var changeOutput = new AlonzoTransactionOutput(new Address(changeAddress.ToBytes()), changeValue, null);
+            TransactionOutput changeOutput = new AlonzoTransactionOutput(new Address(changeAddress.ToBytes()), changeValue, null);
             context.TxBuilder.AddOutput(changeOutput, true);
 
             List<TransactionInput> sortedInputs = [.. context.TxBuilder.body.Inputs.GetValue().OrderBy(e => Convert.ToHexString(e.TransactionId)).ThenBy(e => e.Index)];
@@ -302,10 +303,10 @@ public class TransactionTemplateBuilder<T>
                 context.TxBuilder.SetReferenceInputs(sortedRefInputs);
             }
 
-            var inputIdToOrderedIndex = GetInputIdToOrderedIndex(context.InputsById, sortedInputs);
-            var intIndexedAssociations = new Dictionary<int, Dictionary<string, int>>();
-            var stringIndexedAssociations = GetIndexedAssociations(context.AssociationsByInputId, inputIdToOrderedIndex);
-            var refInputIdToOrderedIndex = GetRefInputIdToOrderedIndex(context.ReferenceInputsById, sortedRefInputs);
+            Dictionary<string, int> inputIdToOrderedIndex = GetInputIdToOrderedIndex(context.InputsById, sortedInputs);
+            Dictionary<int, Dictionary<string, int>> intIndexedAssociations = [];
+            Dictionary<string, (ulong inputIndex, Dictionary<string, int> outputIndices)> stringIndexedAssociations = GetIndexedAssociations(context.AssociationsByInputId, inputIdToOrderedIndex);
+            Dictionary<string, ulong> refInputIdToOrderedIndex = GetRefInputIdToOrderedIndex(context.ReferenceInputsById, sortedRefInputs);
 
             foreach (var (inputId, data) in stringIndexedAssociations)
             {
@@ -362,15 +363,15 @@ public class TransactionTemplateBuilder<T>
 
                 if (context.Redeemers.Count > 0)
                 {
-                    var redeemerMap = new RedeemerMap(context.Redeemers);
-                    var serialized = CborSerializer.Serialize(redeemerMap);
+                    RedeemerMap redeemerMap = new(context.Redeemers);
+                    byte[] serialized = CborSerializer.Serialize(redeemerMap);
 
                     context.TxBuilder.SetRedeemers(redeemerMap);
                 }
                 context.TxBuilder.Evaluate(allUtxos);
             }
 
-            foreach (var hook in _preBuildHooks)
+            foreach (PreBuildHook<T> hook in _preBuildHooks)
             {
                 var mapping = new InputOutputMapping();
 
@@ -423,7 +424,7 @@ public class TransactionTemplateBuilder<T>
         ulong requestedLovelace = 0;
         Dictionary<string, decimal> requestedAssets = [];
 
-        foreach (var amount in requiredAmount)
+        foreach (Value amount in requiredAmount)
         {
             requestedLovelace += amount.Lovelace();
 
@@ -439,7 +440,7 @@ public class TransactionTemplateBuilder<T>
         ulong specifiedInputsLovelace = 0;
         Dictionary<string, decimal> specifiedInputsAssets = [];
 
-        foreach (var utxo in specifiedInputsUtxos)
+        foreach (ResolvedInput utxo in specifiedInputsUtxos)
         {
             specifiedInputsLovelace += utxo.Output.Amount().Lovelace();
 
@@ -857,7 +858,7 @@ public class TransactionTemplateBuilder<T>
 
         foreach (var config in _referenceInputConfigs)
         {
-            var referenceInputOptions = new ReferenceInputOptions { From = "", UtxoRef = null, Id = null };
+            ReferenceInputOptions referenceInputOptions = new() { From = "", UtxoRef = null, Id = null };
             config(referenceInputOptions, param);
 
             if (referenceInputOptions.UtxoRef is not null)
@@ -880,14 +881,15 @@ public class TransactionTemplateBuilder<T>
 
     private void ProcessMints(T param, BuildContext context)
     {
-        foreach (var config in _mintConfigs)
+        foreach (MintConfig<T> config in _mintConfigs)
         {
             var mintOptions = new MintOptions<T> { Policy = "", Assets = [] };
             config(mintOptions, param);
 
-            if (!context.Mints.ContainsKey(mintOptions.Policy))
+            if (!context.Mints.TryGetValue(mintOptions.Policy, out Dictionary<string, long>? value))
             {
-                context.Mints[mintOptions.Policy] = [];
+                value = [];
+                context.Mints[mintOptions.Policy] = value;
             }
             if (mintOptions.RedeemerBuilder != null || mintOptions.Redeemer is not null)
             {
@@ -896,7 +898,7 @@ public class TransactionTemplateBuilder<T>
 
             foreach (var (assetName, amount) in mintOptions.Assets)
             {
-                context.Mints[mintOptions.Policy][assetName] = (long)amount;
+                value[assetName] = amount;
                 context.TxBuilder.AddMint(new MultiAssetMint(new Dictionary<byte[], TokenBundleMint>
                 {
                     { Convert.FromHexString(mintOptions.Policy), new TokenBundleMint(new Dictionary<byte[], long> { { Convert.FromHexString(assetName), (long)amount } }) }
@@ -908,9 +910,9 @@ public class TransactionTemplateBuilder<T>
     private void ProcessOutputs(T param, BuildContext context, Dictionary<string, string> parties, List<Value> requiredAmount, ref int changeIndex)
     {
         int outputIndex = 0;
-        foreach (var config in _outputConfigs)
+        foreach (OutputConfig<T> config in _outputConfigs)
         {
-            var outputOptions = new OutputOptions { To = "", Amount = null, Datum = null };
+            OutputOptions outputOptions = new() { To = "", Amount = null, Datum = null };
             config(outputOptions, param);
             if (
                 !string.IsNullOrEmpty(outputOptions.AssociatedInputId) &&
@@ -932,9 +934,9 @@ public class TransactionTemplateBuilder<T>
     private void ProcessWithdrawals(T param, BuildContext context, Dictionary<string, string> parties, Dictionary<int, Dictionary<string, int>> indexedAssociations)
     {
         Dictionary<RewardAccount, ulong> rewards = [];
-        foreach (var config in _withdrawalConfigs)
+        foreach (WithdrawalConfig<T> config in _withdrawalConfigs)
         {
-            var withdrawalOptions = new WithdrawalOptions<T> { From = "", Amount = 0 };
+            WithdrawalOptions<T> withdrawalOptions = new() { From = "", Amount = 0 };
             config(withdrawalOptions, param);
 
             WalletAddress withdrawalAddress = WalletAddress.FromBech32(parties[withdrawalOptions.From]);
@@ -953,9 +955,9 @@ public class TransactionTemplateBuilder<T>
         {
             List<Script> scripts = [];
 
-            foreach (var referenceInput in referenceInputs)
+            foreach (TransactionInput referenceInput in referenceInputs)
             {
-                foreach (var utxo in allUtxos)
+                foreach (ResolvedInput utxo in allUtxos)
                 {
                     if (Convert.ToHexString(utxo.Outref.TransactionId) == Convert.ToHexString(referenceInput.TransactionId) &&
                         utxo.Outref.Index == referenceInput.Index)
@@ -978,7 +980,7 @@ public class TransactionTemplateBuilder<T>
 
     private ResolvedInput? SelectFeeInput(List<ResolvedInput> utxos, List<ResolvedInput> consumedInputs)
     {
-        var sortedUtxos = utxos
+        IEnumerable<ResolvedInput> sortedUtxos = utxos
             .Where(e => e.Output.Amount().Lovelace() >= 5_000_000UL)
             .Where(e => !consumedInputs.Any(input =>
                 Convert.ToHexString(input.Outref.TransactionId) == Convert.ToHexString(e.Outref.TransactionId) &&
@@ -1000,7 +1002,7 @@ public class TransactionTemplateBuilder<T>
     private List<ResolvedInput> GetSpecifiedInputsUtxos(List<TransactionInput> specifiedInputs, List<ResolvedInput> allUtxos)
     {
         List<ResolvedInput> specifiedInputsUtxos = [];
-        foreach (var input in specifiedInputs)
+        foreach (TransactionInput input in specifiedInputs)
         {
             ResolvedInput specifiedInputUtxo = allUtxos.First(e =>
                 Convert.ToHexString(e.Outref.TransactionId) == Convert.ToHexString(input.TransactionId) &&
