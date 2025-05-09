@@ -367,7 +367,6 @@ public class TransactionTemplateBuilder<T>
 
                     context.TxBuilder.SetRedeemers(redeemerMap);
                 }
-                context.TxBuilder.Evaluate(allUtxos);
             }
 
             foreach (var hook in _preBuildHooks)
@@ -452,11 +451,12 @@ public class TransactionTemplateBuilder<T>
         Dictionary<string, decimal> originalSpecifiedInputsAssets = new(specifiedInputsAssets);
 
         Dictionary<string, decimal> mintedAssets = [];
+
         foreach (var policy in context.Mints)
         {
             foreach (var asset in policy.Value)
             {
-                string assetKey = policy.Key + asset.Key;
+                string assetKey = (policy.Key + asset.Key).ToLowerInvariant();
                 if (!mintedAssets.ContainsKey(assetKey))
                 {
                     mintedAssets[assetKey] = asset.Value;
@@ -473,17 +473,6 @@ public class TransactionTemplateBuilder<T>
 
         requestedLovelace = requestedLovelace > specifiedInputsLovelace ? requestedLovelace - specifiedInputsLovelace : 0;
 
-        foreach (var asset in specifiedInputsAssets)
-        {
-            if (requestedAssets.ContainsKey(asset.Key))
-            {
-                requestedAssets[asset.Key] -= asset.Value;
-                if (requestedAssets[asset.Key] <= 0)
-                {
-                    requestedAssets.Remove(asset.Key);
-                }
-            }
-        }
 
         foreach (var asset in mintedAssets)
         {
@@ -502,7 +491,7 @@ public class TransactionTemplateBuilder<T>
             {
                 if (!requestedAssets.ContainsKey(asset.Key))
                 {
-                    requestedAssets[asset.Key] = Math.Abs(asset.Value);
+                    requestedAssets[asset.Key.ToLowerInvariant()] = Math.Abs(asset.Value);
                 }
                 else
                 {
@@ -510,6 +499,20 @@ public class TransactionTemplateBuilder<T>
                 }
             }
         }
+
+        foreach (var asset in specifiedInputsAssets)
+        {
+            if (requestedAssets.ContainsKey(asset.Key))
+            {
+                requestedAssets[asset.Key] -= asset.Value;
+                if (requestedAssets[asset.Key] <= 0)
+                {
+                    requestedAssets.Remove(asset.Key);
+                }
+            }
+        }
+
+
 
         List<Value> updatedRequiredAmounts = [];
         Lovelace updatedRequestedLovelace = new(requestedLovelace);
