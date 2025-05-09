@@ -111,7 +111,7 @@ public class TransactionTemplateBuilder<T>
         return this;
     }
 
-    public Func<T, Task<Transaction>> Build(bool Eval = true)
+    public TransactionTemplate<T> Build(bool Eval = true)
     {
         return async param =>
         {
