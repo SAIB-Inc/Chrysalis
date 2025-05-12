@@ -11,7 +11,7 @@ public abstract partial record PlutusData : CborBase
 
 [CborSerializable]
 [CborConstr]
-public partial record PlutusConstr(List<PlutusData> PlutusData) : PlutusData;
+public partial record PlutusConstr(CborMaybeIndefList<PlutusData> PlutusData) : PlutusData;
 
 [CborSerializable]
 public partial record PlutusMap(Dictionary<PlutusData, PlutusData> PlutusData) : PlutusData;
