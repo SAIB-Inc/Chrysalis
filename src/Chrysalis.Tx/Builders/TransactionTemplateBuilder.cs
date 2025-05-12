@@ -801,15 +801,15 @@ public class TransactionTemplateBuilder<T>
                 }
                 else
                 {
-                    byte[] dataBytes = CborSerializer.Serialize(dataObj);
+                     byte[] dataBytes = CborSerializer.Serialize(dataObj);
                     redeemerData = CborSerializer.Deserialize<PlutusData>(dataBytes);
                 }
 
                 redeemerExUnits = redeemer.ExUnits;
 
-                var key = new RedeemerKey((int)redeemerTag, index);
+                RedeemerKey key = new((int)redeemerTag, index);
 
-                var value = new RedeemerValue(redeemerData, redeemerExUnits);
+                RedeemerValue value = new(redeemerData, redeemerExUnits);
 
                 buildContext.Redeemers[key] = value;
             }
