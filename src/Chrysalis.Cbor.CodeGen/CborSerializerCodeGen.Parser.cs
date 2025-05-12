@@ -65,6 +65,7 @@ public sealed partial class CborSerializerCodeGen
             AttributeSyntax? cborUnionAttribute = attributes.FirstOrDefault(a => a.Name.ToString() == CborUnion);
             AttributeSyntax? cborConstrAttribute = attributes.FirstOrDefault(a => a.Name.ToString() == CborConstr);
             AttributeSyntax? cborTagAttribute = attributes.FirstOrDefault(a => a.Name.ToString() == CborTag);
+            AttributeSyntax? cborIndefiniteAttribute = attributes.FirstOrDefault(a => a.Name.ToString() == CborIndefinite);
 
             int? constrIndex = cborConstrAttribute?.ArgumentList?.Arguments.FirstOrDefault()?.GetFirstToken().Value as int?;
             int? cborTag = cborTagAttribute?.ArgumentList?.Arguments.FirstOrDefault()?.GetFirstToken().Value as int?;
@@ -85,6 +86,7 @@ public sealed partial class CborSerializerCodeGen
                 keyword,
                 cborTag,
                 constrIndex,
+                cborIndefiniteAttribute != null,
                 serializationType,
                 validatorFullyQualifiedName,
                 shouldPreserveRaw

@@ -58,7 +58,15 @@ public sealed partial class CborSerializerCodeGen
             Emitter.EmitPropertyCountWriter(sb, metadata);
             bool isIntKey = metadata.Properties[0].PropertyKeyInt is not null;
 
-            sb.AppendLine($"writer.WriteStartMap(propCount);");
+            if (metadata.IsIndefinite)
+            {
+                sb.AppendLine($"writer.WriteStartMap(null);");
+            }
+            else
+            {
+                sb.AppendLine($"writer.WriteStartMap(propCount);");
+            }
+
             foreach (var prop in metadata.Properties)
             {
                 if (prop.IsNullable)

@@ -91,7 +91,7 @@ public sealed class CborSizeAttribute(int size) : Attribute
     public int Size { get; } = size;
 }
 
-[AttributeUsage(AttributeTargets.Property | AttributeTargets.Parameter, Inherited = false, AllowMultiple = false)]
+[AttributeUsage(AttributeTargets.Class | AttributeTargets.Struct | AttributeTargets.Interface | AttributeTargets.Property | AttributeTargets.Parameter, Inherited = false, AllowMultiple = false)]
 public sealed class CborIndefiniteAttribute : Attribute
 {
     public CborIndefiniteAttribute() { }
