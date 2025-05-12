@@ -304,7 +304,14 @@ public sealed partial class CborSerializerCodeGen
             EmitPropertyCountWriter(sb, metadata);
             if (!(metadata.SerializationType == SerializationType.Constr && (metadata.CborIndex is null || metadata.CborIndex < 0)))
             {
-                sb.AppendLine($"writer.WriteStartArray(propCount);");
+                if (metadata.IsIndefinite)
+                {
+                    sb.AppendLine($"writer.WriteStartArray(null);");
+                }
+                else
+                {
+                    sb.AppendLine($"writer.WriteStartArray(propCount);");
+                }
             }
 
             foreach (SerializablePropertyMetadata prop in metadata.Properties)
@@ -335,7 +342,7 @@ public sealed partial class CborSerializerCodeGen
         {
             sb.AppendLine($"if (data.Raw is not null)");
             sb.AppendLine("{");
-            sb.AppendLine($"writer.WriteEncodedValue(data.Raw?.ToArray());");
+            sb.AppendLine($"writer.WriteByteString(data.Raw?.ToArray());");
             sb.AppendLine("return;");
             sb.AppendLine("}");
             return sb;
