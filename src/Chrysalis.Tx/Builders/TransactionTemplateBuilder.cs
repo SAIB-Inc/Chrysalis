@@ -138,13 +138,19 @@ public class TransactionTemplateBuilder<T>
             foreach (ConfigGenerator<T> generator in _configGenerators)
             {
                 var dynamicConfigs = generator(param);
-                foreach (var (inputConfig, mintConfigs, outputConfigs) in dynamicConfigs)
+                foreach (var (inputConfig, referenceInputConfigs, mintConfigs, outputConfigs) in dynamicConfigs)
                 {
                     _inputConfigs.Add(inputConfig);
+                    foreach (ReferenceInputConfig<T> referenceInputConfig in referenceInputConfigs)
+                    {
+                        _referenceInputConfigs.Add(referenceInputConfig);
+                    }
+
                     foreach (MintConfig<T> mintConfig in mintConfigs)
                     {
                         _mintConfigs.Add(mintConfig);
                     }
+
                     foreach (OutputConfig<T> outputConfig in outputConfigs)
                     {
                         _outputConfigs.Add(outputConfig);
