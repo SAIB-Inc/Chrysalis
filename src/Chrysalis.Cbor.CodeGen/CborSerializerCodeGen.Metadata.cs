@@ -22,6 +22,7 @@ public sealed partial class CborSerializerCodeGen
         string keyword,
         int? cborTag,
         int? cborIndex,
+        bool isIndefinite,
         SerializationType serializationType,
         string? validator,
         bool shouldPreserveRaw
@@ -35,6 +36,7 @@ public sealed partial class CborSerializerCodeGen
         public string Keyword { get; } = keyword;
         public int? CborTag { get; } = cborTag;
         public int? CborIndex { get; } = cborIndex;
+        public bool IsIndefinite { get; } = isIndefinite;
         public SerializationType SerializationType { get; } = serializationType;
         public string? Validator { get; } = validator;
         public bool ShouldPreserveRaw { get; } = shouldPreserveRaw;
@@ -55,6 +57,7 @@ public sealed partial class CborSerializerCodeGen
                 // SerializationType: {{SerializationType}}
                 // CborTag: {{CborTag}}
                 // CborIndex: {{CborIndex}}
+                // IsIndefinite: {{IsIndefinite}}
                 // ShouldPreserveRaw: {{ShouldPreserveRaw}}
                 // Validator: {{Validator}}
                 // Properties: {{string.Join(",", Properties.Select(p => p.ToString()))}}
