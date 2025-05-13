@@ -1,8 +1,11 @@
+using Chrysalis.Tx.Models.Cbor;
+
 namespace Chrysalis.Tx.Models;
 
 public class InputOutputMapping
 {
     private readonly Dictionary<string, (ulong InputIndex, Dictionary<string, ulong> OutputIndexes)> _inputOutputMapping = [];
+    private readonly List<ResolvedInput> _resolvedInputs = [];
     private readonly Dictionary<string, ulong> _referenceInputs = [];
 
     public void AddInput(string inputId, ulong inputIndex)
@@ -18,6 +21,19 @@ public class InputOutputMapping
         }
     }
 
+    public void SetResolvedInputs(List<ResolvedInput> resolvedInputs)
+    {
+        List<ResolvedInput> sortedInputs = [.. resolvedInputs
+        .OrderBy(x => Convert.ToHexString(x.Outref.TransactionId))
+        .ThenBy(x => x.Outref.Index)];
+
+        _resolvedInputs.AddRange(sortedInputs);
+    }
+
+    public List<ResolvedInput> GetResolvedInputs()
+    {
+        return _resolvedInputs;
+    }
     public void AddReferenceInput(string inputId, ulong inputIndex)
     {
         _referenceInputs[inputId] = inputIndex;
