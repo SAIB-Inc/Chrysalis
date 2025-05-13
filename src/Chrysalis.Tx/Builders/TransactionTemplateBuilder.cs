@@ -183,7 +183,8 @@ public class TransactionTemplateBuilder<T>
             }
 
             List<ResolvedInput> specifiedInputsUtxos = GetSpecifiedInputsUtxos(context.SpecifiedInputs, allUtxos);
-
+            context.ResolvedInputs.AddRange(specifiedInputsUtxos);
+            
             CoinSelectionResult coinSelectionResult = PerformCoinSelection(
                 utxos,
                 requiredAmount,
@@ -193,6 +194,7 @@ public class TransactionTemplateBuilder<T>
 
             foreach (ResolvedInput consumedInput in coinSelectionResult.Inputs)
             {
+                context.ResolvedInputs.Add(consumedInput);
                 context.TxBuilder.AddInput(consumedInput.Outref);
             }
 
@@ -200,6 +202,7 @@ public class TransactionTemplateBuilder<T>
             if (feeInput is not null)
             {
                 utxos.Remove(feeInput);
+                context.ResolvedInputs.Add(feeInput);
                 context.InputsById["fee"] = feeInput.Outref;
                 context.TxBuilder.AddInput(feeInput.Outref);
             }
@@ -679,7 +682,7 @@ public class TransactionTemplateBuilder<T>
         Dictionary<string, Dictionary<string, ulong>> outputMappings)
     {
         var mapping = new InputOutputMapping();
-
+        mapping.SetResolvedInputs(buildContext.ResolvedInputs);
         foreach (var (inputId, inputIndex) in inputIdToIndex)
         {
             mapping.AddInput(inputId, inputIndex);
@@ -716,7 +719,7 @@ public class TransactionTemplateBuilder<T>
                 if (inputOptions.Id is not null)
                 {
                     var inputIndex = inputIdToIndex[inputOptions.Id];
-                    var redeemerObj = inputOptions.RedeemerBuilder(mapping, param);
+                    var redeemerObj = inputOptions.RedeemerBuilder(mapping, param, buildContext.TxBuilder);
 
                     if (redeemerObj != null)
                     {
@@ -742,7 +745,7 @@ public class TransactionTemplateBuilder<T>
 
             if (withdrawalOptions.RedeemerBuilder != null)
             {
-                var redeemerObj = withdrawalOptions.RedeemerBuilder(mapping, param);
+                var redeemerObj = withdrawalOptions.RedeemerBuilder(mapping, param, buildContext.TxBuilder);
 
                 if (redeemerObj != null)
                 {
@@ -769,7 +772,7 @@ public class TransactionTemplateBuilder<T>
 
             if (mintOptions.RedeemerBuilder != null)
             {
-                Redeemer<CborBase> redeemer = mintOptions.RedeemerBuilder(mapping, param);
+                Redeemer<CborBase> redeemer = mintOptions.RedeemerBuilder(mapping, param, buildContext.TxBuilder);
 
                 if (redeemer != null)
                 {
@@ -874,10 +877,6 @@ public class TransactionTemplateBuilder<T>
                 context.ReferenceInputs.Add(referenceInputOptions.UtxoRef);
                 context.TxBuilder.AddReferenceInput(referenceInputOptions.UtxoRef);
             }
-            else
-            {
-                throw new Exception($"Reference input not found for {referenceInputOptions.From}");
-            }
         }
 
     }
@@ -941,9 +940,11 @@ public class TransactionTemplateBuilder<T>
         {
             WithdrawalOptions<T> withdrawalOptions = new() { From = "", Amount = 0 };
             config(withdrawalOptions, param);
-
-            WalletAddress withdrawalAddress = WalletAddress.FromBech32(parties[withdrawalOptions.From]);
-            rewards.Add(new RewardAccount(withdrawalAddress.ToBytes()), withdrawalOptions.Amount!);
+            if (withdrawalOptions.From != string.Empty)
+            {
+                WalletAddress withdrawalAddress = WalletAddress.FromBech32(parties[withdrawalOptions.From]);
+                rewards.Add(new RewardAccount(withdrawalAddress.ToBytes()), withdrawalOptions.Amount!);
+            }
         }
 
         if (rewards.Count > 0)
@@ -1155,7 +1156,8 @@ public class TransactionTemplateBuilder<T>
         public Dictionary<string, TransactionInput> ReferenceInputsById { get; } = [];
         public Dictionary<string, Dictionary<string, int>> AssociationsByInputId { get; } = [];
         public List<string> InputAddresses { get; } = [];
-        public List<TransactionInput> SpecifiedInputs { get; } = [];
+        public List<ResolvedInput> ResolvedInputs { get; } = [];
+        public List<TransactionInput> SpecifiedInputs { get; set; } = [];
         public Dictionary<RedeemerKey, RedeemerValue> Redeemers { get; } = [];
         public Dictionary<string, Dictionary<string, long>> Mints { get; } = [];
     }

@@ -1,5 +1,6 @@
 using Chrysalis.Cbor.Types;
 using Chrysalis.Cbor.Types.Cardano.Core.Protocol;
+using Chrysalis.Tx.Builders;
 
 namespace Chrysalis.Tx.Models;
 
@@ -14,6 +15,6 @@ public enum RedeemerTag
 
 }
 
-public delegate TData RedeemerDataBuilder<TContext, TData>(InputOutputMapping mapping, TContext context) where TData : CborBase;
+public delegate TData RedeemerDataBuilder<TContext, TData>(InputOutputMapping mapping, TContext context, TransactionBuilder transactionBuilder) where TData : CborBase;
 
 public record Redeemer<T>(RedeemerTag Tag, ulong Index, T Data, ExUnits ExUnits) where T : CborBase;

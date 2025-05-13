@@ -5,6 +5,7 @@ using Chrysalis.Cbor.Types.Cardano.Core.Common;
 using Chrysalis.Cbor.Types.Cardano.Core.Protocol;
 using Chrysalis.Cbor.Types.Cardano.Core.Transaction;
 using Chrysalis.Cbor.Types.Cardano.Core.TransactionWitness;
+using Chrysalis.Tx.Builders;
 using Chrysalis.Tx.Utils;
 using WalletAddress = Chrysalis.Wallet.Models.Addresses.Address;
 
@@ -20,14 +21,14 @@ public record InputOptions<T>
     public string? Id { get; set; }
     public RedeemerMap? Redeemer { get; set; }
 
-    public Func<InputOutputMapping, T, Redeemer<CborBase>>? RedeemerBuilder { get; set; }
+    public Func<InputOutputMapping, T, TransactionBuilder, Redeemer<CborBase>>? RedeemerBuilder { get; set; }
 
     public InputOptions<T> SetRedeemerBuilder<TData>(RedeemerDataBuilder<T, TData> factory, RedeemerTag tag = RedeemerTag.Spend)
         where TData : CborBase
     {
-        RedeemerBuilder = (mapping, context) =>
+        RedeemerBuilder = (mapping, context, transactionBuilder) =>
         {
-            TData data = factory(mapping, context);
+            TData data = factory(mapping, context, transactionBuilder);
             return new Redeemer<CborBase>(tag, 0, data, new(157374, 49443675));
         };
         return this;
@@ -90,13 +91,13 @@ public record MintOptions<T>
     public string Policy { get; set; } = string.Empty;
     public Dictionary<string, int> Assets { get; set; } = [];
     public RedeemerMap? Redeemer { get; set; }
-    public Func<InputOutputMapping, T, Redeemer<CborBase>>? RedeemerBuilder { get; set; }
+    public Func<InputOutputMapping, T, TransactionBuilder, Redeemer<CborBase>>? RedeemerBuilder { get; set; }
     public MintOptions<T> SetRedeemerBuilder<TData>(RedeemerDataBuilder<T, TData> factory)
         where TData : CborBase
     {
-        RedeemerBuilder = (mapping, context) =>
+        RedeemerBuilder = (mapping, context, transactionBuilder) =>
         {
-            TData data = factory(mapping, context);
+            TData data = factory(mapping, context, transactionBuilder);
             return new Redeemer<CborBase>(RedeemerTag.Mint, 0, data, new(98397, 25938682));
         };
         return this;
@@ -112,13 +113,13 @@ public record WithdrawalOptions<T>
     public ulong Amount { get; set; }
     public string? Id { get; set; }
     public RedeemerMap? Redeemer { get; set; }
-    public Func<InputOutputMapping, T, Redeemer<CborBase>>? RedeemerBuilder { get; set; }
+    public Func<InputOutputMapping, T, TransactionBuilder, Redeemer<CborBase>>? RedeemerBuilder { get; set; }
     public WithdrawalOptions<T> SetRedeemerBuilder<TData>(RedeemerDataBuilder<T, TData> factory, ExUnits? exUnits = null)
         where TData : CborBase
     {
-        RedeemerBuilder = (mapping, context) =>
+        RedeemerBuilder = (mapping, context, transactionBuilder) =>
         {
-            TData data = factory(mapping, context);
+            TData data = factory(mapping, context, transactionBuilder);
             return new Redeemer<CborBase>(RedeemerTag.Reward, 0, data, new ExUnits(1648071, 497378507));
         };
         return this;
