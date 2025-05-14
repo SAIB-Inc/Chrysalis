@@ -25,6 +25,19 @@ jobs:
       uses: actions/setup-dotnet@v3
       with:
         dotnet-version: 9.x.x
+    
+    - name: Set up Rust
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: stable
+        override: true
+    
+    - name: Make build script executable
+      run: chmod +x ./src/Chrysalis.Plutus/build-rs.sh
+    
+    - name: Build Plutus
+      run: dotnet build -c Release
+      working-directory: ./src/Chrysalis.Plutus
         
     - name: Restore dependencies
       run: dotnet restore
