@@ -5,6 +5,10 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <LangVersion>Latest</LangVersion>
+    <Version>0.7.4</Version>
+    <PackageId>Chrysalis.Cbor.CodeGen</PackageId>
+    <Authors>clark@saib.dev, rjlacanlale@saib.dev</Authors>
+    <Company>SAIB Inc</Company>
     <EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
     <IncludeBuildOutput>false</IncludeBuildOutput>
     <DevelopmentDependency>true</DevelopmentDependency>
