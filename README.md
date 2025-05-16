@@ -234,13 +234,20 @@ Key performance advantages:
 
 Chrysalis provides comprehensive support for Cardano's evolution:
 
-| Era | Phase | Status |
-|-----|-------|--------|
-| **Byron** | Foundation | Planned |
-| **Shelley** (+ Allegra, Mary) | Decentralization | Supported |
-| **Alonzo** (Goguen) | Smart Contracts | Supported |
-| **Babbage/Vasil** (Basho) | Scaling | Supported |
-| **Conway** (Voltaire) | Governance | Supported |
+| Era | Phase | Status | Serialization | Block Processing | Transaction Building |
+|-----|-------|:------:|:-------------:|:----------------:|:--------------------:|
+| **Byron** | Foundation | 🚧 Planned | ❌ | ❌ | ❌ |
+| **Shelley** | Decentralization | ✅ Supported | ✅ | ✅ | ✅ |
+| **Allegra** | Token Locking | ✅ Supported | ✅ | ✅ | ✅ |
+| **Mary** | Multi-Asset | ✅ Supported | ✅ | ✅ | ✅ |
+| **Alonzo** | Smart Contracts | ✅ Supported | ✅ | ✅ | ✅ |
+| **Babbage/Vasil** | Scaling | ✅ Supported | ✅ | ✅ | ✅ |
+| **Conway** | Governance | ✅ Supported | ✅ | ✅ | ✅ |
+
+**Legend**:
+- ✅ Fully Supported
+- 🚧 Planned/In Development
+- ❌ Not Supported Yet
 
 ## 📚 Documentation
 
