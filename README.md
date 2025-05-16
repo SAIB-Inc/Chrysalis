@@ -1,5 +1,5 @@
 <div align="center">
-  <h1>Chrysalis</h1>
+  <h1>Chrysalis 🦋</h1>
   <p>A comprehensive .NET ecosystem for Cardano blockchain development</p>
   
   <a href="https://www.nuget.org/packages/Chrysalis">
@@ -26,26 +26,26 @@
   </a>
 </div>
 
-## Overview
+## 📖 Overview
 
 Chrysalis is a native .NET toolkit for Cardano blockchain development, providing everything needed to build applications on Cardano. From CBOR serialization to transaction building and smart contract interaction, Chrysalis offers a complete solution for .NET developers.
 
 **Key Components:**
-- **Serialization** - Efficient CBOR encoding/decoding for Cardano data structures
-- **Node Communication** - Direct interaction with Cardano nodes
-- **Wallet Management** - Address generation and key handling
-- **Transaction Building** - Simple and advanced transaction construction
-- **Smart Contract Integration** - Plutus script evaluation and validation
+- 📦 **Serialization** - Efficient CBOR encoding/decoding for Cardano data structures
+- 🔄 **Node Communication** - Direct interaction with Cardano nodes
+- 🔑 **Wallet Management** - Address generation and key handling
+- 💳 **Transaction Building** - Simple and advanced transaction construction
+- 📜 **Smart Contract Integration** - Plutus script evaluation and validation
 
-## Features
+## ✨ Features
 
-- **Type-Safe Data Models** - Strong typing for all Cardano blockchain structures
-- **High Performance** - Optimized for speed and efficiency
-- **Modular Architecture** - Use only what you need
-- **Modern C# API** - Takes advantage of the latest .NET features
-- **Complete Cardano Support** - Works with all major Cardano eras and protocols
+- 🔐 **Type-Safe Data Models** - Strong typing for all Cardano blockchain structures
+- ⚡ **High Performance** - Optimized for speed and efficiency
+- 🧩 **Modular Architecture** - Use only what you need
+- 🚀 **Modern C# API** - Takes advantage of the latest .NET features
+- 🔗 **Complete Cardano Support** - Works with all major Cardano eras and protocols
 
-## Installation
+## 📥 Installation
 
 ```bash
 # Install the main package
@@ -62,7 +62,7 @@ dotnet add package Chrysalis.Plutus
 dotnet add package Chrysalis.Wallet
 ```
 
-## Architecture
+## 🧩 Architecture
 
 Chrysalis consists of several specialized libraries:
 
@@ -74,9 +74,9 @@ Chrysalis consists of several specialized libraries:
 | **Chrysalis.Plutus** | Smart contract evaluation and validation |
 | **Chrysalis.Wallet** | Key management and address handling |
 
-## Usage Examples
+## 💻 Usage Examples
 
-### CBOR Serialization
+### 📦 CBOR Serialization
 
 Define and use CBOR-serializable types with attribute-based serialization:
 
@@ -105,7 +105,7 @@ AssetDetails details = CborSerializer.Deserialize<AssetDetails>(data);
 byte[] serialized = CborSerializer.Serialize(details);
 ```
 
-### Wallet Management
+### 🔑 Wallet Management
 
 Generate and manage addresses and keys:
 
@@ -138,7 +138,7 @@ var address = new Address(
 string bech32Address = address.ToBech32();
 ```
 
-### Node Communication
+### 🔄 Node Communication
 
 Connect directly to a Cardano node:
 
@@ -156,7 +156,7 @@ var chainSync = client.GetProtocol<ChainSync>();
 var tip = await chainSync.GetTipAsync();
 ```
 
-### Transaction Building
+### 💳 Transaction Building
 
 Build and sign transactions with the fluent API or template builder:
 
@@ -180,7 +180,7 @@ Transaction tx = await transfer(5_000_000UL);
 Transaction signedTx = tx.Sign(privateKey);
 ```
 
-### Smart Contract Interaction
+### 📜 Smart Contract Interaction
 
 Interact with and validate Plutus scripts:
 
@@ -210,7 +210,7 @@ var evaluator = new Evaluator();
 var result = evaluator.EvaluateTx(transaction, datums, redeemers);
 ```
 
-## Performance
+## ⚡ Performance
 
 Chrysalis is optimized for performance, outperforming equivalent libraries in other languages. Our benchmarks show superior performance in key operations:
 
@@ -230,7 +230,7 @@ Key performance advantages:
 - Efficient memory management
 - Excellent scalability for high-throughput applications
 
-## Cardano Era Support
+## 🔄 Cardano Era Support
 
 Chrysalis provides comprehensive support for Cardano's evolution:
 
@@ -242,14 +242,14 @@ Chrysalis provides comprehensive support for Cardano's evolution:
 | **Babbage/Vasil** (Basho) | Scaling | Supported |
 | **Conway** (Voltaire) | Governance | Supported |
 
-## Documentation
+## 📚 Documentation
 
 For detailed documentation on each component:
 
 - [Chrysalis.Cbor Documentation](./CBOR.md)
 - [Chrysalis.Tx Documentation](./TX.md)
 
-## Contributing
+## 🤝 Contributing
 
 We welcome contributions! To get started:
 
@@ -261,7 +261,7 @@ We welcome contributions! To get started:
 
 Please make sure to update tests as appropriate.
 
-## License
+## 📄 License
 
 This project is licensed under the MIT License - see the [LICENSE.md](LICENSE.md) file for details.
 
