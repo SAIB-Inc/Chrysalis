@@ -255,7 +255,7 @@ Chrysalis provides comprehensive support for Cardano's evolution:
   <tr>
     <td><strong>Byron</strong></td>
     <td>Foundation</td>
-    <td align="center">🚧 Planned</td>
+    <td align="center">🚧</td>
     <td align="center">❌</td>
     <td align="center">❌</td>
     <td align="center">❌</td>
@@ -263,7 +263,7 @@ Chrysalis provides comprehensive support for Cardano's evolution:
   <tr>
     <td><strong>Shelley</strong></td>
     <td>Decentralization</td>
-    <td align="center">✅ Supported</td>
+    <td align="center">✅</td>
     <td align="center">✅</td>
     <td align="center">✅</td>
     <td align="center">✅</td>
@@ -271,7 +271,7 @@ Chrysalis provides comprehensive support for Cardano's evolution:
   <tr>
     <td><strong>Allegra</strong></td>
     <td>Token Locking</td>
-    <td align="center">✅ Supported</td>
+    <td align="center">✅</td>
     <td align="center">✅</td>
     <td align="center">✅</td>
     <td align="center">✅</td>
@@ -279,7 +279,7 @@ Chrysalis provides comprehensive support for Cardano's evolution:
   <tr>
     <td><strong>Mary</strong></td>
     <td>Multi-Asset</td>
-    <td align="center">✅ Supported</td>
+    <td align="center">✅</td>
     <td align="center">✅</td>
     <td align="center">✅</td>
     <td align="center">✅</td>
@@ -287,7 +287,7 @@ Chrysalis provides comprehensive support for Cardano's evolution:
   <tr>
     <td><strong>Alonzo</strong></td>
     <td>Smart Contracts</td>
-    <td align="center">✅ Supported</td>
+    <td align="center">✅</td>
     <td align="center">✅</td>
     <td align="center">✅</td>
     <td align="center">✅</td>
@@ -295,7 +295,7 @@ Chrysalis provides comprehensive support for Cardano's evolution:
   <tr>
     <td><strong>Babbage/Vasil</strong></td>
     <td>Scaling</td>
-    <td align="center">✅ Supported</td>
+    <td align="center">✅</td>
     <td align="center">✅</td>
     <td align="center">✅</td>
     <td align="center">✅</td>
@@ -303,7 +303,7 @@ Chrysalis provides comprehensive support for Cardano's evolution:
   <tr>
     <td><strong>Conway</strong></td>
     <td>Governance</td>
-    <td align="center">✅ Supported</td>
+    <td align="center">✅</td>
     <td align="center">✅</td>
     <td align="center">✅</td>
     <td align="center">✅</td>
@@ -313,7 +313,7 @@ Chrysalis provides comprehensive support for Cardano's evolution:
 
 **Legend**:
 - ✅ Fully Supported
-- 🚧 Planned/In Development
+- 🚧 Planned for Future Release
 - ❌ Not Supported Yet
 
 ## 📚 Documentation
