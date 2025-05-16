@@ -17,7 +17,7 @@ public static class BlockExtensions
             _ => throw new NotSupportedException()
         };
 
-    public static string Hash(this BlockHeader self) => Convert.ToHexString(Blake2Fast.Blake2b.ComputeHash(32, self.Raw!.Value.Span)).ToLowerInvariant();
+    public static string Hash(this BlockHeader self) => Convert.ToHexString(Blake2Fast.Blake2b.HashData(32, self.Raw!.Value.Span)).ToLowerInvariant();
 
     public static IEnumerable<TransactionBody> TransactionBodies(this CBlock self)
     {

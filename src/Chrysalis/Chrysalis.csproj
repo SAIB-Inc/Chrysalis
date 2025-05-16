@@ -37,7 +37,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="SauceControl.Blake2Fast" Version="2.0.0" />
+    <PackageReference Include="SAIB.Blake2Fast" Version="3.0.1" />
     <PackageReference Include="System.Formats.Cbor" Version="9.0.3" />
     <PackageReference Include="Microsoft.AspNetCore.Cryptography.KeyDerivation" Version="9.0.3" />
     <PackageReference Include="CardanoSharp.Chaos" Version="0.1.0" />
