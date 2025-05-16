@@ -234,15 +234,82 @@ Key performance advantages:
 
 Chrysalis provides comprehensive support for Cardano's evolution:
 
-| Era | Phase | Status | Serialization | Block Processing | Transaction Building |
-|-----|-------|:------:|:-------------:|:----------------:|:--------------------:|
-| **Byron** | Foundation | 🚧 | ❌ | ❌ | ❌ |
-| **Shelley** | Decentralization | ✅ | ✅ | ✅ | ✅ |
-| **Allegra** | Token Locking | ✅ | ✅ | ✅ | ✅ |
-| **Mary** | Multi-Asset | ✅ | ✅ | ✅ | ✅ |
-| **Alonzo** | Smart Contracts | ✅ | ✅ | ✅ | ✅ |
-| **Babbage/Vasil** | Scaling | ✅ | ✅ | ✅ | ✅ |
-| **Conway** | Governance | ✅ | ✅ | ✅ | ✅ |
+<table>
+<thead>
+  <tr>
+    <th>Era</th>
+    <th>Phase</th>
+    <th>Status</th>
+    <th colspan="3">Feature Support</th>
+  </tr>
+  <tr>
+    <th></th>
+    <th></th>
+    <th></th>
+    <th align="center">Serialization</th>
+    <th align="center">Block Processing</th>
+    <th align="center">Transaction Building</th>
+  </tr>
+</thead>
+<tbody>
+  <tr>
+    <td><strong>Byron</strong></td>
+    <td>Foundation</td>
+    <td align="center">🚧</td>
+    <td align="center">❌</td>
+    <td align="center">❌</td>
+    <td align="center">❌</td>
+  </tr>
+  <tr>
+    <td><strong>Shelley</strong></td>
+    <td>Decentralization</td>
+    <td align="center">✅</td>
+    <td align="center">✅</td>
+    <td align="center">✅</td>
+    <td align="center">✅</td>
+  </tr>
+  <tr>
+    <td><strong>Allegra</strong></td>
+    <td>Token Locking</td>
+    <td align="center">✅</td>
+    <td align="center">✅</td>
+    <td align="center">✅</td>
+    <td align="center">✅</td>
+  </tr>
+  <tr>
+    <td><strong>Mary</strong></td>
+    <td>Multi-Asset</td>
+    <td align="center">✅</td>
+    <td align="center">✅</td>
+    <td align="center">✅</td>
+    <td align="center">✅</td>
+  </tr>
+  <tr>
+    <td><strong>Alonzo</strong></td>
+    <td>Smart Contracts</td>
+    <td align="center">✅</td>
+    <td align="center">✅</td>
+    <td align="center">✅</td>
+    <td align="center">✅</td>
+  </tr>
+  <tr>
+    <td><strong>Babbage/Vasil</strong></td>
+    <td>Scaling</td>
+    <td align="center">✅</td>
+    <td align="center">✅</td>
+    <td align="center">✅</td>
+    <td align="center">✅</td>
+  </tr>
+  <tr>
+    <td><strong>Conway</strong></td>
+    <td>Governance</td>
+    <td align="center">✅</td>
+    <td align="center">✅</td>
+    <td align="center">✅</td>
+    <td align="center">✅</td>
+  </tr>
+</tbody>
+</table>
 
 **Legend**:
 - ✅ Fully Supported
