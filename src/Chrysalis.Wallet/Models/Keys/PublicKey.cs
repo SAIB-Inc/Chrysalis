@@ -14,7 +14,7 @@ public class PublicKey(byte[] key, byte[] chaincode)
 
     public string ToHex() => Convert.ToHexString(Key);
 
-    public byte[] ToBlake2b224() => Blake2Fast.Blake2b.ComputeHash(28, Key);
+    public byte[] ToBlake2b224() => Blake2Fast.Blake2b.HashData(28, Key);
 
     public override bool Equals(object? obj)
     {

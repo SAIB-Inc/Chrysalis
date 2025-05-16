@@ -182,6 +182,6 @@ public static class TransactionBodyExtensions
     public static string Hash(this TransactionBody self)
     {
         byte[] raw = self.Raw is null ? CborSerializer.Serialize(self) : self.Raw.Value.ToArray();
-        return Convert.ToHexString(Blake2b.ComputeHash(32, raw)).ToLowerInvariant();
+        return Convert.ToHexString(Blake2b.HashData(32, raw)).ToLowerInvariant();
     }
 }
