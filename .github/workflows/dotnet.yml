@@ -26,6 +26,16 @@ jobs:
       with:
         dotnet-version: 9.x.x
     
+    - name: Build CodeGen Package
+      run: |
+        dotnet restore
+        dotnet build -c Release
+      working-directory: ./src/Chrysalis.Cbor.CodeGen
+    
+    - name: Pack CodeGen Package
+      run: dotnet pack -c Release -o out
+      working-directory: ./src/Chrysalis.Cbor.CodeGen
+    
     - name: Set up Rust
       uses: actions-rs/toolchain@v1
       with:
@@ -60,5 +70,7 @@ jobs:
       working-directory: ./src/Chrysalis
 
     - name: Push to NuGet
-      run: dotnet nuget push ./src/Chrysalis/out/*.nupkg --api-key ${{ secrets.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json
-      if: github.event_name == 'release'
+      if: github.event_name == 'release' 
+      run: |
+        dotnet nuget push ./src/Chrysalis.Cbor.CodeGen/out/*.nupkg --api-key ${{ secrets.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json
+        dotnet nuget push ./src/Chrysalis/out/*.nupkg --api-key ${{ secrets.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json
