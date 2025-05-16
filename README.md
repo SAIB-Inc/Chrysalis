@@ -1,8 +1,6 @@
 <div align="center">
   <img src="assets/banner.png" alt="Chrysalis Banner" width="100%">
   
-  <p>A comprehensive .NET ecosystem for Cardano blockchain development</p>
-  
   <a href="https://www.nuget.org/packages/Chrysalis">
     <img src="https://img.shields.io/nuget/v/Chrysalis.svg?style=flat-square" alt="NuGet">
   </a>
