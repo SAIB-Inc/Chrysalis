@@ -12,17 +12,6 @@ on:
     types: [tag]
   release:
     types: [published]
-  workflow_dispatch:
-    inputs:
-      codegen_version:
-        description: 'Chrysalis.Cbor.CodeGen version to publish'
-        required: true
-        default: '0.1.0'
-      publish_codegen:
-        description: 'Publish CodeGen to NuGet'
-        required: true
-        type: boolean
-        default: false
 
 jobs:
   build:
@@ -38,23 +27,16 @@ jobs:
         dotnet-version: 9.x.x
     
     - name: Build CodeGen Package
-      if: github.event_name == 'workflow_dispatch'
       run: |
         dotnet restore
         dotnet build -c Release
       working-directory: ./src/Chrysalis.Cbor.CodeGen
     
     - name: Pack CodeGen Package
-      if: github.event_name == 'workflow_dispatch'
-      run: dotnet pack -c Release -o out /p:Version=${{ inputs.codegen_version }}
+      run: dotnet pack -c Release -o out
       working-directory: ./src/Chrysalis.Cbor.CodeGen
     
-    - name: Push CodeGen Package to NuGet
-      if: github.event_name == 'workflow_dispatch' && inputs.publish_codegen
-      run: dotnet nuget push ./src/Chrysalis.Cbor.CodeGen/out/*.nupkg --api-key ${{ secrets.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json
-    
     - name: Set up Rust
-      if: github.event_name != 'workflow_dispatch'
       uses: actions-rs/toolchain@v1
       with:
         toolchain: stable
@@ -64,35 +46,31 @@ jobs:
       run: chmod +x ./src/Chrysalis.Plutus/build-rs.sh
     
     - name: Build Plutus
-      if: github.event_name != 'workflow_dispatch'
       run: dotnet build -c Release
       working-directory: ./src/Chrysalis.Plutus
         
     - name: Restore dependencies
-      if: github.event_name != 'workflow_dispatch'
       run: dotnet restore
       working-directory: ./src/Chrysalis
 
     - name: Build
-      if: github.event_name != 'workflow_dispatch'
       run: dotnet build --no-restore
       working-directory: ./src/Chrysalis
 
     - name: Test
-      if: github.event_name != 'workflow_dispatch'
       run: dotnet test --verbosity normal
       working-directory: ./
 
     - name: Publish
-      if: github.event_name != 'workflow_dispatch'
       run: dotnet publish --no-restore
       working-directory: ./src/Chrysalis
 
     - name: Pack
-      if: github.event_name != 'workflow_dispatch'
       run: dotnet pack -c Release -o out
       working-directory: ./src/Chrysalis
 
     - name: Push to NuGet
-      run: dotnet nuget push ./src/Chrysalis/out/*.nupkg --api-key ${{ secrets.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json
       if: github.event_name == 'release' 
+      run: |
+        dotnet nuget push ./src/Chrysalis.Cbor.CodeGen/out/*.nupkg --api-key ${{ secrets.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json
+        dotnet nuget push ./src/Chrysalis/out/*.nupkg --api-key ${{ secrets.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json
