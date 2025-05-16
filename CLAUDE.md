@@ -156,6 +156,23 @@ When working with Chrysalis, consider these best practices:
 
 6. **Performance Considerations**: Be aware of memory usage patterns, especially when processing large blocks or many transactions.
 
+## Git Workflow Guidelines
+
+When working with this repository:
+
+1. **Avoid Force Pushing**: As a general rule, avoid using `git push --force` or `git push -f` as this can overwrite others' work and destroy history. Only use force pushing in exceptional circumstances:
+   - On your own personal feature branches that no one else is working on
+   - When absolutely necessary to resolve complex merge conflicts
+   - Never force push to shared branches, especially `main`
+
+2. **Use Pull Requests**: All changes should be made through pull requests, not direct commits to main.
+
+3. **Follow Conventional Commits**: Use the conventional commits format (`feat:`, `fix:`, `docs:`, etc.) for clear commit messages.
+
+4. **Create Topic Branches**: Always work in feature branches (e.g., `feature/new-feature` or `fix/bug-fix`) rather than directly on main.
+
+5. **Keep PRs Focused**: Each pull request should address a single concern or feature to make review easier.
+
 ## Performance Benchmarking
 
 Chrysalis has demonstrated excellent performance in benchmarks against similar libraries in other languages (including Rust-based implementations). When working on performance-critical code:
