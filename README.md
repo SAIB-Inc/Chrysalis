@@ -30,6 +30,7 @@
 Chrysalis is a native .NET toolkit for Cardano blockchain development, providing everything needed to build applications on Cardano. From CBOR serialization to transaction building and smart contract interaction, Chrysalis offers a complete solution for .NET developers.
 
 **Key Components:**
+
 - 📦 **Serialization** - Efficient CBOR encoding/decoding for Cardano data structures
 - 🔄 **Node Communication** - Direct interaction with Cardano nodes through Ouroboros mini-protocols
 - 🔑 **Wallet Management** - Address generation and key handling
@@ -65,14 +66,14 @@ dotnet add package Chrysalis.Wallet
 
 Chrysalis consists of several specialized libraries:
 
-| Module | Description |
-|--------|-------------|
-| **Chrysalis.Cbor** | CBOR serialization for Cardano data structures |
+| Module                     | Description                                        |
+| -------------------------- | -------------------------------------------------- |
+| **Chrysalis.Cbor**         | CBOR serialization for Cardano data structures     |
 | **Chrysalis.Cbor.CodeGen** | Source generation for optimized serialization code |
-| **Chrysalis.Network** | Implementation of Ouroboros mini-protocols |
-| **Chrysalis.Tx** | Transaction building and submission |
-| **Chrysalis.Plutus** | Smart contract evaluation and validation |
-| **Chrysalis.Wallet** | Key management and address handling |
+| **Chrysalis.Network**      | Implementation of Ouroboros mini-protocols         |
+| **Chrysalis.Tx**           | Transaction building and submission                |
+| **Chrysalis.Plutus**       | Smart contract evaluation and validation           |
+| **Chrysalis.Wallet**       | Key management and address handling                |
 
 ## 💻 Usage Examples
 
@@ -87,7 +88,7 @@ Define and use CBOR-serializable types with attribute-based serialization:
 public partial record AssetDetails(
     [CborOrder(0)] byte[] PolicyId,
     [CborOrder(1)] AssetClass Asset,
-    [CborOrder(2)] ulong Amount 
+    [CborOrder(2)] ulong Amount
 ): CborBase;
 
 [CborSerializable]
@@ -126,31 +127,36 @@ Generate and manage addresses and keys:
 
 ```csharp
 // Create wallet from mnemonic
-string mnemonic = "your mnemonic here";
-var wallet = Mnemonic.Restore(mnemonic, English.Words);
+var mnemonic = Mnemonic.Generate(English.Words, 24);
 
-// Derive keys following Cardano standards
-var accountKey = wallet.GetRootKey()
-    .Derive(PurposeType.Shelley, DerivationType.HARD)
-    .Derive(CoinType.Ada, DerivationType.HARD)
-    .Derive(0, DerivationType.HARD);
+var accountKey = mnemonic
+            .GetRootKey()
+            .Derive(PurposeType.Shelley, DerivationType.HARD)
+            .Derive(CoinType.Ada, DerivationType.HARD)
+            .Derive(0, DerivationType.HARD);
 
-var paymentKey = accountKey
-    .Derive(RoleType.ExternalChain)
-    .Derive(0);
+var privateKey = accountKey
+            .Derive(RoleType.ExternalChain)
+            .Derive(0);
+
+var paymentKey = privateKey.GetPublicKey();
+
 var stakingKey = accountKey
-    .Derive(RoleType.Staking)
-    .Derive(0);
+            .Derive(RoleType.Staking)
+            .Derive(0)
+            .GetPublicKey();
 
 // Generate address
-var address = new Address(
-    NetworkType.Testnet, 
+var address = Address.FromPublicKeys(
+    NetworkType.Testnet,
     AddressType.BasePayment,
-    paymentKey.GetPublicKey(), 
-    stakingKey.GetPublicKey()
+    paymentKey,
+    stakingKey
 );
 
 string bech32Address = address.ToBech32();
+
+Console.WriteLine($"Bech32 Address: {bech32Address}");
 ```
 
 ### 🔄 Node Communication
@@ -161,15 +167,16 @@ Connect directly to a Cardano node:
 try {
     // Connect to a local node
     NodeClient client = await NodeClient.ConnectAsync("/ipc/node.socket");
-    await client.StartAsync(networkMagic: 2UL);
+    await client.StartAsync(2);
 
     // Query UTXOs by address
-    byte[] addressBytes = Convert.FromHexString("00a7e1d2e57b1f9aa851b08c8934a315ffd97397fa997bb3851c626d3bb8d804d91fa134757d1a41b0b12762f8922fe4b4c6faa5ffec1bc9cf");
-    var utxos = await client.LocalStateQuery.GetUtxosByAddressAsync(new List<byte[]> { addressBytes });
+    var addressBytes = Convert.FromHexString("00a7e1d2e57b1f9aa851b08c8934a315ffd97397fa997bb3851c626d3bb8d804d91fa134757d1a41b0b12762f8922fe4b4c6faa5ffec1bc9cf");
+    var utxos = await client.LocalStateQuery.GetUtxosByAddressAsync([addressBytes]);
 
     // Synchronize with the chain
-    var tip = await client.ChainSync.GetTipAsync();
-    
+    var tip = await client.LocalStateQuery.GetTipAsync();
+    Console.WriteLine($"Chain tip: {tip}");
+
     // Available mini-protocols - accessed as properties
     var localTxSubmit = client.LocalTxSubmit;
     var localStateQuery = client.LocalStateQuery;
@@ -189,14 +196,19 @@ Build and sign transactions with the fluent API or template builder:
 
 ```csharp
 // Simple transaction using template builder
+var senderAddress = address.ToBech32();
+var receiverAddress = "addr_test1qpcxqfg6xrzqus5qshxmgaa2pj5yv2h9mzm22hj7jct2ad59q2pfxagx7574360xl47vhw79wxtdtze2z83k5a4xpptsm6dhy7";
 var provider = new Blockfrost("apiKeyHere");
+
 var transfer = TransactionTemplateBuilder<ulong>.Create(provider)
     .AddStaticParty("sender", senderAddress, true)
     .AddStaticParty("receiver", receiverAddress)
-    .AddInput((options, amount) => {
+    .AddInput((options, amount) =>
+    {
         options.From = "sender";
     })
-    .AddOutput((options, amount) => {
+    .AddOutput((options, amount) =>
+    {
         options.To = "receiver";
         options.Amount = new Lovelace(amount);
     })
@@ -212,49 +224,47 @@ Transaction signedTx = tx.Sign(privateKey);
 Interact with and validate Plutus scripts:
 
 ```csharp
-try {
-    // Create a validator transaction
-    var unlockLovelace = TransactionTemplateBuilder<UnlockParameters>.Create(provider)
-        .AddStaticParty("owner", ownerAddress, true)
-        .AddStaticParty("validator", validatorAddress)
-        .AddInput((options, unlockParams) => {
-            options.From = "validator";
-            options.UtxoRef = new TransactionInput(unlockParams.ScriptRef.Id, unlockParams.ScriptRef.Index);
-            options.IsReference = true;
-        })
-        .AddInput((options, unlockParams) => {
-            options.From = "validator";
-            options.UtxoRef = new TransactionInput(unlockParams.LockedUtxo.Id, unlockParams.LockedUtxo.Index);
-            options.Redeemer = unlockParams.Redeemer;
-        })
-        .AddOutput((options, unlockParams) => {
-            options.To = "owner";
-            options.Amount = unlockParams.Amount;
-        })
-        .Build();
+var provider = new Blockfrost("project_id");
+var ownerAddress = "your address";
+var alwaysTrueValidatorAddress = "your validator address";
 
-    // Evaluate script execution via Rust FFI - Evaluator is a static class
-    byte[] txCborBytes = CborSerializer.Serialize(transaction);
-    byte[] utxoCborBytes = CborSerializer.Serialize(resolvedInputs);
-    IReadOnlyList<EvaluationResult> results = Evaluator.EvaluateTx(txCborBytes, utxoCborBytes);
-    
-    // Update redeemers with actual execution units
-    foreach (var result in results)
+var spendRedeemerBuilder = (_, _, _) =>
+{
+    // Custom Logic and return type as long as it inherits from CborBase
+    // ex: returns an empty list
+    return new PlutusConstr([]);
+};
+
+var lockTxHash = "your locked tx hash";
+var scriptRefTxHash = "your script ref tx hash";
+
+var unlockLovelace = TransactionTemplateBuilder<UnlockParameters>.Create(provider)
+    .AddStaticParty("owner", ownerAddress, true)
+    .AddStaticParty("alwaysTrueValidator", alwaysTrueValidatorAddress)
+    .AddReferenceInput((options, unlockParams) =>
     {
-        // Access execution unit data
-        RedeemerTag tag = result.RedeemerTag;
-        uint index = result.Index; // Index is uint, not int
-        ExUnits units = result.ExUnits;
-        
-        Console.WriteLine($"Redeemer {tag}:{index} requires {units.Mem} memory units and {units.Steps} CPU steps");
-    }
-    
-    // Then update transaction with actual execution costs
-    builder.SetRedeemers(updatedRedeemers);
-}
-catch (InvalidOperationException ex) {
-    Console.WriteLine($"Script evaluation failed: {ex.Message}");
-}
+        options.From = "alwaysTrueValidator";
+        options.UtxoRef = unlockParams.ScriptRefUtxoOutref;
+    })
+    .AddInput((options, unlockParams) =>
+    {
+        options.From = "alwaysTrueValidator";
+        options.UtxoRef = unlockParams.LockedUtxoOutRef;
+        options.SetRedeemerBuilder(spendRedeemerBuilder);
+    })
+    .Build();
+
+
+var unlockParams = new(
+    new TransactionInput(Convert.FromHexString(lockTxHash), 0),
+    new TransactionInput(Convert.FromHexString(scriptRefTxHash), 0)
+);
+
+var unlockUnsignedTx = await unlockLovelace(unlockParams);
+var unlockSignedTx = unlockUnsignedTx.Sign(privateKey);
+var unlockTxHash = await provider.SubmitTransactionAsync(unlockSignedTx);
+
+Console.WriteLine($"Unlock Tx Hash: {unlockTxHash}");
 ```
 
 #### CIP Implementation Support
@@ -287,6 +297,7 @@ Chrysalis is optimized for performance, with benchmarks showing it outperforms e
 </div>
 
 Key performance advantages:
+
 - Faster block deserialization (approximately 28% faster than Rust)
 - Optimized chain synchronization
 - Lower memory footprint (reduced allocations)
@@ -376,6 +387,7 @@ Chrysalis provides comprehensive support for Cardano's evolution:
 </table>
 
 **Legend**:
+
 - ✅ Fully Supported
 - 🚧 Planned for Future Release
 - ❌ Not Supported Yet
@@ -396,6 +408,7 @@ For detailed documentation on each component:
 The Plutus VM integration currently requires Rust-based native libraries that are automatically included with the NuGet package. We are actively working towards a pure .NET implementation of the Plutus Virtual Machine for improved cross-platform compatibility and performance.
 
 Current native dependencies:
+
 - Linux: `libpallas_dotnet_rs.so` and `libplutus_vm_dotnet_rs.so`
 - macOS: `libplutus_vm_dotnet_rs.dylib`
 
