@@ -4,8 +4,8 @@ using CProposalProcedure = Chrysalis.Cbor.Types.Cardano.Core.Governance.Proposal
 using Chrysalis.Cbor.Types.Cardano.Core.Transaction;
 using CCertificate = Chrysalis.Cbor.Types.Cardano.Core.Certificates.Certificate;
 using Chrysalis.Cbor.Types.Cardano.Core.Governance;
-using NSec.Cryptography;
 using Chrysalis.Cbor.Serialization;
+using Blake2Fast;
 
 namespace Chrysalis.Cbor.Extensions.Cardano.Core.Transaction;
 
@@ -181,8 +181,7 @@ public static class TransactionBodyExtensions
 
     public static string Hash(this TransactionBody self)
     {
-        Blake2b algorithm = HashAlgorithm.Blake2b_256;
         byte[] raw = self.Raw is null ? CborSerializer.Serialize(self) : self.Raw.Value.ToArray();
-        return Convert.ToHexString(algorithm.Hash(raw)).ToLowerInvariant();
+        return Convert.ToHexString(Blake2b.ComputeHash(32, raw)).ToLowerInvariant();
     }
 }

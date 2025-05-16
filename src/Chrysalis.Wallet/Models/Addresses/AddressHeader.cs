@@ -42,7 +42,7 @@ public record AddressHeader(AddressType Type, NetworkType Network, CredentialTyp
 
     public string GetPrefix()
     {
-        string prefixCore = Type == AddressType.StakeKey ? "stake" : "addr";
+        string prefixCore = Type == AddressType.Delegation ? "stake" : "addr";
         string networkSuffix = Network == NetworkType.Mainnet ? string.Empty : "_test";
         return prefixCore + networkSuffix;
     }

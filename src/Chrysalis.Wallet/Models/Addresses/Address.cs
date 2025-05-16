@@ -1,3 +1,4 @@
+using Blake2Fast;
 using Chrysalis.Cbor.Serialization;
 using Chrysalis.Cbor.Types.Plutus.Address;
 using Chrysalis.Wallet.Extensions;
@@ -12,8 +13,6 @@ public class Address
     #region Fields and Properties
 
     private readonly byte[] _addressBytes;
-    public Credential PaymentCredential { get; set; }
-    public Credential? StakeCredential { get; }
     public AddressType Type { get; init; }
     NetworkType Network { get; init; }
 
@@ -27,7 +26,6 @@ public class Address
         AddressHeader addressHeader = GetAddressHeader(addressBytes[0]);
         Type = addressHeader.Type;
         Network = addressHeader.Network;
-        (PaymentCredential, StakeCredential) = ExtractCredentialsFromBytes(addressBytes);
     }
 
     public Address(string bech32Address)
@@ -37,15 +35,12 @@ public class Address
         Type = addressHeader.Type;
         Network = addressHeader.Network;
         _addressBytes = addressBytes;
-        (PaymentCredential, StakeCredential) = ExtractCredentialsFromBytes(addressBytes);
     }
 
-    public Address(NetworkType networkType, AddressType addressType, Credential payment, Credential? stake)
+    public Address(NetworkType networkType, AddressType addressType, byte[] payment, byte[]? stake)
     {
         Type = addressType;
         Network = networkType;
-        PaymentCredential = payment;
-        StakeCredential = stake;
         _addressBytes = ConstructAddressBytes(new(addressType, networkType), payment, stake);
     }
 
@@ -78,13 +73,24 @@ public class Address
     /// <param name="paymentBytes">The payment credential bytes (e.g., PaymentKeyHash).</param>
     /// <param name="stakeBytes">Optional stake credential bytes (e.g., StakeKeyHash).</param>
     /// <returns>An <see cref="Address"/> instance.</returns>
-    public static Address FromCredentials(NetworkType networkType, AddressType addressType, byte[] paymentBytes, byte[]? stakeBytes)
+    public static Address FromCredentials(NetworkType networkType, AddressType addressType, Credential paymentBytes, Credential? stakeBytes)
     {
-        Credential paymentCredential = ExtractCredential(paymentBytes, 1);
-        Credential? stakeCredential = null;
-        if (stakeBytes is not null) stakeCredential = ExtractCredential(stakeBytes, 1);
+        byte[] pkh = paymentBytes switch
+        {
+            VerificationKey vkey => vkey.VerificationKeyHash,
+            Script script => script.ScriptHash,
+            _ => throw new ArgumentException("Invalid payment credential type")
+        };
 
-        return new Address(networkType, addressType, paymentCredential, stakeCredential);
+        byte[]? skh = stakeBytes switch
+        {
+            VerificationKey vkey => vkey.VerificationKeyHash,
+            Script script => script.ScriptHash,
+            null => null,
+            _ => throw new ArgumentException("Invalid stake credential type")
+        };
+
+        return new Address(networkType, addressType, pkh, skh);
     }
 
     /// <summary>
@@ -99,7 +105,7 @@ public class Address
         byte[] paymentHash = HashUtil.Blake2b224(paymentPub.Key);
         byte[]? stakeHash = stakePub?.Key is not null ? HashUtil.Blake2b224(stakePub.Key) : null;
 
-        return FromCredentials(networkType, addressType, paymentHash, stakeHash);
+        return new Address(networkType, addressType, paymentHash, stakeHash);
     }
 
     #endregion
@@ -118,22 +124,22 @@ public class Address
     public string GetPrefix() => GetAddressHeader(_addressBytes[0]).GetPrefix();
 
     public byte[]? GetPaymentKeyHash() =>
-        Type is AddressType.StakeKey or AddressType.ScriptStakeKey
+        Type is AddressType.Delegation or AddressType.ScriptDelegation
             ? null
             : _addressBytes.Length >= 29 ? _addressBytes[1..29] : null;
 
     public byte[]? GetStakeKeyHash() => Type switch
     {
         // Payment (28 bytes) + Stake (28 bytes)
-        AddressType.BasePayment
-        or AddressType.ScriptPayment
-        or AddressType.BaseWithScriptDelegation
-        or AddressType.ScriptWithScriptDelegation
+        AddressType.Base
+        or AddressType.ScriptPaymentWithDelegation
+        or AddressType.PaymentWithScriptDelegation
+        or AddressType.ScriptPaymentWithScriptDelegation
             => _addressBytes.Length >= 57 ? _addressBytes[29..57] : null,
 
         // Stake-only addresses (stake hash at offset 1)
-        AddressType.StakeKey
-        or AddressType.ScriptStakeKey
+        AddressType.Delegation
+        or AddressType.ScriptDelegation
             => _addressBytes.Length >= 29 ? _addressBytes[1..29] : null,
 
         _ => null
@@ -144,17 +150,17 @@ public class Address
         int typeValue = (headerByte & 0xF0) >> 4;
         AddressType type = typeValue switch
         {
-            0x00 => AddressType.BasePayment,
-            0x01 => AddressType.ScriptPayment,
-            0x02 => AddressType.BaseWithScriptDelegation,
-            0x03 => AddressType.ScriptWithScriptDelegation,
-            0x04 => AddressType.BaseWithPointerDelegation,
-            0x05 => AddressType.BaseWithPointerDelegation,
+            0x00 => AddressType.Base,
+            0x01 => AddressType.ScriptPaymentWithDelegation,
+            0x02 => AddressType.PaymentWithScriptDelegation,
+            0x03 => AddressType.ScriptPaymentWithScriptDelegation,
+            0x04 => AddressType.PaymentWithPointerDelegation,
+            0x05 => AddressType.ScriptPaymentWithPointerDelegation,
             0x06 => AddressType.EnterprisePayment,
             0x07 => AddressType.EnterpriseScriptPayment,
-            0x0e => AddressType.StakeKey,
-            0x0f => AddressType.ScriptStakeKey,
-            _ => AddressType.BasePayment
+            0x0e => AddressType.Delegation,
+            0x0f => AddressType.ScriptDelegation,
+            _ => AddressType.Base
         };
 
         NetworkType network = (headerByte & 0x0F) switch
@@ -172,7 +178,7 @@ public class Address
     #region Private Helper Methods
 
     // TODO: Handle other AddressTypes properly
-    private static byte[] ConstructAddressBytes(AddressHeader header, Credential payment, Credential? stake)
+    private static byte[] ConstructAddressBytes(AddressHeader header, byte[] payment, byte[]? stake)
     {
         byte headerByte = header.ToByte();
         byte[] addressBytes = [headerByte];
@@ -180,21 +186,21 @@ public class Address
         switch (header.Type)
         {
             // Base addresses: header + payment credential + stake credential
-            case AddressType.BasePayment:
-            case AddressType.ScriptPayment:
-            case AddressType.BaseWithScriptDelegation:
-            case AddressType.ScriptWithScriptDelegation:
+            case AddressType.Base:
+            case AddressType.ScriptPaymentWithDelegation:
+            case AddressType.PaymentWithScriptDelegation:
+            case AddressType.ScriptPaymentWithScriptDelegation:
                 if (stake == null)
                     throw new ArgumentNullException(nameof(stake), "Stake credential cannot be null for Base addresses");
-                addressBytes = addressBytes.ConcatFast(payment.Raw.HasValue ? payment.Raw!.Value.ToArray() : GetKeyHash(payment));
-                return addressBytes.ConcatFast(stake.Raw.HasValue ? stake.Raw.Value.ToArray() : GetKeyHash(stake));
+                addressBytes = addressBytes.ConcatFast(payment);
+                return addressBytes.ConcatFast(stake);
 
             // TODO:
             // Pointer addresses: header + payment credential + pointer
-            case AddressType.BaseWithPointerDelegation:
-            case AddressType.ScriptWithPointerDelegation:
+            case AddressType.PaymentWithPointerDelegation:
+            case AddressType.ScriptPaymentWithPointerDelegation:
                 // Add payment credential
-                addressBytes = addressBytes.ConcatFast(payment.Raw.HasValue ? payment.Raw.Value.ToArray() : GetKeyHash(payment));
+                addressBytes = addressBytes.ConcatFast(payment);
 
                 // TODO: Add proper pointer implementation
                 // For now, just return with payment credential
@@ -203,12 +209,11 @@ public class Address
             // Enterprise addresses: header + payment credential
             case AddressType.EnterprisePayment:
             case AddressType.EnterpriseScriptPayment:
-                return addressBytes.ConcatFast(payment.Raw.HasValue ? payment.Raw.Value.ToArray() : GetKeyHash(payment));
+                return addressBytes.ConcatFast(payment);
 
-            // Stake addresses: header + stake credential
-            case AddressType.StakeKey:
-            case AddressType.ScriptStakeKey:
-                return addressBytes.ConcatFast(stake!.Raw.HasValue ? stake.Raw.Value.ToArray() : GetKeyHash(stake));
+            case AddressType.Delegation:
+            case AddressType.ScriptDelegation:
+                return addressBytes.ConcatFast(stake!);
 
             default:
                 throw new NotSupportedException($"Address type {header.Type} is not supported");
@@ -237,12 +242,12 @@ public class Address
 
         switch (header.Type)
         {
-            case AddressType.BasePayment:
-            case AddressType.ScriptPayment:
-            case AddressType.BaseWithScriptDelegation:
-            case AddressType.ScriptWithScriptDelegation:
-            case AddressType.BaseWithPointerDelegation:
-            case AddressType.ScriptWithPointerDelegation:
+            case AddressType.Base:
+            case AddressType.ScriptPaymentWithDelegation:
+            case AddressType.PaymentWithScriptDelegation:
+            case AddressType.ScriptPaymentWithScriptDelegation:
+            case AddressType.PaymentWithPointerDelegation:
+            case AddressType.ScriptPaymentWithPointerDelegation:
                 ValidateAddressLength(57); // Base and script address types require at least 57 bytes
                 return ExtractPaymentAndStakeCredentials();
 
@@ -250,12 +255,10 @@ public class Address
             case AddressType.EnterpriseScriptPayment:
                 ValidateAddressLength(29); // Enterprise address types require at least 29 bytes
                 return (ExtractCredential(addressBytes, 1), null);
-
-            case AddressType.StakeKey:
-            case AddressType.ScriptStakeKey:
-                ValidateAddressLength(29); // Reward address types require at least 29 bytes
-                Credential rewardCred = ExtractCredential(addressBytes, 1);
-                return (rewardCred, rewardCred);
+            case AddressType.Delegation:
+            case AddressType.ScriptDelegation:
+                ValidateAddressLength(29); // Delegation address types require at least 29 bytes
+                return (ExtractCredential(addressBytes, 1), ExtractCredential(addressBytes, 29));
 
             default:
                 throw new NotSupportedException($"Address type {header.Type} is not supported");
