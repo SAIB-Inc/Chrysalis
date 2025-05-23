@@ -10,6 +10,7 @@ public enum AddressType
     ScriptPaymentWithPointerDelegation,
     EnterprisePayment,
     EnterpriseScriptPayment,
+    ScriptPayment = EnterpriseScriptPayment, // Alias for backward compatibility
     Delegation,
     ScriptDelegation
 }

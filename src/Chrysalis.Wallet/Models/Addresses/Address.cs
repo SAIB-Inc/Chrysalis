@@ -157,7 +157,7 @@ public class Address
             0x04 => AddressType.PaymentWithPointerDelegation,
             0x05 => AddressType.ScriptPaymentWithPointerDelegation,
             0x06 => AddressType.EnterprisePayment,
-            0x07 => AddressType.EnterpriseScriptPayment,
+            0x07 => AddressType.ScriptPayment, // Use the more descriptive alias
             0x0e => AddressType.Delegation,
             0x0f => AddressType.ScriptDelegation,
             _ => AddressType.Base
@@ -209,6 +209,7 @@ public class Address
             // Enterprise addresses: header + payment credential
             case AddressType.EnterprisePayment:
             case AddressType.EnterpriseScriptPayment:
+            case AddressType.ScriptPayment:
                 return addressBytes.ConcatFast(payment);
 
             case AddressType.Delegation:
@@ -253,6 +254,7 @@ public class Address
 
             case AddressType.EnterprisePayment:
             case AddressType.EnterpriseScriptPayment:
+            case AddressType.ScriptPayment:
                 ValidateAddressLength(29); // Enterprise address types require at least 29 bytes
                 return (ExtractCredential(addressBytes, 1), null);
             case AddressType.Delegation:
