@@ -213,11 +213,16 @@ public class Address
 
             case AddressType.Delegation:
             case AddressType.ScriptDelegation:
-                return addressBytes.ConcatFast(stake!);
+                if (stake == null)
+                    throw new ArgumentNullException(nameof(stake), "Stake credential cannot be null for Delegation addresses");
+                return addressBytes.ConcatFast(stake);
 
             default:
+                // If stake is null, treat as enterprise payment address
+                if (stake == null)
+                    return addressBytes.ConcatFast(payment);
+                
                 throw new NotSupportedException($"Address type {header.Type} is not supported");
-        }
     }
 
 
