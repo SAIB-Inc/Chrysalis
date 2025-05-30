@@ -11,6 +11,7 @@ using Chrysalis.Network.Cbor.LocalTxSubmit;
 using Chrysalis.Cbor.Serialization;
 using Chrysalis.Wallet.Utils;
 using Chrysalis.Tx.Models.Cbor;
+using Chrysalis.Cbor.Types.Cardano.Core;
 
 namespace Chrysalis.Tx.Providers;
 public class Ouroboros(string socketPath, ulong networkMagic = 2) : ICardanoDataProvider
@@ -74,5 +75,10 @@ public class Ouroboros(string socketPath, ulong networkMagic = 2) : ICardanoData
         };
 
         return txHash;
+    }
+
+    public Task<Metadata?> GetTransactionMetadataAsync(string txHash)
+    {
+        throw new NotImplementedException("Transaction metadata retrieval is not supported via Ouroboros protocol");
     }
 }
