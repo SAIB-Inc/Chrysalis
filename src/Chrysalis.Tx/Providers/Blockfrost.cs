@@ -1,5 +1,6 @@
 using System.Net.Http.Headers;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using Chrysalis.Cbor.Serialization;
 using Chrysalis.Cbor.Types;
 using Chrysalis.Cbor.Types.Cardano.Core.Common;
@@ -10,27 +11,36 @@ using Chrysalis.Cbor.Types.Cardano.Core.Transaction;
 using Chrysalis.Network.Cbor.LocalStateQuery;
 using Chrysalis.Tx.Models;
 using Chrysalis.Tx.Models.Cbor;
+using Chrysalis.Cbor.Types.Cardano.Core;
+using Chrysalis.Wallet.Models.Enums;
 using ChrysalisWallet = Chrysalis.Wallet.Models.Addresses;
 
 namespace Chrysalis.Tx.Providers;
 
+public record BlockfrostMetadataResponse(
+    [property: JsonPropertyName("label")] string Label, 
+    [property: JsonPropertyName("json_metadata")] object JsonMetadata);
+
 public class Blockfrost : ICardanoDataProvider
 {
     private readonly HttpClient _httpClient;
-    private readonly string _baseUrl;
+    private readonly NetworkType _networkType;
 
-    public Blockfrost(string apiKey)
+    public Blockfrost(string apiKey, NetworkType networkType = NetworkType.Preview)
     {
-        _httpClient = new HttpClient();
-        _baseUrl = GetBaseUrl();
+        _networkType = networkType;
+        _httpClient = new()
+        {
+            BaseAddress = new Uri(GetBaseUrl())
+        };
         _httpClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
-        _httpClient.DefaultRequestHeaders.Add("project_id", apiKey);
+        _httpClient.DefaultRequestHeaders.Add("Project_id", apiKey);
     }
 
     public async Task<ProtocolParams> GetParametersAsync()
     {
-        const string query = "/epochs/latest/parameters";
-        var response = await _httpClient.GetAsync($"{_baseUrl}{query}");
+        const string query = "epochs/latest/parameters";
+        var response = await _httpClient.GetAsync(query);
 
         if (!response.IsSuccessStatusCode)
         {
@@ -101,8 +111,8 @@ public class Blockfrost : ICardanoDataProvider
         while (true)
         {
             var pagination = $"count={maxPageCount}&page={page}";
-            var query = $"/addresses/{address}/utxos?{pagination}";
-            var response = await _httpClient.GetAsync($"{_baseUrl}{query}");
+            var query = $"addresses/{address}/utxos?{pagination}";
+            var response = await _httpClient.GetAsync($"{query}");
 
 
             var content = await response.Content.ReadAsStringAsync();
@@ -181,8 +191,8 @@ public class Blockfrost : ICardanoDataProvider
 
     public async Task<Script> GetScript(string scriptHash)
     {
-        var typeQuery = $"/scripts/{scriptHash}";
-        var typeResponse = await _httpClient.GetAsync($"{_baseUrl}{typeQuery}");
+        var typeQuery = $"scripts/{scriptHash}";
+        var typeResponse = await _httpClient.GetAsync($"{typeQuery}");
         var typeContent = await typeResponse.Content.ReadAsStringAsync();
 
         using var typeDoc = JsonDocument.Parse(typeContent);
@@ -200,8 +210,8 @@ public class Blockfrost : ICardanoDataProvider
             throw new Exception("GetScriptRef: Native scripts are not yet supported.");
         }
 
-        var cborQuery = $"/scripts/{scriptHash}/cbor";
-        var cborResponse = await _httpClient.GetAsync($"{_baseUrl}{cborQuery}");
+        var cborQuery = $"scripts/{scriptHash}/cbor";
+        var cborResponse = await _httpClient.GetAsync($"{cborQuery}");
         var cborContent = await cborResponse.Content.ReadAsStringAsync();
 
         using var cborDoc = JsonDocument.Parse(cborContent);
@@ -235,7 +245,7 @@ public class Blockfrost : ICardanoDataProvider
 
     public async Task<string> SubmitTransactionAsync(Transaction tx)
     {
-        string query = _baseUrl + "/tx/submit";
+        string query = "tx/submit";
 
         ByteArrayContent content = new(CborSerializer.Serialize(tx));
         content.Headers.ContentType = new MediaTypeHeaderValue("application/cbor");
@@ -254,10 +264,93 @@ public class Blockfrost : ICardanoDataProvider
 
         return txId;
     }
-    private string GetBaseUrl()
+
+    public async Task<Metadata?> GetTransactionMetadataAsync(string txHash)
     {
-        //TODO: implement network specific base url
-        return "https://cardano-preview.blockfrost.io/api/v0";
+        var query = $"txs/{txHash}/metadata";
+        var response = await _httpClient.GetAsync(query);
+
+        var content = await response.Content.ReadAsStringAsync();
+
+        if (!response.IsSuccessStatusCode)
+        {
+            if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+                return null;
+            throw new Exception($"GetTransactionMetadata: HTTP error {response.StatusCode} - Response: {content}");
+        }
+
+        var rawMetadata = JsonSerializer.Deserialize<List<BlockfrostMetadataResponse>>(content);
+        
+        if (rawMetadata == null || rawMetadata.Count == 0)
+            return null;
+
+        var metadataDict = new Dictionary<ulong, TransactionMetadatum>();
+        foreach (var item in rawMetadata)
+        {
+            if (ulong.TryParse(item.Label, out var label))
+            {
+                var metadatum = ConvertToTransactionMetadatum(item.JsonMetadata);
+                if (metadatum != null)
+                {
+                    metadataDict[label] = metadatum;
+                }
+            }
+        }
+
+        return metadataDict.Count > 0 ? new Metadata(metadataDict) : null;
     }
 
+    private static TransactionMetadatum? ConvertToTransactionMetadatum(object? value)
+    {
+        return value switch
+        {
+            string str => new MetadataText(str),
+            long lng => new MetadatumIntLong(lng),
+            int i => new MetadatumIntLong(i),
+            JsonElement element => ConvertJsonElementToMetadatum(element),
+            Dictionary<string, object> dict => new MetadatumMap(
+                dict.ToDictionary(
+                    kv => ConvertToTransactionMetadatum(kv.Key) ?? new MetadataText(kv.Key),
+                    kv => ConvertToTransactionMetadatum(kv.Value) ?? new MetadataText(kv.Value?.ToString() ?? "")
+                )
+            ),
+            _ => value?.ToString() is string s ? new MetadataText(s) : null
+        };
+    }
+
+    private static TransactionMetadatum? ConvertJsonElementToMetadatum(JsonElement element)
+    {
+        return element.ValueKind switch
+        {
+            JsonValueKind.String => new MetadataText(element.GetString() ?? ""),
+            JsonValueKind.Number when element.TryGetInt64(out var lng) => new MetadatumIntLong(lng),
+            JsonValueKind.Number when element.TryGetUInt64(out var ulng) => new MetadatumIntUlong(ulng),
+            JsonValueKind.Object => new MetadatumMap(
+                element.EnumerateObject().ToDictionary(
+                    prop => new MetadataText(prop.Name) as TransactionMetadatum,
+                    prop => ConvertJsonElementToMetadatum(prop.Value) ?? new MetadataText("")
+                )
+            ),
+            JsonValueKind.Array => new MetadatumList(
+                element.EnumerateArray()
+                    .Select(ConvertJsonElementToMetadatum)
+                    .Where(m => m != null)
+                    .Cast<TransactionMetadatum>()
+                    .ToList()
+            ),
+            _ => new MetadataText(element.ToString())
+        };
+    }
+
+    private string GetBaseUrl()
+    {
+        return _networkType switch
+        {
+            NetworkType.Mainnet => "https://cardano-mainnet.blockfrost.io/api/v0/",
+            NetworkType.Preview => "https://cardano-preview.blockfrost.io/api/v0/",
+            NetworkType.Preprod => "https://cardano-preprod.blockfrost.io/api/v0/",
+            NetworkType.Testnet => "https://cardano-testnet.blockfrost.io/api/v0/",
+            _ => throw new ArgumentException($"Unsupported network type: {_networkType}")
+        };
+    }
 }
