@@ -17,13 +17,13 @@ public class TransactionBuilder
     public PostAlonzoTransactionWitnessSet witnessSet;
     public ProtocolParams? pparams;
     public TransactionOutput? changeOutput;
-    private AuxiliaryData? auxiliaryData;
+    private PostAlonzoAuxiliaryDataMap auxiliaryData;
 
     public TransactionBuilder()
     {
         body = CborTypeDefaults.TransactionBody;
         witnessSet = CborTypeDefaults.TransactionWitnessSet;
-        auxiliaryData = null;
+        auxiliaryData = CborTypeDefaults.AuxiliaryData;
     }
     public static TransactionBuilder Create(ProtocolParams pparams)
     {
@@ -163,7 +163,7 @@ public class TransactionBuilder
         body = body with { ReferenceInputs = new CborDefListWithTag<TransactionInput>(referenceInputs) };
         return this;
     }
-   
+
     public TransactionBuilder SetVotingProcedures(VotingProcedures votingProcedures)
     {
         body = body with { VotingProcedures = votingProcedures };
@@ -244,9 +244,19 @@ public class TransactionBuilder
 
     #region Auxiliary Data
 
-    public TransactionBuilder SetAuxiliaryData(AuxiliaryData data)
+    public TransactionBuilder SetAuxiliaryData(PostAlonzoAuxiliaryDataMap data)
     {
         auxiliaryData = data;
+        return this;
+    }
+
+    public TransactionBuilder SetMetadata(Metadata metadata)
+    {
+        auxiliaryData = auxiliaryData with
+        {
+            MetadataValue = metadata
+        };
+
         return this;
     }
 
