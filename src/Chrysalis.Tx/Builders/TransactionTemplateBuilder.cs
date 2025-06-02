@@ -3,6 +3,7 @@ using Chrysalis.Cbor.Extensions.Cardano.Core.Common;
 using Chrysalis.Cbor.Extensions.Cardano.Core.Transaction;
 using Chrysalis.Cbor.Serialization;
 using Chrysalis.Cbor.Types;
+using Chrysalis.Cbor.Types.Cardano.Core;
 using Chrysalis.Cbor.Types.Cardano.Core.Certificates;
 using Chrysalis.Cbor.Types.Cardano.Core.Common;
 using Chrysalis.Cbor.Types.Cardano.Core.Protocol;
@@ -12,6 +13,7 @@ using Chrysalis.Tx.Extensions;
 using Chrysalis.Tx.Models;
 using Chrysalis.Tx.Models.Cbor;
 using Chrysalis.Tx.Utils;
+using Chrysalis.Wallet.Utils;
 using WalletAddress = Chrysalis.Wallet.Models.Addresses.Address;
 
 namespace Chrysalis.Tx.Builders;
@@ -27,6 +29,7 @@ public class TransactionTemplateBuilder<T>
     private readonly List<MintConfig<T>> _mintConfigs = [];
     private readonly List<WithdrawalConfig<T>> _withdrawalConfigs = [];
     private readonly List<ConfigGenerator<T>> _configGenerators = [];
+    private MetadataConfig<T>? _metadataConfig = null;
     private readonly List<PreBuildHook<T>> _preBuildHooks = [];
     private readonly List<string> requiredSigners = [];
     private ulong _validFrom;
@@ -68,6 +71,12 @@ public class TransactionTemplateBuilder<T>
     public TransactionTemplateBuilder<T> AddOutput(OutputConfig<T> config)
     {
         _outputConfigs.Add(config);
+        return this;
+    }
+
+    public TransactionTemplateBuilder<T> AddMetadata(MetadataConfig<T> config)
+    {
+        _metadataConfig = config;
         return this;
     }
 
@@ -184,7 +193,7 @@ public class TransactionTemplateBuilder<T>
 
             List<ResolvedInput> specifiedInputsUtxos = GetSpecifiedInputsUtxos(context.SpecifiedInputs, allUtxos);
             context.ResolvedInputs.AddRange(specifiedInputsUtxos);
-            
+
             CoinSelectionResult coinSelectionResult = PerformCoinSelection(
                 utxos,
                 requiredAmount,
@@ -371,6 +380,17 @@ public class TransactionTemplateBuilder<T>
 
                     context.TxBuilder.SetRedeemers(redeemerMap);
                 }
+            }
+
+            if (_metadataConfig is not null)
+            {
+                Metadata metadata = _metadataConfig(param);
+                context.TxBuilder.SetMetadata(metadata);
+
+                PostMaryTransaction tx = context.TxBuilder.Build();
+                AuxiliaryData auxData = tx.AuxiliaryData!;
+
+                context.TxBuilder.SetAuxiliaryDataHash(HashUtil.Blake2b256(CborSerializer.Serialize(auxData)));
             }
 
             foreach (PreBuildHook<T> hook in _preBuildHooks)
@@ -804,7 +824,7 @@ public class TransactionTemplateBuilder<T>
                 }
                 else
                 {
-                     byte[] dataBytes = CborSerializer.Serialize(dataObj);
+                    byte[] dataBytes = CborSerializer.Serialize(dataObj);
                     redeemerData = CborSerializer.Deserialize<PlutusData>(dataBytes);
                 }
 

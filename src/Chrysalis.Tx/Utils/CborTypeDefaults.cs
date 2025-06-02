@@ -1,4 +1,5 @@
 using Chrysalis.Cbor.Types;
+using Chrysalis.Cbor.Types.Cardano.Core;
 using Chrysalis.Cbor.Types.Cardano.Core.Transaction;
 using Chrysalis.Cbor.Types.Cardano.Core.TransactionWitness;
 
@@ -12,5 +13,13 @@ public static class CborTypeDefaults
         new CborDefList<TransactionOutput>([]), 0, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null
     );
     public static PostAlonzoTransactionWitnessSet TransactionWitnessSet => new(null, null, null, null, null, null, null, null);
+
+    public static PostAlonzoAuxiliaryDataMap AuxiliaryData => new(
+        null,
+        null,
+        null,
+        null,
+        null
+    );
 
 }
