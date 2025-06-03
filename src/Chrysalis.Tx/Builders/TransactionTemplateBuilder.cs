@@ -32,6 +32,7 @@ public class TransactionTemplateBuilder<T>
     private MetadataConfig<T>? _metadataConfig = null;
     private readonly List<PreBuildHook<T>> _preBuildHooks = [];
     private readonly List<string> requiredSigners = [];
+    private NativeScriptBuilder<T>? _nativeScriptBuilder;
     private ulong _validFrom;
     private ulong _validTo;
 
@@ -89,6 +90,12 @@ public class TransactionTemplateBuilder<T>
     public TransactionTemplateBuilder<T> AddWithdrawal(WithdrawalConfig<T> config)
     {
         _withdrawalConfigs.Add(config);
+        return this;
+    }
+
+    public TransactionTemplateBuilder<T> AddNativeScript(NativeScriptBuilder<T> nativeScriptBuilder)
+    {
+        _nativeScriptBuilder = nativeScriptBuilder;
         return this;
     }
 
@@ -201,6 +208,13 @@ public class TransactionTemplateBuilder<T>
                 context
             );
 
+            ulong totalLovelaceChange = coinSelectionResult.LovelaceChange;
+            Lovelace lovelaceChange = new(totalLovelaceChange);
+
+            Dictionary<byte[], TokenBundleOutput> assetsChange = coinSelectionResult.AssetsChange;
+
+            Dictionary<byte[], Dictionary<byte[], ulong>> existingAssetsChange = [];
+
             foreach (ResolvedInput consumedInput in coinSelectionResult.Inputs)
             {
                 context.ResolvedInputs.Add(consumedInput);
@@ -208,81 +222,77 @@ public class TransactionTemplateBuilder<T>
             }
 
             ResolvedInput? feeInput = SelectFeeInput(utxos, coinSelectionResult.Inputs);
+
+            Dictionary<byte[], Dictionary<byte[], ulong>> combinedAssets = new(existingAssetsChange);
+
+            foreach (var asset in assetsChange)
+            {
+                existingAssetsChange.Add(asset.Key, asset.Value.Value);
+            }
+
             if (feeInput is not null)
             {
                 utxos.Remove(feeInput);
                 context.ResolvedInputs.Add(feeInput);
                 context.InputsById["fee"] = feeInput.Outref;
                 context.TxBuilder.AddInput(feeInput.Outref);
-            }
 
+                lovelaceChange = new(totalLovelaceChange + (feeInput?.Output.Amount().Lovelace() ?? 0));
 
-            ulong totalLovelaceChange = coinSelectionResult.LovelaceChange;
-            Dictionary<byte[], TokenBundleOutput> assetsChange = coinSelectionResult.AssetsChange;
-
-            Lovelace lovelaceChange = new(totalLovelaceChange + (feeInput?.Output.Amount().Lovelace() ?? 0));
-            if (feeInput!.Output.Amount() is LovelaceWithMultiAsset lovelaceWithMultiAsset)
-            {
-                Dictionary<byte[], Dictionary<byte[], ulong>> existingAssetsChange = [];
-                Dictionary<byte[], Dictionary<byte[], ulong>> feeInputAssetsChange = [];
-
-                foreach (var asset in assetsChange)
+                if (feeInput!.Output.Amount() is LovelaceWithMultiAsset lovelaceWithMultiAsset)
                 {
-                    existingAssetsChange.Add(asset.Key, asset.Value.Value);
-                }
+                    Dictionary<byte[], Dictionary<byte[], ulong>> feeInputAssetsChange = [];
 
-                foreach (var asset in lovelaceWithMultiAsset.MultiAsset.Value)
-                {
-                    feeInputAssetsChange.Add(asset.Key, asset.Value.Value);
-                }
-
-                Dictionary<byte[], Dictionary<byte[], ulong>> combinedAssets = new(existingAssetsChange);
-
-                foreach (var asset in feeInputAssetsChange)
-                {
-                    byte[]? matchingKey = null;
-                    foreach (var existingKey in combinedAssets.Keys)
+                    foreach (var asset in lovelaceWithMultiAsset.MultiAsset.Value)
                     {
-                        if (existingKey.SequenceEqual(asset.Key))
-                        {
-                            matchingKey = existingKey;
-                            break;
-                        }
+                        feeInputAssetsChange.Add(asset.Key, asset.Value.Value);
                     }
 
-                    if (matchingKey != null)
+                    foreach (var asset in feeInputAssetsChange)
                     {
-                        var existingTokens = combinedAssets[matchingKey];
-
-                        foreach (var token in asset.Value)
+                        byte[]? matchingKey = null;
+                        foreach (var existingKey in combinedAssets.Keys)
                         {
-                            byte[]? matchingTokenKey = null;
-                            foreach (var existingTokenKey in existingTokens.Keys)
+                            if (existingKey.SequenceEqual(asset.Key))
                             {
-                                if (existingTokenKey.SequenceEqual(token.Key))
+                                matchingKey = existingKey;
+                                break;
+                            }
+                        }
+
+                        if (matchingKey != null)
+                        {
+                            var existingTokens = combinedAssets[matchingKey];
+
+                            foreach (var token in asset.Value)
+                            {
+                                byte[]? matchingTokenKey = null;
+                                foreach (var existingTokenKey in existingTokens.Keys)
                                 {
-                                    matchingTokenKey = existingTokenKey;
-                                    break;
+                                    if (existingTokenKey.SequenceEqual(token.Key))
+                                    {
+                                        matchingTokenKey = existingTokenKey;
+                                        break;
+                                    }
+                                }
+
+                                if (matchingTokenKey != null)
+                                {
+                                    existingTokens[matchingTokenKey] += token.Value;
+                                }
+                                else
+                                {
+                                    existingTokens.Add(token.Key, token.Value);
                                 }
                             }
-
-                            if (matchingTokenKey != null)
-                            {
-                                existingTokens[matchingTokenKey] += token.Value;
-                            }
-                            else
-                            {
-                                existingTokens.Add(token.Key, token.Value);
-                            }
                         }
-                    }
-                    else
-                    {
-                        combinedAssets.Add(asset.Key, new Dictionary<byte[], ulong>(asset.Value));
-                    }
+                        else
+                        {
+                            combinedAssets.Add(asset.Key, new Dictionary<byte[], ulong>(asset.Value));
+                        }
 
+                    }
                 }
-
 
                 Dictionary<byte[], TokenBundleOutput> convertedAssetsChange = [];
 
@@ -293,8 +303,8 @@ public class TransactionTemplateBuilder<T>
                 }
 
                 assetsChange = convertedAssetsChange;
-
             }
+
             Value changeValue = assetsChange.Count > 0
                 ? new LovelaceWithMultiAsset(lovelaceChange, new MultiAssetOutput(assetsChange))
                 : lovelaceChange;
@@ -391,6 +401,12 @@ public class TransactionTemplateBuilder<T>
                 AuxiliaryData auxData = tx.AuxiliaryData!;
 
                 context.TxBuilder.SetAuxiliaryDataHash(HashUtil.Blake2b256(CborSerializer.Serialize(auxData)));
+            }
+
+            if (_nativeScriptBuilder is not null)
+            {
+                NativeScript nativeScript = _nativeScriptBuilder(param);
+                context.TxBuilder.AddNativeScript(nativeScript);
             }
 
             foreach (PreBuildHook<T> hook in _preBuildHooks)

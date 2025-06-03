@@ -26,12 +26,12 @@ public class Blockfrost : ICardanoDataProvider
     private readonly HttpClient _httpClient;
     private readonly NetworkType _networkType;
 
-    public Blockfrost(string apiKey, NetworkType networkType = NetworkType.Preview)
+    public Blockfrost(string apiKey, NetworkType networkType = NetworkType.Preview, string url = "")
     {
         _networkType = networkType;
         _httpClient = new()
         {
-            BaseAddress = new Uri(GetBaseUrl())
+            BaseAddress = new Uri(string.IsNullOrEmpty(url) ? GetBaseUrl() : url)
         };
         _httpClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
         _httpClient.DefaultRequestHeaders.Add("Project_id", apiKey);

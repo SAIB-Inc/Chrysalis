@@ -17,13 +17,13 @@ public class TransactionBuilder
     public PostAlonzoTransactionWitnessSet witnessSet;
     public ProtocolParams? pparams;
     public TransactionOutput? changeOutput;
-    private PostAlonzoAuxiliaryDataMap auxiliaryData;
+    private PostAlonzoAuxiliaryDataMap? auxiliaryData;
 
     public TransactionBuilder()
     {
         body = CborTypeDefaults.TransactionBody;
         witnessSet = CborTypeDefaults.TransactionWitnessSet;
-        auxiliaryData = CborTypeDefaults.AuxiliaryData;
+        auxiliaryData = null;
     }
     public static TransactionBuilder Create(ProtocolParams pparams)
     {
@@ -252,10 +252,14 @@ public class TransactionBuilder
 
     public TransactionBuilder SetMetadata(Metadata metadata)
     {
-        auxiliaryData = auxiliaryData with
+        if (auxiliaryData == null)
         {
-            MetadataValue = metadata
-        };
+            auxiliaryData = new PostAlonzoAuxiliaryDataMap(metadata, null, null, null, null);
+        }
+        else
+        {
+            auxiliaryData = auxiliaryData with { MetadataValue = metadata };
+        }
 
         return this;
     }
