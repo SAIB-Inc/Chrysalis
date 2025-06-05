@@ -213,8 +213,6 @@ public class TransactionTemplateBuilder<T>
 
             Dictionary<byte[], TokenBundleOutput> assetsChange = coinSelectionResult.AssetsChange;
 
-            Dictionary<byte[], Dictionary<byte[], ulong>> existingAssetsChange = [];
-
             foreach (ResolvedInput consumedInput in coinSelectionResult.Inputs)
             {
                 context.ResolvedInputs.Add(consumedInput);
@@ -222,14 +220,6 @@ public class TransactionTemplateBuilder<T>
             }
 
             ResolvedInput? feeInput = SelectFeeInput(utxos, coinSelectionResult.Inputs);
-
-            Dictionary<byte[], Dictionary<byte[], ulong>> combinedAssets = new(existingAssetsChange);
-
-            foreach (var asset in assetsChange)
-            {
-                existingAssetsChange.Add(asset.Key, asset.Value.Value);
-            }
-
             if (feeInput is not null)
             {
                 utxos.Remove(feeInput);
@@ -242,11 +232,19 @@ public class TransactionTemplateBuilder<T>
                 if (feeInput!.Output.Amount() is LovelaceWithMultiAsset lovelaceWithMultiAsset)
                 {
                     Dictionary<byte[], Dictionary<byte[], ulong>> feeInputAssetsChange = [];
+                    Dictionary<byte[], Dictionary<byte[], ulong>> existingAssetsChange = [];
+
+                    foreach (var asset in assetsChange)
+                    {
+                        existingAssetsChange.Add(asset.Key, asset.Value.Value);
+                    }
 
                     foreach (var asset in lovelaceWithMultiAsset.MultiAsset.Value)
                     {
                         feeInputAssetsChange.Add(asset.Key, asset.Value.Value);
                     }
+
+                    Dictionary<byte[], Dictionary<byte[], ulong>> combinedAssets = new(existingAssetsChange);
 
                     foreach (var asset in feeInputAssetsChange)
                     {
@@ -292,17 +290,16 @@ public class TransactionTemplateBuilder<T>
                         }
 
                     }
+                    Dictionary<byte[], TokenBundleOutput> convertedAssetsChange = [];
+
+                    foreach (var asset in combinedAssets)
+                    {
+                        TokenBundleOutput tokenBundle = new(asset.Value);
+                        convertedAssetsChange.Add(asset.Key, tokenBundle);
+                    }
+
+                    assetsChange = convertedAssetsChange;
                 }
-
-                Dictionary<byte[], TokenBundleOutput> convertedAssetsChange = [];
-
-                foreach (var asset in combinedAssets)
-                {
-                    TokenBundleOutput tokenBundle = new(asset.Value);
-                    convertedAssetsChange.Add(asset.Key, tokenBundle);
-                }
-
-                assetsChange = convertedAssetsChange;
             }
 
             Value changeValue = assetsChange.Count > 0
@@ -961,8 +958,10 @@ public class TransactionTemplateBuilder<T>
                 associations[outputOptions.Id] = outputIndex;
             }
 
-            context.TxBuilder.AddOutput(outputOptions.BuildOutput(parties, context.TxBuilder.pparams?.AdaPerUTxOByte ?? 4310));
-            requiredAmount.Add(outputOptions.Amount!);
+            TransactionOutput output = outputOptions.BuildOutput(parties, context.TxBuilder.pparams?.AdaPerUTxOByte ?? 4310);
+
+            context.TxBuilder.AddOutput(output);
+            requiredAmount.Add(output.Amount());
 
             changeIndex++;
             outputIndex++;

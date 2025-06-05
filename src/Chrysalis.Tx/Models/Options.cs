@@ -1,4 +1,5 @@
 using Chrysalis.Cbor.Extensions.Cardano.Core.Common;
+using Chrysalis.Cbor.Extensions.Cardano.Core.Transaction;
 using Chrysalis.Cbor.Serialization;
 using Chrysalis.Cbor.Types;
 using Chrysalis.Cbor.Types.Cardano.Core.Common;
@@ -60,29 +61,37 @@ public record OutputOptions
     {
         Address address = new(WalletAddress.FromBech32(parties[To]).ToBytes());
         CborEncodedValue? script = Script is not null ? new CborEncodedValue(CborSerializer.Serialize(Script)) : null;
-        PostAlonzoTransactionOutput output = new(address, Amount ?? new Lovelace(2000000), Datum, script);
-        ulong minLovelace = FeeUtil.CalculateMinimumLovelace(adaPerUtxoByte, CborSerializer.Serialize(output));
-        Value minLovelaceValue = new Lovelace(minLovelace);
+        TransactionOutput output = new AlonzoTransactionOutput(address, Amount ?? new Lovelace(1000000), null);
 
-        if (Amount is not null)
+        if (Datum is not null || Script is not null)
         {
-            minLovelaceValue = Amount switch
-            {
-                LovelaceWithMultiAsset multiAsset => multiAsset.Lovelace() >= minLovelace
-                    ? multiAsset
-                    : new LovelaceWithMultiAsset(new Lovelace(minLovelace), multiAsset.MultiAsset),
-                _ => Amount.Lovelace() >= minLovelace
-                    ? Amount
-                    : new Lovelace(minLovelace)
-            };
+            output = new PostAlonzoTransactionOutput(address, Amount ?? new Lovelace(1000000), Datum, script);
         }
 
-        Amount = minLovelaceValue;
+        ulong minLovelace = FeeUtil.CalculateMinimumLovelace(adaPerUtxoByte, CborSerializer.Serialize(output));
+        ulong currentLovelace = output.Amount().Lovelace();
 
-        return Datum is null && Script is null
-            ? new AlonzoTransactionOutput(address, Amount, null)
-            : new PostAlonzoTransactionOutput(address, Amount, Datum, script);
+        while (currentLovelace < minLovelace)
+        {
+            Value amount = output.Amount();
+            amount = amount switch
+            {
+                LovelaceWithMultiAsset multiAsset => new LovelaceWithMultiAsset(new Lovelace(minLovelace), multiAsset.MultiAsset),
+                _ => new Lovelace(minLovelace)
+            };
 
+            output = output switch
+            {
+                AlonzoTransactionOutput alonzoOutput => new AlonzoTransactionOutput(alonzoOutput.Address, amount, alonzoOutput.DatumHash),
+                PostAlonzoTransactionOutput postAlonzoOutput => new PostAlonzoTransactionOutput(postAlonzoOutput.Address, amount, postAlonzoOutput.Datum, postAlonzoOutput.ScriptRef),
+                _ => throw new InvalidOperationException("Unsupported transaction output type")
+            };
+
+            minLovelace = FeeUtil.CalculateMinimumLovelace(adaPerUtxoByte, CborSerializer.Serialize(output));
+            currentLovelace = output.Amount().Lovelace();
+        }
+
+        return output;
     }
 }
 
