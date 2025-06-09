@@ -11,14 +11,15 @@
     <ProjectReference Include="../Chrysalis.Tx/Chrysalis.Tx.csproj" />
   </ItemGroup>
 
-    <ItemGroup>
+  <ItemGroup>
     <ProjectReference Include="../Chrysalis.Cbor/Chrysalis.Cbor.csproj" />
-    <ProjectReference Include="../Chrysalis.Cbor.CodeGen/Chrysalis.Cbor.CodeGen.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+    <ProjectReference Include="../Chrysalis.Cbor.CodeGen/Chrysalis.Cbor.CodeGen.csproj"
+      OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
   </ItemGroup>
 
-    <ItemGroup>
-      <PackageReference Include="SauceControl.Blake2Fast" Version="2.0.0" />
-    </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="SauceControl.Blake2Fast" Version="2.0.0" />
+  </ItemGroup>
 
 
 </Project>

@@ -14,42 +14,84 @@ using Chrysalis.Wallet.Words;
 var blockfrost = new Blockfrost("previewajMhMPYerz9Pd3GsqjayLwP5mgnNnZCC", NetworkType.Preview);
 
 // Test with a known transaction that has metadata
-string txHash = "1d7ba2f9bb914d3457be9aec82cfaf1684c6705ae3baed0f60d846136395f1c1";
+string txHash = args.Length > 0 ? args[0] : "1d7ba2f9bb914d3457be9aec82cfaf1684c6705ae3baed0f60d846136395f1c1";
 
 try
 {
-    // Test other endpoints first
-    Console.WriteLine("Testing protocol parameters endpoint...");
-    var protocolParams = await blockfrost.GetParametersAsync();
-    Console.WriteLine($"Protocol params retrieved: MinFeeA={protocolParams.MinFeeA}");
+    var allPayloadBytes = new List<byte>();
+    string currentTxHash = txHash;
     
-    Console.WriteLine("\nTesting UTXO endpoint...");
-    try 
-    {
-        var utxos = await blockfrost.GetUtxosAsync("addr_test1qplj3frty09zw07sn03ucr2al2p82akg5p2rws55ulrn3dzveufqne0w9me28c6ujmd7an7j980njdrntzz0gpsuuatqmjwand");
-        Console.WriteLine($"UTXOs retrieved: {utxos.Count} UTXOs");
-    }
-    catch (Exception utxoEx)
-    {
-        Console.WriteLine($"UTXO test failed: {utxoEx.Message}");
-    }
+    Console.WriteLine($"Starting metadata collection from transaction: {currentTxHash}");
     
-    Console.WriteLine($"\nTesting metadata endpoint for transaction: {txHash}");
-    var metadata = await blockfrost.GetTransactionMetadataAsync(txHash);
-    
-    if (metadata != null)
+    while (!string.IsNullOrEmpty(currentTxHash))
     {
-        Console.WriteLine("Metadata found:");
+        Console.WriteLine($"Getting metadata for: {currentTxHash}");
+        var metadata = await blockfrost.GetTransactionMetadataAsync(currentTxHash);
+        
+        if (metadata == null)
+        {
+            Console.WriteLine("No metadata found for this transaction.");
+            break;
+        }
+        
+        string? nextHash = null;
+        
         foreach (var (label, metadatum) in metadata.Value)
         {
-            Console.WriteLine($"  Label: {label}");
-            DisplayMetadatum(metadatum, "    ");
+            Console.WriteLine($"Processing label: {label}");
+            
+            if (metadatum is MetadatumMap map)
+            {
+                // Look for "next" field
+                foreach (var (key, value) in map.Value)
+                {
+                    if (key is MetadataText keyText && keyText.Value == "next" && value is MetadataText nextText)
+                    {
+                        nextHash = nextText.Value;
+                        if (nextHash.StartsWith("0x"))
+                            nextHash = nextHash[2..];
+                        Console.WriteLine($"Found next hash: {nextHash}");
+                    }
+                    
+                    // Look for "payload" field
+                    if (key is MetadataText payloadKey && payloadKey.Value == "payload" && value is MetadatumList payloadList)
+                    {
+                        Console.WriteLine($"Found payload with {payloadList.Value.Count} chunks");
+                        
+                        foreach (var chunk in payloadList.Value)
+                        {
+                            if (chunk is MetadataText chunkText)
+                            {
+                                string hexData = chunkText.Value;
+                                if (hexData.StartsWith("0x"))
+                                    hexData = hexData[2..];
+                                
+                                try
+                                {
+                                    byte[] chunkBytes = Convert.FromHexString(hexData);
+                                    allPayloadBytes.AddRange(chunkBytes);
+                                }
+                                catch (Exception ex)
+                                {
+                                    Console.WriteLine($"Error converting hex chunk: {ex.Message}");
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
+        
+        currentTxHash = nextHash;
     }
-    else
-    {
-        Console.WriteLine("No metadata found for this transaction.");
-    }
+    
+    Console.WriteLine($"Collected {allPayloadBytes.Count} total bytes");
+    
+    // Write to file
+    string outputPath = "/tmp/hello_adafs.png";
+    await File.WriteAllBytesAsync(outputPath, allPayloadBytes.ToArray());
+    
+    Console.WriteLine($"File written to: {outputPath}");
 }
 catch (Exception ex)
 {
