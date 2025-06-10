@@ -17,7 +17,7 @@ namespace Chrysalis.Tx.Extensions;
 
 public static class TransactionBuilderExtensions
 {
-    public static TransactionBuilder CalculateFee(this TransactionBuilder builder, List<Script> scripts, int mockWitnessFee = 1)
+    public static TransactionBuilder CalculateFee(this TransactionBuilder builder, List<Script> scripts, ulong defaultFee = 0, int mockWitnessFee = 1)
     {
 
         ulong scriptFee = 0;
@@ -47,7 +47,8 @@ public static class TransactionBuilderExtensions
             scriptExecutionFee = FeeUtil.CalculateScriptExecutionFee(builder.witnessSet.Redeemers, memUnitsCost, stepUnitsCost);
 
         }
-        builder.SetFee(2000000UL);
+
+        builder.SetFee(defaultFee == 0 ? 2000000UL : defaultFee);
         // fee and change calculation
         Transaction draftTx = builder.Build();
         var draftTxCborBytes = CborSerializer.Serialize(draftTx);
@@ -74,27 +75,43 @@ public static class TransactionBuilderExtensions
                 new Lovelace(lovelace - totalCollateral), null));
         }
 
+        if (defaultFee > 0)
+        {
+            fee = defaultFee;
+        }
+
+        builder.SetFee(fee);
+
+        if (builder.changeOutput is null)
+        {
+            return builder;
+        }
+
         List<TransactionOutput> outputs = [.. builder.body.Outputs.GetValue()];
 
-        Lovelace updatedChangeLovelace = builder.changeOutput switch
+        decimal updatedChangeLovelace = builder.changeOutput switch
         {
             AlonzoTransactionOutput alonzo => alonzo.Amount switch
             {
-                Lovelace value => new Lovelace(value.Value - fee),
-                LovelaceWithMultiAsset multiAsset => new Lovelace(multiAsset.LovelaceValue.Value - fee),
+                Lovelace value => (decimal)value.Value - fee,
+                LovelaceWithMultiAsset multiAsset => multiAsset.LovelaceValue.Value - fee,
                 _ => throw new Exception("Invalid change output type")
             },
             PostAlonzoTransactionOutput postAlonzoChange => postAlonzoChange.Amount switch
             {
-                Lovelace value => new Lovelace(value.Value - fee),
-                LovelaceWithMultiAsset multiAsset => new Lovelace(multiAsset.LovelaceValue.Value - fee),
+                Lovelace value => value.Value - fee,
+                LovelaceWithMultiAsset multiAsset => multiAsset.LovelaceValue.Value - fee,
                 _ => throw new Exception("Invalid change output type")
             },
             _ => throw new Exception("Invalid change output type")
         };
 
-        Value changeValue = updatedChangeLovelace;
+        if (updatedChangeLovelace < 0)
+        {
+            updatedChangeLovelace = 0;
+        }
 
+        Value changeValue = new Lovelace((ulong)updatedChangeLovelace);
 
         Value changeOutputValue = builder.changeOutput switch
         {
@@ -105,39 +122,51 @@ public static class TransactionBuilderExtensions
 
         if (changeOutputValue is LovelaceWithMultiAsset lovelaceWithMultiAsset)
         {
-            changeValue = new LovelaceWithMultiAsset(updatedChangeLovelace, lovelaceWithMultiAsset.MultiAsset);
+            changeValue = new LovelaceWithMultiAsset(new Lovelace((ulong)updatedChangeLovelace), lovelaceWithMultiAsset.MultiAsset);
         }
 
         TransactionOutput? updatedChangeOutput = null;
 
-        if (builder.changeOutput is AlonzoTransactionOutput change)
+        if (updatedChangeLovelace > 0)
         {
-            updatedChangeOutput = new AlonzoTransactionOutput(
-                change.Address,
-                changeValue,
-                change.DatumHash
-            );
+            if (builder.changeOutput is AlonzoTransactionOutput change)
+            {
+                updatedChangeOutput = new AlonzoTransactionOutput(
+                    change.Address,
+                    changeValue,
+                    change.DatumHash
+                );
 
+            }
+            else if (builder.changeOutput is PostAlonzoTransactionOutput postAlonzoChange)
+            {
+                updatedChangeOutput = new PostAlonzoTransactionOutput(
+                    postAlonzoChange.Address!,
+                    changeValue,
+                    postAlonzoChange.Datum,
+                    postAlonzoChange.ScriptRef
+                );
+            }
         }
-        else if (builder.changeOutput is PostAlonzoTransactionOutput postAlonzoChange)
-        {
-            updatedChangeOutput = new PostAlonzoTransactionOutput(
-                postAlonzoChange.Address!,
-                changeValue,
-                postAlonzoChange.Datum,
-                postAlonzoChange.ScriptRef
-            );
-        }
+
+        outputs.RemoveAt(outputs.Count - 1);
 
         if (updatedChangeOutput is not null)
         {
-            outputs.RemoveAt(outputs.Count - 1);
-            outputs.Add(updatedChangeOutput);
-            builder.SetOutputs(outputs);
+            byte[] updatedChangeOutputBytes = CborSerializer.Serialize(updatedChangeOutput);
+            ulong minLovelace = FeeUtil.CalculateMinimumLovelace((ulong)builder.pparams!.AdaPerUTxOByte!, updatedChangeOutputBytes);
+
+            if (updatedChangeLovelace < minLovelace)
+            {
+                builder.SetFee(fee + (ulong)updatedChangeLovelace);
+            }
+            else
+            {
+                outputs.Add(updatedChangeOutput);
+            }
         }
 
-        builder.SetFee(fee);
-
+        builder.SetOutputs(outputs);
 
         return builder;
     }

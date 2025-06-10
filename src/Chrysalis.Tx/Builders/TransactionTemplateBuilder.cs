@@ -127,319 +127,327 @@ public class TransactionTemplateBuilder<T>
         return this;
     }
 
+
+    private async Task<Transaction> EvaluateTemplate(T param, bool eval = true, ulong fee = 0)
+    {
+        BuildContext context = new()
+        {
+            TxBuilder = TransactionBuilder.Create(await _provider!.GetParametersAsync())
+        };
+
+        Dictionary<string, string> parties = ResolveParties(param);
+
+        if (_validFrom > 0)
+            context.TxBuilder.SetValidityIntervalStart(_validFrom);
+
+        if (_validTo > 0)
+            context.TxBuilder.SetTtl(_validTo);
+
+        WalletAddress changeAddress = WalletAddress.FromBech32(parties["change"]);
+
+        foreach (ConfigGenerator<T> generator in _configGenerators)
+        {
+            var dynamicConfigs = generator(param);
+            foreach (var (inputConfig, mintConfigs, outputConfigs) in dynamicConfigs)
+            {
+                _inputConfigs.Add(inputConfig);
+                foreach (MintConfig<T> mintConfig in mintConfigs)
+                {
+                    _mintConfigs.Add(mintConfig);
+                }
+                foreach (OutputConfig<T> outputConfig in outputConfigs)
+                {
+                    _outputConfigs.Add(outputConfig);
+                }
+            }
+        }
+
+        context.AssociationsByInputId["fee"] = [];
+
+        ProcessInputs(param, context);
+        ProcessMints(param, context);
+
+        List<Value> requiredAmount = [];
+        int changeIndex = 0;
+        ProcessOutputs(param, context, parties, requiredAmount, ref changeIndex, fee);
+
+        List<ResolvedInput> utxos = await _provider!.GetUtxosAsync([parties["change"]]);
+
+        List<ResolvedInput> allUtxos = [.. utxos];
+        foreach (string address in context.InputAddresses.Distinct())
+        {
+            if (address != _changeAddress)
+            {
+                allUtxos.AddRange(await _provider!.GetUtxosAsync([parties[address]]));
+            }
+        }
+
+        List<Script> scripts = GetScripts(context.IsSmartContractTx, context.ReferenceInputs, allUtxos);
+
+        ResolvedInput? collateralInput = SelectCollateralInput(utxos, context.IsSmartContractTx);
+        if (collateralInput is not null)
+        {
+            utxos.Remove(collateralInput);
+            context.TxBuilder.AddCollateral(collateralInput.Outref);
+            context.TxBuilder.SetCollateralReturn(collateralInput.Output);
+        }
+
+        List<ResolvedInput> specifiedInputsUtxos = GetSpecifiedInputsUtxos(context.SpecifiedInputs, allUtxos);
+        context.ResolvedInputs.AddRange(specifiedInputsUtxos);
+
+        CoinSelectionResult coinSelectionResult = PerformCoinSelection(
+            utxos,
+            requiredAmount,
+            specifiedInputsUtxos,
+            context
+        );
+
+        ulong totalLovelaceChange = coinSelectionResult.LovelaceChange;
+        Lovelace lovelaceChange = new(totalLovelaceChange);
+
+        Dictionary<byte[], TokenBundleOutput> assetsChange = coinSelectionResult.AssetsChange;
+
+        foreach (ResolvedInput consumedInput in coinSelectionResult.Inputs)
+        {
+            context.ResolvedInputs.Add(consumedInput);
+            context.TxBuilder.AddInput(consumedInput.Outref);
+        }
+
+        ResolvedInput? feeInput = SelectFeeInput(utxos, coinSelectionResult.Inputs);
+        if (feeInput is not null)
+        {
+            utxos.Remove(feeInput);
+            context.ResolvedInputs.Add(feeInput);
+            context.InputsById["fee"] = feeInput.Outref;
+            context.TxBuilder.AddInput(feeInput.Outref);
+
+            lovelaceChange = new(totalLovelaceChange + (feeInput?.Output.Amount().Lovelace() ?? 0));
+
+            if (feeInput!.Output.Amount() is LovelaceWithMultiAsset lovelaceWithMultiAsset)
+            {
+                Dictionary<byte[], Dictionary<byte[], ulong>> feeInputAssetsChange = [];
+                Dictionary<byte[], Dictionary<byte[], ulong>> existingAssetsChange = [];
+
+                foreach (var asset in assetsChange)
+                {
+                    existingAssetsChange.Add(asset.Key, asset.Value.Value);
+                }
+
+                foreach (var asset in lovelaceWithMultiAsset.MultiAsset.Value)
+                {
+                    feeInputAssetsChange.Add(asset.Key, asset.Value.Value);
+                }
+
+                Dictionary<byte[], Dictionary<byte[], ulong>> combinedAssets = new(existingAssetsChange);
+
+                foreach (var asset in feeInputAssetsChange)
+                {
+                    byte[]? matchingKey = null;
+                    foreach (var existingKey in combinedAssets.Keys)
+                    {
+                        if (existingKey.SequenceEqual(asset.Key))
+                        {
+                            matchingKey = existingKey;
+                            break;
+                        }
+                    }
+
+                    if (matchingKey != null)
+                    {
+                        var existingTokens = combinedAssets[matchingKey];
+
+                        foreach (var token in asset.Value)
+                        {
+                            byte[]? matchingTokenKey = null;
+                            foreach (var existingTokenKey in existingTokens.Keys)
+                            {
+                                if (existingTokenKey.SequenceEqual(token.Key))
+                                {
+                                    matchingTokenKey = existingTokenKey;
+                                    break;
+                                }
+                            }
+
+                            if (matchingTokenKey != null)
+                            {
+                                existingTokens[matchingTokenKey] += token.Value;
+                            }
+                            else
+                            {
+                                existingTokens.Add(token.Key, token.Value);
+                            }
+                        }
+                    }
+                    else
+                    {
+                        combinedAssets.Add(asset.Key, new Dictionary<byte[], ulong>(asset.Value));
+                    }
+
+                }
+                Dictionary<byte[], TokenBundleOutput> convertedAssetsChange = [];
+
+                foreach (var asset in combinedAssets)
+                {
+                    TokenBundleOutput tokenBundle = new(asset.Value);
+                    convertedAssetsChange.Add(asset.Key, tokenBundle);
+                }
+
+                assetsChange = convertedAssetsChange;
+            }
+        }
+
+        Value changeValue = assetsChange.Count > 0
+            ? new LovelaceWithMultiAsset(lovelaceChange, new MultiAssetOutput(assetsChange))
+            : lovelaceChange;
+
+        TransactionOutput changeOutput = new AlonzoTransactionOutput(new Address(changeAddress.ToBytes()), changeValue, null);
+
+        if (!string.IsNullOrEmpty(_changeAddress) && lovelaceChange.Value > 0)
+        {
+            context.TxBuilder.AddOutput(changeOutput, true);
+        }
+
+        List<TransactionInput> sortedInputs = [.. context.TxBuilder.body.Inputs.GetValue().OrderBy(e => Convert.ToHexString(e.TransactionId)).ThenBy(e => e.Index)];
+        context.TxBuilder.SetInputs(sortedInputs);
+
+        List<TransactionInput> sortedRefInputs = [];
+        if (context.TxBuilder.body.ReferenceInputs?.GetValue() != null)
+        {
+            sortedRefInputs = [.. context.TxBuilder.body.ReferenceInputs.GetValue()
+                .OrderBy(e => Convert.ToHexString(e.TransactionId))
+                .ThenBy(e => e.Index)];
+
+            context.TxBuilder.SetReferenceInputs(sortedRefInputs);
+        }
+
+        Dictionary<string, int> inputIdToOrderedIndex = GetInputIdToOrderedIndex(context.InputsById, sortedInputs);
+        Dictionary<int, Dictionary<string, int>> intIndexedAssociations = [];
+        Dictionary<string, (ulong inputIndex, Dictionary<string, int> outputIndices)> stringIndexedAssociations = GetIndexedAssociations(context.AssociationsByInputId, inputIdToOrderedIndex);
+        Dictionary<string, ulong> refInputIdToOrderedIndex = GetRefInputIdToOrderedIndex(context.ReferenceInputsById, sortedRefInputs);
+
+        foreach (var (inputId, data) in stringIndexedAssociations)
+        {
+            if (int.TryParse(inputId, out int intKey))
+            {
+                intIndexedAssociations[intKey] = data.outputIndices;
+            }
+        }
+
+        ProcessWithdrawals(param, context, parties, intIndexedAssociations);
+
+        if (requiredSigners.Count > 0)
+        {
+            foreach (string signer in requiredSigners)
+            {
+                WalletAddress address = WalletAddress.FromBech32(parties[signer]);
+                context.TxBuilder.AddRequiredSigner(address.GetPaymentKeyHash()!);
+            }
+        }
+
+        if (context.IsSmartContractTx)
+        {
+            var inputIdToIndex = new Dictionary<string, ulong>();
+            var outputMappings = new Dictionary<string, Dictionary<string, ulong>>();
+
+            foreach (var (inputId, input) in context.InputsById)
+            {
+                for (int i = 0; i < sortedInputs.Count; i++)
+                {
+                    if (Convert.ToHexString(sortedInputs[i].TransactionId) == Convert.ToHexString(input.TransactionId) &&
+                        sortedInputs[i].Index == input.Index)
+                    {
+                        inputIdToIndex[inputId] = (ulong)i;
+                        break;
+                    }
+                }
+            }
+
+
+            foreach (var (inputId, associations) in context.AssociationsByInputId)
+            {
+                if (!outputMappings.ContainsKey(inputId))
+                {
+                    outputMappings[inputId] = [];
+                }
+
+                foreach (var (outputId, outputIndex) in associations)
+                {
+                    outputMappings[inputId][outputId] = (ulong)outputIndex;
+                }
+            }
+
+            BuildRedeemers(context, param, inputIdToIndex, refInputIdToOrderedIndex, outputMappings);
+
+            if (context.Redeemers.Count > 0)
+            {
+                RedeemerMap redeemerMap = new(context.Redeemers);
+                byte[] serialized = CborSerializer.Serialize(redeemerMap);
+
+                context.TxBuilder.SetRedeemers(redeemerMap);
+            }
+        }
+
+        if (_metadataConfig is not null)
+        {
+            Metadata metadata = _metadataConfig(param);
+            context.TxBuilder.SetMetadata(metadata);
+
+            PostMaryTransaction tx = context.TxBuilder.Build();
+            AuxiliaryData auxData = tx.AuxiliaryData!;
+
+            context.TxBuilder.SetAuxiliaryDataHash(HashUtil.Blake2b256(CborSerializer.Serialize(auxData)));
+        }
+
+        if (_nativeScriptBuilder is not null)
+        {
+            NativeScript nativeScript = _nativeScriptBuilder(param);
+            context.TxBuilder.AddNativeScript(nativeScript);
+        }
+
+        foreach (PreBuildHook<T> hook in _preBuildHooks)
+        {
+            var mapping = new InputOutputMapping();
+
+            foreach (var (inputId, index) in inputIdToOrderedIndex)
+            {
+                mapping.AddInput(inputId, (ulong)index);
+            }
+
+            foreach (var (refInputId, refInputIndex) in refInputIdToOrderedIndex)
+            {
+                mapping.AddReferenceInput(refInputId, refInputIndex);
+            }
+
+            foreach (var (inputId, outputsDict) in stringIndexedAssociations)
+            {
+                foreach (var (outputId, outputIndex) in outputsDict.outputIndices)
+                {
+                    mapping.AddOutput(inputId, outputId, (ulong)outputIndex);
+                }
+            }
+
+            hook(context.TxBuilder, mapping, param);
+        }
+
+        if (context.IsSmartContractTx && eval)
+        {
+            context.TxBuilder.Evaluate(allUtxos);
+        }
+
+        return context.TxBuilder.CalculateFee(scripts, fee, 5).Build();
+
+    }
+
     public TransactionTemplate<T> Build(bool Eval = true)
     {
         return async param =>
         {
-            BuildContext context = new()
-            {
-                TxBuilder = TransactionBuilder.Create(await _provider!.GetParametersAsync())
-            };
-
-            Dictionary<string, string> parties = ResolveParties(param);
-
-            if (_changeAddress is null)
-            {
-                throw new InvalidOperationException("Change address not set");
-            }
-
-            if (_validFrom > 0)
-                context.TxBuilder.SetValidityIntervalStart(_validFrom);
-
-            if (_validTo > 0)
-                context.TxBuilder.SetTtl(_validTo);
-
-            WalletAddress changeAddress = WalletAddress.FromBech32(parties["change"]);
-
-            foreach (ConfigGenerator<T> generator in _configGenerators)
-            {
-                var dynamicConfigs = generator(param);
-                foreach (var (inputConfig, mintConfigs, outputConfigs) in dynamicConfigs)
-                {
-                    _inputConfigs.Add(inputConfig);
-                    foreach (MintConfig<T> mintConfig in mintConfigs)
-                    {
-                        _mintConfigs.Add(mintConfig);
-                    }
-                    foreach (OutputConfig<T> outputConfig in outputConfigs)
-                    {
-                        _outputConfigs.Add(outputConfig);
-                    }
-                }
-            }
-
-            context.AssociationsByInputId["fee"] = [];
-
-            ProcessInputs(param, context);
-            ProcessMints(param, context);
-
-            List<Value> requiredAmount = [];
-            int changeIndex = 0;
-            ProcessOutputs(param, context, parties, requiredAmount, ref changeIndex);
-
-            List<ResolvedInput> utxos = await _provider!.GetUtxosAsync([parties["change"]]);
-
-            List<ResolvedInput> allUtxos = [.. utxos];
-            foreach (string address in context.InputAddresses.Distinct())
-            {
-                if (address != _changeAddress)
-                {
-                    allUtxos.AddRange(await _provider!.GetUtxosAsync([parties[address]]));
-                }
-            }
-
-            List<Script> scripts = GetScripts(context.IsSmartContractTx, context.ReferenceInputs, allUtxos);
-
-            ResolvedInput? collateralInput = SelectCollateralInput(utxos, context.IsSmartContractTx);
-            if (collateralInput is not null)
-            {
-                utxos.Remove(collateralInput);
-                context.TxBuilder.AddCollateral(collateralInput.Outref);
-                context.TxBuilder.SetCollateralReturn(collateralInput.Output);
-            }
-
-            List<ResolvedInput> specifiedInputsUtxos = GetSpecifiedInputsUtxos(context.SpecifiedInputs, allUtxos);
-            context.ResolvedInputs.AddRange(specifiedInputsUtxos);
-
-            CoinSelectionResult coinSelectionResult = PerformCoinSelection(
-                utxos,
-                requiredAmount,
-                specifiedInputsUtxos,
-                context
-            );
-
-            ulong totalLovelaceChange = coinSelectionResult.LovelaceChange;
-            Lovelace lovelaceChange = new(totalLovelaceChange);
-
-            Dictionary<byte[], TokenBundleOutput> assetsChange = coinSelectionResult.AssetsChange;
-
-            foreach (ResolvedInput consumedInput in coinSelectionResult.Inputs)
-            {
-                context.ResolvedInputs.Add(consumedInput);
-                context.TxBuilder.AddInput(consumedInput.Outref);
-            }
-
-            ResolvedInput? feeInput = SelectFeeInput(utxos, coinSelectionResult.Inputs);
-            if (feeInput is not null)
-            {
-                utxos.Remove(feeInput);
-                context.ResolvedInputs.Add(feeInput);
-                context.InputsById["fee"] = feeInput.Outref;
-                context.TxBuilder.AddInput(feeInput.Outref);
-
-                lovelaceChange = new(totalLovelaceChange + (feeInput?.Output.Amount().Lovelace() ?? 0));
-
-                if (feeInput!.Output.Amount() is LovelaceWithMultiAsset lovelaceWithMultiAsset)
-                {
-                    Dictionary<byte[], Dictionary<byte[], ulong>> feeInputAssetsChange = [];
-                    Dictionary<byte[], Dictionary<byte[], ulong>> existingAssetsChange = [];
-
-                    foreach (var asset in assetsChange)
-                    {
-                        existingAssetsChange.Add(asset.Key, asset.Value.Value);
-                    }
-
-                    foreach (var asset in lovelaceWithMultiAsset.MultiAsset.Value)
-                    {
-                        feeInputAssetsChange.Add(asset.Key, asset.Value.Value);
-                    }
-
-                    Dictionary<byte[], Dictionary<byte[], ulong>> combinedAssets = new(existingAssetsChange);
-
-                    foreach (var asset in feeInputAssetsChange)
-                    {
-                        byte[]? matchingKey = null;
-                        foreach (var existingKey in combinedAssets.Keys)
-                        {
-                            if (existingKey.SequenceEqual(asset.Key))
-                            {
-                                matchingKey = existingKey;
-                                break;
-                            }
-                        }
-
-                        if (matchingKey != null)
-                        {
-                            var existingTokens = combinedAssets[matchingKey];
-
-                            foreach (var token in asset.Value)
-                            {
-                                byte[]? matchingTokenKey = null;
-                                foreach (var existingTokenKey in existingTokens.Keys)
-                                {
-                                    if (existingTokenKey.SequenceEqual(token.Key))
-                                    {
-                                        matchingTokenKey = existingTokenKey;
-                                        break;
-                                    }
-                                }
-
-                                if (matchingTokenKey != null)
-                                {
-                                    existingTokens[matchingTokenKey] += token.Value;
-                                }
-                                else
-                                {
-                                    existingTokens.Add(token.Key, token.Value);
-                                }
-                            }
-                        }
-                        else
-                        {
-                            combinedAssets.Add(asset.Key, new Dictionary<byte[], ulong>(asset.Value));
-                        }
-
-                    }
-                    Dictionary<byte[], TokenBundleOutput> convertedAssetsChange = [];
-
-                    foreach (var asset in combinedAssets)
-                    {
-                        TokenBundleOutput tokenBundle = new(asset.Value);
-                        convertedAssetsChange.Add(asset.Key, tokenBundle);
-                    }
-
-                    assetsChange = convertedAssetsChange;
-                }
-            }
-
-            Value changeValue = assetsChange.Count > 0
-                ? new LovelaceWithMultiAsset(lovelaceChange, new MultiAssetOutput(assetsChange))
-                : lovelaceChange;
-
-            TransactionOutput changeOutput = new AlonzoTransactionOutput(new Address(changeAddress.ToBytes()), changeValue, null);
-            context.TxBuilder.AddOutput(changeOutput, true);
-
-            List<TransactionInput> sortedInputs = [.. context.TxBuilder.body.Inputs.GetValue().OrderBy(e => Convert.ToHexString(e.TransactionId)).ThenBy(e => e.Index)];
-            context.TxBuilder.SetInputs(sortedInputs);
-
-            List<TransactionInput> sortedRefInputs = [];
-            if (context.TxBuilder.body.ReferenceInputs?.GetValue() != null)
-            {
-                sortedRefInputs = [.. context.TxBuilder.body.ReferenceInputs.GetValue()
-                .OrderBy(e => Convert.ToHexString(e.TransactionId))
-                .ThenBy(e => e.Index)];
-
-                context.TxBuilder.SetReferenceInputs(sortedRefInputs);
-            }
-
-            Dictionary<string, int> inputIdToOrderedIndex = GetInputIdToOrderedIndex(context.InputsById, sortedInputs);
-            Dictionary<int, Dictionary<string, int>> intIndexedAssociations = [];
-            Dictionary<string, (ulong inputIndex, Dictionary<string, int> outputIndices)> stringIndexedAssociations = GetIndexedAssociations(context.AssociationsByInputId, inputIdToOrderedIndex);
-            Dictionary<string, ulong> refInputIdToOrderedIndex = GetRefInputIdToOrderedIndex(context.ReferenceInputsById, sortedRefInputs);
-
-            foreach (var (inputId, data) in stringIndexedAssociations)
-            {
-                if (int.TryParse(inputId, out int intKey))
-                {
-                    intIndexedAssociations[intKey] = data.outputIndices;
-                }
-            }
-
-            ProcessWithdrawals(param, context, parties, intIndexedAssociations);
-
-            if (requiredSigners.Count > 0)
-            {
-                foreach (string signer in requiredSigners)
-                {
-                    WalletAddress address = WalletAddress.FromBech32(parties[signer]);
-                    context.TxBuilder.AddRequiredSigner(address.GetPaymentKeyHash()!);
-                }
-            }
-
-            if (context.IsSmartContractTx)
-            {
-                var inputIdToIndex = new Dictionary<string, ulong>();
-                var outputMappings = new Dictionary<string, Dictionary<string, ulong>>();
-
-                foreach (var (inputId, input) in context.InputsById)
-                {
-                    for (int i = 0; i < sortedInputs.Count; i++)
-                    {
-                        if (Convert.ToHexString(sortedInputs[i].TransactionId) == Convert.ToHexString(input.TransactionId) &&
-                            sortedInputs[i].Index == input.Index)
-                        {
-                            inputIdToIndex[inputId] = (ulong)i;
-                            break;
-                        }
-                    }
-                }
-
-
-                foreach (var (inputId, associations) in context.AssociationsByInputId)
-                {
-                    if (!outputMappings.ContainsKey(inputId))
-                    {
-                        outputMappings[inputId] = [];
-                    }
-
-                    foreach (var (outputId, outputIndex) in associations)
-                    {
-                        outputMappings[inputId][outputId] = (ulong)outputIndex;
-                    }
-                }
-
-                BuildRedeemers(context, param, inputIdToIndex, refInputIdToOrderedIndex, outputMappings);
-
-                if (context.Redeemers.Count > 0)
-                {
-                    RedeemerMap redeemerMap = new(context.Redeemers);
-                    byte[] serialized = CborSerializer.Serialize(redeemerMap);
-
-                    context.TxBuilder.SetRedeemers(redeemerMap);
-                }
-            }
-
-            if (_metadataConfig is not null)
-            {
-                Metadata metadata = _metadataConfig(param);
-                context.TxBuilder.SetMetadata(metadata);
-
-                PostMaryTransaction tx = context.TxBuilder.Build();
-                AuxiliaryData auxData = tx.AuxiliaryData!;
-
-                context.TxBuilder.SetAuxiliaryDataHash(HashUtil.Blake2b256(CborSerializer.Serialize(auxData)));
-            }
-
-            if (_nativeScriptBuilder is not null)
-            {
-                NativeScript nativeScript = _nativeScriptBuilder(param);
-                context.TxBuilder.AddNativeScript(nativeScript);
-            }
-
-            foreach (PreBuildHook<T> hook in _preBuildHooks)
-            {
-                var mapping = new InputOutputMapping();
-
-                foreach (var (inputId, index) in inputIdToOrderedIndex)
-                {
-                    mapping.AddInput(inputId, (ulong)index);
-                }
-
-                foreach (var (refInputId, refInputIndex) in refInputIdToOrderedIndex)
-                {
-                    mapping.AddReferenceInput(refInputId, refInputIndex);
-                }
-
-                foreach (var (inputId, outputsDict) in stringIndexedAssociations)
-                {
-                    foreach (var (outputId, outputIndex) in outputsDict.outputIndices)
-                    {
-                        mapping.AddOutput(inputId, outputId, (ulong)outputIndex);
-                    }
-                }
-
-                hook(context.TxBuilder, mapping, param);
-            }
-
-            if (context.IsSmartContractTx && Eval)
-            {
-                context.TxBuilder.Evaluate(allUtxos);
-            }
-
-
-            return context.TxBuilder.CalculateFee(scripts, 5).Build();
+            PostMaryTransaction? draftTx = await EvaluateTemplate(param, Eval) as PostMaryTransaction;
+            return await EvaluateTemplate(param, Eval, draftTx?.TransactionBody.Fee() ?? 0);
         };
     }
+
+
 
     private Dictionary<string, string> ResolveParties(T param)
     {
@@ -942,13 +950,13 @@ public class TransactionTemplateBuilder<T>
         }
     }
 
-    private void ProcessOutputs(T param, BuildContext context, Dictionary<string, string> parties, List<Value> requiredAmount, ref int changeIndex)
+    private void ProcessOutputs(T param, BuildContext context, Dictionary<string, string> parties, List<Value> requiredAmount, ref int changeIndex, ulong fee)
     {
         int outputIndex = 0;
         foreach (OutputConfig<T> config in _outputConfigs)
         {
             OutputOptions outputOptions = new() { To = "", Amount = null, Datum = null };
-            config(outputOptions, param);
+            config(outputOptions, param, fee);
             if (
                 !string.IsNullOrEmpty(outputOptions.AssociatedInputId) &&
                 !string.IsNullOrEmpty(outputOptions.Id) &&
