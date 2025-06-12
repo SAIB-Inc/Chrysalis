@@ -145,19 +145,22 @@ public class TransactionTemplateBuilder<T>
 
         WalletAddress changeAddress = WalletAddress.FromBech32(parties["change"]);
 
-        foreach (ConfigGenerator<T> generator in _configGenerators)
+        if (fee == 0)
         {
-            var dynamicConfigs = generator(param);
-            foreach (var (inputConfig, mintConfigs, outputConfigs) in dynamicConfigs)
+            foreach (ConfigGenerator<T> generator in _configGenerators)
             {
-                _inputConfigs.Add(inputConfig);
-                foreach (MintConfig<T> mintConfig in mintConfigs)
+                var dynamicConfigs = generator(param);
+                foreach (var (inputConfig, mintConfigs, outputConfigs) in dynamicConfigs)
                 {
-                    _mintConfigs.Add(mintConfig);
-                }
-                foreach (OutputConfig<T> outputConfig in outputConfigs)
-                {
-                    _outputConfigs.Add(outputConfig);
+                    _inputConfigs.Add(inputConfig);
+                    foreach (MintConfig<T> mintConfig in mintConfigs)
+                    {
+                        _mintConfigs.Add(mintConfig);
+                    }
+                    foreach (OutputConfig<T> outputConfig in outputConfigs)
+                    {
+                        _outputConfigs.Add(outputConfig);
+                    }
                 }
             }
         }
