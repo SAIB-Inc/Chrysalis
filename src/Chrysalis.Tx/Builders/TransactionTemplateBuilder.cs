@@ -266,15 +266,17 @@ public class TransactionTemplateBuilder<T>
             context.TxBuilder.AddOutput(changeOutput, true);
         }
 
-        List<TransactionInput> sortedInputs = [.. context.TxBuilder.body.Inputs.GetValue().OrderBy(e => Convert.ToHexString(e.TransactionId)).ThenBy(e => e.Index)];
+        List<TransactionInput> sortedInputs = [.. context.TxBuilder.body.Inputs.GetValue()
+            .OrderBy(e => HexStringCache.ToHexString(e.TransactionId))
+            .ThenBy(e => e.Index)];
         context.TxBuilder.SetInputs(sortedInputs);
 
         List<TransactionInput> sortedRefInputs = [];
         if (context.TxBuilder.body.ReferenceInputs?.GetValue() != null)
         {
             sortedRefInputs = [.. context.TxBuilder.body.ReferenceInputs.GetValue()
-            .OrderBy(e => Convert.ToHexString(e.TransactionId))
-            .ThenBy(e => e.Index)];
+                .OrderBy(e => HexStringCache.ToHexString(e.TransactionId))
+                .ThenBy(e => e.Index)];
 
             context.TxBuilder.SetReferenceInputs(sortedRefInputs);
         }
@@ -556,12 +558,12 @@ public class TransactionTemplateBuilder<T>
 
             foreach (var policy in assetsByPolicy)
             {
-                var policyId = Convert.FromHexString(policy.Key);
-                Dictionary<byte[], ulong> tokenBundle = [];
+                var policyId = HexStringCache.FromHexString(policy.Key);
+                var tokenBundle = new Dictionary<byte[], ulong>(ByteArrayEqualityComparer.Instance);
 
                 foreach (var asset in policy.Value)
                 {
-                    var assetName = Convert.FromHexString(asset.Key[56..]);
+                    var assetName = HexStringCache.FromHexString(asset.Key[56..]);
                     tokenBundle[assetName] = (ulong)asset.Value;
                 }
 
@@ -601,8 +603,8 @@ public class TransactionTemplateBuilder<T>
 
                     string policyId = assetKey[..56];
                     string assetName = assetKey[56..];
-                    byte[] policyIdBytes = Convert.FromHexString(policyId);
-                    byte[] assetNameBytes = Convert.FromHexString(assetName);
+                    byte[] policyIdBytes = HexStringCache.FromHexString(policyId);
+                    byte[] assetNameBytes = HexStringCache.FromHexString(assetName);
 
                     AddAssetToChange(selection.AssetsChange, policyIdBytes, assetNameBytes, (int)changeAmount);
                 }
@@ -922,9 +924,10 @@ public class TransactionTemplateBuilder<T>
             foreach (var (assetName, amount) in mintOptions.Assets)
             {
                 value[assetName] = amount;
-                context.TxBuilder.AddMint(new MultiAssetMint(new Dictionary<byte[], TokenBundleMint>
+                context.TxBuilder.AddMint(new MultiAssetMint(new Dictionary<byte[], TokenBundleMint>(ByteArrayEqualityComparer.Instance)
                 {
-                    { Convert.FromHexString(mintOptions.Policy), new TokenBundleMint(new Dictionary<byte[], long> { { Convert.FromHexString(assetName), (long)amount } }) }
+                    { HexStringCache.FromHexString(mintOptions.Policy), new TokenBundleMint(new Dictionary<byte[], long>(ByteArrayEqualityComparer.Instance)
+                    { { HexStringCache.FromHexString(assetName), amount } }) }
                 }));
             }
         }
@@ -1010,16 +1013,17 @@ public class TransactionTemplateBuilder<T>
 
     private static ResolvedInput? SelectFeeInput(List<ResolvedInput> utxos, List<ResolvedInput> consumedInputs)
     {
-        // Create a lookup set for faster exclusion checks
-        var consumedLookup = new HashSet<(string txId, ulong index)>();
+        // OPTIMIZED: Use byte array based lookup instead of hex string conversion
+        var consumedLookup = new HashSet<(byte[], ulong)>(new TransactionInputEqualityComparer());
+
         foreach (var input in consumedInputs)
         {
-            consumedLookup.Add((Convert.ToHexString(input.Outref.TransactionId), input.Outref.Index));
+            consumedLookup.Add((input.Outref.TransactionId, input.Outref.Index));
         }
 
         return utxos
             .Where(e => e.Output.Amount().Lovelace() >= 5_000_000UL)
-            .Where(e => !consumedLookup.Contains((Convert.ToHexString(e.Outref.TransactionId), e.Outref.Index)))
+            .Where(e => !consumedLookup.Contains((e.Outref.TransactionId, e.Outref.Index)))
             .OrderBy(e => e.Output.Amount().Lovelace())
             .FirstOrDefault();
     }
@@ -1035,14 +1039,25 @@ public class TransactionTemplateBuilder<T>
 
     private static List<ResolvedInput> GetSpecifiedInputsUtxos(List<TransactionInput> specifiedInputs, List<ResolvedInput> allUtxos)
     {
-        List<ResolvedInput> specifiedInputsUtxos = [];
-        foreach (TransactionInput input in specifiedInputs)
+        // OPTIMIZED: Create lookup dictionary for O(1) access instead of O(n) per input
+        var utxoLookup = new Dictionary<(byte[], ulong), ResolvedInput>(new TransactionInputEqualityComparer());
+
+        foreach (var utxo in allUtxos)
         {
-            ResolvedInput specifiedInputUtxo = allUtxos.First(e =>
-                Convert.ToHexString(e.Outref.TransactionId) == Convert.ToHexString(input.TransactionId) &&
-                e.Outref.Index == input.Index);
-            specifiedInputsUtxos.Add(specifiedInputUtxo);
+            utxoLookup[(utxo.Outref.TransactionId, utxo.Outref.Index)] = utxo;
         }
+
+        var specifiedInputsUtxos = new List<ResolvedInput>(specifiedInputs.Count);
+
+        foreach (var input in specifiedInputs)
+        {
+            var key = (input.TransactionId, input.Index);
+            if (utxoLookup.TryGetValue(key, out var utxo))
+            {
+                specifiedInputsUtxos.Add(utxo);
+            }
+        }
+
         return specifiedInputsUtxos;
     }
 
