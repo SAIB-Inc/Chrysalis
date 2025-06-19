@@ -388,7 +388,7 @@ public class TransactionTemplateBuilder<T>
             context.TxBuilder.Evaluate(allUtxos);
         }
 
-        return context.TxBuilder.CalculateFee(scripts, fee, 5).Build();
+        return context.TxBuilder.CalculateFee(scripts, fee, 1).Build();
     }
 
     public TransactionTemplate<T> Build(bool Eval = true)
