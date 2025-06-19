@@ -271,8 +271,7 @@ public class TransactionBuilder
         return new PostMaryTransaction(body, witnessSet, true, auxiliaryData);
     }
 
-    // Replace the MergeMints method with this optimized version:
-    private MultiAssetMint MergeMints(MultiAssetMint existingMint, MultiAssetMint newMint)
+    private static MultiAssetMint MergeMints(MultiAssetMint existingMint, MultiAssetMint newMint)
     {
         // Use the custom comparer instead of default dictionary
         Dictionary<byte[], TokenBundleMint> result = new(ByteArrayEqualityComparer.Instance);
