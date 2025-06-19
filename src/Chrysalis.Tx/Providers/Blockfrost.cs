@@ -129,7 +129,7 @@ public class Blockfrost : ICardanoDataProvider
             if (utxos == null || utxos.Count == 0)
                 break;
 
-            Task<ResolvedInput>[] batchTasks = utxos.Select(ProcessUtxo).ToArray();
+            Task<ResolvedInput>[] batchTasks = [.. utxos.Select(ProcessUtxo)];
             ResolvedInput[] batchResults = await Task.WhenAll(batchTasks);
             results.AddRange(batchResults);
 
@@ -370,11 +370,10 @@ public class Blockfrost : ICardanoDataProvider
                 )
             ),
             JsonValueKind.Array => new MetadatumList(
-                element.EnumerateArray()
+                [.. element.EnumerateArray()
                     .Select(ConvertJsonElementToMetadatum)
                     .Where(m => m != null)
-                    .Cast<TransactionMetadatum>()
-                    .ToList()
+                    .Cast<TransactionMetadatum>()]
             ),
             _ => new MetadataText(element.ToString())
         };
