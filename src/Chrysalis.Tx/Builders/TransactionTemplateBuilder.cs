@@ -316,14 +316,15 @@ public class TransactionTemplateBuilder<T>
 
             foreach ((string inputId, Dictionary<string, int> associations) in context.AssociationsByInputId)
             {
-                if (!outputMappings.ContainsKey(inputId))
+                if (!outputMappings.TryGetValue(inputId, out Dictionary<string, ulong>? value))
                 {
-                    outputMappings[inputId] = [];
+                    value = [];
+                    outputMappings[inputId] = value;
                 }
 
                 foreach ((string outputId, int outputIndex) in associations)
                 {
-                    outputMappings[inputId][outputId] = (ulong)outputIndex;
+                    value[outputId] = (ulong)outputIndex;
                 }
             }
 
