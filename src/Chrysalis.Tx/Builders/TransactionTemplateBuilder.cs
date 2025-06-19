@@ -1,4 +1,5 @@
-﻿using Chrysalis.Cbor.Extensions;
+﻿using System.Text;
+using Chrysalis.Cbor.Extensions;
 using Chrysalis.Cbor.Extensions.Cardano.Core.Common;
 using Chrysalis.Cbor.Extensions.Cardano.Core.Transaction;
 using Chrysalis.Cbor.Serialization;
@@ -437,228 +438,239 @@ public class TransactionTemplateBuilder<T>
         BuildContext context
     )
     {
-        ulong requestedLovelace = 0;
-        Dictionary<string, decimal> requestedAssets = [];
+        var requirements = CalculateRequirements(requiredAmount, specifiedInputsUtxos, context.Mints);
 
-        foreach (Value amount in requiredAmount)
+        // Step 2: Perform coin selection
+        var selection = CoinSelectionUtil.LargestFirstAlgorithm(utxos, requirements.RequiredAmounts);
+
+        // Step 3: Calculate change
+        CalculateChangeOptimized(selection, requirements);
+
+        return selection;
+    }
+
+    private static RequirementsResult CalculateRequirements(
+        List<Value> requiredAmount,
+        List<ResolvedInput> specifiedInputsUtxos,
+        Dictionary<string, Dictionary<string, long>> mints)
+    {
+        // FIX: Explicitly cast to decimal to resolve ambiguity
+        var requestedLovelace = requiredAmount.Sum(amount => (decimal)amount.Lovelace());
+        var requestedAssets = new Dictionary<string, decimal>();
+
+        // Extract requested assets
+        foreach (var amount in requiredAmount)
         {
-            requestedLovelace += amount.Lovelace();
-
             if (amount is LovelaceWithMultiAsset lovelaceWithMultiAsset)
             {
-                ExtractAssets(lovelaceWithMultiAsset.MultiAsset, requestedAssets);
+                ExtractAssetsOptimized(lovelaceWithMultiAsset.MultiAsset, requestedAssets);
             }
         }
 
-        ulong originalRequestedLovelace = requestedLovelace;
-        Dictionary<string, decimal> originalRequestedAssets = new(requestedAssets);
+        // Process specified inputs - FIX: Explicitly cast to decimal
+        var specifiedInputsLovelace = specifiedInputsUtxos.Sum(utxo => (decimal)utxo.Output.Amount().Lovelace());
+        var specifiedInputsAssets = new Dictionary<string, decimal>();
 
-        ulong specifiedInputsLovelace = 0;
-        Dictionary<string, decimal> specifiedInputsAssets = [];
-
-        foreach (ResolvedInput utxo in specifiedInputsUtxos)
+        foreach (var utxo in specifiedInputsUtxos)
         {
-            specifiedInputsLovelace += utxo.Output.Amount().Lovelace();
-
             if (utxo.Output.Amount() is LovelaceWithMultiAsset lovelaceWithMultiAsset)
             {
-                ExtractAssets(lovelaceWithMultiAsset.MultiAsset, specifiedInputsAssets);
+                ExtractAssetsOptimized(lovelaceWithMultiAsset.MultiAsset, specifiedInputsAssets);
             }
         }
 
-        Dictionary<string, decimal> originalSpecifiedInputsAssets = new(specifiedInputsAssets);
-
-        Dictionary<string, decimal> mintedAssets = [];
-
-        foreach (KeyValuePair<string, Dictionary<string, long>> policy in context.Mints)
+        // Process minted assets
+        var mintedAssets = new Dictionary<string, decimal>();
+        foreach (var (policyId, assets) in mints)
         {
-            foreach (KeyValuePair<string, long> asset in policy.Value)
+            foreach (var (assetName, amount) in assets)
             {
-                string assetKey = (policy.Key + asset.Key).ToLowerInvariant();
-                if (!mintedAssets.ContainsKey(assetKey))
-                {
-                    mintedAssets[assetKey] = asset.Value;
-                }
-                else
-                {
-                    mintedAssets[assetKey] += asset.Value;
-                }
+                var assetKey = BuildAssetKeyOptimized(policyId, assetName);
+                mintedAssets[assetKey] = mintedAssets.GetValueOrDefault(assetKey, 0) + amount;
             }
         }
 
-        Dictionary<string, decimal> originalMintedAssets = new(mintedAssets);
+        // Adjust requirements based on specified inputs and mints
+        var adjustedLovelace = Math.Max(0, (long)(requestedLovelace - specifiedInputsLovelace));
+        var adjustedAssets = AdjustAssetsForMintsAndInputs(requestedAssets, mintedAssets, specifiedInputsAssets);
 
+        // Build required amounts for coin selection
+        var requiredAmounts = BuildRequiredAmountsOptimized(adjustedLovelace, adjustedAssets);
 
-        requestedLovelace = requestedLovelace > specifiedInputsLovelace ? requestedLovelace - specifiedInputsLovelace : 0;
-
-
-        foreach (KeyValuePair<string, decimal> asset in mintedAssets)
+        return new RequirementsResult
         {
-            if (asset.Value > 0)
+            OriginalRequestedLovelace = (ulong)requestedLovelace,
+            OriginalRequestedAssets = new Dictionary<string, decimal>(requestedAssets),
+            OriginalSpecifiedInputsAssets = specifiedInputsAssets,
+            OriginalMintedAssets = mintedAssets,
+            RequiredAmounts = requiredAmounts,
+            SpecifiedInputsLovelace = (ulong)specifiedInputsLovelace
+        };
+    }
+
+    private static void ExtractAssetsOptimized(MultiAssetOutput? multiAsset, Dictionary<string, decimal> assetDict)
+    {
+        if (multiAsset?.Value == null) return;
+
+        foreach (var (policyId, tokenBundle) in multiAsset.Value)
+        {
+            var policyHex = HexStringCache.ToHexString(policyId);
+
+            foreach (var (assetName, amount) in tokenBundle.Value)
             {
-                if (requestedAssets.ContainsKey(asset.Key))
+                var assetHex = HexStringCache.ToHexString(assetName);
+                var assetKey = BuildAssetKeyOptimized(policyHex, assetHex);
+
+                assetDict[assetKey] = assetDict.GetValueOrDefault(assetKey, 0) + amount;
+            }
+        }
+    }
+
+    private static readonly object _builderLock = new();
+
+    private static string BuildAssetKeyOptimized(string policyId, string assetName)
+    {
+        lock (_builderLock) // For thread safety - use ThreadLocal<StringBuilder> for better performance
+        {
+            var capacity = policyId.Length + assetName.Length;
+            var builder = new StringBuilder(capacity);
+            builder.Append(policyId);
+            builder.Append(assetName);
+            return builder.ToString().ToLowerInvariant();
+        }
+    }
+
+    private static Dictionary<string, decimal> AdjustAssetsForMintsAndInputs(
+    Dictionary<string, decimal> requestedAssets,
+    Dictionary<string, decimal> mintedAssets,
+    Dictionary<string, decimal> specifiedInputsAssets)
+    {
+        var adjusted = new Dictionary<string, decimal>(requestedAssets);
+
+        // Subtract minted assets
+        foreach (var (assetKey, mintAmount) in mintedAssets)
+        {
+            if (mintAmount > 0)
+            {
+                if (adjusted.TryGetValue(assetKey, out var requested))
                 {
-                    requestedAssets[asset.Key] -= asset.Value;
-                    if (requestedAssets[asset.Key] <= 0)
-                    {
-                        requestedAssets.Remove(asset.Key);
-                    }
+                    adjusted[assetKey] = Math.Max(0, requested - mintAmount);
+                    if (adjusted[assetKey] <= 0)
+                        adjusted.Remove(assetKey);
                 }
             }
             else
             {
-                if (!requestedAssets.ContainsKey(asset.Key))
-                {
-                    requestedAssets[asset.Key.ToLowerInvariant()] = Math.Abs(asset.Value);
-                }
-                else
-                {
-                    requestedAssets[asset.Key] += Math.Abs(asset.Value);
-                }
+                // Burning - add to requirements
+                adjusted[assetKey] = adjusted.GetValueOrDefault(assetKey, 0) + Math.Abs(mintAmount);
             }
         }
 
-        foreach (KeyValuePair<string, decimal> asset in specifiedInputsAssets)
+        // Subtract specified input assets
+        foreach (var (assetKey, inputAmount) in specifiedInputsAssets)
         {
-            if (requestedAssets.ContainsKey(asset.Key))
+            if (adjusted.TryGetValue(assetKey, out var required))
             {
-                requestedAssets[asset.Key] -= asset.Value;
-                if (requestedAssets[asset.Key] <= 0)
-                {
-                    requestedAssets.Remove(asset.Key);
-                }
+                adjusted[assetKey] = Math.Max(0, required - inputAmount);
+                if (adjusted[assetKey] <= 0)
+                    adjusted.Remove(assetKey);
             }
         }
 
+        return adjusted;
+    }
 
+    private static List<Value> BuildRequiredAmountsOptimized(long adjustedLovelace, Dictionary<string, decimal> adjustedAssets)
+    {
+        var requiredAmounts = new List<Value>();
+        var lovelace = new Lovelace((ulong)Math.Max(0, adjustedLovelace));
 
-        List<Value> updatedRequiredAmounts = [];
-        Lovelace updatedRequestedLovelace = new(requestedLovelace);
-
-        if (requestedAssets.Count == 0)
+        if (adjustedAssets.Count == 0)
         {
-            updatedRequiredAmounts.Add(updatedRequestedLovelace);
+            requiredAmounts.Add(lovelace);
         }
         else
         {
-            Dictionary<byte[], TokenBundleOutput> multiAssetDict = [];
+            var multiAssetDict = new Dictionary<byte[], TokenBundleOutput>(ByteArrayEqualityComparer.Instance);
 
-            Dictionary<string, List<KeyValuePair<string, decimal>>> assetsByPolicy = requestedAssets
+            var assetsByPolicy = adjustedAssets
+                .Where(a => a.Value > 0)
                 .GroupBy(a => a.Key[..56])
                 .ToDictionary(g => g.Key, g => g.ToList());
 
-            foreach (KeyValuePair<string, List<KeyValuePair<string, decimal>>> policy in assetsByPolicy)
+            foreach (var (policyIdHex, assets) in assetsByPolicy)
             {
-                byte[] policyId = HexStringCache.FromHexString(policy.Key);
-                Dictionary<byte[], ulong> tokenBundle = new Dictionary<byte[], ulong>(ByteArrayEqualityComparer.Instance);
+                var policyId = HexStringCache.FromHexString(policyIdHex);
+                var tokenBundle = new Dictionary<byte[], ulong>(ByteArrayEqualityComparer.Instance);
 
-                foreach (KeyValuePair<string, decimal> asset in policy.Value)
+                foreach (var asset in assets)
                 {
-                    byte[] assetName = HexStringCache.FromHexString(asset.Key[56..]);
+                    var assetName = HexStringCache.FromHexString(asset.Key[56..]);
                     tokenBundle[assetName] = (ulong)asset.Value;
                 }
 
                 multiAssetDict[policyId] = new TokenBundleOutput(tokenBundle);
             }
 
-            MultiAssetOutput multiAssetOutput = new MultiAssetOutput(multiAssetDict);
-            LovelaceWithMultiAsset lovelaceWithAssets = new LovelaceWithMultiAsset(updatedRequestedLovelace, multiAssetOutput);
-            updatedRequiredAmounts.Add(lovelaceWithAssets);
+            var multiAssetOutput = new MultiAssetOutput(multiAssetDict);
+            var lovelaceWithAssets = new LovelaceWithMultiAsset(lovelace, multiAssetOutput);
+            requiredAmounts.Add(lovelaceWithAssets);
         }
 
-        CoinSelectionResult selection = CoinSelectionUtil.LargestFirstAlgorithm(
-            utxos,
-            updatedRequiredAmounts
-        );
-
-        if (specifiedInputsLovelace > originalRequestedLovelace)
+        return requiredAmounts;
+    }
+    private static void CalculateChangeOptimized(CoinSelectionResult selection, RequirementsResult requirements)
+    {
+        // Handle excess lovelace
+        if (requirements.SpecifiedInputsLovelace > requirements.OriginalRequestedLovelace)
         {
-            ulong excessLovelace = specifiedInputsLovelace - originalRequestedLovelace;
-            selection.LovelaceChange += excessLovelace;
+            selection.LovelaceChange += requirements.SpecifiedInputsLovelace - requirements.OriginalRequestedLovelace;
         }
 
-
-        foreach (KeyValuePair<string, decimal> assetEntry in originalSpecifiedInputsAssets)
+        // Handle asset change - simplified logic
+        foreach (var (assetKey, amount) in requirements.OriginalSpecifiedInputsAssets)
         {
-            string assetKey = assetEntry.Key;
-            decimal amount = assetEntry.Value;
-            bool consumedByOutput = originalRequestedAssets.ContainsKey(assetKey);
-            bool mintRelated = mintedAssets.ContainsKey(assetKey);
+            var consumedByOutput = requirements.OriginalRequestedAssets.GetValueOrDefault(assetKey, 0);
+            var mintAmount = requirements.OriginalMintedAssets.GetValueOrDefault(assetKey, 0);
 
-            if (consumedByOutput)
+            if (consumedByOutput < amount && mintAmount >= 0)
             {
-
-                if (originalRequestedAssets[assetKey] < amount)
+                var changeAmount = amount - consumedByOutput;
+                if (changeAmount > 0)
                 {
-                    decimal changeAmount = amount - originalRequestedAssets[assetKey];
-
-                    string policyId = assetKey[..56];
-                    string assetName = assetKey[56..];
-                    byte[] policyIdBytes = HexStringCache.FromHexString(policyId);
-                    byte[] assetNameBytes = HexStringCache.FromHexString(assetName);
-
-                    AddAssetToChange(selection.AssetsChange, policyIdBytes, assetNameBytes, (int)changeAmount);
+                    var policyId = HexStringCache.FromHexString(assetKey[..56]);
+                    var assetName = HexStringCache.FromHexString(assetKey[56..]);
+                    AddAssetToChange(selection.AssetsChange, policyId, assetName, (int)changeAmount);
                 }
             }
-            else if (mintRelated)
-            {
-                if (mintedAssets[assetKey] < 0)
-                {
-                    continue;
-                }
-
-                string policyId = assetKey[..56];
-                string assetName = assetKey[56..];
-                byte[] policyIdBytes = HexStringCache.FromHexString(policyId);
-                byte[] assetNameBytes = HexStringCache.FromHexString(assetName);
-
-                AddAssetToChange(selection.AssetsChange, policyIdBytes, assetNameBytes, (int)amount);
-            }
-            else
-            {
-                string policyId = assetKey[..56];
-                string assetName = assetKey[56..];
-                byte[] policyIdBytes = HexStringCache.FromHexString(policyId);
-                byte[] assetNameBytes = HexStringCache.FromHexString(assetName);
-
-                AddAssetToChange(selection.AssetsChange, policyIdBytes, assetNameBytes, (int)amount);
-            }
         }
 
-        foreach (KeyValuePair<string, decimal> assetEntry in mintedAssets)
+        // Handle mint excess
+        foreach (var (assetKey, amount) in requirements.OriginalMintedAssets.Where(a => a.Value > 0))
         {
-            string assetKey = assetEntry.Key;
-            decimal amount = assetEntry.Value;
-
-            if (amount <= 0)
-                continue;
-
-            decimal requiredExcessAmount = originalRequestedAssets.ContainsKey(assetKey) ?
-                originalRequestedAssets[assetKey] : 0;
-
-            decimal excessAmount = amount - requiredExcessAmount;
+            var requiredAmount = requirements.OriginalRequestedAssets.GetValueOrDefault(assetKey, 0);
+            var excessAmount = amount - requiredAmount;
 
             if (excessAmount > 0)
             {
-                string policyId = assetKey[..56];
-                string assetName = assetKey[56..];
-                byte[] policyIdBytes = HexStringCache.FromHexString(policyId);
-                byte[] assetNameBytes = HexStringCache.FromHexString(assetName);
-
-                AddAssetToChange(selection.AssetsChange, policyIdBytes, assetNameBytes, (int)excessAmount);
+                var policyId = HexStringCache.FromHexString(assetKey[..56]);
+                var assetName = HexStringCache.FromHexString(assetKey[56..]);
+                AddAssetToChange(selection.AssetsChange, policyId, assetName, (int)excessAmount);
             }
         }
-
-        foreach (KeyValuePair<byte[], TokenBundleOutput> token in selection.AssetsChange.ToList())
-        {
-            if (token.Value.Value.Count == 0)
-            {
-                selection.AssetsChange.Remove(token.Key);
-            }
-        }
-
-        return selection;
     }
+
+    // Supporting record type
+    private record RequirementsResult
+    {
+        public required ulong OriginalRequestedLovelace { get; init; }
+        public required Dictionary<string, decimal> OriginalRequestedAssets { get; init; }
+        public required Dictionary<string, decimal> OriginalSpecifiedInputsAssets { get; init; }
+        public required Dictionary<string, decimal> OriginalMintedAssets { get; init; }
+        public required List<Value> RequiredAmounts { get; init; }
+        public required ulong SpecifiedInputsLovelace { get; init; }
+    }
+
     private static void ExtractAssets(
         MultiAssetOutput multiAsset,
         Dictionary<string, decimal> assetDict)
