@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Net.Http.Headers;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -12,13 +13,14 @@ using Chrysalis.Network.Cbor.LocalStateQuery;
 using Chrysalis.Tx.Models;
 using Chrysalis.Tx.Models.Cbor;
 using Chrysalis.Cbor.Types.Cardano.Core;
+using Chrysalis.Tx.Utils;
 using Chrysalis.Wallet.Models.Enums;
 using ChrysalisWallet = Chrysalis.Wallet.Models.Addresses;
 
 namespace Chrysalis.Tx.Providers;
 
 public record BlockfrostMetadataResponse(
-    [property: JsonPropertyName("label")] string Label, 
+    [property: JsonPropertyName("label")] string Label,
     [property: JsonPropertyName("json_metadata")] object JsonMetadata);
 
 public class Blockfrost : ICardanoDataProvider
@@ -26,34 +28,42 @@ public class Blockfrost : ICardanoDataProvider
     private readonly HttpClient _httpClient;
     private readonly NetworkType _networkType;
 
+    private readonly ConcurrentDictionary<string, Script> _scriptCache = new();
+
     public Blockfrost(string apiKey, NetworkType networkType = NetworkType.Preview, string url = "")
     {
         _networkType = networkType;
-        _httpClient = new()
+
+        HttpClientHandler handler = new();
+
+        _httpClient = new HttpClient(handler)
         {
-            BaseAddress = new Uri(string.IsNullOrEmpty(url) ? GetBaseUrl() : url)
+            BaseAddress = new Uri(string.IsNullOrEmpty(url) ? GetBaseUrl() : url),
+            Timeout = TimeSpan.FromSeconds(30)
         };
+
         _httpClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
         _httpClient.DefaultRequestHeaders.Add("Project_id", apiKey);
+        _httpClient.DefaultRequestHeaders.ConnectionClose = false;
     }
 
     public async Task<ProtocolParams> GetParametersAsync()
     {
         const string query = "epochs/latest/parameters";
-        var response = await _httpClient.GetAsync(query);
+        HttpResponseMessage response = await _httpClient.GetAsync(query);
 
         if (!response.IsSuccessStatusCode)
         {
             throw new Exception($"GetParameters: HTTP error {response.StatusCode}");
         }
 
-        var content = await response.Content.ReadAsStringAsync();
-        var parameters = JsonSerializer.Deserialize<BlockfrostProtocolParametersResponse>(content) ??
+        string content = await response.Content.ReadAsStringAsync();
+        BlockfrostProtocolParametersResponse parameters = JsonSerializer.Deserialize<BlockfrostProtocolParametersResponse>(content) ??
             throw new Exception("GetParameters: Could not parse response json");
 
         Dictionary<int, CborDefList<long>> costMdls = [];
 
-        foreach (var (key, value) in parameters.CostModelsRaw ?? [])
+        foreach ((string key, int[] value) in parameters.CostModelsRaw ?? [])
         {
             int version = key switch
             {
@@ -103,128 +113,141 @@ public class Blockfrost : ICardanoDataProvider
 
     public async Task<List<ResolvedInput>> GetUtxosAsync(string address)
     {
-
-        const int maxPageCount = 100; // Blockfrost limit
-        var page = 1;
-        var results = new List<ResolvedInput>();
+        const int maxPageCount = 100;
+        int page = 1;
+        List<ResolvedInput> results = [];
 
         while (true)
         {
-            var pagination = $"count={maxPageCount}&page={page}";
-            var query = $"addresses/{address}/utxos?{pagination}";
-            var response = await _httpClient.GetAsync($"{query}");
+            string pagination = $"count={maxPageCount}&page={page}";
+            string query = $"addresses/{address}/utxos?{pagination}";
+            HttpResponseMessage response = await _httpClient.GetAsync($"{query}");
 
-
-            var content = await response.Content.ReadAsStringAsync();
-            var utxos = JsonSerializer.Deserialize<List<BlockfrostUtxo>>(content);
+            string content = await response.Content.ReadAsStringAsync();
+            List<BlockfrostUtxo>? utxos = JsonSerializer.Deserialize<List<BlockfrostUtxo>>(content);
 
             if (utxos == null || utxos.Count == 0)
                 break;
-            foreach (var utxo in utxos)
-            {
-                ulong lovelace = 0;
-                Dictionary<byte[], TokenBundleOutput> assets = [];
-                foreach (var amount in utxo.Amount!)
-                {
-                    if (amount.Unit == "lovelace")
-                    {
-                        lovelace = ulong.Parse(amount.Quantity!);
-                    }
-                    else
-                    {
-                        byte[] policy = Convert.FromHexString(amount.Unit![..56]);
-                        byte[] assetName = Convert.FromHexString(amount.Unit![56..]);
-                        byte[]? existingKey = assets.Keys.FirstOrDefault(x => x.SequenceEqual(policy));
-                        if (existingKey is null)
-                        {
-                            assets[policy] = new TokenBundleOutput(new Dictionary<byte[], ulong>
-                            {
-                                [assetName] = ulong.Parse(amount.Quantity!)
-                            });
-                        }
-                        else
-                        {
-                            assets[existingKey].Value[assetName] = ulong.Parse(amount.Quantity!);
-                        }
-                    }
-                }
-                TransactionInput outref = new(Convert.FromHexString(utxo.TxHash!), (ulong)utxo.TxIndex!);
-                Lovelace CborLovelace = new(lovelace);
-                Value value = new Lovelace(lovelace);
-                if (assets.Count > 0)
-                {
-                    value = new LovelaceWithMultiAsset(CborLovelace, new MultiAssetOutput(assets));
-                }
 
-                ChrysalisWallet.Address outputAddress = ChrysalisWallet.Address.FromBech32(utxo.Address!);
-                CborEncodedValue? scriptRef = null;
-
-                if (utxo.ReferenceScriptHash is not null)
-                {
-                    Script scriptRefValue = await GetScript(utxo.ReferenceScriptHash);
-                    scriptRef = new CborEncodedValue(CborSerializer.Serialize(scriptRefValue));
-                }
-
-                DatumOption? datum = null;
-                if (utxo.InlineDatum is not null)
-                {
-                    datum = new InlineDatumOption(1, new CborEncodedValue(Convert.FromHexString(utxo.InlineDatum)));
-                }
-
-                TransactionOutput output = new PostAlonzoTransactionOutput(
-                    new Address(outputAddress.ToBytes())
-                    , value, datum, scriptRef);
-
-
-                results.Add(new ResolvedInput(outref, output));
-            }
-
+            Task<ResolvedInput>[] batchTasks = utxos.Select(ProcessUtxo).ToArray();
+            ResolvedInput[] batchResults = await Task.WhenAll(batchTasks);
+            results.AddRange(batchResults);
 
             if (utxos.Count < maxPageCount)
                 break;
 
             page++;
-
         }
         return results;
     }
 
+    private async Task<ResolvedInput> ProcessUtxo(BlockfrostUtxo utxo)
+    {
+        ulong lovelace = 0;
+
+        Dictionary<byte[], TokenBundleOutput> assets = new(ByteArrayEqualityComparer.Instance);
+
+        foreach (Amount amount in utxo.Amount!)
+        {
+            if (amount.Unit == "lovelace")
+            {
+                lovelace = ulong.Parse(amount.Quantity!);
+            }
+            else
+            {
+                byte[] policy = HexStringCache.FromHexString(amount.Unit![..56]);
+                byte[] assetName = HexStringCache.FromHexString(amount.Unit![56..]);
+
+                if (assets.TryGetValue(policy, out TokenBundleOutput? existingBundle))
+                {
+                    existingBundle.Value[assetName] = ulong.Parse(amount.Quantity!);
+                }
+                else
+                {
+                    assets[policy] = new TokenBundleOutput(new Dictionary<byte[], ulong>(ByteArrayEqualityComparer.Instance)
+                    {
+                        [assetName] = ulong.Parse(amount.Quantity!)
+                    });
+                }
+            }
+        }
+
+        TransactionInput outref = new(HexStringCache.FromHexString(utxo.TxHash!), (ulong)utxo.TxIndex!);
+        Lovelace cborLovelace = new(lovelace);
+        Value value = assets.Count > 0
+            ? new LovelaceWithMultiAsset(cborLovelace, new MultiAssetOutput(assets))
+            : cborLovelace;
+
+        ChrysalisWallet.Address outputAddress = ChrysalisWallet.Address.FromBech32(utxo.Address!);
+
+        CborEncodedValue?  scriptRef = null;
+        if (utxo.ReferenceScriptHash is not null)
+        {
+            Script scriptRefValue = await GetScriptCached(utxo.ReferenceScriptHash);
+            scriptRef = new CborEncodedValue(CborSerializer.Serialize(scriptRefValue));
+        }
+
+        DatumOption? datum = null;
+        if (utxo.InlineDatum is not null)
+        {
+            datum = new InlineDatumOption(1, new CborEncodedValue(HexStringCache.FromHexString(utxo.InlineDatum)));
+        }
+
+        TransactionOutput output = new PostAlonzoTransactionOutput(
+            new Address(outputAddress.ToBytes()),
+            value,
+            datum,
+            scriptRef);
+
+        return new ResolvedInput(outref, output);
+    }
+
+    private async Task<Script> GetScriptCached(string scriptHash)
+    {
+        if (_scriptCache.TryGetValue(scriptHash, out Script? cachedScript))
+            return cachedScript;
+
+        Script script = await GetScript(scriptHash);
+        _scriptCache.TryAdd(scriptHash, script);
+        return script;
+    }
+
     public async Task<Script> GetScript(string scriptHash)
     {
-        var typeQuery = $"scripts/{scriptHash}";
-        var typeResponse = await _httpClient.GetAsync($"{typeQuery}");
-        var typeContent = await typeResponse.Content.ReadAsStringAsync();
+        string typeQuery = $"scripts/{scriptHash}";
+        HttpResponseMessage typeResponse = await _httpClient.GetAsync($"{typeQuery}");
+        string typeContent = await typeResponse.Content.ReadAsStringAsync();
 
-        using var typeDoc = JsonDocument.Parse(typeContent);
-        var root = typeDoc.RootElement;
+        using JsonDocument typeDoc = JsonDocument.Parse(typeContent);
+        JsonElement root = typeDoc.RootElement;
 
-        if (!root.TryGetProperty("type", out var typeElement))
+        if (!root.TryGetProperty("type", out JsonElement typeElement))
         {
             throw new Exception("GetScriptRef: Could not parse response json");
         }
 
-        var type = typeElement.GetString() ?? throw new Exception("GetScriptRef: Could not parse type from response");
+        string type = typeElement.GetString() ?? throw new Exception("GetScriptRef: Could not parse type from response");
 
         if (type == "timelock")
         {
             throw new Exception("GetScriptRef: Native scripts are not yet supported.");
         }
 
-        var cborQuery = $"scripts/{scriptHash}/cbor";
-        var cborResponse = await _httpClient.GetAsync($"{cborQuery}");
-        var cborContent = await cborResponse.Content.ReadAsStringAsync();
+        string cborQuery = $"scripts/{scriptHash}/cbor";
+        HttpResponseMessage cborResponse = await _httpClient.GetAsync($"{cborQuery}");
+        string cborContent = await cborResponse.Content.ReadAsStringAsync();
 
-        using var cborDoc = JsonDocument.Parse(cborContent);
+        using JsonDocument cborDoc = JsonDocument.Parse(cborContent);
         root = cborDoc.RootElement;
 
-        if (!root.TryGetProperty("cbor", out var cborElement))
+        if (!root.TryGetProperty("cbor", out JsonElement cborElement))
         {
             throw new Exception("GetScriptRef: Could not parse response json");
         }
 
-        var cborHex = cborElement.GetString() ?? throw new Exception("GetScriptRef: Could not parse CBOR from response");
+        string cborHex = cborElement.GetString() ?? throw new Exception("GetScriptRef: Could not parse CBOR from response");
 
-        byte[] cborBytes = Convert.FromHexString(cborHex);
+        byte[] cborBytes = HexStringCache.FromHexString(cborHex);
         Script script = type switch
         {
             "plutusV1" => new PlutusV1Script(new Value1(1), cborBytes),
@@ -238,9 +261,24 @@ public class Blockfrost : ICardanoDataProvider
 
     public async Task<List<ResolvedInput>> GetUtxosAsync(List<string> addresses)
     {
-        var tasks = addresses.Select(GetUtxosAsync);
-        var results = await Task.WhenAll(tasks);
-        return [.. results.SelectMany(utxos => utxos)];
+        const int batchSize = 5;
+        List<ResolvedInput> allResults = [];
+
+        for (int i = 0; i < addresses.Count; i += batchSize)
+        {
+            IEnumerable<string> batch = addresses.Skip(i).Take(batchSize);
+            IEnumerable<Task<List<ResolvedInput>>> batchTasks = batch.Select(GetUtxosAsync);
+            List<ResolvedInput>[] batchResults = await Task.WhenAll(batchTasks);
+
+            allResults.AddRange(batchResults.SelectMany(utxos => utxos));
+
+            if (i + batchSize < addresses.Count)
+            {
+                await Task.Delay(50);
+            }
+        }
+
+        return allResults;
     }
 
     public async Task<string> SubmitTransactionAsync(Transaction tx)
@@ -267,10 +305,10 @@ public class Blockfrost : ICardanoDataProvider
 
     public async Task<Metadata?> GetTransactionMetadataAsync(string txHash)
     {
-        var query = $"txs/{txHash}/metadata";
-        var response = await _httpClient.GetAsync(query);
+        string query = $"txs/{txHash}/metadata";
+        HttpResponseMessage response = await _httpClient.GetAsync(query);
 
-        var content = await response.Content.ReadAsStringAsync();
+        string content = await response.Content.ReadAsStringAsync();
 
         if (!response.IsSuccessStatusCode)
         {
@@ -279,17 +317,17 @@ public class Blockfrost : ICardanoDataProvider
             throw new Exception($"GetTransactionMetadata: HTTP error {response.StatusCode} - Response: {content}");
         }
 
-        var rawMetadata = JsonSerializer.Deserialize<List<BlockfrostMetadataResponse>>(content);
-        
+        List<BlockfrostMetadataResponse>? rawMetadata = JsonSerializer.Deserialize<List<BlockfrostMetadataResponse>>(content);
+
         if (rawMetadata == null || rawMetadata.Count == 0)
             return null;
 
-        var metadataDict = new Dictionary<ulong, TransactionMetadatum>();
-        foreach (var item in rawMetadata)
+        Dictionary<ulong, TransactionMetadatum> metadataDict = [];
+        foreach (BlockfrostMetadataResponse item in rawMetadata)
         {
-            if (ulong.TryParse(item.Label, out var label))
+            if (ulong.TryParse(item.Label, out ulong label))
             {
-                var metadatum = ConvertToTransactionMetadatum(item.JsonMetadata);
+                TransactionMetadatum? metadatum = ConvertToTransactionMetadatum(item.JsonMetadata);
                 if (metadatum != null)
                 {
                     metadataDict[label] = metadatum;
@@ -323,8 +361,8 @@ public class Blockfrost : ICardanoDataProvider
         return element.ValueKind switch
         {
             JsonValueKind.String => new MetadataText(element.GetString() ?? ""),
-            JsonValueKind.Number when element.TryGetInt64(out var lng) => new MetadatumIntLong(lng),
-            JsonValueKind.Number when element.TryGetUInt64(out var ulng) => new MetadatumIntUlong(ulng),
+            JsonValueKind.Number when element.TryGetInt64(out long lng) => new MetadatumIntLong(lng),
+            JsonValueKind.Number when element.TryGetUInt64(out ulong ulng) => new MetadatumIntUlong(ulng),
             JsonValueKind.Object => new MetadatumMap(
                 element.EnumerateObject().ToDictionary(
                     prop => new MetadataText(prop.Name) as TransactionMetadatum,
@@ -352,5 +390,10 @@ public class Blockfrost : ICardanoDataProvider
             NetworkType.Testnet => "https://cardano-testnet.blockfrost.io/api/v0/",
             _ => throw new ArgumentException($"Unsupported network type: {_networkType}")
         };
+    }
+
+    public (int ScriptCacheSize, (int BytesToHex, int HexToBytes) HexCacheStats) GetCacheStats()
+    {
+        return (_scriptCache.Count, HexStringCache.GetCacheStats());
     }
 }
