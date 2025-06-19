@@ -181,122 +181,110 @@ public static class CoinSelectionUtil
     }
 
     private static Dictionary<byte[], TokenBundleOutput> CalculateAssetsChange(
-        List<ResolvedInput> selectedUtxos,
-        List<Value> requestedAmounts)
+    List<ResolvedInput> selectedUtxos,
+    List<Value> requestedAmounts)
     {
-        Dictionary<string, Dictionary<string, decimal>> selectedAssetsByPolicy = [];
+        // UPDATED: Use custom comparer for all byte array dictionaries
+        var selectedAssetsByPolicy = new Dictionary<byte[], Dictionary<byte[], decimal>>(ByteArrayEqualityComparer.Instance);
+        var requestedAssetsByPolicy = new Dictionary<byte[], Dictionary<byte[], decimal>>(ByteArrayEqualityComparer.Instance);
 
+        // Process selected UTXOs
         foreach (var utxo in selectedUtxos)
         {
             if (utxo.Output.Amount() is LovelaceWithMultiAsset lovelaceWithMultiAsset)
             {
                 var multiAsset = lovelaceWithMultiAsset.MultiAsset;
-                if (multiAsset == null || multiAsset.Value == null) continue;
+                if (multiAsset?.Value == null) continue;
 
                 foreach (var policyEntry in multiAsset.Value)
                 {
-                    string policyId = Convert.ToHexString(policyEntry.Key).ToLowerInvariant();
-                    var tokenBundle = policyEntry.Value;
-
-                    if (!selectedAssetsByPolicy.ContainsKey(policyId))
+                    // BEFORE: This would create new dictionaries with default comparer
+                    // AFTER: Use custom comparer and TryGetValue
+                    if (!selectedAssetsByPolicy.TryGetValue(policyEntry.Key, out var selectedAssets))
                     {
-                        selectedAssetsByPolicy[policyId] = [];
+                        selectedAssets = new Dictionary<byte[], decimal>(ByteArrayEqualityComparer.Instance);
+                        selectedAssetsByPolicy[policyEntry.Key] = selectedAssets;
                     }
 
-                    foreach (var assetEntry in tokenBundle.Value)
+                    foreach (var assetEntry in policyEntry.Value.Value)
                     {
-                        string assetName = Convert.ToHexString(assetEntry.Key).ToLowerInvariant();
                         decimal amount = assetEntry.Value;
-
-                        if (!selectedAssetsByPolicy[policyId].ContainsKey(assetName))
+                        if (selectedAssets.TryGetValue(assetEntry.Key, out var existing))
                         {
-                            selectedAssetsByPolicy[policyId][assetName] = amount;
+                            selectedAssets[assetEntry.Key] = existing + amount;
                         }
                         else
                         {
-                            selectedAssetsByPolicy[policyId][assetName] += amount;
+                            selectedAssets[assetEntry.Key] = amount;
                         }
                     }
                 }
             }
         }
 
-        Dictionary<string, Dictionary<string, decimal>> requestedAssetsByPolicy = [];
-
+        // Process requested amounts (same pattern)
         foreach (Value value in requestedAmounts)
         {
             if (value is LovelaceWithMultiAsset lovelaceWithMultiAsset)
             {
                 var multiAsset = lovelaceWithMultiAsset.MultiAsset;
-                if (multiAsset == null || multiAsset.Value == null) continue;
+                if (multiAsset?.Value == null) continue;
 
                 foreach (var policyEntry in multiAsset.Value)
                 {
-                    string policyId = Convert.ToHexString(policyEntry.Key).ToLowerInvariant();
-                    var tokenBundle = policyEntry.Value;
-
-                    if (!requestedAssetsByPolicy.ContainsKey(policyId))
+                    if (!requestedAssetsByPolicy.TryGetValue(policyEntry.Key, out var requestedAssets))
                     {
-                        requestedAssetsByPolicy[policyId] = [];
+                        requestedAssets = new Dictionary<byte[], decimal>(ByteArrayEqualityComparer.Instance);
+                        requestedAssetsByPolicy[policyEntry.Key] = requestedAssets;
                     }
 
-                    foreach (var assetEntry in tokenBundle.Value)
+                    foreach (var assetEntry in policyEntry.Value.Value)
                     {
-                        string assetName = Convert.ToHexString(assetEntry.Key).ToLowerInvariant();
                         decimal amount = assetEntry.Value;
-
-                        if (!requestedAssetsByPolicy[policyId].ContainsKey(assetName))
+                        if (requestedAssets.TryGetValue(assetEntry.Key, out var existing))
                         {
-                            requestedAssetsByPolicy[policyId][assetName] = amount;
+                            requestedAssets[assetEntry.Key] = existing + amount;
                         }
                         else
                         {
-                            requestedAssetsByPolicy[policyId][assetName] += amount;
+                            requestedAssets[assetEntry.Key] = amount;
                         }
                     }
                 }
             }
         }
 
-        Dictionary<byte[], TokenBundleOutput> assetsChange = [];
+        // Calculate change using optimized lookups
+        var assetsChange = new Dictionary<byte[], TokenBundleOutput>(ByteArrayEqualityComparer.Instance);
 
-        foreach (var policyEntry in selectedAssetsByPolicy)
+        foreach (var (policyId, selectedAssets) in selectedAssetsByPolicy)
         {
-            string policyId = policyEntry.Key;
-            var selectedAssets = policyEntry.Value;
-
-            Dictionary<string, ulong> assetChangesByName = [];
+            var assetChanges = new Dictionary<byte[], ulong>(ByteArrayEqualityComparer.Instance);
             bool hasChange = false;
 
-            foreach (var assetEntry in selectedAssets)
+            foreach (var (assetName, selectedAmount) in selectedAssets)
             {
-                string assetName = assetEntry.Key;
-                decimal selectedAmount = assetEntry.Value;
+                decimal requestedAmount = 0;
 
-                decimal requestedAssetAmount = 0;
-                if (requestedAssetsByPolicy.ContainsKey(policyId) &&
-                    requestedAssetsByPolicy[policyId].ContainsKey(assetName))
+                // BEFORE: Would loop through all entries looking for matches
+                // AFTER: Direct lookup with custom comparer
+                if (requestedAssetsByPolicy.TryGetValue(policyId, out var requestedTokens) &&
+                    requestedTokens.TryGetValue(assetName, out var requested))
                 {
-                    requestedAssetAmount = requestedAssetsByPolicy[policyId][assetName];
+                    requestedAmount = requested;
                 }
 
-                decimal change = selectedAmount - requestedAssetAmount;
+                decimal change = selectedAmount - requestedAmount;
                 if (change > 0)
                 {
-                    assetChangesByName[assetName] = (ulong)change;
+                    assetChanges[assetName] = (ulong)change;
                     hasChange = true;
                 }
             }
 
             if (hasChange)
             {
-                Dictionary<byte[], ulong> assetChanges = [];
-                foreach (var change in assetChangesByName)
-                {
-                    assetChanges[Convert.FromHexString(change.Key)] = change.Value;
-                }
-
-                assetsChange[Convert.FromHexString(policyId)] = new TokenBundleOutput(assetChanges);
+                assetsChange[policyId] = new TokenBundleOutput(assetChanges);
             }
         }
 
