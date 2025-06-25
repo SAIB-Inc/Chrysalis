@@ -41,5 +41,16 @@ public class ChainSync(AgentChannel channel) : IMiniProtocol
         await _buffer.SendFullMessageAsync(_nextRequest, cancellationToken);
         return await _buffer.ReceiveFullMessageAsync<MessageNextResponse>(cancellationToken);
     }
+
+    /// <summary>
+    /// Terminates the Chain-Sync protocol.
+    /// </summary>
+    /// <param name="cancellationToken">Token to cancel the operation.</param>
+    /// <returns>A task representing the asynchronous operation.</returns>
+    public async Task DoneAsync(CancellationToken cancellationToken)
+    {
+        var doneMessage = ChainSyncMessages.Done();
+        await _buffer.SendFullMessageAsync<ChainSyncMessage>(doneMessage, cancellationToken);
+    }
 }
 

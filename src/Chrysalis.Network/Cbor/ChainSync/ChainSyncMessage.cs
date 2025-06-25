@@ -67,9 +67,16 @@ public partial record MessageIntersectNotFound(
     [CborOrder(2)] Tip Tip
 ) : MessageIntersectResult;
 
+[CborSerializable]
+[CborList]
+public partial record MessageDone(
+    [CborOrder(0)] Value7 Idx
+) : ChainSyncMessage;
+
 
 public static class ChainSyncMessages
 {
     public static MessageNextRequest NextRequest() => new(new Value0(0));
     public static MessageFindIntersect FindIntersect(Points points) => new(new Value4(4), points);
+    public static MessageDone Done() => new(new Value7(7));
 }

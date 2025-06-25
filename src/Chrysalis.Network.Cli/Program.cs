@@ -1,165 +1,72 @@
-﻿using System.Formats.Cbor;
-using System.Text.Json;
-using Chrysalis.Cbor.Types.Cardano.Core;
-using Chrysalis.Cbor.Types.Cardano.Core.Header;
+﻿using System.Text.Json;
 using Chrysalis.Network.Cbor.ChainSync;
 using Chrysalis.Network.Cbor.Common;
-using Chrysalis.Network.Cbor.Handshake;
 using Chrysalis.Network.Cli;
 using Chrysalis.Network.Multiplexer;
 
+try
+{
+    // Connect to the Cardano node
+    Console.WriteLine("Connecting to Cardano node...");
+    NodeClient client = await NodeClient.ConnectAsync("/tmp/node.socket");
+    await client.StartAsync();
+    Console.WriteLine("Connected successfully!");
 
-NodeClient client = await NodeClient.ConnectAsync("/tmp/node.socket");
-await client.StartAsync();
+    // Test Chain-Sync protocol
+    Console.WriteLine("\n=== Testing Chain-Sync Protocol ===");
+    
+    // Request the first update
+    Console.WriteLine("\n1. Requesting first update...");
+    var response1 = await client.ChainSync.NextRequestAsync(CancellationToken.None);
+    Console.WriteLine($"Response type: {response1?.GetType().Name}");
+    
+    switch (response1)
+    {
+        case MessageRollForward rollForward:
+            Console.WriteLine($"  - Rolled forward to tip slot: {rollForward.Tip.Slot.Slot}");
+            Console.WriteLine($"  - Tip hash: {Convert.ToHexString(rollForward.Tip.Slot.Hash)}");
+            Console.WriteLine($"  - Block number: {rollForward.Tip.BlockNumber}");
+            break;
+        case MessageRollBackward rollBack:
+            Console.WriteLine($"  - Rolled backward to slot: {rollBack.Point.Slot}");
+            break;
+        case MessageAwaitReply:
+            Console.WriteLine("  - Node says to wait (we're at the tip)");
+            break;
+    }
 
-var nextResponse = await client.ChainSync.NextRequestAsync(new CancellationToken());
-Console.WriteLine(JsonSerializer.Serialize(nextResponse));
+    // Request another update
+    Console.WriteLine("\n2. Requesting second update...");
+    var response2 = await client.ChainSync.NextRequestAsync(CancellationToken.None);
+    Console.WriteLine($"Response type: {response2?.GetType().Name}");
+    
+    // Find intersection with a known point (optional)
+    Console.WriteLine("\n3. Testing intersection finding...");
+    var knownPoint = new Point(84131605, Convert.FromHexString("f93a3418fcc6017e66186f2e3c9d2baee61762c192bf5c3c582cc3b9e2424bb6"));
+    Console.WriteLine($"  - Looking for intersection at slot {knownPoint.Slot}, hash {Convert.ToHexString(knownPoint.Hash)}");
+    var intersectResponse = await client.ChainSync.FindIntersectionAsync([knownPoint], CancellationToken.None);
+    
+    switch (intersectResponse)
+    {
+        case MessageIntersectFound found:
+            Console.WriteLine($"  - Intersection found at slot: {found.Point.Slot}");
+            break;
+        case MessageIntersectNotFound notFound:
+            Console.WriteLine($"  - No intersection found. Tip at slot: {notFound.Tip.Slot.Slot}");
+            break;
+    }
 
-nextResponse = await client.ChainSync.NextRequestAsync(new CancellationToken());
-Console.WriteLine(JsonSerializer.Serialize(nextResponse));
+    // Send Done message to properly terminate the protocol
+    Console.WriteLine("\n4. Sending Done message to terminate protocol...");
+    await client.ChainSync.DoneAsync(CancellationToken.None);
+    Console.WriteLine("Chain-Sync protocol terminated successfully!");
 
-// ProposeVersions proposeVersion = HandshakeMessages.ProposeVersions(VersionTables.N2C_V10_AND_ABOVE());
-// CborWriter writer = new();
-// ProposeVersions.Write(writer, proposeVersion);
-// string serialized = Convert.ToHexString(writer.Encode());
-
-// Console.WriteLine("Sending handshake message...");
-// await client.Handshake!.SendAsync(proposeVersion, CancellationToken.None);
-// Console.WriteLine("Handshake success!!");
-
-// Point point = new(57371845, Convert.FromHexString("20a81db38339bf6ee9b1d7e22b22c0ac4d887d332bbf4f3005db4848cd647743"));
-
-// Console.WriteLine("Finding Intersection...");
-// await client.ChainSync!.FindIntersectionAsync([point], CancellationToken.None);
-// Console.WriteLine("Intersection found");
-
-// Console.WriteLine("Initializing Db...");
-// await BlockDbHelper.InitializeDbAsync();
-
-// Console.WriteLine("Starting ChainSync...");
-
-// int blockCount = 0;
-// int deserializedCount = 0;
-// _ = Task.Run(async () =>
-// {
-//     while (true)
-//     {
-//         Console.WriteLine($"Block count: {blockCount}, Deserialized: {deserializedCount}, Success rate: {(deserializedCount > 0 ? deserializedCount / blockCount * 100.0 : 0.0)}%");
-//         blockCount = 0;
-//         deserializedCount = 0;
-//         await Task.Delay(1000);
-//     }
-// });
-
-// while (true)
-// {
-//     try
-//     {
-//         MessageNextResponse? nextResponse = await client.ChainSync!.NextRequestAsync(CancellationToken.None);
-
-//         switch (nextResponse)
-//         {
-//             case MessageRollBackward msg:
-//                 Console.WriteLine($"Rolling back to {msg.Point.Slot}");
-//                 break;
-//             case MessageRollForward msg:
-//                 try
-//                 {
-//                     Block? block = TestUtils.DeserializeBlockWithEra(msg.Payload.Value);
-//                     blockCount++;
-//                     deserializedCount++;
-
-//                     ulong blockNumber = 0;
-//                     ulong blockSlot = 0;
-//                     string blockHash = string.Empty;
-
-//                     switch (block)
-//                     {
-//                         case AlonzoCompatibleBlock alonzoBlock:
-//                             switch (alonzoBlock.Header.HeaderBody)
-//                             {
-//                                 case AlonzoHeaderBody alonzoBlockHeaderBody:
-//                                     blockNumber = alonzoBlockHeaderBody.BlockNumber;
-//                                     blockSlot = alonzoBlockHeaderBody.Slot;
-//                                     blockHash = Convert.ToHexString(alonzoBlockHeaderBody.BlockBodyHash);
-//                                     break;
-//                                 case BabbageHeaderBody babbageHeaderBody:
-//                                     blockNumber = babbageHeaderBody.BlockNumber;
-//                                     blockSlot = babbageHeaderBody.Slot;
-//                                     blockHash = Convert.ToHexString(babbageHeaderBody.BlockBodyHash);
-//                                     break;
-//                                 default:
-//                                     throw new NotSupportedException($"Unsupported Alonzo block header body: {alonzoBlock.Header.HeaderBody.GetType()}");
-//                             }
-//                             break;
-//                         case BabbageBlock babbageBlock:
-//                             switch (babbageBlock.Header.HeaderBody)
-//                             {
-//                                 case AlonzoHeaderBody alonzoHeaderBody:
-//                                     blockNumber = alonzoHeaderBody.BlockNumber;
-//                                     blockSlot = alonzoHeaderBody.Slot;
-//                                     blockHash = Convert.ToHexString(alonzoHeaderBody.BlockBodyHash);
-//                                     break;
-//                                 case BabbageHeaderBody babbageHeaderBody:
-//                                     blockNumber = babbageHeaderBody.BlockNumber;
-//                                     blockSlot = babbageHeaderBody.Slot;
-//                                     blockHash = Convert.ToHexString(babbageHeaderBody.BlockBodyHash);
-//                                     break;
-//                                 default:
-//                                     throw new NotSupportedException($"Unsupported Babbage block header body: {babbageBlock.Header.HeaderBody.GetType()}");
-//                             }
-//                             break;
-//                         case ConwayBlock conwayBlock:
-//                             switch (conwayBlock.Header.HeaderBody)
-//                             {
-//                                 case AlonzoHeaderBody alonzoHeaderBody:
-//                                     blockNumber = alonzoHeaderBody.BlockNumber;
-//                                     blockSlot = alonzoHeaderBody.Slot;
-//                                     blockHash = Convert.ToHexString(alonzoHeaderBody.BlockBodyHash);
-//                                     break;
-//                                 case BabbageHeaderBody babbageHeaderBody:
-//                                     blockNumber = babbageHeaderBody.BlockNumber;
-//                                     blockSlot = babbageHeaderBody.Slot;
-//                                     blockHash = Convert.ToHexString(babbageHeaderBody.BlockBodyHash);
-//                                     break;
-//                                 default:
-//                                     throw new NotSupportedException($"Unsupported Conway block header body: {conwayBlock.Header.HeaderBody.GetType()}");
-//                             }
-//                             break;
-//                         default:
-//                             throw new NotSupportedException($"Unsupported block type: {block?.GetType()}");
-//                     }
-
-//                     await BlockDbHelper.InsertBlockAsync(blockNumber, blockSlot, blockHash);
-//                 }
-//                 catch
-//                 {
-//                     CborReader reader = new(msg.Payload.Value, CborConformanceMode.Lax);
-//                     reader.ReadTag();
-//                     reader = new(reader.ReadByteString(), CborConformanceMode.Lax);
-//                     reader.ReadStartArray();
-//                     Era era = (Era)reader.ReadInt32();
-//                     ReadOnlyMemory<byte> blockBytes = reader.ReadEncodedValue(true);
-
-
-//                     Console.WriteLine($"Failed to deserialize block: {Convert.ToHexString(blockBytes.ToArray())}");
-//                     deserializedCount--;
-//                     throw;
-//                 }
-//                 break;
-//             case MessageAwaitReply msg:
-//                 Console.WriteLine($"Block count: {blockCount}");
-//                 blockCount = 0;
-//                 deserializedCount = 0;
-//                 Console.WriteLine("Tip reached!!!");
-//                 break;
-//         }
-//     }
-//     catch (Exception ex)
-//     {
-//         Console.WriteLine(ex);
-//         throw;
-//     }
-// }
-
-// public record CPoint(string Hash, ulong Slot);
+    // Clean up
+    client.Dispose();
+    Console.WriteLine("\nConnection closed.");
+}
+catch (Exception ex)
+{
+    Console.WriteLine($"\nError: {ex.Message}");
+    Console.WriteLine($"Stack trace: {ex.StackTrace}");
+}
