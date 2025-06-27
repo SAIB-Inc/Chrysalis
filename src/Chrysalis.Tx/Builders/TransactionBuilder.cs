@@ -271,51 +271,49 @@ public class TransactionBuilder
         return new PostMaryTransaction(body, witnessSet, true, auxiliaryData);
     }
 
-    private MultiAssetMint MergeMints(MultiAssetMint existingMint, MultiAssetMint newMint)
+    private static MultiAssetMint MergeMints(MultiAssetMint existingMint, MultiAssetMint newMint)
     {
-        Dictionary<byte[], TokenBundleMint> result = [];
+        // Use the custom comparer instead of default dictionary
+        Dictionary<byte[], TokenBundleMint> result = new(ByteArrayEqualityComparer.Instance);
 
+        // Copy existing mints
         foreach (var policyEntry in existingMint.Value)
         {
             result[policyEntry.Key] = policyEntry.Value;
         }
 
+        // Merge new mints
         foreach (var policyEntry in newMint.Value)
         {
-            bool policyFound = false;
-            foreach (var existingPolicy in result.ToList())
+            // BEFORE: This used nested loops with SequenceEqual
+            // AFTER: Direct dictionary lookup with custom comparer
+            if (result.TryGetValue(policyEntry.Key, out var existingTokenBundle))
             {
-                if (policyEntry.Key.SequenceEqual(existingPolicy.Key))
-                {
-                    Dictionary<byte[], long> mergedTokens = [];
-                    foreach (var token in existingPolicy.Value.Value)
-                    {
-                        mergedTokens[token.Key] = token.Value;
-                    }
+                // Merge token bundles using the same pattern
+                var mergedTokens = new Dictionary<byte[], long>(ByteArrayEqualityComparer.Instance);
 
-                    foreach (var tokenEntry in policyEntry.Value.Value)
-                    {
-                        bool tokenFound = false;
-                        foreach (var existingToken in mergedTokens.ToList())
-                        {
-                            if (tokenEntry.Key.SequenceEqual(existingToken.Key))
-                            {
-                                mergedTokens[existingToken.Key] = existingToken.Value + tokenEntry.Value;
-                                tokenFound = true;
-                                break;
-                            }
-                        }
-                        if (!tokenFound)
-                        {
-                            mergedTokens[tokenEntry.Key] = tokenEntry.Value;
-                        }
-                    }
-                    result[existingPolicy.Key] = new TokenBundleMint(mergedTokens);
-                    policyFound = true;
-                    break;
+                // Copy existing tokens
+                foreach (var token in existingTokenBundle.Value)
+                {
+                    mergedTokens[token.Key] = token.Value;
                 }
+
+                // Add new tokens
+                foreach (var tokenEntry in policyEntry.Value.Value)
+                {
+                    if (mergedTokens.TryGetValue(tokenEntry.Key, out var existingAmount))
+                    {
+                        mergedTokens[tokenEntry.Key] = existingAmount + tokenEntry.Value;
+                    }
+                    else
+                    {
+                        mergedTokens[tokenEntry.Key] = tokenEntry.Value;
+                    }
+                }
+
+                result[policyEntry.Key] = new TokenBundleMint(mergedTokens);
             }
-            if (!policyFound)
+            else
             {
                 result[policyEntry.Key] = policyEntry.Value;
             }
