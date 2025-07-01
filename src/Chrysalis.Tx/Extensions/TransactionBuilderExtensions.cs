@@ -62,7 +62,6 @@ public static class TransactionBuilderExtensions
             var totalCollateral = FeeUtil.CalculateRequiredCollateral(fee, builder.pparams!.CollateralPercentage!.Value);
             builder.SetTotalCollateral(totalCollateral);
 
-            Console.WriteLine(builder.body.CollateralReturn);
             Address address = builder.body.CollateralReturn switch
             {
                 AlonzoTransactionOutput alonzoTransactionOutput => alonzoTransactionOutput.Address,
