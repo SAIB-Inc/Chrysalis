@@ -12,7 +12,8 @@ internal static partial class NativeMethods
         [In] byte[] txCborBytes,
         nuint txCborBytesLength,
         [In] byte[] utxoCborBytes,
-        nuint utxoCborBytesLength
+        nuint utxoCborBytesLength,
+        uint networkType
     );
 
     [LibraryImport(LibraryName, EntryPoint = "free_eval_results")]

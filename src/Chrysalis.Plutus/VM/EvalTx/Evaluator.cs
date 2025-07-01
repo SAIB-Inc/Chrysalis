@@ -3,6 +3,7 @@ using Chrysalis.Plutus.VM.Models;
 using Chrysalis.Plutus.VM.Models.Interop;
 using Chrysalis.Plutus.VM.Models.Enums;
 using Chrysalis.Plutus.VM.Interop;
+using Chrysalis.Wallet.Models.Enums;
 
 namespace Chrysalis.Plutus.VM.EvalTx;
 
@@ -10,7 +11,7 @@ namespace Chrysalis.Plutus.VM.EvalTx;
 public static class Evaluator
 {
 
-    public static IReadOnlyList<EvaluationResult> EvaluateTx(string txCborHex, string utxosCborHex)
+    public static IReadOnlyList<EvaluationResult> EvaluateTx(string txCborHex, string utxosCborHex, NetworkType networkType = NetworkType.Preview)
     {
         byte[] txCborBytes = Convert.FromHexString(txCborHex);
         byte[] utxosCborBytes = Convert.FromHexString(utxosCborHex);
@@ -18,13 +19,14 @@ public static class Evaluator
         return EvaluateTx(txCborBytes, utxosCborBytes);
     }
 
-    public static IReadOnlyList<EvaluationResult> EvaluateTx(byte[] txCborBytes, byte[] utxosCborBytes)
+    public static IReadOnlyList<EvaluationResult> EvaluateTx(byte[] txCborBytes, byte[] utxosCborBytes, NetworkType networkType = NetworkType.Preview)
     {
         TxEvalResultArray resultArray = NativeMethods.EvalTxRaw(
             txCborBytes,
             (nuint)txCborBytes.Length,
             utxosCborBytes,
-            (nuint)utxosCborBytes.Length
+            (nuint)utxosCborBytes.Length,
+            (uint)networkType
         );
 
         try

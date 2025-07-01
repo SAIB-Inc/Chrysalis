@@ -25,6 +25,8 @@ public class Blockfrost : ICardanoDataProvider
 {
     private readonly HttpClient _httpClient;
     private readonly NetworkType _networkType;
+    
+    public NetworkType NetworkType => _networkType;
 
     public Blockfrost(string apiKey, NetworkType networkType = NetworkType.Preview, string url = "")
     {
