@@ -98,7 +98,7 @@ public record OutputOptions
 public record MintOptions<T>
 {
     public string Policy { get; set; } = string.Empty;
-    public Dictionary<string, int> Assets { get; set; } = [];
+    public Dictionary<string, long> Assets { get; set; } = [];
     public RedeemerMap? Redeemer { get; set; }
     public Func<InputOutputMapping, T, TransactionBuilder, Redeemer<CborBase>>? RedeemerBuilder { get; set; }
     public MintOptions<T> SetRedeemerBuilder<TData>(RedeemerDataBuilder<T, TData> factory)
@@ -129,7 +129,7 @@ public record WithdrawalOptions<T>
         RedeemerBuilder = (mapping, context, transactionBuilder) =>
         {
             TData data = factory(mapping, context, transactionBuilder);
-            return new Redeemer<CborBase>(RedeemerTag.Reward, 0, data, new ExUnits(1648071, 497378507));
+            return new Redeemer<CborBase>(RedeemerTag.Reward, 0, data, new ExUnits(1988046, 656021537));
         };
         return this;
     }
