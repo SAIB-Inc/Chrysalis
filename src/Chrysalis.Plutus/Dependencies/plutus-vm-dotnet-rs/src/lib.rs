@@ -66,13 +66,22 @@ pub unsafe extern "C" fn eval_tx(
     resolved_utxo_cbor_len: usize,
     network_type: u32,
 ) -> CTxEvalResultArray {
-    let transaction_cbor =
-        bytes_from_raw_parts(transaction_cbor_bytes, transaction_cbor_len).unwrap();
+    let transaction_cbor = match bytes_from_raw_parts(transaction_cbor_bytes, transaction_cbor_len) {
+        Some(bytes) => bytes,
+        None => return CTxEvalResultArray::null(),
+    };
 
-    let utxo_cbor = bytes_from_raw_parts(resolved_utxo_cbor_bytes, resolved_utxo_cbor_len).unwrap();
+    let utxo_cbor = match bytes_from_raw_parts(resolved_utxo_cbor_bytes, resolved_utxo_cbor_len) {
+        Some(bytes) => bytes,
+        None => return CTxEvalResultArray::null(),
+    };
 
-    let c_results = eval(transaction_cbor, utxo_cbor, network_type)
-        .unwrap()
+    let results = match eval(transaction_cbor, utxo_cbor, network_type) {
+        Ok(results) => results,
+        Err(_) => return CTxEvalResultArray::null(),
+    };
+
+    let c_results = results
         .into_iter()
         .map(|result| CTxEvalResult {
             tag: result.0.tag as u8,
@@ -104,11 +113,9 @@ fn eval(transaction_cbor: &[u8], utxo_cbor: &[u8], network_type: u32) -> Result<
 
     let slot_config = SlotConfig::for_network(network_type);
 
-    let mtx: MintedTx = minicbor::decode(transaction_cbor)
-        .unwrap();
+    let mtx: MintedTx = minicbor::decode(transaction_cbor)?;
 
-    let resolved_inputs: Vec<Utxo> =
-        minicbor::decode(utxo_cbor).unwrap();
+    let resolved_inputs: Vec<Utxo> = minicbor::decode(utxo_cbor)?;
 
     let utxos: Vec<ResolvedInput> = resolved_inputs
         .iter()
