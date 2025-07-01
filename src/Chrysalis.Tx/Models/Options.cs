@@ -98,7 +98,7 @@ public record OutputOptions
 public record MintOptions<T>
 {
     public string Policy { get; set; } = string.Empty;
-    public Dictionary<string, long> Assets { get; set; } = [];
+    public Dictionary<string, int> Assets { get; set; } = [];
     public RedeemerMap? Redeemer { get; set; }
     public Func<InputOutputMapping, T, TransactionBuilder, Redeemer<CborBase>>? RedeemerBuilder { get; set; }
     public MintOptions<T> SetRedeemerBuilder<TData>(RedeemerDataBuilder<T, TData> factory)
