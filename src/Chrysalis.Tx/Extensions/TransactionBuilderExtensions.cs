@@ -12,6 +12,7 @@ using Chrysalis.Tx.Builders;
 using Chrysalis.Tx.Models;
 using Chrysalis.Tx.Models.Cbor;
 using Chrysalis.Tx.Utils;
+using Chrysalis.Wallet.Models.Enums;
 
 namespace Chrysalis.Tx.Extensions;
 
@@ -170,13 +171,13 @@ public static class TransactionBuilderExtensions
         return builder;
     }
 
-    public static TransactionBuilder Evaluate(this TransactionBuilder builder, List<ResolvedInput> utxos)
+    public static TransactionBuilder Evaluate(this TransactionBuilder builder, List<ResolvedInput> utxos, NetworkType networkType)
     {
         CborDefList<ResolvedInput> utxoCbor = new(utxos);
         var utxoCborBytes = CborSerializer.Serialize<CborMaybeIndefList<ResolvedInput>>(utxoCbor);
         Transaction transaction = builder.Build();
         var txCborBytes = CborSerializer.Serialize(transaction);
-        var evalResult = Evaluator.EvaluateTx(txCborBytes, utxoCborBytes);
+        var evalResult = Evaluator.EvaluateTx(txCborBytes, utxoCborBytes, networkType);
         var previousRedeemers = builder.witnessSet.Redeemers;
 
 

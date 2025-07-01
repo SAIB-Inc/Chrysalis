@@ -27,6 +27,8 @@ public class Blockfrost : ICardanoDataProvider
 {
     private readonly HttpClient _httpClient;
     private readonly NetworkType _networkType;
+    
+    public NetworkType NetworkType => _networkType;
 
     private readonly ConcurrentDictionary<string, Script> _scriptCache = new();
 

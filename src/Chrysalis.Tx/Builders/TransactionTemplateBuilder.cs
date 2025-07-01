@@ -14,6 +14,7 @@ using Chrysalis.Tx.Extensions;
 using Chrysalis.Tx.Models;
 using Chrysalis.Tx.Models.Cbor;
 using Chrysalis.Tx.Utils;
+using Chrysalis.Wallet.Models.Enums;
 using Chrysalis.Wallet.Utils;
 using WalletAddress = Chrysalis.Wallet.Models.Addresses.Address;
 
@@ -129,6 +130,8 @@ public class TransactionTemplateBuilder<T>
         {
             TxBuilder = TransactionBuilder.Create(await _provider!.GetParametersAsync())
         };
+
+        NetworkType networkType = _provider.NetworkType;
 
         Dictionary<string, string> parties = ResolveParties(param);
 
@@ -385,7 +388,7 @@ public class TransactionTemplateBuilder<T>
 
         if (context.IsSmartContractTx && eval)
         {
-            context.TxBuilder.Evaluate(allUtxos);
+            context.TxBuilder.Evaluate(allUtxos, networkType);
         }
 
         return context.TxBuilder.CalculateFee(scripts, fee, 1).Build();

@@ -64,14 +64,24 @@ pub unsafe extern "C" fn eval_tx(
     transaction_cbor_len: usize,
     resolved_utxo_cbor_bytes: *const u8,
     resolved_utxo_cbor_len: usize,
+    network_type: u32,
 ) -> CTxEvalResultArray {
-    let transaction_cbor =
-        bytes_from_raw_parts(transaction_cbor_bytes, transaction_cbor_len).unwrap();
+    let transaction_cbor = match bytes_from_raw_parts(transaction_cbor_bytes, transaction_cbor_len) {
+        Some(bytes) => bytes,
+        None => return CTxEvalResultArray::null(),
+    };
 
-    let utxo_cbor = bytes_from_raw_parts(resolved_utxo_cbor_bytes, resolved_utxo_cbor_len).unwrap();
+    let utxo_cbor = match bytes_from_raw_parts(resolved_utxo_cbor_bytes, resolved_utxo_cbor_len) {
+        Some(bytes) => bytes,
+        None => return CTxEvalResultArray::null(),
+    };
 
-    let c_results = eval(transaction_cbor, utxo_cbor)
-        .unwrap()
+    let results = match eval(transaction_cbor, utxo_cbor, network_type) {
+        Ok(results) => results,
+        Err(_) => return CTxEvalResultArray::null(),
+    };
+
+    let c_results = results
         .into_iter()
         .map(|result| CTxEvalResult {
             tag: result.0.tag as u8,
@@ -98,12 +108,14 @@ unsafe fn bytes_from_raw_parts(ptr: *const u8, len: usize) -> Option<&'static [u
     Some(slice::from_raw_parts(ptr, len))
 }
 
-fn eval(transaction_cbor: &[u8], utxo_cbor: &[u8]) -> Result<Vec<(Redeemer, EvalResult)>, Error>  {
-    let mtx: MintedTx = minicbor::decode(transaction_cbor)
-        .unwrap();
+fn eval(transaction_cbor: &[u8], utxo_cbor: &[u8], network_type: u32) -> Result<Vec<(Redeemer, EvalResult)>, Error>  {
+    let network_type : NetworkType = network_type.into();
 
-    let resolved_inputs: Vec<Utxo> =
-        minicbor::decode(utxo_cbor).unwrap();
+    let slot_config = SlotConfig::for_network(network_type);
+
+    let mtx: MintedTx = minicbor::decode(transaction_cbor)?;
+
+    let resolved_inputs: Vec<Utxo> = minicbor::decode(utxo_cbor)?;
 
     let utxos: Vec<ResolvedInput> = resolved_inputs
         .iter()
@@ -115,5 +127,63 @@ fn eval(transaction_cbor: &[u8], utxo_cbor: &[u8]) -> Result<Vec<(Redeemer, Eval
         })
         .collect();
 
-    eval_phase_two(&mtx, &utxos, None, Some(&ExBudget::default()), &SlotConfig::default(), false, |_| ()).map_err(|e| e)
+    eval_phase_two(&mtx, &utxos, None, Some(&ExBudget::default()), &slot_config, false, |_| ()).map_err(|e| e)
+}
+
+pub enum NetworkType {
+    Testnet = 0,
+    Mainnet = 1,
+    Preview = 2,
+    Preprod = 3,
+    Unknown = 4,
+}
+
+impl From<u32> for NetworkType {
+    fn from(value: u32) -> Self {
+        match value {
+            0 => NetworkType::Testnet,
+            1 => NetworkType::Mainnet,
+            2 => NetworkType::Preview,
+            3 => NetworkType::Preprod,
+            _ => NetworkType::Unknown,
+        }
+    }
+}
+
+pub trait SlotConfigExt {
+    fn for_network(network: NetworkType) -> Self;
+    fn mainnet() -> Self;
+    fn preview() -> Self;
+    fn preprod() -> Self;
+}
+
+impl SlotConfigExt for SlotConfig {
+    fn for_network(network: NetworkType) -> Self {
+        match network {
+            NetworkType::Testnet => SlotConfig::preview(),
+            NetworkType::Mainnet => SlotConfig::default(),
+            NetworkType::Preview => SlotConfig::preview(),
+            NetworkType::Preprod => SlotConfig::preprod(),
+            NetworkType::Unknown => SlotConfig::default(),
+        }
+    }
+    fn preview() -> Self {
+        SlotConfig {
+            slot_length: 1000,
+            zero_time: 1666656000000,
+            zero_slot: 0
+        }
+    }
+
+    fn mainnet() -> Self {
+        SlotConfig::default()
+    }
+
+    fn preprod() -> Self {
+        SlotConfig {
+            slot_length: 1000,
+            zero_time: 1655769600000,
+            zero_slot: 86400
+        }
+    }
 }
