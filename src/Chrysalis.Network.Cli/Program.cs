@@ -68,15 +68,28 @@ try
                     {
                         Console.WriteLine($"\n[{DateTime.Now:HH:mm:ss}] Roll forward #{updateCount}:");
                         
-                        // Decode the block using BlockWithEra
+                        // Decode the N2C block format
                         if (rollForward.Payload?.Value != null)
                         {
                             Console.WriteLine($"  - Payload size: {rollForward.Payload.Value.Length} bytes");
                             
                             try
                             {
-                                // The ChainSync library now handles CBOR tag stripping internally
-                                var blockWithEra = CborSerializer.Deserialize<BlockWithEra>(rollForward.Payload.Value);
+                                // N2C sends: Tag(24, ByteString([era, block]))
+                                var reader = new System.Formats.Cbor.CborReader(rollForward.Payload.Value, System.Formats.Cbor.CborConformanceMode.Lax);
+                                
+                                // Read tag 24
+                                var tag = reader.ReadTag();
+                                if (tag != System.Formats.Cbor.CborTag.EncodedCborDataItem)
+                                {
+                                    throw new InvalidOperationException($"Expected CBOR tag 24, got {tag}");
+                                }
+                                
+                                // Read the byte string containing [era, block]
+                                var innerBytes = reader.ReadByteString();
+                                
+                                // Now deserialize BlockWithEra from the inner bytes
+                                var blockWithEra = CborSerializer.Deserialize<BlockWithEra>(innerBytes);
                                 
                                 // Get the block
                                 var block = blockWithEra.Block;
