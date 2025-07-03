@@ -1,6 +1,4 @@
-using System.Formats.Cbor;
 using System.Runtime.CompilerServices;
-using Chrysalis.Cbor.Types;
 using Chrysalis.Network.Cbor.ChainSync;
 using Chrysalis.Network.Cbor.Common;
 using Chrysalis.Network.Core;
@@ -112,10 +110,9 @@ public class ChainSync(AgentChannel channel) : IMiniProtocol
             case MessageAwaitReply:
                 _state = ChainSyncState.MustReply;
                 break;
-            case MessageRollForward rollForward:
+            case MessageRollForward:
                 _state = ChainSyncState.Idle;
-                // For N2C, process the payload to strip CBOR tag if present
-                return ProcessRollForward(rollForward);
+                break;
             case MessageRollBackward:
                 _state = ChainSyncState.Idle;
                 break;
@@ -124,37 +121,6 @@ public class ChainSync(AgentChannel channel) : IMiniProtocol
         return response;
     }
 
-    /// <summary>
-    /// Process RollForward message to handle N2C CBOR tag wrapping.
-    /// </summary>
-    private MessageRollForward ProcessRollForward(MessageRollForward rollForward)
-    {
-        if (rollForward.Payload?.Value == null || rollForward.Payload.Value.Length == 0)
-            return rollForward;
-
-        try
-        {
-            // Check if payload starts with CBOR tag 24
-            var reader = new CborReader(rollForward.Payload.Value, CborConformanceMode.Lax);
-            
-            if (reader.PeekState() == CborReaderState.Tag)
-            {
-                var tag = reader.ReadTag();
-                if (tag == CborTag.EncodedCborDataItem)
-                {
-                    // Read the byte string and use that as the payload
-                    var innerBytes = reader.ReadByteString();
-                    return rollForward with { Payload = new CborEncodedValue(innerBytes) };
-                }
-            }
-        }
-        catch
-        {
-            // If anything fails, return original
-        }
-        
-        return rollForward;
-    }
 
     /// <summary>
     /// Terminates the Chain-Sync protocol.
