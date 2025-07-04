@@ -61,18 +61,35 @@ public static class TransactionBuilderExtensions
         {
             var totalCollateral = FeeUtil.CalculateRequiredCollateral(fee, builder.pparams!.CollateralPercentage!.Value);
             builder.SetTotalCollateral(totalCollateral);
+            Value collateralInputUtxo = builder.body.CollateralReturn!.Amount();
 
-            Address address = builder.body.CollateralReturn switch
+            Value collateralReturnValue = collateralInputUtxo switch
             {
-                AlonzoTransactionOutput alonzoTransactionOutput => alonzoTransactionOutput.Address,
-                PostAlonzoTransactionOutput postAlonzoTransactionOutput => postAlonzoTransactionOutput.Address!,
+                Lovelace collateralInputLovelace => new Lovelace(collateralInputLovelace.Value - totalCollateral),
+                LovelaceWithMultiAsset collateralInputMultiAsset => new LovelaceWithMultiAsset(
+                    new Lovelace(collateralInputMultiAsset.LovelaceValue.Value - totalCollateral),
+                    collateralInputMultiAsset.MultiAsset
+                ),
                 _ => throw new Exception("Invalid collateral return type")
             };
 
-            ulong lovelace = builder.body.CollateralReturn.Amount().Lovelace();
-            builder.SetCollateralReturn(new AlonzoTransactionOutput(
-                address,
-                new Lovelace(lovelace - totalCollateral), null));
+            TransactionOutput collateralReturnOutput = builder.body.CollateralReturn switch
+            {
+                AlonzoTransactionOutput alonzo => new AlonzoTransactionOutput(
+                    alonzo.Address,
+                    collateralReturnValue,
+                    alonzo.DatumHash
+                ),
+                PostAlonzoTransactionOutput postAlonzo => new PostAlonzoTransactionOutput(
+                    postAlonzo.Address!,
+                    collateralReturnValue,
+                    postAlonzo.Datum,
+                    postAlonzo.ScriptRef
+                ),
+                _ => throw new Exception("Invalid transaction output type")
+            };
+
+            builder.SetCollateralReturn(collateralReturnOutput);
         }
 
         if (defaultFee > 0)

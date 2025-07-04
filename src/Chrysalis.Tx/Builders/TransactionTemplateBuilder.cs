@@ -148,21 +148,14 @@ public class TransactionTemplateBuilder<T>
         ProcessInputs(param, context);
         ProcessMints(param, context);
 
-        List<Value> requiredAmount = [];
+        ulong feeBuffer = 5000000;
+        List<Value> requiredAmount = [new Lovelace(feeBuffer)];
         int changeIndex = 0;
         ProcessOutputs(param, context, parties, requiredAmount, ref changeIndex, fee);
 
         (List<ResolvedInput> utxos, List<ResolvedInput> allUtxos) = await GetAllUtxos(parties, context);
 
         List<Script> scripts = GetScripts(context.IsSmartContractTx, context.ReferenceInputs, allUtxos);
-
-        ResolvedInput? collateralInput = SelectCollateralInput(utxos, context.IsSmartContractTx);
-        if (collateralInput is not null)
-        {
-            utxos.Remove(collateralInput);
-            context.TxBuilder.AddCollateral(collateralInput.Outref);
-            context.TxBuilder.SetCollateralReturn(collateralInput.Output);
-        }
 
         List<ResolvedInput> specifiedInputsUtxos = GetSpecifiedInputsUtxos(context.SpecifiedInputs, allUtxos);
         context.ResolvedInputs.AddRange(specifiedInputsUtxos);
@@ -174,7 +167,13 @@ public class TransactionTemplateBuilder<T>
             context
         );
 
-        ulong totalLovelaceChange = coinSelectionResult.LovelaceChange;
+        if (coinSelectionResult.Inputs.Any() && context.IsSmartContractTx)
+        {
+            context.TxBuilder.AddCollateral(coinSelectionResult.Inputs[0].Outref);
+            context.TxBuilder.SetCollateralReturn(coinSelectionResult.Inputs[0].Output);
+        }
+
+        ulong totalLovelaceChange = coinSelectionResult.LovelaceChange + feeBuffer;
         Lovelace lovelaceChange = new(totalLovelaceChange);
 
         Dictionary<byte[], TokenBundleOutput> assetsChange = coinSelectionResult.AssetsChange;
@@ -183,73 +182,6 @@ public class TransactionTemplateBuilder<T>
         {
             context.ResolvedInputs.Add(consumedInput);
             context.TxBuilder.AddInput(consumedInput.Outref);
-        }
-
-        ResolvedInput? feeInput = SelectFeeInput(utxos, coinSelectionResult.Inputs);
-        if (feeInput is not null)
-        {
-            utxos.Remove(feeInput);
-            context.ResolvedInputs.Add(feeInput);
-            context.InputsById["fee"] = feeInput.Outref;
-            context.TxBuilder.AddInput(feeInput.Outref);
-
-            lovelaceChange = new(totalLovelaceChange + (feeInput?.Output.Amount().Lovelace() ?? 0));
-
-            if (feeInput!.Output.Amount() is LovelaceWithMultiAsset lovelaceWithMultiAsset)
-            {
-                // OPTIMIZED: Use ByteArrayEqualityComparer instead of SequenceEqual loops
-                Dictionary<byte[], Dictionary<byte[], ulong>> feeInputAssetsChange = new(ByteArrayEqualityComparer.Instance);
-                Dictionary<byte[], Dictionary<byte[], ulong>> existingAssetsChange = new(ByteArrayEqualityComparer.Instance);
-
-                // Copy existing assets change
-                foreach (KeyValuePair<byte[], TokenBundleOutput> asset in assetsChange)
-                {
-                    existingAssetsChange.Add(asset.Key, asset.Value.Value);
-                }
-
-                // Copy fee input assets
-                foreach (KeyValuePair<byte[], TokenBundleOutput> asset in lovelaceWithMultiAsset.MultiAsset.Value)
-                {
-                    feeInputAssetsChange.Add(asset.Key, asset.Value.Value);
-                }
-
-                // BEFORE: This used nested loops with SequenceEqual
-                // AFTER: Direct dictionary operations with custom comparer
-                Dictionary<byte[], Dictionary<byte[], ulong>> combinedAssets = new(existingAssetsChange, ByteArrayEqualityComparer.Instance);
-
-                foreach ((byte[] policyId, Dictionary<byte[], ulong> tokens) in feeInputAssetsChange)
-                {
-                    if (combinedAssets.TryGetValue(policyId, out Dictionary<byte[], ulong>? existingTokens))
-                    {
-                        // Merge token bundles
-                        foreach ((byte[] tokenName, ulong amount) in tokens)
-                        {
-                            if (existingTokens.TryGetValue(tokenName, out ulong existingAmount))
-                            {
-                                existingTokens[tokenName] = existingAmount + amount;
-                            }
-                            else
-                            {
-                                existingTokens[tokenName] = amount;
-                            }
-                        }
-                    }
-                    else
-                    {
-                        // Add new policy with all its tokens
-                        combinedAssets[policyId] = new Dictionary<byte[], ulong>(tokens, ByteArrayEqualityComparer.Instance);
-                    }
-                }
-
-                // Convert back to TokenBundleOutput format
-                Dictionary<byte[], TokenBundleOutput> convertedAssetsChange = new(ByteArrayEqualityComparer.Instance);
-                foreach ((byte[] policyId, Dictionary<byte[], ulong> tokens) in combinedAssets)
-                {
-                    convertedAssetsChange[policyId] = new TokenBundleOutput(tokens);
-                }
-
-                assetsChange = convertedAssetsChange;
-            }
         }
 
         Value changeValue = assetsChange.Count > 0
@@ -1028,32 +960,6 @@ public class TransactionTemplateBuilder<T>
         }
 
         return scripts;
-    }
-
-    private static ResolvedInput? SelectFeeInput(List<ResolvedInput> utxos, List<ResolvedInput> consumedInputs)
-    {
-        // OPTIMIZED: Use byte array based lookup instead of hex string conversion
-        HashSet<(byte[], ulong)> consumedLookup = new(new TransactionInputEqualityComparer());
-
-        foreach (ResolvedInput input in consumedInputs)
-        {
-            consumedLookup.Add((input.Outref.TransactionId, input.Outref.Index));
-        }
-
-        return utxos
-            .Where(e => e.Output.Amount().Lovelace() >= 5_000_000UL)
-            .Where(e => !consumedLookup.Contains((e.Outref.TransactionId, e.Outref.Index)))
-            .OrderBy(e => e.Output.Amount().Lovelace())
-            .FirstOrDefault();
-    }
-
-    private static ResolvedInput? SelectCollateralInput(List<ResolvedInput> utxos, bool isSmartContractTx)
-    {
-        if (!isSmartContractTx) return null;
-        return utxos
-            .Where(e => e.Output.Amount().Lovelace() >= 7_000_000UL && e.Output.Amount() is Lovelace)
-            .OrderBy(e => e.Output.Amount().Lovelace())
-            .FirstOrDefault();
     }
 
     private static List<ResolvedInput> GetSpecifiedInputsUtxos(List<TransactionInput> specifiedInputs, List<ResolvedInput> allUtxos)
