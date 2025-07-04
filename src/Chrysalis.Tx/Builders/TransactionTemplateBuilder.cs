@@ -180,7 +180,6 @@ public class TransactionTemplateBuilder<T>
         foreach (ResolvedInput consumedInput in coinSelectionResult.Inputs)
         {
             context.ResolvedInputs.Add(consumedInput);
-            utxos.RemoveAll(e => e.Outref.TransactionId.SequenceEqual(consumedInput.Outref.TransactionId) && e.Outref.Index == consumedInput.Outref.Index);
             context.TxBuilder.AddInput(consumedInput.Outref);
         }
 
