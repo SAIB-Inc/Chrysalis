@@ -148,7 +148,8 @@ public class TransactionTemplateBuilder<T>
         ProcessInputs(param, context);
         ProcessMints(param, context);
 
-        List<Value> requiredAmount = [new Lovelace(5000000)];
+        ulong feeBuffer = 5000000;
+        List<Value> requiredAmount = [new Lovelace(feeBuffer)];
         int changeIndex = 0;
         ProcessOutputs(param, context, parties, requiredAmount, ref changeIndex, fee);
 
@@ -172,7 +173,7 @@ public class TransactionTemplateBuilder<T>
             context.TxBuilder.SetCollateralReturn(coinSelectionResult.Inputs[0].Output);
         }
 
-        ulong totalLovelaceChange = coinSelectionResult.LovelaceChange + 5000000;
+        ulong totalLovelaceChange = coinSelectionResult.LovelaceChange + feeBuffer;
         Lovelace lovelaceChange = new(totalLovelaceChange);
 
         Dictionary<byte[], TokenBundleOutput> assetsChange = coinSelectionResult.AssetsChange;
