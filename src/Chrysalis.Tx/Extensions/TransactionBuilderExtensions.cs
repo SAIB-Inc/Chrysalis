@@ -86,7 +86,7 @@ public static class TransactionBuilderExtensions
                     postAlonzo.Datum,
                     postAlonzo.ScriptRef
                 ),
-                _ => throw new Exception("Invalid collateral return type")
+                _ => throw new Exception("Invalid transaction output type")
             };
 
             builder.SetCollateralReturn(collateralReturnOutput);
