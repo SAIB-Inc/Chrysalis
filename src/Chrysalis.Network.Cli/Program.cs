@@ -1,9 +1,6 @@
-﻿using Chrysalis.Cbor.Extensions.Cardano.Core;
-using Chrysalis.Cbor.Serialization;
-using Chrysalis.Cbor.Types.Cardano.Core;
-using Chrysalis.Cbor.Types.Cardano.Core.Header;
 using Chrysalis.Network.Cbor.ChainSync;
 using Chrysalis.Network.Cbor.Common;
+using Chrysalis.Network.MiniProtocols.Extensions;
 using Chrysalis.Network.Multiplexer;
 
 try
@@ -14,176 +11,118 @@ try
     await client.StartAsync();
     Console.WriteLine("Connected successfully!");
 
-    // Test Chain-Sync protocol
-    Console.WriteLine("\n=== Testing Chain-Sync Protocol ===");
+    // Query initial tip
+    Console.WriteLine("\nQuerying initial tip...");
+    var initialTip = await client.LocalStateQuery.GetTipAsync();
+    Console.WriteLine($"Initial tip: Slot {initialTip.Slot.Slot}, Hash {Convert.ToHexString(initialTip.Slot.Hash)}");
+
+    // Start ChainSync from the initial tip
+    Console.WriteLine("\nStarting ChainSync from initial tip...");
+    var intersectionPoint = new Point(initialTip.Slot.Slot, initialTip.Slot.Hash);
+    var intersectResponse = await client.ChainSync.FindIntersectionAsync([intersectionPoint], CancellationToken.None);
     
-    // Find intersection first
-    Console.WriteLine("\n1. Finding intersection with known point...");
-    var knownPoint = new Point(84131605, Convert.FromHexString("f93a3418fcc6017e66186f2e3c9d2baee61762c192bf5c3c582cc3b9e2424bb6"));
-    Console.WriteLine($"  - Looking for intersection at slot {knownPoint.Slot}, hash {Convert.ToHexString(knownPoint.Hash)}");
-    var intersectResponse = await client.ChainSync.FindIntersectionAsync([knownPoint], CancellationToken.None);
-    
-    switch (intersectResponse)
+    if (intersectResponse is MessageIntersectFound found)
     {
-        case MessageIntersectFound found:
-            Console.WriteLine($"  - Intersection found at slot: {found.Point.Slot}");
-            Console.WriteLine($"  - Tip at slot: {found.Tip.Slot.Slot}");
-            break;
-        case MessageIntersectNotFound notFound:
-            Console.WriteLine($"  - No intersection found. Tip at slot: {notFound.Tip.Slot.Slot}");
-            break;
+        Console.WriteLine($"Intersection found at slot {found.Point.Slot}");
     }
 
-    // Test continuous sync
-    Console.WriteLine("\n2. Starting continuous sync (press Ctrl+C to stop)...");
-    Console.WriteLine("  - This will test the proper handling of AwaitReply at the tip");
-    
+    // Create cancellation token for graceful shutdown
     using var cts = new CancellationTokenSource();
     Console.CancelKeyPress += (s, e) => {
         e.Cancel = true;
         cts.Cancel();
     };
 
-    int updateCount = 0;
-    int awaitCount = 0;
-    ulong? firstTipSlot = null;
-    
-    while (!cts.Token.IsCancellationRequested)
+    // Start ChainSync in background task
+    var chainSyncTask = Task.Run(async () =>
     {
-        try
+        int blockCount = 0;
+        bool atTip = false;
+        Console.WriteLine("\n[ChainSync] Starting to sync blocks...");
+        
+        while (!cts.Token.IsCancellationRequested)
         {
-            var response = await client.ChainSync.NextRequestAsync(cts.Token);
-            
-            switch (response)
+            try
             {
-                case MessageRollForward rollForward:
-                    updateCount++;
-                    
-                    // Track if we're catching up
-                    firstTipSlot ??= rollForward.Tip.Slot.Slot;
-                    bool isCatchingUp = rollForward.Tip.Slot.Slot == firstTipSlot;
-                    
-                    // Only show every 100th block when catching up
-                    if (!isCatchingUp || updateCount % 100 == 1)
-                    {
-                        Console.WriteLine($"\n[{DateTime.Now:HH:mm:ss}] Roll forward #{updateCount}:");
+                var response = await client.ChainSync.NextRequestAsync(cts.Token);
+                
+                switch (response)
+                {
+                    case MessageRollForward rollForward:
+                        blockCount++;
                         
-                        // Decode the N2C block format
-                        if (rollForward.Payload?.Value != null)
+                        // Always log when at tip (receiving new blocks)
+                        if (atTip)
                         {
-                            Console.WriteLine($"  - Payload size: {rollForward.Payload.Value.Length} bytes");
-                            
-                            try
-                            {
-                                // N2C sends: Tag(24, ByteString([era, block]))
-                                var reader = new System.Formats.Cbor.CborReader(rollForward.Payload.Value, System.Formats.Cbor.CborConformanceMode.Lax);
-                                
-                                // Read tag 24
-                                var tag = reader.ReadTag();
-                                if (tag != System.Formats.Cbor.CborTag.EncodedCborDataItem)
-                                {
-                                    throw new InvalidOperationException($"Expected CBOR tag 24, got {tag}");
-                                }
-                                
-                                // Read the byte string containing [era, block]
-                                var innerBytes = reader.ReadByteString();
-                                
-                                // Now deserialize BlockWithEra from the inner bytes
-                                var blockWithEra = CborSerializer.Deserialize<BlockWithEra>(innerBytes);
-                                
-                                // Get the block
-                                var block = blockWithEra.Block;
-                                var era = blockWithEra.EraNumber;
-                                
-                                // Get block info
-                                var header = block.Header();
-                                var headerBody = header.HeaderBody;
-                                
-                                ulong? blockSlot = null;
-                                ulong? blockNumber = null;
-                                
-                                switch (headerBody)
-                                {
-                                    case AlonzoHeaderBody alonzo:
-                                        blockSlot = alonzo.Slot;
-                                        blockNumber = alonzo.BlockNumber;
-                                        break;
-                                    case BabbageHeaderBody babbage:
-                                        blockSlot = babbage.Slot;
-                                        blockNumber = babbage.BlockNumber;
-                                        break;
-                                }
-                                
-                                if (blockSlot.HasValue)
-                                {
-                                    Console.WriteLine($"  - Block slot: {blockSlot}");
-                                    Console.WriteLine($"  - Block number: {blockNumber}");
-                                    Console.WriteLine($"  - Block hash: {header.Hash()}");
-                                    Console.WriteLine($"  - Era: {era}");
-                                }
-                            }
-                            catch (Exception ex)
-                            {
-                                Console.WriteLine($"  - Failed to decode block: {ex.Message}");
-                                // Print hex for debugging
-                                var hexString = Convert.ToHexString(rollForward.Payload.Value.AsSpan(0, Math.Min(100, rollForward.Payload.Value.Length)));
-                                Console.WriteLine($"  - Payload hex (first 100 bytes): {hexString}");
-                            }
+                            Console.WriteLine($"[ChainSync] New block! Slot: {rollForward.Tip.Slot.Slot}, Total blocks: {blockCount}");
                         }
-                        
-                        Console.WriteLine($"\n  - Current tip slot: {rollForward.Tip.Slot.Slot}");
-                        Console.WriteLine($"  - Current tip hash: {Convert.ToHexString(rollForward.Tip.Slot.Hash)}");
-                        
-                        if (isCatchingUp)
+                        // When catching up, only log every 100th block
+                        else if (blockCount % 100 == 1)
                         {
-                            Console.WriteLine($"  - Status: Catching up to tip (showing every 100th block)");
+                            Console.WriteLine($"[ChainSync] Catching up... Processed {blockCount} blocks, current tip: {rollForward.Tip.Slot.Slot}");
                         }
-                    }
-                    else if (updateCount % 1000 == 0)
-                    {
-                        Console.WriteLine($"  ... processed {updateCount} blocks, still catching up ...");
-                    }
-                    break;
-                    
-                case MessageRollBackward rollBack:
-                    Console.WriteLine($"\n[{DateTime.Now:HH:mm:ss}] Roll backward:");
-                    Console.WriteLine($"  - To slot: {rollBack.Point.Slot}");
-                    Console.WriteLine($"  - Tip at: {rollBack.Tip.Slot.Slot}");
-                    break;
-                    
-                case MessageAwaitReply:
-                    awaitCount++;
-                    if (awaitCount == 1)
-                    {
-                        Console.WriteLine($"\n[{DateTime.Now:HH:mm:ss}] Reached tip, waiting for new blocks...");
-                        Console.WriteLine("  - The protocol should now handle this internally");
-                        Console.WriteLine("  - Next call should wait for server update, not send a new request");
-                    }
-                    else if (awaitCount % 10 == 0)
-                    {
-                        Console.Write(".");
-                    }
-                    break;
+                        break;
+                        
+                    case MessageAwaitReply:
+                        if (!atTip)
+                        {
+                            Console.WriteLine($"[ChainSync] Reached tip! Processed {blockCount} blocks. Waiting for new blocks...");
+                            atTip = true;
+                        }
+                        break;
+                        
+                    case MessageRollBackward rollBack:
+                        Console.WriteLine($"[ChainSync] Roll backward to slot: {rollBack.Point.Slot}");
+                        break;
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                break;
             }
         }
-        catch (OperationCanceledException)
+        
+        Console.WriteLine($"[ChainSync] Stopped. Total blocks processed: {blockCount}");
+    });
+
+    // Start tip query loop in background
+    var tipQueryTask = Task.Run(async () =>
+    {
+        Console.WriteLine("\n[TipQuery] Starting to query tips every 3 seconds...");
+        
+        ulong? lastSlot = null;
+        while (!cts.Token.IsCancellationRequested)
         {
-            break;
+            try
+            {
+                var currentTip = await client.LocalStateQuery.GetTipAsync(cts.Token);
+                
+                // Only log if the tip changed or it's the first query
+                if (lastSlot == null || lastSlot != currentTip.Slot.Slot)
+                {
+                    Console.WriteLine($"[TipQuery] Tip updated! Slot: {currentTip.Slot.Slot} (was: {lastSlot?.ToString() ?? "N/A"})");
+                    lastSlot = currentTip.Slot.Slot;
+                }
+                
+                await Task.Delay(3000, cts.Token); // Query every 3 seconds
+            }
+            catch (OperationCanceledException)
+            {
+                break;
+            }
         }
-    }
+        
+        Console.WriteLine("[TipQuery] Stopped.");
+    });
 
-    // Send Done message to properly terminate the protocol
-    Console.WriteLine("\n\n3. Sending Done message to terminate protocol...");
-    await client.ChainSync.DoneAsync(CancellationToken.None);
-    Console.WriteLine("Chain-Sync protocol terminated successfully!");
-
-    // Show summary
-    Console.WriteLine($"\nSummary:");
-    Console.WriteLine($"  - Total updates received: {updateCount}");
-    Console.WriteLine($"  - Times at tip (await): {awaitCount}");
-    Console.WriteLine($"  - Protocol state: {client.ChainSync.State}");
+    // Wait for user to stop
+    Console.WriteLine("\nPress Ctrl+C to stop...\n");
+    
+    // Wait for both tasks to complete
+    await Task.WhenAll(chainSyncTask, tipQueryTask);
 
     // Clean up
+    await client.ChainSync.DoneAsync(CancellationToken.None);
     client.Dispose();
     Console.WriteLine("\nConnection closed.");
 }
