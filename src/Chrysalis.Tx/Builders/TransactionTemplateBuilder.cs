@@ -872,7 +872,7 @@ public class TransactionTemplateBuilder<T>
                 context.IsSmartContractTx = true;
             }
 
-            foreach ((string assetName, int amount) in mintOptions.Assets)
+            foreach ((string assetName, long amount) in mintOptions.Assets)
             {
                 value[assetName] = amount;
                 context.TxBuilder.AddMint(new MultiAssetMint(new Dictionary<byte[], TokenBundleMint>(ByteArrayEqualityComparer.Instance)
