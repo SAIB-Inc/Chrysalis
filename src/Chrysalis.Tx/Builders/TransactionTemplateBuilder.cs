@@ -394,7 +394,7 @@ public class TransactionTemplateBuilder<T>
     {
         // FIX: Explicitly cast to decimal to resolve ambiguity
         decimal requestedLovelace = requiredAmount.Sum(amount => (decimal)amount.Lovelace());
-        Dictionary<string, decimal> requestedAssets = [];
+        Dictionary<string, ulong> requestedAssets = [];
 
         // Extract requested assets
         foreach (Value amount in requiredAmount)
@@ -405,9 +405,9 @@ public class TransactionTemplateBuilder<T>
             }
         }
 
-        // Process specified inputs - FIX: Explicitly cast to decimal
-        decimal specifiedInputsLovelace = specifiedInputsUtxos.Sum(utxo => (decimal)utxo.Output.Amount().Lovelace());
-        Dictionary<string, decimal> specifiedInputsAssets = [];
+        // Process specified inputs - FIX: Explicitly cast to long
+        long specifiedInputsLovelace = specifiedInputsUtxos.Sum(utxo => (long)utxo.Output.Amount().Lovelace());
+        Dictionary<string, ulong> specifiedInputsAssets = [];
 
         foreach (ResolvedInput utxo in specifiedInputsUtxos)
         {
@@ -418,19 +418,19 @@ public class TransactionTemplateBuilder<T>
         }
 
         // Process minted assets
-        Dictionary<string, decimal> mintedAssets = [];
+        Dictionary<string, ulong> mintedAssets = [];
         foreach ((string policyId, Dictionary<string, long> assets) in mints)
         {
             foreach ((string assetName, long amount) in assets)
             {
                 string assetKey = BuildAssetKey(policyId, assetName);
-                mintedAssets[assetKey] = mintedAssets.GetValueOrDefault(assetKey, 0) + amount;
+                mintedAssets[assetKey] = (ulong)((long)mintedAssets.GetValueOrDefault(assetKey, 0UL) + amount);
             }
         }
 
         // Adjust requirements based on specified inputs and mints
         long adjustedLovelace = Math.Max(0, (long)(requestedLovelace - specifiedInputsLovelace));
-        Dictionary<string, decimal> adjustedAssets = AdjustAssetsForMintsAndInputs(requestedAssets, mintedAssets, specifiedInputsAssets);
+        Dictionary<string, ulong> adjustedAssets = AdjustAssetsForMintsAndInputs(requestedAssets, mintedAssets, specifiedInputsAssets);
 
         // Build required amounts for coin selection
         List<Value> requiredAmounts = BuildRequiredAmounts(adjustedLovelace, adjustedAssets);
@@ -438,7 +438,7 @@ public class TransactionTemplateBuilder<T>
         return new RequirementsResult
         {
             OriginalRequestedLovelace = (ulong)requestedLovelace,
-            OriginalRequestedAssets = new Dictionary<string, decimal>(requestedAssets),
+            OriginalRequestedAssets = new Dictionary<string, ulong>(requestedAssets),
             OriginalSpecifiedInputsAssets = specifiedInputsAssets,
             OriginalMintedAssets = mintedAssets,
             RequiredAmounts = requiredAmounts,
@@ -446,7 +446,7 @@ public class TransactionTemplateBuilder<T>
         };
     }
 
-    private static void ExtractAssets(MultiAssetOutput? multiAsset, Dictionary<string, decimal> assetDict)
+    private static void ExtractAssets(MultiAssetOutput? multiAsset, Dictionary<string, ulong> assetDict)
     {
         if (multiAsset?.Value == null) return;
 
@@ -459,7 +459,7 @@ public class TransactionTemplateBuilder<T>
                 string assetHex = HexStringCache.ToHexString(assetName);
                 string assetKey = BuildAssetKey(policyHex, assetHex);
 
-                assetDict[assetKey] = assetDict.GetValueOrDefault(assetKey, 0) + amount;
+                assetDict[assetKey] = assetDict.GetValueOrDefault(assetKey, 0UL) + amount;
             }
         }
     }
@@ -476,19 +476,19 @@ public class TransactionTemplateBuilder<T>
         }
     }
 
-    private static Dictionary<string, decimal> AdjustAssetsForMintsAndInputs(
-    Dictionary<string, decimal> requestedAssets,
-    Dictionary<string, decimal> mintedAssets,
-    Dictionary<string, decimal> specifiedInputsAssets)
+    private static Dictionary<string, ulong> AdjustAssetsForMintsAndInputs(
+    Dictionary<string, ulong> requestedAssets,
+    Dictionary<string, ulong> mintedAssets,
+    Dictionary<string, ulong> specifiedInputsAssets)
     {
-        Dictionary<string, decimal> adjusted = new(requestedAssets);
+        Dictionary<string, ulong> adjusted = new(requestedAssets);
 
         // Subtract minted assets
-        foreach ((string assetKey, decimal mintAmount) in mintedAssets)
+        foreach ((string assetKey, ulong mintAmount) in mintedAssets)
         {
             if (mintAmount > 0)
             {
-                if (adjusted.TryGetValue(assetKey, out decimal requested))
+                if (adjusted.TryGetValue(assetKey, out ulong requested))
                 {
                     adjusted[assetKey] = Math.Max(0, requested - mintAmount);
                     if (adjusted[assetKey] <= 0)
@@ -498,14 +498,14 @@ public class TransactionTemplateBuilder<T>
             else
             {
                 // Burning - add to requirements
-                adjusted[assetKey] = adjusted.GetValueOrDefault(assetKey, 0) + Math.Abs(mintAmount);
+                adjusted[assetKey] = adjusted.GetValueOrDefault(assetKey, 0UL) + mintAmount;
             }
         }
 
         // Subtract specified input assets
-        foreach ((string assetKey, decimal inputAmount) in specifiedInputsAssets)
+        foreach ((string assetKey, ulong inputAmount) in specifiedInputsAssets)
         {
-            if (adjusted.TryGetValue(assetKey, out decimal required))
+            if (adjusted.TryGetValue(assetKey, out ulong required))
             {
                 adjusted[assetKey] = Math.Max(0, required - inputAmount);
                 if (adjusted[assetKey] <= 0)
@@ -516,7 +516,7 @@ public class TransactionTemplateBuilder<T>
         return adjusted;
     }
 
-    private static List<Value> BuildRequiredAmounts(long adjustedLovelace, Dictionary<string, decimal> adjustedAssets)
+    private static List<Value> BuildRequiredAmounts(long adjustedLovelace, Dictionary<string, ulong> adjustedAssets)
     {
         List<Value> requiredAmounts = [];
         Lovelace lovelace = new((ulong)Math.Max(0, adjustedLovelace));
@@ -529,20 +529,20 @@ public class TransactionTemplateBuilder<T>
         {
             Dictionary<byte[], TokenBundleOutput> multiAssetDict = new(ByteArrayEqualityComparer.Instance);
 
-            Dictionary<string, List<KeyValuePair<string, decimal>>> assetsByPolicy = adjustedAssets
+            Dictionary<string, List<KeyValuePair<string, ulong>>> assetsByPolicy = adjustedAssets
                 .Where(a => a.Value > 0)
                 .GroupBy(a => a.Key[..56])
                 .ToDictionary(g => g.Key, g => g.ToList());
 
-            foreach ((string policyIdHex, List<KeyValuePair<string, decimal>> assets) in assetsByPolicy)
+            foreach ((string policyIdHex, List<KeyValuePair<string, ulong>> assets) in assetsByPolicy)
             {
                 byte[] policyId = HexStringCache.FromHexString(policyIdHex);
                 Dictionary<byte[], ulong> tokenBundle = new(ByteArrayEqualityComparer.Instance);
 
-                foreach (KeyValuePair<string, decimal> asset in assets)
+                foreach (KeyValuePair<string, ulong> asset in assets)
                 {
                     byte[] assetName = HexStringCache.FromHexString(asset.Key[56..]);
-                    tokenBundle[assetName] = (ulong)asset.Value;
+                    tokenBundle[assetName] = asset.Value;
                 }
 
                 multiAssetDict[policyId] = new TokenBundleOutput(tokenBundle);
@@ -564,34 +564,34 @@ public class TransactionTemplateBuilder<T>
         }
 
         // Handle asset change - simplified logic
-        foreach ((string assetKey, decimal amount) in requirements.OriginalSpecifiedInputsAssets)
+        foreach ((string assetKey, ulong amount) in requirements.OriginalSpecifiedInputsAssets)
         {
-            decimal consumedByOutput = requirements.OriginalRequestedAssets.GetValueOrDefault(assetKey, 0);
-            decimal mintAmount = requirements.OriginalMintedAssets.GetValueOrDefault(assetKey, 0);
+            ulong consumedByOutput = requirements.OriginalRequestedAssets.GetValueOrDefault(assetKey, 0UL);
+            ulong mintAmount = requirements.OriginalMintedAssets.GetValueOrDefault(assetKey, 0UL);
 
             if (consumedByOutput < amount && mintAmount >= 0)
             {
-                decimal changeAmount = amount - consumedByOutput;
+                ulong changeAmount = amount - consumedByOutput;
                 if (changeAmount > 0)
                 {
                     byte[] policyId = HexStringCache.FromHexString(assetKey[..56]);
                     byte[] assetName = HexStringCache.FromHexString(assetKey[56..]);
-                    AddAssetToChange(selection.AssetsChange, policyId, assetName, (int)changeAmount);
+                    AddAssetToChange(selection.AssetsChange, policyId, assetName, changeAmount);
                 }
             }
         }
 
         // Handle mint excess
-        foreach ((string assetKey, decimal amount) in requirements.OriginalMintedAssets.Where(a => a.Value > 0))
+        foreach ((string assetKey, ulong amount) in requirements.OriginalMintedAssets.Where(a => a.Value > 0))
         {
-            decimal requiredAmount = requirements.OriginalRequestedAssets.GetValueOrDefault(assetKey, 0);
-            decimal excessAmount = amount - requiredAmount;
+            ulong requiredAmount = requirements.OriginalRequestedAssets.GetValueOrDefault(assetKey, 0UL);
+            ulong excessAmount = amount - requiredAmount;
 
             if (excessAmount > 0)
             {
                 byte[] policyId = HexStringCache.FromHexString(assetKey[..56]);
                 byte[] assetName = HexStringCache.FromHexString(assetKey[56..]);
-                AddAssetToChange(selection.AssetsChange, policyId, assetName, (int)excessAmount);
+                AddAssetToChange(selection.AssetsChange, policyId, assetName, excessAmount);
             }
         }
     }
@@ -600,9 +600,9 @@ public class TransactionTemplateBuilder<T>
     private record RequirementsResult
     {
         public required ulong OriginalRequestedLovelace { get; init; }
-        public required Dictionary<string, decimal> OriginalRequestedAssets { get; init; }
-        public required Dictionary<string, decimal> OriginalSpecifiedInputsAssets { get; init; }
-        public required Dictionary<string, decimal> OriginalMintedAssets { get; init; }
+        public required Dictionary<string, ulong> OriginalRequestedAssets { get; init; }
+        public required Dictionary<string, ulong> OriginalSpecifiedInputsAssets { get; init; }
+        public required Dictionary<string, ulong> OriginalMintedAssets { get; init; }
         public required List<Value> RequiredAmounts { get; init; }
         public required ulong SpecifiedInputsLovelace { get; init; }
     }
@@ -1052,7 +1052,7 @@ public class TransactionTemplateBuilder<T>
         Dictionary<byte[], TokenBundleOutput> assetsChange,
         byte[] policyId,
         byte[] assetName,
-        int amount
+        ulong amount
     )
     {
         // AFTER: Use TryGetValue instead of SequenceEqual loops
@@ -1062,7 +1062,7 @@ public class TransactionTemplateBuilder<T>
 
             if (tokenBundle.TryGetValue(assetName, out ulong existingAmount))
             {
-                int newAmount = (int)existingAmount + amount;
+                ulong newAmount = existingAmount + amount;
                 if (newAmount <= 0)
                 {
                     tokenBundle.Remove(assetName);
