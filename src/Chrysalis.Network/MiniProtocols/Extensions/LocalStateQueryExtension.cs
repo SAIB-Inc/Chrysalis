@@ -15,49 +15,86 @@ public static class LocalStateQueryExtension
     private static readonly string DeserializationError = "Failed to deserialize response";
     private static readonly string InvalidResponseError = "Invalid response format";
 
-
     /// <summary>
-    /// Gets UTxOs by address
+    /// Executes a query with automatic acquire/release handling for fresh state
     /// </summary>
-    /// <param name="localStateQuery">The LocalStateQuery protocol instance</param>
-    /// <param name="addresses">List of addresses to query</param>
-    /// <returns>A task yielding the UTxO response</returns>
-    /// <exception cref="InvalidOperationException">Thrown when response extraction or deserialization fails</exception>
-    public static async Task<Tip> GetTipAsync(this LocalStateQuery localStateQuery)
-    {
-        Result queryResult = await localStateQuery.QueryAsync(null, RawQueries.GetTip, default);
-        byte[] rawBytes = await ExtractRawBytesAsync(queryResult);
-        return await DeserializeResponseAsync<Tip>(rawBytes);
-    }
-
-    public static async Task<CurrentEraQueryResponse> GetCurrentEraAsync(this LocalStateQuery localStateQuery)
-    {
-        Result queryResult = await localStateQuery.QueryAsync(null, RawQueries.GetCurrentEra, default);
-        byte[] rawBytes = await ExtractRawBytesAsync(queryResult);
-        return await DeserializeResponseAsync<CurrentEraQueryResponse>(rawBytes);
-    }
-
-    public static async Task<CurrentProtocolParamsResponse> GetCurrentProtocolParamsAsync(this LocalStateQuery localStateQuery)
-    {
-        Result queryResult = await localStateQuery.QueryAsync(null, RawQueries.GetCurrentProtocolParams, default);
-        byte[] rawBytes = await ExtractRawBytesAsync(queryResult);
-        return await DeserializeResponseAsync<CurrentProtocolParamsResponse>(rawBytes);
-    }
-
-    /// <summary>
-    /// Gets UTxOs by address
-    /// </summary>
-    /// <param name="localStateQuery">The LocalStateQuery protocol instance</param>
-    /// <param name="addresses">List of addresses to query</param>
-    /// <returns>A task yielding the UTxO response</returns>
-    /// <exception cref="InvalidOperationException">Thrown when response extraction or deserialization fails</exception>
-    public static async Task<UtxoByAddressResponse> GetUtxosByAddressAsync(
+    private static async Task<T> ExecuteWithFreshStateAsync<T>(
         this LocalStateQuery localStateQuery,
-        List<byte[]> addresses)
+        Func<Task<Result>> queryFunc,
+        CancellationToken cancellationToken) where T : CborBase
     {
-        Result queryResult = await localStateQuery.QueryAsync(null, RawQueries.GetUtxoByAddress(addresses), default);
-        byte[] rawBytes = await ExtractRawBytesAsync(queryResult);
-        return await DeserializeResponseAsync<UtxoByAddressResponse>(rawBytes);
+        // Release if already acquired, then acquire fresh state
+        if (localStateQuery.IsAcquired)
+        {
+            await localStateQuery.ReleaseAsync(cancellationToken);
+        }
+        await localStateQuery.AcquireAsync(null, cancellationToken); // null = volatile tip
+        
+        try
+        {
+            Result queryResult = await queryFunc();
+            byte[] rawBytes = ExtractRawBytes(queryResult);
+            
+            try
+            {
+                return CborSerializer.Deserialize<T>(rawBytes);
+            }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException($"{DeserializationError}: {ex.Message}", ex);
+            }
+        }
+        finally
+        {
+            await localStateQuery.ReleaseAsync(cancellationToken);
+        }
+    }
+
+
+    /// <summary>
+    /// Gets the current chain tip. Always re-acquires state to ensure fresh data.
+    /// </summary>
+    /// <param name="localStateQuery">The LocalStateQuery protocol instance</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>A task yielding the current tip</returns>
+    /// <exception cref="InvalidOperationException">Thrown when response extraction or deserialization fails</exception>
+    public static Task<Tip> GetTipAsync(this LocalStateQuery localStateQuery, CancellationToken cancellationToken = default)
+    {
+        return localStateQuery.ExecuteWithFreshStateAsync<Tip>(
+            async () => await localStateQuery.QueryAsync(RawQueries.GetTip, cancellationToken),
+            cancellationToken);
+    }
+
+    public static Task<CurrentEraQueryResponse> GetCurrentEraAsync(this LocalStateQuery localStateQuery, CancellationToken cancellationToken = default)
+    {
+        return localStateQuery.ExecuteWithFreshStateAsync<CurrentEraQueryResponse>(
+            async () => await localStateQuery.QueryAsync(RawQueries.GetCurrentEra, cancellationToken),
+            cancellationToken);
+    }
+
+    public static Task<CurrentProtocolParamsResponse> GetCurrentProtocolParamsAsync(this LocalStateQuery localStateQuery, CancellationToken cancellationToken = default)
+    {
+        return localStateQuery.ExecuteWithFreshStateAsync<CurrentProtocolParamsResponse>(
+            async () => await localStateQuery.QueryAsync(RawQueries.GetCurrentProtocolParams, cancellationToken),
+            cancellationToken);
+    }
+
+    /// <summary>
+    /// Gets UTxOs by address
+    /// </summary>
+    /// <param name="localStateQuery">The LocalStateQuery protocol instance</param>
+    /// <param name="addresses">List of addresses to query</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>A task yielding the UTxO response</returns>
+    /// <exception cref="InvalidOperationException">Thrown when response extraction or deserialization fails</exception>
+    public static Task<UtxoByAddressResponse> GetUtxosByAddressAsync(
+        this LocalStateQuery localStateQuery,
+        List<byte[]> addresses,
+        CancellationToken cancellationToken = default)
+    {
+        return localStateQuery.ExecuteWithFreshStateAsync<UtxoByAddressResponse>(
+            async () => await localStateQuery.QueryAsync(RawQueries.GetUtxoByAddress(addresses), cancellationToken),
+            cancellationToken);
     }
 
     /// <summary>
@@ -65,31 +102,33 @@ public static class LocalStateQueryExtension
     /// </summary>
     /// <param name="localStateQuery">The LocalStateQuery protocol instance</param>
     /// <param name="txIns">List of transaction inputs to query</param>
+    /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>A task yielding the UTxO response</returns>
     /// <exception cref="InvalidOperationException">Thrown when response extraction or deserialization fails</exception>
-    public static async Task<UtxoByAddressResponse> GetUtxosByTxInAsync(
+    public static Task<UtxoByAddressResponse> GetUtxosByTxInAsync(
         this LocalStateQuery localStateQuery,
-        List<TransactionInput> txIns)
+        List<TransactionInput> txIns,
+        CancellationToken cancellationToken = default)
     {
-        Result queryResult = await localStateQuery.QueryAsync(null, RawQueries.GetUtxoByTxIns(txIns), default);
-        byte[] rawBytes = await ExtractRawBytesAsync(queryResult);
-        return await DeserializeResponseAsync<UtxoByAddressResponse>(rawBytes);
+        return localStateQuery.ExecuteWithFreshStateAsync<UtxoByAddressResponse>(
+            async () => await localStateQuery.QueryAsync(RawQueries.GetUtxoByTxIns(txIns), cancellationToken),
+            cancellationToken);
     }
 
     /// <summary>
     /// Extracts raw bytes from a query result
     /// </summary>
     /// <param name="result">The query result to extract bytes from</param>
-    /// <returns>A task yielding the raw bytes</returns>
+    /// <returns>The raw bytes</returns>
     /// <exception cref="InvalidOperationException">Thrown when raw bytes extraction fails</exception>
-    private static Task<byte[]> ExtractRawBytesAsync(Result result)
+    private static byte[] ExtractRawBytes(Result result)
     {
         try
         {
             if (result.QueryResult.Value == null)
                 throw new InvalidOperationException($"{InvalidResponseError}: Result has no raw data");
 
-            return Task.FromResult(result.QueryResult.Value.ToArray());
+            return [.. result.QueryResult.Value];
         }
         catch (Exception ex) when (ex is not InvalidOperationException)
         {
@@ -97,22 +136,4 @@ public static class LocalStateQueryExtension
         }
     }
 
-    /// <summary>
-    /// Deserializes raw bytes to the specified type
-    /// </summary>
-    /// <typeparam name="T">The type to deserialize to</typeparam>
-    /// <param name="rawBytes">The raw bytes to deserialize</param>
-    /// <returns>A task yielding the deserialized object</returns>
-    /// <exception cref="InvalidOperationException">Thrown when deserialization fails</exception>
-    private static Task<T> DeserializeResponseAsync<T>(byte[] rawBytes) where T : CborBase
-    {
-        try
-        {
-            return Task.FromResult(CborSerializer.Deserialize<T>(rawBytes));
-        }
-        catch (Exception ex)
-        {
-            throw new InvalidOperationException($"{DeserializationError}: {ex.Message}", ex);
-        }
-    }
 }
