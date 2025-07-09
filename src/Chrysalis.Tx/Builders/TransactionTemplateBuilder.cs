@@ -392,8 +392,7 @@ public class TransactionTemplateBuilder<T>
         List<ResolvedInput> specifiedInputsUtxos,
         Dictionary<string, Dictionary<string, long>> mints)
     {
-        // FIX: Explicitly cast to decimal to resolve ambiguity
-        decimal requestedLovelace = requiredAmount.Sum(amount => (decimal)amount.Lovelace());
+        ulong requestedLovelace = requiredAmount.Aggregate(0UL, (sum, amount) => sum + amount.Lovelace());
         Dictionary<string, ulong> requestedAssets = [];
 
         // Extract requested assets
@@ -405,8 +404,8 @@ public class TransactionTemplateBuilder<T>
             }
         }
 
-        // Process specified inputs - FIX: Explicitly cast to long
-        long specifiedInputsLovelace = specifiedInputsUtxos.Sum(utxo => (long)utxo.Output.Amount().Lovelace());
+        // Process specified inputs - use ulong directly
+        ulong specifiedInputsLovelace = specifiedInputsUtxos.Aggregate(0UL, (sum, utxo) => sum + utxo.Output.Amount().Lovelace());
         Dictionary<string, ulong> specifiedInputsAssets = [];
 
         foreach (ResolvedInput utxo in specifiedInputsUtxos)
@@ -429,7 +428,7 @@ public class TransactionTemplateBuilder<T>
         }
 
         // Adjust requirements based on specified inputs and mints
-        long adjustedLovelace = Math.Max(0, (long)(requestedLovelace - specifiedInputsLovelace));
+        ulong adjustedLovelace = requestedLovelace > specifiedInputsLovelace ? requestedLovelace - specifiedInputsLovelace : 0;
         Dictionary<string, ulong> adjustedAssets = AdjustAssetsForMintsAndInputs(requestedAssets, mintedAssets, specifiedInputsAssets);
 
         // Build required amounts for coin selection
@@ -437,12 +436,12 @@ public class TransactionTemplateBuilder<T>
 
         return new RequirementsResult
         {
-            OriginalRequestedLovelace = (ulong)requestedLovelace,
+            OriginalRequestedLovelace = requestedLovelace,
             OriginalRequestedAssets = new Dictionary<string, ulong>(requestedAssets),
             OriginalSpecifiedInputsAssets = specifiedInputsAssets,
             OriginalMintedAssets = mintedAssets,
             RequiredAmounts = requiredAmounts,
-            SpecifiedInputsLovelace = (ulong)specifiedInputsLovelace
+            SpecifiedInputsLovelace = specifiedInputsLovelace
         };
     }
 
@@ -516,10 +515,10 @@ public class TransactionTemplateBuilder<T>
         return adjusted;
     }
 
-    private static List<Value> BuildRequiredAmounts(long adjustedLovelace, Dictionary<string, ulong> adjustedAssets)
+    private static List<Value> BuildRequiredAmounts(ulong adjustedLovelace, Dictionary<string, ulong> adjustedAssets)
     {
         List<Value> requiredAmounts = [];
-        Lovelace lovelace = new((ulong)Math.Max(0, adjustedLovelace));
+        Lovelace lovelace = new(adjustedLovelace);
 
         if (adjustedAssets.Count == 0)
         {
