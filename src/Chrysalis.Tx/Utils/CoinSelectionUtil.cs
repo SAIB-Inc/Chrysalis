@@ -22,7 +22,7 @@ public static class CoinSelectionUtil
             throw new ArgumentException("Requested amount must be greater than zero", nameof(requestedAmount));
 
         ulong requestedLovelace = 0;
-        Dictionary<string, decimal> requiredAssets = [];
+        Dictionary<string, ulong> requiredAssets = [];
         bool isLovelaceOnlyRequest = true;
 
         foreach (Value value in requestedAmount)
@@ -47,7 +47,7 @@ public static class CoinSelectionUtil
             bool isLovelaceOnly = !(utxo.Output.Amount() is LovelaceWithMultiAsset);
 
             int assetsCovered = 0;
-            Dictionary<string, decimal> utxoAssets = [];
+            Dictionary<string, ulong> utxoAssets = [];
 
             if (!isLovelaceOnly)
             {
@@ -119,8 +119,8 @@ public static class CoinSelectionUtil
                 {
                     if (requiredAssets.ContainsKey(asset.Key))
                     {
-                        requiredAssets[asset.Key] -= asset.Value;
-                        if (requiredAssets[asset.Key] <= 0)
+                        requiredAssets[asset.Key] = requiredAssets[asset.Key] >= asset.Value ? requiredAssets[asset.Key] - asset.Value : 0;
+                        if (requiredAssets[asset.Key] == 0)
                         {
                             requiredAssets.Remove(asset.Key);
                         }
@@ -153,7 +153,7 @@ public static class CoinSelectionUtil
 
     private static void ExtractAssets(
         MultiAssetOutput multiAsset,
-        Dictionary<string, decimal> assetDict)
+        Dictionary<string, ulong> assetDict)
     {
         if (multiAsset == null || multiAsset.Value == null)
             return;
@@ -184,9 +184,9 @@ public static class CoinSelectionUtil
     List<ResolvedInput> selectedUtxos,
     List<Value> requestedAmounts)
     {
-        // UPDATED: Use custom comparer for all byte array dictionaries
-        var selectedAssetsByPolicy = new Dictionary<byte[], Dictionary<byte[], decimal>>(ByteArrayEqualityComparer.Instance);
-        var requestedAssetsByPolicy = new Dictionary<byte[], Dictionary<byte[], decimal>>(ByteArrayEqualityComparer.Instance);
+        // UPDATED: Use custom comparer for all byte array dictionaries and ulong for consistency
+        var selectedAssetsByPolicy = new Dictionary<byte[], Dictionary<byte[], ulong>>(ByteArrayEqualityComparer.Instance);
+        var requestedAssetsByPolicy = new Dictionary<byte[], Dictionary<byte[], ulong>>(ByteArrayEqualityComparer.Instance);
 
         // Process selected UTXOs
         foreach (var utxo in selectedUtxos)
@@ -202,13 +202,13 @@ public static class CoinSelectionUtil
                     // AFTER: Use custom comparer and TryGetValue
                     if (!selectedAssetsByPolicy.TryGetValue(policyEntry.Key, out var selectedAssets))
                     {
-                        selectedAssets = new Dictionary<byte[], decimal>(ByteArrayEqualityComparer.Instance);
+                        selectedAssets = new Dictionary<byte[], ulong>(ByteArrayEqualityComparer.Instance);
                         selectedAssetsByPolicy[policyEntry.Key] = selectedAssets;
                     }
 
                     foreach (var assetEntry in policyEntry.Value.Value)
                     {
-                        decimal amount = assetEntry.Value;
+                        ulong amount = assetEntry.Value;
                         if (selectedAssets.TryGetValue(assetEntry.Key, out var existing))
                         {
                             selectedAssets[assetEntry.Key] = existing + amount;
@@ -234,13 +234,13 @@ public static class CoinSelectionUtil
                 {
                     if (!requestedAssetsByPolicy.TryGetValue(policyEntry.Key, out var requestedAssets))
                     {
-                        requestedAssets = new Dictionary<byte[], decimal>(ByteArrayEqualityComparer.Instance);
+                        requestedAssets = new Dictionary<byte[], ulong>(ByteArrayEqualityComparer.Instance);
                         requestedAssetsByPolicy[policyEntry.Key] = requestedAssets;
                     }
 
                     foreach (var assetEntry in policyEntry.Value.Value)
                     {
-                        decimal amount = assetEntry.Value;
+                        ulong amount = assetEntry.Value;
                         if (requestedAssets.TryGetValue(assetEntry.Key, out var existing))
                         {
                             requestedAssets[assetEntry.Key] = existing + amount;
@@ -264,7 +264,7 @@ public static class CoinSelectionUtil
 
             foreach (var (assetName, selectedAmount) in selectedAssets)
             {
-                decimal requestedAmount = 0;
+                ulong requestedAmount = 0;
 
                 // BEFORE: Would loop through all entries looking for matches
                 // AFTER: Direct lookup with custom comparer
@@ -274,10 +274,10 @@ public static class CoinSelectionUtil
                     requestedAmount = requested;
                 }
 
-                decimal change = selectedAmount - requestedAmount;
-                if (change > 0)
+                if (selectedAmount > requestedAmount)
                 {
-                    assetChanges[assetName] = (ulong)change;
+                    ulong change = selectedAmount - requestedAmount;
+                    assetChanges[assetName] = change;
                     hasChange = true;
                 }
             }
