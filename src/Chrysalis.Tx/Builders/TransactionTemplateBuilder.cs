@@ -149,7 +149,7 @@ public class TransactionTemplateBuilder<T>
         ProcessMints(param, context);
 
         ulong feeBuffer = 5000000;
-        List<Value> requiredAmount = [new Lovelace(feeBuffer)];
+        List<Value> requiredAmount = [];
         int changeIndex = 0;
         ProcessOutputs(param, context, parties, requiredAmount, ref changeIndex, fee);
 
@@ -164,6 +164,7 @@ public class TransactionTemplateBuilder<T>
             utxos,
             requiredAmount,
             specifiedInputsUtxos,
+            feeBuffer,
             context
         );
 
@@ -373,11 +374,12 @@ public class TransactionTemplateBuilder<T>
         List<ResolvedInput> utxos,
         List<Value> requiredAmount,
         List<ResolvedInput> specifiedInputsUtxos,
+        ulong feeBuffer,
         BuildContext context
     )
     {
         RequirementsResult requirements = CalculateRequirements(requiredAmount, specifiedInputsUtxos, context.Mints);
-
+        requirements.RequiredAmounts.Add(new Lovelace(feeBuffer));
         // Step 2: Perform coin selection
         CoinSelectionResult selection = CoinSelectionUtil.LargestFirstAlgorithm(utxos, requirements.RequiredAmounts);
 
@@ -489,7 +491,9 @@ public class TransactionTemplateBuilder<T>
             {
                 if (adjusted.TryGetValue(assetKey, out ulong requested))
                 {
-                    adjusted[assetKey] = Math.Max(0, requested - mintAmount);
+                    adjusted[assetKey] = requested > mintAmount
+                        ? requested - mintAmount
+                        : 0UL;
                     if (adjusted[assetKey] <= 0)
                         adjusted.Remove(assetKey);
                 }
@@ -506,7 +510,9 @@ public class TransactionTemplateBuilder<T>
         {
             if (adjusted.TryGetValue(assetKey, out ulong required))
             {
-                adjusted[assetKey] = Math.Max(0, required - inputAmount);
+                adjusted[assetKey] = required > inputAmount
+                    ? required - inputAmount
+                    : 0UL;
                 if (adjusted[assetKey] <= 0)
                     adjusted.Remove(assetKey);
             }
