@@ -132,7 +132,7 @@ public class Kupo(string kupoEndpoint, NetworkType networkType = NetworkType.Pre
 
     private async Task<List<KupoMatch>> FetchMatchesForAddress(string address)
     {
-        HttpResponseMessage response = await _httpClient.GetAsync($"matches/{address}?unspent");
+        HttpResponseMessage response = await _httpClient.GetAsync($"matches/{address}?unspent&resolve_hashes");
 
         if (!response.IsSuccessStatusCode)
         {

@@ -9,7 +9,108 @@ using Chrysalis.Tx.Providers;
 using Chrysalis.Wallet.Models.Enums;
 using Chrysalis.Wallet.Models.Keys;
 using Chrysalis.Wallet.Words;
+using Chrysalis.Cbor.Extensions.Cardano.Core.Transaction;
 
+// Test Kupo provider
+Console.WriteLine("=== Testing Kupo Provider ===\n");
+
+var kupo = new Kupo("https://kupo1vqn9ql3n5srn2me0nqz.preview-v2.kupo-m1.demeter.run", NetworkType.Preview);
+var testAddress = "addr_test1wruqu6yj05wwpf2gew53w4t354rgghhuud83wf8qa4sgc5gnfwaxc";
+
+Console.WriteLine($"Network: {kupo.NetworkType}");
+Console.WriteLine($"Test address: {testAddress}\n");
+
+try
+{
+    // Test protocol parameters
+    Console.WriteLine("1. Testing GetParametersAsync...");
+    var protocolParams = await kupo.GetParametersAsync();
+    Console.WriteLine($"✅ Protocol params retrieved:");
+    Console.WriteLine($"   - MinFeeA: {protocolParams.MinFeeA}");
+    Console.WriteLine($"   - MinFeeB: {protocolParams.MinFeeB}");
+    Console.WriteLine($"   - MaxTxSize: {protocolParams.MaxTransactionSize}");
+    Console.WriteLine($"   - KeyDeposit: {protocolParams.KeyDeposit}");
+    Console.WriteLine($"   - PoolDeposit: {protocolParams.PoolDeposit}\n");
+
+    // Test UTXOs
+    Console.WriteLine("2. Testing GetUtxosAsync...");
+    var utxos = await kupo.GetUtxosAsync([testAddress]);
+    Console.WriteLine($"✅ Found {utxos.Count} UTXOs:");
+
+    foreach (var (utxo, index) in utxos.Select((u, i) => (u, i)))
+    {
+        Console.WriteLine($"\n   UTXO #{index + 1}:");
+        Console.WriteLine($"   - TX: {Convert.ToHexString(utxo.Outref.TransactionId).ToLower()}#{utxo.Outref.Index}");
+
+        var value = utxo.Output.Amount();
+        if (value is Lovelace lovelace)
+        {
+            Console.WriteLine($"   - Value: {lovelace.Value:N0} lovelace");
+        }
+        else if (value is LovelaceWithMultiAsset multiAsset)
+        {
+            Console.WriteLine($"   - Value: {multiAsset.LovelaceValue.Value:N0} lovelace + assets");
+            if (multiAsset.MultiAsset?.Value != null)
+            {
+                foreach (var (policyId, assets) in multiAsset.MultiAsset.Value)
+                {
+                    Console.WriteLine($"     Policy: {Convert.ToHexString(policyId).ToLower()}");
+                    foreach (var (assetName, amount) in assets.Value)
+                    {
+                        var nameStr = assetName.Length > 0 ? Convert.ToHexString(assetName) : "(empty)";
+                        Console.WriteLine($"       {nameStr}: {amount}");
+                    }
+                }
+            }
+        }
+
+        if (utxo.Output.DatumOption() != null)
+        {
+            Console.WriteLine($"   - Datum: {utxo.Output.DatumOption()?.GetType().Name}");
+        }
+
+        if (utxo.Output.ScriptRef() != null)
+        {
+            Console.WriteLine($"   - Script Reference: Present");
+        }
+    }
+
+    // Test methods that should throw NotImplementedException
+    Console.WriteLine("\n3. Testing unsupported methods...");
+
+    try
+    {
+        await kupo.SubmitTransactionAsync(null!);
+    }
+    catch (NotImplementedException ex)
+    {
+        Console.WriteLine($"✅ SubmitTransactionAsync correctly throws: {ex.Message}");
+    }
+
+    try
+    {
+        await kupo.GetTransactionMetadataAsync("abc123");
+    }
+    catch (NotImplementedException ex)
+    {
+        Console.WriteLine($"✅ GetTransactionMetadataAsync correctly throws: {ex.Message}");
+    }
+
+    Console.WriteLine("\n✅ All tests passed!");
+}
+catch (Exception ex)
+{
+    Console.WriteLine($"❌ Error: {ex.Message}");
+    if (ex.InnerException != null)
+    {
+        Console.WriteLine($"   Inner: {ex.InnerException.Message}");
+    }
+}
+
+return;
+
+// Comment out original metadata test
+/*
 // Test transaction metadata retrieval
 var blockfrost = new Blockfrost("previewajMhMPYerz9Pd3GsqjayLwP5mgnNnZCC", NetworkType.Preview);
 
@@ -137,3 +238,4 @@ static void DisplayMetadatum(TransactionMetadatum metadatum, string indent = "")
             break;
     }
 }
+*/
