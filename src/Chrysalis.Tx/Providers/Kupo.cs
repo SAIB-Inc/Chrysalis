@@ -11,6 +11,7 @@ using Chrysalis.Cbor.Types;
 using Chrysalis.Cbor.Types.Cardano.Core.Header;
 using Chrysalis.Cbor.Types.Cardano.Core.Protocol;
 using Chrysalis.Cbor.Types.Cardano.Core.Governance;
+using Chrysalis.Cbor.Serialization;
 
 namespace Chrysalis.Tx.Providers;
 
@@ -220,10 +221,24 @@ public class Kupo(string kupoEndpoint, NetworkType networkType = NetworkType.Pre
         return null;
     }
 
-    private static CborEncodedValue? CreateScriptReference(KupoScript? script) =>
-        !string.IsNullOrEmpty(script?.Script)
-            ? new CborEncodedValue(HexStringCache.FromHexString(script.Script))
-            : null;
+    private static CborEncodedValue? CreateScriptReference(KupoScript? script)
+    {
+        if (string.IsNullOrEmpty(script?.Script) || string.IsNullOrEmpty(script?.Language))
+            return null;
+
+        byte[] scriptBytes = HexStringCache.FromHexString(script.Script);
+        
+        Script scriptObj = script.Language switch
+        {
+            "native" => new MultiSigScript(new Value0(0), CborSerializer.Deserialize<NativeScript>(scriptBytes)),
+            "plutus:v1" => new PlutusV1Script(new Value1(1), scriptBytes),
+            "plutus:v2" => new PlutusV2Script(new Value2(2), scriptBytes),
+            "plutus:v3" => new PlutusV3Script(new Value3(3), scriptBytes),
+            _ => throw new NotSupportedException($"Unsupported script language: {script.Language}")
+        };
+
+        return new CborEncodedValue(CborSerializer.Serialize(scriptObj));
+    }
 
     private static Address CreateAddress(string bech32Address) =>
         new(Wallet.Models.Addresses.Address.FromBech32(bech32Address).ToBytes());
