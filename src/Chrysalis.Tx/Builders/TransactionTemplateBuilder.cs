@@ -168,10 +168,23 @@ public class TransactionTemplateBuilder<T>
             context
         );
 
-        if (coinSelectionResult.Inputs.Any() && context.IsSmartContractTx)
+        // Create a prioritized list of inputs for collateral selection:
+        // 1. First, the selected inputs from coin selection
+        // 2. Then, remaining UTXOs not used in coin selection
+        List<ResolvedInput> prioritizedInputsForCollateral = [.. coinSelectionResult.Inputs];
+        
+        if (context.IsSmartContractTx)
         {
-            context.TxBuilder.AddCollateral(coinSelectionResult.Inputs[0].Outref);
-            context.TxBuilder.SetCollateralReturn(coinSelectionResult.Inputs[0].Output);
+            // Add remaining UTXOs that weren't selected
+            HashSet<(byte[] TransactionId, ulong Index)> selectedInputIds = coinSelectionResult.Inputs
+                .Select(i => (i.Outref.TransactionId, i.Outref.Index))
+                .ToHashSet(new TransactionInputEqualityComparer());
+
+            IOrderedEnumerable<ResolvedInput> remainingUtxos = utxos
+                .Where(u => !selectedInputIds.Contains((u.Outref.TransactionId, u.Outref.Index)))
+                .OrderByDescending(u => u.Output.Amount().Lovelace());
+                
+            prioritizedInputsForCollateral.AddRange(remainingUtxos);
         }
 
         ulong totalLovelaceChange = coinSelectionResult.LovelaceChange + feeBuffer;
@@ -324,7 +337,7 @@ public class TransactionTemplateBuilder<T>
             context.TxBuilder.Evaluate(allUtxos, networkType);
         }
 
-        return context.TxBuilder.CalculateFee(scripts, fee, 1).Build();
+        return context.TxBuilder.CalculateFee(scripts, fee, 1, prioritizedInputsForCollateral).Build();
     }
 
     public TransactionTemplate<T> Build(bool Eval = true)

@@ -18,7 +18,7 @@ namespace Chrysalis.Tx.Extensions;
 
 public static class TransactionBuilderExtensions
 {
-    public static TransactionBuilder CalculateFee(this TransactionBuilder builder, List<Script> scripts, ulong defaultFee = 0, int mockWitnessFee = 1)
+    public static TransactionBuilder CalculateFee(this TransactionBuilder builder, List<Script> scripts, ulong defaultFee = 0, int mockWitnessFee = 1, List<ResolvedInput>? availableInputs = null)
     {
 
         ulong scriptFee = 0;
@@ -32,12 +32,12 @@ public static class TransactionBuilderExtensions
                 throw new ArgumentNullException(nameof(scripts), "Missing script");
             }
 
-            var usedLanguage = builder.pparams!.CostModelsForScriptLanguage!.Value[scripts[0].Version() - 1];
-            var costModel = new CostMdls(new Dictionary<int, CborDefList<long>>(){
+            CborDefList<long> usedLanguage = builder.pparams!.CostModelsForScriptLanguage!.Value[scripts[0].Version() - 1];
+            CostMdls costModel = new(new Dictionary<int, CborDefList<long>>(){
                  { scripts[0].Version() - 1, usedLanguage }
             });
-            var costModelBytes = CborSerializer.Serialize(costModel);
-            var scriptDataHash = DataHashUtil.CalculateScriptDataHash(builder.witnessSet.Redeemers, builder.witnessSet.PlutusDataSet?.GetValue() as PlutusList, costModelBytes);
+            byte[] costModelBytes = CborSerializer.Serialize(costModel);
+            byte[] scriptDataHash = DataHashUtil.CalculateScriptDataHash(builder.witnessSet.Redeemers, builder.witnessSet.PlutusDataSet?.GetValue() as PlutusList, costModelBytes);
             builder.SetScriptDataHash(scriptDataHash);
 
             ulong scriptCostPerByte = builder.pparams!.MinFeeRefScriptCostPerByte!.Numerator / builder.pparams.MinFeeRefScriptCostPerByte!.Denominator;
@@ -50,46 +50,181 @@ public static class TransactionBuilderExtensions
         }
 
         builder.SetFee(defaultFee == 0 ? 2000000UL : defaultFee);
-        // fee and change calculation
-        Transaction draftTx = builder.Build();
-        var draftTxCborBytes = CborSerializer.Serialize(draftTx);
-        ulong draftTxCborLength = (ulong)draftTxCborBytes.Length;
-
-        var fee = FeeUtil.CalculateFeeWithWitness(draftTxCborLength, builder.pparams!.MinFeeA!.Value, builder!.pparams.MinFeeB!.Value, mockWitnessFee) + scriptFee + scriptExecutionFee;
-
-        if (builder.body.TotalCollateral is not null)
+        
+        // Recursive fee and collateral calculation
+        // Since adding collateral inputs changes transaction size, which changes fee, which changes collateral requirements
+        ulong previousFee = 0;
+        ulong fee = 0;
+        int iterations = 0;
+        int maxIterations = 10;
+        
+        while (iterations < maxIterations)
         {
-            var totalCollateral = FeeUtil.CalculateRequiredCollateral(fee, builder.pparams!.CollateralPercentage!.Value);
-            builder.SetTotalCollateral(totalCollateral);
-            Value collateralInputUtxo = builder.body.CollateralReturn!.Amount();
-
-            Value collateralReturnValue = collateralInputUtxo switch
+            // Calculate current fee based on current transaction state
+            Transaction draftTx = builder.Build();
+            byte[] draftTxCborBytes = CborSerializer.Serialize(draftTx);
+            ulong draftTxCborLength = (ulong)draftTxCborBytes.Length;
+            
+            fee = FeeUtil.CalculateFeeWithWitness(draftTxCborLength, builder.pparams!.MinFeeA!.Value, builder!.pparams.MinFeeB!.Value, mockWitnessFee) + scriptFee + scriptExecutionFee;
+            
+            // If fee hasn't changed significantly, we're done
+            if (Math.Abs((long)fee - (long)previousFee) < 1000) // 1000 lovelace tolerance
             {
-                Lovelace collateralInputLovelace => new Lovelace(collateralInputLovelace.Value - totalCollateral),
-                LovelaceWithMultiAsset collateralInputMultiAsset => new LovelaceWithMultiAsset(
-                    new Lovelace(collateralInputMultiAsset.LovelaceValue.Value - totalCollateral),
-                    collateralInputMultiAsset.MultiAsset
-                ),
-                _ => throw new Exception("Invalid collateral return type")
-            };
-
-            TransactionOutput collateralReturnOutput = builder.body.CollateralReturn switch
+                break;
+            }
+            
+            previousFee = fee;
+            builder.SetFee(fee);
+            
+            // Handle collateral if needed
+            if (builder.body.TotalCollateral is not null && availableInputs != null && availableInputs.Count > 0)
             {
-                AlonzoTransactionOutput alonzo => new AlonzoTransactionOutput(
-                    alonzo.Address,
-                    collateralReturnValue,
-                    alonzo.DatumHash
-                ),
-                PostAlonzoTransactionOutput postAlonzo => new PostAlonzoTransactionOutput(
-                    postAlonzo.Address!,
-                    collateralReturnValue,
-                    postAlonzo.Datum,
-                    postAlonzo.ScriptRef
-                ),
-                _ => throw new Exception("Invalid transaction output type")
-            };
+                ulong totalCollateral = FeeUtil.CalculateRequiredCollateral(fee, builder.pparams!.CollateralPercentage!.Value);
+                builder.SetTotalCollateral(totalCollateral);
+                
+                // Clear any existing collateral settings to start fresh
+                builder.body = builder.body with { Collateral = null, CollateralReturn = null };
 
-            builder.SetCollateralReturn(collateralReturnOutput);
+                // Estimate minimum ADA needed for return output
+                ResolvedInput firstInput = availableInputs[0];
+                TransactionOutput dummyReturnOutput = firstInput.Output;
+                
+                byte[] dummyReturnOutputBytes = CborSerializer.Serialize(dummyReturnOutput);
+                ulong estimatedMinLovelaceForReturn = FeeUtil.CalculateMinimumLovelace(
+                    (ulong)builder.pparams!.AdaPerUTxOByte!, 
+                    dummyReturnOutputBytes
+                );
+
+                // Add buffer to ensure we have enough for return (50% buffer should be sufficient)
+                ulong totalCollateralNeeded = totalCollateral + estimatedMinLovelaceForReturn + (estimatedMinLovelaceForReturn / 2);
+
+                // Use coin selection to get sufficient collateral with buffer
+                List<Value> collateralRequirement = [new Lovelace(totalCollateralNeeded)];
+                int maxCollateralInputs = (int)(builder.pparams!.MaxCollateralInputs ?? 3);
+                
+                CoinSelectionResult collateralSelection;
+                try
+                {
+                    collateralSelection = CoinSelectionUtil.LargestFirstAlgorithm(
+                        availableInputs,
+                        collateralRequirement,
+                        maxCollateralInputs
+                    );
+                }
+                catch (InvalidOperationException)
+                {
+                    // Fallback: try with just the required collateral amount
+                    collateralSelection = CoinSelectionUtil.LargestFirstAlgorithm(
+                        availableInputs,
+                        [new Lovelace(totalCollateral)],
+                        maxCollateralInputs
+                    );
+                }
+
+                List<ResolvedInput> collateralInputs = collateralSelection.Inputs;
+                
+                // Add all selected collateral inputs to the builder
+                foreach (ResolvedInput input in collateralInputs)
+                {
+                    builder.AddCollateral(input.Outref);
+                }
+
+                // Calculate totals
+                ulong totalCollateralInputLovelace = (ulong)collateralInputs.Sum(i => (long)i.Output.Amount().Lovelace());
+                
+                if (totalCollateralInputLovelace < totalCollateral)
+                {
+                    throw new InvalidOperationException(
+                        $"Selected collateral inputs insufficient. Need {totalCollateral} lovelace but only have {totalCollateralInputLovelace} lovelace."
+                    );
+                }
+
+                ulong returnLovelace = totalCollateralInputLovelace - totalCollateral;
+
+                // Aggregate all assets from collateral inputs
+                Dictionary<byte[], TokenBundleOutput> aggregatedAssets = new(ByteArrayEqualityComparer.Instance);
+                foreach (ResolvedInput input in collateralInputs)
+                {
+                    if (input.Output.Amount() is LovelaceWithMultiAsset multiAsset && multiAsset.MultiAsset?.Value != null)
+                    {
+                        foreach ((byte[] policyId, TokenBundleOutput tokenBundle) in multiAsset.MultiAsset.Value)
+                        {
+                            if (!aggregatedAssets.TryGetValue(policyId, out TokenBundleOutput? existingBundle))
+                            {
+                                aggregatedAssets[policyId] = tokenBundle;
+                            }
+                            else
+                            {
+                                // Merge token bundles
+                                Dictionary<byte[], ulong> mergedTokens = new(ByteArrayEqualityComparer.Instance);
+                                foreach ((byte[] name, ulong amount) in existingBundle.Value)
+                                {
+                                    mergedTokens[name] = amount;
+                                }
+                                foreach ((byte[] name, ulong amount) in tokenBundle.Value)
+                                {
+                                    mergedTokens[name] = mergedTokens.TryGetValue(name, out ulong existing) ? existing + amount : amount;
+                                }
+                                aggregatedAssets[policyId] = new TokenBundleOutput(mergedTokens);
+                            }
+                        }
+                    }
+                }
+                
+                // Build return value
+                Value returnValue;
+                if (aggregatedAssets.Count > 0)
+                {
+                    returnValue = new LovelaceWithMultiAsset(
+                        new Lovelace(returnLovelace),
+                        new MultiAssetOutput(aggregatedAssets)
+                    );
+                }
+                else
+                {
+                    returnValue = new Lovelace(returnLovelace);
+                }
+
+                // Create return output using first collateral's address
+                ResolvedInput firstCollateral = collateralInputs[0];
+                TransactionOutput returnOutput = firstCollateral.Output switch
+                {
+                    AlonzoTransactionOutput alonzo => new AlonzoTransactionOutput(
+                        alonzo.Address,
+                        returnValue,
+                        null
+                    ),
+                    PostAlonzoTransactionOutput postAlonzo => new AlonzoTransactionOutput(
+                        postAlonzo.Address!,
+                        returnValue,
+                        null
+                    ),
+                    _ => throw new Exception("Invalid transaction output type")
+                };
+
+                // Final verification of minimum ADA requirement
+                byte[] returnOutputBytes = CborSerializer.Serialize(returnOutput);
+                ulong minLovelaceRequired = FeeUtil.CalculateMinimumLovelace(
+                    (ulong)builder.pparams!.AdaPerUTxOByte!, 
+                    returnOutputBytes
+                );
+                
+                if (returnLovelace < minLovelaceRequired)
+                {
+                    throw new InvalidOperationException(
+                        $"Collateral return output ({returnLovelace} lovelace) is below minimum ADA requirement ({minLovelaceRequired} lovelace). Available inputs cannot provide sufficient collateral with adequate return."
+                    );
+                }
+                
+                builder.SetCollateralReturn(returnOutput);
+            }
+            
+            iterations++;
+        }
+        
+        if (iterations >= maxIterations)
+        {
+            throw new InvalidOperationException("Fee calculation did not converge after maximum iterations.");
         }
 
         if (defaultFee > 0)
@@ -191,20 +326,20 @@ public static class TransactionBuilderExtensions
     public static TransactionBuilder Evaluate(this TransactionBuilder builder, List<ResolvedInput> utxos, NetworkType networkType)
     {
         CborDefList<ResolvedInput> utxoCbor = new(utxos);
-        var utxoCborBytes = CborSerializer.Serialize<CborMaybeIndefList<ResolvedInput>>(utxoCbor);
+        byte[] utxoCborBytes = CborSerializer.Serialize<CborMaybeIndefList<ResolvedInput>>(utxoCbor);
         Transaction transaction = builder.Build();
-        var txCborBytes = CborSerializer.Serialize(transaction);
-        var evalResult = Evaluator.EvaluateTx(txCborBytes, utxoCborBytes, networkType);
-        var previousRedeemers = builder.witnessSet.Redeemers;
+        byte[] txCborBytes = CborSerializer.Serialize(transaction);
+        IReadOnlyList<Plutus.VM.Models.EvaluationResult> evalResult = Evaluator.EvaluateTx(txCborBytes, utxoCborBytes, networkType);
+        Redeemers? previousRedeemers = builder.witnessSet.Redeemers;
 
 
         switch (previousRedeemers)
         {
             case RedeemerList redeemersList:
                 List<RedeemerEntry> updatedRedeemersList = [];
-                foreach (var redeemer in redeemersList.Value)
+                foreach (RedeemerEntry redeemer in redeemersList.Value)
                 {
-                    foreach (var result in evalResult)
+                    foreach (Plutus.VM.Models.EvaluationResult result in evalResult)
                     {
                         if (redeemer.Tag == (int)result.RedeemerTag && redeemer.Index == result.Index)
                         {
@@ -217,9 +352,9 @@ public static class TransactionBuilderExtensions
                 break;
             case RedeemerMap redeemersMap:
                 Dictionary<RedeemerKey, RedeemerValue> updatedRedeemersMap = [];
-                foreach (var kvp in redeemersMap.Value)
+                foreach (KeyValuePair<RedeemerKey, RedeemerValue> kvp in redeemersMap.Value)
                 {
-                    foreach (var result in evalResult)
+                    foreach (Plutus.VM.Models.EvaluationResult result in evalResult)
                     {
                         if (kvp.Key.Tag == (int)result.RedeemerTag && kvp.Key.Index == result.Index)
                         {
