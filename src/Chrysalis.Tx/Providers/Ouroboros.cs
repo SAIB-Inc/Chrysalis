@@ -15,18 +15,26 @@ using Chrysalis.Cbor.Types.Cardano.Core;
 using Chrysalis.Wallet.Models.Enums;
 
 namespace Chrysalis.Tx.Providers;
+
 public class Ouroboros(string socketPath, ulong networkMagic = 2) : ICardanoDataProvider
 {
     private readonly string _socketPath = socketPath ?? throw new ArgumentNullException(nameof(socketPath));
     private readonly ulong _networkMagic = networkMagic;
 
-    public NetworkType NetworkType => 
+    public NetworkType NetworkType =>
         _networkMagic switch
         {
             764824073 => NetworkType.Mainnet,
             1 => NetworkType.Preprod,
-            2 => NetworkType.Preview,
             _ => NetworkType.Preview
+        };
+
+    public static ulong GetNetworkMagic(NetworkType networkType) =>
+        networkType switch
+        {
+            NetworkType.Mainnet => 764824073UL,
+            NetworkType.Preprod => 1UL,
+            _ => 2UL
         };
 
     public async Task<ProtocolParams> GetParametersAsync()
