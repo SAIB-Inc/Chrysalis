@@ -37,10 +37,7 @@ jobs:
       working-directory: ./src/Chrysalis.Cbor.CodeGen
     
     - name: Set up Rust
-      uses: actions-rs/toolchain@v1
-      with:
-        toolchain: stable
-        override: true
+      uses: dtolnay/rust-toolchain@stable
     
     - name: Make build script executable
       run: chmod +x ./src/Chrysalis.Plutus/build-rs.sh

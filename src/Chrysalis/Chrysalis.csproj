@@ -20,10 +20,10 @@
       <PackagePath>runtimes/osx-arm64/native/libplutus_vm_dotnet_rs.dylib</PackagePath>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
-    <Content Include="..\Chrysalis.Plutus\lib\libpallas_dotnet_rs.so" Condition="Exists('..\Chrysalis.Plutus\lib\libpallas_dotnet_rs.so')">
+    <Content Include="..\Chrysalis.Plutus\lib\libplutus_vm_dotnet_rs.so" Condition="Exists('..\Chrysalis.Plutus\lib\libplutus_vm_dotnet_rs.so')">
       <Pack>true</Pack>
       <PackageCopyToOutput>true</PackageCopyToOutput>
-      <PackagePath>runtimes/linux-x64/native/libpallas_dotnet_rs.so</PackagePath>
+      <PackagePath>runtimes/linux-x64/native/libplutus_vm_dotnet_rs.so</PackagePath>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
   </ItemGroup>
