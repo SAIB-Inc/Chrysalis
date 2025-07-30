@@ -42,6 +42,8 @@ public abstract partial record CborBase
 
     public int ConstrIndex { get; set; } = 0;
 
+    public bool IsIndefinite { get; set; }
+
     public static CborBase Read(ReadOnlyMemory<byte> data)
     {
         throw new NotImplementedException();
