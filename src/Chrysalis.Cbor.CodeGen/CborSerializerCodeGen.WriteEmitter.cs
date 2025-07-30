@@ -182,6 +182,7 @@ public sealed partial class CborSerializerCodeGen
                     throw new InvalidOperationException($"List item type is null for property {metadata.PropertyName}");
                 }
 
+                // Check both attribute and runtime flag
                 if (metadata.IsIndefinite)
                 {
                     sb.AppendLine($"writer.WriteStartArray(null);");
@@ -343,14 +344,16 @@ public sealed partial class CborSerializerCodeGen
             EmitPropertyCountWriter(sb, metadata);
             if (!(metadata.SerializationType == SerializationType.Constr && (metadata.CborIndex is null || metadata.CborIndex < 0)))
             {
-                if (metadata.IsIndefinite)
-                {
-                    sb.AppendLine($"writer.WriteStartArray(null);");
-                }
-                else
-                {
-                    sb.AppendLine($"writer.WriteStartArray(propCount);");
-                }
+                // Use indefinite if either attribute OR runtime flag is set
+                sb.AppendLine($"bool useIndefinite = {(metadata.IsIndefinite ? "true" : "false")} || data.IsIndefinite;");
+                sb.AppendLine("if (useIndefinite)");
+                sb.AppendLine("{");
+                sb.AppendLine("    writer.WriteStartArray(null);");
+                sb.AppendLine("}");
+                sb.AppendLine("else");
+                sb.AppendLine("{");
+                sb.AppendLine("    writer.WriteStartArray(propCount);");
+                sb.AppendLine("}");
             }
 
             foreach (SerializablePropertyMetadata prop in metadata.Properties)

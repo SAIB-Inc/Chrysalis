@@ -317,10 +317,14 @@ public sealed partial class CborSerializerCodeGen
         public static StringBuilder EmitCustomListReader(StringBuilder sb, SerializableTypeMetadata metadata, int? constrIndex = null)
         {
             Dictionary<string, string> propMapping = [];
+            bool detectIndefinite = false;
 
             if (!(metadata.SerializationType == SerializationType.Constr && (metadata.CborIndex is null || metadata.CborIndex < 0)))
             {
-                sb.AppendLine("reader.ReadStartArray();");
+                // Read the array and check if it's indefinite
+                sb.AppendLine("int? arrayLength = reader.ReadStartArray();");
+                sb.AppendLine("bool isIndefiniteArray = !arrayLength.HasValue;");
+                detectIndefinite = true;
             }
 
             foreach (SerializablePropertyMetadata prop in metadata.Properties)
@@ -349,6 +353,16 @@ public sealed partial class CborSerializerCodeGen
                 sb.AppendLine(string.Join(",\n", propStrings));
                 sb.AppendLine(");");
             }
+
+            // Set the IsIndefinite flag if we detected it
+            if (detectIndefinite)
+            {
+                sb.AppendLine("if (isIndefiniteArray)");
+                sb.AppendLine("{");
+                sb.AppendLine($"    result.IsIndefinite = true;");
+                sb.AppendLine("}");
+            }
+            
 
             EmitReaderValidationAndResult(sb, metadata, "result");
 

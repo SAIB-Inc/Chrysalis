@@ -13,7 +13,11 @@ public sealed partial class CborSerializerCodeGen
             bool isIntKey = metadata.Properties[0].PropertyKeyInt is not null;
 
             sb.AppendLine($"Dictionary<{(isIntKey ? "int" : "string")}, object> resultMap = [];");
-            sb.AppendLine($"reader.ReadStartMap();");
+            
+            // Read the map and check if it's indefinite
+            sb.AppendLine("int? mapLength = reader.ReadStartMap();");
+            sb.AppendLine("bool isIndefiniteMap = !mapLength.HasValue;");
+            
             sb.AppendLine("while (reader.PeekState() != CborReaderState.EndMap)");
             sb.AppendLine("{");
 
@@ -32,7 +36,9 @@ public sealed partial class CborSerializerCodeGen
 
             sb.AppendLine($"resultMap.Add(key, value);");
             sb.AppendLine("}");
-            sb.AppendLine($"reader.ReadEndMap();");
+            
+            // Read the end map marker
+            sb.AppendLine("reader.ReadEndMap();");
             sb.AppendLine($"{metadata.FullyQualifiedName} result = new {metadata.FullyQualifiedName}(");
 
             for (int i = 0; i < metadata.Properties.Count; i++)
@@ -45,6 +51,12 @@ public sealed partial class CborSerializerCodeGen
             }
 
             sb.AppendLine(");");
+            
+            // Set the IsIndefinite flag if we detected it
+            sb.AppendLine("if (isIndefiniteMap)");
+            sb.AppendLine("{");
+            sb.AppendLine("    result.IsIndefinite = true;");
+            sb.AppendLine("}");
 
             Emitter.EmitReaderValidationAndResult(sb, metadata, "result");
             return sb;
@@ -58,14 +70,16 @@ public sealed partial class CborSerializerCodeGen
             Emitter.EmitPropertyCountWriter(sb, metadata);
             bool isIntKey = metadata.Properties[0].PropertyKeyInt is not null;
 
-            if (metadata.IsIndefinite)
-            {
-                sb.AppendLine($"writer.WriteStartMap(null);");
-            }
-            else
-            {
-                sb.AppendLine($"writer.WriteStartMap(propCount);");
-            }
+            // Use indefinite if either attribute OR runtime flag is set
+            sb.AppendLine($"bool useIndefinite = {(metadata.IsIndefinite ? "true" : "false")} || data.IsIndefinite;");
+            sb.AppendLine("if (useIndefinite)");
+            sb.AppendLine("{");
+            sb.AppendLine("    writer.WriteStartMap(null);");
+            sb.AppendLine("}");
+            sb.AppendLine("else");
+            sb.AppendLine("{");
+            sb.AppendLine("    writer.WriteStartMap(propCount);");
+            sb.AppendLine("}");
 
             foreach (var prop in metadata.Properties)
             {
