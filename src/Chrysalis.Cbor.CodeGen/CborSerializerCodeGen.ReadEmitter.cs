@@ -148,7 +148,8 @@ public sealed partial class CborSerializerCodeGen
 
                 sb.AppendLine($"{metadata.ListItemTypeFullName} {propertyName}TempItem = default;");
                 sb.AppendLine($"List<{metadata.ListItemTypeFullName}> {propertyName}TempList = new();");
-                sb.AppendLine($"reader.ReadStartArray();");
+                sb.AppendLine($"int? {propertyName}ArrayLength = reader.ReadStartArray();");
+                sb.AppendLine($"bool {propertyName}IsIndefinite = !{propertyName}ArrayLength.HasValue;");
                 sb.AppendLine($"while (reader.PeekState() != CborReaderState.EndArray)");
                 sb.AppendLine("{");
 
@@ -174,6 +175,10 @@ public sealed partial class CborSerializerCodeGen
                 sb.AppendLine("}");
                 sb.AppendLine($"reader.ReadEndArray();");
                 sb.AppendLine($"{propertyName} = {propertyName}TempList;");
+                sb.AppendLine($"if ({propertyName}IsIndefinite)");
+                sb.AppendLine("{");
+                sb.AppendLine($"    Chrysalis.Cbor.Serialization.IndefiniteStateTracker.SetIndefinite({propertyName});");
+                sb.AppendLine("}");
 
                 return sb;
             }
@@ -188,7 +193,8 @@ public sealed partial class CborSerializerCodeGen
                 sb.AppendLine($"Dictionary<{metadata.MapKeyTypeFullName}, {metadata.MapValueTypeFullName}> {propertyName}TempMap = new();");
                 sb.AppendLine($"{metadata.MapKeyTypeFullName} {propertyName}TempKeyItem = default;");
                 sb.AppendLine($"{metadata.MapValueTypeFullName} {propertyName}TempValueItem = default;");
-                sb.AppendLine($"reader.ReadStartMap();");
+                sb.AppendLine($"int? {propertyName}MapLength = reader.ReadStartMap();");
+                sb.AppendLine($"bool {propertyName}IsIndefinite = !{propertyName}MapLength.HasValue;");
                 sb.AppendLine($"while (reader.PeekState() != CborReaderState.EndMap)");
                 sb.AppendLine("{");
 
@@ -234,6 +240,10 @@ public sealed partial class CborSerializerCodeGen
                 sb.AppendLine("}");
                 sb.AppendLine($"reader.ReadEndMap();");
                 sb.AppendLine($"{propertyName} = {propertyName}TempMap;");
+                sb.AppendLine($"if ({propertyName}IsIndefinite)");
+                sb.AppendLine("{");
+                sb.AppendLine($"    Chrysalis.Cbor.Serialization.IndefiniteStateTracker.SetIndefinite({propertyName});");
+                sb.AppendLine("}");
 
                 return sb;
             }
