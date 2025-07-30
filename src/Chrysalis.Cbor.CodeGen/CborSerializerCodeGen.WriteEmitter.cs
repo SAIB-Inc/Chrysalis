@@ -143,15 +143,17 @@ public sealed partial class CborSerializerCodeGen
                     throw new InvalidOperationException($"List item type is null for property {metadata.PropertyName}");
                 }
 
-                // Check both attribute and runtime flag
-                if (metadata.IsIndefinite)
-                {
-                    sb.AppendLine($"writer.WriteStartArray(null);");
-                }
-                else
-                {
-                    sb.AppendLine($"writer.WriteStartArray({propertyName}.Count());");
-                }
+                // Check attribute, runtime flag, or tracked indefinite state
+                sb.AppendLine($"bool useIndefiniteFor{metadata.PropertyName} = {(metadata.IsIndefinite ? "true" : "false")} || ");
+                sb.AppendLine($"    Chrysalis.Cbor.Serialization.IndefiniteStateTracker.IsIndefinite({propertyName});");
+                sb.AppendLine($"if (useIndefiniteFor{metadata.PropertyName})");
+                sb.AppendLine("{");
+                sb.AppendLine($"    writer.WriteStartArray(null);");
+                sb.AppendLine("}");
+                sb.AppendLine("else");
+                sb.AppendLine("{");
+                sb.AppendLine($"    writer.WriteStartArray({propertyName}.Count());");
+                sb.AppendLine("}");
 
                 sb.AppendLine($"foreach (var item in {propertyName})");
                 sb.AppendLine("{");
@@ -185,14 +187,17 @@ public sealed partial class CborSerializerCodeGen
                     throw new InvalidOperationException($"Map key or value type is null for property {metadata.PropertyName}");
                 }
 
-                if (metadata.IsIndefinite)
-                {
-                    sb.AppendLine($"writer.WriteStartMap(null);");
-                }
-                else
-                {
-                    sb.AppendLine($"writer.WriteStartMap({propertyName}.Count());");
-                }
+                // Check attribute, runtime flag, or tracked indefinite state
+                sb.AppendLine($"bool useIndefiniteMapFor{metadata.PropertyName} = {(metadata.IsIndefinite ? "true" : "false")} || ");
+                sb.AppendLine($"    Chrysalis.Cbor.Serialization.IndefiniteStateTracker.IsIndefinite({propertyName});");
+                sb.AppendLine($"if (useIndefiniteMapFor{metadata.PropertyName})");
+                sb.AppendLine("{");
+                sb.AppendLine($"    writer.WriteStartMap(null);");
+                sb.AppendLine("}");
+                sb.AppendLine("else");
+                sb.AppendLine("{");
+                sb.AppendLine($"    writer.WriteStartMap({propertyName}.Count());");
+                sb.AppendLine("}");
 
                 sb.AppendLine($"foreach (var kvp in {propertyName})");
                 sb.AppendLine("{");
