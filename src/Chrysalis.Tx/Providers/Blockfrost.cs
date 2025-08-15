@@ -27,7 +27,7 @@ public class Blockfrost : ICardanoDataProvider
 {
     private readonly HttpClient _httpClient;
     private readonly NetworkType _networkType;
-    
+
     public NetworkType NetworkType => _networkType;
 
     private readonly ConcurrentDictionary<string, Script> _scriptCache = new();
@@ -63,7 +63,7 @@ public class Blockfrost : ICardanoDataProvider
         BlockfrostProtocolParametersResponse parameters = JsonSerializer.Deserialize<BlockfrostProtocolParametersResponse>(content) ??
             throw new Exception("GetParameters: Could not parse response json");
 
-        Dictionary<int, CborDefList<long>> costMdls = [];
+        Dictionary<int, CborMaybeIndefList<long>> costMdls = [];
 
         foreach ((string key, int[] value) in parameters.CostModelsRaw ?? [])
         {
@@ -182,7 +182,7 @@ public class Blockfrost : ICardanoDataProvider
 
         ChrysalisWallet.Address outputAddress = ChrysalisWallet.Address.FromBech32(utxo.Address!);
 
-        CborEncodedValue?  scriptRef = null;
+        CborEncodedValue? scriptRef = null;
         if (utxo.ReferenceScriptHash is not null)
         {
             Script scriptRefValue = await GetScriptCached(utxo.ReferenceScriptHash);

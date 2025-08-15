@@ -308,7 +308,7 @@ public sealed partial class CborSerializerCodeGen
                 {
                     sb.AppendLine($"writer.WriteStartArray(null);");
                 }
-                else
+                else if (metadata.IsDefinite || (!metadata.IsIndefinite && !metadata.IsDefinite))
                 {
                     sb.AppendLine($"writer.WriteStartArray(propCount);");
                 }

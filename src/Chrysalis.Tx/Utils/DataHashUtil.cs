@@ -1,3 +1,4 @@
+using Chrysalis.Cbor.Extensions;
 using Chrysalis.Cbor.Serialization;
 using Chrysalis.Cbor.Types.Cardano.Core.Common;
 using Chrysalis.Cbor.Types.Cardano.Core.TransactionWitness;
@@ -26,7 +27,7 @@ public static class DataHashUtil
         **/
 
         byte[] plutusDataBytes = [];
-        if (datums != null && datums.PlutusData.Count > 0)
+        if (datums != null && datums.PlutusData.GetValue().Any())
         {
             plutusDataBytes = CborSerializer.Serialize<PlutusData>(datums);
         }

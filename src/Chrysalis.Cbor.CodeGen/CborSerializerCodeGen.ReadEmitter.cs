@@ -126,7 +126,25 @@ public sealed partial class CborSerializerCodeGen
 
                 sb.AppendLine($"{metadata.ListItemTypeFullName} {propertyName}TempItem = default;");
                 sb.AppendLine($"List<{metadata.ListItemTypeFullName}> {propertyName}TempList = new();");
-                sb.AppendLine($"reader.ReadStartArray();");
+                
+                // Read array start and check if it's indefinite
+                sb.AppendLine($"int? {propertyName}ArrayLength = reader.ReadStartArray();");
+                
+                // Validate encoding based on attributes
+                if (metadata.IsIndefinite)
+                {
+                    sb.AppendLine($"bool {propertyName}IsIndefinite = !{propertyName}ArrayLength.HasValue;");
+                    sb.AppendLine($"if (!{propertyName}IsIndefinite)");
+                    sb.AppendLine($"    throw new InvalidOperationException(\"Property '{metadata.PropertyName}' requires indefinite CBOR array encoding due to [CborIndefinite] attribute\");");
+                }
+                else if (metadata.IsDefinite)
+                {
+                    sb.AppendLine($"bool {propertyName}IsIndefinite = !{propertyName}ArrayLength.HasValue;");
+                    sb.AppendLine($"if ({propertyName}IsIndefinite)");
+                    sb.AppendLine($"    throw new InvalidOperationException(\"Property '{metadata.PropertyName}' requires definite CBOR array encoding due to [CborDefinite] attribute\");");
+                }
+                // If no attribute, accept both definite and indefinite (backward compatibility)
+                
                 sb.AppendLine($"while (reader.PeekState() != CborReaderState.EndArray)");
                 sb.AppendLine("{");
 
@@ -166,7 +184,25 @@ public sealed partial class CborSerializerCodeGen
                 sb.AppendLine($"Dictionary<{metadata.MapKeyTypeFullName}, {metadata.MapValueTypeFullName}> {propertyName}TempMap = new();");
                 sb.AppendLine($"{metadata.MapKeyTypeFullName} {propertyName}TempKeyItem = default;");
                 sb.AppendLine($"{metadata.MapValueTypeFullName} {propertyName}TempValueItem = default;");
-                sb.AppendLine($"reader.ReadStartMap();");
+                
+                // Read map start and check if it's indefinite
+                sb.AppendLine($"int? {propertyName}MapLength = reader.ReadStartMap();");
+                
+                // Validate encoding based on attributes
+                if (metadata.IsIndefinite)
+                {
+                    sb.AppendLine($"bool {propertyName}MapIsIndefinite = !{propertyName}MapLength.HasValue;");
+                    sb.AppendLine($"if (!{propertyName}MapIsIndefinite)");
+                    sb.AppendLine($"    throw new InvalidOperationException(\"Property '{metadata.PropertyName}' requires indefinite CBOR map encoding due to [CborIndefinite] attribute\");");
+                }
+                else if (metadata.IsDefinite)
+                {
+                    sb.AppendLine($"bool {propertyName}MapIsIndefinite = !{propertyName}MapLength.HasValue;");
+                    sb.AppendLine($"if ({propertyName}MapIsIndefinite)");
+                    sb.AppendLine($"    throw new InvalidOperationException(\"Property '{metadata.PropertyName}' requires definite CBOR map encoding due to [CborDefinite] attribute\");");
+                }
+                // If no attribute, accept both definite and indefinite (backward compatibility)
+                
                 sb.AppendLine($"while (reader.PeekState() != CborReaderState.EndMap)");
                 sb.AppendLine("{");
 
@@ -298,7 +334,19 @@ public sealed partial class CborSerializerCodeGen
 
             if (!(metadata.SerializationType == SerializationType.Constr && (metadata.CborIndex is null || metadata.CborIndex < 0)))
             {
-                sb.AppendLine("reader.ReadStartArray();");
+                sb.AppendLine("int? arrayLength = reader.ReadStartArray();");
+                
+                // Validate encoding based on type-level attributes
+                if (metadata.IsIndefinite)
+                {
+                    sb.AppendLine("if (arrayLength.HasValue)");
+                    sb.AppendLine($"    throw new InvalidOperationException(\"Type '{metadata.FullyQualifiedName}' requires indefinite CBOR array encoding due to [CborIndefinite] attribute\");");
+                }
+                else if (metadata.IsDefinite)
+                {
+                    sb.AppendLine("if (!arrayLength.HasValue)");
+                    sb.AppendLine($"    throw new InvalidOperationException(\"Type '{metadata.FullyQualifiedName}' requires definite CBOR array encoding due to [CborDefinite] attribute\");");
+                }
             }
 
             foreach (SerializablePropertyMetadata prop in metadata.Properties)

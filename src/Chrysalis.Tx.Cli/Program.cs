@@ -20,26 +20,26 @@ try
 {
     var allPayloadBytes = new List<byte>();
     string currentTxHash = txHash;
-    
+
     Console.WriteLine($"Starting metadata collection from transaction: {currentTxHash}");
-    
+
     while (!string.IsNullOrEmpty(currentTxHash))
     {
         Console.WriteLine($"Getting metadata for: {currentTxHash}");
         var metadata = await blockfrost.GetTransactionMetadataAsync(currentTxHash);
-        
+
         if (metadata == null)
         {
             Console.WriteLine("No metadata found for this transaction.");
             break;
         }
-        
+
         string? nextHash = null;
-        
+
         foreach (var (label, metadatum) in metadata.Value)
         {
             Console.WriteLine($"Processing label: {label}");
-            
+
             if (metadatum is MetadatumMap map)
             {
                 // Look for "next" field
@@ -52,12 +52,12 @@ try
                             nextHash = nextHash[2..];
                         Console.WriteLine($"Found next hash: {nextHash}");
                     }
-                    
+
                     // Look for "payload" field
                     if (key is MetadataText payloadKey && payloadKey.Value == "payload" && value is MetadatumList payloadList)
                     {
                         Console.WriteLine($"Found payload with {payloadList.Value.Count} chunks");
-                        
+
                         foreach (var chunk in payloadList.Value)
                         {
                             if (chunk is MetadataText chunkText)
@@ -65,7 +65,7 @@ try
                                 string hexData = chunkText.Value;
                                 if (hexData.StartsWith("0x"))
                                     hexData = hexData[2..];
-                                
+
                                 try
                                 {
                                     byte[] chunkBytes = Convert.FromHexString(hexData);
@@ -81,16 +81,16 @@ try
                 }
             }
         }
-        
-        currentTxHash = nextHash;
+
+        currentTxHash = nextHash!;
     }
-    
+
     Console.WriteLine($"Collected {allPayloadBytes.Count} total bytes");
-    
+
     // Write to file
     string outputPath = "/tmp/hello_adafs.png";
     await File.WriteAllBytesAsync(outputPath, allPayloadBytes.ToArray());
-    
+
     Console.WriteLine($"File written to: {outputPath}");
 }
 catch (Exception ex)
