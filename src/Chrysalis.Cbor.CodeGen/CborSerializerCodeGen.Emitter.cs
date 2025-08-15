@@ -147,6 +147,9 @@ public sealed partial class CborSerializerCodeGen
             "CborEncodedValue" => true,
             "Chrysalis.Cbor.Types.Primitives.CborEncodedValue" => true,
             "global::Chrysalis.Cbor.Types.Primitives.CborEncodedValue" => true,
+            "CborLabel" => true,
+            "Chrysalis.Cbor.Types.CborLabel" => true,
+            "global::Chrysalis.Cbor.Types.CborLabel" => true,
             _ => false
         };
     }
