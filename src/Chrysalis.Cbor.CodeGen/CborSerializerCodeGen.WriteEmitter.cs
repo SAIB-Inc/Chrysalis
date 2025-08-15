@@ -20,6 +20,27 @@ public sealed partial class CborSerializerCodeGen
         public static StringBuilder EmitSerializablePropertyWriter(StringBuilder sb, SerializablePropertyMetadata metadata)
         {
             string propertyName = $"data.{metadata.PropertyName}";
+            
+            // Special handling for CborLabel's Value property
+            if (metadata.PropertyName == "Value" && metadata.PropertyType == "object")
+            {
+                sb.AppendLine($"switch ({propertyName})");
+                sb.AppendLine("{");
+                sb.AppendLine("    case int i:");
+                sb.AppendLine("        writer.WriteInt32(i);");
+                sb.AppendLine("        break;");
+                sb.AppendLine("    case long l:");
+                sb.AppendLine("        writer.WriteInt64(l);");
+                sb.AppendLine("        break;");
+                sb.AppendLine("    case string s:");
+                sb.AppendLine("        writer.WriteTextString(s);");
+                sb.AppendLine("        break;");
+                sb.AppendLine("    default:");
+                sb.AppendLine($"        throw new InvalidOperationException($\"CborLabel value must be int, long, or string. Got: {{{propertyName}?.GetType()}}\");");
+                sb.AppendLine("}");
+                return sb;
+            }
+            
             if (metadata.IsNullable)
             {
                 sb.AppendLine($"if ({propertyName} is null)");
@@ -128,6 +149,24 @@ public sealed partial class CborSerializerCodeGen
                 case "global::Chrysalis.Cbor.Types.Primitives.CborEncodedValue":
                     sb.AppendLine("writer.WriteTag(CborTag.EncodedCborDataItem);");
                     sb.AppendLine($"writer.WriteByteString({propertyName}.Value);");
+                    break;
+                case "CborLabel":
+                case "Chrysalis.Cbor.Types.CborLabel":
+                case "global::Chrysalis.Cbor.Types.CborLabel":
+                    sb.AppendLine($"switch ({propertyName}.Value)");
+                    sb.AppendLine("{");
+                    sb.AppendLine("    case int i:");
+                    sb.AppendLine("        writer.WriteInt32(i);");
+                    sb.AppendLine("        break;");
+                    sb.AppendLine("    case long l:");
+                    sb.AppendLine("        writer.WriteInt64(l);");
+                    sb.AppendLine("        break;");
+                    sb.AppendLine("    case string s:");
+                    sb.AppendLine("        writer.WriteTextString(s);");
+                    sb.AppendLine("        break;");
+                    sb.AppendLine("    default:");
+                    sb.AppendLine($"        throw new InvalidOperationException($\"CborLabel value must be int, long, or string. Got: {{{propertyName}.Value?.GetType()}}\");");
+                    sb.AppendLine("}");
                     break;
             }
 

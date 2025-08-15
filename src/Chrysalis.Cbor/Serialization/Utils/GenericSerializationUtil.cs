@@ -60,7 +60,8 @@ public static class GenericSerializationUtil
                type == typeof(decimal) ||
                type == typeof(string) ||
                type == typeof(byte[]) ||
-               type == typeof(CborEncodedValue);
+               type == typeof(CborEncodedValue) ||
+               type == typeof(CborLabel);
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -86,6 +87,7 @@ public static class GenericSerializationUtil
             _ when type == typeof(string) => (T)(object)reader.ReadTextString(),
             _ when type == typeof(byte[]) => (T)(object)ReadByteArray(reader),
             _ when type == typeof(CborEncodedValue) => (T)(object)new CborEncodedValue(reader.ReadEncodedValue().ToArray()),
+            _ when type == typeof(CborLabel) => (T)(object)ReadCborLabel(reader),
             _ => throw new NotSupportedException($"Type {type} is not supported as a primitive type.")
         };
     }
@@ -119,10 +121,22 @@ public static class GenericSerializationUtil
             _ when type == typeof(string) => reader.ReadTextString(),
             _ when type == typeof(byte[]) => ReadByteArray(reader),
             _ when type == typeof(CborEncodedValue) => new CborEncodedValue(reader.ReadEncodedValue().ToArray()),
+            _ when type == typeof(CborLabel) => ReadCborLabel(reader),
             _ => throw new NotSupportedException($"Type {type} is not supported as a primitive type.")
         };
 
         throw new NotSupportedException($"Type {type} is not supported as a primitive type.");
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static CborLabel ReadCborLabel(CborReader reader)
+    {
+        return reader.PeekState() switch
+        {
+            CborReaderState.UnsignedInteger or CborReaderState.NegativeInteger => new CborLabel(reader.ReadInt64()),
+            CborReaderState.TextString => new CborLabel(reader.ReadTextString()),
+            _ => throw new InvalidOperationException($"Invalid CBOR type for Label: {reader.PeekState()}")
+        };
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -314,6 +328,28 @@ public static class GenericSerializationUtil
                 {
                     writer.WriteTag(CborTag.EncodedCborDataItem);
                     writer.WriteByteString(encodedValue.Value);
+                }
+                else
+                    throw new InvalidCastException($"Value is not of type {type}");
+                break;
+
+            case Type t when t == typeof(CborLabel):
+                if (value is CborLabel label)
+                {
+                    switch (label.Value)
+                    {
+                        case int i:
+                            writer.WriteInt32(i);
+                            break;
+                        case long l:
+                            writer.WriteInt64(l);
+                            break;
+                        case string s:
+                            writer.WriteTextString(s);
+                            break;
+                        default:
+                            throw new InvalidOperationException($"CborLabel value must be int, long, or string. Got: {label.Value?.GetType()}");
+                    }
                 }
                 else
                     throw new InvalidCastException($"Value is not of type {type}");

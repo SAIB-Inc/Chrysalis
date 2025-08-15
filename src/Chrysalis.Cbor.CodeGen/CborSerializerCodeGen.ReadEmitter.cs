@@ -20,6 +20,18 @@ public sealed partial class CborSerializerCodeGen
         public static StringBuilder EmitSerializablePropertyReader(StringBuilder sb, SerializablePropertyMetadata metadata, string propertyName, bool isList = false)
         {
             sb.AppendLine($"{metadata.PropertyTypeFullName} {propertyName} = default{(metadata.PropertyType.Contains("?") ? "" : "!")};");
+            
+            // Special handling for CborLabel's Value property
+            if (metadata.PropertyName == "Value" && metadata.PropertyType == "object")
+            {
+                sb.AppendLine($"{propertyName} = reader.PeekState() switch");
+                sb.AppendLine("{");
+                sb.AppendLine("    CborReaderState.UnsignedInteger or CborReaderState.NegativeInteger => (object)reader.ReadInt64(),");
+                sb.AppendLine("    CborReaderState.TextString => (object)reader.ReadTextString(),");
+                sb.AppendLine($"    _ => throw new InvalidOperationException($\"Invalid CBOR type for Label: {{reader.PeekState()}}\")");
+                sb.AppendLine("};");
+                return sb;
+            }
 
             if (isList)
             {
@@ -109,6 +121,16 @@ public sealed partial class CborSerializerCodeGen
                 case "Chrysalis.Cbor.Types.Primitives.CborEncodedValue":
                 case "global::Chrysalis.Cbor.Types.Primitives.CborEncodedValue":
                     sb.AppendLine($"{propertyName} = new {CborEncodeValueFullName}(reader.ReadEncodedValue(true).ToArray());");
+                    break;
+                case "CborLabel":
+                case "Chrysalis.Cbor.Types.CborLabel":
+                case "global::Chrysalis.Cbor.Types.CborLabel":
+                    sb.AppendLine($"{propertyName} = reader.PeekState() switch");
+                    sb.AppendLine("{");
+                    sb.AppendLine("    CborReaderState.UnsignedInteger or CborReaderState.NegativeInteger => new Chrysalis.Cbor.Types.CborLabel(reader.ReadInt64()),");
+                    sb.AppendLine("    CborReaderState.TextString => new Chrysalis.Cbor.Types.CborLabel(reader.ReadTextString()),");
+                    sb.AppendLine($"    _ => throw new InvalidOperationException($\"Invalid CBOR type for Label: {{reader.PeekState()}}\")");
+                    sb.AppendLine("};");
                     break;
             }
 
