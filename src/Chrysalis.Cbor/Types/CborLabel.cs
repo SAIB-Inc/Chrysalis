@@ -1,5 +1,6 @@
 
 using System;
+using Chrysalis.Cbor.Serialization.Attributes;
 
 namespace Chrysalis.Cbor.Types;
 
@@ -7,14 +8,10 @@ namespace Chrysalis.Cbor.Types;
 /// COSE Label type that can be either an integer or a text string.
 /// Based on RFC 8152: label = int / tstr
 /// </summary>
-public partial record CborLabel : CborBase
+[CborSerializable]
+public partial record CborLabel(object Value) : CborBase
 {
-    public object Value { get; }
-    
-    // Private constructor prevents object construction
-    private CborLabel(object value) { Value = value; }
-    
-    // Public type-safe constructors
+    // Public type-safe constructors  
     public CborLabel(int value) : this((object)value) { }
     public CborLabel(long value) : this((object)value) { }
     public CborLabel(string value) : this((object)value ?? throw new ArgumentNullException(nameof(value))) { }

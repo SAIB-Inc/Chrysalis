@@ -208,7 +208,7 @@ public sealed partial class CborSerializerCodeGen
                     }
                     else
                     {
-                        sb.AppendLine($"{metadata.ListItemTypeFullName}.Write(writer, item);");
+                        sb.AppendLine($"{metadata.ListItemTypeFullName}.Write(writer, ({metadata.ListItemTypeFullName})item);");
                     }
                 }
 
@@ -253,7 +253,7 @@ public sealed partial class CborSerializerCodeGen
                     }
                     else
                     {
-                        sb.AppendLine($"{metadata.MapKeyTypeFullName}.Write(writer, kvp.Key);");
+                        sb.AppendLine($"{metadata.MapKeyTypeFullName}.Write(writer, ({metadata.MapKeyTypeFullName})kvp.Key);");
                     }
                 }
 
@@ -269,7 +269,7 @@ public sealed partial class CborSerializerCodeGen
                     }
                     else
                     {
-                        sb.AppendLine($"{metadata.MapValueTypeFullName}.Write(writer, kvp.Value);");
+                        sb.AppendLine($"{metadata.MapValueTypeFullName}.Write(writer, ({metadata.MapValueTypeFullName})kvp.Value);");
                     }
                 }
 
@@ -284,7 +284,7 @@ public sealed partial class CborSerializerCodeGen
             }
             else
             {
-                sb.AppendLine($"{metadata.PropertyTypeFullName}.Write(writer, {propertyName});");
+                sb.AppendLine($"{metadata.PropertyTypeFullName}.Write(writer, ({metadata.PropertyTypeFullName}){propertyName});");
             }
 
             return sb;

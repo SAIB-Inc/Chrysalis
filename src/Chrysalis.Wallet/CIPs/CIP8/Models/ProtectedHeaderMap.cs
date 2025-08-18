@@ -1,3 +1,4 @@
+using System;
 using Chrysalis.Cbor.Serialization;
 
 namespace Chrysalis.Wallet.CIPs.CIP8.Models;
@@ -42,7 +43,7 @@ public class ProtectedHeaderMap
     public HeaderMap Deserialize()
     {
         if (_serializedMap.Length == 0)
-            return new HeaderMap();
+            return HeaderMap.Empty;
             
         return CborSerializer.Deserialize<HeaderMap>(_serializedMap);
     }

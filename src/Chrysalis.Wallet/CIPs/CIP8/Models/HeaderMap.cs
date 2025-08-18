@@ -18,7 +18,7 @@ public partial record HeaderMap(
     /// <summary>
     /// Creates an empty header map
     /// </summary>
-    public static HeaderMap Empty { get; } = new(new Dictionary<CborLabel, CborPrimitive>());
+    public static HeaderMap Empty { get; } = new([]);
 
     /// <summary>
     /// Creates a header map with the "hashed" field

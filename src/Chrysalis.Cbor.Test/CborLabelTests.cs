@@ -12,7 +12,7 @@ public class CborLabelTests
     public void CborLabel_IntConstructor_Works()
     {
         // Arrange & Act
-        CborLabel label = new CborLabel(42);
+        CborLabel label = new(42);
         
         // Assert
         Assert.Equal(42, label.Value);
@@ -22,7 +22,7 @@ public class CborLabelTests
     public void CborLabel_LongConstructor_Works()
     {
         // Arrange & Act
-        CborLabel label = new CborLabel(42L);
+        CborLabel label = new(42L);
         
         // Assert
         Assert.Equal(42L, label.Value);
@@ -32,7 +32,7 @@ public class CborLabelTests
     public void CborLabel_StringConstructor_Works()
     {
         // Arrange & Act
-        CborLabel label = new CborLabel("header");
+        CborLabel label = new("header");
         
         // Assert
         Assert.Equal("header", label.Value);
@@ -154,9 +154,9 @@ public class CborLabelTests
         // new CborLabel(new byte[]{}); // Won't compile
         
         // Only these compile:
-        CborLabel intLabel = new CborLabel(42);
-        CborLabel longLabel = new CborLabel(42L);
-        CborLabel stringLabel = new CborLabel("test");
+        CborLabel intLabel = new(42);
+        CborLabel longLabel = new(42L);
+        CborLabel stringLabel = new("test");
         
         Assert.Equal(42, intLabel.Value);
         Assert.Equal(42L, longLabel.Value);
