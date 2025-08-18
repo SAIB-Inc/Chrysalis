@@ -1,3 +1,5 @@
+using System;
+using System.Collections.Generic;
 using Chrysalis.Cbor.Serialization;
 using Chrysalis.Cbor.Types;
 using Xunit;
@@ -7,14 +9,81 @@ namespace Chrysalis.Cbor.Test;
 public class CborLabelTests
 {
     [Fact]
-    public void CborLabel_IntegerValue_SerializesAsInteger()
+    public void CborLabel_IntConstructor_Works()
+    {
+        // Arrange & Act
+        CborLabel label = new CborLabel(42);
+        
+        // Assert
+        Assert.Equal(42, label.Value);
+    }
+
+    [Fact]
+    public void CborLabel_LongConstructor_Works()
+    {
+        // Arrange & Act
+        CborLabel label = new CborLabel(42L);
+        
+        // Assert
+        Assert.Equal(42L, label.Value);
+    }
+
+    [Fact]
+    public void CborLabel_StringConstructor_Works()
+    {
+        // Arrange & Act
+        CborLabel label = new CborLabel("header");
+        
+        // Assert
+        Assert.Equal("header", label.Value);
+    }
+
+    [Fact]
+    public void CborLabel_StringConstructor_NullThrows()
+    {
+        // Act & Assert
+        Assert.Throws<ArgumentNullException>(() => new CborLabel((string)null!));
+    }
+
+    [Fact]
+    public void CborLabel_ImplicitConversion_Int_Works()
+    {
+        // Arrange & Act
+        CborLabel label = 42;
+        
+        // Assert
+        Assert.Equal(42, label.Value);
+    }
+
+    [Fact]
+    public void CborLabel_ImplicitConversion_Long_Works()
+    {
+        // Arrange & Act
+        CborLabel label = 42L;
+        
+        // Assert
+        Assert.Equal(42L, label.Value);
+    }
+
+    [Fact]
+    public void CborLabel_ImplicitConversion_String_Works()
+    {
+        // Arrange & Act
+        CborLabel label = "custom-header";
+        
+        // Assert
+        Assert.Equal("custom-header", label.Value);
+    }
+
+    [Fact]
+    public void CborLabel_IntValue_SerializesAsInteger()
     {
         // Arrange
-        var label = new CborLabel(1);
+        CborLabel label = 1;
         
         // Act
-        var bytes = CborSerializer.Serialize(label);
-        var hex = Convert.ToHexString(bytes);
+        byte[] bytes = CborSerializer.Serialize(label);
+        string hex = Convert.ToHexString(bytes);
         
         // Assert
         Assert.Equal("01", hex); // CBOR integer 1
@@ -24,25 +93,25 @@ public class CborLabelTests
     public void CborLabel_StringValue_SerializesAsString()
     {
         // Arrange
-        var label = new CborLabel("alg");
+        CborLabel label = "alg";
         
         // Act
-        var bytes = CborSerializer.Serialize(label);
-        var hex = Convert.ToHexString(bytes);
+        byte[] bytes = CborSerializer.Serialize(label);
+        string hex = Convert.ToHexString(bytes);
         
         // Assert
-        Assert.Equal("63616C67", hex); // CBOR text string "alg" (63 = 3-byte string, 616C67 = "alg")
+        Assert.Equal("63616C67", hex); // CBOR text string "alg"
     }
     
     [Fact]
-    public void CborLabel_IntegerValue_RoundTrip()
+    public void CborLabel_IntValue_RoundTrip()
     {
         // Arrange
-        var label = new CborLabel(42);
+        CborLabel label = 42;
         
         // Act
-        var bytes = CborSerializer.Serialize(label);
-        var deserialized = CborSerializer.Deserialize<CborLabel>(bytes);
+        byte[] bytes = CborSerializer.Serialize(label);
+        CborLabel deserialized = CborSerializer.Deserialize<CborLabel>(bytes);
         
         // Assert
         Assert.Equal(42L, deserialized.Value); // Note: deserializes as long
@@ -52,11 +121,11 @@ public class CborLabelTests
     public void CborLabel_StringValue_RoundTrip()
     {
         // Arrange
-        var label = new CborLabel("custom-header");
+        CborLabel label = "custom-header";
         
         // Act
-        var bytes = CborSerializer.Serialize(label);
-        var deserialized = CborSerializer.Deserialize<CborLabel>(bytes);
+        byte[] bytes = CborSerializer.Serialize(label);
+        CborLabel deserialized = CborSerializer.Deserialize<CborLabel>(bytes);
         
         // Assert
         Assert.Equal("custom-header", deserialized.Value);
@@ -66,13 +135,31 @@ public class CborLabelTests
     public void CborLabel_NegativeInteger_Works()
     {
         // Arrange
-        var label = new CborLabel(-1);
+        CborLabel label = -1;
         
         // Act
-        var bytes = CborSerializer.Serialize(label);
-        var hex = Convert.ToHexString(bytes);
+        byte[] bytes = CborSerializer.Serialize(label);
+        string hex = Convert.ToHexString(bytes);
         
         // Assert
-        Assert.Equal("20", hex); // CBOR negative integer -1 (encoded as 0)
+        Assert.Equal("20", hex); // CBOR negative integer -1
+    }
+
+    [Fact]
+    public void CborLabel_TypeSafety_InvalidTypesRejected()
+    {
+        // These should not compile due to type-safe constructors:
+        // new CborLabel(3.14);       // Won't compile
+        // new CborLabel(DateTime.Now); // Won't compile  
+        // new CborLabel(new byte[]{}); // Won't compile
+        
+        // Only these compile:
+        CborLabel intLabel = new CborLabel(42);
+        CborLabel longLabel = new CborLabel(42L);
+        CborLabel stringLabel = new CborLabel("test");
+        
+        Assert.Equal(42, intLabel.Value);
+        Assert.Equal(42L, longLabel.Value);
+        Assert.Equal("test", stringLabel.Value);
     }
 }

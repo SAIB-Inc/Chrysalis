@@ -1,3 +1,5 @@
+using Chrysalis.Cbor.Types;
+
 namespace Chrysalis.Wallet.CIPs.CIP8.Models;
 
 /// <summary>
@@ -64,4 +66,23 @@ public static class HeaderLabels
     // CIP-8 custom labels (strings)
     public const string Address = "address";
     public const string Hashed = "hashed";
+}
+
+/// <summary>
+/// Common COSE header labels as CborLabel instances for type-safe usage
+/// </summary>
+public static class CoseHeaders
+{
+    // Standard COSE labels (integers)
+    public static readonly CborLabel Algorithm = 1;
+    public static readonly CborLabel Criticality = 2;
+    public static readonly CborLabel ContentType = 3;
+    public static readonly CborLabel KeyId = 4;
+    public static readonly CborLabel IV = 5;
+    public static readonly CborLabel PartialIV = 6;
+    public static readonly CborLabel CounterSignature = 7;
+    
+    // CIP-8 custom labels (strings)
+    public static readonly CborLabel Address = "address";
+    public static readonly CborLabel Hashed = "hashed";
 }
