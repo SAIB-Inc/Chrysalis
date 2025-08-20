@@ -17,7 +17,7 @@ public sealed partial class CborSerializerCodeGen
             return sb;
         }
 
-        public static StringBuilder EmitSerializablePropertyReader(StringBuilder sb, SerializablePropertyMetadata metadata, string propertyName, bool isList = false)
+        public static StringBuilder EmitSerializablePropertyReader(StringBuilder sb, SerializablePropertyMetadata metadata, string propertyName, bool isList = false, bool trackFields = false, int fieldIndex = -1)
         {
             sb.AppendLine($"{metadata.PropertyTypeFullName} {propertyName} = default{(metadata.PropertyType.Contains("?") ? "" : "!")};");
 
@@ -25,6 +25,12 @@ public sealed partial class CborSerializerCodeGen
             {
                 sb.AppendLine($"if (reader.PeekState() != CborReaderState.EndArray)");
                 sb.AppendLine("{");
+                
+                // Track that this field was read for validation - only if we actually declared the array
+                if (trackFields && fieldIndex >= 0)
+                {
+                    sb.AppendLine($"fieldsRead[{fieldIndex}] = true;");
+                }
             }
 
             if (metadata.IsNullable)
@@ -295,17 +301,41 @@ public sealed partial class CborSerializerCodeGen
         public static StringBuilder EmitCustomListReader(StringBuilder sb, SerializableTypeMetadata metadata, int? constrIndex = null)
         {
             Dictionary<string, string> propMapping = [];
+            bool isListSerialization = metadata.SerializationType == SerializationType.List;
 
             if (!(metadata.SerializationType == SerializationType.Constr && (metadata.CborIndex is null || metadata.CborIndex < 0)))
             {
                 sb.AppendLine("reader.ReadStartArray();");
             }
 
+            // Add field tracking for List serialization to validate required fields
+            bool shouldTrackFields = isListSerialization && metadata.Properties.Any(p => p.IsRequired);
+            if (shouldTrackFields)
+            {
+                sb.AppendLine($"bool[] fieldsRead = new bool[{metadata.Properties.Count}];");
+            }
+
+            int fieldIndex = 0;
             foreach (SerializablePropertyMetadata prop in metadata.Properties)
             {
                 string propName = $"{metadata.BaseIdentifier}{prop.PropertyName}";
                 propMapping.Add(prop.PropertyName, propName);
-                EmitSerializablePropertyReader(sb, prop, propName, true);
+                EmitSerializablePropertyReader(sb, prop, propName, true, shouldTrackFields, fieldIndex);
+                fieldIndex++;
+            }
+
+            // Add validation for required fields in List serialization
+            if (shouldTrackFields)
+            {
+                List<SerializablePropertyMetadata> requiredProps = metadata.Properties.Where(p => p.IsRequired).ToList();
+                foreach (SerializablePropertyMetadata requiredProp in requiredProps)
+                {
+                    int propIndex = metadata.Properties.ToList().IndexOf(requiredProp);
+                    sb.AppendLine($"if (!fieldsRead[{propIndex}])");
+                    sb.AppendLine("{");
+                    sb.AppendLine($"    throw new System.Exception(\"Required field '{requiredProp.PropertyName}' is missing from CBOR data\");");
+                    sb.AppendLine("}");
+                }
             }
 
             if (metadata.SerializationType == SerializationType.Constr && metadata.CborIndex is not null && metadata.CborIndex >= 0)
