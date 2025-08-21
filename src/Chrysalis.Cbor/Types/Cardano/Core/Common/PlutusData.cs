@@ -1,3 +1,4 @@
+using Chrysalis.Cbor.Serialization;
 using Chrysalis.Cbor.Serialization.Attributes;
 using Chrysalis.Cbor.Types;
 
@@ -5,9 +6,7 @@ namespace Chrysalis.Cbor.Types.Cardano.Core.Common;
 
 [CborSerializable]
 [CborUnion]
-public abstract partial record PlutusData : CborBase
-{
-}
+public abstract partial record PlutusData : CborBase, ICborPreserveRaw;
 
 [CborSerializable]
 [CborConstr]
