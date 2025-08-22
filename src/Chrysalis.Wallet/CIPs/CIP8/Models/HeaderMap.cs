@@ -13,7 +13,6 @@ namespace Chrysalis.Wallet.CIPs.CIP8.Models;
 public partial record HeaderMap(
     Dictionary<CborLabel, CborPrimitive> Headers
 ) : CborBase
-
 {
     /// <summary>
     /// Creates an empty header map
@@ -33,12 +32,7 @@ public partial record HeaderMap(
     }
 
     /// <summary>
-    /// Checks if the header map is empty
-    /// </summary>
-    public bool IsEmpty() => Headers.Count == 0;
-
-    /// <summary>
-    /// Adds a header with integer label (standard COSE headers)
+    /// Adds a header with an integer label
     /// </summary>
     public HeaderMap WithHeader(int label, CborPrimitive value)
     {
@@ -50,7 +44,7 @@ public partial record HeaderMap(
     }
 
     /// <summary>
-    /// Adds a header with string label (custom headers)
+    /// Adds a header with a string label
     /// </summary>
     public HeaderMap WithHeader(string label, CborPrimitive value)
     {

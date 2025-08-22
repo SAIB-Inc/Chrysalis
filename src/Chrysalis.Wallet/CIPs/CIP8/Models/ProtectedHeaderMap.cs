@@ -11,29 +11,30 @@ public class ProtectedHeaderMap
     private readonly byte[] _serializedMap;
     
     /// <summary>
-    /// Creates a new ProtectedHeaderMap from a HeaderMap
-    /// </summary>
-    public ProtectedHeaderMap(HeaderMap headerMap)
-    {
-        if (headerMap == null)
-            throw new ArgumentNullException(nameof(headerMap));
-            
-        // COSE spec: empty protected headers should be encoded as zero-length byte string
-        _serializedMap = headerMap.IsEmpty() 
-            ? []
-            : CborSerializer.Serialize(headerMap);
-    }
-    
-    /// <summary>
-    /// Creates a ProtectedHeaderMap from already serialized bytes
+    /// Creates a protected header map from serialized CBOR bytes
     /// </summary>
     public ProtectedHeaderMap(byte[] serializedMap)
     {
-        _serializedMap = serializedMap ?? throw new ArgumentNullException(nameof(serializedMap));
+        _serializedMap = serializedMap ?? Array.Empty<byte>();
     }
     
     /// <summary>
-    /// Gets the serialized bytes of the protected headers
+    /// Creates a protected header map from a HeaderMap
+    /// </summary>
+    public ProtectedHeaderMap(HeaderMap headerMap)
+    {
+        if (headerMap == null || headerMap == HeaderMap.Empty)
+        {
+            _serializedMap = Array.Empty<byte>();
+        }
+        else
+        {
+            _serializedMap = CborSerializer.Serialize(headerMap);
+        }
+    }
+    
+    /// <summary>
+    /// Gets the serialized CBOR bytes
     /// </summary>
     public byte[] GetBytes() => _serializedMap;
     
