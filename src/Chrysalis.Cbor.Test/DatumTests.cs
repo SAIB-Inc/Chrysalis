@@ -113,7 +113,7 @@ public class DatumTests
         byte[] cborBytes = Convert.FromHexString(cborHex);
         
         // Deserialize the CBOR data
-        var poolDatum = CborSerializer.Deserialize<SundaeSwapPoolDatum>(cborBytes);
+        SundaeSwapPoolDatum poolDatum = CborSerializer.Deserialize<SundaeSwapPoolDatum>(cborBytes);
         
         // Verify pool identifier
         Assert.NotNull(poolDatum);
@@ -124,12 +124,12 @@ public class DatumTests
         Assert.Equal(2, poolDatum.Assets.Count);
         
         // First asset should be ADA (empty policy and name)
-        var asset1 = poolDatum.Assets[0];
+        AssetClass asset1 = poolDatum.Assets[0];
         Assert.Empty(asset1.PolicyId);
         Assert.Empty(asset1.AssetName);
         
         // Second asset should be SDAM token
-        var asset2 = poolDatum.Assets[1];
+        AssetClass asset2 = poolDatum.Assets[1];
         Assert.Equal("c48cbb3d5e57ed56e276bc45f99ab39abe94e6cd7ac39fb402da47ad", Convert.ToHexString(asset2.PolicyId).ToLowerInvariant());
         Assert.Equal("0014df105553444d", Convert.ToHexString(asset2.AssetName).ToLowerInvariant());
         
@@ -142,10 +142,10 @@ public class DatumTests
         
         // Verify fee manager
         Assert.IsType<Some<MultisigScript>>(poolDatum.FeeManager);
-        var feeManager = poolDatum.FeeManager as Some<MultisigScript>;
+        Some<MultisigScript> feeManager = poolDatum.FeeManager as Some<MultisigScript>;
         Assert.NotNull(feeManager);
         Assert.IsType<Signature>(feeManager.Value);
-        var signature = feeManager.Value as Signature;
+        Signature signature = feeManager.Value as Signature;
         Assert.Equal("0bc4df2c05da7920fe0825b68f83fd96d84f215da6ef360f7057ad83", Convert.ToHexString(signature.KeyHash).ToLowerInvariant());
     }
     
@@ -157,7 +157,7 @@ public class DatumTests
         byte[] originalBytes = Convert.FromHexString(originalHex);
         
         // Deserialize the CBOR data
-        var poolDatum = CborSerializer.Deserialize<SundaeSwapPoolDatum>(originalBytes);
+        SundaeSwapPoolDatum poolDatum = CborSerializer.Deserialize<SundaeSwapPoolDatum>(originalBytes);
         
         // Re-serialize
         byte[] reserializedBytes = CborSerializer.Serialize(poolDatum);
