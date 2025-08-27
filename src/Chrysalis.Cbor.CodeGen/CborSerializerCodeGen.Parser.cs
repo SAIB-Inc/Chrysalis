@@ -24,6 +24,7 @@ public sealed partial class CborSerializerCodeGen
         public const string CborProperty = "CborProperty";
         public const string CborSize = "CborSize";
         public const string CborIndefinite = "CborIndefinite";
+        public const string CborDefinite = "CborDefinite";
 
         // Interfaces
         public const string ICborPreserveRawFullName = "Chrysalis.Cbor.Serialization.ICborPreserveRaw";
@@ -66,6 +67,7 @@ public sealed partial class CborSerializerCodeGen
             AttributeSyntax? cborConstrAttribute = attributes.FirstOrDefault(a => a.Name.ToString() == CborConstr);
             AttributeSyntax? cborTagAttribute = attributes.FirstOrDefault(a => a.Name.ToString() == CborTag);
             AttributeSyntax? cborIndefiniteAttribute = attributes.FirstOrDefault(a => a.Name.ToString() == CborIndefinite);
+            AttributeSyntax? cborDefiniteAttribute = attributes.FirstOrDefault(a => a.Name.ToString() == CborDefinite);
 
             int? constrIndex = cborConstrAttribute?.ArgumentList?.Arguments.FirstOrDefault()?.GetFirstToken().Value as int?;
             int? cborTag = cborTagAttribute?.ArgumentList?.Arguments.FirstOrDefault()?.GetFirstToken().Value as int?;
@@ -87,6 +89,7 @@ public sealed partial class CborSerializerCodeGen
                 cborTag,
                 constrIndex,
                 cborIndefiniteAttribute != null,
+                cborDefiniteAttribute != null,
                 serializationType,
                 validatorFullyQualifiedName,
                 shouldPreserveRaw
@@ -174,6 +177,7 @@ public sealed partial class CborSerializerCodeGen
             string propertyTypeNamespace = model.GetSymbolInfo(property.Type).Symbol?.ContainingNamespace.ToDisplayString() ?? string.Empty;
             bool isNullable = attributes.FirstOrDefault(a => a.Name.ToString() == Parser.CborNullable) is not null;
             bool isIndefinite = attributes.FirstOrDefault(a => a.Name.ToString() == Parser.CborIndefinite) is not null;
+            bool isDefinite = attributes.FirstOrDefault(a => a.Name.ToString() == Parser.CborDefinite) is not null;
             int? size = attributes.FirstOrDefault(a => a.Name.ToString() == Parser.CborSize)?.ArgumentList?.Arguments.FirstOrDefault()?.GetFirstToken().Value as int?;
             int? order = attributes.FirstOrDefault(a => a.Name.ToString() == Parser.CborOrder)?.ArgumentList?.Arguments.FirstOrDefault()?.GetFirstToken().Value as int?;
             GetCborPropertyKey(property, model, out string? stringKey, out int? intKey);
@@ -201,6 +205,7 @@ public sealed partial class CborSerializerCodeGen
                 isNullable,
                 size,
                 isIndefinite,
+                isDefinite,
                 order,
                 stringKey,
                 intKey,
@@ -253,6 +258,7 @@ public sealed partial class CborSerializerCodeGen
 
             bool isNullable = paramAttributes.Any(a => a.Name.ToString() == Parser.CborNullable);
             bool isIndefinite = paramAttributes.Any(a => a.Name.ToString() == Parser.CborIndefinite);
+            bool isDefinite = paramAttributes.Any(a => a.Name.ToString() == Parser.CborDefinite);
 
             int? size = null;
             AttributeSyntax sizeAttr = paramAttributes.FirstOrDefault(a => a.Name.ToString() == Parser.CborSize);
@@ -357,6 +363,7 @@ public sealed partial class CborSerializerCodeGen
                 isNullable,
                 size,
                 isIndefinite,
+                isDefinite,
                 order,
                 stringKey,
                 intKey,

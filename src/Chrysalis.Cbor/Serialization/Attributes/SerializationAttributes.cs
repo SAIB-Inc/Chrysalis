@@ -96,3 +96,9 @@ public sealed class CborIndefiniteAttribute : Attribute
 {
     public CborIndefiniteAttribute() { }
 }
+
+[AttributeUsage(AttributeTargets.Class | AttributeTargets.Struct | AttributeTargets.Interface | AttributeTargets.Property | AttributeTargets.Parameter, Inherited = false, AllowMultiple = false)]
+public sealed class CborDefiniteAttribute : Attribute
+{
+    public CborDefiniteAttribute() { }
+}

@@ -23,6 +23,7 @@ public sealed partial class CborSerializerCodeGen
         int? cborTag,
         int? cborIndex,
         bool isIndefinite,
+        bool isDefinite,
         SerializationType serializationType,
         string? validator,
         bool shouldPreserveRaw
@@ -37,6 +38,7 @@ public sealed partial class CborSerializerCodeGen
         public int? CborTag { get; } = cborTag;
         public int? CborIndex { get; } = cborIndex;
         public bool IsIndefinite { get; } = isIndefinite;
+        public bool IsDefinite { get; } = isDefinite;
         public SerializationType SerializationType { get; } = serializationType;
         public string? Validator { get; } = validator;
         public bool ShouldPreserveRaw { get; } = shouldPreserveRaw;
@@ -58,6 +60,7 @@ public sealed partial class CborSerializerCodeGen
                 // CborTag: {{CborTag}}
                 // CborIndex: {{CborIndex}}
                 // IsIndefinite: {{IsIndefinite}}
+                // IsDefinite: {{IsDefinite}}
                 // ShouldPreserveRaw: {{ShouldPreserveRaw}}
                 // Validator: {{Validator}}
                 // Properties: {{string.Join(",", Properties.Select(p => p.ToString()))}}
@@ -89,6 +92,7 @@ public sealed partial class CborSerializerCodeGen
         bool isNullable,
         int? size,
         bool isIndefinite,
+        bool isDefinite,
         int? order,
         string? propertyKeyString,
         int? propertyKeyInt,
@@ -121,6 +125,7 @@ public sealed partial class CborSerializerCodeGen
         public bool IsRequired => !IsTypeNullable && !IsNullable;
         public int? Size { get; } = size;
         public bool IsIndefinite { get; } = isIndefinite;
+        public bool IsDefinite { get; } = isDefinite;
         public int? Order { get; set; } = order;
         public string? PropertyKeyString { get; } = propertyKeyString;
         public int? PropertyKeyInt { get; } = propertyKeyInt;

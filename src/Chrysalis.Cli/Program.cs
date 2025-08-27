@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Text.Json;
+using Chrysalis.Cbor.Extensions;
 using Chrysalis.Cbor.Extensions.Cardano.Core.Common;
 using Chrysalis.Cbor.Extensions.Cardano.Core.Transaction;
 using Chrysalis.Cbor.Serialization;
@@ -138,7 +139,7 @@ while (!exitProgram)
                     foreach (var costMdl in costMdls.Value)
                     {
                         Console.WriteLine($"{costMdl.Key}: [");
-                        foreach (var item in costMdl.Value.Value)
+                        foreach (var item in costMdl.Value.GetValue())
                         {
                             Console.WriteLine($"\t{item}, ");
                         }
@@ -197,11 +198,11 @@ while (!exitProgram)
                     }
                 }
                 Console.WriteLine("     }");
-                if(utxo.Value.DatumOption() is not null)
+                if (utxo.Value.DatumOption() is not null)
                 {
                     Console.WriteLine("     datum: " + CborSerializer.Serialize(utxo.Value.DatumOption()!));
                 }
-                if(utxo.Value.ScriptRef() is not null)
+                if (utxo.Value.ScriptRef() is not null)
                 {
                     Console.WriteLine("     scriptRef: " + Convert.ToHexString(utxo.Value.ScriptRef()!));
                 }
