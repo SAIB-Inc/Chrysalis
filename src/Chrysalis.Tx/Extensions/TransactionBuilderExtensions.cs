@@ -32,8 +32,8 @@ public static class TransactionBuilderExtensions
                 throw new ArgumentNullException(nameof(scripts), "Missing script");
             }
 
-            CborDefList<long> usedLanguage = builder.pparams!.CostModelsForScriptLanguage!.Value[scripts[0].Version() - 1];
-            CostMdls costModel = new(new Dictionary<int, CborDefList<long>>(){
+            CborMaybeIndefList<long> usedLanguage = builder.pparams!.CostModelsForScriptLanguage!.Value[scripts[0].Version() - 1];
+            CostMdls costModel = new(new Dictionary<int, CborMaybeIndefList<long>>(){
                  { scripts[0].Version() - 1, usedLanguage }
             });
             byte[] costModelBytes = CborSerializer.Serialize(costModel);
@@ -50,48 +50,48 @@ public static class TransactionBuilderExtensions
         }
 
         builder.SetFee(defaultFee == 0 ? 2000000UL : defaultFee);
-        
+
         // Recursive fee and collateral calculation
         // Since adding collateral inputs changes transaction size, which changes fee, which changes collateral requirements
         ulong previousFee = 0;
         ulong fee = 0;
         int iterations = 0;
         int maxIterations = 10;
-        
+
         while (iterations < maxIterations)
         {
             // Calculate current fee based on current transaction state
             Transaction draftTx = builder.Build();
             byte[] draftTxCborBytes = CborSerializer.Serialize(draftTx);
             ulong draftTxCborLength = (ulong)draftTxCborBytes.Length;
-            
+
             fee = FeeUtil.CalculateFeeWithWitness(draftTxCborLength, builder.pparams!.MinFeeA!.Value, builder!.pparams.MinFeeB!.Value, mockWitnessFee) + scriptFee + scriptExecutionFee;
-            
+
             // If fee hasn't changed significantly, we're done
             if (Math.Abs((long)fee - (long)previousFee) < 1000) // 1000 lovelace tolerance
             {
                 break;
             }
-            
+
             previousFee = fee;
             builder.SetFee(fee);
-            
+
             // Handle collateral if needed
             if (builder.body.TotalCollateral is not null && availableInputs != null && availableInputs.Count > 0)
             {
                 ulong totalCollateral = FeeUtil.CalculateRequiredCollateral(fee, builder.pparams!.CollateralPercentage!.Value);
                 builder.SetTotalCollateral(totalCollateral);
-                
+
                 // Clear any existing collateral settings to start fresh
                 builder.body = builder.body with { Collateral = null, CollateralReturn = null };
 
                 // Estimate minimum ADA needed for return output
                 ResolvedInput firstInput = availableInputs[0];
                 TransactionOutput dummyReturnOutput = firstInput.Output;
-                
+
                 byte[] dummyReturnOutputBytes = CborSerializer.Serialize(dummyReturnOutput);
                 ulong estimatedMinLovelaceForReturn = FeeUtil.CalculateMinimumLovelace(
-                    (ulong)builder.pparams!.AdaPerUTxOByte!, 
+                    (ulong)builder.pparams!.AdaPerUTxOByte!,
                     dummyReturnOutputBytes
                 );
 
@@ -101,7 +101,7 @@ public static class TransactionBuilderExtensions
                 // Use coin selection to get sufficient collateral with buffer
                 List<Value> collateralRequirement = [new Lovelace(totalCollateralNeeded)];
                 int maxCollateralInputs = (int)(builder.pparams!.MaxCollateralInputs ?? 3);
-                
+
                 CoinSelectionResult collateralSelection;
                 try
                 {
@@ -122,7 +122,7 @@ public static class TransactionBuilderExtensions
                 }
 
                 List<ResolvedInput> collateralInputs = collateralSelection.Inputs;
-                
+
                 // Add all selected collateral inputs to the builder
                 foreach (ResolvedInput input in collateralInputs)
                 {
@@ -131,7 +131,7 @@ public static class TransactionBuilderExtensions
 
                 // Calculate totals
                 ulong totalCollateralInputLovelace = (ulong)collateralInputs.Sum(i => (long)i.Output.Amount().Lovelace());
-                
+
                 if (totalCollateralInputLovelace < totalCollateral)
                 {
                     throw new InvalidOperationException(
@@ -170,7 +170,7 @@ public static class TransactionBuilderExtensions
                         }
                     }
                 }
-                
+
                 // Build return value
                 Value returnValue;
                 if (aggregatedAssets.Count > 0)
@@ -205,23 +205,23 @@ public static class TransactionBuilderExtensions
                 // Final verification of minimum ADA requirement
                 byte[] returnOutputBytes = CborSerializer.Serialize(returnOutput);
                 ulong minLovelaceRequired = FeeUtil.CalculateMinimumLovelace(
-                    (ulong)builder.pparams!.AdaPerUTxOByte!, 
+                    (ulong)builder.pparams!.AdaPerUTxOByte!,
                     returnOutputBytes
                 );
-                
+
                 if (returnLovelace < minLovelaceRequired)
                 {
                     throw new InvalidOperationException(
                         $"Collateral return output ({returnLovelace} lovelace) is below minimum ADA requirement ({minLovelaceRequired} lovelace). Available inputs cannot provide sufficient collateral with adequate return."
                     );
                 }
-                
+
                 builder.SetCollateralReturn(returnOutput);
             }
-            
+
             iterations++;
         }
-        
+
         if (iterations >= maxIterations)
         {
             throw new InvalidOperationException("Fee calculation did not converge after maximum iterations.");

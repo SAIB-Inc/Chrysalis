@@ -350,15 +350,30 @@ public sealed partial class CborSerializerCodeGen
             if (!(metadata.SerializationType == SerializationType.Constr && (metadata.CborIndex is null || metadata.CborIndex < 0)))
             {
                 // Use indefinite if either attribute OR runtime flag is set
-                sb.AppendLine($"bool useIndefinite = {(metadata.IsIndefinite ? "true" : "false")} || data.IsIndefinite;");
-                sb.AppendLine("if (useIndefinite)");
-                sb.AppendLine("{");
-                sb.AppendLine("    writer.WriteStartArray(null);");
-                sb.AppendLine("}");
-                sb.AppendLine("else");
-                sb.AppendLine("{");
-                sb.AppendLine("    writer.WriteStartArray(propCount);");
-                sb.AppendLine("}");
+                // This supports both compile-time ([CborIndefinite]) and runtime (data.IsIndefinite) control
+                if (metadata.IsIndefinite)
+                {
+                    // Force indefinite encoding due to attribute
+                    sb.AppendLine($"writer.WriteStartArray(null);");
+                }
+                else if (metadata.IsDefinite)
+                {
+                    // Force definite encoding due to attribute
+                    sb.AppendLine($"writer.WriteStartArray(propCount);");
+                }
+                else
+                {
+                    // No explicit attribute - check runtime flag for dynamic behavior
+                    sb.AppendLine($"bool useIndefinite = data.IsIndefinite;");
+                    sb.AppendLine("if (useIndefinite)");
+                    sb.AppendLine("{");
+                    sb.AppendLine("    writer.WriteStartArray(null);");
+                    sb.AppendLine("}");
+                    sb.AppendLine("else");
+                    sb.AppendLine("{");
+                    sb.AppendLine("    writer.WriteStartArray(propCount);");
+                    sb.AppendLine("}");
+                }
             }
 
             foreach (SerializablePropertyMetadata prop in metadata.Properties)

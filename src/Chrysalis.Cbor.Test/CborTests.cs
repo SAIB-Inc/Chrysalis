@@ -1,4 +1,6 @@
 using Chrysalis.Cbor.Serialization;
+using Chrysalis.Cbor.Serialization.Attributes;
+using Chrysalis.Cbor.Types;
 using Chrysalis.Cbor.Types.Cardano.Core;
 using Chrysalis.Cbor.Types.Cardano.Core.Common;
 using Chrysalis.Cbor.Types.Cardano.Core.Transaction;
@@ -9,6 +11,24 @@ namespace Chrysalis.Test;
 
 record TestRecord(string p, int i);
 
+// Test record with required fields - all fields must be present
+[CborSerializable]
+[CborList]
+partial record PersonRequired(
+    [CborOrder(0)] int Id,
+    [CborOrder(1)] string Name,
+    [CborOrder(2)] int Age
+) : CborBase;
+
+// Test record with nullable fields - fields can be missing
+[CborSerializable]
+[CborList]
+partial record PersonOptional(
+    [CborOrder(0)] int? Id,
+    [CborOrder(1)] string? Name,
+    [CborOrder(2)] int? Age
+) : CborBase;
+
 
 public class CborTests
 {
@@ -17,7 +37,7 @@ public class CborTests
     public void TransactionInputTest(string cbor)
     {
         string unsignedTx = "84A300D90102828258200177512CA37FED793D93474F0F8F1898E2B747ADE8D7C5F7572C64B478C5ACD00182582099DA5D9C5F595FC49AE2568E38919596940EE3C394421C27C643EE7AAA69F390000182A300581D70FA74D35F4B0D48AC6288AC5CEA71F28E807565AD09845232F229660F011A05F5E100028201D8185854D8799FD8799FD8799FD8799F581C5C5C318D01F729E205C95EB1B02D623DD10E78EA58F72D0C13F892B2FFFFD8799F40401A05F5E100FFD8799F40401A05F5E100FFD8799F40401A004C4B40FF00D8799FFFFFFF825839005C5C318D01F729E205C95EB1B02D623DD10E78EA58F72D0C13F892B2E8904EDC699E2F0CE7B72BE7CEC991DF651A222E2AE9244EB5975CBA1B0000000137EF0544021A00030AA9A0F5F6";
-        
+
         // Use the cbor parameter to validate the test data
         _ = cbor;
 
@@ -35,34 +55,46 @@ public class CborTests
 
         Assert.NotNull("");
     }
-    //     // [Theory]
-    //     // [MemberData(nameof(BoolTestData.GetTestData), MemberType = typeof(BoolTestData))]
-    //     // [MemberData(nameof(BytesTestData.GetTestData), MemberType = typeof(BytesTestData))]
-    //     // [MemberData(nameof(IntTestData.GetTestData), MemberType = typeof(IntTestData))]
-    //     // [MemberData(nameof(LongTestData.GetTestData), MemberType = typeof(LongTestData))]
-    //     // [MemberData(nameof(UlongTestData.GetTestData), MemberType = typeof(UlongTestData))]
-    //     // [MemberData(nameof(TextTestData.GetTestData), MemberType = typeof(TextTestData))]
-    //     // public void Deserialize(TestData testData)
-    //     // {
-    //     //     Assert.NotNull(testData);
-    //     //     Assert.NotNull(testData.Serialized);
-    //     //     Assert.NotNull(testData.Deserialized);
 
-    //     //     byte[] data = Convert.FromHexString(testData.Serialized);
-    //     //     Type actualType = testData.Deserialized.GetType();
+    [Fact]
+    public void RequiredFieldValidation_ShouldThrowWhenRequiredFieldMissing()
+    {
+        // Create a PersonOptional with missing fields (nulls)
+        var optionalPerson = new PersonOptional(1, null, null);
+        byte[] cbor = CborSerializer.Serialize(optionalPerson);
 
-    //     //     // Act
-    //     //     MethodInfo deserializeMethod = typeof(CborSerializer)
-    //     //         .GetMethod(nameof(CborSerializer.Deserialize))!
-    //     //         .MakeGenericMethod(actualType);
+        // Try to deserialize as PersonRequired - should fail because Name and Age are required
+        var ex = Assert.Throws<Exception>(() => (PersonRequired)PersonRequired.Read(cbor));
+        Assert.Contains("Required field", ex.Message);
+    }
 
-    //     //     object? actual = deserializeMethod.Invoke(null, [data]);
+    [Fact]
+    public void RequiredFieldValidation_ShouldSucceedWhenAllRequiredFieldsPresent()
+    {
+        // Create a PersonRequired with all fields
+        var requiredPerson = new PersonRequired(1, "John", 25);
+        byte[] cbor = CborSerializer.Serialize(requiredPerson);
 
-    //     //     // Assert
-    //     //     Assert.NotNull(actual);
-    //     //     Assert.IsType(actualType, actual);
-    //     //     // Assert.Equivalent(testData.Deserialized, actual);
-    //     // }
+        // Should succeed - all required fields are present
+        var deserialized = (PersonRequired)PersonRequired.Read(cbor);
+        Assert.Equal(1, deserialized.Id);
+        Assert.Equal("John", deserialized.Name);
+        Assert.Equal(25, deserialized.Age);
+    }
+
+    [Fact]
+    public void RequiredFieldValidation_ShouldSucceedWhenDeserializingRequiredAsOptional()
+    {
+        // Create a PersonRequired with all fields
+        var requiredPerson = new PersonRequired(1, "John", 25);
+        byte[] cbor = CborSerializer.Serialize(requiredPerson);
+
+        // Should succeed when deserializing as optional - all fields present
+        var optionalPerson = (PersonOptional)PersonOptional.Read(cbor);
+        Assert.Equal(1, optionalPerson.Id);
+        Assert.Equal("John", optionalPerson.Name);
+        Assert.Equal(25, optionalPerson.Age);
+    }
 
     [Theory]
     // Babbage
@@ -164,27 +196,3 @@ public class CborTests
         await Task.WhenAll(tasks);
     }
 }
-
-//     [Theory]
-//     // Conway
-//     [InlineData("820785828A1A002D34C71A04563448582025FAE387A21887B140E3E8F6D52116837E06E588640805088B15AB307AA3F85A5820BE5501BDA6376FBE9952E2E4AFAF3F7726C82D45FEBD3E359240F91D3558713E58205606C6FCF1CD2874FC7A7792CB20C50F60CB634821AC2BDE34E215527B7FC3518258407B734B5F5313EF6FA62F75519BF3FB4E8C1C7AABA74371F55C9C74047B2FDD5D258038C090E351422076C71674E594B889B6052D9F22AB62A0A5FA25364142355850647395C521E6549B810DA6F21DDB37392F0C65D1410A3F1CBF7F7A79A64821329C110D868DDC553708FA9146AD0BEBD81E3C83D8F9DE5081BF55A5290147B5A5E19624E95451BDD04217B748A5AAAE0604582029571D16F081709B3C48651860077BEBF9340ABB3FC7133443C54F1F5A5EDCF18458206639753EE5E1717AD8B41A0234B8CF87D6452FCABE2EF989A2442ED0A5CC4AA3061901FC5840C0FF15AABA20D8DDEFA00EEC010D12BE728EE9C11068F245BDA7B40D449E7E85E8E67D0D3B0D63071321BE3E551F3B9F414E2974E8A40B896F9AA04BFBDC4A0A820A025901C0BA463AA894438450B3DA9C5D3D1C54753E8B1D93A735AF7EAD983E3EB98626441BAE2BFF55F794596EC342302EEBC2026A4CDD6C76CC6C55BA735BF04F26B603CB80BED294C6F5EB707FA945628ECD175CADFA11586281307DE618ACD0661EE88623165FEE60C0FF6C9EA8321B1C2BDA6AA273689CC40BB52C2969A6D4C4F1BFBF36EEE18B0783863E61833B01F0A49BEF441087F895A53E6895B8AFD6F0BB2492C2D7ADC28DFACD0D802F33861E1A7174938CE3720325F5E192375BB5851D4253351AF5595B4FCB63F4D82115257C30FCA40CC0905AD063E98985CD70CD6FF896AC42D0F30349655028A5371709AF1EEF6248EDA6C7F034CB840092C79C2F50C00D9777CE1D2B43AAD1CD84FF8BE31BFA0D1B8026EAD61E1981B5D9D3395A57DC2F9D3668EDD9400EF774B9E620B0F64F7D566C210B912BBBB29E1F3978E4F550D491EA45C559C9E4BB8B6C2D44C67BC7714A55C9C72AEF04F3EED2BFF7581A013FD4D5AFD9A079450C83F77583E3DD5F383A5A28975F87EA50AF2A9655EF46BCF263C865094A66B7A33F1B0357734D5C31DA3C091484B8876850BB590DB3DFACF50B5E0F9380DCF1C186F975969CE82690BA3E8C862CB8148350B3A34667218080A080")]
-//     public async Task DeserializeBlockWithEra(string cbor)
-//     {
-//         byte[] cborRaw = Convert.FromHexString(cbor);
-
-//         const int concurrencyLevel = 1;   // Number of parallel tasks
-//         const int iterationsPerTask = 1; // Number of deserializations per task
-
-//         IEnumerable<Task> tasks = [.. Enumerable.Range(0, concurrencyLevel).Select(_ => Task.Run(() =>
-//         {
-//             for (int i = 0; i < iterationsPerTask; i++)
-//             {
-//                 BlockWithEra<Block> block = CborSerializer.Deserialize<BlockWithEra<Block>>(cborRaw);
-//                 Assert.NotNull(block);
-//             }
-//         }))];
-
-//         // Await all tasks to complete; if any fail, the test will fail
-//         await Task.WhenAll(tasks);
-//     }
-// }

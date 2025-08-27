@@ -43,7 +43,7 @@ public class Kupo(string kupoEndpoint, NetworkType networkType = NetworkType.Pre
             _ => throw new ArgumentException($"Unsupported network type: {_networkType}")
         };
 
-        Dictionary<int, CborDefList<long>> costMdls = [];
+        Dictionary<int, CborMaybeIndefList<long>> costMdls = [];
 
         foreach ((string key, int[] value) in parameters.CostModelsRaw ?? [])
         {
@@ -227,7 +227,7 @@ public class Kupo(string kupoEndpoint, NetworkType networkType = NetworkType.Pre
             return null;
 
         byte[] scriptBytes = HexStringCache.FromHexString(script.Script);
-        
+
         Script scriptObj = script.Language switch
         {
             "native" => new MultiSigScript(new Value0(0), CborSerializer.Deserialize<NativeScript>(scriptBytes)),
