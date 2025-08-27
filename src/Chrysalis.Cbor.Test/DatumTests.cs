@@ -142,10 +142,10 @@ public class DatumTests
         Assert.Equal(1076872000UL, poolDatum.ProtocolFees);
         // Verify fee manager
         Assert.IsType<Some<MultisigScript>>(poolDatum.FeeManager);
-        Some<MultisigScript> feeManager = poolDatum.FeeManager as Some<MultisigScript>;
+        Some<MultisigScript> feeManager = (poolDatum.FeeManager as Some<MultisigScript>)!;
         Assert.NotNull(feeManager);
         Assert.IsType<Signature>(feeManager.Value);
-        Signature signature = feeManager.Value as Signature;
+        Signature signature = (feeManager.Value as Signature)!;
         Assert.Equal("0bc4df2c05da7920fe0825b68f83fd96d84f215da6ef360f7057ad83", Convert.ToHexString(signature.KeyHash).ToLowerInvariant());
     }
     [Theory]
