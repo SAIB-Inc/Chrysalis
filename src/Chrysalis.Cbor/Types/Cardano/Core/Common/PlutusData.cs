@@ -6,9 +6,7 @@ namespace Chrysalis.Cbor.Types.Cardano.Core.Common;
 
 [CborSerializable]
 [CborUnion]
-public abstract partial record PlutusData : CborBase
-{
-}
+public abstract partial record PlutusData : CborBase, ICborPreserveRaw;
 
 // PlutusConstr with index for validation
 [CborSerializable]
