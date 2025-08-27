@@ -118,6 +118,7 @@ public sealed partial class CborSerializerCodeGen
         // Attributes
         public bool IsNullable { get; } = isNullable;
         public bool IsTypeNullable => PropertyType.Contains("?");
+        public bool IsRequired => !IsTypeNullable && !IsNullable;
         public int? Size { get; } = size;
         public bool IsIndefinite { get; } = isIndefinite;
         public int? Order { get; set; } = order;
