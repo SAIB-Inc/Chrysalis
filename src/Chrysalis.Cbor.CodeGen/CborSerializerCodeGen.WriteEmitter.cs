@@ -20,6 +20,27 @@ public sealed partial class CborSerializerCodeGen
         public static StringBuilder EmitSerializablePropertyWriter(StringBuilder sb, SerializablePropertyMetadata metadata)
         {
             string propertyName = $"data.{metadata.PropertyName}";
+            
+            // Special handling for CborLabel's Value property
+            if (metadata.PropertyName == "Value" && metadata.PropertyType == "object")
+            {
+                sb.AppendLine($"switch ({propertyName})");
+                sb.AppendLine("{");
+                sb.AppendLine("    case int i:");
+                sb.AppendLine("        writer.WriteInt32(i);");
+                sb.AppendLine("        break;");
+                sb.AppendLine("    case long l:");
+                sb.AppendLine("        writer.WriteInt64(l);");
+                sb.AppendLine("        break;");
+                sb.AppendLine("    case string s:");
+                sb.AppendLine("        writer.WriteTextString(s);");
+                sb.AppendLine("        break;");
+                sb.AppendLine("    default:");
+                sb.AppendLine($"        throw new InvalidOperationException($\"CborLabel value must be int, long, or string. Got: {{{propertyName}?.GetType()}}\");");
+                sb.AppendLine("}");
+                return sb;
+            }
+            
             if (metadata.IsNullable)
             {
                 sb.AppendLine($"if ({propertyName} is null)");
@@ -129,6 +150,24 @@ public sealed partial class CborSerializerCodeGen
                     sb.AppendLine("writer.WriteTag(CborTag.EncodedCborDataItem);");
                     sb.AppendLine($"writer.WriteByteString({propertyName}.Value);");
                     break;
+                case "CborLabel":
+                case "Chrysalis.Cbor.Types.CborLabel":
+                case "global::Chrysalis.Cbor.Types.CborLabel":
+                    sb.AppendLine($"switch ({propertyName}.Value)");
+                    sb.AppendLine("{");
+                    sb.AppendLine("    case int i:");
+                    sb.AppendLine("        writer.WriteInt32(i);");
+                    sb.AppendLine("        break;");
+                    sb.AppendLine("    case long l:");
+                    sb.AppendLine("        writer.WriteInt64(l);");
+                    sb.AppendLine("        break;");
+                    sb.AppendLine("    case string s:");
+                    sb.AppendLine("        writer.WriteTextString(s);");
+                    sb.AppendLine("        break;");
+                    sb.AppendLine("    default:");
+                    sb.AppendLine($"        throw new InvalidOperationException($\"CborLabel value must be int, long, or string. Got: {{{propertyName}.Value?.GetType()}}\");");
+                    sb.AppendLine("}");
+                    break;
             }
 
             return sb;
@@ -143,14 +182,17 @@ public sealed partial class CborSerializerCodeGen
                     throw new InvalidOperationException($"List item type is null for property {metadata.PropertyName}");
                 }
 
-                if (metadata.IsIndefinite)
-                {
-                    sb.AppendLine($"writer.WriteStartArray(null);");
-                }
-                else
-                {
-                    sb.AppendLine($"writer.WriteStartArray({propertyName}.Count());");
-                }
+                // Check attribute, runtime flag, or tracked indefinite state
+                sb.AppendLine($"bool useIndefiniteFor{metadata.PropertyName} = {(metadata.IsIndefinite ? "true" : "false")} || ");
+                sb.AppendLine($"    Chrysalis.Cbor.Serialization.IndefiniteStateTracker.IsIndefinite({propertyName});");
+                sb.AppendLine($"if (useIndefiniteFor{metadata.PropertyName})");
+                sb.AppendLine("{");
+                sb.AppendLine($"    writer.WriteStartArray(null);");
+                sb.AppendLine("}");
+                sb.AppendLine("else");
+                sb.AppendLine("{");
+                sb.AppendLine($"    writer.WriteStartArray({propertyName}.Count());");
+                sb.AppendLine("}");
 
                 sb.AppendLine($"foreach (var item in {propertyName})");
                 sb.AppendLine("{");
@@ -166,7 +208,7 @@ public sealed partial class CborSerializerCodeGen
                     }
                     else
                     {
-                        sb.AppendLine($"{metadata.ListItemTypeFullName}.Write(writer, item);");
+                        sb.AppendLine($"{metadata.ListItemTypeFullName}.Write(writer, ({metadata.ListItemTypeFullName})item);");
                     }
                 }
 
@@ -184,14 +226,17 @@ public sealed partial class CborSerializerCodeGen
                     throw new InvalidOperationException($"Map key or value type is null for property {metadata.PropertyName}");
                 }
 
-                if (metadata.IsIndefinite)
-                {
-                    sb.AppendLine($"writer.WriteStartMap(null);");
-                }
-                else
-                {
-                    sb.AppendLine($"writer.WriteStartMap({propertyName}.Count());");
-                }
+                // Check attribute, runtime flag, or tracked indefinite state
+                sb.AppendLine($"bool useIndefiniteMapFor{metadata.PropertyName} = {(metadata.IsIndefinite ? "true" : "false")} || ");
+                sb.AppendLine($"    Chrysalis.Cbor.Serialization.IndefiniteStateTracker.IsIndefinite({propertyName});");
+                sb.AppendLine($"if (useIndefiniteMapFor{metadata.PropertyName})");
+                sb.AppendLine("{");
+                sb.AppendLine($"    writer.WriteStartMap(null);");
+                sb.AppendLine("}");
+                sb.AppendLine("else");
+                sb.AppendLine("{");
+                sb.AppendLine($"    writer.WriteStartMap({propertyName}.Count());");
+                sb.AppendLine("}");
 
                 sb.AppendLine($"foreach (var kvp in {propertyName})");
                 sb.AppendLine("{");
@@ -208,7 +253,7 @@ public sealed partial class CborSerializerCodeGen
                     }
                     else
                     {
-                        sb.AppendLine($"{metadata.MapKeyTypeFullName}.Write(writer, kvp.Key);");
+                        sb.AppendLine($"{metadata.MapKeyTypeFullName}.Write(writer, ({metadata.MapKeyTypeFullName})kvp.Key);");
                     }
                 }
 
@@ -224,7 +269,7 @@ public sealed partial class CborSerializerCodeGen
                     }
                     else
                     {
-                        sb.AppendLine($"{metadata.MapValueTypeFullName}.Write(writer, kvp.Value);");
+                        sb.AppendLine($"{metadata.MapValueTypeFullName}.Write(writer, ({metadata.MapValueTypeFullName})kvp.Value);");
                     }
                 }
 
@@ -239,7 +284,7 @@ public sealed partial class CborSerializerCodeGen
             }
             else
             {
-                sb.AppendLine($"{metadata.PropertyTypeFullName}.Write(writer, {propertyName});");
+                sb.AppendLine($"{metadata.PropertyTypeFullName}.Write(writer, ({metadata.PropertyTypeFullName}){propertyName});");
             }
 
             return sb;
@@ -304,13 +349,30 @@ public sealed partial class CborSerializerCodeGen
             EmitPropertyCountWriter(sb, metadata);
             if (!(metadata.SerializationType == SerializationType.Constr && (metadata.CborIndex is null || metadata.CborIndex < 0)))
             {
+                // Use indefinite if either attribute OR runtime flag is set
+                // This supports both compile-time ([CborIndefinite]) and runtime (data.IsIndefinite) control
                 if (metadata.IsIndefinite)
                 {
+                    // Force indefinite encoding due to attribute
                     sb.AppendLine($"writer.WriteStartArray(null);");
                 }
-                else if (metadata.IsDefinite || (!metadata.IsIndefinite && !metadata.IsDefinite))
+                else if (metadata.IsDefinite)
                 {
+                    // Force definite encoding due to attribute
                     sb.AppendLine($"writer.WriteStartArray(propCount);");
+                }
+                else
+                {
+                    // No explicit attribute - check runtime flag for dynamic behavior
+                    sb.AppendLine($"bool useIndefinite = data.IsIndefinite;");
+                    sb.AppendLine("if (useIndefinite)");
+                    sb.AppendLine("{");
+                    sb.AppendLine("    writer.WriteStartArray(null);");
+                    sb.AppendLine("}");
+                    sb.AppendLine("else");
+                    sb.AppendLine("{");
+                    sb.AppendLine("    writer.WriteStartArray(propCount);");
+                    sb.AppendLine("}");
                 }
             }
 

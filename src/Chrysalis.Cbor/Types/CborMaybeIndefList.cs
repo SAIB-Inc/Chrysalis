@@ -7,10 +7,10 @@ namespace Chrysalis.Cbor.Types;
 public abstract partial record CborMaybeIndefList<T> : CborBase { }
 
 [CborSerializable]
-public partial record CborIndefList<T>([CborIndefinite] List<T> Value) : CborMaybeIndefList<T>;
+public partial record CborDefList<T>(List<T> Value) : CborMaybeIndefList<T>;
 
 [CborSerializable]
-public partial record CborDefList<T>(List<T> Value) : CborMaybeIndefList<T>;
+public partial record CborIndefList<T>([CborIndefinite] List<T> Value) : CborMaybeIndefList<T>;
 
 [CborSerializable]
 [CborTag(258)]

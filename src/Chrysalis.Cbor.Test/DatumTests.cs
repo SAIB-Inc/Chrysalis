@@ -103,7 +103,6 @@ public partial record SundaeSwapPoolDatum(
 
     [CborOrder(6)]
     ulong MarketOpen,  // UNIX timestamp when trading is allowed (0 = open)
-
     [CborOrder(7)]
     ulong ProtocolFees  // ADA set aside for protocol fees
 ) : CborBase;
@@ -116,44 +115,39 @@ public class DatumTests
     {
         // Convert hex to bytes
         byte[] cborBytes = Convert.FromHexString(cborHex);
-
         // Deserialize the CBOR data
-        var poolDatum = CborSerializer.Deserialize<SundaeSwapPoolDatum>(cborBytes);
-
+        SundaeSwapPoolDatum poolDatum = CborSerializer.Deserialize<SundaeSwapPoolDatum>(cborBytes);
         // Verify pool identifier
         Assert.NotNull(poolDatum);
         Assert.Equal(28, poolDatum.Identifier.Length);
         Assert.Equal("64f35d26b237ad58e099041bc14c687ea7fdc58969d7d5b66e2540ef", Convert.ToHexString(poolDatum.Identifier).ToLowerInvariant());
-
+        
         // Verify assets
         Assert.Equal(2, poolDatum.Assets.Count);
-
+        
         // First asset should be ADA (empty policy and name)
-        var asset1 = poolDatum.Assets[0];
+        AssetClass asset1 = poolDatum.Assets[0];
         Assert.Empty(asset1.PolicyId);
         Assert.Empty(asset1.AssetName);
-
+        
         // Second asset should be SDAM token
-        var asset2 = poolDatum.Assets[1];
+        AssetClass asset2 = poolDatum.Assets[1];
         Assert.Equal("c48cbb3d5e57ed56e276bc45f99ab39abe94e6cd7ac39fb402da47ad", Convert.ToHexString(asset2.PolicyId).ToLowerInvariant());
         Assert.Equal("0014df105553444d", Convert.ToHexString(asset2.AssetName).ToLowerInvariant());
-
         // Verify other pool parameters
         Assert.Equal(831464150266UL, poolDatum.CirculatingLp);
         Assert.Equal(60UL, poolDatum.BidFeesPerTenThousand); // 0.6%
         Assert.Equal(60UL, poolDatum.AskFeesPerTenThousand); // 0.6%
         Assert.Equal(0UL, poolDatum.MarketOpen); // Market is open
         Assert.Equal(1076872000UL, poolDatum.ProtocolFees);
-
         // Verify fee manager
         Assert.IsType<Some<MultisigScript>>(poolDatum.FeeManager);
-        var feeManager = poolDatum.FeeManager as Some<MultisigScript>;
+        Some<MultisigScript> feeManager = poolDatum.FeeManager as Some<MultisigScript>;
         Assert.NotNull(feeManager);
         Assert.IsType<Signature>(feeManager.Value);
-        var signature = feeManager.Value as Signature;
+        Signature signature = feeManager.Value as Signature;
         Assert.Equal("0bc4df2c05da7920fe0825b68f83fd96d84f215da6ef360f7057ad83", Convert.ToHexString(signature.KeyHash).ToLowerInvariant());
     }
-
     [Theory]
     [InlineData("d8799f581c64f35d26b237ad58e099041bc14c687ea7fdc58969d7d5b66e2540ef9f9f4040ff9f581cc48cbb3d5e57ed56e276bc45f99ab39abe94e6cd7ac39fb402da47ad480014df105553444dffff1b000000c1972014fa183c183cd8799fd8799f581c0bc4df2c05da7920fe0825b68f83fd96d84f215da6ef360f7057ad83ffff001a402fc340ff")]
     public void SundaeSwapPoolDatumRoundTripTest(string originalHex)
@@ -162,14 +156,13 @@ public class DatumTests
         byte[] originalBytes = Convert.FromHexString(originalHex);
 
         // Deserialize the CBOR data
-        var poolDatum = CborSerializer.Deserialize<SundaeSwapPoolDatum>(originalBytes);
-        var plutusDataDatum = CborSerializer.Deserialize<PlutusData>(originalBytes);
+        SundaeSwapPoolDatum poolDatum = CborSerializer.Deserialize<SundaeSwapPoolDatum>(originalBytes);
+        PlutusData plutusDataDatum = CborSerializer.Deserialize<PlutusData>(originalBytes);
 
         // Re-serialize
         byte[] reserializedBytes = CborSerializer.Serialize(poolDatum);
         string reserializedHex = Convert.ToHexString(reserializedBytes).ToLowerInvariant();
         string plutusDataHex = Convert.ToHexString(CborSerializer.Serialize(plutusDataDatum)).ToLowerInvariant();
-
 
         // They should match
         Assert.Equal(originalHex.ToLowerInvariant(), reserializedHex);

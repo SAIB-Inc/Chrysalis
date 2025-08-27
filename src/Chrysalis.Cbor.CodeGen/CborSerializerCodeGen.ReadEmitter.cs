@@ -20,6 +20,18 @@ public sealed partial class CborSerializerCodeGen
         public static StringBuilder EmitSerializablePropertyReader(StringBuilder sb, SerializablePropertyMetadata metadata, string propertyName, bool isList = false, bool trackFields = false, int fieldIndex = -1)
         {
             sb.AppendLine($"{metadata.PropertyTypeFullName} {propertyName} = default{(metadata.PropertyType.Contains("?") ? "" : "!")};");
+            
+            // Special handling for CborLabel's Value property
+            if (metadata.PropertyName == "Value" && metadata.PropertyType == "object")
+            {
+                sb.AppendLine($"{propertyName} = reader.PeekState() switch");
+                sb.AppendLine("{");
+                sb.AppendLine("    CborReaderState.UnsignedInteger or CborReaderState.NegativeInteger => (object)reader.ReadInt64(),");
+                sb.AppendLine("    CborReaderState.TextString => (object)reader.ReadTextString(),");
+                sb.AppendLine($"    _ => throw new InvalidOperationException($\"Invalid CBOR type for Label: {{reader.PeekState()}}\")");
+                sb.AppendLine("};");
+                return sb;
+            }
 
             if (isList)
             {
@@ -116,6 +128,16 @@ public sealed partial class CborSerializerCodeGen
                 case "global::Chrysalis.Cbor.Types.Primitives.CborEncodedValue":
                     sb.AppendLine($"{propertyName} = new {CborEncodeValueFullName}(reader.ReadEncodedValue(true).ToArray());");
                     break;
+                case "CborLabel":
+                case "Chrysalis.Cbor.Types.CborLabel":
+                case "global::Chrysalis.Cbor.Types.CborLabel":
+                    sb.AppendLine($"{propertyName} = reader.PeekState() switch");
+                    sb.AppendLine("{");
+                    sb.AppendLine("    CborReaderState.UnsignedInteger or CborReaderState.NegativeInteger => new Chrysalis.Cbor.Types.CborLabel(reader.ReadInt64()),");
+                    sb.AppendLine("    CborReaderState.TextString => new Chrysalis.Cbor.Types.CborLabel(reader.ReadTextString()),");
+                    sb.AppendLine($"    _ => throw new InvalidOperationException($\"Invalid CBOR type for Label: {{reader.PeekState()}}\")");
+                    sb.AppendLine("};");
+                    break;
             }
 
             return sb;
@@ -132,25 +154,22 @@ public sealed partial class CborSerializerCodeGen
 
                 sb.AppendLine($"{metadata.ListItemTypeFullName} {propertyName}TempItem = default;");
                 sb.AppendLine($"List<{metadata.ListItemTypeFullName}> {propertyName}TempList = new();");
-                
                 // Read array start and check if it's indefinite
                 sb.AppendLine($"int? {propertyName}ArrayLength = reader.ReadStartArray();");
+                sb.AppendLine($"bool {propertyName}IsIndefinite = !{propertyName}ArrayLength.HasValue;");
                 
                 // Validate encoding based on attributes
                 if (metadata.IsIndefinite)
                 {
-                    sb.AppendLine($"bool {propertyName}IsIndefinite = !{propertyName}ArrayLength.HasValue;");
                     sb.AppendLine($"if (!{propertyName}IsIndefinite)");
                     sb.AppendLine($"    throw new InvalidOperationException(\"Property '{metadata.PropertyName}' requires indefinite CBOR array encoding due to [CborIndefinite] attribute\");");
                 }
                 else if (metadata.IsDefinite)
                 {
-                    sb.AppendLine($"bool {propertyName}IsIndefinite = !{propertyName}ArrayLength.HasValue;");
                     sb.AppendLine($"if ({propertyName}IsIndefinite)");
                     sb.AppendLine($"    throw new InvalidOperationException(\"Property '{metadata.PropertyName}' requires definite CBOR array encoding due to [CborDefinite] attribute\");");
                 }
                 // If no attribute, accept both definite and indefinite (backward compatibility)
-                
                 sb.AppendLine($"while (reader.PeekState() != CborReaderState.EndArray)");
                 sb.AppendLine("{");
 
@@ -176,6 +195,10 @@ public sealed partial class CborSerializerCodeGen
                 sb.AppendLine("}");
                 sb.AppendLine($"reader.ReadEndArray();");
                 sb.AppendLine($"{propertyName} = {propertyName}TempList;");
+                sb.AppendLine($"if ({propertyName}IsIndefinite)");
+                sb.AppendLine("{");
+                sb.AppendLine($"    Chrysalis.Cbor.Serialization.IndefiniteStateTracker.SetIndefinite({propertyName});");
+                sb.AppendLine("}");
 
                 return sb;
             }
@@ -190,25 +213,22 @@ public sealed partial class CborSerializerCodeGen
                 sb.AppendLine($"Dictionary<{metadata.MapKeyTypeFullName}, {metadata.MapValueTypeFullName}> {propertyName}TempMap = new();");
                 sb.AppendLine($"{metadata.MapKeyTypeFullName} {propertyName}TempKeyItem = default;");
                 sb.AppendLine($"{metadata.MapValueTypeFullName} {propertyName}TempValueItem = default;");
-                
                 // Read map start and check if it's indefinite
                 sb.AppendLine($"int? {propertyName}MapLength = reader.ReadStartMap();");
+                sb.AppendLine($"bool {propertyName}MapIsIndefinite = !{propertyName}MapLength.HasValue;");
                 
                 // Validate encoding based on attributes
                 if (metadata.IsIndefinite)
                 {
-                    sb.AppendLine($"bool {propertyName}MapIsIndefinite = !{propertyName}MapLength.HasValue;");
                     sb.AppendLine($"if (!{propertyName}MapIsIndefinite)");
                     sb.AppendLine($"    throw new InvalidOperationException(\"Property '{metadata.PropertyName}' requires indefinite CBOR map encoding due to [CborIndefinite] attribute\");");
                 }
                 else if (metadata.IsDefinite)
                 {
-                    sb.AppendLine($"bool {propertyName}MapIsIndefinite = !{propertyName}MapLength.HasValue;");
                     sb.AppendLine($"if ({propertyName}MapIsIndefinite)");
                     sb.AppendLine($"    throw new InvalidOperationException(\"Property '{metadata.PropertyName}' requires definite CBOR map encoding due to [CborDefinite] attribute\");");
                 }
                 // If no attribute, accept both definite and indefinite (backward compatibility)
-                
                 sb.AppendLine($"while (reader.PeekState() != CborReaderState.EndMap)");
                 sb.AppendLine("{");
 
@@ -254,6 +274,10 @@ public sealed partial class CborSerializerCodeGen
                 sb.AppendLine("}");
                 sb.AppendLine($"reader.ReadEndMap();");
                 sb.AppendLine($"{propertyName} = {propertyName}TempMap;");
+                sb.AppendLine($"if ({propertyName}MapIsIndefinite)");
+                sb.AppendLine("{");
+                sb.AppendLine($"    Chrysalis.Cbor.Serialization.IndefiniteStateTracker.SetIndefinite({propertyName});");
+                sb.AppendLine("}");
 
                 return sb;
             }
@@ -338,10 +362,14 @@ public sealed partial class CborSerializerCodeGen
         {
             Dictionary<string, string> propMapping = [];
             bool isListSerialization = metadata.SerializationType == SerializationType.List;
+            bool detectIndefinite = false;
 
             if (!(metadata.SerializationType == SerializationType.Constr && (metadata.CborIndex is null || metadata.CborIndex < 0)))
             {
+                // Read the array and check if it's indefinite
                 sb.AppendLine("int? arrayLength = reader.ReadStartArray();");
+                sb.AppendLine("bool isIndefiniteArray = !arrayLength.HasValue;");
+                detectIndefinite = true;
                 
                 // Validate encoding based on type-level attributes
                 if (metadata.IsIndefinite)
@@ -405,6 +433,16 @@ public sealed partial class CborSerializerCodeGen
                 sb.AppendLine(string.Join(",\n", propStrings));
                 sb.AppendLine(");");
             }
+
+            // Set the IsIndefinite flag if we detected it
+            if (detectIndefinite)
+            {
+                sb.AppendLine("if (isIndefiniteArray)");
+                sb.AppendLine("{");
+                sb.AppendLine($"    result.IsIndefinite = true;");
+                sb.AppendLine("}");
+            }
+            
 
             EmitReaderValidationAndResult(sb, metadata, "result");
 

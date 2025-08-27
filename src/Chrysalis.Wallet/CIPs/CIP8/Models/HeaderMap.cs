@@ -1,120 +1,57 @@
+using System.Collections.Generic;
+using Chrysalis.Cbor.Serialization.Attributes;
 using Chrysalis.Cbor.Types;
-using System.Formats.Cbor;
 
 namespace Chrysalis.Wallet.CIPs.CIP8.Models;
 
 /// <summary>
 /// COSE header map containing standard and custom headers
+/// Uses CborLabel for type-safe header keys (int or string)
+/// Uses CborPrimitive for type-safe header values (int, string, bool, bytes, etc.)
 /// </summary>
-public record HeaderMap : CborBase
+[CborSerializable]
+public partial record HeaderMap(
+    Dictionary<CborLabel, CborPrimitive> Headers
+) : CborBase
 {
-    private readonly Dictionary<object, object> _headers;
-    
-    public HeaderMap()
-    {
-        _headers = new Dictionary<object, object>();
-    }
-    
-    public HeaderMap(Dictionary<object, object> headers)
-    {
-        _headers = headers ?? new Dictionary<object, object>();
-    }
-    
     /// <summary>
     /// Creates an empty header map
     /// </summary>
-    public static HeaderMap Empty { get; } = new();
-    
+    public static HeaderMap Empty { get; } = new([]);
+
     /// <summary>
     /// Creates a header map with the "hashed" field
     /// </summary>
     public static HeaderMap WithHashed(bool hashed)
     {
-        var headers = new Dictionary<object, object>
+        Dictionary<CborLabel, CborPrimitive> headers = new()
         {
             ["hashed"] = hashed
         };
-        return new HeaderMap(headers);
+        return new(headers);
     }
-    
+
     /// <summary>
-    /// Checks if the header map is empty
+    /// Adds a header with an integer label
     /// </summary>
-    public bool IsEmpty() => _headers.Count == 0;
-    
+    public HeaderMap WithHeader(int label, CborPrimitive value)
+    {
+        Dictionary<CborLabel, CborPrimitive> newHeaders = new(Headers)
+        {
+            [label] = value
+        };
+        return new(newHeaders);
+    }
+
     /// <summary>
-    /// Serializes the header map to CBOR
+    /// Adds a header with a string label
     /// </summary>
-    public byte[] ToCbor()
+    public HeaderMap WithHeader(string label, CborPrimitive value)
     {
-        var writer = new CborWriter(CborConformanceMode.Lax);
-        Write(writer, this);
-        return writer.Encode();
-    }
-    
-    public static void Write(CborWriter writer, HeaderMap data)
-    {
-        writer.WriteStartMap(data._headers.Count);
-        
-        foreach (var kvp in data._headers)
+        Dictionary<CborLabel, CborPrimitive> newHeaders = new(Headers)
         {
-            // Write key
-            if (kvp.Key is string strKey)
-                writer.WriteTextString(strKey);
-            else if (kvp.Key is int intKey)
-                writer.WriteInt32(intKey);
-            else if (kvp.Key is long longKey)
-                writer.WriteInt64(longKey);
-            
-            // Write value
-            if (kvp.Value is bool boolVal)
-                writer.WriteBoolean(boolVal);
-            else if (kvp.Value is byte[] bytesVal)
-                writer.WriteByteString(bytesVal);
-            else if (kvp.Value is string strVal)
-                writer.WriteTextString(strVal);
-            else if (kvp.Value is int intVal)
-                writer.WriteInt32(intVal);
-        }
-        
-        writer.WriteEndMap();
-    }
-    
-    public static new HeaderMap Read(ReadOnlyMemory<byte> data)
-    {
-        var reader = new CborReader(data, CborConformanceMode.Lax);
-        var headers = new Dictionary<object, object>();
-        
-        if (reader.PeekState() == CborReaderState.StartMap)
-        {
-            var count = reader.ReadStartMap();
-            
-            for (int i = 0; i < (count ?? int.MaxValue) && reader.PeekState() != CborReaderState.EndMap; i++)
-            {
-                // Read key
-                object key = reader.PeekState() switch
-                {
-                    CborReaderState.TextString => reader.ReadTextString(),
-                    CborReaderState.UnsignedInteger or CborReaderState.NegativeInteger => reader.ReadInt32(),
-                    _ => reader.ReadInt32()
-                };
-                
-                // Read value
-                object value = reader.PeekState() switch
-                {
-                    CborReaderState.Boolean => reader.ReadBoolean(),
-                    CborReaderState.ByteString => reader.ReadByteString(),
-                    CborReaderState.TextString => reader.ReadTextString(),
-                    CborReaderState.UnsignedInteger or CborReaderState.NegativeInteger => reader.ReadInt32(),
-                    _ => reader.ReadByteString()
-                };
-                
-                headers[key] = value;
-            }
-            
-            reader.ReadEndMap();
-        }
-        
-        return new HeaderMap(headers);
+            [label] = value
+        };
+        return new(newHeaders);
     }
 }
