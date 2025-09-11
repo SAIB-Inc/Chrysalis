@@ -7,12 +7,6 @@ namespace Chrysalis.Plutus.VM.EvalTx;
 
 public static class ScriptApplicator
 {
-    /// <summary>
-    /// Apply parameters to a Plutus script from hex-encoded inputs.
-    /// </summary>
-    /// <param name="scriptHex">Hex-encoded CBOR script bytes</param>
-    /// <param name="parameters">List of PlutusData parameters to apply</param>
-    /// <returns>Hex-encoded parameterized script</returns>
     public static string ApplyParameters(string scriptHex, PlutusData parameters)
     {
         byte[] scriptBytes = Convert.FromHexString(scriptHex);
@@ -20,27 +14,14 @@ public static class ScriptApplicator
         return Convert.ToHexString(result);
     }
 
-    /// <summary>
-    /// Apply parameters to a Plutus script from byte arrays.
-    /// </summary>
-    /// <param name="scriptBytes">CBOR-encoded script bytes</param>
-    /// <param name="parameters">List of PlutusData parameters to apply</param>
-    /// <returns>CBOR-encoded parameterized script bytes</returns>
     public static byte[] ApplyParameters(byte[] scriptBytes, PlutusData parameters)
     {
-        // Wrap the single parameter in a PlutusList (array) as expected by UPLC
-        var parametersList = new PlutusList(new CborIndefList<PlutusData>([parameters]));
+        PlutusList parametersList = new(new CborIndefList<PlutusData>([parameters]));
         byte[] parametersCbor = CborSerializer.Serialize(parametersList);
         
         return ApplyParametersFromCbor(scriptBytes, parametersCbor);
     }
 
-    /// <summary>
-    /// Apply parameters to a Plutus script where parameters are already CBOR-encoded.
-    /// </summary>
-    /// <param name="scriptBytes">CBOR-encoded script bytes</param>
-    /// <param name="parametersCbor">CBOR-encoded PlutusData array of parameters</param>
-    /// <returns>CBOR-encoded parameterized script bytes</returns>
     public static byte[] ApplyParametersFromCbor(byte[] scriptBytes, byte[] parametersCbor)
     {
         unsafe
@@ -60,7 +41,6 @@ public static class ScriptApplicator
 
             try
             {
-                // Copy the result to managed memory
                 byte[] result = new byte[resultLength];
                 fixed (byte* destPtr = result)
                 {
@@ -70,7 +50,6 @@ public static class ScriptApplicator
             }
             finally
             {
-                // Free the native memory
                 NativeMethods.FreeScriptBytes((IntPtr)resultPtr, resultLength);
             }
         }

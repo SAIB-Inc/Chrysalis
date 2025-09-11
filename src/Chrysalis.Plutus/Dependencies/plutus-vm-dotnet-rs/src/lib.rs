@@ -3,15 +3,13 @@ use pallas::ledger::primitives::conway::{
     MintedTx, Redeemer, TransactionOutput
 };
 use pallas::ledger::primitives::{
-    TransactionInput,
-    alonzo::PlutusData
+    TransactionInput
 };
 
 use uplc::machine::cost_model::ExBudget;
 use uplc::machine::eval_result::EvalResult;
 use uplc::tx::error::Error;
 use uplc::tx::{apply_params_to_script, eval_phase_two, ResolvedInput, SlotConfig};
-use uplc::ast::{DeBruijn, Program};
 use std::os::raw::{c_uint, c_ulong};
 use std::slice;
 
