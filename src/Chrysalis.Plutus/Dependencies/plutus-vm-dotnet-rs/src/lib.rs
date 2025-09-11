@@ -76,9 +76,11 @@ pub unsafe extern "C" fn eval_tx(
         None => return CTxEvalResultArray::null(),
     };
 
-    let results = eval(transaction_cbor, utxo_cbor, network_type).unwrap();
+    let results = match eval(transaction_cbor, utxo_cbor, network_type) {
+        Ok(results) => results,
+        Err(_) => return CTxEvalResultArray::null(),
+    };
       
-
     let c_results = results
         .into_iter()
         .map(|result| CTxEvalResult {
