@@ -2,14 +2,16 @@ use pallas::codec::minicbor::{self, Decode, Encode};
 use pallas::ledger::primitives::conway::{
     MintedTx, Redeemer, TransactionOutput
 };
-use pallas::ledger::primitives::
-    TransactionInput
-;
+use pallas::ledger::primitives::{
+    TransactionInput,
+    alonzo::PlutusData
+};
 
 use uplc::machine::cost_model::ExBudget;
 use uplc::machine::eval_result::EvalResult;
 use uplc::tx::error::Error;
-use uplc::tx::{eval_phase_two, ResolvedInput, SlotConfig};
+use uplc::tx::{apply_params_to_script, eval_phase_two, ResolvedInput, SlotConfig};
+use uplc::ast::{DeBruijn, Program};
 use std::os::raw::{c_uint, c_ulong};
 use std::slice;
 
@@ -76,10 +78,8 @@ pub unsafe extern "C" fn eval_tx(
         None => return CTxEvalResultArray::null(),
     };
 
-    let results = match eval(transaction_cbor, utxo_cbor, network_type) {
-        Ok(results) => results,
-        Err(_) => return CTxEvalResultArray::null(),
-    };
+    let results = eval(transaction_cbor, utxo_cbor, network_type).unwrap();
+      
 
     let c_results = results
         .into_iter()
@@ -98,6 +98,65 @@ pub unsafe extern "C" fn eval_tx(
 pub unsafe extern "C" fn free_eval_results(results: *mut CTxEvalResult, len: usize) {
     if !results.is_null() && len > 0 {
         let _ = Vec::from_raw_parts(results, len, len);
+    }
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn apply_params_to_script_raw(
+    script_cbor_bytes: *const u8,
+    script_cbor_len: usize,
+    params_cbor_bytes: *const u8,
+    params_cbor_len: usize,
+    out_len: *mut usize,
+) -> *mut u8 {
+    let script_cbor = match bytes_from_raw_parts(script_cbor_bytes, script_cbor_len) {
+        Some(bytes) => bytes,
+        None => {
+            if !out_len.is_null() {
+                *out_len = 0;
+            }
+            return std::ptr::null_mut();
+        }
+    };
+
+    let params_cbor = match bytes_from_raw_parts(params_cbor_bytes, params_cbor_len) {
+        Some(bytes) => bytes,
+        None => {
+            if !out_len.is_null() {
+                *out_len = 0;
+            }
+            return std::ptr::null_mut();
+        }
+    };
+
+    match apply_params_to_script(params_cbor, script_cbor) {
+        Ok(parameterized_script) => {
+            let len = parameterized_script.len();
+            let mut boxed = parameterized_script.into_boxed_slice();
+            let ptr = boxed.as_mut_ptr();
+            
+            // Prevent the Box from being dropped
+            std::mem::forget(boxed);
+            
+            if !out_len.is_null() {
+                *out_len = len;
+            }
+            
+            ptr
+        }
+        Err(_) => {
+            if !out_len.is_null() {
+                *out_len = 0;
+            }
+            std::ptr::null_mut()
+        }
+    }
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn free_script_bytes(ptr: *mut u8, len: usize) {
+    if !ptr.is_null() && len > 0 {
+        let _ = Vec::from_raw_parts(ptr, len, len);
     }
 }
 
