@@ -30,25 +30,35 @@ public static class ScriptExtension
         };
     }
 
-    public static Script ApplyParameters<T>(this Script script, T parameter) where T : CborBase
+    public static Script ApplyParameters<T>(this Script self, T parameter) where T : CborBase
     {
-        if (script is MultiSigScript)
+        if (self is MultiSigScript)
         {
             throw new NotSupportedException("MultiSig scripts do not support parameterization");
         }
 
-        byte[] originalBytes = script.Bytes();
+        byte[] originalBytes = self.Bytes();
         byte[] parameterCbor = CborSerializer.Serialize(parameter);
         PlutusData plutusParameter = CborSerializer.Deserialize<PlutusData>(parameterCbor);
         byte[] parameterizedBytes = ScriptApplicator.ApplyParameters(originalBytes, plutusParameter);
         
-        return script switch
+        return self switch
         {
             PlutusV1Script plutusV1 => plutusV1 with { ScriptBytes = parameterizedBytes },
             PlutusV2Script plutusV2 => plutusV2 with { ScriptBytes = parameterizedBytes },
             PlutusV3Script plutusV3 => plutusV3 with { ScriptBytes = parameterizedBytes },
-            _ => throw new NotSupportedException($"Unsupported script type: {script.GetType()}")
+            _ => throw new NotSupportedException($"Unsupported script type: {self.GetType()}")
         };
+    }
+
+    public static Script ApplyParameters<T>(this Script self, List<T> parameters) where T : CborBase
+    {
+        Script current = self;
+        foreach (var parameter in parameters)
+        {
+            current = current.ApplyParameters(parameter);
+        }
+        return current;
     }
 
 }
