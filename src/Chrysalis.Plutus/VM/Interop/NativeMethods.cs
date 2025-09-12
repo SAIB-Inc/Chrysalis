@@ -18,4 +18,16 @@ internal static partial class NativeMethods
 
     [LibraryImport(LibraryName, EntryPoint = "free_eval_results")]
     public static partial void FreeEvalResults(TxEvalResultArray results);
+
+    [LibraryImport(LibraryName, EntryPoint = "apply_params_to_script_raw")]
+    public static unsafe partial byte* ApplyParamsToScriptRaw(
+        [In] byte[] scriptCborBytes,
+        nuint scriptCborBytesLength,
+        [In] byte[] paramsCborBytes,
+        nuint paramsCborBytesLength,
+        out nuint outLength
+    );
+
+    [LibraryImport(LibraryName, EntryPoint = "free_script_bytes")]
+    public static partial void FreeScriptBytes(IntPtr ptr, nuint len);
 }
