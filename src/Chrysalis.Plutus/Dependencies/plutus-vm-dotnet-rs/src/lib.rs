@@ -60,23 +60,23 @@ impl CTxEvalResultArray {
 
 #[no_mangle]
 pub unsafe extern "C" fn eval_tx(
-    transaction_cbor_bytes: *const u8,
+    transaction_cbor_pointer: *const u8,
     transaction_cbor_len: usize,
-    resolved_utxo_cbor_bytes: *const u8,
+    resolved_utxo_cbor_pointer: *const u8,
     resolved_utxo_cbor_len: usize,
     network_type: u32,
 ) -> CTxEvalResultArray {
-    let transaction_cbor = match bytes_from_raw_parts(transaction_cbor_bytes, transaction_cbor_len) {
+    let transaction_cbor_bytes = match bytes_from_raw_parts(transaction_cbor_pointer, transaction_cbor_len) {
         Some(bytes) => bytes,
         None => return CTxEvalResultArray::null(),
     };
 
-    let utxo_cbor = match bytes_from_raw_parts(resolved_utxo_cbor_bytes, resolved_utxo_cbor_len) {
+    let utxo_cbor_bytes = match bytes_from_raw_parts(resolved_utxo_cbor_pointer, resolved_utxo_cbor_len) {
         Some(bytes) => bytes,
         None => return CTxEvalResultArray::null(),
     };
 
-    let results = match eval(transaction_cbor, utxo_cbor, network_type) {
+    let results = match eval(transaction_cbor_bytes, utxo_cbor_bytes, network_type) {
         Ok(results) => results,
         Err(_) => return CTxEvalResultArray::null(),
     };
