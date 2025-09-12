@@ -132,11 +132,8 @@ pub unsafe extern "C" fn apply_params_to_script_raw(
     match apply_params_to_script(params_cbor, script_cbor) {
         Ok(parameterized_script) => {
             let len = parameterized_script.len();
-            let mut boxed = parameterized_script.into_boxed_slice();
-            let ptr = boxed.as_mut_ptr();
-            
-            // Prevent the Box from being dropped
-            std::mem::forget(boxed);
+            let boxed = parameterized_script.into_boxed_slice();
+            let ptr = Box::into_raw(boxed) as *mut u8;
             
             if !out_len.is_null() {
                 *out_len = len;
@@ -156,7 +153,7 @@ pub unsafe extern "C" fn apply_params_to_script_raw(
 #[no_mangle]
 pub unsafe extern "C" fn free_script_bytes(ptr: *mut u8, len: usize) {
     if !ptr.is_null() && len > 0 {
-        let _ = Vec::from_raw_parts(ptr, len, len);
+        let _ = Box::from_raw(std::slice::from_raw_parts_mut(ptr, len));
     }
 }
 
