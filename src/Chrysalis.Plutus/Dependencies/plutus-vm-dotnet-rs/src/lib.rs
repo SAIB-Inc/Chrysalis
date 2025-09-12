@@ -103,13 +103,13 @@ pub unsafe extern "C" fn free_eval_results(results: *mut CTxEvalResult, len: usi
 
 #[no_mangle]
 pub unsafe extern "C" fn apply_params_to_script_raw(
-    script_cbor_bytes: *const u8,
+    script_cbor_pointer: *const u8,
     script_cbor_len: usize,
-    params_cbor_bytes: *const u8,
+    params_cbor_pointer: *const u8,
     params_cbor_len: usize,
     out_len: *mut usize,
 ) -> *mut u8 {
-    let script_cbor = match bytes_from_raw_parts(script_cbor_bytes, script_cbor_len) {
+    let script_cbor_bytes = match bytes_from_raw_parts(script_cbor_pointer, script_cbor_len) {
         Some(bytes) => bytes,
         None => {
             if !out_len.is_null() {
@@ -119,7 +119,7 @@ pub unsafe extern "C" fn apply_params_to_script_raw(
         }
     };
 
-    let params_cbor = match bytes_from_raw_parts(params_cbor_bytes, params_cbor_len) {
+    let params_cbor_bytes = match bytes_from_raw_parts(params_cbor_pointer, params_cbor_len) {
         Some(bytes) => bytes,
         None => {
             if !out_len.is_null() {
@@ -129,7 +129,7 @@ pub unsafe extern "C" fn apply_params_to_script_raw(
         }
     };
 
-    match apply_params_to_script(params_cbor, script_cbor) {
+    match apply_params_to_script(params_cbor_bytes, script_cbor_bytes) {
         Ok(parameterized_script) => {
             let len = parameterized_script.len();
             let boxed = parameterized_script.into_boxed_slice();
