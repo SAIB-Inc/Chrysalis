@@ -7,5 +7,5 @@ namespace Chrysalis.Network.Cbor.Common;
 [CborList]
 public partial record Tip(
     [CborOrder(0)] Point Slot,
-    [CborOrder(1)] int BlockNumber
+    [CborOrder(1)] int? BlockNumber
 ) : CborBase;
