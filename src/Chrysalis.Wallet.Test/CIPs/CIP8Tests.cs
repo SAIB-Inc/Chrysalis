@@ -156,6 +156,46 @@ public class CIP8Tests
         Assert.Equal(original.Payload, parsedSign1.Payload);
         Assert.Equal(original.Signature, parsedSign1.Signature);
     }
+
+    /// <summary>
+    /// Ensures CIP-8 parsing works when the checksum contains base64url underscores
+    /// </summary>
+    [Fact]
+    public void CIP8FormatRoundTrip_WithUnderscoreInChecksum()
+    {
+        const int encodedChecksumLength = 6; // Base64Url length for the 4-byte FNV-1a checksum
+
+        // Use deterministic headers/signature to keep the CBOR representation stable
+        var protectedHeaders = Array.Empty<byte>();
+        var signature = new byte[] { 1, 2, 3, 4, 5, 6, 7, 8 };
+        CoseSign1? messageWithUnderscore = null;
+        string? cip8WithUnderscore = null;
+
+        for (var i = 0; i < 500; i++)
+        {
+            var payload = Encoding.UTF8.GetBytes($"payload-{i}");
+            var candidate = new CoseSign1(protectedHeaders, HeaderMap.Empty, payload, signature);
+            var cip8 = candidate.ToCip8Format();
+            var checksum = cip8[^encodedChecksumLength..];
+
+            if (!checksum.Contains('_'))
+                continue;
+
+            messageWithUnderscore = candidate;
+            cip8WithUnderscore = cip8;
+            break;
+        }
+
+        Assert.NotNull(messageWithUnderscore);
+        Assert.NotNull(cip8WithUnderscore);
+
+        var parsed = CoseMessageExtensions.FromCip8Format(cip8WithUnderscore!);
+
+        Assert.Equal(messageWithUnderscore!.ProtectedHeaders, parsed.ProtectedHeaders);
+        Assert.Equal(messageWithUnderscore.UnprotectedHeaders.Headers, parsed.UnprotectedHeaders.Headers);
+        Assert.Equal(messageWithUnderscore.Payload, parsed.Payload);
+        Assert.Equal(messageWithUnderscore.Signature, parsed.Signature);
+    }
     
     /// <summary>
     /// Test hashed payload functionality
