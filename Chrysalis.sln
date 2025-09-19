@@ -36,6 +36,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Chrysalis.Wallet.Test", "sr
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Chrysalis.Wallet.Cli", "src\Chrysalis.Wallet.Cli\Chrysalis.Wallet.Cli.csproj", "{4B127AF9-F512-412F-A202-EE4CD3938EC5}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Chrysalis.Network.Test", "src\Chrysalis.Network.Test\Chrysalis.Network.Test.csproj", "{A4BA5355-DE95-4631-B97A-B3D4A23DB18F}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -106,6 +108,10 @@ Global
 		{4B127AF9-F512-412F-A202-EE4CD3938EC5}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{4B127AF9-F512-412F-A202-EE4CD3938EC5}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{4B127AF9-F512-412F-A202-EE4CD3938EC5}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A4BA5355-DE95-4631-B97A-B3D4A23DB18F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A4BA5355-DE95-4631-B97A-B3D4A23DB18F}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A4BA5355-DE95-4631-B97A-B3D4A23DB18F}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A4BA5355-DE95-4631-B97A-B3D4A23DB18F}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -127,6 +133,7 @@ Global
 		{FC919DAE-1852-426C-927B-84008F2D94AC} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 		{A0FA541E-FC27-47F7-B50B-7BCDE90C1127} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 		{4B127AF9-F512-412F-A202-EE4CD3938EC5} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
+		{A4BA5355-DE95-4631-B97A-B3D4A23DB18F} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {A298013F-F39C-4701-8D24-C3EB97C657A1}
