@@ -39,15 +39,25 @@ public sealed class Plexer(IBearer bearer) : IDisposable
     /// </summary>
     /// <param name="cancellationToken">A token to cancel the operation.</param>
     /// <returns>A task that completes when the plexer stops.</returns>
-    /// <exception cref="InvalidOperationException">Thrown if the plexer is already running.</exception>
+    /// <exception cref="InvalidOperationException">Thrown if either demuxer or muxer completes unexpectedly.</exception>
     public async Task RunAsync(CancellationToken cancellationToken)
     {
-        await Task.WhenAny(
-            _demuxer.RunAsync(cancellationToken),
-            _muxer.RunAsync(cancellationToken)
-        );
+        Task demuxerTask = _demuxer.RunAsync(cancellationToken);
+        Task muxerTask = _muxer.RunAsync(cancellationToken);
 
-        throw new InvalidOperationException("Something went wrong");
+        Task completedTask = await Task.WhenAny(demuxerTask, muxerTask);
+
+        // Check which task completed and propagate its exception (if faulted)
+        if (completedTask == demuxerTask)
+        {
+            await demuxerTask; // Re-throws exception if faulted
+            throw new InvalidOperationException("Demuxer completed unexpectedly without error");
+        }
+        else
+        {
+            await muxerTask; // Re-throws exception if faulted
+            throw new InvalidOperationException("Muxer completed unexpectedly without error");
+        }
     }
 
     /// <summary>

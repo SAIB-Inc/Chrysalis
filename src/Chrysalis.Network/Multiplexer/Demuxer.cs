@@ -146,14 +146,47 @@ public sealed class Demuxer(IBearer bearer) : IDisposable
     /// <param name="cancellationToken">A token to cancel the operation.</param>
     public async Task RunAsync(CancellationToken cancellationToken)
     {
-        while (!cancellationToken.IsCancellationRequested)
+        Exception? demuxerException = null;
+
+        try
         {
-            MuxSegment segment = await ReadSegmentAsync(cancellationToken);
+            while (!cancellationToken.IsCancellationRequested)
+            {
+                MuxSegment segment = await ReadSegmentAsync(cancellationToken);
 
-            if (!_protocolPipes.TryGetValue(segment.Header.ProtocolId, out Pipe? pipe)) continue;
+                if (!_protocolPipes.TryGetValue(segment.Header.ProtocolId, out Pipe? pipe)) continue;
 
-            await pipe.Writer.WriteAsync(segment.Payload.First, cancellationToken);
-            await pipe.Writer.FlushAsync(cancellationToken);
+                await pipe.Writer.WriteAsync(segment.Payload.First, cancellationToken);
+                await pipe.Writer.FlushAsync(cancellationToken);
+            }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            // Normal cancellation - don't treat as error
+            throw;
+        }
+        catch (Exception ex)
+        {
+            // Capture exception to complete pipes with error state
+            demuxerException = ex;
+            throw;
+        }
+        finally
+        {
+            // Complete all pipes so waiting readers wake up
+            CompletePipes(demuxerException);
+        }
+    }
+
+    /// <summary>
+    /// Completes all protocol pipes, optionally with an error state.
+    /// </summary>
+    /// <param name="error">The exception to propagate to pipe readers, or null for normal completion.</param>
+    private void CompletePipes(Exception? error = null)
+    {
+        foreach (Pipe pipe in _protocolPipes.Values)
+        {
+            pipe.Writer.Complete(error);
         }
     }
 
@@ -164,11 +197,8 @@ public sealed class Demuxer(IBearer bearer) : IDisposable
     {
         if (_isDisposed) return;
 
-        // Complete all channels
-        foreach (Pipe pipe in _protocolPipes.Values)
-        {
-            pipe.Writer.Complete();
-        }
+        // Complete all pipes without error
+        CompletePipes();
 
         // Don't dispose bearer here - it's provided externally
 

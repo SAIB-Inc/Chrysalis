@@ -100,7 +100,6 @@ public sealed class Muxer(IBearer bearer, ProtocolMode muxerMode) : IDisposable
             {
                 break;
             }
-            catch { }
         }
 
         _pipe.Writer.Complete();
