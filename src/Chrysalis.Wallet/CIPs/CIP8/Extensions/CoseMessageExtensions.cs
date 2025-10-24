@@ -9,6 +9,9 @@ namespace Chrysalis.Wallet.CIPs.CIP8.Extensions;
 /// </summary>
 public static class CoseMessageExtensions
 {
+    private const int ChecksumByteLength = sizeof(uint);
+    private static readonly int EncodedChecksumLength = Base64UrlEncode(new byte[ChecksumByteLength]).Length;
+
     /// <summary>
     /// Converts a COSE message to CIP-8 format with prefix and checksum
     /// </summary>
@@ -46,16 +49,25 @@ public static class CoseMessageExtensions
         var firstUnderscore = cip8Message.IndexOf('_');
         if (firstUnderscore == -1)
             throw new FormatException("Invalid CIP-8 format. Expected format: prefix_data_checksum");
-            
-        // Find the last underscore (before checksum)
-        var lastUnderscore = cip8Message.LastIndexOf('_');
-        if (lastUnderscore == firstUnderscore)
-            throw new FormatException("Invalid CIP-8 format. Expected format: prefix_data_checksum");
-        
+
         var prefix = cip8Message.Substring(0, firstUnderscore + 1);
-        var data = cip8Message.Substring(firstUnderscore + 1, lastUnderscore - firstUnderscore - 1);
-        var checksum = cip8Message.Substring(lastUnderscore + 1);
-        
+
+        // We always append "_" + checksum where the checksum is the Base64Url text of a 4-byte hash.
+        if (cip8Message.Length <= firstUnderscore + 1 + EncodedChecksumLength)
+            throw new FormatException("Invalid CIP-8 format. Missing payload or checksum");
+
+        var separatorIndex = cip8Message.Length - EncodedChecksumLength - 1;
+        if (separatorIndex <= firstUnderscore || cip8Message[separatorIndex] != '_')
+            throw new FormatException("Invalid CIP-8 format. Could not isolate checksum");
+
+        var data = cip8Message.Substring(firstUnderscore + 1, separatorIndex - firstUnderscore - 1);
+        var checksum = cip8Message.Substring(separatorIndex + 1);
+
+        if (checksum.Length != EncodedChecksumLength)
+            throw new FormatException("Invalid CIP-8 format. Invalid checksum length");
+        if (string.IsNullOrEmpty(data))
+            throw new FormatException("Invalid CIP-8 format. Missing payload data");
+
         // Verify checksum
         var dataToChecksum = $"{prefix}{data}";
         var expectedChecksum = CalculateFnv32a(dataToChecksum);

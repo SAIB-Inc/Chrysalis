@@ -41,7 +41,7 @@ public static class TransactionBuilderExtensions
             builder.SetScriptDataHash(scriptDataHash);
 
             ulong scriptCostPerByte = builder.pparams!.MinFeeRefScriptCostPerByte!.Numerator / builder.pparams.MinFeeRefScriptCostPerByte!.Denominator;
-            scriptFee = (ulong)scripts.Sum(script => (decimal)FeeUtil.CalculateReferenceScriptFee(script.Bytes(), scriptCostPerByte * 5));
+            scriptFee = (ulong)scripts.Sum(script => (decimal)FeeUtil.CalculateReferenceScriptFee(script.Bytes(), scriptCostPerByte));
 
             RationalNumber memUnitsCost = new(builder.pparams!.ExecutionCosts!.MemPrice!.Numerator!, builder.pparams.ExecutionCosts!.MemPrice!.Denominator!);
             RationalNumber stepUnitsCost = new(builder.pparams.ExecutionCosts!.StepPrice!.Numerator!, builder.pparams.ExecutionCosts!.StepPrice!.Denominator!);
