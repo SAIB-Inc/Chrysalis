@@ -127,13 +127,21 @@ public class ChainSyncWorker(ILogger<ChainSyncWorker> logger, IConfiguration con
     {
         logger.LogInformation("Starting continuous chain synchronization...");
         Stopwatch logTimer = Stopwatch.StartNew();
-        
+
         while (!cancellationToken.IsCancellationRequested && !chainSync.IsDone)
         {
             try
             {
+                // Check if multiplexer is healthy before attempting operations
+                if (_nodeClient != null && !_nodeClient.IsPlexerHealthy())
+                {
+                    Exception? plexerException = _nodeClient.GetPlexerException();
+                    logger.LogError(plexerException, "Multiplexer has stopped - connection lost");
+                    throw new InvalidOperationException("Connection lost: multiplexer has stopped", plexerException);
+                }
+
                 MessageNextResponse? response = await chainSync.NextRequestAsync(cancellationToken);
-                
+
                 switch (response)
                 {
                     case MessageRollForward rollForward:
