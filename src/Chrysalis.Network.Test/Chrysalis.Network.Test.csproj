@@ -1,7 +1,7 @@
 ﻿<Project>
 
   <ItemGroup>
-    <PackageReference Include="Chrysalis" Version="0.7.19" />
+    <ProjectReference Include="..\Chrysalis.Network\Chrysalis.Network.csproj" />
   </ItemGroup>
 
   <ItemGroup>
