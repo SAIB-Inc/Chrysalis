@@ -107,14 +107,11 @@ public class NodeClient : IDisposable
     /// Checks if the plexer (multiplexer/demultiplexer) is healthy and running.
     /// </summary>
     /// <returns>True if the plexer is running normally, false if it has stopped or faulted.</returns>
-    public bool IsPlexerHealthy()
-    {
-        if (_plexerTask == null) return false;
-        if (_plexerTask.IsCompleted) return false;
-        if (_plexerTask.IsFaulted) return false;
-        if (_plexerTask.IsCanceled) return false;
-        return true;
-    }
+    /// <remarks>
+    /// Task.IsCompleted returns true when the task is in RanToCompletion, Faulted, or Canceled state,
+    /// so this single check covers all failure scenarios.
+    /// </remarks>
+    public bool IsPlexerHealthy() => _plexerTask is { IsCompleted: false };
 
     /// <summary>
     /// Gets the exception that caused the plexer to fail, if any.

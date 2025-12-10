@@ -42,22 +42,30 @@ public sealed class Plexer(IBearer bearer) : IDisposable
     /// <exception cref="InvalidOperationException">Thrown if either demuxer or muxer completes unexpectedly.</exception>
     public async Task RunAsync(CancellationToken cancellationToken)
     {
-        Task demuxerTask = _demuxer.RunAsync(cancellationToken);
-        Task muxerTask = _muxer.RunAsync(cancellationToken);
+        using CancellationTokenSource linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+
+        Task demuxerTask = _demuxer.RunAsync(linkedCts.Token);
+        Task muxerTask = _muxer.RunAsync(linkedCts.Token);
 
         Task completedTask = await Task.WhenAny(demuxerTask, muxerTask);
 
-        // Check which task completed and propagate its exception (if faulted)
-        if (completedTask == demuxerTask)
+        // Cancel the other task to ensure clean shutdown
+        await linkedCts.CancelAsync();
+
+        // Wait for both to finish to ensure proper cleanup
+        try
         {
-            await demuxerTask; // Re-throws exception if faulted
-            throw new InvalidOperationException("Demuxer completed unexpectedly without error");
+            await Task.WhenAll(demuxerTask, muxerTask).WaitAsync(TimeSpan.FromSeconds(5));
         }
-        else
+        catch
         {
-            await muxerTask; // Re-throws exception if faulted
-            throw new InvalidOperationException("Muxer completed unexpectedly without error");
+            // Ignore exceptions here - we'll propagate the original error below
         }
+
+        // Propagate the original exception from the task that failed first
+        string failedComponent = completedTask == demuxerTask ? "Demuxer" : "Muxer";
+        await completedTask; // Re-throws exception if faulted
+        throw new InvalidOperationException($"{failedComponent} completed unexpectedly without error");
     }
 
     /// <summary>

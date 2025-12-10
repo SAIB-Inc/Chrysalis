@@ -106,18 +106,18 @@ public class ChainSyncWorker(ILogger<ChainSyncWorker> logger, IConfiguration con
         switch (intersectResponse)
         {
             case MessageIntersectFound found:
-                logger.LogInformation("Found intersection at slot {Slot}, block {Block}", 
+                logger.LogInformation("Found intersection at slot {Slot}, block {Block}",
                     found.Point.Slot, found.Tip.BlockNumber);
                 _currentSlot = found.Point.Slot;
-                _currentBlockNumber = found.Tip.BlockNumber;
+                _currentBlockNumber = found.Tip.BlockNumber ?? 0;
                 break;
-                
+
             case MessageIntersectNotFound notFound:
-                logger.LogInformation("No intersection found, starting from tip at block {Block}", 
+                logger.LogInformation("No intersection found, starting from tip at block {Block}",
                     notFound.Tip.BlockNumber);
-                _currentBlockNumber = notFound.Tip.BlockNumber;
+                _currentBlockNumber = notFound.Tip.BlockNumber ?? 0;
                 break;
-                
+
             default:
                 throw new InvalidOperationException($"Unexpected intersection response: {intersectResponse}");
         }
@@ -183,9 +183,9 @@ public class ChainSyncWorker(ILogger<ChainSyncWorker> logger, IConfiguration con
         _blocksProcessed++;
         _lastBlockTime = DateTime.UtcNow;
         _currentSlot = rollForward.Tip.Slot.Slot;
-        _currentBlockNumber = rollForward.Tip.BlockNumber;
+        _currentBlockNumber = rollForward.Tip.BlockNumber ?? 0;
         string blockHash = Convert.ToHexString(rollForward.Tip.Slot.Hash).ToLowerInvariant();
-        
+
         logger.LogInformation(
             "Found block: Slot {Slot}, Hash {Hash}",
             _currentSlot,
@@ -198,14 +198,14 @@ public class ChainSyncWorker(ILogger<ChainSyncWorker> logger, IConfiguration con
     {
         _rollBacksProcessed++;
         _currentSlot = rollBackward.Point.Slot;
-        
+
         logger.LogInformation(
             "Chain rollback to slot {Slot}, new tip at block {BlockNumber}",
             rollBackward.Point.Slot,
             rollBackward.Tip.BlockNumber);
-        
-        _currentBlockNumber = rollBackward.Tip.BlockNumber;
-        
+
+        _currentBlockNumber = rollBackward.Tip.BlockNumber ?? 0;
+
         return Task.CompletedTask;
     }
 
