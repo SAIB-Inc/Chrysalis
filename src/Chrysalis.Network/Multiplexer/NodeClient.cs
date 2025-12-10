@@ -12,6 +12,7 @@ public class NodeClient : IDisposable
     public ulong NetworkMagic { get; set; } = 2;
 
     private readonly Plexer _plexer;
+    private Task? _plexerTask;
 
     /// <summary>
     /// Gets the Handshake protocol handler.
@@ -82,7 +83,9 @@ public class NodeClient : IDisposable
     /// <exception cref="InvalidOperationException">Thrown if the client is already started.</exception>
     public async Task StartAsync(ulong networkMagic = 2)
     {
-        _ = _plexer.RunAsync(CancellationToken.None);
+        // Store plexer task so we can observe failures
+        _plexerTask = _plexer.RunAsync(CancellationToken.None);
+
         Handshake = new(_plexer.SubscribeClient(ProtocolType.Handshake));
         ChainSync = new(_plexer.SubscribeClient(ProtocolType.ClientChainSync));
         LocalTxSubmit = new(_plexer.SubscribeClient(ProtocolType.LocalTxSubmission));
@@ -98,6 +101,25 @@ public class NodeClient : IDisposable
         {
             throw new InvalidOperationException("Handshake failed");
         }
+    }
+
+    /// <summary>
+    /// Checks if the plexer (multiplexer/demultiplexer) is healthy and running.
+    /// </summary>
+    /// <returns>True if the plexer is running normally, false if it has stopped or faulted.</returns>
+    /// <remarks>
+    /// Task.IsCompleted returns true when the task is in RanToCompletion, Faulted, or Canceled state,
+    /// so this single check covers all failure scenarios.
+    /// </remarks>
+    public bool IsPlexerHealthy() => _plexerTask is { IsCompleted: false };
+
+    /// <summary>
+    /// Gets the exception that caused the plexer to fail, if any.
+    /// </summary>
+    /// <returns>The base exception from the plexer task, or null if no exception occurred.</returns>
+    public Exception? GetPlexerException()
+    {
+        return _plexerTask?.Exception?.GetBaseException();
     }
 
     /// <summary>

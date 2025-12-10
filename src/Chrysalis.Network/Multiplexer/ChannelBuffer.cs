@@ -39,6 +39,15 @@ public sealed class ChannelBuffer(AgentChannel channel)
             ReadResult readResult = await channel.ReadChunkAsync(cancellationToken);
             ReadOnlySequence<byte> buffer = readResult.Buffer;
 
+            // Check if pipe was completed (demuxer stopped) before we have a complete message
+            if (readResult.IsCompleted && buffer.Length == 0)
+            {
+                throw new InvalidOperationException(
+                    "Connection closed by multiplexer. The demuxer has stopped, likely due to a network error or node disconnection. " +
+                    "Check the plexer health status for the underlying exception."
+                );
+            }
+
             try
             {
                 T result;
@@ -72,7 +81,10 @@ public sealed class ChannelBuffer(AgentChannel channel)
             {
                 // If pipe is completed and we still can't deserialize, that's an error
                 channel.AdvanceTo(buffer.End);
-                throw new InvalidOperationException("Pipe completed before a valid message could be parsed");
+                throw new InvalidOperationException(
+                    "Pipe completed with partial data that could not be deserialized. " +
+                    "This may indicate connection was closed mid-message."
+                );
             }
         }
     }

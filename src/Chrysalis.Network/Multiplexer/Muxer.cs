@@ -66,9 +66,11 @@ public sealed class Muxer(IBearer bearer, ProtocolMode muxerMode) : IDisposable
     /// <param name="cancellationToken">A token to cancel the operation.</param>
     public async Task RunAsync(CancellationToken cancellationToken)
     {
-        while (!cancellationToken.IsCancellationRequested)
+        Exception? muxerException = null;
+
+        try
         {
-            try
+            while (!cancellationToken.IsCancellationRequested)
             {
                 ReadResult protocolMessageResult = await _pipe.Reader.ReadAsync(cancellationToken);
                 ReadOnlySequence<byte> protocolMessageBuffer = protocolMessageResult.Buffer;
@@ -94,16 +96,24 @@ public sealed class Muxer(IBearer bearer, ProtocolMode muxerMode) : IDisposable
                 MuxSegment segment = new(segmentHeader, payloadSlice);
                 await WriteSegmentAsync(segment, cancellationToken);
                 _pipe.Reader.AdvanceTo(payloadSlice.End);
-
             }
-            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-            {
-                break;
-            }
-            catch { }
         }
-
-        _pipe.Writer.Complete();
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            // Normal cancellation - don't treat as error
+            throw;
+        }
+        catch (Exception ex)
+        {
+            // Capture exception to complete pipe with error state
+            muxerException = ex;
+            throw;
+        }
+        finally
+        {
+            // Complete pipe so waiting writers are notified
+            _pipe.Writer.Complete(muxerException);
+        }
     }
 
     /// <summary>
