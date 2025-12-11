@@ -5,7 +5,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <LangVersion>Latest</LangVersion>
-    <Version>1.0.0-alpha</Version>
+    <Version>1.0.1-alpha</Version>
     <PackageId>Chrysalis.Cbor.CodeGen</PackageId>
     <Authors>clark@saib.dev, rjlacanlale@saib.dev</Authors>
     <Company>SAIB Inc</Company>
