@@ -1,4 +1,6 @@
 using System.Net.Http.Json;
+using System.Text;
+using System.Text.Json;
 using Chrysalis.Cbor.Types.Cardano.Core.Transaction;
 using Chrysalis.Network.Cbor.LocalStateQuery;
 using Chrysalis.Tx.Models.Cbor;
@@ -15,9 +17,10 @@ using Chrysalis.Cbor.Serialization;
 
 namespace Chrysalis.Tx.Providers;
 
-public class Kupo(string kupoEndpoint, NetworkType networkType = NetworkType.Preview) : ICardanoDataProvider
+public class Kupmios(string kupoEndpoint, string ogmiosEndpoint, NetworkType networkType = NetworkType.Preview) : ICardanoDataProvider
 {
     private readonly HttpClient _httpClient = CreateHttpClient(kupoEndpoint);
+    private readonly HttpClient _ogmiosClient = new() { BaseAddress = new Uri(ogmiosEndpoint), Timeout = TimeSpan.FromSeconds(30) };
     private readonly NetworkType _networkType = networkType;
     public NetworkType NetworkType => _networkType;
 
@@ -106,10 +109,42 @@ public class Kupo(string kupoEndpoint, NetworkType networkType = NetworkType.Pre
         return Task.FromResult(protocolParams);
     }
 
-    public Task<string> SubmitTransactionAsync(Transaction tx) =>
-        throw new NotImplementedException(
-            "Transaction submission is not supported by Kupo. " +
-            "This operation requires Ogmios Local Tx Submit protocol.");
+    public async Task<string> SubmitTransactionAsync(Transaction tx)
+    {
+        byte[] txBytes = CborSerializer.Serialize(tx);
+        string txCbor = Convert.ToHexString(txBytes).ToLowerInvariant();
+
+        var request = new
+        {
+            jsonrpc = "2.0",
+            method = "submitTransaction",
+            @params = new { transaction = new { cbor = txCbor } },
+            id = Guid.NewGuid().ToString()
+        };
+
+        string json = JsonSerializer.Serialize(request);
+        using StringContent content = new(json, Encoding.UTF8, "application/json");
+
+        HttpResponseMessage response = await _ogmiosClient.PostAsync("", content);
+        string responseJson = await response.Content.ReadAsStringAsync();
+
+        JsonElement result = JsonSerializer.Deserialize<JsonElement>(responseJson);
+
+        if (result.TryGetProperty("error", out JsonElement error))
+        {
+            string message = error.GetProperty("message").GetString() ?? "Unknown error";
+            throw new Exception($"Ogmios submit failed: {message}");
+        }
+
+        if (result.TryGetProperty("result", out JsonElement res) &&
+            res.TryGetProperty("transaction", out JsonElement txResult) &&
+            txResult.TryGetProperty("id", out JsonElement txId))
+        {
+            return txId.GetString() ?? throw new Exception("Could not parse transaction ID");
+        }
+
+        throw new Exception("Unexpected Ogmios response format");
+    }
 
     public Task<Metadata?> GetTransactionMetadataAsync(string txHash) =>
         throw new NotImplementedException(

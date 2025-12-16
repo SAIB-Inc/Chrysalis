@@ -27,11 +27,13 @@ public static class ServiceCollectionExtensions
                 return new Blockfrost(projectId, networkType);
             }),
 
-            "Kupo" => services.AddSingleton<ICardanoDataProvider>(_ =>
+            "Kupmios" => services.AddSingleton<ICardanoDataProvider>(_ =>
             {
                 string kupoUrl = configuration.GetValue<string>("KupoUrl")
-                    ?? throw new InvalidOperationException("KupoUrl is required when using Kupo provider");
-                return new Kupo(kupoUrl, networkType);
+                    ?? throw new InvalidOperationException("KupoUrl is required when using Kupmios provider");
+                string ogmiosUrl = configuration.GetValue<string>("OgmiosUrl")
+                    ?? throw new InvalidOperationException("OgmiosUrl is required when using Kupmios provider");
+                return new Kupmios(kupoUrl, ogmiosUrl, networkType);
             }),
 
             "Ouroboros" => services.AddSingleton<ICardanoDataProvider>(_ =>
@@ -41,7 +43,7 @@ public static class ServiceCollectionExtensions
                 return new Ouroboros(socketPath, Ouroboros.GetNetworkMagic(networkType));
             }),
 
-            _ => throw new InvalidOperationException($"Unknown provider type: {provider}. Supported providers are: Blockfrost, Kupo, Ouroboros")
+            _ => throw new InvalidOperationException($"Unknown provider type: {provider}. Supported providers are: Blockfrost, Kupmios, Ouroboros")
         };
     }
 }
