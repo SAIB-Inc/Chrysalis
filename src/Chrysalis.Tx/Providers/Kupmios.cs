@@ -123,7 +123,7 @@ public class Kupmios(string kupoEndpoint, string ogmiosEndpoint, NetworkType net
         };
 
         string json = JsonSerializer.Serialize(request);
-        using var content = new StringContent(json, Encoding.UTF8, "application/json");
+        using StringContent content = new(json, Encoding.UTF8, "application/json");
 
         HttpResponseMessage response = await _ogmiosClient.PostAsync("", content);
         string responseJson = await response.Content.ReadAsStringAsync();
