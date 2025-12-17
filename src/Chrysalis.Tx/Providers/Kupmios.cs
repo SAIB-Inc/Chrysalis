@@ -209,12 +209,9 @@ public class Kupmios(string kupoEndpoint, string ogmiosEndpoint, NetworkType net
 
         foreach ((string fullAssetName, long quantity) in assets)
         {
-            // Asset name format: policyId.assetName
             string[] parts = fullAssetName.Split('.', 2);
-            if (parts.Length != 2) continue;
-
             string policyId = parts[0];
-            string assetName = parts[1];
+            string assetName = parts.Length > 1 ? parts[1] : string.Empty;
 
             byte[] policy = HexStringCache.FromHexString(policyId);
             byte[] assetNameBytes = HexStringCache.FromHexString(assetName);
