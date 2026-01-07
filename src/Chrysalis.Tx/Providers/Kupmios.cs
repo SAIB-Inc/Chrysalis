@@ -35,6 +35,25 @@ public class Kupmios(string kupoEndpoint, string ogmiosEndpoint, NetworkType net
         return [.. results.SelectMany(matches => matches.Select(ConvertToResolvedInput))];
     }
 
+ 
+    public Task<List<ResolvedInput>> GetUtxosByPaymentKeyAsync(string paymentKey)
+    {
+        string pattern = paymentKey.EndsWith("/*")
+            ? paymentKey
+            : $"{paymentKey}/*";
+
+        return GetUtxosAsync([pattern]);
+    }
+
+    public Task<List<ResolvedInput>> GetUtxosByPaymentKeysAsync(List<string> paymentKeys)
+    {
+        if (paymentKeys.Count == 0) return Task.FromResult<List<ResolvedInput>>([]);
+
+        List<string> patterns = [.. paymentKeys.Select(key => key.EndsWith("/*") ? key : $"{key}/*")];
+
+        return GetUtxosAsync(patterns);
+    }
+
     public Task<ProtocolParams> GetParametersAsync()
     {
         ProtocolParametersResponse parameters = _networkType switch
