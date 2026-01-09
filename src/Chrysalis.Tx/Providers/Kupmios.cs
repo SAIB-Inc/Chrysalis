@@ -54,6 +54,52 @@ public class Kupmios(string kupoEndpoint, string ogmiosEndpoint, NetworkType net
         return GetUtxosAsync(patterns);
     }
 
+    public async Task<ResolvedInput?> GetUtxoByOutRefAsync(string txHash, ulong outputIndex)
+    {
+        string pattern = $"{outputIndex}@{txHash}";
+
+        HttpResponseMessage response = await _httpClient.GetAsync($"matches/{pattern}?unspent&resolve_hashes");
+
+        if (!response.IsSuccessStatusCode)
+        {
+            if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+                return null;
+
+            string error = await response.Content.ReadAsStringAsync();
+            throw new Exception($"Failed to fetch UTXO for {pattern}: {response.StatusCode} - {error}");
+        }
+
+        List<KupoMatch>? matches = await response.Content.ReadFromJsonAsync<List<KupoMatch>>();
+
+        if (matches is null || matches.Count == 0)
+            return null;
+
+        return ConvertToResolvedInput(matches[0]);
+    }
+
+    public Task<ResolvedInput?> GetUtxoByOutRefAsync(TransactionInput outRef) =>
+        GetUtxoByOutRefAsync(HexStringCache.ToHexString(outRef.TransactionId), outRef.Index);
+
+    public async Task<List<ResolvedInput>> GetUtxosByOutRefsAsync(List<(string TxHash, ulong OutputIndex)> outRefs)
+    {
+        if (outRefs.Count == 0) return [];
+
+        IEnumerable<Task<ResolvedInput?>> tasks = outRefs.Select(outRef => GetUtxoByOutRefAsync(outRef.TxHash, outRef.OutputIndex));
+        ResolvedInput?[] results = await Task.WhenAll(tasks);
+
+        return [.. results.Where(r => r is not null).Select(r => r!)];
+    }
+
+    public async Task<List<ResolvedInput>> GetUtxosByOutRefsAsync(List<TransactionInput> outRefs)
+    {
+        if (outRefs.Count == 0) return [];
+
+        IEnumerable<Task<ResolvedInput?>> tasks = outRefs.Select(GetUtxoByOutRefAsync);
+        ResolvedInput?[] results = await Task.WhenAll(tasks);
+
+        return [.. results.Where(r => r is not null).Select(r => r!)];
+    }
+
     public Task<ProtocolParams> GetParametersAsync()
     {
         ProtocolParametersResponse parameters = _networkType switch
