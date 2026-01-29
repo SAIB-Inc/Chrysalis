@@ -16,11 +16,11 @@ public static class FeeUtil
     private const int SizeIncrement = 25600;
     private const double Multiplier = 1.2;
 
-    public static ulong CalculateReferenceScriptFee(byte[] refScriptBytes, ulong minFeeRefScriptCostPerByte)
+    public static ulong CalculateReferenceScriptFee(int totalScriptSize, ulong minFeeRefScriptCostPerByte)
     {
         double accumulatedFee = 0;
         double currentTierPrice = minFeeRefScriptCostPerByte;
-        int remainingSize = refScriptBytes.Length;
+        int remainingSize = totalScriptSize;
 
         while (remainingSize > 0)
         {
@@ -39,6 +39,9 @@ public static class FeeUtil
 
         return (ulong)Math.Floor(accumulatedFee);
     }
+
+    public static ulong CalculateReferenceScriptFee(byte[] refScriptBytes, ulong minFeeRefScriptCostPerByte)
+        => CalculateReferenceScriptFee(refScriptBytes.Length, minFeeRefScriptCostPerByte);
 
     public static ulong CalculateFee(ulong txSizeInBytes, ulong minFeeA, ulong minFeeB)
     {
