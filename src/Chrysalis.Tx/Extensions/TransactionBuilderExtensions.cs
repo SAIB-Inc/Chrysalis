@@ -43,7 +43,7 @@ public static class TransactionBuilderExtensions
             ulong scriptCostPerByte = builder.pparams!.MinFeeRefScriptCostPerByte!.Numerator / builder.pparams.MinFeeRefScriptCostPerByte!.Denominator;
 
             // Tiered pricing applies to TOTAL script size, not per-script
-            int totalScriptSize = scripts.Sum(script => script.Bytes().Length);
+            ulong totalScriptSize = scripts.Sum(script => (ulong)script.Bytes().Length);
             scriptFee = FeeUtil.CalculateReferenceScriptFee(totalScriptSize, scriptCostPerByte);
 
             RationalNumber memUnitsCost = new(builder.pparams!.ExecutionCosts!.MemPrice!.Numerator!, builder.pparams.ExecutionCosts!.MemPrice!.Denominator!);

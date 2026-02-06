@@ -13,14 +13,21 @@ public static class FeeUtil
     private const ulong PROTOCOL_OVERHEAD_BYTES = 160;
 
     // hardcoded for now but will be part of the next era after conway
-    private const int SizeIncrement = 25600;
+    private const ulong SizeIncrement = 25600;
     private const double Multiplier = 1.2;
 
     public static ulong CalculateReferenceScriptFee(int totalScriptSize, ulong minFeeRefScriptCostPerByte)
     {
+        if (totalScriptSize <= 0) return 0;
+
+        return CalculateReferenceScriptFee((ulong)totalScriptSize, minFeeRefScriptCostPerByte);
+    }
+
+    public static ulong CalculateReferenceScriptFee(ulong totalRefScriptBytes, ulong minFeeRefScriptCostPerByte)
+    {
         double accumulatedFee = 0;
         double currentTierPrice = minFeeRefScriptCostPerByte;
-        int remainingSize = totalScriptSize;
+        ulong remainingSize = totalRefScriptBytes;
 
         while (remainingSize > 0)
         {
@@ -41,7 +48,7 @@ public static class FeeUtil
     }
 
     public static ulong CalculateReferenceScriptFee(byte[] refScriptBytes, ulong minFeeRefScriptCostPerByte)
-        => CalculateReferenceScriptFee(refScriptBytes.Length, minFeeRefScriptCostPerByte);
+        => CalculateReferenceScriptFee((ulong)refScriptBytes.Length, minFeeRefScriptCostPerByte);
 
     public static ulong CalculateFee(ulong txSizeInBytes, ulong minFeeA, ulong minFeeB)
     {
