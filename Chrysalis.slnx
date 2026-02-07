@@ -1,6 +1,5 @@
 <Solution>
   <Folder Name="/src/">
-    <Project Path="src/Chrysalis.Cbor.Benchmark/Chrysalis.Cbor.Benchmark.csproj" />
     <Project Path="src/Chrysalis.Cbor.Cli/Chrysalis.Cbor.Cli.csproj" />
     <Project Path="src/Chrysalis.Cbor.CodeGen/Chrysalis.Cbor.CodeGen.csproj" />
     <Project Path="src/Chrysalis.Cbor/Chrysalis.Cbor.csproj" />
