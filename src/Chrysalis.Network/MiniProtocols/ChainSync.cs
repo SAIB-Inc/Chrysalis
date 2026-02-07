@@ -27,16 +27,22 @@ public enum ChainSyncState
 /// <summary>
 /// Implementation of the Ouroboros ChainSync mini-protocol.
 /// </summary>
-/// <remarks>
-/// Initializes a new instance of the ChainSync protocol.
-/// </remarks>
-/// <param name="channel">The channel for protocol communication.</param>
-public class ChainSync(AgentChannel channel) : IMiniProtocol
+public class ChainSync : IMiniProtocol
 {
-    public static ProtocolType ProtocolType => ProtocolType.ClientChainSync;
-    private readonly ChannelBuffer _buffer = new(channel);
+    private readonly ChannelBuffer _buffer;
     private readonly ChainSyncMessage _nextRequest = ChainSyncMessages.NextRequest();
     private ChainSyncState _state = ChainSyncState.Idle;
+
+    public ChainSync(AgentChannel channel, ProtocolType protocol = ProtocolType.ClientChainSync)
+    {
+        _buffer = new ChannelBuffer(channel);
+        Protocol = protocol;
+    }
+
+    /// <summary>
+    /// Gets the protocol type for this ChainSync instance.
+    /// </summary>
+    public ProtocolType Protocol { get; }
 
     /// <summary>
     /// Gets the current state of the protocol.
