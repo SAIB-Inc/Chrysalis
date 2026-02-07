@@ -1,11 +1,11 @@
 ﻿<Project>
+
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <Version>0.7.19</Version>
     <PackageId>Chrysalis.Cbor</PackageId>
-    <Authors>clark@saib.dev, rjlacanlale@saib.dev, kathea.mayol@saib.dev</Authors>
+    <Authors>clark@saib.dev, kathea.mayol@saib.dev</Authors>
     <Company>SAIB Inc</Company>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageLicenseFile>LICENSE.md</PackageLicenseFile>

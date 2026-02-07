@@ -5,14 +5,13 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <Nullable>enable</Nullable>
-    <Version>1.0.6-alpha</Version>
   </PropertyGroup>
 
   <Target Name="PreBuild" BeforeTargets="PreBuildEvent">
     <Exec Command="./build-rs.sh" />
   </Target>
 
-   <ItemGroup>
+  <ItemGroup>
     <None Update="*.so">
       <Pack>true</Pack>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
@@ -49,7 +48,7 @@
     </Content>
   </ItemGroup>
 
-   <ItemGroup>
+  <ItemGroup>
     <ProjectReference Include="../Chrysalis.Wallet/Chrysalis.Wallet.csproj" />
   </ItemGroup>
 
