@@ -1,0 +1,23 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Chrysalis.Cbor.Benchmark/Chrysalis.Cbor.Benchmark.csproj" />
+    <Project Path="src/Chrysalis.Cbor.Cli/Chrysalis.Cbor.Cli.csproj" />
+    <Project Path="src/Chrysalis.Cbor.CodeGen/Chrysalis.Cbor.CodeGen.csproj" />
+    <Project Path="src/Chrysalis.Cbor/Chrysalis.Cbor.csproj" />
+    <Project Path="src/Chrysalis.Cli/Chrysalis.Cli.csproj" />
+    <Project Path="src/Chrysalis.Network.Cli/Chrysalis.Network.Cli.csproj" />
+    <Project Path="src/Chrysalis.Network.Tests/Chrysalis.Network.Tests.csproj" />
+    <Project Path="src/Chrysalis.Network/Chrysalis.Network.csproj" />
+    <Project Path="src/Chrysalis.Plutus.Cli/Chrysalis.Plutus.Cli.csproj" />
+    <Project Path="src/Chrysalis.Plutus/Chrysalis.Plutus.csproj" />
+    <Project Path="src/Chrysalis.Tx.Cli/Chrysalis.Tx.Cli.csproj" />
+    <Project Path="src/Chrysalis.Tx/Chrysalis.Tx.csproj" />
+    <Project Path="src/Chrysalis.Wallet.Cli/Chrysalis.Wallet.Cli.csproj" />
+    <Project Path="src/Chrysalis.Wallet.Test/Chrysalis.Wallet.Test.csproj" />
+    <Project Path="src/Chrysalis.Wallet/Chrysalis.Wallet.csproj" />
+    <Project Path="src/Chrysalis/Chrysalis.csproj" />
+  </Folder>
+  <Folder Name="/src/Chrysalis.Cbor.Test/">
+    <Project Path="src/Chrysalis.Cbor.Test/Chrysalis.Test.csproj" />
+  </Folder>
+</Solution>

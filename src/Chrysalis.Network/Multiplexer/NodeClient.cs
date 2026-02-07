@@ -69,7 +69,7 @@ public class NodeClient : IDisposable
     /// <param name="port">The port to connect to.</param>
     /// <param name="cancellationToken">A token to cancel the connection operation.</param>
     /// <returns>A connected NodeClient instance.</returns>
-    public static async Task<NodeClient> ConnectTcpAsync(string host, int port, CancellationToken cancellationToken = default)
+    public static async Task<NodeClient> ConnectAsync(string host, int port, CancellationToken cancellationToken = default)
     {
         TcpBearer tcpBearer = await TcpBearer.CreateAsync(host, port, cancellationToken);
         Plexer plexer = new(tcpBearer);
