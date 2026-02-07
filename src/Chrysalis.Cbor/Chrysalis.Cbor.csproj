@@ -3,7 +3,7 @@
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <Version>0.7.19</Version>
+    <Version>1.1.0-alpha</Version>
     <PackageId>Chrysalis.Cbor</PackageId>
     <Authors>clark@saib.dev, rjlacanlale@saib.dev, kathea.mayol@saib.dev</Authors>
     <Company>SAIB Inc</Company>
