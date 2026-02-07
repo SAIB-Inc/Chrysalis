@@ -6,7 +6,7 @@
     <Nullable>enable</Nullable>
     <Version>1.1.0-alpha</Version>
     <PackageId>Chrysalis</PackageId>
-    <Authors>clark@saib.dev, rjlacanlale@saib.dev, rico.quiblat@saib.dev, wendellmor.tamayo@saib.dev, christian.gantuangco@saib.dev</Authors>
+    <Authors>clark@saib.dev, rico.quiblat@saib.dev, wendellmor.tamayo@saib.dev</Authors>
     <Company>SAIB Inc</Company>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageLicenseFile>LICENSE.md</PackageLicenseFile>

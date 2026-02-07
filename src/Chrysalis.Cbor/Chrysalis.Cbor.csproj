@@ -5,7 +5,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <PackageId>Chrysalis.Cbor</PackageId>
-    <Authors>clark@saib.dev, rjlacanlale@saib.dev, kathea.mayol@saib.dev</Authors>
+    <Authors>clark@saib.dev, kathea.mayol@saib.dev</Authors>
     <Company>SAIB Inc</Company>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageLicenseFile>LICENSE.md</PackageLicenseFile>
