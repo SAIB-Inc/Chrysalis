@@ -9,44 +9,11 @@ namespace Chrysalis.Network.Tests;
 public class MultiplexerTests
 {
     /// <summary>
-    /// Tests that the Muxer correctly handles incomplete protocol message headers.
-    /// </summary>
-    [Fact]
-    public async Task Muxer_WaitsForCompleteHeader_WhenPartialDataAvailable()
-    {
-        // Arrange
-        var pipe = new Pipe();
-        var mockBearer = new MockBearer();
-        var muxer = new Muxer(mockBearer, ProtocolMode.Initiator);
-
-        // Start the muxer
-        using var cts = new CancellationTokenSource();
-        var muxerTask = muxer.RunAsync(cts.Token);
-
-        // Write only 2 bytes (incomplete header - need 3 bytes minimum)
-        pipe.Writer.Write(new byte[] { 0x01, 0x00 }); // Protocol ID and partial length
-        await pipe.Writer.FlushAsync();
-
-        // Give muxer time to process (it should wait for more data)
-        await Task.Delay(100);
-
-        // Complete with full message
-        pipe.Writer.Write(new byte[] { 0x02, 0xAB, 0xCD }); // Length (2) + payload (AB CD)
-        await pipe.Writer.FlushAsync();
-
-        // Give time to process the complete message
-        await Task.Delay(100);
-
-        // Cleanup
-        cts.Cancel();
-        try { await muxerTask; } catch (OperationCanceledException) { }
-    }
-
-    /// <summary>
     /// Tests that the AgentChannel correctly handles the two-argument AdvanceTo overload.
+    /// This validates the fix for the ChannelBuffer infinite loop bug.
     /// </summary>
     [Fact]
-    public async Task AgentChannel_AdvanceTo_WithExamined_SetsCorrectPositions()
+    public async Task AgentChannel_AdvanceTo_WithConsumedAndExamined_AllowsWaitingForMoreData()
     {
         // Arrange
         var pipe = new Pipe();
@@ -58,21 +25,27 @@ public class MultiplexerTests
 
         // Write some data
         pipe.Writer.Write(new byte[] { 0x01, 0x02, 0x03, 0x04, 0x05 });
-        pipe.Writer.Complete();
+        await pipe.Writer.FlushAsync();
 
-        // Read the data
-        var result = await pipe.Reader.ReadAsync();
+        // Read the data via channel
+        var result = await channel.ReadChunkAsync();
         var buffer = result.Buffer;
 
-        // Act - advance with both consumed and examined positions
-        var consumed = buffer.Start;
-        var examined = buffer.End;
-        channel.AdvanceTo(consumed, examined);
+        // Act - advance with consumed=Start (nothing consumed) and examined=End (everything examined)
+        // This tells the pipe reader to wait for more data before returning
+        channel.AdvanceTo(buffer.Start, buffer.End);
 
-        // Assert - no exception should be thrown, and we can read again
-        // This is a basic sanity check that the two-argument overload works
-        var secondResult = await pipe.Reader.ReadAsync();
-        Assert.True(secondResult.IsCompleted);
+        // Write more data
+        pipe.Writer.Write(new byte[] { 0x06, 0x07, 0x08 });
+        await pipe.Writer.FlushAsync();
+
+        // Second read should return all the data (original + new)
+        var secondResult = await channel.ReadChunkAsync();
+        Assert.Equal(8, secondResult.Buffer.Length);
+
+        // Cleanup
+        channel.AdvanceTo(secondResult.Buffer.End);
+        pipe.Writer.Complete();
     }
 
     /// <summary>
@@ -108,6 +81,46 @@ public class MultiplexerTests
         // Assert - check if data was routed to the protocol pipe
         var readResult = await protocolReader.ReadAsync(CancellationToken.None);
         Assert.False(readResult.Buffer.IsEmpty);
+    }
+
+    /// <summary>
+    /// Tests that the Demuxer can handle segments split across multiple reads.
+    /// This validates the fix for the double-advance bug.
+    /// </summary>
+    [Fact]
+    public async Task Demuxer_HandlesSegmentsSplitAcrossReads()
+    {
+        // Arrange
+        var mockBearer = new MockBearer();
+        var demuxer = new Demuxer(mockBearer);
+
+        // Subscribe to a protocol before running
+        var protocolReader = demuxer.Subscribe(ProtocolType.Handshake);
+
+        // Create a segment but split it into parts
+        var fullSegment = CreateMuxSegment(
+            transmissionTime: 1000,
+            protocolId: (ushort)ProtocolType.Handshake,
+            payload: new byte[] { 0xAB, 0xCD, 0xEF, 0x12, 0x34 }
+        );
+
+        // First enqueue just the header (8 bytes)
+        mockBearer.EnqueueIncomingData(fullSegment[..8]);
+        
+        // Then enqueue the payload (5 bytes)
+        mockBearer.EnqueueIncomingData(fullSegment[8..]);
+
+        // Act - run demuxer briefly
+        using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(500));
+        try
+        {
+            await demuxer.RunAsync(cts.Token);
+        }
+        catch (OperationCanceledException) { }
+
+        // Assert - check if data was routed correctly
+        var readResult = await protocolReader.ReadAsync(CancellationToken.None);
+        Assert.Equal(5, readResult.Buffer.Length); // payload length
     }
 
     /// <summary>
