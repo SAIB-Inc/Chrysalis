@@ -75,6 +75,20 @@ public sealed class Muxer(IBearer bearer, ProtocolMode muxerMode) : IDisposable
                 ReadResult protocolMessageResult = await _pipe.Reader.ReadAsync(cancellationToken);
                 ReadOnlySequence<byte> protocolMessageBuffer = protocolMessageResult.Buffer;
 
+                // Check for pipe completion with empty buffer
+                if (protocolMessageResult.IsCompleted && protocolMessageBuffer.Length == 0)
+                {
+                    break;
+                }
+
+                // Need at least 3 bytes for header (1 protocol ID + 2 length)
+                if (protocolMessageBuffer.Length < 3)
+                {
+                    // Not enough data, wait for more
+                    _pipe.Reader.AdvanceTo(protocolMessageBuffer.Start, protocolMessageBuffer.End);
+                    continue;
+                }
+
                 // protocol id
                 ReadOnlySequence<byte> protocolIdSlice = protocolMessageBuffer.Slice(0, 1);
                 ProtocolType protocolId = (ProtocolType)protocolIdSlice.FirstSpan[0];
@@ -82,6 +96,15 @@ public sealed class Muxer(IBearer bearer, ProtocolMode muxerMode) : IDisposable
                 // payload length
                 ReadOnlySequence<byte> payloadLengthSlice = protocolMessageBuffer.Slice(1, 2);
                 ushort payloadLength = BinaryPrimitives.ReadUInt16BigEndian(payloadLengthSlice.FirstSpan);
+
+                // Check if we have the complete payload
+                int totalMessageLength = 3 + payloadLength;
+                if (protocolMessageBuffer.Length < totalMessageLength)
+                {
+                    // Not enough data, wait for more
+                    _pipe.Reader.AdvanceTo(protocolMessageBuffer.Start, protocolMessageBuffer.End);
+                    continue;
+                }
 
                 // payload
                 ReadOnlySequence<byte> payloadSlice = protocolMessageBuffer.Slice(3, payloadLength);
@@ -95,7 +118,7 @@ public sealed class Muxer(IBearer bearer, ProtocolMode muxerMode) : IDisposable
 
                 MuxSegment segment = new(segmentHeader, payloadSlice);
                 await WriteSegmentAsync(segment, cancellationToken);
-                _pipe.Reader.AdvanceTo(payloadSlice.End);
+                _pipe.Reader.AdvanceTo(protocolMessageBuffer.GetPosition(totalMessageLength));
             }
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)

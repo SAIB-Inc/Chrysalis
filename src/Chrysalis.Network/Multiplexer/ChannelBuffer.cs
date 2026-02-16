@@ -74,8 +74,9 @@ public sealed class ChannelBuffer(AgentChannel channel)
             }
             catch (Exception) when (!readResult.IsCompleted)
             {
-                // Need more data - mark what we examined but couldn't use
-                channel.AdvanceTo(buffer.Start);
+                // Need more data - mark what we examined but couldn't consume
+                // This tells the pipe reader to wait for more data before returning the same buffer
+                channel.AdvanceTo(buffer.Start, buffer.End);
             }
             catch (Exception) when (readResult.IsCompleted)
             {
