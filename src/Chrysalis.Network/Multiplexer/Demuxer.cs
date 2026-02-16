@@ -52,7 +52,7 @@ public sealed class Demuxer(IBearer bearer) : IDisposable
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public async ValueTask<MuxSegment> ReadSegmentAsync(CancellationToken cancellationToken)
     {
-        // Read the header
+        // Read at least the header first
         ReadResult result = await bearer.Reader.ReadAtLeastAsync(ProtocolConstants.SegmentHeaderSize, cancellationToken);
         ReadOnlySequence<byte> buffer = result.Buffer;
 
@@ -60,84 +60,43 @@ public sealed class Demuxer(IBearer bearer) : IDisposable
         ReadOnlySequence<byte> headerSlice = buffer.Slice(0, ProtocolConstants.SegmentHeaderSize);
         MuxSegmentHeader header = MuxSegmentCodec.DecodeHeader(headerSlice);
 
-        // Advance past the header
-        bearer.Reader.AdvanceTo(buffer.GetPosition(ProtocolConstants.SegmentHeaderSize));
+        int totalRequired = ProtocolConstants.SegmentHeaderSize + header.PayloadLength;
 
-        // Read and process the payload
-        ReadOnlySequence<byte> payloadSequence;
+        // If we don't have enough data for header + payload, read more
+        if (buffer.Length < totalRequired)
+        {
+            // Mark what we've examined (header) but haven't consumed anything yet
+            bearer.Reader.AdvanceTo(buffer.Start, buffer.GetPosition(ProtocolConstants.SegmentHeaderSize));
 
-        if (buffer.Length >= header.PayloadLength + ProtocolConstants.SegmentHeaderSize)
-        {
-            // We already have the complete payload in the buffer
-            ReadOnlySequence<byte> payloadSlice = buffer.Slice(ProtocolConstants.SegmentHeaderSize, header.PayloadLength);
-            payloadSequence = CopyPayload(payloadSlice);
-            bearer.Reader.AdvanceTo(buffer.GetPosition(header.PayloadLength + ProtocolConstants.SegmentHeaderSize));
+            // Read until we have enough for header + payload
+            result = await bearer.Reader.ReadAtLeastAsync(totalRequired, cancellationToken);
+            buffer = result.Buffer;
         }
-        else
-        {
-            // We need to read more data for the payload
-            result = await bearer.Reader.ReadAtLeastAsync(header.PayloadLength, cancellationToken);
-            ReadOnlySequence<byte> payloadSlice = result.Buffer.Slice(0, header.PayloadLength);
-            payloadSequence = CopyPayload(payloadSlice);
-            bearer.Reader.AdvanceTo(result.Buffer.GetPosition(header.PayloadLength));
-        }
+
+        // Now we have the complete segment in buffer
+        ReadOnlySequence<byte> payloadSlice = buffer.Slice(ProtocolConstants.SegmentHeaderSize, header.PayloadLength);
+        ReadOnlySequence<byte> payloadSequence = CopyPayload(payloadSlice);
+
+        // Advance past the entire segment (header + payload)
+        bearer.Reader.AdvanceTo(buffer.GetPosition(totalRequired));
 
         return new MuxSegment(header, payloadSequence);
     }
 
-    // Shared buffer pool to reduce allocations
-    private static readonly ArrayPool<byte> _bufferPool = ArrayPool<byte>.Shared;
-
     /// <summary>
-    /// Creates a copy of the payload from a ReadOnlySequence using buffer pooling.
+    /// Creates a copy of the payload from a ReadOnlySequence.
     /// </summary>
+    /// <remarks>
+    /// This method always allocates a new array because ReadOnlySequence doesn't track
+    /// memory ownership, making it impossible to reliably return pooled buffers.
+    /// For the typical segment sizes in Cardano protocols, this is acceptable.
+    /// </remarks>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static ReadOnlySequence<byte> CopyPayload(ReadOnlySequence<byte> payload)
     {
-        // For very small payloads, using pooling introduces more overhead than benefit
-        if (payload.Length <= 128)
-        {
-            byte[] smallPayloadCopy = new byte[payload.Length];
-            payload.CopyTo(smallPayloadCopy);
-            return new ReadOnlySequence<byte>(smallPayloadCopy);
-        }
-
-        // For larger payloads, use the shared buffer pool
-        byte[] payloadCopy = _bufferPool.Rent((int)payload.Length);
-
-        try
-        {
-            payload.CopyTo(payloadCopy);
-            // Store the buffer in the memory record for later return to pool
-            PooledMemory managedPayload = new(payloadCopy, _bufferPool, (int)payload.Length);
-            return new ReadOnlySequence<byte>(managedPayload.Memory);
-        }
-        catch
-        {
-            // Ensure buffer is returned on exception
-            _bufferPool.Return(payloadCopy);
-            throw;
-        }
-    }
-
-    // Helper class to track pooled memory and return it when no longer used
-    private sealed class PooledMemory(byte[] buffer, ArrayPool<byte> pool, int length) : IMemoryOwner<byte>
-    {
-        private readonly byte[] _buffer = buffer;
-        private readonly ArrayPool<byte> _pool = pool;
-        private readonly int _length = length;
-        private bool _disposed = false;
-
-        public Memory<byte> Memory => _buffer.AsMemory(0, _length);
-
-        public void Dispose()
-        {
-            if (!_disposed)
-            {
-                _pool.Return(_buffer);
-                _disposed = true;
-            }
-        }
+        byte[] payloadCopy = new byte[payload.Length];
+        payload.CopyTo(payloadCopy);
+        return new ReadOnlySequence<byte>(payloadCopy);
     }
 
     /// <summary>
