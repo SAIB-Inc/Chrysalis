@@ -47,49 +47,60 @@ public class UTxORPC : ICardanoDataProvider
         }
     }
 
+    private const int MaxParallelQueries = 5;
+
     public async Task<List<ResolvedInput>> GetUtxosAsync(List<string> addresses)
     {
         if (addresses.Count == 0) return [];
 
         List<ResolvedInput> results = [];
 
-        foreach (string address in addresses)
+        for (int i = 0; i < addresses.Count; i += MaxParallelQueries)
         {
-            byte[] addressBytes = ChrysalisAddress.FromBech32(address).ToBytes();
-
-            SearchUtxosRequest request = new()
-            {
-                Predicate = new UtxoPredicate
-                {
-                    Match = new AnyUtxoPattern
-                    {
-                        Cardano = new CardanoSpec.TxOutputPattern
-                        {
-                            Address = new CardanoSpec.AddressPattern
-                            {
-                                ExactAddress = ByteString.CopyFrom(addressBytes)
-                            }
-                        }
-                    }
-                },
-                MaxItems = 100
-            };
-
-            SearchUtxosResponse response = await _queryClient.SearchUtxosAsync(request, headers: _headers);
-
-            foreach (AnyUtxoData item in response.Items)
-            {
-                if (item.TxoRef == null)
-                    continue;
-
-                ResolvedInput? resolved = MapToResolvedInput(item);
-                if (resolved != null)
-                    results.Add(resolved);
-            }
+            IEnumerable<string> batch = addresses.Skip(i).Take(MaxParallelQueries);
+            List<ResolvedInput>[] batchResults = await Task.WhenAll(batch.Select(SearchUtxosByAddressAsync));
+            results.AddRange(batchResults.SelectMany(r => r));
         }
 
         return results;
     }
+
+    private async Task<List<ResolvedInput>> SearchUtxosByAddressAsync(string address)
+    {
+        byte[] addressBytes = ChrysalisAddress.FromBech32(address).ToBytes();
+
+        SearchUtxosResponse response = await _queryClient.SearchUtxosAsync(
+            new SearchUtxosRequest { Predicate = BuildAddressPredicate(addressBytes) },
+            headers: _headers);
+
+        List<ResolvedInput> results = [];
+        foreach (AnyUtxoData item in response.Items)
+        {
+            if (item.TxoRef == null)
+                continue;
+
+            ResolvedInput? resolved = MapToResolvedInput(item);
+            if (resolved != null)
+                results.Add(resolved);
+        }
+
+        return results;
+    }
+
+    private static UtxoPredicate BuildAddressPredicate(byte[] addressBytes) =>
+        new()
+        {
+            Match = new AnyUtxoPattern
+            {
+                Cardano = new CardanoSpec.TxOutputPattern
+                {
+                    Address = new CardanoSpec.AddressPattern
+                    {
+                        ExactAddress = ByteString.CopyFrom(addressBytes)
+                    }
+                }
+            }
+        };
 
     public async Task<ProtocolParams> GetParametersAsync()
     {
