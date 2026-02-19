@@ -22,14 +22,13 @@ using Transaction = Chrysalis.Cbor.Types.Cardano.Core.Transaction.Transaction;
 
 namespace Chrysalis.Tx.Providers;
 
-public class UTxORPC : ICardanoDataProvider, IDisposable
+public class UTxORPC : ICardanoDataProvider
 {
     private readonly GrpcChannel _channel;
     private readonly QueryService.QueryServiceClient _queryClient;
     private readonly SubmitService.SubmitServiceClient _submitClient;
     private readonly GrpcMetadata _headers;
     private readonly NetworkType _networkType;
-    private bool _disposed;
 
     public NetworkType NetworkType => _networkType;
 
@@ -125,14 +124,6 @@ public class UTxORPC : ICardanoDataProvider, IDisposable
         throw new NotImplementedException(
             "Transaction metadata retrieval is not supported via UTxO RPC. " +
             "Use Blockfrost or another provider for metadata queries.");
-    }
-
-    public void Dispose()
-    {
-        if (_disposed) return;
-        _disposed = true;
-        _channel.Dispose();
-        GC.SuppressFinalize(this);
     }
 
     #region Private Helpers
