@@ -1,5 +1,3 @@
-using Blake2Fast;
-using Chrysalis.Cbor.Serialization;
 using Chrysalis.Cbor.Types.Plutus.Address;
 using Chrysalis.Wallet.Extensions;
 using Chrysalis.Wallet.Models.Enums;
@@ -94,18 +92,26 @@ public class Address
     }
 
     /// <summary>
-    /// Creates an <see cref="Address"/> from public key(s).
+    /// Creates an <see cref="Address"/> from public key(s) with an explicit address type.
+    /// For delegation/stake types (14, 15), <paramref name="paymentPub"/> is used as the stake credential.
+    /// For all other types, <paramref name="paymentPub"/> is the payment credential and
+    /// <paramref name="stakePub"/> is the optional stake credential.
     /// </summary>
     /// <param name="networkType">The Cardano network type (e.g., Mainnet or Testnet).</param>
-    /// <param name="addressType">The type of address to create.</param>
-    /// <param name="paymentPub">The public key for the payment part.</param>
-    /// <param name="stakePub">Optional public key for the stake delegation part.</param>
+    /// <param name="addressType">The address type to create.</param>
+    /// <param name="paymentPub">The public key for the payment credential (or stake credential for delegation types).</param>
+    /// <param name="stakePub">Optional public key for the stake credential.</param>
     public static Address FromPublicKeys(NetworkType networkType, AddressType addressType, PublicKey paymentPub, PublicKey? stakePub = null)
     {
-        byte[] paymentHash = HashUtil.Blake2b224(paymentPub.Key);
-        byte[]? stakeHash = stakePub?.Key is not null ? HashUtil.Blake2b224(stakePub.Key) : null;
+        if (addressType is AddressType.Delegation or AddressType.ScriptDelegation)
+        {
+            byte[] stakeHash = HashUtil.Blake2b224(paymentPub.Key);
+            return new Address(networkType, addressType, [], stakeHash);
+        }
 
-        return new Address(networkType, addressType, paymentHash, stakeHash);
+        byte[] paymentHash = HashUtil.Blake2b224(paymentPub.Key);
+        byte[]? stakeHash2 = stakePub is not null ? HashUtil.Blake2b224(stakePub.Key) : null;
+        return new Address(networkType, addressType, paymentHash, stakeHash2);
     }
 
     #endregion
@@ -177,7 +183,6 @@ public class Address
 
     #region Private Helper Methods
 
-    // TODO: Handle other AddressTypes properly
     private static byte[] ConstructAddressBytes(AddressHeader header, byte[] payment, byte[]? stake)
     {
         byte headerByte = header.ToByte();
@@ -219,76 +224,6 @@ public class Address
                 throw new NotSupportedException($"Address type {header.Type} is not supported");
         }
     }
-
-
-    // TODO
-    private static (Credential payment, Credential? stake) ExtractCredentialsFromBytes(byte[] addressBytes)
-    {
-        AddressHeader header = GetAddressHeader(addressBytes[0]);
-
-        void ValidateAddressLength(int requiredLength)
-        {
-            if (addressBytes.Length < requiredLength)
-                throw new ArgumentException($"Address must be at least {requiredLength} bytes");
-        }
-
-        (Credential payment, Credential? stake) ExtractPaymentAndStakeCredentials()
-        {
-            return (
-                ExtractCredential(addressBytes, 0),
-                ExtractCredential(addressBytes, 28)
-            );
-        }
-
-        switch (header.Type)
-        {
-            case AddressType.Base:
-            case AddressType.ScriptPaymentWithDelegation:
-            case AddressType.PaymentWithScriptDelegation:
-            case AddressType.ScriptPaymentWithScriptDelegation:
-            case AddressType.PaymentWithPointerDelegation:
-            case AddressType.ScriptPaymentWithPointerDelegation:
-                ValidateAddressLength(57); // Base and script address types require at least 57 bytes
-                return ExtractPaymentAndStakeCredentials();
-
-            case AddressType.EnterprisePayment:
-            case AddressType.EnterpriseScriptPayment:
-                ValidateAddressLength(29); // Enterprise address types require at least 29 bytes
-                return (ExtractCredential(addressBytes, 1), null);
-            case AddressType.Delegation:
-            case AddressType.ScriptDelegation:
-                ValidateAddressLength(29); // Delegation address types require at least 29 bytes
-                return (ExtractCredential(addressBytes, 1), ExtractCredential(addressBytes, 29));
-
-            default:
-                throw new NotSupportedException($"Address type {header.Type} is not supported");
-        }
-    }
-
-    private static Credential ExtractCredential(byte[] bytes, int offset)
-    {
-        if (bytes.Length < 28)
-            throw new ArgumentException("Not enough bytes to extract credential");
-
-        CredentialType credType = (CredentialType)(bytes[offset] >> 7);
-        byte[] hash = [.. bytes.Skip(offset).Take(29)];
-
-        Credential credential = credType switch
-        {
-            CredentialType.KeyHash => new VerificationKey(hash),
-            CredentialType.ScriptHash => new Script(hash),
-            _ => throw new ArgumentException("Unsupported credential type")
-        };
-
-        return credential;
-    }
-
-    private static byte[] GetKeyHash(Credential self) => self switch
-    {
-        VerificationKey vkey => vkey.VerificationKeyHash,
-        Script script => script.ScriptHash,
-        _ => throw new Exception("Invalid credential")
-    };
 
     #endregion
 }
