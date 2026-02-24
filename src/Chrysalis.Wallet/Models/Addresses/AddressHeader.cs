@@ -1,48 +1,25 @@
-using Chrysalis.Wallet.Extensions;
 using Chrysalis.Wallet.Models.Enums;
 
 namespace Chrysalis.Wallet.Models.Addresses;
 
-public record AddressHeader(AddressType Type, NetworkType Network, CredentialType? StakeCredentialType = null)
+public record AddressHeader(AddressType Type, NetworkType Network)
 {
     public byte ToByte()
     {
-        // If it's a stake address, use either 14 (KeyHash) or 15 (ScriptHash)
-        byte header = (byte)(((byte)Type << 4) | (byte)Network);
-
-        // Optionally, modify the header byte if it's a stake address
-        if (StakeCredentialType is not null)
-        {
-            // Set the top 4 bits for stake address type
-            header |= (byte)((StakeCredentialType == CredentialType.KeyHash) ? 0x0E : 0x0F);
-        }
-
-        return header;
+        int networkNibble = Network == NetworkType.Mainnet ? 1 : 0;
+        return (byte)(((byte)Type << 4) | networkNibble);
     }
 
     public static AddressHeader FromByte(byte headerByte)
     {
-        // Extract type and network from the header byte
         AddressType type = (AddressType)(headerByte >> 4);
         NetworkType network = (NetworkType)(headerByte & 0x0F);
-
-        // Extract CredentialType (0x0E = StakeKeyHash, 0x0F = ScriptHash)
-        CredentialType? stakeCredentialType = null;
-        if (headerByte == 0x0E)
-        {
-            stakeCredentialType = CredentialType.KeyHash;
-        }
-        else if (headerByte == 0x0F)
-        {
-            stakeCredentialType = CredentialType.ScriptHash;
-        }
-
-        return new AddressHeader(type, network, stakeCredentialType);
+        return new AddressHeader(type, network);
     }
 
     public string GetPrefix()
     {
-        string prefixCore = Type == AddressType.Delegation ? "stake" : "addr";
+        string prefixCore = Type is AddressType.Delegation or AddressType.ScriptDelegation ? "stake" : "addr";
         string networkSuffix = Network == NetworkType.Mainnet ? string.Empty : "_test";
         return prefixCore + networkSuffix;
     }

@@ -160,7 +160,7 @@ public class Address
             0x07 => AddressType.EnterpriseScriptPayment,
             0x0e => AddressType.Delegation,
             0x0f => AddressType.ScriptDelegation,
-            _ => AddressType.Base
+            _ => throw new ArgumentOutOfRangeException(nameof(headerByte), $"Unsupported address type nibble: 0x{typeValue:X2}")
         };
 
         NetworkType network = (headerByte & 0x0F) switch
