@@ -18,7 +18,7 @@
   </a>
   <br>
   <a href="https://dotnet.microsoft.com/download">
-    <img src="https://img.shields.io/badge/.NET-9.0-512BD4?style=flat-square" alt=".NET">
+    <img src="https://img.shields.io/badge/.NET-10.0-512BD4?style=flat-square" alt=".NET">
   </a>
   <a href="https://cardano.org/">
     <img src="https://img.shields.io/badge/Cardano-Compatible-0033AD?style=flat-square" alt="Cardano">
@@ -330,9 +330,9 @@ Chrysalis provides comprehensive support for Cardano's evolution:
   <tr>
     <td><strong>Byron</strong></td>
     <td>Foundation</td>
-    <td align="center">🚧</td>
-    <td align="center">❌</td>
-    <td align="center">❌</td>
+    <td align="center">✅</td>
+    <td align="center">✅</td>
+    <td align="center">✅</td>
     <td align="center">❌</td>
   </tr>
   <tr>

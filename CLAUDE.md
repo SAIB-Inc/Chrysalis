@@ -134,7 +134,7 @@ Chrysalis currently supports the following Cardano eras:
 
 | Era | Phase | Status |
 |-----|-------|--------|
-| **Byron** | Foundation | Planned for future releases |
+| **Byron** | Foundation | Serialization and block processing supported |
 | **Shelley** (+ Allegra, Mary) | Decentralization | Fully supported |
 | **Alonzo** (Goguen) | Smart Contracts | Fully supported |
 | **Babbage/Vasil** (Basho) | Scaling | Fully supported |
