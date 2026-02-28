@@ -27,7 +27,6 @@
     <PackageVersion Include="Microsoft.Extensions.Configuration.Binder" Version="10.0.2" />
 
     <!-- Cryptography -->
-    <PackageVersion Include="CardanoSharp.Chaos" Version="0.1.0" />
     <PackageVersion Include="Microsoft.AspNetCore.Cryptography.KeyDerivation" Version="10.0.2" />
     <PackageVersion Include="SauceControl.Blake2Fast" Version="2.0.0" />
   </ItemGroup>

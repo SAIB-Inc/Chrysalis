@@ -1,6 +1,6 @@
 using System.Buffers.Binary;
 using System.Security.Cryptography;
-using Chaos.NaCl;
+using Chrysalis.Crypto;
 using Chrysalis.Wallet.Models.Enums;
 using Chrysalis.Wallet.Utils;
 

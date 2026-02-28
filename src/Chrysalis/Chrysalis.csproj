@@ -32,10 +32,10 @@
     <ProjectReference Include="..\Chrysalis.Network\Chrysalis.Network.csproj" PrivateAssets="All" />
     <ProjectReference Include="..\Chrysalis.Tx\Chrysalis.Tx.csproj" PrivateAssets="All" />
     <ProjectReference Include="..\Chrysalis.Wallet\Chrysalis.Wallet.csproj" PrivateAssets="All" />
+    <ProjectReference Include="..\Chrysalis.Crypto\Chrysalis.Crypto.csproj" PrivateAssets="All" />
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="CardanoSharp.Chaos" />
     <PackageReference Include="SAIB.Blake2Fast" />
     <PackageReference Include="System.Formats.Cbor" />
     <PackageReference Include="Microsoft.AspNetCore.Cryptography.KeyDerivation" />

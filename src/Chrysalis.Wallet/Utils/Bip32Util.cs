@@ -1,4 +1,4 @@
-using Chaos.NaCl;
+using Chrysalis.Crypto;
 using Chrysalis.Wallet.Models.Enums;
 
 namespace Chrysalis.Wallet.Utils;
