@@ -9,11 +9,11 @@ crate-type = ["cdylib"]
 
 [dependencies]
 hex = "0.4"
-chrono = "0.4.41"
+chrono = "0.4.44"
 
 pallas = "0.33.0"
 # pallas = { git = "https://github.com/txpipe/pallas.git", features = ["phase-two"] }
 # pallas = { path = "../../../../../pallas/pallas"}
 
-uplc = "1.1.19"
+uplc = "1.1.21"
 # uplc = {path = "../../../../../aiken/crates/uplc"}
