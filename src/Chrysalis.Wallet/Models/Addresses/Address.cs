@@ -225,10 +225,11 @@ public class Address
             AddressType.Delegation
             or AddressType.ScriptDelegation
                 => _addressBytes.Length >= 29 ? _addressBytes[1..29] : null,
-            AddressType.PaymentWithPointerDelegation => throw new NotImplementedException(),
-            AddressType.ScriptPaymentWithPointerDelegation => throw new NotImplementedException(),
-            AddressType.EnterprisePayment => throw new NotImplementedException(),
-            AddressType.EnterpriseScriptPayment => throw new NotImplementedException(),
+            // Pointer and enterprise addresses have no stake key hash
+            AddressType.PaymentWithPointerDelegation
+            or AddressType.ScriptPaymentWithPointerDelegation
+            or AddressType.EnterprisePayment
+            or AddressType.EnterpriseScriptPayment => null,
             _ => null
         };
     }
