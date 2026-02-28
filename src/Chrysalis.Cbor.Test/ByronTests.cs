@@ -89,10 +89,10 @@ public class ByronTests
         BlockWithEra blockWithEra = CborSerializer.Deserialize<BlockWithEra>(cborRaw);
         ByronMainBlock byron = (ByronMainBlock)blockWithEra.Block;
 
-        Assert.NotNull(byron.Header.PrevBlock);
+        Assert.False(byron.Header.PrevBlock.IsEmpty);
         Assert.NotNull(byron.Header.ConsensusData);
         Assert.NotNull(byron.Header.ConsensusData.SlotId);
-        Assert.NotNull(byron.Header.ConsensusData.PubKey);
+        Assert.False(byron.Header.ConsensusData.PubKey.IsEmpty);
     }
 
     [Fact]

@@ -12,7 +12,7 @@ public static class OperationalCertExtensions
     /// </summary>
     /// <param name="self">The operational certificate instance.</param>
     /// <returns>The hot verification key bytes.</returns>
-    public static byte[] HotVKey(this OperationalCert self)
+    public static ReadOnlyMemory<byte> HotVKey(this OperationalCert self)
     {
         ArgumentNullException.ThrowIfNull(self);
         return self.HotVKey;
@@ -45,7 +45,7 @@ public static class OperationalCertExtensions
     /// </summary>
     /// <param name="self">The operational certificate instance.</param>
     /// <returns>The sigma bytes.</returns>
-    public static byte[] Sigma(this OperationalCert self)
+    public static ReadOnlyMemory<byte> Sigma(this OperationalCert self)
     {
         ArgumentNullException.ThrowIfNull(self);
         return self.Sigma;

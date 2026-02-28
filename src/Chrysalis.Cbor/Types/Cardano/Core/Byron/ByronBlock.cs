@@ -29,6 +29,6 @@ public partial record ByronMainBlock(
 [CborList]
 public partial record ByronEbBlock(
     [CborOrder(0)] ByronEbbHead Header,
-    [CborOrder(1)] CborMaybeIndefList<byte[]> Body,
+    [CborOrder(1)] CborMaybeIndefList<ReadOnlyMemory<byte>> Body,
     [CborOrder(2)] CborMaybeIndefList<CborEncodedValue> Extra
 ) : Block, ICborPreserveRaw;

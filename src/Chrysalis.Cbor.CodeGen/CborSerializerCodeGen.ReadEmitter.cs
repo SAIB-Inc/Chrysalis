@@ -53,10 +53,14 @@ public sealed partial class CborSerializerCodeGen
 
             if (metadata.IsNullable)
             {
+                // ReadOnlyMemory<byte> is a value type; use default instead of null
+                // when the C# type is non-nullable but the CBOR encoding can be null.
+                bool isValueTypeMemory = !metadata.IsTypeNullable && IsReadOnlyMemoryByteType(metadata.PropertyTypeFullName);
+                string nullAssignment = isValueTypeMemory ? "default" : "null";
                 _ = sb.AppendLine($"if (reader.PeekState() == CborReaderState.Null)");
                 _ = sb.AppendLine("{");
                 _ = sb.AppendLine($"reader.ReadNull();");
-                _ = sb.AppendLine($"{propertyName} = null;");
+                _ = sb.AppendLine($"{propertyName} = {nullAssignment};");
                 _ = sb.AppendLine("}");
                 _ = sb.AppendLine($"else");
                 _ = sb.AppendLine("{");
@@ -133,10 +137,36 @@ public sealed partial class CborSerializerCodeGen
                     _ = sb.AppendLine("}");
 
                     break;
+                case "ReadOnlyMemory<byte>?":
+                case "ReadOnlyMemory<byte>":
+                case "System.ReadOnlyMemory<byte>?":
+                case "System.ReadOnlyMemory<byte>":
+                case "global::System.ReadOnlyMemory<byte>?":
+                case "global::System.ReadOnlyMemory<byte>":
+                    _ = sb.AppendLine($"if (reader.PeekState() == CborReaderState.StartIndefiniteLengthByteString)");
+                    _ = sb.AppendLine("{");
+                    _ = sb.AppendLine("     reader.ReadStartIndefiniteLengthByteString();");
+                    _ = sb.AppendLine("     using (var stream = new MemoryStream())");
+                    _ = sb.AppendLine("     {");
+                    _ = sb.AppendLine("         while (reader.PeekState() != CborReaderState.EndIndefiniteLengthByteString)");
+                    _ = sb.AppendLine("         {");
+                    _ = sb.AppendLine("             byte[] chunk = reader.ReadByteString();");
+                    _ = sb.AppendLine("             stream.Write(chunk, 0, chunk.Length);");
+                    _ = sb.AppendLine("         }");
+                    _ = sb.AppendLine("         reader.ReadEndIndefiniteLengthByteString();");
+                    _ = sb.AppendLine($"         {propertyName} = (ReadOnlyMemory<byte>)stream.ToArray();");
+                    _ = sb.AppendLine("     }");
+                    _ = sb.AppendLine("}");
+                    _ = sb.AppendLine("else");
+                    _ = sb.AppendLine("{");
+                    _ = sb.AppendLine($"    {propertyName} = (ReadOnlyMemory<byte>)reader.ReadByteString();");
+                    _ = sb.AppendLine("}");
+
+                    break;
                 case "CborEncodedValue":
                 case "Chrysalis.Cbor.Types.Primitives.CborEncodedValue":
                 case "global::Chrysalis.Cbor.Types.Primitives.CborEncodedValue":
-                    _ = sb.AppendLine($"{propertyName} = new {CborEncodeValueFullName}(reader.ReadEncodedValue(true).ToArray());");
+                    _ = sb.AppendLine($"{propertyName} = new {CborEncodeValueFullName}(reader.ReadEncodedValue(true));");
                     break;
                 case "CborLabel":
                 case "Chrysalis.Cbor.Types.CborLabel":
@@ -222,7 +252,9 @@ public sealed partial class CborSerializerCodeGen
                     throw new InvalidOperationException($"Map key or value type is null for property {metadata.PropertyName}");
                 }
 
-                _ = sb.AppendLine($"Dictionary<{metadata.MapKeyTypeFullName}, {metadata.MapValueTypeFullName}> {propertyName}TempMap = new();");
+                _ = IsReadOnlyMemoryByteType(metadata.MapKeyTypeFullName)
+                    ? sb.AppendLine($"Dictionary<{metadata.MapKeyTypeFullName}, {metadata.MapValueTypeFullName}> {propertyName}TempMap = new(global::Chrysalis.Cbor.Serialization.Utils.ReadOnlyMemoryComparer.Instance);")
+                    : sb.AppendLine($"Dictionary<{metadata.MapKeyTypeFullName}, {metadata.MapValueTypeFullName}> {propertyName}TempMap = new();");
                 _ = sb.AppendLine($"{metadata.MapKeyTypeFullName} {propertyName}TempKeyItem = default;");
                 _ = sb.AppendLine($"{metadata.MapValueTypeFullName} {propertyName}TempValueItem = default;");
                 // Read map start and check if it's indefinite

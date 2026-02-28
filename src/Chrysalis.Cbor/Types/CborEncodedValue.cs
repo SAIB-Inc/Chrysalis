@@ -7,4 +7,4 @@ namespace Chrysalis.Cbor.Types;
 /// </summary>
 /// <param name="Value">The raw CBOR-encoded byte array.</param>
 [CborSerializable]
-public partial record CborEncodedValue(byte[] Value) : CborBase;
+public partial record CborEncodedValue(ReadOnlyMemory<byte> Value) : CborBase;

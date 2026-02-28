@@ -18,7 +18,7 @@ public abstract partial record NativeScript : CborBase { }
 [CborList]
 public partial record ScriptPubKey(
     [CborOrder(0)] int Tag,
-    [CborOrder(1)] byte[] AddrKeyHash
+    [CborOrder(1)] ReadOnlyMemory<byte> AddrKeyHash
 ) : NativeScript;
 
 /// <summary>

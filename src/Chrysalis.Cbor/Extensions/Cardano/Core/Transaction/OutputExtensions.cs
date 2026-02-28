@@ -13,14 +13,14 @@ public static class OutputExtensions
     /// </summary>
     /// <param name="self">The transaction output instance.</param>
     /// <returns>The address bytes.</returns>
-    public static byte[] Address(this TransactionOutput self)
+    public static ReadOnlyMemory<byte> Address(this TransactionOutput self)
     {
         ArgumentNullException.ThrowIfNull(self);
         return self switch
         {
             AlonzoTransactionOutput alonzoTxOutput => alonzoTxOutput.Address.Value,
             PostAlonzoTransactionOutput postAlonzoTxOutput => postAlonzoTxOutput.Address.Value,
-            _ => []
+            _ => ReadOnlyMemory<byte>.Empty
         };
     }
 
@@ -45,7 +45,7 @@ public static class OutputExtensions
     /// </summary>
     /// <param name="self">The transaction output instance.</param>
     /// <returns>The datum hash bytes, or null.</returns>
-    public static byte[]? DatumHash(this TransactionOutput self)
+    public static ReadOnlyMemory<byte>? DatumHash(this TransactionOutput self)
     {
         ArgumentNullException.ThrowIfNull(self);
         return self switch
@@ -80,7 +80,7 @@ public static class OutputExtensions
     /// </summary>
     /// <param name="self">The transaction output instance.</param>
     /// <returns>The script reference bytes, or null.</returns>
-    public static byte[]? ScriptRef(this TransactionOutput self)
+    public static ReadOnlyMemory<byte>? ScriptRef(this TransactionOutput self)
     {
         ArgumentNullException.ThrowIfNull(self);
         return self switch

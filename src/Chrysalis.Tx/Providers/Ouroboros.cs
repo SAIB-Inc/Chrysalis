@@ -86,14 +86,15 @@ public class Ouroboros(string socketPath, ulong networkMagic = 2) : ICardanoData
         List<ResolvedInput> resolvedInputs = [];
         foreach ((CborTransactionInput? key, TransactionOutput? value) in utxos.Utxos)
         {
-            byte[] txHash = key.TransactionId;
+            ReadOnlyMemory<byte> txHash = key.TransactionId;
             ulong index = key.Index;
 
+            ReadOnlyMemory<byte>? scriptRefBytes = value.ScriptRef();
             TransactionOutput output = new PostAlonzoTransactionOutput(
                 new Cbor.Types.Cardano.Core.Common.Address(value.Address()),
                 value.Amount(),
                 value.DatumOption(),
-                value.ScriptRef() is not null ? new CborEncodedValue(value.ScriptRef()!) : null
+                scriptRefBytes is not null ? new CborEncodedValue(scriptRefBytes.Value) : null
             );
 
             resolvedInputs.Add(new ResolvedInput(new CborTransactionInput(txHash, index), output));

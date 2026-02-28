@@ -21,8 +21,8 @@ public abstract partial record Relay : CborBase { }
 public partial record SingleHostAddr(
    [CborOrder(0)] int Tag,
    [CborOrder(1)][CborNullable] ulong? Port,
-   [CborOrder(2)][CborNullable] byte[]? IPv4,
-   [CborOrder(3)][CborNullable] byte[] IPv6
+   [CborOrder(2)][CborNullable] ReadOnlyMemory<byte>? IPv4,
+   [CborOrder(3)][CborNullable] ReadOnlyMemory<byte>? IPv6
 ) : Relay;
 
 /// <summary>

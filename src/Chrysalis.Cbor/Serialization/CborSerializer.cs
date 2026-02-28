@@ -43,6 +43,28 @@ public static class CborSerializer
     }
 
     /// <summary>
+    /// Serializes a CborBase-derived object to a <see cref="ReadOnlyMemory{T}"/> without copying when pre-serialized data exists.
+    /// </summary>
+    /// <typeparam name="T">The type of object to serialize, which must inherit from CborBase.</typeparam>
+    /// <param name="value">The object instance to serialize.</param>
+    /// <returns>A <see cref="ReadOnlyMemory{T}"/> containing the CBOR-encoded representation of the object.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static ReadOnlyMemory<byte> SerializeToMemory<T>(T value) where T : CborBase
+    {
+        ArgumentNullException.ThrowIfNull(value);
+
+        if (value.Raw is not null)
+        {
+            return value.Raw.Value;
+        }
+
+        CborWriter writer = new(CborConformanceMode.Lax);
+        GenericSerializationUtil.Write<T>(writer, value);
+
+        return writer.Encode();
+    }
+
+    /// <summary>
     /// Deserializes a CBOR byte array into an object of type T.
     /// </summary>
     /// <typeparam name="T">The target type for deserialization, which must inherit from CborBase.</typeparam>

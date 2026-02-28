@@ -46,7 +46,7 @@ public partial record StakeDeregistration(
 public partial record StakeDelegation(
     [CborOrder(0)] int Tag,
     [CborOrder(1)] Credential StakeCredential,
-    [CborOrder(2)] byte[] PoolKeyHash
+    [CborOrder(2)] ReadOnlyMemory<byte> PoolKeyHash
 ) : Certificate;
 
 /// <summary>
@@ -66,13 +66,13 @@ public partial record StakeDelegation(
 [CborList]
 public partial record PoolRegistration(
     [CborOrder(0)] int Tag,
-    [CborOrder(1)] byte[] Operator,
-    [CborOrder(2)] byte[] VrfKeyHash,
+    [CborOrder(1)] ReadOnlyMemory<byte> Operator,
+    [CborOrder(2)] ReadOnlyMemory<byte> VrfKeyHash,
     [CborOrder(3)] ulong Pledge,
     [CborOrder(4)] ulong Cost,
     [CborOrder(5)] CborRationalNumber Margin,
     [CborOrder(6)] RewardAccount RewardAccount,
-    [CborOrder(7)] CborMaybeIndefList<byte[]> PoolOwners,
+    [CborOrder(7)] CborMaybeIndefList<ReadOnlyMemory<byte>> PoolOwners,
     [CborOrder(8)] CborMaybeIndefList<Relay> Relay,
     [CborOrder(9)][CborNullable] PoolMetadata? PoolMetadata
 ) : Certificate;
@@ -87,7 +87,7 @@ public partial record PoolRegistration(
 [CborList]
 public partial record PoolRetirement(
     [CborOrder(0)] int Tag,
-    [CborOrder(1)] byte[] PoolKeyHash,
+    [CborOrder(1)] ReadOnlyMemory<byte> PoolKeyHash,
     [CborOrder(2)] ulong EpochNo
 ) : Certificate;
 
@@ -145,7 +145,7 @@ public partial record VoteDelegCert(
 public partial record StakeVoteDelegCert(
     [CborOrder(0)] int Tag,
     [CborOrder(1)] Credential StakeCredential,
-    [CborOrder(2)] byte[] PoolKeyHash,
+    [CborOrder(2)] ReadOnlyMemory<byte> PoolKeyHash,
     [CborOrder(3)] DRep DRep
 ) : Certificate;
 
@@ -161,7 +161,7 @@ public partial record StakeVoteDelegCert(
 public partial record StakeRegDelegCert(
     [CborOrder(0)] int Tag,
     [CborOrder(1)] Credential StakeCredential,
-    [CborOrder(2)] byte[] PoolKeyHash,
+    [CborOrder(2)] ReadOnlyMemory<byte> PoolKeyHash,
     [CborOrder(3)] ulong Coin
 ) : Certificate;
 
@@ -194,7 +194,7 @@ public partial record VoteRegDelegCert(
 public partial record StakeVoteRegDelegCert(
     [CborOrder(0)] int Tag,
     [CborOrder(1)] Credential StakeCredential,
-    [CborOrder(2)] byte[] PoolKeyHash,
+    [CborOrder(2)] ReadOnlyMemory<byte> PoolKeyHash,
     [CborOrder(3)] DRep Drep,
     [CborOrder(4)] ulong Coin
 ) : Certificate;
@@ -223,7 +223,7 @@ public partial record AuthCommitteeHotCert(
 [CborList]
 public partial record ResignCommitteeColdCert(
     [CborOrder(0)] int Tag,
-    [CborOrder(1)] byte[] CommitteeColdCredential,
+    [CborOrder(1)] ReadOnlyMemory<byte> CommitteeColdCredential,
     [CborOrder(2)] Anchor? Anchor
 ) : Certificate;
 
@@ -282,9 +282,9 @@ public partial record UpdateDrepCert(
 [CborList]
 public partial record GenesisKeyDelegation(
     [CborOrder(0)] int Tag,
-    [CborOrder(1)] byte[] GenesisHash,
-    [CborOrder(2)] byte[] GenesisDelegateHash,
-    [CborOrder(3)] byte[] VrfKeyHash
+    [CborOrder(1)] ReadOnlyMemory<byte> GenesisHash,
+    [CborOrder(2)] ReadOnlyMemory<byte> GenesisDelegateHash,
+    [CborOrder(3)] ReadOnlyMemory<byte> VrfKeyHash
 ) : Certificate;
 
 /// <summary>

@@ -25,7 +25,7 @@ public partial record ParameterChangeAction(
     [CborOrder(0)] int ActionType,
     [CborOrder(1)] GovActionId? GovActionId,
     [CborOrder(2)] ProtocolParamUpdate ProtocolParamUpdate,
-    [CborOrder(3)] byte[]? PolicyHash
+    [CborOrder(3)] ReadOnlyMemory<byte>? PolicyHash
 ) : GovAction;
 
 /// <summary>
@@ -53,7 +53,7 @@ public partial record HardForkInitiationAction(
 public partial record TreasuryWithdrawalsAction(
      [CborOrder(0)] int ActionType,
      [CborOrder(1)] Withdrawals Withdrawals,
-     [CborOrder(2)] byte[]? PolicyHash
+     [CborOrder(2)] ReadOnlyMemory<byte>? PolicyHash
  ) : GovAction;
 
 /// <summary>

@@ -23,7 +23,7 @@ public static class AnchorExtensions
     /// </summary>
     /// <param name="self">The anchor instance.</param>
     /// <returns>The data hash bytes.</returns>
-    public static byte[] DataHash(this Anchor self)
+    public static ReadOnlyMemory<byte> DataHash(this Anchor self)
     {
         ArgumentNullException.ThrowIfNull(self);
         return self.AnchorDataHash;

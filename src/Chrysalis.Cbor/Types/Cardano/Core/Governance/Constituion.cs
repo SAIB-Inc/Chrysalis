@@ -12,5 +12,5 @@ namespace Chrysalis.Cbor.Types.Cardano.Core.Governance;
 [CborList]
 public partial record Constitution(
     [CborOrder(0)] Anchor Anchor,
-    [CborOrder(1)][CborNullable] byte[]? ScriptHash
+    [CborOrder(1)][CborNullable] ReadOnlyMemory<byte>? ScriptHash
 ) : CborBase;

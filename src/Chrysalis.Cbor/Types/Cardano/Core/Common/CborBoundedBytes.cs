@@ -7,4 +7,4 @@ namespace Chrysalis.Cbor.Types.Cardano.Core.Common;
 /// </summary>
 /// <param name="Value">The bounded byte array value.</param>
 [CborSerializable]
-public partial record CborBoundedBytes([CborSize(64)] byte[] Value) : CborBase;
+public partial record CborBoundedBytes([CborSize(64)] ReadOnlyMemory<byte> Value) : CborBase;

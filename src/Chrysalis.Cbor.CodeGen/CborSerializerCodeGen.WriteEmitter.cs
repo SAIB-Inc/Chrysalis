@@ -49,7 +49,13 @@ public sealed partial class CborSerializerCodeGen
 
             if (metadata.IsNullable)
             {
-                _ = sb.AppendLine($"if ({propertyName} is null)");
+                // ReadOnlyMemory<byte> is a value type and cannot be null;
+                // use Length == 0 as the sentinel for CBOR null when the C# type is non-nullable.
+                bool isValueTypeMemory = !metadata.IsTypeNullable && IsReadOnlyMemoryByteType(metadata.PropertyTypeFullName);
+                string nullCheck = isValueTypeMemory
+                    ? $"{propertyName}.Length == 0"
+                    : $"{propertyName} is null";
+                _ = sb.AppendLine($"if ({nullCheck})");
                 _ = sb.AppendLine("{");
                 _ = sb.AppendLine($"writer.WriteNull();");
                 _ = sb.AppendLine("}");
@@ -153,11 +159,44 @@ public sealed partial class CborSerializerCodeGen
                     }
 
                     break;
+                case "ReadOnlyMemory<byte>?":
+                case "ReadOnlyMemory<byte>":
+                case "System.ReadOnlyMemory<byte>?":
+                case "System.ReadOnlyMemory<byte>":
+                case "global::System.ReadOnlyMemory<byte>?":
+                case "global::System.ReadOnlyMemory<byte>":
+                    // When the original type is nullable (ReadOnlyMemory<byte>?), we must
+                    // access .Value first to unwrap the Nullable<T> before accessing .Span/.Length.
+                    string spanAccess = isNullable ? $"{propertyName}.Value.Span" : $"{propertyName}.Span";
+                    string lengthAccess = isNullable ? $"{propertyName}.Value.Length" : $"{propertyName}.Length";
+                    if (size is not null)
+                    {
+                        _ = sb.AppendLine($"if ({lengthAccess} > {size})");
+                        _ = sb.AppendLine("{");
+                        _ = sb.AppendLine($"writer.WriteStartIndefiniteLengthByteString();");
+                        _ = sb.AppendLine($"for (int _i = 0; _i < {lengthAccess}; _i += {size})");
+                        _ = sb.AppendLine("{");
+                        _ = sb.AppendLine($"    int _len = Math.Min({size}, {lengthAccess} - _i);");
+                        _ = sb.AppendLine($"    writer.WriteByteString({spanAccess}.Slice(_i, _len));");
+                        _ = sb.AppendLine("}");
+                        _ = sb.AppendLine($"writer.WriteEndIndefiniteLengthByteString();");
+                        _ = sb.AppendLine("}");
+                        _ = sb.AppendLine("else");
+                        _ = sb.AppendLine("{");
+                        _ = sb.AppendLine($"writer.WriteByteString({spanAccess});");
+                        _ = sb.AppendLine("}");
+                    }
+                    else
+                    {
+                        _ = sb.AppendLine($"writer.WriteByteString({spanAccess});");
+                    }
+
+                    break;
                 case "CborEncodedValue":
                 case "Chrysalis.Cbor.Types.Primitives.CborEncodedValue":
                 case "global::Chrysalis.Cbor.Types.Primitives.CborEncodedValue":
                     _ = sb.AppendLine("writer.WriteTag(CborTag.EncodedCborDataItem);");
-                    _ = sb.AppendLine($"writer.WriteByteString({propertyName}.Value);");
+                    _ = sb.AppendLine($"writer.WriteByteString({propertyName}.Value.Span);");
                     break;
                 case "CborLabel":
                 case "Chrysalis.Cbor.Types.CborLabel":
@@ -370,7 +409,7 @@ public sealed partial class CborSerializerCodeGen
         {
             _ = sb.AppendLine($"if (data.Raw is not null)");
             _ = sb.AppendLine("{");
-            _ = sb.AppendLine($"writer.WriteEncodedValue(data.Raw?.ToArray());");
+            _ = sb.AppendLine($"writer.WriteEncodedValue(data.Raw.Value.Span);");
             _ = sb.AppendLine("return;");
             _ = sb.AppendLine("}");
             return sb;

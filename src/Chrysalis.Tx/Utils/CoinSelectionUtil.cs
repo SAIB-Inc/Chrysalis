@@ -1,5 +1,6 @@
 using Chrysalis.Cbor.Extensions.Cardano.Core.Common;
 using Chrysalis.Cbor.Extensions.Cardano.Core.Transaction;
+using Chrysalis.Cbor.Serialization.Utils;
 using Chrysalis.Cbor.Types.Cardano.Core.Common;
 using Chrysalis.Tx.Extensions;
 using Chrysalis.Tx.Models.Cbor;
@@ -146,7 +147,7 @@ public static class CoinSelectionUtil
         }
 
         ulong lovelaceChange = selectedLovelace - requestedLovelace;
-        Dictionary<byte[], TokenBundleOutput> assetsChange = CalculateAssetsChange(selectedUtxos, requestedAmount);
+        Dictionary<ReadOnlyMemory<byte>, TokenBundleOutput> assetsChange = CalculateAssetsChange(selectedUtxos, requestedAmount);
 
         return new CoinSelectionResult
         {
@@ -182,12 +183,12 @@ public static class CoinSelectionUtil
         }
     }
 
-    private static Dictionary<byte[], TokenBundleOutput> CalculateAssetsChange(
+    private static Dictionary<ReadOnlyMemory<byte>, TokenBundleOutput> CalculateAssetsChange(
     List<ResolvedInput> selectedUtxos,
     List<Value> requestedAmounts)
     {
-        Dictionary<byte[], Dictionary<byte[], ulong>> selectedAssetsByPolicy = new(ByteArrayEqualityComparer.Instance);
-        Dictionary<byte[], Dictionary<byte[], ulong>> requestedAssetsByPolicy = new(ByteArrayEqualityComparer.Instance);
+        Dictionary<ReadOnlyMemory<byte>, Dictionary<ReadOnlyMemory<byte>, ulong>> selectedAssetsByPolicy = new(ReadOnlyMemoryComparer.Instance);
+        Dictionary<ReadOnlyMemory<byte>, Dictionary<ReadOnlyMemory<byte>, ulong>> requestedAssetsByPolicy = new(ReadOnlyMemoryComparer.Instance);
 
         // Process selected UTXOs
         foreach (ResolvedInput utxo in selectedUtxos)
@@ -200,15 +201,15 @@ public static class CoinSelectionUtil
                     continue;
                 }
 
-                foreach (KeyValuePair<byte[], TokenBundleOutput> policyEntry in multiAsset.Value)
+                foreach (KeyValuePair<ReadOnlyMemory<byte>, TokenBundleOutput> policyEntry in multiAsset.Value)
                 {
-                    if (!selectedAssetsByPolicy.TryGetValue(policyEntry.Key, out Dictionary<byte[], ulong>? selectedAssets))
+                    if (!selectedAssetsByPolicy.TryGetValue(policyEntry.Key, out Dictionary<ReadOnlyMemory<byte>, ulong>? selectedAssets))
                     {
-                        selectedAssets = new Dictionary<byte[], ulong>(ByteArrayEqualityComparer.Instance);
+                        selectedAssets = new Dictionary<ReadOnlyMemory<byte>, ulong>(ReadOnlyMemoryComparer.Instance);
                         selectedAssetsByPolicy[policyEntry.Key] = selectedAssets;
                     }
 
-                    foreach (KeyValuePair<byte[], ulong> assetEntry in policyEntry.Value.Value)
+                    foreach (KeyValuePair<ReadOnlyMemory<byte>, ulong> assetEntry in policyEntry.Value.Value)
                     {
                         ulong amount = assetEntry.Value;
                         selectedAssets[assetEntry.Key] = selectedAssets.TryGetValue(assetEntry.Key, out ulong existing) ? existing + amount : amount;
@@ -228,15 +229,15 @@ public static class CoinSelectionUtil
                     continue;
                 }
 
-                foreach (KeyValuePair<byte[], TokenBundleOutput> policyEntry in multiAsset.Value)
+                foreach (KeyValuePair<ReadOnlyMemory<byte>, TokenBundleOutput> policyEntry in multiAsset.Value)
                 {
-                    if (!requestedAssetsByPolicy.TryGetValue(policyEntry.Key, out Dictionary<byte[], ulong>? requestedAssets))
+                    if (!requestedAssetsByPolicy.TryGetValue(policyEntry.Key, out Dictionary<ReadOnlyMemory<byte>, ulong>? requestedAssets))
                     {
-                        requestedAssets = new Dictionary<byte[], ulong>(ByteArrayEqualityComparer.Instance);
+                        requestedAssets = new Dictionary<ReadOnlyMemory<byte>, ulong>(ReadOnlyMemoryComparer.Instance);
                         requestedAssetsByPolicy[policyEntry.Key] = requestedAssets;
                     }
 
-                    foreach (KeyValuePair<byte[], ulong> assetEntry in policyEntry.Value.Value)
+                    foreach (KeyValuePair<ReadOnlyMemory<byte>, ulong> assetEntry in policyEntry.Value.Value)
                     {
                         ulong amount = assetEntry.Value;
                         requestedAssets[assetEntry.Key] = requestedAssets.TryGetValue(assetEntry.Key, out ulong existing) ? existing + amount : amount;
@@ -246,18 +247,18 @@ public static class CoinSelectionUtil
         }
 
         // Calculate change using optimized lookups
-        Dictionary<byte[], TokenBundleOutput> assetsChange = new(ByteArrayEqualityComparer.Instance);
+        Dictionary<ReadOnlyMemory<byte>, TokenBundleOutput> assetsChange = new(ReadOnlyMemoryComparer.Instance);
 
-        foreach ((byte[]? policyId, Dictionary<byte[], ulong>? selectedAssets) in selectedAssetsByPolicy)
+        foreach ((ReadOnlyMemory<byte> policyId, Dictionary<ReadOnlyMemory<byte>, ulong> selectedAssets) in selectedAssetsByPolicy)
         {
-            Dictionary<byte[], ulong> assetChanges = new(ByteArrayEqualityComparer.Instance);
+            Dictionary<ReadOnlyMemory<byte>, ulong> assetChanges = new(ReadOnlyMemoryComparer.Instance);
             bool hasChange = false;
 
-            foreach ((byte[]? assetName, ulong selectedAmount) in selectedAssets)
+            foreach ((ReadOnlyMemory<byte> assetName, ulong selectedAmount) in selectedAssets)
             {
                 ulong requestedAmount = 0;
 
-                if (requestedAssetsByPolicy.TryGetValue(policyId, out Dictionary<byte[], ulong>? requestedTokens) &&
+                if (requestedAssetsByPolicy.TryGetValue(policyId, out Dictionary<ReadOnlyMemory<byte>, ulong>? requestedTokens) &&
                     requestedTokens.TryGetValue(assetName, out ulong requested))
                 {
                     requestedAmount = requested;
@@ -301,5 +302,5 @@ public record CoinSelectionResult
     /// <summary>
     /// Gets or sets the multi-asset change amounts.
     /// </summary>
-    public Dictionary<byte[], TokenBundleOutput> AssetsChange { get; init; } = [];
+    public Dictionary<ReadOnlyMemory<byte>, TokenBundleOutput> AssetsChange { get; init; } = [];
 }

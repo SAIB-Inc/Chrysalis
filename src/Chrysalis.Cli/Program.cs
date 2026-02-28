@@ -179,19 +179,19 @@ while (!exitProgram)
             foreach (KeyValuePair<TransactionInput, TransactionOutput> utxo in utxos.Utxos)
             {
                 Console.WriteLine(" {");
-                Console.WriteLine("     transactionId: " + Convert.ToHexString(utxo.Key.TransactionId));
+                Console.WriteLine("     transactionId: " + Convert.ToHexString(utxo.Key.TransactionId.Span));
                 Console.WriteLine("     index: " + utxo.Key.Index);
                 Console.WriteLine("     amount: {");
                 Console.WriteLine("         Lovelace: " + utxo.Value.Amount().Lovelace());
                 if (utxo.Value.Amount() is LovelaceWithMultiAsset lovelaceWithMultiAsset)
                 {
-                    foreach (KeyValuePair<byte[], TokenBundleOutput> asset in lovelaceWithMultiAsset.MultiAsset.Value)
+                    foreach (KeyValuePair<ReadOnlyMemory<byte>, TokenBundleOutput> asset in lovelaceWithMultiAsset.MultiAsset.Value)
                     {
-                        Console.Write($"         {Convert.ToHexString(asset.Key)} : ");
+                        Console.Write($"         {Convert.ToHexString(asset.Key.Span)} : ");
                         Console.WriteLine("{");
-                        foreach (KeyValuePair<byte[], ulong> token in asset.Value.Value)
+                        foreach (KeyValuePair<ReadOnlyMemory<byte>, ulong> token in asset.Value.Value)
                         {
-                            Console.WriteLine($"            {Convert.ToHexString(token.Key)} : {token.Value}");
+                            Console.WriteLine($"            {Convert.ToHexString(token.Key.Span)} : {token.Value}");
                         }
                         Console.WriteLine("            }");
                     }
@@ -203,7 +203,7 @@ while (!exitProgram)
                 }
                 if (utxo.Value.ScriptRef() is not null)
                 {
-                    Console.WriteLine("     scriptRef: " + Convert.ToHexString(utxo.Value.ScriptRef()!));
+                    Console.WriteLine("     scriptRef: " + Convert.ToHexString(utxo.Value.ScriptRef()!.Value.Span));
                 }
 
             }

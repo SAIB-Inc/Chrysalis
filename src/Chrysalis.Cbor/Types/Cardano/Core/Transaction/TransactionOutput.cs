@@ -22,7 +22,7 @@ public abstract partial record TransactionOutput : CborBase { }
 public partial record AlonzoTransactionOutput(
     [CborOrder(0)] Address Address,
     [CborOrder(1)] Value Amount,
-    [CborOrder(2)] byte[]? DatumHash
+    [CborOrder(2)] ReadOnlyMemory<byte>? DatumHash
 ) : TransactionOutput, ICborPreserveRaw;
 
 /// <summary>

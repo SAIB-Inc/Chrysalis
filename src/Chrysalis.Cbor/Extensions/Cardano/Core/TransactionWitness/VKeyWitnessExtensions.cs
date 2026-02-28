@@ -12,7 +12,7 @@ public static class VKeyWitnessExtensions
     /// </summary>
     /// <param name="self">The VKey witness instance.</param>
     /// <returns>The verification key bytes.</returns>
-    public static byte[] VKey(this CVKeyWitness self)
+    public static ReadOnlyMemory<byte> VKey(this CVKeyWitness self)
     {
         ArgumentNullException.ThrowIfNull(self);
         return self.VKey;
@@ -23,7 +23,7 @@ public static class VKeyWitnessExtensions
     /// </summary>
     /// <param name="self">The VKey witness instance.</param>
     /// <returns>The signature bytes.</returns>
-    public static byte[] Signature(this CVKeyWitness self)
+    public static ReadOnlyMemory<byte> Signature(this CVKeyWitness self)
     {
         ArgumentNullException.ThrowIfNull(self);
         return self.Signature;

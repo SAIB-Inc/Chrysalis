@@ -122,6 +122,11 @@ public sealed partial class CborSerializerCodeGen
             }
         }
 
+        private static bool IsReadOnlyMemoryByteType(string type)
+        {
+            return type.Replace("?", "") is "ReadOnlyMemory<byte>" or "System.ReadOnlyMemory<byte>" or "global::System.ReadOnlyMemory<byte>";
+        }
+
         private static bool IsPrimitiveType(string type)
         {
             return type.Replace("?", "") switch
@@ -136,6 +141,9 @@ public sealed partial class CborSerializerCodeGen
                 "decimal" => true,
                 "string" => true,
                 "byte[]" => true,
+                "ReadOnlyMemory<byte>" => true,
+                "System.ReadOnlyMemory<byte>" => true,
+                "global::System.ReadOnlyMemory<byte>" => true,
                 "CborEncodedValue" => true,
                 "Chrysalis.Cbor.Types.Primitives.CborEncodedValue" => true,
                 "global::Chrysalis.Cbor.Types.Primitives.CborEncodedValue" => true,

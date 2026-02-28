@@ -18,8 +18,8 @@ public static class MultiAssetExtension
 
         IEnumerable<string> policies = self switch
         {
-            MultiAssetOutput multiAssetOutput => multiAssetOutput.Value.Keys.Select(Convert.ToHexString),
-            MultiAssetMint multiAssetMint => multiAssetMint.Value.Keys.Select(Convert.ToHexString),
+            MultiAssetOutput multiAssetOutput => multiAssetOutput.Value.Keys.Select(k => Convert.ToHexString(k.Span)),
+            MultiAssetMint multiAssetMint => multiAssetMint.Value.Keys.Select(k => Convert.ToHexString(k.Span)),
             _ => throw new InvalidOperationException("Unknown multi asset type")
         };
 
@@ -41,22 +41,23 @@ public static class MultiAssetExtension
         try
         {
             byte[] policyIdBytes = Convert.FromHexString(policyId);
+            ReadOnlyMemory<byte> policyIdMemory = policyIdBytes;
 
             return self switch
             {
                 MultiAssetOutput multiAssetOutput => FindTokenBundle(
                     multiAssetOutput.Value,
-                    policyIdBytes,
+                    policyIdMemory,
                     bundle => bundle.Value.ToDictionary(
-                        x => Convert.ToHexString(x.Key),
+                        x => Convert.ToHexString(x.Key.Span),
                         x => x.Value)
                 ),
 
                 MultiAssetMint multiAssetMint => FindTokenBundle(
                     multiAssetMint.Value,
-                    policyIdBytes,
+                    policyIdMemory,
                     bundle => bundle.Value.ToDictionary(
-                        x => Convert.ToHexString(x.Key),
+                        x => Convert.ToHexString(x.Key.Span),
                         x => (ulong)x.Value)
                 ),
 
@@ -70,13 +71,13 @@ public static class MultiAssetExtension
     }
 
     private static Dictionary<string, ulong>? FindTokenBundle<TBundle>(
-        Dictionary<byte[], TBundle> bundles,
-        byte[] policyId,
+        Dictionary<ReadOnlyMemory<byte>, TBundle> bundles,
+        ReadOnlyMemory<byte> policyId,
         Func<TBundle, Dictionary<string, ulong>> converter)
     {
-        foreach (KeyValuePair<byte[], TBundle> kvp in bundles)
+        foreach (KeyValuePair<ReadOnlyMemory<byte>, TBundle> kvp in bundles)
         {
-            if (kvp.Key.SequenceEqual(policyId))
+            if (kvp.Key.Span.SequenceEqual(policyId.Span))
             {
                 return converter(kvp.Value);
             }

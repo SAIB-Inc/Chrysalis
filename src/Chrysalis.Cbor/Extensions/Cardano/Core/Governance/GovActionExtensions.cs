@@ -51,7 +51,7 @@ public static class GovActionExtensions
     /// </summary>
     /// <param name="self">The governance action instance.</param>
     /// <returns>The policy hash bytes, or null.</returns>
-    public static byte[]? PolicyHash(this GovAction self)
+    public static ReadOnlyMemory<byte>? PolicyHash(this GovAction self)
     {
         ArgumentNullException.ThrowIfNull(self);
         return self switch

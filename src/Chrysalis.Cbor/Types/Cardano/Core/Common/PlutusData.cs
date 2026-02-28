@@ -123,7 +123,7 @@ public partial record PlutusUint64(ulong Value) : PlutusInt;
 /// <param name="Value">The big unsigned integer as bounded bytes.</param>
 [CborSerializable]
 [CborTag(2)]
-public partial record PlutusBigUint([CborSize(64)] byte[] Value) : PlutusBigInt;
+public partial record PlutusBigUint([CborSize(64)] ReadOnlyMemory<byte> Value) : PlutusBigInt;
 
 /// <summary>
 /// Represents a Plutus big negative integer encoded with CBOR tag 3.
@@ -131,11 +131,11 @@ public partial record PlutusBigUint([CborSize(64)] byte[] Value) : PlutusBigInt;
 /// <param name="Value">The big negative integer as bounded bytes.</param>
 [CborSerializable]
 [CborTag(3)]
-public partial record PlutusBigNint([CborSize(64)] byte[] Value) : PlutusBigInt;
+public partial record PlutusBigNint([CborSize(64)] ReadOnlyMemory<byte> Value) : PlutusBigInt;
 
 /// <summary>
 /// Represents Plutus bounded bytes data with a maximum size of 64 bytes.
 /// </summary>
 /// <param name="Value">The bounded byte array value.</param>
 [CborSerializable]
-public partial record PlutusBoundedBytes([CborSize(64)] byte[] Value) : PlutusData;
+public partial record PlutusBoundedBytes([CborSize(64)] ReadOnlyMemory<byte> Value) : PlutusData;

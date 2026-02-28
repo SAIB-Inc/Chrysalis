@@ -2,6 +2,7 @@ using Chrysalis.Cbor.Extensions;
 using Chrysalis.Cbor.Extensions.Cardano.Core.Common;
 using Chrysalis.Cbor.Extensions.Cardano.Core.Transaction;
 using Chrysalis.Cbor.Serialization;
+using Chrysalis.Cbor.Serialization.Utils;
 using Chrysalis.Cbor.Types;
 using Chrysalis.Cbor.Types.Cardano.Core.Common;
 using Chrysalis.Cbor.Types.Cardano.Core.Protocol;
@@ -158,12 +159,12 @@ public static class TransactionBuilderExtensions
                 ulong returnLovelace = totalCollateralInputLovelace - totalCollateral;
 
                 // Aggregate all assets from collateral inputs
-                Dictionary<byte[], TokenBundleOutput> aggregatedAssets = new(ByteArrayEqualityComparer.Instance);
+                Dictionary<ReadOnlyMemory<byte>, TokenBundleOutput> aggregatedAssets = new(ReadOnlyMemoryComparer.Instance);
                 foreach (ResolvedInput collateralInput in collateralInputs)
                 {
                     if (collateralInput.Output.Amount() is LovelaceWithMultiAsset multiAsset && multiAsset.MultiAsset?.Value != null)
                     {
-                        foreach ((byte[] policyId, TokenBundleOutput tokenBundle) in multiAsset.MultiAsset.Value)
+                        foreach ((ReadOnlyMemory<byte> policyId, TokenBundleOutput tokenBundle) in multiAsset.MultiAsset.Value)
                         {
                             if (!aggregatedAssets.TryGetValue(policyId, out TokenBundleOutput? existingBundle))
                             {
@@ -172,12 +173,12 @@ public static class TransactionBuilderExtensions
                             else
                             {
                                 // Merge token bundles
-                                Dictionary<byte[], ulong> mergedTokens = new(ByteArrayEqualityComparer.Instance);
-                                foreach ((byte[] name, ulong amount) in existingBundle.Value)
+                                Dictionary<ReadOnlyMemory<byte>, ulong> mergedTokens = new(ReadOnlyMemoryComparer.Instance);
+                                foreach ((ReadOnlyMemory<byte> name, ulong amount) in existingBundle.Value)
                                 {
                                     mergedTokens[name] = amount;
                                 }
-                                foreach ((byte[] name, ulong amount) in tokenBundle.Value)
+                                foreach ((ReadOnlyMemory<byte> name, ulong amount) in tokenBundle.Value)
                                 {
                                     mergedTokens[name] = mergedTokens.TryGetValue(name, out ulong existing) ? existing + amount : amount;
                                 }

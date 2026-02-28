@@ -156,6 +156,25 @@ public abstract partial record CborPrimitive : CborBase
     }
 
     /// <summary>
+    /// Converts a ReadOnlyMemory&lt;byte&gt; to a <see cref="CborPrimitive"/>.
+    /// </summary>
+    /// <param name="value">The ReadOnlyMemory&lt;byte&gt; value.</param>
+    public static implicit operator CborPrimitive(ReadOnlyMemory<byte> value)
+    {
+        return new CborBytes(value);
+    }
+
+    /// <summary>
+    /// Creates a <see cref="CborPrimitive"/> from a ReadOnlyMemory&lt;byte&gt; value.
+    /// </summary>
+    /// <param name="value">The ReadOnlyMemory&lt;byte&gt; value.</param>
+    /// <returns>A new <see cref="CborBytes"/> instance.</returns>
+    public static CborPrimitive FromReadOnlyMemory(ReadOnlyMemory<byte> value)
+    {
+        return new CborBytes(value);
+    }
+
+    /// <summary>
     /// Converts a float to a <see cref="CborPrimitive"/>.
     /// </summary>
     /// <param name="value">The float value.</param>
@@ -279,7 +298,7 @@ public partial record CborBool(bool Value) : CborPrimitive;
 /// </summary>
 /// <param name="Value">The byte array value.</param>
 [CborSerializable]
-public partial record CborBytes(byte[] Value) : CborPrimitive;
+public partial record CborBytes(ReadOnlyMemory<byte> Value) : CborPrimitive;
 
 /// <summary>
 /// A CBOR single-precision floating-point primitive value.

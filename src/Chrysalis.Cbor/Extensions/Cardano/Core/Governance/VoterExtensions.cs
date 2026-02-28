@@ -23,7 +23,7 @@ public static class VoterExtensions
     /// </summary>
     /// <param name="self">The voter instance.</param>
     /// <returns>The hash bytes.</returns>
-    public static byte[] Hash(this Voter self)
+    public static ReadOnlyMemory<byte> Hash(this Voter self)
     {
         ArgumentNullException.ThrowIfNull(self);
         return self.Hash;

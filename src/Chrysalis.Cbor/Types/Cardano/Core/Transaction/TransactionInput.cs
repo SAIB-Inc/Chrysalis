@@ -10,6 +10,6 @@ namespace Chrysalis.Cbor.Types.Cardano.Core.Transaction;
 [CborSerializable]
 [CborList]
 public partial record TransactionInput(
-    [CborOrder(0)] byte[] TransactionId,
+    [CborOrder(0)] ReadOnlyMemory<byte> TransactionId,
     [CborOrder(1)] ulong Index
 ) : CborBase;

@@ -10,6 +10,6 @@ namespace Chrysalis.Cbor.Types.Cardano.Core.Governance;
 [CborSerializable]
 [CborList]
 public partial record GovActionId(
-    [CborOrder(0)] byte[] TransactionId,
+    [CborOrder(0)] ReadOnlyMemory<byte> TransactionId,
     [CborOrder(1)] int GovActionIndex
 ) : CborBase;

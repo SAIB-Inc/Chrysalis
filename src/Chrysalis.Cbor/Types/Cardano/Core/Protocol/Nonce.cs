@@ -18,7 +18,7 @@ public abstract partial record Nonce : CborBase { }
 [CborList]
 public partial record NonceWithHash(
     [CborOrder(0)] ulong Variant,
-    [CborOrder(1)] byte[]? Hash
+    [CborOrder(1)] ReadOnlyMemory<byte>? Hash
 ) : Nonce;
 
 /// <summary>

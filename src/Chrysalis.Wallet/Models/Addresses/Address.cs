@@ -112,15 +112,15 @@ public class Address
 
         byte[] pkh = paymentBytes switch
         {
-            VerificationKey vkey => vkey.VerificationKeyHash,
-            Script script => script.ScriptHash,
+            VerificationKey vkey => vkey.VerificationKeyHash.ToArray(),
+            Script script => script.ScriptHash.ToArray(),
             _ => throw new ArgumentException("Invalid payment credential type", nameof(paymentBytes))
         };
 
         byte[]? skh = stakeBytes switch
         {
-            VerificationKey vkey => vkey.VerificationKeyHash,
-            Script script => script.ScriptHash,
+            VerificationKey vkey => vkey.VerificationKeyHash.ToArray(),
+            Script script => script.ScriptHash.ToArray(),
             null => null,
             _ => throw new ArgumentException("Invalid stake credential type", nameof(stakeBytes))
         };

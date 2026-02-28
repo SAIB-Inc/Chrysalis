@@ -23,7 +23,7 @@ public static class CredentialExtensions
     /// </summary>
     /// <param name="self">The credential instance.</param>
     /// <returns>The hash bytes.</returns>
-    public static byte[] Hash(this Credential self)
+    public static ReadOnlyMemory<byte> Hash(this Credential self)
     {
         ArgumentNullException.ThrowIfNull(self);
         return self.Hash;

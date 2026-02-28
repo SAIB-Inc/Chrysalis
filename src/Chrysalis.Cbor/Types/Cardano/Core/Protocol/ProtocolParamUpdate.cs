@@ -235,5 +235,5 @@ public partial record MaryProtocolParamUpdate(
 /// <param name="Value">Dictionary mapping genesis delegate key hashes to parameter update proposals.</param>
 [CborSerializable]
 public partial record ProposedProtocolParameterUpdates(
-    Dictionary<byte[], ProtocolParamUpdate> Value
+    Dictionary<ReadOnlyMemory<byte>, ProtocolParamUpdate> Value
 ) : CborBase;

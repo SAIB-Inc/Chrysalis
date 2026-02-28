@@ -130,9 +130,9 @@ public static class LocalStateQueryExtension
     {
         try
         {
-            return result.QueryResult.Value == null
+            return result.QueryResult.Value.Length == 0
                 ? throw new InvalidOperationException($"{InvalidResponseError}: Result has no raw data")
-                : [.. result.QueryResult.Value];
+                : result.QueryResult.Value.ToArray();
         }
         catch (Exception ex) when (ex is not InvalidOperationException)
         {

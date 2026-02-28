@@ -15,7 +15,7 @@ namespace Chrysalis.Cbor.Types.Cardano.Core.Byron;
 [CborList]
 public partial record ByronBlockHead(
     [CborOrder(0)] uint ProtocolMagic,
-    [CborOrder(1)] byte[] PrevBlock,
+    [CborOrder(1)] ReadOnlyMemory<byte> PrevBlock,
     [CborOrder(2)] ByronBlockProof BodyProof,
     [CborOrder(3)] ByronBlockCons ConsensusData,
     [CborOrder(4)] ByronBlockExtraData ExtraData
@@ -33,8 +33,8 @@ public partial record ByronBlockHead(
 [CborList]
 public partial record ByronEbbHead(
     [CborOrder(0)] uint ProtocolMagic,
-    [CborOrder(1)] byte[] PrevBlock,
-    [CborOrder(2)] byte[] BodyProof,
+    [CborOrder(1)] ReadOnlyMemory<byte> PrevBlock,
+    [CborOrder(2)] ReadOnlyMemory<byte> BodyProof,
     [CborOrder(3)] ByronEbbCons ConsensusData,
     [CborOrder(4)] CborMaybeIndefList<CborEncodedValue> ExtraData
 ) : CborBase, ICborPreserveRaw;
@@ -50,7 +50,7 @@ public partial record ByronEbbHead(
 [CborList]
 public partial record ByronBlockCons(
     [CborOrder(0)] ByronSlotId SlotId,
-    [CborOrder(1)] byte[] PubKey,
+    [CborOrder(1)] ReadOnlyMemory<byte> PubKey,
     [CborOrder(2)] CborMaybeIndefList<ulong> Difficulty,
     [CborOrder(3)] ByronBlockSig BlockSignature
 ) : CborBase;
@@ -80,7 +80,7 @@ public partial record ByronBlockExtraData(
     [CborOrder(0)] ByronBlockVersion BlockVersion,
     [CborOrder(1)] ByronSoftwareVersion SoftwareVersion,
     [CborOrder(2)] CborEncodedValue? Attributes,
-    [CborOrder(3)] byte[] ExtraProof
+    [CborOrder(3)] ReadOnlyMemory<byte> ExtraProof
 ) : CborBase;
 
 /// <summary>
@@ -95,6 +95,6 @@ public partial record ByronBlockExtraData(
 public partial record ByronBlockProof(
     [CborOrder(0)] ByronTxProof TxProof,
     [CborOrder(1)] CborEncodedValue SscProof,
-    [CborOrder(2)] byte[] DlgProof,
-    [CborOrder(3)] byte[] UpdProof
+    [CborOrder(2)] ReadOnlyMemory<byte> DlgProof,
+    [CborOrder(3)] ReadOnlyMemory<byte> UpdProof
 ) : CborBase;

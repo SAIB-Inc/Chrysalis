@@ -3,6 +3,7 @@ using Chrysalis.Cbor.Extensions;
 using Chrysalis.Cbor.Extensions.Cardano.Core.Common;
 using Chrysalis.Cbor.Extensions.Cardano.Core.Transaction;
 using Chrysalis.Cbor.Serialization;
+using Chrysalis.Cbor.Serialization.Utils;
 using Chrysalis.Cbor.Types;
 using Chrysalis.Cbor.Types.Cardano.Core;
 using Chrysalis.Cbor.Types.Cardano.Core.Certificates;
@@ -281,7 +282,7 @@ public sealed class TransactionTemplateBuilder<T>
         if (context.IsSmartContractTx)
         {
             // Add remaining UTXOs that weren't selected
-            HashSet<(byte[] TransactionId, ulong Index)> selectedInputIds = coinSelectionResult.Inputs
+            HashSet<(ReadOnlyMemory<byte> TransactionId, ulong Index)> selectedInputIds = coinSelectionResult.Inputs
                 .Select(i => (i.Outref.TransactionId, i.Outref.Index))
                 .ToHashSet(new TransactionInputEqualityComparer());
 
@@ -295,7 +296,7 @@ public sealed class TransactionTemplateBuilder<T>
         ulong totalLovelaceChange = coinSelectionResult.LovelaceChange + feeBuffer;
         Lovelace lovelaceChange = new(totalLovelaceChange);
 
-        Dictionary<byte[], TokenBundleOutput> assetsChange = coinSelectionResult.AssetsChange;
+        Dictionary<ReadOnlyMemory<byte>, TokenBundleOutput> assetsChange = coinSelectionResult.AssetsChange;
 
         foreach (ResolvedInput consumedInput in coinSelectionResult.Inputs)
         {
@@ -359,11 +360,11 @@ public sealed class TransactionTemplateBuilder<T>
             Dictionary<string, Dictionary<string, ulong>> outputMappings = [];
 
             // Create lookup dictionary instead of nested loops
-            Dictionary<(byte[] TransactionId, ulong Index), int> sortedInputsLookup = CreateInputLookup(sortedInputs);
+            Dictionary<(ReadOnlyMemory<byte> TransactionId, ulong Index), int> sortedInputsLookup = CreateInputLookup(sortedInputs);
 
             foreach ((string inputId, TransactionInput input) in context.InputsById)
             {
-                (byte[] TransactionId, ulong Index) inputKey = (input.TransactionId, input.Index);
+                (ReadOnlyMemory<byte> TransactionId, ulong Index) inputKey = (input.TransactionId, input.Index);
                 if (sortedInputsLookup.TryGetValue(inputKey, out int index))
                 {
                     inputIdToIndex[inputId] = (ulong)index;
@@ -466,9 +467,9 @@ public sealed class TransactionTemplateBuilder<T>
         return MergeParties(_staticParties, additionalParties);
     }
 
-    private static Dictionary<(byte[] TransactionId, ulong Index), int> CreateInputLookup(List<TransactionInput> sortedInputs)
+    private static Dictionary<(ReadOnlyMemory<byte> TransactionId, ulong Index), int> CreateInputLookup(List<TransactionInput> sortedInputs)
     {
-        Dictionary<(byte[], ulong), int> inputLookup = new(new TransactionInputEqualityComparer());
+        Dictionary<(ReadOnlyMemory<byte>, ulong), int> inputLookup = new(new TransactionInputEqualityComparer());
 
         for (int i = 0; i < sortedInputs.Count; i++)
         {
@@ -479,16 +480,16 @@ public sealed class TransactionTemplateBuilder<T>
         return inputLookup;
     }
 
-    private sealed class TransactionInputEqualityComparer : IEqualityComparer<(byte[] TransactionId, ulong Index)>
+    private sealed class TransactionInputEqualityComparer : IEqualityComparer<(ReadOnlyMemory<byte> TransactionId, ulong Index)>
     {
-        public bool Equals((byte[] TransactionId, ulong Index) x, (byte[] TransactionId, ulong Index) y)
+        public bool Equals((ReadOnlyMemory<byte> TransactionId, ulong Index) x, (ReadOnlyMemory<byte> TransactionId, ulong Index) y)
         {
-            return x.Index == y.Index && ByteArrayEqualityComparer.Instance.Equals(x.TransactionId, y.TransactionId);
+            return x.Index == y.Index && ReadOnlyMemoryComparer.Instance.Equals(x.TransactionId, y.TransactionId);
         }
 
-        public int GetHashCode((byte[] TransactionId, ulong Index) obj)
+        public int GetHashCode((ReadOnlyMemory<byte> TransactionId, ulong Index) obj)
         {
-            return HashCode.Combine(ByteArrayEqualityComparer.Instance.GetHashCode(obj.TransactionId), obj.Index);
+            return HashCode.Combine(ReadOnlyMemoryComparer.Instance.GetHashCode(obj.TransactionId), obj.Index);
         }
     }
 
@@ -576,11 +577,11 @@ public sealed class TransactionTemplateBuilder<T>
             return;
         }
 
-        foreach ((byte[] policyId, TokenBundleOutput tokenBundle) in multiAsset.Value)
+        foreach ((ReadOnlyMemory<byte> policyId, TokenBundleOutput tokenBundle) in multiAsset.Value)
         {
             string policyHex = HexStringCache.ToHexString(policyId);
 
-            foreach ((byte[] assetName, ulong amount) in tokenBundle.Value)
+            foreach ((ReadOnlyMemory<byte> assetName, ulong amount) in tokenBundle.Value)
             {
                 string assetHex = HexStringCache.ToHexString(assetName);
                 string assetKey = BuildAssetKey(policyHex, assetHex);
@@ -661,7 +662,7 @@ public sealed class TransactionTemplateBuilder<T>
         }
         else
         {
-            Dictionary<byte[], TokenBundleOutput> multiAssetDict = new(ByteArrayEqualityComparer.Instance);
+            Dictionary<ReadOnlyMemory<byte>, TokenBundleOutput> multiAssetDict = new(ReadOnlyMemoryComparer.Instance);
 
             Dictionary<string, List<KeyValuePair<string, ulong>>> assetsByPolicy = adjustedAssets
                 .Where(a => a.Value > 0)
@@ -670,12 +671,12 @@ public sealed class TransactionTemplateBuilder<T>
 
             foreach ((string policyIdHex, List<KeyValuePair<string, ulong>> assets) in assetsByPolicy)
             {
-                byte[] policyId = HexStringCache.FromHexString(policyIdHex);
-                Dictionary<byte[], ulong> tokenBundle = new(ByteArrayEqualityComparer.Instance);
+                ReadOnlyMemory<byte> policyId = HexStringCache.FromHexString(policyIdHex);
+                Dictionary<ReadOnlyMemory<byte>, ulong> tokenBundle = new(ReadOnlyMemoryComparer.Instance);
 
                 foreach (KeyValuePair<string, ulong> asset in assets)
                 {
-                    byte[] assetNameBytes = HexStringCache.FromHexString(asset.Key[56..]);
+                    ReadOnlyMemory<byte> assetNameBytes = HexStringCache.FromHexString(asset.Key[56..]);
                     tokenBundle[assetNameBytes] = asset.Value;
                 }
 
@@ -709,8 +710,8 @@ public sealed class TransactionTemplateBuilder<T>
                 ulong changeAmount = amount - consumedByOutput;
                 if (changeAmount > 0)
                 {
-                    byte[] policyId = HexStringCache.FromHexString(assetKey[..56]);
-                    byte[] assetNameBytes = HexStringCache.FromHexString(assetKey[56..]);
+                    ReadOnlyMemory<byte> policyId = HexStringCache.FromHexString(assetKey[..56]);
+                    ReadOnlyMemory<byte> assetNameBytes = HexStringCache.FromHexString(assetKey[56..]);
                     AddAssetToChange(selection.AssetsChange, policyId, assetNameBytes, changeAmount);
                 }
             }
@@ -724,8 +725,8 @@ public sealed class TransactionTemplateBuilder<T>
 
             if (excessAmount > 0)
             {
-                byte[] policyId = HexStringCache.FromHexString(assetKey[..56]);
-                byte[] assetNameBytes = HexStringCache.FromHexString(assetKey[56..]);
+                ReadOnlyMemory<byte> policyId = HexStringCache.FromHexString(assetKey[..56]);
+                ReadOnlyMemory<byte> assetNameBytes = HexStringCache.FromHexString(assetKey[56..]);
                 AddAssetToChange(selection.AssetsChange, policyId, assetNameBytes, excessAmount);
             }
         }
@@ -774,8 +775,8 @@ public sealed class TransactionTemplateBuilder<T>
     {
         return output switch
         {
-            AlonzoTransactionOutput alonzo => WalletAddress.FromBytes(alonzo.Address.Value).ToBech32(),
-            PostAlonzoTransactionOutput postAlonzo => WalletAddress.FromBytes(postAlonzo.Address!.Value).ToBech32(),
+            AlonzoTransactionOutput alonzo => WalletAddress.FromBytes(alonzo.Address.Value.ToArray()).ToBech32(),
+            PostAlonzoTransactionOutput postAlonzo => WalletAddress.FromBytes(postAlonzo.Address!.Value.ToArray()).ToBech32(),
             _ => throw new InvalidOperationException("Unknown output type")
         };
     }
@@ -1010,9 +1011,9 @@ public sealed class TransactionTemplateBuilder<T>
             foreach ((string assetName, long amount) in mintOptions.Assets)
             {
                 value[assetName] = amount;
-                _ = context.TxBuilder.AddMint(new MultiAssetMint(new Dictionary<byte[], TokenBundleMint>(ByteArrayEqualityComparer.Instance)
+                _ = context.TxBuilder.AddMint(new MultiAssetMint(new Dictionary<ReadOnlyMemory<byte>, TokenBundleMint>(ReadOnlyMemoryComparer.Instance)
                 {
-                    { HexStringCache.FromHexString(mintOptions.Policy), new TokenBundleMint(new Dictionary<byte[], long>(ByteArrayEqualityComparer.Instance)
+                    { HexStringCache.FromHexString(mintOptions.Policy), new TokenBundleMint(new Dictionary<ReadOnlyMemory<byte>, long>(ReadOnlyMemoryComparer.Instance)
                     { { HexStringCache.FromHexString(assetName), amount } }) }
                 }));
             }
@@ -1075,7 +1076,7 @@ public sealed class TransactionTemplateBuilder<T>
         List<Script> scripts = [];
 
         // Create lookup dictionary for faster matching
-        Dictionary<(byte[], ulong), ResolvedInput> utxoLookup = new(new TransactionInputEqualityComparer());
+        Dictionary<(ReadOnlyMemory<byte>, ulong), ResolvedInput> utxoLookup = new(new TransactionInputEqualityComparer());
 
         foreach (ResolvedInput utxo in allUtxos)
         {
@@ -1084,13 +1085,13 @@ public sealed class TransactionTemplateBuilder<T>
 
         foreach (TransactionInput referenceInput in referenceInputs)
         {
-            (byte[] TransactionId, ulong Index) key = (referenceInput.TransactionId, referenceInput.Index);
+            (ReadOnlyMemory<byte> TransactionId, ulong Index) key = (referenceInput.TransactionId, referenceInput.Index);
             if (utxoLookup.TryGetValue(key, out ResolvedInput? utxo))
             {
                 if (utxo.Output is PostAlonzoTransactionOutput postAlonzoOutput &&
                     postAlonzoOutput.ScriptRef is not null)
                 {
-                    Script script = CborSerializer.Deserialize<Script>(postAlonzoOutput.ScriptRef.Value);
+                    Script script = CborSerializer.Deserialize<Script>(postAlonzoOutput.ScriptRef.Value.ToArray());
                     scripts.Add(script);
                 }
             }
@@ -1102,7 +1103,7 @@ public sealed class TransactionTemplateBuilder<T>
     private static List<ResolvedInput> GetSpecifiedInputsUtxos(List<TransactionInput> specifiedInputs, List<ResolvedInput> allUtxos)
     {
         // Create lookup dictionary for O(1) access instead of O(n) per input
-        Dictionary<(byte[], ulong), ResolvedInput> utxoLookup = new(new TransactionInputEqualityComparer());
+        Dictionary<(ReadOnlyMemory<byte>, ulong), ResolvedInput> utxoLookup = new(new TransactionInputEqualityComparer());
 
         foreach (ResolvedInput utxo in allUtxos)
         {
@@ -1113,7 +1114,7 @@ public sealed class TransactionTemplateBuilder<T>
 
         foreach (TransactionInput input in specifiedInputs)
         {
-            (byte[] TransactionId, ulong Index) key = (input.TransactionId, input.Index);
+            (ReadOnlyMemory<byte> TransactionId, ulong Index) key = (input.TransactionId, input.Index);
             if (utxoLookup.TryGetValue(key, out ResolvedInput? utxo))
             {
                 specifiedInputsUtxos.Add(utxo);
@@ -1129,12 +1130,12 @@ public sealed class TransactionTemplateBuilder<T>
     {
         Dictionary<string, int> inputIdToOrderedIndex = new(inputsById.Count);
 
-        // Create lookup dictionary using byte array comparer for transaction IDs
-        Dictionary<(byte[] TransactionId, ulong Index), int> inputLookup = CreateInputLookup(sortedInputs);
+        // Create lookup dictionary using memory comparer for transaction IDs
+        Dictionary<(ReadOnlyMemory<byte> TransactionId, ulong Index), int> inputLookup = CreateInputLookup(sortedInputs);
 
         foreach ((string inputId, TransactionInput input) in inputsById)
         {
-            (byte[] TransactionId, ulong Index) key = (input.TransactionId, input.Index);
+            (ReadOnlyMemory<byte> TransactionId, ulong Index) key = (input.TransactionId, input.Index);
             if (inputLookup.TryGetValue(key, out int index))
             {
                 inputIdToOrderedIndex[inputId] = index;
@@ -1151,7 +1152,7 @@ public sealed class TransactionTemplateBuilder<T>
         Dictionary<string, ulong> refInputIdToOrderedIndex = [];
 
         // Create lookup dictionary to avoid nested loops
-        Dictionary<(byte[], ulong), int> refInputLookup = new(new TransactionInputEqualityComparer());
+        Dictionary<(ReadOnlyMemory<byte>, ulong), int> refInputLookup = new(new TransactionInputEqualityComparer());
 
         for (int i = 0; i < sortedRefInputs.Count; i++)
         {
@@ -1161,7 +1162,7 @@ public sealed class TransactionTemplateBuilder<T>
 
         foreach ((string refInputId, TransactionInput refInput) in refInputsById)
         {
-            (byte[] TransactionId, ulong Index) key = (refInput.TransactionId, refInput.Index);
+            (ReadOnlyMemory<byte> TransactionId, ulong Index) key = (refInput.TransactionId, refInput.Index);
             if (refInputLookup.TryGetValue(key, out int index))
             {
                 refInputIdToOrderedIndex[refInputId] = (ulong)index;
@@ -1185,15 +1186,15 @@ public sealed class TransactionTemplateBuilder<T>
     }
 
     private static void AddAssetToChange(
-        Dictionary<byte[], TokenBundleOutput> assetsChange,
-        byte[] policyId,
-        byte[] assetName,
+        Dictionary<ReadOnlyMemory<byte>, TokenBundleOutput> assetsChange,
+        ReadOnlyMemory<byte> policyId,
+        ReadOnlyMemory<byte> assetName,
         ulong amount
     )
     {
         if (assetsChange.TryGetValue(policyId, out TokenBundleOutput? existingPolicy))
         {
-            Dictionary<byte[], ulong> tokenBundle = existingPolicy.Value;
+            Dictionary<ReadOnlyMemory<byte>, ulong> tokenBundle = existingPolicy.Value;
 
             if (tokenBundle.TryGetValue(assetName, out ulong existingAmount))
             {
@@ -1214,7 +1215,7 @@ public sealed class TransactionTemplateBuilder<T>
         }
         else if (amount > 0)
         {
-            Dictionary<byte[], ulong> tokenBundle = new(ByteArrayEqualityComparer.Instance)
+            Dictionary<ReadOnlyMemory<byte>, ulong> tokenBundle = new(ReadOnlyMemoryComparer.Instance)
             {
                 [assetName] = amount
             };

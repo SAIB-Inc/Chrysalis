@@ -30,7 +30,7 @@ public partial record MultiSigScript(
 [CborList]
 public partial record PlutusV1Script(
     [CborOrder(0)] Value1 Version,
-    [CborOrder(1)] byte[] ScriptBytes
+    [CborOrder(1)] ReadOnlyMemory<byte> ScriptBytes
 ) : Script;
 
 /// <summary>
@@ -42,7 +42,7 @@ public partial record PlutusV1Script(
 [CborList]
 public partial record PlutusV2Script(
     [CborOrder(0)] Value2 Version,
-    [CborOrder(1)] byte[] ScriptBytes
+    [CborOrder(1)] ReadOnlyMemory<byte> ScriptBytes
 ) : Script;
 
 /// <summary>
@@ -54,5 +54,5 @@ public partial record PlutusV2Script(
 [CborList]
 public partial record PlutusV3Script(
     [CborOrder(0)] Value3 Version,
-    [CborOrder(1)] byte[] ScriptBytes
+    [CborOrder(1)] ReadOnlyMemory<byte> ScriptBytes
 ) : Script;

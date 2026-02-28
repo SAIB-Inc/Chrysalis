@@ -28,13 +28,17 @@ public static class ValueExtensions
     /// Gets the multi-asset dictionary from the value.
     /// </summary>
     /// <param name="self">The value instance.</param>
-    /// <returns>The multi-asset dictionary mapping policy IDs to token bundles.</returns>
-    public static Dictionary<byte[], TokenBundleOutput> MultiAsset(this Value self)
+    /// <returns>The multi-asset dictionary mapping hex-encoded policy IDs to token bundles.</returns>
+    public static Dictionary<string, TokenBundleOutput> MultiAsset(this Value self)
     {
         ArgumentNullException.ThrowIfNull(self);
         return self switch
         {
-            LovelaceWithMultiAsset lovelaceWithMultiAsset => lovelaceWithMultiAsset.MultiAsset.Value,
+            LovelaceWithMultiAsset lovelaceWithMultiAsset => lovelaceWithMultiAsset.MultiAsset.Value
+                .ToDictionary(
+                    kvp => Convert.ToHexString(kvp.Key.Span).ToUpperInvariant(),
+                    kvp => kvp.Value
+                ),
             _ => []
         };
     }
@@ -57,8 +61,8 @@ public static class ValueExtensions
                     ma.Value.ToDict()
                     .Where(tb =>
                     {
-                        string policyId = Convert.ToHexString(ma.Key);
-                        string assetName = Convert.ToHexString(tb.Key);
+                        string policyId = ma.Key;
+                        string assetName = tb.Key;
                         string fullSubject = string.Concat(policyId, assetName);
 
                         return string.Equals(fullSubject, subject, StringComparison.OrdinalIgnoreCase);

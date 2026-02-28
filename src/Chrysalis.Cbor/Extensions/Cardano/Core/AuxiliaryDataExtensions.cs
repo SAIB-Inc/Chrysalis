@@ -48,7 +48,7 @@ public static class AuxiliaryDataExtensions
     /// </summary>
     /// <param name="self">The auxiliary data instance.</param>
     /// <returns>The Plutus V1 scripts, or null if not present.</returns>
-    public static IEnumerable<byte[]>? PlutusV1ScriptSet(this CAuxiliaryData self)
+    public static IEnumerable<ReadOnlyMemory<byte>>? PlutusV1ScriptSet(this CAuxiliaryData self)
     {
         ArgumentNullException.ThrowIfNull(self);
         return self switch
@@ -63,7 +63,7 @@ public static class AuxiliaryDataExtensions
     /// </summary>
     /// <param name="self">The auxiliary data instance.</param>
     /// <returns>The Plutus V2 scripts, or null if not present.</returns>
-    public static IEnumerable<byte[]>? PlutusV2ScriptSet(this CAuxiliaryData self)
+    public static IEnumerable<ReadOnlyMemory<byte>>? PlutusV2ScriptSet(this CAuxiliaryData self)
     {
         ArgumentNullException.ThrowIfNull(self);
         return self switch
@@ -78,7 +78,7 @@ public static class AuxiliaryDataExtensions
     /// </summary>
     /// <param name="self">The auxiliary data instance.</param>
     /// <returns>The Plutus V3 scripts, or null if not present.</returns>
-    public static IEnumerable<byte[]>? PlutusV3ScriptSet(this CAuxiliaryData self)
+    public static IEnumerable<ReadOnlyMemory<byte>>? PlutusV3ScriptSet(this CAuxiliaryData self)
     {
         ArgumentNullException.ThrowIfNull(self);
         return self switch

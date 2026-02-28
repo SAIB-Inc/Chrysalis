@@ -4,6 +4,7 @@ using System.Net.Http.Headers;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Chrysalis.Cbor.Serialization;
+using Chrysalis.Cbor.Serialization.Utils;
 using Chrysalis.Cbor.Types;
 using Chrysalis.Cbor.Types.Cardano.Core.Common;
 using Chrysalis.Cbor.Types.Cardano.Core.Governance;
@@ -184,7 +185,7 @@ public sealed class Blockfrost : ICardanoDataProvider, IDisposable
     {
         ulong lovelace = 0;
 
-        Dictionary<byte[], TokenBundleOutput> assets = new(ByteArrayEqualityComparer.Instance);
+        Dictionary<ReadOnlyMemory<byte>, TokenBundleOutput> assets = new(ReadOnlyMemoryComparer.Instance);
 
         foreach (Amount amount in utxo.Amount!)
         {
@@ -194,8 +195,8 @@ public sealed class Blockfrost : ICardanoDataProvider, IDisposable
             }
             else
             {
-                byte[] policy = HexStringCache.FromHexString(amount.Unit![..56]);
-                byte[] assetName = HexStringCache.FromHexString(amount.Unit![56..]);
+                ReadOnlyMemory<byte> policy = HexStringCache.FromHexString(amount.Unit![..56]);
+                ReadOnlyMemory<byte> assetName = HexStringCache.FromHexString(amount.Unit![56..]);
 
                 if (assets.TryGetValue(policy, out TokenBundleOutput? existingBundle))
                 {
@@ -203,7 +204,7 @@ public sealed class Blockfrost : ICardanoDataProvider, IDisposable
                 }
                 else
                 {
-                    assets[policy] = new TokenBundleOutput(new Dictionary<byte[], ulong>(ByteArrayEqualityComparer.Instance)
+                    assets[policy] = new TokenBundleOutput(new Dictionary<ReadOnlyMemory<byte>, ulong>(ReadOnlyMemoryComparer.Instance)
                     {
                         [assetName] = ulong.Parse(amount.Quantity!, CultureInfo.InvariantCulture)
                     });
