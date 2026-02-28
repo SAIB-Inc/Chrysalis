@@ -418,6 +418,10 @@ public sealed partial class CborSerializerCodeGen
             {
                 sb.AppendLine("reader.ReadEndArray();");
             }
+            else if (metadata.SerializationType == SerializationType.List)
+            {
+                sb.AppendLine("reader.ReadEndArray();");
+            }
 
             sb.AppendLine($"{metadata.FullyQualifiedName} result;");
 

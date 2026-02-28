@@ -1,7 +1,8 @@
-using System.Formats.Cbor;
+using Chrysalis.Cbor.Extensions;
 using Chrysalis.Cbor.Extensions.Cardano.Core;
 using Chrysalis.Cbor.Extensions.Cardano.Core.Header;
 using Chrysalis.Cbor.Serialization;
+using Chrysalis.Cbor.Types.Cardano.Core.Byron;
 using Chrysalis.Cbor.Types.Cardano.Core.Header;
 using Chrysalis.Network.Cbor.ChainSync;
 using Chrysalis.Network.Cbor.Common;
@@ -18,21 +19,15 @@ internal static class Program
         string Host,
         int Port,
         ulong NetworkMagic,
-        int KeepAliveSeconds,
-        ulong StartSlot,
-        byte[] StartHash
+        int KeepAliveSeconds
     );
-
-    private sealed record HeaderInfo(ulong Slot, ulong BlockNumber, string Hash);
 
     private static async Task<int> Main(string[] args)
     {
         if (!TryParseOptions(args, out Options options, out string? error))
         {
             if (!string.IsNullOrWhiteSpace(error))
-            {
                 Console.Error.WriteLine(error);
-            }
             PrintUsage();
             return 1;
         }
@@ -44,26 +39,22 @@ internal static class Program
             cts.Cancel();
         };
 
-        Console.WriteLine(
-            $"Connecting to {options.Host}:{options.Port} (magic {options.NetworkMagic})...");
+        Console.WriteLine($"Connecting to {options.Host}:{options.Port} (magic {options.NetworkMagic})...");
 
         using PeerClient peer = await PeerClient.ConnectAsync(options.Host, options.Port, cts.Token);
         await peer.StartAsync(options.NetworkMagic, TimeSpan.FromSeconds(options.KeepAliveSeconds));
 
         Console.WriteLine("Connected. Starting ChainSync...");
 
-        Point startPoint = new(options.StartSlot, options.StartHash);
-        ChainSyncMessage intersect = await peer.ChainSync.FindIntersectionAsync([startPoint], cts.Token);
+        ChainSyncMessage intersect = await peer.ChainSync.FindIntersectionAsync([Point.Origin], cts.Token);
 
         switch (intersect)
         {
             case MessageIntersectFound found:
-                Console.WriteLine(
-                    $"Intersection found at slot {found.Point.Slot} hash {ToHex(found.Point.Hash)}");
+                Console.WriteLine($"Intersection found at {FormatPoint(found.Point)}");
                 break;
             case MessageIntersectNotFound notFound:
-                Console.WriteLine(
-                    $"Intersection not found. Tip slot {notFound.Tip.Slot.Slot} hash {ToHex(notFound.Tip.Slot.Hash)}");
+                Console.WriteLine($"Intersection not found. Tip {FormatPoint(notFound.Tip.Slot)}");
                 return 2;
             default:
                 Console.WriteLine("Unexpected intersection response.");
@@ -80,22 +71,12 @@ internal static class Program
             {
                 case MessageRollForward rollForward:
                     atTip = false;
-                    if (TryDecodeHeader(rollForward.Payload.Value, out HeaderInfo header))
-                    {
-                        Console.WriteLine(
-                            $"rollforward slot {header.Slot} hash {header.Hash} block {header.BlockNumber}");
-                    }
-                    else
-                    {
-                        Console.WriteLine(
-                            $"rollforward tip slot {rollForward.Tip.Slot.Slot} hash {ToHex(rollForward.Tip.Slot.Hash)}");
-                    }
+                    Console.WriteLine(FormatRollForward(rollForward));
                     break;
 
                 case MessageRollBackward rollBackward:
                     atTip = false;
-                    Console.WriteLine(
-                        $"rollback to slot {rollBackward.Point.Slot} hash {ToHex(rollBackward.Point.Hash)}");
+                    Console.WriteLine($"rollback to {FormatPoint(rollBackward.Point)}");
                     break;
 
                 case MessageAwaitReply:
@@ -110,18 +91,64 @@ internal static class Program
 
         if (peer.ChainSync.HasAgency)
         {
-            try
-            {
-                await peer.ChainSync.DoneAsync(CancellationToken.None);
-            }
-            catch
-            {
-                // Best-effort shutdown.
-            }
+            try { await peer.ChainSync.DoneAsync(CancellationToken.None); }
+            catch { /* Best-effort shutdown */ }
         }
 
         return 0;
     }
+
+    private static string FormatRollForward(MessageRollForward rollForward)
+    {
+        try
+        {
+            HeaderContent header = HeaderContent.Decode(rollForward.Payload.Value);
+
+            if (header.IsByron)
+                return FormatByronHeader(header);
+
+            BlockHeader blockHeader = CborSerializer.Deserialize<BlockHeader>(header.HeaderCbor);
+            ulong slot = blockHeader.HeaderBody.Slot();
+            ulong blockNumber = blockHeader.HeaderBody.BlockNumber();
+            string hash = blockHeader.Hash();
+
+            return $"[{header.Era}] rollforward slot {slot} block {blockNumber} hash {hash}";
+        }
+        catch
+        {
+            return $"rollforward tip {FormatPoint(rollForward.Tip.Slot)}";
+        }
+    }
+
+    private static string FormatByronHeader(HeaderContent header)
+    {
+        string hash = Convert.ToHexString(
+            Blake2Fast.Blake2b.HashData(32, header.HeaderCbor)).ToLowerInvariant();
+
+        if (header.IsByronEbb)
+        {
+            ByronEbbHead ebbHead = CborSerializer.Deserialize<ByronEbbHead>(header.HeaderCbor);
+            return $"[{header.Era}] rollforward epoch {ebbHead.ConsensusData.EpochId} hash {hash}";
+        }
+
+        ByronBlockHead blockHead = CborSerializer.Deserialize<ByronBlockHead>(header.HeaderCbor);
+        ulong epoch = blockHead.ConsensusData.SlotId.Epoch;
+        ulong relSlot = blockHead.ConsensusData.SlotId.Slot;
+        ulong absSlot = epoch * 21600 + relSlot;
+        ulong blockNumber = blockHead.ConsensusData.Difficulty.GetValue().FirstOrDefault();
+
+        return $"[{header.Era}] rollforward slot {absSlot} block {blockNumber} hash {hash}";
+    }
+
+    private static string FormatPoint(Point point) => point switch
+    {
+        SpecificPoint sp => $"slot {sp.Slot} hash {ToHex(sp.Hash)}",
+        _ => "origin"
+    };
+
+    private static string ToHex(byte[] bytes) => Convert.ToHexString(bytes).ToLowerInvariant();
+
+    #region Options parsing
 
     private static bool TryParseOptions(string[] args, out Options options, out string? error)
     {
@@ -129,9 +156,7 @@ internal static class Program
         error = null;
 
         if (args.Any(arg => string.Equals(arg, "--help", StringComparison.OrdinalIgnoreCase)))
-        {
             return false;
-        }
 
         Dictionary<string, string> map = new(StringComparer.OrdinalIgnoreCase);
         for (int i = 0; i < args.Length; i++)
@@ -165,43 +190,17 @@ internal static class Program
         ulong magic = ParseUlong(GetValue(map, "magic") ?? GetEnv("NetworkMagic", "NETWORK_MAGIC"), DefaultNetworkMagic, "network magic", ref error);
         int keepAlive = ParseInt(
             GetValue(map, "keepalive") ?? GetEnv("KeepAliveIntervalSeconds", "KEEPALIVE_INTERVAL_SECONDS"),
-            DefaultKeepAliveSeconds,
-            "keepalive seconds",
-            ref error);
+            DefaultKeepAliveSeconds, "keepalive seconds", ref error);
 
         if (!string.IsNullOrWhiteSpace(error))
-        {
             return false;
-        }
 
-        string? slotRaw = GetValue(map, "slot") ?? GetEnv("Slot", "SLOT");
-        string? hashRaw = GetValue(map, "hash") ?? GetEnv("Hash", "HASH");
-
-        if (string.IsNullOrWhiteSpace(slotRaw) || string.IsNullOrWhiteSpace(hashRaw))
-        {
-            error = "Both slot and hash are required.";
-            return false;
-        }
-
-        if (!ulong.TryParse(slotRaw, out ulong slot))
-        {
-            error = $"Invalid slot value '{slotRaw}'.";
-            return false;
-        }
-
-        if (!TryParseHash(hashRaw, out byte[] hash, out error))
-        {
-            return false;
-        }
-
-        options = new Options(host, port, magic, keepAlive, slot, hash);
+        options = new Options(host, port, magic, keepAlive);
         return true;
     }
 
-    private static string? GetValue(Dictionary<string, string> map, string key)
-    {
-        return map.TryGetValue(key, out string? value) ? value : null;
-    }
+    private static string? GetValue(Dictionary<string, string> map, string key) =>
+        map.TryGetValue(key, out string? value) ? value : null;
 
     private static string? GetEnv(params string[] names)
     {
@@ -209,173 +208,44 @@ internal static class Program
         {
             string? value = Environment.GetEnvironmentVariable(name);
             if (!string.IsNullOrWhiteSpace(value))
-            {
                 return value;
-            }
         }
-
         return null;
     }
 
     private static int ParseInt(string? value, int fallback, string label, ref string? error)
     {
-        if (string.IsNullOrWhiteSpace(value))
-        {
-            return fallback;
-        }
-
+        if (string.IsNullOrWhiteSpace(value)) return fallback;
         if (!int.TryParse(value, out int parsed))
         {
             error = $"Invalid {label} value '{value}'.";
             return fallback;
         }
-
         return parsed;
     }
 
     private static ulong ParseUlong(string? value, ulong fallback, string label, ref string? error)
     {
-        if (string.IsNullOrWhiteSpace(value))
-        {
-            return fallback;
-        }
-
+        if (string.IsNullOrWhiteSpace(value)) return fallback;
         if (!ulong.TryParse(value, out ulong parsed))
         {
             error = $"Invalid {label} value '{value}'.";
             return fallback;
         }
-
         return parsed;
     }
-
-    private static bool TryParseHash(string value, out byte[] hash, out string? error)
-    {
-        hash = Array.Empty<byte>();
-        error = null;
-
-        string normalized = value.Trim();
-        if (normalized.StartsWith("0x", StringComparison.OrdinalIgnoreCase))
-        {
-            normalized = normalized[2..];
-        }
-
-        if (normalized.Length == 0 || normalized.Length % 2 != 0)
-        {
-            error = "Hash must be a non-empty hex string with an even length.";
-            return false;
-        }
-
-        try
-        {
-            hash = Convert.FromHexString(normalized);
-            return true;
-        }
-        catch (FormatException)
-        {
-            error = "Hash must be a valid hex string.";
-            return false;
-        }
-    }
-
-    private static bool TryDecodeHeader(ReadOnlyMemory<byte> payload, out HeaderInfo headerInfo)
-    {
-        headerInfo = default!;
-
-        if (payload.IsEmpty)
-        {
-            return false;
-        }
-
-        if (!TryExtractHeaderBytes(payload, out byte variant, out byte[] headerBytes))
-        {
-            return false;
-        }
-
-        if (variant == 0)
-        {
-            return false;
-        }
-
-        try
-        {
-            BlockHeader header = CborSerializer.Deserialize<BlockHeader>(headerBytes);
-            ulong slot = header.HeaderBody.Slot();
-            ulong blockNumber = header.HeaderBody.BlockNumber();
-            string hash = header.Hash();
-            headerInfo = new HeaderInfo(slot, blockNumber, hash);
-            return true;
-        }
-        catch
-        {
-            return false;
-        }
-    }
-
-    private static bool TryExtractHeaderBytes(ReadOnlyMemory<byte> payload, out byte variant, out byte[] headerBytes)
-    {
-        variant = 0;
-        headerBytes = Array.Empty<byte>();
-
-        try
-        {
-            CborReader reader = new(payload, CborConformanceMode.Lax);
-            int? outerLength = reader.ReadStartArray();
-
-            variant = checked((byte)reader.ReadUInt64());
-
-            if (variant == 0)
-            {
-                int? innerLength = reader.ReadStartArray();
-                int? prefixLength = reader.ReadStartArray();
-                _ = reader.ReadUInt64();
-                _ = reader.ReadUInt64();
-
-                if (prefixLength is null)
-                {
-                    reader.ReadEndArray();
-                }
-
-                _ = reader.ReadTag();
-                headerBytes = reader.ReadByteString();
-
-                if (innerLength is null)
-                {
-                    reader.ReadEndArray();
-                }
-            }
-            else
-            {
-                _ = reader.ReadTag();
-                headerBytes = reader.ReadByteString();
-            }
-
-            if (outerLength is null)
-            {
-                reader.ReadEndArray();
-            }
-
-            return headerBytes.Length > 0;
-        }
-        catch
-        {
-            return false;
-        }
-    }
-
-    private static string ToHex(byte[] bytes) => Convert.ToHexString(bytes).ToLowerInvariant();
 
     private static void PrintUsage()
     {
         Console.WriteLine("Usage:");
-        Console.WriteLine("  dotnet run --project src/Chrysalis.Network.Cli -- --slot <slot> --hash <hex> [options]");
-        Console.WriteLine("");
-        Console.WriteLine("Options (args or env):");
+        Console.WriteLine("  dotnet run --project src/Chrysalis.Network.Cli -- [options]");
+        Console.WriteLine();
+        Console.WriteLine("Syncs from chain origin (genesis). Options (args or env):");
         Console.WriteLine("  --tcp-host <host>            TcpHost / HOST (default 127.0.0.1)");
         Console.WriteLine("  --tcp-port <port>            TcpPort / PORT (default 3001)");
         Console.WriteLine("  --magic <magic>              NetworkMagic / NETWORK_MAGIC (default 2)");
         Console.WriteLine("  --keepalive <seconds>        KeepAliveIntervalSeconds / KEEPALIVE_INTERVAL_SECONDS (default 20)");
-        Console.WriteLine("  --slot <slot>                Slot / SLOT (required)");
-        Console.WriteLine("  --hash <hex>                 Hash / HASH (required)");
     }
+
+    #endregion
 }

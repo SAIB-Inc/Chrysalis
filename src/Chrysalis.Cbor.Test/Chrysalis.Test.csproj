@@ -31,6 +31,12 @@
   </ItemGroup>
 
   <ItemGroup>
+    <None Update="TestData\*.*">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="../Chrysalis.Cbor/Chrysalis.Cbor.csproj" />
     <ProjectReference Include="../Chrysalis.Cbor.CodeGen/Chrysalis.Cbor.CodeGen.csproj" 
               OutputItemType="Analyzer" 
