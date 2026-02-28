@@ -10,7 +10,7 @@ namespace Chrysalis.Network.Cbor.ChainSync;
 public record HeaderContent(
     byte Variant,
     byte? ByronSubTag,
-    byte[] HeaderCbor
+    ReadOnlyMemory<byte> HeaderCbor
 )
 {
     /// <summary>Whether this header is from the Byron era (variant 0).</summary>
@@ -46,7 +46,7 @@ public record HeaderContent(
         byte variant = checked((byte)reader.ReadUInt64());
 
         byte? byronSubTag = null;
-        byte[] headerCbor;
+        ReadOnlyMemory<byte> headerCbor;
 
         if (variant == 0)
         {

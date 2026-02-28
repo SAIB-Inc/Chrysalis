@@ -17,9 +17,8 @@ public sealed class ChannelBuffer(AgentChannel channel)
 {
     public async Task SendFullMessageAsync<T>(T message, CancellationToken cancellationToken) where T : CborBase
     {
-        byte[] payload = CborSerializer.Serialize(message);
-        ReadOnlyMemory<byte> payloadMemory = payload.AsMemory();
-        int payloadLength = payload.Length;
+        ReadOnlyMemory<byte> payloadMemory = CborSerializer.SerializeToMemory(message);
+        int payloadLength = payloadMemory.Length;
 
         for (int offset = 0; offset < payloadLength; offset += ProtocolConstants.MaxSegmentPayloadLength)
         {
@@ -56,8 +55,8 @@ public sealed class ChannelBuffer(AgentChannel channel)
                 T result;
                 if (buffer.IsSingleSegment)
                 {
-                    result = CborSerializer.Deserialize<T>(buffer.First);
-                    channel.AdvanceTo(buffer.End);
+                    result = CborSerializer.Deserialize<T>(buffer.First, out int consumed);
+                    channel.AdvanceTo(buffer.GetPosition(consumed));
                     return result;
                 }
 
@@ -66,8 +65,8 @@ public sealed class ChannelBuffer(AgentChannel channel)
                 try
                 {
                     buffer.CopyTo(rentedBuffer);
-                    result = CborSerializer.Deserialize<T>(rentedBuffer.AsMemory(0, (int)buffer.Length));
-                    channel.AdvanceTo(buffer.End);
+                    result = CborSerializer.Deserialize<T>(rentedBuffer.AsMemory(0, (int)buffer.Length), out int consumed);
+                    channel.AdvanceTo(buffer.GetPosition(consumed));
                     return result;
                 }
                 finally
@@ -78,7 +77,7 @@ public sealed class ChannelBuffer(AgentChannel channel)
             catch (FormatException) when (!readResult.IsCompleted)
             {
                 // Need more data - mark what we examined but couldn't use
-                channel.AdvanceTo(buffer.Start);
+                channel.AdvanceTo(buffer.Start, buffer.End);
             }
             catch (FormatException) when (readResult.IsCompleted)
             {

@@ -31,6 +31,11 @@ public sealed class PeerClient : IDisposable
     /// </summary>
     public KeepAliveClient KeepAlive { get; private set; } = default!;
 
+    /// <summary>
+    /// Gets the BlockFetch protocol handler (N2N).
+    /// </summary>
+    public BlockFetch BlockFetch { get; private set; } = default!;
+
     private PeerClient(Plexer plexer)
     {
         _plexer = plexer ?? throw new ArgumentNullException(nameof(plexer));
@@ -108,6 +113,7 @@ public sealed class PeerClient : IDisposable
         Handshake = new(_plexer.SubscribeClient(ProtocolType.Handshake));
         ChainSync = new(_plexer.SubscribeClient(ProtocolType.NodeChainSync), ProtocolType.NodeChainSync);
         KeepAlive = new(_plexer.SubscribeClient(ProtocolType.KeepAlive));
+        BlockFetch = new(_plexer.SubscribeClient(ProtocolType.BlockFetch));
 
         NetworkMagic = networkMagic;
 

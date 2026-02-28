@@ -7,4 +7,4 @@ namespace Chrysalis.Network.Multiplexer;
 /// </summary>
 /// <param name="Protocol">The protocol type.</param>
 /// <param name="Payload">The payload data.</param>
-public partial record ProtocolMessage(ProtocolType Protocol, byte[] Payload);
+public partial record ProtocolMessage(ProtocolType Protocol, ReadOnlyMemory<byte> Payload);
