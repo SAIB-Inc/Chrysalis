@@ -34,7 +34,7 @@ public partial record MetadatumList(
 /// </summary>
 /// <param name="Value">The byte array metadata value.</param>
 [CborSerializable]
-public partial record MetadatumBytes(byte[] Value) : TransactionMetadatum;
+public partial record MetadatumBytes(ReadOnlyMemory<byte> Value) : TransactionMetadatum;
 
 /// <summary>
 /// A metadata value containing a text string.

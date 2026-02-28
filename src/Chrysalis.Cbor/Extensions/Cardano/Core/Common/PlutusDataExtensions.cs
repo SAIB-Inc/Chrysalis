@@ -11,10 +11,10 @@ public static class PlutusDataExtensions
     /// Gets the raw CBOR bytes of the Plutus data.
     /// </summary>
     /// <param name="self">The Plutus data instance.</param>
-    /// <returns>The raw bytes, or an empty array if not available.</returns>
-    public static byte[] Raw(this CPlutusData self)
+    /// <returns>The raw bytes, or empty if not available.</returns>
+    public static ReadOnlyMemory<byte> Raw(this CPlutusData self)
     {
         ArgumentNullException.ThrowIfNull(self);
-        return self.Raw?.ToArray() ?? [];
+        return self.Raw ?? ReadOnlyMemory<byte>.Empty;
     }
 }

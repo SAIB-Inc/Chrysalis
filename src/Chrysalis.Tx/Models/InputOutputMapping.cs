@@ -38,7 +38,7 @@ public class InputOutputMapping
         ArgumentNullException.ThrowIfNull(resolvedInputs);
 
         List<ResolvedInput> sortedInputs = [.. resolvedInputs
-        .OrderBy(x => Convert.ToHexString(x.Outref.TransactionId))
+        .OrderBy(x => Convert.ToHexString(x.Outref.TransactionId.Span))
         .ThenBy(x => x.Outref.Index)];
 
         ResolvedInputs.AddRange(sortedInputs);

@@ -30,7 +30,7 @@ public static class DRepExtensions
     /// </summary>
     /// <param name="self">The DRep instance.</param>
     /// <returns>The key or script hash bytes, or null for abstain/no-confidence.</returns>
-    public static byte[]? KeyHash(this DRep self)
+    public static ReadOnlyMemory<byte>? KeyHash(this DRep self)
     {
         ArgumentNullException.ThrowIfNull(self);
         return self switch

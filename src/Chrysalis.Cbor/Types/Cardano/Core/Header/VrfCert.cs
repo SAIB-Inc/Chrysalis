@@ -10,6 +10,6 @@ namespace Chrysalis.Cbor.Types.Cardano.Core.Header;
 [CborSerializable]
 [CborList]
 public partial record VrfCert(
-    [CborOrder(0)] byte[] Proof,
-    [CborOrder(1)] byte[] Output
+    [CborOrder(0)] ReadOnlyMemory<byte> Proof,
+    [CborOrder(1)] ReadOnlyMemory<byte> Output
 ) : CborBase;

@@ -15,7 +15,7 @@ public abstract partial record MultiAsset : CborBase { }
 /// <param name="Value">The dictionary mapping policy ID bytes to token bundle outputs.</param>
 [CborSerializable]
 public partial record MultiAssetOutput(
-    Dictionary<byte[], TokenBundleOutput> Value
+    Dictionary<ReadOnlyMemory<byte>, TokenBundleOutput> Value
 ) : MultiAsset;
 
 /// <summary>
@@ -24,5 +24,5 @@ public partial record MultiAssetOutput(
 /// <param name="Value">The dictionary mapping policy ID bytes to token bundle mints.</param>
 [CborSerializable]
 public partial record MultiAssetMint(
-    Dictionary<byte[], TokenBundleMint> Value
+    Dictionary<ReadOnlyMemory<byte>, TokenBundleMint> Value
 ) : MultiAsset;

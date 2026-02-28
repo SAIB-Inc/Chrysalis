@@ -12,7 +12,7 @@ public static class BootstrapWitnessExtensions
     /// </summary>
     /// <param name="self">The bootstrap witness instance.</param>
     /// <returns>The public key bytes.</returns>
-    public static byte[] PublicKey(this CBootstrapWitness self)
+    public static ReadOnlyMemory<byte> PublicKey(this CBootstrapWitness self)
     {
         ArgumentNullException.ThrowIfNull(self);
         return self.PublicKey;
@@ -23,7 +23,7 @@ public static class BootstrapWitnessExtensions
     /// </summary>
     /// <param name="self">The bootstrap witness instance.</param>
     /// <returns>The signature bytes.</returns>
-    public static byte[] Signature(this CBootstrapWitness self)
+    public static ReadOnlyMemory<byte> Signature(this CBootstrapWitness self)
     {
         ArgumentNullException.ThrowIfNull(self);
         return self.Signature;
@@ -34,7 +34,7 @@ public static class BootstrapWitnessExtensions
     /// </summary>
     /// <param name="self">The bootstrap witness instance.</param>
     /// <returns>The chain code bytes.</returns>
-    public static byte[] ChainCode(this CBootstrapWitness self)
+    public static ReadOnlyMemory<byte> ChainCode(this CBootstrapWitness self)
     {
         ArgumentNullException.ThrowIfNull(self);
         return self.ChainCode;
@@ -45,7 +45,7 @@ public static class BootstrapWitnessExtensions
     /// </summary>
     /// <param name="self">The bootstrap witness instance.</param>
     /// <returns>The attributes bytes.</returns>
-    public static byte[] Attributes(this CBootstrapWitness self)
+    public static ReadOnlyMemory<byte> Attributes(this CBootstrapWitness self)
     {
         ArgumentNullException.ThrowIfNull(self);
         return self.Attributes;

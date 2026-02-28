@@ -12,7 +12,7 @@ public static class RewardAccountExtensions
     /// </summary>
     /// <param name="self">The reward account instance.</param>
     /// <returns>The reward account bytes.</returns>
-    public static byte[] Value(this RewardAccount self)
+    public static ReadOnlyMemory<byte> Value(this RewardAccount self)
     {
         ArgumentNullException.ThrowIfNull(self);
         return self.Value;

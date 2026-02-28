@@ -12,5 +12,5 @@ namespace Chrysalis.Cbor.Types.Cardano.Core.Header;
 [CborList]
 public partial record BlockHeader(
     [CborOrder(0)] BlockHeaderBody HeaderBody,
-    [CborOrder(1)] byte[] BodySignature
+    [CborOrder(1)] ReadOnlyMemory<byte> BodySignature
 ) : CborBase, ICborPreserveRaw;

@@ -34,7 +34,7 @@ public static class ByronBlockExtensions
     /// </summary>
     /// <param name="self">The Byron main block instance.</param>
     /// <returns>The previous block hash bytes.</returns>
-    public static byte[] PrevBlock(this ByronMainBlock self)
+    public static ReadOnlyMemory<byte> PrevBlock(this ByronMainBlock self)
     {
         ArgumentNullException.ThrowIfNull(self);
         return self.Header.PrevBlock;
@@ -45,7 +45,7 @@ public static class ByronBlockExtensions
     /// </summary>
     /// <param name="self">The Byron epoch boundary block instance.</param>
     /// <returns>The previous block hash bytes.</returns>
-    public static byte[] PrevBlock(this ByronEbBlock self)
+    public static ReadOnlyMemory<byte> PrevBlock(this ByronEbBlock self)
     {
         ArgumentNullException.ThrowIfNull(self);
         return self.Header.PrevBlock;

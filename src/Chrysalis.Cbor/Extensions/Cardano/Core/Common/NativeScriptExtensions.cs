@@ -34,7 +34,7 @@ public static class NativeScriptExtensions
     /// </summary>
     /// <param name="self">The native script instance.</param>
     /// <returns>The address key hash bytes.</returns>
-    public static byte[] AddressKeyHash(this CNativeScript self)
+    public static ReadOnlyMemory<byte> AddressKeyHash(this CNativeScript self)
     {
         ArgumentNullException.ThrowIfNull(self);
         return self switch

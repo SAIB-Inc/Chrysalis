@@ -11,5 +11,5 @@ namespace Chrysalis.Cbor.Types.Cardano.Core.Transaction;
 [CborList]
 public partial record Anchor(
     [CborOrder(0)] string AnchorUrl,
-    [CborOrder(1)] byte[] AnchorDataHash
+    [CborOrder(1)] ReadOnlyMemory<byte> AnchorDataHash
 ) : CborBase;

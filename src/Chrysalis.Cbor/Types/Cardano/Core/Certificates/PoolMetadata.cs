@@ -11,5 +11,5 @@ namespace Chrysalis.Cbor.Types.Cardano.Core.Certificates;
 [CborList]
 public partial record PoolMetadata(
     [CborOrder(0)] string Url,
-    [CborOrder(1)] byte[] PoolMetadataHash
+    [CborOrder(1)] ReadOnlyMemory<byte> PoolMetadataHash
 ) : CborBase;

@@ -28,13 +28,13 @@ public static class DatumOptionExtensions
     /// </summary>
     /// <param name="self">The datum option instance.</param>
     /// <returns>The datum data bytes.</returns>
-    public static byte[] Data(this DatumOption self)
+    public static ReadOnlyMemory<byte> Data(this DatumOption self)
     {
         ArgumentNullException.ThrowIfNull(self);
         return self switch
         {
             InlineDatumOption inlineDatumOption => inlineDatumOption.Data.Value,
-            _ => []
+            _ => ReadOnlyMemory<byte>.Empty
         };
     }
 }

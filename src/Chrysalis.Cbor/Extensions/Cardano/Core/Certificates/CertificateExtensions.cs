@@ -85,7 +85,7 @@ public static class CertificateExtensions
     /// </summary>
     /// <param name="self">The certificate instance.</param>
     /// <returns>The pool key hash bytes, or null.</returns>
-    public static byte[]? PoolKeyHash(this CCertificate self)
+    public static ReadOnlyMemory<byte>? PoolKeyHash(this CCertificate self)
     {
         ArgumentNullException.ThrowIfNull(self);
         return self switch

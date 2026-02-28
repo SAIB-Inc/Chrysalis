@@ -8,13 +8,16 @@ namespace Chrysalis.Cbor.Extensions.Cardano.Core.Common;
 public static class TokenBundleOutputExtensions
 {
     /// <summary>
-    /// Converts the token bundle output to a dictionary of asset name to quantity.
+    /// Converts the token bundle output to a dictionary of hex-encoded asset name to quantity.
     /// </summary>
     /// <param name="self">The token bundle output instance.</param>
-    /// <returns>The dictionary mapping asset names to quantities.</returns>
-    public static Dictionary<byte[], ulong> ToDict(this TokenBundleOutput self)
+    /// <returns>The dictionary mapping hex-encoded asset names to quantities.</returns>
+    public static Dictionary<string, ulong> ToDict(this TokenBundleOutput self)
     {
         ArgumentNullException.ThrowIfNull(self);
-        return self.Value;
+        return self.Value.ToDictionary(
+            kvp => Convert.ToHexString(kvp.Key.Span).ToUpperInvariant(),
+            kvp => kvp.Value
+        );
     }
 }

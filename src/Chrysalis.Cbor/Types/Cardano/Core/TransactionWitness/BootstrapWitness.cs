@@ -13,8 +13,8 @@ namespace Chrysalis.Cbor.Types.Cardano.Core.TransactionWitness;
 [CborSerializable]
 [CborList]
 public partial record BootstrapWitness(
-   [CborOrder(0)] byte[] PublicKey,
-   [CborOrder(1)] byte[] Signature,
-   [CborOrder(2)] byte[] ChainCode,
-   [CborOrder(3)] byte[] Attributes
+   [CborOrder(0)] ReadOnlyMemory<byte> PublicKey,
+   [CborOrder(1)] ReadOnlyMemory<byte> Signature,
+   [CborOrder(2)] ReadOnlyMemory<byte> ChainCode,
+   [CborOrder(3)] ReadOnlyMemory<byte> Attributes
 ) : CborBase, ICborPreserveRaw;

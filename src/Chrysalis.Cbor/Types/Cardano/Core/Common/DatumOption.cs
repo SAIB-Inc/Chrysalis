@@ -19,7 +19,7 @@ public abstract partial record DatumOption : CborBase { }
 [CborList]
 public partial record DatumHashOption(
     [CborOrder(0)] int Option,
-    [CborOrder(1)] byte[] DatumHash
+    [CborOrder(1)] ReadOnlyMemory<byte> DatumHash
 ) : DatumOption, ICborPreserveRaw;
 
 /// <summary>

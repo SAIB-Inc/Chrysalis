@@ -50,6 +50,6 @@ public partial record ByronSoftwareVersion(
 [CborList]
 public partial record ByronTxProof(
     [CborOrder(0)] uint Index,
-    [CborOrder(1)] byte[] MerkleRoot,
-    [CborOrder(2)] byte[] WitnessHash
+    [CborOrder(1)] ReadOnlyMemory<byte> MerkleRoot,
+    [CborOrder(2)] ReadOnlyMemory<byte> WitnessHash
 ) : CborBase;

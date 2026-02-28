@@ -110,7 +110,7 @@ static void DisplayMetadatum(TransactionMetadatum metadatum, string indent = "")
             Console.WriteLine($"{indent}UInteger: {intUlong.Value}");
             break;
         case MetadatumBytes bytes:
-            Console.WriteLine($"{indent}Bytes: {Convert.ToHexString(bytes.Value)}");
+            Console.WriteLine($"{indent}Bytes: {Convert.ToHexString(bytes.Value.Span)}");
             break;
         case MetadatumList list:
             Console.WriteLine($"{indent}List ({list.Value.Count} items):");

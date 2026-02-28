@@ -138,7 +138,7 @@ public static class TransactionBodyExtensions
     /// </summary>
     /// <param name="self">The transaction body instance.</param>
     /// <returns>The auxiliary data hash bytes, or null.</returns>
-    public static byte[]? AuxiliaryDataHash(this TransactionBody self)
+    public static ReadOnlyMemory<byte>? AuxiliaryDataHash(this TransactionBody self)
     {
         ArgumentNullException.ThrowIfNull(self);
         return self switch
@@ -155,16 +155,20 @@ public static class TransactionBodyExtensions
     /// </summary>
     /// <param name="self">The transaction body instance.</param>
     /// <returns>The mint dictionary, or null.</returns>
-    public static Dictionary<byte[], TokenBundleMint>? Mint(this TransactionBody self)
+    public static Dictionary<string, TokenBundleMint>? Mint(this TransactionBody self)
     {
         ArgumentNullException.ThrowIfNull(self);
-        return self switch
+        Dictionary<ReadOnlyMemory<byte>, TokenBundleMint>? raw = self switch
         {
             AlonzoTransactionBody alonzoTxBody => alonzoTxBody.Mint?.Value,
             BabbageTransactionBody babbageTxBody => babbageTxBody.Mint?.Value,
             ConwayTransactionBody conwayTxBody => conwayTxBody.Mint?.Value,
             _ => null
         };
+        return raw?.ToDictionary(
+            kvp => Convert.ToHexString(kvp.Key.Span).ToUpperInvariant(),
+            kvp => kvp.Value
+        );
     }
 
     /// <summary>
@@ -172,7 +176,7 @@ public static class TransactionBodyExtensions
     /// </summary>
     /// <param name="self">The transaction body instance.</param>
     /// <returns>The script data hash bytes, or null.</returns>
-    public static byte[]? ScriptDataHash(this TransactionBody self)
+    public static ReadOnlyMemory<byte>? ScriptDataHash(this TransactionBody self)
     {
         ArgumentNullException.ThrowIfNull(self);
         return self switch
@@ -206,7 +210,7 @@ public static class TransactionBodyExtensions
     /// </summary>
     /// <param name="self">The transaction body instance.</param>
     /// <returns>The required signer key hashes, or null.</returns>
-    public static IEnumerable<byte[]>? RequiredSigners(this TransactionBody self)
+    public static IEnumerable<ReadOnlyMemory<byte>>? RequiredSigners(this TransactionBody self)
     {
         ArgumentNullException.ThrowIfNull(self);
         return self switch

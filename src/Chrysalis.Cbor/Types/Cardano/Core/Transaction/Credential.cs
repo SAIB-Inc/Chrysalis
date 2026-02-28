@@ -11,5 +11,5 @@ namespace Chrysalis.Cbor.Types.Cardano.Core.Transaction;
 [CborList]
 public partial record Credential(
     [CborOrder(0)] int CredentialType,
-    [CborOrder(1)] byte[] Hash
+    [CborOrder(1)] ReadOnlyMemory<byte> Hash
 ) : CborBase;

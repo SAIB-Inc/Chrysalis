@@ -44,7 +44,7 @@ public static class HeaderBodyExtensions
     /// </summary>
     /// <param name="self">The block header body instance.</param>
     /// <returns>The previous block hash bytes.</returns>
-    public static byte[] PrevHash(this BlockHeaderBody self)
+    public static ReadOnlyMemory<byte>? PrevHash(this BlockHeaderBody self)
     {
         ArgumentNullException.ThrowIfNull(self);
         return self switch
@@ -60,7 +60,7 @@ public static class HeaderBodyExtensions
     /// </summary>
     /// <param name="self">The block header body instance.</param>
     /// <returns>The issuer verification key bytes.</returns>
-    public static byte[] IssuerVKey(this BlockHeaderBody self)
+    public static ReadOnlyMemory<byte> IssuerVKey(this BlockHeaderBody self)
     {
         ArgumentNullException.ThrowIfNull(self);
         return self switch
@@ -75,7 +75,7 @@ public static class HeaderBodyExtensions
     /// </summary>
     /// <param name="self">The block header body instance.</param>
     /// <returns>The VRF verification key bytes.</returns>
-    public static byte[] VrfKey(this BlockHeaderBody self)
+    public static ReadOnlyMemory<byte> VrfKey(this BlockHeaderBody self)
     {
         ArgumentNullException.ThrowIfNull(self);
         return self switch
@@ -122,7 +122,7 @@ public static class HeaderBodyExtensions
     /// </summary>
     /// <param name="self">The block header body instance.</param>
     /// <returns>The block body hash bytes.</returns>
-    public static byte[] BlockBodyHash(this BlockHeaderBody self)
+    public static ReadOnlyMemory<byte> BlockBodyHash(this BlockHeaderBody self)
     {
         ArgumentNullException.ThrowIfNull(self);
         return self switch
@@ -170,7 +170,7 @@ public static class HeaderBodyExtensions
     /// </summary>
     /// <param name="self">The block header body instance.</param>
     /// <returns>The sigma bytes.</returns>
-    public static byte[] OperationalCertSigma(this BlockHeaderBody self)
+    public static ReadOnlyMemory<byte> OperationalCertSigma(this BlockHeaderBody self)
     {
         ArgumentNullException.ThrowIfNull(self);
         return self switch

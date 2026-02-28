@@ -34,7 +34,7 @@ public static class ScriptExtension
     /// </summary>
     /// <param name="script">The script to extract bytes from.</param>
     /// <returns>The script bytes.</returns>
-    public static byte[] Bytes(this Script script)
+    public static ReadOnlyMemory<byte> Bytes(this Script script)
     {
         ArgumentNullException.ThrowIfNull(script);
 
@@ -64,7 +64,7 @@ public static class ScriptExtension
             throw new NotSupportedException("MultiSig scripts do not support parameterization");
         }
 
-        byte[] originalBytes = self.Bytes();
+        byte[] originalBytes = self.Bytes().ToArray();
         byte[] parameterCbor = CborSerializer.Serialize(parameter);
         PlutusData plutusParameter = CborSerializer.Deserialize<PlutusData>(parameterCbor);
         byte[] parameterizedBytes = ScriptApplicator.ApplyParameters(originalBytes, plutusParameter);

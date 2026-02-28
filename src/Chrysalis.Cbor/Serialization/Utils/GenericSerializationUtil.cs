@@ -84,6 +84,7 @@ public static class GenericSerializationUtil
                type == typeof(decimal) ||
                type == typeof(string) ||
                type == typeof(byte[]) ||
+               type == typeof(ReadOnlyMemory<byte>) ||
                type == typeof(CborEncodedValue) ||
                type == typeof(CborLabel);
     }
@@ -118,7 +119,8 @@ public static class GenericSerializationUtil
             _ when type == typeof(decimal) => (T)(object)reader.ReadDecimal(),
             _ when type == typeof(string) => (T)(object)reader.ReadTextString(),
             _ when type == typeof(byte[]) => (T)(object)ReadByteArray(reader),
-            _ when type == typeof(CborEncodedValue) => (T)(object)new CborEncodedValue(reader.ReadEncodedValue().ToArray()),
+            _ when type == typeof(ReadOnlyMemory<byte>) => (T)(object)(ReadOnlyMemory<byte>)ReadByteArray(reader),
+            _ when type == typeof(CborEncodedValue) => (T)(object)new CborEncodedValue(reader.ReadEncodedValue()),
             _ when type == typeof(CborLabel) => (T)(object)ReadCborLabel(reader),
             _ => throw new NotSupportedException($"Type {type} is not supported as a primitive type.")
         };
@@ -157,7 +159,8 @@ public static class GenericSerializationUtil
             _ when type == typeof(decimal) => reader.ReadDecimal(),
             _ when type == typeof(string) => reader.ReadTextString(),
             _ when type == typeof(byte[]) => ReadByteArray(reader),
-            _ when type == typeof(CborEncodedValue) => new CborEncodedValue(reader.ReadEncodedValue().ToArray()),
+            _ when type == typeof(ReadOnlyMemory<byte>) => (ReadOnlyMemory<byte>)ReadByteArray(reader),
+            _ when type == typeof(CborEncodedValue) => new CborEncodedValue(reader.ReadEncodedValue()),
             _ when type == typeof(CborLabel) => ReadCborLabel(reader),
             _ => throw new NotSupportedException($"Type {type} is not supported as a primitive type.")
         };
@@ -459,11 +462,23 @@ public static class GenericSerializationUtil
 
                 break;
 
+            case Type t when t == typeof(ReadOnlyMemory<byte>):
+                if (value is ReadOnlyMemory<byte> memoryValue)
+                {
+                    writer.WriteByteString(memoryValue.Span);
+                }
+                else
+                {
+                    throw new InvalidCastException($"Value is not of type {type}");
+                }
+
+                break;
+
             case Type t when t == typeof(CborEncodedValue):
                 if (value is CborEncodedValue encodedValue)
                 {
                     writer.WriteTag(CborTag.EncodedCborDataItem);
-                    writer.WriteByteString(encodedValue.Value);
+                    writer.WriteByteString(encodedValue.Value.Span);
                 }
                 else
                 {

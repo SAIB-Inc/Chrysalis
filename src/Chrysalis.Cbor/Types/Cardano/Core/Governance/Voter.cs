@@ -11,5 +11,5 @@ namespace Chrysalis.Cbor.Types.Cardano.Core.Governance;
 [CborList]
 public partial record Voter(
     [CborOrder(0)] int Tag,
-    [CborOrder(1)] byte[] Hash
+    [CborOrder(1)] ReadOnlyMemory<byte> Hash
 ) : CborBase;

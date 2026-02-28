@@ -8,13 +8,16 @@ namespace Chrysalis.Cbor.Extensions.Cardano.Core.Common;
 public static class TokenBundleMintExtensions
 {
     /// <summary>
-    /// Gets the mint dictionary mapping asset names to signed quantities.
+    /// Gets the mint dictionary mapping hex-encoded asset names to signed quantities.
     /// </summary>
     /// <param name="self">The token bundle mint instance.</param>
     /// <returns>The mint dictionary.</returns>
-    public static Dictionary<byte[], long> Value(this TokenBundleMint self)
+    public static Dictionary<string, long> Value(this TokenBundleMint self)
     {
         ArgumentNullException.ThrowIfNull(self);
-        return self.Value;
+        return self.Value.ToDictionary(
+            kvp => Convert.ToHexString(kvp.Key.Span).ToUpperInvariant(),
+            kvp => kvp.Value
+        );
     }
 }

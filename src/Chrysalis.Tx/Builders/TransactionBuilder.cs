@@ -7,6 +7,7 @@ using Chrysalis.Cbor.Types.Cardano.Core.Governance;
 using Chrysalis.Cbor.Types;
 using Chrysalis.Tx.Utils;
 using Chrysalis.Cbor.Extensions;
+using Chrysalis.Cbor.Serialization.Utils;
 using Chrysalis.Network.Cbor.LocalStateQuery;
 
 namespace Chrysalis.Tx.Builders;
@@ -238,9 +239,9 @@ public class TransactionBuilder
     /// </summary>
     /// <param name="signer">The signer key hash bytes.</param>
     /// <returns>This builder for chaining.</returns>
-    public TransactionBuilder AddRequiredSigner(byte[] signer)
+    public TransactionBuilder AddRequiredSigner(ReadOnlyMemory<byte> signer)
     {
-        Body = Body with { RequiredSigners = new CborDefListWithTag<byte[]>([.. Body.RequiredSigners is not null ? Body.RequiredSigners.GetValue() : [], signer]) };
+        Body = Body with { RequiredSigners = new CborDefListWithTag<ReadOnlyMemory<byte>>([.. Body.RequiredSigners is not null ? Body.RequiredSigners.GetValue() : [], signer]) };
         return this;
     }
 
@@ -374,9 +375,9 @@ public class TransactionBuilder
     /// </summary>
     /// <param name="script">The Plutus V1 script bytes.</param>
     /// <returns>This builder for chaining.</returns>
-    public TransactionBuilder AddPlutusV1Script(byte[] script)
+    public TransactionBuilder AddPlutusV1Script(ReadOnlyMemory<byte> script)
     {
-        WitnessSet = WitnessSet with { PlutusV1ScriptSet = new CborDefListWithTag<byte[]>([.. WitnessSet.PlutusV1ScriptSet is not null ? WitnessSet.PlutusV1ScriptSet.GetValue() : [], script]) };
+        WitnessSet = WitnessSet with { PlutusV1ScriptSet = new CborDefListWithTag<ReadOnlyMemory<byte>>([.. WitnessSet.PlutusV1ScriptSet is not null ? WitnessSet.PlutusV1ScriptSet.GetValue() : [], script]) };
         return this;
     }
 
@@ -385,9 +386,9 @@ public class TransactionBuilder
     /// </summary>
     /// <param name="script">The Plutus V2 script bytes.</param>
     /// <returns>This builder for chaining.</returns>
-    public TransactionBuilder AddPlutusV2Script(byte[] script)
+    public TransactionBuilder AddPlutusV2Script(ReadOnlyMemory<byte> script)
     {
-        WitnessSet = WitnessSet with { PlutusV2ScriptSet = new CborDefListWithTag<byte[]>([.. WitnessSet.PlutusV2ScriptSet is not null ? WitnessSet.PlutusV2ScriptSet.GetValue() : [], script]) };
+        WitnessSet = WitnessSet with { PlutusV2ScriptSet = new CborDefListWithTag<ReadOnlyMemory<byte>>([.. WitnessSet.PlutusV2ScriptSet is not null ? WitnessSet.PlutusV2ScriptSet.GetValue() : [], script]) };
         return this;
     }
 
@@ -396,9 +397,9 @@ public class TransactionBuilder
     /// </summary>
     /// <param name="script">The Plutus V3 script bytes.</param>
     /// <returns>This builder for chaining.</returns>
-    public TransactionBuilder AddPlutusV3Script(byte[] script)
+    public TransactionBuilder AddPlutusV3Script(ReadOnlyMemory<byte> script)
     {
-        WitnessSet = WitnessSet with { PlutusV3ScriptSet = new CborDefListWithTag<byte[]>([.. WitnessSet.PlutusV3ScriptSet is not null ? WitnessSet.PlutusV3ScriptSet.GetValue() : [], script]) };
+        WitnessSet = WitnessSet with { PlutusV3ScriptSet = new CborDefListWithTag<ReadOnlyMemory<byte>>([.. WitnessSet.PlutusV3ScriptSet is not null ? WitnessSet.PlutusV3ScriptSet.GetValue() : [], script]) };
         return this;
     }
 
@@ -467,30 +468,30 @@ public class TransactionBuilder
     private static MultiAssetMint MergeMints(MultiAssetMint existingMint, MultiAssetMint newMint)
     {
         // Use the custom comparer instead of default dictionary
-        Dictionary<byte[], TokenBundleMint> result = new(ByteArrayEqualityComparer.Instance);
+        Dictionary<ReadOnlyMemory<byte>, TokenBundleMint> result = new(ReadOnlyMemoryComparer.Instance);
 
         // Copy existing mints
-        foreach (KeyValuePair<byte[], TokenBundleMint> policyEntry in existingMint.Value)
+        foreach (KeyValuePair<ReadOnlyMemory<byte>, TokenBundleMint> policyEntry in existingMint.Value)
         {
             result[policyEntry.Key] = policyEntry.Value;
         }
 
         // Merge new mints
-        foreach (KeyValuePair<byte[], TokenBundleMint> policyEntry in newMint.Value)
+        foreach (KeyValuePair<ReadOnlyMemory<byte>, TokenBundleMint> policyEntry in newMint.Value)
         {
             if (result.TryGetValue(policyEntry.Key, out TokenBundleMint? existingTokenBundle))
             {
                 // Merge token bundles using the same pattern
-                Dictionary<byte[], long> mergedTokens = new(ByteArrayEqualityComparer.Instance);
+                Dictionary<ReadOnlyMemory<byte>, long> mergedTokens = new(ReadOnlyMemoryComparer.Instance);
 
                 // Copy existing tokens
-                foreach (KeyValuePair<byte[], long> token in existingTokenBundle.Value)
+                foreach (KeyValuePair<ReadOnlyMemory<byte>, long> token in existingTokenBundle.Value)
                 {
                     mergedTokens[token.Key] = token.Value;
                 }
 
                 // Add new tokens
-                foreach (KeyValuePair<byte[], long> tokenEntry in policyEntry.Value.Value)
+                foreach (KeyValuePair<ReadOnlyMemory<byte>, long> tokenEntry in policyEntry.Value.Value)
                 {
                     mergedTokens[tokenEntry.Key] = mergedTokens.TryGetValue(tokenEntry.Key, out long existingAmount)
                         ? existingAmount + tokenEntry.Value

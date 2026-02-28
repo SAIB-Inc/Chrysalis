@@ -18,7 +18,7 @@ public abstract partial record DRep : CborBase { }
 [CborList]
 public partial record DRepAddrKeyHash(
     [CborOrder(0)] int Tag,
-    [CborOrder(1)] byte[] AddrKeyHash
+    [CborOrder(1)] ReadOnlyMemory<byte> AddrKeyHash
 ) : DRep;
 
 /// <summary>
@@ -30,7 +30,7 @@ public partial record DRepAddrKeyHash(
 [CborList]
 public partial record DRepScriptHash(
     [CborOrder(0)] int Tag,
-    [CborOrder(1)] byte[] ScriptHash
+    [CborOrder(1)] ReadOnlyMemory<byte> ScriptHash
 ) : DRep;
 
 /// <summary>

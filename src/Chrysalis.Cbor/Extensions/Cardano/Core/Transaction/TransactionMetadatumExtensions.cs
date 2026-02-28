@@ -11,10 +11,10 @@ public static class TransactionMetadatumExtensions
     /// Gets the raw CBOR bytes of the transaction metadatum.
     /// </summary>
     /// <param name="self">The transaction metadatum instance.</param>
-    /// <returns>The raw bytes, or an empty array if not available.</returns>
-    public static byte[] Raw(this TransactionMetadatum self)
+    /// <returns>The raw bytes, or empty if not available.</returns>
+    public static ReadOnlyMemory<byte> Raw(this TransactionMetadatum self)
     {
         ArgumentNullException.ThrowIfNull(self);
-        return self.Raw?.ToArray() ?? [];
+        return self.Raw ?? ReadOnlyMemory<byte>.Empty;
     }
 }

@@ -16,7 +16,7 @@ public static class InputExtensions
     /// </summary>
     /// <param name="self">The transaction input instance.</param>
     /// <returns>The transaction ID bytes.</returns>
-    public static byte[] TransactionId(this TransactionInput self)
+    public static ReadOnlyMemory<byte> TransactionId(this TransactionInput self)
     {
         ArgumentNullException.ThrowIfNull(self);
         return self.TransactionId;
@@ -49,7 +49,7 @@ public static class InputExtensions
 
         int txBodyIndex = block.TransactionBodies()
             .Select((tb, index) => new { tb, index })
-            .Where(x => x.tb.Inputs().Any(i => i.TransactionId() == self.TransactionId() && i.Index() == self.Index()))
+            .Where(x => x.tb.Inputs().Any(i => i.TransactionId().Span.SequenceEqual(self.TransactionId().Span) && i.Index() == self.Index()))
             .Select(x => x.index)
             .FirstOrDefault();
 
@@ -57,10 +57,10 @@ public static class InputExtensions
             .Select((tb, index) => new { tb, index })
             .Where(e => e.index == txBodyIndex)
             .Select(e => e.tb.Inputs()
-                .OrderBy(e => string.Concat(Convert.ToHexString(e.TransactionId()), e.Index())))
+                .OrderBy(e => string.Concat(Convert.ToHexString(e.TransactionId().Span), e.Index())))
                 .Select(g => g
                     .Select((input, inputIndex) => new { input, inputIndex })
-                    .Where(e => e.input.TransactionId() == self.TransactionId())
+                    .Where(e => e.input.TransactionId().Span.SequenceEqual(self.TransactionId().Span))
                     .Select(e => (ulong)e.inputIndex)
                     .FirstOrDefault())
             .FirstOrDefault();

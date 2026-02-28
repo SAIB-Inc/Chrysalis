@@ -11,6 +11,6 @@ namespace Chrysalis.Cbor.Types.Cardano.Core.TransactionWitness;
 [CborSerializable]
 [CborList]
 public partial record VKeyWitness(
-    [CborOrder(0)] byte[] VKey,
-    [CborOrder(1)] byte[] Signature
+    [CborOrder(0)] ReadOnlyMemory<byte> VKey,
+    [CborOrder(1)] ReadOnlyMemory<byte> Signature
 ) : CborBase, ICborPreserveRaw;

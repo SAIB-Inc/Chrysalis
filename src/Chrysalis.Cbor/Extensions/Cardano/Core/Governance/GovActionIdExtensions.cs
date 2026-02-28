@@ -12,7 +12,7 @@ public static class GovActionIdExtensions
     /// </summary>
     /// <param name="self">The governance action ID instance.</param>
     /// <returns>The transaction ID bytes.</returns>
-    public static byte[] TransactionId(this GovActionId self)
+    public static ReadOnlyMemory<byte> TransactionId(this GovActionId self)
     {
         ArgumentNullException.ThrowIfNull(self);
         return self.TransactionId;

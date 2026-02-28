@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
+using Chrysalis.Cbor.Serialization.Utils;
 using Chrysalis.Cbor.Types.Cardano.Core.Transaction;
 using Chrysalis.Network.Cbor.LocalStateQuery;
 using Chrysalis.Tx.Models.Cbor;
@@ -141,7 +142,7 @@ public sealed class Kupmios : ICardanoDataProvider, IDisposable
     public Task<ResolvedInput?> GetUtxoByOutRefAsync(TransactionInput outRef)
     {
         ArgumentNullException.ThrowIfNull(outRef);
-        return GetUtxoByOutRefAsync(HexStringCache.ToHexString(outRef.TransactionId), outRef.Index);
+        return GetUtxoByOutRefAsync(Convert.ToHexString(outRef.TransactionId.Span), outRef.Index);
     }
 
     /// <summary>
@@ -372,7 +373,7 @@ public sealed class Kupmios : ICardanoDataProvider, IDisposable
 
     private static MultiAssetOutput CreateMultiAsset(Dictionary<string, long> assets)
     {
-        Dictionary<byte[], TokenBundleOutput> assetDict = new(ByteArrayEqualityComparer.Instance);
+        Dictionary<ReadOnlyMemory<byte>, TokenBundleOutput> assetDict = new(ReadOnlyMemoryComparer.Instance);
 
         foreach ((string fullAssetName, long quantity) in assets)
         {
@@ -380,8 +381,8 @@ public sealed class Kupmios : ICardanoDataProvider, IDisposable
             string policyId = parts[0];
             string assetName = parts.Length > 1 ? parts[1] : string.Empty;
 
-            byte[] policy = HexStringCache.FromHexString(policyId);
-            byte[] assetNameBytes = HexStringCache.FromHexString(assetName);
+            ReadOnlyMemory<byte> policy = HexStringCache.FromHexString(policyId);
+            ReadOnlyMemory<byte> assetNameBytes = HexStringCache.FromHexString(assetName);
 
             if (assetDict.TryGetValue(policy, out TokenBundleOutput? existingBundle))
             {
@@ -389,7 +390,7 @@ public sealed class Kupmios : ICardanoDataProvider, IDisposable
             }
             else
             {
-                Dictionary<byte[], ulong> tokenBundle = new(ByteArrayEqualityComparer.Instance)
+                Dictionary<ReadOnlyMemory<byte>, ulong> tokenBundle = new(ReadOnlyMemoryComparer.Instance)
                 {
                     [assetNameBytes] = (ulong)quantity
                 };

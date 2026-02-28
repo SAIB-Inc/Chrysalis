@@ -12,7 +12,7 @@ public static class VrfCertExtensions
     /// </summary>
     /// <param name="self">The VRF certificate instance.</param>
     /// <returns>The proof bytes.</returns>
-    public static byte[] Proof(this VrfCert self)
+    public static ReadOnlyMemory<byte> Proof(this VrfCert self)
     {
         ArgumentNullException.ThrowIfNull(self);
         return self.Proof;
@@ -23,7 +23,7 @@ public static class VrfCertExtensions
     /// </summary>
     /// <param name="self">The VRF certificate instance.</param>
     /// <returns>The output bytes.</returns>
-    public static byte[] Output(this VrfCert self)
+    public static ReadOnlyMemory<byte> Output(this VrfCert self)
     {
         ArgumentNullException.ThrowIfNull(self);
         return self.Output;

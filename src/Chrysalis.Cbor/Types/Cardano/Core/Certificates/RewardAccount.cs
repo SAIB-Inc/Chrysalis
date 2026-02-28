@@ -7,4 +7,4 @@ namespace Chrysalis.Cbor.Types.Cardano.Core.Certificates;
 /// </summary>
 /// <param name="Value">The raw reward account bytes.</param>
 [CborSerializable]
-public partial record RewardAccount(byte[] Value) : CborBase;
+public partial record RewardAccount(ReadOnlyMemory<byte> Value) : CborBase;

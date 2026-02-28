@@ -20,4 +20,4 @@ public partial record OutputReference(
 /// <param name="Hash">The transaction hash bytes.</param>
 [CborSerializable]
 [CborConstr(0)]
-public partial record TransactionId(byte[] Hash) : CborBase;
+public partial record TransactionId(ReadOnlyMemory<byte> Hash) : CborBase;

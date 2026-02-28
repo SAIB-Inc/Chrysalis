@@ -15,7 +15,7 @@ public abstract partial record Credential : CborBase;
 /// <param name="VerificationKeyHash">The hash of the verification (public) key.</param>
 [CborSerializable]
 [CborConstr(0)]
-public partial record VerificationKey([CborOrder(0)] byte[] VerificationKeyHash) : Credential;
+public partial record VerificationKey([CborOrder(0)] ReadOnlyMemory<byte> VerificationKeyHash) : Credential;
 
 /// <summary>
 /// A credential based on a script hash.
@@ -23,4 +23,4 @@ public partial record VerificationKey([CborOrder(0)] byte[] VerificationKeyHash)
 /// <param name="ScriptHash">The hash of the script.</param>
 [CborSerializable]
 [CborConstr(1)]
-public partial record Script([CborOrder(0)] byte[] ScriptHash) : Credential;
+public partial record Script([CborOrder(0)] ReadOnlyMemory<byte> ScriptHash) : Credential;

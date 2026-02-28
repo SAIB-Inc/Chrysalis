@@ -7,39 +7,29 @@ namespace Chrysalis.Tx.Utils;
 /// </summary>
 public static class HexStringCache
 {
-    private static readonly ConcurrentDictionary<byte[], string> BytesToHex =
-        new(ByteArrayEqualityComparer.Instance);
-
     private static readonly ConcurrentDictionary<string, byte[]> HexToBytes =
         new(StringComparer.OrdinalIgnoreCase);
 
     private const int MaxCacheSize = 50000;
 
     /// <summary>
-    /// Converts a byte array to its hex string representation, using a cache for repeated lookups.
+    /// Converts a ReadOnlyMemory&lt;byte&gt; to its hex string representation.
+    /// </summary>
+    /// <param name="bytes">The memory to convert.</param>
+    /// <returns>The hex string representation.</returns>
+    public static string ToHexString(ReadOnlyMemory<byte> bytes)
+    {
+        return bytes.Length == 0 ? string.Empty : Convert.ToHexString(bytes.Span);
+    }
+
+    /// <summary>
+    /// Converts a byte array to its hex string representation.
     /// </summary>
     /// <param name="bytes">The byte array to convert.</param>
     /// <returns>The hex string representation.</returns>
     public static string ToHexString(byte[] bytes)
     {
-        if (bytes == null || bytes.Length == 0)
-        {
-            return string.Empty;
-        }
-
-        if (BytesToHex.TryGetValue(bytes, out string? cached))
-        {
-            return cached;
-        }
-
-        string result = Convert.ToHexString(bytes);
-
-        if (BytesToHex.Count < MaxCacheSize)
-        {
-            _ = BytesToHex.TryAdd(bytes, result);
-        }
-
-        return result;
+        return bytes == null || bytes.Length == 0 ? string.Empty : Convert.ToHexString(bytes);
     }
 
     /// <summary>
@@ -76,12 +66,11 @@ public static class HexStringCache
     /// </summary>
     public static void ClearCache()
     {
-        BytesToHex.Clear();
         HexToBytes.Clear();
     }
 
     /// <summary>
     /// Gets the current cache sizes for monitoring.
     /// </summary>
-    public static (int BytesToHexCount, int HexToBytesCount) CacheStats => (BytesToHex.Count, HexToBytes.Count);
+    public static (int BytesToHex, int HexToBytes) CacheStats => (0, HexToBytes.Count);
 }
