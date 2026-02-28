@@ -17,8 +17,8 @@ public record Mnemonic
 
     #region Constants and Fields
 
-    private static readonly int[] _allowedEntropyLengths = [12, 16, 20, 24, 28, 32];
-    private static readonly int[] _allowedWordLengths = [9, 12, 15, 18, 21, 24];
+    private static readonly int[] _allowedEntropyLengths = [16, 20, 24, 28, 32];
+    private static readonly int[] _allowedWordLengths = [12, 15, 18, 21, 24];
     private const int _allWordsLength = 2048; // 1111 1111 111 -> 0..2047
     private const int _bitsPerWord = 11;
 
