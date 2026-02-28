@@ -36,7 +36,7 @@ while (!exitProgram)
             Console.Write($"Current tip: ");
             if (tip.Slot is SpecificPoint sp)
             {
-                Console.Write(Convert.ToHexString(sp.Hash));
+                Console.Write(Convert.ToHexString(sp.Hash.Span));
                 Console.Write($" at slot ");
                 Console.WriteLine(sp.Slot);
             }

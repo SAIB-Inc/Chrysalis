@@ -2,6 +2,7 @@ using Chrysalis.Cbor.Extensions;
 using Chrysalis.Cbor.Extensions.Cardano.Core;
 using Chrysalis.Cbor.Extensions.Cardano.Core.Header;
 using Chrysalis.Cbor.Serialization;
+using Chrysalis.Cbor.Types.Cardano.Core;
 using Chrysalis.Cbor.Types.Cardano.Core.Byron;
 using Chrysalis.Cbor.Types.Cardano.Core.Header;
 using Chrysalis.Network.Cbor.ChainSync;
@@ -16,10 +17,13 @@ internal static class Program
     private const int DefaultKeepAliveSeconds = 20;
 
     private sealed record Options(
+        string Command,
         string Host,
         int Port,
         ulong NetworkMagic,
-        int KeepAliveSeconds
+        int KeepAliveSeconds,
+        ulong? Slot,
+        string? Hash
     );
 
     private static async Task<int> Main(string[] args)
@@ -47,9 +51,23 @@ internal static class Program
         using PeerClient peer = await PeerClient.ConnectAsync(options.Host, options.Port, cts.Token).ConfigureAwait(false);
         await peer.StartAsync(options.NetworkMagic, TimeSpan.FromSeconds(options.KeepAliveSeconds)).ConfigureAwait(false);
 
-        Console.WriteLine("Connected. Starting ChainSync...");
+        Console.WriteLine("Connected.");
 
-        ChainSyncMessage intersect = await peer.ChainSync.FindIntersectionAsync([Point.Origin], cts.Token).ConfigureAwait(false);
+        return options.Command switch
+        {
+            "CHAINSYNC" => await RunChainSync(peer, cts.Token).ConfigureAwait(false),
+            "BLOCKFETCH" => await RunBlockFetch(peer, options, cts.Token).ConfigureAwait(false),
+            _ => throw new InvalidOperationException($"Unknown command: {options.Command}")
+        };
+    }
+
+    #region ChainSync
+
+    private static async Task<int> RunChainSync(PeerClient peer, CancellationToken ct)
+    {
+        Console.WriteLine("Starting ChainSync from origin...");
+
+        ChainSyncMessage intersect = await peer.ChainSync.FindIntersectionAsync([Point.Origin], ct).ConfigureAwait(false);
 
         switch (intersect)
         {
@@ -66,9 +84,9 @@ internal static class Program
 
         bool atTip = false;
 
-        while (!cts.Token.IsCancellationRequested)
+        while (!ct.IsCancellationRequested)
         {
-            MessageNextResponse? response = await peer.ChainSync.NextRequestAsync(cts.Token).ConfigureAwait(false);
+            MessageNextResponse? response = await peer.ChainSync.NextRequestAsync(ct).ConfigureAwait(false);
 
             switch (response)
             {
@@ -103,6 +121,83 @@ internal static class Program
         return 0;
     }
 
+    #endregion
+
+    #region BlockFetch
+
+    private static async Task<int> RunBlockFetch(PeerClient peer, Options options, CancellationToken ct)
+    {
+        Point point;
+
+        if (options.Slot is not null && options.Hash is not null)
+        {
+            byte[] hashBytes = Convert.FromHexString(options.Hash);
+            point = Point.Specific(options.Slot.Value, hashBytes);
+        }
+        else
+        {
+            // Use chainsync to discover a block point first
+            Console.WriteLine("No --slot/--hash given, using ChainSync to discover a block...");
+            ChainSyncMessage intersect = await peer.ChainSync.FindIntersectionAsync([Point.Origin], ct).ConfigureAwait(false);
+
+            if (intersect is not MessageIntersectFound)
+            {
+                Console.WriteLine("Failed to find intersection.");
+                return 2;
+            }
+
+            // Get first rollforward to have a real block point
+            MessageNextResponse? response = await peer.ChainSync.NextRequestAsync(ct).ConfigureAwait(false);
+            while (response is MessageRollBackward or MessageAwaitReply)
+            {
+                response = await peer.ChainSync.NextRequestAsync(ct).ConfigureAwait(false);
+            }
+
+            if (response is not MessageRollForward rollForward)
+            {
+                Console.WriteLine("Failed to get a block from ChainSync.");
+                return 2;
+            }
+
+            // Extract the tip point as our fetch target (we know this block exists)
+            point = rollForward.Tip.Slot;
+            Console.WriteLine($"Discovered block: {FormatPoint(point)}");
+        }
+
+        Console.WriteLine($"Fetching block at {FormatPoint(point)}...");
+
+        ReadOnlyMemory<byte>? blockData = await peer.BlockFetch.FetchSingleAsync(point, ct).ConfigureAwait(false);
+
+        if (blockData is null)
+        {
+            Console.WriteLine("NoBlocks — block not found.");
+            return 2;
+        }
+
+        Console.WriteLine($"Received block: {blockData.Value.Length} bytes");
+
+        BlockWithEra block = CborSerializer.Deserialize<BlockWithEra>(blockData.Value);
+        Console.WriteLine($"Deserialized: {block.GetType().Name}");
+
+        Block? inner = block.Block;
+        if (inner is not null)
+        {
+            Console.WriteLine($"Era block type: {inner.GetType().Name}");
+        }
+
+        if (peer.BlockFetch.HasAgency)
+        {
+            try { await peer.BlockFetch.DoneAsync(CancellationToken.None).ConfigureAwait(false); }
+            catch (InvalidOperationException) { /* Best-effort shutdown */ }
+        }
+
+        return 0;
+    }
+
+    #endregion
+
+    #region Formatting
+
     private static string FormatRollForward(MessageRollForward rollForward)
     {
         try
@@ -130,7 +225,7 @@ internal static class Program
     private static string FormatByronHeader(HeaderContent header)
     {
         string hash = Convert.ToHexStringLower(
-            Blake2Fast.Blake2b.HashData(32, header.HeaderCbor));
+            Blake2Fast.Blake2b.HashData(32, header.HeaderCbor.Span));
 
         if (header.IsByronEbb)
         {
@@ -151,15 +246,12 @@ internal static class Program
     {
         return point switch
         {
-            SpecificPoint sp => $"slot {sp.Slot} hash {ToHex(sp.Hash)}",
+            SpecificPoint sp => $"slot {sp.Slot} hash {Convert.ToHexStringLower(sp.Hash.Span)}",
             _ => "origin"
         };
     }
 
-    private static string ToHex(byte[] bytes)
-    {
-        return Convert.ToHexStringLower(bytes);
-    }
+    #endregion
 
     #region Options parsing
 
@@ -173,8 +265,23 @@ internal static class Program
             return false;
         }
 
+        // First positional arg is the command (default: chainsync)
+        string command = "chainsync";
+        int startIdx = 0;
+        if (args.Length > 0 && !args[0].StartsWith("--", StringComparison.Ordinal))
+        {
+            command = args[0].ToUpperInvariant();
+            startIdx = 1;
+        }
+
+        if (command is not "CHAINSYNC" and not "BLOCKFETCH")
+        {
+            error = $"Unknown command '{command}'. Use 'CHAINSYNC' or 'BLOCKFETCH'.";
+            return false;
+        }
+
         Dictionary<string, string> map = new(StringComparer.OrdinalIgnoreCase);
-        for (int i = 0; i < args.Length; i++)
+        for (int i = startIdx; i < args.Length; i++)
         {
             string arg = args[i];
             if (!arg.StartsWith("--", StringComparison.Ordinal))
@@ -207,12 +314,27 @@ internal static class Program
             GetValue(map, "keepalive") ?? GetEnv("KeepAliveIntervalSeconds", "KEEPALIVE_INTERVAL_SECONDS"),
             DefaultKeepAliveSeconds, "keepalive seconds", ref error);
 
+        ulong? slot = null;
+        string? hash = null;
+
+        if (map.TryGetValue("slot", out string? slotStr))
+        {
+            if (!ulong.TryParse(slotStr, out ulong parsedSlot))
+            {
+                error = $"Invalid slot value '{slotStr}'.";
+                return false;
+            }
+            slot = parsedSlot;
+        }
+
+        hash = GetValue(map, "hash");
+
         if (!string.IsNullOrWhiteSpace(error))
         {
             return false;
         }
 
-        options = new Options(host, port, magic, keepAlive);
+        options = new Options(command, host, port, magic, keepAlive, slot, hash);
         return true;
     }
 
@@ -267,13 +389,25 @@ internal static class Program
     private static void PrintUsage()
     {
         Console.WriteLine("Usage:");
-        Console.WriteLine("  dotnet run --project src/Chrysalis.Network.Cli -- [options]");
+        Console.WriteLine("  dotnet run --project src/Chrysalis.Network.Cli -- <command> [options]");
         Console.WriteLine();
-        Console.WriteLine("Syncs from chain origin (genesis). Options (args or env):");
+        Console.WriteLine("Commands:");
+        Console.WriteLine("  chainsync    Sync headers from chain origin (default)");
+        Console.WriteLine("  blockfetch   Fetch a single block by slot + hash");
+        Console.WriteLine();
+        Console.WriteLine("Common options (args or env):");
         Console.WriteLine("  --tcp-host <host>            TcpHost / HOST (default 127.0.0.1)");
         Console.WriteLine("  --tcp-port <port>            TcpPort / PORT (default 3001)");
         Console.WriteLine("  --magic <magic>              NetworkMagic / NETWORK_MAGIC (default 2)");
-        Console.WriteLine("  --keepalive <seconds>        KeepAliveIntervalSeconds / KEEPALIVE_INTERVAL_SECONDS (default 20)");
+        Console.WriteLine("  --keepalive <seconds>        KeepAliveIntervalSeconds (default 20)");
+        Console.WriteLine();
+        Console.WriteLine("BlockFetch options:");
+        Console.WriteLine("  --slot <slot>                Block slot number");
+        Console.WriteLine("  --hash <hex>                 Block hash (hex-encoded)");
+        Console.WriteLine();
+        Console.WriteLine("Examples:");
+        Console.WriteLine("  dotnet run -- chainsync");
+        Console.WriteLine("  dotnet run -- blockfetch --slot 12345 --hash abcdef...");
     }
 
     #endregion

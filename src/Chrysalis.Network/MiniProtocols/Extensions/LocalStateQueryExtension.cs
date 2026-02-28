@@ -33,7 +33,7 @@ public static class LocalStateQueryExtension
         try
         {
             Result queryResult = await queryFunc().ConfigureAwait(false);
-            byte[] rawBytes = ExtractRawBytes(queryResult);
+            ReadOnlyMemory<byte> rawBytes = ExtractRawBytes(queryResult);
 
             try
             {
@@ -92,7 +92,7 @@ public static class LocalStateQueryExtension
     /// <exception cref="InvalidOperationException">Thrown when response extraction or deserialization fails.</exception>
     public static Task<UtxoByAddressResponse> GetUtxosByAddressAsync(
         this LocalStateQuery localStateQuery,
-        List<byte[]> addresses,
+        List<ReadOnlyMemory<byte>> addresses,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(localStateQuery);
@@ -126,13 +126,13 @@ public static class LocalStateQueryExtension
     /// <param name="result">The query result to extract bytes from.</param>
     /// <returns>The raw bytes.</returns>
     /// <exception cref="InvalidOperationException">Thrown when raw bytes extraction fails.</exception>
-    private static byte[] ExtractRawBytes(Result result)
+    private static ReadOnlyMemory<byte> ExtractRawBytes(Result result)
     {
         try
         {
             return result.QueryResult.Value.Length == 0
                 ? throw new InvalidOperationException($"{InvalidResponseError}: Result has no raw data")
-                : result.QueryResult.Value.ToArray();
+                : result.QueryResult.Value;
         }
         catch (Exception ex) when (ex is not InvalidOperationException)
         {

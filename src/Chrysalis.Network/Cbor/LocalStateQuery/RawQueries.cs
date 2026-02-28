@@ -26,7 +26,7 @@ public static class RawQueries
         return new BaseQuery(0, new BaseQuery(0, new BaseQuery((int)QueryEra.Conway, query)));
     }
 
-    public static QueryReq GetUtxoByAddress(List<byte[]> addresses)
+    public static QueryReq GetUtxoByAddress(List<ReadOnlyMemory<byte>> addresses)
     {
         return CreateBlockQuery(new UtxoByAddressQuery(6, new(addresses)));
     }
@@ -53,7 +53,7 @@ public partial record BaseQuery(
 [CborList]
 public partial record UtxoByAddressQuery(
     [CborOrder(0)] ulong Idx,
-    [CborOrder(1)] CborDefList<byte[]> Addresses
+    [CborOrder(1)] CborDefList<ReadOnlyMemory<byte>> Addresses
 ) : QueryReq;
 
 [CborSerializable]

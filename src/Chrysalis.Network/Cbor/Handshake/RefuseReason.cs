@@ -20,7 +20,7 @@ public partial record VersionMismatch(
 public partial record HandshakeDecodeError(
     [CborOrder(0)] Value1 Idx,
     [CborOrder(1)] int VersionNumber,
-    [CborOrder(2)] byte[] ErrorData
+    [CborOrder(2)] ReadOnlyMemory<byte> ErrorData
 ) : RefuseReason;
 
 [CborSerializable]
@@ -28,5 +28,5 @@ public partial record HandshakeDecodeError(
 public partial record Refused(
     [CborOrder(0)] Value2 Idx,
     [CborOrder(1)] int VersionNumber,
-    [CborOrder(2)] byte[] ErrorData
+    [CborOrder(2)] ReadOnlyMemory<byte> ErrorData
 ) : RefuseReason;

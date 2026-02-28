@@ -87,4 +87,20 @@ public static class CborSerializer
         T? result = GenericSerializationUtil.Read<T>(reader);
         return result ?? throw new InvalidOperationException("Deserialization failed: result is null.");
     }
+
+    /// <summary>
+    /// Deserializes a single CBOR value from the beginning of the data and reports how many bytes were consumed.
+    /// </summary>
+    /// <typeparam name="T">The target type for deserialization, which must inherit from CborBase.</typeparam>
+    /// <param name="data">The CBOR-encoded data to deserialize. May contain trailing data beyond the first value.</param>
+    /// <param name="bytesConsumed">When this method returns, contains the number of bytes consumed from the input.</param>
+    /// <returns>A deserialized instance of type T.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static T Deserialize<T>(ReadOnlyMemory<byte> data, out int bytesConsumed) where T : CborBase
+    {
+        CborReader reader = new(data, CborConformanceMode.Lax);
+        T? result = GenericSerializationUtil.Read<T>(reader);
+        bytesConsumed = data.Length - reader.BytesRemaining;
+        return result ?? throw new InvalidOperationException("Deserialization failed: result is null.");
+    }
 }

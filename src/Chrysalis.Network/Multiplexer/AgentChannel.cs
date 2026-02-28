@@ -75,4 +75,15 @@ public sealed class AgentChannel(
     {
         plexerReader.AdvanceTo(position);
     }
+
+    /// <summary>
+    /// Advances the channels reader with separate consumed and examined positions.
+    /// </summary>
+    /// <param name="consumed">The position of the last consumed data.</param>
+    /// <param name="examined">The position of the last examined data.</param>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void AdvanceTo(SequencePosition consumed, SequencePosition examined)
+    {
+        plexerReader.AdvanceTo(consumed, examined);
+    }
 }
