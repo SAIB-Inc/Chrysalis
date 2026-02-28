@@ -1,0 +1,128 @@
+# Vendored Ed25519 cryptographic code from Chaos.NaCl (public domain).
+# These rules are suppressed because the code is ported from C reference
+# implementations and must preserve its original structure and naming for
+# correctness and auditability.
+
+[*.cs]
+
+# IDE0130: Namespace does not match folder structure
+# The files live under Ed25519/ but use Chrysalis.Crypto namespace intentionally.
+dotnet_diagnostic.IDE0130.severity = none
+
+# IDE1006: Naming rule violation (snake_case method names from C reference impl)
+dotnet_diagnostic.IDE1006.severity = none
+
+# IDE0011: Add braces (crypto code uses single-line if/for from reference impl)
+dotnet_diagnostic.IDE0011.severity = none
+
+# IDE0004: Cast is redundant (explicit casts kept for clarity in crypto math)
+dotnet_diagnostic.IDE0004.severity = none
+
+# IDE0090: 'new' expression can be simplified
+dotnet_diagnostic.IDE0090.severity = none
+
+# IDE0007: Use 'var' instead of explicit type (crypto code uses explicit types for clarity)
+dotnet_diagnostic.IDE0007.severity = none
+
+# IDE0008: Use explicit type instead of 'var'
+dotnet_diagnostic.IDE0008.severity = none
+
+# IDE0048: Add parentheses for clarity
+dotnet_diagnostic.IDE0048.severity = none
+
+# IDE0017: Object initialization can be simplified
+dotnet_diagnostic.IDE0017.severity = none
+
+# IDE0018: Inline variable declaration
+dotnet_diagnostic.IDE0018.severity = none
+
+# IDE0059: Unnecessary assignment
+dotnet_diagnostic.IDE0059.severity = none
+
+# IDE0054: Use compound assignment
+dotnet_diagnostic.IDE0054.severity = none
+
+# IDE0028: Use collection initializers
+dotnet_diagnostic.IDE0028.severity = none
+
+# IDE0300: Use collection expression
+dotnet_diagnostic.IDE0300.severity = none
+
+# IDE0301: Use collection expression for empty
+dotnet_diagnostic.IDE0301.severity = none
+
+# IDE0074: Use coalesce compound assignment
+dotnet_diagnostic.IDE0074.severity = none
+
+# IDE0305: Use collection expression for fluent
+dotnet_diagnostic.IDE0305.severity = none
+
+# CS1591: Missing XML comment for publicly visible type or member
+# Internal crypto math doesn't need XML docs on every field
+dotnet_diagnostic.CS1591.severity = none
+
+# CA1822: Mark members as static (partial class methods)
+dotnet_diagnostic.CA1822.severity = none
+
+# CA1062: Validate arguments of public methods (internal crypto code)
+dotnet_diagnostic.CA1062.severity = none
+
+# CA1024: Use properties where appropriate
+dotnet_diagnostic.CA1024.severity = none
+
+# CA1034: Nested types should not be visible
+dotnet_diagnostic.CA1034.severity = none
+
+# IDE0005: Remove unnecessary using directive
+dotnet_diagnostic.IDE0005.severity = none
+
+# IDE0049: Use language keywords instead of framework type names
+dotnet_diagnostic.IDE0049.severity = none
+
+# IDE0055: Fix formatting
+dotnet_diagnostic.IDE0055.severity = none
+
+# IDE0161: Convert to file-scoped namespace (already converted, but some partial classes need this)
+dotnet_diagnostic.IDE0161.severity = none
+
+# CA1707: Identifiers should not contain underscores (crypto naming convention)
+dotnet_diagnostic.CA1707.severity = none
+
+# CA1720: Identifiers should not contain type names
+dotnet_diagnostic.CA1720.severity = none
+
+# CA1814: Prefer jagged arrays over multidimensional
+dotnet_diagnostic.CA1814.severity = none
+
+# IDE0058: Expression value is never used
+dotnet_diagnostic.IDE0058.severity = none
+
+# IDE0046: Convert to conditional expression
+dotnet_diagnostic.IDE0046.severity = none
+
+# IDE0010: Add missing cases to switch statement
+dotnet_diagnostic.IDE0010.severity = none
+
+# IDE0045: Use conditional expression for assignment
+dotnet_diagnostic.IDE0045.severity = none
+
+# IDE0056: Use index operator
+dotnet_diagnostic.IDE0056.severity = none
+
+# IDE0078: Use pattern matching
+dotnet_diagnostic.IDE0078.severity = none
+
+# IDE0057: Use range operator
+dotnet_diagnostic.IDE0057.severity = none
+
+# CA1861: Avoid constant arrays as arguments
+dotnet_diagnostic.CA1861.severity = none
+
+# IDE0040: Accessibility modifiers required
+dotnet_diagnostic.IDE0040.severity = none
+
+# IDE0034: 'default' expression can be simplified
+dotnet_diagnostic.IDE0034.severity = none
+
+# IDE0047: Parentheses can be removed
+dotnet_diagnostic.IDE0047.severity = none

@@ -4,6 +4,8 @@
     <Project Path="src/Chrysalis.Cbor.CodeGen/Chrysalis.Cbor.CodeGen.csproj" />
     <Project Path="src/Chrysalis.Cbor/Chrysalis.Cbor.csproj" />
     <Project Path="src/Chrysalis.Cli/Chrysalis.Cli.csproj" />
+    <Project Path="src/Chrysalis.Crypto/Chrysalis.Crypto.csproj" />
+    <Project Path="src/Chrysalis.Crypto.Test/Chrysalis.Crypto.Test.csproj" />
     <Project Path="src/Chrysalis.Network.Cli/Chrysalis.Network.Cli.csproj" />
     <Project Path="src/Chrysalis.Network.Tests/Chrysalis.Network.Tests.csproj" />
     <Project Path="src/Chrysalis.Network/Chrysalis.Network.csproj" />
