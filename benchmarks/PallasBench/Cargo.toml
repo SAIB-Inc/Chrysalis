@@ -1,0 +1,16 @@
+[package]
+name = "pallas-bench"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+pallas = "1.0.0-alpha.4"
+hex = "0.4.3"
+
+[dev-dependencies]
+criterion = { version = "0.5", features = ["html_reports"] }
+
+[[bench]]
+name = "block_decode"
+harness = false
