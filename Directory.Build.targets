@@ -1,0 +1,6 @@
+<Project>
+  <!-- Relaxed rules for test projects (evaluated after .csproj sets IsTestProject) -->
+  <PropertyGroup Condition="'$(IsTestProject)' == 'true'">
+    <NoWarn>$(NoWarn);CS1591;CA1707;CA1812;CA1852</NoWarn>
+  </PropertyGroup>
+</Project>

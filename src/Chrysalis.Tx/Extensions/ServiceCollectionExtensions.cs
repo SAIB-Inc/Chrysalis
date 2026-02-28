@@ -6,8 +6,17 @@ using Chrysalis.Wallet.Models.Enums;
 
 namespace Chrysalis.Tx.Extensions;
 
+/// <summary>
+/// Extension methods for registering Cardano data providers with dependency injection.
+/// </summary>
 public static class ServiceCollectionExtensions
 {
+    /// <summary>
+    /// Adds a Cardano data provider to the service collection based on configuration.
+    /// </summary>
+    /// <param name="services">The service collection.</param>
+    /// <param name="configuration">The configuration section with provider settings.</param>
+    /// <returns>The service collection for chaining.</returns>
     public static IServiceCollection AddCardanoProvider(
         this IServiceCollection services,
         IConfiguration configuration)

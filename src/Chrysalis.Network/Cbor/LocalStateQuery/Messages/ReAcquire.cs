@@ -8,10 +8,18 @@ namespace Chrysalis.Network.Cbor.LocalStateQuery.Messages;
 [CborUnion]
 public abstract partial record ReAcquire : LocalStateQueryMessage;
 
-public class ReAcquireIdxs
+public static class ReAcquireIdxs
 {
-    public static ReAcquire Default(Point? point = null) => point is not null ? SpecificPoint(point) : VolatileTip;
-    public static ReAcquireSpecificPoint SpecificPoint(Point point) => new(new Value6(6), point);
+    public static ReAcquire Default(Point? point = null)
+    {
+        return point is not null ? SpecificPoint(point) : VolatileTip;
+    }
+
+    public static ReAcquireSpecificPoint SpecificPoint(Point point)
+    {
+        return new(new Value6(6), point);
+    }
+
     public static ReAcquireVolatileTip VolatileTip => new(new Value9(9));
     public static ReAcquireImmutableTip ImmutableTip => new(new Value11(11));
 }

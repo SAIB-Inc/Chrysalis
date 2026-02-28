@@ -29,7 +29,18 @@ public partial record MessageDone(
 
 public static class KeepAliveMessages
 {
-    public static MessageKeepAlive KeepAlive(uint cookie) => new(new Value0(0), cookie);
-    public static MessageKeepAliveResponse KeepAliveResponse(uint cookie) => new(new Value1(1), cookie);
-    public static MessageDone Done() => new(new Value2(2));
+    public static MessageKeepAlive KeepAlive(uint cookie)
+    {
+        return new(new Value0(0), cookie);
+    }
+
+    public static MessageKeepAliveResponse KeepAliveResponse(uint cookie)
+    {
+        return new(new Value1(1), cookie);
+    }
+
+    public static MessageDone Done()
+    {
+        return new(new Value2(2));
+    }
 }

@@ -4,35 +4,30 @@ namespace Chrysalis.Cbor.CodeGen;
 
 public sealed partial class CborSerializerCodeGen
 {
-    private class ConstructorEmitter : ICborSerializerEmitter
+    private sealed class ConstructorEmitter : ICborSerializerEmitter
     {
         public StringBuilder EmitReader(StringBuilder sb, SerializableTypeMetadata metadata)
         {
             int constrIndex = Emitter.ResolveTag(metadata.CborIndex);
-            Emitter.EmitCborReaderInstance(sb, "data");
-            Emitter.EmitTagReader(sb, metadata.CborTag, "tagIndex");
-            Emitter.EmitTagReader(sb, constrIndex, "constrIndex");
-            Emitter.EmitCustomListReader(sb, metadata);
+            _ = Emitter.EmitCborReaderInstance(sb, "data");
+            _ = Emitter.EmitTagReader(sb, metadata.CborTag, "tagIndex");
+            _ = Emitter.EmitTagReader(sb, constrIndex, "constrIndex");
+            _ = Emitter.EmitCustomListReader(sb, metadata);
 
             return sb;
         }
 
         public StringBuilder EmitWriter(StringBuilder sb, SerializableTypeMetadata metadata)
         {
-            Emitter.EmitPreservedRawWriter(sb);
-            Emitter.EmitWriterValidation(sb, metadata);
-            Emitter.EmitTagWriter(sb, metadata.CborTag);
+            _ = Emitter.EmitPreservedRawWriter(sb);
+            _ = Emitter.EmitWriterValidation(sb, metadata);
+            _ = Emitter.EmitTagWriter(sb, metadata.CborTag);
 
-            if (metadata.CborIndex is null || metadata.CborIndex < 0)
-            {
-                sb.AppendLine("writer.WriteTag((CborTag)data.ConstrIndex);");
-            }
-            else
-            {
-                sb.AppendLine($"writer.WriteTag((CborTag){Emitter.ResolveTag(metadata.CborIndex)});");
-            }
+            _ = metadata.CborIndex is null or < 0
+                ? sb.AppendLine("writer.WriteTag((CborTag)data.ConstrIndex);")
+                : sb.AppendLine($"writer.WriteTag((CborTag){Emitter.ResolveTag(metadata.CborIndex)});");
 
-            Emitter.EmitCustomListWriter(sb, metadata);
+            _ = Emitter.EmitCustomListWriter(sb, metadata);
 
             return sb;
         }

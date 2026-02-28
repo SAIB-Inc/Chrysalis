@@ -1,6 +1,5 @@
 using Chrysalis.Network.Cbor.LocalStateQuery.Messages;
 using Chrysalis.Network.Multiplexer;
-using Chrysalis.Cbor.Serialization;
 using Chrysalis.Network.Cbor.LocalStateQuery;
 using Chrysalis.Network.Cbor.Common;
 using Chrysalis.Cbor.Types;
@@ -11,41 +10,38 @@ public class LocalStateQuery(AgentChannel channel) : IAsyncDisposable
 {
     private readonly ChannelBuffer _buffer = new(channel);
 
-    // State management
-    private bool _isAcquired = false;
-
-    public bool IsAcquired => _isAcquired;
+    public bool IsAcquired { get; private set; }
 
     public async Task<Result> QueryAsync(QueryReq query, CancellationToken cancellationToken)
     {
-        if (!_isAcquired)
+        if (!IsAcquired)
         {
             throw new InvalidOperationException("Must acquire state before querying. Call AcquireAsync first.");
         }
 
-        await _buffer.SendFullMessageAsync(QueryRequest.New(query), cancellationToken);
-        return await _buffer.ReceiveFullMessageAsync<Result>(cancellationToken);
+        await _buffer.SendFullMessageAsync(QueryRequest.New(query), cancellationToken).ConfigureAwait(false);
+        return await _buffer.ReceiveFullMessageAsync<Result>(cancellationToken).ConfigureAwait(false);
     }
 
     public async Task AcquireAsync(Point? point, CancellationToken cancellationToken)
     {
-        await _buffer.SendFullMessageAsync(AcquireTypes.Default(point), cancellationToken);
-        LocalStateQueryMessage acquireResponse = await _buffer.ReceiveFullMessageAsync<LocalStateQueryMessage>(cancellationToken);
+        await _buffer.SendFullMessageAsync(AcquireTypes.Default(point), cancellationToken).ConfigureAwait(false);
+        LocalStateQueryMessage acquireResponse = await _buffer.ReceiveFullMessageAsync<LocalStateQueryMessage>(cancellationToken).ConfigureAwait(false);
 
         if (acquireResponse is not Acquired)
         {
-            throw new Exception($"Failed to acquire state: {acquireResponse}");
+            throw new InvalidOperationException($"Failed to acquire state: {acquireResponse}");
         }
 
-        _isAcquired = true;
+        IsAcquired = true;
     }
 
     public async Task ReleaseAsync(CancellationToken cancellationToken)
     {
-        if (_isAcquired)
+        if (IsAcquired)
         {
-            await _buffer.SendFullMessageAsync(new Release(new Value5(5)), cancellationToken);
-            _isAcquired = false;
+            await _buffer.SendFullMessageAsync(new Release(new Value5(5)), cancellationToken).ConfigureAwait(false);
+            IsAcquired = false;
         }
     }
 
@@ -54,11 +50,17 @@ public class LocalStateQuery(AgentChannel channel) : IAsyncDisposable
     {
         try
         {
-            await ReleaseAsync(CancellationToken.None);
+            await ReleaseAsync(CancellationToken.None).ConfigureAwait(false);
         }
-        catch
+        catch (ObjectDisposedException)
         {
-            // Best effort cleanup
+            // Best effort cleanup - channel may already be disposed
         }
+        catch (InvalidOperationException)
+        {
+            // Best effort cleanup - protocol state may be invalid
+        }
+
+        GC.SuppressFinalize(this);
     }
 }

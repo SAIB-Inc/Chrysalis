@@ -33,10 +33,13 @@ public sealed partial class CborSerializerCodeGen
 
         public static SerializableTypeMetadata? ParseSerialazableType(TypeDeclarationSyntax tds, SemanticModel model)
         {
-            IEnumerable<AttributeSyntax> attributes = tds.AttributeLists.SelectMany(a => a.Attributes);
+            List<AttributeSyntax> attributes = [.. tds.AttributeLists.SelectMany(a => a.Attributes)];
             AttributeSyntax? cborSerializableAttribute = attributes.FirstOrDefault(a => a.Name.ToString() == CborSerializable);
 
-            if (cborSerializableAttribute == null) return null;
+            if (cborSerializableAttribute == null)
+            {
+                return null;
+            }
 
             string baseNamespace = GetBaseNamespace(tds, model);
             (string path, string parentTypeParams) = GetFullNamespaceWithParentsAndTypeParams(tds, model);
@@ -109,16 +112,28 @@ public sealed partial class CborSerializerCodeGen
         }
     }
 
+    /// <summary>
+    /// Determines whether the given type declaration implements the ICborPreserveRaw interface.
+    /// </summary>
+    /// <param name="tds">The type declaration syntax node.</param>
+    /// <param name="semanticModel">The semantic model for symbol resolution.</param>
+    /// <returns>True if the type preserves raw CBOR data; otherwise false.</returns>
     public static bool ShouldPreserveRaw(TypeDeclarationSyntax tds, SemanticModel semanticModel)
     {
+        if (semanticModel is null)
+        {
+            throw new ArgumentNullException(nameof(semanticModel));
+        }
+
         if (semanticModel.GetDeclaredSymbol(tds) is not INamedTypeSymbol typeSymbol)
+        {
             return false;
+        }
 
         INamedTypeSymbol? interfaceSymbol = semanticModel.Compilation.GetTypeByMetadataName(Parser.ICborPreserveRaw);
-        if (interfaceSymbol != null)
-            return typeSymbol.AllInterfaces.Contains(interfaceSymbol);
-
-        return typeSymbol.AllInterfaces.Any(i =>
+        return interfaceSymbol != null
+            ? typeSymbol.AllInterfaces.Contains(interfaceSymbol)
+            : typeSymbol.AllInterfaces.Any(i =>
             i.ToDisplayString() == Parser.ICborPreserveRaw ||
             i.ToDisplayString() == Parser.ICborPreserveRawFullName ||
             i.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) == $"global::{Parser.ICborPreserveRawFullName}");
@@ -126,20 +141,27 @@ public sealed partial class CborSerializerCodeGen
 
     private static SerializationType GetSerializationType(AttributeSyntax? cborMapAttribute, AttributeSyntax? cborListAttribute, AttributeSyntax? cborUnionAttribute, AttributeSyntax? cborConstrAttribute)
     {
-        if (cborMapAttribute != null) return SerializationType.Map;
-        if (cborListAttribute != null) return SerializationType.List;
-        if (cborUnionAttribute != null) return SerializationType.Union;
-        if (cborConstrAttribute != null) return SerializationType.Constr;
-
-        return SerializationType.Container;
+        return cborMapAttribute != null
+            ? SerializationType.Map
+            : cborListAttribute != null
+                ? SerializationType.List
+                : cborUnionAttribute != null
+                    ? SerializationType.Union
+                    : cborConstrAttribute != null ? SerializationType.Constr : SerializationType.Container;
     }
 
     private static string? FindValidatorForType(TypeDeclarationSyntax typeDecl, SemanticModel semanticModel, Compilation compilation)
     {
-        if (semanticModel.GetDeclaredSymbol(typeDecl) is not INamedTypeSymbol typeSymbol) return null;
+        if (semanticModel.GetDeclaredSymbol(typeDecl) is not INamedTypeSymbol typeSymbol)
+        {
+            return null;
+        }
 
         INamedTypeSymbol? openValidatorInterface = compilation.GetTypeByMetadataName(Parser.ICborValidatorFullName);
-        if (openValidatorInterface == null) return null;
+        if (openValidatorInterface == null)
+        {
+            return null;
+        }
 
         INamedTypeSymbol closedValidatorInterface = openValidatorInterface.Construct(typeSymbol);
         INamedTypeSymbol validator = compilation
@@ -166,7 +188,7 @@ public sealed partial class CborSerializerCodeGen
 
     private static IEnumerable<SerializablePropertyMetadata> GetClassPropertyMetadata(ClassDeclarationSyntax classDecl, SemanticModel model)
     {
-        IEnumerable<AttributeSyntax> attributes = classDecl.AttributeLists.SelectMany(a => a.Attributes);
+        List<AttributeSyntax> attributes = [.. classDecl.AttributeLists.SelectMany(a => a.Attributes)];
         IEnumerable<PropertyDeclarationSyntax> properties = classDecl.DescendantNodes().OfType<PropertyDeclarationSyntax>();
 
         foreach (PropertyDeclarationSyntax property in properties)
@@ -218,10 +240,10 @@ public sealed partial class CborSerializerCodeGen
     {
         foreach (ParameterSyntax param in recordDecl.ParameterList?.Parameters ?? [])
         {
-            IEnumerable<AttributeSyntax> paramAttributes = param.AttributeLists.SelectMany(a => a.Attributes);
+            List<AttributeSyntax> paramAttributes = [.. param.AttributeLists.SelectMany(a => a.Attributes)];
 
             string propertyName = param.Identifier.Text;
-            string propertyType = param.Type?.ToString() ?? throw new ArgumentNullException(nameof(param.Type));
+            string propertyType = param.Type?.ToString() ?? throw new ArgumentNullException(nameof(recordDecl), "Parameter type cannot be null");
             string propertyTypeNamespace = string.Empty;
             bool isOpenGeneric = false;
             ISymbol? typeSymbol = model.GetSymbolInfo(param.Type).Symbol;
@@ -266,7 +288,9 @@ public sealed partial class CborSerializerCodeGen
             {
                 Optional<object?> constValue = model.GetConstantValue(sizeArg.Expression);
                 if (constValue.HasValue && constValue.Value is int sizeVal)
+                {
                     size = sizeVal;
+                }
             }
 
             int? order = null;
@@ -275,7 +299,9 @@ public sealed partial class CborSerializerCodeGen
             {
                 Optional<object?> constValue = model.GetConstantValue(orderArg.Expression);
                 if (constValue.HasValue && constValue.Value is int orderVal)
+                {
                     order = orderVal;
+                }
             }
 
             GetCborPropertyKey(param, model, out string? stringKey, out int? intKey);
@@ -379,8 +405,8 @@ public sealed partial class CborSerializerCodeGen
 
         ISymbol? symbol = semanticModel.GetDeclaredSymbol(node);
         AttributeData? attribute = symbol?.GetAttributes()
-            .FirstOrDefault(a => a.AttributeClass?.Name == Parser.CborProperty ||
-                              a.AttributeClass?.Name == Parser.CborPropertyAttribute);
+            .FirstOrDefault(a => a.AttributeClass?.Name is Parser.CborProperty or
+                              Parser.CborPropertyAttribute);
 
         if (attribute?.ConstructorArguments.FirstOrDefault() is TypedConstant arg)
         {
@@ -395,12 +421,15 @@ public sealed partial class CborSerializerCodeGen
         }
     }
 
-    private static IEnumerable<SerializableTypeMetadata> GetChildTypes(TypeDeclarationSyntax tds, SemanticModel model)
+    private static Dictionary<string, SerializableTypeMetadata>.ValueCollection GetChildTypes(TypeDeclarationSyntax tds, SemanticModel model)
     {
-        if (model.GetDeclaredSymbol(tds) is not INamedTypeSymbol typeSymbol) return [];
+        if (model.GetDeclaredSymbol(tds) is not INamedTypeSymbol typeSymbol)
+        {
+            return new Dictionary<string, SerializableTypeMetadata>().Values;
+        }
 
         IEnumerable<INamedTypeSymbol> derivedTypes = FindDerivedTypes(typeSymbol, model.Compilation);
-        Dictionary<string, SerializableTypeMetadata> resultDict = new();
+        Dictionary<string, SerializableTypeMetadata> resultDict = [];
 
         // Process nested types
         foreach (TypeDeclarationSyntax nestedType in tds.DescendantNodes().OfType<TypeDeclarationSyntax>())
@@ -408,7 +437,9 @@ public sealed partial class CborSerializerCodeGen
             if (Parser.ParseSerialazableType(nestedType, model) is SerializableTypeMetadata metadata)
             {
                 if (!resultDict.ContainsKey(metadata.FullyQualifiedName))
+                {
                     resultDict[metadata.FullyQualifiedName] = metadata;
+                }
             }
         }
 
@@ -420,12 +451,16 @@ public sealed partial class CborSerializerCodeGen
             {
                 SemanticModel derivedTypeModel = model;
                 if (syntaxRef.SyntaxTree != model.SyntaxTree)
+                {
                     derivedTypeModel = model.Compilation.GetSemanticModel(syntaxRef.SyntaxTree);
+                }
 
                 if (Parser.ParseSerialazableType(derivedTypeSyntax, derivedTypeModel) is SerializableTypeMetadata metadata)
                 {
                     if (!resultDict.ContainsKey(metadata.FullyQualifiedName))
+                    {
                         resultDict[metadata.FullyQualifiedName] = metadata;
+                    }
                 }
             }
         }
@@ -455,7 +490,9 @@ public sealed partial class CborSerializerCodeGen
             while (currentType != null)
             {
                 if (SymbolEqualityComparer.Default.Equals(currentType.OriginalDefinition, baseType.OriginalDefinition))
+                {
                     return true;
+                }
 
                 currentType = currentType.BaseType;
             }
@@ -534,21 +571,14 @@ public sealed partial class CborSerializerCodeGen
     }
     private static string GetBaseNamespace(TypeDeclarationSyntax typeDecl, SemanticModel model)
     {
-        if (model.GetDeclaredSymbol(typeDecl) is INamedTypeSymbol symbol)
-        {
-            return symbol.ContainingNamespace.ToDisplayString();
-        }
-
-        return typeDecl.GetNamespace() ?? string.Empty;
+        return model.GetDeclaredSymbol(typeDecl) is INamedTypeSymbol symbol
+            ? symbol.ContainingNamespace.ToDisplayString()
+            : typeDecl.GetNamespace() ?? string.Empty;
     }
 
     private static string RemoveGenericPart(string identifier)
     {
         int angleBracketIndex = identifier.IndexOf('<');
-        if (angleBracketIndex > 0)
-        {
-            return identifier.Substring(0, angleBracketIndex).Trim();
-        }
-        return identifier.Trim();
+        return angleBracketIndex > 0 ? identifier.Substring(0, angleBracketIndex).Trim() : identifier.Trim();
     }
 }

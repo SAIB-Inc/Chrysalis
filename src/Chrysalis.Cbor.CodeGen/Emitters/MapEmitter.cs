@@ -1,111 +1,107 @@
+using System.Globalization;
 using System.Text;
 
 namespace Chrysalis.Cbor.CodeGen;
 
 public sealed partial class CborSerializerCodeGen
 {
-    private class MapEmitter : ICborSerializerEmitter
+    private sealed class MapEmitter : ICborSerializerEmitter
     {
         public StringBuilder EmitReader(StringBuilder sb, SerializableTypeMetadata metadata)
         {
-            Emitter.EmitCborReaderInstance(sb, "data");
-            Emitter.EmitTagReader(sb, metadata.CborTag, "tagIndex");
+            _ = Emitter.EmitCborReaderInstance(sb, "data");
+            _ = Emitter.EmitTagReader(sb, metadata.CborTag, "tagIndex");
             bool isIntKey = metadata.Properties[0].PropertyKeyInt is not null;
 
-            sb.AppendLine($"Dictionary<{(isIntKey ? "int" : "string")}, object> resultMap = [];");
-            
+            _ = sb.AppendLine($"Dictionary<{(isIntKey ? "int" : "string")}, object> resultMap = [];");
+
             // Read the map and check if it's indefinite
-            sb.AppendLine("int? mapLength = reader.ReadStartMap();");
-            sb.AppendLine("bool isIndefiniteMap = !mapLength.HasValue;");
-            
-            sb.AppendLine("while (reader.PeekState() != CborReaderState.EndMap)");
-            sb.AppendLine("{");
+            _ = sb.AppendLine("int? mapLength = reader.ReadStartMap();");
+            _ = sb.AppendLine("bool isIndefiniteMap = !mapLength.HasValue;");
 
-            if (isIntKey)
-            {
-                sb.AppendLine($"int key = reader.ReadInt32();");
-            }
-            else
-            {
-                sb.AppendLine($"string key = reader.ReadTextString();");
-            }
+            _ = sb.AppendLine("while (reader.PeekState() != CborReaderState.EndMap)");
+            _ = sb.AppendLine("{");
 
-            sb.AppendLine($"object value = null;");
+            _ = isIntKey
+                ? sb.AppendLine($"int key = reader.ReadInt32();")
+                : sb.AppendLine($"string key = reader.ReadTextString();");
 
-            Emitter.EmitGenericReader(sb, "TypeMapping[key]", "value");
+            _ = sb.AppendLine($"object value = null;");
 
-            sb.AppendLine($"resultMap.Add(key, value);");
-            sb.AppendLine("}");
-            
+            _ = Emitter.EmitGenericReader(sb, "TypeMapping[key]", "value");
+
+            _ = sb.AppendLine($"resultMap.Add(key, value);");
+            _ = sb.AppendLine("}");
+
             // Read the end map marker
-            sb.AppendLine("reader.ReadEndMap();");
-            sb.AppendLine($"{metadata.FullyQualifiedName} result = new {metadata.FullyQualifiedName}(");
+            _ = sb.AppendLine("reader.ReadEndMap();");
+            _ = sb.AppendLine($"{metadata.FullyQualifiedName} result = new {metadata.FullyQualifiedName}(");
 
             for (int i = 0; i < metadata.Properties.Count; i++)
             {
                 SerializablePropertyMetadata prop = metadata.Properties[i];
-                string? key = isIntKey ? prop.PropertyKeyInt?.ToString() : prop.PropertyKeyString;
+                string? key = isIntKey ? prop.PropertyKeyInt?.ToString(CultureInfo.InvariantCulture) : prop.PropertyKeyString;
 
-                sb.Append($"resultMap.TryGetValue({key}, out var {prop.PropertyName}Value) ? ({prop.PropertyTypeFullName}){prop.PropertyName}Value : default");
-                sb.AppendLine($"{(i == metadata.Properties.Count - 1 ? "" : ",")}");
+                _ = sb.Append($"resultMap.TryGetValue({key}, out var {prop.PropertyName}Value) ? ({prop.PropertyTypeFullName}){prop.PropertyName}Value : default");
+                _ = sb.AppendLine($"{(i == metadata.Properties.Count - 1 ? "" : ",")}");
             }
 
-            sb.AppendLine(");");
-            
-            // Set the IsIndefinite flag if we detected it
-            sb.AppendLine("if (isIndefiniteMap)");
-            sb.AppendLine("{");
-            sb.AppendLine("    result.IsIndefinite = true;");
-            sb.AppendLine("}");
+            _ = sb.AppendLine(");");
 
-            Emitter.EmitReaderValidationAndResult(sb, metadata, "result");
+            // Set the IsIndefinite flag if we detected it
+            _ = sb.AppendLine("if (isIndefiniteMap)");
+            _ = sb.AppendLine("{");
+            _ = sb.AppendLine("    result.IsIndefinite = true;");
+            _ = sb.AppendLine("}");
+
+            _ = Emitter.EmitReaderValidationAndResult(sb, metadata, "result");
             return sb;
         }
 
         public StringBuilder EmitWriter(StringBuilder sb, SerializableTypeMetadata metadata)
         {
-            Emitter.EmitPreservedRawWriter(sb);
-            Emitter.EmitWriterValidation(sb, metadata);
-            Emitter.EmitTagWriter(sb, metadata.CborTag);
-            Emitter.EmitPropertyCountWriter(sb, metadata);
+            _ = Emitter.EmitPreservedRawWriter(sb);
+            _ = Emitter.EmitWriterValidation(sb, metadata);
+            _ = Emitter.EmitTagWriter(sb, metadata.CborTag);
+            _ = Emitter.EmitPropertyCountWriter(sb, metadata);
             bool isIntKey = metadata.Properties[0].PropertyKeyInt is not null;
 
             // Use indefinite if either attribute OR runtime flag is set
-            sb.AppendLine($"bool useIndefinite = {(metadata.IsIndefinite ? "true" : "false")} || data.IsIndefinite;");
-            sb.AppendLine("if (useIndefinite)");
-            sb.AppendLine("{");
-            sb.AppendLine("    writer.WriteStartMap(null);");
-            sb.AppendLine("}");
-            sb.AppendLine("else");
-            sb.AppendLine("{");
-            sb.AppendLine("    writer.WriteStartMap(propCount);");
-            sb.AppendLine("}");
+            _ = sb.AppendLine($"bool useIndefinite = {(metadata.IsIndefinite ? "true" : "false")} || data.IsIndefinite;");
+            _ = sb.AppendLine("if (useIndefinite)");
+            _ = sb.AppendLine("{");
+            _ = sb.AppendLine("    writer.WriteStartMap(null);");
+            _ = sb.AppendLine("}");
+            _ = sb.AppendLine("else");
+            _ = sb.AppendLine("{");
+            _ = sb.AppendLine("    writer.WriteStartMap(propCount);");
+            _ = sb.AppendLine("}");
 
-            foreach (var prop in metadata.Properties)
+            foreach (SerializablePropertyMetadata prop in metadata.Properties)
             {
                 if (prop.IsNullable)
                 {
-                    sb.AppendLine($"{(isIntKey ? $"writer.WriteInt32(KeyMapping[\"{prop.PropertyName}\"])" : $"writer.WriteTextString(KeyMapping[\"{prop.PropertyName}\"])")};");
-                    Emitter.EmitSerializablePropertyWriter(sb, prop);
+                    _ = sb.AppendLine($"{(isIntKey ? $"writer.WriteInt32(KeyMapping[\"{prop.PropertyName}\"])" : $"writer.WriteTextString(KeyMapping[\"{prop.PropertyName}\"])")};");
+                    _ = Emitter.EmitSerializablePropertyWriter(sb, prop);
                 }
                 else
                 {
                     if (prop.IsTypeNullable)
                     {
-                        sb.AppendLine($"if (data.{prop.PropertyName} is not null)");
-                        sb.AppendLine("{");
-                        sb.AppendLine($"{(isIntKey ? $"writer.WriteInt32(KeyMapping[\"{prop.PropertyName}\"])" : $"writer.WriteTextString(KeyMapping[\"{prop.PropertyName}\"])")};");
-                        Emitter.EmitSerializablePropertyWriter(sb, prop);
-                        sb.AppendLine("}");
+                        _ = sb.AppendLine($"if (data.{prop.PropertyName} is not null)");
+                        _ = sb.AppendLine("{");
+                        _ = sb.AppendLine($"{(isIntKey ? $"writer.WriteInt32(KeyMapping[\"{prop.PropertyName}\"])" : $"writer.WriteTextString(KeyMapping[\"{prop.PropertyName}\"])")};");
+                        _ = Emitter.EmitSerializablePropertyWriter(sb, prop);
+                        _ = sb.AppendLine("}");
                     }
                     else
                     {
-                        sb.AppendLine($"{(isIntKey ? $"writer.WriteInt32(KeyMapping[\"{prop.PropertyName}\"])" : $"writer.WriteTextString(KeyMapping[\"{prop.PropertyName}\"])")};");
-                        Emitter.EmitSerializablePropertyWriter(sb, prop);
+                        _ = sb.AppendLine($"{(isIntKey ? $"writer.WriteInt32(KeyMapping[\"{prop.PropertyName}\"])" : $"writer.WriteTextString(KeyMapping[\"{prop.PropertyName}\"])")};");
+                        _ = Emitter.EmitSerializablePropertyWriter(sb, prop);
                     }
                 }
             }
-            sb.AppendLine($"writer.WriteEndMap();");
+            _ = sb.AppendLine($"writer.WriteEndMap();");
 
             return sb;
         }

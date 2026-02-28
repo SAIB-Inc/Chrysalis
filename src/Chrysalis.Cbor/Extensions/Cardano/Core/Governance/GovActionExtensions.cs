@@ -2,10 +2,20 @@ using Chrysalis.Cbor.Types.Cardano.Core.Governance;
 
 namespace Chrysalis.Cbor.Extensions.Cardano.Core.Governance;
 
+/// <summary>
+/// Extension methods for <see cref="GovAction"/> to access governance action properties.
+/// </summary>
 public static class GovActionExtensions
 {
-    public static int Type(this GovAction self) =>
-        self switch
+    /// <summary>
+    /// Gets the governance action type tag.
+    /// </summary>
+    /// <param name="self">The governance action instance.</param>
+    /// <returns>The action type value.</returns>
+    public static int Type(this GovAction self)
+    {
+        ArgumentNullException.ThrowIfNull(self);
+        return self switch
         {
             ParameterChangeAction parameterChangeAction => parameterChangeAction.ActionType,
             HardForkInitiationAction hardForkInitiationAction => hardForkInitiationAction.ActionType,
@@ -15,9 +25,17 @@ public static class GovActionExtensions
             NewConstitution newConstitution => newConstitution.ActionType,
             _ => throw new NotImplementedException()
         };
+    }
 
-    public static GovActionId? GovActionId(this GovAction self) => 
-        self switch
+    /// <summary>
+    /// Gets the governance action ID referenced by this action, if applicable.
+    /// </summary>
+    /// <param name="self">The governance action instance.</param>
+    /// <returns>The governance action ID, or null.</returns>
+    public static GovActionId? GovActionId(this GovAction self)
+    {
+        ArgumentNullException.ThrowIfNull(self);
+        return self switch
         {
             ParameterChangeAction parameterChangeAction => parameterChangeAction.GovActionId,
             HardForkInitiationAction hardForkInitiationAction => hardForkInitiationAction.GovActionId,
@@ -26,12 +44,21 @@ public static class GovActionExtensions
             NewConstitution newConstitution => newConstitution.GovActionId,
             _ => null
         };
+    }
 
-    public static byte[]? PolicyHash(this GovAction self) =>
-        self switch
+    /// <summary>
+    /// Gets the policy hash from the governance action, if applicable.
+    /// </summary>
+    /// <param name="self">The governance action instance.</param>
+    /// <returns>The policy hash bytes, or null.</returns>
+    public static byte[]? PolicyHash(this GovAction self)
+    {
+        ArgumentNullException.ThrowIfNull(self);
+        return self switch
         {
             ParameterChangeAction parameterChangeAction => parameterChangeAction.PolicyHash,
             TreasuryWithdrawalsAction treasuryWithdrawalsAction => treasuryWithdrawalsAction.PolicyHash,
             _ => null
         };
+    }
 }

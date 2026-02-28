@@ -1,4 +1,8 @@
 namespace Chrysalis.Wallet.Models.Enums;
+
+/// <summary>
+/// Represents the role type in CIP-1852 derivation paths for Cardano wallets.
+/// </summary>
 public enum RoleType
 {
     /// <summary>

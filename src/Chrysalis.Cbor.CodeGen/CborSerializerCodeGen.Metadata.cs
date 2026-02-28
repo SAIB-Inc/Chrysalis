@@ -1,5 +1,3 @@
-using System.Data.Common;
-
 namespace Chrysalis.Cbor.CodeGen;
 
 public sealed partial class CborSerializerCodeGen

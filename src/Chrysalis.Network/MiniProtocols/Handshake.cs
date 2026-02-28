@@ -14,6 +14,11 @@ public class Handshake(AgentChannel channel) : IMiniProtocol
     private readonly ChannelBuffer _buffer = new(channel);
 
     /// <summary>
+    /// Gets whether the protocol is done.
+    /// </summary>
+    public bool IsDone { get; private set; }
+
+    /// <summary>
     /// Sends a version proposal and receives the handshake response.
     /// </summary>
     /// <param name="propose">The version proposal message.</param>
@@ -21,8 +26,9 @@ public class Handshake(AgentChannel channel) : IMiniProtocol
     /// <returns>The handshake response message.</returns>
     public async Task<HandshakeMessage> SendAsync(ProposeVersions propose, CancellationToken cancellationToken)
     {
-        await _buffer.SendFullMessageAsync<HandshakeMessage>(propose, cancellationToken);
-        return await _buffer.ReceiveFullMessageAsync<HandshakeMessage>(cancellationToken);
+        await _buffer.SendFullMessageAsync<HandshakeMessage>(propose, cancellationToken).ConfigureAwait(false);
+        HandshakeMessage response = await _buffer.ReceiveFullMessageAsync<HandshakeMessage>(cancellationToken).ConfigureAwait(false);
+        IsDone = true;
+        return response;
     }
 }
-

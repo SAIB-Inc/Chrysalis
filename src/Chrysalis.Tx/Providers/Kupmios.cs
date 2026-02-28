@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
@@ -17,98 +18,186 @@ using Chrysalis.Cbor.Serialization;
 
 namespace Chrysalis.Tx.Providers;
 
-public class Kupmios(string kupoEndpoint, string ogmiosEndpoint, NetworkType networkType = NetworkType.Preview) : ICardanoDataProvider
+/// <summary>
+/// Kupo+Ogmios (Kupmios) implementation of the Cardano data provider.
+/// </summary>
+public sealed class Kupmios : ICardanoDataProvider, IDisposable
 {
-    private readonly HttpClient _httpClient = CreateHttpClient(kupoEndpoint);
-    private readonly HttpClient _ogmiosClient = new() { BaseAddress = new Uri(ogmiosEndpoint), Timeout = TimeSpan.FromSeconds(30) };
-    private readonly NetworkType _networkType = networkType;
-    public NetworkType NetworkType => _networkType;
+    private readonly HttpClient _httpClient;
+    private readonly HttpClient _ogmiosClient;
 
-    public async Task<List<ResolvedInput>> GetUtxosAsync(List<string> addresses)
+    /// <summary>
+    /// Gets the network type for this provider.
+    /// </summary>
+    public NetworkType NetworkType { get; }
+
+    /// <summary>
+    /// Initializes a new Kupmios provider.
+    /// </summary>
+    /// <param name="kupoEndpoint">The Kupo API endpoint URL.</param>
+    /// <param name="ogmiosEndpoint">The Ogmios API endpoint URL.</param>
+    /// <param name="networkType">The Cardano network type.</param>
+    public Kupmios(string kupoEndpoint, string ogmiosEndpoint, NetworkType networkType = NetworkType.Preview)
     {
-        if (addresses.Count == 0) return [];
+        ArgumentNullException.ThrowIfNull(kupoEndpoint);
+        ArgumentNullException.ThrowIfNull(ogmiosEndpoint);
+
+        _httpClient = CreateHttpClient(kupoEndpoint);
+        _ogmiosClient = new HttpClient() { BaseAddress = new Uri(ogmiosEndpoint), Timeout = TimeSpan.FromSeconds(30) };
+        NetworkType = networkType;
+    }
+
+    /// <summary>
+    /// Retrieves UTxOs for multiple addresses via Kupo.
+    /// </summary>
+    /// <param name="address">The list of addresses or patterns.</param>
+    /// <returns>A list of resolved inputs.</returns>
+    public async Task<List<ResolvedInput>> GetUtxosAsync(List<string> address)
+    {
+        ArgumentNullException.ThrowIfNull(address);
+
+        if (address.Count == 0)
+        {
+            return [];
+        }
 
         // Query each address individually using the /matches/{address} endpoint
-        IEnumerable<Task<List<KupoMatch>>> tasks = addresses.Select(FetchMatchesForAddress);
-        List<KupoMatch>[] results = await Task.WhenAll(tasks);
+        IEnumerable<Task<List<KupoMatch>>> tasks = address.Select(FetchMatchesForAddress);
+        List<KupoMatch>[] results = await Task.WhenAll(tasks).ConfigureAwait(false);
 
         return [.. results.SelectMany(matches => matches.Select(ConvertToResolvedInput))];
     }
 
- 
+    /// <summary>
+    /// Retrieves UTxOs by payment key hash pattern.
+    /// </summary>
+    /// <param name="paymentKey">The payment key hash.</param>
+    /// <returns>A list of resolved inputs.</returns>
     public Task<List<ResolvedInput>> GetUtxosByPaymentKeyAsync(string paymentKey)
     {
-        string pattern = paymentKey.EndsWith("/*")
+        ArgumentNullException.ThrowIfNull(paymentKey);
+
+        string pattern = paymentKey.EndsWith("/*", StringComparison.Ordinal)
             ? paymentKey
             : $"{paymentKey}/*";
 
         return GetUtxosAsync([pattern]);
     }
 
+    /// <summary>
+    /// Retrieves UTxOs by multiple payment key hash patterns.
+    /// </summary>
+    /// <param name="paymentKeys">The payment key hashes.</param>
+    /// <returns>A list of resolved inputs.</returns>
     public Task<List<ResolvedInput>> GetUtxosByPaymentKeysAsync(List<string> paymentKeys)
     {
-        if (paymentKeys.Count == 0) return Task.FromResult<List<ResolvedInput>>([]);
+        ArgumentNullException.ThrowIfNull(paymentKeys);
 
-        List<string> patterns = [.. paymentKeys.Select(key => key.EndsWith("/*") ? key : $"{key}/*")];
+        if (paymentKeys.Count == 0)
+        {
+            return Task.FromResult<List<ResolvedInput>>([]);
+        }
+
+        List<string> patterns = [.. paymentKeys.Select(key => key.EndsWith("/*", StringComparison.Ordinal) ? key : $"{key}/*")];
 
         return GetUtxosAsync(patterns);
     }
 
+    /// <summary>
+    /// Retrieves a UTxO by its output reference (transaction hash + index).
+    /// </summary>
+    /// <param name="txHash">The transaction hash.</param>
+    /// <param name="outputIndex">The output index.</param>
+    /// <returns>The resolved input, or null if not found.</returns>
     public async Task<ResolvedInput?> GetUtxoByOutRefAsync(string txHash, ulong outputIndex)
     {
-        string pattern = $"{outputIndex}@{txHash}";
+        ArgumentNullException.ThrowIfNull(txHash);
 
-        HttpResponseMessage response = await _httpClient.GetAsync($"matches/{pattern}?unspent&resolve_hashes");
+        string pattern = string.Create(CultureInfo.InvariantCulture, $"{outputIndex}@{txHash}");
+
+        using HttpResponseMessage response = await _httpClient.GetAsync(new Uri($"matches/{pattern}?unspent&resolve_hashes", UriKind.Relative)).ConfigureAwait(false);
 
         if (!response.IsSuccessStatusCode)
         {
             if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+            {
                 return null;
+            }
 
-            string error = await response.Content.ReadAsStringAsync();
-            throw new Exception($"Failed to fetch UTXO for {pattern}: {response.StatusCode} - {error}");
+            string error = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+            throw new InvalidOperationException($"Failed to fetch UTXO for {pattern}: {response.StatusCode} - {error}");
         }
 
-        List<KupoMatch>? matches = await response.Content.ReadFromJsonAsync<List<KupoMatch>>();
+        List<KupoMatch>? matches = await response.Content.ReadFromJsonAsync<List<KupoMatch>>().ConfigureAwait(false);
 
-        if (matches is null || matches.Count == 0)
-            return null;
-
-        return ConvertToResolvedInput(matches[0]);
+        return matches is null || matches.Count == 0 ? null : ConvertToResolvedInput(matches[0]);
     }
 
-    public Task<ResolvedInput?> GetUtxoByOutRefAsync(TransactionInput outRef) =>
-        GetUtxoByOutRefAsync(HexStringCache.ToHexString(outRef.TransactionId), outRef.Index);
+    /// <summary>
+    /// Retrieves a UTxO by its TransactionInput reference.
+    /// </summary>
+    /// <param name="outRef">The transaction input reference.</param>
+    /// <returns>The resolved input, or null if not found.</returns>
+    public Task<ResolvedInput?> GetUtxoByOutRefAsync(TransactionInput outRef)
+    {
+        ArgumentNullException.ThrowIfNull(outRef);
+        return GetUtxoByOutRefAsync(HexStringCache.ToHexString(outRef.TransactionId), outRef.Index);
+    }
 
+    /// <summary>
+    /// Retrieves UTxOs by multiple output references.
+    /// </summary>
+    /// <param name="outRefs">The output references as tuples.</param>
+    /// <returns>A list of resolved inputs.</returns>
     public async Task<List<ResolvedInput>> GetUtxosByOutRefsAsync(List<(string TxHash, ulong OutputIndex)> outRefs)
     {
-        if (outRefs.Count == 0) return [];
+        ArgumentNullException.ThrowIfNull(outRefs);
+
+        if (outRefs.Count == 0)
+        {
+            return [];
+        }
 
         IEnumerable<Task<ResolvedInput?>> tasks = outRefs.Select(outRef => GetUtxoByOutRefAsync(outRef.TxHash, outRef.OutputIndex));
-        ResolvedInput?[] results = await Task.WhenAll(tasks);
+        ResolvedInput?[] results = await Task.WhenAll(tasks).ConfigureAwait(false);
 
         return [.. results.Where(r => r is not null).Select(r => r!)];
     }
 
+    /// <summary>
+    /// Retrieves UTxOs by multiple TransactionInput references.
+    /// </summary>
+    /// <param name="outRefs">The transaction input references.</param>
+    /// <returns>A list of resolved inputs.</returns>
     public async Task<List<ResolvedInput>> GetUtxosByOutRefsAsync(List<TransactionInput> outRefs)
     {
-        if (outRefs.Count == 0) return [];
+        ArgumentNullException.ThrowIfNull(outRefs);
+
+        if (outRefs.Count == 0)
+        {
+            return [];
+        }
 
         IEnumerable<Task<ResolvedInput?>> tasks = outRefs.Select(GetUtxoByOutRefAsync);
-        ResolvedInput?[] results = await Task.WhenAll(tasks);
+        ResolvedInput?[] results = await Task.WhenAll(tasks).ConfigureAwait(false);
 
         return [.. results.Where(r => r is not null).Select(r => r!)];
     }
 
+    /// <summary>
+    /// Retrieves protocol parameters (uses defaults for each network).
+    /// </summary>
+    /// <returns>The protocol parameters.</returns>
     public Task<ProtocolParams> GetParametersAsync()
     {
-        ProtocolParametersResponse parameters = _networkType switch
+        ProtocolParametersResponse parameters = NetworkType switch
         {
             NetworkType.Mainnet => PParamsDefaults.Mainnet(),
             NetworkType.Preview => PParamsDefaults.Preview(),
-            NetworkType.Preprod => PParamsDefaults.Preview(), // Use Preview params for Preprod
-            NetworkType.Testnet => PParamsDefaults.Preview(), // Use Preview params for Testnet
-            _ => throw new ArgumentException($"Unsupported network type: {_networkType}")
+            NetworkType.Preprod => PParamsDefaults.Preview(),
+            NetworkType.Testnet => PParamsDefaults.Preview(),
+            NetworkType.Unknown => throw new NotImplementedException(),
+            _ => throw new ArgumentException($"Unsupported network type: {NetworkType}")
         };
 
         Dictionary<int, CborMaybeIndefList<long>> costMdls = [];
@@ -120,7 +209,7 @@ public class Kupmios(string kupoEndpoint, string ogmiosEndpoint, NetworkType net
                 "PlutusV1" => 0,
                 "PlutusV2" => 1,
                 "PlutusV3" => 2,
-                _ => throw new ArgumentException("Invalid key", nameof(key))
+                _ => throw new ArgumentException($"Invalid cost model key: {key}", nameof(key))
             };
 
             costMdls[version] = new CborDefList<long>([.. value.Select(x => (long)x)]);
@@ -132,24 +221,24 @@ public class Kupmios(string kupoEndpoint, string ogmiosEndpoint, NetworkType net
             (ulong)parameters.MaxBlockSize,
             (ulong)parameters.MaxTxSize,
             (ulong)parameters.MaxBlockHeaderSize,
-            ulong.Parse(parameters.KeyDeposit),
-            ulong.Parse(parameters.PoolDeposit),
+            ulong.Parse(parameters.KeyDeposit, CultureInfo.InvariantCulture),
+            ulong.Parse(parameters.PoolDeposit, CultureInfo.InvariantCulture),
             (ulong)parameters.EMax,
             (ulong)parameters.NOpt,
             new CborRationalNumber((ulong)(parameters.A0 * 100), 100),
             new CborRationalNumber((ulong)(parameters.Rho * 100), 100),
             new CborRationalNumber((ulong)(parameters.Tau * 100), 100),
             new ProtocolVersion(9, 0),
-            ulong.Parse(parameters.MinPoolCost),
-            ulong.Parse(parameters.CoinsPerUtxoSize),
+            ulong.Parse(parameters.MinPoolCost, CultureInfo.InvariantCulture),
+            ulong.Parse(parameters.CoinsPerUtxoSize, CultureInfo.InvariantCulture),
             new CostMdls(costMdls),
             new ExUnitPrices(
                 new CborRationalNumber((ulong)(parameters.PriceMem * 1000000), 1000000),
                 new CborRationalNumber((ulong)(parameters.PriceStep * 1000000), 1000000)
             ),
-            new ExUnits(ulong.Parse(parameters.MaxTxExMem), ulong.Parse(parameters.MaxTxExSteps)),
-            new ExUnits(ulong.Parse(parameters.MaxBlockExMem), ulong.Parse(parameters.MaxBlockExSteps)),
-            ulong.Parse(parameters.MaxValSize),
+            new ExUnits(ulong.Parse(parameters.MaxTxExMem, CultureInfo.InvariantCulture), ulong.Parse(parameters.MaxTxExSteps, CultureInfo.InvariantCulture)),
+            new ExUnits(ulong.Parse(parameters.MaxBlockExMem, CultureInfo.InvariantCulture), ulong.Parse(parameters.MaxBlockExSteps, CultureInfo.InvariantCulture)),
+            ulong.Parse(parameters.MaxValSize, CultureInfo.InvariantCulture),
             (ulong)parameters.CollateralPercent,
             (ulong)parameters.MaxCollateralInputs,
             new PoolVotingThresholds(
@@ -174,10 +263,17 @@ public class Kupmios(string kupoEndpoint, string ogmiosEndpoint, NetworkType net
         return Task.FromResult(protocolParams);
     }
 
+    /// <summary>
+    /// Submits a signed transaction via Ogmios.
+    /// </summary>
+    /// <param name="tx">The signed transaction.</param>
+    /// <returns>The transaction hash.</returns>
     public async Task<string> SubmitTransactionAsync(Transaction tx)
     {
+        ArgumentNullException.ThrowIfNull(tx);
+
         byte[] txBytes = CborSerializer.Serialize(tx);
-        string txCbor = Convert.ToHexString(txBytes).ToLowerInvariant();
+        string txCbor = Convert.ToHexString(txBytes).ToUpperInvariant();
 
         var request = new
         {
@@ -190,32 +286,36 @@ public class Kupmios(string kupoEndpoint, string ogmiosEndpoint, NetworkType net
         string json = JsonSerializer.Serialize(request);
         using StringContent content = new(json, Encoding.UTF8, "application/json");
 
-        HttpResponseMessage response = await _ogmiosClient.PostAsync("", content);
-        string responseJson = await response.Content.ReadAsStringAsync();
+        using HttpResponseMessage response = await _ogmiosClient.PostAsync((Uri?)null, content).ConfigureAwait(false);
+        string responseJson = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
 
         JsonElement result = JsonSerializer.Deserialize<JsonElement>(responseJson);
 
         if (result.TryGetProperty("error", out JsonElement error))
         {
             string message = error.GetProperty("message").GetString() ?? "Unknown error";
-            throw new Exception($"Ogmios submit failed: {message}");
+            throw new InvalidOperationException($"Ogmios submit failed: {message}");
         }
 
-        if (result.TryGetProperty("result", out JsonElement res) &&
+        return result.TryGetProperty("result", out JsonElement res) &&
             res.TryGetProperty("transaction", out JsonElement txResult) &&
-            txResult.TryGetProperty("id", out JsonElement txId))
-        {
-            return txId.GetString() ?? throw new Exception("Could not parse transaction ID");
-        }
-
-        throw new Exception("Unexpected Ogmios response format");
+            txResult.TryGetProperty("id", out JsonElement txId)
+            ? txId.GetString() ?? throw new InvalidOperationException("Could not parse transaction ID")
+            : throw new InvalidOperationException("Unexpected Ogmios response format");
     }
 
-    public Task<Metadata?> GetTransactionMetadataAsync(string txHash) =>
+    /// <summary>
+    /// Transaction metadata retrieval is not supported by Kupo.
+    /// </summary>
+    /// <param name="txHash">The transaction hash.</param>
+    /// <returns>Always throws NotImplementedException.</returns>
+    public Task<Metadata?> GetTransactionMetadataAsync(string txHash)
+    {
         throw new NotImplementedException(
             "Transaction metadata retrieval by transaction hash is not supported by Kupo. " +
             "Kupo only provides metadata by slot number, which requires Ogmios to resolve " +
             "transaction hash to slot number.");
+    }
 
     private static HttpClient CreateHttpClient(string kupoEndpoint)
     {
@@ -233,15 +333,15 @@ public class Kupmios(string kupoEndpoint, string ogmiosEndpoint, NetworkType net
 
     private async Task<List<KupoMatch>> FetchMatchesForAddress(string address)
     {
-        HttpResponseMessage response = await _httpClient.GetAsync($"matches/{address}?unspent&resolve_hashes");
+        using HttpResponseMessage response = await _httpClient.GetAsync(new Uri($"matches/{address}?unspent&resolve_hashes", UriKind.Relative)).ConfigureAwait(false);
 
         if (!response.IsSuccessStatusCode)
         {
-            string error = await response.Content.ReadAsStringAsync();
-            throw new Exception($"Failed to fetch matches for {address}: {response.StatusCode} - {error}");
+            string error = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+            throw new InvalidOperationException($"Failed to fetch matches for {address}: {response.StatusCode} - {error}");
         }
 
-        return await response.Content.ReadFromJsonAsync<List<KupoMatch>>() ?? [];
+        return await response.Content.ReadFromJsonAsync<List<KupoMatch>>().ConfigureAwait(false) ?? [];
     }
 
     private static ResolvedInput ConvertToResolvedInput(KupoMatch match)
@@ -256,8 +356,10 @@ public class Kupmios(string kupoEndpoint, string ogmiosEndpoint, NetworkType net
         return new ResolvedInput(outref, output);
     }
 
-    private static TransactionInput CreateTransactionInput(KupoMatch match) =>
-        new(HexStringCache.FromHexString(match.TransactionId), (ulong)match.OutputIndex);
+    private static TransactionInput CreateTransactionInput(KupoMatch match)
+    {
+        return new(HexStringCache.FromHexString(match.TransactionId), (ulong)match.OutputIndex);
+    }
 
     private static Value CreateValue(KupoValue kupoValue)
     {
@@ -300,28 +402,22 @@ public class Kupmios(string kupoEndpoint, string ogmiosEndpoint, NetworkType net
 
     private static DatumOption? CreateDatumOption(KupoMatch match)
     {
-        if (!string.IsNullOrEmpty(match.Datum))
-        {
-            return match.DatumType switch
+        return !string.IsNullOrEmpty(match.Datum)
+            ? match.DatumType switch
             {
                 "inline" => new InlineDatumOption(1, new CborEncodedValue(HexStringCache.FromHexString(match.Datum))),
                 "hash" => new DatumHashOption(0, HexStringCache.FromHexString(match.DatumHash!)),
                 _ => null
-            };
-        }
-
-        if (!string.IsNullOrEmpty(match.DatumHash))
-        {
-            return new DatumHashOption(0, HexStringCache.FromHexString(match.DatumHash));
-        }
-
-        return null;
+            }
+            : !string.IsNullOrEmpty(match.DatumHash) ? new DatumHashOption(0, HexStringCache.FromHexString(match.DatumHash)) : null;
     }
 
     private static CborEncodedValue? CreateScriptReference(KupoScript? script)
     {
         if (string.IsNullOrEmpty(script?.Script) || string.IsNullOrEmpty(script?.Language))
+        {
             return null;
+        }
 
         byte[] scriptBytes = HexStringCache.FromHexString(script.Script);
 
@@ -337,6 +433,17 @@ public class Kupmios(string kupoEndpoint, string ogmiosEndpoint, NetworkType net
         return new CborEncodedValue(CborSerializer.Serialize(scriptObj));
     }
 
-    private static Address CreateAddress(string bech32Address) =>
-        new(Wallet.Models.Addresses.Address.FromBech32(bech32Address).ToBytes());
+    private static Address CreateAddress(string bech32Address)
+    {
+        return new(Wallet.Models.Addresses.Address.FromBech32(bech32Address).ToBytes());
+    }
+
+    /// <summary>
+    /// Disposes the underlying HTTP clients.
+    /// </summary>
+    public void Dispose()
+    {
+        _httpClient.Dispose();
+        _ogmiosClient.Dispose();
+    }
 }

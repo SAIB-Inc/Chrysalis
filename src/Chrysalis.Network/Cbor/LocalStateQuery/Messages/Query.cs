@@ -1,7 +1,5 @@
-using Chrysalis.Cbor.Serialization;
 using Chrysalis.Cbor.Serialization.Attributes;
 using Chrysalis.Cbor.Types;
-using Chrysalis.Network.Cbor.Common;
 
 namespace Chrysalis.Network.Cbor.LocalStateQuery.Messages;
 
@@ -12,7 +10,7 @@ public partial record Query(
     [CborOrder(1)] QueryReq QueryRequest
 ) : LocalStateQueryMessage;
 
-public class QueryRequest
+public static class QueryRequest
 {
     public static Query New(QueryReq queryRequest)
     {

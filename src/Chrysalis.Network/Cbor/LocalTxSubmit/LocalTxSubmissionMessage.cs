@@ -1,6 +1,5 @@
 using Chrysalis.Cbor.Serialization.Attributes;
 using Chrysalis.Cbor.Types;
-using Chrysalis.Network.Cbor.Common;
 
 namespace Chrysalis.Network.Cbor.LocalTxSubmit;
 
@@ -8,12 +7,27 @@ namespace Chrysalis.Network.Cbor.LocalTxSubmit;
 [CborUnion]
 public abstract partial record LocalTxSubmissionMessage : CborBase;
 
-public class LocalTxSubmissionMessages
+public static class LocalTxSubmissionMessages
 {
-    public static SubmitTx SubmitTx(EraTx eraTx) => new(new(0), eraTx);
-    public static AcceptTx AcceptTx() => new(new(1));
-    public static RejectTx RejectTx(CborEncodedValue rejectReason) => new(new(2), rejectReason);
-    public static Done Done() => new(new(3));
+    public static SubmitTx SubmitTx(EraTx eraTx)
+    {
+        return new(new(0), eraTx);
+    }
+
+    public static AcceptTx AcceptTx()
+    {
+        return new(new(1));
+    }
+
+    public static RejectTx RejectTx(CborEncodedValue rejectReason)
+    {
+        return new(new(2), rejectReason);
+    }
+
+    public static Done Done()
+    {
+        return new(new(3));
+    }
 }
 
 [CborSerializable]

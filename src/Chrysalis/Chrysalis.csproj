@@ -2,8 +2,6 @@
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
     <Version>1.1.0-alpha</Version>
     <PackageId>Chrysalis</PackageId>
     <Authors>clark@saib.dev, rico.quiblat@saib.dev, wendellmor.tamayo@saib.dev</Authors>
@@ -37,10 +35,10 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="SAIB.Blake2Fast" Version="3.0.1" />
-    <PackageReference Include="System.Formats.Cbor" Version="10.0.2" />
-    <PackageReference Include="Microsoft.AspNetCore.Cryptography.KeyDerivation" Version="10.0.2" />
-    <PackageReference Include="CardanoSharp.Chaos" Version="0.1.0" />
+    <PackageReference Include="CardanoSharp.Chaos" />
+    <PackageReference Include="SAIB.Blake2Fast" />
+    <PackageReference Include="System.Formats.Cbor" />
+    <PackageReference Include="Microsoft.AspNetCore.Cryptography.KeyDerivation" />
   </ItemGroup>
 
   <Target Name="CopyProjectReferencesToPackage" DependsOnTargets="ResolveReferences">

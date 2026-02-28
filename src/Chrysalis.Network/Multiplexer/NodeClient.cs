@@ -7,7 +7,7 @@ namespace Chrysalis.Network.Multiplexer;
 /// <summary>
 /// Provides a high-level client for connecting to Cardano nodes.
 /// </summary>
-public class NodeClient : IDisposable
+public sealed class NodeClient : IDisposable
 {
     public ulong NetworkMagic { get; set; } = 2;
 
@@ -30,12 +30,12 @@ public class NodeClient : IDisposable
     public ChainSync ChainSync { get; private set; } = default!;
 
     /// <summary>
-    /// Gets the LocalTxSubmit protocol handler
+    /// Gets the LocalTxSubmit protocol handler.
     /// </summary>
     public LocalTxSubmit LocalTxSubmit { get; private set; } = default!;
 
     /// <summary>
-    /// Gets the LocalTxMonitor protocol handler
+    /// Gets the LocalTxMonitor protocol handler.
     /// </summary>
     public LocalTxMonitor LocalTxMonitor { get; private set; } = default!;
 
@@ -57,9 +57,18 @@ public class NodeClient : IDisposable
     /// <exception cref="InvalidOperationException">Thrown if the connection fails.</exception>
     public static async Task<NodeClient> ConnectAsync(string socketPath, CancellationToken cancellationToken = default)
     {
-        UnixBearer unixBearer = await UnixBearer.CreateAsync(socketPath, cancellationToken);
-        Plexer plexer = new(unixBearer);
-        return new(plexer);
+        UnixBearer? unixBearer = null;
+        try
+        {
+            unixBearer = await UnixBearer.CreateAsync(socketPath, cancellationToken).ConfigureAwait(false);
+            NodeClient client = CreateFromBearer(unixBearer);
+            unixBearer = null; // Ownership transferred
+            return client;
+        }
+        finally
+        {
+            unixBearer?.Dispose();
+        }
     }
 
     /// <summary>
@@ -71,15 +80,39 @@ public class NodeClient : IDisposable
     /// <returns>A connected NodeClient instance.</returns>
     public static async Task<NodeClient> ConnectAsync(string host, int port, CancellationToken cancellationToken = default)
     {
-        TcpBearer tcpBearer = await TcpBearer.CreateAsync(host, port, cancellationToken);
-        Plexer plexer = new(tcpBearer);
-        return new(plexer);
+        TcpBearer? tcpBearer = null;
+        try
+        {
+            tcpBearer = await TcpBearer.CreateAsync(host, port, cancellationToken).ConfigureAwait(false);
+            NodeClient client = CreateFromBearer(tcpBearer);
+            tcpBearer = null; // Ownership transferred
+            return client;
+        }
+        finally
+        {
+            tcpBearer?.Dispose();
+        }
+    }
+
+    private static NodeClient CreateFromBearer(IBearer bearer)
+    {
+        Plexer plexer = new(bearer);
+        try
+        {
+            NodeClient client = new(plexer);
+            return client;
+        }
+        catch
+        {
+            plexer.Dispose();
+            throw;
+        }
     }
 
     /// <summary>
     /// Starts the client and initializes protocol handlers.
     /// </summary>
-    /// <param name="cancellationToken">A token to cancel the start operation.</param>
+    /// <param name="networkMagic">The network magic number for the handshake.</param>
     /// <exception cref="InvalidOperationException">Thrown if the client is already started.</exception>
     public async Task StartAsync(ulong networkMagic = 2)
     {
@@ -94,8 +127,8 @@ public class NodeClient : IDisposable
 
         NetworkMagic = networkMagic;
 
-        ProposeVersions proposeVersion = HandshakeMessages.ProposeVersions(VersionTables.N2C_V10_AND_ABOVE(networkMagic));
-        HandshakeMessage handshakeResponse = await Handshake.SendAsync(proposeVersion, CancellationToken.None);
+        ProposeVersions proposeVersion = HandshakeMessages.ProposeVersions(VersionTables.N2cV10AndAbove(networkMagic));
+        HandshakeMessage handshakeResponse = await Handshake.SendAsync(proposeVersion, CancellationToken.None).ConfigureAwait(false);
 
         if (handshakeResponse is not AcceptVersion)
         {
@@ -111,7 +144,10 @@ public class NodeClient : IDisposable
     /// Task.IsCompleted returns true when the task is in RanToCompletion, Faulted, or Canceled state,
     /// so this single check covers all failure scenarios.
     /// </remarks>
-    public bool IsPlexerHealthy() => _plexerTask is { IsCompleted: false };
+    public bool IsPlexerHealthy()
+    {
+        return _plexerTask is { IsCompleted: false };
+    }
 
     /// <summary>
     /// Gets the exception that caused the plexer to fail, if any.
@@ -128,6 +164,5 @@ public class NodeClient : IDisposable
     public void Dispose()
     {
         _plexer.Dispose();
-        GC.SuppressFinalize(this);
     }
 }

@@ -1,6 +1,5 @@
 using Chrysalis.Cbor.Serialization.Attributes;
 using Chrysalis.Cbor.Types;
-using Chrysalis.Network.Cbor.Common;
 using Chrysalis.Network.Cbor.LocalTxSubmit;
 
 namespace Chrysalis.Network.Cbor.LocalTxMonitor;
@@ -9,16 +8,31 @@ namespace Chrysalis.Network.Cbor.LocalTxMonitor;
 [CborUnion]
 public abstract partial record LocalTxMonitorMessage : CborBase;
 
-public class LocalTxMonitorMessages
+public static class LocalTxMonitorMessages
 {
-    public static Acquire Acquire() => new(new(1));
-    public static Release Release() => new(new(3));
-    public static NextTx NextTx() => new(new(5));
-    public static HasTx HasTx(string txId) => new(new(7), new(txId));
-    public static GetSizes GetSizes() => new(new(9));
-    public static GetMeasures GetMeasures() => new(new(11));
+    public static Acquire Acquire()
+    {
+        return new(new(1));
+    }
 
+    public static Release Release()
+    {
+        return new(new(3));
+    }
 
+    public static NextTx NextTx()
+    {
+        return new(new(5));
+    }
+
+    public static HasTx HasTx(string txId)
+    {
+        return new(new(7), new(txId));
+    }
+
+    public static GetSizes DefaultGetSizes => new(new(9));
+
+    public static GetMeasures DefaultGetMeasures => new(new(11));
 }
 
 [CborSerializable]
@@ -116,6 +130,3 @@ public partial record Measures(
     [CborOrder(0)] int CurrentSize,
     [CborOrder(1)] int MaxCapacity
 ) : CborBase;
-
-
-

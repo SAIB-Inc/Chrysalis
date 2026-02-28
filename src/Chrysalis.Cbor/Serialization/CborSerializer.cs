@@ -25,10 +25,12 @@ public static class CborSerializer
     /// 4. Delegates to the appropriate serialization implementation
     /// 5. Encodes and returns the final byte array
     /// </remarks>
-    /// <exception cref="CborSerializationException">Thrown when an error occurs during serialization.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when an error occurs during serialization.</exception>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static byte[] Serialize<T>(T value) where T : CborBase
     {
+        ArgumentNullException.ThrowIfNull(value);
+
         if (value.Raw is not null)
         {
             return value.Raw.Value.ToArray();
@@ -55,13 +57,12 @@ public static class CborSerializer
     /// 5. Stores the original byte array in the instance's Raw property
     /// 6. Returns the typed instance
     /// </remarks>
-    /// <exception cref="CborDeserializationException">Thrown when an error occurs during deserialization.</exception>
-    /// <exception cref="CborTypeMismatchException">Thrown when the deserialized type does not match the expected type.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when an error occurs during deserialization or when the deserialized type does not match the expected type.</exception>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static T Deserialize<T>(ReadOnlyMemory<byte> data) where T : CborBase
     {
         CborReader reader = new(data, CborConformanceMode.Lax);
         T? result = GenericSerializationUtil.Read<T>(reader);
-        return result ?? throw new Exception("Deserialization failed: result is null.");
+        return result ?? throw new InvalidOperationException("Deserialization failed: result is null.");
     }
 }

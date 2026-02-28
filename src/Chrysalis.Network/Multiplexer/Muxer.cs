@@ -16,12 +16,11 @@ namespace Chrysalis.Network.Multiplexer;
 /// <remarks>
 /// Initializes a new instance of the <see cref="Muxer"/> class.
 /// </remarks>
-/// <param name="bearer">The bearer to write segments to.</param>
+/// <param name="bearerWriter">The pipe writer to write segments to.</param>
 /// <param name="muxerMode">The mode of operation (initiator or responder).</param>
-/// <exception cref="ArgumentNullException">Thrown if bearer is null.</exception>
-public sealed class Muxer(IBearer bearer, ProtocolMode muxerMode) : IDisposable
+public sealed class Muxer(PipeWriter bearerWriter, ProtocolMode muxerMode) : IDisposable
 {
-    private readonly IBearer _bearer = bearer ?? throw new ArgumentNullException(nameof(bearer));
+    private readonly PipeWriter _bearerWriter = bearerWriter ?? throw new ArgumentNullException(nameof(bearerWriter));
     private readonly ProtocolMode _muxerMode = muxerMode;
     private readonly DateTimeOffset _startTime = DateTimeOffset.UtcNow;
     private readonly Pipe _pipe = new();
@@ -45,11 +44,11 @@ public sealed class Muxer(IBearer bearer, ProtocolMode muxerMode) : IDisposable
         // Write directly using the sequence without creating an additional Memory/Span
         foreach (ReadOnlyMemory<byte> memory in encodedSegment)
         {
-            await _bearer.Writer.WriteAsync(memory, cancellationToken);
+            _ = await _bearerWriter.WriteAsync(memory, cancellationToken).ConfigureAwait(false);
         }
 
-        // Use ValueTask.WhenAll to potentially process multiple operations in parallel
-        await _bearer.Writer.FlushAsync(cancellationToken);
+        // Flush to ensure data is sent
+        _ = await _bearerWriter.FlushAsync(cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -57,8 +56,10 @@ public sealed class Muxer(IBearer bearer, ProtocolMode muxerMode) : IDisposable
     /// </summary>
     /// <returns>The transmission time in milliseconds.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private uint CalculateTransmissionTime() =>
-        (uint)Math.Min((DateTimeOffset.UtcNow - _startTime).TotalMilliseconds, uint.MaxValue);
+    private uint CalculateTransmissionTime()
+    {
+        return (uint)Math.Min((DateTimeOffset.UtcNow - _startTime).TotalMilliseconds, uint.MaxValue);
+    }
 
     /// <summary>
     /// Runs the muxer, continuously reading messages from the channel and writing them to the bearer.
@@ -72,7 +73,7 @@ public sealed class Muxer(IBearer bearer, ProtocolMode muxerMode) : IDisposable
         {
             while (!cancellationToken.IsCancellationRequested)
             {
-                ReadResult protocolMessageResult = await _pipe.Reader.ReadAsync(cancellationToken);
+                ReadResult protocolMessageResult = await _pipe.Reader.ReadAsync(cancellationToken).ConfigureAwait(false);
                 ReadOnlySequence<byte> protocolMessageBuffer = protocolMessageResult.Buffer;
 
                 // protocol id
@@ -94,7 +95,7 @@ public sealed class Muxer(IBearer bearer, ProtocolMode muxerMode) : IDisposable
                 );
 
                 MuxSegment segment = new(segmentHeader, payloadSlice);
-                await WriteSegmentAsync(segment, cancellationToken);
+                await WriteSegmentAsync(segment, cancellationToken).ConfigureAwait(false);
                 _pipe.Reader.AdvanceTo(payloadSlice.End);
             }
         }
@@ -112,7 +113,7 @@ public sealed class Muxer(IBearer bearer, ProtocolMode muxerMode) : IDisposable
         finally
         {
             // Complete pipe so waiting writers are notified
-            _pipe.Writer.Complete(muxerException);
+            await _pipe.Writer.CompleteAsync(muxerException).ConfigureAwait(false);
         }
     }
 
@@ -121,13 +122,14 @@ public sealed class Muxer(IBearer bearer, ProtocolMode muxerMode) : IDisposable
     /// </summary>
     public void Dispose()
     {
-        if (_isDisposed) return;
+        if (_isDisposed)
+        {
+            return;
+        }
 
         // Complete the channel
         _pipe.Writer.Complete();
 
-        // Don't dispose bearer here - it's provided externally
         _isDisposed = true;
-        GC.SuppressFinalize(this);
     }
 }

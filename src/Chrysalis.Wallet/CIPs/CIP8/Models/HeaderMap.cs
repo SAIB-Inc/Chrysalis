@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using Chrysalis.Cbor.Serialization.Attributes;
 using Chrysalis.Cbor.Types;
 

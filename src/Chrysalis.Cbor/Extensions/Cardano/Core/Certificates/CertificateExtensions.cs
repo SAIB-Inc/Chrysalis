@@ -5,10 +5,20 @@ using CCertificate = Chrysalis.Cbor.Types.Cardano.Core.Certificates.Certificate;
 
 namespace Chrysalis.Cbor.Extensions.Cardano.Core.Certificates;
 
+/// <summary>
+/// Extension methods for <see cref="CCertificate"/> to access certificate properties across types.
+/// </summary>
 public static class CertificateExtensions
 {
-    public static int Tag(this CCertificate self) =>
-        self switch
+    /// <summary>
+    /// Gets the certificate type tag.
+    /// </summary>
+    /// <param name="self">The certificate instance.</param>
+    /// <returns>The type tag value.</returns>
+    public static int Tag(this CCertificate self)
+    {
+        ArgumentNullException.ThrowIfNull(self);
+        return self switch
         {
             StakeRegistration stakeRegistration => stakeRegistration.Tag,
             StakeDeregistration stakeDeregistration => stakeDeregistration.Tag,
@@ -28,9 +38,17 @@ public static class CertificateExtensions
             UpdateDrepCert updateDrepCert => updateDrepCert.Tag,
             _ => throw new NotImplementedException()
         };
+    }
 
-    public static Credential? StakeCredential(this CCertificate self) =>
-        self switch
+    /// <summary>
+    /// Gets the stake credential from the certificate, if applicable.
+    /// </summary>
+    /// <param name="self">The certificate instance.</param>
+    /// <returns>The stake credential, or null.</returns>
+    public static Credential? StakeCredential(this CCertificate self)
+    {
+        ArgumentNullException.ThrowIfNull(self);
+        return self switch
         {
             StakeRegistration stakeRegistration => stakeRegistration.StakeCredential,
             StakeDeregistration stakeDeregistration => stakeDeregistration.StakeCredential,
@@ -43,18 +61,34 @@ public static class CertificateExtensions
             StakeVoteRegDelegCert stakeVoteRegDelegCert => stakeVoteRegDelegCert.StakeCredential,
             _ => null
         };
+    }
 
-    public static Credential? DRepCredential(this CCertificate self) =>
-        self switch
+    /// <summary>
+    /// Gets the DRep credential from the certificate, if applicable.
+    /// </summary>
+    /// <param name="self">The certificate instance.</param>
+    /// <returns>The DRep credential, or null.</returns>
+    public static Credential? DRepCredential(this CCertificate self)
+    {
+        ArgumentNullException.ThrowIfNull(self);
+        return self switch
         {
             RegDrepCert regDrepCert => regDrepCert.DRepCredential,
             UnRegDrepCert unRegDrepCert => unRegDrepCert.DrepCredential,
             UpdateDrepCert updateDrepCert => updateDrepCert.DrepCredential,
             _ => null
         };
+    }
 
-    public static byte[]? PoolKeyHash(this CCertificate self) =>
-        self switch
+    /// <summary>
+    /// Gets the pool key hash from the certificate, if applicable.
+    /// </summary>
+    /// <param name="self">The certificate instance.</param>
+    /// <returns>The pool key hash bytes, or null.</returns>
+    public static byte[]? PoolKeyHash(this CCertificate self)
+    {
+        ArgumentNullException.ThrowIfNull(self);
+        return self switch
         {
             StakeDelegation stakeDelegation => stakeDelegation.PoolKeyHash,
             PoolRetirement poolRetirement => poolRetirement.PoolKeyHash,
@@ -63,9 +97,17 @@ public static class CertificateExtensions
             StakeVoteRegDelegCert stakeVoteRegDelegCert => stakeVoteRegDelegCert.PoolKeyHash,
             _ => null
         };
+    }
 
-    public static ulong? Coin(this CCertificate self) =>
-        self switch
+    /// <summary>
+    /// Gets the coin deposit amount from the certificate, if applicable.
+    /// </summary>
+    /// <param name="self">The certificate instance.</param>
+    /// <returns>The coin amount, or null.</returns>
+    public static ulong? Coin(this CCertificate self)
+    {
+        ArgumentNullException.ThrowIfNull(self);
+        return self switch
         {
             RegCert regCert => regCert.Coin,
             UnRegCert unRegCert => unRegCert.Coin,
@@ -76,9 +118,17 @@ public static class CertificateExtensions
             UnRegDrepCert unRegDrepCert => unRegDrepCert.Coin,
             _ => null
         };
+    }
 
-    public static DRep? DRep(this CCertificate self) =>
-        self switch
+    /// <summary>
+    /// Gets the DRep from the certificate, if applicable.
+    /// </summary>
+    /// <param name="self">The certificate instance.</param>
+    /// <returns>The DRep, or null.</returns>
+    public static DRep? DRep(this CCertificate self)
+    {
+        ArgumentNullException.ThrowIfNull(self);
+        return self switch
         {
             VoteDelegCert voteDelegCert => voteDelegCert.DRep,
             StakeVoteDelegCert stakeVoteDelegCert => stakeVoteDelegCert.DRep,
@@ -86,13 +136,22 @@ public static class CertificateExtensions
             StakeVoteRegDelegCert stakeVoteRegDelegCert => stakeVoteRegDelegCert.Drep,
             _ => null
         };
+    }
 
-    public static Anchor? Anchor(this CCertificate self) =>
-        self switch
+    /// <summary>
+    /// Gets the anchor from the certificate, if applicable.
+    /// </summary>
+    /// <param name="self">The certificate instance.</param>
+    /// <returns>The anchor, or null.</returns>
+    public static Anchor? Anchor(this CCertificate self)
+    {
+        ArgumentNullException.ThrowIfNull(self);
+        return self switch
         {
             ResignCommitteeColdCert resignCommitteeColdCert => resignCommitteeColdCert.Anchor,
             RegDrepCert regDrepCert => regDrepCert.Anchor,
             UpdateDrepCert updateDrepCert => updateDrepCert.Anchor,
             _ => null
         };
+    }
 }

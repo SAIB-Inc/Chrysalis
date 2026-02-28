@@ -21,9 +21,20 @@ public static class RawQueries
     public static QueryReq GetTip => CreateBlockQuery(new GlobalQuery(0));
     public static QueryReq GetCurrentProtocolParams => CreateBlockQuery(new GlobalQuery(3));
 
-    public static QueryReq CreateBlockQuery(QueryReq query) => new BaseQuery(0, new BaseQuery(0, new BaseQuery((int)QueryEra.Conway, query)));
-    public static QueryReq GetUtxoByAddress(List<byte[]> addresses) => CreateBlockQuery(new UtxoByAddressQuery(6, new(addresses)));
-    public static QueryReq GetUtxoByTxIns(List<TransactionInput> txIns) => CreateBlockQuery(new UtxoByTxInQuery(15, new(txIns)));
+    public static QueryReq CreateBlockQuery(QueryReq query)
+    {
+        return new BaseQuery(0, new BaseQuery(0, new BaseQuery((int)QueryEra.Conway, query)));
+    }
+
+    public static QueryReq GetUtxoByAddress(List<byte[]> addresses)
+    {
+        return CreateBlockQuery(new UtxoByAddressQuery(6, new(addresses)));
+    }
+
+    public static QueryReq GetUtxoByTxIns(List<TransactionInput> txIns)
+    {
+        return CreateBlockQuery(new UtxoByTxInQuery(15, new(txIns)));
+    }
 }
 
 

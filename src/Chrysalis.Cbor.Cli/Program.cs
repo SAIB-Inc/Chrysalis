@@ -3,8 +3,7 @@ using Chrysalis.Cbor.Types.Cardano.Core;
 
 if (Console.IsInputRedirected)
 {
-    Stream inputStream = Console.OpenStandardInput();
-    // Stream outputStream = Console.OpenStandardOutput();
+    using Stream inputStream = Console.OpenStandardInput();
     byte[] buffer = new byte[1024];
 
     while (true)
@@ -48,7 +47,7 @@ if (Console.IsInputRedirected)
         }
 
         //Console.Out.WriteLine(Convert.ToHexString(blockBuffer));
-        CborSerializer.Deserialize<BlockWithEra>(blockBuffer);
+        _ = CborSerializer.Deserialize<BlockWithEra>(blockBuffer);
         //Console.Out.WriteLine(block.Block.Slot());
     }
 }

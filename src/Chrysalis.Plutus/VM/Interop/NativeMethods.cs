@@ -7,6 +7,7 @@ internal static partial class NativeMethods
 {
     private const string LibraryName = "plutus_vm_dotnet_rs";
 
+    [DefaultDllImportSearchPaths(DllImportSearchPath.SafeDirectories)]
     [LibraryImport(LibraryName, EntryPoint = "eval_tx")]
     public static partial TxEvalResultArray EvalTxRaw(
         [In] byte[] txCborBytes,
@@ -16,9 +17,11 @@ internal static partial class NativeMethods
         uint networkType
     );
 
+    [DefaultDllImportSearchPaths(DllImportSearchPath.SafeDirectories)]
     [LibraryImport(LibraryName, EntryPoint = "free_eval_results")]
     public static partial void FreeEvalResults(TxEvalResultArray results);
 
+    [DefaultDllImportSearchPaths(DllImportSearchPath.SafeDirectories)]
     [LibraryImport(LibraryName, EntryPoint = "apply_params_to_script_raw")]
     public static unsafe partial byte* ApplyParamsToScriptRaw(
         [In] byte[] scriptCborBytes,
@@ -28,6 +31,7 @@ internal static partial class NativeMethods
         out nuint outLength
     );
 
+    [DefaultDllImportSearchPaths(DllImportSearchPath.SafeDirectories)]
     [LibraryImport(LibraryName, EntryPoint = "free_script_bytes")]
     public static partial void FreeScriptBytes(IntPtr ptr, nuint len);
 }

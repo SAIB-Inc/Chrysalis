@@ -2,10 +2,20 @@ using Chrysalis.Cbor.Types.Cardano.Core.Governance;
 
 namespace Chrysalis.Cbor.Extensions.Cardano.Core.Certificates;
 
+/// <summary>
+/// Extension methods for <see cref="DRep"/> to access tag and key hash.
+/// </summary>
 public static class DRepExtensions
 {
-    public static int Tag(this DRep self) =>
-        self switch
+    /// <summary>
+    /// Gets the DRep type tag.
+    /// </summary>
+    /// <param name="self">The DRep instance.</param>
+    /// <returns>The type tag value.</returns>
+    public static int Tag(this DRep self)
+    {
+        ArgumentNullException.ThrowIfNull(self);
+        return self switch
         {
             DRepAddrKeyHash dRepAddrKeyHash => dRepAddrKeyHash.Tag,
             DRepScriptHash dRepScriptHash => dRepScriptHash.Tag,
@@ -13,12 +23,21 @@ public static class DRepExtensions
             DRepNoConfidence dRepNoConfidence => dRepNoConfidence.Tag,
             _ => throw new NotImplementedException()
         };
+    }
 
-    public static byte[]? KeyHash(this DRep self) =>
-        self switch
+    /// <summary>
+    /// Gets the key hash or script hash of the DRep, if applicable.
+    /// </summary>
+    /// <param name="self">The DRep instance.</param>
+    /// <returns>The key or script hash bytes, or null for abstain/no-confidence.</returns>
+    public static byte[]? KeyHash(this DRep self)
+    {
+        ArgumentNullException.ThrowIfNull(self);
+        return self switch
         {
             DRepAddrKeyHash dRepAddrKeyHash => dRepAddrKeyHash.AddrKeyHash,
             DRepScriptHash dRepScriptHash => dRepScriptHash.ScriptHash,
             _ => null
         };
+    }
 }

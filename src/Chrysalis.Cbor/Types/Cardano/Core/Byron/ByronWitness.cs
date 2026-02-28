@@ -1,4 +1,3 @@
-using Chrysalis.Cbor.Serialization;
 using Chrysalis.Cbor.Serialization.Attributes;
 
 namespace Chrysalis.Cbor.Types.Cardano.Core.Byron;
@@ -9,6 +8,8 @@ namespace Chrysalis.Cbor.Types.Cardano.Core.Byron;
 /// Variant 1: ScriptWitness [validator_script, redeemer_script]
 /// Variant 2: RedeemWitness [pubkey, signature]
 /// </summary>
+/// <param name="Variant">The witness variant type.</param>
+/// <param name="Data">The encoded witness data.</param>
 [CborSerializable]
 [CborList]
 public partial record ByronTxWitness(

@@ -239,7 +239,7 @@ public class AddressTests
         Address address = Address.FromPublicKeys(NetworkType.Mainnet, AddressType.Base, paymentPub, stakePub);
 
         Assert.Equal("addr", address.GetPrefix());
-        Assert.StartsWith("addr1", address.ToBech32());
+        Assert.StartsWith("addr1", address.ToBech32(), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -249,7 +249,7 @@ public class AddressTests
         Address address = Address.FromPublicKeys(NetworkType.Testnet, AddressType.Base, paymentPub, stakePub);
 
         Assert.Equal("addr_test", address.GetPrefix());
-        Assert.StartsWith("addr_test1", address.ToBech32());
+        Assert.StartsWith("addr_test1", address.ToBech32(), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -258,7 +258,7 @@ public class AddressTests
         Address stakeAddr = CreateStakeAddress(NetworkType.Mainnet);
 
         Assert.Equal("stake", stakeAddr.GetPrefix());
-        Assert.StartsWith("stake1", stakeAddr.ToBech32());
+        Assert.StartsWith("stake1", stakeAddr.ToBech32(), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -267,7 +267,7 @@ public class AddressTests
         Address stakeAddr = CreateStakeAddress(NetworkType.Testnet);
 
         Assert.Equal("stake_test", stakeAddr.GetPrefix());
-        Assert.StartsWith("stake_test1", stakeAddr.ToBech32());
+        Assert.StartsWith("stake_test1", stakeAddr.ToBech32(), StringComparison.Ordinal);
     }
 
     [Theory]
@@ -277,7 +277,7 @@ public class AddressTests
     {
         Address stakeAddr = CreateStakeAddress(networkType);
 
-        Assert.StartsWith("stake_test1", stakeAddr.ToBech32());
+        Assert.StartsWith("stake_test1", stakeAddr.ToBech32(), StringComparison.Ordinal);
     }
 
     #endregion
@@ -441,7 +441,7 @@ public class AddressTests
     public void GetAddressHeader_UnknownType_ThrowsArgumentOutOfRangeException()
     {
         // Header byte 0x81 has type nibble 8 which is not a valid CIP-19 type
-        Assert.Throws<ArgumentOutOfRangeException>(() => Address.GetAddressHeader(0x81));
+        _ = Assert.Throws<ArgumentOutOfRangeException>(() => Address.GetAddressHeader(0x81));
     }
 
     [Fact]
@@ -453,7 +453,7 @@ public class AddressTests
         string hex = address.ToHex();
 
         Assert.NotEmpty(hex);
-        Assert.True(hex.All(c => "0123456789abcdef".Contains(c)));
+        Assert.True(hex.All(c => "0123456789abcdef".Contains(c, StringComparison.Ordinal)));
     }
 
     #endregion

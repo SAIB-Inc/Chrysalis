@@ -2,19 +2,18 @@ using Chrysalis.Cbor.Serialization;
 using Chrysalis.Cbor.Serialization.Attributes;
 using Chrysalis.Cbor.Types;
 using Chrysalis.Cbor.Types.Cardano.Core;
-using Chrysalis.Cbor.Types.Cardano.Core.Common;
 using Chrysalis.Cbor.Types.Cardano.Core.Transaction;
 using Chrysalis.Cbor.Types.Cardano.Core.TransactionWitness;
 
 namespace Chrysalis.Test;
 
 
-record TestRecord(string p, int i);
+internal record TestRecord(string P, int I);
 
 // Test record with required fields - all fields must be present
 [CborSerializable]
 [CborList]
-partial record PersonRequired(
+public partial record PersonRequired(
     [CborOrder(0)] int Id,
     [CborOrder(1)] string Name,
     [CborOrder(2)] int Age
@@ -23,7 +22,7 @@ partial record PersonRequired(
 // Test record with nullable fields - fields can be missing
 [CborSerializable]
 [CborList]
-partial record PersonOptional(
+public partial record PersonOptional(
     [CborOrder(0)] int? Id,
     [CborOrder(1)] string? Name,
     [CborOrder(2)] int? Age
@@ -51,7 +50,7 @@ public class CborTests
         tx.TransactionBody.Raw = null;
         tx.TransactionWitnessSet.Raw = null;
 
-        string serialized = Convert.ToHexString(CborSerializer.Serialize(tx));
+        _ = Convert.ToHexString(CborSerializer.Serialize(tx));
 
         Assert.NotNull("");
     }
@@ -60,23 +59,23 @@ public class CborTests
     public void RequiredFieldValidation_ShouldThrowWhenRequiredFieldMissing()
     {
         // Create a PersonOptional with missing fields (nulls)
-        var optionalPerson = new PersonOptional(1, null, null);
+        PersonOptional optionalPerson = new(1, null, null);
         byte[] cbor = CborSerializer.Serialize(optionalPerson);
 
         // Try to deserialize as PersonRequired - should fail because Name and Age are required
-        var ex = Assert.Throws<Exception>(() => (PersonRequired)PersonRequired.Read(cbor));
-        Assert.Contains("Required field", ex.Message);
+        Exception ex = Assert.Throws<Exception>(() => PersonRequired.Read(cbor));
+        Assert.Contains("Required field", ex.Message, StringComparison.Ordinal);
     }
 
     [Fact]
     public void RequiredFieldValidation_ShouldSucceedWhenAllRequiredFieldsPresent()
     {
         // Create a PersonRequired with all fields
-        var requiredPerson = new PersonRequired(1, "John", 25);
+        PersonRequired requiredPerson = new(1, "John", 25);
         byte[] cbor = CborSerializer.Serialize(requiredPerson);
 
         // Should succeed - all required fields are present
-        var deserialized = (PersonRequired)PersonRequired.Read(cbor);
+        PersonRequired deserialized = PersonRequired.Read(cbor);
         Assert.Equal(1, deserialized.Id);
         Assert.Equal("John", deserialized.Name);
         Assert.Equal(25, deserialized.Age);
@@ -86,11 +85,11 @@ public class CborTests
     public void RequiredFieldValidation_ShouldSucceedWhenDeserializingRequiredAsOptional()
     {
         // Create a PersonRequired with all fields
-        var requiredPerson = new PersonRequired(1, "John", 25);
+        PersonRequired requiredPerson = new(1, "John", 25);
         byte[] cbor = CborSerializer.Serialize(requiredPerson);
 
         // Should succeed when deserializing as optional - all fields present
-        var optionalPerson = (PersonOptional)PersonOptional.Read(cbor);
+        PersonOptional optionalPerson = PersonOptional.Read(cbor);
         Assert.Equal(1, optionalPerson.Id);
         Assert.Equal("John", optionalPerson.Name);
         Assert.Equal(25, optionalPerson.Age);

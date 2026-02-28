@@ -6,7 +6,7 @@ namespace Chrysalis.Network.Core;
 /// <summary>
 /// TCP implementation of the bearer interface for network communication.
 /// </summary>
-public class TcpBearer : IBearer
+public sealed class TcpBearer : IBearer
 {
     private readonly TcpClient _client;
     private readonly NetworkStream _stream;
@@ -53,7 +53,7 @@ public class TcpBearer : IBearer
     public static async Task<TcpBearer> CreateAsync(string host, int port, CancellationToken cancellationToken)
     {
         TcpClient client = new();
-        await client.ConnectAsync(host, port, cancellationToken);
+        await client.ConnectAsync(host, port, cancellationToken).ConfigureAwait(false);
         NetworkStream stream = client.GetStream();
         return new TcpBearer(client, stream);
     }
@@ -63,7 +63,10 @@ public class TcpBearer : IBearer
     /// </summary>
     public void Dispose()
     {
-        if (_isDisposed) return;
+        if (_isDisposed)
+        {
+            return;
+        }
 
         Reader.Complete();
         Writer.Complete();
@@ -71,6 +74,5 @@ public class TcpBearer : IBearer
         _client.Dispose();
 
         _isDisposed = true;
-        GC.SuppressFinalize(this);
     }
 }

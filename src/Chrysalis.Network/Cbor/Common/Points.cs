@@ -8,7 +8,10 @@ namespace Chrysalis.Network.Cbor.Common;
 public abstract partial record Point : CborBase
 {
     public static Point Origin => new OriginPoint();
-    public static Point Specific(ulong slot, byte[] hash) => new SpecificPoint(slot, hash);
+    public static Point Specific(ulong slot, byte[] hash)
+    {
+        return new SpecificPoint(slot, hash);
+    }
 }
 
 [CborSerializable]

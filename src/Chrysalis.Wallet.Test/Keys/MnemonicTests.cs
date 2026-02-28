@@ -1,6 +1,5 @@
 using Chrysalis.Wallet.Models.Keys;
 using Chrysalis.Wallet.Words;
-using Xunit;
 
 namespace Chrysalis.Wallet.Test.Keys;
 
@@ -25,14 +24,14 @@ public class MnemonicTests
     [InlineData(25)]
     public void Generate_InvalidWordLength_ThrowsArgumentOutOfRangeException(int wordLength)
     {
-        Assert.Throws<ArgumentOutOfRangeException>(() => Mnemonic.Generate(English.Words, wordLength));
+        _ = Assert.Throws<ArgumentOutOfRangeException>(() => Mnemonic.Generate(English.Words, wordLength));
     }
 
     [Fact]
     public void Generate_InvalidWordList_ThrowsArgumentOutOfRangeException()
     {
         string[] invalidWordList = new string[100];
-        Assert.Throws<ArgumentOutOfRangeException>(() => Mnemonic.Generate(invalidWordList, 12));
+        _ = Assert.Throws<ArgumentOutOfRangeException>(() => Mnemonic.Generate(invalidWordList, 12));
     }
 
     [Fact]
@@ -62,7 +61,7 @@ public class MnemonicTests
     {
         string invalidPhrase = "invalid word here abandon abandon abandon abandon abandon abandon abandon abandon about";
 
-        Assert.Throws<ArgumentException>(() => Mnemonic.Restore(invalidPhrase, English.Words));
+        _ = Assert.Throws<ArgumentException>(() => Mnemonic.Restore(invalidPhrase, English.Words));
     }
 
     [Fact]
@@ -71,7 +70,7 @@ public class MnemonicTests
         // Valid words but invalid checksum
         string invalidChecksum = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon";
 
-        Assert.Throws<FormatException>(() => Mnemonic.Restore(invalidChecksum, English.Words));
+        _ = Assert.Throws<FormatException>(() => Mnemonic.Restore(invalidChecksum, English.Words));
     }
 
     [Fact]
@@ -112,7 +111,7 @@ public class MnemonicTests
     public void Restore_9WordMnemonic_ThrowsFormatException()
     {
         // 9-word mnemonics are non-standard and should be rejected
-        Assert.Throws<FormatException>(() =>
+        _ = Assert.Throws<FormatException>(() =>
             Mnemonic.Restore("abandon abandon abandon abandon abandon abandon abandon abandon about", English.Words));
     }
 }

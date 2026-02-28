@@ -4,41 +4,41 @@ namespace Chrysalis.Cbor.CodeGen;
 
 public sealed partial class CborSerializerCodeGen
 {
-    private class UnionEmitter : ICborSerializerEmitter
+    private sealed class UnionEmitter : ICborSerializerEmitter
     {
         public StringBuilder EmitReader(StringBuilder sb, SerializableTypeMetadata metadata)
         {
-            sb.AppendLine($"List<string> errors = [];");
-            foreach (var childType in metadata.ChildTypes)
+            _ = sb.AppendLine($"List<string> errors = [];");
+            foreach (SerializableTypeMetadata childType in metadata.ChildTypes)
             {
-                sb.AppendLine($"try");
-                sb.AppendLine("{");
-                sb.AppendLine($"return ({metadata.FullyQualifiedName}){childType.FullyQualifiedName}.Read(data);");
-                sb.AppendLine("}");
-                sb.AppendLine($"catch (Exception ex)");
-                sb.AppendLine("{");
-                sb.AppendLine($"errors.Add(ex.Message);");
-                sb.AppendLine("}");
+                _ = sb.AppendLine($"try");
+                _ = sb.AppendLine("{");
+                _ = sb.AppendLine($"return ({metadata.FullyQualifiedName}){childType.FullyQualifiedName}.Read(data);");
+                _ = sb.AppendLine("}");
+                _ = sb.AppendLine($"catch (Exception ex)");
+                _ = sb.AppendLine("{");
+                _ = sb.AppendLine($"errors.Add(ex.Message);");
+                _ = sb.AppendLine("}");
             }
 
-            sb.AppendLine($"throw new Exception(\"Union deserialization failed. {metadata.FullyQualifiedName} \" + string.Join(\"\\n\", errors));");
+            _ = sb.AppendLine($"throw new Exception(\"Union deserialization failed. {metadata.FullyQualifiedName} \" + string.Join(\"\\n\", errors));");
 
             return sb;
         }
 
         public StringBuilder EmitWriter(StringBuilder sb, SerializableTypeMetadata metadata)
         {
-            sb.AppendLine("switch (data.CborTypeName)");
-            sb.AppendLine("{");
-            foreach (var childType in metadata.ChildTypes)
+            _ = sb.AppendLine("switch (data.CborTypeName)");
+            _ = sb.AppendLine("{");
+            foreach (SerializableTypeMetadata childType in metadata.ChildTypes)
             {
-                sb.AppendLine($"case \"{childType.FullyQualifiedName}\":");
-                sb.AppendLine($"{childType.FullyQualifiedName}.Write(writer, ({childType.FullyQualifiedName})data);");
-                sb.AppendLine($"break;");
+                _ = sb.AppendLine($"case \"{childType.FullyQualifiedName}\":");
+                _ = sb.AppendLine($"{childType.FullyQualifiedName}.Write(writer, ({childType.FullyQualifiedName})data);");
+                _ = sb.AppendLine($"break;");
             }
-            sb.AppendLine($"default:");
-            sb.AppendLine($"throw new Exception(\"Union serialization failed. {metadata.FullyQualifiedName} \");");
-            sb.AppendLine("}");
+            _ = sb.AppendLine($"default:");
+            _ = sb.AppendLine($"throw new Exception(\"Union serialization failed. {metadata.FullyQualifiedName} \");");
+            _ = sb.AppendLine("}");
             return sb;
         }
     }

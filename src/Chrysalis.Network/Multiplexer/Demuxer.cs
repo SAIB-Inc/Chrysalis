@@ -53,7 +53,7 @@ public sealed class Demuxer(IBearer bearer) : IDisposable
     public async ValueTask<MuxSegment> ReadSegmentAsync(CancellationToken cancellationToken)
     {
         // Read the header
-        ReadResult result = await bearer.Reader.ReadAtLeastAsync(ProtocolConstants.SegmentHeaderSize, cancellationToken);
+        ReadResult result = await bearer.Reader.ReadAtLeastAsync(ProtocolConstants.SegmentHeaderSize, cancellationToken).ConfigureAwait(false);
         ReadOnlySequence<byte> buffer = result.Buffer;
 
         // Decode the header
@@ -76,7 +76,7 @@ public sealed class Demuxer(IBearer bearer) : IDisposable
         else
         {
             // We need to read more data for the payload
-            result = await bearer.Reader.ReadAtLeastAsync(header.PayloadLength, cancellationToken);
+            result = await bearer.Reader.ReadAtLeastAsync(header.PayloadLength, cancellationToken).ConfigureAwait(false);
             ReadOnlySequence<byte> payloadSlice = result.Buffer.Slice(0, header.PayloadLength);
             payloadSequence = CopyPayload(payloadSlice);
             bearer.Reader.AdvanceTo(result.Buffer.GetPosition(header.PayloadLength));
@@ -86,7 +86,7 @@ public sealed class Demuxer(IBearer bearer) : IDisposable
     }
 
     // Shared buffer pool to reduce allocations
-    private static readonly ArrayPool<byte> _bufferPool = ArrayPool<byte>.Shared;
+    private static readonly ArrayPool<byte> BufferPool = ArrayPool<byte>.Shared;
 
     /// <summary>
     /// Creates a copy of the payload from a ReadOnlySequence using buffer pooling.
@@ -103,19 +103,19 @@ public sealed class Demuxer(IBearer bearer) : IDisposable
         }
 
         // For larger payloads, use the shared buffer pool
-        byte[] payloadCopy = _bufferPool.Rent((int)payload.Length);
+        byte[] payloadCopy = BufferPool.Rent((int)payload.Length);
 
         try
         {
             payload.CopyTo(payloadCopy);
             // Store the buffer in the memory record for later return to pool
-            PooledMemory managedPayload = new(payloadCopy, _bufferPool, (int)payload.Length);
+            PooledMemory managedPayload = new(payloadCopy, BufferPool, (int)payload.Length);
             return new ReadOnlySequence<byte>(managedPayload.Memory);
         }
         catch
         {
             // Ensure buffer is returned on exception
-            _bufferPool.Return(payloadCopy);
+            BufferPool.Return(payloadCopy);
             throw;
         }
     }
@@ -126,7 +126,7 @@ public sealed class Demuxer(IBearer bearer) : IDisposable
         private readonly byte[] _buffer = buffer;
         private readonly ArrayPool<byte> _pool = pool;
         private readonly int _length = length;
-        private bool _disposed = false;
+        private bool _disposed;
 
         public Memory<byte> Memory => _buffer.AsMemory(0, _length);
 
@@ -152,12 +152,15 @@ public sealed class Demuxer(IBearer bearer) : IDisposable
         {
             while (!cancellationToken.IsCancellationRequested)
             {
-                MuxSegment segment = await ReadSegmentAsync(cancellationToken);
+                MuxSegment segment = await ReadSegmentAsync(cancellationToken).ConfigureAwait(false);
 
-                if (!_protocolPipes.TryGetValue(segment.Header.ProtocolId, out Pipe? pipe)) continue;
+                if (!_protocolPipes.TryGetValue(segment.Header.ProtocolId, out Pipe? pipe))
+                {
+                    continue;
+                }
 
-                await pipe.Writer.WriteAsync(segment.Payload.First, cancellationToken);
-                await pipe.Writer.FlushAsync(cancellationToken);
+                _ = await pipe.Writer.WriteAsync(segment.Payload.First, cancellationToken).ConfigureAwait(false);
+                _ = await pipe.Writer.FlushAsync(cancellationToken).ConfigureAwait(false);
             }
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -195,7 +198,10 @@ public sealed class Demuxer(IBearer bearer) : IDisposable
     /// </summary>
     public void Dispose()
     {
-        if (_isDisposed) return;
+        if (_isDisposed)
+        {
+            return;
+        }
 
         // Complete all pipes without error
         CompletePipes();
@@ -203,6 +209,5 @@ public sealed class Demuxer(IBearer bearer) : IDisposable
         // Don't dispose bearer here - it's provided externally
 
         _isDisposed = true;
-        GC.SuppressFinalize(this);
     }
 }

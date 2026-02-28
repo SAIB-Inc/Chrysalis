@@ -7,14 +7,27 @@ using Chrysalis.Wallet.Models.Keys;
 using Chrysalis.Wallet.Utils;
 
 namespace Chrysalis.Tx.Extensions;
+
+/// <summary>
+/// Extension methods for signing Cardano transactions.
+/// </summary>
 public static class TransactionExtension
 {
+    /// <summary>
+    /// Signs a transaction with the given private key.
+    /// </summary>
+    /// <param name="self">The transaction to sign.</param>
+    /// <param name="privateKey">The private key to sign with.</param>
+    /// <returns>The transaction with the added VKey witness.</returns>
     public static Transaction Sign(this Transaction self, PrivateKey privateKey)
     {
+        ArgumentNullException.ThrowIfNull(self);
+        ArgumentNullException.ThrowIfNull(privateKey);
+
         PostMaryTransaction tx = self switch
         {
             PostMaryTransaction postMaryTransaction => postMaryTransaction,
-            _ => throw new Exception("Transaction type not supported")
+            _ => throw new InvalidOperationException("Transaction type not supported")
         };
         byte[] txBodyBytes = CborSerializer.Serialize(tx.TransactionBody);
         byte[] signature = privateKey.Sign(HashUtil.Blake2b256(txBodyBytes));
@@ -36,20 +49,29 @@ public static class TransactionExtension
                 {
                     VKeyWitnessSet = new CborDefListWithTag<VKeyWitness>(vKeyWitnesses)
                 },
-                _ => throw new Exception("Unknown transaction witness set type")
+                _ => throw new InvalidOperationException("Unknown transaction witness set type")
             }
         };
     }
 
+    /// <summary>
+    /// Signs a transaction with the given list of VKey witnesses.
+    /// </summary>
+    /// <param name="self">The transaction to sign.</param>
+    /// <param name="vKeyWitnesses">The VKey witnesses to add.</param>
+    /// <returns>The transaction with the added VKey witnesses.</returns>
     public static Transaction Sign(this Transaction self, List<VKeyWitness> vKeyWitnesses)
     {
+        ArgumentNullException.ThrowIfNull(self);
+        ArgumentNullException.ThrowIfNull(vKeyWitnesses);
+
         PostMaryTransaction tx = self switch
         {
             PostMaryTransaction postMaryTransaction => postMaryTransaction,
-            _ => throw new Exception("Transaction type not supported")
+            _ => throw new InvalidOperationException("Transaction type not supported")
         };
-        var vkeyWitnessSet = tx.TransactionWitnessSet.VKeyWitnessSet() is not null ?
-            tx.TransactionWitnessSet.VKeyWitnessSet()!.ToList() : [];
+        List<VKeyWitness> vkeyWitnessSet = tx.TransactionWitnessSet.VKeyWitnessSet() is not null ?
+            [.. tx.TransactionWitnessSet.VKeyWitnessSet()!] : [];
         vkeyWitnessSet.AddRange(vKeyWitnesses);
 
         return tx with
@@ -66,10 +88,10 @@ public static class TransactionExtension
                     VKeyWitnessSet = new CborDefListWithTag<VKeyWitness>(vkeyWitnessSet),
                     Raw = null
                 },
-                _ => throw new Exception("Unknown transaction witness set type")
+                _ => throw new InvalidOperationException("Unknown transaction witness set type")
             },
             Raw = null
-            
+
         };
     }
 }
