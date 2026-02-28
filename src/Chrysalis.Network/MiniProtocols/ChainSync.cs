@@ -73,13 +73,14 @@ public class ChainSync : IMiniProtocol
         Points message = new([.. points]);
         MessageFindIntersect messageCbor = ChainSyncMessages.FindIntersect(message);
         await _buffer.SendFullMessageAsync<ChainSyncMessage>(messageCbor, cancellationToken);
-        
+
         _state = ChainSyncState.Intersect;
         var response = await _buffer.ReceiveFullMessageAsync<ChainSyncMessage>(cancellationToken);
         _state = ChainSyncState.Idle;
-        
+
         return response;
     }
+
 
     /// <summary>
     /// Requests the next update from the chain, properly handling the await state.

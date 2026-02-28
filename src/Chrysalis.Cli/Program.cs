@@ -41,9 +41,16 @@ while (!exitProgram)
             Console.WriteLine("\n====================================================================\n");
             Tip tip = await nodeService.GetTipAsync();
             Console.Write($"Current tip: ");
-            Console.Write(Convert.ToHexString(tip.Slot.Hash));
-            Console.Write($" at slot ");
-            Console.WriteLine(tip.Slot.Slot);
+            if (tip.Slot is SpecificPoint sp)
+            {
+                Console.Write(Convert.ToHexString(sp.Hash));
+                Console.Write($" at slot ");
+                Console.WriteLine(sp.Slot);
+            }
+            else
+            {
+                Console.WriteLine("origin");
+            }
             Console.WriteLine("");
 
             break;
