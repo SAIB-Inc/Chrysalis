@@ -26,7 +26,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Content Include="lib/libplutus_vm_dotnet_rs.so">
+    <Content Include="lib/libplutus_vm_dotnet_rs.so" Condition="Exists('lib/libplutus_vm_dotnet_rs.so')">
       <Link>libplutus_vm_dotnet_rs.so</Link>
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
       <PackageCopyToOutput>true</PackageCopyToOutput>
@@ -37,7 +37,7 @@
 
 
   <ItemGroup>
-    <Content Include="lib/libplutus_vm_dotnet_rs.dylib">
+    <Content Include="lib/libplutus_vm_dotnet_rs.dylib" Condition="Exists('lib/libplutus_vm_dotnet_rs.dylib')">
       <Link>libplutus_vm_dotnet_rs.dylib</Link>
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
       <PackageCopyToOutput>true</PackageCopyToOutput>
