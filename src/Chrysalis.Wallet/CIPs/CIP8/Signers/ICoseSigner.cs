@@ -18,12 +18,12 @@ public interface ICoseSigner
     /// <param name="hashPayload">Whether to hash the payload with Blake2b224</param>
     /// <returns>A signed COSE_Sign1 message</returns>
     CoseSign1 BuildCoseSign1(
-        byte[] payload, 
-        PrivateKey signingKey, 
-        byte[]? externalAad = null, 
-        byte[]? address = null, 
+        byte[] payload,
+        PrivateKey signingKey,
+        byte[]? externalAad = null,
+        byte[]? address = null,
         bool hashPayload = false);
-    
+
     /// <summary>
     /// Verifies a COSE_Sign1 message signature
     /// </summary>
@@ -33,8 +33,8 @@ public interface ICoseSigner
     /// <param name="payload">Optional payload for detached payload messages</param>
     /// <returns>True if the signature is valid, false otherwise</returns>
     bool VerifyCoseSign1(
-        CoseSign1 coseSign1, 
-        PublicKey verificationKey, 
+        CoseSign1 coseSign1,
+        PublicKey verificationKey,
         byte[]? externalAad = null,
         byte[]? payload = null);
 }

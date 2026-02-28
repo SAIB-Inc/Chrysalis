@@ -27,12 +27,15 @@ internal static class Program
         if (!TryParseOptions(args, out Options options, out string? error))
         {
             if (!string.IsNullOrWhiteSpace(error))
-                Console.Error.WriteLine(error);
+            {
+                await Console.Error.WriteLineAsync(error).ConfigureAwait(false);
+            }
+
             PrintUsage();
             return 1;
         }
 
-        using var cts = new CancellationTokenSource();
+        using CancellationTokenSource cts = new();
         Console.CancelKeyPress += (_, e) =>
         {
             e.Cancel = true;
@@ -41,12 +44,12 @@ internal static class Program
 
         Console.WriteLine($"Connecting to {options.Host}:{options.Port} (magic {options.NetworkMagic})...");
 
-        using PeerClient peer = await PeerClient.ConnectAsync(options.Host, options.Port, cts.Token);
-        await peer.StartAsync(options.NetworkMagic, TimeSpan.FromSeconds(options.KeepAliveSeconds));
+        using PeerClient peer = await PeerClient.ConnectAsync(options.Host, options.Port, cts.Token).ConfigureAwait(false);
+        await peer.StartAsync(options.NetworkMagic, TimeSpan.FromSeconds(options.KeepAliveSeconds)).ConfigureAwait(false);
 
         Console.WriteLine("Connected. Starting ChainSync...");
 
-        ChainSyncMessage intersect = await peer.ChainSync.FindIntersectionAsync([Point.Origin], cts.Token);
+        ChainSyncMessage intersect = await peer.ChainSync.FindIntersectionAsync([Point.Origin], cts.Token).ConfigureAwait(false);
 
         switch (intersect)
         {
@@ -65,7 +68,7 @@ internal static class Program
 
         while (!cts.Token.IsCancellationRequested)
         {
-            MessageNextResponse? response = await peer.ChainSync.NextRequestAsync(cts.Token);
+            MessageNextResponse? response = await peer.ChainSync.NextRequestAsync(cts.Token).ConfigureAwait(false);
 
             switch (response)
             {
@@ -86,13 +89,15 @@ internal static class Program
                         atTip = true;
                     }
                     break;
+                default:
+                    break;
             }
         }
 
         if (peer.ChainSync.HasAgency)
         {
-            try { await peer.ChainSync.DoneAsync(CancellationToken.None); }
-            catch { /* Best-effort shutdown */ }
+            try { await peer.ChainSync.DoneAsync(CancellationToken.None).ConfigureAwait(false); }
+            catch (InvalidOperationException) { /* Best-effort shutdown */ }
         }
 
         return 0;
@@ -105,7 +110,9 @@ internal static class Program
             HeaderContent header = HeaderContent.Decode(rollForward.Payload.Value);
 
             if (header.IsByron)
+            {
                 return FormatByronHeader(header);
+            }
 
             BlockHeader blockHeader = CborSerializer.Deserialize<BlockHeader>(header.HeaderCbor);
             ulong slot = blockHeader.HeaderBody.Slot();
@@ -114,7 +121,7 @@ internal static class Program
 
             return $"[{header.Era}] rollforward slot {slot} block {blockNumber} hash {hash}";
         }
-        catch
+        catch (InvalidOperationException)
         {
             return $"rollforward tip {FormatPoint(rollForward.Tip.Slot)}";
         }
@@ -122,8 +129,8 @@ internal static class Program
 
     private static string FormatByronHeader(HeaderContent header)
     {
-        string hash = Convert.ToHexString(
-            Blake2Fast.Blake2b.HashData(32, header.HeaderCbor)).ToLowerInvariant();
+        string hash = Convert.ToHexStringLower(
+            Blake2Fast.Blake2b.HashData(32, header.HeaderCbor));
 
         if (header.IsByronEbb)
         {
@@ -134,19 +141,25 @@ internal static class Program
         ByronBlockHead blockHead = CborSerializer.Deserialize<ByronBlockHead>(header.HeaderCbor);
         ulong epoch = blockHead.ConsensusData.SlotId.Epoch;
         ulong relSlot = blockHead.ConsensusData.SlotId.Slot;
-        ulong absSlot = epoch * 21600 + relSlot;
+        ulong absSlot = (epoch * 21600) + relSlot;
         ulong blockNumber = blockHead.ConsensusData.Difficulty.GetValue().FirstOrDefault();
 
         return $"[{header.Era}] rollforward slot {absSlot} block {blockNumber} hash {hash}";
     }
 
-    private static string FormatPoint(Point point) => point switch
+    private static string FormatPoint(Point point)
     {
-        SpecificPoint sp => $"slot {sp.Slot} hash {ToHex(sp.Hash)}",
-        _ => "origin"
-    };
+        return point switch
+        {
+            SpecificPoint sp => $"slot {sp.Slot} hash {ToHex(sp.Hash)}",
+            _ => "origin"
+        };
+    }
 
-    private static string ToHex(byte[] bytes) => Convert.ToHexString(bytes).ToLowerInvariant();
+    private static string ToHex(byte[] bytes)
+    {
+        return Convert.ToHexStringLower(bytes);
+    }
 
     #region Options parsing
 
@@ -156,7 +169,9 @@ internal static class Program
         error = null;
 
         if (args.Any(arg => string.Equals(arg, "--help", StringComparison.OrdinalIgnoreCase)))
+        {
             return false;
+        }
 
         Dictionary<string, string> map = new(StringComparer.OrdinalIgnoreCase);
         for (int i = 0; i < args.Length; i++)
@@ -193,14 +208,18 @@ internal static class Program
             DefaultKeepAliveSeconds, "keepalive seconds", ref error);
 
         if (!string.IsNullOrWhiteSpace(error))
+        {
             return false;
+        }
 
         options = new Options(host, port, magic, keepAlive);
         return true;
     }
 
-    private static string? GetValue(Dictionary<string, string> map, string key) =>
-        map.TryGetValue(key, out string? value) ? value : null;
+    private static string? GetValue(Dictionary<string, string> map, string key)
+    {
+        return map.TryGetValue(key, out string? value) ? value : null;
+    }
 
     private static string? GetEnv(params string[] names)
     {
@@ -208,14 +227,20 @@ internal static class Program
         {
             string? value = Environment.GetEnvironmentVariable(name);
             if (!string.IsNullOrWhiteSpace(value))
+            {
                 return value;
+            }
         }
         return null;
     }
 
     private static int ParseInt(string? value, int fallback, string label, ref string? error)
     {
-        if (string.IsNullOrWhiteSpace(value)) return fallback;
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return fallback;
+        }
+
         if (!int.TryParse(value, out int parsed))
         {
             error = $"Invalid {label} value '{value}'.";
@@ -226,7 +251,11 @@ internal static class Program
 
     private static ulong ParseUlong(string? value, ulong fallback, string label, ref string? error)
     {
-        if (string.IsNullOrWhiteSpace(value)) return fallback;
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return fallback;
+        }
+
         if (!ulong.TryParse(value, out ulong parsed))
         {
             error = $"Invalid {label} value '{value}'.";

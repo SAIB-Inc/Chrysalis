@@ -2,6 +2,9 @@ using System.Text;
 
 namespace Chrysalis.Wallet.Utils;
 
+/// <summary>
+/// Utility class for Bech32 encoding and decoding of Cardano addresses.
+/// </summary>
 public static class Bech32Util
 {
     private const int CheckSumSize = 6;
@@ -11,7 +14,7 @@ public static class Bech32Util
     private const int HrpMaxValue = 126;
     private const char Separator = '1';
     // Bech32 character set for encoding
-    private static readonly string Charset = "qpzry9x8gf2tvdw0s3jn54khce6mua7l";
+    private const string Charset = "qpzry9x8gf2tvdw0s3jn54khce6mua7l";
 
     // Bech32 character set index lookup
     private static readonly Dictionary<char, int> CharsetRev = Charset
@@ -22,14 +25,20 @@ public static class Bech32Util
     private static readonly uint[] Generator = [0x3b6a57b2, 0x26508e6d, 0x1ea119fa, 0x3d4233dd, 0x2a1462b3];
 
     /// <summary>
-    /// Encode a byte array with an HRP into a Bech32 string
+    /// Encodes a byte array with an HRP into a Bech32 string.
     /// </summary>
+    /// <param name="data">The data bytes to encode.</param>
+    /// <param name="hrp">The human-readable part prefix.</param>
+    /// <returns>The Bech32-encoded string.</returns>
     public static string Encode(byte[] data, string hrp)
     {
+        ArgumentNullException.ThrowIfNull(data);
+        ArgumentNullException.ThrowIfNull(hrp);
+
         // Check if HRP is valid
-        if (string.IsNullOrEmpty(hrp) || hrp.Length < HrpMinLength || hrp.Length > HrpMaxLength || hrp.Any(c => c < HrpMinValue || c > HrpMaxValue))
+        if (string.IsNullOrEmpty(hrp) || hrp.Length < HrpMinLength || hrp.Length > HrpMaxLength || hrp.Any(c => c is < (char)HrpMinValue or > (char)HrpMaxValue))
         {
-            throw new ArgumentException("Invalid HRP");
+            throw new ArgumentException("Invalid HRP", nameof(hrp));
         }
 
         // Convert data to 5-bit values
@@ -45,30 +54,54 @@ public static class Bech32Util
 
         // Combine everything and encode
         StringBuilder result = new(hrp.Length + values.Length + checksum.Length + 1);
-        result.Append(hrp);
-        result.Append(Separator); // Separator
+        _ = result.Append(hrp);
+        _ = result.Append(Separator); // Separator
 
         foreach (byte b in combined)
         {
-            result.Append(Charset[b]);
+            _ = result.Append(Charset[b]);
         }
 
         return result.ToString();
     }
 
     /// <summary>
-    /// Decode a Bech32 string into an HRP and data parts
+    /// Decodes a Bech32 string into an HRP and data parts.
     /// </summary>
+    /// <param name="bech32">The Bech32-encoded string to decode.</param>
+    /// <returns>A tuple containing the HRP and decoded data bytes.</returns>
     public static (string hrp, byte[] data) Decode(string bech32)
     {
-        // Reject mixed-case strings
-        if (bech32.ToLower() != bech32 && bech32.ToUpper() != bech32)
+        ArgumentNullException.ThrowIfNull(bech32);
+
+        // Reject mixed-case strings: check that all alphabetic chars are the same case
+        bool hasUpper = false;
+        bool hasLower = false;
+        foreach (char c in bech32)
+        {
+            if (char.IsUpper(c))
+            {
+                hasUpper = true;
+            }
+
+            if (char.IsLower(c))
+            {
+                hasLower = true;
+            }
+        }
+        if (hasUpper && hasLower)
         {
             throw new FormatException("Mixed-case strings not allowed");
         }
 
-        // Lowercase for internal operations
-        bech32 = bech32.ToLower();
+        // Lowercase for internal operations (convert char by char to avoid CA1308)
+        bech32 = string.Create(bech32.Length, bech32, static (span, source) =>
+        {
+            for (int idx = 0; idx < source.Length; idx++)
+            {
+                span[idx] = char.ToLowerInvariant(source[idx]);
+            }
+        });
 
         // Find the separator
         int pos = bech32.LastIndexOf(Separator);
@@ -108,36 +141,42 @@ public static class Bech32Util
     }
 
     /// <summary>
-    /// Validates if a string is a valid Bech32 encoded value
+    /// Validates if a string is a valid Bech32 encoded value.
     /// </summary>
+    /// <param name="bech32">The string to validate.</param>
+    /// <returns>True if the string is a valid Bech32 encoding.</returns>
     public static bool Validate(string bech32)
     {
         try
         {
-            Decode(bech32);
+            _ = Decode(bech32);
             return true;
         }
-        catch
+        catch (FormatException)
+        {
+            return false;
+        }
+        catch (ArgumentException)
         {
             return false;
         }
     }
 
     /// <summary>
-    /// Extract the Human Readable Part from a Bech32 address
+    /// Extracts the Human Readable Part from a Bech32 address.
     /// </summary>
+    /// <param name="address">The Bech32-encoded address string.</param>
+    /// <returns>The human-readable part prefix.</returns>
     public static string GetHumanReadablePart(string address)
     {
+        ArgumentNullException.ThrowIfNull(address);
+
         int pos = address.LastIndexOf(Separator);
-        if (pos < 1)
-        {
-            throw new FormatException("Invalid Bech32 string");
-        }
-        return address[..pos];
+        return pos < 1 ? throw new FormatException("Invalid Bech32 string") : address[..pos];
     }
 
     /// <summary>
-    /// Create a Bech32 checksum
+    /// Creates a Bech32 checksum.
     /// </summary>
     private static byte[] CreateChecksum(string hrp, byte[] data)
     {
@@ -156,7 +195,7 @@ public static class Bech32Util
     }
 
     /// <summary>
-    /// Verify a Bech32 checksum
+    /// Verifies a Bech32 checksum.
     /// </summary>
     private static bool VerifyChecksum(string hrp, byte[] data)
     {
@@ -167,11 +206,11 @@ public static class Bech32Util
     }
 
     /// <summary>
-    /// Expand the HRP for checksum computation
+    /// Expands the HRP for checksum computation.
     /// </summary>
     private static byte[] HrpExpand(string hrp)
     {
-        byte[] result = new byte[hrp.Length * 2 + 1];
+        byte[] result = new byte[(hrp.Length * 2) + 1];
 
         for (int i = 0; i < hrp.Length; i++)
         {
@@ -184,7 +223,7 @@ public static class Bech32Util
     }
 
     /// <summary>
-    /// Calculate the Bech32 checksum polymod
+    /// Calculates the Bech32 checksum polymod.
     /// </summary>
     private static uint Polymod(byte[] values)
     {
@@ -208,10 +247,17 @@ public static class Bech32Util
     }
 
     /// <summary>
-    /// Convert between bit sizes
+    /// Converts between bit sizes.
     /// </summary>
+    /// <param name="data">The input data bytes.</param>
+    /// <param name="fromBits">The source bit width.</param>
+    /// <param name="toBits">The target bit width.</param>
+    /// <param name="pad">Whether to pad the output.</param>
+    /// <returns>The converted byte array.</returns>
     public static byte[] ConvertBits(byte[] data, int fromBits, int toBits, bool pad)
     {
+        ArgumentNullException.ThrowIfNull(data);
+
         int acc = 0;
         int bits = 0;
         List<byte> result = [];
@@ -221,7 +267,7 @@ public static class Bech32Util
         {
             if ((value >> fromBits) > 0)
             {
-                throw new ArgumentException("Invalid input data");
+                throw new ArgumentException("Invalid input data", nameof(data));
             }
 
             acc = (acc << fromBits) | value;
@@ -243,22 +289,26 @@ public static class Bech32Util
         }
         else if (bits >= fromBits || ((acc << (toBits - bits)) & maxv) != 0)
         {
-            throw new ArgumentException("Invalid padding");
+            throw new ArgumentException("Invalid padding", nameof(data));
         }
 
         return [.. result];
     }
 
-    // TODO: this is a Simplified implementation
-    // this should handle different addresses
-    // Modify this
+    /// <summary>
+    /// Extracts the payment and delegation parts from a Cardano address byte array.
+    /// </summary>
+    /// <param name="address">The raw address bytes.</param>
+    /// <returns>A tuple containing the payment part and delegation part byte arrays.</returns>
     public static (byte[] paymentPart, byte[] delegationPart) ExtractPaymentAndDelegation(byte[] address)
     {
+        ArgumentNullException.ThrowIfNull(address);
+
         // Let's assume the structure of the address:
         // - Prefix (e.g., "addr" or "stake")
         // - Payment Part (usually 28 bytes for the public key hash or script hash)
         // - Delegation Part (usually 28 bytes for the staking credential or key)
-        
+
         // First, determine the offset of the payment part and delegation part.
         int paymentPartLength = 28;  // Payment part is typically 28 bytes (public key hash)
         int delegationPartLength = 28;  // Delegation part is typically 28 bytes (staking key)

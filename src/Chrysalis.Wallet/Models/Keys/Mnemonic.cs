@@ -1,26 +1,34 @@
 using System.Security.Cryptography;
 using System.Text;
-using Chrysalis.Wallet.Extensions;
-using Chrysalis.Wallet.Models.Enums;
 using Microsoft.AspNetCore.Cryptography.KeyDerivation;
 
 namespace Chrysalis.Wallet.Models.Keys;
 
+/// <summary>
+/// Represents a BIP-39 mnemonic phrase for generating deterministic wallets.
+/// </summary>
 public record Mnemonic
 {
     #region Properties
 
+    /// <summary>
+    /// Gets the array of mnemonic words.
+    /// </summary>
     public string[] Words { get; private set; }
+
+    /// <summary>
+    /// Gets the entropy bytes from which the mnemonic was derived.
+    /// </summary>
     public byte[] Entropy { get; private set; }
 
     #endregion
 
     #region Constants and Fields
 
-    private static readonly int[] _allowedEntropyLengths = [16, 20, 24, 28, 32];
-    private static readonly int[] _allowedWordLengths = [12, 15, 18, 21, 24];
-    private const int _allWordsLength = 2048; // 1111 1111 111 -> 0..2047
-    private const int _bitsPerWord = 11;
+    private static readonly int[] AllowedEntropyLengths = [16, 20, 24, 28, 32];
+    private static readonly int[] AllowedWordLengths = [12, 15, 18, 21, 24];
+    private const int AllWordsLength = 2048; // 1111 1111 111 -> 0..2047
+    private const int BitsPerWord = 11;
 
     #endregion
 
@@ -39,26 +47,37 @@ public record Mnemonic
     /// <summary>
     /// Generates a new mnemonic from a given word list and word length.
     /// </summary>
+    /// <param name="wordLists">The BIP-39 word list containing 2048 words.</param>
+    /// <param name="wordLength">The desired mnemonic length (12, 15, 18, 21, or 24).</param>
+    /// <returns>A new Mnemonic instance.</returns>
     public static Mnemonic Generate(string[] wordLists, int wordLength = 12)
     {
-        if (wordLists.Length is not _allWordsLength)
-            throw new ArgumentOutOfRangeException(
-                nameof(wordLists.Length),
-                $"Expected {nameof(wordLists)} length of {_allWordsLength}, but got {wordLists.Length}."
-            );
+        ArgumentNullException.ThrowIfNull(wordLists);
 
-        if (!_allowedWordLengths.Contains(wordLength))
+        if (wordLists.Length is not AllWordsLength)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(wordLists),
+                $"Expected {nameof(wordLists)} length of {AllWordsLength}, but got {wordLists.Length}."
+            );
+        }
+
+        if (!AllowedWordLengths.Contains(wordLength))
+        {
             throw new ArgumentOutOfRangeException(
                 nameof(wordLength),
-                $"Invalid {nameof(wordLength)}: {wordLength}. Must be one of ({string.Join(", ", _allowedWordLengths)})."
+                $"Invalid {nameof(wordLength)}: {wordLength}. Must be one of ({string.Join(", ", AllowedWordLengths)})."
             );
+        }
 
-        int entropySize = _allowedEntropyLengths[Array.FindIndex(_allowedWordLengths, x => x == wordLength)];
-        if (!_allowedEntropyLengths.Contains(entropySize))
+        int entropySize = AllowedEntropyLengths[Array.FindIndex(AllowedWordLengths, x => x == wordLength)];
+        if (!AllowedEntropyLengths.Contains(entropySize))
+        {
             throw new ArgumentOutOfRangeException(
-                nameof(entropySize),
-                $"Invalid derived entropy size: {entropySize}. Must be one of ({string.Join(", ", _allowedEntropyLengths)})."
+                nameof(wordLength),
+                $"Invalid derived entropy size: {entropySize}. Must be one of ({string.Join(", ", AllowedEntropyLengths)})."
             );
+        }
 
         byte[] entropy = new byte[entropySize];
         using RandomNumberGenerator rng = RandomNumberGenerator.Create();
@@ -70,8 +89,14 @@ public record Mnemonic
     /// <summary>
     /// Restores a mnemonic from a space-separated string.
     /// </summary>
+    /// <param name="mnemonic">The space-separated mnemonic phrase.</param>
+    /// <param name="wordLists">The BIP-39 word list containing 2048 words.</param>
+    /// <returns>A restored Mnemonic instance.</returns>
     public static Mnemonic Restore(string mnemonic, string[] wordLists)
     {
+        ArgumentNullException.ThrowIfNull(mnemonic);
+        ArgumentNullException.ThrowIfNull(wordLists);
+
         string[] wordArr = mnemonic.Split(' ');
         return Restore(wordArr, wordLists);
     }
@@ -79,31 +104,45 @@ public record Mnemonic
     /// <summary>
     /// Restores a mnemonic from an array of words.
     /// </summary>
+    /// <param name="mnemonicWords">The array of mnemonic words.</param>
+    /// <param name="wordLists">The BIP-39 word list containing 2048 words.</param>
+    /// <returns>A restored Mnemonic instance.</returns>
     public static Mnemonic Restore(string[] mnemonicWords, string[] wordLists)
     {
+        ArgumentNullException.ThrowIfNull(mnemonicWords);
+        ArgumentNullException.ThrowIfNull(wordLists);
+
         // Validate wordLists has the correct number of words
-        if (wordLists.Length is not _allWordsLength)
+        if (wordLists.Length is not AllWordsLength)
+        {
             throw new ArgumentOutOfRangeException(
-                nameof(wordLists.Length),
-                $"Expected {nameof(wordLists)} length of {_allWordsLength}, but got {wordLists.Length}."
+                nameof(wordLists),
+                $"Expected {nameof(wordLists)} length of {AllWordsLength}, but got {wordLists.Length}."
             );
+        }
 
         // Validate all mnemonic words exist in wordLists
         if (!mnemonicWords.All(x => wordLists.Contains(x)))
-            throw new ArgumentException(nameof(mnemonicWords), "Seed has invalid words.");
+        {
+            throw new ArgumentException("Seed has invalid words.", nameof(mnemonicWords));
+        }
 
         // Validate mnemonic length is one of the allowed lengths
-        if (!_allowedWordLengths.Contains(mnemonicWords.Length))
-            throw new FormatException($"Invalid seed length. It must be one of the following values ({string.Join(", ", _allowedWordLengths)})");
+        if (!AllowedWordLengths.Contains(mnemonicWords.Length))
+        {
+            throw new FormatException($"Invalid seed length. It must be one of the following values ({string.Join(", ", AllowedWordLengths)})");
+        }
 
         // Calculate effective entropy length (accounting for checksum)
-        int entropyBitLength = mnemonicWords.Length * _bitsPerWord * 32 / 33;
+        int entropyBitLength = mnemonicWords.Length * BitsPerWord * 32 / 33;
         int entropyByteLength = entropyBitLength / 8;
 
-        if (!_allowedEntropyLengths.Contains(entropyByteLength))
-            throw new ArgumentException($"Invalid entropy length derived from mnemonic: {entropyByteLength} bytes.");
+        if (!AllowedEntropyLengths.Contains(entropyByteLength))
+        {
+            throw new ArgumentException($"Invalid entropy length derived from mnemonic: {entropyByteLength} bytes.", nameof(mnemonicWords));
+        }
 
-        int checksumBitLength = mnemonicWords.Length * _bitsPerWord - entropyBitLength;
+        int checksumBitLength = (mnemonicWords.Length * BitsPerWord) - entropyBitLength;
         byte[] entropy = new byte[entropyByteLength];
 
         // Convert each mnemonic word to its index in the word list.
@@ -113,12 +152,12 @@ public record Mnemonic
         for (int i = 0; i < indices.Length; i++)
         {
             int wordIndex = indices[i];
-            for (int j = 0; j < _bitsPerWord; j++)
+            for (int j = 0; j < BitsPerWord; j++)
             {
-                int bitPosition = i * _bitsPerWord + j;
+                int bitPosition = (i * BitsPerWord) + j;
                 if (bitPosition < entropyBitLength)
                 {
-                    bool bitValue = ((wordIndex >> (_bitsPerWord - 1 - j)) & 1) == 1;
+                    bool bitValue = ((wordIndex >> (BitsPerWord - 1 - j)) & 1) == 1;
                     if (bitValue)
                     {
                         int byteIndex = bitPosition / 8;
@@ -134,15 +173,17 @@ public record Mnemonic
         for (int i = 0; i < checksumBitLength; i++)
         {
             int entropyBitPosition = entropyBitLength + i;
-            int wordIndex = entropyBitPosition / _bitsPerWord;
-            int bitIndexInWord = entropyBitPosition % _bitsPerWord;
+            int wordIndex = entropyBitPosition / BitsPerWord;
+            int bitIndexInWord = entropyBitPosition % BitsPerWord;
 
-            bool expectedBit = ((indices[wordIndex] >> (_bitsPerWord - 1 - bitIndexInWord)) & 1) == 1;
+            bool expectedBit = ((indices[wordIndex] >> (BitsPerWord - 1 - bitIndexInWord)) & 1) == 1;
             int hashBitIndex = i % 8;
             bool actualBit = ((hash[i / 8] >> (7 - hashBitIndex)) & 1) == 1;
 
             if (expectedBit != actualBit)
+            {
                 throw new FormatException("Invalid mnemonic checksum.");
+            }
         }
 
         return new Mnemonic(mnemonicWords, entropy);
@@ -151,8 +192,14 @@ public record Mnemonic
     /// <summary>
     /// Creates a mnemonic from entropy by calculating the checksum and mapping bits to words.
     /// </summary>
+    /// <param name="entropy">The entropy bytes.</param>
+    /// <param name="wordList">The BIP-39 word list.</param>
+    /// <returns>A new Mnemonic instance derived from the given entropy.</returns>
     public static Mnemonic CreateMnemonicFromEntropy(byte[] entropy, string[] wordList)
     {
+        ArgumentNullException.ThrowIfNull(entropy);
+        ArgumentNullException.ThrowIfNull(wordList);
+
         // Calculate checksum length in bits (entropy length in bits / 32)
         int checksumBitLength = entropy.Length * 8 / 32;
 
@@ -160,14 +207,14 @@ public record Mnemonic
         byte[] hash = SHA256.HashData(entropy);
 
         // Calculate total bit length (entropy bits + checksum bits)
-        int totalBitLength = entropy.Length * 8 + checksumBitLength;
-        int wordCount = totalBitLength / _bitsPerWord; // Each word represents 11 bits
+        int totalBitLength = (entropy.Length * 8) + checksumBitLength;
+        int wordCount = totalBitLength / BitsPerWord; // Each word represents 11 bits
 
         // Process 11 bits at a time to generate word indices
         string[] words = [.. Enumerable.Range(0, wordCount)
             .Select(i =>
             {
-                int startBit = i * _bitsPerWord;
+                int startBit = i * BitsPerWord;
                 int index = GetWordIndexFromBits(entropy, hash, startBit);
                 return wordList[index].Normalize(NormalizationForm.FormKD);
             })];
@@ -178,21 +225,20 @@ public record Mnemonic
     /// <summary>
     /// Derives the root private key from a mnemonic phrase, applying Ed25519 scalar clamping to ensure key compliance.
     /// </summary>
-    /// <param name="mnemonic">The mnemonic phrase used to generate the root key</param>
-    /// <param name="password">Optional password for additional key derivation security (default is empty string)</param>
-    /// <returns>A PrivateKey instance with the derived and clamped root key</returns>
+    /// <param name="password">Optional password for additional key derivation security (default is empty string).</param>
+    /// <returns>A PrivateKey instance with the derived and clamped root key.</returns>
     /// <remarks>
-    /// Scalar clamping is a critical cryptographic process that ensures the generated private key 
+    /// Scalar clamping is a critical cryptographic process that ensures the generated private key
     /// is suitable for use with Ed25519 signatures. It involves three specific bit manipulations:
-    /// 
-    /// 1. Clear the lowest 3 bits (rootKey[0] &= 0b1111_1000):
+    ///
+    /// 1. Clear the lowest 3 bits (rootKey[0] &amp;= 0b1111_1000):
     ///    - Ensures the scalar is a multiple of 8, improving performance
     ///    - Prevents small-subgroup attacks by restricting the scalar's range
-    /// 
-    /// 2. Clear the highest 3 bits (rootKey[31] &= 0b0001_1111):
+    ///
+    /// 2. Clear the highest 3 bits (rootKey[31] &amp;= 0b0001_1111):
     ///    - Prevents potential side-channel attacks
     ///    - Limits the scalar's magnitude to prevent overflow
-    /// 
+    ///
     /// 3. Set the second-highest bit (rootKey[31] |= 0b0100_0000):
     ///    - Guarantees the scalar is within a specific range
     ///    - Provides additional cryptographic hardening
@@ -228,7 +274,7 @@ public record Mnemonic
 
         // Use LINQ to process the bits and calculate the index
         return Enumerable.Range(0, bitsPerWord)
-            .Select(bitOffset =>
+            .Sum(bitOffset =>
             {
                 int position = startBit + bitOffset;
                 bool bitValue = position < entropyBitLength
@@ -237,8 +283,7 @@ public record Mnemonic
 
                 // Calculate bit contribution to the final index (MSB first)
                 return bitValue ? 1 << (bitsPerWord - 1 - bitOffset) : 0;
-            })
-            .Sum(); // Sum all bit values to get the final index
+            }); // Sum all bit values to get the final index
     }
 
     /// <summary>
@@ -252,4 +297,4 @@ public record Mnemonic
     }
 
     #endregion
-};
+}

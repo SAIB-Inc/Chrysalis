@@ -23,12 +23,15 @@ public sealed class ChannelBuffer(AgentChannel channel)
 
         for (int offset = 0; offset < payloadLength; offset += ProtocolConstants.MaxSegmentPayloadLength)
         {
-            if (cancellationToken.IsCancellationRequested) break;
+            if (cancellationToken.IsCancellationRequested)
+            {
+                break;
+            }
 
             int chunkSize = Math.Min(ProtocolConstants.MaxSegmentPayloadLength, payloadLength - offset);
             ReadOnlyMemory<byte> chunkMemory = payloadMemory.Slice(offset, chunkSize);
             ReadOnlySequence<byte> chunkSequence = new(chunkMemory);
-            await channel.EnqueueChunkAsync(chunkSequence, cancellationToken);
+            await channel.EnqueueChunkAsync(chunkSequence, cancellationToken).ConfigureAwait(false);
         }
     }
 
@@ -36,7 +39,7 @@ public sealed class ChannelBuffer(AgentChannel channel)
     {
         while (true)
         {
-            ReadResult readResult = await channel.ReadChunkAsync(cancellationToken);
+            ReadResult readResult = await channel.ReadChunkAsync(cancellationToken).ConfigureAwait(false);
             ReadOnlySequence<byte> buffer = readResult.Buffer;
 
             // Check if pipe was completed (demuxer stopped) before we have a complete message
@@ -72,12 +75,12 @@ public sealed class ChannelBuffer(AgentChannel channel)
                     ArrayPool<byte>.Shared.Return(rentedBuffer);
                 }
             }
-            catch (Exception) when (!readResult.IsCompleted)
+            catch (FormatException) when (!readResult.IsCompleted)
             {
                 // Need more data - mark what we examined but couldn't use
                 channel.AdvanceTo(buffer.Start);
             }
-            catch (Exception) when (readResult.IsCompleted)
+            catch (FormatException) when (readResult.IsCompleted)
             {
                 // If pipe is completed and we still can't deserialize, that's an error
                 channel.AdvanceTo(buffer.End);

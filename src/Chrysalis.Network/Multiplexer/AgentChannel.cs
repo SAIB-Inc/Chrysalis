@@ -2,7 +2,6 @@ using System.Buffers;
 using System.Buffers.Binary;
 using System.IO.Pipelines;
 using System.Runtime.CompilerServices;
-using System.Threading.Channels;
 using Chrysalis.Network.Core;
 
 namespace Chrysalis.Network.Multiplexer;
@@ -53,7 +52,7 @@ public sealed class AgentChannel(
 
         // Write payload - handle multi-segment sequences efficiently
         plexerWriter.Write(protocolMessage);
-        await plexerWriter.FlushAsync(cancellationToken);
+        _ = await plexerWriter.FlushAsync(cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -62,13 +61,18 @@ public sealed class AgentChannel(
     /// <param name="cancellationToken">A token to cancel the operation.</param>
     /// <returns>The received data.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public async Task<ReadResult> ReadChunkAsync(CancellationToken cancellationToken = default) =>
-        await plexerReader.ReadAsync(cancellationToken);
+    public async Task<ReadResult> ReadChunkAsync(CancellationToken cancellationToken = default)
+    {
+        return await plexerReader.ReadAsync(cancellationToken).ConfigureAwait(false);
+    }
 
     /// <summary>
     /// Advances the channels reader to a position.
     /// </summary>
     /// <param name="position">The SequencePosition of the last consumed data.</param>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public void AdvanceTo(SequencePosition position) => plexerReader.AdvanceTo(position);
+    public void AdvanceTo(SequencePosition position)
+    {
+        plexerReader.AdvanceTo(position);
+    }
 }

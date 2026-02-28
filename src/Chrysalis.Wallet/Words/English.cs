@@ -1,11 +1,14 @@
 namespace Chrysalis.Wallet.Words;
 
+/// <summary>
+/// Contains the BIP-39 English word list used for mnemonic phrase generation.
+/// </summary>
 public static class English
 {
-    // Words obtained from wordlist documented at 
-    // https://github.com/bitcoin/bips/blob/master/bip-0039/bip-0039-wordlists.md
-    // Props to CardanoSharp for converting txt into a C# file
-    // https://github.com/SAIB-Inc/cardanosharp-wallet/blob/6b35a43e97f10d33c31f690786120b567f382a40/CardanoSharp.Wallet/Words/English.cs#L6
+    /// <summary>
+    /// The BIP-39 English word list containing 2048 words for mnemonic generation.
+    /// Words obtained from https://github.com/bitcoin/bips/blob/master/bip-0039/bip-0039-wordlists.md
+    /// </summary>
     public static readonly string[] Words =
     [
         "abandon",

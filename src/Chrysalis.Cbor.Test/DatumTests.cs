@@ -1,7 +1,3 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using Xunit;
 using Chrysalis.Cbor.Serialization;
 using Chrysalis.Cbor.Serialization.Attributes;
 using Chrysalis.Cbor.Types;
@@ -99,7 +95,7 @@ public partial record SundaeSwapPoolDatum(
 
     [CborOrder(5)]
     [CborIndefinite]
-    Option<MultisigScript> FeeManager,  // Optional fee manager script
+    CborOption<MultisigScript> FeeManager,  // Optional fee manager script
 
     [CborOrder(6)]
     ulong MarketOpen,  // UNIX timestamp when trading is allowed (0 = open)
@@ -120,20 +116,20 @@ public class DatumTests
         // Verify pool identifier
         Assert.NotNull(poolDatum);
         Assert.Equal(28, poolDatum.Identifier.Length);
-        Assert.Equal("64f35d26b237ad58e099041bc14c687ea7fdc58969d7d5b66e2540ef", Convert.ToHexString(poolDatum.Identifier).ToLowerInvariant());
-        
+        Assert.Equal("64F35D26B237AD58E099041BC14C687EA7FDC58969D7D5B66E2540EF", Convert.ToHexString(poolDatum.Identifier).ToUpperInvariant());
+
         // Verify assets
         Assert.Equal(2, poolDatum.Assets.Count);
-        
+
         // First asset should be ADA (empty policy and name)
         AssetClass asset1 = poolDatum.Assets[0];
         Assert.Empty(asset1.PolicyId);
         Assert.Empty(asset1.AssetName);
-        
+
         // Second asset should be SDAM token
         AssetClass asset2 = poolDatum.Assets[1];
-        Assert.Equal("c48cbb3d5e57ed56e276bc45f99ab39abe94e6cd7ac39fb402da47ad", Convert.ToHexString(asset2.PolicyId).ToLowerInvariant());
-        Assert.Equal("0014df105553444d", Convert.ToHexString(asset2.AssetName).ToLowerInvariant());
+        Assert.Equal("C48CBB3D5E57ED56E276BC45F99AB39ABE94E6CD7AC39FB402DA47AD", Convert.ToHexString(asset2.PolicyId).ToUpperInvariant());
+        Assert.Equal("0014DF105553444D", Convert.ToHexString(asset2.AssetName).ToUpperInvariant());
         // Verify other pool parameters
         Assert.Equal(831464150266UL, poolDatum.CirculatingLp);
         Assert.Equal(60UL, poolDatum.BidFeesPerTenThousand); // 0.6%
@@ -141,12 +137,12 @@ public class DatumTests
         Assert.Equal(0UL, poolDatum.MarketOpen); // Market is open
         Assert.Equal(1076872000UL, poolDatum.ProtocolFees);
         // Verify fee manager
-        Assert.IsType<Some<MultisigScript>>(poolDatum.FeeManager);
+        _ = Assert.IsType<Some<MultisigScript>>(poolDatum.FeeManager);
         Some<MultisigScript> feeManager = (poolDatum.FeeManager as Some<MultisigScript>)!;
         Assert.NotNull(feeManager);
-        Assert.IsType<Signature>(feeManager.Value);
+        _ = Assert.IsType<Signature>(feeManager.Value);
         Signature signature = (feeManager.Value as Signature)!;
-        Assert.Equal("0bc4df2c05da7920fe0825b68f83fd96d84f215da6ef360f7057ad83", Convert.ToHexString(signature.KeyHash).ToLowerInvariant());
+        Assert.Equal("0BC4DF2C05DA7920FE0825B68F83FD96D84F215DA6EF360F7057AD83", Convert.ToHexString(signature.KeyHash).ToUpperInvariant());
     }
     [Theory]
     [InlineData("d8799f581c64f35d26b237ad58e099041bc14c687ea7fdc58969d7d5b66e2540ef9f9f4040ff9f581cc48cbb3d5e57ed56e276bc45f99ab39abe94e6cd7ac39fb402da47ad480014df105553444dffff1b000000c1972014fa183c183cd8799fd8799f581c0bc4df2c05da7920fe0825b68f83fd96d84f215da6ef360f7057ad83ffff001a402fc340ff")]
@@ -161,11 +157,12 @@ public class DatumTests
 
         // Re-serialize
         byte[] reserializedBytes = CborSerializer.Serialize(poolDatum);
-        string reserializedHex = Convert.ToHexString(reserializedBytes).ToLowerInvariant();
-        string plutusDataHex = Convert.ToHexString(CborSerializer.Serialize(plutusDataDatum)).ToLowerInvariant();
+        string reserializedHex = Convert.ToHexString(reserializedBytes).ToUpperInvariant();
+        string plutusDataHex = Convert.ToHexString(CborSerializer.Serialize(plutusDataDatum)).ToUpperInvariant();
 
         // They should match
-        Assert.Equal(originalHex.ToLowerInvariant(), reserializedHex);
-        Assert.Equal(originalHex.ToLowerInvariant(), plutusDataHex);
+        ArgumentNullException.ThrowIfNull(originalHex);
+        Assert.Equal(originalHex.ToUpperInvariant(), reserializedHex);
+        Assert.Equal(originalHex.ToUpperInvariant(), plutusDataHex);
     }
 }

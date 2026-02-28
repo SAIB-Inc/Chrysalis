@@ -5,8 +5,17 @@ using Chrysalis.Cbor.Serialization;
 
 namespace Chrysalis.Plutus.VM.EvalTx;
 
+/// <summary>
+/// Provides methods to apply parameters to Plutus scripts.
+/// </summary>
 public static class ScriptApplicator
 {
+    /// <summary>
+    /// Applies a parameter to a Plutus script given as a hex string.
+    /// </summary>
+    /// <param name="scriptHex">The hex-encoded Plutus script.</param>
+    /// <param name="parameters">The Plutus data parameter to apply.</param>
+    /// <returns>The hex-encoded result script with the parameter applied.</returns>
     public static string ApplyParameters(string scriptHex, PlutusData parameters)
     {
         byte[] scriptBytes = Convert.FromHexString(scriptHex);
@@ -14,16 +23,31 @@ public static class ScriptApplicator
         return Convert.ToHexString(result);
     }
 
+    /// <summary>
+    /// Applies a parameter to a Plutus script given as a byte array.
+    /// </summary>
+    /// <param name="scriptBytes">The CBOR-encoded Plutus script bytes.</param>
+    /// <param name="parameters">The Plutus data parameter to apply.</param>
+    /// <returns>The result script bytes with the parameter applied.</returns>
     public static byte[] ApplyParameters(byte[] scriptBytes, PlutusData parameters)
     {
         PlutusList parametersList = new(new CborIndefList<PlutusData>([parameters]));
         byte[] parametersCbor = CborSerializer.Serialize(parametersList);
-        
+
         return ApplyParametersFromCbor(scriptBytes, parametersCbor);
     }
 
+    /// <summary>
+    /// Applies CBOR-encoded parameters to a CBOR-encoded Plutus script.
+    /// </summary>
+    /// <param name="scriptBytes">The CBOR-encoded Plutus script bytes.</param>
+    /// <param name="parametersCbor">The CBOR-encoded parameters bytes.</param>
+    /// <returns>The result script bytes with the parameters applied.</returns>
     public static byte[] ApplyParametersFromCbor(byte[] scriptBytes, byte[] parametersCbor)
     {
+        ArgumentNullException.ThrowIfNull(scriptBytes);
+        ArgumentNullException.ThrowIfNull(parametersCbor);
+
         unsafe
         {
             byte* resultPtr = NativeMethods.ApplyParamsToScriptRaw(
@@ -54,5 +78,4 @@ public static class ScriptApplicator
             }
         }
     }
-
 }

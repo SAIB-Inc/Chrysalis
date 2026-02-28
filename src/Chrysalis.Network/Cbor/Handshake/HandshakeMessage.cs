@@ -1,6 +1,5 @@
 using Chrysalis.Cbor.Serialization.Attributes;
 using Chrysalis.Cbor.Types;
-using Chrysalis.Network.Cbor.Common;
 
 namespace Chrysalis.Network.Cbor.Handshake;
 
@@ -8,25 +7,37 @@ namespace Chrysalis.Network.Cbor.Handshake;
 [CborUnion]
 public abstract partial record HandshakeMessage : CborBase;
 
-public class HandshakeMessages
+public static class HandshakeMessages
 {
-    public static ProposeVersions ProposeVersions(VersionTable versionTable) =>
-        new(new Value0(0), versionTable);
+    public static ProposeVersions ProposeVersions(VersionTable versionTable)
+    {
+        return new(new Value0(0), versionTable);
+    }
 
-    public static N2NAcceptVersion N2NAcceptVersion(N2NVersion version, N2NVersionData versionData) =>
-        new(new Value1(1), version, versionData);
+    public static N2NAcceptVersion N2NAcceptVersion(N2NVersion version, N2NVersionData versionData)
+    {
+        return new(new Value1(1), version, versionData);
+    }
 
-    public static N2CAcceptVersion N2CAcceptVersion(N2CVersion version, N2CVersionData versionData) =>
-        new(new Value1(1), version, versionData);
+    public static N2CAcceptVersion N2CAcceptVersion(N2CVersion version, N2CVersionData versionData)
+    {
+        return new(new Value1(1), version, versionData);
+    }
 
-    public static Refuse Refuse(RefuseReason reason) =>
-        new(new Value2(2), reason);
+    public static Refuse Refuse(RefuseReason reason)
+    {
+        return new(new Value2(2), reason);
+    }
 
-    public static N2NQueryReply N2NQueryReply(N2NVersionTable versionTable) =>
-        new(new Value3(3), versionTable);
+    public static N2NQueryReply N2NQueryReply(N2NVersionTable versionTable)
+    {
+        return new(new Value3(3), versionTable);
+    }
 
-    public static N2CQueryReply N2CQueryReply(N2CVersionTable versionTable) =>
-        new(new Value3(3), versionTable);
+    public static N2CQueryReply N2CQueryReply(N2CVersionTable versionTable)
+    {
+        return new(new Value3(3), versionTable);
+    }
 }
 
 #region ProposeVersions

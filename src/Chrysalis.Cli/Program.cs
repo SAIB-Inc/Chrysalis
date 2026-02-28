@@ -1,6 +1,4 @@
-﻿using System;
-using System.Text.Json;
-using Chrysalis.Cbor.Extensions;
+﻿using Chrysalis.Cbor.Extensions;
 using Chrysalis.Cbor.Extensions.Cardano.Core.Common;
 using Chrysalis.Cbor.Extensions.Cardano.Core.Transaction;
 using Chrysalis.Cbor.Serialization;
@@ -17,11 +15,6 @@ using Chrysalis.Network.Cbor.LocalStateQuery;
 bool exitProgram = false;
 
 NodeService nodeService = new("/tmp/preview-node.socket");
-var options = new JsonSerializerOptions
-{
-    WriteIndented = true,
-    PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-};
 
 while (!exitProgram)
 {
@@ -39,7 +32,7 @@ while (!exitProgram)
     {
         case "1":
             Console.WriteLine("\n====================================================================\n");
-            Tip tip = await nodeService.GetTipAsync();
+            Tip tip = await nodeService.GetTipAsync().ConfigureAwait(false);
             Console.Write($"Current tip: ");
             if (tip.Slot is SpecificPoint sp)
             {
@@ -55,42 +48,41 @@ while (!exitProgram)
 
             break;
         case "2":
-            ProtocolParams protocolParams = await nodeService.GetCurrentProtocolParamsAsync();
-            var (
-            minFeeA,
-            minFeeB,
-            maxBlockBodySize,
-            maxTransactionSize,
-            maxBlockHeaderSize,
-            keyDeposit,
-            poolDeposit,
-            maximumEpoch,
-            desiredNumberOfStakePools,
-            poolPledgeInfluence,
-            expansionRate,
-            treasuryGrowthRate,
-            protocolVersion,
-            minPoolCost,
-            adaPerUTxOByte,
-            costModelsForScriptLanguage,
-            executionCosts,
-            maxTxExUnits,
-            maxBlockExUnits,
-            maxValueSize,
-            collateralPercentage,
-            maxCollateralInputs,
-            poolVotingThresholds,
-            drepVotingThresholds,
-            minCommitteeSize,
-            committeeTermLimit,
-            governanceActionValidityPeriod,
-            governanceActionDeposit,
-            drepDeposit,
-            drepInactivityPeriod,
-            minFeeRefScriptCostPerByte
-        ) = protocolParams;
+            ProtocolParams protocolParams = await nodeService.GetCurrentProtocolParamsAsync().ConfigureAwait(false);
+            (
+            ulong? minFeeA,
+            ulong? minFeeB,
+            ulong? maxBlockBodySize,
+            ulong? maxTransactionSize,
+            ulong? maxBlockHeaderSize,
+            ulong? keyDeposit,
+            ulong? poolDeposit,
+            ulong? maximumEpoch,
+            ulong? desiredNumberOfStakePools,
+            CborRationalNumber? poolPledgeInfluence,
+            CborRationalNumber? expansionRate,
+            CborRationalNumber? treasuryGrowthRate,
+            ProtocolVersion? protocolVersion,
+            ulong? minPoolCost,
+            ulong? adaPerUTxOByte,
+            CostMdls? costModelsForScriptLanguage,
+            ExUnitPrices? executionCosts,
+            ExUnits? maxTxExUnits,
+            ExUnits? maxBlockExUnits,
+            ulong? maxValueSize,
+            ulong? collateralPercentage,
+            ulong? maxCollateralInputs,
+            PoolVotingThresholds? poolVotingThresholds,
+            DRepVotingThresholds? drepVotingThresholds,
+            ulong? minCommitteeSize,
+            ulong? committeeTermLimit,
+            ulong? governanceActionValidityPeriod,
+            ulong? governanceActionDeposit,
+            ulong? drepDeposit,
+            ulong? drepInactivityPeriod,
+            CborRationalNumber? minFeeRefScriptCostPerByte) = protocolParams;
 
-            var propertyDict = new Dictionary<string, object?>
+            Dictionary<string, object?> propertyDict = new()
         {
             { nameof(ProtocolParams.MinFeeA), minFeeA },
             { nameof(ProtocolParams.MinFeeB), minFeeB },
@@ -125,9 +117,9 @@ while (!exitProgram)
             { nameof(ProtocolParams.MinFeeRefScriptCostPerByte), minFeeRefScriptCostPerByte }
         };
 
-            foreach (var kvp in propertyDict)
+            foreach (KeyValuePair<string, object?> kvp in propertyDict)
             {
-                if (kvp.Value is PoolVotingThresholds || kvp.Value is DRepVotingThresholds)
+                if (kvp.Value is PoolVotingThresholds or DRepVotingThresholds)
                 {
                     continue;
                 }
@@ -143,10 +135,10 @@ while (!exitProgram)
                 }
                 else if (kvp.Value is CostMdls costMdls)
                 {
-                    foreach (var costMdl in costMdls.Value)
+                    foreach (KeyValuePair<int, CborMaybeIndefList<long>> costMdl in costMdls.Value)
                     {
                         Console.WriteLine($"{costMdl.Key}: [");
-                        foreach (var item in costMdl.Value.GetValue())
+                        foreach (long item in costMdl.Value.GetValue())
                         {
                             Console.WriteLine($"\t{item}, ");
                         }
@@ -182,9 +174,9 @@ while (!exitProgram)
             string address = Console.ReadLine() ?? "";
 
             Console.WriteLine($"Querying UTXOs for address: {address}");
-            var utxos = await nodeService.GetUtxoByAddressAsync(address);
+            UtxoByAddressResponse utxos = await nodeService.GetUtxoByAddressAsync(address).ConfigureAwait(false);
             Console.WriteLine("[");
-            foreach (var utxo in utxos.Utxos)
+            foreach (KeyValuePair<TransactionInput, TransactionOutput> utxo in utxos.Utxos)
             {
                 Console.WriteLine(" {");
                 Console.WriteLine("     transactionId: " + Convert.ToHexString(utxo.Key.TransactionId));
@@ -193,11 +185,11 @@ while (!exitProgram)
                 Console.WriteLine("         Lovelace: " + utxo.Value.Amount().Lovelace());
                 if (utxo.Value.Amount() is LovelaceWithMultiAsset lovelaceWithMultiAsset)
                 {
-                    foreach (var asset in lovelaceWithMultiAsset.MultiAsset.Value)
+                    foreach (KeyValuePair<byte[], TokenBundleOutput> asset in lovelaceWithMultiAsset.MultiAsset.Value)
                     {
                         Console.Write($"         {Convert.ToHexString(asset.Key)} : ");
                         Console.WriteLine("{");
-                        foreach (var token in asset.Value.Value)
+                        foreach (KeyValuePair<byte[], ulong> token in asset.Value.Value)
                         {
                             Console.WriteLine($"            {Convert.ToHexString(token.Key)} : {token.Value}");
                         }
@@ -225,7 +217,7 @@ while (!exitProgram)
 
         default:
             Console.WriteLine("Invalid option. Press any key to continue...");
-            Console.ReadKey();
+            _ = Console.ReadKey();
             break;
     }
 }

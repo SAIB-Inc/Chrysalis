@@ -27,37 +27,30 @@ public enum ChainSyncState
 /// <summary>
 /// Implementation of the Ouroboros ChainSync mini-protocol.
 /// </summary>
-public class ChainSync : IMiniProtocol
+public class ChainSync(AgentChannel channel, ProtocolType protocol = ProtocolType.ClientChainSync) : IMiniProtocol
 {
-    private readonly ChannelBuffer _buffer;
+    private readonly ChannelBuffer _buffer = new(channel);
     private readonly ChainSyncMessage _nextRequest = ChainSyncMessages.NextRequest();
-    private ChainSyncState _state = ChainSyncState.Idle;
-
-    public ChainSync(AgentChannel channel, ProtocolType protocol = ProtocolType.ClientChainSync)
-    {
-        _buffer = new ChannelBuffer(channel);
-        Protocol = protocol;
-    }
 
     /// <summary>
     /// Gets the protocol type for this ChainSync instance.
     /// </summary>
-    public ProtocolType Protocol { get; }
+    public ProtocolType Protocol { get; } = protocol;
 
     /// <summary>
-    /// Gets the current state of the protocol.
+    /// Gets or sets the current state of the protocol.
     /// </summary>
-    public ChainSyncState State => _state;
+    public ChainSyncState State { get; private set; } = ChainSyncState.Idle;
 
     /// <summary>
     /// Gets whether the protocol is done.
     /// </summary>
-    public bool IsDone => _state == ChainSyncState.Done;
+    public bool IsDone => State == ChainSyncState.Done;
 
     /// <summary>
     /// Gets whether the client has agency to send messages.
     /// </summary>
-    public bool HasAgency => _state == ChainSyncState.Idle;
+    public bool HasAgency => State == ChainSyncState.Idle;
 
     /// <summary>
     /// Finds an intersection point between the local and remote chains.
@@ -67,16 +60,18 @@ public class ChainSync : IMiniProtocol
     /// <returns>The response message indicating intersection status.</returns>
     public async Task<ChainSyncMessage> FindIntersectionAsync(IEnumerable<Point> points, CancellationToken cancellationToken)
     {
-        if (_state != ChainSyncState.Idle)
-            throw new InvalidOperationException($"Cannot find intersection in state {_state}");
+        if (State != ChainSyncState.Idle)
+        {
+            throw new InvalidOperationException($"Cannot find intersection in state {State}");
+        }
 
         Points message = new([.. points]);
         MessageFindIntersect messageCbor = ChainSyncMessages.FindIntersect(message);
-        await _buffer.SendFullMessageAsync<ChainSyncMessage>(messageCbor, cancellationToken);
+        await _buffer.SendFullMessageAsync<ChainSyncMessage>(messageCbor, cancellationToken).ConfigureAwait(false);
 
-        _state = ChainSyncState.Intersect;
-        var response = await _buffer.ReceiveFullMessageAsync<ChainSyncMessage>(cancellationToken);
-        _state = ChainSyncState.Idle;
+        State = ChainSyncState.Intersect;
+        ChainSyncMessage response = await _buffer.ReceiveFullMessageAsync<ChainSyncMessage>(cancellationToken).ConfigureAwait(false);
+        State = ChainSyncState.Idle;
 
         return response;
     }
@@ -91,37 +86,44 @@ public class ChainSync : IMiniProtocol
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public async Task<MessageNextResponse?> NextRequestAsync(CancellationToken cancellationToken)
     {
-        MessageNextResponse response;
+        MessageNextResponse? response = null;
 
-        switch (_state)
+        switch (State)
         {
             case ChainSyncState.Idle:
                 // We have agency, send request
-                await _buffer.SendFullMessageAsync(_nextRequest, cancellationToken);
-                _state = ChainSyncState.CanAwait;
-                response = await _buffer.ReceiveFullMessageAsync<MessageNextResponse>(cancellationToken);
+                await _buffer.SendFullMessageAsync(_nextRequest, cancellationToken).ConfigureAwait(false);
+                State = ChainSyncState.CanAwait;
+                response = await _buffer.ReceiveFullMessageAsync<MessageNextResponse>(cancellationToken).ConfigureAwait(false);
                 break;
 
             case ChainSyncState.MustReply:
                 // Server has agency, just wait for response
-                response = await _buffer.ReceiveFullMessageAsync<MessageNextResponse>(cancellationToken);
+                response = await _buffer.ReceiveFullMessageAsync<MessageNextResponse>(cancellationToken).ConfigureAwait(false);
                 break;
-
+            case ChainSyncState.CanAwait:
+                break;
+            case ChainSyncState.Intersect:
+                break;
+            case ChainSyncState.Done:
+                break;
             default:
-                throw new InvalidOperationException($"Cannot request next in state {_state}");
+                throw new InvalidOperationException($"Cannot request next in state {State}");
         }
 
         // Update state based on response
         switch (response)
         {
             case MessageAwaitReply:
-                _state = ChainSyncState.MustReply;
+                State = ChainSyncState.MustReply;
                 break;
             case MessageRollForward:
-                _state = ChainSyncState.Idle;
+                State = ChainSyncState.Idle;
                 break;
             case MessageRollBackward:
-                _state = ChainSyncState.Idle;
+                State = ChainSyncState.Idle;
+                break;
+            default:
                 break;
         }
 
@@ -136,11 +138,13 @@ public class ChainSync : IMiniProtocol
     /// <returns>A task representing the asynchronous operation.</returns>
     public async Task DoneAsync(CancellationToken cancellationToken)
     {
-        if (_state != ChainSyncState.Idle)
-            throw new InvalidOperationException($"Cannot send done in state {_state}");
+        if (State != ChainSyncState.Idle)
+        {
+            throw new InvalidOperationException($"Cannot send done in state {State}");
+        }
 
-        var doneMessage = ChainSyncMessages.Done();
-        await _buffer.SendFullMessageAsync<ChainSyncMessage>(doneMessage, cancellationToken);
-        _state = ChainSyncState.Done;
+        MessageDone doneMessage = ChainSyncMessages.Done();
+        await _buffer.SendFullMessageAsync<ChainSyncMessage>(doneMessage, cancellationToken).ConfigureAwait(false);
+        State = ChainSyncState.Done;
     }
 }

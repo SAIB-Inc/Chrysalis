@@ -41,7 +41,7 @@ public record HeaderContent(
     public static HeaderContent Decode(ReadOnlyMemory<byte> payload)
     {
         CborReader reader = new(payload, CborConformanceMode.Lax);
-        reader.ReadStartArray();
+        _ = reader.ReadStartArray();
 
         byte variant = checked((byte)reader.ReadUInt64());
 
@@ -51,9 +51,9 @@ public record HeaderContent(
         if (variant == 0)
         {
             // Byron: [[prefix_a, prefix_b], tag24(header_bytes)]
-            reader.ReadStartArray();
+            _ = reader.ReadStartArray();
 
-            reader.ReadStartArray();
+            _ = reader.ReadStartArray();
             byronSubTag = checked((byte)reader.ReadUInt64());
             _ = reader.ReadUInt64(); // second prefix value (unused)
             reader.ReadEndArray();

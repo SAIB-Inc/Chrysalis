@@ -1,9 +1,12 @@
 namespace Chrysalis.Wallet.Extensions;
 
+/// <summary>
+/// Extension methods for byte array operations.
+/// </summary>
 public static class ByteArrayExtension
 {
     /// <summary>
-    /// Concatinates two given byte arrays and returns a new byte array containing all the elements.
+    /// Concatenates two given byte arrays and returns a new byte array containing all the elements.
     /// </summary>
     /// <remarks>
     /// This is a lot faster than Linq (~30 times)
@@ -11,13 +14,11 @@ public static class ByteArrayExtension
     /// <exception cref="ArgumentNullException"/>
     /// <param name="firstArray">First set of bytes in the final array.</param>
     /// <param name="secondArray">Second set of bytes in the final array.</param>
-    /// <returns>The concatinated array of bytes.</returns>
+    /// <returns>The concatenated array of bytes.</returns>
     public static byte[] ConcatFast(this byte[] firstArray, byte[] secondArray)
     {
-        if (firstArray == null)
-            throw new ArgumentNullException(nameof(firstArray), "First array can not be null!");
-        if (secondArray == null)
-            throw new ArgumentNullException(nameof(secondArray), "Second array can not be null!");
+        ArgumentNullException.ThrowIfNull(firstArray);
+        ArgumentNullException.ThrowIfNull(secondArray);
 
         byte[] result = new byte[firstArray.Length + secondArray.Length];
         Buffer.BlockCopy(firstArray, 0, result, 0, firstArray.Length);

@@ -6,17 +6,47 @@ using Chrysalis.Cbor.Extensions.Cardano.Core.TransactionWitness;
 
 namespace Chrysalis.Cbor.Extensions.Cardano.Core.Transaction;
 
+/// <summary>
+/// Extension methods for <see cref="TransactionInput"/> to access input fields and resolve redeemers.
+/// </summary>
 public static class InputExtensions
 {
-    public static byte[] TransactionId(this TransactionInput self) => self.TransactionId;
+    /// <summary>
+    /// Gets the transaction ID that this input references.
+    /// </summary>
+    /// <param name="self">The transaction input instance.</param>
+    /// <returns>The transaction ID bytes.</returns>
+    public static byte[] TransactionId(this TransactionInput self)
+    {
+        ArgumentNullException.ThrowIfNull(self);
+        return self.TransactionId;
+    }
 
-    public static ulong Index(this TransactionInput self) => self.Index;
+    /// <summary>
+    /// Gets the output index within the referenced transaction.
+    /// </summary>
+    /// <param name="self">The transaction input instance.</param>
+    /// <returns>The output index.</returns>
+    public static ulong Index(this TransactionInput self)
+    {
+        ArgumentNullException.ThrowIfNull(self);
+        return self.Index;
+    }
 
+    /// <summary>
+    /// Resolves the redeemer for this input within the given block.
+    /// </summary>
+    /// <param name="self">The transaction input instance.</param>
+    /// <param name="block">The block containing the transaction.</param>
+    /// <returns>The redeemer entry, or null if not found.</returns>
     public static Redeemer? Redeemer(
         this TransactionInput self,
         CBlock block
     )
     {
+        ArgumentNullException.ThrowIfNull(self);
+        ArgumentNullException.ThrowIfNull(block);
+
         int txBodyIndex = block.TransactionBodies()
             .Select((tb, index) => new { tb, index })
             .Where(x => x.tb.Inputs().Any(i => i.TransactionId() == self.TransactionId() && i.Index() == self.Index()))
@@ -27,7 +57,7 @@ public static class InputExtensions
             .Select((tb, index) => new { tb, index })
             .Where(e => e.index == txBodyIndex)
             .Select(e => e.tb.Inputs()
-                .OrderBy(e => (Convert.ToHexString(e.TransactionId()) + e.Index()).ToLowerInvariant()))
+                .OrderBy(e => string.Concat(Convert.ToHexString(e.TransactionId()), e.Index())))
                 .Select(g => g
                     .Select((input, inputIndex) => new { input, inputIndex })
                     .Where(e => e.input.TransactionId() == self.TransactionId())
@@ -36,18 +66,20 @@ public static class InputExtensions
             .FirstOrDefault();
 
         TransactionWitnessSet? witnessSet = block.TransactionWitnessSets()
-            .Select((witnessSet, index) => new { witnessSet, index})
+            .Select((witnessSet, index) => new { witnessSet, index })
             .Where(e => e.index == txBodyIndex)
             .Select(e => e.witnessSet)
             .FirstOrDefault();
 
-        if (witnessSet is null) return null;
+        if (witnessSet is null)
+        {
+            return null;
+        }
 
         Redeemer? redeemer = witnessSet.Redeemers() switch
         {
             RedeemerList list => list.Value
-                .Where(re => re.Index == inputIndex)
-                .FirstOrDefault(),
+                .FirstOrDefault(re => re.Index == inputIndex),
             RedeemerMap map => map.Value
                 .Where(dict => dict.Key.Index == inputIndex)
                 .Select(e => new Redeemer(

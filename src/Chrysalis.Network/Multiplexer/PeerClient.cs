@@ -44,9 +44,18 @@ public sealed class PeerClient : IDisposable
     /// <returns>A connected PeerClient instance.</returns>
     public static async Task<PeerClient> ConnectAsync(string socketPath, CancellationToken cancellationToken = default)
     {
-        UnixBearer unixBearer = await UnixBearer.CreateAsync(socketPath, cancellationToken);
-        Plexer plexer = new(unixBearer);
-        return new(plexer);
+        UnixBearer? unixBearer = null;
+        try
+        {
+            unixBearer = await UnixBearer.CreateAsync(socketPath, cancellationToken).ConfigureAwait(false);
+            PeerClient client = CreateFromBearer(unixBearer);
+            unixBearer = null; // Ownership transferred
+            return client;
+        }
+        finally
+        {
+            unixBearer?.Dispose();
+        }
     }
 
     /// <summary>
@@ -58,9 +67,33 @@ public sealed class PeerClient : IDisposable
     /// <returns>A connected PeerClient instance.</returns>
     public static async Task<PeerClient> ConnectAsync(string host, int port, CancellationToken cancellationToken = default)
     {
-        TcpBearer tcpBearer = await TcpBearer.CreateAsync(host, port, cancellationToken);
-        Plexer plexer = new(tcpBearer);
-        return new(plexer);
+        TcpBearer? tcpBearer = null;
+        try
+        {
+            tcpBearer = await TcpBearer.CreateAsync(host, port, cancellationToken).ConfigureAwait(false);
+            PeerClient client = CreateFromBearer(tcpBearer);
+            tcpBearer = null; // Ownership transferred
+            return client;
+        }
+        finally
+        {
+            tcpBearer?.Dispose();
+        }
+    }
+
+    private static PeerClient CreateFromBearer(IBearer bearer)
+    {
+        Plexer plexer = new(bearer);
+        try
+        {
+            PeerClient client = new(plexer);
+            return client;
+        }
+        catch
+        {
+            plexer.Dispose();
+            throw;
+        }
     }
 
     /// <summary>
@@ -78,15 +111,15 @@ public sealed class PeerClient : IDisposable
 
         NetworkMagic = networkMagic;
 
-        ProposeVersions proposeVersion = HandshakeMessages.ProposeVersions(VersionTables.N2N_V11_AND_ABOVE(networkMagic));
-        HandshakeMessage handshakeResponse = await Handshake.SendAsync(proposeVersion, CancellationToken.None);
+        ProposeVersions proposeVersion = HandshakeMessages.ProposeVersions(VersionTables.N2nV11AndAbove(networkMagic));
+        HandshakeMessage handshakeResponse = await Handshake.SendAsync(proposeVersion, CancellationToken.None).ConfigureAwait(false);
 
         if (handshakeResponse is not AcceptVersion)
         {
             throw new InvalidOperationException("Handshake failed");
         }
 
-        var interval = keepAliveInterval ?? TimeSpan.FromSeconds(20);
+        TimeSpan interval = keepAliveInterval ?? TimeSpan.FromSeconds(20);
         _keepAliveCts = new CancellationTokenSource();
         _keepAliveTask = RunKeepAliveLoop(interval, _keepAliveCts.Token);
     }
@@ -94,7 +127,10 @@ public sealed class PeerClient : IDisposable
     /// <summary>
     /// Checks if the plexer (multiplexer/demultiplexer) is healthy and running.
     /// </summary>
-    public bool IsPlexerHealthy() => _plexerTask is { IsCompleted: false };
+    public bool IsPlexerHealthy()
+    {
+        return _plexerTask is { IsCompleted: false };
+    }
 
     /// <summary>
     /// Gets the exception that caused the plexer to fail, if any.
@@ -107,7 +143,10 @@ public sealed class PeerClient : IDisposable
     /// <summary>
     /// Checks if the keepalive loop is healthy and running.
     /// </summary>
-    public bool IsKeepAliveHealthy() => _keepAliveTask is { IsCompleted: false };
+    public bool IsKeepAliveHealthy()
+    {
+        return _keepAliveTask is { IsCompleted: false };
+    }
 
     /// <summary>
     /// Gets the exception that caused the keepalive loop to fail, if any.
@@ -122,9 +161,9 @@ public sealed class PeerClient : IDisposable
         using PeriodicTimer timer = new(interval);
         try
         {
-            while (await timer.WaitForNextTickAsync(cancellationToken))
+            while (await timer.WaitForNextTickAsync(cancellationToken).ConfigureAwait(false))
             {
-                await KeepAlive.KeepAliveRoundtripAsync(cancellationToken);
+                await KeepAlive.KeepAliveRoundtripAsync(cancellationToken).ConfigureAwait(false);
             }
         }
         catch (OperationCanceledException)
@@ -141,6 +180,5 @@ public sealed class PeerClient : IDisposable
         _keepAliveCts?.Cancel();
         _keepAliveCts?.Dispose();
         _plexer.Dispose();
-        GC.SuppressFinalize(this);
     }
 }

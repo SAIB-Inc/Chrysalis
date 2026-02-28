@@ -31,7 +31,7 @@ public class ByronTests
         Assert.Equal(1, blockWithEra.EraNumber);
 
         Block block = blockWithEra.Block;
-        Assert.IsType<ByronMainBlock>(block);
+        _ = Assert.IsType<ByronMainBlock>(block);
 
         ByronMainBlock byron = (ByronMainBlock)block;
         Assert.NotNull(byron.Header);
@@ -48,7 +48,7 @@ public class ByronTests
         Assert.Equal(0, blockWithEra.EraNumber);
 
         Block block = blockWithEra.Block;
-        Assert.IsType<ByronEbBlock>(block);
+        _ = Assert.IsType<ByronEbBlock>(block);
     }
 
     [Theory]

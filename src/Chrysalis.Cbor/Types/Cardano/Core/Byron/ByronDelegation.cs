@@ -1,8 +1,14 @@
-using Chrysalis.Cbor.Serialization;
 using Chrysalis.Cbor.Serialization.Attributes;
 
 namespace Chrysalis.Cbor.Types.Cardano.Core.Byron;
 
+/// <summary>
+/// Represents a Byron heavyweight delegation certificate.
+/// </summary>
+/// <param name="Epoch">The epoch number for which the delegation is valid.</param>
+/// <param name="Issuer">The public key of the issuer.</param>
+/// <param name="Delegate">The public key of the delegate.</param>
+/// <param name="Certificate">The delegation certificate signature.</param>
 [CborSerializable]
 [CborList]
 public partial record ByronDlg(
@@ -12,6 +18,13 @@ public partial record ByronDlg(
     [CborOrder(3)] byte[] Certificate
 ) : CborBase;
 
+/// <summary>
+/// Represents a Byron lightweight delegation certificate with an epoch range.
+/// </summary>
+/// <param name="EpochRange">The range of epochs for which the delegation is valid.</param>
+/// <param name="Issuer">The public key of the issuer.</param>
+/// <param name="Delegate">The public key of the delegate.</param>
+/// <param name="Certificate">The delegation certificate signature.</param>
 [CborSerializable]
 [CborList]
 public partial record ByronLwdlg(
@@ -27,6 +40,8 @@ public partial record ByronLwdlg(
 /// Variant 1: Lightweight delegation signature ([lwdlg, signature])
 /// Variant 2: Heavy delegation signature ([dlg, signature])
 /// </summary>
+/// <param name="Variant">The signature variant type.</param>
+/// <param name="Data">The encoded signature data.</param>
 [CborSerializable]
 [CborList]
 public partial record ByronBlockSig(

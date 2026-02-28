@@ -7,7 +7,7 @@ namespace Chrysalis.Network.Core;
 /// <summary>
 /// Unix domain socket implementation of the bearer interface.
 /// </summary>
-public class UnixBearer : IBearer
+public sealed class UnixBearer : IBearer
 {
     private readonly Socket _socket;
     private readonly NetworkStream _stream;
@@ -41,7 +41,7 @@ public class UnixBearer : IBearer
     {
         Socket socket = new(AddressFamily.Unix, SocketType.Stream, SocketProtocolType.Unspecified);
         UnixDomainSocketEndPoint endpoint = new(path);
-        await socket.ConnectAsync(endpoint, cancellationToken);
+        await socket.ConnectAsync(endpoint, cancellationToken).ConfigureAwait(false);
         NetworkStream stream = new(socket, ownsSocket: true);
         return new UnixBearer(socket, stream);
     }
@@ -51,7 +51,10 @@ public class UnixBearer : IBearer
     /// </summary>
     public void Dispose()
     {
-        if (_isDisposed) return;
+        if (_isDisposed)
+        {
+            return;
+        }
 
         Reader.Complete();
         Writer.Complete();
@@ -59,6 +62,5 @@ public class UnixBearer : IBearer
         _socket.Dispose();
 
         _isDisposed = true;
-        GC.SuppressFinalize(this);
     }
 }

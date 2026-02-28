@@ -5,10 +5,20 @@ using Chrysalis.Plutus.VM.EvalTx;
 
 namespace Chrysalis.Tx.Extensions;
 
+/// <summary>
+/// Extension methods for working with Cardano scripts.
+/// </summary>
 public static class ScriptExtension
 {
+    /// <summary>
+    /// Gets the version number of a script (0=MultiSig, 1=PlutusV1, 2=PlutusV2, 3=PlutusV3).
+    /// </summary>
+    /// <param name="script">The script to check.</param>
+    /// <returns>The script version number.</returns>
     public static int Version(this Script script)
     {
+        ArgumentNullException.ThrowIfNull(script);
+
         return script switch
         {
             MultiSigScript => 0,
@@ -19,8 +29,15 @@ public static class ScriptExtension
         };
     }
 
+    /// <summary>
+    /// Gets the raw bytes of a Plutus script.
+    /// </summary>
+    /// <param name="script">The script to extract bytes from.</param>
+    /// <returns>The script bytes.</returns>
     public static byte[] Bytes(this Script script)
     {
+        ArgumentNullException.ThrowIfNull(script);
+
         return script switch
         {
             PlutusV1Script plutusV1Script => plutusV1Script.ScriptBytes,
@@ -30,8 +47,18 @@ public static class ScriptExtension
         };
     }
 
+    /// <summary>
+    /// Applies a single parameter to a Plutus script.
+    /// </summary>
+    /// <typeparam name="T">The parameter CBOR type.</typeparam>
+    /// <param name="self">The script to parameterize.</param>
+    /// <param name="parameter">The parameter to apply.</param>
+    /// <returns>A new script with the parameter applied.</returns>
     public static Script ApplyParameters<T>(this Script self, T parameter) where T : CborBase
     {
+        ArgumentNullException.ThrowIfNull(self);
+        ArgumentNullException.ThrowIfNull(parameter);
+
         if (self is MultiSigScript)
         {
             throw new NotSupportedException("MultiSig scripts do not support parameterization");
@@ -41,7 +68,7 @@ public static class ScriptExtension
         byte[] parameterCbor = CborSerializer.Serialize(parameter);
         PlutusData plutusParameter = CborSerializer.Deserialize<PlutusData>(parameterCbor);
         byte[] parameterizedBytes = ScriptApplicator.ApplyParameters(originalBytes, plutusParameter);
-        
+
         return self switch
         {
             PlutusV1Script plutusV1 => plutusV1 with { ScriptBytes = parameterizedBytes },
@@ -51,14 +78,23 @@ public static class ScriptExtension
         };
     }
 
+    /// <summary>
+    /// Applies a list of parameters sequentially to a Plutus script.
+    /// </summary>
+    /// <typeparam name="T">The parameter CBOR type.</typeparam>
+    /// <param name="self">The script to parameterize.</param>
+    /// <param name="parameters">The parameters to apply in order.</param>
+    /// <returns>A new script with all parameters applied.</returns>
     public static Script ApplyParameters<T>(this Script self, List<T> parameters) where T : CborBase
     {
+        ArgumentNullException.ThrowIfNull(self);
+        ArgumentNullException.ThrowIfNull(parameters);
+
         Script current = self;
-        foreach (var parameter in parameters)
+        foreach (T parameter in parameters)
         {
             current = current.ApplyParameters(parameter);
         }
         return current;
     }
-
 }

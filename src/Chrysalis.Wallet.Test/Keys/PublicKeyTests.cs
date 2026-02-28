@@ -1,6 +1,5 @@
 using Chrysalis.Wallet.Models.Keys;
 using Chrysalis.Wallet.Words;
-using Xunit;
 
 namespace Chrysalis.Wallet.Test.Keys;
 
@@ -80,7 +79,7 @@ public class PublicKeyTests
         string hex = publicKey.ToHex();
 
         Assert.Equal(64, hex.Length);
-        Assert.True(hex.All(c => "0123456789ABCDEF".Contains(c)));
+        Assert.True(hex.All(c => "0123456789ABCDEF".Contains(c, StringComparison.Ordinal)));
     }
 
     [Fact]

@@ -8,11 +8,17 @@ public sealed partial class CborSerializerCodeGen
     {
         public static StringBuilder EmitSerializableTypeWriter(StringBuilder sb, SerializableTypeMetadata metadata)
         {
-            sb.AppendLine($"public static new void Write(CborWriter writer, {metadata.FullyQualifiedName} data)");
-            sb.AppendLine("{");
+            string xmlSafeId = metadata.Indentifier.Replace("<", "{").Replace(">", "}");
+            _ = sb.AppendLine($"/// <summary>");
+            _ = sb.AppendLine($"/// Serializes a <see cref=\"{xmlSafeId}\"/> instance to CBOR format.");
+            _ = sb.AppendLine($"/// </summary>");
+            _ = sb.AppendLine($"/// <param name=\"writer\">The CBOR writer to serialize to.</param>");
+            _ = sb.AppendLine($"/// <param name=\"data\">The <see cref=\"{xmlSafeId}\"/> instance to serialize.</param>");
+            _ = sb.AppendLine($"public static new void Write(CborWriter writer, {metadata.FullyQualifiedName} data)");
+            _ = sb.AppendLine("{");
             ICborSerializerEmitter emitter = GetEmitter(metadata);
-            emitter.EmitWriter(sb, metadata);
-            sb.AppendLine("}");
+            _ = emitter.EmitWriter(sb, metadata);
+            _ = sb.AppendLine("}");
 
             return sb;
         }
@@ -20,52 +26,55 @@ public sealed partial class CborSerializerCodeGen
         public static StringBuilder EmitSerializablePropertyWriter(StringBuilder sb, SerializablePropertyMetadata metadata)
         {
             string propertyName = $"data.{metadata.PropertyName}";
-            
+
             // Special handling for CborLabel's Value property
             if (metadata.PropertyName == "Value" && metadata.PropertyType == "object")
             {
-                sb.AppendLine($"switch ({propertyName})");
-                sb.AppendLine("{");
-                sb.AppendLine("    case int i:");
-                sb.AppendLine("        writer.WriteInt32(i);");
-                sb.AppendLine("        break;");
-                sb.AppendLine("    case long l:");
-                sb.AppendLine("        writer.WriteInt64(l);");
-                sb.AppendLine("        break;");
-                sb.AppendLine("    case string s:");
-                sb.AppendLine("        writer.WriteTextString(s);");
-                sb.AppendLine("        break;");
-                sb.AppendLine("    default:");
-                sb.AppendLine($"        throw new InvalidOperationException($\"CborLabel value must be int, long, or string. Got: {{{propertyName}?.GetType()}}\");");
-                sb.AppendLine("}");
+                _ = sb.AppendLine($"switch ({propertyName})");
+                _ = sb.AppendLine("{");
+                _ = sb.AppendLine("    case int i:");
+                _ = sb.AppendLine("        writer.WriteInt32(i);");
+                _ = sb.AppendLine("        break;");
+                _ = sb.AppendLine("    case long l:");
+                _ = sb.AppendLine("        writer.WriteInt64(l);");
+                _ = sb.AppendLine("        break;");
+                _ = sb.AppendLine("    case string s:");
+                _ = sb.AppendLine("        writer.WriteTextString(s);");
+                _ = sb.AppendLine("        break;");
+                _ = sb.AppendLine("    default:");
+                _ = sb.AppendLine($"        throw new InvalidOperationException($\"CborLabel value must be int, long, or string. Got: {{{propertyName}?.GetType()}}\");");
+                _ = sb.AppendLine("}");
                 return sb;
             }
-            
+
             if (metadata.IsNullable)
             {
-                sb.AppendLine($"if ({propertyName} is null)");
-                sb.AppendLine("{");
-                sb.AppendLine($"writer.WriteNull();");
-                sb.AppendLine("}");
-                sb.AppendLine($"else");
-                sb.AppendLine("{");
+                _ = sb.AppendLine($"if ({propertyName} is null)");
+                _ = sb.AppendLine("{");
+                _ = sb.AppendLine($"writer.WriteNull();");
+                _ = sb.AppendLine("}");
+                _ = sb.AppendLine($"else");
+                _ = sb.AppendLine("{");
             }
 
             if (metadata.IsTypeNullable)
             {
-                sb.AppendLine($"if ({propertyName} is not null)");
-                sb.AppendLine("{");
-                EmitPrimitiveOrObjectWriter(sb, metadata, propertyName);
-                sb.AppendLine("}");
+                _ = sb.AppendLine($"if ({propertyName} is not null)");
+                _ = sb.AppendLine("{");
+                _ = EmitPrimitiveOrObjectWriter(sb, metadata, propertyName);
+                _ = sb.AppendLine("}");
             }
             else
             {
-                EmitPrimitiveOrObjectWriter(sb, metadata, propertyName);
+                _ = EmitPrimitiveOrObjectWriter(sb, metadata, propertyName);
             }
 
-            if (metadata.IsNullable) sb.AppendLine("}");
+            if (metadata.IsNullable)
+            {
+                _ = sb.AppendLine("}");
+            }
 
-            sb.AppendLine();
+            _ = sb.AppendLine();
 
             return sb;
         }
@@ -77,96 +86,98 @@ public sealed partial class CborSerializerCodeGen
             switch (type)
             {
                 case "bool":
-                    sb.AppendLine(isNullable
+                    _ = sb.AppendLine(isNullable
                         ? $"writer.WriteBoolean({propertyName}.Value);"
                         : $"writer.WriteBoolean({propertyName});");
                     break;
                 case "int":
-                    sb.AppendLine(isNullable
+                    _ = sb.AppendLine(isNullable
                         ? $"writer.WriteInt32({propertyName}.Value);"
                         : $"writer.WriteInt32({propertyName});");
                     break;
                 case "uint":
-                    sb.AppendLine(isNullable
+                    _ = sb.AppendLine(isNullable
                         ? $"writer.WriteUInt32({propertyName}.Value);"
                         : $"writer.WriteUInt32({propertyName});");
                     break;
                 case "long":
-                    sb.AppendLine(isNullable
+                    _ = sb.AppendLine(isNullable
                         ? $"writer.WriteInt64({propertyName}.Value);"
                         : $"writer.WriteInt64({propertyName});");
                     break;
                 case "ulong":
-                    sb.AppendLine(isNullable
+                    _ = sb.AppendLine(isNullable
                         ? $"writer.WriteUInt64({propertyName}.Value);"
                         : $"writer.WriteUInt64({propertyName});");
                     break;
                 case "float":
-                    sb.AppendLine(isNullable
+                    _ = sb.AppendLine(isNullable
                         ? $"writer.WriteSingle({propertyName}.Value);"
                         : $"writer.WriteSingle({propertyName});");
                     break;
                 case "double":
-                    sb.AppendLine(isNullable
+                    _ = sb.AppendLine(isNullable
                         ? $"writer.WriteDouble({propertyName}.Value);"
                         : $"writer.WriteDouble({propertyName});");
                     break;
                 case "decimal":
-                    sb.AppendLine(isNullable
+                    _ = sb.AppendLine(isNullable
                         ? $"writer.WriteDecimal({propertyName}.Value);"
                         : $"writer.WriteDecimal({propertyName});");
                     break;
                 case "string":
-                    sb.AppendLine($"writer.WriteTextString({propertyName});");
+                    _ = sb.AppendLine($"writer.WriteTextString({propertyName});");
                     break;
                 case "byte[]?":
                 case "byte[]":
                     if (size is not null)
                     {
-                        sb.AppendLine($"if ({propertyName}.Length > {size})");
-                        sb.AppendLine("{");
-                        sb.AppendLine($"writer.WriteStartIndefiniteLengthByteString();");
-                        sb.AppendLine($"var {propertyName.Replace(".", "")}Chunks = {propertyName}.Chunk({size});");
-                        sb.AppendLine($"foreach (var chunk in {propertyName.Replace(".", "")}Chunks)");
-                        sb.AppendLine("{");
-                        sb.AppendLine($"writer.WriteByteString(chunk);");
-                        sb.AppendLine("}");
-                        sb.AppendLine($"writer.WriteEndIndefiniteLengthByteString();");
-                        sb.AppendLine("}");
-                        sb.AppendLine("else");
-                        sb.AppendLine("{");
-                        sb.AppendLine($"writer.WriteByteString({propertyName});");
-                        sb.AppendLine("}");
+                        _ = sb.AppendLine($"if ({propertyName}.Length > {size})");
+                        _ = sb.AppendLine("{");
+                        _ = sb.AppendLine($"writer.WriteStartIndefiniteLengthByteString();");
+                        _ = sb.AppendLine($"var {propertyName.Replace(".", "")}Chunks = {propertyName}.Chunk({size});");
+                        _ = sb.AppendLine($"foreach (var chunk in {propertyName.Replace(".", "")}Chunks)");
+                        _ = sb.AppendLine("{");
+                        _ = sb.AppendLine($"writer.WriteByteString(chunk);");
+                        _ = sb.AppendLine("}");
+                        _ = sb.AppendLine($"writer.WriteEndIndefiniteLengthByteString();");
+                        _ = sb.AppendLine("}");
+                        _ = sb.AppendLine("else");
+                        _ = sb.AppendLine("{");
+                        _ = sb.AppendLine($"writer.WriteByteString({propertyName});");
+                        _ = sb.AppendLine("}");
                     }
                     else
                     {
-                        sb.AppendLine($"writer.WriteByteString({propertyName});");
+                        _ = sb.AppendLine($"writer.WriteByteString({propertyName});");
                     }
 
                     break;
                 case "CborEncodedValue":
                 case "Chrysalis.Cbor.Types.Primitives.CborEncodedValue":
                 case "global::Chrysalis.Cbor.Types.Primitives.CborEncodedValue":
-                    sb.AppendLine("writer.WriteTag(CborTag.EncodedCborDataItem);");
-                    sb.AppendLine($"writer.WriteByteString({propertyName}.Value);");
+                    _ = sb.AppendLine("writer.WriteTag(CborTag.EncodedCborDataItem);");
+                    _ = sb.AppendLine($"writer.WriteByteString({propertyName}.Value);");
                     break;
                 case "CborLabel":
                 case "Chrysalis.Cbor.Types.CborLabel":
                 case "global::Chrysalis.Cbor.Types.CborLabel":
-                    sb.AppendLine($"switch ({propertyName}.Value)");
-                    sb.AppendLine("{");
-                    sb.AppendLine("    case int i:");
-                    sb.AppendLine("        writer.WriteInt32(i);");
-                    sb.AppendLine("        break;");
-                    sb.AppendLine("    case long l:");
-                    sb.AppendLine("        writer.WriteInt64(l);");
-                    sb.AppendLine("        break;");
-                    sb.AppendLine("    case string s:");
-                    sb.AppendLine("        writer.WriteTextString(s);");
-                    sb.AppendLine("        break;");
-                    sb.AppendLine("    default:");
-                    sb.AppendLine($"        throw new InvalidOperationException($\"CborLabel value must be int, long, or string. Got: {{{propertyName}.Value?.GetType()}}\");");
-                    sb.AppendLine("}");
+                    _ = sb.AppendLine($"switch ({propertyName}.Value)");
+                    _ = sb.AppendLine("{");
+                    _ = sb.AppendLine("    case int i:");
+                    _ = sb.AppendLine("        writer.WriteInt32(i);");
+                    _ = sb.AppendLine("        break;");
+                    _ = sb.AppendLine("    case long l:");
+                    _ = sb.AppendLine("        writer.WriteInt64(l);");
+                    _ = sb.AppendLine("        break;");
+                    _ = sb.AppendLine("    case string s:");
+                    _ = sb.AppendLine("        writer.WriteTextString(s);");
+                    _ = sb.AppendLine("        break;");
+                    _ = sb.AppendLine("    default:");
+                    _ = sb.AppendLine($"        throw new InvalidOperationException($\"CborLabel value must be int, long, or string. Got: {{{propertyName}.Value?.GetType()}}\");");
+                    _ = sb.AppendLine("}");
+                    break;
+                default:
                     break;
             }
 
@@ -183,38 +194,28 @@ public sealed partial class CborSerializerCodeGen
                 }
 
                 // Check attribute, runtime flag, or tracked indefinite state
-                sb.AppendLine($"bool useIndefiniteFor{metadata.PropertyName} = {(metadata.IsIndefinite ? "true" : "false")} || ");
-                sb.AppendLine($"    Chrysalis.Cbor.Serialization.IndefiniteStateTracker.IsIndefinite({propertyName});");
-                sb.AppendLine($"if (useIndefiniteFor{metadata.PropertyName})");
-                sb.AppendLine("{");
-                sb.AppendLine($"    writer.WriteStartArray(null);");
-                sb.AppendLine("}");
-                sb.AppendLine("else");
-                sb.AppendLine("{");
-                sb.AppendLine($"    writer.WriteStartArray({propertyName}.Count());");
-                sb.AppendLine("}");
+                _ = sb.AppendLine($"bool useIndefiniteFor{metadata.PropertyName} = {(metadata.IsIndefinite ? "true" : "false")} || ");
+                _ = sb.AppendLine($"    Chrysalis.Cbor.Serialization.IndefiniteStateTracker.IsIndefinite({propertyName});");
+                _ = sb.AppendLine($"if (useIndefiniteFor{metadata.PropertyName})");
+                _ = sb.AppendLine("{");
+                _ = sb.AppendLine($"    writer.WriteStartArray(null);");
+                _ = sb.AppendLine("}");
+                _ = sb.AppendLine("else");
+                _ = sb.AppendLine("{");
+                _ = sb.AppendLine($"    writer.WriteStartArray({propertyName}.Count());");
+                _ = sb.AppendLine("}");
 
-                sb.AppendLine($"foreach (var item in {propertyName})");
-                sb.AppendLine("{");
-                if (metadata.IsListItemTypeOpenGeneric)
-                {
-                    EmitGenericWithTypeParamsWriter(sb, metadata.ListItemType, $"item");
-                }
-                else
-                {
-                    if (IsPrimitiveType(metadata.ListItemTypeFullName))
-                    {
-                        EmitPrimitivePropertyWriter(sb, metadata.ListItemTypeFullName, "item");
-                    }
-                    else
-                    {
-                        sb.AppendLine($"{metadata.ListItemTypeFullName}.Write(writer, ({metadata.ListItemTypeFullName})item);");
-                    }
-                }
+                _ = sb.AppendLine($"foreach (var item in {propertyName})");
+                _ = sb.AppendLine("{");
+                _ = metadata.IsListItemTypeOpenGeneric
+                    ? EmitGenericWithTypeParamsWriter(sb, metadata.ListItemType, $"item")
+                    : IsPrimitiveType(metadata.ListItemTypeFullName)
+                        ? EmitPrimitivePropertyWriter(sb, metadata.ListItemTypeFullName, "item")
+                        : sb.AppendLine($"{metadata.ListItemTypeFullName}.Write(writer, ({metadata.ListItemTypeFullName})item);");
 
 
-                sb.AppendLine("}");
-                sb.AppendLine($"writer.WriteEndArray();");
+                _ = sb.AppendLine("}");
+                _ = sb.AppendLine($"writer.WriteEndArray();");
 
                 return sb;
             }
@@ -227,65 +228,40 @@ public sealed partial class CborSerializerCodeGen
                 }
 
                 // Check attribute, runtime flag, or tracked indefinite state
-                sb.AppendLine($"bool useIndefiniteMapFor{metadata.PropertyName} = {(metadata.IsIndefinite ? "true" : "false")} || ");
-                sb.AppendLine($"    Chrysalis.Cbor.Serialization.IndefiniteStateTracker.IsIndefinite({propertyName});");
-                sb.AppendLine($"if (useIndefiniteMapFor{metadata.PropertyName})");
-                sb.AppendLine("{");
-                sb.AppendLine($"    writer.WriteStartMap(null);");
-                sb.AppendLine("}");
-                sb.AppendLine("else");
-                sb.AppendLine("{");
-                sb.AppendLine($"    writer.WriteStartMap({propertyName}.Count());");
-                sb.AppendLine("}");
+                _ = sb.AppendLine($"bool useIndefiniteMapFor{metadata.PropertyName} = {(metadata.IsIndefinite ? "true" : "false")} || ");
+                _ = sb.AppendLine($"    Chrysalis.Cbor.Serialization.IndefiniteStateTracker.IsIndefinite({propertyName});");
+                _ = sb.AppendLine($"if (useIndefiniteMapFor{metadata.PropertyName})");
+                _ = sb.AppendLine("{");
+                _ = sb.AppendLine($"    writer.WriteStartMap(null);");
+                _ = sb.AppendLine("}");
+                _ = sb.AppendLine("else");
+                _ = sb.AppendLine("{");
+                _ = sb.AppendLine($"    writer.WriteStartMap({propertyName}.Count());");
+                _ = sb.AppendLine("}");
 
-                sb.AppendLine($"foreach (var kvp in {propertyName})");
-                sb.AppendLine("{");
+                _ = sb.AppendLine($"foreach (var kvp in {propertyName})");
+                _ = sb.AppendLine("{");
 
-                if (metadata.IsMapKeyTypeOpenGeneric)
-                {
-                    EmitGenericWithTypeParamsWriter(sb, metadata.MapKeyTypeFullName, $"kvp.Key");
-                }
-                else
-                {
-                    if (IsPrimitiveType(metadata.MapKeyTypeFullName))
-                    {
-                        EmitPrimitivePropertyWriter(sb, metadata.MapKeyTypeFullName, $"kvp.Key");
-                    }
-                    else
-                    {
-                        sb.AppendLine($"{metadata.MapKeyTypeFullName}.Write(writer, ({metadata.MapKeyTypeFullName})kvp.Key);");
-                    }
-                }
+                _ = metadata.IsMapKeyTypeOpenGeneric
+                    ? EmitGenericWithTypeParamsWriter(sb, metadata.MapKeyTypeFullName, $"kvp.Key")
+                    : IsPrimitiveType(metadata.MapKeyTypeFullName)
+                        ? EmitPrimitivePropertyWriter(sb, metadata.MapKeyTypeFullName, $"kvp.Key")
+                        : sb.AppendLine($"{metadata.MapKeyTypeFullName}.Write(writer, ({metadata.MapKeyTypeFullName})kvp.Key);");
 
-                if (metadata.IsMapValueTypeOpenGeneric)
-                {
-                    EmitGenericWithTypeParamsWriter(sb, metadata.MapValueTypeFullName, $"kvp.Value");
-                }
-                else
-                {
-                    if (IsPrimitiveType(metadata.MapValueTypeFullName))
-                    {
-                        EmitPrimitivePropertyWriter(sb, metadata.MapValueTypeFullName, $"kvp.Value");
-                    }
-                    else
-                    {
-                        sb.AppendLine($"{metadata.MapValueTypeFullName}.Write(writer, ({metadata.MapValueTypeFullName})kvp.Value);");
-                    }
-                }
+                _ = metadata.IsMapValueTypeOpenGeneric
+                    ? EmitGenericWithTypeParamsWriter(sb, metadata.MapValueTypeFullName, $"kvp.Value")
+                    : IsPrimitiveType(metadata.MapValueTypeFullName)
+                        ? EmitPrimitivePropertyWriter(sb, metadata.MapValueTypeFullName, $"kvp.Value")
+                        : sb.AppendLine($"{metadata.MapValueTypeFullName}.Write(writer, ({metadata.MapValueTypeFullName})kvp.Value);");
 
-                sb.AppendLine("}");
-                sb.AppendLine($"writer.WriteEndMap();");
+                _ = sb.AppendLine("}");
+                _ = sb.AppendLine($"writer.WriteEndMap();");
                 return sb;
             }
 
-            if (metadata.IsOpenGeneric)
-            {
-                EmitGenericWithTypeParamsWriter(sb, metadata.PropertyTypeFullName, propertyName);
-            }
-            else
-            {
-                sb.AppendLine($"{metadata.PropertyTypeFullName}.Write(writer, ({metadata.PropertyTypeFullName}){propertyName});");
-            }
+            _ = metadata.IsOpenGeneric
+                ? EmitGenericWithTypeParamsWriter(sb, metadata.PropertyTypeFullName, propertyName)
+                : sb.AppendLine($"{metadata.PropertyTypeFullName}.Write(writer, ({metadata.PropertyTypeFullName}){propertyName});");
 
             return sb;
         }
@@ -294,7 +270,7 @@ public sealed partial class CborSerializerCodeGen
         {
             if (tag.HasValue && tag.Value >= 0)
             {
-                sb.AppendLine($"writer.WriteTag((CborTag){tag});");
+                _ = sb.AppendLine($"writer.WriteTag((CborTag){tag});");
             }
 
             return sb;
@@ -304,8 +280,8 @@ public sealed partial class CborSerializerCodeGen
         {
             if (metadata.Validator is not null)
             {
-                sb.AppendLine($"{metadata.Validator} validator = new();");
-                sb.AppendLine($"if (!validator.Validate({propertyName})) throw new Exception(\"Validation failed\");");
+                _ = sb.AppendLine($"{metadata.Validator} validator = new();");
+                _ = sb.AppendLine($"if (!validator.Validate({propertyName})) throw new Exception(\"Validation failed\");");
             }
 
             return sb;
@@ -313,40 +289,30 @@ public sealed partial class CborSerializerCodeGen
 
         public static StringBuilder EmitGenericWithTypeParamsWriter(StringBuilder sb, string type, string propertyName)
         {
-            sb.AppendLine($"{GenericSerializationUtilFullname}.Write<{type}>(writer, {propertyName});");
+            _ = sb.AppendLine($"{GenericSerializationUtilFullname}.Write<{type}>(writer, {propertyName});");
             return sb;
         }
 
-        public static StringBuilder EmitGenericWriter(StringBuilder sb, string type, string propertyName)
+        public static StringBuilder EmitGenericWriter(StringBuilder sb, string type)
         {
-            sb.AppendLine($"{GenericSerializationUtilFullname}.Write(writer, {type});");
+            _ = sb.AppendLine($"{GenericSerializationUtilFullname}.Write(writer, {type});");
             return sb;
         }
 
         public static StringBuilder EmitPrimitiveOrObjectWriter(StringBuilder sb, SerializablePropertyMetadata metadata, string propertyName)
         {
-            if (metadata.IsOpenGeneric)
-            {
-                EmitGenericWithTypeParamsWriter(sb, metadata.PropertyType, propertyName);
-            }
-            else
-            {
-                if (IsPrimitiveType(metadata.PropertyType))
-                {
-                    EmitPrimitivePropertyWriter(sb, metadata.PropertyType, propertyName, metadata.Size);
-                }
-                else
-                {
-                    EmitObjectPropertyWriter(sb, metadata, propertyName);
-                }
-            }
+            _ = metadata.IsOpenGeneric
+                ? EmitGenericWithTypeParamsWriter(sb, metadata.PropertyType, propertyName)
+                : IsPrimitiveType(metadata.PropertyType)
+                    ? EmitPrimitivePropertyWriter(sb, metadata.PropertyType, propertyName, metadata.Size)
+                    : EmitObjectPropertyWriter(sb, metadata, propertyName);
 
             return sb;
         }
 
         public static StringBuilder EmitCustomListWriter(StringBuilder sb, SerializableTypeMetadata metadata)
         {
-            EmitPropertyCountWriter(sb, metadata);
+            _ = EmitPropertyCountWriter(sb, metadata);
             if (!(metadata.SerializationType == SerializationType.Constr && (metadata.CborIndex is null || metadata.CborIndex < 0)))
             {
                 // Use indefinite if either attribute OR runtime flag is set
@@ -354,36 +320,36 @@ public sealed partial class CborSerializerCodeGen
                 if (metadata.IsIndefinite)
                 {
                     // Force indefinite encoding due to attribute
-                    sb.AppendLine($"writer.WriteStartArray(null);");
+                    _ = sb.AppendLine($"writer.WriteStartArray(null);");
                 }
                 else if (metadata.IsDefinite)
                 {
                     // Force definite encoding due to attribute
-                    sb.AppendLine($"writer.WriteStartArray(propCount);");
+                    _ = sb.AppendLine($"writer.WriteStartArray(propCount);");
                 }
                 else
                 {
                     // No explicit attribute - check runtime flag for dynamic behavior
-                    sb.AppendLine($"bool useIndefinite = data.IsIndefinite;");
-                    sb.AppendLine("if (useIndefinite)");
-                    sb.AppendLine("{");
-                    sb.AppendLine("    writer.WriteStartArray(null);");
-                    sb.AppendLine("}");
-                    sb.AppendLine("else");
-                    sb.AppendLine("{");
-                    sb.AppendLine("    writer.WriteStartArray(propCount);");
-                    sb.AppendLine("}");
+                    _ = sb.AppendLine($"bool useIndefinite = data.IsIndefinite;");
+                    _ = sb.AppendLine("if (useIndefinite)");
+                    _ = sb.AppendLine("{");
+                    _ = sb.AppendLine("    writer.WriteStartArray(null);");
+                    _ = sb.AppendLine("}");
+                    _ = sb.AppendLine("else");
+                    _ = sb.AppendLine("{");
+                    _ = sb.AppendLine("    writer.WriteStartArray(propCount);");
+                    _ = sb.AppendLine("}");
                 }
             }
 
             foreach (SerializablePropertyMetadata prop in metadata.Properties)
             {
-                EmitSerializablePropertyWriter(sb, prop);
+                _ = EmitSerializablePropertyWriter(sb, prop);
             }
 
             if (!(metadata.SerializationType == SerializationType.Constr && (metadata.CborIndex is null || metadata.CborIndex < 0)))
             {
-                sb.AppendLine($"writer.WriteEndArray();");
+                _ = sb.AppendLine($"writer.WriteEndArray();");
             }
 
             return sb;
@@ -393,8 +359,8 @@ public sealed partial class CborSerializerCodeGen
         {
             if (metadata.Validator is not null)
             {
-                sb.AppendLine($"{metadata.Validator} validator = new();");
-                sb.AppendLine($"if (!validator.Validate(data)) throw new Exception(\"Validation failed\");");
+                _ = sb.AppendLine($"{metadata.Validator} validator = new();");
+                _ = sb.AppendLine($"if (!validator.Validate(data)) throw new Exception(\"Validation failed\");");
             }
 
             return sb;
@@ -402,31 +368,26 @@ public sealed partial class CborSerializerCodeGen
 
         public static StringBuilder EmitPreservedRawWriter(StringBuilder sb)
         {
-            sb.AppendLine($"if (data.Raw is not null)");
-            sb.AppendLine("{");
-            sb.AppendLine($"writer.WriteEncodedValue(data.Raw?.ToArray());");
-            sb.AppendLine("return;");
-            sb.AppendLine("}");
+            _ = sb.AppendLine($"if (data.Raw is not null)");
+            _ = sb.AppendLine("{");
+            _ = sb.AppendLine($"writer.WriteEncodedValue(data.Raw?.ToArray());");
+            _ = sb.AppendLine("return;");
+            _ = sb.AppendLine("}");
             return sb;
         }
 
         public static StringBuilder EmitPropertyCountWriter(StringBuilder sb, SerializableTypeMetadata metadata)
         {
-            sb.AppendLine($"int propCount = 0;");
+            _ = sb.AppendLine($"int propCount = 0;");
 
             foreach (SerializablePropertyMetadata prop in metadata.Properties)
             {
-                if (prop.IsNullable || !prop.IsTypeNullable)
-                {
-                    sb.AppendLine("propCount++;");
-                }
-                else
-                {
-                    sb.AppendLine($"if (data.{prop.PropertyName} is not null) propCount++;");
-                }
+                _ = prop.IsNullable || !prop.IsTypeNullable
+                    ? sb.AppendLine("propCount++;")
+                    : sb.AppendLine($"if (data.{prop.PropertyName} is not null) propCount++;");
             }
 
-            sb.AppendLine();
+            _ = sb.AppendLine();
 
             return sb;
         }

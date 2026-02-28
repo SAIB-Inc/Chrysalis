@@ -1,7 +1,6 @@
 using Chrysalis.Wallet.Models.Enums;
 using Chrysalis.Wallet.Models.Keys;
 using Chrysalis.Wallet.Words;
-using Xunit;
 
 namespace Chrysalis.Wallet.Test.Keys;
 

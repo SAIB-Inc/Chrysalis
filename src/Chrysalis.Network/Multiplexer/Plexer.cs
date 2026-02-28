@@ -13,7 +13,7 @@ namespace Chrysalis.Network.Multiplexer;
 public sealed class Plexer(IBearer bearer) : IDisposable
 {
     private readonly Demuxer _demuxer = new(bearer);
-    private readonly Muxer _muxer = new(bearer, ProtocolMode.Initiator);
+    private readonly Muxer _muxer = new(bearer.Writer, ProtocolMode.Initiator);
     private bool _isDisposed;
 
     /// <summary>
@@ -33,7 +33,11 @@ public sealed class Plexer(IBearer bearer) : IDisposable
     /// </summary>
     /// <param name="protocol">The protocol type to subscribe to.</param>
     /// <returns>A bidirectional agent channel for the specified protocol.</returns>
-    public AgentChannel SubscribeServer(ProtocolType protocol) => SubscribeClient(protocol);
+    public AgentChannel SubscribeServer(ProtocolType protocol)
+    {
+        return SubscribeClient(protocol);
+    }
+
     /// <summary>
     /// Starts the plexer, running both the demuxer and muxer.
     /// </summary>
@@ -47,24 +51,28 @@ public sealed class Plexer(IBearer bearer) : IDisposable
         Task demuxerTask = _demuxer.RunAsync(linkedCts.Token);
         Task muxerTask = _muxer.RunAsync(linkedCts.Token);
 
-        Task completedTask = await Task.WhenAny(demuxerTask, muxerTask);
+        Task completedTask = await Task.WhenAny(demuxerTask, muxerTask).ConfigureAwait(false);
 
         // Cancel the other task to ensure clean shutdown
-        await linkedCts.CancelAsync();
+        await linkedCts.CancelAsync().ConfigureAwait(false);
 
         // Wait for both to finish to ensure proper cleanup
         try
         {
-            await Task.WhenAll(demuxerTask, muxerTask).WaitAsync(TimeSpan.FromSeconds(5));
+            await Task.WhenAll(demuxerTask, muxerTask).WaitAsync(TimeSpan.FromSeconds(5), cancellationToken).ConfigureAwait(false);
         }
-        catch
+        catch (OperationCanceledException)
         {
-            // Ignore exceptions here - we'll propagate the original error below
+            // Expected during cancellation - ignore
+        }
+        catch (TimeoutException)
+        {
+            // Timeout waiting for tasks to finish - ignore, we'll propagate the original error below
         }
 
         // Propagate the original exception from the task that failed first
         string failedComponent = completedTask == demuxerTask ? "Demuxer" : "Muxer";
-        await completedTask; // Re-throws exception if faulted
+        await completedTask.ConfigureAwait(false); // Re-throws exception if faulted
         throw new InvalidOperationException($"{failedComponent} completed unexpectedly without error");
     }
 
@@ -74,12 +82,14 @@ public sealed class Plexer(IBearer bearer) : IDisposable
     public void Dispose()
     {
         if (_isDisposed)
+        {
             return;
+        }
 
         _muxer.Dispose();
         _demuxer.Dispose();
+        bearer.Dispose();
 
         _isDisposed = true;
-        GC.SuppressFinalize(this);
     }
 }

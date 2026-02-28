@@ -1,0 +1,31 @@
+# Top-level EditorConfig
+root = true
+
+[*.cs]
+
+# ── Style preferences ──
+csharp_style_namespace_declarations = file_scoped
+
+# ── Promote ALL Roslyn style suggestions to warnings. ──
+# Combined with TreatWarningsAsErrors in Directory.Build.props,
+# every IDE suggestion becomes a build error.
+dotnet_analyzer_diagnostic.category-Style.severity = warning
+
+# ── Deferred rules (tracked in GitHub issue) ──
+# CA1819: byte[] → ReadOnlyMemory<byte> (requires Span/Memory refactoring)
+# CA1002: List<T> → IReadOnlyList<T> (tied to code generator)
+# CA1724: type/namespace naming conflicts (breaking API change)
+# CA1054/CA1056: string → Uri parameters (breaking API change)
+# CA1303: string literals in Console output (not applicable for CLI tools)
+# CA1515: SUPPRESS — public → internal in applications (conflicts with code generator partial types; revisit later)
+dotnet_diagnostic.CA1819.severity = none
+dotnet_diagnostic.CA1515.severity = none
+dotnet_diagnostic.CA1002.severity = none
+dotnet_diagnostic.CA1724.severity = none
+dotnet_diagnostic.CA1054.severity = none
+dotnet_diagnostic.CA1056.severity = none
+dotnet_diagnostic.CA1303.severity = none
+
+# ── Skip analysis on source-generated files ──
+[*.g.cs]
+generated_code = true

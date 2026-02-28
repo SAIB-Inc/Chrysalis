@@ -76,7 +76,18 @@ public partial record MessageDone(
 
 public static class ChainSyncMessages
 {
-    public static MessageNextRequest NextRequest() => new(new Value0(0));
-    public static MessageFindIntersect FindIntersect(Points points) => new(new Value4(4), points);
-    public static MessageDone Done() => new(new Value7(7));
+    public static MessageNextRequest NextRequest()
+    {
+        return new(new Value0(0));
+    }
+
+    public static MessageFindIntersect FindIntersect(Points points)
+    {
+        return new(new Value4(4), points);
+    }
+
+    public static MessageDone Done()
+    {
+        return new(new Value7(7));
+    }
 }

@@ -1,15 +1,24 @@
 using Chrysalis.Cbor.Serialization.Attributes;
-using Chrysalis.Cbor.Types;
 
 namespace Chrysalis.Cbor.Types.Cardano.Core.Common;
 
+/// <summary>
+/// Represents a token bundle mapping asset names to quantities under a single policy.
+/// </summary>
 [CborSerializable]
 [CborUnion]
 public abstract partial record TokenBundle : CborBase { }
 
+/// <summary>
+/// Represents a token bundle for transaction outputs mapping asset name bytes to unsigned quantities.
+/// </summary>
+/// <param name="Value">The dictionary mapping asset name bytes to their unsigned output quantities.</param>
 [CborSerializable]
 public partial record TokenBundleOutput(Dictionary<byte[], ulong> Value) : TokenBundle;
 
-
+/// <summary>
+/// Represents a token bundle for minting operations mapping asset name bytes to signed quantities.
+/// </summary>
+/// <param name="Value">The dictionary mapping asset name bytes to their signed mint quantities.</param>
 [CborSerializable]
 public partial record TokenBundleMint(Dictionary<byte[], long> Value) : TokenBundle;

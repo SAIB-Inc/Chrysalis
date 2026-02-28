@@ -1,10 +1,7 @@
-using System;
-using System.Collections.Generic;
 using Chrysalis.Cbor.Serialization;
 using Chrysalis.Cbor.Types;
-using Xunit;
 
-namespace Chrysalis.Cbor.Test;
+namespace Chrysalis.Test;
 
 public class CborLabelTests
 {
@@ -13,7 +10,7 @@ public class CborLabelTests
     {
         // Arrange & Act
         CborLabel label = new(42);
-        
+
         // Assert
         Assert.Equal(42, label.Value);
     }
@@ -23,7 +20,7 @@ public class CborLabelTests
     {
         // Arrange & Act
         CborLabel label = new(42L);
-        
+
         // Assert
         Assert.Equal(42L, label.Value);
     }
@@ -33,7 +30,7 @@ public class CborLabelTests
     {
         // Arrange & Act
         CborLabel label = new("header");
-        
+
         // Assert
         Assert.Equal("header", label.Value);
     }
@@ -42,7 +39,7 @@ public class CborLabelTests
     public void CborLabel_StringConstructor_NullThrows()
     {
         // Act & Assert
-        Assert.Throws<ArgumentNullException>(() => new CborLabel((string)null!));
+        _ = Assert.Throws<ArgumentNullException>(() => new CborLabel(null!));
     }
 
     [Fact]
@@ -50,7 +47,7 @@ public class CborLabelTests
     {
         // Arrange & Act
         CborLabel label = 42;
-        
+
         // Assert
         Assert.Equal(42, label.Value);
     }
@@ -60,7 +57,7 @@ public class CborLabelTests
     {
         // Arrange & Act
         CborLabel label = 42L;
-        
+
         // Assert
         Assert.Equal(42L, label.Value);
     }
@@ -70,7 +67,7 @@ public class CborLabelTests
     {
         // Arrange & Act
         CborLabel label = "custom-header";
-        
+
         // Assert
         Assert.Equal("custom-header", label.Value);
     }
@@ -80,67 +77,67 @@ public class CborLabelTests
     {
         // Arrange
         CborLabel label = 1;
-        
+
         // Act
         byte[] bytes = CborSerializer.Serialize(label);
         string hex = Convert.ToHexString(bytes);
-        
+
         // Assert
         Assert.Equal("01", hex); // CBOR integer 1
     }
-    
+
     [Fact]
     public void CborLabel_StringValue_SerializesAsString()
     {
         // Arrange
         CborLabel label = "alg";
-        
+
         // Act
         byte[] bytes = CborSerializer.Serialize(label);
         string hex = Convert.ToHexString(bytes);
-        
+
         // Assert
         Assert.Equal("63616C67", hex); // CBOR text string "alg"
     }
-    
+
     [Fact]
     public void CborLabel_IntValue_RoundTrip()
     {
         // Arrange
         CborLabel label = 42;
-        
+
         // Act
         byte[] bytes = CborSerializer.Serialize(label);
         CborLabel deserialized = CborSerializer.Deserialize<CborLabel>(bytes);
-        
+
         // Assert
         Assert.Equal(42L, deserialized.Value); // Note: deserializes as long
     }
-    
+
     [Fact]
     public void CborLabel_StringValue_RoundTrip()
     {
         // Arrange
         CborLabel label = "custom-header";
-        
+
         // Act
         byte[] bytes = CborSerializer.Serialize(label);
         CborLabel deserialized = CborSerializer.Deserialize<CborLabel>(bytes);
-        
+
         // Assert
         Assert.Equal("custom-header", deserialized.Value);
     }
-    
+
     [Fact]
     public void CborLabel_NegativeInteger_Works()
     {
         // Arrange
         CborLabel label = -1;
-        
+
         // Act
         byte[] bytes = CborSerializer.Serialize(label);
         string hex = Convert.ToHexString(bytes);
-        
+
         // Assert
         Assert.Equal("20", hex); // CBOR negative integer -1
     }
@@ -152,12 +149,12 @@ public class CborLabelTests
         // new CborLabel(3.14);       // Won't compile
         // new CborLabel(DateTime.Now); // Won't compile  
         // new CborLabel(new byte[]{}); // Won't compile
-        
+
         // Only these compile:
         CborLabel intLabel = new(42);
         CborLabel longLabel = new(42L);
         CborLabel stringLabel = new("test");
-        
+
         Assert.Equal(42, intLabel.Value);
         Assert.Equal(42L, longLabel.Value);
         Assert.Equal("test", stringLabel.Value);
