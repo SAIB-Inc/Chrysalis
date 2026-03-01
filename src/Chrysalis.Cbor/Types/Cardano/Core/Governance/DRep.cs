@@ -16,6 +16,7 @@ public abstract partial record DRep : CborBase { }
 /// <param name="AddrKeyHash">The address key hash identifying the DRep.</param>
 [CborSerializable]
 [CborList]
+[CborIndex(0)]
 public partial record DRepAddrKeyHash(
     [CborOrder(0)] int Tag,
     [CborOrder(1)] ReadOnlyMemory<byte> AddrKeyHash
@@ -28,6 +29,7 @@ public partial record DRepAddrKeyHash(
 /// <param name="ScriptHash">The script hash identifying the DRep.</param>
 [CborSerializable]
 [CborList]
+[CborIndex(1)]
 public partial record DRepScriptHash(
     [CborOrder(0)] int Tag,
     [CborOrder(1)] ReadOnlyMemory<byte> ScriptHash
@@ -39,6 +41,7 @@ public partial record DRepScriptHash(
 /// <param name="Tag">The DRep type tag.</param>
 [CborSerializable]
 [CborList]
+[CborIndex(2)]
 public partial record Abstain(
     [CborOrder(0)] int Tag
 ) : DRep;
@@ -49,6 +52,7 @@ public partial record Abstain(
 /// <param name="Tag">The DRep type tag.</param>
 [CborSerializable]
 [CborList]
+[CborIndex(3)]
 public partial record DRepNoConfidence(
     [CborOrder(0)] int Tag
 ) : DRep;

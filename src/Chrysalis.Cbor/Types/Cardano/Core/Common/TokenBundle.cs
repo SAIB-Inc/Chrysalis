@@ -5,8 +5,6 @@ namespace Chrysalis.Cbor.Types.Cardano.Core.Common;
 /// <summary>
 /// Represents a token bundle mapping asset names to quantities under a single policy.
 /// </summary>
-[CborSerializable]
-[CborUnion]
 public abstract partial record TokenBundle : CborBase { }
 
 /// <summary>

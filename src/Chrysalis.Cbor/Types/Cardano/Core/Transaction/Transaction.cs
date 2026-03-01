@@ -23,7 +23,7 @@ public abstract partial record Transaction : CborBase
 [CborList]
 public partial record ShelleyTransaction(
    [CborOrder(0)] TransactionBody TransactionBody,
-   [CborOrder(1)] TransactionWitnessSet TransactionWitnessSet,
+   [CborOrder(1)] PostAlonzoTransactionWitnessSet TransactionWitnessSet,
    [CborOrder(2)][CborNullable] Metadata? TransactionMetadata
 ) : Transaction, ICborPreserveRaw;
 
@@ -37,7 +37,7 @@ public partial record ShelleyTransaction(
 [CborList]
 public partial record AllegraTransaction(
     [CborOrder(0)] TransactionBody TransactionBody,
-    [CborOrder(1)] TransactionWitnessSet TransactionWitnessSet,
+    [CborOrder(1)] PostAlonzoTransactionWitnessSet TransactionWitnessSet,
     [CborOrder(2)][CborNullable] AuxiliaryData? AuxiliaryData
 ) : Transaction, ICborPreserveRaw;
 
@@ -52,7 +52,7 @@ public partial record AllegraTransaction(
 [CborList]
 public partial record PostMaryTransaction(
     [CborOrder(0)] TransactionBody TransactionBody,
-    [CborOrder(1)] TransactionWitnessSet TransactionWitnessSet,
+    [CborOrder(1)] PostAlonzoTransactionWitnessSet TransactionWitnessSet,
     [CborOrder(2)] bool IsValid,
     [CborOrder(3)][CborNullable] AuxiliaryData? AuxiliaryData
 ) : Transaction, ICborPreserveRaw;

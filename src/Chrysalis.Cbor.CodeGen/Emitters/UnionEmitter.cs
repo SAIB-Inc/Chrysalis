@@ -71,8 +71,8 @@ public sealed partial class CborSerializerCodeGen
             _ = sb.AppendLine("{");
             _ = sb.AppendLine("{");
             _ = sb.AppendLine($"    int _pos = data.Length - reader.Buffer.Length;");
-            _ = sb.AppendLine($"    var _itemSpan = reader.ReadDataItem();");
-            _ = sb.AppendLine($"    tempList.Add({Emitter.GenericSerializationUtilFullname}.Read<{typeParam}>(data.Slice(_pos, _itemSpan.Length)));");
+            _ = sb.AppendLine($"    tempList.Add({Emitter.GenericSerializationUtilFullname}.ReadAnyWithConsumed<{typeParam}>(data.Slice(_pos), out int _consumed));");
+            _ = sb.AppendLine($"    reader = new CborReader(data.Span.Slice(_pos + _consumed));");
             _ = sb.AppendLine("}");
             _ = sb.AppendLine($"if (_arraySize > 0) _remaining--;");
             _ = sb.AppendLine("}");
@@ -140,13 +140,18 @@ public sealed partial class CborSerializerCodeGen
             bool hasTagChildren = probeGroups.Keys.Any(k => k.StartsWith("tag:", StringComparison.Ordinal));
             bool hasConstrChildren = probeGroups.ContainsKey("constr");
             bool hasIdxChildren = probeGroups.Keys.Any(k => k.StartsWith("idx:", StringComparison.Ordinal));
-            bool hasStateChildren = probeGroups.Keys.Any(k => !k.StartsWith("tag:", StringComparison.Ordinal) && !k.StartsWith("idx:", StringComparison.Ordinal) && k != "constr");
+            bool hasArraySizeChildren = probeGroups.Keys.Any(k => k.StartsWith("array:", StringComparison.Ordinal));
+            bool hasStateChildren = probeGroups.Keys.Any(k => !k.StartsWith("tag:", StringComparison.Ordinal) && !k.StartsWith("idx:", StringComparison.Ordinal) && !k.StartsWith("array:", StringComparison.Ordinal) && k != "constr");
 
-            if (hasIdxChildren && !hasTagChildren && !hasConstrChildren && !hasStateChildren)
+            if (hasArraySizeChildren && !hasTagChildren && !hasConstrChildren && !hasIdxChildren && !hasStateChildren)
+            {
+                EmitArraySizeBranch(sb, metadata, probeGroups);
+            }
+            else if (hasIdxChildren && !hasTagChildren && !hasConstrChildren && !hasStateChildren && !hasArraySizeChildren)
             {
                 EmitIdxOnlyBranch(sb, metadata, probeGroups);
             }
-            else if ((hasTagChildren || hasConstrChildren) && (hasStateChildren || hasIdxChildren))
+            else if ((hasTagChildren || hasConstrChildren) && (hasStateChildren || hasIdxChildren || hasArraySizeChildren))
             {
                 EmitTagBranchWithConstr(sb, metadata, probeGroups, hasConstrChildren);
                 _ = sb.AppendLine($"var reader = new CborReader(data.Span);");
@@ -230,6 +235,23 @@ public sealed partial class CborSerializerCodeGen
             _ = sb.AppendLine($"return _idxResult;");
         }
 
+        private static void EmitArraySizeBranch(StringBuilder sb, SerializableTypeMetadata metadata, Dictionary<string, List<SerializableTypeMetadata>> probeGroups)
+        {
+            _ = sb.AppendLine($"var _sizeReader = new CborReader(data.Span);");
+            _ = sb.AppendLine($"_sizeReader.ReadBeginArray();");
+            _ = sb.AppendLine($"int _size = _sizeReader.ReadSize();");
+            _ = sb.AppendLine($"{metadata.FullyQualifiedName} _sizeResult = _size switch");
+            _ = sb.AppendLine("{");
+            foreach (KeyValuePair<string, List<SerializableTypeMetadata>> group in probeGroups)
+            {
+                int sizeValue = int.Parse(group.Key.Substring(6), CultureInfo.InvariantCulture);
+                _ = sb.AppendLine($"    {sizeValue} => ({metadata.FullyQualifiedName}){group.Value[0].FullyQualifiedName}.Read(data, out bytesConsumed),");
+            }
+            _ = sb.AppendLine($"    _ => throw new Exception(\"Union deserialization failed. {metadata.FullyQualifiedName}: unexpected array size \" + _size)");
+            _ = sb.AppendLine("};");
+            _ = sb.AppendLine($"return _sizeResult;");
+        }
+
         private static void EmitStateOnlyBranch(StringBuilder sb, SerializableTypeMetadata metadata, Dictionary<string, List<SerializableTypeMetadata>> probeGroups)
         {
             _ = sb.AppendLine($"{metadata.FullyQualifiedName} _stateResult = state switch");
@@ -300,19 +322,8 @@ public sealed partial class CborSerializerCodeGen
                 return $"idx:{child.CborIndex.Value}";
             }
 
-            if (child.Properties.Count > 0)
-            {
-                string firstPropType = child.Properties[0].PropertyTypeFullName;
-                int lastDot = firstPropType.LastIndexOf('.');
-                string typeName = lastDot >= 0 ? firstPropType.Substring(lastDot + 1) : firstPropType;
-                if (typeName.StartsWith("Value", StringComparison.Ordinal) && typeName.Length > 5
-                    && int.TryParse(typeName.Substring(5), NumberStyles.None, CultureInfo.InvariantCulture, out int idx))
-                {
-                    return $"idx:{idx}";
-                }
-            }
-
-            return "array";
+            // Distinguish by property count (array size) — e.g. OriginPoint(0) vs SpecificPoint(2)
+            return $"array:{child.Properties.Count}";
         }
 
         private static string GetContainerProbeKey(SerializableTypeMetadata child)
@@ -355,18 +366,20 @@ public sealed partial class CborSerializerCodeGen
 
         private static string GetCborReaderStatePattern(string probeKey)
         {
-            return probeKey switch
-            {
-                "array" => "CborDataItemType.Array",
-                "map" => "CborDataItemType.Map",
-                "integer" => "CborDataItemType.Unsigned or CborDataItemType.Signed",
-                "signed" => "CborDataItemType.Signed",
-                "unsigned" => "CborDataItemType.Unsigned",
-                "text" => "CborDataItemType.String",
-                "bytes" => "CborDataItemType.ByteString",
-                "boolean" => "CborDataItemType.Boolean",
-                _ => throw new InvalidOperationException($"Unexpected probe key: {probeKey}")
-            };
+            return probeKey.StartsWith("array:", StringComparison.Ordinal)
+                ? "CborDataItemType.Array"
+                : probeKey switch
+                {
+                    "array" => "CborDataItemType.Array",
+                    "map" => "CborDataItemType.Map",
+                    "integer" => "CborDataItemType.Unsigned or CborDataItemType.Signed",
+                    "signed" => "CborDataItemType.Signed",
+                    "unsigned" => "CborDataItemType.Unsigned",
+                    "text" => "CborDataItemType.String",
+                    "bytes" => "CborDataItemType.ByteString",
+                    "boolean" => "CborDataItemType.Boolean",
+                    _ => throw new InvalidOperationException($"Unexpected probe key: {probeKey}")
+                };
         }
 
         private static StringBuilder EmitTryCatchReader(StringBuilder sb, SerializableTypeMetadata metadata)

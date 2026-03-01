@@ -21,6 +21,7 @@ public abstract partial record GovAction : CborBase { }
 /// <param name="PolicyHash">The optional policy hash authorizing the change.</param>
 [CborSerializable]
 [CborList]
+[CborIndex(0)]
 public partial record ParameterChangeAction(
     [CborOrder(0)] int ActionType,
     [CborOrder(1)] GovActionId? GovActionId,
@@ -36,6 +37,7 @@ public partial record ParameterChangeAction(
 /// <param name="ProtocolVersion">The target protocol version for the hard fork.</param>
 [CborSerializable]
 [CborList]
+[CborIndex(1)]
 public partial record HardForkInitiationAction(
      [CborOrder(0)] int ActionType,
      [CborOrder(1)] GovActionId? GovActionId,
@@ -50,6 +52,7 @@ public partial record HardForkInitiationAction(
 /// <param name="PolicyHash">The optional policy hash authorizing the withdrawal.</param>
 [CborSerializable]
 [CborList]
+[CborIndex(2)]
 public partial record TreasuryWithdrawalsAction(
      [CborOrder(0)] int ActionType,
      [CborOrder(1)] Withdrawals Withdrawals,
@@ -63,6 +66,7 @@ public partial record TreasuryWithdrawalsAction(
 /// <param name="GovActionId">The optional previous governance action identifier.</param>
 [CborSerializable]
 [CborList]
+[CborIndex(3)]
 public partial record NoConfidence(
     [CborOrder(0)] int ActionType,
     [CborOrder(1)] GovActionId? GovActionId
@@ -78,6 +82,7 @@ public partial record NoConfidence(
 /// <param name="QuorumThreshold">The new quorum threshold as a rational number.</param>
 [CborSerializable]
 [CborList]
+[CborIndex(4)]
 public partial record UpdateCommittee(
     [CborOrder(0)] int ActionType,
     [CborOrder(1)] GovActionId? GovActionId,
@@ -94,6 +99,7 @@ public partial record UpdateCommittee(
 /// <param name="Constitution">The new constitution to adopt.</param>
 [CborSerializable]
 [CborList]
+[CborIndex(5)]
 public partial record NewConstitution(
     [CborOrder(0)] int ActionType,
     [CborOrder(1)] GovActionId? GovActionId,
@@ -106,6 +112,7 @@ public partial record NewConstitution(
 /// <param name="Value">The action type tag value.</param>
 [CborSerializable]
 [CborList]
+[CborIndex(6)]
 public partial record InfoAction(
     [CborOrder(0)] int Value
 ) : GovAction;

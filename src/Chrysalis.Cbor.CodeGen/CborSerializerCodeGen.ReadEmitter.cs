@@ -252,8 +252,8 @@ public sealed partial class CborSerializerCodeGen
                     {
                         _ = sb.AppendLine("{");
                         _ = sb.AppendLine($"int _pos = data.Length - reader.Buffer.Length;");
-                        _ = sb.AppendLine($"var _span = reader.ReadDataItem();");
-                        _ = sb.AppendLine($"{propertyName}TempItem = ({metadata.ListItemTypeFullName}){metadata.ListItemTypeFullName}.Read(data.Slice(_pos, _span.Length));");
+                        _ = sb.AppendLine($"{propertyName}TempItem = ({metadata.ListItemTypeFullName}){metadata.ListItemTypeFullName}.Read(data.Slice(_pos), out int _consumed);");
+                        _ = sb.AppendLine($"reader = new CborReader(data.Span.Slice(_pos + _consumed));");
                         _ = sb.AppendLine("}");
                     }
                     else
@@ -327,8 +327,8 @@ public sealed partial class CborSerializerCodeGen
                     {
                         _ = sb.AppendLine("{");
                         _ = sb.AppendLine($"int _pos = data.Length - reader.Buffer.Length;");
-                        _ = sb.AppendLine($"var _span = reader.ReadDataItem();");
-                        _ = sb.AppendLine($"{propertyName}TempKeyItem = ({metadata.MapKeyTypeFullName}){metadata.MapKeyTypeFullName}.Read(data.Slice(_pos, _span.Length));");
+                        _ = sb.AppendLine($"{propertyName}TempKeyItem = ({metadata.MapKeyTypeFullName}){metadata.MapKeyTypeFullName}.Read(data.Slice(_pos), out int _consumed);");
+                        _ = sb.AppendLine($"reader = new CborReader(data.Span.Slice(_pos + _consumed));");
                         _ = sb.AppendLine("}");
                     }
                     else
@@ -355,8 +355,8 @@ public sealed partial class CborSerializerCodeGen
                     {
                         _ = sb.AppendLine("{");
                         _ = sb.AppendLine($"int _pos = data.Length - reader.Buffer.Length;");
-                        _ = sb.AppendLine($"var _span = reader.ReadDataItem();");
-                        _ = sb.AppendLine($"{propertyName}TempValueItem = ({metadata.MapValueTypeFullName}){metadata.MapValueTypeFullName}.Read(data.Slice(_pos, _span.Length));");
+                        _ = sb.AppendLine($"{propertyName}TempValueItem = ({metadata.MapValueTypeFullName}){metadata.MapValueTypeFullName}.Read(data.Slice(_pos), out int _consumed);");
+                        _ = sb.AppendLine($"reader = new CborReader(data.Span.Slice(_pos + _consumed));");
                         _ = sb.AppendLine("}");
                     }
                     else
@@ -396,12 +396,12 @@ public sealed partial class CborSerializerCodeGen
             }
             else if (metadata.IsPropertyTypeUnion)
             {
-                // Union types use try-catch dispatch that could greedily consume trailing
-                // bytes when given unbounded data, so we must use ReadDataItem for bounding
+                // Union types now use probe-based dispatch that reports correct bytesConsumed,
+                // so unbounded reads are safe — no ReadDataItem bounding needed
                 _ = sb.AppendLine("{");
                 _ = sb.AppendLine($"int _pos = data.Length - reader.Buffer.Length;");
-                _ = sb.AppendLine($"var _span = reader.ReadDataItem();");
-                _ = sb.AppendLine($"{propertyName} = ({metadata.PropertyTypeFullName}){metadata.PropertyTypeFullName}.Read(data.Slice(_pos, _span.Length));");
+                _ = sb.AppendLine($"{propertyName} = ({metadata.PropertyTypeFullName}){metadata.PropertyTypeFullName}.Read(data.Slice(_pos), out int _consumed);");
+                _ = sb.AppendLine($"reader = new CborReader(data.Span.Slice(_pos + _consumed));");
                 _ = sb.AppendLine("}");
             }
             else
@@ -539,8 +539,8 @@ public sealed partial class CborSerializerCodeGen
                 string nonNullType = prop.PropertyTypeFullName.Replace("?", "");
                 _ = sb.AppendLine("{");
                 _ = sb.AppendLine($"int _pos = data.Length - reader.Buffer.Length;");
-                _ = sb.AppendLine($"var _span = reader.ReadDataItem();");
-                _ = sb.AppendLine($"value = {nonNullType}.Read(data.Slice(_pos, _span.Length));");
+                _ = sb.AppendLine($"value = {nonNullType}.Read(data.Slice(_pos), out int _consumed);");
+                _ = sb.AppendLine($"reader = new CborReader(data.Span.Slice(_pos + _consumed));");
                 _ = sb.AppendLine("}");
             }
             else

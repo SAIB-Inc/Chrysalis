@@ -16,6 +16,7 @@ public abstract partial record NativeScript : CborBase { }
 /// <param name="AddrKeyHash">The address key hash that must sign the transaction.</param>
 [CborSerializable]
 [CborList]
+[CborIndex(0)]
 public partial record ScriptPubKey(
     [CborOrder(0)] int Tag,
     [CborOrder(1)] ReadOnlyMemory<byte> AddrKeyHash
@@ -28,6 +29,7 @@ public partial record ScriptPubKey(
 /// <param name="Scripts">The list of sub-scripts that must all be satisfied.</param>
 [CborSerializable]
 [CborList]
+[CborIndex(1)]
 public partial record ScriptAll(
     [CborOrder(0)] int Tag,
     [CborOrder(1)] CborMaybeIndefList<NativeScript>? Scripts
@@ -40,6 +42,7 @@ public partial record ScriptAll(
 /// <param name="Scripts">The list of sub-scripts of which at least one must be satisfied.</param>
 [CborSerializable]
 [CborList]
+[CborIndex(2)]
 public partial record ScriptAny(
     [CborOrder(0)] int Tag,
     [CborOrder(1)] CborMaybeIndefList<NativeScript>? Scripts
@@ -53,6 +56,7 @@ public partial record ScriptAny(
 /// <param name="Scripts">The list of sub-scripts.</param>
 [CborSerializable]
 [CborList]
+[CborIndex(3)]
 public partial record ScriptNOfK(
     [CborOrder(0)] int Tag,
     [CborOrder(1)] int N,
@@ -66,6 +70,7 @@ public partial record ScriptNOfK(
 /// <param name="Slot">The slot from which this script becomes valid.</param>
 [CborSerializable]
 [CborList]
+[CborIndex(4)]
 public partial record InvalidBefore(
     [CborOrder(0)] int Tag,
     [CborOrder(1)] ulong Slot
@@ -78,6 +83,7 @@ public partial record InvalidBefore(
 /// <param name="Slot">The slot after which this script becomes invalid.</param>
 [CborSerializable]
 [CborList]
+[CborIndex(5)]
 public partial record InvalidHereafter(
     [CborOrder(0)] int Tag,
     [CborOrder(1)] ulong Slot

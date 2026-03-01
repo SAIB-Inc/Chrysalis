@@ -7,8 +7,6 @@ namespace Chrysalis.Cbor.Types.Cardano.Core.TransactionWitness;
 /// <summary>
 /// Abstract base for transaction witness sets across different Cardano eras.
 /// </summary>
-[CborSerializable]
-[CborUnion]
 public abstract partial record TransactionWitnessSet : CborBase
 {
 }

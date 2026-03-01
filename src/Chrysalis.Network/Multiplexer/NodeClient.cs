@@ -128,12 +128,7 @@ public sealed class NodeClient : IDisposable
         NetworkMagic = networkMagic;
 
         ProposeVersions proposeVersion = HandshakeMessages.ProposeVersions(VersionTables.N2cV10AndAbove(networkMagic));
-        HandshakeMessage handshakeResponse = await Handshake.SendAsync(proposeVersion, CancellationToken.None).ConfigureAwait(false);
-
-        if (handshakeResponse is not AcceptVersion)
-        {
-            throw new InvalidOperationException("Handshake failed");
-        }
+        _ = await Handshake.SendAsync<N2CAcceptVersion>(proposeVersion, CancellationToken.None).ConfigureAwait(false);
     }
 
     /// <summary>

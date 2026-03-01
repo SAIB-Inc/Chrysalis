@@ -52,7 +52,7 @@ public class CborTests
 
         string witnessSet = "a100818258202a60dcffe8ba15307556dbf8d7df142cb9eb15d601251d400d523689d575b8385840f545d4894180626ee529d4d137262a5df4d3fe40d6304d99e0dbeb7e8966afab0f3e4ef82ebcc3e9a02fbb33733bb5323d0a9c545375512630dc6db77dfc520f";
 
-        AlonzoTransactionWitnessSet aWitnessSet = AlonzoTransactionWitnessSet.Read(Convert.FromHexString(witnessSet));
+        PostAlonzoTransactionWitnessSet aWitnessSet = PostAlonzoTransactionWitnessSet.Read(Convert.FromHexString(witnessSet));
 
         tx = tx with { TransactionWitnessSet = aWitnessSet };
         tx.TransactionBody.Raw = null;
