@@ -94,7 +94,11 @@ public sealed partial class CborSerializerCodeGen
         int? order,
         string? propertyKeyString,
         int? propertyKeyInt,
-        bool isOpenGeneric
+        bool isOpenGeneric,
+        bool useReaderOverloadForType,
+        bool useReaderOverloadForListItem,
+        bool useReaderOverloadForMapKey,
+        bool useReaderOverloadForMapValue
     )
     {
         public string PropertyName { get; } = propertyName;
@@ -128,6 +132,10 @@ public sealed partial class CborSerializerCodeGen
         public string? PropertyKeyString { get; } = propertyKeyString;
         public int? PropertyKeyInt { get; } = propertyKeyInt;
         public bool IsOpenGeneric { get; } = isOpenGeneric;
+        public bool UseReaderOverloadForType { get; } = useReaderOverloadForType;
+        public bool UseReaderOverloadForListItem { get; } = useReaderOverloadForListItem;
+        public bool UseReaderOverloadForMapKey { get; } = useReaderOverloadForMapKey;
+        public bool UseReaderOverloadForMapValue { get; } = useReaderOverloadForMapValue;
 
         /// <summary>
         /// Maps discriminant int values to fully-qualified concrete type names for union hint dispatch.
@@ -167,6 +175,10 @@ public sealed partial class CborSerializerCodeGen
                 // IsMapKeyTypeOpenGeneric: {{IsMapKeyTypeOpenGeneric}}
                 // IsMapValueTypeOpenGeneric: {{IsMapValueTypeOpenGeneric}}
                 // IsOpenGeneric: {{IsOpenGeneric}}
+                // UseReaderOverloadForType: {{UseReaderOverloadForType}}
+                // UseReaderOverloadForListItem: {{UseReaderOverloadForListItem}}
+                // UseReaderOverloadForMapKey: {{UseReaderOverloadForMapKey}}
+                // UseReaderOverloadForMapValue: {{UseReaderOverloadForMapValue}}
                 // IsTypeNullable: {{IsTypeNullable}}
             """;
         }

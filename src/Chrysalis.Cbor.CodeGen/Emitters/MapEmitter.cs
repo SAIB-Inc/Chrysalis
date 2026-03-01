@@ -7,9 +7,12 @@ public sealed partial class CborSerializerCodeGen
 {
     private sealed class MapEmitter : ICborSerializerEmitter
     {
-        public StringBuilder EmitReader(StringBuilder sb, SerializableTypeMetadata metadata)
+        public StringBuilder EmitReader(StringBuilder sb, SerializableTypeMetadata metadata, bool useExistingReader)
         {
-            _ = Emitter.EmitCborReaderInstance(sb, "data");
+            if (!useExistingReader)
+            {
+                _ = Emitter.EmitCborReaderInstance(sb, "data");
+            }
             _ = Emitter.EmitTagReader(sb, metadata.CborTag, "tagIndex");
             bool isIntKey = metadata.Properties[0].PropertyKeyInt is not null;
 

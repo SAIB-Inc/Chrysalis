@@ -9,7 +9,7 @@ public sealed partial class CborSerializerCodeGen
     private interface ICborSerializerEmitter
     {
         StringBuilder EmitWriter(StringBuilder sb, SerializableTypeMetadata metadata);
-        StringBuilder EmitReader(StringBuilder sb, SerializableTypeMetadata metadata);
+        StringBuilder EmitReader(StringBuilder sb, SerializableTypeMetadata metadata, bool useExistingReader);
     }
 
     private static partial class Emitter

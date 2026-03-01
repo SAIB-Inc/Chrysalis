@@ -17,8 +17,23 @@ public sealed partial class CborSerializerCodeGen
             _ = sb.AppendLine($"public static new {metadata.FullyQualifiedName} Read(ReadOnlyMemory<byte> data)");
             _ = sb.AppendLine("{");
             ICborSerializerEmitter emitter = GetEmitter(metadata);
-            _ = emitter.EmitReader(sb, metadata);
+            _ = emitter.EmitReader(sb, metadata, useExistingReader: false);
             _ = sb.AppendLine("}");
+
+            bool shouldEmitReaderOverload = metadata.SerializationType != SerializationType.Union && !metadata.ShouldPreserveRaw;
+            if (shouldEmitReaderOverload)
+            {
+                _ = sb.AppendLine();
+                _ = sb.AppendLine("/// <summary>");
+                _ = sb.AppendLine($"/// Deserializes a <see cref=\"{xmlSafeId}\"/> instance from an existing CBOR reader.");
+                _ = sb.AppendLine("/// </summary>");
+                _ = sb.AppendLine("/// <param name=\"reader\">The CBOR reader positioned at the start of the value.</param>");
+                _ = sb.AppendLine($"/// <returns>A deserialized <see cref=\"{xmlSafeId}\"/> instance.</returns>");
+                _ = sb.AppendLine($"public static {metadata.FullyQualifiedName} Read(CborReader reader)");
+                _ = sb.AppendLine("{");
+                _ = emitter.EmitReader(sb, metadata, useExistingReader: true);
+                _ = sb.AppendLine("}");
+            }
 
             return sb;
         }
@@ -228,7 +243,9 @@ public sealed partial class CborSerializerCodeGen
                     else
                     {
                         // @TODO: Handle nested lists/maps, right now we are assuming that the list item type is a class
-                        _ = sb.AppendLine($"{propertyName}TempItem = ({metadata.ListItemTypeFullName}){metadata.ListItemTypeFullName}.Read(reader.ReadEncodedValue(true));");
+                        _ = metadata.UseReaderOverloadForListItem
+                            ? sb.AppendLine($"{propertyName}TempItem = ({metadata.ListItemTypeFullName}){metadata.ListItemTypeFullName}.Read(reader);")
+                            : sb.AppendLine($"{propertyName}TempItem = ({metadata.ListItemTypeFullName}){metadata.ListItemTypeFullName}.Read(reader.ReadEncodedValue(true));");
                     }
                 }
 
@@ -289,7 +306,9 @@ public sealed partial class CborSerializerCodeGen
                     else
                     {
                         // @TODO: Handle nested lists/maps, right now we are assuming that the map key item type is a class
-                        _ = sb.AppendLine($"{propertyName}TempKeyItem = ({metadata.MapKeyTypeFullName}){metadata.MapKeyTypeFullName}.Read(reader.ReadEncodedValue(true));");
+                        _ = metadata.UseReaderOverloadForMapKey
+                            ? sb.AppendLine($"{propertyName}TempKeyItem = ({metadata.MapKeyTypeFullName}){metadata.MapKeyTypeFullName}.Read(reader);")
+                            : sb.AppendLine($"{propertyName}TempKeyItem = ({metadata.MapKeyTypeFullName}){metadata.MapKeyTypeFullName}.Read(reader.ReadEncodedValue(true));");
                     }
                 }
 
@@ -306,7 +325,9 @@ public sealed partial class CborSerializerCodeGen
                     else
                     {
                         // @TODO: Handle nested lists/maps, right now we are assuming that the map value item type is a class
-                        _ = sb.AppendLine($"{propertyName}TempValueItem = ({metadata.MapValueTypeFullName}){metadata.MapValueTypeFullName}.Read(reader.ReadEncodedValue(true));");
+                        _ = metadata.UseReaderOverloadForMapValue
+                            ? sb.AppendLine($"{propertyName}TempValueItem = ({metadata.MapValueTypeFullName}){metadata.MapValueTypeFullName}.Read(reader);")
+                            : sb.AppendLine($"{propertyName}TempValueItem = ({metadata.MapValueTypeFullName}){metadata.MapValueTypeFullName}.Read(reader.ReadEncodedValue(true));");
                     }
                 }
 
@@ -330,7 +351,9 @@ public sealed partial class CborSerializerCodeGen
                 ? EmitGenericWithTypeParamsReader(sb, metadata.PropertyTypeFullName, propertyName)
                 : metadata.UnionHints.Count > 0 && metadata.UnionHintDiscriminantProperty is not null
                     ? EmitUnionHintReader(sb, metadata, propertyName)
-                    : sb.AppendLine($"{propertyName} = ({metadata.PropertyTypeFullName}){metadata.PropertyTypeFullName}.Read(reader.ReadEncodedValue(true));");
+                    : metadata.UseReaderOverloadForType
+                        ? sb.AppendLine($"{propertyName} = ({metadata.PropertyTypeFullName}){metadata.PropertyTypeFullName}.Read(reader);")
+                        : sb.AppendLine($"{propertyName} = ({metadata.PropertyTypeFullName}){metadata.PropertyTypeFullName}.Read(reader.ReadEncodedValue(true));");
             return sb;
         }
 
@@ -359,15 +382,29 @@ public sealed partial class CborSerializerCodeGen
                 : propertyName;
             string discriminantVar = $"{prefix}{discriminantProp}";
 
-            _ = sb.AppendLine($"var {propertyName}EncodedValue = reader.ReadEncodedValue(true);");
-            _ = sb.AppendLine($"{propertyName} = {discriminantVar} switch");
-            _ = sb.AppendLine("{");
-            foreach (KeyValuePair<int, string> hint in metadata.UnionHints)
+            if (metadata.UseReaderOverloadForType)
             {
-                _ = sb.AppendLine($"    {hint.Key} => ({metadata.PropertyTypeFullName}){hint.Value}.Read({propertyName}EncodedValue),");
+                _ = sb.AppendLine($"{propertyName} = {discriminantVar} switch");
+                _ = sb.AppendLine("{");
+                foreach (KeyValuePair<int, string> hint in metadata.UnionHints)
+                {
+                    _ = sb.AppendLine($"    {hint.Key} => ({metadata.PropertyTypeFullName}){hint.Value}.Read(reader),");
+                }
+                _ = sb.AppendLine($"    _ => ({metadata.PropertyTypeFullName}){metadata.PropertyTypeFullName}.Read(reader)");
+                _ = sb.AppendLine("};");
             }
-            _ = sb.AppendLine($"    _ => ({metadata.PropertyTypeFullName}){metadata.PropertyTypeFullName}.Read({propertyName}EncodedValue)");
-            _ = sb.AppendLine("};");
+            else
+            {
+                _ = sb.AppendLine($"var {propertyName}EncodedValue = reader.ReadEncodedValue(true);");
+                _ = sb.AppendLine($"{propertyName} = {discriminantVar} switch");
+                _ = sb.AppendLine("{");
+                foreach (KeyValuePair<int, string> hint in metadata.UnionHints)
+                {
+                    _ = sb.AppendLine($"    {hint.Key} => ({metadata.PropertyTypeFullName}){hint.Value}.Read({propertyName}EncodedValue),");
+                }
+                _ = sb.AppendLine($"    _ => ({metadata.PropertyTypeFullName}){metadata.PropertyTypeFullName}.Read({propertyName}EncodedValue)");
+                _ = sb.AppendLine("};");
+            }
             return sb;
         }
 

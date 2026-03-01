@@ -7,10 +7,23 @@ public sealed partial class CborSerializerCodeGen
 {
     private sealed class UnionEmitter : ICborSerializerEmitter
     {
-        public StringBuilder EmitReader(StringBuilder sb, SerializableTypeMetadata metadata)
+        public StringBuilder EmitReader(StringBuilder sb, SerializableTypeMetadata metadata, bool useExistingReader)
         {
+            if (useExistingReader)
+            {
+                _ = sb.AppendLine("var data = reader.ReadEncodedValue(true);");
+                _ = sb.AppendLine($"return {metadata.FullyQualifiedName}.Read(data);");
+                return sb;
+            }
+
             // General discriminant probe: list-based unions that carry a stable constructor label.
             if (TryEmitListDiscriminantProbeReader(sb, metadata))
+            {
+                return sb;
+            }
+
+            // General discriminant probe with runtime cache for list unions that use an integer tag.
+            if (TryEmitListIntegerDiscriminantCacheReader(sb, metadata))
             {
                 return sb;
             }
@@ -118,6 +131,106 @@ public sealed partial class CborSerializerCodeGen
 
             string suffix = typeName.Substring(ValueTypePrefix.Length);
             return int.TryParse(suffix, NumberStyles.Integer, CultureInfo.InvariantCulture, out value);
+        }
+
+        private static bool TryEmitListIntegerDiscriminantCacheReader(StringBuilder sb, SerializableTypeMetadata metadata)
+        {
+            if (!TryGetListIntegerDiscriminantChildren(metadata, out List<SerializableTypeMetadata> children))
+            {
+                return false;
+            }
+
+            string cacheType = "global::Chrysalis.Cbor.Serialization.Utils.UnionDispatchCache";
+
+            _ = sb.AppendLine("var reader = new CborReader(data, CborConformanceMode.Lax);");
+            _ = sb.AppendLine("if (reader.PeekState() != CborReaderState.StartArray)");
+            _ = sb.AppendLine("{");
+            _ = sb.AppendLine($"    throw new Exception(\"Union deserialization failed. {metadata.FullyQualifiedName}: expected array state\");");
+            _ = sb.AppendLine("}");
+            _ = sb.AppendLine("reader.ReadStartArray();");
+            _ = sb.AppendLine("if (reader.PeekState() is not CborReaderState.UnsignedInteger and not CborReaderState.NegativeInteger)");
+            _ = sb.AppendLine("{");
+            _ = sb.AppendLine($"    throw new Exception(\"Union deserialization failed. {metadata.FullyQualifiedName}: expected integer discriminant\");");
+            _ = sb.AppendLine("}");
+            _ = sb.AppendLine("int discriminant = reader.ReadInt32();");
+            _ = sb.AppendLine($"if ({cacheType}.TryGet<{metadata.FullyQualifiedName}>(discriminant, out var cachedDispatch))");
+            _ = sb.AppendLine("{");
+            _ = sb.AppendLine("    try");
+            _ = sb.AppendLine("    {");
+            _ = sb.AppendLine("        return cachedDispatch(data);");
+            _ = sb.AppendLine("    }");
+            _ = sb.AppendLine("    catch (Exception)");
+            _ = sb.AppendLine("    {");
+            _ = sb.AppendLine($"        {cacheType}.Remove<{metadata.FullyQualifiedName}>(discriminant);");
+            _ = sb.AppendLine("    }");
+            _ = sb.AppendLine("}");
+
+            foreach (SerializableTypeMetadata childType in children)
+            {
+                _ = sb.AppendLine("try");
+                _ = sb.AppendLine("{");
+                _ = sb.AppendLine($"    var result = ({metadata.FullyQualifiedName}){childType.FullyQualifiedName}.Read(data);");
+                _ = sb.AppendLine($"    {cacheType}.Set<{metadata.FullyQualifiedName}>(discriminant, static dispatchData => ({metadata.FullyQualifiedName}){childType.FullyQualifiedName}.Read(dispatchData));");
+                _ = sb.AppendLine("    return result;");
+                _ = sb.AppendLine("}");
+                _ = sb.AppendLine("catch (Exception)");
+                _ = sb.AppendLine("{");
+                _ = sb.AppendLine("}");
+            }
+
+            _ = sb.AppendLine($"throw new Exception(\"Union deserialization failed. {metadata.FullyQualifiedName}: unknown discriminant \" + discriminant);");
+            return true;
+        }
+
+        private static bool TryGetListIntegerDiscriminantChildren(SerializableTypeMetadata metadata, out List<SerializableTypeMetadata> children)
+        {
+            children = [];
+            foreach (SerializableTypeMetadata child in metadata.ChildTypes)
+            {
+                if (child.SerializationType != SerializationType.List)
+                {
+                    children = [];
+                    return false;
+                }
+
+                SerializablePropertyMetadata? firstField = child.Properties
+                    .Where(p => p.Order is not null)
+                    .OrderBy(p => p.Order)
+                    .FirstOrDefault();
+                if (firstField is null || firstField.Order != 0)
+                {
+                    children = [];
+                    return false;
+                }
+
+                if (!IsIntegerType(firstField.PropertyTypeFullName))
+                {
+                    children = [];
+                    return false;
+                }
+
+                children.Add(child);
+            }
+
+            return children.Count > 0;
+        }
+
+        private static bool IsIntegerType(string propertyTypeFullName)
+        {
+            string cleanType = propertyTypeFullName.Replace("?", "");
+            return cleanType is
+                "int" or
+                "uint" or
+                "long" or
+                "ulong" or
+                "System.Int32" or
+                "System.UInt32" or
+                "System.Int64" or
+                "System.UInt64" or
+                "global::System.Int32" or
+                "global::System.UInt32" or
+                "global::System.Int64" or
+                "global::System.UInt64";
         }
 
         /// <summary>
@@ -315,7 +428,7 @@ public sealed partial class CborSerializerCodeGen
 
         private static StringBuilder EmitTryCatchReader(StringBuilder sb, SerializableTypeMetadata metadata)
         {
-            _ = sb.AppendLine($"List<string> errors = [];");
+            _ = sb.AppendLine("Exception? lastError = null;");
             foreach (SerializableTypeMetadata childType in metadata.ChildTypes)
             {
                 _ = sb.AppendLine($"try");
@@ -324,11 +437,11 @@ public sealed partial class CborSerializerCodeGen
                 _ = sb.AppendLine("}");
                 _ = sb.AppendLine($"catch (Exception ex)");
                 _ = sb.AppendLine("{");
-                _ = sb.AppendLine($"errors.Add(ex.Message);");
+                _ = sb.AppendLine("lastError = ex;");
                 _ = sb.AppendLine("}");
             }
 
-            _ = sb.AppendLine($"throw new Exception(\"Union deserialization failed. {metadata.FullyQualifiedName} \" + string.Join(\"\\n\", errors));");
+            _ = sb.AppendLine($"throw new Exception(\"Union deserialization failed. {metadata.FullyQualifiedName}\", lastError);");
 
             return sb;
         }

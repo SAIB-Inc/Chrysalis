@@ -6,10 +6,13 @@ public sealed partial class CborSerializerCodeGen
 {
     private sealed class ConstructorEmitter : ICborSerializerEmitter
     {
-        public StringBuilder EmitReader(StringBuilder sb, SerializableTypeMetadata metadata)
+        public StringBuilder EmitReader(StringBuilder sb, SerializableTypeMetadata metadata, bool useExistingReader)
         {
             int constrIndex = Emitter.ResolveTag(metadata.CborIndex);
-            _ = Emitter.EmitCborReaderInstance(sb, "data");
+            if (!useExistingReader)
+            {
+                _ = Emitter.EmitCborReaderInstance(sb, "data");
+            }
             _ = Emitter.EmitTagReader(sb, metadata.CborTag, "tagIndex");
             _ = Emitter.EmitTagReader(sb, constrIndex, "constrIndex");
             _ = Emitter.EmitCustomListReader(sb, metadata);
