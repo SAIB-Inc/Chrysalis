@@ -1,0 +1,10 @@
+[package]
+name = "pallas-chainsync-bench"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+pallas = "1.0.0-alpha.4"
+hex = "0.4.3"
+tokio = { version = "1.27.0", features = ["rt-multi-thread", "macros", "signal"] }

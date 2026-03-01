@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang='en'>
+<head>
+<meta charset='utf-8' />
+<title>BlockDeserializationBenchmarks-20260301-064521</title>
+
+<style type="text/css">
+	table { border-collapse: collapse; display: block; width: 100%; overflow: auto; }
+	td, th { padding: 6px 13px; border: 1px solid #ddd; text-align: right; }
+	tr { background-color: #fff; border-top: 1px solid #ccc; }
+	tr:nth-child(even) { background: #f8f8f8; }
+</style>
+</head>
+<body>
+<pre><code>
+BenchmarkDotNet v0.15.8, Linux Ubuntu 24.04.4 LTS (Noble Numbat)
+AMD Ryzen 9 9900X3D 4.40GHz, 1 CPU, 24 logical and 12 physical cores
+.NET SDK 10.0.102
+  [Host]     : .NET 10.0.2 (10.0.2, 10.0.225.61305), X64 RyuJIT x86-64-v4
+  DefaultJob : .NET 10.0.2 (10.0.2, 10.0.225.61305), X64 RyuJIT x86-64-v4
+</code></pre>
+<pre><code></code></pre>
+
+<table>
+<thead><tr><th>Method</th><th>Mean   </th><th>Error</th><th>StdDev</th><th>Gen0</th><th>Gen1</th><th>Gen2</th><th>Allocated</th>
+</tr>
+</thead><tbody><tr><td>Byron1</td><td>7.819 &mu;s</td><td>0.1560 &mu;s</td><td>0.2606 &mu;s</td><td>0.2289</td><td>0.0305</td><td>0.0153</td><td>11.22 KB</td>
+</tr><tr><td>Byron7</td><td>100.709 &mu;s</td><td>1.6353 &mu;s</td><td>1.5296 &mu;s</td><td>1.8311</td><td>0.1221</td><td>-</td><td>94.05 KB</td>
+</tr><tr><td>Genesis</td><td>1,596.976 &mu;s</td><td>27.3963 &mu;s</td><td>24.2861 &mu;s</td><td>285.1563</td><td>285.1563</td><td>285.1563</td><td>2213.62 KB</td>
+</tr><tr><td>Shelley1</td><td>43.016 &mu;s</td><td>0.7263 &mu;s</td><td>0.6794 &mu;s</td><td>0.9766</td><td>-</td><td>-</td><td>48.79 KB</td>
+</tr><tr><td>Allegra1</td><td>40.331 &mu;s</td><td>0.7389 &mu;s</td><td>0.6550 &mu;s</td><td>0.9155</td><td>-</td><td>-</td><td>47.26 KB</td>
+</tr><tr><td>Mary1</td><td>3,673.225 &mu;s</td><td>36.3146 &mu;s</td><td>33.9687 &mu;s</td><td>31.2500</td><td>7.8125</td><td>-</td><td>1905.35 KB</td>
+</tr><tr><td>Alonzo1</td><td>328.804 &mu;s</td><td>6.5489 &mu;s</td><td>7.0073 &mu;s</td><td>3.9063</td><td>-</td><td>-</td><td>208.69 KB</td>
+</tr><tr><td>Alonzo14</td><td>6,420.739 &mu;s</td><td>56.9292 &mu;s</td><td>44.4465 &mu;s</td><td>70.3125</td><td>23.4375</td><td>7.8125</td><td>3648.38 KB</td>
+</tr><tr><td>Babbage1</td><td>117.947 &mu;s</td><td>2.0698 &mu;s</td><td>1.7283 &mu;s</td><td>1.4648</td><td>-</td><td>-</td><td>73.73 KB</td>
+</tr><tr><td>Babbage9</td><td>19,162.470 &mu;s</td><td>292.4646 &mu;s</td><td>273.5716 &mu;s</td><td>187.5000</td><td>156.2500</td><td>-</td><td>10577.37 KB</td>
+</tr><tr><td>Conway1</td><td>136.560 &mu;s</td><td>2.6443 &mu;s</td><td>3.0452 &mu;s</td><td>1.4648</td><td>-</td><td>-</td><td>85.35 KB</td>
+</tr></tbody></table>
+</body>
+</html>

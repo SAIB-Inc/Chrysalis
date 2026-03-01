@@ -166,17 +166,14 @@ internal static class Program
 
         Console.WriteLine($"Fetching block at {FormatPoint(point)}...");
 
-        ReadOnlyMemory<byte>? blockData = await peer.BlockFetch.FetchSingleAsync(point, ct).ConfigureAwait(false);
+        BlockWithEra? block = await peer.BlockFetch.FetchSingleAsync<BlockWithEra>(point, ct).ConfigureAwait(false);
 
-        if (blockData is null)
+        if (block is null)
         {
             Console.WriteLine("NoBlocks — block not found.");
             return 2;
         }
 
-        Console.WriteLine($"Received block: {blockData.Value.Length} bytes");
-
-        BlockWithEra block = CborSerializer.Deserialize<BlockWithEra>(blockData.Value);
         Console.WriteLine($"Deserialized: {block.GetType().Name}");
 
         Block? inner = block.Block;
