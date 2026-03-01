@@ -282,28 +282,30 @@ var nftMetadata = new Cip68<PlutusData>(
 
 ## ⚡ Performance
 
-Chrysalis is optimized for performance, with benchmarks showing it outperforms equivalent libraries in other languages, including Pallas (Rust). Our benchmarks show superior performance in key operations:
+Chrysalis is built for high-throughput block processing. Benchmarks compare Chrysalis against [Pallas](https://github.com/txpipe/pallas) (Rust), the reference Cardano mini-protocol implementation, on Conway-era blocks over N2C (Unix socket) chain sync.
 
-<div align="center">
-  <p><strong>Performance with Database Operations</strong></p>
-  <p>Chrysalis (609.56 blocks/s) vs Pallas Rust (474.95 blocks/s)</p>
-  <img src="assets/chrysalis_bechmark_with_db.png" alt="Benchmarks with DB" width="70%">
-</div>
+**Conway N2C Chain Sync — 5,000 blocks, 3x averaged:**
 
-<div align="center">
-  <p><strong>Performance without Database Operations</strong></p>
-  <p>Chrysalis (4,500 blocks/s) vs Pallas Rust (3,500 blocks/s)</p>
-  <img src="assets/chrysalis_bechmark_no_db.png" alt="Benchmarks without DB" width="70%">
-</div>
+| | Network Only (blk/s) | With Deserialization (blk/s) |
+|---|---|---|
+| **Pallas (Rust)** | 3,374 | 3,271 |
+| **Chrysalis (.NET)** | 2,586 | 1,261 |
 
-Key performance advantages:
+**N2N (TCP) Chain Sync + BlockFetch — 10,000 blocks from origin:**
 
-- Faster block deserialization (approximately 28% faster than Rust)
-- Optimized chain synchronization
-- Lower memory footprint (reduced allocations)
-- Excellent scalability for high-throughput applications
+| | blk/s |
+|---|---|
+| **Chrysalis (.NET)** | ~713 |
+| **Pallas (Rust)** | ~689 |
 
-These benchmarks were performed using BenchmarkDotNet with proper warm-up cycles, multiple iterations, and statistical analysis.
+Key performance characteristics:
+
+- **80% networking parity** with Rust on pure I/O throughput (N2C)
+- **N2N parity** — Chrysalis matches or exceeds Pallas on TCP chain sync + block fetch
+- **Probe-based union dispatch** — source-generated deterministic CBOR type resolution via PeekState/PeekTag instead of try-catch
+- **Zero-copy deserialization** — `ReadOnlyMemory<byte>` throughout the pipeline, minimizing allocations
+
+Benchmarks run on AMD Ryzen 9 9900X3D, .NET 10, against a local Cardano Preview testnet node. Full benchmark suite in `benchmarks/`.
 
 ## 🔄 Cardano Era Support
 
