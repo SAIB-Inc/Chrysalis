@@ -153,12 +153,22 @@ static string FormatBytes(double bytes) => bytes switch
 static Dictionary<string, string> ParseArgs(string[] args)
 {
     Dictionary<string, string> map = new(StringComparer.OrdinalIgnoreCase);
-    for (int i = 0; i < args.Length - 1; i++)
+    for (int i = 0; i < args.Length; i++)
     {
-        if (args[i].StartsWith("--"))
+        if (!args[i].StartsWith("--", StringComparison.Ordinal))
+            continue;
+
+        string key = args[i][2..];
+        bool hasValue = i + 1 < args.Length && !args[i + 1].StartsWith("--", StringComparison.Ordinal);
+
+        if (hasValue)
         {
-            map[args[i][2..]] = args[i + 1];
+            map[key] = args[i + 1];
             i++;
+        }
+        else
+        {
+            map[key] = string.Empty;
         }
     }
     return map;

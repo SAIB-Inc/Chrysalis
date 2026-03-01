@@ -15,26 +15,29 @@ public sealed partial class CborSerializerCodeGen
 
             _ = sb.AppendLine($"Dictionary<{(isIntKey ? "int" : "string")}, object> resultMap = [];");
 
-            // Read the map and check if it's indefinite
-            _ = sb.AppendLine("int? mapLength = reader.ReadStartMap();");
-            _ = sb.AppendLine("bool isIndefiniteMap = !mapLength.HasValue;");
+            // Read the map and size using Dahomey API
+            _ = sb.AppendLine("reader.ReadBeginMap();");
+            _ = sb.AppendLine("int mapSize = reader.ReadSize();");
+            _ = sb.AppendLine("bool isIndefiniteMap = mapSize == -1;");
+            _ = sb.AppendLine("int mapRemaining = mapSize;");
 
-            _ = sb.AppendLine("while (reader.PeekState() != CborReaderState.EndMap)");
+            _ = sb.AppendLine("while (isIndefiniteMap ? (reader.Buffer.Length > 0 && reader.Buffer[0] != 0xFF) : mapRemaining > 0)");
             _ = sb.AppendLine("{");
 
             _ = isIntKey
                 ? sb.AppendLine($"int key = reader.ReadInt32();")
-                : sb.AppendLine($"string key = reader.ReadTextString();");
+                : sb.AppendLine($"string key = reader.ReadString();");
 
             _ = sb.AppendLine($"object value = null;");
 
             _ = Emitter.EmitGenericReader(sb, "TypeMapping[key]", "value");
 
             _ = sb.AppendLine($"resultMap.Add(key, value);");
+            _ = sb.AppendLine($"if (mapSize > 0) mapRemaining--;");
             _ = sb.AppendLine("}");
 
-            // Read the end map marker
-            _ = sb.AppendLine("reader.ReadEndMap();");
+            // Skip break for indefinite maps
+            _ = sb.AppendLine("if (isIndefiniteMap && reader.Buffer.Length > 0 && reader.Buffer[0] == 0xFF) reader.ReadDataItem();");
             _ = sb.AppendLine($"{metadata.FullyQualifiedName} result = new {metadata.FullyQualifiedName}(");
 
             for (int i = 0; i < metadata.Properties.Count; i++)
@@ -68,20 +71,23 @@ public sealed partial class CborSerializerCodeGen
 
             // Use indefinite if either attribute OR runtime flag is set
             _ = sb.AppendLine($"bool useIndefinite = {(metadata.IsIndefinite ? "true" : "false")} || data.IsIndefinite;");
+            _ = sb.AppendLine("int _mapSize;");
             _ = sb.AppendLine("if (useIndefinite)");
             _ = sb.AppendLine("{");
-            _ = sb.AppendLine("    writer.WriteStartMap(null);");
+            _ = sb.AppendLine("    _mapSize = -1;");
+            _ = sb.AppendLine("    writer.WriteBeginMap(-1);");
             _ = sb.AppendLine("}");
             _ = sb.AppendLine("else");
             _ = sb.AppendLine("{");
-            _ = sb.AppendLine("    writer.WriteStartMap(propCount);");
+            _ = sb.AppendLine("    _mapSize = propCount;");
+            _ = sb.AppendLine("    writer.WriteBeginMap(propCount);");
             _ = sb.AppendLine("}");
 
             foreach (SerializablePropertyMetadata prop in metadata.Properties)
             {
                 if (prop.IsNullable)
                 {
-                    _ = sb.AppendLine($"{(isIntKey ? $"writer.WriteInt32(KeyMapping[\"{prop.PropertyName}\"])" : $"writer.WriteTextString(KeyMapping[\"{prop.PropertyName}\"])")};");
+                    _ = sb.AppendLine($"{(isIntKey ? $"writer.WriteInt32(KeyMapping[\"{prop.PropertyName}\"])" : $"writer.WriteString(KeyMapping[\"{prop.PropertyName}\"])")};");
                     _ = Emitter.EmitSerializablePropertyWriter(sb, prop);
                 }
                 else
@@ -90,18 +96,18 @@ public sealed partial class CborSerializerCodeGen
                     {
                         _ = sb.AppendLine($"if (data.{prop.PropertyName} is not null)");
                         _ = sb.AppendLine("{");
-                        _ = sb.AppendLine($"{(isIntKey ? $"writer.WriteInt32(KeyMapping[\"{prop.PropertyName}\"])" : $"writer.WriteTextString(KeyMapping[\"{prop.PropertyName}\"])")};");
+                        _ = sb.AppendLine($"{(isIntKey ? $"writer.WriteInt32(KeyMapping[\"{prop.PropertyName}\"])" : $"writer.WriteString(KeyMapping[\"{prop.PropertyName}\"])")};");
                         _ = Emitter.EmitSerializablePropertyWriter(sb, prop);
                         _ = sb.AppendLine("}");
                     }
                     else
                     {
-                        _ = sb.AppendLine($"{(isIntKey ? $"writer.WriteInt32(KeyMapping[\"{prop.PropertyName}\"])" : $"writer.WriteTextString(KeyMapping[\"{prop.PropertyName}\"])")};");
+                        _ = sb.AppendLine($"{(isIntKey ? $"writer.WriteInt32(KeyMapping[\"{prop.PropertyName}\"])" : $"writer.WriteString(KeyMapping[\"{prop.PropertyName}\"])")};");
                         _ = Emitter.EmitSerializablePropertyWriter(sb, prop);
                     }
                 }
             }
-            _ = sb.AppendLine($"writer.WriteEndMap();");
+            _ = sb.AppendLine($"writer.WriteEndMap(_mapSize);");
 
             return sb;
         }

@@ -12,7 +12,7 @@
 
   <ItemGroup>
     <PackageReference Include="SAIB.Blake2Fast" />
-    <PackageReference Include="System.Formats.Cbor" />
+    <PackageReference Include="Dahomey.Cbor" />
   </ItemGroup>
 
   <ItemGroup>

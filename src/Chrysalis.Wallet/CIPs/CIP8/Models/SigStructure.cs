@@ -1,5 +1,6 @@
+using System.Buffers;
 using Chrysalis.Cbor.Types;
-using System.Formats.Cbor;
+using Dahomey.Cbor.Serialization;
 
 namespace Chrysalis.Wallet.CIPs.CIP8.Models;
 
@@ -7,11 +8,6 @@ namespace Chrysalis.Wallet.CIPs.CIP8.Models;
 /// COSE Sig_structure for creating signatures.
 /// See RFC 8152 Section 4.4.
 /// </summary>
-/// <param name="Context">Context string: "Signature", "Signature1", or "CounterSignature".</param>
-/// <param name="BodyProtected">Protected headers from the message body.</param>
-/// <param name="SignProtected">Protected headers from the signer (empty for Signature1).</param>
-/// <param name="ExternalAad">External additional authenticated data.</param>
-/// <param name="Payload">The payload to be signed.</param>
 public record SigStructure(
     string Context,
     byte[] BodyProtected,
@@ -23,33 +19,31 @@ public record SigStructure(
     /// <summary>
     /// Serializes the SigStructure to CBOR bytes.
     /// </summary>
-    /// <returns>The CBOR-encoded byte representation.</returns>
     public byte[] ToCbor()
     {
-        CborWriter writer = new(CborConformanceMode.Lax);
-        Write(writer, this);
-        return writer.Encode();
+        ArrayBufferWriter<byte> output = new();
+        Write(output, this);
+        return output.WrittenSpan.ToArray();
     }
 
     /// <summary>
-    /// Writes a SigStructure to the specified CBOR writer.
+    /// Writes a SigStructure to the specified output buffer.
     /// </summary>
-    /// <param name="writer">The CBOR writer to write to.</param>
-    /// <param name="data">The SigStructure data to serialize.</param>
-    public static void Write(CborWriter writer, SigStructure data)
+    public static void Write(IBufferWriter<byte> output, SigStructure data)
     {
-        ArgumentNullException.ThrowIfNull(writer);
+        ArgumentNullException.ThrowIfNull(output);
         ArgumentNullException.ThrowIfNull(data);
 
-        // For Signature1 context, we only write 4 elements (no SignProtected)
-        // For Signature and CounterSignature, we write 5 elements
-        bool includeSignProtected = !string.Equals(data.Context, "Signature1", StringComparison.Ordinal);
-        writer.WriteStartArray(includeSignProtected ? 5 : 4);
+        CborWriter writer = new(output);
 
-        writer.WriteTextString(data.Context);
+        // For Signature1 context, we only write 4 elements (no SignProtected)
+        bool includeSignProtected = !string.Equals(data.Context, "Signature1", StringComparison.Ordinal);
+        int size = includeSignProtected ? 5 : 4;
+        writer.WriteBeginArray(size);
+
+        writer.WriteString(data.Context);
         writer.WriteByteString(data.BodyProtected);
 
-        // Only include SignProtected for non-Signature1 contexts
         if (includeSignProtected)
         {
             writer.WriteByteString(data.SignProtected);
@@ -57,26 +51,23 @@ public record SigStructure(
 
         writer.WriteByteString(data.ExternalAad);
         writer.WriteByteString(data.Payload);
-        writer.WriteEndArray();
+        writer.WriteEndArray(size);
     }
 
     /// <summary>
     /// Reads a SigStructure from CBOR byte data.
     /// </summary>
-    /// <param name="data">The CBOR-encoded byte data.</param>
-    /// <returns>A deserialized SigStructure instance.</returns>
     public static new SigStructure Read(ReadOnlyMemory<byte> data)
     {
-        CborReader reader = new(data, CborConformanceMode.Lax);
-        _ = reader.ReadStartArray();
+        CborReader reader = new(data.Span);
+        reader.ReadBeginArray();
+        _ = reader.ReadSize();
 
-        string context = reader.ReadTextString();
-        byte[] bodyProtected = reader.ReadByteString();
-        byte[] signProtected = reader.ReadByteString();
-        byte[] externalAad = reader.ReadByteString();
-        byte[] payload = reader.ReadByteString();
-
-        reader.ReadEndArray();
+        string context = reader.ReadString()!;
+        byte[] bodyProtected = reader.ReadByteString().ToArray();
+        byte[] signProtected = reader.ReadByteString().ToArray();
+        byte[] externalAad = reader.ReadByteString().ToArray();
+        byte[] payload = reader.ReadByteString().ToArray();
 
         return new SigStructure(context, bodyProtected, signProtected, externalAad, payload);
     }

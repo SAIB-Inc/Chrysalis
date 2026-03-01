@@ -1,4 +1,4 @@
-using System.Formats.Cbor;
+using Dahomey.Cbor.Serialization;
 using System.Text;
 using System.Text.Json;
 using Chrysalis.Wallet.CIPs.CIP8.Builders;
@@ -211,10 +211,10 @@ static async Task SignMessage(string skeyPath, string vkeyPath, string payloadPa
 
     // The CBOR should be a byte string containing the key
     CborReader skeyReader = new(skeyCbor);
-    byte[] skeyBytes = skeyReader.ReadByteString();
+    byte[] skeyBytes = skeyReader.ReadByteString().ToArray();
 
     CborReader vkeyReader = new(vkeyCbor);
-    byte[] vkeyBytes = vkeyReader.ReadByteString();
+    byte[] vkeyBytes = vkeyReader.ReadByteString().ToArray();
 
     Console.WriteLine($"Signing key length: {skeyBytes.Length} bytes");
     Console.WriteLine($"Verification key length: {vkeyBytes.Length} bytes");
@@ -336,7 +336,7 @@ static async Task<int> VerifySignature(string signatureInput, string vkeyPath, s
 
     byte[] vkeyCbor = Convert.FromHexString(vkeyCborHex);
     CborReader vkeyReader = new(vkeyCbor);
-    byte[] vkeyBytes = vkeyReader.ReadByteString();
+    byte[] vkeyBytes = vkeyReader.ReadByteString().ToArray();
 
     PublicKey publicKey;
     if (vkeyBytes.Length >= 32)
