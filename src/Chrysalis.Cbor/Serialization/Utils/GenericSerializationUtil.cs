@@ -125,6 +125,16 @@ public static class GenericSerializationUtil
         return IsPrimitiveType(type) ? ReadPrimitive(type, data) : ReadNonPrimitive(type, data);
     }
 
+    /// <summary>Reads a value of the specified type from CBOR-encoded bytes and reports consumed bytes.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static object? ReadAnyWithConsumed(ReadOnlyMemory<byte> data, Type type, out int bytesConsumed)
+    {
+        ArgumentNullException.ThrowIfNull(type);
+        return IsPrimitiveType(type)
+            ? ReadPrimitiveWithConsumed(type, data, out bytesConsumed)
+            : ReadNonPrimitiveWithConsumed(type, data, out bytesConsumed);
+    }
+
     /// <summary>Determines whether the specified type is a CBOR primitive type.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static bool IsPrimitiveType(Type type)
@@ -215,6 +225,66 @@ public static class GenericSerializationUtil
             _ when type == typeof(CborLabel) => ReadCborLabel(ref reader),
             _ => throw new NotSupportedException($"Type {type} is not supported as a primitive type.")
         };
+    }
+
+    /// <summary>Reads a primitive value of the specified type from CBOR-encoded bytes and reports consumed bytes.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static object? ReadPrimitiveWithConsumed(Type type, ReadOnlyMemory<byte> data, out int bytesConsumed)
+    {
+        CborReader reader = new(data.Span);
+
+        if (Nullable.GetUnderlyingType(type) != null)
+        {
+            type = Nullable.GetUnderlyingType(type)!;
+        }
+
+        // CborEncodedValue needs special handling (requires ReadDataItem for boundary)
+        if (type == typeof(CborEncodedValue))
+        {
+            int pos = data.Length - reader.Buffer.Length;
+            _ = reader.ReadDataItem();
+            bytesConsumed = data.Length - reader.Buffer.Length;
+            return new CborEncodedValue(data[pos..bytesConsumed]);
+        }
+
+        object? result = true switch
+        {
+            _ when type == typeof(bool) => reader.ReadBoolean(),
+            _ when type == typeof(int) => reader.ReadInt32(),
+            _ when type == typeof(uint) => reader.ReadUInt32(),
+            _ when type == typeof(long) => reader.ReadInt64(),
+            _ when type == typeof(ulong) => reader.ReadUInt64(),
+            _ when type == typeof(float) => reader.ReadSingle(),
+            _ when type == typeof(double) => reader.ReadDouble(),
+            _ when type == typeof(decimal) => reader.ReadDecimal(),
+            _ when type == typeof(string) => reader.ReadString()!,
+            _ when type == typeof(byte[]) => ReadByteArray(ref reader),
+            _ when type == typeof(ReadOnlyMemory<byte>) => (ReadOnlyMemory<byte>)ReadByteArray(ref reader),
+            _ when type == typeof(CborLabel) => ReadCborLabel(ref reader),
+            _ => throw new NotSupportedException($"Type {type} is not supported as a primitive type.")
+        };
+        bytesConsumed = data.Length - reader.Buffer.Length;
+        return result;
+    }
+
+    /// <summary>Reads a non-primitive value of the specified type from CBOR-encoded bytes and reports consumed bytes.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static object? ReadNonPrimitiveWithConsumed(Type type, ReadOnlyMemory<byte> data, out int bytesConsumed)
+    {
+        ArgumentNullException.ThrowIfNull(type);
+
+        if (Nullable.GetUnderlyingType(type) != null)
+        {
+            type = Nullable.GetUnderlyingType(type)!;
+        }
+
+        MethodInfo readMethod = type.GetMethod("Read", BindingFlags.Public | BindingFlags.Static | BindingFlags.FlattenHierarchy, null, [typeof(ReadOnlyMemory<byte>), typeof(int).MakeByRefType()], null)
+            ?? throw new NotSupportedException($"Type {type.FullName} does not have a valid static Read(ReadOnlyMemory<byte>, out int) method.");
+
+        object?[] args = [data, 0];
+        object? result = readMethod.Invoke(null, args);
+        bytesConsumed = (int)args[1]!;
+        return result;
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]

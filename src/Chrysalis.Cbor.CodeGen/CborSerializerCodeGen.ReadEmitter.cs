@@ -444,16 +444,16 @@ public sealed partial class CborSerializerCodeGen
 
             _ = sb.AppendLine("{");
             _ = sb.AppendLine($"int _pos = data.Length - reader.Buffer.Length;");
-            _ = sb.AppendLine($"var _span = reader.ReadDataItem();");
-            _ = sb.AppendLine($"var {propertyName}EncodedValue = data.Slice(_pos, _span.Length);");
+            _ = sb.AppendLine($"int _consumed;");
             _ = sb.AppendLine($"{propertyName} = {discriminantVar} switch");
             _ = sb.AppendLine("{");
             foreach (KeyValuePair<int, string> hint in metadata.UnionHints)
             {
-                _ = sb.AppendLine($"    {hint.Key} => ({metadata.PropertyTypeFullName}){hint.Value}.Read({propertyName}EncodedValue),");
+                _ = sb.AppendLine($"    {hint.Key} => ({metadata.PropertyTypeFullName}){hint.Value}.Read(data.Slice(_pos), out _consumed),");
             }
-            _ = sb.AppendLine($"    _ => ({metadata.PropertyTypeFullName}){metadata.PropertyTypeFullName}.Read({propertyName}EncodedValue)");
+            _ = sb.AppendLine($"    _ => ({metadata.PropertyTypeFullName}){metadata.PropertyTypeFullName}.Read(data.Slice(_pos), out _consumed)");
             _ = sb.AppendLine("};");
+            _ = sb.AppendLine($"reader = new CborReader(data.Span.Slice(_pos + _consumed));");
             _ = sb.AppendLine("}");
             return sb;
         }
@@ -492,11 +492,11 @@ public sealed partial class CborSerializerCodeGen
 
         public static StringBuilder EmitGenericWithTypeParamsReader(StringBuilder sb, string type, string propertyName)
         {
-            // Extract encoded value from current reader position, then dispatch via ReadOnlyMemory<byte>
+            // Unbounded read: use ReadAnyWithConsumed<T> to avoid ReadDataItem double-scan
             _ = sb.AppendLine("{");
             _ = sb.AppendLine($"int _pos = data.Length - reader.Buffer.Length;");
-            _ = sb.AppendLine($"var _span = reader.ReadDataItem();");
-            _ = sb.AppendLine($"{propertyName} = {GenericSerializationUtilFullname}.Read<{type}>(data.Slice(_pos, _span.Length));");
+            _ = sb.AppendLine($"{propertyName} = {GenericSerializationUtilFullname}.ReadAnyWithConsumed<{type}>(data.Slice(_pos), out int _consumed);");
+            _ = sb.AppendLine($"reader = new CborReader(data.Span.Slice(_pos + _consumed));");
             _ = sb.AppendLine("}");
             return sb;
         }
