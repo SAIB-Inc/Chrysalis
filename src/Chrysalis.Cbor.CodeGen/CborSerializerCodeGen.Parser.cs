@@ -23,6 +23,7 @@ public sealed partial class CborSerializerCodeGen
         public const string CborPropertyAttribute = "CborPropertyAttribute";
         public const string CborProperty = "CborProperty";
         public const string CborSize = "CborSize";
+        public const string CborIndex = "CborIndex";
         public const string CborIndefinite = "CborIndefinite";
         public const string CborDefinite = "CborDefinite";
         public const string CborUnionHint = "CborUnionHint";
@@ -75,6 +76,8 @@ public sealed partial class CborSerializerCodeGen
             AttributeSyntax? cborDefiniteAttribute = attributes.FirstOrDefault(a => a.Name.ToString() == CborDefinite);
 
             int? constrIndex = cborConstrAttribute?.ArgumentList?.Arguments.FirstOrDefault()?.GetFirstToken().Value as int?;
+            AttributeSyntax? cborIndexAttribute = attributes.FirstOrDefault(a => a.Name.ToString() == CborIndex);
+            int? cborIndexValue = cborIndexAttribute?.ArgumentList?.Arguments.FirstOrDefault()?.GetFirstToken().Value as int?;
             int? cborTag = cborTagAttribute?.ArgumentList?.Arguments.FirstOrDefault()?.GetFirstToken().Value as int?;
             bool shouldPreserveRaw = ShouldPreserveRaw(tds, model);
 
@@ -92,7 +95,7 @@ public sealed partial class CborSerializerCodeGen
                 fullyQualifiedName,
                 keyword,
                 cborTag,
-                constrIndex,
+                cborIndexValue ?? constrIndex,
                 cborIndefiniteAttribute != null,
                 cborDefiniteAttribute != null,
                 serializationType,

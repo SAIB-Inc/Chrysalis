@@ -18,6 +18,7 @@ public abstract partial record Certificate : CborBase { }
 /// <param name="StakeCredential">The stake credential being registered.</param>
 [CborSerializable]
 [CborList]
+[CborIndex(0)]
 public partial record StakeRegistration(
    [CborOrder(0)] int Tag,
    [CborOrder(1)] Credential StakeCredential
@@ -30,6 +31,7 @@ public partial record StakeRegistration(
 /// <param name="StakeCredential">The stake credential being deregistered.</param>
 [CborSerializable]
 [CborList]
+[CborIndex(1)]
 public partial record StakeDeregistration(
     [CborOrder(0)] int Tag,
     [CborOrder(1)] Credential StakeCredential
@@ -43,6 +45,7 @@ public partial record StakeDeregistration(
 /// <param name="PoolKeyHash">The hash of the target pool's key.</param>
 [CborSerializable]
 [CborList]
+[CborIndex(2)]
 public partial record StakeDelegation(
     [CborOrder(0)] int Tag,
     [CborOrder(1)] Credential StakeCredential,
@@ -64,6 +67,7 @@ public partial record StakeDelegation(
 /// <param name="PoolMetadata">The optional pool metadata reference.</param>
 [CborSerializable]
 [CborList]
+[CborIndex(3)]
 public partial record PoolRegistration(
     [CborOrder(0)] int Tag,
     [CborOrder(1)] ReadOnlyMemory<byte> Operator,
@@ -85,10 +89,41 @@ public partial record PoolRegistration(
 /// <param name="EpochNo">The epoch number at which the pool will be retired.</param>
 [CborSerializable]
 [CborList]
+[CborIndex(4)]
 public partial record PoolRetirement(
     [CborOrder(0)] int Tag,
     [CborOrder(1)] ReadOnlyMemory<byte> PoolKeyHash,
     [CborOrder(2)] ulong EpochNo
+) : Certificate;
+
+/// <summary>
+/// Represents a genesis key delegation certificate.
+/// </summary>
+/// <param name="Tag">The certificate tag value.</param>
+/// <param name="GenesisHash">The genesis key hash.</param>
+/// <param name="GenesisDelegateHash">The genesis delegate key hash.</param>
+/// <param name="VrfKeyHash">The VRF verification key hash.</param>
+[CborSerializable]
+[CborList]
+[CborIndex(5)]
+public partial record GenesisKeyDelegation(
+    [CborOrder(0)] int Tag,
+    [CborOrder(1)] ReadOnlyMemory<byte> GenesisHash,
+    [CborOrder(2)] ReadOnlyMemory<byte> GenesisDelegateHash,
+    [CborOrder(3)] ReadOnlyMemory<byte> VrfKeyHash
+) : Certificate;
+
+/// <summary>
+/// Represents a move instantaneous rewards certificate.
+/// </summary>
+/// <param name="Tag">The certificate tag value.</param>
+/// <param name="MoveInstantaneousReward">The move instantaneous reward details.</param>
+[CborSerializable]
+[CborList]
+[CborIndex(6)]
+public partial record MoveInstantaneousRewardsCert(
+    [CborOrder(0)] int Tag,
+    [CborOrder(1)] MoveInstantaneousReward MoveInstantaneousReward
 ) : Certificate;
 
 /// <summary>
@@ -99,6 +134,7 @@ public partial record PoolRetirement(
 /// <param name="Coin">The deposit amount in lovelace.</param>
 [CborSerializable]
 [CborList]
+[CborIndex(7)]
 public partial record RegCert(
     [CborOrder(0)] int Tag,
     [CborOrder(1)] Credential StakeCredential,
@@ -113,6 +149,7 @@ public partial record RegCert(
 /// <param name="Coin">The deposit refund amount in lovelace.</param>
 [CborSerializable]
 [CborList]
+[CborIndex(8)]
 public partial record UnRegCert(
     [CborOrder(0)] int Tag,
     [CborOrder(1)] Credential StakeCredential,
@@ -127,6 +164,7 @@ public partial record UnRegCert(
 /// <param name="DRep">The target DRep for vote delegation.</param>
 [CborSerializable]
 [CborList]
+[CborIndex(9)]
 public partial record VoteDelegCert(
     [CborOrder(0)] int Tag,
     [CborOrder(1)] Credential StakeCredential,
@@ -142,6 +180,7 @@ public partial record VoteDelegCert(
 /// <param name="DRep">The target DRep for vote delegation.</param>
 [CborSerializable]
 [CborList]
+[CborIndex(10)]
 public partial record StakeVoteDelegCert(
     [CborOrder(0)] int Tag,
     [CborOrder(1)] Credential StakeCredential,
@@ -158,6 +197,7 @@ public partial record StakeVoteDelegCert(
 /// <param name="Coin">The deposit amount in lovelace.</param>
 [CborSerializable]
 [CborList]
+[CborIndex(11)]
 public partial record StakeRegDelegCert(
     [CborOrder(0)] int Tag,
     [CborOrder(1)] Credential StakeCredential,
@@ -174,6 +214,7 @@ public partial record StakeRegDelegCert(
 /// <param name="Coin">The deposit amount in lovelace.</param>
 [CborSerializable]
 [CborList]
+[CborIndex(12)]
 public partial record VoteRegDelegCert(
     [CborOrder(0)] int Tag,
     [CborOrder(1)] Credential StakeCredential,
@@ -191,6 +232,7 @@ public partial record VoteRegDelegCert(
 /// <param name="Coin">The deposit amount in lovelace.</param>
 [CborSerializable]
 [CborList]
+[CborIndex(13)]
 public partial record StakeVoteRegDelegCert(
     [CborOrder(0)] int Tag,
     [CborOrder(1)] Credential StakeCredential,
@@ -207,6 +249,7 @@ public partial record StakeVoteRegDelegCert(
 /// <param name="CommitteeHotCredential">The hot credential being authorized.</param>
 [CborSerializable]
 [CborList]
+[CborIndex(14)]
 public partial record AuthCommitteeHotCert(
     [CborOrder(0)] int Tag,
     [CborOrder(1)] Credential CommitteeColdCredential,
@@ -221,6 +264,7 @@ public partial record AuthCommitteeHotCert(
 /// <param name="Anchor">The optional anchor with resignation metadata.</param>
 [CborSerializable]
 [CborList]
+[CborIndex(15)]
 public partial record ResignCommitteeColdCert(
     [CborOrder(0)] int Tag,
     [CborOrder(1)] ReadOnlyMemory<byte> CommitteeColdCredential,
@@ -236,6 +280,7 @@ public partial record ResignCommitteeColdCert(
 /// <param name="Anchor">The optional anchor with DRep metadata.</param>
 [CborSerializable]
 [CborList]
+[CborIndex(16)]
 public partial record RegDrepCert(
     [CborOrder(0)] int Tag,
     [CborOrder(1)] Credential DRepCredential,
@@ -251,6 +296,7 @@ public partial record RegDrepCert(
 /// <param name="Coin">The deposit refund amount in lovelace.</param>
 [CborSerializable]
 [CborList]
+[CborIndex(17)]
 public partial record UnRegDrepCert(
     [CborOrder(0)] int Tag,
     [CborOrder(1)] Credential DrepCredential,
@@ -265,36 +311,9 @@ public partial record UnRegDrepCert(
 /// <param name="Anchor">The optional new anchor with updated DRep metadata.</param>
 [CborSerializable]
 [CborList]
+[CborIndex(18)]
 public partial record UpdateDrepCert(
     [CborOrder(0)] int Tag,
     [CborOrder(1)] Credential DrepCredential,
     [CborOrder(2)][CborNullable] Anchor? Anchor
-) : Certificate;
-
-/// <summary>
-/// Represents a genesis key delegation certificate.
-/// </summary>
-/// <param name="Tag">The certificate tag value.</param>
-/// <param name="GenesisHash">The genesis key hash.</param>
-/// <param name="GenesisDelegateHash">The genesis delegate key hash.</param>
-/// <param name="VrfKeyHash">The VRF verification key hash.</param>
-[CborSerializable]
-[CborList]
-public partial record GenesisKeyDelegation(
-    [CborOrder(0)] int Tag,
-    [CborOrder(1)] ReadOnlyMemory<byte> GenesisHash,
-    [CborOrder(2)] ReadOnlyMemory<byte> GenesisDelegateHash,
-    [CborOrder(3)] ReadOnlyMemory<byte> VrfKeyHash
-) : Certificate;
-
-/// <summary>
-/// Represents a move instantaneous rewards certificate.
-/// </summary>
-/// <param name="Tag">The certificate tag value.</param>
-/// <param name="MoveInstantaneousReward">The move instantaneous reward details.</param>
-[CborSerializable]
-[CborList]
-public partial record MoveInstantaneousRewardsCert(
-    [CborOrder(0)] int Tag,
-    [CborOrder(1)] MoveInstantaneousReward MoveInstantaneousReward
 ) : Certificate;

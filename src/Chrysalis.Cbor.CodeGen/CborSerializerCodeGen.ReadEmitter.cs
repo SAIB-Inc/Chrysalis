@@ -511,6 +511,51 @@ public sealed partial class CborSerializerCodeGen
             return sb;
         }
 
+        /// <summary>
+        /// Emits code to read a single map value into the <c>value</c> variable (of type <c>object</c>).
+        /// Dispatches based on the property's type: primitive, open generic, union, or non-union object.
+        /// </summary>
+        public static StringBuilder EmitMapValueReader(StringBuilder sb, SerializablePropertyMetadata prop)
+        {
+            string cleanType = prop.PropertyType.Replace("?", "");
+
+            if (prop.IsOpenGeneric)
+            {
+                _ = sb.AppendLine("{");
+                _ = sb.AppendLine($"int _pos = data.Length - reader.Buffer.Length;");
+                _ = sb.AppendLine($"value = {GenericSerializationUtilFullname}.ReadAnyWithConsumed<{prop.PropertyType}>(data.Slice(_pos), out int _consumed);");
+                _ = sb.AppendLine($"reader = new CborReader(data.Span.Slice(_pos + _consumed));");
+                _ = sb.AppendLine("}");
+            }
+            else if (IsPrimitiveType(cleanType))
+            {
+                string tempVar = $"_val_{prop.PropertyName}";
+                _ = sb.AppendLine($"{cleanType} {tempVar};");
+                _ = EmitPrimitivePropertyReader(sb, prop.PropertyType, tempVar);
+                _ = sb.AppendLine($"value = {tempVar};");
+            }
+            else if (prop.IsPropertyTypeUnion)
+            {
+                string nonNullType = prop.PropertyTypeFullName.Replace("?", "");
+                _ = sb.AppendLine("{");
+                _ = sb.AppendLine($"int _pos = data.Length - reader.Buffer.Length;");
+                _ = sb.AppendLine($"var _span = reader.ReadDataItem();");
+                _ = sb.AppendLine($"value = {nonNullType}.Read(data.Slice(_pos, _span.Length));");
+                _ = sb.AppendLine("}");
+            }
+            else
+            {
+                string nonNullType = prop.PropertyTypeFullName.Replace("?", "");
+                _ = sb.AppendLine("{");
+                _ = sb.AppendLine($"int _pos = data.Length - reader.Buffer.Length;");
+                _ = sb.AppendLine($"value = {nonNullType}.Read(data.Slice(_pos), out int _consumed);");
+                _ = sb.AppendLine($"reader = new CborReader(data.Span.Slice(_pos + _consumed));");
+                _ = sb.AppendLine("}");
+            }
+
+            return sb;
+        }
+
         public static StringBuilder EmitPrimitiveOrObjectReader(StringBuilder sb, SerializablePropertyMetadata metadata, string propertyName)
         {
             string cleanPropertyType = metadata.PropertyType.Replace("?", "");

@@ -71,8 +71,8 @@ public sealed partial class CborSerializerCodeGen
             _ = sb.AppendLine("{");
             _ = sb.AppendLine("{");
             _ = sb.AppendLine($"    int _pos = data.Length - reader.Buffer.Length;");
-            _ = sb.AppendLine($"    tempList.Add({Emitter.GenericSerializationUtilFullname}.ReadAnyWithConsumed<{typeParam}>(data.Slice(_pos), out int _consumed));");
-            _ = sb.AppendLine($"    reader = new CborReader(data.Span.Slice(_pos + _consumed));");
+            _ = sb.AppendLine($"    var _itemSpan = reader.ReadDataItem();");
+            _ = sb.AppendLine($"    tempList.Add({Emitter.GenericSerializationUtilFullname}.Read<{typeParam}>(data.Slice(_pos, _itemSpan.Length)));");
             _ = sb.AppendLine("}");
             _ = sb.AppendLine($"if (_arraySize > 0) _remaining--;");
             _ = sb.AppendLine("}");
@@ -294,6 +294,12 @@ public sealed partial class CborSerializerCodeGen
 
         private static string GetListProbeKey(SerializableTypeMetadata child)
         {
+            // [CborIndex(N)] on a [CborList] type provides an explicit discriminant
+            if (child.CborIndex.HasValue && child.CborIndex.Value >= 0)
+            {
+                return $"idx:{child.CborIndex.Value}";
+            }
+
             if (child.Properties.Count > 0)
             {
                 string firstPropType = child.Properties[0].PropertyTypeFullName;

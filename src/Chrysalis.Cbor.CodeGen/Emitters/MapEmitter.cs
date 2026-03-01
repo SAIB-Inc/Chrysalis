@@ -30,7 +30,24 @@ public sealed partial class CborSerializerCodeGen
 
             _ = sb.AppendLine($"object value = null;");
 
-            _ = Emitter.EmitGenericReader(sb, "TypeMapping[key]", "value");
+            // Per-key switch: dispatch each map value to the optimal reader for its known type
+            _ = sb.AppendLine("switch (key)");
+            _ = sb.AppendLine("{");
+            foreach (SerializablePropertyMetadata prop in metadata.Properties)
+            {
+                string keyLiteral = isIntKey
+                    ? prop.PropertyKeyInt?.ToString(CultureInfo.InvariantCulture)!
+                    : $"\"{prop.PropertyKeyString}\"";
+                _ = sb.AppendLine($"case {keyLiteral}:");
+                _ = sb.AppendLine("{");
+                _ = Emitter.EmitMapValueReader(sb, prop);
+                _ = sb.AppendLine("break;");
+                _ = sb.AppendLine("}");
+            }
+            _ = sb.AppendLine("default:");
+            _ = sb.AppendLine("reader.ReadDataItem();");
+            _ = sb.AppendLine("break;");
+            _ = sb.AppendLine("}");
 
             _ = sb.AppendLine($"resultMap.Add(key, value);");
             _ = sb.AppendLine($"if (mapSize > 0) mapRemaining--;");
