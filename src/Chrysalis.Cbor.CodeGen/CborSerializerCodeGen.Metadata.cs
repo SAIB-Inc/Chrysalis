@@ -129,6 +129,17 @@ public sealed partial class CborSerializerCodeGen
         public int? PropertyKeyInt { get; } = propertyKeyInt;
         public bool IsOpenGeneric { get; } = isOpenGeneric;
 
+        /// <summary>
+        /// Maps discriminant int values to fully-qualified concrete type names for union hint dispatch.
+        /// Key: discriminant value, Value: (concreteTypeFullName, siblingPropertyName).
+        /// </summary>
+        public Dictionary<int, string> UnionHints { get; } = [];
+
+        /// <summary>
+        /// The name of the sibling property used as the discriminant for union hint dispatch.
+        /// </summary>
+        public string? UnionHintDiscriminantProperty { get; set; }
+
         public override string ToString()
         {
             return $$"""

@@ -205,3 +205,30 @@ public sealed class CborDefiniteAttribute : Attribute
     /// </summary>
     public CborDefiniteAttribute() { }
 }
+
+/// <summary>
+/// Provides a hint for dispatching a union property based on a sibling field's value.
+/// Apply multiple times to map different discriminant values to concrete types.
+/// The discriminant property must be serialized before this property (lower CborOrder).
+/// </summary>
+/// <param name="discriminantProperty">The name of the sibling property whose value selects the concrete type.</param>
+/// <param name="discriminantValue">The value of the sibling discriminant field that selects this type.</param>
+/// <param name="concreteType">The concrete type to deserialize when the discriminant matches.</param>
+[AttributeUsage(AttributeTargets.Property | AttributeTargets.Parameter, Inherited = false, AllowMultiple = true)]
+public sealed class CborUnionHintAttribute(string discriminantProperty, int discriminantValue, Type concreteType) : Attribute
+{
+    /// <summary>
+    /// Gets the name of the sibling property used as discriminant.
+    /// </summary>
+    public string DiscriminantProperty { get; } = discriminantProperty;
+
+    /// <summary>
+    /// Gets the discriminant value that selects this concrete type.
+    /// </summary>
+    public int DiscriminantValue { get; } = discriminantValue;
+
+    /// <summary>
+    /// Gets the concrete type to deserialize.
+    /// </summary>
+    public Type ConcreteType { get; } = concreteType;
+}

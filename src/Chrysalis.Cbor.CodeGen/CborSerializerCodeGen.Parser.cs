@@ -25,6 +25,8 @@ public sealed partial class CborSerializerCodeGen
         public const string CborSize = "CborSize";
         public const string CborIndefinite = "CborIndefinite";
         public const string CborDefinite = "CborDefinite";
+        public const string CborUnionHint = "CborUnionHint";
+        public const string CborUnionHintAttribute = "CborUnionHintAttribute";
 
         // Interfaces
         public const string ICborPreserveRawFullName = "Chrysalis.Cbor.Serialization.ICborPreserveRaw";
@@ -367,7 +369,7 @@ public sealed partial class CborSerializerCodeGen
                 }
             }
 
-            yield return new SerializablePropertyMetadata(
+            SerializablePropertyMetadata propMetadata = new(
                 propertyName,
                 propertyType,
                 propertyTypeFullName,
@@ -395,6 +397,11 @@ public sealed partial class CborSerializerCodeGen
                 intKey,
                 isOpenGeneric
             );
+
+            // Parse [CborUnionHint] attributes
+            ParseUnionHints(param, model, propMetadata);
+
+            yield return propMetadata;
         }
     }
 
@@ -417,6 +424,44 @@ public sealed partial class CborSerializerCodeGen
             else if (arg.Kind == TypedConstantKind.Primitive && arg.Value is string stringValue)
             {
                 stringKey = stringValue;
+            }
+        }
+    }
+
+    private static void ParseUnionHints(ParameterSyntax param, SemanticModel model, SerializablePropertyMetadata propMetadata)
+    {
+        ISymbol? symbol = model.GetDeclaredSymbol(param);
+        if (symbol is null)
+        {
+            return;
+        }
+
+        AttributeData[] hintAttrs = [.. symbol.GetAttributes()
+            .Where(a => a.AttributeClass?.Name is Parser.CborUnionHint or Parser.CborUnionHintAttribute)];
+
+        if (hintAttrs.Length == 0)
+        {
+            return;
+        }
+
+        foreach (AttributeData attr in hintAttrs)
+        {
+            if (attr.ConstructorArguments.Length < 3)
+            {
+                continue;
+            }
+
+            TypedConstant discriminantPropArg = attr.ConstructorArguments[0];
+            TypedConstant discriminantValueArg = attr.ConstructorArguments[1];
+            TypedConstant typeArg = attr.ConstructorArguments[2];
+
+            if (discriminantPropArg.Kind == TypedConstantKind.Primitive && discriminantPropArg.Value is string discriminantProp
+                && discriminantValueArg.Kind == TypedConstantKind.Primitive && discriminantValueArg.Value is int discriminantValue
+                && typeArg.Kind == TypedConstantKind.Type && typeArg.Value is INamedTypeSymbol concreteType)
+            {
+                string concreteTypeFqn = concreteType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+                propMetadata.UnionHints[discriminantValue] = concreteTypeFqn;
+                propMetadata.UnionHintDiscriminantProperty ??= discriminantProp;
             }
         }
     }

@@ -328,7 +328,46 @@ public sealed partial class CborSerializerCodeGen
 
             _ = metadata.IsOpenGeneric
                 ? EmitGenericWithTypeParamsReader(sb, metadata.PropertyTypeFullName, propertyName)
-                : sb.AppendLine($"{propertyName} = ({metadata.PropertyTypeFullName}){metadata.PropertyTypeFullName}.Read(reader.ReadEncodedValue(true));");
+                : metadata.UnionHints.Count > 0 && metadata.UnionHintDiscriminantProperty is not null
+                    ? EmitUnionHintReader(sb, metadata, propertyName)
+                    : sb.AppendLine($"{propertyName} = ({metadata.PropertyTypeFullName}){metadata.PropertyTypeFullName}.Read(reader.ReadEncodedValue(true));");
+            return sb;
+        }
+
+        public static StringBuilder EmitUnionHintReader(StringBuilder sb, SerializablePropertyMetadata metadata, string propertyName)
+        {
+            // The discriminant variable was already read by a previous property.
+            // Its local variable name follows the pattern: {TypeBaseIdentifier}{PropertyName}
+            // We can't know the type base identifier here, but the caller's pattern uses
+            // the parent type's BaseIdentifier + discriminant property name.
+            // We'll use a convention: the discriminant variable is named the same way as
+            // other properties in the same containing type's generated code.
+            // Since EmitCustomListReader creates variables as {metadata.BaseIdentifier}{prop.PropertyName},
+            // we need the parent type's base identifier. We don't have it here, so we reference the
+            // discriminant property variable using the same naming convention.
+            // The propertyName we receive is already the full variable name (e.g., "BlockWithEraBlock").
+            // We need to derive the discriminant variable name by replacing our property name part
+            // with the discriminant property name.
+            // Example: propertyName = "BlockWithEraBlock", discriminantProp = "EraNumber"
+            // discriminant variable = "BlockWithEraEraNumber"
+
+            // Extract the prefix (everything before this property's name in the variable)
+            string discriminantProp = metadata.UnionHintDiscriminantProperty!;
+            string suffix = metadata.PropertyName;
+            string prefix = propertyName.EndsWith(suffix, StringComparison.Ordinal)
+                ? propertyName.Substring(0, propertyName.Length - suffix.Length)
+                : propertyName;
+            string discriminantVar = $"{prefix}{discriminantProp}";
+
+            _ = sb.AppendLine($"var {propertyName}EncodedValue = reader.ReadEncodedValue(true);");
+            _ = sb.AppendLine($"{propertyName} = {discriminantVar} switch");
+            _ = sb.AppendLine("{");
+            foreach (KeyValuePair<int, string> hint in metadata.UnionHints)
+            {
+                _ = sb.AppendLine($"    {hint.Key} => ({metadata.PropertyTypeFullName}){hint.Value}.Read({propertyName}EncodedValue),");
+            }
+            _ = sb.AppendLine($"    _ => ({metadata.PropertyTypeFullName}){metadata.PropertyTypeFullName}.Read({propertyName}EncodedValue)");
+            _ = sb.AppendLine("};");
             return sb;
         }
 

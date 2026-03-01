@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang='en'>
+<head>
+<meta charset='utf-8' />
+<title>BlockDeserializationBenchmarks-20260301-064221</title>
+
+<style type="text/css">
+	table { border-collapse: collapse; display: block; width: 100%; overflow: auto; }
+	td, th { padding: 6px 13px; border: 1px solid #ddd; text-align: right; }
+	tr { background-color: #fff; border-top: 1px solid #ccc; }
+	tr:nth-child(even) { background: #f8f8f8; }
+</style>
+</head>
+<body>
+<pre><code>
+BenchmarkDotNet v0.15.8, Linux Ubuntu 24.04.4 LTS (Noble Numbat)
+AMD Ryzen 9 9900X3D 4.40GHz, 1 CPU, 24 logical and 12 physical cores
+.NET SDK 10.0.102
+  [Host]     : .NET 10.0.2 (10.0.2, 10.0.225.61305), X64 RyuJIT x86-64-v4
+  DefaultJob : .NET 10.0.2 (10.0.2, 10.0.225.61305), X64 RyuJIT x86-64-v4
+</code></pre>
+<pre><code></code></pre>
+
+<table>
+<thead><tr><th>Method</th><th>Mean  </th><th>Error</th><th>StdDev</th><th>Gen0</th><th>Gen1</th><th>Gen2</th><th>Allocated</th>
+</tr>
+</thead><tbody><tr><td>Byron1</td><td>NA</td><td>NA</td><td>NA</td><td>NA</td><td>NA</td><td>NA</td><td>NA</td>
+</tr><tr><td>Byron7</td><td>NA</td><td>NA</td><td>NA</td><td>NA</td><td>NA</td><td>NA</td><td>NA</td>
+</tr><tr><td>Genesis</td><td>NA</td><td>NA</td><td>NA</td><td>NA</td><td>NA</td><td>NA</td><td>NA</td>
+</tr><tr><td>Shelley1</td><td>27.32 &mu;s</td><td>0.438 &mu;s</td><td>0.388 &mu;s</td><td>0.7935</td><td>-</td><td>-</td><td>39.31 KB</td>
+</tr><tr><td>Allegra1</td><td>29.64 &mu;s</td><td>0.345 &mu;s</td><td>0.269 &mu;s</td><td>0.8240</td><td>-</td><td>-</td><td>40.58 KB</td>
+</tr><tr><td>Mary1</td><td>3,581.89 &mu;s</td><td>46.765 &mu;s</td><td>39.051 &mu;s</td><td>31.2500</td><td>7.8125</td><td>-</td><td>1891.86 KB</td>
+</tr><tr><td>Alonzo1</td><td>327.54 &mu;s</td><td>6.416 &mu;s</td><td>9.405 &mu;s</td><td>3.9063</td><td>-</td><td>-</td><td>204.74 KB</td>
+</tr><tr><td>Alonzo14</td><td>6,379.73 &mu;s</td><td>126.406 &mu;s</td><td>145.570 &mu;s</td><td>70.3125</td><td>23.4375</td><td>7.8125</td><td>3643.39 KB</td>
+</tr><tr><td>Babbage1</td><td>111.46 &mu;s</td><td>1.627 &mu;s</td><td>1.671 &mu;s</td><td>1.2207</td><td>-</td><td>-</td><td>70.34 KB</td>
+</tr><tr><td>Babbage9</td><td>19,291.25 &mu;s</td><td>377.107 &mu;s</td><td>575.882 &mu;s</td><td>187.5000</td><td>156.2500</td><td>-</td><td>10561.95 KB</td>
+</tr><tr><td>Conway1</td><td>131.73 &mu;s</td><td>2.634 &mu;s</td><td>2.705 &mu;s</td><td>1.4648</td><td>-</td><td>-</td><td>81.87 KB</td>
+</tr></tbody></table>
+</body>
+</html>

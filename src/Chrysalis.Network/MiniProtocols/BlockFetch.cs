@@ -1,4 +1,5 @@
 using System.Runtime.CompilerServices;
+using Chrysalis.Cbor.Extensions;
 using Chrysalis.Cbor.Types;
 using Chrysalis.Network.Cbor.BlockFetch;
 using Chrysalis.Network.Cbor.Common;
@@ -62,13 +63,14 @@ public class BlockFetch(AgentChannel channel) : IMiniProtocol
     }
 
     /// <summary>
-    /// Receives blocks after a RequestRange has been sent.
+    /// Receives blocks after a RequestRange has been sent, deserializing each as <typeparamref name="T"/>.
     /// Transitions: Busy → Streaming → Idle (or Busy → Idle if NoBlocks).
     /// </summary>
+    /// <typeparam name="T">The CBOR type to deserialize each block body as.</typeparam>
     /// <param name="cancellationToken">Token to cancel the operation.</param>
-    /// <returns>An async enumerable of raw CBOR-encoded block bytes (zero-copy from CborEncodedValue).</returns>
-    public async IAsyncEnumerable<ReadOnlyMemory<byte>> ReceiveBlocksAsync(
-        [EnumeratorCancellation] CancellationToken cancellationToken)
+    /// <returns>An async enumerable of deserialized block objects.</returns>
+    public async IAsyncEnumerable<T> ReceiveBlocksAsync<T>(
+        [EnumeratorCancellation] CancellationToken cancellationToken) where T : CborBase
     {
         if (State != BlockFetchState.Busy)
         {
@@ -103,7 +105,7 @@ public class BlockFetch(AgentChannel channel) : IMiniProtocol
             switch (blockMsg)
             {
                 case BlockBody block:
-                    yield return UnwrapEncodedCbor(block.Body);
+                    yield return block.Body.Deserialize<T>();
                     break;
 
                 case BatchDone:
@@ -120,16 +122,17 @@ public class BlockFetch(AgentChannel channel) : IMiniProtocol
     /// <summary>
     /// Fetches all blocks in a range. Combines RequestRange + ReceiveBlocks.
     /// </summary>
+    /// <typeparam name="T">The CBOR type to deserialize each block body as.</typeparam>
     /// <param name="from">The start point (inclusive).</param>
     /// <param name="to">The end point (inclusive).</param>
     /// <param name="cancellationToken">Token to cancel the operation.</param>
-    /// <returns>An async enumerable of raw CBOR-encoded block bytes.</returns>
-    public async IAsyncEnumerable<ReadOnlyMemory<byte>> FetchRangeAsync(
+    /// <returns>An async enumerable of deserialized block objects.</returns>
+    public async IAsyncEnumerable<T> FetchRangeAsync<T>(
         Point from, Point to,
-        [EnumeratorCancellation] CancellationToken cancellationToken)
+        [EnumeratorCancellation] CancellationToken cancellationToken) where T : CborBase
     {
         await RequestRangeAsync(from, to, cancellationToken).ConfigureAwait(false);
-        await foreach (ReadOnlyMemory<byte> block in ReceiveBlocksAsync(cancellationToken).ConfigureAwait(false))
+        await foreach (T block in ReceiveBlocksAsync<T>(cancellationToken).ConfigureAwait(false))
         {
             yield return block;
         }
@@ -138,68 +141,20 @@ public class BlockFetch(AgentChannel channel) : IMiniProtocol
     /// <summary>
     /// Fetches a single block at a specific point.
     /// </summary>
+    /// <typeparam name="T">The CBOR type to deserialize the block body as.</typeparam>
     /// <param name="point">The point identifying the block to fetch.</param>
     /// <param name="cancellationToken">Token to cancel the operation.</param>
-    /// <returns>The raw CBOR-encoded block bytes, or null if the block was not found.</returns>
-    public async Task<ReadOnlyMemory<byte>?> FetchSingleAsync(Point point, CancellationToken cancellationToken)
+    /// <returns>The deserialized block, or null if the block was not found.</returns>
+    public async Task<T?> FetchSingleAsync<T>(Point point, CancellationToken cancellationToken) where T : CborBase
     {
         await RequestRangeAsync(point, point, cancellationToken).ConfigureAwait(false);
 
-        ReadOnlyMemory<byte>? result = null;
-        await foreach (ReadOnlyMemory<byte> block in ReceiveBlocksAsync(cancellationToken).ConfigureAwait(false))
+        T? result = null;
+        await foreach (T block in ReceiveBlocksAsync<T>(cancellationToken).ConfigureAwait(false))
         {
             result = block;
         }
         return result;
-    }
-
-    /// <summary>
-    /// Unwraps a CBOR encoded value (tag 24 + byte string) to get the inner block bytes
-    /// as a zero-copy slice of the original buffer.
-    /// </summary>
-    private static ReadOnlyMemory<byte> UnwrapEncodedCbor(CborEncodedValue encoded)
-    {
-        ReadOnlySpan<byte> span = encoded.Value.Span;
-        int tagHeaderSize = GetCborTagHeaderSize(span);
-        int bstrHeaderSize = GetCborByteStringHeaderSize(span[tagHeaderSize..]);
-        return encoded.Value[(tagHeaderSize + bstrHeaderSize)..];
-    }
-
-    /// <summary>
-    /// Computes the CBOR tag header size from the initial byte (major type 6).
-    /// </summary>
-    private static int GetCborTagHeaderSize(ReadOnlySpan<byte> data)
-    {
-        int additionalInfo = data[0] & 0x1F;
-        return additionalInfo switch
-        {
-            < 24 => 1,
-            24 => 2,
-            25 => 3,
-            26 => 5,
-            27 => 9,
-            _ => throw new FormatException($"Unexpected CBOR tag additional info: {additionalInfo}")
-        };
-    }
-
-    /// <summary>
-    /// Computes the CBOR byte string header size from the initial byte.
-    /// </summary>
-    private static int GetCborByteStringHeaderSize(ReadOnlySpan<byte> data)
-    {
-        // CBOR byte string: major type 2 (bits 7-5 = 010)
-        // Additional info is bits 4-0
-        byte initial = data[0];
-        int additionalInfo = initial & 0x1F;
-        return additionalInfo switch
-        {
-            < 24 => 1,       // Value is the additional info itself
-            24 => 2,         // 1 byte follows
-            25 => 3,         // 2 bytes follow (uint16)
-            26 => 5,         // 4 bytes follow (uint32)
-            27 => 9,         // 8 bytes follow (uint64)
-            _ => throw new FormatException($"Unexpected CBOR additional info: {additionalInfo}")
-        };
     }
 
     /// <summary>
