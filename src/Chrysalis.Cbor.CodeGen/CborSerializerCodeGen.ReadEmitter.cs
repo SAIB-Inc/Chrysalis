@@ -70,7 +70,10 @@ public sealed partial class CborSerializerCodeGen
             {
                 bool isValueTypeMemory = !metadata.IsTypeNullable && IsReadOnlyMemoryByteType(metadata.PropertyTypeFullName);
                 string nullAssignment = isValueTypeMemory ? "default" : "null";
-                _ = sb.AppendLine($"if (reader.GetCurrentDataItemType() == CborDataItemType.Null)");
+                // Use byte peek (0xF6=null, 0xF7=undefined) instead of GetCurrentDataItemType()
+                // because GetCurrentDataItemType() consumes the header byte, corrupting the reader
+                // position for subsequent data.Slice(_pos) calculations in the else branch.
+                _ = sb.AppendLine($"if (reader.Buffer.Length > 0 && (reader.Buffer[0] == 0xF6 || reader.Buffer[0] == 0xF7))");
                 _ = sb.AppendLine("{");
                 _ = sb.AppendLine($"reader.ReadNull();");
                 _ = sb.AppendLine($"{propertyName} = {nullAssignment};");
@@ -131,26 +134,7 @@ public sealed partial class CborSerializerCodeGen
                     break;
                 case "byte[]?":
                 case "byte[]":
-                    // Indefinite byte string: peek first byte for 0x5F
-                    _ = sb.AppendLine($"if (reader.Buffer.Length > 0 && reader.Buffer[0] == 0x5F)");
-                    _ = sb.AppendLine("{");
-                    _ = sb.AppendLine("     reader.ReadDataItem(); // skip 0x5F header");
-                    _ = sb.AppendLine("     using (var stream = new MemoryStream())");
-                    _ = sb.AppendLine("     {");
-                    _ = sb.AppendLine("         while (reader.Buffer.Length > 0 && reader.Buffer[0] != 0xFF)");
-                    _ = sb.AppendLine("         {");
-                    _ = sb.AppendLine("             var chunk = reader.ReadByteString();");
-                    _ = sb.AppendLine("             stream.Write(chunk);");
-                    _ = sb.AppendLine("         }");
-                    _ = sb.AppendLine("         reader.ReadDataItem(); // skip 0xFF break");
-                    _ = sb.AppendLine($"         {propertyName} = stream.ToArray();");
-                    _ = sb.AppendLine("     }");
-                    _ = sb.AppendLine("}");
-                    _ = sb.AppendLine("else");
-                    _ = sb.AppendLine("{");
-                    _ = sb.AppendLine($"    {propertyName} = reader.ReadByteString().ToArray();");
-                    _ = sb.AppendLine("}");
-
+                    _ = sb.AppendLine($"{propertyName} = reader.ReadByteString().ToArray();");
                     break;
                 case "ReadOnlyMemory<byte>?":
                 case "ReadOnlyMemory<byte>":
@@ -158,25 +142,7 @@ public sealed partial class CborSerializerCodeGen
                 case "System.ReadOnlyMemory<byte>":
                 case "global::System.ReadOnlyMemory<byte>?":
                 case "global::System.ReadOnlyMemory<byte>":
-                    // Indefinite byte string: peek first byte for 0x5F
-                    _ = sb.AppendLine($"if (reader.Buffer.Length > 0 && reader.Buffer[0] == 0x5F)");
-                    _ = sb.AppendLine("{");
-                    _ = sb.AppendLine("     reader.ReadDataItem(); // skip 0x5F header");
-                    _ = sb.AppendLine("     using (var stream = new MemoryStream())");
-                    _ = sb.AppendLine("     {");
-                    _ = sb.AppendLine("         while (reader.Buffer.Length > 0 && reader.Buffer[0] != 0xFF)");
-                    _ = sb.AppendLine("         {");
-                    _ = sb.AppendLine("             var chunk = reader.ReadByteString();");
-                    _ = sb.AppendLine("             stream.Write(chunk);");
-                    _ = sb.AppendLine("         }");
-                    _ = sb.AppendLine("         reader.ReadDataItem(); // skip 0xFF break");
-                    _ = sb.AppendLine($"         {propertyName} = (ReadOnlyMemory<byte>)stream.ToArray();");
-                    _ = sb.AppendLine("     }");
-                    _ = sb.AppendLine("}");
-                    _ = sb.AppendLine("else");
-                    _ = sb.AppendLine("{");
-                    _ = sb.AppendLine($"    {propertyName} = (ReadOnlyMemory<byte>)reader.ReadByteString().ToArray();");
-                    _ = sb.AppendLine("}");
+                    _ = sb.AppendLine($"{propertyName} = (ReadOnlyMemory<byte>)reader.ReadByteString().ToArray();");
 
                     break;
                 case "CborEncodedValue":
