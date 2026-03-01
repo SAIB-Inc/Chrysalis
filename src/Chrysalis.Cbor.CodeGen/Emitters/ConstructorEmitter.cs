@@ -24,8 +24,8 @@ public sealed partial class CborSerializerCodeGen
             _ = Emitter.EmitTagWriter(sb, metadata.CborTag);
 
             _ = metadata.CborIndex is null or < 0
-                ? sb.AppendLine("writer.WriteTag((CborTag)data.ConstrIndex);")
-                : sb.AppendLine($"writer.WriteTag((CborTag){Emitter.ResolveTag(metadata.CborIndex)});");
+                ? sb.AppendLine("writer.WriteSemanticTag((ulong)data.ConstrIndex);")
+                : sb.AppendLine($"writer.WriteSemanticTag((ulong){Emitter.ResolveTag(metadata.CborIndex)});");
 
             _ = Emitter.EmitCustomListWriter(sb, metadata);
 

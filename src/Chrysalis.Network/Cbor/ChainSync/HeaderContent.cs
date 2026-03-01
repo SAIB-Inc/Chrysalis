@@ -1,4 +1,4 @@
-using System.Formats.Cbor;
+using Dahomey.Cbor.Serialization;
 
 namespace Chrysalis.Network.Cbor.ChainSync;
 
@@ -40,8 +40,9 @@ public record HeaderContent(
     /// </summary>
     public static HeaderContent Decode(ReadOnlyMemory<byte> payload)
     {
-        CborReader reader = new(payload, CborConformanceMode.Lax);
-        _ = reader.ReadStartArray();
+        CborReader reader = new(payload.Span);
+        reader.ReadBeginArray();
+        _ = reader.ReadSize();
 
         byte variant = checked((byte)reader.ReadUInt64());
 
@@ -51,26 +52,23 @@ public record HeaderContent(
         if (variant == 0)
         {
             // Byron: [[prefix_a, prefix_b], tag24(header_bytes)]
-            _ = reader.ReadStartArray();
+            reader.ReadBeginArray();
+            _ = reader.ReadSize();
 
-            _ = reader.ReadStartArray();
+            reader.ReadBeginArray();
+            _ = reader.ReadSize();
             byronSubTag = checked((byte)reader.ReadUInt64());
             _ = reader.ReadUInt64(); // second prefix value (unused)
-            reader.ReadEndArray();
 
-            _ = reader.ReadTag();
-            headerCbor = reader.ReadByteString();
-
-            reader.ReadEndArray();
+            _ = reader.TryReadSemanticTag(out _);
+            headerCbor = reader.ReadByteString().ToArray();
         }
         else
         {
             // Shelley+: tag24(header_bytes)
-            _ = reader.ReadTag();
-            headerCbor = reader.ReadByteString();
+            _ = reader.TryReadSemanticTag(out _);
+            headerCbor = reader.ReadByteString().ToArray();
         }
-
-        reader.ReadEndArray();
 
         return new HeaderContent(variant, byronSubTag, headerCbor);
     }

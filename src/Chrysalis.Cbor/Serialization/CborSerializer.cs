@@ -1,7 +1,8 @@
-using System.Formats.Cbor;
+using System.Buffers;
 using System.Runtime.CompilerServices;
 using Chrysalis.Cbor.Serialization.Utils;
 using Chrysalis.Cbor.Types;
+using Dahomey.Cbor.Serialization;
 
 
 namespace Chrysalis.Cbor.Serialization;
@@ -11,21 +12,7 @@ namespace Chrysalis.Cbor.Serialization;
 /// </summary>
 public static class CborSerializer
 {
-    /// <summary>
-    /// Serializes a CborBase-derived object to a Concise Binary Object Representation (CBOR) byte array.
-    /// </summary>
-    /// <typeparam name="T">The type of object to serialize, which must inherit from CborBase.</typeparam>
-    /// <param name="value">The object instance to serialize. If this object already contains serialized data in its Raw property, that data will be returned directly.</param>
-    /// <returns>A byte array containing the CBOR-encoded representation of the object.</returns>
-    /// <remarks>
-    /// This method performs the following steps:
-    /// 1. Checks if the object already contains pre-serialized data (Raw property)
-    /// 2. If not, creates a new CborWriter with Lax conformance mode
-    /// 3. Retrieves type-specific serialization options from the CborRegistry
-    /// 4. Delegates to the appropriate serialization implementation
-    /// 5. Encodes and returns the final byte array
-    /// </remarks>
-    /// <exception cref="InvalidOperationException">Thrown when an error occurs during serialization.</exception>
+    /// <summary>Serializes a CborBase-derived object to a byte array.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static byte[] Serialize<T>(T value) where T : CborBase
     {
@@ -36,18 +23,13 @@ public static class CborSerializer
             return value.Raw.Value.ToArray();
         }
 
-        CborWriter writer = new(CborConformanceMode.Lax);
-        GenericSerializationUtil.Write<T>(writer, value);
+        ArrayBufferWriter<byte> output = new();
+        GenericSerializationUtil.Write<T>(output, value);
 
-        return writer.Encode();
+        return output.WrittenSpan.ToArray();
     }
 
-    /// <summary>
-    /// Serializes a CborBase-derived object to a <see cref="ReadOnlyMemory{T}"/> without copying when pre-serialized data exists.
-    /// </summary>
-    /// <typeparam name="T">The type of object to serialize, which must inherit from CborBase.</typeparam>
-    /// <param name="value">The object instance to serialize.</param>
-    /// <returns>A <see cref="ReadOnlyMemory{T}"/> containing the CBOR-encoded representation of the object.</returns>
+    /// <summary>Serializes a CborBase-derived object to ReadOnlyMemory without copying when pre-serialized data exists.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static ReadOnlyMemory<byte> SerializeToMemory<T>(T value) where T : CborBase
     {
@@ -58,49 +40,30 @@ public static class CborSerializer
             return value.Raw.Value;
         }
 
-        CborWriter writer = new(CborConformanceMode.Lax);
-        GenericSerializationUtil.Write<T>(writer, value);
+        ArrayBufferWriter<byte> output = new();
+        GenericSerializationUtil.Write<T>(output, value);
 
-        return writer.Encode();
+        return output.WrittenMemory;
     }
 
-    /// <summary>
-    /// Deserializes a CBOR byte array into an object of type T.
-    /// </summary>
-    /// <typeparam name="T">The target type for deserialization, which must inherit from CborBase.</typeparam>
-    /// <param name="data">The CBOR-encoded byte array to deserialize.</param>
-    /// <returns>A deserialized instance of type T with its Raw property set to the input data.</returns>
-    /// <remarks>
-    /// This method performs the following steps:
-    /// 1. Creates a new CborReader with the provided data and Lax conformance mode
-    /// 2. Retrieves type-specific deserialization options from the CborRegistry
-    /// 3. Delegates to the appropriate deserialization implementation
-    /// 4. Casts the result to CborBase and validates it is non-null
-    /// 5. Stores the original byte array in the instance's Raw property
-    /// 6. Returns the typed instance
-    /// </remarks>
-    /// <exception cref="InvalidOperationException">Thrown when an error occurs during deserialization or when the deserialized type does not match the expected type.</exception>
+    /// <summary>Deserializes a CBOR byte array into an object of type T.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static T Deserialize<T>(ReadOnlyMemory<byte> data) where T : CborBase
     {
-        CborReader reader = new(data, CborConformanceMode.Lax);
-        T? result = GenericSerializationUtil.Read<T>(reader);
+        T? result = GenericSerializationUtil.Read<T>(data);
         return result ?? throw new InvalidOperationException("Deserialization failed: result is null.");
     }
 
-    /// <summary>
-    /// Deserializes a single CBOR value from the beginning of the data and reports how many bytes were consumed.
-    /// </summary>
-    /// <typeparam name="T">The target type for deserialization, which must inherit from CborBase.</typeparam>
-    /// <param name="data">The CBOR-encoded data to deserialize. May contain trailing data beyond the first value.</param>
-    /// <param name="bytesConsumed">When this method returns, contains the number of bytes consumed from the input.</param>
-    /// <returns>A deserialized instance of type T.</returns>
+    /// <summary>Deserializes a single CBOR value and reports how many bytes were consumed.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static T Deserialize<T>(ReadOnlyMemory<byte> data, out int bytesConsumed) where T : CborBase
     {
-        CborReader reader = new(data, CborConformanceMode.Lax);
-        T? result = GenericSerializationUtil.Read<T>(reader);
-        bytesConsumed = data.Length - reader.BytesRemaining;
+        // Use Dahomey reader to determine how many bytes the first CBOR item consumes
+        CborReader reader = new(data.Span);
+        ReadOnlySpan<byte> item = reader.ReadDataItem();
+        bytesConsumed = item.Length;
+
+        T? result = GenericSerializationUtil.Read<T>(data[..bytesConsumed]);
         return result ?? throw new InvalidOperationException("Deserialization failed: result is null.");
     }
 }

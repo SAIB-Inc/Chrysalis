@@ -5,7 +5,7 @@
 
   <ItemGroup>
     <!-- Serialization -->
-    <PackageVersion Include="System.Formats.Cbor" Version="10.0.2" />
+    <PackageVersion Include="Dahomey.Cbor" Version="1.26.1" />
     <PackageVersion Include="SAIB.Blake2Fast" Version="3.0.1" />
 
     <!-- Code Analysis / Source Generation -->

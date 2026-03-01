@@ -1,26 +1,20 @@
-
+using System.Buffers;
 using System.Collections.Concurrent;
-using System.Formats.Cbor;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using Chrysalis.Cbor.Types;
+using Dahomey.Cbor.Serialization;
 namespace Chrysalis.Cbor.Serialization.Utils;
 
 /// <summary>
 /// Delegate for reading a value of type <typeparamref name="T"/> from CBOR-encoded bytes.
 /// </summary>
-/// <typeparam name="T">The type to read.</typeparam>
-/// <param name="data">The CBOR-encoded data.</param>
-/// <returns>The deserialized value.</returns>
 public delegate T ReadHandler<T>(ReadOnlyMemory<byte> data);
 
 /// <summary>
-/// Delegate for writing a value of type <typeparamref name="T"/> to a CBOR writer.
+/// Delegate for writing a value of type <typeparamref name="T"/> to an output buffer.
 /// </summary>
-/// <typeparam name="T">The type to write.</typeparam>
-/// <param name="writer">The CBOR writer.</param>
-/// <param name="value">The value to serialize.</param>
-public delegate void WriteHandler<T>(CborWriter writer, T value);
+public delegate void WriteHandler<T>(IBufferWriter<byte> output, T value);
 
 /// <summary>
 /// Provides utility methods for generic CBOR serialization and deserialization.
@@ -32,38 +26,22 @@ public static class GenericSerializationUtil
 
     #region Read
 
-    /// <summary>
-    /// Reads a value of type <typeparamref name="T"/> from the CBOR reader.
-    /// </summary>
-    /// <typeparam name="T">The type to read.</typeparam>
-    /// <param name="reader">The CBOR reader.</param>
-    /// <returns>The deserialized value, or null.</returns>
+    /// <summary>Reads a value of type T from CBOR-encoded bytes.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static T? Read<T>(CborReader reader)
+    public static T? Read<T>(ReadOnlyMemory<byte> data)
     {
-        ArgumentNullException.ThrowIfNull(reader);
-        return IsPrimitiveType(typeof(T)) ? ReadPrimitive<T>(reader) : ReadNonPrimitive<T>(reader);
+        return IsPrimitiveType(typeof(T)) ? ReadPrimitive<T>(data) : ReadNonPrimitive<T>(data);
     }
 
-    /// <summary>
-    /// Reads a value of the specified type from the CBOR reader.
-    /// </summary>
-    /// <param name="reader">The CBOR reader.</param>
-    /// <param name="type">The type to read.</param>
-    /// <returns>The deserialized value, or null.</returns>
+    /// <summary>Reads a value of the specified type from CBOR-encoded bytes.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static object? Read(CborReader reader, Type type)
+    public static object? Read(ReadOnlyMemory<byte> data, Type type)
     {
-        ArgumentNullException.ThrowIfNull(reader);
         ArgumentNullException.ThrowIfNull(type);
-        return IsPrimitiveType(type) ? ReadPrimitive(type, reader) : ReadNonPrimitive(type, reader);
+        return IsPrimitiveType(type) ? ReadPrimitive(type, data) : ReadNonPrimitive(type, data);
     }
 
-    /// <summary>
-    /// Determines whether the specified type is a CBOR primitive type.
-    /// </summary>
-    /// <param name="type">The type to check.</param>
-    /// <returns>True if the type is a primitive CBOR type; otherwise, false.</returns>
+    /// <summary>Determines whether the specified type is a CBOR primitive type.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static bool IsPrimitiveType(Type type)
     {
@@ -89,16 +67,11 @@ public static class GenericSerializationUtil
                type == typeof(CborLabel);
     }
 
-    /// <summary>
-    /// Reads a primitive value of type <typeparamref name="T"/> from the CBOR reader.
-    /// </summary>
-    /// <typeparam name="T">The primitive type to read.</typeparam>
-    /// <param name="reader">The CBOR reader.</param>
-    /// <returns>The deserialized primitive value.</returns>
+    /// <summary>Reads a primitive value of type T from CBOR-encoded bytes.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static T? ReadPrimitive<T>(CborReader reader)
+    public static T? ReadPrimitive<T>(ReadOnlyMemory<byte> data)
     {
-        ArgumentNullException.ThrowIfNull(reader);
+        CborReader reader = new(data.Span);
 
         Type type = typeof(T);
 
@@ -117,35 +90,29 @@ public static class GenericSerializationUtil
             _ when type == typeof(float) => (T)(object)reader.ReadSingle(),
             _ when type == typeof(double) => (T)(object)reader.ReadDouble(),
             _ when type == typeof(decimal) => (T)(object)reader.ReadDecimal(),
-            _ when type == typeof(string) => (T)(object)reader.ReadTextString(),
-            _ when type == typeof(byte[]) => (T)(object)ReadByteArray(reader),
-            _ when type == typeof(ReadOnlyMemory<byte>) => (T)(object)(ReadOnlyMemory<byte>)ReadByteArray(reader),
-            _ when type == typeof(CborEncodedValue) => (T)(object)new CborEncodedValue(reader.ReadEncodedValue()),
-            _ when type == typeof(CborLabel) => (T)(object)ReadCborLabel(reader),
+            _ when type == typeof(string) => (T)(object)reader.ReadString()!,
+            _ when type == typeof(byte[]) => (T)(object)ReadByteArray(ref reader),
+            _ when type == typeof(ReadOnlyMemory<byte>) => (T)(object)(ReadOnlyMemory<byte>)ReadByteArray(ref reader),
+            _ when type == typeof(CborEncodedValue) => (T)(object)new CborEncodedValue(data),
+            _ when type == typeof(CborLabel) => (T)(object)ReadCborLabel(ref reader),
             _ => throw new NotSupportedException($"Type {type} is not supported as a primitive type.")
         };
     }
 
-    /// <summary>
-    /// Reads a primitive value of the specified type from the CBOR reader.
-    /// </summary>
-    /// <param name="type">The primitive type to read.</param>
-    /// <param name="reader">The CBOR reader.</param>
-    /// <returns>The deserialized primitive value.</returns>
+    /// <summary>Reads a primitive value of the specified type from CBOR-encoded bytes.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static object? ReadPrimitive(Type type, CborReader reader)
+    public static object? ReadPrimitive(Type type, ReadOnlyMemory<byte> data)
     {
         ArgumentNullException.ThrowIfNull(type);
-        ArgumentNullException.ThrowIfNull(reader);
 
         if (Nullable.GetUnderlyingType(type) != null)
         {
             Type underlyingType = Nullable.GetUnderlyingType(type)!;
-
-            object? value = ReadPrimitive(underlyingType, reader);
-
+            object? value = ReadPrimitive(underlyingType, data);
             return value;
         }
+
+        CborReader reader = new(data.Span);
 
         return true switch
         {
@@ -157,78 +124,57 @@ public static class GenericSerializationUtil
             _ when type == typeof(float) => reader.ReadSingle(),
             _ when type == typeof(double) => reader.ReadDouble(),
             _ when type == typeof(decimal) => reader.ReadDecimal(),
-            _ when type == typeof(string) => reader.ReadTextString(),
-            _ when type == typeof(byte[]) => ReadByteArray(reader),
-            _ when type == typeof(ReadOnlyMemory<byte>) => (ReadOnlyMemory<byte>)ReadByteArray(reader),
-            _ when type == typeof(CborEncodedValue) => new CborEncodedValue(reader.ReadEncodedValue()),
-            _ when type == typeof(CborLabel) => ReadCborLabel(reader),
+            _ when type == typeof(string) => reader.ReadString()!,
+            _ when type == typeof(byte[]) => ReadByteArray(ref reader),
+            _ when type == typeof(ReadOnlyMemory<byte>) => (ReadOnlyMemory<byte>)ReadByteArray(ref reader),
+            _ when type == typeof(CborEncodedValue) => new CborEncodedValue(data),
+            _ when type == typeof(CborLabel) => ReadCborLabel(ref reader),
             _ => throw new NotSupportedException($"Type {type} is not supported as a primitive type.")
         };
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static CborLabel ReadCborLabel(CborReader reader)
+    private static CborLabel ReadCborLabel(ref CborReader reader)
     {
-        return reader.PeekState() switch
+        CborDataItemType itemType = reader.GetCurrentDataItemType();
+        return itemType switch
         {
-            CborReaderState.UnsignedInteger or CborReaderState.NegativeInteger => new CborLabel(reader.ReadInt64()),
-            CborReaderState.TextString => new CborLabel(reader.ReadTextString()),
-            CborReaderState.Undefined => throw new NotImplementedException(),
-            CborReaderState.ByteString => throw new NotImplementedException(),
-            CborReaderState.StartIndefiniteLengthByteString => throw new NotImplementedException(),
-            CborReaderState.EndIndefiniteLengthByteString => throw new NotImplementedException(),
-            CborReaderState.StartIndefiniteLengthTextString => throw new NotImplementedException(),
-            CborReaderState.EndIndefiniteLengthTextString => throw new NotImplementedException(),
-            CborReaderState.StartArray => throw new NotImplementedException(),
-            CborReaderState.EndArray => throw new NotImplementedException(),
-            CborReaderState.StartMap => throw new NotImplementedException(),
-            CborReaderState.EndMap => throw new NotImplementedException(),
-            CborReaderState.Tag => throw new NotImplementedException(),
-            CborReaderState.SimpleValue => throw new NotImplementedException(),
-            CborReaderState.HalfPrecisionFloat => throw new NotImplementedException(),
-            CborReaderState.SinglePrecisionFloat => throw new NotImplementedException(),
-            CborReaderState.DoublePrecisionFloat => throw new NotImplementedException(),
-            CborReaderState.Null => throw new NotImplementedException(),
-            CborReaderState.Boolean => throw new NotImplementedException(),
-            CborReaderState.Finished => throw new NotImplementedException(),
-            _ => throw new InvalidOperationException($"Invalid CBOR type for Label: {reader.PeekState()}")
+            CborDataItemType.Unsigned or CborDataItemType.Signed => new CborLabel(reader.ReadInt64()),
+            CborDataItemType.String => new CborLabel(reader.ReadString()!),
+            CborDataItemType.Boolean or CborDataItemType.Null or CborDataItemType.Single or CborDataItemType.Double
+                or CborDataItemType.ByteString or CborDataItemType.Array or CborDataItemType.Map
+                or CborDataItemType.Break or CborDataItemType.Decimal
+                => throw new InvalidOperationException($"Invalid CBOR type for Label: {itemType}"),
+            _ => throw new InvalidOperationException($"Invalid CBOR type for Label: {itemType}")
         };
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static byte[] ReadByteArray(CborReader reader)
+    private static byte[] ReadByteArray(ref CborReader reader)
     {
-        if (reader.PeekState() == CborReaderState.StartIndefiniteLengthByteString)
+        // Check for indefinite byte string (0x5F)
+        if (reader.Buffer.Length > 0 && reader.Buffer[0] == 0x5F)
         {
-            reader.ReadStartIndefiniteLengthByteString();
+            _ = reader.ReadDataItem(); // skip 0x5F
             using MemoryStream stream = new();
-            while (reader.PeekState() != CborReaderState.EndIndefiniteLengthByteString)
+            while (reader.Buffer.Length > 0 && reader.Buffer[0] != 0xFF)
             {
-                byte[] chunk = reader.ReadByteString();
-                stream.Write(chunk, 0, chunk.Length);
+                ReadOnlySpan<byte> chunk = reader.ReadByteString();
+                stream.Write(chunk);
             }
-            reader.ReadEndIndefiniteLengthByteString();
+            _ = reader.ReadDataItem(); // skip 0xFF break
             return stream.ToArray();
         }
         else
         {
-            return reader.ReadByteString();
+            return reader.ReadByteString().ToArray();
         }
     }
 
-    /// <summary>
-    /// Reads a non-primitive value of type <typeparamref name="T"/> from the CBOR reader.
-    /// </summary>
-    /// <typeparam name="T">The type to read.</typeparam>
-    /// <param name="reader">The CBOR reader.</param>
-    /// <returns>The deserialized value.</returns>
+    /// <summary>Reads a non-primitive value of type T from CBOR-encoded bytes.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static T ReadNonPrimitive<T>(CborReader reader)
+    public static T ReadNonPrimitive<T>(ReadOnlyMemory<byte> data)
     {
-        ArgumentNullException.ThrowIfNull(reader);
-
-        ReadOnlyMemory<byte> encodedValue = reader.ReadEncodedValue();
-
         try
         {
             if (!ReadMethodCache.TryGetValue(typeof(T), out Delegate? readDelegate))
@@ -239,7 +185,7 @@ public static class GenericSerializationUtil
                 ReadMethodCache[typeof(T)] = readDelegate;
             }
 
-            return ((ReadHandler<T>)readDelegate)(encodedValue);
+            return ((ReadHandler<T>)readDelegate)(data);
         }
         catch (Exception ex)
         {
@@ -247,19 +193,11 @@ public static class GenericSerializationUtil
         }
     }
 
-    /// <summary>
-    /// Reads a non-primitive value of the specified type from the CBOR reader.
-    /// </summary>
-    /// <param name="type">The type to read.</param>
-    /// <param name="reader">The CBOR reader.</param>
-    /// <returns>The deserialized value, or null.</returns>
+    /// <summary>Reads a non-primitive value of the specified type from CBOR-encoded bytes.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static object? ReadNonPrimitive(Type type, CborReader reader)
+    public static object? ReadNonPrimitive(Type type, ReadOnlyMemory<byte> data)
     {
         ArgumentNullException.ThrowIfNull(type);
-        ArgumentNullException.ThrowIfNull(reader);
-
-        ReadOnlyMemory<byte> encodedValue = reader.ReadEncodedValue();
 
         try
         {
@@ -276,7 +214,7 @@ public static class GenericSerializationUtil
                     ReadMethodCache[underlyingType] = readDelegate;
                 }
 
-                object? result = readDelegate.DynamicInvoke(encodedValue);
+                object? result = readDelegate.DynamicInvoke(data);
                 return result == null ? null : Convert.ChangeType(result, type, System.Globalization.CultureInfo.InvariantCulture);
             }
 
@@ -289,7 +227,7 @@ public static class GenericSerializationUtil
                 ReadMethodCache[type] = readDelegateNonNullable;
             }
 
-            return readDelegateNonNullable.DynamicInvoke(encodedValue);
+            return readDelegateNonNullable.DynamicInvoke(data);
         }
         catch (Exception ex) when (ex is not InvalidOperationException)
         {
@@ -301,37 +239,29 @@ public static class GenericSerializationUtil
 
     #region Write
 
-    /// <summary>
-    /// Writes a value of type <typeparamref name="T"/> to the CBOR writer.
-    /// </summary>
-    /// <typeparam name="T">The type to write.</typeparam>
-    /// <param name="writer">The CBOR writer.</param>
-    /// <param name="value">The value to serialize.</param>
+    /// <summary>Writes a value of type T to the output buffer.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static void Write<T>(CborWriter writer, T value)
+    public static void Write<T>(IBufferWriter<byte> output, T value)
     {
-        ArgumentNullException.ThrowIfNull(writer);
+        ArgumentNullException.ThrowIfNull(output);
 
         if (IsPrimitiveType(typeof(T)))
         {
-            WritePrimitive<T>(writer, value);
+            WritePrimitive<T>(output, value);
         }
         else
         {
-            WriteNonPrimitive(writer, value);
+            WriteNonPrimitive(output, value);
         }
     }
 
-    /// <summary>
-    /// Writes a primitive value of type <typeparamref name="T"/> to the CBOR writer.
-    /// </summary>
-    /// <typeparam name="T">The primitive type to write.</typeparam>
-    /// <param name="writer">The CBOR writer.</param>
-    /// <param name="value">The value to serialize.</param>
+    /// <summary>Writes a primitive value of type T to the output buffer.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static void WritePrimitive<T>(CborWriter writer, object? value)
+    public static void WritePrimitive<T>(IBufferWriter<byte> output, object? value)
     {
-        ArgumentNullException.ThrowIfNull(writer);
+        ArgumentNullException.ThrowIfNull(output);
+
+        CborWriter writer = new(output);
 
         Type type = typeof(T);
 
@@ -441,7 +371,7 @@ public static class GenericSerializationUtil
             case Type t when t == typeof(string):
                 if (value is string stringValue)
                 {
-                    writer.WriteTextString(stringValue);
+                    writer.WriteString(stringValue);
                 }
                 else
                 {
@@ -477,7 +407,7 @@ public static class GenericSerializationUtil
             case Type t when t == typeof(CborEncodedValue):
                 if (value is CborEncodedValue encodedValue)
                 {
-                    writer.WriteTag(CborTag.EncodedCborDataItem);
+                    writer.WriteSemanticTag(24);
                     writer.WriteByteString(encodedValue.Value.Span);
                 }
                 else
@@ -499,7 +429,7 @@ public static class GenericSerializationUtil
                             writer.WriteInt64(l);
                             break;
                         case string s:
-                            writer.WriteTextString(s);
+                            writer.WriteString(s);
                             break;
                         default:
                             throw new InvalidOperationException($"CborLabel value must be int, long, or string. Got: {label.Value?.GetType()}");
@@ -517,29 +447,24 @@ public static class GenericSerializationUtil
         }
     }
 
-    /// <summary>
-    /// Writes a non-primitive value of type <typeparamref name="T"/> to the CBOR writer.
-    /// </summary>
-    /// <typeparam name="T">The type to write.</typeparam>
-    /// <param name="writer">The CBOR writer.</param>
-    /// <param name="value">The value to serialize.</param>
+    /// <summary>Writes a non-primitive value of type T to the output buffer.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static void WriteNonPrimitive<T>(CborWriter writer, T value)
+    public static void WriteNonPrimitive<T>(IBufferWriter<byte> output, T value)
     {
-        ArgumentNullException.ThrowIfNull(writer);
+        ArgumentNullException.ThrowIfNull(output);
 
         try
         {
             if (!WriteMethodCache.TryGetValue(typeof(T), out Delegate? writeDelegate))
             {
-                MethodInfo writeMethod = typeof(T).GetMethod("Write", BindingFlags.Public | BindingFlags.Static | BindingFlags.FlattenHierarchy, null, [typeof(CborWriter), typeof(T)], null)
+                MethodInfo writeMethod = typeof(T).GetMethod("Write", BindingFlags.Public | BindingFlags.Static | BindingFlags.FlattenHierarchy, null, [typeof(IBufferWriter<byte>), typeof(T)], null)
                     ?? throw new NotSupportedException($"Type {typeof(T).FullName} does not have a valid static Write method.");
 
                 writeDelegate = (WriteHandler<T>)Delegate.CreateDelegate(typeof(WriteHandler<T>), writeMethod);
                 WriteMethodCache[typeof(T)] = writeDelegate;
             }
 
-            ((WriteHandler<T>)writeDelegate)(writer, value);
+            ((WriteHandler<T>)writeDelegate)(output, value);
         }
         catch (Exception ex)
         {

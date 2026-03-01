@@ -23,25 +23,29 @@ public sealed partial class CborSerializerCodeGen
             return sb;
         }
 
-        public static StringBuilder EmitSerializablePropertyReader(StringBuilder sb, SerializablePropertyMetadata metadata, string propertyName, bool isList = false, bool trackFields = false, int fieldIndex = -1)
+        public static StringBuilder EmitSerializablePropertyReader(StringBuilder sb, SerializablePropertyMetadata metadata, string propertyName, bool isList = false, bool trackFields = false, int fieldIndex = -1, string? parentRemainingVar = null)
         {
             _ = sb.AppendLine($"{metadata.PropertyTypeFullName} {propertyName} = default{(metadata.PropertyType.Contains("?") ? "" : "!")};");
 
             // Special handling for CborLabel's Value property
             if (metadata.PropertyName == "Value" && metadata.PropertyType == "object")
             {
-                _ = sb.AppendLine($"{propertyName} = reader.PeekState() switch");
+                _ = sb.AppendLine($"{propertyName} = reader.GetCurrentDataItemType() switch");
                 _ = sb.AppendLine("{");
-                _ = sb.AppendLine("    CborReaderState.UnsignedInteger or CborReaderState.NegativeInteger => (object)reader.ReadInt64(),");
-                _ = sb.AppendLine("    CborReaderState.TextString => (object)reader.ReadTextString(),");
-                _ = sb.AppendLine($"    _ => throw new InvalidOperationException($\"Invalid CBOR type for Label: {{reader.PeekState()}}\")");
+                _ = sb.AppendLine("    CborDataItemType.Unsigned or CborDataItemType.Signed => (object)reader.ReadInt64(),");
+                _ = sb.AppendLine("    CborDataItemType.String => (object)reader.ReadString(),");
+                _ = sb.AppendLine($"    _ => throw new InvalidOperationException($\"Invalid CBOR type for Label: {{reader.GetCurrentDataItemType()}}\")");
                 _ = sb.AppendLine("};");
+                if (isList && parentRemainingVar is not null)
+                {
+                    _ = sb.AppendLine($"if ({parentRemainingVar} > 0) {parentRemainingVar}--;");
+                }
                 return sb;
             }
 
-            if (isList)
+            if (isList && parentRemainingVar is not null)
             {
-                _ = sb.AppendLine($"if (reader.PeekState() != CborReaderState.EndArray)");
+                _ = sb.AppendLine($"if ({parentRemainingVar} != 0)");
                 _ = sb.AppendLine("{");
 
                 // Track that this field was read for validation - only if we actually declared the array
@@ -53,11 +57,9 @@ public sealed partial class CborSerializerCodeGen
 
             if (metadata.IsNullable)
             {
-                // ReadOnlyMemory<byte> is a value type; use default instead of null
-                // when the C# type is non-nullable but the CBOR encoding can be null.
                 bool isValueTypeMemory = !metadata.IsTypeNullable && IsReadOnlyMemoryByteType(metadata.PropertyTypeFullName);
                 string nullAssignment = isValueTypeMemory ? "default" : "null";
-                _ = sb.AppendLine($"if (reader.PeekState() == CborReaderState.Null)");
+                _ = sb.AppendLine($"if (reader.GetCurrentDataItemType() == CborDataItemType.Null)");
                 _ = sb.AppendLine("{");
                 _ = sb.AppendLine($"reader.ReadNull();");
                 _ = sb.AppendLine($"{propertyName} = {nullAssignment};");
@@ -73,8 +75,9 @@ public sealed partial class CborSerializerCodeGen
                 _ = sb.AppendLine("}");
             }
 
-            if (isList)
+            if (isList && parentRemainingVar is not null)
             {
+                _ = sb.AppendLine($"if ({parentRemainingVar} > 0) {parentRemainingVar}--;");
                 _ = sb.AppendLine("}");
             }
 
@@ -113,27 +116,28 @@ public sealed partial class CborSerializerCodeGen
                     _ = sb.AppendLine($"{propertyName} = reader.ReadDecimal();");
                     break;
                 case "string":
-                    _ = sb.AppendLine($"{propertyName} = reader.ReadTextString();");
+                    _ = sb.AppendLine($"{propertyName} = reader.ReadString();");
                     break;
                 case "byte[]?":
                 case "byte[]":
-                    _ = sb.AppendLine($"if (reader.PeekState() == CborReaderState.StartIndefiniteLengthByteString)");
+                    // Indefinite byte string: peek first byte for 0x5F
+                    _ = sb.AppendLine($"if (reader.Buffer.Length > 0 && reader.Buffer[0] == 0x5F)");
                     _ = sb.AppendLine("{");
-                    _ = sb.AppendLine("     reader.ReadStartIndefiniteLengthByteString();");
+                    _ = sb.AppendLine("     reader.ReadDataItem(); // skip 0x5F header");
                     _ = sb.AppendLine("     using (var stream = new MemoryStream())");
                     _ = sb.AppendLine("     {");
-                    _ = sb.AppendLine("         while (reader.PeekState() != CborReaderState.EndIndefiniteLengthByteString)");
+                    _ = sb.AppendLine("         while (reader.Buffer.Length > 0 && reader.Buffer[0] != 0xFF)");
                     _ = sb.AppendLine("         {");
-                    _ = sb.AppendLine("             byte[] chunk = reader.ReadByteString();");
-                    _ = sb.AppendLine("             stream.Write(chunk, 0, chunk.Length);");
+                    _ = sb.AppendLine("             var chunk = reader.ReadByteString();");
+                    _ = sb.AppendLine("             stream.Write(chunk);");
                     _ = sb.AppendLine("         }");
-                    _ = sb.AppendLine("         reader.ReadEndIndefiniteLengthByteString();");
+                    _ = sb.AppendLine("         reader.ReadDataItem(); // skip 0xFF break");
                     _ = sb.AppendLine($"         {propertyName} = stream.ToArray();");
                     _ = sb.AppendLine("     }");
                     _ = sb.AppendLine("}");
                     _ = sb.AppendLine("else");
                     _ = sb.AppendLine("{");
-                    _ = sb.AppendLine($"    {propertyName} = reader.ReadByteString();");
+                    _ = sb.AppendLine($"    {propertyName} = reader.ReadByteString().ToArray();");
                     _ = sb.AppendLine("}");
 
                     break;
@@ -143,39 +147,45 @@ public sealed partial class CborSerializerCodeGen
                 case "System.ReadOnlyMemory<byte>":
                 case "global::System.ReadOnlyMemory<byte>?":
                 case "global::System.ReadOnlyMemory<byte>":
-                    _ = sb.AppendLine($"if (reader.PeekState() == CborReaderState.StartIndefiniteLengthByteString)");
+                    // Indefinite byte string: peek first byte for 0x5F
+                    _ = sb.AppendLine($"if (reader.Buffer.Length > 0 && reader.Buffer[0] == 0x5F)");
                     _ = sb.AppendLine("{");
-                    _ = sb.AppendLine("     reader.ReadStartIndefiniteLengthByteString();");
+                    _ = sb.AppendLine("     reader.ReadDataItem(); // skip 0x5F header");
                     _ = sb.AppendLine("     using (var stream = new MemoryStream())");
                     _ = sb.AppendLine("     {");
-                    _ = sb.AppendLine("         while (reader.PeekState() != CborReaderState.EndIndefiniteLengthByteString)");
+                    _ = sb.AppendLine("         while (reader.Buffer.Length > 0 && reader.Buffer[0] != 0xFF)");
                     _ = sb.AppendLine("         {");
-                    _ = sb.AppendLine("             byte[] chunk = reader.ReadByteString();");
-                    _ = sb.AppendLine("             stream.Write(chunk, 0, chunk.Length);");
+                    _ = sb.AppendLine("             var chunk = reader.ReadByteString();");
+                    _ = sb.AppendLine("             stream.Write(chunk);");
                     _ = sb.AppendLine("         }");
-                    _ = sb.AppendLine("         reader.ReadEndIndefiniteLengthByteString();");
+                    _ = sb.AppendLine("         reader.ReadDataItem(); // skip 0xFF break");
                     _ = sb.AppendLine($"         {propertyName} = (ReadOnlyMemory<byte>)stream.ToArray();");
                     _ = sb.AppendLine("     }");
                     _ = sb.AppendLine("}");
                     _ = sb.AppendLine("else");
                     _ = sb.AppendLine("{");
-                    _ = sb.AppendLine($"    {propertyName} = (ReadOnlyMemory<byte>)reader.ReadByteString();");
+                    _ = sb.AppendLine($"    {propertyName} = (ReadOnlyMemory<byte>)reader.ReadByteString().ToArray();");
                     _ = sb.AppendLine("}");
 
                     break;
                 case "CborEncodedValue":
                 case "Chrysalis.Cbor.Types.Primitives.CborEncodedValue":
                 case "global::Chrysalis.Cbor.Types.Primitives.CborEncodedValue":
-                    _ = sb.AppendLine($"{propertyName} = new {CborEncodeValueFullName}(reader.ReadEncodedValue(true));");
+                    // Zero-copy: track position, read item, slice from original data
+                    _ = sb.AppendLine("{");
+                    _ = sb.AppendLine($"int _pos = data.Length - reader.Buffer.Length;");
+                    _ = sb.AppendLine($"var _span = reader.ReadDataItem();");
+                    _ = sb.AppendLine($"{propertyName} = new {CborEncodeValueFullName}(data.Slice(_pos, _span.Length));");
+                    _ = sb.AppendLine("}");
                     break;
                 case "CborLabel":
                 case "Chrysalis.Cbor.Types.CborLabel":
                 case "global::Chrysalis.Cbor.Types.CborLabel":
-                    _ = sb.AppendLine($"{propertyName} = reader.PeekState() switch");
+                    _ = sb.AppendLine($"{propertyName} = reader.GetCurrentDataItemType() switch");
                     _ = sb.AppendLine("{");
-                    _ = sb.AppendLine("    CborReaderState.UnsignedInteger or CborReaderState.NegativeInteger => new Chrysalis.Cbor.Types.CborLabel(reader.ReadInt64()),");
-                    _ = sb.AppendLine("    CborReaderState.TextString => new Chrysalis.Cbor.Types.CborLabel(reader.ReadTextString()),");
-                    _ = sb.AppendLine($"    _ => throw new InvalidOperationException($\"Invalid CBOR type for Label: {{reader.PeekState()}}\")");
+                    _ = sb.AppendLine("    CborDataItemType.Unsigned or CborDataItemType.Signed => new Chrysalis.Cbor.Types.CborLabel(reader.ReadInt64()),");
+                    _ = sb.AppendLine("    CborDataItemType.String => new Chrysalis.Cbor.Types.CborLabel(reader.ReadString()),");
+                    _ = sb.AppendLine($"    _ => throw new InvalidOperationException($\"Invalid CBOR type for Label: {{reader.GetCurrentDataItemType()}}\")");
                     _ = sb.AppendLine("};");
                     break;
                 default:
@@ -196,9 +206,10 @@ public sealed partial class CborSerializerCodeGen
 
                 _ = sb.AppendLine($"{metadata.ListItemTypeFullName} {propertyName}TempItem = default;");
                 _ = sb.AppendLine($"List<{metadata.ListItemTypeFullName}> {propertyName}TempList = new();");
-                // Read array start and check if it's indefinite
-                _ = sb.AppendLine($"int? {propertyName}ArrayLength = reader.ReadStartArray();");
-                _ = sb.AppendLine($"bool {propertyName}IsIndefinite = !{propertyName}ArrayLength.HasValue;");
+                // Read array start and size
+                _ = sb.AppendLine($"reader.ReadBeginArray();");
+                _ = sb.AppendLine($"int {propertyName}ArraySize = reader.ReadSize();");
+                _ = sb.AppendLine($"bool {propertyName}IsIndefinite = {propertyName}ArraySize == -1;");
 
                 // Validate encoding based on attributes
                 if (metadata.IsIndefinite)
@@ -211,8 +222,9 @@ public sealed partial class CborSerializerCodeGen
                     _ = sb.AppendLine($"if ({propertyName}IsIndefinite)");
                     _ = sb.AppendLine($"    throw new InvalidOperationException(\"Property '{metadata.PropertyName}' requires definite CBOR array encoding due to [CborDefinite] attribute\");");
                 }
-                // If no attribute, accept both definite and indefinite (backward compatibility)
-                _ = sb.AppendLine($"while (reader.PeekState() != CborReaderState.EndArray)");
+                // Size-based loop: for definite use counter, for indefinite check break byte
+                _ = sb.AppendLine($"int {propertyName}ArrayRemaining = {propertyName}ArraySize;");
+                _ = sb.AppendLine($"while ({propertyName}IsIndefinite ? (reader.Buffer.Length > 0 && reader.Buffer[0] != 0xFF) : {propertyName}ArrayRemaining > 0)");
                 _ = sb.AppendLine("{");
 
                 if (metadata.IsListItemTypeOpenGeneric)
@@ -227,15 +239,19 @@ public sealed partial class CborSerializerCodeGen
                     }
                     else
                     {
-                        // @TODO: Handle nested lists/maps, right now we are assuming that the list item type is a class
-                        _ = sb.AppendLine($"{propertyName}TempItem = ({metadata.ListItemTypeFullName}){metadata.ListItemTypeFullName}.Read(reader.ReadEncodedValue(true));");
+                        _ = sb.AppendLine("{");
+                        _ = sb.AppendLine($"int _pos = data.Length - reader.Buffer.Length;");
+                        _ = sb.AppendLine($"var _span = reader.ReadDataItem();");
+                        _ = sb.AppendLine($"{propertyName}TempItem = ({metadata.ListItemTypeFullName}){metadata.ListItemTypeFullName}.Read(data.Slice(_pos, _span.Length));");
+                        _ = sb.AppendLine("}");
                     }
                 }
 
                 _ = sb.AppendLine($"{propertyName}TempList.Add({propertyName}TempItem);");
+                _ = sb.AppendLine($"if ({propertyName}ArraySize > 0) {propertyName}ArrayRemaining--;");
 
                 _ = sb.AppendLine("}");
-                _ = sb.AppendLine($"reader.ReadEndArray();");
+                _ = sb.AppendLine($"if ({propertyName}IsIndefinite && reader.Buffer.Length > 0 && reader.Buffer[0] == 0xFF) reader.ReadDataItem();"); // skip break
                 _ = sb.AppendLine($"{propertyName} = {propertyName}TempList;");
                 _ = sb.AppendLine($"if ({propertyName}IsIndefinite)");
                 _ = sb.AppendLine("{");
@@ -257,9 +273,10 @@ public sealed partial class CborSerializerCodeGen
                     : sb.AppendLine($"Dictionary<{metadata.MapKeyTypeFullName}, {metadata.MapValueTypeFullName}> {propertyName}TempMap = new();");
                 _ = sb.AppendLine($"{metadata.MapKeyTypeFullName} {propertyName}TempKeyItem = default;");
                 _ = sb.AppendLine($"{metadata.MapValueTypeFullName} {propertyName}TempValueItem = default;");
-                // Read map start and check if it's indefinite
-                _ = sb.AppendLine($"int? {propertyName}MapLength = reader.ReadStartMap();");
-                _ = sb.AppendLine($"bool {propertyName}MapIsIndefinite = !{propertyName}MapLength.HasValue;");
+                // Read map start and size
+                _ = sb.AppendLine($"reader.ReadBeginMap();");
+                _ = sb.AppendLine($"int {propertyName}MapSize = reader.ReadSize();");
+                _ = sb.AppendLine($"bool {propertyName}MapIsIndefinite = {propertyName}MapSize == -1;");
 
                 // Validate encoding based on attributes
                 if (metadata.IsIndefinite)
@@ -272,8 +289,9 @@ public sealed partial class CborSerializerCodeGen
                     _ = sb.AppendLine($"if ({propertyName}MapIsIndefinite)");
                     _ = sb.AppendLine($"    throw new InvalidOperationException(\"Property '{metadata.PropertyName}' requires definite CBOR map encoding due to [CborDefinite] attribute\");");
                 }
-                // If no attribute, accept both definite and indefinite (backward compatibility)
-                _ = sb.AppendLine($"while (reader.PeekState() != CborReaderState.EndMap)");
+                // Size-based loop
+                _ = sb.AppendLine($"int {propertyName}MapRemaining = {propertyName}MapSize;");
+                _ = sb.AppendLine($"while ({propertyName}MapIsIndefinite ? (reader.Buffer.Length > 0 && reader.Buffer[0] != 0xFF) : {propertyName}MapRemaining > 0)");
                 _ = sb.AppendLine("{");
 
                 if (metadata.IsMapKeyTypeOpenGeneric)
@@ -288,8 +306,11 @@ public sealed partial class CborSerializerCodeGen
                     }
                     else
                     {
-                        // @TODO: Handle nested lists/maps, right now we are assuming that the map key item type is a class
-                        _ = sb.AppendLine($"{propertyName}TempKeyItem = ({metadata.MapKeyTypeFullName}){metadata.MapKeyTypeFullName}.Read(reader.ReadEncodedValue(true));");
+                        _ = sb.AppendLine("{");
+                        _ = sb.AppendLine($"int _pos = data.Length - reader.Buffer.Length;");
+                        _ = sb.AppendLine($"var _span = reader.ReadDataItem();");
+                        _ = sb.AppendLine($"{propertyName}TempKeyItem = ({metadata.MapKeyTypeFullName}){metadata.MapKeyTypeFullName}.Read(data.Slice(_pos, _span.Length));");
+                        _ = sb.AppendLine("}");
                     }
                 }
 
@@ -305,8 +326,11 @@ public sealed partial class CborSerializerCodeGen
                     }
                     else
                     {
-                        // @TODO: Handle nested lists/maps, right now we are assuming that the map value item type is a class
-                        _ = sb.AppendLine($"{propertyName}TempValueItem = ({metadata.MapValueTypeFullName}){metadata.MapValueTypeFullName}.Read(reader.ReadEncodedValue(true));");
+                        _ = sb.AppendLine("{");
+                        _ = sb.AppendLine($"int _pos = data.Length - reader.Buffer.Length;");
+                        _ = sb.AppendLine($"var _span = reader.ReadDataItem();");
+                        _ = sb.AppendLine($"{propertyName}TempValueItem = ({metadata.MapValueTypeFullName}){metadata.MapValueTypeFullName}.Read(data.Slice(_pos, _span.Length));");
+                        _ = sb.AppendLine("}");
                     }
                 }
 
@@ -314,9 +338,10 @@ public sealed partial class CborSerializerCodeGen
                 _ = sb.AppendLine("{");
                 _ = sb.AppendLine($"{propertyName}TempMap.Add({propertyName}TempKeyItem, {propertyName}TempValueItem);");
                 _ = sb.AppendLine("}");
+                _ = sb.AppendLine($"if ({propertyName}MapSize > 0) {propertyName}MapRemaining--;");
 
                 _ = sb.AppendLine("}");
-                _ = sb.AppendLine($"reader.ReadEndMap();");
+                _ = sb.AppendLine($"if ({propertyName}MapIsIndefinite && reader.Buffer.Length > 0 && reader.Buffer[0] == 0xFF) reader.ReadDataItem();"); // skip break
                 _ = sb.AppendLine($"{propertyName} = {propertyName}TempMap;");
                 _ = sb.AppendLine($"if ({propertyName}MapIsIndefinite)");
                 _ = sb.AppendLine("{");
@@ -326,11 +351,23 @@ public sealed partial class CborSerializerCodeGen
                 return sb;
             }
 
-            _ = metadata.IsOpenGeneric
-                ? EmitGenericWithTypeParamsReader(sb, metadata.PropertyTypeFullName, propertyName)
-                : metadata.UnionHints.Count > 0 && metadata.UnionHintDiscriminantProperty is not null
-                    ? EmitUnionHintReader(sb, metadata, propertyName)
-                    : sb.AppendLine($"{propertyName} = ({metadata.PropertyTypeFullName}){metadata.PropertyTypeFullName}.Read(reader.ReadEncodedValue(true));");
+            if (metadata.IsOpenGeneric)
+            {
+                _ = EmitGenericWithTypeParamsReader(sb, metadata.PropertyTypeFullName, propertyName);
+            }
+            else if (metadata.UnionHints.Count > 0 && metadata.UnionHintDiscriminantProperty is not null)
+            {
+                _ = EmitUnionHintReader(sb, metadata, propertyName);
+            }
+            else
+            {
+                // Zero-copy ReadEncodedValue replacement
+                _ = sb.AppendLine("{");
+                _ = sb.AppendLine($"int _pos = data.Length - reader.Buffer.Length;");
+                _ = sb.AppendLine($"var _span = reader.ReadDataItem();");
+                _ = sb.AppendLine($"{propertyName} = ({metadata.PropertyTypeFullName}){metadata.PropertyTypeFullName}.Read(data.Slice(_pos, _span.Length));");
+                _ = sb.AppendLine("}");
+            }
             return sb;
         }
 
@@ -359,7 +396,10 @@ public sealed partial class CborSerializerCodeGen
                 : propertyName;
             string discriminantVar = $"{prefix}{discriminantProp}";
 
-            _ = sb.AppendLine($"var {propertyName}EncodedValue = reader.ReadEncodedValue(true);");
+            _ = sb.AppendLine("{");
+            _ = sb.AppendLine($"int _pos = data.Length - reader.Buffer.Length;");
+            _ = sb.AppendLine($"var _span = reader.ReadDataItem();");
+            _ = sb.AppendLine($"var {propertyName}EncodedValue = data.Slice(_pos, _span.Length);");
             _ = sb.AppendLine($"{propertyName} = {discriminantVar} switch");
             _ = sb.AppendLine("{");
             foreach (KeyValuePair<int, string> hint in metadata.UnionHints)
@@ -368,12 +408,13 @@ public sealed partial class CborSerializerCodeGen
             }
             _ = sb.AppendLine($"    _ => ({metadata.PropertyTypeFullName}){metadata.PropertyTypeFullName}.Read({propertyName}EncodedValue)");
             _ = sb.AppendLine("};");
+            _ = sb.AppendLine("}");
             return sb;
         }
 
         public static StringBuilder EmitCborReaderInstance(StringBuilder sb, string dataName)
         {
-            _ = sb.AppendLine($"var reader = new CborReader({dataName}, CborConformanceMode.Lax);");
+            _ = sb.AppendLine($"var reader = new CborReader({dataName}.Span);");
             return sb;
         }
 
@@ -381,7 +422,8 @@ public sealed partial class CborSerializerCodeGen
         {
             if (tag.HasValue)
             {
-                _ = sb.AppendLine($"var {propertyName} = (int)reader.ReadTag();");
+                _ = sb.AppendLine($"reader.TryReadSemanticTag(out ulong _{propertyName}Raw);");
+                _ = sb.AppendLine($"var {propertyName} = (int)_{propertyName}Raw;");
                 if (tag.Value >= 0)
                 {
                     _ = sb.AppendLine($"if ({propertyName} != {tag}) throw new Exception(\"Invalid tag\");");
@@ -404,13 +446,22 @@ public sealed partial class CborSerializerCodeGen
 
         public static StringBuilder EmitGenericWithTypeParamsReader(StringBuilder sb, string type, string propertyName)
         {
-            _ = sb.AppendLine($"{propertyName} = {GenericSerializationUtilFullname}.Read<{type}>(reader);");
+            // Extract encoded value from current reader position, then dispatch via ReadOnlyMemory<byte>
+            _ = sb.AppendLine("{");
+            _ = sb.AppendLine($"int _pos = data.Length - reader.Buffer.Length;");
+            _ = sb.AppendLine($"var _span = reader.ReadDataItem();");
+            _ = sb.AppendLine($"{propertyName} = {GenericSerializationUtilFullname}.Read<{type}>(data.Slice(_pos, _span.Length));");
+            _ = sb.AppendLine("}");
             return sb;
         }
 
         public static StringBuilder EmitGenericReader(StringBuilder sb, string type, string propertyName)
         {
-            _ = sb.AppendLine($"{propertyName} = {GenericSerializationUtilFullname}.Read(reader, {type});");
+            _ = sb.AppendLine("{");
+            _ = sb.AppendLine($"int _pos = data.Length - reader.Buffer.Length;");
+            _ = sb.AppendLine($"var _span = reader.ReadDataItem();");
+            _ = sb.AppendLine($"{propertyName} = {GenericSerializationUtilFullname}.Read(data.Slice(_pos, _span.Length), {type});");
+            _ = sb.AppendLine("}");
             return sb;
         }
 
@@ -434,22 +485,31 @@ public sealed partial class CborSerializerCodeGen
 
             if (!(metadata.SerializationType == SerializationType.Constr && (metadata.CborIndex is null || metadata.CborIndex < 0)))
             {
-                // Read the array and check if it's indefinite
-                _ = sb.AppendLine("int? arrayLength = reader.ReadStartArray();");
-                _ = sb.AppendLine("bool isIndefiniteArray = !arrayLength.HasValue;");
+                // Read the array and size using Dahomey API
+                _ = sb.AppendLine("reader.ReadBeginArray();");
+                _ = sb.AppendLine("int arraySize = reader.ReadSize();");
+                _ = sb.AppendLine("bool isIndefiniteArray = arraySize == -1;");
+                // Track remaining for size-based termination
+                _ = sb.AppendLine($"int {metadata.BaseIdentifier}ArrayRemaining = arraySize;");
                 detectIndefinite = true;
 
                 // Validate encoding based on type-level attributes
                 if (metadata.IsIndefinite)
                 {
-                    _ = sb.AppendLine("if (arrayLength.HasValue)");
+                    _ = sb.AppendLine("if (!isIndefiniteArray)");
                     _ = sb.AppendLine($"    throw new InvalidOperationException(\"Type '{metadata.FullyQualifiedName}' requires indefinite CBOR array encoding due to [CborIndefinite] attribute\");");
                 }
                 else if (metadata.IsDefinite)
                 {
-                    _ = sb.AppendLine("if (!arrayLength.HasValue)");
+                    _ = sb.AppendLine("if (isIndefiniteArray)");
                     _ = sb.AppendLine($"    throw new InvalidOperationException(\"Type '{metadata.FullyQualifiedName}' requires definite CBOR array encoding due to [CborDefinite] attribute\");");
                 }
+            }
+
+            if (!detectIndefinite)
+            {
+                // No array wrapper — declare a dummy remaining counter for property readers
+                _ = sb.AppendLine($"int {metadata.BaseIdentifier}ArrayRemaining = {metadata.Properties.Count};");
             }
 
             // Add field tracking for List serialization to validate required fields
@@ -464,7 +524,7 @@ public sealed partial class CborSerializerCodeGen
             {
                 string propName = $"{metadata.BaseIdentifier}{prop.PropertyName}";
                 propMapping.Add(prop.PropertyName, propName);
-                _ = EmitSerializablePropertyReader(sb, prop, propName, true, shouldTrackFields, fieldIndex);
+                _ = EmitSerializablePropertyReader(sb, prop, propName, true, shouldTrackFields, fieldIndex, $"{metadata.BaseIdentifier}ArrayRemaining");
                 fieldIndex++;
             }
 
@@ -482,13 +542,14 @@ public sealed partial class CborSerializerCodeGen
                 }
             }
 
+            // Skip break byte for indefinite arrays
             if (metadata.SerializationType == SerializationType.Constr && metadata.CborIndex is not null && metadata.CborIndex >= 0)
             {
-                _ = sb.AppendLine("reader.ReadEndArray();");
+                _ = sb.AppendLine("if (isIndefiniteArray && reader.Buffer.Length > 0 && reader.Buffer[0] == 0xFF) reader.ReadDataItem();");
             }
             else if (metadata.SerializationType == SerializationType.List)
             {
-                _ = sb.AppendLine("reader.ReadEndArray();");
+                _ = sb.AppendLine("if (isIndefiniteArray && reader.Buffer.Length > 0 && reader.Buffer[0] == 0xFF) reader.ReadDataItem();");
             }
 
             _ = sb.AppendLine($"{metadata.FullyQualifiedName} result;");

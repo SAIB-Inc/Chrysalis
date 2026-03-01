@@ -1,4 +1,4 @@
-using System.Formats.Cbor;
+using System.Buffers;
 
 namespace Chrysalis.Cbor.Types;
 
@@ -65,12 +65,12 @@ public abstract partial record CborBase
     }
 
     /// <summary>
-    /// Writes a CBOR value to the specified writer.
+    /// Writes a CBOR value to the specified output buffer.
     /// </summary>
-    /// <param name="writer">The CBOR writer to write to.</param>
+    /// <param name="output">The output buffer to write to.</param>
     /// <param name="data">The CBOR value to write.</param>
     /// <exception cref="NotImplementedException">Always thrown; use the generated serializer instead.</exception>
-    public static void Write(CborWriter writer, CborBase? data)
+    public static void Write(IBufferWriter<byte> output, CborBase? data)
     {
         throw new NotImplementedException();
     }

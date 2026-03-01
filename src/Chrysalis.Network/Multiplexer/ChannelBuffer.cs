@@ -74,12 +74,12 @@ public sealed class ChannelBuffer(AgentChannel channel)
                     ArrayPool<byte>.Shared.Return(rentedBuffer);
                 }
             }
-            catch (Exception ex) when (!readResult.IsCompleted && ex is FormatException or System.Formats.Cbor.CborContentException)
+            catch (Exception ex) when (!readResult.IsCompleted && ex is FormatException or IndexOutOfRangeException or Dahomey.Cbor.CborException)
             {
                 // Need more data - mark what we examined but couldn't use
                 channel.AdvanceTo(buffer.Start, buffer.End);
             }
-            catch (Exception ex) when (readResult.IsCompleted && ex is FormatException or System.Formats.Cbor.CborContentException)
+            catch (Exception ex) when (readResult.IsCompleted && ex is FormatException or IndexOutOfRangeException or Dahomey.Cbor.CborException)
             {
                 // If pipe is completed and we still can't deserialize, that's an error
                 channel.AdvanceTo(buffer.End);

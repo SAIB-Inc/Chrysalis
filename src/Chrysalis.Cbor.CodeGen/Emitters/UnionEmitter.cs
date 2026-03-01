@@ -32,7 +32,7 @@ public sealed partial class CborSerializerCodeGen
             foreach (SerializableTypeMetadata childType in metadata.ChildTypes)
             {
                 _ = sb.AppendLine($"case \"{childType.FullyQualifiedName}\":");
-                _ = sb.AppendLine($"{childType.FullyQualifiedName}.Write(writer, ({childType.FullyQualifiedName})data);");
+                _ = sb.AppendLine($"{childType.FullyQualifiedName}.Write(output, ({childType.FullyQualifiedName})data);");
                 _ = sb.AppendLine($"break;");
             }
             _ = sb.AppendLine($"default:");
@@ -60,17 +60,23 @@ public sealed partial class CborSerializerCodeGen
             string defListWithTagType = $"Chrysalis.Cbor.Types.CborDefListWithTag{typeParams}";
             string indefListWithTagType = $"Chrysalis.Cbor.Types.CborIndefListWithTag{typeParams}";
 
-            _ = sb.AppendLine($"var reader = new CborReader(data, CborConformanceMode.Lax);");
-            _ = sb.AppendLine($"bool hasTag258 = reader.PeekState() == CborReaderState.Tag;");
-            _ = sb.AppendLine($"if (hasTag258) {{ reader.ReadTag(); }}");
-            _ = sb.AppendLine($"int? arrayLength = reader.ReadStartArray();");
-            _ = sb.AppendLine($"bool isIndefinite = !arrayLength.HasValue;");
+            _ = sb.AppendLine($"var reader = new CborReader(data.Span);");
+            _ = sb.AppendLine($"bool hasTag258 = reader.TryReadSemanticTag(out _);");
+            _ = sb.AppendLine($"reader.ReadBeginArray();");
+            _ = sb.AppendLine($"int _arraySize = reader.ReadSize();");
+            _ = sb.AppendLine($"bool isIndefinite = _arraySize == -1;");
+            _ = sb.AppendLine($"int _remaining = _arraySize;");
             _ = sb.AppendLine($"List<{typeParam}> tempList = new();");
-            _ = sb.AppendLine($"while (reader.PeekState() != CborReaderState.EndArray)");
+            _ = sb.AppendLine($"while (isIndefinite ? (reader.Buffer.Length > 0 && reader.Buffer[0] != 0xFF) : _remaining > 0)");
             _ = sb.AppendLine("{");
-            _ = sb.AppendLine($"    tempList.Add({Emitter.GenericSerializationUtilFullname}.Read<{typeParam}>(reader));");
+            _ = sb.AppendLine("{");
+            _ = sb.AppendLine($"    int _pos = data.Length - reader.Buffer.Length;");
+            _ = sb.AppendLine($"    var _span = reader.ReadDataItem();");
+            _ = sb.AppendLine($"    tempList.Add({Emitter.GenericSerializationUtilFullname}.Read<{typeParam}>(data.Slice(_pos, _span.Length)));");
             _ = sb.AppendLine("}");
-            _ = sb.AppendLine($"reader.ReadEndArray();");
+            _ = sb.AppendLine($"if (_arraySize > 0) _remaining--;");
+            _ = sb.AppendLine("}");
+            _ = sb.AppendLine($"if (isIndefinite && reader.Buffer.Length > 0 && reader.Buffer[0] == 0xFF) reader.ReadDataItem();");
             _ = sb.AppendLine($"{metadata.FullyQualifiedName} result;");
             _ = sb.AppendLine($"if (hasTag258)");
             _ = sb.AppendLine("{");
@@ -129,20 +135,24 @@ public sealed partial class CborSerializerCodeGen
             bool hasTagChildren = probeGroups.Keys.Any(k => k.StartsWith("tag:", StringComparison.Ordinal));
             bool hasNonTagChildren = probeGroups.Keys.Any(k => !k.StartsWith("tag:", StringComparison.Ordinal));
 
-            _ = sb.AppendLine($"var reader = new CborReader(data, CborConformanceMode.Lax);");
-            _ = sb.AppendLine($"var state = reader.PeekState();");
-
             if (hasTagChildren && hasNonTagChildren)
             {
+                // Tag branch uses raw byte peek; state branch needs GetCurrentDataItemType
+                // but only AFTER confirming no tag (to avoid auto-consuming it)
                 EmitTagBranch(sb, metadata, probeGroups);
+                _ = sb.AppendLine($"var reader = new CborReader(data.Span);");
+                _ = sb.AppendLine($"var state = reader.GetCurrentDataItemType();");
                 EmitStateBranch(sb, metadata, probeGroups);
             }
             else if (hasTagChildren)
             {
+                // Tag-only: no need for GetCurrentDataItemType at all
                 EmitTagOnlyBranch(sb, metadata, probeGroups);
             }
             else
             {
+                _ = sb.AppendLine($"var reader = new CborReader(data.Span);");
+                _ = sb.AppendLine($"var state = reader.GetCurrentDataItemType();");
                 EmitStateOnlyBranch(sb, metadata, probeGroups);
             }
 
@@ -151,9 +161,12 @@ public sealed partial class CborSerializerCodeGen
 
         private static void EmitTagBranch(StringBuilder sb, SerializableTypeMetadata metadata, Dictionary<string, List<SerializableTypeMetadata>> probeGroups)
         {
-            _ = sb.AppendLine($"if (state == CborReaderState.Tag)");
+            // Check for semantic tag by peeking at raw byte (major type 6 = 0xC0-0xDB)
+            _ = sb.AppendLine($"if (data.Length > 0 && (data.Span[0] >> 5) == 6)");
             _ = sb.AppendLine("{");
-            _ = sb.AppendLine($"    var tag = (int)reader.PeekTag();");
+            _ = sb.AppendLine($"    var _tagReader = new CborReader(data.Span);");
+            _ = sb.AppendLine($"    _tagReader.TryReadSemanticTag(out ulong _tagVal);");
+            _ = sb.AppendLine($"    var tag = (int)_tagVal;");
             _ = sb.AppendLine($"    return tag switch");
             _ = sb.AppendLine("    {");
             foreach (KeyValuePair<string, List<SerializableTypeMetadata>> group in probeGroups.Where(g => g.Key.StartsWith("tag:", StringComparison.Ordinal)))
@@ -181,9 +194,12 @@ public sealed partial class CborSerializerCodeGen
 
         private static void EmitTagOnlyBranch(StringBuilder sb, SerializableTypeMetadata metadata, Dictionary<string, List<SerializableTypeMetadata>> probeGroups)
         {
-            _ = sb.AppendLine($"if (state == CborReaderState.Tag)");
+            // Check for semantic tag by peeking at raw byte (major type 6 = 0xC0-0xDB)
+            _ = sb.AppendLine($"if (data.Length > 0 && (data.Span[0] >> 5) == 6)");
             _ = sb.AppendLine("{");
-            _ = sb.AppendLine($"    var tag = (int)reader.PeekTag();");
+            _ = sb.AppendLine($"    var _tagReader = new CborReader(data.Span);");
+            _ = sb.AppendLine($"    _tagReader.TryReadSemanticTag(out ulong _tagVal);");
+            _ = sb.AppendLine($"    var tag = (int)_tagVal;");
             _ = sb.AppendLine($"    return tag switch");
             _ = sb.AppendLine("    {");
             foreach (KeyValuePair<string, List<SerializableTypeMetadata>> group in probeGroups)
@@ -276,12 +292,12 @@ public sealed partial class CborSerializerCodeGen
         {
             return probeKey switch
             {
-                "array" => "CborReaderState.StartArray",
-                "map" => "CborReaderState.StartMap",
-                "integer" => "CborReaderState.UnsignedInteger or CborReaderState.NegativeInteger",
-                "text" => "CborReaderState.TextString",
-                "bytes" => "CborReaderState.ByteString",
-                "boolean" => "CborReaderState.Boolean",
+                "array" => "CborDataItemType.Array",
+                "map" => "CborDataItemType.Map",
+                "integer" => "CborDataItemType.Unsigned or CborDataItemType.Signed",
+                "text" => "CborDataItemType.String",
+                "bytes" => "CborDataItemType.ByteString",
+                "boolean" => "CborDataItemType.Boolean",
                 _ => throw new InvalidOperationException($"Unexpected probe key: {probeKey}")
             };
         }
