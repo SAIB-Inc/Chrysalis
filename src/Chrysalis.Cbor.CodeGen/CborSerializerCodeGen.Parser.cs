@@ -370,6 +370,9 @@ public sealed partial class CborSerializerCodeGen
             }
 
             bool isPropertyTypeUnion = typeSymbol is ITypeSymbol pts && HasCborUnionAttribute(pts);
+            bool isListItemTypeUnion = isList && typeSymbol is ITypeSymbol lts && IsListType(lts, out ITypeSymbol? litSymbol) && litSymbol is not null && HasCborUnionAttribute(litSymbol);
+            bool isMapKeyTypeUnion = isMap && typeSymbol is ITypeSymbol mks && IsMapType(mks, out ITypeSymbol? mkSymbol, out _) && mkSymbol is not null && HasCborUnionAttribute(mkSymbol);
+            bool isMapValueTypeUnion = isMap && typeSymbol is ITypeSymbol mvs && IsMapType(mvs, out _, out ITypeSymbol? mvSymbol) && mvSymbol is not null && HasCborUnionAttribute(mvSymbol);
 
             SerializablePropertyMetadata propMetadata = new(
                 propertyName,
@@ -398,7 +401,10 @@ public sealed partial class CborSerializerCodeGen
                 stringKey,
                 intKey,
                 isOpenGeneric,
-                isPropertyTypeUnion
+                isPropertyTypeUnion,
+                isListItemTypeUnion,
+                isMapKeyTypeUnion,
+                isMapValueTypeUnion
             );
 
             // Parse [CborUnionHint] attributes
@@ -409,15 +415,38 @@ public sealed partial class CborSerializerCodeGen
     }
 
     /// <summary>
-    /// Checks if a type or any of its base types has the [CborUnion] attribute,
-    /// meaning it uses try-catch dispatch that could greedily consume trailing bytes.
+    /// Checks if a type or any of its base types has the [CborUnion] attribute
+    /// AND uses try-catch dispatch (not probe-based). Probe-based unions like
+    /// CborMaybeIndefList correctly report bytesConsumed and are safe with unbounded data.
     /// </summary>
     private static bool HasCborUnionAttribute(ITypeSymbol typeSymbol)
     {
+        // CborMaybeIndefList uses probe-based dispatch, safe with unbounded data
+        if (IsCborMaybeIndefListType(typeSymbol))
+        {
+            return false;
+        }
+
         ITypeSymbol? current = typeSymbol;
         while (current != null && current.SpecialType != SpecialType.System_Object)
         {
             if (current.GetAttributes().Any(a => a.AttributeClass?.Name is Parser.CborUnion or "CborUnionAttribute"))
+            {
+                return true;
+            }
+
+            current = current.BaseType;
+        }
+
+        return false;
+    }
+
+    private static bool IsCborMaybeIndefListType(ITypeSymbol typeSymbol)
+    {
+        ITypeSymbol? current = typeSymbol;
+        while (current != null && current.SpecialType != SpecialType.System_Object)
+        {
+            if (current.Name == "CborMaybeIndefList" || (current is INamedTypeSymbol nts && nts.OriginalDefinition.Name == "CborMaybeIndefList"))
             {
                 return true;
             }

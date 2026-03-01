@@ -95,7 +95,10 @@ public sealed partial class CborSerializerCodeGen
         string? propertyKeyString,
         int? propertyKeyInt,
         bool isOpenGeneric,
-        bool isPropertyTypeUnion = false
+        bool isPropertyTypeUnion = false,
+        bool isListItemTypeUnion = false,
+        bool isMapKeyTypeUnion = false,
+        bool isMapValueTypeUnion = false
     )
     {
         public string PropertyName { get; } = propertyName;
@@ -135,6 +138,9 @@ public sealed partial class CborSerializerCodeGen
         /// dispatch that could greedily consume trailing bytes when given unbounded data.
         /// </summary>
         public bool IsPropertyTypeUnion { get; } = isPropertyTypeUnion;
+        public bool IsListItemTypeUnion { get; } = isListItemTypeUnion;
+        public bool IsMapKeyTypeUnion { get; } = isMapKeyTypeUnion;
+        public bool IsMapValueTypeUnion { get; } = isMapValueTypeUnion;
 
         /// <summary>
         /// Maps discriminant int values to fully-qualified concrete type names for union hint dispatch.

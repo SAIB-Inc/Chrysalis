@@ -248,12 +248,20 @@ public sealed partial class CborSerializerCodeGen
                     {
                         _ = EmitPrimitivePropertyReader(sb, metadata.ListItemTypeFullName, $"{propertyName}TempItem");
                     }
-                    else
+                    else if (metadata.IsListItemTypeUnion)
                     {
                         _ = sb.AppendLine("{");
                         _ = sb.AppendLine($"int _pos = data.Length - reader.Buffer.Length;");
                         _ = sb.AppendLine($"var _span = reader.ReadDataItem();");
                         _ = sb.AppendLine($"{propertyName}TempItem = ({metadata.ListItemTypeFullName}){metadata.ListItemTypeFullName}.Read(data.Slice(_pos, _span.Length));");
+                        _ = sb.AppendLine("}");
+                    }
+                    else
+                    {
+                        _ = sb.AppendLine("{");
+                        _ = sb.AppendLine($"int _pos = data.Length - reader.Buffer.Length;");
+                        _ = sb.AppendLine($"{propertyName}TempItem = ({metadata.ListItemTypeFullName}){metadata.ListItemTypeFullName}.Read(data.Slice(_pos), out int _consumed);");
+                        _ = sb.AppendLine($"reader = new CborReader(data.Span.Slice(_pos + _consumed));");
                         _ = sb.AppendLine("}");
                     }
                 }
@@ -315,12 +323,20 @@ public sealed partial class CborSerializerCodeGen
                     {
                         _ = EmitPrimitivePropertyReader(sb, metadata.MapKeyTypeFullName, $"{propertyName}TempKeyItem");
                     }
-                    else
+                    else if (metadata.IsMapKeyTypeUnion)
                     {
                         _ = sb.AppendLine("{");
                         _ = sb.AppendLine($"int _pos = data.Length - reader.Buffer.Length;");
                         _ = sb.AppendLine($"var _span = reader.ReadDataItem();");
                         _ = sb.AppendLine($"{propertyName}TempKeyItem = ({metadata.MapKeyTypeFullName}){metadata.MapKeyTypeFullName}.Read(data.Slice(_pos, _span.Length));");
+                        _ = sb.AppendLine("}");
+                    }
+                    else
+                    {
+                        _ = sb.AppendLine("{");
+                        _ = sb.AppendLine($"int _pos = data.Length - reader.Buffer.Length;");
+                        _ = sb.AppendLine($"{propertyName}TempKeyItem = ({metadata.MapKeyTypeFullName}){metadata.MapKeyTypeFullName}.Read(data.Slice(_pos), out int _consumed);");
+                        _ = sb.AppendLine($"reader = new CborReader(data.Span.Slice(_pos + _consumed));");
                         _ = sb.AppendLine("}");
                     }
                 }
@@ -335,12 +351,20 @@ public sealed partial class CborSerializerCodeGen
                     {
                         _ = EmitPrimitivePropertyReader(sb, metadata.MapValueTypeFullName, $"{propertyName}TempValueItem");
                     }
-                    else
+                    else if (metadata.IsMapValueTypeUnion)
                     {
                         _ = sb.AppendLine("{");
                         _ = sb.AppendLine($"int _pos = data.Length - reader.Buffer.Length;");
                         _ = sb.AppendLine($"var _span = reader.ReadDataItem();");
                         _ = sb.AppendLine($"{propertyName}TempValueItem = ({metadata.MapValueTypeFullName}){metadata.MapValueTypeFullName}.Read(data.Slice(_pos, _span.Length));");
+                        _ = sb.AppendLine("}");
+                    }
+                    else
+                    {
+                        _ = sb.AppendLine("{");
+                        _ = sb.AppendLine($"int _pos = data.Length - reader.Buffer.Length;");
+                        _ = sb.AppendLine($"{propertyName}TempValueItem = ({metadata.MapValueTypeFullName}){metadata.MapValueTypeFullName}.Read(data.Slice(_pos), out int _consumed);");
+                        _ = sb.AppendLine($"reader = new CborReader(data.Span.Slice(_pos + _consumed));");
                         _ = sb.AppendLine("}");
                     }
                 }
