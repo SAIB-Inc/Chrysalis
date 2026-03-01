@@ -1,4 +1,6 @@
+using System.Buffers.Binary;
 using System.Runtime.CompilerServices;
+using Chrysalis.Cbor.Serialization;
 using Chrysalis.Network.Cbor.ChainSync;
 using Chrysalis.Network.Cbor.Common;
 using Chrysalis.Network.Core;
@@ -27,15 +29,15 @@ public enum ChainSyncState
 /// <summary>
 /// Implementation of the Ouroboros ChainSync mini-protocol.
 /// </summary>
-public class ChainSync(AgentChannel channel, ProtocolType protocol = ProtocolType.ClientChainSync) : IMiniProtocol
+public class ChainSync : IMiniProtocol
 {
-    private readonly ChannelBuffer _buffer = new(channel);
-    private readonly ChainSyncMessage _nextRequest = ChainSyncMessages.NextRequest();
+    private readonly ChannelBuffer _buffer;
+    private readonly ReadOnlyMemory<byte> _preEncodedNextRequest;
 
     /// <summary>
     /// Gets the protocol type for this ChainSync instance.
     /// </summary>
-    public ProtocolType Protocol { get; } = protocol;
+    public ProtocolType Protocol { get; }
 
     /// <summary>
     /// Gets or sets the current state of the protocol.
@@ -53,11 +55,44 @@ public class ChainSync(AgentChannel channel, ProtocolType protocol = ProtocolTyp
     public bool HasAgency => State == ChainSyncState.Idle;
 
     /// <summary>
+    /// Initializes a new ChainSync instance with pre-encoded NextRequest for fast-path sending.
+    /// </summary>
+    public ChainSync(AgentChannel channel, ProtocolType protocol = ProtocolType.ClientChainSync)
+    {
+        _buffer = new ChannelBuffer(channel);
+        Protocol = protocol;
+
+        // Pre-encode the full mux segment for NextRequest at construction time.
+        // This bypasses CborSerializer + Muxer pipeline on every NextRequestAsync call.
+        ChainSyncMessage nextRequest = ChainSyncMessages.NextRequest();
+        byte[] cborPayload = CborSerializer.Serialize(nextRequest);
+        _preEncodedNextRequest = BuildMuxSegment(protocol, cborPayload);
+    }
+
+    /// <summary>
+    /// Builds a complete mux segment (8-byte header + payload) ready for direct bearer write.
+    /// </summary>
+    private static byte[] BuildMuxSegment(ProtocolType protocolId, byte[] cborPayload)
+    {
+        // Header: 4 bytes timestamp + 2 bytes protocol ID + 2 bytes payload length
+        byte[] segment = new byte[8 + cborPayload.Length];
+        Span<byte> span = segment.AsSpan();
+
+        // Timestamp = 0 (Cardano nodes don't validate it)
+        BinaryPrimitives.WriteUInt32BigEndian(span[..4], 0);
+        // Protocol ID (initiator mode, no 0x8000 bit)
+        BinaryPrimitives.WriteUInt16BigEndian(span[4..6], (ushort)protocolId);
+        // Payload length
+        BinaryPrimitives.WriteUInt16BigEndian(span[6..8], (ushort)cborPayload.Length);
+        // Payload
+        cborPayload.CopyTo(span[8..]);
+
+        return segment;
+    }
+
+    /// <summary>
     /// Finds an intersection point between the local and remote chains.
     /// </summary>
-    /// <param name="points">Collection of points to check for intersection.</param>
-    /// <param name="cancellationToken">Token to cancel the operation.</param>
-    /// <returns>The response message indicating intersection status.</returns>
     public async Task<ChainSyncMessage> FindIntersectionAsync(IEnumerable<Point> points, CancellationToken cancellationToken)
     {
         if (State != ChainSyncState.Idle)
@@ -76,13 +111,10 @@ public class ChainSync(AgentChannel channel, ProtocolType protocol = ProtocolTyp
         return response;
     }
 
-
     /// <summary>
     /// Requests the next update from the chain, properly handling the await state.
-    /// Safe to call repeatedly in a loop - handles protocol state machine internally.
+    /// Uses pre-encoded NextRequest for zero-allocation send path.
     /// </summary>
-    /// <param name="cancellationToken">Token to cancel the operation.</param>
-    /// <returns>The next update response.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public async Task<MessageNextResponse?> NextRequestAsync(CancellationToken cancellationToken)
     {
@@ -91,14 +123,13 @@ public class ChainSync(AgentChannel channel, ProtocolType protocol = ProtocolTyp
         switch (State)
         {
             case ChainSyncState.Idle:
-                // We have agency, send request
-                await _buffer.SendFullMessageAsync(_nextRequest, cancellationToken).ConfigureAwait(false);
+                // Fast-path: write pre-encoded segment directly to bearer
+                await _buffer.SendPreEncodedSegmentAsync(_preEncodedNextRequest, cancellationToken).ConfigureAwait(false);
                 State = ChainSyncState.CanAwait;
                 response = await _buffer.ReceiveFullMessageAsync<MessageNextResponse>(cancellationToken).ConfigureAwait(false);
                 break;
 
             case ChainSyncState.MustReply:
-                // Server has agency, just wait for response
                 response = await _buffer.ReceiveFullMessageAsync<MessageNextResponse>(cancellationToken).ConfigureAwait(false);
                 break;
             case ChainSyncState.CanAwait:
@@ -130,12 +161,9 @@ public class ChainSync(AgentChannel channel, ProtocolType protocol = ProtocolTyp
         return response;
     }
 
-
     /// <summary>
     /// Terminates the Chain-Sync protocol.
     /// </summary>
-    /// <param name="cancellationToken">Token to cancel the operation.</param>
-    /// <returns>A task representing the asynchronous operation.</returns>
     public async Task DoneAsync(CancellationToken cancellationToken)
     {
         if (State != ChainSyncState.Idle)

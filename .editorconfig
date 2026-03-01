@@ -25,6 +25,7 @@ dotnet_diagnostic.CA1724.severity = none
 dotnet_diagnostic.CA1054.severity = none
 dotnet_diagnostic.CA1056.severity = none
 dotnet_diagnostic.CA1303.severity = none
+dotnet_diagnostic.CA1031.severity = none
 
 # ── Skip analysis on source-generated files ──
 [*.g.cs]

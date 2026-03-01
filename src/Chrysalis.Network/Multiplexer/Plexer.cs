@@ -1,4 +1,5 @@
 using System.IO.Pipelines;
+using System.Threading.Channels;
 using Chrysalis.Network.Core;
 
 namespace Chrysalis.Network.Multiplexer;
@@ -6,10 +7,6 @@ namespace Chrysalis.Network.Multiplexer;
 /// <summary>
 /// Provides bidirectional multiplexing capabilities over a single bearer.
 /// </summary>
-/// <remarks>
-/// Initializes a new instance of the Plexer class.
-/// </remarks>
-/// <param name="bearer">The bearer providing the physical connection.</param>
 public sealed class Plexer(IBearer bearer) : IDisposable
 {
     private readonly Demuxer _demuxer = new(bearer);
@@ -23,9 +20,10 @@ public sealed class Plexer(IBearer bearer) : IDisposable
     /// <returns>A bidirectional agent channel for the specified protocol.</returns>
     public AgentChannel SubscribeClient(ProtocolType protocol)
     {
-        PipeWriter writer = _muxer.Writer;
-        PipeReader reader = _demuxer.Subscribe(protocol);
-        return new AgentChannel(protocol, writer, reader);
+        PipeWriter muxerWriter = _muxer.Writer;
+        PipeWriter bearerWriter = bearer.Writer;
+        ChannelReader<ReadOnlyMemory<byte>> reader = _demuxer.Subscribe(protocol);
+        return new AgentChannel(protocol, muxerWriter, bearerWriter, reader);
     }
 
     /// <summary>
@@ -42,8 +40,6 @@ public sealed class Plexer(IBearer bearer) : IDisposable
     /// Starts the plexer, running both the demuxer and muxer.
     /// </summary>
     /// <param name="cancellationToken">A token to cancel the operation.</param>
-    /// <returns>A task that completes when the plexer stops.</returns>
-    /// <exception cref="InvalidOperationException">Thrown if either demuxer or muxer completes unexpectedly.</exception>
     public async Task RunAsync(CancellationToken cancellationToken)
     {
         using CancellationTokenSource linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
@@ -53,26 +49,23 @@ public sealed class Plexer(IBearer bearer) : IDisposable
 
         Task completedTask = await Task.WhenAny(demuxerTask, muxerTask).ConfigureAwait(false);
 
-        // Cancel the other task to ensure clean shutdown
         await linkedCts.CancelAsync().ConfigureAwait(false);
 
-        // Wait for both to finish to ensure proper cleanup
         try
         {
             await Task.WhenAll(demuxerTask, muxerTask).WaitAsync(TimeSpan.FromSeconds(5), cancellationToken).ConfigureAwait(false);
         }
         catch (OperationCanceledException)
         {
-            // Expected during cancellation - ignore
+            // Expected during cancellation
         }
         catch (TimeoutException)
         {
-            // Timeout waiting for tasks to finish - ignore, we'll propagate the original error below
+            // Timeout waiting for tasks to finish
         }
 
-        // Propagate the original exception from the task that failed first
         string failedComponent = completedTask == demuxerTask ? "Demuxer" : "Muxer";
-        await completedTask.ConfigureAwait(false); // Re-throws exception if faulted
+        await completedTask.ConfigureAwait(false);
         throw new InvalidOperationException($"{failedComponent} completed unexpectedly without error");
     }
 
