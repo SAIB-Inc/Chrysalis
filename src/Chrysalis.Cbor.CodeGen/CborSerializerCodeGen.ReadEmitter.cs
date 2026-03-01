@@ -9,15 +9,26 @@ public sealed partial class CborSerializerCodeGen
         public static StringBuilder EmitSerializableTypeReader(StringBuilder sb, SerializableTypeMetadata metadata)
         {
             string xmlSafeId = metadata.Indentifier.Replace("<", "{").Replace(">", "}");
+
+            // Primary overload: Read(data, out bytesConsumed)
             _ = sb.AppendLine($"/// <summary>");
-            _ = sb.AppendLine($"/// Deserializes a <see cref=\"{xmlSafeId}\"/> instance from CBOR-encoded bytes.");
+            _ = sb.AppendLine($"/// Deserializes a <see cref=\"{xmlSafeId}\"/> instance from CBOR-encoded bytes and reports bytes consumed.");
             _ = sb.AppendLine($"/// </summary>");
-            _ = sb.AppendLine($"/// <param name=\"data\">The CBOR-encoded bytes to deserialize.</param>");
-            _ = sb.AppendLine($"/// <returns>A deserialized <see cref=\"{xmlSafeId}\"/> instance.</returns>");
-            _ = sb.AppendLine($"public static new {metadata.FullyQualifiedName} Read(ReadOnlyMemory<byte> data)");
+            _ = sb.AppendLine($"public static new {metadata.FullyQualifiedName} Read(ReadOnlyMemory<byte> data, out int bytesConsumed)");
             _ = sb.AppendLine("{");
             ICborSerializerEmitter emitter = GetEmitter(metadata);
             _ = emitter.EmitReader(sb, metadata);
+            _ = sb.AppendLine("}");
+
+            _ = sb.AppendLine();
+
+            // Convenience overload: Read(data) delegates to primary
+            _ = sb.AppendLine($"/// <summary>");
+            _ = sb.AppendLine($"/// Deserializes a <see cref=\"{xmlSafeId}\"/> instance from CBOR-encoded bytes.");
+            _ = sb.AppendLine($"/// </summary>");
+            _ = sb.AppendLine($"public static new {metadata.FullyQualifiedName} Read(ReadOnlyMemory<byte> data)");
+            _ = sb.AppendLine("{");
+            _ = sb.AppendLine($"return Read(data, out _);");
             _ = sb.AppendLine("}");
 
             return sb;
@@ -359,13 +370,24 @@ public sealed partial class CborSerializerCodeGen
             {
                 _ = EmitUnionHintReader(sb, metadata, propertyName);
             }
-            else
+            else if (metadata.IsPropertyTypeUnion)
             {
-                // Zero-copy ReadEncodedValue replacement
+                // Union types use try-catch dispatch that could greedily consume trailing
+                // bytes when given unbounded data, so we must use ReadDataItem for bounding
                 _ = sb.AppendLine("{");
                 _ = sb.AppendLine($"int _pos = data.Length - reader.Buffer.Length;");
                 _ = sb.AppendLine($"var _span = reader.ReadDataItem();");
                 _ = sb.AppendLine($"{propertyName} = ({metadata.PropertyTypeFullName}){metadata.PropertyTypeFullName}.Read(data.Slice(_pos, _span.Length));");
+                _ = sb.AppendLine("}");
+            }
+            else
+            {
+                // Non-union types: skip ReadDataItem double-scan by passing unbounded data
+                // and using bytesConsumed to reconstruct the reader position
+                _ = sb.AppendLine("{");
+                _ = sb.AppendLine($"int _pos = data.Length - reader.Buffer.Length;");
+                _ = sb.AppendLine($"{propertyName} = ({metadata.PropertyTypeFullName}){metadata.PropertyTypeFullName}.Read(data.Slice(_pos), out int _consumed);");
+                _ = sb.AppendLine($"reader = new CborReader(data.Span.Slice(_pos + _consumed));");
                 _ = sb.AppendLine("}");
             }
             return sb;
@@ -591,9 +613,12 @@ public sealed partial class CborSerializerCodeGen
                 _ = sb.AppendLine($"{resultName}.ConstrIndex = constrIndex;");
             }
 
+            // Calculate bytesConsumed from reader position before potentially slicing Raw
+            _ = sb.AppendLine($"bytesConsumed = data.Length - reader.Buffer.Length;");
+
             if (metadata.ShouldPreserveRaw)
             {
-                _ = sb.AppendLine($"{resultName}.Raw = data;");
+                _ = sb.AppendLine($"{resultName}.Raw = data[..bytesConsumed];");
             }
 
             _ = sb.AppendLine($"return {resultName};");

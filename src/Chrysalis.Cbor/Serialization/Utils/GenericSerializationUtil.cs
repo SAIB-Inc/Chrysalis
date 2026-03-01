@@ -12,6 +12,11 @@ namespace Chrysalis.Cbor.Serialization.Utils;
 public delegate T ReadHandler<T>(ReadOnlyMemory<byte> data);
 
 /// <summary>
+/// Delegate for reading a value of type <typeparamref name="T"/> from CBOR-encoded bytes with consumed byte tracking.
+/// </summary>
+public delegate T ReadWithConsumedHandler<T>(ReadOnlyMemory<byte> data, out int bytesConsumed);
+
+/// <summary>
 /// Delegate for writing a value of type <typeparamref name="T"/> to an output buffer.
 /// </summary>
 public delegate void WriteHandler<T>(IBufferWriter<byte> output, T value);
@@ -22,6 +27,7 @@ public delegate void WriteHandler<T>(IBufferWriter<byte> output, T value);
 public static class GenericSerializationUtil
 {
     private static readonly ConcurrentDictionary<Type, Delegate> ReadMethodCache = [];
+    private static readonly ConcurrentDictionary<Type, Delegate> ReadWithConsumedMethodCache = [];
     private static readonly ConcurrentDictionary<Type, Delegate> WriteMethodCache = [];
 
     #region Read
@@ -31,6 +37,29 @@ public static class GenericSerializationUtil
     public static T? Read<T>(ReadOnlyMemory<byte> data)
     {
         return IsPrimitiveType(typeof(T)) ? ReadPrimitive<T>(data) : ReadNonPrimitive<T>(data);
+    }
+
+    /// <summary>Reads a value of type T from CBOR-encoded bytes and reports how many bytes were consumed.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static T? ReadWithConsumed<T>(ReadOnlyMemory<byte> data, out int bytesConsumed) where T : CborBase
+    {
+        return ReadNonPrimitiveWithConsumed<T>(data, out bytesConsumed);
+    }
+
+    /// <summary>Reads a non-primitive value of type T from CBOR-encoded bytes, reporting consumed bytes via the generated Read(data, out bytesConsumed) overload.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static T ReadNonPrimitiveWithConsumed<T>(ReadOnlyMemory<byte> data, out int bytesConsumed) where T : CborBase
+    {
+        if (!ReadWithConsumedMethodCache.TryGetValue(typeof(T), out Delegate? readDelegate))
+        {
+            MethodInfo readMethod = typeof(T).GetMethod("Read", BindingFlags.Public | BindingFlags.Static | BindingFlags.FlattenHierarchy, null, [typeof(ReadOnlyMemory<byte>), typeof(int).MakeByRefType()], null)
+                ?? throw new NotSupportedException($"Type {typeof(T).FullName} does not have a valid static Read(ReadOnlyMemory<byte>, out int) method.");
+
+            readDelegate = (ReadWithConsumedHandler<T>)Delegate.CreateDelegate(typeof(ReadWithConsumedHandler<T>), readMethod);
+            ReadWithConsumedMethodCache[typeof(T)] = readDelegate;
+        }
+
+        return ((ReadWithConsumedHandler<T>)readDelegate)(data, out bytesConsumed);
     }
 
     /// <summary>Reads a value of the specified type from CBOR-encoded bytes.</summary>

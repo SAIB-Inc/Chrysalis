@@ -2,8 +2,6 @@ using System.Buffers;
 using System.Runtime.CompilerServices;
 using Chrysalis.Cbor.Serialization.Utils;
 using Chrysalis.Cbor.Types;
-using Dahomey.Cbor.Serialization;
-
 
 namespace Chrysalis.Cbor.Serialization;
 
@@ -58,12 +56,7 @@ public static class CborSerializer
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static T Deserialize<T>(ReadOnlyMemory<byte> data, out int bytesConsumed) where T : CborBase
     {
-        // Use Dahomey reader to determine how many bytes the first CBOR item consumes
-        CborReader reader = new(data.Span);
-        ReadOnlySpan<byte> item = reader.ReadDataItem();
-        bytesConsumed = item.Length;
-
-        T? result = GenericSerializationUtil.Read<T>(data[..bytesConsumed]);
+        T? result = GenericSerializationUtil.ReadWithConsumed<T>(data, out bytesConsumed);
         return result ?? throw new InvalidOperationException("Deserialization failed: result is null.");
     }
 }

@@ -369,6 +369,8 @@ public sealed partial class CborSerializerCodeGen
                 }
             }
 
+            bool isPropertyTypeUnion = typeSymbol is ITypeSymbol pts && HasCborUnionAttribute(pts);
+
             SerializablePropertyMetadata propMetadata = new(
                 propertyName,
                 propertyType,
@@ -395,7 +397,8 @@ public sealed partial class CborSerializerCodeGen
                 order,
                 stringKey,
                 intKey,
-                isOpenGeneric
+                isOpenGeneric,
+                isPropertyTypeUnion
             );
 
             // Parse [CborUnionHint] attributes
@@ -403,6 +406,26 @@ public sealed partial class CborSerializerCodeGen
 
             yield return propMetadata;
         }
+    }
+
+    /// <summary>
+    /// Checks if a type or any of its base types has the [CborUnion] attribute,
+    /// meaning it uses try-catch dispatch that could greedily consume trailing bytes.
+    /// </summary>
+    private static bool HasCborUnionAttribute(ITypeSymbol typeSymbol)
+    {
+        ITypeSymbol? current = typeSymbol;
+        while (current != null && current.SpecialType != SpecialType.System_Object)
+        {
+            if (current.GetAttributes().Any(a => a.AttributeClass?.Name is Parser.CborUnion or "CborUnionAttribute"))
+            {
+                return true;
+            }
+
+            current = current.BaseType;
+        }
+
+        return false;
     }
 
     private static void GetCborPropertyKey(SyntaxNode node, SemanticModel semanticModel, out string? stringKey, out int? intKey)
