@@ -7,17 +7,28 @@ public sealed partial class CborSerializerCodeGen
 {
     private sealed class MapEmitter : ICborSerializerEmitter
     {
-        public StringBuilder EmitReader(StringBuilder sb, SerializableTypeMetadata metadata)
+        public StringBuilder EmitReader(StringBuilder sb, SerializableTypeMetadata metadata, bool useExistingReader)
         {
-            _ = Emitter.EmitCborReaderInstance(sb, "data");
+            if (!useExistingReader)
+            {
+                _ = Emitter.EmitCborReaderInstance(sb, "data");
+            }
             _ = Emitter.EmitTagReader(sb, metadata.CborTag, "tagIndex");
             bool isIntKey = metadata.Properties[0].PropertyKeyInt is not null;
-
-            _ = sb.AppendLine($"Dictionary<{(isIntKey ? "int" : "string")}, object> resultMap = [];");
+            bool assumeNoPreserveRaw = useExistingReader && metadata.ShouldPreserveRaw;
 
             // Read the map and check if it's indefinite
             _ = sb.AppendLine("int? mapLength = reader.ReadStartMap();");
             _ = sb.AppendLine("bool isIndefiniteMap = !mapLength.HasValue;");
+
+            // Deserialize directly into strongly typed locals to avoid map boxing/object dispatch.
+            Dictionary<string, string> propMapping = [];
+            foreach (SerializablePropertyMetadata prop in metadata.Properties)
+            {
+                string propName = $"{metadata.BaseIdentifier}{prop.PropertyName}";
+                propMapping[prop.PropertyName] = propName;
+                _ = sb.AppendLine($"{prop.PropertyTypeFullName} {propName} = default{(prop.PropertyType.Contains("?") ? "" : "!")};");
+            }
 
             _ = sb.AppendLine("while (reader.PeekState() != CborReaderState.EndMap)");
             _ = sb.AppendLine("{");
@@ -26,11 +37,27 @@ public sealed partial class CborSerializerCodeGen
                 ? sb.AppendLine($"int key = reader.ReadInt32();")
                 : sb.AppendLine($"string key = reader.ReadTextString();");
 
-            _ = sb.AppendLine($"object value = null;");
+            _ = sb.AppendLine("switch (key)");
+            _ = sb.AppendLine("{");
+            foreach (SerializablePropertyMetadata prop in metadata.Properties)
+            {
+                string key = isIntKey
+                    ? prop.PropertyKeyInt?.ToString(CultureInfo.InvariantCulture) ?? "0"
+                    : ToCSharpStringLiteral(prop.PropertyKeyString ?? string.Empty);
+                string propName = propMapping[prop.PropertyName];
 
-            _ = Emitter.EmitGenericReader(sb, "TypeMapping[key]", "value");
+                _ = sb.AppendLine($"case {key}:");
+                _ = sb.AppendLine("{");
+                _ = Emitter.EmitPrimitiveOrObjectReader(sb, prop, propName, assumeNoPreserveRaw);
+                _ = sb.AppendLine("break;");
+                _ = sb.AppendLine("}");
+            }
 
-            _ = sb.AppendLine($"resultMap.Add(key, value);");
+            _ = sb.AppendLine("default:");
+            _ = sb.AppendLine("{");
+            _ = sb.AppendLine($"throw new Exception(\"Unknown CBOR map key while reading {metadata.FullyQualifiedName}\");");
+            _ = sb.AppendLine("}");
+            _ = sb.AppendLine("}");
             _ = sb.AppendLine("}");
 
             // Read the end map marker
@@ -40,9 +67,7 @@ public sealed partial class CborSerializerCodeGen
             for (int i = 0; i < metadata.Properties.Count; i++)
             {
                 SerializablePropertyMetadata prop = metadata.Properties[i];
-                string? key = isIntKey ? prop.PropertyKeyInt?.ToString(CultureInfo.InvariantCulture) : prop.PropertyKeyString;
-
-                _ = sb.Append($"resultMap.TryGetValue({key}, out var {prop.PropertyName}Value) ? ({prop.PropertyTypeFullName}){prop.PropertyName}Value : default");
+                _ = sb.Append($"{propMapping[prop.PropertyName]}");
                 _ = sb.AppendLine($"{(i == metadata.Properties.Count - 1 ? "" : ",")}");
             }
 
@@ -54,7 +79,7 @@ public sealed partial class CborSerializerCodeGen
             _ = sb.AppendLine("    result.IsIndefinite = true;");
             _ = sb.AppendLine("}");
 
-            _ = Emitter.EmitReaderValidationAndResult(sb, metadata, "result");
+            _ = Emitter.EmitReaderValidationAndResult(sb, metadata, "result", hasInputData: !useExistingReader);
             return sb;
         }
 
@@ -79,9 +104,13 @@ public sealed partial class CborSerializerCodeGen
 
             foreach (SerializablePropertyMetadata prop in metadata.Properties)
             {
+                string mapKeyWriterLine = isIntKey
+                    ? $"writer.WriteInt32({prop.PropertyKeyInt?.ToString(CultureInfo.InvariantCulture) ?? "0"});"
+                    : $"writer.WriteTextString({ToCSharpStringLiteral(prop.PropertyKeyString ?? string.Empty)});";
+
                 if (prop.IsNullable)
                 {
-                    _ = sb.AppendLine($"{(isIntKey ? $"writer.WriteInt32(KeyMapping[\"{prop.PropertyName}\"])" : $"writer.WriteTextString(KeyMapping[\"{prop.PropertyName}\"])")};");
+                    _ = sb.AppendLine(mapKeyWriterLine);
                     _ = Emitter.EmitSerializablePropertyWriter(sb, prop);
                 }
                 else
@@ -90,13 +119,13 @@ public sealed partial class CborSerializerCodeGen
                     {
                         _ = sb.AppendLine($"if (data.{prop.PropertyName} is not null)");
                         _ = sb.AppendLine("{");
-                        _ = sb.AppendLine($"{(isIntKey ? $"writer.WriteInt32(KeyMapping[\"{prop.PropertyName}\"])" : $"writer.WriteTextString(KeyMapping[\"{prop.PropertyName}\"])")};");
+                        _ = sb.AppendLine(mapKeyWriterLine);
                         _ = Emitter.EmitSerializablePropertyWriter(sb, prop);
                         _ = sb.AppendLine("}");
                     }
                     else
                     {
-                        _ = sb.AppendLine($"{(isIntKey ? $"writer.WriteInt32(KeyMapping[\"{prop.PropertyName}\"])" : $"writer.WriteTextString(KeyMapping[\"{prop.PropertyName}\"])")};");
+                        _ = sb.AppendLine(mapKeyWriterLine);
                         _ = Emitter.EmitSerializablePropertyWriter(sb, prop);
                     }
                 }
@@ -104,6 +133,16 @@ public sealed partial class CborSerializerCodeGen
             _ = sb.AppendLine($"writer.WriteEndMap();");
 
             return sb;
+        }
+
+        private static string ToCSharpStringLiteral(string value)
+        {
+            return "\"" + value
+                .Replace("\\", "\\\\")
+                .Replace("\"", "\\\"")
+                .Replace("\r", "\\r")
+                .Replace("\n", "\\n")
+                .Replace("\t", "\\t") + "\"";
         }
     }
 }

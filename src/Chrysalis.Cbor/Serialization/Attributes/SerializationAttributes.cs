@@ -59,6 +59,20 @@ public sealed class CborUnionAttribute : Attribute
 }
 
 /// <summary>
+/// Declares the integer discriminant value for a concrete child type of a CBOR union.
+/// This is used by source-generated union readers to dispatch directly without trial decoding.
+/// </summary>
+/// <param name="discriminant">The union discriminant integer value encoded at array index 0.</param>
+[AttributeUsage(AttributeTargets.Class | AttributeTargets.Struct, Inherited = false, AllowMultiple = false)]
+public sealed class CborUnionCaseAttribute(int discriminant) : Attribute
+{
+    /// <summary>
+    /// Gets the union discriminant value.
+    /// </summary>
+    public int Discriminant { get; } = discriminant;
+}
+
+/// <summary>
 /// Marks a type as a CBOR constructor encoding used in Plutus data.
 /// </summary>
 [AttributeUsage(AttributeTargets.Class | AttributeTargets.Struct | AttributeTargets.Interface, Inherited = false, AllowMultiple = false)]

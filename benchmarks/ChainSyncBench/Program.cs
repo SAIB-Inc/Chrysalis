@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using Chrysalis.Cbor.Extensions;
 using Chrysalis.Cbor.Extensions.Cardano.Core;
+using Chrysalis.Cbor.Extensions.Cardano.Core.Byron;
 using Chrysalis.Cbor.Extensions.Cardano.Core.Header;
 using Chrysalis.Cbor.Serialization;
 using Chrysalis.Cbor.Types.Cardano.Core;
@@ -71,17 +72,18 @@ else
 
 using (client)
 {
-    Console.WriteLine("Connected. Starting sync from origin...");
-    Console.WriteLine();
-
     Point startPoint = (fromSlotStr is not null && fromHash is not null)
         ? Point.Specific(ulong.Parse(fromSlotStr), Convert.FromHexString(fromHash))
         : Point.Origin;
-    if (startPoint != Point.Origin)
+    if (startPoint != Point.Origin && useUnixSocket)
     {
         Console.WriteLine($"  Starting from slot {fromSlotStr}");
         Console.WriteLine();
     }
+
+    Console.WriteLine("Connected. Starting sync...");
+    Console.WriteLine();
+
     ChainSyncMessage intersect = await chainSync.FindIntersectionAsync([startPoint], cts.Token);
     if (intersect is not MessageIntersectFound)
     {
@@ -96,7 +98,7 @@ using (client)
     long totalBytesDownloaded = 0;
     int windowBlocks = 0;
     long windowBytes = 0;
-    string lastEra = "?";
+    string lastEra = useUnixSocket ? "N2C" : "?";
     ulong lastSlot = 0;
     ulong lastBlockNumber = 0;
 
@@ -118,13 +120,29 @@ using (client)
                         {
                             try
                             {
-                                BlockWithEra block = rollForward.Payload.Deserialize<BlockWithEra>();
-                                lastEra = block.Block?.GetType().Name ?? "?";
+                                BlockWithEra block = rollForward.Payload.DeserializeWithoutRaw<BlockWithEra>();
+
+                                if (TryGetBlockProgressInfo(block, out ulong slot, out ulong blockNumber))
+                                {
+                                    lastSlot = slot;
+                                    lastBlockNumber = blockNumber;
+                                }
                             }
-                            catch
+                            catch (Exception ex)
                             {
-                                lastEra = "?";
+                                Console.Error.WriteLine($"WARN: block decode failed ({payloadLen} bytes): {ex.Message}");
                             }
+                        }
+
+                        if (noDeser)
+                        {
+                            lastSlot = 0;
+                            lastBlockNumber = 0;
+                            lastEra = "N2C";
+                        }
+                        else
+                        {
+                            lastEra = "N2C";
                         }
 
                         totalBlocksSynced++;
@@ -259,6 +277,36 @@ using (client)
 return 0;
 
 // ---
+
+static bool TryGetBlockProgressInfo(BlockWithEra blockWithEra, out ulong slot, out ulong blockNumber)
+{
+    slot = 0;
+    blockNumber = 0;
+
+    switch (blockWithEra.Block)
+    {
+        case ByronEbBlock byronEbbBlock:
+            slot = byronEbbBlock.Epoch() * 21600;
+            blockNumber = 0;
+            return true;
+
+        case ByronMainBlock byronMainBlock:
+            slot = (byronMainBlock.Epoch() * 21600) + byronMainBlock.Slot();
+            blockNumber = byronMainBlock.Header.ConsensusData.Difficulty.GetValue().FirstOrDefault();
+            return true;
+
+        case AlonzoCompatibleBlock:
+        case BabbageBlock:
+        case ConwayBlock:
+            BlockHeader header = blockWithEra.Block.Header();
+            slot = header.HeaderBody.Slot();
+            blockNumber = header.HeaderBody.BlockNumber();
+            return true;
+
+        default:
+            return false;
+    }
+}
 
 static void PrintProgress(Stopwatch totalTimer, Stopwatch windowTimer,
     ulong slot, ulong blockNum, string era,

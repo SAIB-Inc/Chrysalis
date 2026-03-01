@@ -1,4 +1,5 @@
 using System.Buffers;
+using System.Buffers.Binary;
 using System.Collections.Concurrent;
 using System.IO.Pipelines;
 using System.Runtime.CompilerServices;
@@ -52,91 +53,53 @@ public sealed class Demuxer(IBearer bearer) : IDisposable
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public async ValueTask<MuxSegment> ReadSegmentAsync(CancellationToken cancellationToken)
     {
-        // Read the header
-        ReadResult result = await bearer.Reader.ReadAtLeastAsync(ProtocolConstants.SegmentHeaderSize, cancellationToken).ConfigureAwait(false);
-        ReadOnlySequence<byte> buffer = result.Buffer;
-
-        // Decode the header
-        ReadOnlySequence<byte> headerSlice = buffer.Slice(0, ProtocolConstants.SegmentHeaderSize);
-        MuxSegmentHeader header = MuxSegmentCodec.DecodeHeader(headerSlice);
-
-        // Advance past the header
-        bearer.Reader.AdvanceTo(buffer.GetPosition(ProtocolConstants.SegmentHeaderSize));
-
-        // Read and process the payload
-        ReadOnlySequence<byte> payloadSequence;
-
-        if (buffer.Length >= header.PayloadLength + ProtocolConstants.SegmentHeaderSize)
+        while (true)
         {
-            // We already have the complete payload in the buffer
-            ReadOnlySequence<byte> payloadSlice = buffer.Slice(ProtocolConstants.SegmentHeaderSize, header.PayloadLength);
-            payloadSequence = CopyPayload(payloadSlice);
-            bearer.Reader.AdvanceTo(buffer.GetPosition(header.PayloadLength + ProtocolConstants.SegmentHeaderSize));
-        }
-        else
-        {
-            // We need to read more data for the payload
-            result = await bearer.Reader.ReadAtLeastAsync(header.PayloadLength, cancellationToken).ConfigureAwait(false);
-            ReadOnlySequence<byte> payloadSlice = result.Buffer.Slice(0, header.PayloadLength);
-            payloadSequence = CopyPayload(payloadSlice);
-            bearer.Reader.AdvanceTo(result.Buffer.GetPosition(header.PayloadLength));
-        }
+            ReadResult result = await bearer.Reader.ReadAsync(cancellationToken).ConfigureAwait(false);
+            ReadOnlySequence<byte> buffer = result.Buffer;
 
-        return new MuxSegment(header, payloadSequence);
-    }
-
-    // Shared buffer pool to reduce allocations
-    private static readonly ArrayPool<byte> BufferPool = ArrayPool<byte>.Shared;
-
-    /// <summary>
-    /// Creates a copy of the payload from a ReadOnlySequence using buffer pooling.
-    /// </summary>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static ReadOnlySequence<byte> CopyPayload(ReadOnlySequence<byte> payload)
-    {
-        // For very small payloads, using pooling introduces more overhead than benefit
-        if (payload.Length <= 128)
-        {
-            byte[] smallPayloadCopy = new byte[payload.Length];
-            payload.CopyTo(smallPayloadCopy);
-            return new ReadOnlySequence<byte>(smallPayloadCopy);
-        }
-
-        // For larger payloads, use the shared buffer pool
-        byte[] payloadCopy = BufferPool.Rent((int)payload.Length);
-
-        try
-        {
-            payload.CopyTo(payloadCopy);
-            // Store the buffer in the memory record for later return to pool
-            PooledMemory managedPayload = new(payloadCopy, BufferPool, (int)payload.Length);
-            return new ReadOnlySequence<byte>(managedPayload.Memory);
-        }
-        catch
-        {
-            // Ensure buffer is returned on exception
-            BufferPool.Return(payloadCopy);
-            throw;
-        }
-    }
-
-    // Helper class to track pooled memory and return it when no longer used
-    private sealed class PooledMemory(byte[] buffer, ArrayPool<byte> pool, int length) : IMemoryOwner<byte>
-    {
-        private readonly byte[] _buffer = buffer;
-        private readonly ArrayPool<byte> _pool = pool;
-        private readonly int _length = length;
-        private bool _disposed;
-
-        public Memory<byte> Memory => _buffer.AsMemory(0, _length);
-
-        public void Dispose()
-        {
-            if (!_disposed)
+            if (buffer.IsEmpty && result.IsCompleted)
             {
-                _pool.Return(_buffer);
-                _disposed = true;
+                throw new InvalidOperationException("Connection closed before a complete mux segment was received.");
             }
+
+            if (!TryDecodeHeader(buffer, out MuxSegmentHeader header))
+            {
+                if (result.IsCompleted)
+                {
+                    bearer.Reader.AdvanceTo(buffer.End);
+                    throw new InvalidOperationException("Connection closed with an incomplete mux segment header.");
+                }
+
+                bearer.Reader.AdvanceTo(buffer.Start, buffer.End);
+                continue;
+            }
+
+            long totalSegmentLength = ProtocolConstants.SegmentHeaderSize + header.PayloadLength;
+            if (buffer.Length < totalSegmentLength)
+            {
+                if (result.IsCompleted)
+                {
+                    bearer.Reader.AdvanceTo(buffer.End);
+                    throw new InvalidOperationException("Connection closed with an incomplete mux segment payload.");
+                }
+
+                bearer.Reader.AdvanceTo(buffer.Start, buffer.End);
+                continue;
+            }
+
+            ReadOnlySequence<byte> payloadSlice = buffer.Slice(ProtocolConstants.SegmentHeaderSize, header.PayloadLength);
+            byte[] payloadCopy = header.PayloadLength == 0
+                ? []
+                : GC.AllocateUninitializedArray<byte>(header.PayloadLength);
+
+            if (header.PayloadLength > 0)
+            {
+                payloadSlice.CopyTo(payloadCopy);
+            }
+
+            bearer.Reader.AdvanceTo(buffer.GetPosition(totalSegmentLength));
+            return new MuxSegment(header, new ReadOnlySequence<byte>(payloadCopy));
         }
     }
 
@@ -147,20 +110,47 @@ public sealed class Demuxer(IBearer bearer) : IDisposable
     public async Task RunAsync(CancellationToken cancellationToken)
     {
         Exception? demuxerException = null;
+        HashSet<PipeWriter> writersToFlush = [];
 
         try
         {
             while (!cancellationToken.IsCancellationRequested)
             {
-                MuxSegment segment = await ReadSegmentAsync(cancellationToken).ConfigureAwait(false);
+                ReadResult result = await bearer.Reader.ReadAsync(cancellationToken).ConfigureAwait(false);
+                ReadOnlySequence<byte> buffer = result.Buffer;
+                SequencePosition consumed = buffer.Start;
 
-                if (!_protocolPipes.TryGetValue(segment.Header.ProtocolId, out Pipe? pipe))
+                while (TryReadNextSegment(buffer.Slice(consumed), out MuxSegmentHeader header, out ReadOnlySequence<byte> payload, out SequencePosition nextConsumed))
                 {
-                    continue;
+                    consumed = nextConsumed;
+
+                    if (!_protocolPipes.TryGetValue(header.ProtocolId, out Pipe? pipe))
+                    {
+                        continue;
+                    }
+
+                    WritePayload(pipe.Writer, payload);
+                    _ = writersToFlush.Add(pipe.Writer);
                 }
 
-                _ = await pipe.Writer.WriteAsync(segment.Payload.First, cancellationToken).ConfigureAwait(false);
-                _ = await pipe.Writer.FlushAsync(cancellationToken).ConfigureAwait(false);
+                bearer.Reader.AdvanceTo(consumed, buffer.End);
+
+                if (result.IsCompleted && !buffer.Slice(consumed).IsEmpty)
+                {
+                    throw new InvalidOperationException("Connection closed with incomplete mux segment data.");
+                }
+
+                foreach (PipeWriter writer in writersToFlush)
+                {
+                    _ = await writer.FlushAsync(cancellationToken).ConfigureAwait(false);
+                }
+
+                writersToFlush.Clear();
+
+                if (result.IsCompleted)
+                {
+                    break;
+                }
             }
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -179,6 +169,70 @@ public sealed class Demuxer(IBearer bearer) : IDisposable
             // Complete all pipes so waiting readers wake up
             CompletePipes(demuxerException);
         }
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static void WritePayload(PipeWriter writer, ReadOnlySequence<byte> payload)
+    {
+        foreach (ReadOnlyMemory<byte> chunk in payload)
+        {
+            writer.Write(chunk.Span);
+        }
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static bool TryReadNextSegment(
+        ReadOnlySequence<byte> buffer,
+        out MuxSegmentHeader header,
+        out ReadOnlySequence<byte> payload,
+        out SequencePosition nextConsumed
+    )
+    {
+        payload = default;
+        nextConsumed = buffer.Start;
+
+        if (!TryDecodeHeader(buffer, out header))
+        {
+            return false;
+        }
+
+        long totalSegmentLength = ProtocolConstants.SegmentHeaderSize + header.PayloadLength;
+        if (buffer.Length < totalSegmentLength)
+        {
+            return false;
+        }
+
+        payload = buffer.Slice(ProtocolConstants.SegmentHeaderSize, header.PayloadLength);
+        nextConsumed = buffer.GetPosition(totalSegmentLength);
+        return true;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static bool TryDecodeHeader(ReadOnlySequence<byte> buffer, out MuxSegmentHeader header)
+    {
+        header = null!;
+
+        if (buffer.Length < ProtocolConstants.SegmentHeaderSize)
+        {
+            return false;
+        }
+
+        Span<byte> headerBytes = stackalloc byte[ProtocolConstants.SegmentHeaderSize];
+        buffer.Slice(0, ProtocolConstants.SegmentHeaderSize).CopyTo(headerBytes);
+
+        uint transmissionTime = BinaryPrimitives.ReadUInt32BigEndian(headerBytes[..4]);
+        ushort protocolIdAndMode = BinaryPrimitives.ReadUInt16BigEndian(headerBytes.Slice(4, 2));
+        bool mode = (protocolIdAndMode & 0x8000) != 0;
+        ProtocolType protocolId = (ProtocolType)(protocolIdAndMode & 0x7FFF);
+        ushort payloadLength = BinaryPrimitives.ReadUInt16BigEndian(headerBytes.Slice(6, 2));
+
+        header = new MuxSegmentHeader(
+            transmissionTime,
+            protocolId,
+            payloadLength,
+            mode
+        );
+        return true;
     }
 
     /// <summary>

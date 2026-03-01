@@ -6,7 +6,7 @@ public sealed partial class CborSerializerCodeGen
 {
     private sealed class ContainerEmitter : ICborSerializerEmitter
     {
-        public StringBuilder EmitReader(StringBuilder sb, SerializableTypeMetadata metadata)
+        public StringBuilder EmitReader(StringBuilder sb, SerializableTypeMetadata metadata, bool useExistingReader)
         {
             if (metadata.Properties.Count is > 1 or < 1)
             {
@@ -14,12 +14,15 @@ public sealed partial class CborSerializerCodeGen
             }
 
             SerializablePropertyMetadata prop = metadata.Properties[0];
-            _ = Emitter.EmitCborReaderInstance(sb, "data");
+            if (!useExistingReader)
+            {
+                _ = Emitter.EmitCborReaderInstance(sb, "data");
+            }
             _ = Emitter.EmitTagReader(sb, metadata.CborTag, "tagIndex");
             string propName = $"{metadata.BaseIdentifier}{prop.PropertyName}";
             _ = Emitter.EmitSerializablePropertyReader(sb, prop, propName);
             _ = sb.AppendLine($"var result = new {metadata.FullyQualifiedName}({propName});");
-            _ = Emitter.EmitReaderValidationAndResult(sb, metadata, "result");
+            _ = Emitter.EmitReaderValidationAndResult(sb, metadata, "result", hasInputData: !useExistingReader);
 
             return sb;
         }

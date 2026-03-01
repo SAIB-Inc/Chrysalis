@@ -15,6 +15,7 @@ public abstract partial record Nonce : CborBase { }
 /// <param name="Variant">The nonce variant tag.</param>
 /// <param name="Hash">The nonce hash value.</param>
 [CborSerializable]
+[CborUnionCase(1)]
 [CborList]
 public partial record NonceWithHash(
     [CborOrder(0)] ulong Variant,
@@ -26,6 +27,7 @@ public partial record NonceWithHash(
 /// </summary>
 /// <param name="Variant">The nonce variant tag.</param>
 [CborSerializable]
+[CborUnionCase(0)]
 [CborList]
 public partial record NonceWithoutHash(
     [CborOrder(0)] ulong Variant
