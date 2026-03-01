@@ -9,10 +9,10 @@ public sealed partial class CborSerializerCodeGen
     {
         public StringBuilder EmitReader(StringBuilder sb, SerializableTypeMetadata metadata)
         {
-            // Special-case: CborMaybeIndefList<T> — probe by tag and definite/indefinite
-            if (IsCborMaybeIndefListUnion(metadata))
+            // General discriminant probe: list-based unions that carry a stable constructor label.
+            if (TryEmitListDiscriminantProbeReader(sb, metadata))
             {
-                return EmitMaybeIndefListProbeReader(sb, metadata);
+                return sb;
             }
 
             // General structural probe: children have distinct CBOR major types or tags
@@ -41,56 +41,83 @@ public sealed partial class CborSerializerCodeGen
             return sb;
         }
 
-        private static bool IsCborMaybeIndefListUnion(SerializableTypeMetadata metadata)
+        private static bool TryEmitListDiscriminantProbeReader(StringBuilder sb, SerializableTypeMetadata metadata)
         {
-            return metadata.FullyQualifiedName.Contains("CborMaybeIndefList");
+            Dictionary<int, SerializableTypeMetadata>? cases = TryGetListDiscriminantCases(metadata);
+            if (cases is null || cases.Count == 0)
+            {
+                return false;
+            }
+
+            _ = sb.AppendLine("var reader = new CborReader(data, CborConformanceMode.Lax);");
+            _ = sb.AppendLine("if (reader.PeekState() != CborReaderState.StartArray)");
+            _ = sb.AppendLine("{");
+            _ = sb.AppendLine($"    throw new Exception(\"Union deserialization failed. {metadata.FullyQualifiedName}: expected array state\");");
+            _ = sb.AppendLine("}");
+            _ = sb.AppendLine("reader.ReadStartArray();");
+            _ = sb.AppendLine("if (reader.PeekState() is not CborReaderState.UnsignedInteger and not CborReaderState.NegativeInteger)");
+            _ = sb.AppendLine("{");
+            _ = sb.AppendLine($"    throw new Exception(\"Union deserialization failed. {metadata.FullyQualifiedName}: expected integer discriminant\");");
+            _ = sb.AppendLine("}");
+            _ = sb.AppendLine("int discriminant = reader.ReadInt32();");
+            _ = sb.AppendLine("return discriminant switch");
+            _ = sb.AppendLine("{");
+            foreach (KeyValuePair<int, SerializableTypeMetadata> entry in cases.OrderBy(kvp => kvp.Key))
+            {
+                _ = sb.AppendLine($"    {entry.Key} => ({metadata.FullyQualifiedName}){entry.Value.FullyQualifiedName}.Read(data),");
+            }
+            _ = sb.AppendLine($"    _ => throw new Exception(\"Union deserialization failed. {metadata.FullyQualifiedName}: unknown discriminant \" + discriminant)");
+            _ = sb.AppendLine("};");
+
+            return true;
         }
 
-        /// <summary>
-        /// Emits a probe-based reader for CborMaybeIndefList that checks tag presence
-        /// and definite/indefinite encoding to determine the concrete variant without try-catch.
-        /// </summary>
-        private static StringBuilder EmitMaybeIndefListProbeReader(StringBuilder sb, SerializableTypeMetadata metadata)
+        private static Dictionary<int, SerializableTypeMetadata>? TryGetListDiscriminantCases(SerializableTypeMetadata metadata)
         {
-            string typeParams = metadata.TypeParams ?? "<T>";
-            string typeParam = typeParams.TrimStart('<').TrimEnd('>');
+            Dictionary<int, SerializableTypeMetadata> cases = [];
+            foreach (SerializableTypeMetadata child in metadata.ChildTypes)
+            {
+                if (child.SerializationType != SerializationType.List)
+                {
+                    return null;
+                }
 
-            string defListType = $"Chrysalis.Cbor.Types.CborDefList{typeParams}";
-            string indefListType = $"Chrysalis.Cbor.Types.CborIndefList{typeParams}";
-            string defListWithTagType = $"Chrysalis.Cbor.Types.CborDefListWithTag{typeParams}";
-            string indefListWithTagType = $"Chrysalis.Cbor.Types.CborIndefListWithTag{typeParams}";
+                SerializablePropertyMetadata? firstField = child.Properties
+                    .Where(p => p.Order is not null)
+                    .OrderBy(p => p.Order)
+                    .FirstOrDefault();
+                if (firstField is null || firstField.Order != 0)
+                {
+                    return null;
+                }
 
-            _ = sb.AppendLine($"var reader = new CborReader(data, CborConformanceMode.Lax);");
-            _ = sb.AppendLine($"bool hasTag258 = reader.PeekState() == CborReaderState.Tag;");
-            _ = sb.AppendLine($"if (hasTag258) {{ reader.ReadTag(); }}");
-            _ = sb.AppendLine($"int? arrayLength = reader.ReadStartArray();");
-            _ = sb.AppendLine($"bool isIndefinite = !arrayLength.HasValue;");
-            _ = sb.AppendLine($"List<{typeParam}> tempList = new();");
-            _ = sb.AppendLine($"while (reader.PeekState() != CborReaderState.EndArray)");
-            _ = sb.AppendLine("{");
-            _ = sb.AppendLine($"    tempList.Add({Emitter.GenericSerializationUtilFullname}.Read<{typeParam}>(reader));");
-            _ = sb.AppendLine("}");
-            _ = sb.AppendLine($"reader.ReadEndArray();");
-            _ = sb.AppendLine($"{metadata.FullyQualifiedName} result;");
-            _ = sb.AppendLine($"if (hasTag258)");
-            _ = sb.AppendLine("{");
-            _ = sb.AppendLine($"    result = isIndefinite");
-            _ = sb.AppendLine($"        ? new {indefListWithTagType}(tempList)");
-            _ = sb.AppendLine($"        : new {defListWithTagType}(tempList);");
-            _ = sb.AppendLine("}");
-            _ = sb.AppendLine($"else");
-            _ = sb.AppendLine("{");
-            _ = sb.AppendLine($"    result = isIndefinite");
-            _ = sb.AppendLine($"        ? new {indefListType}(tempList)");
-            _ = sb.AppendLine($"        : new {defListType}(tempList);");
-            _ = sb.AppendLine("}");
-            _ = sb.AppendLine($"if (isIndefinite)");
-            _ = sb.AppendLine("{");
-            _ = sb.AppendLine($"    result.IsIndefinite = true;");
-            _ = sb.AppendLine("}");
-            _ = sb.AppendLine($"return result;");
+                if (!TryExtractDiscriminantValue(firstField.PropertyTypeFullName, out int value))
+                {
+                    return null;
+                }
 
-            return sb;
+                if (cases.ContainsKey(value))
+                {
+                    return null;
+                }
+                cases[value] = child;
+            }
+
+            return cases;
+        }
+
+        private static bool TryExtractDiscriminantValue(string propertyTypeFullName, out int value)
+        {
+            const string ValueTypePrefix = "Value";
+            value = default;
+            string typeName = propertyTypeFullName.Split('.').Last();
+            if (!typeName.StartsWith(ValueTypePrefix, StringComparison.Ordinal))
+            {
+                return false;
+            }
+
+            string suffix = typeName.Substring(ValueTypePrefix.Length);
+            return int.TryParse(suffix, NumberStyles.Integer, CultureInfo.InvariantCulture, out value);
         }
 
         /// <summary>
