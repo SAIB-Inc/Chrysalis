@@ -11,6 +11,54 @@ namespace Chrysalis.Cbor.Serialization;
 /// </summary>
 public static class CborSerializer
 {
+    [ThreadStatic]
+    private static bool? t_preserveRawOverride;
+
+    /// <summary>
+    /// Gets or sets a value indicating whether deserialization preserves raw CBOR bytes by default.
+    /// </summary>
+    /// <remarks>
+    /// Use <see cref="UsePreserveRaw(bool)"/> to override this setting for a logical async flow.
+    /// </remarks>
+    public static bool PreserveRawByDefault { get; set; } = true;
+
+    /// <summary>
+    /// Gets a value indicating whether raw CBOR bytes should be preserved for the current thread.
+    /// </summary>
+    public static bool ShouldPreserveRaw
+    {
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        get => t_preserveRawOverride ?? PreserveRawByDefault;
+    }
+
+    /// <summary>
+    /// Temporarily overrides raw CBOR preservation for the current thread.
+    /// </summary>
+    /// <param name="preserveRaw">Whether to preserve raw CBOR bytes while the scope is active.</param>
+    /// <returns>A disposable scope that restores the previous setting when disposed.</returns>
+    public static IDisposable UsePreserveRaw(bool preserveRaw)
+    {
+        bool? previous = t_preserveRawOverride;
+        t_preserveRawOverride = preserveRaw;
+        return new PreserveRawScope(previous);
+    }
+
+    private sealed class PreserveRawScope(bool? previous) : IDisposable
+    {
+        private bool _disposed;
+
+        public void Dispose()
+        {
+            if (_disposed)
+            {
+                return;
+            }
+
+            t_preserveRawOverride = previous;
+            _disposed = true;
+        }
+    }
+
     /// <summary>
     /// Serializes a CborBase-derived object to a Concise Binary Object Representation (CBOR) byte array.
     /// </summary>
@@ -86,6 +134,29 @@ public static class CborSerializer
         CborReader reader = new(data, CborConformanceMode.Lax);
         T? result = GenericSerializationUtil.Read<T>(reader);
         return result ?? throw new InvalidOperationException("Deserialization failed: result is null.");
+    }
+
+    /// <summary>
+    /// Deserializes a CBOR byte array into an object of type T with raw-byte preservation disabled.
+    /// </summary>
+    /// <typeparam name="T">The target type for deserialization, which must inherit from CborBase.</typeparam>
+    /// <param name="data">The CBOR-encoded byte array to deserialize.</param>
+    /// <returns>A deserialized instance of type T.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static T DeserializeWithoutRaw<T>(ReadOnlyMemory<byte> data) where T : CborBase
+    {
+        bool? previous = t_preserveRawOverride;
+        t_preserveRawOverride = false;
+        try
+        {
+            CborReader reader = new(data, CborConformanceMode.Lax);
+            T? result = GenericSerializationUtil.Read<T>(reader);
+            return result ?? throw new InvalidOperationException("Deserialization failed: result is null.");
+        }
+        finally
+        {
+            t_preserveRawOverride = previous;
+        }
     }
 
     /// <summary>

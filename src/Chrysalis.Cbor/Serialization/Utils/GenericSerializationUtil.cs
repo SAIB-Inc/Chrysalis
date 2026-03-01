@@ -28,7 +28,70 @@ public delegate void WriteHandler<T>(CborWriter writer, T value);
 public static class GenericSerializationUtil
 {
     private static readonly ConcurrentDictionary<Type, Delegate> ReadMethodCache = [];
+    private static readonly ConcurrentDictionary<Type, object> ReadReaderMethodCache = [];
     private static readonly ConcurrentDictionary<Type, Delegate> WriteMethodCache = [];
+    private static readonly object ReadReaderDelegateMissingSentinel = new();
+
+    private static class GenericTypeCache<T>
+    {
+        public static readonly bool IsPrimitive = IsPrimitiveType(typeof(T));
+    }
+
+    private static class GenericReadCache<T>
+    {
+        public static readonly Func<CborReader, T>? ReaderDelegate = CreateReadReaderDelegate();
+        public static readonly ReadHandler<T>? MemoryDelegate = CreateReadMemoryDelegate();
+
+        private static Func<CborReader, T>? CreateReadReaderDelegate()
+        {
+            MethodInfo? readMethod = typeof(T).GetMethod(
+                "Read",
+                BindingFlags.Public | BindingFlags.Static | BindingFlags.FlattenHierarchy,
+                null,
+                [typeof(CborReader)],
+                null
+            );
+
+            if (readMethod is null)
+            {
+                return null;
+            }
+
+            try
+            {
+                return (Func<CborReader, T>)Delegate.CreateDelegate(typeof(Func<CborReader, T>), readMethod);
+            }
+            catch (ArgumentException)
+            {
+                return null;
+            }
+        }
+
+        private static ReadHandler<T>? CreateReadMemoryDelegate()
+        {
+            MethodInfo? readMethod = typeof(T).GetMethod(
+                "Read",
+                BindingFlags.Public | BindingFlags.Static | BindingFlags.FlattenHierarchy,
+                null,
+                [typeof(ReadOnlyMemory<byte>)],
+                null
+            );
+
+            if (readMethod is null)
+            {
+                return null;
+            }
+
+            try
+            {
+                return (ReadHandler<T>)Delegate.CreateDelegate(typeof(ReadHandler<T>), readMethod);
+            }
+            catch (ArgumentException)
+            {
+                return null;
+            }
+        }
+    }
 
     #region Read
 
@@ -42,7 +105,7 @@ public static class GenericSerializationUtil
     public static T? Read<T>(CborReader reader)
     {
         ArgumentNullException.ThrowIfNull(reader);
-        return IsPrimitiveType(typeof(T)) ? ReadPrimitive<T>(reader) : ReadNonPrimitive<T>(reader);
+        return GenericTypeCache<T>.IsPrimitive ? ReadPrimitive<T>(reader) : ReadNonPrimitive<T>(reader);
     }
 
     /// <summary>
@@ -227,19 +290,21 @@ public static class GenericSerializationUtil
     {
         ArgumentNullException.ThrowIfNull(reader);
 
+        if (GenericReadCache<T>.ReaderDelegate is Func<CborReader, T> readerDelegate)
+        {
+            return readerDelegate(reader);
+        }
+
         ReadOnlyMemory<byte> encodedValue = reader.ReadEncodedValue();
+
+        if (GenericReadCache<T>.MemoryDelegate is not ReadHandler<T> readDelegate)
+        {
+            throw new NotSupportedException($"Type {typeof(T).FullName} does not have a valid static Read method.");
+        }
 
         try
         {
-            if (!ReadMethodCache.TryGetValue(typeof(T), out Delegate? readDelegate))
-            {
-                MethodInfo readMethod = typeof(T).GetMethod("Read", BindingFlags.Public | BindingFlags.Static | BindingFlags.FlattenHierarchy, null, [typeof(ReadOnlyMemory<byte>)], null) ?? throw new NotSupportedException($"Type {typeof(T).FullName} does not have a valid static Read method.");
-
-                readDelegate = (ReadHandler<T>)Delegate.CreateDelegate(typeof(ReadHandler<T>), readMethod);
-                ReadMethodCache[typeof(T)] = readDelegate;
-            }
-
-            return ((ReadHandler<T>)readDelegate)(encodedValue);
+            return readDelegate(encodedValue);
         }
         catch (Exception ex)
         {
@@ -258,6 +323,17 @@ public static class GenericSerializationUtil
     {
         ArgumentNullException.ThrowIfNull(type);
         ArgumentNullException.ThrowIfNull(reader);
+
+        if (!ReadReaderMethodCache.TryGetValue(type, out object? readerDelegateObj))
+        {
+            readerDelegateObj = CreateReadReaderDelegateOrSentinel(type);
+            ReadReaderMethodCache[type] = readerDelegateObj;
+        }
+
+        if (!ReferenceEquals(readerDelegateObj, ReadReaderDelegateMissingSentinel))
+        {
+            return ((Delegate)readerDelegateObj).DynamicInvoke(reader);
+        }
 
         ReadOnlyMemory<byte> encodedValue = reader.ReadEncodedValue();
 
@@ -294,6 +370,33 @@ public static class GenericSerializationUtil
         catch (Exception ex) when (ex is not InvalidOperationException)
         {
             throw new InvalidOperationException($"Failed to read type {type.FullName} via delegate invocation: {ex.Message}", ex);
+        }
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static object CreateReadReaderDelegateOrSentinel(Type type)
+    {
+        MethodInfo? readMethod = type.GetMethod(
+            "Read",
+            BindingFlags.Public | BindingFlags.Static | BindingFlags.FlattenHierarchy,
+            null,
+            [typeof(CborReader)],
+            null
+        );
+
+        if (readMethod is null)
+        {
+            return ReadReaderDelegateMissingSentinel;
+        }
+
+        Type delegateType = typeof(Func<,>).MakeGenericType(typeof(CborReader), type);
+        try
+        {
+            return Delegate.CreateDelegate(delegateType, readMethod);
+        }
+        catch (ArgumentException)
+        {
+            return ReadReaderDelegateMissingSentinel;
         }
     }
 

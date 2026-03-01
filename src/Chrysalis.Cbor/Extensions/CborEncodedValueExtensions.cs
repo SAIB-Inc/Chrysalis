@@ -32,11 +32,47 @@ public static class CborEncodedValueExtensions
     /// <returns>The deserialized object.</returns>
     public static T Deserialize<T>(this CborEncodedValue self) where T : CborBase
     {
+        return Deserialize<T>(self, preserveRaw: true);
+    }
+
+    /// <summary>
+    /// Unwraps the CBOR tag 24 envelope and deserializes the inner byte string directly
+    /// as <typeparamref name="T"/> without allocating an intermediate byte[].
+    /// </summary>
+    /// <typeparam name="T">The CBOR type to deserialize the inner value as.</typeparam>
+    /// <param name="self">The CBOR encoded value.</param>
+    /// <param name="preserveRaw">Whether to preserve raw CBOR bytes on decoded model instances.</param>
+    /// <returns>The deserialized object.</returns>
+    public static T Deserialize<T>(this CborEncodedValue self, bool preserveRaw) where T : CborBase
+    {
         ArgumentNullException.ThrowIfNull(self);
         ReadOnlySpan<byte> span = self.Value.Span;
         int tagHeaderSize = CborHeaderSize(span);
         int bstrHeaderSize = CborHeaderSize(span[tagHeaderSize..]);
-        return CborSerializer.Deserialize<T>(self.Value[(tagHeaderSize + bstrHeaderSize)..]);
+        ReadOnlyMemory<byte> payload = self.Value[(tagHeaderSize + bstrHeaderSize)..];
+        if (!preserveRaw)
+        {
+            return CborSerializer.DeserializeWithoutRaw<T>(payload);
+        }
+
+        if (CborSerializer.ShouldPreserveRaw)
+        {
+            return CborSerializer.Deserialize<T>(payload);
+        }
+
+        using IDisposable preserveRawScope = CborSerializer.UsePreserveRaw(true);
+        return CborSerializer.Deserialize<T>(payload);
+    }
+
+    /// <summary>
+    /// Deserializes the inner CBOR value with raw-byte preservation disabled.
+    /// </summary>
+    /// <typeparam name="T">The CBOR type to deserialize the inner value as.</typeparam>
+    /// <param name="self">The CBOR encoded value.</param>
+    /// <returns>The deserialized object.</returns>
+    public static T DeserializeWithoutRaw<T>(this CborEncodedValue self) where T : CborBase
+    {
+        return Deserialize<T>(self, preserveRaw: false);
     }
 
     /// <summary>

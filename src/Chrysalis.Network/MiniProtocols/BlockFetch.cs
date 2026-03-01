@@ -105,7 +105,7 @@ public class BlockFetch(AgentChannel channel) : IMiniProtocol
             switch (blockMsg)
             {
                 case BlockBody block:
-                    yield return block.Body.Deserialize<T>();
+                    yield return block.Body.DeserializeWithoutRaw<T>();
                     break;
 
                 case BatchDone:

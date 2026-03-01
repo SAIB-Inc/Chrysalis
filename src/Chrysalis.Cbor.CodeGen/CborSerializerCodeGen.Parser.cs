@@ -19,6 +19,8 @@ public sealed partial class CborSerializerCodeGen
         public const string CborList = "CborList";
         public const string CborUnion = "CborUnion";
         public const string CborUnionAttribute = "CborUnionAttribute";
+        public const string CborUnionCase = "CborUnionCase";
+        public const string CborUnionCaseAttribute = "CborUnionCaseAttribute";
         public const string CborConstr = "CborConstr";
         public const string CborTag = "CborTag";
         public const string CborOrder = "CborOrder";
@@ -71,6 +73,7 @@ public sealed partial class CborSerializerCodeGen
             AttributeSyntax? cborMapAttribute = attributes.FirstOrDefault(a => a.Name.ToString() == CborMap);
             AttributeSyntax? cborListAttribute = attributes.FirstOrDefault(a => a.Name.ToString() == CborList);
             AttributeSyntax? cborUnionAttribute = attributes.FirstOrDefault(a => a.Name.ToString() == CborUnion);
+            AttributeSyntax? cborUnionCaseAttribute = attributes.FirstOrDefault(a => a.Name.ToString() == CborUnionCase);
             AttributeSyntax? cborConstrAttribute = attributes.FirstOrDefault(a => a.Name.ToString() == CborConstr);
             AttributeSyntax? cborTagAttribute = attributes.FirstOrDefault(a => a.Name.ToString() == CborTag);
             AttributeSyntax? cborIndefiniteAttribute = attributes.FirstOrDefault(a => a.Name.ToString() == CborIndefinite);
@@ -78,6 +81,7 @@ public sealed partial class CborSerializerCodeGen
 
             int? constrIndex = cborConstrAttribute?.ArgumentList?.Arguments.FirstOrDefault()?.GetFirstToken().Value as int?;
             int? cborTag = cborTagAttribute?.ArgumentList?.Arguments.FirstOrDefault()?.GetFirstToken().Value as int?;
+            int? unionCaseDiscriminant = TryGetSingleIntArgument(cborUnionCaseAttribute, model);
             bool shouldPreserveRaw = ShouldPreserveRaw(tds, model);
 
             SerializationType serializationType = GetSerializationType(cborMapAttribute, cborListAttribute, cborUnionAttribute, cborConstrAttribute);
@@ -94,6 +98,7 @@ public sealed partial class CborSerializerCodeGen
                 fullyQualifiedName,
                 keyword,
                 cborTag,
+                unionCaseDiscriminant,
                 constrIndex,
                 cborIndefiniteAttribute != null,
                 cborDefiniteAttribute != null,
@@ -154,6 +159,26 @@ public sealed partial class CborSerializerCodeGen
                     : cborConstrAttribute != null ? SerializationType.Constr : SerializationType.Container;
     }
 
+    private static int? TryGetSingleIntArgument(AttributeSyntax? attribute, SemanticModel model)
+    {
+        if (attribute?.ArgumentList?.Arguments.Count is not > 0)
+        {
+            return null;
+        }
+
+        ExpressionSyntax expression = attribute.ArgumentList.Arguments[0].Expression;
+        Optional<object?> constantValue = model.GetConstantValue(expression);
+        object? argumentValue = constantValue.HasValue ? constantValue.Value : null;
+        return argumentValue switch
+        {
+            int intValue => intValue,
+            uint uintValue when uintValue <= int.MaxValue => (int)uintValue,
+            long longValue when longValue is >= int.MinValue and <= int.MaxValue => (int)longValue,
+            ulong ulongValue when ulongValue <= int.MaxValue => (int)ulongValue,
+            _ => null
+        };
+    }
+
     private static string? FindValidatorForType(TypeDeclarationSyntax typeDecl, SemanticModel semanticModel, Compilation compilation)
     {
         if (semanticModel.GetDeclaredSymbol(typeDecl) is not INamedTypeSymbol typeSymbol)
@@ -203,7 +228,7 @@ public sealed partial class CborSerializerCodeGen
             string propertyTypeFullName = propertyTypeSymbol?.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) ?? string.Empty;
             string propertyTypeNamespace = propertyTypeSymbol?.ContainingNamespace.ToDisplayString() ?? string.Empty;
             bool useReaderOverloadForType = propertyTypeSymbol is ITypeSymbol propertyTypeITypeSymbol &&
-                                            CanUseReaderOverload(propertyTypeITypeSymbol, model.Compilation);
+                                            CanUseReaderOverload(propertyTypeITypeSymbol);
             bool isNullable = attributes.FirstOrDefault(a => a.Name.ToString() == Parser.CborNullable) is not null;
             bool isIndefinite = attributes.FirstOrDefault(a => a.Name.ToString() == Parser.CborIndefinite) is not null;
             bool isDefinite = attributes.FirstOrDefault(a => a.Name.ToString() == Parser.CborDefinite) is not null;
@@ -341,7 +366,7 @@ public sealed partial class CborSerializerCodeGen
 
             if (typeSymbol is ITypeSymbol ts)
             {
-                useReaderOverloadForType = CanUseReaderOverload(ts, model.Compilation);
+                useReaderOverloadForType = CanUseReaderOverload(ts);
 
                 if (IsMapType(ts, out ITypeSymbol? keyTypeSymbol, out ITypeSymbol? valueTypeSymbol))
                 {
@@ -367,8 +392,8 @@ public sealed partial class CborSerializerCodeGen
 
                     mapKeyTypeFullName = keyTypeSymbol?.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
                     mapValueTypeFullName = valueTypeSymbol?.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
-                    useReaderOverloadForMapKey = keyTypeSymbol is not null && CanUseReaderOverload(keyTypeSymbol, model.Compilation);
-                    useReaderOverloadForMapValue = valueTypeSymbol is not null && CanUseReaderOverload(valueTypeSymbol, model.Compilation);
+                    useReaderOverloadForMapKey = keyTypeSymbol is not null && CanUseReaderOverload(keyTypeSymbol);
+                    useReaderOverloadForMapValue = valueTypeSymbol is not null && CanUseReaderOverload(valueTypeSymbol);
 
                 }
                 else if (IsListType(ts, out ITypeSymbol? itemTypeSymbol))
@@ -382,7 +407,7 @@ public sealed partial class CborSerializerCodeGen
                         (itemTypeSymbol is INamedTypeSymbol namedItemType &&
                             namedItemType.IsGenericType &&
                             namedItemType.TypeArguments.Any(ta => ta.TypeKind == TypeKind.TypeParameter));
-                    useReaderOverloadForListItem = itemTypeSymbol is not null && CanUseReaderOverload(itemTypeSymbol, model.Compilation);
+                    useReaderOverloadForListItem = itemTypeSymbol is not null && CanUseReaderOverload(itemTypeSymbol);
                 }
             }
 
@@ -567,36 +592,33 @@ public sealed partial class CborSerializerCodeGen
         return false;
     }
 
-    private static bool CanUseReaderOverload(ITypeSymbol typeSymbol, Compilation compilation)
+    private static bool CanUseReaderOverload(ITypeSymbol typeSymbol)
     {
         if (typeSymbol is not INamedTypeSymbol namedTypeSymbol)
         {
             return false;
         }
 
-        bool isCborSerializable = namedTypeSymbol.GetAttributes().Any(a =>
-            a.AttributeClass?.Name is Parser.CborSerializable or Parser.CborSerializableAttribute);
-
-        if (!isCborSerializable)
+        static bool HasAnyAttribute(INamedTypeSymbol symbol, string name, string attributeName)
         {
-            return false;
+            return symbol.GetAttributes().Any(a =>
+                a.AttributeClass?.Name is not null &&
+                (a.AttributeClass.Name == name || a.AttributeClass.Name == attributeName));
         }
 
-        bool isUnionType = namedTypeSymbol.GetAttributes().Any(a =>
-            a.AttributeClass?.Name is Parser.CborUnion or Parser.CborUnionAttribute);
-
-        if (isUnionType)
+        bool isCborSerializable = HasAnyAttribute(namedTypeSymbol, Parser.CborSerializable, Parser.CborSerializableAttribute);
+        if (!isCborSerializable &&
+            namedTypeSymbol.IsGenericType &&
+            !SymbolEqualityComparer.Default.Equals(namedTypeSymbol, namedTypeSymbol.OriginalDefinition))
         {
-            return false;
+            isCborSerializable = HasAnyAttribute(
+                namedTypeSymbol.OriginalDefinition,
+                Parser.CborSerializable,
+                Parser.CborSerializableAttribute
+            );
         }
 
-        INamedTypeSymbol? preserveRawInterface = compilation.GetTypeByMetadataName(Parser.ICborPreserveRawFullName);
-        return preserveRawInterface is not null
-            ? !namedTypeSymbol.AllInterfaces.Any(i => SymbolEqualityComparer.Default.Equals(i, preserveRawInterface))
-            : !namedTypeSymbol.AllInterfaces.Any(i =>
-            i.ToDisplayString() == Parser.ICborPreserveRaw ||
-            i.ToDisplayString() == Parser.ICborPreserveRawFullName ||
-            i.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) == $"global::{Parser.ICborPreserveRawFullName}");
+        return isCborSerializable;
     }
 
     private static bool IsListType(ITypeSymbol? typeSymbol, out ITypeSymbol? itemType)

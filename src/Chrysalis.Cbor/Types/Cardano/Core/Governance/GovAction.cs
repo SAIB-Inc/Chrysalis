@@ -20,6 +20,7 @@ public abstract partial record GovAction : CborBase { }
 /// <param name="ProtocolParamUpdate">The proposed protocol parameter changes.</param>
 /// <param name="PolicyHash">The optional policy hash authorizing the change.</param>
 [CborSerializable]
+[CborUnionCase(0)]
 [CborList]
 public partial record ParameterChangeAction(
     [CborOrder(0)] int ActionType,
@@ -35,6 +36,7 @@ public partial record ParameterChangeAction(
 /// <param name="GovActionId">The optional previous governance action identifier.</param>
 /// <param name="ProtocolVersion">The target protocol version for the hard fork.</param>
 [CborSerializable]
+[CborUnionCase(1)]
 [CborList]
 public partial record HardForkInitiationAction(
      [CborOrder(0)] int ActionType,
@@ -49,6 +51,7 @@ public partial record HardForkInitiationAction(
 /// <param name="Withdrawals">The proposed treasury withdrawals mapped by reward account.</param>
 /// <param name="PolicyHash">The optional policy hash authorizing the withdrawal.</param>
 [CborSerializable]
+[CborUnionCase(2)]
 [CborList]
 public partial record TreasuryWithdrawalsAction(
      [CborOrder(0)] int ActionType,
@@ -62,6 +65,7 @@ public partial record TreasuryWithdrawalsAction(
 /// <param name="ActionType">The governance action type tag.</param>
 /// <param name="GovActionId">The optional previous governance action identifier.</param>
 [CborSerializable]
+[CborUnionCase(3)]
 [CborList]
 public partial record NoConfidence(
     [CborOrder(0)] int ActionType,
@@ -77,6 +81,7 @@ public partial record NoConfidence(
 /// <param name="MemberTermLimits">The new committee members with their term limits.</param>
 /// <param name="QuorumThreshold">The new quorum threshold as a rational number.</param>
 [CborSerializable]
+[CborUnionCase(4)]
 [CborList]
 public partial record UpdateCommittee(
     [CborOrder(0)] int ActionType,
@@ -93,6 +98,7 @@ public partial record UpdateCommittee(
 /// <param name="GovActionId">The optional previous governance action identifier.</param>
 /// <param name="Constitution">The new constitution to adopt.</param>
 [CborSerializable]
+[CborUnionCase(5)]
 [CborList]
 public partial record NewConstitution(
     [CborOrder(0)] int ActionType,
@@ -105,6 +111,7 @@ public partial record NewConstitution(
 /// </summary>
 /// <param name="Value">The action type tag value.</param>
 [CborSerializable]
+[CborUnionCase(6)]
 [CborList]
 public partial record InfoAction(
     [CborOrder(0)] int Value

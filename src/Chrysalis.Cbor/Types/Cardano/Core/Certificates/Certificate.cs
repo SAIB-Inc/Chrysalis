@@ -17,6 +17,7 @@ public abstract partial record Certificate : CborBase { }
 /// <param name="Tag">The certificate tag value.</param>
 /// <param name="StakeCredential">The stake credential being registered.</param>
 [CborSerializable]
+[CborUnionCase(0)]
 [CborList]
 public partial record StakeRegistration(
    [CborOrder(0)] int Tag,
@@ -29,6 +30,7 @@ public partial record StakeRegistration(
 /// <param name="Tag">The certificate tag value.</param>
 /// <param name="StakeCredential">The stake credential being deregistered.</param>
 [CborSerializable]
+[CborUnionCase(1)]
 [CborList]
 public partial record StakeDeregistration(
     [CborOrder(0)] int Tag,
@@ -42,6 +44,7 @@ public partial record StakeDeregistration(
 /// <param name="StakeCredential">The stake credential being delegated.</param>
 /// <param name="PoolKeyHash">The hash of the target pool's key.</param>
 [CborSerializable]
+[CborUnionCase(2)]
 [CborList]
 public partial record StakeDelegation(
     [CborOrder(0)] int Tag,
@@ -63,6 +66,7 @@ public partial record StakeDelegation(
 /// <param name="Relay">The list of pool relays.</param>
 /// <param name="PoolMetadata">The optional pool metadata reference.</param>
 [CborSerializable]
+[CborUnionCase(3)]
 [CborList]
 public partial record PoolRegistration(
     [CborOrder(0)] int Tag,
@@ -84,6 +88,7 @@ public partial record PoolRegistration(
 /// <param name="PoolKeyHash">The hash of the pool's key being retired.</param>
 /// <param name="EpochNo">The epoch number at which the pool will be retired.</param>
 [CborSerializable]
+[CborUnionCase(4)]
 [CborList]
 public partial record PoolRetirement(
     [CborOrder(0)] int Tag,
@@ -98,6 +103,7 @@ public partial record PoolRetirement(
 /// <param name="StakeCredential">The stake credential being registered.</param>
 /// <param name="Coin">The deposit amount in lovelace.</param>
 [CborSerializable]
+[CborUnionCase(7)]
 [CborList]
 public partial record RegCert(
     [CborOrder(0)] int Tag,
@@ -112,6 +118,7 @@ public partial record RegCert(
 /// <param name="StakeCredential">The stake credential being unregistered.</param>
 /// <param name="Coin">The deposit refund amount in lovelace.</param>
 [CborSerializable]
+[CborUnionCase(8)]
 [CborList]
 public partial record UnRegCert(
     [CborOrder(0)] int Tag,
@@ -126,6 +133,7 @@ public partial record UnRegCert(
 /// <param name="StakeCredential">The stake credential delegating voting power.</param>
 /// <param name="DRep">The target DRep for vote delegation.</param>
 [CborSerializable]
+[CborUnionCase(9)]
 [CborList]
 public partial record VoteDelegCert(
     [CborOrder(0)] int Tag,
@@ -141,6 +149,7 @@ public partial record VoteDelegCert(
 /// <param name="PoolKeyHash">The hash of the target pool's key.</param>
 /// <param name="DRep">The target DRep for vote delegation.</param>
 [CborSerializable]
+[CborUnionCase(10)]
 [CborList]
 public partial record StakeVoteDelegCert(
     [CborOrder(0)] int Tag,
@@ -157,6 +166,7 @@ public partial record StakeVoteDelegCert(
 /// <param name="PoolKeyHash">The hash of the target pool's key.</param>
 /// <param name="Coin">The deposit amount in lovelace.</param>
 [CborSerializable]
+[CborUnionCase(11)]
 [CborList]
 public partial record StakeRegDelegCert(
     [CborOrder(0)] int Tag,
@@ -173,6 +183,7 @@ public partial record StakeRegDelegCert(
 /// <param name="DRep">The target DRep for vote delegation.</param>
 /// <param name="Coin">The deposit amount in lovelace.</param>
 [CborSerializable]
+[CborUnionCase(12)]
 [CborList]
 public partial record VoteRegDelegCert(
     [CborOrder(0)] int Tag,
@@ -190,6 +201,7 @@ public partial record VoteRegDelegCert(
 /// <param name="Drep">The target DRep for vote delegation.</param>
 /// <param name="Coin">The deposit amount in lovelace.</param>
 [CborSerializable]
+[CborUnionCase(13)]
 [CborList]
 public partial record StakeVoteRegDelegCert(
     [CborOrder(0)] int Tag,
@@ -206,6 +218,7 @@ public partial record StakeVoteRegDelegCert(
 /// <param name="CommitteeColdCredential">The cold credential of the committee member.</param>
 /// <param name="CommitteeHotCredential">The hot credential being authorized.</param>
 [CborSerializable]
+[CborUnionCase(14)]
 [CborList]
 public partial record AuthCommitteeHotCert(
     [CborOrder(0)] int Tag,
@@ -220,6 +233,7 @@ public partial record AuthCommitteeHotCert(
 /// <param name="CommitteeColdCredential">The cold credential of the resigning committee member.</param>
 /// <param name="Anchor">The optional anchor with resignation metadata.</param>
 [CborSerializable]
+[CborUnionCase(15)]
 [CborList]
 public partial record ResignCommitteeColdCert(
     [CborOrder(0)] int Tag,
@@ -235,6 +249,7 @@ public partial record ResignCommitteeColdCert(
 /// <param name="Coin">The deposit amount in lovelace.</param>
 /// <param name="Anchor">The optional anchor with DRep metadata.</param>
 [CborSerializable]
+[CborUnionCase(16)]
 [CborList]
 public partial record RegDrepCert(
     [CborOrder(0)] int Tag,
@@ -250,6 +265,7 @@ public partial record RegDrepCert(
 /// <param name="DrepCredential">The credential of the DRep being unregistered.</param>
 /// <param name="Coin">The deposit refund amount in lovelace.</param>
 [CborSerializable]
+[CborUnionCase(17)]
 [CborList]
 public partial record UnRegDrepCert(
     [CborOrder(0)] int Tag,
@@ -264,6 +280,7 @@ public partial record UnRegDrepCert(
 /// <param name="DrepCredential">The credential of the DRep being updated.</param>
 /// <param name="Anchor">The optional new anchor with updated DRep metadata.</param>
 [CborSerializable]
+[CborUnionCase(18)]
 [CborList]
 public partial record UpdateDrepCert(
     [CborOrder(0)] int Tag,
@@ -279,6 +296,7 @@ public partial record UpdateDrepCert(
 /// <param name="GenesisDelegateHash">The genesis delegate key hash.</param>
 /// <param name="VrfKeyHash">The VRF verification key hash.</param>
 [CborSerializable]
+[CborUnionCase(5)]
 [CborList]
 public partial record GenesisKeyDelegation(
     [CborOrder(0)] int Tag,
@@ -293,6 +311,7 @@ public partial record GenesisKeyDelegation(
 /// <param name="Tag">The certificate tag value.</param>
 /// <param name="MoveInstantaneousReward">The move instantaneous reward details.</param>
 [CborSerializable]
+[CborUnionCase(6)]
 [CborList]
 public partial record MoveInstantaneousRewardsCert(
     [CborOrder(0)] int Tag,

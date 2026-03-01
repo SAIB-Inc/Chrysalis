@@ -19,6 +19,7 @@ public sealed partial class CborSerializerCodeGen
         string fullyQualifiedName,
         string keyword,
         int? cborTag,
+        int? unionCaseDiscriminant,
         int? cborIndex,
         bool isIndefinite,
         bool isDefinite,
@@ -34,6 +35,7 @@ public sealed partial class CborSerializerCodeGen
         public string FullyQualifiedName { get; } = fullyQualifiedName;
         public string Keyword { get; } = keyword;
         public int? CborTag { get; } = cborTag;
+        public int? UnionCaseDiscriminant { get; } = unionCaseDiscriminant;
         public int? CborIndex { get; } = cborIndex;
         public bool IsIndefinite { get; } = isIndefinite;
         public bool IsDefinite { get; } = isDefinite;
@@ -56,6 +58,7 @@ public sealed partial class CborSerializerCodeGen
                 // FullyQualifiedName: {{FullyQualifiedName}}
                 // SerializationType: {{SerializationType}}
                 // CborTag: {{CborTag}}
+                // UnionCaseDiscriminant: {{UnionCaseDiscriminant}}
                 // CborIndex: {{CborIndex}}
                 // IsIndefinite: {{IsIndefinite}}
                 // IsDefinite: {{IsDefinite}}

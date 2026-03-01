@@ -16,6 +16,7 @@ public abstract partial record DatumOption : CborBase { }
 /// <param name="Option">The option tag (0 for datum hash).</param>
 /// <param name="DatumHash">The hash of the referenced datum.</param>
 [CborSerializable]
+[CborUnionCase(0)]
 [CborList]
 public partial record DatumHashOption(
     [CborOrder(0)] int Option,
@@ -28,6 +29,7 @@ public partial record DatumHashOption(
 /// <param name="Option">The option tag (1 for inline datum).</param>
 /// <param name="Data">The inline datum encoded as a CBOR value.</param>
 [CborSerializable]
+[CborUnionCase(1)]
 [CborList]
 public partial record InlineDatumOption(
     [CborOrder(0)] int Option,

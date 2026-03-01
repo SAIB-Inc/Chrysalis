@@ -1,4 +1,3 @@
-using System.Globalization;
 using System.Text;
 using Microsoft.CodeAnalysis;
 
@@ -37,51 +36,6 @@ public sealed partial class CborSerializerCodeGen
 
             _ = sb.AppendLine($"public partial {metadata?.Keyword} {metadata?.Indentifier}");
             _ = sb.AppendLine("{");
-
-            // Type Mapping
-            if (metadata?.SerializationType is SerializationType.Map)
-            {
-                bool isIntKey = metadata.Properties[0].PropertyKeyInt is not null;
-                _ = sb.AppendLine($"static Dictionary<{(isIntKey ? "int" : "string")}, Type> TypeMapping = new()");
-                _ = sb.AppendLine("{");
-
-                List<SerializablePropertyMetadata> properties = [.. metadata.Properties];
-                for (int i = 0; i < properties.Count; i++)
-                {
-                    SerializablePropertyMetadata prop = properties[i];
-                    string? keyValue = isIntKey ? prop.PropertyKeyInt?.ToString(CultureInfo.InvariantCulture) : prop.PropertyKeyString;
-
-                    _ = i == properties.Count - 1
-                        ? sb.AppendLine($"  {{{keyValue}, typeof({prop.PropertyTypeFullName})}}")
-                        : sb.AppendLine($"  {{{keyValue}, typeof({prop.PropertyTypeFullName})}},");
-                }
-
-                _ = sb.AppendLine("};");
-                _ = sb.AppendLine();
-            }
-
-            // Property Key Mapping
-            if (metadata?.SerializationType is SerializationType.Map)
-            {
-                bool isIntKey = metadata.Properties[0].PropertyKeyInt is not null;
-                _ = sb.AppendLine($"static Dictionary<string, {(isIntKey ? "int" : "string")}> KeyMapping = new()");
-                _ = sb.AppendLine("{");
-
-                List<SerializablePropertyMetadata> properties = [.. metadata.Properties];
-                for (int i = 0; i < properties.Count; i++)
-                {
-                    SerializablePropertyMetadata prop = properties[i];
-                    string? keyValue = $"\"{prop.PropertyName}\"";
-                    string? value = isIntKey ? prop.PropertyKeyInt?.ToString(CultureInfo.InvariantCulture) : prop.PropertyKeyString;
-
-                    _ = i == properties.Count - 1
-                        ? sb.AppendLine($"  {{{keyValue}, {value}}}")
-                        : sb.AppendLine($"  {{{keyValue}, {value}}},");
-                }
-
-                _ = sb.AppendLine("};");
-                _ = sb.AppendLine();
-            }
 
             _ = EmitSerializableTypeReader(sb, metadata!);
 

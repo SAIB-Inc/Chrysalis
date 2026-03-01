@@ -13,7 +13,7 @@ public sealed partial class CborSerializerCodeGen
                 _ = Emitter.EmitCborReaderInstance(sb, "data");
             }
             _ = Emitter.EmitTagReader(sb, metadata.CborTag, "tagIndex");
-            _ = Emitter.EmitCustomListReader(sb, metadata);
+            _ = Emitter.EmitCustomListReader(sb, metadata, useExistingReader);
             return sb;
         }
 

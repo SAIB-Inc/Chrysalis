@@ -22,7 +22,7 @@ public sealed partial class CborSerializerCodeGen
             string propName = $"{metadata.BaseIdentifier}{prop.PropertyName}";
             _ = Emitter.EmitSerializablePropertyReader(sb, prop, propName);
             _ = sb.AppendLine($"var result = new {metadata.FullyQualifiedName}({propName});");
-            _ = Emitter.EmitReaderValidationAndResult(sb, metadata, "result");
+            _ = Emitter.EmitReaderValidationAndResult(sb, metadata, "result", hasInputData: !useExistingReader);
 
             return sb;
         }

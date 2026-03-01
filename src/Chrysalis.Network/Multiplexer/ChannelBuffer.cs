@@ -199,7 +199,7 @@ public sealed class ChannelBuffer(AgentChannel channel)
             if (buffer.IsSingleSegment)
             {
                 ReadOnlyMemory<byte> messageBuffer = buffer.First[..messageLength];
-                result = CborSerializer.Deserialize<T>(messageBuffer);
+                result = CborSerializer.DeserializeWithoutRaw<T>(messageBuffer);
             }
 
             else
@@ -208,7 +208,7 @@ public sealed class ChannelBuffer(AgentChannel channel)
                 try
                 {
                     buffer.Slice(0, messageLength).CopyTo(rentedBuffer.AsSpan(0, messageLength));
-                    result = CborSerializer.Deserialize<T>(rentedBuffer.AsMemory(0, messageLength));
+                    result = CborSerializer.DeserializeWithoutRaw<T>(rentedBuffer.AsMemory(0, messageLength));
                 }
                 finally
                 {

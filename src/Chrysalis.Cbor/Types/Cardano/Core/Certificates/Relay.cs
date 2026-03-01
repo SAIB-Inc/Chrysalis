@@ -17,6 +17,7 @@ public abstract partial record Relay : CborBase { }
 /// <param name="IPv4">The optional IPv4 address bytes.</param>
 /// <param name="IPv6">The IPv6 address bytes.</param>
 [CborSerializable]
+[CborUnionCase(0)]
 [CborList]
 public partial record SingleHostAddr(
    [CborOrder(0)] int Tag,
@@ -32,6 +33,7 @@ public partial record SingleHostAddr(
 /// <param name="Port">The optional port number.</param>
 /// <param name="DNSName">The DNS hostname of the relay.</param>
 [CborSerializable]
+[CborUnionCase(1)]
 [CborList]
 public partial record SingleHostName(
     [CborOrder(0)] int Tag,
@@ -45,6 +47,7 @@ public partial record SingleHostName(
 /// <param name="Tag">The certificate tag value.</param>
 /// <param name="DNSName">The DNS hostname of the relay.</param>
 [CborSerializable]
+[CborUnionCase(2)]
 [CborList]
 public partial record MultiHostName(
     [CborOrder(0)] int Tag,

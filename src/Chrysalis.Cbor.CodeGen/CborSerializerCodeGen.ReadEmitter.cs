@@ -20,7 +20,7 @@ public sealed partial class CborSerializerCodeGen
             _ = emitter.EmitReader(sb, metadata, useExistingReader: false);
             _ = sb.AppendLine("}");
 
-            bool shouldEmitReaderOverload = metadata.SerializationType != SerializationType.Union && !metadata.ShouldPreserveRaw;
+            bool shouldEmitReaderOverload = true;
             if (shouldEmitReaderOverload)
             {
                 _ = sb.AppendLine();
@@ -29,8 +29,16 @@ public sealed partial class CborSerializerCodeGen
                 _ = sb.AppendLine("/// </summary>");
                 _ = sb.AppendLine("/// <param name=\"reader\">The CBOR reader positioned at the start of the value.</param>");
                 _ = sb.AppendLine($"/// <returns>A deserialized <see cref=\"{xmlSafeId}\"/> instance.</returns>");
-                _ = sb.AppendLine($"public static {metadata.FullyQualifiedName} Read(CborReader reader)");
+                _ = sb.AppendLine($"public static new {metadata.FullyQualifiedName} Read(CborReader reader)");
                 _ = sb.AppendLine("{");
+                if (metadata.ShouldPreserveRaw)
+                {
+                    _ = sb.AppendLine("if (global::Chrysalis.Cbor.Serialization.CborSerializer.ShouldPreserveRaw)");
+                    _ = sb.AppendLine("{");
+                    _ = sb.AppendLine("    ReadOnlyMemory<byte> data = reader.ReadEncodedValue(true);");
+                    _ = sb.AppendLine("    return Read(data);");
+                    _ = sb.AppendLine("}");
+                }
                 _ = emitter.EmitReader(sb, metadata, useExistingReader: true);
                 _ = sb.AppendLine("}");
             }
@@ -38,7 +46,15 @@ public sealed partial class CborSerializerCodeGen
             return sb;
         }
 
-        public static StringBuilder EmitSerializablePropertyReader(StringBuilder sb, SerializablePropertyMetadata metadata, string propertyName, bool isList = false, bool trackFields = false, int fieldIndex = -1)
+        public static StringBuilder EmitSerializablePropertyReader(
+            StringBuilder sb,
+            SerializablePropertyMetadata metadata,
+            string propertyName,
+            bool isList = false,
+            bool trackFields = false,
+            int fieldIndex = -1,
+            bool useFieldBitset = false,
+            bool assumeNoPreserveRaw = false)
         {
             _ = sb.AppendLine($"{metadata.PropertyTypeFullName} {propertyName} = default{(metadata.PropertyType.Contains("?") ? "" : "!")};");
 
@@ -62,7 +78,9 @@ public sealed partial class CborSerializerCodeGen
                 // Track that this field was read for validation - only if we actually declared the array
                 if (trackFields && fieldIndex >= 0)
                 {
-                    _ = sb.AppendLine($"fieldsRead[{fieldIndex}] = true;");
+                    _ = useFieldBitset
+                        ? sb.AppendLine($"fieldsReadBits |= 1UL << {fieldIndex};")
+                        : sb.AppendLine($"fieldsRead[{fieldIndex}] = true;");
                 }
             }
 
@@ -81,7 +99,7 @@ public sealed partial class CborSerializerCodeGen
                 _ = sb.AppendLine("{");
             }
 
-            _ = EmitPrimitiveOrObjectReader(sb, metadata, propertyName);
+            _ = EmitPrimitiveOrObjectReader(sb, metadata, propertyName, assumeNoPreserveRaw);
 
             if (metadata.IsNullable)
             {
@@ -200,7 +218,7 @@ public sealed partial class CborSerializerCodeGen
             return sb;
         }
 
-        public static StringBuilder EmitObjectPropertyReader(StringBuilder sb, SerializablePropertyMetadata metadata, string propertyName)
+        public static StringBuilder EmitObjectPropertyReader(StringBuilder sb, SerializablePropertyMetadata metadata, string propertyName, bool assumeNoPreserveRaw = false)
         {
             if (metadata.IsList)
             {
@@ -210,10 +228,10 @@ public sealed partial class CborSerializerCodeGen
                 }
 
                 _ = sb.AppendLine($"{metadata.ListItemTypeFullName} {propertyName}TempItem = default;");
-                _ = sb.AppendLine($"List<{metadata.ListItemTypeFullName}> {propertyName}TempList = new();");
                 // Read array start and check if it's indefinite
                 _ = sb.AppendLine($"int? {propertyName}ArrayLength = reader.ReadStartArray();");
                 _ = sb.AppendLine($"bool {propertyName}IsIndefinite = !{propertyName}ArrayLength.HasValue;");
+                _ = sb.AppendLine($"List<{metadata.ListItemTypeFullName}> {propertyName}TempList = {propertyName}ArrayLength.HasValue ? new List<{metadata.ListItemTypeFullName}>({propertyName}ArrayLength.Value) : new List<{metadata.ListItemTypeFullName}>();");
 
                 // Validate encoding based on attributes
                 if (metadata.IsIndefinite)
@@ -269,14 +287,14 @@ public sealed partial class CborSerializerCodeGen
                     throw new InvalidOperationException($"Map key or value type is null for property {metadata.PropertyName}");
                 }
 
-                _ = IsReadOnlyMemoryByteType(metadata.MapKeyTypeFullName)
-                    ? sb.AppendLine($"Dictionary<{metadata.MapKeyTypeFullName}, {metadata.MapValueTypeFullName}> {propertyName}TempMap = new(global::Chrysalis.Cbor.Serialization.Utils.ReadOnlyMemoryComparer.Instance);")
-                    : sb.AppendLine($"Dictionary<{metadata.MapKeyTypeFullName}, {metadata.MapValueTypeFullName}> {propertyName}TempMap = new();");
-                _ = sb.AppendLine($"{metadata.MapKeyTypeFullName} {propertyName}TempKeyItem = default;");
-                _ = sb.AppendLine($"{metadata.MapValueTypeFullName} {propertyName}TempValueItem = default;");
                 // Read map start and check if it's indefinite
                 _ = sb.AppendLine($"int? {propertyName}MapLength = reader.ReadStartMap();");
                 _ = sb.AppendLine($"bool {propertyName}MapIsIndefinite = !{propertyName}MapLength.HasValue;");
+                _ = IsReadOnlyMemoryByteType(metadata.MapKeyTypeFullName)
+                    ? sb.AppendLine($"Dictionary<{metadata.MapKeyTypeFullName}, {metadata.MapValueTypeFullName}> {propertyName}TempMap = {propertyName}MapLength.HasValue ? new Dictionary<{metadata.MapKeyTypeFullName}, {metadata.MapValueTypeFullName}>({propertyName}MapLength.Value, global::Chrysalis.Cbor.Serialization.Utils.ReadOnlyMemoryComparer.Instance) : new Dictionary<{metadata.MapKeyTypeFullName}, {metadata.MapValueTypeFullName}>(global::Chrysalis.Cbor.Serialization.Utils.ReadOnlyMemoryComparer.Instance);")
+                    : sb.AppendLine($"Dictionary<{metadata.MapKeyTypeFullName}, {metadata.MapValueTypeFullName}> {propertyName}TempMap = {propertyName}MapLength.HasValue ? new Dictionary<{metadata.MapKeyTypeFullName}, {metadata.MapValueTypeFullName}>({propertyName}MapLength.Value) : new Dictionary<{metadata.MapKeyTypeFullName}, {metadata.MapValueTypeFullName}>();");
+                _ = sb.AppendLine($"{metadata.MapKeyTypeFullName} {propertyName}TempKeyItem = default;");
+                _ = sb.AppendLine($"{metadata.MapValueTypeFullName} {propertyName}TempValueItem = default;");
 
                 // Validate encoding based on attributes
                 if (metadata.IsIndefinite)
@@ -331,10 +349,7 @@ public sealed partial class CborSerializerCodeGen
                     }
                 }
 
-                _ = sb.AppendLine($"if (!{propertyName}TempMap.ContainsKey({propertyName}TempKeyItem))");
-                _ = sb.AppendLine("{");
-                _ = sb.AppendLine($"{propertyName}TempMap.Add({propertyName}TempKeyItem, {propertyName}TempValueItem);");
-                _ = sb.AppendLine("}");
+                _ = sb.AppendLine($"_ = {propertyName}TempMap.TryAdd({propertyName}TempKeyItem, {propertyName}TempValueItem);");
 
                 _ = sb.AppendLine("}");
                 _ = sb.AppendLine($"reader.ReadEndMap();");
@@ -350,14 +365,14 @@ public sealed partial class CborSerializerCodeGen
             _ = metadata.IsOpenGeneric
                 ? EmitGenericWithTypeParamsReader(sb, metadata.PropertyTypeFullName, propertyName)
                 : metadata.UnionHints.Count > 0 && metadata.UnionHintDiscriminantProperty is not null
-                    ? EmitUnionHintReader(sb, metadata, propertyName)
+                    ? EmitUnionHintReader(sb, metadata, propertyName, assumeNoPreserveRaw)
                     : metadata.UseReaderOverloadForType
                         ? sb.AppendLine($"{propertyName} = ({metadata.PropertyTypeFullName}){metadata.PropertyTypeFullName}.Read(reader);")
                         : sb.AppendLine($"{propertyName} = ({metadata.PropertyTypeFullName}){metadata.PropertyTypeFullName}.Read(reader.ReadEncodedValue(true));");
             return sb;
         }
 
-        public static StringBuilder EmitUnionHintReader(StringBuilder sb, SerializablePropertyMetadata metadata, string propertyName)
+        public static StringBuilder EmitUnionHintReader(StringBuilder sb, SerializablePropertyMetadata metadata, string propertyName, bool assumeNoPreserveRaw = false)
         {
             // The discriminant variable was already read by a previous property.
             // Its local variable name follows the pattern: {TypeBaseIdentifier}{PropertyName}
@@ -395,15 +410,43 @@ public sealed partial class CborSerializerCodeGen
             }
             else
             {
-                _ = sb.AppendLine($"var {propertyName}EncodedValue = reader.ReadEncodedValue(true);");
-                _ = sb.AppendLine($"{propertyName} = {discriminantVar} switch");
-                _ = sb.AppendLine("{");
-                foreach (KeyValuePair<int, string> hint in metadata.UnionHints)
+                if (assumeNoPreserveRaw)
                 {
-                    _ = sb.AppendLine($"    {hint.Key} => ({metadata.PropertyTypeFullName}){hint.Value}.Read({propertyName}EncodedValue),");
+                    _ = sb.AppendLine($"{propertyName} = {discriminantVar} switch");
+                    _ = sb.AppendLine("{");
+                    foreach (KeyValuePair<int, string> hint in metadata.UnionHints)
+                    {
+                        _ = sb.AppendLine($"    {hint.Key} => ({metadata.PropertyTypeFullName}){hint.Value}.Read(reader),");
+                    }
+                    _ = sb.AppendLine($"    _ => ({metadata.PropertyTypeFullName}){metadata.PropertyTypeFullName}.Read(reader.ReadEncodedValue(true))");
+                    _ = sb.AppendLine("};");
                 }
-                _ = sb.AppendLine($"    _ => ({metadata.PropertyTypeFullName}){metadata.PropertyTypeFullName}.Read({propertyName}EncodedValue)");
-                _ = sb.AppendLine("};");
+                else
+                {
+                    _ = sb.AppendLine("if (global::Chrysalis.Cbor.Serialization.CborSerializer.ShouldPreserveRaw)");
+                    _ = sb.AppendLine("{");
+                    _ = sb.AppendLine($"    var {propertyName}EncodedValue = reader.ReadEncodedValue(true);");
+                    _ = sb.AppendLine($"    {propertyName} = {discriminantVar} switch");
+                    _ = sb.AppendLine("    {");
+                    foreach (KeyValuePair<int, string> hint in metadata.UnionHints)
+                    {
+                        _ = sb.AppendLine($"        {hint.Key} => ({metadata.PropertyTypeFullName}){hint.Value}.Read({propertyName}EncodedValue),");
+                    }
+                    _ = sb.AppendLine($"        _ => ({metadata.PropertyTypeFullName}){metadata.PropertyTypeFullName}.Read({propertyName}EncodedValue)");
+                    _ = sb.AppendLine("    };");
+                    _ = sb.AppendLine("}");
+                    _ = sb.AppendLine("else");
+                    _ = sb.AppendLine("{");
+                    _ = sb.AppendLine($"    {propertyName} = {discriminantVar} switch");
+                    _ = sb.AppendLine("    {");
+                    foreach (KeyValuePair<int, string> hint in metadata.UnionHints)
+                    {
+                        _ = sb.AppendLine($"        {hint.Key} => ({metadata.PropertyTypeFullName}){hint.Value}.Read(reader),");
+                    }
+                    _ = sb.AppendLine($"        _ => ({metadata.PropertyTypeFullName}){metadata.PropertyTypeFullName}.Read(reader.ReadEncodedValue(true))");
+                    _ = sb.AppendLine("    };");
+                    _ = sb.AppendLine("}");
+                }
             }
             return sb;
         }
@@ -451,19 +494,19 @@ public sealed partial class CborSerializerCodeGen
             return sb;
         }
 
-        public static StringBuilder EmitPrimitiveOrObjectReader(StringBuilder sb, SerializablePropertyMetadata metadata, string propertyName)
+        public static StringBuilder EmitPrimitiveOrObjectReader(StringBuilder sb, SerializablePropertyMetadata metadata, string propertyName, bool assumeNoPreserveRaw = false)
         {
             string cleanPropertyType = metadata.PropertyType.Replace("?", "");
             _ = metadata.IsOpenGeneric
                 ? EmitGenericWithTypeParamsReader(sb, metadata.PropertyType, propertyName)
                 : IsPrimitiveType(cleanPropertyType)
                     ? EmitPrimitivePropertyReader(sb, metadata.PropertyType, propertyName)
-                    : EmitObjectPropertyReader(sb, metadata, propertyName);
+                    : EmitObjectPropertyReader(sb, metadata, propertyName, assumeNoPreserveRaw);
 
             return sb;
         }
 
-        public static StringBuilder EmitCustomListReader(StringBuilder sb, SerializableTypeMetadata metadata)
+        public static StringBuilder EmitCustomListReader(StringBuilder sb, SerializableTypeMetadata metadata, bool useExistingReader)
         {
             Dictionary<string, string> propMapping = [];
             bool isListSerialization = metadata.SerializationType == SerializationType.List;
@@ -491,17 +534,30 @@ public sealed partial class CborSerializerCodeGen
 
             // Add field tracking for List serialization to validate required fields
             bool shouldTrackFields = isListSerialization && metadata.Properties.Any(p => p.IsRequired);
+            bool useFieldBitset = shouldTrackFields && metadata.Properties.Count <= 64;
             if (shouldTrackFields)
             {
-                _ = sb.AppendLine($"bool[] fieldsRead = new bool[{metadata.Properties.Count}];");
+                _ = useFieldBitset
+                    ? sb.AppendLine("ulong fieldsReadBits = 0;")
+                    : sb.AppendLine($"bool[] fieldsRead = new bool[{metadata.Properties.Count}];");
             }
 
             int fieldIndex = 0;
+            bool assumeNoPreserveRaw = useExistingReader && metadata.ShouldPreserveRaw;
             foreach (SerializablePropertyMetadata prop in metadata.Properties)
             {
                 string propName = $"{metadata.BaseIdentifier}{prop.PropertyName}";
                 propMapping.Add(prop.PropertyName, propName);
-                _ = EmitSerializablePropertyReader(sb, prop, propName, true, shouldTrackFields, fieldIndex);
+                _ = EmitSerializablePropertyReader(
+                    sb,
+                    prop,
+                    propName,
+                    true,
+                    shouldTrackFields,
+                    fieldIndex,
+                    useFieldBitset,
+                    assumeNoPreserveRaw
+                );
                 fieldIndex++;
             }
 
@@ -512,7 +568,9 @@ public sealed partial class CborSerializerCodeGen
                 foreach (SerializablePropertyMetadata requiredProp in requiredProps)
                 {
                     int propIndex = metadata.Properties.ToList().IndexOf(requiredProp);
-                    _ = sb.AppendLine($"if (!fieldsRead[{propIndex}])");
+                    _ = useFieldBitset
+                        ? sb.AppendLine($"if ((fieldsReadBits & (1UL << {propIndex})) == 0)")
+                        : sb.AppendLine($"if (!fieldsRead[{propIndex}])");
                     _ = sb.AppendLine("{");
                     _ = sb.AppendLine($"    throw new System.Exception(\"Required field '{requiredProp.PropertyName}' is missing from CBOR data\");");
                     _ = sb.AppendLine("}");
@@ -553,12 +611,12 @@ public sealed partial class CborSerializerCodeGen
             }
 
 
-            _ = EmitReaderValidationAndResult(sb, metadata, "result");
+            _ = EmitReaderValidationAndResult(sb, metadata, "result", hasInputData: !useExistingReader);
 
             return sb;
         }
 
-        public static StringBuilder EmitReaderValidationAndResult(StringBuilder sb, SerializableTypeMetadata metadata, string resultName)
+        public static StringBuilder EmitReaderValidationAndResult(StringBuilder sb, SerializableTypeMetadata metadata, string resultName, bool hasInputData = true)
         {
             _ = EmitSerializableTypeValidatorReader(sb, metadata, resultName);
 
@@ -567,9 +625,12 @@ public sealed partial class CborSerializerCodeGen
                 _ = sb.AppendLine($"{resultName}.ConstrIndex = constrIndex;");
             }
 
-            if (metadata.ShouldPreserveRaw)
+            if (metadata.ShouldPreserveRaw && hasInputData)
             {
-                _ = sb.AppendLine($"{resultName}.Raw = data;");
+                _ = sb.AppendLine("if (global::Chrysalis.Cbor.Serialization.CborSerializer.ShouldPreserveRaw)");
+                _ = sb.AppendLine("{");
+                _ = sb.AppendLine($"    {resultName}.Raw = data;");
+                _ = sb.AppendLine("}");
             }
 
             _ = sb.AppendLine($"return {resultName};");

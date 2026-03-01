@@ -120,7 +120,7 @@ using (client)
                         {
                             try
                             {
-                                BlockWithEra block = rollForward.Payload.Deserialize<BlockWithEra>();
+                                BlockWithEra block = rollForward.Payload.DeserializeWithoutRaw<BlockWithEra>();
 
                                 if (TryGetBlockProgressInfo(block, out ulong slot, out ulong blockNumber))
                                 {
