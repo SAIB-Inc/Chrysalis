@@ -159,6 +159,11 @@ public sealed class Blockfrost : ICardanoDataProvider, IDisposable
             string query = $"addresses/{address}/utxos?{pagination}";
             using HttpResponseMessage response = await _httpClient.GetAsync(new Uri(query, UriKind.Relative)).ConfigureAwait(false);
 
+            if (!response.IsSuccessStatusCode)
+            {
+                break;
+            }
+
             string content = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
             List<BlockfrostUtxo>? utxos = JsonSerializer.Deserialize<List<BlockfrostUtxo>>(content);
 

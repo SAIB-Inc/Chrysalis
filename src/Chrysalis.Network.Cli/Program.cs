@@ -182,11 +182,20 @@ internal static class Program
         ulong lastSlot = 0;
         ulong lastBlockNumber = 0;
         Point tipPoint = Point.Origin;
+        int maxPipelineDepth = Math.Max(1, pipelineDepth);
+        ulong lastHeaderSlot = 0;
+        bool tipBackoffLogged = false;
 
         while (!ct.IsCancellationRequested)
         {
             // Phase 1: Send a burst of pipelined NextRequest messages
-            int toSend = pipelineDepth;
+            int toSend = maxPipelineDepth;
+            if (tipPoint is SpecificPoint tip && lastHeaderSlot > 0)
+            {
+                ulong tipGap = tip.Slot > lastHeaderSlot ? tip.Slot - lastHeaderSlot : 0;
+                toSend = ComputeAdaptivePipelineDepth(maxPipelineDepth, tipGap);
+            }
+
             await peer.ChainSync.SendNextRequestBatchAsync(toSend, ct).ConfigureAwait(false);
 
             // Phase 2: Drain all responses and collect header points
@@ -207,6 +216,10 @@ internal static class Program
                         if (headerPoint is not null)
                         {
                             batch.Add(headerPoint);
+                            if (headerPoint is SpecificPoint sp)
+                            {
+                                lastHeaderSlot = sp.Slot;
+                            }
                         }
                         else
                         {
@@ -298,15 +311,40 @@ internal static class Program
 
             if (reachedTip)
             {
+                if (!tipBackoffLogged)
+                {
+                    Console.WriteLine("at tip: reducing pipeline depth to 1");
+                    tipBackoffLogged = true;
+                }
+
                 PrintAtTip(totalTimer, totalBlocks, tipPoint);
                 Console.WriteLine("awaiting new blocks...");
 
-                // Fall back to sequential mode at the tip
+                // We already got AwaitReply for a pending request; wait for its response
+                // before sending any new request to avoid over-requesting at the tip.
                 while (!ct.IsCancellationRequested)
                 {
-                    MessageNextResponse? response = await peer.ChainSync.NextRequestAsync(ct).ConfigureAwait(false);
-                    if (response is MessageRollForward)
+                    MessageNextResponse response = await peer.ChainSync.ReceiveNextResponseAsync(ct).ConfigureAwait(false);
+                    if (response is MessageAwaitReply)
                     {
+                        PrintAtTip(totalTimer, totalBlocks, tipPoint);
+                        Console.WriteLine("awaiting new blocks...");
+                        continue;
+                    }
+
+                    if (response is MessageRollBackward rollBackward)
+                    {
+                        Console.WriteLine($"rollback to {FormatPoint(rollBackward.Point)}");
+                    }
+
+                    if (response is MessageRollForward rollForward)
+                    {
+                        tipPoint = rollForward.Tip.Slot;
+                    }
+
+                    if (response is MessageRollForward or MessageRollBackward)
+                    {
+                        tipBackoffLogged = false;
                         break;
                     }
                 }
@@ -323,6 +361,24 @@ internal static class Program
         }
 
         return 0;
+    }
+
+    private static int ComputeAdaptivePipelineDepth(int maxPipelineDepth, ulong tipGap)
+    {
+        int target = tipGap switch
+        {
+            0 => 1,
+            <= 4 => 1,
+            <= 20 => 2,
+            <= 100 => 5,
+            <= 500 => 20,
+            <= 2_000 => 100,
+            <= 10_000 => 500,
+            <= 50_000 => 2_000,
+            _ => maxPipelineDepth
+        };
+
+        return Math.Min(maxPipelineDepth, Math.Max(1, target));
     }
 
     #endregion
