@@ -120,6 +120,60 @@ public class BlockFetch(AgentChannel channel) : IMiniProtocol
     }
 
     /// <summary>
+    /// Receives raw block messages after a RequestRange, yielding each BlockBody without deserializing.
+    /// Always drains through BatchDone so the state returns to Idle even if the caller stops early.
+    /// </summary>
+    public async IAsyncEnumerable<BlockFetchMessage> ReceiveBlockMessagesAsync(
+        [EnumeratorCancellation] CancellationToken cancellationToken)
+    {
+        if (State != BlockFetchState.Busy)
+        {
+            throw new InvalidOperationException($"Cannot receive blocks in state {State}");
+        }
+
+        BlockFetchMessage response = await _buffer
+            .ReceiveFullMessageAsync<BlockFetchMessage>(cancellationToken)
+            .ConfigureAwait(false);
+
+        switch (response)
+        {
+            case NoBlocks:
+                State = BlockFetchState.Idle;
+                yield break;
+
+            case StartBatch:
+                State = BlockFetchState.Streaming;
+                break;
+
+            default:
+                throw new InvalidOperationException(
+                    $"Unexpected message in Busy state: {response.GetType().Name}");
+        }
+
+        while (true)
+        {
+            BlockFetchMessage blockMsg = await _buffer
+                .ReceiveFullMessageAsync<BlockFetchMessage>(cancellationToken)
+                .ConfigureAwait(false);
+
+            switch (blockMsg)
+            {
+                case BlockBody:
+                    yield return blockMsg;
+                    break;
+
+                case BatchDone:
+                    State = BlockFetchState.Idle;
+                    yield break;
+
+                default:
+                    throw new InvalidOperationException(
+                        $"Unexpected message in Streaming state: {blockMsg.GetType().Name}");
+            }
+        }
+    }
+
+    /// <summary>
     /// Fetches all blocks in a range. Combines RequestRange + ReceiveBlocks.
     /// </summary>
     /// <typeparam name="T">The CBOR type to deserialize each block body as.</typeparam>

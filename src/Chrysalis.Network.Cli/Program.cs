@@ -7,6 +7,7 @@ using Chrysalis.Cbor.Serialization;
 using Chrysalis.Cbor.Types.Cardano.Core;
 using Chrysalis.Cbor.Types.Cardano.Core.Byron;
 using Chrysalis.Cbor.Types.Cardano.Core.Header;
+using Chrysalis.Network.Cbor.BlockFetch;
 using Chrysalis.Network.Cbor.ChainSync;
 using Chrysalis.Network.Cbor.Common;
 using Chrysalis.Network.MiniProtocols;
@@ -19,6 +20,7 @@ internal static class Program
     private const ulong DefaultNetworkMagic = 2;
     private const int DefaultKeepAliveSeconds = 20;
     private const int DefaultBlockCount = 100;
+    private const int DefaultPipelineDepth = 50;
 
     private sealed record Options(
         string Command,
@@ -28,6 +30,7 @@ internal static class Program
         ulong NetworkMagic,
         int KeepAliveSeconds,
         int BlockCount,
+        int PipelineDepth,
         ulong? Slot,
         string? Hash
     );
@@ -78,7 +81,7 @@ internal static class Program
 
         return options.Command switch
         {
-            "CHAINSYNC" => await RunChainSyncN2N(peer, cts.Token).ConfigureAwait(false),
+            "CHAINSYNC" => await RunChainSyncN2N(peer, options.PipelineDepth, cts.Token).ConfigureAwait(false),
             "BLOCKFETCH" => await RunBlockFetch(peer, options, cts.Token).ConfigureAwait(false),
             _ => throw new InvalidOperationException($"Unknown command: {options.Command}")
         };
@@ -155,11 +158,9 @@ internal static class Program
 
     #region ChainSync N2N
 
-    private const int BatchSize = 100;
-
-    private static async Task<int> RunChainSyncN2N(PeerClient peer, CancellationToken ct)
+    private static async Task<int> RunChainSyncN2N(PeerClient peer, int pipelineDepth, CancellationToken ct)
     {
-        Console.WriteLine("Starting ChainSync from origin (N2N, headers + block fetch)...");
+        Console.WriteLine($"Starting pipelined ChainSync from origin (N2N, pipeline depth {pipelineDepth})...");
 
         ChainSyncMessage intersect = await peer.ChainSync.FindIntersectionAsync([Point.Origin], ct).ConfigureAwait(false);
         if (intersect is not MessageIntersectFound found)
@@ -180,15 +181,19 @@ internal static class Program
 
         while (!ct.IsCancellationRequested)
         {
-            // Collect a batch of header points
+            // Phase 1: Send a burst of pipelined NextRequest messages
+            int toSend = pipelineDepth;
+            await peer.ChainSync.SendNextRequestBatchAsync(toSend, ct).ConfigureAwait(false);
+
+            // Phase 2: Drain all responses and collect header points
             List<Point> batch = [];
             bool reachedTip = false;
+            int received = 0;
 
-            Stopwatch batchTimer = Stopwatch.StartNew();
-
-            while (batch.Count < BatchSize && !ct.IsCancellationRequested)
+            while (received < toSend && !ct.IsCancellationRequested)
             {
-                MessageNextResponse? response = await peer.ChainSync.NextRequestAsync(ct).ConfigureAwait(false);
+                MessageNextResponse response = await peer.ChainSync.ReceiveNextResponseAsync(ct).ConfigureAwait(false);
+                received++;
 
                 switch (response)
                 {
@@ -210,49 +215,52 @@ internal static class Program
                         break;
                     case MessageAwaitReply:
                         reachedTip = true;
-                        goto fetchBatch;
+                        break;
                     default:
                         break;
                 }
 
-                // Flush partial batch after 3 seconds so we show progress
-                if (batch.Count > 0 && batchTimer.Elapsed.TotalSeconds >= 3)
+                if (reachedTip)
                 {
                     break;
                 }
             }
 
-        fetchBatch:
+            // Phase 3: BlockFetch the collected headers
             if (batch.Count > 0)
             {
-                try
+                await peer.BlockFetch.RequestRangeAsync(batch[0], batch[^1], ct).ConfigureAwait(false);
+                await foreach (BlockFetchMessage msg in peer.BlockFetch.ReceiveBlockMessagesAsync(ct).ConfigureAwait(false))
                 {
-                    await foreach (BlockWithEra block in peer.BlockFetch
-                        .FetchRangeAsync<BlockWithEra>(batch[0], batch[^1], ct)
-                        .ConfigureAwait(false))
+                    if (msg is not BlockBody blockBody)
                     {
-                        totalBlocks++;
-                        windowBlocks++;
+                        continue;
+                    }
 
+                    totalBlocks++;
+                    windowBlocks++;
+
+                    try
+                    {
+                        BlockWithEra block = blockBody.Body.Deserialize<BlockWithEra>();
                         if (block.Block is not null)
                         {
                             lastEra = block.Era();
                             lastSlot = block.Block.Slot();
                             lastBlockNumber = block.Block.Height();
                         }
-
-                        if (windowTimer.Elapsed.TotalSeconds >= 3)
-                        {
-                            PrintProgress(totalTimer, windowTimer, totalBlocks, windowBlocks, lastSlot, lastBlockNumber, lastEra, tipPoint);
-                            windowTimer.Restart();
-                            windowBlocks = 0;
-                        }
                     }
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"  BlockFetch error: {ex.Message}");
-                    Console.WriteLine($"  Batch: {batch.Count} blocks, first={FormatPoint(batch[0])}, last={FormatPoint(batch[^1])}");
+                    catch
+                    {
+                        // Skip blocks that fail to deserialize but keep streaming
+                    }
+
+                    if (windowTimer.Elapsed.TotalSeconds >= 3)
+                    {
+                        PrintProgress(totalTimer, windowTimer, totalBlocks, windowBlocks, lastSlot, lastBlockNumber, lastEra, tipPoint);
+                        windowTimer.Restart();
+                        windowBlocks = 0;
+                    }
                 }
             }
 
@@ -261,7 +269,7 @@ internal static class Program
                 PrintAtTip(totalTimer, totalBlocks, tipPoint);
                 Console.WriteLine("awaiting new blocks...");
 
-                // Wait for next rollforward before resuming batch loop
+                // Fall back to sequential mode at the tip
                 while (!ct.IsCancellationRequested)
                 {
                     MessageNextResponse? response = await peer.ChainSync.NextRequestAsync(ct).ConfigureAwait(false);
@@ -569,6 +577,7 @@ internal static class Program
         int blockCount = ParseInt(
             GetValue(map, "blocks") ?? GetEnv("BLOCKS"),
             DefaultBlockCount, "block count", ref error);
+        int pipelineDepth = ParseInt(GetValue(map, "pipeline"), DefaultPipelineDepth, "pipeline depth", ref error);
 
         ulong? slot = null;
         string? hash = null;
@@ -590,7 +599,7 @@ internal static class Program
             return false;
         }
 
-        options = new Options(command, socket, host, port, magic, keepAlive, blockCount, slot, hash);
+        options = new Options(command, socket, host, port, magic, keepAlive, blockCount, pipelineDepth, slot, hash);
         return true;
     }
 
@@ -662,6 +671,7 @@ internal static class Program
         Console.WriteLine("  --slot <slot>                Start slot (default: origin)");
         Console.WriteLine("  --hash <hex>                 Start block hash (hex-encoded)");
         Console.WriteLine("  --blocks <count>             Number of blocks to fetch (default 100, blockfetch only)");
+        Console.WriteLine("  --pipeline <depth>           Pipeline depth for N2N chainsync (default 50)");
         Console.WriteLine();
         Console.WriteLine("Examples:");
         Console.WriteLine("  dotnet run -- chainsync --socket /path/to/node.socket");

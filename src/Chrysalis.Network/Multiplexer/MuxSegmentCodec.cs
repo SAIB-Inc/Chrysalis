@@ -145,11 +145,24 @@ public static class MuxSegmentCodec
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static MuxSegmentHeader DecodeHeader(in ReadOnlySequence<byte> headerSequence)
     {
-        uint transmissionTime = BinaryPrimitives.ReadUInt32BigEndian(headerSequence.Slice(0, 4).FirstSpan);
-        ushort protocolIdAndMode = BinaryPrimitives.ReadUInt16BigEndian(headerSequence.Slice(4, 2).FirstSpan);
+        if (headerSequence.IsSingleSegment)
+        {
+            return DecodeHeaderSpan(headerSequence.FirstSpan);
+        }
+
+        Span<byte> buf = stackalloc byte[HeaderSize];
+        headerSequence.CopyTo(buf);
+        return DecodeHeaderSpan(buf);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static MuxSegmentHeader DecodeHeaderSpan(ReadOnlySpan<byte> span)
+    {
+        uint transmissionTime = BinaryPrimitives.ReadUInt32BigEndian(span);
+        ushort protocolIdAndMode = BinaryPrimitives.ReadUInt16BigEndian(span.Slice(4, 2));
         bool mode = (protocolIdAndMode & 0x8000) != 0;
         ProtocolType protocolId = (ProtocolType)(protocolIdAndMode & 0x7FFF);
-        ushort payloadLength = BinaryPrimitives.ReadUInt16BigEndian(headerSequence.Slice(6, 2).FirstSpan);
+        ushort payloadLength = BinaryPrimitives.ReadUInt16BigEndian(span.Slice(6, 2));
 
         return new(
             transmissionTime,
