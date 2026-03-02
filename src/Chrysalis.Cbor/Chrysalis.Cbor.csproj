@@ -12,7 +12,7 @@
 
   <ItemGroup>
     <PackageReference Include="SAIB.Blake2Fast" />
-    <ProjectReference Include="/tmp/Dahomey.Cbor/src/Dahomey.Cbor/Dahomey.Cbor.csproj" />
+    <PackageReference Include="SAIB.Cbor" />
   </ItemGroup>
 
   <ItemGroup>

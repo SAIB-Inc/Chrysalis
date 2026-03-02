@@ -1,4 +1,4 @@
-using Dahomey.Cbor.Serialization;
+using SAIB.Cbor.Serialization;
 
 namespace Chrysalis.Network.Cbor.ChainSync;
 
