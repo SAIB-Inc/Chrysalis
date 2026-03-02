@@ -2,7 +2,6 @@ using Chrysalis.Network.Cbor.LocalStateQuery.Messages;
 using Chrysalis.Network.Multiplexer;
 using Chrysalis.Network.Cbor.LocalStateQuery;
 using Chrysalis.Network.Cbor.Common;
-using Chrysalis.Cbor.Types;
 
 namespace Chrysalis.Network.MiniProtocols;
 
@@ -40,7 +39,7 @@ public class LocalStateQuery(AgentChannel channel) : IAsyncDisposable
     {
         if (IsAcquired)
         {
-            await _buffer.SendFullMessageAsync(new Release(new Value5(5)), cancellationToken).ConfigureAwait(false);
+            await _buffer.SendFullMessageAsync(new Release(5), cancellationToken).ConfigureAwait(false);
             IsAcquired = false;
         }
     }

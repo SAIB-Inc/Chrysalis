@@ -83,9 +83,12 @@ using (client)
         Console.WriteLine();
     }
     ChainSyncMessage intersect = await chainSync.FindIntersectionAsync([startPoint], cts.Token);
+    Console.WriteLine($"Intersection response type: {intersect?.GetType().FullName ?? "null"}");
+    if (intersect?.Raw is not null)
+        Console.WriteLine($"Intersection raw hex: {Convert.ToHexString(intersect.Raw.Value.Span[..Math.Min(100, intersect.Raw.Value.Length)])}");
     if (intersect is not MessageIntersectFound)
     {
-        Console.Error.WriteLine("Failed to find intersection.");
+        Console.Error.WriteLine($"Failed to find intersection.");
         return 1;
     }
 
@@ -99,6 +102,8 @@ using (client)
     string lastEra = "?";
     ulong lastSlot = 0;
     ulong lastBlockNumber = 0;
+    int deserErrors = 0;
+    Dictionary<string, int> errorBuckets = new();
 
     try
     {
@@ -121,9 +126,27 @@ using (client)
                                 BlockWithEra block = rollForward.Payload.Deserialize<BlockWithEra>();
                                 lastEra = block.Block?.GetType().Name ?? "?";
                             }
-                            catch
+                            catch (Exception ex)
                             {
                                 lastEra = "?";
+                                deserErrors++;
+                                string key = ex.Message.Length > 200 ? ex.Message[..200] : ex.Message;
+                                errorBuckets[key] = errorBuckets.GetValueOrDefault(key) + 1;
+                                if (deserErrors <= 3)
+                                {
+                                    ReadOnlyMemory<byte> raw = rollForward.Payload.Value;
+                                    Console.Error.WriteLine($"  DESER ERROR #{deserErrors} at block {totalBlocksSynced}: {ex.Message}");
+                                    Exception cur = ex;
+                                    while (cur != null)
+                                    {
+                                        Console.Error.WriteLine($"    [{cur.GetType().Name}] {cur.Message}");
+                                        Console.Error.WriteLine($"      at: {cur.StackTrace?.Split('\n').FirstOrDefault()?.Trim()}");
+                                        cur = cur.InnerException!;
+                                    }
+                                    Console.Error.WriteLine($"    Payload len={raw.Length}, first 60 bytes: {Convert.ToHexString(raw.Span[..Math.Min(60, raw.Length)])}");
+                                    File.WriteAllBytes($"/tmp/failing_block_{deserErrors}.cbor", raw.ToArray());
+                                    Console.Error.WriteLine($"    Saved to /tmp/failing_block_{deserErrors}.cbor");
+                                }
                             }
                         }
 
@@ -234,6 +257,13 @@ using (client)
         Console.WriteLine($"  Avg blocks/s:   {totalBlocksSynced / totalSeconds:F1}");
         Console.WriteLine($"  Avg throughput: {FormatBytes(totalBytesDownloaded / totalSeconds)}/s");
         Console.WriteLine($"  Total data:     {FormatBytes(totalBytesDownloaded)}");
+        Console.WriteLine($"  Deser errors:   {deserErrors}");
+        if (errorBuckets.Count > 0)
+        {
+            Console.WriteLine("  Error breakdown:");
+            foreach (var kv in errorBuckets.OrderByDescending(x => x.Value))
+                Console.WriteLine($"    {kv.Value,5}x {kv.Key}");
+        }
     }
     catch (OperationCanceledException)
     {

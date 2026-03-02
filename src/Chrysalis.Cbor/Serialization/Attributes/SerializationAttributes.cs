@@ -105,6 +105,21 @@ public sealed class CborTagAttribute(int tag) : Attribute
     public int Tag { get; } = tag;
 }
 
+/// <summary>
+/// Specifies the discriminant index for a <see cref="CborListAttribute"/> type in a union.
+/// The value corresponds to the first integer element of the CBOR array, enabling
+/// probe-based union dispatch instead of try-catch fallback.
+/// </summary>
+/// <param name="index">The discriminant index value.</param>
+[AttributeUsage(AttributeTargets.Class | AttributeTargets.Struct, Inherited = false, AllowMultiple = false)]
+public sealed class CborIndexAttribute(int index) : Attribute
+{
+    /// <summary>
+    /// Gets the discriminant index value.
+    /// </summary>
+    public int Index { get; } = index;
+}
+
 // Property/parameter attributes
 
 /// <summary>

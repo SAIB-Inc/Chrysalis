@@ -16,8 +16,9 @@ public abstract partial record Script : CborBase { }
 /// <param name="Script">The native script definition.</param>
 [CborSerializable]
 [CborList]
+[CborIndex(0)]
 public partial record MultiSigScript(
-    [CborOrder(0)] Value0 Version,
+    [CborOrder(0)] int Version,
     [CborOrder(1)] NativeScript Script
 ) : Script;
 
@@ -28,8 +29,9 @@ public partial record MultiSigScript(
 /// <param name="ScriptBytes">The compiled Plutus V1 script bytes.</param>
 [CborSerializable]
 [CborList]
+[CborIndex(1)]
 public partial record PlutusV1Script(
-    [CborOrder(0)] Value1 Version,
+    [CborOrder(0)] int Version,
     [CborOrder(1)] ReadOnlyMemory<byte> ScriptBytes
 ) : Script;
 
@@ -40,8 +42,9 @@ public partial record PlutusV1Script(
 /// <param name="ScriptBytes">The compiled Plutus V2 script bytes.</param>
 [CborSerializable]
 [CborList]
+[CborIndex(2)]
 public partial record PlutusV2Script(
-    [CborOrder(0)] Value2 Version,
+    [CborOrder(0)] int Version,
     [CborOrder(1)] ReadOnlyMemory<byte> ScriptBytes
 ) : Script;
 
@@ -52,7 +55,8 @@ public partial record PlutusV2Script(
 /// <param name="ScriptBytes">The compiled Plutus V3 script bytes.</param>
 [CborSerializable]
 [CborList]
+[CborIndex(3)]
 public partial record PlutusV3Script(
-    [CborOrder(0)] Value3 Version,
+    [CborOrder(0)] int Version,
     [CborOrder(1)] ReadOnlyMemory<byte> ScriptBytes
 ) : Script;

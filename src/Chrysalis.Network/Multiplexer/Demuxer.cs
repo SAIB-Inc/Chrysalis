@@ -1,7 +1,7 @@
 using System.Buffers;
 using System.Collections.Concurrent;
 using System.IO.Pipelines;
-using System.Runtime.CompilerServices;
+using System.Threading.Channels;
 using Chrysalis.Network.Core;
 
 namespace Chrysalis.Network.Multiplexer;
@@ -12,136 +12,36 @@ namespace Chrysalis.Network.Multiplexer;
 /// <remarks>
 /// The Demuxer reads segmented data from the network and routes it to the appropriate
 /// protocol handler's channel based on the protocol ID in the segment header.
+/// Uses System.Threading.Channels instead of Pipes for zero-copy dispatch.
 /// </remarks>
-/// <remarks>
-/// Initializes a new instance of the <see cref="Demuxer"/> class.
-/// </remarks>
-/// <param name="bearer">The bearer to read segments from.</param>
 public sealed class Demuxer(IBearer bearer) : IDisposable
 {
-    private readonly ConcurrentDictionary<ProtocolType, Pipe> _protocolPipes = [];
+    private readonly ConcurrentDictionary<ProtocolType, Channel<ReadOnlyMemory<byte>>> _protocolChannels = [];
     private bool _isDisposed;
 
     /// <summary>
     /// Subscribes to a specific protocol channel.
     /// </summary>
     /// <param name="protocol">The protocol type to subscribe to.</param>
-    /// <returns>A channel reader for consuming messages for the specified protocol.</returns>
-    public PipeReader Subscribe(ProtocolType protocol)
+    /// <returns>A channel reader for consuming segment payloads for the specified protocol.</returns>
+    public ChannelReader<ReadOnlyMemory<byte>> Subscribe(ProtocolType protocol)
     {
-        if (!_protocolPipes.TryGetValue(protocol, out Pipe? pipe))
+        if (!_protocolChannels.TryGetValue(protocol, out Channel<ReadOnlyMemory<byte>>? channel))
         {
-            pipe = new Pipe(
-                new PipeOptions(
-                    pool: MemoryPool<byte>.Shared,
-                    minimumSegmentSize: 4096,
-                    pauseWriterThreshold: 100 * 1024,
-                    resumeWriterThreshold: 99 * 1024
-                )
-            );
-            _protocolPipes[protocol] = pipe;
-        }
-        return pipe.Reader;
-    }
-
-    /// <summary>
-    /// Reads a multiplexed segment from the bearer.
-    /// </summary>
-    /// <param name="cancellationToken">A token to cancel the operation.</param>
-    /// <returns>The read segment.</returns>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public async ValueTask<MuxSegment> ReadSegmentAsync(CancellationToken cancellationToken)
-    {
-        // Read the header
-        ReadResult result = await bearer.Reader.ReadAtLeastAsync(ProtocolConstants.SegmentHeaderSize, cancellationToken).ConfigureAwait(false);
-        ReadOnlySequence<byte> buffer = result.Buffer;
-
-        // Decode the header
-        ReadOnlySequence<byte> headerSlice = buffer.Slice(0, ProtocolConstants.SegmentHeaderSize);
-        MuxSegmentHeader header = MuxSegmentCodec.DecodeHeader(headerSlice);
-
-        // Advance past the header
-        bearer.Reader.AdvanceTo(buffer.GetPosition(ProtocolConstants.SegmentHeaderSize));
-
-        // Read and process the payload
-        ReadOnlySequence<byte> payloadSequence;
-
-        if (buffer.Length >= header.PayloadLength + ProtocolConstants.SegmentHeaderSize)
-        {
-            // We already have the complete payload in the buffer
-            ReadOnlySequence<byte> payloadSlice = buffer.Slice(ProtocolConstants.SegmentHeaderSize, header.PayloadLength);
-            payloadSequence = CopyPayload(payloadSlice);
-            bearer.Reader.AdvanceTo(buffer.GetPosition(header.PayloadLength + ProtocolConstants.SegmentHeaderSize));
-        }
-        else
-        {
-            // We need to read more data for the payload
-            result = await bearer.Reader.ReadAtLeastAsync(header.PayloadLength, cancellationToken).ConfigureAwait(false);
-            ReadOnlySequence<byte> payloadSlice = result.Buffer.Slice(0, header.PayloadLength);
-            payloadSequence = CopyPayload(payloadSlice);
-            bearer.Reader.AdvanceTo(result.Buffer.GetPosition(header.PayloadLength));
-        }
-
-        return new MuxSegment(header, payloadSequence);
-    }
-
-    // Shared buffer pool to reduce allocations
-    private static readonly ArrayPool<byte> BufferPool = ArrayPool<byte>.Shared;
-
-    /// <summary>
-    /// Creates a copy of the payload from a ReadOnlySequence using buffer pooling.
-    /// </summary>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static ReadOnlySequence<byte> CopyPayload(ReadOnlySequence<byte> payload)
-    {
-        // For very small payloads, using pooling introduces more overhead than benefit
-        if (payload.Length <= 128)
-        {
-            byte[] smallPayloadCopy = new byte[payload.Length];
-            payload.CopyTo(smallPayloadCopy);
-            return new ReadOnlySequence<byte>(smallPayloadCopy);
-        }
-
-        // For larger payloads, use the shared buffer pool
-        byte[] payloadCopy = BufferPool.Rent((int)payload.Length);
-
-        try
-        {
-            payload.CopyTo(payloadCopy);
-            // Store the buffer in the memory record for later return to pool
-            PooledMemory managedPayload = new(payloadCopy, BufferPool, (int)payload.Length);
-            return new ReadOnlySequence<byte>(managedPayload.Memory);
-        }
-        catch
-        {
-            // Ensure buffer is returned on exception
-            BufferPool.Return(payloadCopy);
-            throw;
-        }
-    }
-
-    // Helper class to track pooled memory and return it when no longer used
-    private sealed class PooledMemory(byte[] buffer, ArrayPool<byte> pool, int length) : IMemoryOwner<byte>
-    {
-        private readonly byte[] _buffer = buffer;
-        private readonly ArrayPool<byte> _pool = pool;
-        private readonly int _length = length;
-        private bool _disposed;
-
-        public Memory<byte> Memory => _buffer.AsMemory(0, _length);
-
-        public void Dispose()
-        {
-            if (!_disposed)
+            channel = Channel.CreateBounded<ReadOnlyMemory<byte>>(new BoundedChannelOptions(64)
             {
-                _pool.Return(_buffer);
-                _disposed = true;
-            }
+                SingleWriter = true,
+                SingleReader = true,
+                FullMode = BoundedChannelFullMode.Wait
+            });
+            _protocolChannels[protocol] = channel;
         }
+        return channel.Reader;
     }
 
     /// <summary>
     /// Runs the demuxer, continuously reading segments and dispatching them to the appropriate channels.
+    /// Batches multiple segments per read for reduced async overhead.
     /// </summary>
     /// <param name="cancellationToken">A token to cancel the operation.</param>
     public async Task RunAsync(CancellationToken cancellationToken)
@@ -152,44 +52,73 @@ public sealed class Demuxer(IBearer bearer) : IDisposable
         {
             while (!cancellationToken.IsCancellationRequested)
             {
-                MuxSegment segment = await ReadSegmentAsync(cancellationToken).ConfigureAwait(false);
+                // Read whatever is available from the bearer
+                ReadResult result = await bearer.Reader.ReadAsync(cancellationToken).ConfigureAwait(false);
+                ReadOnlySequence<byte> buffer = result.Buffer;
 
-                if (!_protocolPipes.TryGetValue(segment.Header.ProtocolId, out Pipe? pipe))
+                if (result.IsCompleted && buffer.Length == 0)
                 {
-                    continue;
+                    break;
                 }
 
-                _ = await pipe.Writer.WriteAsync(segment.Payload.First, cancellationToken).ConfigureAwait(false);
-                _ = await pipe.Writer.FlushAsync(cancellationToken).ConfigureAwait(false);
+                SequencePosition consumed = buffer.Start;
+
+                // Parse as many complete segments as possible from the buffer
+                while (buffer.Length >= ProtocolConstants.SegmentHeaderSize)
+                {
+                    // Decode header
+                    MuxSegmentHeader header = MuxSegmentCodec.DecodeHeader(buffer.Slice(0, ProtocolConstants.SegmentHeaderSize));
+
+                    long totalSegmentSize = ProtocolConstants.SegmentHeaderSize + header.PayloadLength;
+                    if (buffer.Length < totalSegmentSize)
+                    {
+                        break; // Incomplete segment, wait for more data
+                    }
+
+                    // Extract payload slice (zero-copy reference to PipeReader buffer)
+                    ReadOnlySequence<byte> payloadSlice = buffer.Slice(ProtocolConstants.SegmentHeaderSize, header.PayloadLength);
+
+                    // Dispatch to protocol channel
+                    if (_protocolChannels.TryGetValue(header.ProtocolId, out Channel<ReadOnlyMemory<byte>>? channel))
+                    {
+                        // Copy payload to exact-sized owned array (no pool — ChannelBuffer takes ownership)
+                        byte[] payloadCopy = GC.AllocateUninitializedArray<byte>(header.PayloadLength);
+                        payloadSlice.CopyTo(payloadCopy);
+
+                        await channel.Writer.WriteAsync(payloadCopy, cancellationToken).ConfigureAwait(false);
+                    }
+
+                    // Advance past this segment
+                    buffer = buffer.Slice(totalSegmentSize);
+                    consumed = buffer.Start;
+                }
+
+                bearer.Reader.AdvanceTo(consumed, buffer.End);
             }
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
-            // Normal cancellation - don't treat as error
             throw;
         }
         catch (Exception ex)
         {
-            // Capture exception to complete pipes with error state
             demuxerException = ex;
             throw;
         }
         finally
         {
-            // Complete all pipes so waiting readers wake up
-            CompletePipes(demuxerException);
+            CompleteChannels(demuxerException);
         }
     }
 
     /// <summary>
-    /// Completes all protocol pipes, optionally with an error state.
+    /// Completes all protocol channels, optionally with an error state.
     /// </summary>
-    /// <param name="error">The exception to propagate to pipe readers, or null for normal completion.</param>
-    private void CompletePipes(Exception? error = null)
+    private void CompleteChannels(Exception? error = null)
     {
-        foreach (Pipe pipe in _protocolPipes.Values)
+        foreach (Channel<ReadOnlyMemory<byte>> channel in _protocolChannels.Values)
         {
-            pipe.Writer.Complete(error);
+            _ = channel.Writer.TryComplete(error);
         }
     }
 
@@ -203,11 +132,7 @@ public sealed class Demuxer(IBearer bearer) : IDisposable
             return;
         }
 
-        // Complete all pipes without error
-        CompletePipes();
-
-        // Don't dispose bearer here - it's provided externally
-
+        CompleteChannels();
         _isDisposed = true;
     }
 }

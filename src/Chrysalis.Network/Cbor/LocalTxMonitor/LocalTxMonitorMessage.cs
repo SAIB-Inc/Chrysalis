@@ -12,114 +12,116 @@ public static class LocalTxMonitorMessages
 {
     public static Acquire Acquire()
     {
-        return new(new(1));
+        return new(1);
     }
 
     public static Release Release()
     {
-        return new(new(3));
+        return new(3);
     }
 
     public static NextTx NextTx()
     {
-        return new(new(5));
+        return new(5);
     }
 
     public static HasTx HasTx(string txId)
     {
-        return new(new(7), new(txId));
+        return new(7, txId);
     }
 
-    public static GetSizes DefaultGetSizes => new(new(9));
+    public static GetSizes DefaultGetSizes => new(9);
 
-    public static GetMeasures DefaultGetMeasures => new(new(11));
+    public static GetMeasures DefaultGetMeasures => new(11);
 }
 
 [CborSerializable]
 [CborList]
+[CborIndex(0)]
 public partial record Done(
-    [CborOrder(0)] Value0 Idx
+    [CborOrder(0)] int Idx
 ) : LocalTxMonitorMessage;
 
 [CborSerializable]
 [CborList]
+[CborIndex(1)]
 public partial record Acquire(
-    [CborOrder(0)] Value1 Idx
+    [CborOrder(0)] int Idx
 ) : LocalTxMonitorMessage;
 
 [CborSerializable]
 [CborList]
+[CborIndex(2)]
 public partial record Acquired(
-    [CborOrder(0)] Value2 Idx,
+    [CborOrder(0)] int Idx,
     [CborOrder(1)] ulong Slot
 ) : LocalTxMonitorMessage;
 
 [CborSerializable]
 [CborList]
+[CborIndex(3)]
 public partial record Release(
-    [CborOrder(0)] Value3 Idx
+    [CborOrder(0)] int Idx
 ) : LocalTxMonitorMessage;
 
 [CborSerializable]
 [CborList]
+[CborIndex(5)]
 public partial record NextTx(
-    [CborOrder(0)] Value5 Idx
+    [CborOrder(0)] int Idx
 ) : LocalTxMonitorMessage;
 
 [CborSerializable]
-[CborUnion]
-public abstract partial record ReplyNextTx : LocalTxMonitorMessage;
+[CborList]
+[CborIndex(6)]
+public partial record ReplyNextTx(
+    [CborOrder(0)] int Idx,
+    [CborOrder(1)][CborNullable] EraTx? EraTx
+) : LocalTxMonitorMessage;
 
 [CborSerializable]
 [CborList]
-public partial record ReplyNextTxWithoutTx(
-    [CborOrder(0)] Value6 Idx
-) : ReplyNextTx;
-
-[CborSerializable]
-[CborList]
-public partial record ReplyNextTxWithTx(
-    [CborOrder(0)] Value6 Idx,
-    [CborOrder(1)] EraTx EraTx
-) : ReplyNextTx;
-
-[CborSerializable]
-[CborList]
+[CborIndex(7)]
 public partial record HasTx(
-    [CborOrder(0)] Value7 Idx,
+    [CborOrder(0)] int Idx,
     [CborOrder(1)] string TxId
 ) : LocalTxMonitorMessage;
 
 [CborSerializable]
 [CborList]
+[CborIndex(8)]
 public partial record ReplyHasTx(
-    [CborOrder(0)] Value8 Idx,
+    [CborOrder(0)] int Idx,
     [CborOrder(1)] bool HasTx
 ) : LocalTxMonitorMessage;
 
 [CborSerializable]
 [CborList]
+[CborIndex(9)]
 public partial record GetSizes(
-    [CborOrder(0)] Value9 Idx
+    [CborOrder(0)] int Idx
 ) : LocalTxMonitorMessage;
 
 [CborSerializable]
 [CborList]
+[CborIndex(10)]
 public partial record ReplyGetSizes(
-    [CborOrder(0)] Value10 Idx,
+    [CborOrder(0)] int Idx,
     [CborOrder(1)] List<ulong> Sizes
 ) : LocalTxMonitorMessage;
 
 [CborSerializable]
 [CborList]
+[CborIndex(11)]
 public partial record GetMeasures(
-    [CborOrder(0)] Value11 Idx
+    [CborOrder(0)] int Idx
 ) : LocalTxMonitorMessage;
 
 [CborSerializable]
 [CborList]
+[CborIndex(12)]
 public partial record ReplyGetMeasures(
-    [CborOrder(0)] Value12 Idx,
+    [CborOrder(0)] int Idx,
     [CborOrder(1)] ulong Slot,
     [CborOrder(2)] Dictionary<string, CborDefList<int>> Measures
 ) : LocalTxMonitorMessage;

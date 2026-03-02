@@ -299,9 +299,9 @@ public sealed class Blockfrost : ICardanoDataProvider, IDisposable
         byte[] cborBytes = HexStringCache.FromHexString(cborHex);
         Script script = type switch
         {
-            "plutusV1" => new PlutusV1Script(new Value1(1), cborBytes),
-            "plutusV2" => new PlutusV2Script(new Value2(2), cborBytes),
-            "plutusV3" => new PlutusV3Script(new Value3(3), cborBytes),
+            "plutusV1" => new PlutusV1Script(1, cborBytes),
+            "plutusV2" => new PlutusV2Script(2, cborBytes),
+            "plutusV3" => new PlutusV3Script(3, cborBytes),
             _ => throw new InvalidOperationException($"GetScriptRef: Unsupported script type: {type}")
         };
 

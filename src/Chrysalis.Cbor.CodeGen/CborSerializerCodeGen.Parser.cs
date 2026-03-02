@@ -23,6 +23,7 @@ public sealed partial class CborSerializerCodeGen
         public const string CborPropertyAttribute = "CborPropertyAttribute";
         public const string CborProperty = "CborProperty";
         public const string CborSize = "CborSize";
+        public const string CborIndex = "CborIndex";
         public const string CborIndefinite = "CborIndefinite";
         public const string CborDefinite = "CborDefinite";
         public const string CborUnionHint = "CborUnionHint";
@@ -75,6 +76,8 @@ public sealed partial class CborSerializerCodeGen
             AttributeSyntax? cborDefiniteAttribute = attributes.FirstOrDefault(a => a.Name.ToString() == CborDefinite);
 
             int? constrIndex = cborConstrAttribute?.ArgumentList?.Arguments.FirstOrDefault()?.GetFirstToken().Value as int?;
+            AttributeSyntax? cborIndexAttribute = attributes.FirstOrDefault(a => a.Name.ToString() == CborIndex);
+            int? cborIndexValue = cborIndexAttribute?.ArgumentList?.Arguments.FirstOrDefault()?.GetFirstToken().Value as int?;
             int? cborTag = cborTagAttribute?.ArgumentList?.Arguments.FirstOrDefault()?.GetFirstToken().Value as int?;
             bool shouldPreserveRaw = ShouldPreserveRaw(tds, model);
 
@@ -92,7 +95,7 @@ public sealed partial class CborSerializerCodeGen
                 fullyQualifiedName,
                 keyword,
                 cborTag,
-                constrIndex,
+                cborIndexValue ?? constrIndex,
                 cborIndefiniteAttribute != null,
                 cborDefiniteAttribute != null,
                 serializationType,
@@ -369,6 +372,11 @@ public sealed partial class CborSerializerCodeGen
                 }
             }
 
+            bool isPropertyTypeUnion = typeSymbol is ITypeSymbol pts && HasCborUnionAttribute(pts);
+            bool isListItemTypeUnion = isList && typeSymbol is ITypeSymbol lts && IsListType(lts, out ITypeSymbol? litSymbol) && litSymbol is not null && HasCborUnionAttribute(litSymbol);
+            bool isMapKeyTypeUnion = isMap && typeSymbol is ITypeSymbol mks && IsMapType(mks, out ITypeSymbol? mkSymbol, out _) && mkSymbol is not null && HasCborUnionAttribute(mkSymbol);
+            bool isMapValueTypeUnion = isMap && typeSymbol is ITypeSymbol mvs && IsMapType(mvs, out _, out ITypeSymbol? mvSymbol) && mvSymbol is not null && HasCborUnionAttribute(mvSymbol);
+
             SerializablePropertyMetadata propMetadata = new(
                 propertyName,
                 propertyType,
@@ -395,7 +403,11 @@ public sealed partial class CborSerializerCodeGen
                 order,
                 stringKey,
                 intKey,
-                isOpenGeneric
+                isOpenGeneric,
+                isPropertyTypeUnion,
+                isListItemTypeUnion,
+                isMapKeyTypeUnion,
+                isMapValueTypeUnion
             );
 
             // Parse [CborUnionHint] attributes
@@ -403,6 +415,49 @@ public sealed partial class CborSerializerCodeGen
 
             yield return propMetadata;
         }
+    }
+
+    /// <summary>
+    /// Checks if a type or any of its base types has the [CborUnion] attribute
+    /// AND uses try-catch dispatch (not probe-based). Probe-based unions like
+    /// CborMaybeIndefList correctly report bytesConsumed and are safe with unbounded data.
+    /// </summary>
+    private static bool HasCborUnionAttribute(ITypeSymbol typeSymbol)
+    {
+        // CborMaybeIndefList uses probe-based dispatch, safe with unbounded data
+        if (IsCborMaybeIndefListType(typeSymbol))
+        {
+            return false;
+        }
+
+        ITypeSymbol? current = typeSymbol;
+        while (current != null && current.SpecialType != SpecialType.System_Object)
+        {
+            if (current.GetAttributes().Any(a => a.AttributeClass?.Name is Parser.CborUnion or "CborUnionAttribute"))
+            {
+                return true;
+            }
+
+            current = current.BaseType;
+        }
+
+        return false;
+    }
+
+    private static bool IsCborMaybeIndefListType(ITypeSymbol typeSymbol)
+    {
+        ITypeSymbol? current = typeSymbol;
+        while (current != null && current.SpecialType != SpecialType.System_Object)
+        {
+            if (current.Name == "CborMaybeIndefList" || (current is INamedTypeSymbol nts && nts.OriginalDefinition.Name == "CborMaybeIndefList"))
+            {
+                return true;
+            }
+
+            current = current.BaseType;
+        }
+
+        return false;
     }
 
     private static void GetCborPropertyKey(SyntaxNode node, SemanticModel semanticModel, out string? stringKey, out int? intKey)

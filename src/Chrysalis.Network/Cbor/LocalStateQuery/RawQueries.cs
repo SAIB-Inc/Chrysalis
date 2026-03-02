@@ -38,8 +38,6 @@ public static class RawQueries
 }
 
 
-[CborSerializable]
-[CborUnion]
 public abstract partial record QueryReq : CborBase;
 
 [CborSerializable]
