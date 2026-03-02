@@ -162,6 +162,34 @@ public class ChainSync : IMiniProtocol
     }
 
     /// <summary>
+    /// Sends a single MsgRequestNext without waiting for a response.
+    /// For use in pipelined sync where the caller manages in-flight count.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public async Task SendNextRequestAsync(CancellationToken cancellationToken)
+    {
+        await _buffer.SendPreEncodedSegmentAsync(_preEncodedNextRequest, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Sends N MsgRequestNext messages in a single batched write for pipelined sync.
+    /// </summary>
+    public async Task SendNextRequestBatchAsync(int count, CancellationToken cancellationToken)
+    {
+        await _buffer.SendPreEncodedSegmentBatchAsync(_preEncodedNextRequest, count, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Receives the next response from the server without sending a request.
+    /// For use in pipelined sync where requests were sent separately.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public async Task<MessageNextResponse> ReceiveNextResponseAsync(CancellationToken cancellationToken)
+    {
+        return await _buffer.ReceiveFullMessageAsync<MessageNextResponse>(cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
     /// Terminates the Chain-Sync protocol.
     /// </summary>
     public async Task DoneAsync(CancellationToken cancellationToken)

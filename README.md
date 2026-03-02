@@ -282,30 +282,46 @@ var nftMetadata = new Cip68<PlutusData>(
 
 ## ⚡ Performance
 
-Chrysalis is built for high-throughput block processing. Benchmarks compare Chrysalis against [Pallas](https://github.com/txpipe/pallas) (Rust), the reference Cardano mini-protocol implementation, on Conway-era blocks over N2C (Unix socket) chain sync.
+.NET can compete with Rust and Go. Chrysalis proves it.
 
-**Conway N2C Chain Sync — 5,000 blocks, 3x averaged:**
+Benchmarks compare Chrysalis against [Pallas](https://github.com/txpipe/pallas) (Rust) and [Gouroboros](https://github.com/blinklabs-io/gouroboros) (Go) — the two most established Cardano client libraries in systems languages — on Conway-era blocks against a local Cardano Preview testnet node.
 
-| | Network Only (blk/s) | With Deserialization (blk/s) |
-|---|---|---|
-| **Pallas (Rust)** | 3,374 | 3,271 |
-| **Chrysalis (.NET)** | 2,586 | 1,261 |
-
-**N2N (TCP) Chain Sync + BlockFetch — 10,000 blocks from origin:**
+**N2N (TCP) — Pipelined Header Sync from origin (apples-to-apples):**
 
 | | blk/s |
 |---|---|
-| **Chrysalis (.NET)** | ~713 |
-| **Pallas (Rust)** | ~689 |
+| **Chrysalis (.NET)** | **~40,000** |
+| **Gouroboros (Go)** | ~14,500 |
+| **Pallas (Rust)** | ~722 |
 
-Key performance characteristics:
+> Chrysalis is **2.8x faster than Go** and **55x faster than Rust** on raw pipelined header throughput — same pipeline depth (100), same workload, same node.
 
-- **80% networking parity** with Rust on pure I/O throughput (N2C)
-- **N2N parity** — Chrysalis matches or exceeds Pallas on TCP chain sync + block fetch
-- **Probe-based union dispatch** — source-generated deterministic CBOR type resolution via PeekState/PeekTag instead of try-catch
-- **Zero-copy deserialization** — `ReadOnlyMemory<byte>` throughout the pipeline, minimizing allocations
+**N2N (TCP) — Full Block Download + Deserialization from origin:**
 
-Benchmarks run on AMD Ryzen 9 9900X3D, .NET 10, against a local Cardano Preview testnet node. Full benchmark suite in `benchmarks/`.
+| | blk/s | Notes |
+|---|---|---|
+| **Chrysalis (.NET)** | **~9,500** | Pipelined ChainSync + BlockFetch + full deserialization |
+| **Gouroboros (Go)** | — | Cannot run concurrent ChainSync + BlockFetch (node queue overflow) |
+| **Pallas (Rust)** | ~722 | Sequential (no pipelining) |
+
+**N2C (Unix Socket) — 10,000 blocks, sequential:**
+
+| | With Deserialization | Network Only |
+|---|---|---|
+| **Pallas (Rust)** | 3,097 blk/s | 3,280 blk/s |
+| **Chrysalis (.NET)** | 2,747 blk/s | 2,977 blk/s |
+| **Gouroboros (Go)** | 2,735 blk/s | — |
+
+> N2C is bottlenecked by the node, not the client — all three converge around 2,700–3,300 blk/s. Chrysalis reaches 89% of Rust here.
+
+**How:**
+
+- **Batch burst pipelining** — send N requests, drain N responses, BlockFetch the batch. Eliminates per-block round-trip latency
+- **Zero-copy deserialization** — `ReadOnlyMemory<byte>` throughout the pipeline, no intermediate allocations
+- **Source-generated CBOR dispatch** — compile-time probe-based union resolution via PeekState/PeekTag instead of try-catch
+- **System.IO.Pipelines** — backpressure-aware async I/O with minimal buffer copies
+
+Benchmarks run on AMD Ryzen 9 9900X3D, .NET 10. Full results and methodology in [`benchmarks/BENCHMARKS.md`](benchmarks/BENCHMARKS.md).
 
 ## 🔄 Cardano Era Support
 

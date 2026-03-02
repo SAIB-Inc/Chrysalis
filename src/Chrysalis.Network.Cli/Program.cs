@@ -7,6 +7,7 @@ using Chrysalis.Cbor.Serialization;
 using Chrysalis.Cbor.Types.Cardano.Core;
 using Chrysalis.Cbor.Types.Cardano.Core.Byron;
 using Chrysalis.Cbor.Types.Cardano.Core.Header;
+using Chrysalis.Network.Cbor.BlockFetch;
 using Chrysalis.Network.Cbor.ChainSync;
 using Chrysalis.Network.Cbor.Common;
 using Chrysalis.Network.MiniProtocols;
@@ -19,6 +20,7 @@ internal static class Program
     private const ulong DefaultNetworkMagic = 2;
     private const int DefaultKeepAliveSeconds = 20;
     private const int DefaultBlockCount = 100;
+    private const int DefaultPipelineDepth = 50;
 
     private sealed record Options(
         string Command,
@@ -28,6 +30,8 @@ internal static class Program
         ulong NetworkMagic,
         int KeepAliveSeconds,
         int BlockCount,
+        int PipelineDepth,
+        bool HeadersOnly,
         ulong? Slot,
         string? Hash
     );
@@ -78,7 +82,7 @@ internal static class Program
 
         return options.Command switch
         {
-            "CHAINSYNC" => await RunChainSyncN2N(peer, cts.Token).ConfigureAwait(false),
+            "CHAINSYNC" => await RunChainSyncN2N(peer, options.PipelineDepth, options.HeadersOnly, cts.Token).ConfigureAwait(false),
             "BLOCKFETCH" => await RunBlockFetch(peer, options, cts.Token).ConfigureAwait(false),
             _ => throw new InvalidOperationException($"Unknown command: {options.Command}")
         };
@@ -155,11 +159,10 @@ internal static class Program
 
     #region ChainSync N2N
 
-    private const int BatchSize = 100;
-
-    private static async Task<int> RunChainSyncN2N(PeerClient peer, CancellationToken ct)
+    private static async Task<int> RunChainSyncN2N(PeerClient peer, int pipelineDepth, bool headersOnly, CancellationToken ct)
     {
-        Console.WriteLine("Starting ChainSync from origin (N2N, headers + block fetch)...");
+        string mode = headersOnly ? "headers only" : "headers + BlockFetch + deser";
+        Console.WriteLine($"Starting pipelined ChainSync from origin (N2N, pipeline depth {pipelineDepth}, {mode})...");
 
         ChainSyncMessage intersect = await peer.ChainSync.FindIntersectionAsync([Point.Origin], ct).ConfigureAwait(false);
         if (intersect is not MessageIntersectFound found)
@@ -172,7 +175,9 @@ internal static class Program
         Stopwatch totalTimer = Stopwatch.StartNew();
         Stopwatch windowTimer = Stopwatch.StartNew();
         long totalBlocks = 0;
+        long totalTxs = 0;
         int windowBlocks = 0;
+        int windowTxs = 0;
         Era lastEra = Era.Byron;
         ulong lastSlot = 0;
         ulong lastBlockNumber = 0;
@@ -180,15 +185,19 @@ internal static class Program
 
         while (!ct.IsCancellationRequested)
         {
-            // Collect a batch of header points
+            // Phase 1: Send a burst of pipelined NextRequest messages
+            int toSend = pipelineDepth;
+            await peer.ChainSync.SendNextRequestBatchAsync(toSend, ct).ConfigureAwait(false);
+
+            // Phase 2: Drain all responses and collect header points
             List<Point> batch = [];
             bool reachedTip = false;
+            int received = 0;
 
-            Stopwatch batchTimer = Stopwatch.StartNew();
-
-            while (batch.Count < BatchSize && !ct.IsCancellationRequested)
+            while (received < toSend && !ct.IsCancellationRequested)
             {
-                MessageNextResponse? response = await peer.ChainSync.NextRequestAsync(ct).ConfigureAwait(false);
+                MessageNextResponse response = await peer.ChainSync.ReceiveNextResponseAsync(ct).ConfigureAwait(false);
+                received++;
 
                 switch (response)
                 {
@@ -210,49 +219,80 @@ internal static class Program
                         break;
                     case MessageAwaitReply:
                         reachedTip = true;
-                        goto fetchBatch;
+                        break;
                     default:
                         break;
                 }
 
-                // Flush partial batch after 3 seconds so we show progress
-                if (batch.Count > 0 && batchTimer.Elapsed.TotalSeconds >= 3)
+                if (reachedTip)
                 {
                     break;
                 }
             }
 
-        fetchBatch:
-            if (batch.Count > 0)
+            if (headersOnly)
             {
-                try
-                {
-                    await foreach (BlockWithEra block in peer.BlockFetch
-                        .FetchRangeAsync<BlockWithEra>(batch[0], batch[^1], ct)
-                        .ConfigureAwait(false))
-                    {
-                        totalBlocks++;
-                        windowBlocks++;
+                // Headers-only mode: just count headers, no BlockFetch
+                totalBlocks += batch.Count;
+                windowBlocks += batch.Count;
 
+                if (batch.Count > 0)
+                {
+                    Point last = batch[^1];
+                    if (last is SpecificPoint sp)
+                    {
+                        lastSlot = sp.Slot;
+                    }
+                }
+
+                if (windowTimer.Elapsed.TotalSeconds >= 3)
+                {
+                    PrintProgress(totalTimer, windowTimer, totalBlocks, windowBlocks, lastSlot, lastBlockNumber, lastEra, tipPoint);
+                    windowTimer.Restart();
+                    windowBlocks = 0;
+                }
+            }
+            else if (batch.Count > 0)
+            {
+                // Full mode: BlockFetch + deserialization
+                await peer.BlockFetch.RequestRangeAsync(batch[0], batch[^1], ct).ConfigureAwait(false);
+                await foreach (BlockFetchMessage msg in peer.BlockFetch.ReceiveBlockMessagesAsync(ct).ConfigureAwait(false))
+                {
+                    if (msg is not BlockBody blockBody)
+                    {
+                        continue;
+                    }
+
+                    totalBlocks++;
+                    windowBlocks++;
+
+                    try
+                    {
+                        BlockWithEra block = blockBody.Body.Deserialize<BlockWithEra>();
                         if (block.Block is not null)
                         {
                             lastEra = block.Era();
                             lastSlot = block.Block.Slot();
                             lastBlockNumber = block.Block.Height();
-                        }
-
-                        if (windowTimer.Elapsed.TotalSeconds >= 3)
-                        {
-                            PrintProgress(totalTimer, windowTimer, totalBlocks, windowBlocks, lastSlot, lastBlockNumber, lastEra, tipPoint);
-                            windowTimer.Restart();
-                            windowBlocks = 0;
+                            int txCount = block.Block.TransactionBodies().Count();
+                            totalTxs += txCount;
+                            windowTxs += txCount;
                         }
                     }
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"  BlockFetch error: {ex.Message}");
-                    Console.WriteLine($"  Batch: {batch.Count} blocks, first={FormatPoint(batch[0])}, last={FormatPoint(batch[^1])}");
+                    catch
+                    {
+                        // Skip blocks that fail to deserialize but keep streaming
+                    }
+
+                    if (windowTimer.Elapsed.TotalSeconds >= 3)
+                    {
+                        double tps = windowTxs / windowTimer.Elapsed.TotalSeconds;
+                        PrintProgress(totalTimer, windowTimer, totalBlocks, windowBlocks, lastSlot, lastBlockNumber, lastEra, tipPoint,
+                            $"{tps:F0} tx/s ({totalTxs} total)");
+                        windowTimer.Restart();
+                        windowBlocks = 0;
+                        windowTxs = 0;
+                    }
                 }
             }
 
@@ -261,7 +301,7 @@ internal static class Program
                 PrintAtTip(totalTimer, totalBlocks, tipPoint);
                 Console.WriteLine("awaiting new blocks...");
 
-                // Wait for next rollforward before resuming batch loop
+                // Fall back to sequential mode at the tip
                 while (!ct.IsCancellationRequested)
                 {
                     MessageNextResponse? response = await peer.ChainSync.NextRequestAsync(ct).ConfigureAwait(false);
@@ -276,7 +316,7 @@ internal static class Program
         PrintStopped(totalTimer, totalBlocks);
         await TryDoneAsync(peer.ChainSync).ConfigureAwait(false);
 
-        if (peer.BlockFetch.HasAgency)
+        if (!headersOnly && peer.BlockFetch.HasAgency)
         {
             try { await peer.BlockFetch.DoneAsync(CancellationToken.None).ConfigureAwait(false); }
             catch (InvalidOperationException) { /* Best-effort shutdown */ }
@@ -462,12 +502,16 @@ internal static class Program
     }
 
     private static void PrintProgress(Stopwatch totalTimer, Stopwatch windowTimer, long totalBlocks, int windowBlocks,
-        ulong slot, ulong blockNumber, Era era, Point tipPoint)
+        ulong slot, ulong blockNumber, Era era, Point tipPoint, string? extra = null)
     {
         double blkPerSec = windowBlocks / windowTimer.Elapsed.TotalSeconds;
-        Console.WriteLine(
-            $"[{totalTimer.Elapsed:hh\\:mm\\:ss}] slot {slot,10} block {blockNumber,8} [{era,-10}] | " +
-            $"{blkPerSec,7:F1} blk/s | {totalBlocks} total | tip {FormatPoint(tipPoint)}");
+        string line = $"[{totalTimer.Elapsed:hh\\:mm\\:ss}] slot {slot,10} block {blockNumber,8} [{era,-10}] | " +
+            $"{blkPerSec,7:F1} blk/s | {totalBlocks} total | tip {FormatPoint(tipPoint)}";
+        if (extra is not null)
+        {
+            line += $" | {extra}";
+        }
+        Console.WriteLine(line);
     }
 
     private static void PrintAtTip(Stopwatch totalTimer, long totalBlocks, Point tipPoint)
@@ -532,7 +576,10 @@ internal static class Program
             return false;
         }
 
+        HashSet<string> flags = new(StringComparer.OrdinalIgnoreCase);
         Dictionary<string, string> map = new(StringComparer.OrdinalIgnoreCase);
+        HashSet<string> booleanFlags = new(StringComparer.OrdinalIgnoreCase) { "headers-only" };
+
         for (int i = startIdx; i < args.Length; i++)
         {
             string arg = args[i];
@@ -547,6 +594,12 @@ internal static class Program
             {
                 error = "Invalid argument format.";
                 return false;
+            }
+
+            if (booleanFlags.Contains(key))
+            {
+                _ = flags.Add(key);
+                continue;
             }
 
             if (i + 1 >= args.Length)
@@ -569,6 +622,8 @@ internal static class Program
         int blockCount = ParseInt(
             GetValue(map, "blocks") ?? GetEnv("BLOCKS"),
             DefaultBlockCount, "block count", ref error);
+        int pipelineDepth = ParseInt(GetValue(map, "pipeline"), DefaultPipelineDepth, "pipeline depth", ref error);
+        bool headersOnly = flags.Contains("headers-only");
 
         ulong? slot = null;
         string? hash = null;
@@ -590,7 +645,7 @@ internal static class Program
             return false;
         }
 
-        options = new Options(command, socket, host, port, magic, keepAlive, blockCount, slot, hash);
+        options = new Options(command, socket, host, port, magic, keepAlive, blockCount, pipelineDepth, headersOnly, slot, hash);
         return true;
     }
 
@@ -662,6 +717,8 @@ internal static class Program
         Console.WriteLine("  --slot <slot>                Start slot (default: origin)");
         Console.WriteLine("  --hash <hex>                 Start block hash (hex-encoded)");
         Console.WriteLine("  --blocks <count>             Number of blocks to fetch (default 100, blockfetch only)");
+        Console.WriteLine("  --pipeline <depth>           Pipeline depth for N2N chainsync (default 50)");
+        Console.WriteLine("  --headers-only               Skip BlockFetch, count headers only (N2N chainsync)");
         Console.WriteLine();
         Console.WriteLine("Examples:");
         Console.WriteLine("  dotnet run -- chainsync --socket /path/to/node.socket");
