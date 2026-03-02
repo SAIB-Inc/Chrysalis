@@ -424,10 +424,10 @@ public sealed class Kupmios : ICardanoDataProvider, IDisposable
 
         Script scriptObj = script.Language switch
         {
-            "native" => new MultiSigScript(new Value0(0), CborSerializer.Deserialize<NativeScript>(scriptBytes)),
-            "plutus:v1" => new PlutusV1Script(new Value1(1), scriptBytes),
-            "plutus:v2" => new PlutusV2Script(new Value2(2), scriptBytes),
-            "plutus:v3" => new PlutusV3Script(new Value3(3), scriptBytes),
+            "native" => new MultiSigScript(0, CborSerializer.Deserialize<NativeScript>(scriptBytes)),
+            "plutus:v1" => new PlutusV1Script(1, scriptBytes),
+            "plutus:v2" => new PlutusV2Script(2, scriptBytes),
+            "plutus:v3" => new PlutusV3Script(3, scriptBytes),
             _ => throw new NotSupportedException($"Unsupported script language: {script.Language}")
         };
 

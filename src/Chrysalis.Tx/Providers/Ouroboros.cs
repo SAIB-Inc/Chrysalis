@@ -120,7 +120,7 @@ public class Ouroboros(string socketPath, ulong networkMagic = 2) : ICardanoData
         byte[] txBody = CborSerializer.Serialize(postMaryTx.TransactionBody);
 
         EraTx eraTx = new(6, new CborEncodedValue(Convert.FromHexString(txHex)));
-        LocalTxSubmissionMessage result = await client.LocalTxSubmit.SubmitTxAsync(new SubmitTx(new Value0(0), eraTx), CancellationToken.None).ConfigureAwait(false);
+        LocalTxSubmissionMessage result = await client.LocalTxSubmit.SubmitTxAsync(new SubmitTx(0, eraTx), CancellationToken.None).ConfigureAwait(false);
 
         string txHash = result switch
         {

@@ -71,12 +71,16 @@ public sealed partial class CborSerializerCodeGen
             _ = sb.AppendLine("{");
             _ = sb.AppendLine("{");
             _ = sb.AppendLine($"    int _pos = data.Length - reader.Buffer.Length;");
-            _ = sb.AppendLine($"    var _span = reader.ReadDataItem();");
-            _ = sb.AppendLine($"    tempList.Add({Emitter.GenericSerializationUtilFullname}.Read<{typeParam}>(data.Slice(_pos, _span.Length)));");
+            _ = sb.AppendLine($"    tempList.Add({Emitter.GenericSerializationUtilFullname}.ReadAnyWithConsumed<{typeParam}>(data.Slice(_pos), out int _consumed));");
+            _ = sb.AppendLine($"    reader = new CborReader(data.Span.Slice(_pos + _consumed));");
             _ = sb.AppendLine("}");
             _ = sb.AppendLine($"if (_arraySize > 0) _remaining--;");
             _ = sb.AppendLine("}");
-            _ = sb.AppendLine($"if (isIndefinite && reader.Buffer.Length > 0 && reader.Buffer[0] == 0xFF) reader.ReadDataItem();");
+            _ = sb.AppendLine("{");
+            _ = sb.AppendLine($"    int _endPos = data.Length - reader.Buffer.Length;");
+            _ = sb.AppendLine($"    if (isIndefinite && _endPos < data.Length && data.Span[_endPos] == 0xFF) _endPos++;");
+            _ = sb.AppendLine($"    bytesConsumed = _endPos;");
+            _ = sb.AppendLine("}");
             _ = sb.AppendLine($"{metadata.FullyQualifiedName} result;");
             _ = sb.AppendLine($"if (hasTag258)");
             _ = sb.AppendLine("{");
@@ -105,7 +109,8 @@ public sealed partial class CborSerializerCodeGen
         /// </summary>
         private static bool TryEmitStructuralProbeReader(StringBuilder sb, SerializableTypeMetadata metadata)
         {
-            List<SerializableTypeMetadata> children = metadata.ChildTypes;
+            // Flatten union children: expand intermediate unions to their leaf types
+            List<SerializableTypeMetadata> children = FlattenUnionChildren(metadata.ChildTypes);
             if (children.Count < 2)
             {
                 return false;
@@ -133,21 +138,30 @@ public sealed partial class CborSerializerCodeGen
 
             // All children are distinguishable — emit probe
             bool hasTagChildren = probeGroups.Keys.Any(k => k.StartsWith("tag:", StringComparison.Ordinal));
-            bool hasNonTagChildren = probeGroups.Keys.Any(k => !k.StartsWith("tag:", StringComparison.Ordinal));
+            bool hasConstrChildren = probeGroups.ContainsKey("constr");
+            bool hasIdxChildren = probeGroups.Keys.Any(k => k.StartsWith("idx:", StringComparison.Ordinal));
+            bool hasArraySizeChildren = probeGroups.Keys.Any(k => k.StartsWith("array:", StringComparison.Ordinal));
+            bool hasStateChildren = probeGroups.Keys.Any(k => !k.StartsWith("tag:", StringComparison.Ordinal) && !k.StartsWith("idx:", StringComparison.Ordinal) && !k.StartsWith("array:", StringComparison.Ordinal) && k != "constr");
 
-            if (hasTagChildren && hasNonTagChildren)
+            if (hasArraySizeChildren && !hasTagChildren && !hasConstrChildren && !hasIdxChildren && !hasStateChildren)
             {
-                // Tag branch uses raw byte peek; state branch needs GetCurrentDataItemType
-                // but only AFTER confirming no tag (to avoid auto-consuming it)
-                EmitTagBranch(sb, metadata, probeGroups);
+                EmitArraySizeBranch(sb, metadata, probeGroups);
+            }
+            else if (hasIdxChildren && !hasTagChildren && !hasConstrChildren && !hasStateChildren && !hasArraySizeChildren)
+            {
+                EmitIdxOnlyBranch(sb, metadata, probeGroups);
+            }
+            else if ((hasTagChildren || hasConstrChildren) && (hasStateChildren || hasIdxChildren || hasArraySizeChildren))
+            {
+                EmitTagBranchWithConstr(sb, metadata, probeGroups, hasConstrChildren);
                 _ = sb.AppendLine($"var reader = new CborReader(data.Span);");
                 _ = sb.AppendLine($"var state = reader.GetCurrentDataItemType();");
                 EmitStateBranch(sb, metadata, probeGroups);
             }
-            else if (hasTagChildren)
+            else if (hasTagChildren || hasConstrChildren)
             {
-                // Tag-only: no need for GetCurrentDataItemType at all
-                EmitTagOnlyBranch(sb, metadata, probeGroups);
+                EmitTagBranchWithConstr(sb, metadata, probeGroups, hasConstrChildren);
+                _ = sb.AppendLine($"throw new Exception(\"Union deserialization failed. {metadata.FullyQualifiedName}: expected tag\");");
             }
             else
             {
@@ -159,98 +173,157 @@ public sealed partial class CborSerializerCodeGen
             return true;
         }
 
-        private static void EmitTagBranch(StringBuilder sb, SerializableTypeMetadata metadata, Dictionary<string, List<SerializableTypeMetadata>> probeGroups)
+        private static void EmitTagBranchWithConstr(StringBuilder sb, SerializableTypeMetadata metadata, Dictionary<string, List<SerializableTypeMetadata>> probeGroups, bool hasConstr)
         {
-            // Check for semantic tag by peeking at raw byte (major type 6 = 0xC0-0xDB)
             _ = sb.AppendLine($"if (data.Length > 0 && (data.Span[0] >> 5) == 6)");
             _ = sb.AppendLine("{");
             _ = sb.AppendLine($"    var _tagReader = new CborReader(data.Span);");
             _ = sb.AppendLine($"    _tagReader.TryReadSemanticTag(out ulong _tagVal);");
             _ = sb.AppendLine($"    var tag = (int)_tagVal;");
-            _ = sb.AppendLine($"    return tag switch");
+
+            // Use local variable + assignment to propagate bytesConsumed
+            _ = sb.AppendLine($"    {metadata.FullyQualifiedName} _tagResult = tag switch");
             _ = sb.AppendLine("    {");
             foreach (KeyValuePair<string, List<SerializableTypeMetadata>> group in probeGroups.Where(g => g.Key.StartsWith("tag:", StringComparison.Ordinal)))
             {
                 int tagValue = int.Parse(group.Key.Substring(4), CultureInfo.InvariantCulture);
-                _ = sb.AppendLine($"        {tagValue} => ({metadata.FullyQualifiedName}){group.Value[0].FullyQualifiedName}.Read(data),");
+                _ = sb.AppendLine($"        {tagValue} => ({metadata.FullyQualifiedName}){group.Value[0].FullyQualifiedName}.Read(data, out bytesConsumed),");
             }
-            _ = sb.AppendLine($"        _ => throw new Exception(\"Union deserialization failed. {metadata.FullyQualifiedName}: unexpected tag\")");
+            if (hasConstr && probeGroups.TryGetValue("constr", out List<SerializableTypeMetadata> constrGroup))
+            {
+                // Constr types use semantic tags (121-127, 102, etc.) — catch all unmatched tags
+                _ = sb.AppendLine($"        _ => ({metadata.FullyQualifiedName}){constrGroup[0].FullyQualifiedName}.Read(data, out bytesConsumed),");
+            }
+            else
+            {
+                _ = sb.AppendLine($"        _ => throw new Exception(\"Union deserialization failed. {metadata.FullyQualifiedName}: unexpected tag\")");
+            }
             _ = sb.AppendLine("    };");
+            _ = sb.AppendLine($"    return _tagResult;");
             _ = sb.AppendLine("}");
         }
 
         private static void EmitStateBranch(StringBuilder sb, SerializableTypeMetadata metadata, Dictionary<string, List<SerializableTypeMetadata>> probeGroups)
         {
-            _ = sb.AppendLine($"return state switch");
+            _ = sb.AppendLine($"{metadata.FullyQualifiedName} _stateResult = state switch");
             _ = sb.AppendLine("{");
-            foreach (KeyValuePair<string, List<SerializableTypeMetadata>> group in probeGroups.Where(g => !g.Key.StartsWith("tag:", StringComparison.Ordinal)))
+            foreach (KeyValuePair<string, List<SerializableTypeMetadata>> group in probeGroups.Where(g => !g.Key.StartsWith("tag:", StringComparison.Ordinal) && g.Key != "constr"))
             {
                 string statePattern = GetCborReaderStatePattern(group.Key);
-                _ = sb.AppendLine($"    {statePattern} => ({metadata.FullyQualifiedName}){group.Value[0].FullyQualifiedName}.Read(data),");
+                _ = sb.AppendLine($"    {statePattern} => ({metadata.FullyQualifiedName}){group.Value[0].FullyQualifiedName}.Read(data, out bytesConsumed),");
             }
             _ = sb.AppendLine($"    _ => throw new Exception(\"Union deserialization failed. {metadata.FullyQualifiedName}: unexpected state \" + state)");
             _ = sb.AppendLine("};");
+            _ = sb.AppendLine($"return _stateResult;");
         }
 
-        private static void EmitTagOnlyBranch(StringBuilder sb, SerializableTypeMetadata metadata, Dictionary<string, List<SerializableTypeMetadata>> probeGroups)
+        private static void EmitIdxOnlyBranch(StringBuilder sb, SerializableTypeMetadata metadata, Dictionary<string, List<SerializableTypeMetadata>> probeGroups)
         {
-            // Check for semantic tag by peeking at raw byte (major type 6 = 0xC0-0xDB)
-            _ = sb.AppendLine($"if (data.Length > 0 && (data.Span[0] >> 5) == 6)");
+            _ = sb.AppendLine($"var _idxReader = new CborReader(data.Span);");
+            _ = sb.AppendLine($"_idxReader.ReadBeginArray();");
+            _ = sb.AppendLine($"_idxReader.ReadSize();");
+            _ = sb.AppendLine($"int _idx = _idxReader.ReadInt32();");
+            _ = sb.AppendLine($"{metadata.FullyQualifiedName} _idxResult = _idx switch");
             _ = sb.AppendLine("{");
-            _ = sb.AppendLine($"    var _tagReader = new CborReader(data.Span);");
-            _ = sb.AppendLine($"    _tagReader.TryReadSemanticTag(out ulong _tagVal);");
-            _ = sb.AppendLine($"    var tag = (int)_tagVal;");
-            _ = sb.AppendLine($"    return tag switch");
-            _ = sb.AppendLine("    {");
             foreach (KeyValuePair<string, List<SerializableTypeMetadata>> group in probeGroups)
             {
-                int tagValue = int.Parse(group.Key.Substring(4), CultureInfo.InvariantCulture);
-                _ = sb.AppendLine($"        {tagValue} => ({metadata.FullyQualifiedName}){group.Value[0].FullyQualifiedName}.Read(data),");
+                int idxValue = int.Parse(group.Key.Substring(4), CultureInfo.InvariantCulture);
+                _ = sb.AppendLine($"    {idxValue} => ({metadata.FullyQualifiedName}){group.Value[0].FullyQualifiedName}.Read(data, out bytesConsumed),");
             }
-            _ = sb.AppendLine($"        _ => throw new Exception(\"Union deserialization failed. {metadata.FullyQualifiedName}: unexpected tag\")");
-            _ = sb.AppendLine("    };");
-            _ = sb.AppendLine("}");
-            _ = sb.AppendLine($"throw new Exception(\"Union deserialization failed. {metadata.FullyQualifiedName}: expected tag\");");
+            _ = sb.AppendLine($"    _ => throw new Exception(\"Union deserialization failed. {metadata.FullyQualifiedName}: unexpected idx \" + _idx)");
+            _ = sb.AppendLine("};");
+            _ = sb.AppendLine($"return _idxResult;");
+        }
+
+        private static void EmitArraySizeBranch(StringBuilder sb, SerializableTypeMetadata metadata, Dictionary<string, List<SerializableTypeMetadata>> probeGroups)
+        {
+            _ = sb.AppendLine($"var _sizeReader = new CborReader(data.Span);");
+            _ = sb.AppendLine($"_sizeReader.ReadBeginArray();");
+            _ = sb.AppendLine($"int _size = _sizeReader.ReadSize();");
+            _ = sb.AppendLine($"{metadata.FullyQualifiedName} _sizeResult = _size switch");
+            _ = sb.AppendLine("{");
+            foreach (KeyValuePair<string, List<SerializableTypeMetadata>> group in probeGroups)
+            {
+                int sizeValue = int.Parse(group.Key.Substring(6), CultureInfo.InvariantCulture);
+                _ = sb.AppendLine($"    {sizeValue} => ({metadata.FullyQualifiedName}){group.Value[0].FullyQualifiedName}.Read(data, out bytesConsumed),");
+            }
+            _ = sb.AppendLine($"    _ => throw new Exception(\"Union deserialization failed. {metadata.FullyQualifiedName}: unexpected array size \" + _size)");
+            _ = sb.AppendLine("};");
+            _ = sb.AppendLine($"return _sizeResult;");
         }
 
         private static void EmitStateOnlyBranch(StringBuilder sb, SerializableTypeMetadata metadata, Dictionary<string, List<SerializableTypeMetadata>> probeGroups)
         {
-            _ = sb.AppendLine($"return state switch");
+            _ = sb.AppendLine($"{metadata.FullyQualifiedName} _stateResult = state switch");
             _ = sb.AppendLine("{");
             foreach (KeyValuePair<string, List<SerializableTypeMetadata>> group in probeGroups)
             {
                 string statePattern = GetCborReaderStatePattern(group.Key);
-                _ = sb.AppendLine($"    {statePattern} => ({metadata.FullyQualifiedName}){group.Value[0].FullyQualifiedName}.Read(data),");
+                _ = sb.AppendLine($"    {statePattern} => ({metadata.FullyQualifiedName}){group.Value[0].FullyQualifiedName}.Read(data, out bytesConsumed),");
             }
             _ = sb.AppendLine($"    _ => throw new Exception(\"Union deserialization failed. {metadata.FullyQualifiedName}: unexpected state \" + state)");
             _ = sb.AppendLine("};");
+            _ = sb.AppendLine($"return _stateResult;");
+        }
+
+        /// <summary>
+        /// Recursively expands intermediate union types to their leaf (non-union) children.
+        /// This allows probe-based dispatch to see through union hierarchies like
+        /// PlutusData → PlutusBigInt → PlutusInt → PlutusInt64/PlutusUint64.
+        /// </summary>
+        private static List<SerializableTypeMetadata> FlattenUnionChildren(List<SerializableTypeMetadata> children)
+        {
+            Dictionary<string, SerializableTypeMetadata> seen = [];
+            FlattenUnionChildrenRec(children, seen);
+            return [.. seen.Values];
+        }
+
+        private static void FlattenUnionChildrenRec(List<SerializableTypeMetadata> children, Dictionary<string, SerializableTypeMetadata> seen)
+        {
+            foreach (SerializableTypeMetadata child in children)
+            {
+                if (child.SerializationType == SerializationType.Union && child.ChildTypes.Count > 0)
+                {
+                    FlattenUnionChildrenRec(child.ChildTypes, seen);
+                }
+                else if (!seen.ContainsKey(child.FullyQualifiedName))
+                {
+                    seen[child.FullyQualifiedName] = child;
+                }
+            }
         }
 
         private static string GetProbeKey(SerializableTypeMetadata child)
         {
-            // CborConstr types use specific CBOR tags (121+index for 0-6, 1280+index-7 for 7+)
             if (child.SerializationType == SerializationType.Constr && child.CborIndex is not null && child.CborIndex >= 0)
             {
                 int tag = Emitter.ResolveTag(child.CborIndex);
                 return $"tag:{tag}";
             }
 
-            // Explicit CborTag attribute
-            if (child.CborTag is not null)
+            return child.CborTag is not null
+                ? $"tag:{child.CborTag}"
+                : child.SerializationType switch
+                {
+                    SerializationType.List => GetListProbeKey(child),
+                    SerializationType.Map => "map",
+                    SerializationType.Constr => "constr",
+                    SerializationType.Container => GetContainerProbeKey(child),
+                    SerializationType.Union => "unknown",
+                    _ => "unknown"
+                };
+        }
+
+        private static string GetListProbeKey(SerializableTypeMetadata child)
+        {
+            // [CborIndex(N)] on a [CborList] type provides an explicit discriminant
+            if (child.CborIndex.HasValue && child.CborIndex.Value >= 0)
             {
-                return $"tag:{child.CborTag}";
+                return $"idx:{child.CborIndex.Value}";
             }
 
-            // By SerializationType
-            return child.SerializationType switch
-            {
-                SerializationType.List => "array",
-                SerializationType.Map => "map",
-                SerializationType.Constr => "array",
-                SerializationType.Container => GetContainerProbeKey(child),
-                SerializationType.Union => "unknown",
-                _ => "unknown"
-            };
+            // Distinguish by property count (array size) — e.g. OriginPoint(0) vs SpecificPoint(2)
+            return $"array:{child.Properties.Count}";
         }
 
         private static string GetContainerProbeKey(SerializableTypeMetadata child)
@@ -258,9 +331,13 @@ public sealed partial class CborSerializerCodeGen
             if (child.Properties.Count == 1)
             {
                 string propType = child.Properties[0].PropertyTypeFullName.Replace("?", "");
-                if (propType is "int" or "long" or "uint" or "ulong")
+                if (propType is "long" or "int")
                 {
-                    return "integer";
+                    return "signed";
+                }
+                if (propType is "ulong" or "uint")
+                {
+                    return "unsigned";
                 }
                 if (propType is "string")
                 {
@@ -274,13 +351,12 @@ public sealed partial class CborSerializerCodeGen
                 {
                     return "boolean";
                 }
-                if (propType.StartsWith("Dictionary<", StringComparison.Ordinal)
-                    || propType.StartsWith("System.Collections.Generic.Dictionary<", StringComparison.Ordinal))
+                if (propType.Contains("Dictionary<"))
                 {
                     return "map";
                 }
-                if (propType.StartsWith("List<", StringComparison.Ordinal)
-                    || propType.StartsWith("System.Collections.Generic.List<", StringComparison.Ordinal))
+                if (propType.Contains("List<") || propType.Contains("CborMaybeIndefList<")
+                    || propType.Contains("CborDefList<") || propType.Contains("CborIndefList<"))
                 {
                     return "array";
                 }
@@ -290,16 +366,20 @@ public sealed partial class CborSerializerCodeGen
 
         private static string GetCborReaderStatePattern(string probeKey)
         {
-            return probeKey switch
-            {
-                "array" => "CborDataItemType.Array",
-                "map" => "CborDataItemType.Map",
-                "integer" => "CborDataItemType.Unsigned or CborDataItemType.Signed",
-                "text" => "CborDataItemType.String",
-                "bytes" => "CborDataItemType.ByteString",
-                "boolean" => "CborDataItemType.Boolean",
-                _ => throw new InvalidOperationException($"Unexpected probe key: {probeKey}")
-            };
+            return probeKey.StartsWith("array:", StringComparison.Ordinal)
+                ? "CborDataItemType.Array"
+                : probeKey switch
+                {
+                    "array" => "CborDataItemType.Array",
+                    "map" => "CborDataItemType.Map",
+                    "integer" => "CborDataItemType.Unsigned or CborDataItemType.Signed",
+                    "signed" => "CborDataItemType.Signed",
+                    "unsigned" => "CborDataItemType.Unsigned",
+                    "text" => "CborDataItemType.String",
+                    "bytes" => "CborDataItemType.ByteString",
+                    "boolean" => "CborDataItemType.Boolean",
+                    _ => throw new InvalidOperationException($"Unexpected probe key: {probeKey}")
+                };
         }
 
         private static StringBuilder EmitTryCatchReader(StringBuilder sb, SerializableTypeMetadata metadata)
@@ -309,7 +389,7 @@ public sealed partial class CborSerializerCodeGen
             {
                 _ = sb.AppendLine($"try");
                 _ = sb.AppendLine("{");
-                _ = sb.AppendLine($"return ({metadata.FullyQualifiedName}){childType.FullyQualifiedName}.Read(data);");
+                _ = sb.AppendLine($"return ({metadata.FullyQualifiedName}){childType.FullyQualifiedName}.Read(data, out bytesConsumed);");
                 _ = sb.AppendLine("}");
                 _ = sb.AppendLine($"catch (Exception ex)");
                 _ = sb.AppendLine("{");
