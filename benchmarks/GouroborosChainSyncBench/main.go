@@ -4,13 +4,11 @@ import (
 	"fmt"
 	"net"
 	"os"
-	"sync"
 	"sync/atomic"
 	"time"
 
 	ouroboros "github.com/blinklabs-io/gouroboros"
 	"github.com/blinklabs-io/gouroboros/ledger"
-	"github.com/blinklabs-io/gouroboros/protocol/blockfetch"
 	"github.com/blinklabs-io/gouroboros/protocol/chainsync"
 	ocommon "github.com/blinklabs-io/gouroboros/protocol/common"
 )
@@ -53,8 +51,6 @@ func parseArgs() args {
 	return a
 }
 
-const fetchBatchSize = 100
-
 var blockCount atomic.Int64
 var lastSlot atomic.Int64
 var lastHeight atomic.Int64
@@ -88,9 +84,9 @@ func main() {
 	}
 
 	if isN2N {
-		fmt.Printf("Gouroboros ChainSync + BlockFetch Benchmark (%s)\n", mode)
+		fmt.Printf("Gouroboros ChainSync Benchmark (%s, headers only, pipeline 100)\n", mode)
 	} else {
-		fmt.Printf("Gouroboros ChainSync Benchmark (%s)\n", mode)
+		fmt.Printf("Gouroboros ChainSync Benchmark (%s, full blocks)\n", mode)
 	}
 	fmt.Printf("  Address:  %s\n", addr)
 	fmt.Printf("  Magic:    %d\n", a.magic)
@@ -101,30 +97,41 @@ func main() {
 	}
 	fmt.Println()
 
+	var rollForwardFunc chainsync.RollForwardFunc
+	pipelineLimit := 1 // N2C: sequential
+
 	if isN2N {
-		runN2N(conn, a)
+		pipelineLimit = 100 // N2N: pipelined headers
+		rollForwardFunc = func(ctx chainsync.CallbackContext, blockType uint, block interface{}, tip chainsync.Tip) error {
+			blockCount.Add(1)
+			tipSlot.Store(int64(tip.Point.Slot))
+			if header, ok := block.(ledger.BlockHeader); ok {
+				lastSlot.Store(int64(header.SlotNumber()))
+				lastHeight.Store(int64(header.BlockNumber()))
+			}
+			return nil
+		}
 	} else {
-		runN2C(conn, a)
+		rollForwardFunc = func(ctx chainsync.CallbackContext, blockType uint, block interface{}, tip chainsync.Tip) error {
+			blockCount.Add(1)
+			tipSlot.Store(int64(tip.Point.Slot))
+			if b, ok := block.(ledger.Block); ok {
+				lastSlot.Store(int64(b.SlotNumber()))
+				lastHeight.Store(int64(b.BlockNumber()))
+			}
+			return nil
+		}
 	}
-}
 
-func runN2C(conn net.Conn, a args) {
 	oConn, err := ouroboros.NewConnection(
 		ouroboros.WithConnection(conn),
 		ouroboros.WithNetworkMagic(a.magic),
-		ouroboros.WithNodeToNode(false),
-		ouroboros.WithKeepAlive(false),
+		ouroboros.WithNodeToNode(isN2N),
+		ouroboros.WithKeepAlive(isN2N),
 		ouroboros.WithChainSyncConfig(
 			chainsync.NewConfig(
-				chainsync.WithRollForwardFunc(func(ctx chainsync.CallbackContext, blockType uint, block interface{}, tip chainsync.Tip) error {
-					blockCount.Add(1)
-					tipSlot.Store(int64(tip.Point.Slot))
-					if b, ok := block.(ledger.Block); ok {
-						lastSlot.Store(int64(b.SlotNumber()))
-						lastHeight.Store(int64(b.BlockNumber()))
-					}
-					return nil
-				}),
+				chainsync.WithPipelineLimit(pipelineLimit),
+				chainsync.WithRollForwardFunc(rollForwardFunc),
 				chainsync.WithRollBackwardFunc(func(ctx chainsync.CallbackContext, point ocommon.Point, tip chainsync.Tip) error {
 					return nil
 				}),
@@ -146,94 +153,6 @@ func runN2C(conn net.Conn, a args) {
 		os.Exit(1)
 	}
 
-	progressLoop(oConn, a)
-}
-
-func runN2N(conn net.Conn, a args) {
-	headerCh := make(chan ocommon.Point, fetchBatchSize*2)
-	var fetchDone sync.WaitGroup
-
-	oConn, err := ouroboros.NewConnection(
-		ouroboros.WithConnection(conn),
-		ouroboros.WithNetworkMagic(a.magic),
-		ouroboros.WithNodeToNode(true),
-		ouroboros.WithKeepAlive(true),
-		ouroboros.WithChainSyncConfig(
-			chainsync.NewConfig(
-				chainsync.WithRollForwardFunc(func(ctx chainsync.CallbackContext, blockType uint, block interface{}, tip chainsync.Tip) error {
-					tipSlot.Store(int64(tip.Point.Slot))
-					if header, ok := block.(ledger.BlockHeader); ok {
-						hash := header.Hash()
-						headerCh <- ocommon.Point{
-							Slot: header.SlotNumber(),
-							Hash: hash[:],
-						}
-					}
-					return nil
-				}),
-				chainsync.WithRollBackwardFunc(func(ctx chainsync.CallbackContext, point ocommon.Point, tip chainsync.Tip) error {
-					return nil
-				}),
-			),
-		),
-		ouroboros.WithBlockFetchConfig(
-			blockfetch.NewConfig(
-				blockfetch.WithBlockFunc(func(ctx blockfetch.CallbackContext, blockType uint, block ledger.Block) error {
-					blockCount.Add(1)
-					lastSlot.Store(int64(block.SlotNumber()))
-					lastHeight.Store(int64(block.BlockNumber()))
-					return nil
-				}),
-				blockfetch.WithBatchDoneFunc(func(ctx blockfetch.CallbackContext) error {
-					fetchDone.Done()
-					return nil
-				}),
-			),
-		),
-	)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "ouroboros error: %v\n", err)
-		os.Exit(1)
-	}
-	defer oConn.Close()
-
-	fmt.Println("Connected. Starting sync...")
-	fmt.Println()
-
-	err = oConn.ChainSync().Client.Sync([]ocommon.Point{})
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "sync error: %v\n", err)
-		os.Exit(1)
-	}
-
-	// Goroutine: batch headers and blockfetch
-	go func() {
-		var batch []ocommon.Point
-		for point := range headerCh {
-			batch = append(batch, point)
-			if len(batch) >= fetchBatchSize {
-				fetchDone.Add(1)
-				if err := oConn.BlockFetch().Client.GetBlockRange(batch[0], batch[len(batch)-1]); err != nil {
-					fmt.Fprintf(os.Stderr, "blockfetch error: %v\n", err)
-					return
-				}
-				fetchDone.Wait()
-				batch = batch[:0]
-			}
-		}
-		if len(batch) > 0 {
-			fetchDone.Add(1)
-			if err := oConn.BlockFetch().Client.GetBlockRange(batch[0], batch[len(batch)-1]); err != nil {
-				fmt.Fprintf(os.Stderr, "blockfetch error: %v\n", err)
-			}
-			fetchDone.Wait()
-		}
-	}()
-
-	progressLoop(oConn, a)
-}
-
-func progressLoop(oConn *ouroboros.Connection, a args) {
 	start := time.Now()
 	ticker := time.NewTicker(3 * time.Second)
 	defer ticker.Stop()
