@@ -30,6 +30,38 @@ dotnet_diagnostic.CA1031.severity = none
 # ── XML documentation ──
 dotnet_diagnostic.CS1591.severity = warning
 
-# ── Skip analysis on source-generated files ──
+# ── Generated code ──
 [*.g.cs]
 generated_code = true
+
+# ── Test projects ──
+[src/Chrysalis.Cbor.Test/**.cs]
+dotnet_diagnostic.CS1591.severity = none
+dotnet_diagnostic.CA1707.severity = none
+dotnet_diagnostic.CA1812.severity = none
+dotnet_diagnostic.CA1852.severity = none
+
+[src/Chrysalis.Network.Tests/**.cs]
+dotnet_diagnostic.CS1591.severity = none
+dotnet_diagnostic.CA1707.severity = none
+dotnet_diagnostic.CA1812.severity = none
+dotnet_diagnostic.CA1852.severity = none
+
+[src/Chrysalis.Wallet.Test/**.cs]
+dotnet_diagnostic.CS1591.severity = none
+dotnet_diagnostic.CA1707.severity = none
+dotnet_diagnostic.CA1812.severity = none
+dotnet_diagnostic.CA1852.severity = none
+
+[src/Chrysalis.Crypto.Test/**.cs]
+dotnet_diagnostic.CS1591.severity = none
+dotnet_diagnostic.CA1707.severity = none
+dotnet_diagnostic.CA1812.severity = none
+dotnet_diagnostic.CA1852.severity = none
+
+# ── Benchmarks ──
+[benchmarks/**.cs]
+dotnet_diagnostic.CS1591.severity = none
+dotnet_diagnostic.CA1849.severity = none
+dotnet_diagnostic.CA1050.severity = none
+

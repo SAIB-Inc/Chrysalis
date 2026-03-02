@@ -1,4 +1,6 @@
 using CBlock = Chrysalis.Cbor.Types.Cardano.Core.Block;
+using Chrysalis.Cbor.Extensions.Cardano.Core.Header;
+using Chrysalis.Cbor.Types.Cardano.Core.Byron;
 using Chrysalis.Cbor.Types.Cardano.Core.Header;
 using Chrysalis.Cbor.Types.Cardano.Core;
 using Chrysalis.Cbor.Types.Cardano.Core.Transaction;
@@ -12,7 +14,98 @@ namespace Chrysalis.Cbor.Extensions.Cardano.Core;
 public static class BlockExtensions
 {
     /// <summary>
-    /// Gets the block header from the block.
+    /// Gets the slot number from any block era.
+    /// </summary>
+    /// <param name="self">The block instance.</param>
+    /// <returns>The absolute slot number.</returns>
+    public static ulong Slot(this CBlock self)
+    {
+        ArgumentNullException.ThrowIfNull(self);
+        return self switch
+        {
+            ByronMainBlock byron => (byron.Header.ConsensusData.SlotId.Epoch * 21600) + byron.Header.ConsensusData.SlotId.Slot,
+            ByronEbBlock ebb => ebb.Header.ConsensusData.EpochId * 21600,
+            _ => self.Header().HeaderBody.Slot()
+        };
+    }
+
+    /// <summary>
+    /// Gets the block height (block number) from any block era.
+    /// Byron EBBs return 0 as they don't have block numbers.
+    /// </summary>
+    /// <param name="self">The block instance.</param>
+    /// <returns>The block height.</returns>
+    public static ulong Height(this CBlock self)
+    {
+        ArgumentNullException.ThrowIfNull(self);
+        return self switch
+        {
+            ByronMainBlock byron => byron.Header.ConsensusData.Difficulty.GetValue().FirstOrDefault(),
+            ByronEbBlock => 0,
+            _ => self.Header().HeaderBody.BlockNumber()
+        };
+    }
+
+    /// <summary>
+    /// Computes the Blake2b-256 hash of the block as a lowercase hex string.
+    /// For post-Byron blocks, hashes the block header. For Byron blocks, hashes the raw header.
+    /// </summary>
+    /// <param name="self">The block instance.</param>
+    /// <returns>The hex-encoded hash string.</returns>
+    public static string Hash(this CBlock self)
+    {
+        ArgumentNullException.ThrowIfNull(self);
+        return self switch
+        {
+            ByronMainBlock byron => Convert.ToHexStringLower(Blake2Fast.Blake2b.HashData(32, byron.Header.Raw!.Value.Span)),
+            ByronEbBlock ebb => Convert.ToHexStringLower(Blake2Fast.Blake2b.HashData(32, ebb.Header.Raw!.Value.Span)),
+            _ => self.Header().Hash()
+        };
+    }
+
+    /// <summary>
+    /// Gets the era from any block type.
+    /// Note: <see cref="AlonzoCompatibleBlock"/> covers Shelley through Alonzo and returns <see cref="Types.Cardano.Core.Era.Alonzo"/>.
+    /// Use <see cref="Era(BlockWithEra)"/> for precise era identification.
+    /// </summary>
+    /// <param name="self">The block instance.</param>
+    /// <returns>The era.</returns>
+    public static Era Era(this CBlock self)
+    {
+        ArgumentNullException.ThrowIfNull(self);
+        return self switch
+        {
+            ByronMainBlock or ByronEbBlock => Types.Cardano.Core.Era.Byron,
+            AlonzoCompatibleBlock => Types.Cardano.Core.Era.Alonzo,
+            BabbageBlock => Types.Cardano.Core.Era.Babbage,
+            ConwayBlock => Types.Cardano.Core.Era.Conway,
+            _ => throw new NotSupportedException()
+        };
+    }
+
+    /// <summary>
+    /// Gets the precise era from a <see cref="BlockWithEra"/> using its era number tag.
+    /// </summary>
+    /// <param name="self">The block with era instance.</param>
+    /// <returns>The precise era.</returns>
+    public static Era Era(this BlockWithEra self)
+    {
+        ArgumentNullException.ThrowIfNull(self);
+        return self.EraNumber switch
+        {
+            0 or 1 => Types.Cardano.Core.Era.Byron,
+            2 => Types.Cardano.Core.Era.Shelley,
+            3 => Types.Cardano.Core.Era.Allegra,
+            4 => Types.Cardano.Core.Era.Mary,
+            5 => Types.Cardano.Core.Era.Alonzo,
+            6 => Types.Cardano.Core.Era.Babbage,
+            7 => Types.Cardano.Core.Era.Conway,
+            _ => throw new NotSupportedException($"Unknown era number: {self.EraNumber}")
+        };
+    }
+
+    /// <summary>
+    /// Gets the block header from the block. Only supported for post-Byron eras.
     /// </summary>
     /// <param name="self">The block instance.</param>
     /// <returns>The block header.</returns>
@@ -36,7 +129,7 @@ public static class BlockExtensions
     public static string Hash(this BlockHeader self)
     {
         ArgumentNullException.ThrowIfNull(self);
-        return Convert.ToHexString(Blake2Fast.Blake2b.HashData(32, self.Raw!.Value.Span)).ToUpperInvariant();
+        return Convert.ToHexStringLower(Blake2Fast.Blake2b.HashData(32, self.Raw!.Value.Span));
     }
 
     /// <summary>
