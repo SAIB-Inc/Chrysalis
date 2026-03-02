@@ -3,6 +3,10 @@ using Chrysalis.Network.Multiplexer;
 
 namespace Chrysalis.Network.MiniProtocols;
 
+/// <summary>
+/// Implementation of the Ouroboros LocalTxMonitor mini-protocol for monitoring the local mempool.
+/// Allows querying transactions, sizes, and measures from the Cardano node's mempool.
+/// </summary>
 public class LocalTxMonitor(AgentChannel channel) : IMiniProtocol
 {
     private readonly ChannelBuffer _channelBuffer = new(channel);
@@ -12,6 +16,11 @@ public class LocalTxMonitor(AgentChannel channel) : IMiniProtocol
     /// </summary>
     public bool IsDone => false;
 
+    /// <summary>
+    /// Acquires a snapshot of the current mempool state for subsequent queries.
+    /// </summary>
+    /// <param name="cancellationToken">Token to cancel the operation.</param>
+    /// <returns>The response message from the Cardano node.</returns>
     public async Task<LocalTxMonitorMessage> AcquireAsync(CancellationToken cancellationToken)
     {
         Acquire acquire = LocalTxMonitorMessages.Acquire();
@@ -19,6 +28,11 @@ public class LocalTxMonitor(AgentChannel channel) : IMiniProtocol
         return await _channelBuffer.ReceiveFullMessageAsync<LocalTxMonitorMessage>(cancellationToken).ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// Releases the currently acquired mempool snapshot, allowing a new snapshot to be acquired.
+    /// </summary>
+    /// <param name="cancellationToken">Token to cancel the operation.</param>
+    /// <returns>The response message from the Cardano node.</returns>
     public async Task<LocalTxMonitorMessage> ReleaseAsync(CancellationToken cancellationToken)
     {
         Release release = LocalTxMonitorMessages.Release();
@@ -26,6 +40,11 @@ public class LocalTxMonitor(AgentChannel channel) : IMiniProtocol
         return await _channelBuffer.ReceiveFullMessageAsync<LocalTxMonitorMessage>(cancellationToken).ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// Retrieves the next transaction from the acquired mempool snapshot.
+    /// </summary>
+    /// <param name="cancellationToken">Token to cancel the operation.</param>
+    /// <returns>The response message containing the next transaction or an empty response if no more transactions.</returns>
     public async Task<LocalTxMonitorMessage> NextTxAsync(CancellationToken cancellationToken)
     {
         NextTx nextTx = LocalTxMonitorMessages.NextTx();
@@ -33,6 +52,12 @@ public class LocalTxMonitor(AgentChannel channel) : IMiniProtocol
         return await _channelBuffer.ReceiveFullMessageAsync<LocalTxMonitorMessage>(cancellationToken).ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// Checks whether a specific transaction exists in the mempool.
+    /// </summary>
+    /// <param name="txId">The transaction ID to check for.</param>
+    /// <param name="cancellationToken">Token to cancel the operation.</param>
+    /// <returns>The response message indicating whether the transaction is present.</returns>
     // @TODO
     public async Task<LocalTxMonitorMessage> HasTxAsync(string txId, CancellationToken cancellationToken)
     {
@@ -40,6 +65,11 @@ public class LocalTxMonitor(AgentChannel channel) : IMiniProtocol
         return await _channelBuffer.ReceiveFullMessageAsync<LocalTxMonitorMessage>(cancellationToken).ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// Retrieves the current mempool size information (number of transactions, total bytes, etc.).
+    /// </summary>
+    /// <param name="cancellationToken">Token to cancel the operation.</param>
+    /// <returns>The response message containing mempool size data.</returns>
     public async Task<LocalTxMonitorMessage> GetSizesAsync(CancellationToken cancellationToken)
     {
         GetSizes getSizes = LocalTxMonitorMessages.DefaultGetSizes;
@@ -47,6 +77,11 @@ public class LocalTxMonitor(AgentChannel channel) : IMiniProtocol
         return await _channelBuffer.ReceiveFullMessageAsync<LocalTxMonitorMessage>(cancellationToken).ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// Retrieves mempool capacity measures from the Cardano node.
+    /// </summary>
+    /// <param name="cancellationToken">Token to cancel the operation.</param>
+    /// <returns>The response message containing mempool measures.</returns>
     // @TODO
     public async Task<LocalTxMonitorMessage> GetMeasuresAsync(CancellationToken cancellationToken)
     {

@@ -9,6 +9,7 @@ namespace Chrysalis.Network.Multiplexer;
 /// </summary>
 public sealed class PeerClient : IDisposable
 {
+    /// <summary>Gets the network magic number used during the handshake (e.g., 764824073 for mainnet).</summary>
     public ulong NetworkMagic { get; private set; } = 2;
 
     private readonly Plexer _plexer;

@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Globalization;
 using Chrysalis.Cbor.Extensions;
 using Chrysalis.Cbor.Extensions.Cardano.Core;
 using Chrysalis.Cbor.Extensions.Cardano.Core.Header;
@@ -21,10 +22,10 @@ const int ReportInterval = 1000;
 // Parse args
 Dictionary<string, string> args_ = ParseArgs(args);
 string host = GetArg(args_, "tcp-host", DefaultHost);
-int port = int.Parse(GetArg(args_, "tcp-port", DefaultPort.ToString()));
-ulong magic = ulong.Parse(GetArg(args_, "magic", DefaultMagic.ToString()));
-int targetBlocks = int.Parse(GetArg(args_, "blocks", DefaultBlockCount.ToString()));
-int batchSize = int.Parse(GetArg(args_, "batch", DefaultBatchSize.ToString()));
+int port = int.Parse(GetArg(args_, "tcp-port", DefaultPort.ToString(CultureInfo.InvariantCulture)), CultureInfo.InvariantCulture);
+ulong magic = ulong.Parse(GetArg(args_, "magic", DefaultMagic.ToString(CultureInfo.InvariantCulture)), CultureInfo.InvariantCulture);
+int targetBlocks = int.Parse(GetArg(args_, "blocks", DefaultBlockCount.ToString(CultureInfo.InvariantCulture)), CultureInfo.InvariantCulture);
+int batchSize = int.Parse(GetArg(args_, "batch", DefaultBatchSize.ToString(CultureInfo.InvariantCulture)), CultureInfo.InvariantCulture);
 string? socketPath = GetArgOrNull(args_, "socket");
 string? fromSlotStr = GetArgOrNull(args_, "slot");
 string? fromHash = GetArgOrNull(args_, "hash");
@@ -55,15 +56,15 @@ IDisposable client;
 
 if (useUnixSocket)
 {
-    NodeClient node = await NodeClient.ConnectAsync(socketPath!, cts.Token);
-    await node.StartAsync(magic);
+    NodeClient node = await NodeClient.ConnectAsync(socketPath!, cts.Token).ConfigureAwait(false);
+    await node.StartAsync(magic).ConfigureAwait(false);
     chainSync = node.ChainSync;
     client = node;
 }
 else
 {
-    PeerClient peer = await PeerClient.ConnectAsync(host, port, cts.Token);
-    await peer.StartAsync(magic);
+    PeerClient peer = await PeerClient.ConnectAsync(host, port, cts.Token).ConfigureAwait(false);
+    await peer.StartAsync(magic).ConfigureAwait(false);
     chainSync = peer.ChainSync;
     blockFetch = peer.BlockFetch;
     client = peer;
@@ -75,20 +76,22 @@ using (client)
     Console.WriteLine();
 
     Point startPoint = (fromSlotStr is not null && fromHash is not null)
-        ? Point.Specific(ulong.Parse(fromSlotStr), Convert.FromHexString(fromHash))
+        ? Point.Specific(ulong.Parse(fromSlotStr, CultureInfo.InvariantCulture), Convert.FromHexString(fromHash))
         : Point.Origin;
     if (startPoint != Point.Origin)
     {
         Console.WriteLine($"  Starting from slot {fromSlotStr}");
         Console.WriteLine();
     }
-    ChainSyncMessage intersect = await chainSync.FindIntersectionAsync([startPoint], cts.Token);
+    ChainSyncMessage intersect = await chainSync.FindIntersectionAsync([startPoint], cts.Token).ConfigureAwait(false);
     Console.WriteLine($"Intersection response type: {intersect?.GetType().FullName ?? "null"}");
     if (intersect?.Raw is not null)
+    {
         Console.WriteLine($"Intersection raw hex: {Convert.ToHexString(intersect.Raw.Value.Span[..Math.Min(100, intersect.Raw.Value.Length)])}");
+    }
     if (intersect is not MessageIntersectFound)
     {
-        Console.Error.WriteLine($"Failed to find intersection.");
+        Console.Error.WriteLine("Failed to find intersection.");
         return 1;
     }
 
@@ -103,7 +106,7 @@ using (client)
     ulong lastSlot = 0;
     ulong lastBlockNumber = 0;
     int deserErrors = 0;
-    Dictionary<string, int> errorBuckets = new();
+    Dictionary<string, int> errorBuckets = [];
 
     try
     {
@@ -112,7 +115,7 @@ using (client)
             if (useUnixSocket)
             {
                 // N2C mode: each RollForward payload IS the full block
-                MessageNextResponse? response = await chainSync.NextRequestAsync(cts.Token);
+                MessageNextResponse? response = await chainSync.NextRequestAsync(cts.Token).ConfigureAwait(false);
 
                 switch (response)
                 {
@@ -136,15 +139,15 @@ using (client)
                                 {
                                     ReadOnlyMemory<byte> raw = rollForward.Payload.Value;
                                     Console.Error.WriteLine($"  DESER ERROR #{deserErrors} at block {totalBlocksSynced}: {ex.Message}");
-                                    Exception cur = ex;
+                                    Exception? cur = ex;
                                     while (cur != null)
                                     {
                                         Console.Error.WriteLine($"    [{cur.GetType().Name}] {cur.Message}");
                                         Console.Error.WriteLine($"      at: {cur.StackTrace?.Split('\n').FirstOrDefault()?.Trim()}");
-                                        cur = cur.InnerException!;
+                                        cur = cur.InnerException;
                                     }
                                     Console.Error.WriteLine($"    Payload len={raw.Length}, first 60 bytes: {Convert.ToHexString(raw.Span[..Math.Min(60, raw.Length)])}");
-                                    File.WriteAllBytes($"/tmp/failing_block_{deserErrors}.cbor", raw.ToArray());
+                                    await File.WriteAllBytesAsync($"/tmp/failing_block_{deserErrors}.cbor", raw.ToArray(), cts.Token).ConfigureAwait(false);
                                     Console.Error.WriteLine($"    Saved to /tmp/failing_block_{deserErrors}.cbor");
                                 }
                             }
@@ -187,7 +190,7 @@ using (client)
 
             while (headerBatch.Count < thisBatch && !cts.Token.IsCancellationRequested)
             {
-                MessageNextResponse? response = await chainSync.NextRequestAsync(cts.Token);
+                MessageNextResponse? response = await chainSync.NextRequestAsync(cts.Token).ConfigureAwait(false);
 
                 switch (response)
                 {
@@ -212,8 +215,11 @@ using (client)
             {
                 try
                 {
-                    BlockWithEra? block = await blockFetch!.FetchSingleAsync<BlockWithEra>(headerBatch[i].Point, cts.Token);
-                    if (block is null) continue;
+                    BlockWithEra? block = await blockFetch!.FetchSingleAsync<BlockWithEra>(headerBatch[i].Point, cts.Token).ConfigureAwait(false);
+                    if (block is null)
+                    {
+                        continue;
+                    }
 
                     totalBlocksSynced++;
                     windowBlocks++;
@@ -243,7 +249,7 @@ using (client)
             }
         }
 
-        done:
+    done:
 
         totalTimer.Stop();
         double totalSeconds = totalTimer.Elapsed.TotalSeconds;
@@ -261,8 +267,10 @@ using (client)
         if (errorBuckets.Count > 0)
         {
             Console.WriteLine("  Error breakdown:");
-            foreach (var kv in errorBuckets.OrderByDescending(x => x.Value))
+            foreach (KeyValuePair<string, int> kv in errorBuckets.OrderByDescending(x => x.Value))
+            {
                 Console.WriteLine($"    {kv.Value,5}x {kv.Key}");
+            }
         }
     }
     catch (OperationCanceledException)
@@ -275,13 +283,13 @@ using (client)
     // Cleanup
     if (chainSync.HasAgency)
     {
-        try { await chainSync.DoneAsync(CancellationToken.None); }
+        try { await chainSync.DoneAsync(CancellationToken.None).ConfigureAwait(false); }
         catch (InvalidOperationException) { }
     }
 
     if (blockFetch is { HasAgency: true })
     {
-        try { await blockFetch.DoneAsync(CancellationToken.None); }
+        try { await blockFetch.DoneAsync(CancellationToken.None).ConfigureAwait(false); }
         catch (InvalidOperationException) { }
     }
 }
@@ -341,26 +349,29 @@ static (Point Point, string Era, ulong Slot, ulong BlockNum) ExtractByronPoint(H
     return (point2, header.Era, absSlot, blockNumber);
 }
 
-static string FormatBytes(double bytes) => bytes switch
+static string FormatBytes(double bytes)
 {
-    >= 1_073_741_824 => $"{bytes / 1_073_741_824:F2} GB",
-    >= 1_048_576 => $"{bytes / 1_048_576:F2} MB",
-    >= 1024 => $"{bytes / 1024:F1} KB",
-    _ => $"{bytes:F0} B"
-};
+    return bytes switch
+    {
+        >= 1_073_741_824 => $"{bytes / 1_073_741_824:F2} GB",
+        >= 1_048_576 => $"{bytes / 1_048_576:F2} MB",
+        >= 1024 => $"{bytes / 1024:F1} KB",
+        _ => $"{bytes:F0} B"
+    };
+}
 
 static Dictionary<string, string> ParseArgs(string[] args)
 {
     Dictionary<string, string> map = new(StringComparer.OrdinalIgnoreCase);
     for (int i = 0; i < args.Length; i++)
     {
-        if (!args[i].StartsWith("--"))
+        if (!args[i].StartsWith("--", StringComparison.Ordinal))
         {
             continue;
         }
 
         string key = args[i][2..];
-        bool hasValue = i + 1 < args.Length && !args[i + 1].StartsWith("--");
+        bool hasValue = i + 1 < args.Length && !args[i + 1].StartsWith("--", StringComparison.Ordinal);
 
         if (hasValue)
         {
@@ -376,7 +387,11 @@ static Dictionary<string, string> ParseArgs(string[] args)
 }
 
 static string GetArg(Dictionary<string, string> map, string key, string fallback)
-    => map.TryGetValue(key, out string? value) ? value : fallback;
+{
+    return map.TryGetValue(key, out string? value) ? value : fallback;
+}
 
 static string? GetArgOrNull(Dictionary<string, string> map, string key)
-    => map.TryGetValue(key, out string? value) ? value : null;
+{
+    return map.TryGetValue(key, out string? value) ? value : null;
+}
