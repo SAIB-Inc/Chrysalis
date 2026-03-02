@@ -1,5 +1,5 @@
 using System.Buffers;
-using Dahomey.Cbor.Serialization;
+using SAIB.Cbor.Serialization;
 
 namespace Chrysalis.Wallet.CIPs.CIP8.Models;
 

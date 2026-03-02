@@ -1,6 +1,6 @@
 using System.Buffers;
 using Chrysalis.Cbor.Types;
-using Dahomey.Cbor.Serialization;
+using SAIB.Cbor.Serialization;
 
 namespace Chrysalis.Wallet.CIPs.CIP8.Models;
 
