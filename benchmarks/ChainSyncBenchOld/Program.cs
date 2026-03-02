@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Globalization;
 using Chrysalis.Cbor.Extensions;
 using Chrysalis.Cbor.Serialization;
 using Chrysalis.Cbor.Types.Cardano.Core;
@@ -12,8 +13,8 @@ const int DefaultBlockCount = 10000;
 const int ReportInterval = 1000;
 
 Dictionary<string, string> args_ = ParseArgs(args);
-ulong magic = ulong.Parse(GetArg(args_, "magic", DefaultMagic.ToString()));
-int targetBlocks = int.Parse(GetArg(args_, "blocks", DefaultBlockCount.ToString()));
+ulong magic = ulong.Parse(GetArg(args_, "magic", DefaultMagic.ToString(CultureInfo.InvariantCulture)), CultureInfo.InvariantCulture);
+int targetBlocks = int.Parse(GetArg(args_, "blocks", DefaultBlockCount.ToString(CultureInfo.InvariantCulture)), CultureInfo.InvariantCulture);
 string? socketPath = GetArgOrNull(args_, "socket");
 string? fromSlotStr = GetArgOrNull(args_, "slot");
 string? fromHash = GetArgOrNull(args_, "hash");
@@ -34,19 +35,19 @@ Console.WriteLine();
 using CancellationTokenSource cts = new();
 Console.CancelKeyPress += (_, e) => { e.Cancel = true; cts.Cancel(); };
 
-NodeClient node = await NodeClient.ConnectAsync(socketPath, cts.Token);
-await node.StartAsync(magic);
+NodeClient node = await NodeClient.ConnectAsync(socketPath, cts.Token).ConfigureAwait(false);
+await node.StartAsync(magic).ConfigureAwait(false);
 ChainSync chainSync = node.ChainSync;
 
 using (node)
 {
-    List<Point> startPoints = [new Point(ulong.Parse(fromSlotStr), Convert.FromHexString(fromHash))];
+    List<Point> startPoints = [new Point(ulong.Parse(fromSlotStr, CultureInfo.InvariantCulture), Convert.FromHexString(fromHash))];
     Console.WriteLine($"  Starting from slot {fromSlotStr}");
 
     Console.WriteLine("Connected. Starting sync...");
     Console.WriteLine();
 
-    ChainSyncMessage intersect = await chainSync.FindIntersectionAsync(startPoints, cts.Token);
+    ChainSyncMessage intersect = await chainSync.FindIntersectionAsync(startPoints, cts.Token).ConfigureAwait(false);
     if (intersect is not MessageIntersectFound)
     {
         Console.Error.WriteLine("Failed to find intersection.");
@@ -65,7 +66,7 @@ using (node)
     {
         while (totalBlocksSynced < targetBlocks && !cts.Token.IsCancellationRequested)
         {
-            MessageNextResponse? response = await chainSync.NextRequestAsync(cts.Token);
+            MessageNextResponse? response = await chainSync.NextRequestAsync(cts.Token).ConfigureAwait(false);
 
             switch (response)
             {
@@ -74,7 +75,14 @@ using (node)
 
                     if (!noDeser)
                     {
-                        try { CborSerializer.Deserialize<BlockWithEra>(rollForward.Payload.GetValue()); } catch { }
+                        try
+                        {
+                            _ = CborSerializer.Deserialize<BlockWithEra>(rollForward.Payload.GetValue());
+                        }
+                        catch
+                        {
+                            // Intentionally swallowed for benchmarking
+                        }
                     }
 
                     totalBlocksSynced++;
@@ -98,10 +106,13 @@ using (node)
                 case MessageAwaitReply:
                     Console.WriteLine("Reached chain tip.");
                     goto done;
+
+                default:
+                    break;
             }
         }
 
-        done:
+    done:
 
         totalTimer.Stop();
         double totalSeconds = totalTimer.Elapsed.TotalSeconds;
@@ -123,7 +134,7 @@ using (node)
 
     if (chainSync.HasAgency)
     {
-        try { await chainSync.DoneAsync(CancellationToken.None); }
+        try { await chainSync.DoneAsync(CancellationToken.None).ConfigureAwait(false); }
         catch (InvalidOperationException) { }
     }
 }
@@ -142,13 +153,16 @@ static void PrintProgress(Stopwatch totalTimer, Stopwatch windowTimer,
         $"{windowBlkPerSec,7:F1} blk/s | {FormatBytes(windowBytesPerSec)}/s | {FormatBytes(totalBytes)} total");
 }
 
-static string FormatBytes(double bytes) => bytes switch
+static string FormatBytes(double bytes)
 {
-    >= 1_073_741_824 => $"{bytes / 1_073_741_824:F2} GB",
-    >= 1_048_576 => $"{bytes / 1_048_576:F2} MB",
-    >= 1024 => $"{bytes / 1024:F1} KB",
-    _ => $"{bytes:F0} B"
-};
+    return bytes switch
+    {
+        >= 1_073_741_824 => $"{bytes / 1_073_741_824:F2} GB",
+        >= 1_048_576 => $"{bytes / 1_048_576:F2} MB",
+        >= 1024 => $"{bytes / 1024:F1} KB",
+        _ => $"{bytes:F0} B"
+    };
+}
 
 static Dictionary<string, string> ParseArgs(string[] args)
 {
@@ -156,7 +170,9 @@ static Dictionary<string, string> ParseArgs(string[] args)
     for (int i = 0; i < args.Length; i++)
     {
         if (!args[i].StartsWith("--", StringComparison.Ordinal))
+        {
             continue;
+        }
 
         string key = args[i][2..];
         bool hasValue = i + 1 < args.Length && !args[i + 1].StartsWith("--", StringComparison.Ordinal);
@@ -175,7 +191,11 @@ static Dictionary<string, string> ParseArgs(string[] args)
 }
 
 static string GetArg(Dictionary<string, string> map, string key, string fallback)
-    => map.TryGetValue(key, out string? value) ? value : fallback;
+{
+    return map.TryGetValue(key, out string? value) ? value : fallback;
+}
 
 static string? GetArgOrNull(Dictionary<string, string> map, string key)
-    => map.TryGetValue(key, out string? value) ? value : null;
+{
+    return map.TryGetValue(key, out string? value) ? value : null;
+}
