@@ -59,6 +59,19 @@ dotnet_diagnostic.CA1707.severity = none
 dotnet_diagnostic.CA1812.severity = none
 dotnet_diagnostic.CA1852.severity = none
 
+# ── CLI tools ──
+[src/Chrysalis.Tx.Cli/**.cs]
+dotnet_diagnostic.CS1591.severity = none
+dotnet_diagnostic.CA1849.severity = none
+
+[src/Chrysalis.Network.Cli/**.cs]
+dotnet_diagnostic.CS1591.severity = none
+dotnet_diagnostic.CA1849.severity = none
+
+[src/Chrysalis.Wallet.Cli/**.cs]
+dotnet_diagnostic.CS1591.severity = none
+dotnet_diagnostic.CA1849.severity = none
+
 # ── Benchmarks ──
 [benchmarks/**.cs]
 dotnet_diagnostic.CS1591.severity = none
