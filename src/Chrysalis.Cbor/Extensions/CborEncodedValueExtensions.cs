@@ -1,6 +1,6 @@
 using Chrysalis.Cbor.Serialization;
 using Chrysalis.Cbor.Types;
-using Dahomey.Cbor.Serialization;
+using SAIB.Cbor.Serialization;
 
 namespace Chrysalis.Cbor.Extensions;
 
