@@ -18,7 +18,8 @@ namespace Chrysalis.Network.Multiplexer;
 /// </remarks>
 /// <param name="bearerWriter">The pipe writer to write segments to.</param>
 /// <param name="muxerMode">The mode of operation (initiator or responder).</param>
-public sealed class Muxer(PipeWriter bearerWriter, ProtocolMode muxerMode) : IDisposable
+/// <param name="bearerWriteLock">Shared lock to coordinate bearer writes with AgentChannel fast-path.</param>
+public sealed class Muxer(PipeWriter bearerWriter, ProtocolMode muxerMode, SemaphoreSlim bearerWriteLock) : IDisposable
 {
     private readonly PipeWriter _bearerWriter = bearerWriter ?? throw new ArgumentNullException(nameof(bearerWriter));
     private readonly ProtocolMode _muxerMode = muxerMode;
@@ -41,14 +42,20 @@ public sealed class Muxer(PipeWriter bearerWriter, ProtocolMode muxerMode) : IDi
     {
         ReadOnlySequence<byte> encodedSegment = MuxSegmentCodec.Encode(segment);
 
-        // Write directly using the sequence without creating an additional Memory/Span
-        foreach (ReadOnlyMemory<byte> memory in encodedSegment)
+        await bearerWriteLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
         {
-            _ = await _bearerWriter.WriteAsync(memory, cancellationToken).ConfigureAwait(false);
-        }
+            foreach (ReadOnlyMemory<byte> memory in encodedSegment)
+            {
+                _ = await _bearerWriter.WriteAsync(memory, cancellationToken).ConfigureAwait(false);
+            }
 
-        // Flush to ensure data is sent
-        _ = await _bearerWriter.FlushAsync(cancellationToken).ConfigureAwait(false);
+            _ = await _bearerWriter.FlushAsync(cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            _ = bearerWriteLock.Release();
+        }
     }
 
     /// <summary>

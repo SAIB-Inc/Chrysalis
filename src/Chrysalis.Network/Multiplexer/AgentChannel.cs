@@ -18,7 +18,8 @@ public sealed class AgentChannel(
     ProtocolType protocolId,
     PipeWriter muxerWriter,
     PipeWriter bearerWriter,
-    ChannelReader<ReadOnlyMemory<byte>> demuxReader
+    ChannelReader<ReadOnlyMemory<byte>> demuxReader,
+    SemaphoreSlim bearerWriteLock
 )
 {
     /// <summary>
@@ -45,12 +46,42 @@ public sealed class AgentChannel(
     /// <summary>
     /// Writes a pre-encoded mux segment directly to the bearer, bypassing the muxer pipeline.
     /// Use for hot-path messages like NextRequest where the bytes never change.
+    /// Guarded by a shared lock to prevent interleaving with Muxer writes.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public async Task WriteRawSegmentAsync(ReadOnlyMemory<byte> preEncodedSegment, CancellationToken cancellationToken = default)
     {
-        _ = await bearerWriter.WriteAsync(preEncodedSegment, cancellationToken).ConfigureAwait(false);
-        _ = await bearerWriter.FlushAsync(cancellationToken).ConfigureAwait(false);
+        await bearerWriteLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            _ = await bearerWriter.WriteAsync(preEncodedSegment, cancellationToken).ConfigureAwait(false);
+            _ = await bearerWriter.FlushAsync(cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            _ = bearerWriteLock.Release();
+        }
+    }
+
+    /// <summary>
+    /// Writes N copies of a pre-encoded segment in a single lock acquisition and flush.
+    /// Used for pipelined ChainSync where many identical NextRequest messages are sent at once.
+    /// </summary>
+    public async Task WriteBatchRawSegmentsAsync(ReadOnlyMemory<byte> preEncodedSegment, int count, CancellationToken cancellationToken = default)
+    {
+        await bearerWriteLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            for (int i = 0; i < count; i++)
+            {
+                _ = await bearerWriter.WriteAsync(preEncodedSegment, cancellationToken).ConfigureAwait(false);
+            }
+            _ = await bearerWriter.FlushAsync(cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            _ = bearerWriteLock.Release();
+        }
     }
 
     /// <summary>

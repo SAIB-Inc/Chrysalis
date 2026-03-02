@@ -7,11 +7,24 @@ namespace Chrysalis.Network.Multiplexer;
 /// <summary>
 /// Provides bidirectional multiplexing capabilities over a single bearer.
 /// </summary>
-public sealed class Plexer(IBearer bearer) : IDisposable
+public sealed class Plexer : IDisposable
 {
-    private readonly Demuxer _demuxer = new(bearer);
-    private readonly Muxer _muxer = new(bearer.Writer, ProtocolMode.Initiator);
+    private readonly IBearer _bearer;
+    private readonly SemaphoreSlim _bearerWriteLock = new(1, 1);
+    private readonly Demuxer _demuxer;
+    private readonly Muxer _muxer;
     private bool _isDisposed;
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="Plexer"/> class.
+    /// </summary>
+    /// <param name="bearer">The bearer for network communication.</param>
+    public Plexer(IBearer bearer)
+    {
+        _bearer = bearer ?? throw new ArgumentNullException(nameof(bearer));
+        _demuxer = new Demuxer(bearer);
+        _muxer = new Muxer(bearer.Writer, ProtocolMode.Initiator, _bearerWriteLock);
+    }
 
     /// <summary>
     /// Creates a channel for client-side protocol communication.
@@ -21,9 +34,9 @@ public sealed class Plexer(IBearer bearer) : IDisposable
     public AgentChannel SubscribeClient(ProtocolType protocol)
     {
         PipeWriter muxerWriter = _muxer.Writer;
-        PipeWriter bearerWriter = bearer.Writer;
+        PipeWriter bearerWriter = _bearer.Writer;
         ChannelReader<ReadOnlyMemory<byte>> reader = _demuxer.Subscribe(protocol);
-        return new AgentChannel(protocol, muxerWriter, bearerWriter, reader);
+        return new AgentChannel(protocol, muxerWriter, bearerWriter, reader, _bearerWriteLock);
     }
 
     /// <summary>
@@ -81,7 +94,8 @@ public sealed class Plexer(IBearer bearer) : IDisposable
 
         _muxer.Dispose();
         _demuxer.Dispose();
-        bearer.Dispose();
+        _bearer.Dispose();
+        _bearerWriteLock.Dispose();
 
         _isDisposed = true;
     }

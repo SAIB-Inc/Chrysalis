@@ -30,6 +30,15 @@ public sealed class ChannelBuffer(AgentChannel channel)
     }
 
     /// <summary>
+    /// Writes N copies of a pre-encoded mux segment in a single batched write.
+    /// </summary>
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
+    public async Task SendPreEncodedSegmentBatchAsync(ReadOnlyMemory<byte> preEncodedSegment, int count, CancellationToken cancellationToken)
+    {
+        await channel.WriteBatchRawSegmentsAsync(preEncodedSegment, count, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
     /// Sends a complete CBOR message, chunked into segments if necessary.
     /// </summary>
     public async Task SendFullMessageAsync<T>(T message, CancellationToken cancellationToken) where T : CborBase
