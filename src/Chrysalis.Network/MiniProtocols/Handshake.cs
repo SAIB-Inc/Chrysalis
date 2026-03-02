@@ -4,6 +4,9 @@ using Chrysalis.Network.Multiplexer;
 
 namespace Chrysalis.Network.MiniProtocols;
 
+/// <summary>
+/// Implementation of the Ouroboros Handshake mini-protocol for negotiating protocol versions with a Cardano node.
+/// </summary>
 public class Handshake(AgentChannel channel) : IMiniProtocol
 {
     /// <summary>
@@ -32,6 +35,13 @@ public class Handshake(AgentChannel channel) : IMiniProtocol
         return response;
     }
 
+    /// <summary>
+    /// Sends a version proposal and receives the handshake response, deserializing to the specified type.
+    /// </summary>
+    /// <typeparam name="T">The expected handshake response type (e.g., N2NAcceptVersion or N2CAcceptVersion).</typeparam>
+    /// <param name="propose">The version proposal message.</param>
+    /// <param name="cancellationToken">Token to cancel the operation.</param>
+    /// <returns>The handshake response deserialized as the specified type.</returns>
     public async Task<T> SendAsync<T>(ProposeVersions propose, CancellationToken cancellationToken) where T : HandshakeMessage
     {
         await _buffer.SendFullMessageAsync<HandshakeMessage>(propose, cancellationToken).ConfigureAwait(false);

@@ -27,6 +27,9 @@ dotnet_diagnostic.CA1056.severity = none
 dotnet_diagnostic.CA1303.severity = none
 dotnet_diagnostic.CA1031.severity = none
 
+# ── XML documentation ──
+dotnet_diagnostic.CS1591.severity = warning
+
 # ── Skip analysis on source-generated files ──
 [*.g.cs]
 generated_code = true

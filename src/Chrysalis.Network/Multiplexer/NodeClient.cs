@@ -9,6 +9,7 @@ namespace Chrysalis.Network.Multiplexer;
 /// </summary>
 public sealed class NodeClient : IDisposable
 {
+    /// <summary>Gets or sets the network magic number used during the handshake (e.g., 764824073 for mainnet).</summary>
     public ulong NetworkMagic { get; set; } = 2;
 
     private readonly Plexer _plexer;

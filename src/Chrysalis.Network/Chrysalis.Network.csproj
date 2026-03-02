@@ -10,7 +10,6 @@
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <EmitCompilerGeneratedFiles>false</EmitCompilerGeneratedFiles>
-    <NoWarn>$(NoWarn);CS1591</NoWarn>
   </PropertyGroup>
 
   <Import Project="Sdk.props" Sdk="Microsoft.NET.Sdk" />
