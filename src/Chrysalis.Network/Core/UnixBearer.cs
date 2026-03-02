@@ -27,8 +27,18 @@ public sealed class UnixBearer : IBearer
     {
         _socket = socket;
         _stream = stream;
-        Reader = PipeReader.Create(stream);
-        Writer = PipeWriter.Create(stream);
+        ConfigureSocket(socket);
+        Reader = PipeReader.Create(stream, new StreamPipeReaderOptions(bufferSize: 65_536, minimumReadSize: 32_768));
+        Writer = PipeWriter.Create(stream, new StreamPipeWriterOptions(minimumBufferSize: 4_096));
+    }
+
+    /// <summary>
+    /// Configures socket options for optimal throughput.
+    /// </summary>
+    private static void ConfigureSocket(Socket socket)
+    {
+        socket.SendBufferSize = 131_072;
+        socket.ReceiveBufferSize = 262_144;
     }
 
     /// <summary>

@@ -39,17 +39,9 @@ public static class TransactionExtension
 
         return tx with
         {
-            TransactionWitnessSet = tx.TransactionWitnessSet switch
+            TransactionWitnessSet = tx.TransactionWitnessSet with
             {
-                AlonzoTransactionWitnessSet alonzoTransactionWitnessSet => alonzoTransactionWitnessSet with
-                {
-                    VKeyWitnessSet = new CborDefListWithTag<VKeyWitness>(vKeyWitnesses)
-                },
-                PostAlonzoTransactionWitnessSet postAlonzoTransactionWitnessSet => postAlonzoTransactionWitnessSet with
-                {
-                    VKeyWitnessSet = new CborDefListWithTag<VKeyWitness>(vKeyWitnesses)
-                },
-                _ => throw new InvalidOperationException("Unknown transaction witness set type")
+                VKeyWitnessSet = new CborDefListWithTag<VKeyWitness>(vKeyWitnesses)
             }
         };
     }
@@ -76,22 +68,12 @@ public static class TransactionExtension
 
         return tx with
         {
-            TransactionWitnessSet = tx.TransactionWitnessSet switch
+            TransactionWitnessSet = tx.TransactionWitnessSet with
             {
-                AlonzoTransactionWitnessSet alonzoTransactionWitnessSet => alonzoTransactionWitnessSet with
-                {
-                    VKeyWitnessSet = new CborDefListWithTag<VKeyWitness>(vkeyWitnessSet),
-                    Raw = null
-                },
-                PostAlonzoTransactionWitnessSet postAlonzoTransactionWitnessSet => postAlonzoTransactionWitnessSet with
-                {
-                    VKeyWitnessSet = new CborDefListWithTag<VKeyWitness>(vkeyWitnessSet),
-                    Raw = null
-                },
-                _ => throw new InvalidOperationException("Unknown transaction witness set type")
+                VKeyWitnessSet = new CborDefListWithTag<VKeyWitness>(vkeyWitnessSet),
+                Raw = null
             },
             Raw = null
-
         };
     }
 }

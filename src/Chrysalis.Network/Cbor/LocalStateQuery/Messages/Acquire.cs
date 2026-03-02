@@ -1,5 +1,4 @@
 using Chrysalis.Cbor.Serialization.Attributes;
-using Chrysalis.Cbor.Types;
 using Chrysalis.Network.Cbor.Common;
 
 namespace Chrysalis.Network.Cbor.LocalStateQuery.Messages;
@@ -17,32 +16,31 @@ public static class AcquireTypes
 
     public static Acquire SpecificPoint(Point point)
     {
-        return new SpecificPoint(new Value0(0), point);
+        return new SpecificPoint(0, point);
     }
 
-    public static Acquire VolatileTip => new VolatileTip(new Value8(8));
-    public static Acquire ImmutableTip => new ImmutableTip(new Value10(10));
+    public static Acquire VolatileTip => new VolatileTip(8);
+    public static Acquire ImmutableTip => new ImmutableTip(10);
 }
 
 [CborSerializable]
-[CborUnion]
-public abstract partial record AcquireIdx : CborBase;
-
-[CborSerializable]
 [CborList]
+[CborIndex(0)]
 public partial record SpecificPoint(
-    [CborOrder(0)] Value0 Idx,
+    [CborOrder(0)] int Idx,
     [CborOrder(1)] Point Point
 ) : Acquire;
 
 [CborSerializable]
 [CborList]
+[CborIndex(8)]
 public partial record VolatileTip(
-    [CborOrder(0)] Value8 Idx
+    [CborOrder(0)] int Idx
 ) : Acquire;
 
 [CborSerializable]
 [CborList]
+[CborIndex(10)]
 public partial record ImmutableTip(
-    [CborOrder(0)] Value10 Idx
+    [CborOrder(0)] int Idx
 ) : Acquire;

@@ -9,38 +9,41 @@ public abstract partial record KeepAliveMessage : CborBase;
 
 [CborSerializable]
 [CborList]
+[CborIndex(0)]
 public partial record MessageKeepAlive(
-    [CborOrder(0)] Value0 Idx,
+    [CborOrder(0)] int Idx,
     [CborOrder(1)] uint Cookie
 ) : KeepAliveMessage;
 
 [CborSerializable]
 [CborList]
+[CborIndex(1)]
 public partial record MessageKeepAliveResponse(
-    [CborOrder(0)] Value1 Idx,
+    [CborOrder(0)] int Idx,
     [CborOrder(1)] uint Cookie
 ) : KeepAliveMessage;
 
 [CborSerializable]
 [CborList]
+[CborIndex(2)]
 public partial record MessageDone(
-    [CborOrder(0)] Value2 Idx
+    [CborOrder(0)] int Idx
 ) : KeepAliveMessage;
 
 public static class KeepAliveMessages
 {
     public static MessageKeepAlive KeepAlive(uint cookie)
     {
-        return new(new Value0(0), cookie);
+        return new(0, cookie);
     }
 
     public static MessageKeepAliveResponse KeepAliveResponse(uint cookie)
     {
-        return new(new Value1(1), cookie);
+        return new(1, cookie);
     }
 
     public static MessageDone Done()
     {
-        return new(new Value2(2));
+        return new(2);
     }
 }

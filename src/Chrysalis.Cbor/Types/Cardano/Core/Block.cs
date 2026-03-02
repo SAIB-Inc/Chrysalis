@@ -26,7 +26,7 @@ public abstract partial record Block : CborBase { }
 public partial record AlonzoCompatibleBlock(
 [CborOrder(0)] BlockHeader Header,
 [CborOrder(1)] CborMaybeIndefList<AlonzoTransactionBody> TransactionBodies,
-[CborOrder(2)] CborMaybeIndefList<AlonzoTransactionWitnessSet> TransactionWitnessSets,
+[CborOrder(2)] CborMaybeIndefList<PostAlonzoTransactionWitnessSet> TransactionWitnessSets,
 [CborOrder(3)] AuxiliaryDataSet AuxiliaryDataSet,
 [CborOrder(4)] CborMaybeIndefList<int>? InvalidTransactions
 ) : Block, ICborPreserveRaw;

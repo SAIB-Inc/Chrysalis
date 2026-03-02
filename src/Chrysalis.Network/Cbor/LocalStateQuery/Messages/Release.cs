@@ -1,10 +1,10 @@
 using Chrysalis.Cbor.Serialization.Attributes;
-using Chrysalis.Cbor.Types;
 
 namespace Chrysalis.Network.Cbor.LocalStateQuery.Messages;
 
 [CborSerializable]
 [CborList]
+[CborIndex(5)]
 public partial record Release(
-    [CborOrder(0)] Value5 Idx
+    [CborOrder(0)] int Idx
 ) : LocalStateQueryMessage;

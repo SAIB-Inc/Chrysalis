@@ -36,7 +36,7 @@
 
   <ItemGroup>
     <PackageReference Include="SAIB.Blake2Fast" />
-    <PackageReference Include="Dahomey.Cbor" />
+    <ProjectReference Include="/tmp/Dahomey.Cbor/src/Dahomey.Cbor/Dahomey.Cbor.csproj" />
     <PackageReference Include="Microsoft.AspNetCore.Cryptography.KeyDerivation" />
   </ItemGroup>
 

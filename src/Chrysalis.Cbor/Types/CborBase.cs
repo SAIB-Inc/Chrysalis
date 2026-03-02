@@ -65,6 +65,18 @@ public abstract partial record CborBase
     }
 
     /// <summary>
+    /// Reads a CBOR value from the specified byte data and reports how many bytes were consumed.
+    /// </summary>
+    /// <param name="data">The raw CBOR-encoded bytes to read.</param>
+    /// <param name="bytesConsumed">The number of bytes consumed from the input.</param>
+    /// <returns>The deserialized CBOR value.</returns>
+    /// <exception cref="NotImplementedException">Always thrown; use the generated serializer instead.</exception>
+    public static CborBase Read(ReadOnlyMemory<byte> data, out int bytesConsumed)
+    {
+        throw new NotImplementedException();
+    }
+
+    /// <summary>
     /// Writes a CBOR value to the specified output buffer.
     /// </summary>
     /// <param name="output">The output buffer to write to.</param>

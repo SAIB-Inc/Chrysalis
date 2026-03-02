@@ -5,8 +5,6 @@ namespace Chrysalis.Cbor.Types.Cardano.Core.Common;
 /// <summary>
 /// Represents a multi-asset collection in a Cardano transaction.
 /// </summary>
-[CborSerializable]
-[CborUnion]
 public abstract partial record MultiAsset : CborBase { }
 
 /// <summary>

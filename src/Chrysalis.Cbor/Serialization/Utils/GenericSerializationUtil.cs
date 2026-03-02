@@ -12,6 +12,11 @@ namespace Chrysalis.Cbor.Serialization.Utils;
 public delegate T ReadHandler<T>(ReadOnlyMemory<byte> data);
 
 /// <summary>
+/// Delegate for reading a value of type <typeparamref name="T"/> from CBOR-encoded bytes with consumed byte tracking.
+/// </summary>
+public delegate T ReadWithConsumedHandler<T>(ReadOnlyMemory<byte> data, out int bytesConsumed);
+
+/// <summary>
 /// Delegate for writing a value of type <typeparamref name="T"/> to an output buffer.
 /// </summary>
 public delegate void WriteHandler<T>(IBufferWriter<byte> output, T value);
@@ -22,6 +27,7 @@ public delegate void WriteHandler<T>(IBufferWriter<byte> output, T value);
 public static class GenericSerializationUtil
 {
     private static readonly ConcurrentDictionary<Type, Delegate> ReadMethodCache = [];
+    private static readonly ConcurrentDictionary<Type, Delegate> ReadWithConsumedMethodCache = [];
     private static readonly ConcurrentDictionary<Type, Delegate> WriteMethodCache = [];
 
     #region Read
@@ -33,12 +39,100 @@ public static class GenericSerializationUtil
         return IsPrimitiveType(typeof(T)) ? ReadPrimitive<T>(data) : ReadNonPrimitive<T>(data);
     }
 
+    /// <summary>Reads a value of type T from CBOR-encoded bytes and reports how many bytes were consumed.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static T? ReadWithConsumed<T>(ReadOnlyMemory<byte> data, out int bytesConsumed) where T : CborBase
+    {
+        return ReadNonPrimitiveWithConsumed<T>(data, out bytesConsumed);
+    }
+
+    /// <summary>Reads a value of type T (primitive or non-primitive) from CBOR-encoded bytes and reports consumed bytes.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static T? ReadAnyWithConsumed<T>(ReadOnlyMemory<byte> data, out int bytesConsumed)
+    {
+        if (IsPrimitiveType(typeof(T)))
+        {
+            return ReadPrimitiveWithConsumed<T>(data, out bytesConsumed);
+        }
+
+        if (!ReadWithConsumedMethodCache.TryGetValue(typeof(T), out Delegate? readDelegate))
+        {
+            MethodInfo readMethod = typeof(T).GetMethod("Read", BindingFlags.Public | BindingFlags.Static | BindingFlags.FlattenHierarchy, null, [typeof(ReadOnlyMemory<byte>), typeof(int).MakeByRefType()], null)
+                ?? throw new NotSupportedException($"Type {typeof(T).FullName} does not have a valid static Read(ReadOnlyMemory<byte>, out int) method.");
+
+            readDelegate = Delegate.CreateDelegate(typeof(ReadWithConsumedHandler<T>), readMethod);
+            ReadWithConsumedMethodCache[typeof(T)] = readDelegate;
+        }
+
+        return ((ReadWithConsumedHandler<T>)readDelegate)(data, out bytesConsumed);
+    }
+
+    /// <summary>Reads a primitive value of type T from CBOR-encoded bytes and reports consumed bytes.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static T? ReadPrimitiveWithConsumed<T>(ReadOnlyMemory<byte> data, out int bytesConsumed)
+    {
+        CborReader reader = new(data.Span);
+        Type type = typeof(T);
+
+        if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(Nullable<>))
+        {
+            type = Nullable.GetUnderlyingType(type)!;
+        }
+
+        T? result = true switch
+        {
+            _ when type == typeof(bool) => (T)(object)reader.ReadBoolean(),
+            _ when type == typeof(int) => (T)(object)reader.ReadInt32(),
+            _ when type == typeof(uint) => (T)(object)reader.ReadUInt32(),
+            _ when type == typeof(long) => (T)(object)reader.ReadInt64(),
+            _ when type == typeof(ulong) => (T)(object)reader.ReadUInt64(),
+            _ when type == typeof(float) => (T)(object)reader.ReadSingle(),
+            _ when type == typeof(double) => (T)(object)reader.ReadDouble(),
+            _ when type == typeof(decimal) => (T)(object)reader.ReadDecimal(),
+            _ when type == typeof(string) => (T)(object)reader.ReadString()!,
+            _ when type == typeof(byte[]) => (T)(object)ReadByteArray(ref reader),
+            _ when type == typeof(ReadOnlyMemory<byte>) => (T)(object)(ReadOnlyMemory<byte>)ReadByteArray(ref reader),
+            _ when type == typeof(CborEncodedValue) => ReadCborEncodedValueAsT<T>(ref reader, data),
+            _ when type == typeof(CborLabel) => (T)(object)ReadCborLabel(ref reader),
+            _ => throw new NotSupportedException($"Type {type} is not supported as a primitive type.")
+        };
+
+        bytesConsumed = data.Length - reader.Buffer.Length;
+        return result;
+    }
+
+    /// <summary>Reads a non-primitive value of type T from CBOR-encoded bytes, reporting consumed bytes via the generated Read(data, out bytesConsumed) overload.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static T ReadNonPrimitiveWithConsumed<T>(ReadOnlyMemory<byte> data, out int bytesConsumed) where T : CborBase
+    {
+        if (!ReadWithConsumedMethodCache.TryGetValue(typeof(T), out Delegate? readDelegate))
+        {
+            MethodInfo readMethod = typeof(T).GetMethod("Read", BindingFlags.Public | BindingFlags.Static | BindingFlags.FlattenHierarchy, null, [typeof(ReadOnlyMemory<byte>), typeof(int).MakeByRefType()], null)
+                ?? throw new NotSupportedException($"Type {typeof(T).FullName} does not have a valid static Read(ReadOnlyMemory<byte>, out int) method.");
+
+            readDelegate = (ReadWithConsumedHandler<T>)Delegate.CreateDelegate(typeof(ReadWithConsumedHandler<T>), readMethod);
+            ReadWithConsumedMethodCache[typeof(T)] = readDelegate;
+        }
+
+        return ((ReadWithConsumedHandler<T>)readDelegate)(data, out bytesConsumed);
+    }
+
     /// <summary>Reads a value of the specified type from CBOR-encoded bytes.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static object? Read(ReadOnlyMemory<byte> data, Type type)
     {
         ArgumentNullException.ThrowIfNull(type);
         return IsPrimitiveType(type) ? ReadPrimitive(type, data) : ReadNonPrimitive(type, data);
+    }
+
+    /// <summary>Reads a value of the specified type from CBOR-encoded bytes and reports consumed bytes.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static object? ReadAnyWithConsumed(ReadOnlyMemory<byte> data, Type type, out int bytesConsumed)
+    {
+        ArgumentNullException.ThrowIfNull(type);
+        return IsPrimitiveType(type)
+            ? ReadPrimitiveWithConsumed(type, data, out bytesConsumed)
+            : ReadNonPrimitiveWithConsumed(type, data, out bytesConsumed);
     }
 
     /// <summary>Determines whether the specified type is a CBOR primitive type.</summary>
@@ -133,6 +227,66 @@ public static class GenericSerializationUtil
         };
     }
 
+    /// <summary>Reads a primitive value of the specified type from CBOR-encoded bytes and reports consumed bytes.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static object? ReadPrimitiveWithConsumed(Type type, ReadOnlyMemory<byte> data, out int bytesConsumed)
+    {
+        CborReader reader = new(data.Span);
+
+        if (Nullable.GetUnderlyingType(type) != null)
+        {
+            type = Nullable.GetUnderlyingType(type)!;
+        }
+
+        // CborEncodedValue needs special handling (requires ReadDataItem for boundary)
+        if (type == typeof(CborEncodedValue))
+        {
+            int pos = data.Length - reader.Buffer.Length;
+            _ = reader.ReadDataItem();
+            bytesConsumed = data.Length - reader.Buffer.Length;
+            return new CborEncodedValue(data[pos..bytesConsumed]);
+        }
+
+        object? result = true switch
+        {
+            _ when type == typeof(bool) => reader.ReadBoolean(),
+            _ when type == typeof(int) => reader.ReadInt32(),
+            _ when type == typeof(uint) => reader.ReadUInt32(),
+            _ when type == typeof(long) => reader.ReadInt64(),
+            _ when type == typeof(ulong) => reader.ReadUInt64(),
+            _ when type == typeof(float) => reader.ReadSingle(),
+            _ when type == typeof(double) => reader.ReadDouble(),
+            _ when type == typeof(decimal) => reader.ReadDecimal(),
+            _ when type == typeof(string) => reader.ReadString()!,
+            _ when type == typeof(byte[]) => ReadByteArray(ref reader),
+            _ when type == typeof(ReadOnlyMemory<byte>) => (ReadOnlyMemory<byte>)ReadByteArray(ref reader),
+            _ when type == typeof(CborLabel) => ReadCborLabel(ref reader),
+            _ => throw new NotSupportedException($"Type {type} is not supported as a primitive type.")
+        };
+        bytesConsumed = data.Length - reader.Buffer.Length;
+        return result;
+    }
+
+    /// <summary>Reads a non-primitive value of the specified type from CBOR-encoded bytes and reports consumed bytes.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static object? ReadNonPrimitiveWithConsumed(Type type, ReadOnlyMemory<byte> data, out int bytesConsumed)
+    {
+        ArgumentNullException.ThrowIfNull(type);
+
+        if (Nullable.GetUnderlyingType(type) != null)
+        {
+            type = Nullable.GetUnderlyingType(type)!;
+        }
+
+        MethodInfo readMethod = type.GetMethod("Read", BindingFlags.Public | BindingFlags.Static | BindingFlags.FlattenHierarchy, null, [typeof(ReadOnlyMemory<byte>), typeof(int).MakeByRefType()], null)
+            ?? throw new NotSupportedException($"Type {type.FullName} does not have a valid static Read(ReadOnlyMemory<byte>, out int) method.");
+
+        object?[] args = [data, 0];
+        object? result = readMethod.Invoke(null, args);
+        bytesConsumed = (int)args[1]!;
+        return result;
+    }
+
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static CborLabel ReadCborLabel(ref CborReader reader)
     {
@@ -147,6 +301,15 @@ public static class GenericSerializationUtil
                 => throw new InvalidOperationException($"Invalid CBOR type for Label: {itemType}"),
             _ => throw new InvalidOperationException($"Invalid CBOR type for Label: {itemType}")
         };
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static T ReadCborEncodedValueAsT<T>(ref CborReader reader, ReadOnlyMemory<byte> data)
+    {
+        int pos = data.Length - reader.Buffer.Length;
+        _ = reader.ReadDataItem();
+        int consumed = data.Length - reader.Buffer.Length - pos;
+        return (T)(object)new CborEncodedValue(data.Slice(pos, consumed));
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
