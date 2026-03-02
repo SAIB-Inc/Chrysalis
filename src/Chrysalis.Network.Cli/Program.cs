@@ -401,14 +401,14 @@ internal static class Program
                 {
                     ByronEbbHead ebbHead = CborSerializer.Deserialize<ByronEbbHead>(header.HeaderCbor);
                     ulong slot = ebbHead.ConsensusData.EpochId * 21600;
-                    byte[] hash = Blake2Fast.Blake2b.HashData(32, header.HeaderCbor.Span);
+                    byte[] hash = HashByronHeader(0, header.HeaderCbor.Span);
                     point = Point.Specific(slot, hash);
                 }
                 else
                 {
                     ByronBlockHead blockHead = CborSerializer.Deserialize<ByronBlockHead>(header.HeaderCbor);
                     ulong slot = (blockHead.ConsensusData.SlotId.Epoch * 21600) + blockHead.ConsensusData.SlotId.Slot;
-                    byte[] hash = Blake2Fast.Blake2b.HashData(32, header.HeaderCbor.Span);
+                    byte[] hash = HashByronHeader(1, header.HeaderCbor.Span);
                     point = Point.Specific(slot, hash);
                 }
                 return;
@@ -423,6 +423,19 @@ internal static class Program
         {
             // skip unparseable headers
         }
+    }
+
+    /// <summary>
+    /// Computes the Byron block hash by wrapping the header in a CBOR tuple [tag, header_bytes] before hashing.
+    /// Byron EBB uses tag=0, Byron main block uses tag=1.
+    /// </summary>
+    private static byte[] HashByronHeader(byte tag, ReadOnlySpan<byte> headerCbor)
+    {
+        byte[] wrapped = new byte[2 + headerCbor.Length];
+        wrapped[0] = 0x82; // CBOR array(2)
+        wrapped[1] = tag;  // CBOR uint(0) or uint(1)
+        headerCbor.CopyTo(wrapped.AsSpan(2));
+        return Blake2Fast.Blake2b.HashData(32, wrapped);
     }
 
     #endregion
@@ -635,8 +648,8 @@ internal static class Program
         Console.WriteLine("  dotnet run --project src/Chrysalis.Network.Cli -- <command> [options]");
         Console.WriteLine();
         Console.WriteLine("Commands:");
-        Console.WriteLine("  chainsync    Sync headers from chain origin (default)");
-        Console.WriteLine("  blockfetch   Fetch full blocks via ChainSync + BlockFetch (N2N only)");
+        Console.WriteLine("  chainsync    Sync headers + fetch blocks from origin (default)");
+        Console.WriteLine("  blockfetch   Fetch N blocks via ChainSync + BlockFetch (N2N only)");
         Console.WriteLine();
         Console.WriteLine("Connection (pick one):");
         Console.WriteLine("  --socket <path>              N2C Unix socket path (SOCKET env)");

@@ -57,8 +57,8 @@ public static class BlockExtensions
         ArgumentNullException.ThrowIfNull(self);
         return self switch
         {
-            ByronMainBlock byron => Convert.ToHexStringLower(Blake2Fast.Blake2b.HashData(32, byron.Header.Raw!.Value.Span)),
-            ByronEbBlock ebb => Convert.ToHexStringLower(Blake2Fast.Blake2b.HashData(32, ebb.Header.Raw!.Value.Span)),
+            ByronMainBlock byron => Convert.ToHexStringLower(HashByronHeader(1, byron.Header.Raw!.Value.Span)),
+            ByronEbBlock ebb => Convert.ToHexStringLower(HashByronHeader(0, ebb.Header.Raw!.Value.Span)),
             _ => self.Header().Hash()
         };
     }
@@ -130,6 +130,21 @@ public static class BlockExtensions
     {
         ArgumentNullException.ThrowIfNull(self);
         return Convert.ToHexStringLower(Blake2Fast.Blake2b.HashData(32, self.Raw!.Value.Span));
+    }
+
+    /// <summary>
+    /// Computes the Byron block hash by wrapping the header in a CBOR tuple [tag, header_bytes] before hashing.
+    /// Byron EBB uses tag=0, Byron main block uses tag=1.
+    /// </summary>
+    private static byte[] HashByronHeader(byte tag, ReadOnlySpan<byte> headerCbor)
+    {
+        // Byron block hash = Blake2b-256(CBOR-encode([tag, header]))
+        // where tag=0 for EBB, tag=1 for main block
+        byte[] wrapped = new byte[2 + headerCbor.Length];
+        wrapped[0] = 0x82; // CBOR array(2)
+        wrapped[1] = tag;  // CBOR uint(0) or uint(1)
+        headerCbor.CopyTo(wrapped.AsSpan(2));
+        return Blake2Fast.Blake2b.HashData(32, wrapped);
     }
 
     /// <summary>
