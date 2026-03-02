@@ -142,7 +142,20 @@ public sealed partial class CborSerializerCodeGen
                 case "System.ReadOnlyMemory<byte>":
                 case "global::System.ReadOnlyMemory<byte>?":
                 case "global::System.ReadOnlyMemory<byte>":
-                    _ = sb.AppendLine($"{propertyName} = (ReadOnlyMemory<byte>)reader.ReadByteString().ToArray();");
+                    // Zero-copy for definite-length byte strings; fallback for indefinite
+                    _ = sb.AppendLine("{");
+                    _ = sb.AppendLine("bool _isIndef = reader.Buffer.Length > 0 && reader.Buffer[0] == 0x5F;");
+                    _ = sb.AppendLine("ReadOnlySpan<byte> _bs = reader.ReadByteString();");
+                    _ = sb.AppendLine("if (_isIndef)");
+                    _ = sb.AppendLine("{");
+                    _ = sb.AppendLine($"{propertyName} = (ReadOnlyMemory<byte>)_bs.ToArray();");
+                    _ = sb.AppendLine("}");
+                    _ = sb.AppendLine("else");
+                    _ = sb.AppendLine("{");
+                    _ = sb.AppendLine("int _after = data.Length - reader.Buffer.Length;");
+                    _ = sb.AppendLine($"{propertyName} = data.Slice(_after - _bs.Length, _bs.Length);");
+                    _ = sb.AppendLine("}");
+                    _ = sb.AppendLine("}");
 
                     break;
                 case "CborEncodedValue":
