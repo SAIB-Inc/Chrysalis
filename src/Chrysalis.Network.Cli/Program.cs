@@ -1,5 +1,7 @@
+using System.Diagnostics;
 using Chrysalis.Cbor.Extensions;
 using Chrysalis.Cbor.Extensions.Cardano.Core;
+using Chrysalis.Cbor.Extensions.Cardano.Core.Byron;
 using Chrysalis.Cbor.Extensions.Cardano.Core.Header;
 using Chrysalis.Cbor.Serialization;
 using Chrysalis.Cbor.Types.Cardano.Core;
@@ -7,6 +9,7 @@ using Chrysalis.Cbor.Types.Cardano.Core.Byron;
 using Chrysalis.Cbor.Types.Cardano.Core.Header;
 using Chrysalis.Network.Cbor.ChainSync;
 using Chrysalis.Network.Cbor.Common;
+using Chrysalis.Network.MiniProtocols;
 using Chrysalis.Network.Multiplexer;
 
 internal static class Program
@@ -15,13 +18,16 @@ internal static class Program
     private const int DefaultPort = 3001;
     private const ulong DefaultNetworkMagic = 2;
     private const int DefaultKeepAliveSeconds = 20;
+    private const int DefaultBlockCount = 100;
 
     private sealed record Options(
         string Command,
+        string? Socket,
         string Host,
         int Port,
         ulong NetworkMagic,
         int KeepAliveSeconds,
+        int BlockCount,
         ulong? Slot,
         string? Hash
     );
@@ -46,7 +52,24 @@ internal static class Program
             cts.Cancel();
         };
 
-        Console.WriteLine($"Connecting to {options.Host}:{options.Port} (magic {options.NetworkMagic})...");
+        if (options.Socket is not null)
+        {
+            Console.WriteLine($"Connecting to {options.Socket} (N2C, magic {options.NetworkMagic})...");
+
+            using NodeClient node = await NodeClient.ConnectAsync(options.Socket, cts.Token).ConfigureAwait(false);
+            await node.StartAsync(options.NetworkMagic).ConfigureAwait(false);
+
+            Console.WriteLine("Connected.");
+
+            return options.Command switch
+            {
+                "CHAINSYNC" => await RunChainSyncN2C(node.ChainSync, cts.Token).ConfigureAwait(false),
+                "BLOCKFETCH" => throw new InvalidOperationException("BlockFetch is not available over N2C. Use N2N (--tcp-host/--tcp-port) instead."),
+                _ => throw new InvalidOperationException($"Unknown command: {options.Command}")
+            };
+        }
+
+        Console.WriteLine($"Connecting to {options.Host}:{options.Port} (N2N, magic {options.NetworkMagic})...");
 
         using PeerClient peer = await PeerClient.ConnectAsync(options.Host, options.Port, cts.Token).ConfigureAwait(false);
         await peer.StartAsync(options.NetworkMagic, TimeSpan.FromSeconds(options.KeepAliveSeconds)).ConfigureAwait(false);
@@ -55,44 +78,55 @@ internal static class Program
 
         return options.Command switch
         {
-            "CHAINSYNC" => await RunChainSync(peer, cts.Token).ConfigureAwait(false),
+            "CHAINSYNC" => await RunChainSyncN2N(peer, cts.Token).ConfigureAwait(false),
             "BLOCKFETCH" => await RunBlockFetch(peer, options, cts.Token).ConfigureAwait(false),
             _ => throw new InvalidOperationException($"Unknown command: {options.Command}")
         };
     }
 
-    #region ChainSync
+    #region ChainSync N2C
 
-    private static async Task<int> RunChainSync(PeerClient peer, CancellationToken ct)
+    private static async Task<int> RunChainSyncN2C(ChainSync chainSync, CancellationToken ct)
     {
-        Console.WriteLine("Starting ChainSync from origin...");
+        Console.WriteLine("Starting ChainSync from origin (N2C)...");
 
-        ChainSyncMessage intersect = await peer.ChainSync.FindIntersectionAsync([Point.Origin], ct).ConfigureAwait(false);
-
-        switch (intersect)
+        ChainSyncMessage intersect = await chainSync.FindIntersectionAsync([Point.Origin], ct).ConfigureAwait(false);
+        if (intersect is not MessageIntersectFound found)
         {
-            case MessageIntersectFound found:
-                Console.WriteLine($"Intersection found at {FormatPoint(found.Point)}");
-                break;
-            case MessageIntersectNotFound notFound:
-                Console.WriteLine($"Intersection not found. Tip {FormatPoint(notFound.Tip.Slot)}");
-                return 2;
-            default:
-                Console.WriteLine("Unexpected intersection response.");
-                return 2;
+            Console.WriteLine("Failed to find intersection.");
+            return 2;
         }
+        Console.WriteLine($"Intersection found at {FormatPoint(found.Point)}");
 
+        Stopwatch totalTimer = Stopwatch.StartNew();
+        Stopwatch windowTimer = Stopwatch.StartNew();
+        long totalBlocks = 0;
+        int windowBlocks = 0;
+        Era lastEra = Era.Byron;
+        ulong lastSlot = 0;
+        ulong lastBlockNumber = 0;
+        Point tipPoint = Point.Origin;
         bool atTip = false;
 
         while (!ct.IsCancellationRequested)
         {
-            MessageNextResponse? response = await peer.ChainSync.NextRequestAsync(ct).ConfigureAwait(false);
+            MessageNextResponse? response = await chainSync.NextRequestAsync(ct).ConfigureAwait(false);
 
             switch (response)
             {
                 case MessageRollForward rollForward:
                     atTip = false;
-                    Console.WriteLine(FormatRollForward(rollForward));
+                    totalBlocks++;
+                    windowBlocks++;
+                    tipPoint = rollForward.Tip.Slot;
+                    ExtractBlockInfo(rollForward, ref lastEra, ref lastSlot, ref lastBlockNumber);
+
+                    if (windowTimer.Elapsed.TotalSeconds >= 3)
+                    {
+                        PrintProgress(totalTimer, windowTimer, totalBlocks, windowBlocks, lastSlot, lastBlockNumber, lastEra, tipPoint);
+                        windowTimer.Restart();
+                        windowBlocks = 0;
+                    }
                     break;
 
                 case MessageRollBackward rollBackward:
@@ -103,7 +137,7 @@ internal static class Program
                 case MessageAwaitReply:
                     if (!atTip)
                     {
-                        Console.WriteLine("await");
+                        PrintAtTip(totalTimer, totalBlocks, tipPoint);
                         atTip = true;
                     }
                     break;
@@ -112,75 +146,135 @@ internal static class Program
             }
         }
 
-        if (peer.ChainSync.HasAgency)
-        {
-            try { await peer.ChainSync.DoneAsync(CancellationToken.None).ConfigureAwait(false); }
-            catch (InvalidOperationException) { /* Best-effort shutdown */ }
-        }
-
+        PrintStopped(totalTimer, totalBlocks);
+        await TryDoneAsync(chainSync).ConfigureAwait(false);
         return 0;
     }
 
     #endregion
 
-    #region BlockFetch
+    #region ChainSync N2N
 
-    private static async Task<int> RunBlockFetch(PeerClient peer, Options options, CancellationToken ct)
+    private const int BatchSize = 100;
+
+    private static async Task<int> RunChainSyncN2N(PeerClient peer, CancellationToken ct)
     {
-        Point point;
+        Console.WriteLine("Starting ChainSync from origin (N2N, headers + block fetch)...");
 
-        if (options.Slot is not null && options.Hash is not null)
+        ChainSyncMessage intersect = await peer.ChainSync.FindIntersectionAsync([Point.Origin], ct).ConfigureAwait(false);
+        if (intersect is not MessageIntersectFound found)
         {
-            byte[] hashBytes = Convert.FromHexString(options.Hash);
-            point = Point.Specific(options.Slot.Value, hashBytes);
-        }
-        else
-        {
-            // Use chainsync to discover a block point first
-            Console.WriteLine("No --slot/--hash given, using ChainSync to discover a block...");
-            ChainSyncMessage intersect = await peer.ChainSync.FindIntersectionAsync([Point.Origin], ct).ConfigureAwait(false);
-
-            if (intersect is not MessageIntersectFound)
-            {
-                Console.WriteLine("Failed to find intersection.");
-                return 2;
-            }
-
-            // Get first rollforward to have a real block point
-            MessageNextResponse? response = await peer.ChainSync.NextRequestAsync(ct).ConfigureAwait(false);
-            while (response is MessageRollBackward or MessageAwaitReply)
-            {
-                response = await peer.ChainSync.NextRequestAsync(ct).ConfigureAwait(false);
-            }
-
-            if (response is not MessageRollForward rollForward)
-            {
-                Console.WriteLine("Failed to get a block from ChainSync.");
-                return 2;
-            }
-
-            // Extract the tip point as our fetch target (we know this block exists)
-            point = rollForward.Tip.Slot;
-            Console.WriteLine($"Discovered block: {FormatPoint(point)}");
-        }
-
-        Console.WriteLine($"Fetching block at {FormatPoint(point)}...");
-
-        BlockWithEra? block = await peer.BlockFetch.FetchSingleAsync<BlockWithEra>(point, ct).ConfigureAwait(false);
-
-        if (block is null)
-        {
-            Console.WriteLine("NoBlocks — block not found.");
+            Console.WriteLine("Failed to find intersection.");
             return 2;
         }
+        Console.WriteLine($"Intersection found at {FormatPoint(found.Point)}");
 
-        Console.WriteLine($"Deserialized: {block.GetType().Name}");
+        Stopwatch totalTimer = Stopwatch.StartNew();
+        Stopwatch windowTimer = Stopwatch.StartNew();
+        long totalBlocks = 0;
+        int windowBlocks = 0;
+        Era lastEra = Era.Byron;
+        ulong lastSlot = 0;
+        ulong lastBlockNumber = 0;
+        Point tipPoint = Point.Origin;
 
-        Block? inner = block.Block;
-        if (inner is not null)
+        while (!ct.IsCancellationRequested)
         {
-            Console.WriteLine($"Era block type: {inner.GetType().Name}");
+            // Collect a batch of header points
+            List<Point> batch = [];
+            bool reachedTip = false;
+
+            Stopwatch batchTimer = Stopwatch.StartNew();
+
+            while (batch.Count < BatchSize && !ct.IsCancellationRequested)
+            {
+                MessageNextResponse? response = await peer.ChainSync.NextRequestAsync(ct).ConfigureAwait(false);
+
+                switch (response)
+                {
+                    case MessageRollForward rollForward:
+                        tipPoint = rollForward.Tip.Slot;
+                        ExtractHeaderPoint(rollForward, out Point? headerPoint);
+                        if (headerPoint is not null)
+                        {
+                            batch.Add(headerPoint);
+                        }
+                        else
+                        {
+                            Console.WriteLine($"  WARN: skipped unparseable header (payload {rollForward.Payload.Value.Length} bytes)");
+                        }
+                        break;
+                    case MessageRollBackward rollBackward:
+                        Console.WriteLine($"rollback to {FormatPoint(rollBackward.Point)}");
+                        batch.Clear();
+                        break;
+                    case MessageAwaitReply:
+                        reachedTip = true;
+                        goto fetchBatch;
+                    default:
+                        break;
+                }
+
+                // Flush partial batch after 3 seconds so we show progress
+                if (batch.Count > 0 && batchTimer.Elapsed.TotalSeconds >= 3)
+                {
+                    break;
+                }
+            }
+
+        fetchBatch:
+            if (batch.Count > 0)
+            {
+                try
+                {
+                    await foreach (BlockWithEra block in peer.BlockFetch
+                        .FetchRangeAsync<BlockWithEra>(batch[0], batch[^1], ct)
+                        .ConfigureAwait(false))
+                    {
+                        totalBlocks++;
+                        windowBlocks++;
+
+                        if (block.Block is not null)
+                        {
+                            lastEra = block.Era();
+                            lastSlot = block.Block.Slot();
+                            lastBlockNumber = block.Block.Height();
+                        }
+
+                        if (windowTimer.Elapsed.TotalSeconds >= 3)
+                        {
+                            PrintProgress(totalTimer, windowTimer, totalBlocks, windowBlocks, lastSlot, lastBlockNumber, lastEra, tipPoint);
+                            windowTimer.Restart();
+                            windowBlocks = 0;
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"  BlockFetch error: {ex.Message}");
+                    Console.WriteLine($"  Batch: {batch.Count} blocks, first={FormatPoint(batch[0])}, last={FormatPoint(batch[^1])}");
+                }
+            }
+
+            if (reachedTip)
+            {
+                PrintAtTip(totalTimer, totalBlocks, tipPoint);
+                Console.WriteLine("awaiting new blocks...");
+
+                // Wait for next rollforward before resuming batch loop
+                while (!ct.IsCancellationRequested)
+                {
+                    MessageNextResponse? response = await peer.ChainSync.NextRequestAsync(ct).ConfigureAwait(false);
+                    if (response is MessageRollForward)
+                    {
+                        break;
+                    }
+                }
+            }
         }
+
+        PrintStopped(totalTimer, totalBlocks);
+        await TryDoneAsync(peer.ChainSync).ConfigureAwait(false);
 
         if (peer.BlockFetch.HasAgency)
         {
@@ -193,50 +287,211 @@ internal static class Program
 
     #endregion
 
-    #region Formatting
+    #region BlockFetch
 
-    private static string FormatRollForward(MessageRollForward rollForward)
+    private static async Task<int> RunBlockFetch(PeerClient peer, Options options, CancellationToken ct)
     {
+        Point startPoint = (options.Slot is not null && options.Hash is not null)
+            ? Point.Specific(options.Slot.Value, Convert.FromHexString(options.Hash))
+            : Point.Origin;
+
+        Console.WriteLine($"BlockFetch: syncing headers from {FormatPoint(startPoint)}, then fetching {options.BlockCount} blocks...");
+
+        ChainSyncMessage intersect = await peer.ChainSync.FindIntersectionAsync([startPoint], ct).ConfigureAwait(false);
+        if (intersect is not MessageIntersectFound)
+        {
+            Console.WriteLine("Failed to find intersection.");
+            return 2;
+        }
+
+        // Collect header points via ChainSync
+        List<Point> points = [];
+        while (points.Count < options.BlockCount && !ct.IsCancellationRequested)
+        {
+            MessageNextResponse? response = await peer.ChainSync.NextRequestAsync(ct).ConfigureAwait(false);
+            switch (response)
+            {
+                case MessageRollForward rollForward:
+                    ExtractHeaderPoint(rollForward, out Point? headerPoint);
+                    if (headerPoint is not null)
+                    {
+                        points.Add(headerPoint);
+                    }
+                    break;
+                case MessageRollBackward:
+                    break;
+                case MessageAwaitReply:
+                    Console.WriteLine("Reached chain tip during header collection.");
+                    goto fetchBlocks;
+                default:
+                    break;
+            }
+        }
+
+    fetchBlocks:
+        if (points.Count == 0)
+        {
+            Console.WriteLine("No headers collected.");
+            return 2;
+        }
+
+        Console.WriteLine($"Collected {points.Count} headers. Fetching blocks...");
+
+        Stopwatch timer = Stopwatch.StartNew();
+        Stopwatch windowTimer = Stopwatch.StartNew();
+        int totalFetched = 0;
+        int windowFetched = 0;
+        Era lastEra = Era.Byron;
+        ulong lastSlot = 0;
+        ulong lastHeight = 0;
+
+        // Fetch in batches using FetchRangeAsync (start..end of each batch)
+        int batchSize = Math.Min(100, points.Count);
+        for (int i = 0; i < points.Count && !ct.IsCancellationRequested; i += batchSize)
+        {
+            int end = Math.Min(i + batchSize - 1, points.Count - 1);
+            await foreach (BlockWithEra block in peer.BlockFetch.FetchRangeAsync<BlockWithEra>(points[i], points[end], ct).ConfigureAwait(false))
+            {
+                totalFetched++;
+                windowFetched++;
+
+                if (block.Block is not null)
+                {
+                    lastEra = block.Era();
+                    lastSlot = block.Block.Slot();
+                    lastHeight = block.Block.Height();
+                }
+
+                if (windowTimer.Elapsed.TotalSeconds >= 3)
+                {
+                    double blkPerSec = windowFetched / windowTimer.Elapsed.TotalSeconds;
+                    Console.WriteLine(
+                        $"[{timer.Elapsed:hh\\:mm\\:ss}] slot {lastSlot,10} block {lastHeight,8} [{lastEra,-10}] | " +
+                        $"{blkPerSec,7:F1} blk/s | {totalFetched}/{points.Count} fetched");
+                    windowTimer.Restart();
+                    windowFetched = 0;
+                }
+            }
+        }
+
+        timer.Stop();
+        Console.WriteLine();
+        Console.WriteLine($"Fetched {totalFetched} blocks in {timer.Elapsed.TotalSeconds:F1}s ({totalFetched / timer.Elapsed.TotalSeconds:F1} blk/s)");
+        Console.WriteLine($"Last: slot {lastSlot} block {lastHeight} [{lastEra}]");
+
+        if (peer.BlockFetch.HasAgency)
+        {
+            try { await peer.BlockFetch.DoneAsync(CancellationToken.None).ConfigureAwait(false); }
+            catch (InvalidOperationException) { /* Best-effort shutdown */ }
+        }
+
+        return 0;
+    }
+
+    private static void ExtractHeaderPoint(MessageRollForward rollForward, out Point? point)
+    {
+        point = null;
         try
         {
             HeaderContent header = HeaderContent.Decode(rollForward.Payload.Value);
 
             if (header.IsByron)
             {
-                return FormatByronHeader(header);
+                if (header.IsByronEbb)
+                {
+                    ByronEbbHead ebbHead = CborSerializer.Deserialize<ByronEbbHead>(header.HeaderCbor);
+                    ulong slot = ebbHead.ConsensusData.EpochId * 21600;
+                    byte[] hash = HashByronHeader(0, header.HeaderCbor.Span);
+                    point = Point.Specific(slot, hash);
+                }
+                else
+                {
+                    ByronBlockHead blockHead = CborSerializer.Deserialize<ByronBlockHead>(header.HeaderCbor);
+                    ulong slot = (blockHead.ConsensusData.SlotId.Epoch * 21600) + blockHead.ConsensusData.SlotId.Slot;
+                    byte[] hash = HashByronHeader(1, header.HeaderCbor.Span);
+                    point = Point.Specific(slot, hash);
+                }
+                return;
             }
 
             BlockHeader blockHeader = CborSerializer.Deserialize<BlockHeader>(header.HeaderCbor);
-            ulong slot = blockHeader.HeaderBody.Slot();
-            ulong blockNumber = blockHeader.HeaderBody.BlockNumber();
-            string hash = blockHeader.Hash();
-
-            return $"[{header.Era}] rollforward slot {slot} block {blockNumber} hash {hash}";
+            ulong headerSlot = blockHeader.HeaderBody.Slot();
+            byte[] headerHash = Convert.FromHexString(blockHeader.Hash());
+            point = Point.Specific(headerSlot, headerHash);
         }
-        catch (InvalidOperationException)
+        catch
         {
-            return $"rollforward tip {FormatPoint(rollForward.Tip.Slot)}";
+            // skip unparseable headers
         }
     }
 
-    private static string FormatByronHeader(HeaderContent header)
+    /// <summary>
+    /// Computes the Byron block hash by wrapping the header in a CBOR tuple [tag, header_bytes] before hashing.
+    /// Byron EBB uses tag=0, Byron main block uses tag=1.
+    /// </summary>
+    private static byte[] HashByronHeader(byte tag, ReadOnlySpan<byte> headerCbor)
     {
-        string hash = Convert.ToHexStringLower(
-            Blake2Fast.Blake2b.HashData(32, header.HeaderCbor.Span));
+        byte[] wrapped = new byte[2 + headerCbor.Length];
+        wrapped[0] = 0x82; // CBOR array(2)
+        wrapped[1] = tag;  // CBOR uint(0) or uint(1)
+        headerCbor.CopyTo(wrapped.AsSpan(2));
+        return Blake2Fast.Blake2b.HashData(32, wrapped);
+    }
 
-        if (header.IsByronEbb)
+    #endregion
+
+    #region Formatting
+
+    private static void ExtractBlockInfo(MessageRollForward rollForward, ref Era era, ref ulong slot, ref ulong blockNumber)
+    {
+        try
         {
-            ByronEbbHead ebbHead = CborSerializer.Deserialize<ByronEbbHead>(header.HeaderCbor);
-            return $"[{header.Era}] rollforward epoch {ebbHead.ConsensusData.EpochId} hash {hash}";
+            BlockWithEra block = rollForward.Payload.Deserialize<BlockWithEra>();
+            if (block.Block is null)
+            {
+                return;
+            }
+            era = block.Era();
+            slot = block.Block.Slot();
+            blockNumber = block.Block.Height();
         }
+        catch
+        {
+            // keep previous era value
+        }
+    }
 
-        ByronBlockHead blockHead = CborSerializer.Deserialize<ByronBlockHead>(header.HeaderCbor);
-        ulong epoch = blockHead.ConsensusData.SlotId.Epoch;
-        ulong relSlot = blockHead.ConsensusData.SlotId.Slot;
-        ulong absSlot = (epoch * 21600) + relSlot;
-        ulong blockNumber = blockHead.ConsensusData.Difficulty.GetValue().FirstOrDefault();
+    private static void PrintProgress(Stopwatch totalTimer, Stopwatch windowTimer, long totalBlocks, int windowBlocks,
+        ulong slot, ulong blockNumber, Era era, Point tipPoint)
+    {
+        double blkPerSec = windowBlocks / windowTimer.Elapsed.TotalSeconds;
+        Console.WriteLine(
+            $"[{totalTimer.Elapsed:hh\\:mm\\:ss}] slot {slot,10} block {blockNumber,8} [{era,-10}] | " +
+            $"{blkPerSec,7:F1} blk/s | {totalBlocks} total | tip {FormatPoint(tipPoint)}");
+    }
 
-        return $"[{header.Era}] rollforward slot {absSlot} block {blockNumber} hash {hash}";
+    private static void PrintAtTip(Stopwatch totalTimer, long totalBlocks, Point tipPoint)
+    {
+        double totalSec = totalTimer.Elapsed.TotalSeconds;
+        Console.WriteLine(
+            $"[{totalTimer.Elapsed:hh\\:mm\\:ss}] at tip | {totalBlocks} blocks synced | " +
+            $"{totalBlocks / totalSec:F1} avg blk/s | tip {FormatPoint(tipPoint)}");
+    }
+
+    private static void PrintStopped(Stopwatch totalTimer, long totalBlocks)
+    {
+        totalTimer.Stop();
+        Console.WriteLine();
+        Console.WriteLine($"Stopped after {totalBlocks} blocks in {totalTimer.Elapsed.TotalSeconds:F1}s ({totalBlocks / totalTimer.Elapsed.TotalSeconds:F1} avg blk/s)");
+    }
+
+    private static async Task TryDoneAsync(ChainSync chainSync)
+    {
+        if (chainSync.HasAgency)
+        {
+            try { await chainSync.DoneAsync(CancellationToken.None).ConfigureAwait(false); }
+            catch (InvalidOperationException) { /* Best-effort shutdown */ }
+        }
     }
 
     private static string FormatPoint(Point point)
@@ -304,12 +559,16 @@ internal static class Program
             i++;
         }
 
+        string? socket = GetValue(map, "socket") ?? GetEnv("SOCKET");
         string host = GetValue(map, "tcp-host") ?? GetEnv("TcpHost", "HOST") ?? DefaultHost;
         int port = ParseInt(GetValue(map, "tcp-port") ?? GetEnv("TcpPort", "PORT"), DefaultPort, "port", ref error);
         ulong magic = ParseUlong(GetValue(map, "magic") ?? GetEnv("NetworkMagic", "NETWORK_MAGIC"), DefaultNetworkMagic, "network magic", ref error);
         int keepAlive = ParseInt(
             GetValue(map, "keepalive") ?? GetEnv("KeepAliveIntervalSeconds", "KEEPALIVE_INTERVAL_SECONDS"),
             DefaultKeepAliveSeconds, "keepalive seconds", ref error);
+        int blockCount = ParseInt(
+            GetValue(map, "blocks") ?? GetEnv("BLOCKS"),
+            DefaultBlockCount, "block count", ref error);
 
         ulong? slot = null;
         string? hash = null;
@@ -331,7 +590,7 @@ internal static class Program
             return false;
         }
 
-        options = new Options(command, host, port, magic, keepAlive, slot, hash);
+        options = new Options(command, socket, host, port, magic, keepAlive, blockCount, slot, hash);
         return true;
     }
 
@@ -389,22 +648,25 @@ internal static class Program
         Console.WriteLine("  dotnet run --project src/Chrysalis.Network.Cli -- <command> [options]");
         Console.WriteLine();
         Console.WriteLine("Commands:");
-        Console.WriteLine("  chainsync    Sync headers from chain origin (default)");
-        Console.WriteLine("  blockfetch   Fetch a single block by slot + hash");
+        Console.WriteLine("  chainsync    Sync headers + fetch blocks from origin (default)");
+        Console.WriteLine("  blockfetch   Fetch N blocks via ChainSync + BlockFetch (N2N only)");
         Console.WriteLine();
-        Console.WriteLine("Common options (args or env):");
-        Console.WriteLine("  --tcp-host <host>            TcpHost / HOST (default 127.0.0.1)");
-        Console.WriteLine("  --tcp-port <port>            TcpPort / PORT (default 3001)");
+        Console.WriteLine("Connection (pick one):");
+        Console.WriteLine("  --socket <path>              N2C Unix socket path (SOCKET env)");
+        Console.WriteLine("  --tcp-host <host>            N2N TCP host (TcpHost / HOST, default 127.0.0.1)");
+        Console.WriteLine("  --tcp-port <port>            N2N TCP port (TcpPort / PORT, default 3001)");
+        Console.WriteLine();
+        Console.WriteLine("Common options:");
         Console.WriteLine("  --magic <magic>              NetworkMagic / NETWORK_MAGIC (default 2)");
-        Console.WriteLine("  --keepalive <seconds>        KeepAliveIntervalSeconds (default 20)");
-        Console.WriteLine();
-        Console.WriteLine("BlockFetch options:");
-        Console.WriteLine("  --slot <slot>                Block slot number");
-        Console.WriteLine("  --hash <hex>                 Block hash (hex-encoded)");
+        Console.WriteLine("  --keepalive <seconds>        KeepAliveIntervalSeconds (default 20, N2N only)");
+        Console.WriteLine("  --slot <slot>                Start slot (default: origin)");
+        Console.WriteLine("  --hash <hex>                 Start block hash (hex-encoded)");
+        Console.WriteLine("  --blocks <count>             Number of blocks to fetch (default 100, blockfetch only)");
         Console.WriteLine();
         Console.WriteLine("Examples:");
-        Console.WriteLine("  dotnet run -- chainsync");
-        Console.WriteLine("  dotnet run -- blockfetch --slot 12345 --hash abcdef...");
+        Console.WriteLine("  dotnet run -- chainsync --socket /path/to/node.socket");
+        Console.WriteLine("  dotnet run -- chainsync --tcp-host 127.0.0.1 --tcp-port 3001");
+        Console.WriteLine("  dotnet run -- blockfetch --blocks 500 --slot 12345 --hash abcdef...");
     }
 
     #endregion

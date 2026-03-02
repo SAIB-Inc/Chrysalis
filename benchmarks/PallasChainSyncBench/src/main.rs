@@ -192,7 +192,6 @@ async fn run_n2n(args: Args) -> Result<(), Box<dyn std::error::Error>> {
     let mut window_bytes: u64 = 0;
     let mut last_era = "?".to_string();
     let mut last_slot: u64 = 0;
-    let mut last_block_number: u64 = 0;
 
     const REPORT_INTERVAL: usize = 1000;
 
@@ -243,12 +242,11 @@ async fn run_n2n(args: Args) -> Result<(), Box<dyn std::error::Error>> {
             window_bytes += block_len as u64;
             last_era = era.clone();
             last_slot = *slot;
-            last_block_number = *block_num;
 
             if total_blocks_synced % REPORT_INTERVAL == 0 {
                 print_progress(
                     &total_timer, &window_timer,
-                    last_slot, last_block_number, &last_era,
+                    last_slot, *block_num, &last_era,
                     window_blocks, window_bytes, total_bytes_downloaded,
                 );
                 window_timer = Instant::now();
