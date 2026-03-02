@@ -3,7 +3,7 @@ using System.Collections.Concurrent;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using Chrysalis.Cbor.Types;
-using Dahomey.Cbor.Serialization;
+using SAIB.Cbor.Serialization;
 namespace Chrysalis.Cbor.Serialization.Utils;
 
 /// <summary>

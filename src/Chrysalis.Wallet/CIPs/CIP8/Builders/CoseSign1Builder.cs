@@ -4,7 +4,7 @@ using Chrysalis.Wallet.CIPs.CIP8.Models;
 using Chrysalis.Wallet.Models.Addresses;
 using Chrysalis.Wallet.Models.Keys;
 using Chrysalis.Wallet.Utils;
-using Dahomey.Cbor.Serialization;
+using SAIB.Cbor.Serialization;
 
 namespace Chrysalis.Wallet.CIPs.CIP8.Builders;
 
