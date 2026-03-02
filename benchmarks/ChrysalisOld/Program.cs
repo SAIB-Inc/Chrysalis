@@ -5,6 +5,7 @@ using Chrysalis.Cbor.Types.Cardano.Core;
 
 BenchmarkRunner.Run<BlockDeserializationBenchmarks>();
 
+/// <summary>Benchmarks for block deserialization across all Cardano eras (old NuGet baseline).</summary>
 [MemoryDiagnoser]
 public class BlockDeserializationBenchmarks
 {
@@ -15,7 +16,9 @@ public class BlockDeserializationBenchmarks
         {
             string candidate = Path.Combine(dir.FullName, "data");
             if (Directory.Exists(candidate))
+            {
                 return candidate;
+            }
             dir = dir.Parent;
         }
         throw new DirectoryNotFoundException("Cannot find benchmarks/data directory");
@@ -35,6 +38,7 @@ public class BlockDeserializationBenchmarks
     private byte[] _babbage9 = null!;
     private byte[] _conway1 = null!;
 
+    /// <summary>Loads all test block data from hex files.</summary>
     [GlobalSetup]
     public void Setup()
     {
@@ -57,15 +61,80 @@ public class BlockDeserializationBenchmarks
         return Convert.FromHexString(hex);
     }
 
-    [Benchmark] public BlockWithEra Byron1() => CborSerializer.Deserialize<BlockWithEra>(_byron1);
-    [Benchmark] public BlockWithEra Byron7() => CborSerializer.Deserialize<BlockWithEra>(_byron7);
-    [Benchmark] public BlockWithEra Genesis() => CborSerializer.Deserialize<BlockWithEra>(_genesis);
-    [Benchmark] public BlockWithEra Shelley1() => CborSerializer.Deserialize<BlockWithEra>(_shelley1);
-    [Benchmark] public BlockWithEra Allegra1() => CborSerializer.Deserialize<BlockWithEra>(_allegra1);
-    [Benchmark] public BlockWithEra Mary1() => CborSerializer.Deserialize<BlockWithEra>(_mary1);
-    [Benchmark] public BlockWithEra Alonzo1() => CborSerializer.Deserialize<BlockWithEra>(_alonzo1);
-    [Benchmark] public BlockWithEra Alonzo14() => CborSerializer.Deserialize<BlockWithEra>(_alonzo14);
-    [Benchmark] public BlockWithEra Babbage1() => CborSerializer.Deserialize<BlockWithEra>(_babbage1);
-    [Benchmark] public BlockWithEra Babbage9() => CborSerializer.Deserialize<BlockWithEra>(_babbage9);
-    [Benchmark] public BlockWithEra Conway1() => CborSerializer.Deserialize<BlockWithEra>(_conway1);
+    /// <summary>Deserialize Byron era block (variant 1).</summary>
+    [Benchmark]
+    public BlockWithEra Byron1()
+    {
+        return CborSerializer.Deserialize<BlockWithEra>(_byron1);
+    }
+
+    /// <summary>Deserialize Byron era block (variant 7).</summary>
+    [Benchmark]
+    public BlockWithEra Byron7()
+    {
+        return CborSerializer.Deserialize<BlockWithEra>(_byron7);
+    }
+
+    /// <summary>Deserialize Byron genesis/EBB block.</summary>
+    [Benchmark]
+    public BlockWithEra Genesis()
+    {
+        return CborSerializer.Deserialize<BlockWithEra>(_genesis);
+    }
+
+    /// <summary>Deserialize Shelley era block.</summary>
+    [Benchmark]
+    public BlockWithEra Shelley1()
+    {
+        return CborSerializer.Deserialize<BlockWithEra>(_shelley1);
+    }
+
+    /// <summary>Deserialize Allegra era block.</summary>
+    [Benchmark]
+    public BlockWithEra Allegra1()
+    {
+        return CborSerializer.Deserialize<BlockWithEra>(_allegra1);
+    }
+
+    /// <summary>Deserialize Mary era block.</summary>
+    [Benchmark]
+    public BlockWithEra Mary1()
+    {
+        return CborSerializer.Deserialize<BlockWithEra>(_mary1);
+    }
+
+    /// <summary>Deserialize Alonzo era block (variant 1).</summary>
+    [Benchmark]
+    public BlockWithEra Alonzo1()
+    {
+        return CborSerializer.Deserialize<BlockWithEra>(_alonzo1);
+    }
+
+    /// <summary>Deserialize Alonzo era block (variant 14).</summary>
+    [Benchmark]
+    public BlockWithEra Alonzo14()
+    {
+        return CborSerializer.Deserialize<BlockWithEra>(_alonzo14);
+    }
+
+    /// <summary>Deserialize Babbage era block (variant 1).</summary>
+    [Benchmark]
+    public BlockWithEra Babbage1()
+    {
+        return CborSerializer.Deserialize<BlockWithEra>(_babbage1);
+    }
+
+    /// <summary>Deserialize Babbage era block (variant 9).</summary>
+    [Benchmark]
+    public BlockWithEra Babbage9()
+    {
+        return CborSerializer.Deserialize<BlockWithEra>(_babbage9);
+    }
+
+    /// <summary>Deserialize Conway era block.</summary>
+    [Benchmark]
+    public BlockWithEra Conway1()
+    {
+        return CborSerializer.Deserialize<BlockWithEra>(_conway1);
+    }
 }

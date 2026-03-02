@@ -66,6 +66,13 @@ public static class LocalStateQueryExtension
             cancellationToken);
     }
 
+    /// <summary>
+    /// Gets the current era of the Cardano blockchain. Always re-acquires state to ensure fresh data.
+    /// </summary>
+    /// <param name="localStateQuery">The LocalStateQuery protocol instance.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>A task yielding the current era response.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when response extraction or deserialization fails.</exception>
     public static Task<CurrentEraQueryResponse> GetCurrentEraAsync(this LocalStateQuery localStateQuery, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(localStateQuery);
@@ -74,6 +81,13 @@ public static class LocalStateQueryExtension
             cancellationToken);
     }
 
+    /// <summary>
+    /// Gets the current protocol parameters from the Cardano node. Always re-acquires state to ensure fresh data.
+    /// </summary>
+    /// <param name="localStateQuery">The LocalStateQuery protocol instance.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>A task yielding the current protocol parameters.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when response extraction or deserialization fails.</exception>
     public static Task<CurrentProtocolParamsResponse> GetCurrentProtocolParamsAsync(this LocalStateQuery localStateQuery, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(localStateQuery);
