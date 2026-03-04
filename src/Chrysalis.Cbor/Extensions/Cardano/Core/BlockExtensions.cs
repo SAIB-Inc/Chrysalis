@@ -136,7 +136,10 @@ public static class BlockExtensions
     /// Computes the Byron block hash by wrapping the header in a CBOR tuple [tag, header_bytes] before hashing.
     /// Byron EBB uses tag=0, Byron main block uses tag=1.
     /// </summary>
-    private static byte[] HashByronHeader(byte tag, ReadOnlySpan<byte> headerCbor)
+    /// <param name="tag">The Byron block type tag (0 = EBB, 1 = main block).</param>
+    /// <param name="headerCbor">The raw CBOR bytes of the Byron header.</param>
+    /// <returns>The Blake2b-256 hash of the wrapped header.</returns>
+    public static byte[] HashByronHeader(byte tag, ReadOnlySpan<byte> headerCbor)
     {
         // Byron block hash = Blake2b-256(CBOR-encode([tag, header]))
         // where tag=0 for EBB, tag=1 for main block

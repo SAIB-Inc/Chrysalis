@@ -3,10 +3,7 @@ using Chrysalis.Cbor.Extensions;
 using Chrysalis.Cbor.Extensions.Cardano.Core;
 using Chrysalis.Cbor.Extensions.Cardano.Core.Byron;
 using Chrysalis.Cbor.Extensions.Cardano.Core.Header;
-using Chrysalis.Cbor.Serialization;
 using Chrysalis.Cbor.Types.Cardano.Core;
-using Chrysalis.Cbor.Types.Cardano.Core.Byron;
-using Chrysalis.Cbor.Types.Cardano.Core.Header;
 using Chrysalis.Network.Cbor.BlockFetch;
 using Chrysalis.Network.Cbor.ChainSync;
 using Chrysalis.Network.Cbor.Common;
@@ -489,49 +486,14 @@ internal static class Program
         point = null;
         try
         {
-            HeaderContent header = HeaderContent.Decode(rollForward.Payload.Value);
-
-            if (header.IsByron)
-            {
-                if (header.IsByronEbb)
-                {
-                    ByronEbbHead ebbHead = CborSerializer.Deserialize<ByronEbbHead>(header.HeaderCbor);
-                    ulong slot = ebbHead.ConsensusData.EpochId * 21600;
-                    byte[] hash = HashByronHeader(0, header.HeaderCbor.Span);
-                    point = Point.Specific(slot, hash);
-                }
-                else
-                {
-                    ByronBlockHead blockHead = CborSerializer.Deserialize<ByronBlockHead>(header.HeaderCbor);
-                    ulong slot = (blockHead.ConsensusData.SlotId.Epoch * 21600) + blockHead.ConsensusData.SlotId.Slot;
-                    byte[] hash = HashByronHeader(1, header.HeaderCbor.Span);
-                    point = Point.Specific(slot, hash);
-                }
-                return;
-            }
-
-            BlockHeader blockHeader = CborSerializer.Deserialize<BlockHeader>(header.HeaderCbor);
-            ulong headerSlot = blockHeader.HeaderBody.Slot();
-            byte[] headerHash = Convert.FromHexString(blockHeader.Hash());
-            point = Point.Specific(headerSlot, headerHash);
+            ChainSyncHeader header = ChainSyncHeader.Decode(rollForward.Payload.Value);
+            ChainPoint cp = header.ExtractPoint();
+            point = Point.Specific(cp.Slot, cp.Hash);
         }
         catch
         {
             // skip unparseable headers
         }
-    }
-
-    /// <summary>
-    /// Computes the Byron block hash by wrapping the header in a CBOR tuple [tag, header_bytes] before hashing.
-    /// Byron EBB uses tag=0, Byron main block uses tag=1.
-    /// </summary>
-    private static byte[] HashByronHeader(byte tag, ReadOnlySpan<byte> headerCbor)
-    {
-        byte[] wrapped = new byte[2 + headerCbor.Length];
-        wrapped[0] = 0x82; // CBOR array(2)
-        wrapped[1] = tag;  // CBOR uint(0) or uint(1)
-        headerCbor.CopyTo(wrapped.AsSpan(2));
-        return Blake2Fast.Blake2b.HashData(32, wrapped);
     }
 
     #endregion
