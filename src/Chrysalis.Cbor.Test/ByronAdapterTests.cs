@@ -1,3 +1,4 @@
+using System.IO.Hashing;
 using Chrysalis.Cbor.Extensions;
 using Chrysalis.Cbor.Extensions.Cardano.Core;
 using Chrysalis.Cbor.Extensions.Cardano.Core.Byron;
@@ -12,11 +13,50 @@ namespace Chrysalis.Test;
 
 public class ByronAdapterTests
 {
+    // Pallas test vectors
+    private static readonly string[] AddressTestVectors =
+    [
+        "37btjrVyb4KDXBNC4haBVPCrro8AQPHwvCMp3RFhhSVWwfFmZ6wwzSK6JK1hY6wHNmtrpTf1kdbva8TCneM2YsiXT7mrzT21EacHnPpz5YyUdj64na",
+        "DdzFFzCqrht7PQiAhzrn6rNNoADJieTWBt8KeK9BZdUsGyX9ooYD9NpMCTGjQoUKcHN47g8JMXhvKogsGpQHtiQ65fZwiypjrC6d3a4Q",
+        "Ae2tdPwUPEZLs4HtbuNey7tK4hTKrwNwYtGqp7bDfCy2WdR3P6735W5Yfpe",
+    ];
+
     private static byte[] LoadTestBlock(string filename)
     {
         string hex = File.ReadAllText(Path.Combine("TestData", filename)).Trim();
         return Convert.FromHexString(hex);
     }
+
+    // -- Byron Address Tests (Pallas parity) --
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(2)]
+    public void RoundtripBase58(int index)
+    {
+        string vector = AddressTestVectors[index];
+        ByronAddress addr = ByronAddressExtensions.FromBase58(vector);
+        string ours = addr.ToBase58();
+        Assert.Equal(vector, ours);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(2)]
+    public void PayloadCrcMatches(int index)
+    {
+        string vector = AddressTestVectors[index];
+        ByronAddress addr = ByronAddressExtensions.FromBase58(vector);
+
+        byte[] payloadBytes = addr.Payload.GetValue();
+        uint crc = BitConverter.ToUInt32(Crc32.Hash(payloadBytes));
+
+        Assert.Equal(crc, addr.Crc);
+    }
+
+    // -- Unified API Adapter Tests --
 
     [Fact]
     public void TransactionBodies_ReturnsAdaptersForByronBlock()
@@ -195,7 +235,6 @@ public class ByronAdapterTests
         BlockWithEra blockWithEra = CborSerializer.Deserialize<BlockWithEra>(cborRaw);
         Block block = blockWithEra.Block;
 
-        // These should not throw for any Byron block
         _ = block.Slot();
         _ = block.Height();
         string hash = block.Hash();

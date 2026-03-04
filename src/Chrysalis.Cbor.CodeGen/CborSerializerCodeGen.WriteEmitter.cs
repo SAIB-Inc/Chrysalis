@@ -195,8 +195,7 @@ public sealed partial class CborSerializerCodeGen
                 case "CborEncodedValue":
                 case "Chrysalis.Cbor.Types.Primitives.CborEncodedValue":
                 case "global::Chrysalis.Cbor.Types.Primitives.CborEncodedValue":
-                    _ = sb.AppendLine($"writer.WriteSemanticTag(24);");
-                    _ = sb.AppendLine($"writer.WriteByteString({propertyName}.Value.Span);");
+                    _ = sb.AppendLine($"writer.BufferWriter.Write({propertyName}.Value.Span);");
                     break;
                 case "CborLabel":
                 case "Chrysalis.Cbor.Types.CborLabel":

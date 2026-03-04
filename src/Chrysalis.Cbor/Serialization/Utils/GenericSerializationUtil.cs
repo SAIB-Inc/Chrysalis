@@ -570,8 +570,7 @@ public static class GenericSerializationUtil
             case Type t when t == typeof(CborEncodedValue):
                 if (value is CborEncodedValue encodedValue)
                 {
-                    writer.WriteSemanticTag(24);
-                    writer.WriteByteString(encodedValue.Value.Span);
+                    writer.BufferWriter.Write(encodedValue.Value.Span);
                 }
                 else
                 {
