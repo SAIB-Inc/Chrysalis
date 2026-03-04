@@ -1,3 +1,5 @@
+using Chrysalis.Cbor.Serialization;
+using Chrysalis.Cbor.Types.Cardano.Core.Byron;
 using Chrysalis.Cbor.Types.Cardano.Core.Common;
 using Chrysalis.Cbor.Types.Cardano.Core.Transaction;
 
@@ -18,6 +20,7 @@ public static class OutputExtensions
         ArgumentNullException.ThrowIfNull(self);
         return self switch
         {
+            ByronTransactionOutputAdapter byron => CborSerializer.Serialize(byron.ByronTxOut.Address),
             AlonzoTransactionOutput alonzoTxOutput => alonzoTxOutput.Address.Value,
             PostAlonzoTransactionOutput postAlonzoTxOutput => postAlonzoTxOutput.Address.Value,
             _ => ReadOnlyMemory<byte>.Empty
@@ -34,6 +37,7 @@ public static class OutputExtensions
         ArgumentNullException.ThrowIfNull(self);
         return self switch
         {
+            ByronTransactionOutputAdapter byron => new Lovelace(byron.ByronTxOut.Amount),
             AlonzoTransactionOutput alonzoTxOutput => alonzoTxOutput.Amount,
             PostAlonzoTransactionOutput postAlonzoTxOutput => postAlonzoTxOutput.Amount,
             _ => throw new NotImplementedException()
