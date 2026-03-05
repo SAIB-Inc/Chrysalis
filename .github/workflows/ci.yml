@@ -24,6 +24,9 @@ jobs:
       - name: Make Plutus build script executable
         run: chmod +x ./src/Chrysalis.Plutus/build-rs.sh
 
+      - name: Show .NET version
+        run: dotnet --version
+
       - name: Restore
         run: dotnet restore
 
