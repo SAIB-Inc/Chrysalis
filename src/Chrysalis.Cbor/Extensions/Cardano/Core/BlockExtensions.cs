@@ -65,7 +65,7 @@ public static class BlockExtensions
 
     /// <summary>
     /// Gets the era from any block type.
-    /// Note: <see cref="AlonzoCompatibleBlock"/> covers Shelley through Alonzo and returns <see cref="Types.Cardano.Core.Era.Alonzo"/>.
+    /// Note: <see cref="AlonzoCompatibleBlock"/> covers Shelley through Alonzo and returns <see cref="Era.Alonzo"/>.
     /// Use <see cref="Era(BlockWithEra)"/> for precise era identification.
     /// </summary>
     /// <param name="self">The block instance.</param>

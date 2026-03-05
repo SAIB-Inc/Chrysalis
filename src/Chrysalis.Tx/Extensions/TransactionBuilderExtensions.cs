@@ -350,7 +350,7 @@ public static class TransactionBuilderExtensions
         byte[] utxoCborBytes = CborSerializer.Serialize<CborMaybeIndefList<ResolvedInput>>(utxoCbor);
         Transaction transaction = builder.Build();
         byte[] txCborBytes = CborSerializer.Serialize(transaction);
-        IReadOnlyList<Chrysalis.Plutus.VM.Models.EvaluationResult> evalResult = Evaluator.EvaluateTx(txCborBytes, utxoCborBytes, networkType);
+        IReadOnlyList<Plutus.VM.Models.EvaluationResult> evalResult = Evaluator.EvaluateTx(txCborBytes, utxoCborBytes, networkType);
         Redeemers? previousRedeemers = builder.WitnessSet.Redeemers;
 
 
@@ -360,7 +360,7 @@ public static class TransactionBuilderExtensions
                 List<RedeemerEntry> updatedRedeemersList = [];
                 foreach (RedeemerEntry redeemer in redeemersList.Value)
                 {
-                    foreach (Chrysalis.Plutus.VM.Models.EvaluationResult result in evalResult)
+                    foreach (Plutus.VM.Models.EvaluationResult result in evalResult)
                     {
                         if (redeemer.Tag == (int)result.RedeemerTag && redeemer.Index == result.Index)
                         {
@@ -375,7 +375,7 @@ public static class TransactionBuilderExtensions
                 Dictionary<RedeemerKey, RedeemerValue> updatedRedeemersMap = [];
                 foreach (KeyValuePair<RedeemerKey, RedeemerValue> kvp in redeemersMap.Value)
                 {
-                    foreach (Chrysalis.Plutus.VM.Models.EvaluationResult result in evalResult)
+                    foreach (Plutus.VM.Models.EvaluationResult result in evalResult)
                     {
                         if (kvp.Key.Tag == (int)result.RedeemerTag && kvp.Key.Index == result.Index)
                         {
