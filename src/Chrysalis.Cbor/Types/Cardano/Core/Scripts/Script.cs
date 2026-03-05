@@ -1,6 +1,6 @@
 using Chrysalis.Cbor.Serialization.Attributes;
 
-namespace Chrysalis.Cbor.Types.Cardano.Core.Common;
+namespace Chrysalis.Cbor.Types.Cardano.Core.Scripts;
 
 /// <summary>
 /// Abstract base for Cardano scripts (native scripts and Plutus scripts).

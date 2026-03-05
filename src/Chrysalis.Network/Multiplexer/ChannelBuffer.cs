@@ -69,7 +69,7 @@ public sealed class ChannelBuffer(AgentChannel channel)
         int usedLength = _tempLength - _tempOffset;
         if (usedLength > 0)
         {
-            if (TryDeserialize<T>(out T? result, out int consumed))
+            if (TryDeserialize(out T? result, out int consumed))
             {
                 _tempOffset += consumed;
                 CompactIfNeeded();
@@ -84,7 +84,7 @@ public sealed class ChannelBuffer(AgentChannel channel)
         // This avoids copying into _temp for the common single-segment case
         if (usedLength == 0)
         {
-            if (TryDeserializeDirect<T>(firstChunk, out T? result, out int consumed))
+            if (TryDeserializeDirect(firstChunk, out T? result, out int consumed))
             {
                 // If we consumed the entire chunk, we're done — no copy at all
                 if (consumed >= firstChunk.Length)
@@ -107,7 +107,7 @@ public sealed class ChannelBuffer(AgentChannel channel)
 
         while (true)
         {
-            if (TryDeserialize<T>(out T? result, out int consumed))
+            if (TryDeserialize(out T? result, out int consumed))
             {
                 _tempOffset += consumed;
                 CompactIfNeeded();

@@ -5,10 +5,10 @@
 /// </summary>
 internal static partial class LookupTables
 {
-        /* base[i][j] = (j+1)*256^i*B */
-        //32*8
-        internal static GroupElementPreComp[][] Base = new GroupElementPreComp[][]
-        {
+    /* base[i][j] = (j+1)*256^i*B */
+    //32*8
+    internal static GroupElementPreComp[][] Base = new GroupElementPreComp[][]
+    {
             new[]{
                 new GroupElementPreComp(
                     new FieldElement( 25967493,-14356035,29566456,3660896,-12694345,4014787,27544626,-11754271,-6079156,2047605 ),
@@ -1353,5 +1353,5 @@ internal static partial class LookupTables
                     new FieldElement( -20430234,14955537,-24126347,8124619,-5369288,-5990470,30468147,-13900640,18423289,4177476 )
                 )
             }
-        };
+    };
 }

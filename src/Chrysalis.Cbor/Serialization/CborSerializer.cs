@@ -22,7 +22,7 @@ public static class CborSerializer
         }
 
         ArrayBufferWriter<byte> output = new();
-        GenericSerializationUtil.Write<T>(output, value);
+        GenericSerializationUtil.Write(output, value);
 
         return output.WrittenSpan.ToArray();
     }
@@ -39,7 +39,7 @@ public static class CborSerializer
         }
 
         ArrayBufferWriter<byte> output = new();
-        GenericSerializationUtil.Write<T>(output, value);
+        GenericSerializationUtil.Write(output, value);
 
         return output.WrittenMemory;
     }

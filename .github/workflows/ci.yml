@@ -17,7 +17,6 @@ jobs:
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '10.0.x'
-          dotnet-quality: 'preview'
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
@@ -25,8 +24,14 @@ jobs:
       - name: Make Plutus build script executable
         run: chmod +x ./src/Chrysalis.Plutus/build-rs.sh
 
+      - name: Show .NET version
+        run: dotnet --version
+
       - name: Restore
         run: dotnet restore
+
+      - name: Check formatting
+        run: dotnet format --no-restore --verify-no-changes
 
       - name: Build
         run: dotnet build --no-restore -warnaserror

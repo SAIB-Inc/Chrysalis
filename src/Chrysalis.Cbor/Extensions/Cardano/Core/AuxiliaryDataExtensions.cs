@@ -1,7 +1,7 @@
 using CMetadata = Chrysalis.Cbor.Types.Cardano.Core.Metadata;
 using CAuxiliaryData = Chrysalis.Cbor.Types.Cardano.Core.AuxiliaryData;
 using Chrysalis.Cbor.Types.Cardano.Core;
-using Chrysalis.Cbor.Types.Cardano.Core.Common;
+using Chrysalis.Cbor.Types.Cardano.Core.Scripts;
 
 namespace Chrysalis.Cbor.Extensions.Cardano.Core;
 

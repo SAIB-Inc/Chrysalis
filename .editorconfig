@@ -26,6 +26,8 @@ dotnet_diagnostic.CA1054.severity = none
 dotnet_diagnostic.CA1056.severity = none
 dotnet_diagnostic.CA1303.severity = none
 dotnet_diagnostic.CA1031.severity = none
+# CA2007: ConfigureAwait — no SynchronizationContext in .NET 6+ ASP.NET Core / console / gRPC consumers
+dotnet_diagnostic.CA2007.severity = none
 
 # ── XML documentation ──
 dotnet_diagnostic.CS1591.severity = warning
@@ -34,30 +36,38 @@ dotnet_diagnostic.CS1591.severity = warning
 [*.g.cs]
 generated_code = true
 
+# ── Scripts folder: namespace intentionally differs from folder structure ──
+[src/Chrysalis.Cbor/Types/Cardano/Core/Scripts/**.cs]
+dotnet_diagnostic.IDE0130.severity = none
+
 # ── Test projects ──
 [src/Chrysalis.Cbor.Test/**.cs]
 dotnet_diagnostic.CS1591.severity = none
 dotnet_diagnostic.CA1707.severity = none
 dotnet_diagnostic.CA1812.severity = none
 dotnet_diagnostic.CA1852.severity = none
+dotnet_diagnostic.IDE0002.severity = none
 
 [src/Chrysalis.Network.Tests/**.cs]
 dotnet_diagnostic.CS1591.severity = none
 dotnet_diagnostic.CA1707.severity = none
 dotnet_diagnostic.CA1812.severity = none
 dotnet_diagnostic.CA1852.severity = none
+dotnet_diagnostic.IDE0002.severity = none
 
 [src/Chrysalis.Wallet.Test/**.cs]
 dotnet_diagnostic.CS1591.severity = none
 dotnet_diagnostic.CA1707.severity = none
 dotnet_diagnostic.CA1812.severity = none
 dotnet_diagnostic.CA1852.severity = none
+dotnet_diagnostic.IDE0002.severity = none
 
 [src/Chrysalis.Crypto.Test/**.cs]
 dotnet_diagnostic.CS1591.severity = none
 dotnet_diagnostic.CA1707.severity = none
 dotnet_diagnostic.CA1812.severity = none
 dotnet_diagnostic.CA1852.severity = none
+dotnet_diagnostic.IDE0002.severity = none
 
 # ── CLI tools ──
 [src/Chrysalis.Tx.Cli/**.cs]

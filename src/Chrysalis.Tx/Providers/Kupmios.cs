@@ -9,6 +9,7 @@ using Chrysalis.Tx.Models.Cbor;
 using Chrysalis.Cbor.Types.Cardano.Core;
 using Chrysalis.Wallet.Models.Enums;
 using Chrysalis.Cbor.Types.Cardano.Core.Common;
+using Chrysalis.Cbor.Types.Cardano.Core.Scripts;
 using Chrysalis.Tx.Models;
 using Chrysalis.Tx.Utils;
 using Chrysalis.Cbor.Types;

@@ -46,11 +46,11 @@ public class CborTests
         // Use the cbor parameter to validate the test data
         _ = cbor;
 
-        PostMaryTransaction tx = PostMaryTransaction.Read(Convert.FromHexString(unsignedTx));
+        PostMaryTransaction tx = CborSerializer.Deserialize<PostMaryTransaction>(Convert.FromHexString(unsignedTx));
 
         string witnessSet = "a100818258202a60dcffe8ba15307556dbf8d7df142cb9eb15d601251d400d523689d575b8385840f545d4894180626ee529d4d137262a5df4d3fe40d6304d99e0dbeb7e8966afab0f3e4ef82ebcc3e9a02fbb33733bb5323d0a9c545375512630dc6db77dfc520f";
 
-        PostAlonzoTransactionWitnessSet aWitnessSet = PostAlonzoTransactionWitnessSet.Read(Convert.FromHexString(witnessSet));
+        PostAlonzoTransactionWitnessSet aWitnessSet = CborSerializer.Deserialize<PostAlonzoTransactionWitnessSet>(Convert.FromHexString(witnessSet));
 
         tx = tx with { TransactionWitnessSet = aWitnessSet };
         tx.TransactionBody.Raw = null;
@@ -69,8 +69,8 @@ public class CborTests
         byte[] cbor = CborSerializer.Serialize(optionalPerson);
 
         // Try to deserialize as PersonRequired - should fail because Name and Age are required
-        Exception ex = Assert.Throws<Exception>(() => PersonRequired.Read(cbor));
-        Assert.Contains("Required field", ex.Message, StringComparison.Ordinal);
+        InvalidOperationException ex = Assert.Throws<InvalidOperationException>(() => CborSerializer.Deserialize<PersonRequired>(cbor));
+        Assert.Contains("Required field", ex.InnerException!.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -81,7 +81,7 @@ public class CborTests
         byte[] cbor = CborSerializer.Serialize(requiredPerson);
 
         // Should succeed - all required fields are present
-        PersonRequired deserialized = PersonRequired.Read(cbor);
+        PersonRequired deserialized = CborSerializer.Deserialize<PersonRequired>(cbor);
         Assert.Equal(1, deserialized.Id);
         Assert.Equal("John", deserialized.Name);
         Assert.Equal(25, deserialized.Age);
@@ -95,7 +95,7 @@ public class CborTests
         byte[] cbor = CborSerializer.Serialize(requiredPerson);
 
         // Should succeed when deserializing as optional - all fields present
-        PersonOptional optionalPerson = PersonOptional.Read(cbor);
+        PersonOptional optionalPerson = CborSerializer.Deserialize<PersonOptional>(cbor);
         Assert.Equal(1, optionalPerson.Id);
         Assert.Equal("John", optionalPerson.Name);
         Assert.Equal(25, optionalPerson.Age);
@@ -165,7 +165,7 @@ public class CborTests
         {
             for (int i = 0; i < iterationsPerTask; i++)
             {
-                Block block = ConwayBlock.Read(cborRaw);
+                Block block = CborSerializer.Deserialize<ConwayBlock>(cborRaw);
                 byte[] serialized = CborSerializer.Serialize(block);
                 string serializedHex = Convert.ToHexString(serialized);
                 Assert.NotNull(block);
@@ -182,7 +182,7 @@ public class CborTests
     public void DeserializeFailingBabbageBlock(string filename)
     {
         byte[] cborRaw = LoadTestBlock(filename);
-        BlockWithEra block = BlockWithEra.Read(cborRaw);
+        BlockWithEra block = CborSerializer.Deserialize<BlockWithEra>(cborRaw);
         Assert.NotNull(block);
         Assert.NotNull(block.Block);
         Assert.Equal(6, block.EraNumber);
