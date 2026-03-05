@@ -26,7 +26,9 @@ public static class TransactionBodyExtensions
         ArgumentNullException.ThrowIfNull(self);
         return self switch
         {
-            ByronTransactionBodyAdapter byron => byron.ByronTx.Inputs.GetValue().Select(i => i.ToTransactionInput()),
+            ByronTransactionBodyAdapter byron => byron.ByronTx.Inputs.GetValue()
+                .Select(i => i.TryToTransactionInput(out TransactionInput? input) ? input : null)
+                .OfType<TransactionInput>(),
             AlonzoTransactionBody alonzoTxBody => alonzoTxBody.Inputs.GetValue(),
             BabbageTransactionBody babbageTxBody => babbageTxBody.Inputs.GetValue(),
             ConwayTransactionBody conwayTxBody => conwayTxBody.Inputs.GetValue(),
