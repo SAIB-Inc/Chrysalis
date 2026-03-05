@@ -123,7 +123,7 @@ public class CborTests
             }))];
 
         // Await all tasks to complete; if any fail, the test will fail
-        await Task.WhenAll(tasks);
+        await Task.WhenAll(tasks).ConfigureAwait(true);
     }
 
     [Theory]
@@ -148,7 +148,7 @@ public class CborTests
         }))];
 
         // Await all tasks to complete; if any fail, the test will fail
-        await Task.WhenAll(tasks);
+        await Task.WhenAll(tasks).ConfigureAwait(true);
     }
 
     [Theory]
@@ -173,7 +173,7 @@ public class CborTests
         }))];
 
         // Await all tasks to complete; if any fail, the test will fail
-        await Task.WhenAll(tasks);
+        await Task.WhenAll(tasks).ConfigureAwait(true);
     }
 
     [Theory]
@@ -210,6 +210,6 @@ public class CborTests
         }))];
 
         // Await all tasks to complete; if any fail, the test will fail
-        await Task.WhenAll(tasks);
+        await Task.WhenAll(tasks).ConfigureAwait(true);
     }
 }

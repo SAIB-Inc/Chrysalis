@@ -4,6 +4,8 @@ using CProposalProcedure = Chrysalis.Cbor.Types.Cardano.Core.Governance.Proposal
 using Chrysalis.Cbor.Types.Cardano.Core.Transaction;
 using CCertificate = Chrysalis.Cbor.Types.Cardano.Core.Certificates.Certificate;
 using Chrysalis.Cbor.Types.Cardano.Core.Governance;
+using Chrysalis.Cbor.Types.Cardano.Core.Byron;
+using Chrysalis.Cbor.Extensions.Cardano.Core.Byron;
 using Chrysalis.Cbor.Serialization;
 using Blake2Fast;
 
@@ -24,6 +26,9 @@ public static class TransactionBodyExtensions
         ArgumentNullException.ThrowIfNull(self);
         return self switch
         {
+            ByronTransactionBodyAdapter byron => byron.ByronTx.Inputs.GetValue()
+                .Select(i => i.TryToTransactionInput(out TransactionInput? input) ? input : null)
+                .OfType<TransactionInput>(),
             AlonzoTransactionBody alonzoTxBody => alonzoTxBody.Inputs.GetValue(),
             BabbageTransactionBody babbageTxBody => babbageTxBody.Inputs.GetValue(),
             ConwayTransactionBody conwayTxBody => conwayTxBody.Inputs.GetValue(),
@@ -41,6 +46,7 @@ public static class TransactionBodyExtensions
         ArgumentNullException.ThrowIfNull(self);
         return self switch
         {
+            ByronTransactionBodyAdapter byron => byron.ByronTx.Outputs.GetValue().Select(o => (TransactionOutput)new ByronTransactionOutputAdapter(o)),
             AlonzoTransactionBody alonzoTxBody => alonzoTxBody.Outputs.GetValue(),
             BabbageTransactionBody babbageTxBody => babbageTxBody.Outputs.GetValue(),
             ConwayTransactionBody conwayTxBody => conwayTxBody.Outputs.GetValue(),

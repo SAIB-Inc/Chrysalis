@@ -13,6 +13,7 @@
   <ItemGroup>
     <PackageReference Include="SAIB.Blake2Fast" />
     <PackageReference Include="SAIB.Cbor" />
+    <PackageReference Include="SimpleBase" />
   </ItemGroup>
 
   <ItemGroup>

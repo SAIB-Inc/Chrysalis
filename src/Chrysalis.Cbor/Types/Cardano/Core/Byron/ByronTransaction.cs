@@ -43,10 +43,10 @@ public partial record ByronTxOut(
 
 /// <summary>
 /// Byron TxIn encoded as [variant, #6.24(cbor([txid, index]))].
-/// Variant 0 is the standard spending input.
+/// Variant 0 is the standard spending input; other variants carry opaque bytes.
 /// </summary>
 /// <param name="Variant">The input variant type (0 = standard spending).</param>
-/// <param name="Data">The encoded input data containing transaction ID and index.</param>
+/// <param name="Data">The encoded input data (tag-24 wrapped for variant 0, raw bytes otherwise).</param>
 [CborSerializable]
 [CborList]
 public partial record ByronTxIn(

@@ -160,6 +160,9 @@ public static class BlockExtensions
         ArgumentNullException.ThrowIfNull(self);
         return self switch
         {
+            ByronMainBlock byron => byron.Body.TxPayload.GetValue()
+                .Select(payload => (TransactionBody)new ByronTransactionBodyAdapter(payload)),
+            ByronEbBlock => [],
             AlonzoCompatibleBlock alonzoCompatibleBlock => alonzoCompatibleBlock.TransactionBodies.GetValue(),
             BabbageBlock babbageBlock => babbageBlock.TransactionBodies.GetValue(),
             ConwayBlock conwayBlock => conwayBlock.TransactionBodies.GetValue(),
