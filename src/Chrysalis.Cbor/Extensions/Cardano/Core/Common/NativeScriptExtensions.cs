@@ -1,6 +1,6 @@
 using Chrysalis.Cbor.Types;
-using Chrysalis.Cbor.Types.Cardano.Core.Common;
-using CNativeScript = Chrysalis.Cbor.Types.Cardano.Core.Common.NativeScript;
+using Chrysalis.Cbor.Types.Cardano.Core.Scripts;
+using CNativeScript = Chrysalis.Cbor.Types.Cardano.Core.Scripts.NativeScript;
 
 namespace Chrysalis.Cbor.Extensions.Cardano.Core.Common;
 

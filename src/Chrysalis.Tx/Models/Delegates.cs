@@ -1,5 +1,4 @@
-
-using Chrysalis.Cbor.Types.Cardano.Core.Common;
+using Chrysalis.Cbor.Types.Cardano.Core.Scripts;
 using Chrysalis.Cbor.Types.Cardano.Core;
 using Chrysalis.Cbor.Types.Cardano.Core.Transaction;
 using Chrysalis.Tx.Builders;

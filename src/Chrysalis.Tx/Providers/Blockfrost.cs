@@ -7,6 +7,7 @@ using Chrysalis.Cbor.Serialization;
 using Chrysalis.Cbor.Serialization.Utils;
 using Chrysalis.Cbor.Types;
 using Chrysalis.Cbor.Types.Cardano.Core.Common;
+using Chrysalis.Cbor.Types.Cardano.Core.Scripts;
 using Chrysalis.Cbor.Types.Cardano.Core.Governance;
 using Chrysalis.Cbor.Types.Cardano.Core.Header;
 using Chrysalis.Cbor.Types.Cardano.Core.Protocol;

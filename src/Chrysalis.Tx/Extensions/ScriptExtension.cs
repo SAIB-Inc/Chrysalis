@@ -1,4 +1,5 @@
 using Chrysalis.Cbor.Types.Cardano.Core.Common;
+using Chrysalis.Cbor.Types.Cardano.Core.Scripts;
 using Chrysalis.Cbor.Types;
 using Chrysalis.Cbor.Serialization;
 using Chrysalis.Plutus.VM.EvalTx;

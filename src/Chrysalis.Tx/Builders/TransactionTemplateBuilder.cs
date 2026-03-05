@@ -8,6 +8,7 @@ using Chrysalis.Cbor.Types;
 using Chrysalis.Cbor.Types.Cardano.Core;
 using Chrysalis.Cbor.Types.Cardano.Core.Certificates;
 using Chrysalis.Cbor.Types.Cardano.Core.Common;
+using Chrysalis.Cbor.Types.Cardano.Core.Scripts;
 using Chrysalis.Cbor.Types.Cardano.Core.Protocol;
 using Chrysalis.Cbor.Types.Cardano.Core.Transaction;
 using Chrysalis.Cbor.Types.Cardano.Core.TransactionWitness;

@@ -1,6 +1,6 @@
 using Chrysalis.Cbor.Serialization.Attributes;
 using Chrysalis.Cbor.Serialization;
-using Chrysalis.Cbor.Types.Cardano.Core.Common;
+using Chrysalis.Cbor.Types.Cardano.Core.Scripts;
 using Chrysalis.Cbor.Types.Cardano.Core.Transaction;
 
 namespace Chrysalis.Cbor.Types.Cardano.Core;
