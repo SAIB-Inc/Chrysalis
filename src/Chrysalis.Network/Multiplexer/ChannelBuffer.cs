@@ -1,6 +1,6 @@
 using System.Buffers;
-using Chrysalis.Cbor.Serialization;
-using Chrysalis.Cbor.Types;
+using Chrysalis.Codec.Serialization;
+using Chrysalis.Codec.Types;
 using Chrysalis.Network.Core;
 
 namespace Chrysalis.Network.Multiplexer;

@@ -37,11 +37,11 @@ dotnet_diagnostic.CS1591.severity = warning
 generated_code = true
 
 # ── Scripts folder: namespace intentionally differs from folder structure ──
-[src/Chrysalis.Cbor/Types/Cardano/Core/Scripts/**.cs]
+[src/Chrysalis.Codec/Types/Cardano/Core/Scripts/**.cs]
 dotnet_diagnostic.IDE0130.severity = none
 
 # ── Test projects ──
-[src/Chrysalis.Cbor.Test/**.cs]
+[src/Chrysalis.Codec.Test/**.cs]
 dotnet_diagnostic.CS1591.severity = none
 dotnet_diagnostic.CA1707.severity = none
 dotnet_diagnostic.CA1812.severity = none

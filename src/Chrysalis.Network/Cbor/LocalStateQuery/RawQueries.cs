@@ -1,6 +1,6 @@
-using Chrysalis.Cbor.Serialization.Attributes;
-using Chrysalis.Cbor.Types;
-using Chrysalis.Cbor.Types.Cardano.Core.Transaction;
+using Chrysalis.Codec.Serialization.Attributes;
+using Chrysalis.Codec.Types;
+using Chrysalis.Codec.Types.Cardano.Core.Transaction;
 
 namespace Chrysalis.Network.Cbor.LocalStateQuery;
 

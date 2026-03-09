@@ -1,14 +1,14 @@
-using Chrysalis.Cbor.Types.Cardano.Core.TransactionWitness;
-using Chrysalis.Cbor.Types.Cardano.Core.Transaction;
-using Chrysalis.Cbor.Types.Cardano.Core;
-using Chrysalis.Cbor.Types.Cardano.Core.Certificates;
-using Chrysalis.Cbor.Types.Cardano.Core.Common;
-using Chrysalis.Cbor.Types.Cardano.Core.Scripts;
-using Chrysalis.Cbor.Types.Cardano.Core.Governance;
-using Chrysalis.Cbor.Types;
+using Chrysalis.Codec.Types.Cardano.Core.TransactionWitness;
+using Chrysalis.Codec.Types.Cardano.Core.Transaction;
+using Chrysalis.Codec.Types.Cardano.Core;
+using Chrysalis.Codec.Types.Cardano.Core.Certificates;
+using Chrysalis.Codec.Types.Cardano.Core.Common;
+using Chrysalis.Codec.Types.Cardano.Core.Scripts;
+using Chrysalis.Codec.Types.Cardano.Core.Governance;
+using Chrysalis.Codec.Types;
 using Chrysalis.Tx.Utils;
-using Chrysalis.Cbor.Extensions;
-using Chrysalis.Cbor.Serialization.Utils;
+using Chrysalis.Codec.Extensions;
+using Chrysalis.Codec.Serialization.Utils;
 using Chrysalis.Network.Cbor.LocalStateQuery;
 
 namespace Chrysalis.Tx.Builders;

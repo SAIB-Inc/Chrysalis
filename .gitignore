@@ -20,4 +20,4 @@
 
 out
 build
-.fake
+.fake.env

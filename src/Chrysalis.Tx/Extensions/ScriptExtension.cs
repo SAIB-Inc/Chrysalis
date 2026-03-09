@@ -1,7 +1,7 @@
-using Chrysalis.Cbor.Types.Cardano.Core.Common;
-using Chrysalis.Cbor.Types.Cardano.Core.Scripts;
-using Chrysalis.Cbor.Types;
-using Chrysalis.Cbor.Serialization;
+using Chrysalis.Codec.Types.Cardano.Core.Common;
+using Chrysalis.Codec.Types.Cardano.Core.Scripts;
+using Chrysalis.Codec.Types;
+using Chrysalis.Codec.Serialization;
 using Chrysalis.Plutus.VM.EvalTx;
 
 namespace Chrysalis.Tx.Extensions;

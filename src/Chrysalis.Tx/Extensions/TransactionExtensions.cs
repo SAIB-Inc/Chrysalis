@@ -1,8 +1,8 @@
-using Chrysalis.Cbor.Extensions.Cardano.Core.TransactionWitness;
-using Chrysalis.Cbor.Serialization;
-using Chrysalis.Cbor.Types;
-using Chrysalis.Cbor.Types.Cardano.Core.Transaction;
-using Chrysalis.Cbor.Types.Cardano.Core.TransactionWitness;
+using Chrysalis.Codec.Extensions.Cardano.Core.TransactionWitness;
+using Chrysalis.Codec.Serialization;
+using Chrysalis.Codec.Types;
+using Chrysalis.Codec.Types.Cardano.Core.Transaction;
+using Chrysalis.Codec.Types.Cardano.Core.TransactionWitness;
 using Chrysalis.Wallet.Models.Keys;
 using Chrysalis.Wallet.Utils;
 

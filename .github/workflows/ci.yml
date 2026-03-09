@@ -42,8 +42,8 @@ jobs:
       - name: Pack (dry run)
         run: |
           mkdir -p out
-          dotnet pack ./src/Chrysalis.Cbor.CodeGen/Chrysalis.Cbor.CodeGen.csproj -c Release -o out
-          dotnet pack ./src/Chrysalis.Cbor/Chrysalis.Cbor.csproj -c Release -o out
+          dotnet pack ./src/Chrysalis.Codec.CodeGen/Chrysalis.Codec.CodeGen.csproj -c Release -o out
+          dotnet pack ./src/Chrysalis.Codec/Chrysalis.Codec.csproj -c Release -o out
           dotnet pack ./src/Chrysalis.Crypto/Chrysalis.Crypto.csproj -c Release -o out
           dotnet pack ./src/Chrysalis.Wallet/Chrysalis.Wallet.csproj -c Release -o out
           dotnet pack ./src/Chrysalis.Network/Chrysalis.Network.csproj -c Release -o out

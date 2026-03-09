@@ -1,9 +1,9 @@
-using Chrysalis.Cbor.Extensions;
-using Chrysalis.Cbor.Extensions.Cardano.Core;
-using Chrysalis.Cbor.Extensions.Cardano.Core.Header;
-using Chrysalis.Cbor.Serialization;
-using Chrysalis.Cbor.Types.Cardano.Core.Byron;
-using Chrysalis.Cbor.Types.Cardano.Core.Header;
+using Chrysalis.Codec.Extensions;
+using Chrysalis.Codec.Extensions.Cardano.Core;
+using Chrysalis.Codec.Extensions.Cardano.Core.Header;
+using Chrysalis.Codec.Serialization;
+using Chrysalis.Codec.Types.Cardano.Core.Byron;
+using Chrysalis.Codec.Types.Cardano.Core.Header;
 using SAIB.Cbor.Serialization;
 
 namespace Chrysalis.Network.Cbor.ChainSync;

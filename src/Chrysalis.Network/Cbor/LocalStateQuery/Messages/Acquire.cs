@@ -1,4 +1,4 @@
-using Chrysalis.Cbor.Serialization.Attributes;
+using Chrysalis.Codec.Serialization.Attributes;
 using Chrysalis.Network.Cbor.Common;
 
 namespace Chrysalis.Network.Cbor.LocalStateQuery.Messages;

@@ -1,4 +1,4 @@
-using Chrysalis.Cbor.Serialization;
+using Chrysalis.Codec.Serialization;
 
 namespace Chrysalis.Wallet.CIPs.CIP8.Models;
 

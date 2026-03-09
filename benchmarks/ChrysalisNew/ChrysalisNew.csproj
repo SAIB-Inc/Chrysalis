@@ -8,7 +8,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="../../src/Chrysalis.Cbor/Chrysalis.Cbor.csproj" />
+    <ProjectReference Include="../../src/Chrysalis.Codec/Chrysalis.Codec.csproj" />
     <PackageReference Include="BenchmarkDotNet" />
   </ItemGroup>
 

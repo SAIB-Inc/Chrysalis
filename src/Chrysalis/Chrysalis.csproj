@@ -26,8 +26,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Chrysalis.Cbor\Chrysalis.Cbor.csproj" PrivateAssets="All" />
-    <ProjectReference Include="..\Chrysalis.Cbor.CodeGen\Chrysalis.Cbor.CodeGen.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\Chrysalis.Codec\Chrysalis.Codec.csproj" PrivateAssets="All" />
+    <ProjectReference Include="..\Chrysalis.Codec.CodeGen\Chrysalis.Codec.CodeGen.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
     <ProjectReference Include="..\Chrysalis.Network\Chrysalis.Network.csproj" PrivateAssets="All" />
     <ProjectReference Include="..\Chrysalis.Tx\Chrysalis.Tx.csproj" PrivateAssets="All" />
     <ProjectReference Include="..\Chrysalis.Wallet\Chrysalis.Wallet.csproj" PrivateAssets="All" />

@@ -1,6 +1,6 @@
 using System.Runtime.CompilerServices;
-using Chrysalis.Cbor.Extensions;
-using Chrysalis.Cbor.Types;
+using Chrysalis.Codec.Extensions;
+using Chrysalis.Codec.Types;
 using Chrysalis.Network.Cbor.BlockFetch;
 using Chrysalis.Network.Cbor.Common;
 using Chrysalis.Network.Multiplexer;

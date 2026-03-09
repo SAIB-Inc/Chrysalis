@@ -1,4 +1,4 @@
-using Chrysalis.Cbor.Types.Plutus.Address;
+using Chrysalis.Codec.Types.Plutus.Address;
 using Chrysalis.Wallet.Extensions;
 using Chrysalis.Wallet.Models.Enums;
 using Chrysalis.Wallet.Models.Keys;

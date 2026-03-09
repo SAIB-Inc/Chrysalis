@@ -1,7 +1,7 @@
-using Chrysalis.Cbor.Types;
-using Chrysalis.Cbor.Types.Cardano.Core;
-using Chrysalis.Cbor.Types.Cardano.Core.Transaction;
-using Chrysalis.Cbor.Types.Cardano.Core.TransactionWitness;
+using Chrysalis.Codec.Types;
+using Chrysalis.Codec.Types.Cardano.Core;
+using Chrysalis.Codec.Types.Cardano.Core.Transaction;
+using Chrysalis.Codec.Types.Cardano.Core.TransactionWitness;
 
 namespace Chrysalis.Tx.Utils;
 

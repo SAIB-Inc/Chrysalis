@@ -1,4 +1,4 @@
-using Chrysalis.Cbor.Serialization;
+using Chrysalis.Codec.Serialization;
 using Chrysalis.Network.Cbor.BlockFetch;
 using Chrysalis.Network.Cbor.Common;
 using Xunit;

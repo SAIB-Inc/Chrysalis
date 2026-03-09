@@ -1,6 +1,6 @@
-using Chrysalis.Cbor.Types.Cardano.Core.Scripts;
-using Chrysalis.Cbor.Types.Cardano.Core;
-using Chrysalis.Cbor.Types.Cardano.Core.Transaction;
+using Chrysalis.Codec.Types.Cardano.Core.Scripts;
+using Chrysalis.Codec.Types.Cardano.Core;
+using Chrysalis.Codec.Types.Cardano.Core.Transaction;
 using Chrysalis.Tx.Builders;
 
 namespace Chrysalis.Tx.Models;

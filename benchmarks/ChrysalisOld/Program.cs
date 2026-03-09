@@ -1,7 +1,7 @@
 using BenchmarkDotNet.Attributes;
 using BenchmarkDotNet.Running;
-using Chrysalis.Cbor.Serialization;
-using Chrysalis.Cbor.Types.Cardano.Core;
+using Chrysalis.Codec.Serialization;
+using Chrysalis.Codec.Types.Cardano.Core;
 
 BenchmarkRunner.Run<BlockDeserializationBenchmarks>();
 

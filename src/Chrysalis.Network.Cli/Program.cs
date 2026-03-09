@@ -1,9 +1,9 @@
 using System.Diagnostics;
-using Chrysalis.Cbor.Extensions;
-using Chrysalis.Cbor.Extensions.Cardano.Core;
-using Chrysalis.Cbor.Extensions.Cardano.Core.Byron;
-using Chrysalis.Cbor.Extensions.Cardano.Core.Header;
-using Chrysalis.Cbor.Types.Cardano.Core;
+using Chrysalis.Codec.Extensions;
+using Chrysalis.Codec.Extensions.Cardano.Core;
+using Chrysalis.Codec.Extensions.Cardano.Core.Byron;
+using Chrysalis.Codec.Extensions.Cardano.Core.Header;
+using Chrysalis.Codec.Types.Cardano.Core;
 using Chrysalis.Network.Cbor.BlockFetch;
 using Chrysalis.Network.Cbor.ChainSync;
 using Chrysalis.Network.Cbor.Common;

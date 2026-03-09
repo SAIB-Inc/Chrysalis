@@ -11,9 +11,9 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="../Chrysalis.Cbor/Chrysalis.Cbor.csproj" />
+    <ProjectReference Include="../Chrysalis.Codec/Chrysalis.Codec.csproj" />
     <ProjectReference Include="../Chrysalis.Crypto/Chrysalis.Crypto.csproj" />
-    <ProjectReference Include="..\Chrysalis.Cbor.CodeGen\Chrysalis.Cbor.CodeGen.csproj" 
+    <ProjectReference Include="..\Chrysalis.Codec.CodeGen\Chrysalis.Codec.CodeGen.csproj" 
               OutputItemType="Analyzer" 
               ReferenceOutputAssembly="false" />
   </ItemGroup>

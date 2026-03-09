@@ -1,9 +1,9 @@
-using Chrysalis.Cbor.Serialization.Attributes;
-using Chrysalis.Cbor.Types;
-using Chrysalis.Cbor.Types.Cardano.Core.Governance;
-using Chrysalis.Cbor.Types.Cardano.Core.Header;
-using Chrysalis.Cbor.Types.Cardano.Core.Protocol;
-using Chrysalis.Cbor.Types.Cardano.Core.Transaction;
+using Chrysalis.Codec.Serialization.Attributes;
+using Chrysalis.Codec.Types;
+using Chrysalis.Codec.Types.Cardano.Core.Governance;
+using Chrysalis.Codec.Types.Cardano.Core.Header;
+using Chrysalis.Codec.Types.Cardano.Core.Protocol;
+using Chrysalis.Codec.Types.Cardano.Core.Transaction;
 
 namespace Chrysalis.Network.Cbor.LocalStateQuery;
 
