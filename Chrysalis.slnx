@@ -22,4 +22,8 @@
   <Folder Name="/src/Chrysalis.Codec.Test/">
     <Project Path="src/Chrysalis.Codec.Test/Chrysalis.Codec.Test.csproj" />
   </Folder>
+  <Folder Name="/benchmarks/">
+    <Project Path="benchmarks/ChrysalisNew/ChrysalisNew.csproj" />
+    <Project Path="benchmarks/PlutusBench/PlutusBench.csproj" />
+  </Folder>
 </Solution>
