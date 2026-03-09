@@ -28,10 +28,7 @@ internal static class CryptoBytes
     /// Securely wipes a byte array by setting all elements to zero.
     /// </summary>
     /// <param name="data">The byte array to wipe.</param>
-    internal static void Wipe(byte[] data)
-    {
-        InternalWipe(data, 0, data.Length);
-    }
+    internal static void Wipe(byte[] data) => InternalWipe(data, 0, data.Length);
 
     /// <summary>
     /// Securely wipes a byte array by setting all elements in the specified range to zero.
@@ -42,10 +39,7 @@ internal static class CryptoBytes
     /// <param name="offset">The starting offset.</param>
     /// <param name="count">The number of bytes to wipe.</param>
     [MethodImpl(MethodImplOptions.NoInlining)]
-    internal static void InternalWipe(byte[] data, int offset, int count)
-    {
-        Array.Clear(data, offset, count);
-    }
+    internal static void InternalWipe(byte[] data, int offset, int count) => Array.Clear(data, offset, count);
 
     /// <summary>
     /// Securely wipes a struct value by resetting it to its default state.
@@ -54,8 +48,5 @@ internal static class CryptoBytes
     /// <param name="data">A reference to the struct to wipe.</param>
     [MethodImpl(MethodImplOptions.NoInlining)]
     internal static void InternalWipe<T>(ref T data)
-        where T : struct
-    {
-        data = default;
-    }
+        where T : struct => data = default;
 }

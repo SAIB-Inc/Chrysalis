@@ -1,81 +1,50 @@
-using Chrysalis.Plutus.VM.Interop;
-using Chrysalis.Codec.Types.Cardano.Core.Common;
-using Chrysalis.Codec.Types;
-using Chrysalis.Codec.Serialization;
+using Chrysalis.Plutus.Cbor;
+using Chrysalis.Plutus.Flat;
+using Chrysalis.Plutus.Types;
 
 namespace Chrysalis.Plutus.VM.EvalTx;
 
 /// <summary>
-/// Provides methods to apply parameters to Plutus scripts.
+/// Applies parameters to parameterized Plutus scripts.
+/// Flat-decodes the script, wraps the program body in Apply(body, param), and re-encodes.
 /// </summary>
 public static class ScriptApplicator
 {
     /// <summary>
-    /// Applies a parameter to a Plutus script given as a hex string.
+    /// Applies a single CBOR-encoded PlutusData parameter to a Flat-encoded Plutus script.
     /// </summary>
-    /// <param name="scriptHex">The hex-encoded Plutus script.</param>
-    /// <param name="parameters">The Plutus data parameter to apply.</param>
-    /// <returns>The hex-encoded result script with the parameter applied.</returns>
-    public static string ApplyParameters(string scriptHex, PlutusData parameters)
+    /// <param name="scriptBytes">The Flat-encoded script bytes.</param>
+    /// <param name="parameterCbor">CBOR-encoded PlutusData parameter.</param>
+    /// <returns>The Flat-encoded script with the parameter applied.</returns>
+    public static byte[] ApplyParameter(byte[] scriptBytes, byte[] parameterCbor)
     {
-        byte[] scriptBytes = Convert.FromHexString(scriptHex);
-        byte[] result = ApplyParameters(scriptBytes, parameters);
-        return Convert.ToHexString(result);
+        ArgumentNullException.ThrowIfNull(scriptBytes);
+        ArgumentNullException.ThrowIfNull(parameterCbor);
+
+        Program<DeBruijn> program = FlatDecoder.DecodeProgram(scriptBytes);
+        PlutusData vmData = CborReader.DecodePlutusData(parameterCbor);
+        Term<DeBruijn> applied = new ApplyTerm<DeBruijn>(
+            program.Term,
+            new ConstTerm<DeBruijn>(new DataConstant(vmData)));
+        return FlatEncoder.EncodeProgram(new Program<DeBruijn>(program.Version, applied));
     }
 
     /// <summary>
-    /// Applies a parameter to a Plutus script given as a byte array.
+    /// Applies multiple CBOR-encoded PlutusData parameters to a Flat-encoded Plutus script sequentially.
     /// </summary>
-    /// <param name="scriptBytes">The CBOR-encoded Plutus script bytes.</param>
-    /// <param name="parameters">The Plutus data parameter to apply.</param>
-    /// <returns>The result script bytes with the parameter applied.</returns>
-    public static byte[] ApplyParameters(byte[] scriptBytes, PlutusData parameters)
-    {
-        PlutusList parametersList = new(new CborIndefList<PlutusData>([parameters]));
-        byte[] parametersCbor = CborSerializer.Serialize(parametersList);
-
-        return ApplyParametersFromCbor(scriptBytes, parametersCbor);
-    }
-
-    /// <summary>
-    /// Applies CBOR-encoded parameters to a CBOR-encoded Plutus script.
-    /// </summary>
-    /// <param name="scriptBytes">The CBOR-encoded Plutus script bytes.</param>
-    /// <param name="parametersCbor">The CBOR-encoded parameters bytes.</param>
-    /// <returns>The result script bytes with the parameters applied.</returns>
-    public static byte[] ApplyParametersFromCbor(byte[] scriptBytes, byte[] parametersCbor)
+    /// <param name="scriptBytes">The Flat-encoded script bytes.</param>
+    /// <param name="parametersCbor">CBOR-encoded PlutusData parameters to apply in order.</param>
+    /// <returns>The Flat-encoded script with all parameters applied.</returns>
+    public static byte[] ApplyParameters(byte[] scriptBytes, IReadOnlyList<byte[]> parametersCbor)
     {
         ArgumentNullException.ThrowIfNull(scriptBytes);
         ArgumentNullException.ThrowIfNull(parametersCbor);
 
-        unsafe
+        byte[] current = scriptBytes;
+        foreach (byte[] param in parametersCbor)
         {
-            byte* resultPtr = NativeMethods.ApplyParamsToScriptRaw(
-                scriptBytes,
-                (nuint)scriptBytes.Length,
-                parametersCbor,
-                (nuint)parametersCbor.Length,
-                out nuint resultLength
-            );
-
-            if (resultPtr == null || resultLength == 0)
-            {
-                throw new InvalidOperationException("Failed to apply parameters to script. The script or parameters may be invalid.");
-            }
-
-            try
-            {
-                byte[] result = new byte[resultLength];
-                fixed (byte* destPtr = result)
-                {
-                    Buffer.MemoryCopy(resultPtr, destPtr, (long)resultLength, (long)resultLength);
-                }
-                return result;
-            }
-            finally
-            {
-                NativeMethods.FreeScriptBytes((IntPtr)resultPtr, resultLength);
-            }
+            current = ApplyParameter(current, param);
         }
+        return current;
     }
 }

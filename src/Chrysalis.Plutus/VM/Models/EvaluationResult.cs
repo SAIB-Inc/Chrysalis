@@ -1,11 +1,13 @@
-using Chrysalis.Plutus.VM.Models.Enums;
-
 namespace Chrysalis.Plutus.VM.Models;
 
 /// <summary>
-/// Represents the result of evaluating a Plutus script, including the redeemer tag, index, and execution units consumed.
+/// Result of evaluating a single redeemer in a transaction.
+/// Contains the redeemer tag, index, and computed execution units.
 /// </summary>
-/// <param name="RedeemerTag">The tag identifying the redeemer purpose.</param>
-/// <param name="Index">The index of the redeemer in the transaction.</param>
-/// <param name="ExUnits">The execution units consumed by the script.</param>
-public record EvaluationResult(RedeemerTag RedeemerTag, uint Index, ExUnits ExUnits);
+public sealed record EvaluationResult(int RedeemerTag, ulong Index, ExUnitsResult ExUnits);
+
+/// <summary>
+/// Execution units consumed by a script evaluation.
+/// Memory and CPU steps as unsigned 64-bit values for consumer compatibility.
+/// </summary>
+public sealed record ExUnitsResult(ulong Mem, ulong Steps);

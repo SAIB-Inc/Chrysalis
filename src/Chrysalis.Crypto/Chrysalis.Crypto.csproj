@@ -10,6 +10,11 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <InternalsVisibleTo Include="Chrysalis.Plutus" />
+    <InternalsVisibleTo Include="Chrysalis.Crypto.Test" />
+  </ItemGroup>
+
+  <ItemGroup>
     <None Include="../../LICENSE.md" Pack="true" PackagePath="" />
     <None Include="../../README.md" Pack="true" PackagePath="" />
   </ItemGroup>

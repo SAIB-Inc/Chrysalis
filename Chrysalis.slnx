@@ -11,6 +11,7 @@
     <Project Path="src/Chrysalis.Network/Chrysalis.Network.csproj" />
     <Project Path="src/Chrysalis.Plutus.Cli/Chrysalis.Plutus.Cli.csproj" />
     <Project Path="src/Chrysalis.Plutus/Chrysalis.Plutus.csproj" />
+    <Project Path="src/Chrysalis.Plutus.Test/Chrysalis.Plutus.Test.csproj" />
     <Project Path="src/Chrysalis.Tx.Cli/Chrysalis.Tx.Cli.csproj" />
     <Project Path="src/Chrysalis.Tx/Chrysalis.Tx.csproj" />
     <Project Path="src/Chrysalis.Wallet.Cli/Chrysalis.Wallet.Cli.csproj" />

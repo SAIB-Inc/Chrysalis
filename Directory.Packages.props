@@ -35,5 +35,6 @@
     <!-- Cryptography -->
     <PackageVersion Include="Microsoft.AspNetCore.Cryptography.KeyDerivation" Version="10.0.2" />
     <PackageVersion Include="SauceControl.Blake2Fast" Version="2.0.0" />
+    <PackageVersion Include="BouncyCastle.Cryptography" Version="2.6.1" />
   </ItemGroup>
 </Project>
