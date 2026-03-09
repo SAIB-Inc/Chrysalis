@@ -9,7 +9,7 @@
 
   <ItemGroup>
     <PackageReference Include="Chrysalis" Version="1.1.0-alpha" />
-    <PackageReference Include="Chrysalis.Cbor.CodeGen" Version="1.1.0-alpha" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+    <PackageReference Include="Chrysalis.Codec.CodeGen" Version="1.1.0-alpha" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
     <PackageReference Include="BenchmarkDotNet" Version="0.15.8" />
   </ItemGroup>
 

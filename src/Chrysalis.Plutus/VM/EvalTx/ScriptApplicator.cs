@@ -1,7 +1,7 @@
 using Chrysalis.Plutus.VM.Interop;
-using Chrysalis.Cbor.Types.Cardano.Core.Common;
-using Chrysalis.Cbor.Types;
-using Chrysalis.Cbor.Serialization;
+using Chrysalis.Codec.Types.Cardano.Core.Common;
+using Chrysalis.Codec.Types;
+using Chrysalis.Codec.Serialization;
 
 namespace Chrysalis.Plutus.VM.EvalTx;
 

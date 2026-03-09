@@ -1,5 +1,5 @@
-using Chrysalis.Cbor.Types.Cardano.Core.Protocol;
-using Chrysalis.Cbor.Types.Cardano.Core.TransactionWitness;
+using Chrysalis.Codec.Types.Cardano.Core.Protocol;
+using Chrysalis.Codec.Types.Cardano.Core.TransactionWitness;
 using Chrysalis.Tx.Models;
 
 namespace Chrysalis.Tx.Utils;

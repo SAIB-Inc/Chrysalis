@@ -1,8 +1,8 @@
 using System.Diagnostics;
 using System.Globalization;
-using Chrysalis.Cbor.Extensions;
-using Chrysalis.Cbor.Serialization;
-using Chrysalis.Cbor.Types.Cardano.Core;
+using Chrysalis.Codec.Extensions;
+using Chrysalis.Codec.Serialization;
+using Chrysalis.Codec.Types.Cardano.Core;
 using Chrysalis.Network.Cbor.ChainSync;
 using Chrysalis.Network.Cbor.Common;
 using Chrysalis.Network.MiniProtocols;

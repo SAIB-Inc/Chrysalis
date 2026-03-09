@@ -1,5 +1,5 @@
-using Chrysalis.Cbor.Serialization.Attributes;
-using Chrysalis.Cbor.Types;
+using Chrysalis.Codec.Serialization.Attributes;
+using Chrysalis.Codec.Types;
 using Chrysalis.Network.Cbor.LocalTxSubmit;
 
 namespace Chrysalis.Network.Cbor.LocalTxMonitor;

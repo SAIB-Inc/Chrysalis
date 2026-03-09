@@ -1,7 +1,7 @@
-using Chrysalis.Cbor.Extensions;
-using Chrysalis.Cbor.Serialization;
-using Chrysalis.Cbor.Types.Cardano.Core.Common;
-using Chrysalis.Cbor.Types.Cardano.Core.TransactionWitness;
+using Chrysalis.Codec.Extensions;
+using Chrysalis.Codec.Serialization;
+using Chrysalis.Codec.Types.Cardano.Core.Common;
+using Chrysalis.Codec.Types.Cardano.Core.TransactionWitness;
 using Chrysalis.Wallet.Utils;
 
 namespace Chrysalis.Tx.Utils;

@@ -1,7 +1,7 @@
-using Chrysalis.Cbor.Types.Cardano.Core.Transaction;
+using Chrysalis.Codec.Types.Cardano.Core.Transaction;
 using Chrysalis.Network.Cbor.LocalStateQuery;
 using Chrysalis.Tx.Models.Cbor;
-using Chrysalis.Cbor.Types.Cardano.Core;
+using Chrysalis.Codec.Types.Cardano.Core;
 using Chrysalis.Wallet.Models.Enums;
 
 namespace Chrysalis.Tx.Models;

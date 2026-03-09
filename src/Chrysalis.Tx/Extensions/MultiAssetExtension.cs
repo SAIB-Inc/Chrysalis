@@ -1,4 +1,4 @@
-using Chrysalis.Cbor.Types.Cardano.Core.Common;
+using Chrysalis.Codec.Types.Cardano.Core.Common;
 
 namespace Chrysalis.Tx.Extensions;
 

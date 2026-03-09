@@ -1,5 +1,5 @@
-using Chrysalis.Cbor.Serialization.Attributes;
-using Chrysalis.Cbor.Types;
+using Chrysalis.Codec.Serialization.Attributes;
+using Chrysalis.Codec.Types;
 
 namespace Chrysalis.Wallet.CIPs.CIP8.Models;
 

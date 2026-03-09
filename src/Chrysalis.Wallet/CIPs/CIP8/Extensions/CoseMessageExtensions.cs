@@ -1,5 +1,5 @@
 using System.Text;
-using Chrysalis.Cbor.Serialization;
+using Chrysalis.Codec.Serialization;
 using Chrysalis.Wallet.CIPs.CIP8.Models;
 
 namespace Chrysalis.Wallet.CIPs.CIP8.Extensions;

@@ -1,7 +1,7 @@
-using Chrysalis.Cbor.Extensions.Cardano.Core.Common;
-using Chrysalis.Cbor.Extensions.Cardano.Core.Transaction;
-using Chrysalis.Cbor.Serialization.Utils;
-using Chrysalis.Cbor.Types.Cardano.Core.Common;
+using Chrysalis.Codec.Extensions.Cardano.Core.Common;
+using Chrysalis.Codec.Extensions.Cardano.Core.Transaction;
+using Chrysalis.Codec.Serialization.Utils;
+using Chrysalis.Codec.Types.Cardano.Core.Common;
 using Chrysalis.Tx.Extensions;
 using Chrysalis.Tx.Models.Cbor;
 

@@ -1,8 +1,8 @@
 <Solution>
   <Folder Name="/src/">
-    <Project Path="src/Chrysalis.Cbor.Cli/Chrysalis.Cbor.Cli.csproj" />
-    <Project Path="src/Chrysalis.Cbor.CodeGen/Chrysalis.Cbor.CodeGen.csproj" />
-    <Project Path="src/Chrysalis.Cbor/Chrysalis.Cbor.csproj" />
+    <Project Path="src/Chrysalis.Codec.Cli/Chrysalis.Codec.Cli.csproj" />
+    <Project Path="src/Chrysalis.Codec.CodeGen/Chrysalis.Codec.CodeGen.csproj" />
+    <Project Path="src/Chrysalis.Codec/Chrysalis.Codec.csproj" />
     <Project Path="src/Chrysalis.Cli/Chrysalis.Cli.csproj" />
     <Project Path="src/Chrysalis.Crypto/Chrysalis.Crypto.csproj" />
     <Project Path="src/Chrysalis.Crypto.Test/Chrysalis.Crypto.Test.csproj" />
@@ -18,7 +18,7 @@
     <Project Path="src/Chrysalis.Wallet/Chrysalis.Wallet.csproj" />
     <Project Path="src/Chrysalis/Chrysalis.csproj" />
   </Folder>
-  <Folder Name="/src/Chrysalis.Cbor.Test/">
-    <Project Path="src/Chrysalis.Cbor.Test/Chrysalis.Test.csproj" />
+  <Folder Name="/src/Chrysalis.Codec.Test/">
+    <Project Path="src/Chrysalis.Codec.Test/Chrysalis.Codec.Test.csproj" />
   </Folder>
 </Solution>

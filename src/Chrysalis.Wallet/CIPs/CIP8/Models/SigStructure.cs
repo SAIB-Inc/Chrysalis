@@ -1,5 +1,5 @@
 using System.Buffers;
-using Chrysalis.Cbor.Types;
+using Chrysalis.Codec.Types;
 using SAIB.Cbor.Serialization;
 
 namespace Chrysalis.Wallet.CIPs.CIP8.Models;

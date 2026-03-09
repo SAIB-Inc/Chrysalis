@@ -1,5 +1,5 @@
-using Chrysalis.Cbor.Types;
-using Chrysalis.Cbor.Types.Cardano.Core.Protocol;
+using Chrysalis.Codec.Types;
+using Chrysalis.Codec.Types.Cardano.Core.Protocol;
 using Chrysalis.Tx.Builders;
 
 namespace Chrysalis.Tx.Models;

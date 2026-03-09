@@ -1,4 +1,4 @@
-using Chrysalis.Cbor.Serialization;
+using Chrysalis.Codec.Serialization;
 using Chrysalis.Network.Cbor.KeepAlive;
 using Xunit;
 
