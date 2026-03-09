@@ -54,6 +54,12 @@ jobs:
           dotnet pack ./src/Chrysalis.Tx/Chrysalis.Tx.csproj -c Release -o out -p:Version=${{ steps.version.outputs.version }}
           dotnet pack ./src/Chrysalis/Chrysalis.csproj -c Release -o out -p:Version=${{ steps.version.outputs.version }}
 
+      - name: Debug API key
+        run: |
+          KEY="${{ secrets.NUGET_API_KEY }}"
+          echo "Key length: ${#KEY}"
+          echo "Key sha256: $(echo -n "$KEY" | sha256sum | cut -c1-16)"
+
       - name: Push to NuGet
         run: dotnet nuget push ./out/*.nupkg --api-key ${{ secrets.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate
 
