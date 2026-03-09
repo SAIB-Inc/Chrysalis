@@ -39,6 +39,12 @@ jobs:
       - name: Test
         run: dotnet test --no-build --filter "Category!=Integration"
 
+      - name: Debug NuGet API key
+        run: |
+          KEY="${{ secrets.NUGET_API_KEY }}"
+          echo "Key length: ${#KEY}"
+          echo "Key sha256: $(echo -n "$KEY" | sha256sum | cut -c1-16)"
+
       - name: Pack (dry run)
         run: |
           mkdir -p out
