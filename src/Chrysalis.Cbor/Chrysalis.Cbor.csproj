@@ -3,7 +3,7 @@
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <PackageId>Chrysalis.Cbor</PackageId>
-    <Authors>clark@saib.dev, kathea.mayol@saib.dev</Authors>
+    <Authors>Clark Alesna, Kathea Mayol</Authors>
     <Company>SAIB Inc</Company>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageLicenseFile>LICENSE.md</PackageLicenseFile>

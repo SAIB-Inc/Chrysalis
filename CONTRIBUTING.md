@@ -157,34 +157,11 @@ git pull origin main
 git checkout -b release/v1.0.X-alpha
 ```
 
-#### 2. Update Version Numbers
+#### 2. Prepare the Release Changes
 
-Update the `<Version>` tag in these project files:
+If the release requires packaging or workflow changes, make them on the release branch and commit them with a conventional commit message.
 
-- `src/Chrysalis/Chrysalis.csproj`
-- `src/Chrysalis.Plutus/Chrysalis.Plutus.csproj`
-- `src/Chrysalis.Cbor.CodeGen/Chrysalis.Cbor.CodeGen.csproj`
-
-Example change:
-```xml
-<!-- Before -->
-<Version>1.0.3-alpha</Version>
-
-<!-- After -->
-<Version>1.0.4-alpha</Version>
-```
-
-#### 3. Commit the Version Bump
-
-```bash
-git add src/Chrysalis/Chrysalis.csproj \
-        src/Chrysalis.Plutus/Chrysalis.Plutus.csproj \
-        src/Chrysalis.Cbor.CodeGen/Chrysalis.Cbor.CodeGen.csproj
-
-git commit -m "chore(release): bump version to v1.0.X-alpha"
-```
-
-#### 4. Create a Pull Request
+#### 3. Create a Pull Request
 
 ```bash
 git push origin release/v1.0.X-alpha
@@ -195,11 +172,11 @@ Then create a PR on GitHub:
 - **Description**: List the changes included in this release
 - **Target branch**: `main`
 
-#### 5. Merge the PR
+#### 4. Merge the PR
 
 After approval, merge the PR into `main`.
 
-#### 6. Create the GitHub Release
+#### 5. Create the Git Tag / GitHub Release
 
 ```bash
 gh release create v1.0.X-alpha \
@@ -208,25 +185,32 @@ gh release create v1.0.X-alpha \
   --prerelease
 ```
 
-The `--generate-notes` flag automatically creates a changelog from merged PRs since the last release.
+The tag triggers the release workflow, which builds, tests, packs, and publishes the packages. The `--generate-notes` flag automatically creates a changelog from merged PRs since the last release.
 
-#### 7. Verify CI/CD
+#### 6. Verify CI/CD
 
 The release will trigger the CI/CD pipeline which:
 1. Builds all projects
 2. Runs tests
-3. Packs NuGet packages
+3. Packs the published NuGet packages:
+   - `Chrysalis`
+   - `Chrysalis.Cbor`
+   - `Chrysalis.Cbor.CodeGen`
+   - `Chrysalis.Crypto`
+   - `Chrysalis.Network`
+   - `Chrysalis.Plutus`
+   - `Chrysalis.Tx`
+   - `Chrysalis.Wallet`
 4. Pushes to NuGet.org (on release publish)
 
 ### Release Checklist
 
-- [ ] Version bumped in all 3 project files
-- [ ] Version bump committed with proper message format
+- [ ] Release changes committed with proper message format
 - [ ] Pull Request created and approved
 - [ ] PR merged to `main`
 - [ ] GitHub release created with `--generate-notes`
 - [ ] Release marked as pre-release (if alpha/beta)
-- [ ] NuGet packages published (automatic via CI)
+- [ ] NuGet packages published for the umbrella package and supported leaf packages
 - [ ] Release notes reviewed for accuracy
 
 ### Hotfix Releases
@@ -235,15 +219,15 @@ For urgent fixes:
 
 1. Create a hotfix branch from `main`
 2. Apply the fix
-3. Update version (increment patch version)
+3. Create the next hotfix tag (increment patch version)
 4. Follow the standard PR and release process
 
 ### What NOT to Do
 
 - **Never push directly to `main`** - Always use Pull Requests
 - **Never force push to `main`** - This destroys history
-- **Never skip the PR for version bumps** - The PR provides audit trail
-- **Never create releases without the version bump PR merged first**
+- **Never skip the PR for release changes** - The PR provides audit trail
+- **Never create releases without the release PR merged first**
 
 ## Questions?
 

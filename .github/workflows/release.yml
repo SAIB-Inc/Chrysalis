@@ -19,7 +19,9 @@ jobs:
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '10.0.x'
-          dotnet-quality: 'preview'
+
+      - name: Show .NET version
+        run: dotnet --version
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
@@ -40,18 +42,20 @@ jobs:
       - name: Test
         run: dotnet test -c Release --no-build --filter "Category!=Integration"
 
-      - name: Pack CodeGen
-        run: dotnet pack -c Release -o out -p:Version=${{ steps.version.outputs.version }}
-        working-directory: ./src/Chrysalis.Cbor.CodeGen
-
-      - name: Pack Chrysalis
-        run: dotnet pack -c Release -o out -p:Version=${{ steps.version.outputs.version }}
-        working-directory: ./src/Chrysalis
+      - name: Pack packages
+        run: |
+          mkdir -p out
+          dotnet pack ./src/Chrysalis.Cbor.CodeGen/Chrysalis.Cbor.CodeGen.csproj -c Release -o out -p:Version=${{ steps.version.outputs.version }}
+          dotnet pack ./src/Chrysalis.Cbor/Chrysalis.Cbor.csproj -c Release -o out -p:Version=${{ steps.version.outputs.version }}
+          dotnet pack ./src/Chrysalis.Crypto/Chrysalis.Crypto.csproj -c Release -o out -p:Version=${{ steps.version.outputs.version }}
+          dotnet pack ./src/Chrysalis.Wallet/Chrysalis.Wallet.csproj -c Release -o out -p:Version=${{ steps.version.outputs.version }}
+          dotnet pack ./src/Chrysalis.Network/Chrysalis.Network.csproj -c Release -o out -p:Version=${{ steps.version.outputs.version }}
+          dotnet pack ./src/Chrysalis.Plutus/Chrysalis.Plutus.csproj -c Release -o out -p:Version=${{ steps.version.outputs.version }}
+          dotnet pack ./src/Chrysalis.Tx/Chrysalis.Tx.csproj -c Release -o out -p:Version=${{ steps.version.outputs.version }}
+          dotnet pack ./src/Chrysalis/Chrysalis.csproj -c Release -o out -p:Version=${{ steps.version.outputs.version }}
 
       - name: Push to NuGet
-        run: |
-          dotnet nuget push ./src/Chrysalis.Cbor.CodeGen/out/*.nupkg --api-key ${{ secrets.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate
-          dotnet nuget push ./src/Chrysalis/out/*.nupkg --api-key ${{ secrets.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate
+        run: dotnet nuget push ./out/*.nupkg --api-key ${{ secrets.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2

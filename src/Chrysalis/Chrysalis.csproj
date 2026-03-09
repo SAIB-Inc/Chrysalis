@@ -3,7 +3,7 @@
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <PackageId>Chrysalis</PackageId>
-    <Authors>clark@saib.dev, rico.quiblat@saib.dev, wendellmor.tamayo@saib.dev</Authors>
+    <Authors>Clark Alesna, Rico Quiblat, Wendell Mor Tamayo</Authors>
     <Company>SAIB Inc</Company>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageLicenseFile>LICENSE.md</PackageLicenseFile>
