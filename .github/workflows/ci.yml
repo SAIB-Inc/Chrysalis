@@ -41,15 +41,14 @@ jobs:
 
       - name: Pack (dry run)
         run: |
-          dotnet build -c Release --no-restore
           mkdir -p out
-          dotnet pack ./src/Chrysalis.Cbor.CodeGen/Chrysalis.Cbor.CodeGen.csproj -c Release --no-build -o out
-          dotnet pack ./src/Chrysalis.Cbor/Chrysalis.Cbor.csproj -c Release --no-build -o out
-          dotnet pack ./src/Chrysalis.Crypto/Chrysalis.Crypto.csproj -c Release --no-build -o out
-          dotnet pack ./src/Chrysalis.Wallet/Chrysalis.Wallet.csproj -c Release --no-build -o out
-          dotnet pack ./src/Chrysalis.Network/Chrysalis.Network.csproj -c Release --no-build -o out
-          dotnet pack ./src/Chrysalis.Plutus/Chrysalis.Plutus.csproj -c Release --no-build -o out
-          dotnet pack ./src/Chrysalis.Tx/Chrysalis.Tx.csproj -c Release --no-build -o out
-          dotnet pack ./src/Chrysalis/Chrysalis.csproj -c Release --no-build -o out
+          dotnet pack ./src/Chrysalis.Cbor.CodeGen/Chrysalis.Cbor.CodeGen.csproj -c Release -o out
+          dotnet pack ./src/Chrysalis.Cbor/Chrysalis.Cbor.csproj -c Release -o out
+          dotnet pack ./src/Chrysalis.Crypto/Chrysalis.Crypto.csproj -c Release -o out
+          dotnet pack ./src/Chrysalis.Wallet/Chrysalis.Wallet.csproj -c Release -o out
+          dotnet pack ./src/Chrysalis.Network/Chrysalis.Network.csproj -c Release -o out
+          dotnet pack ./src/Chrysalis.Plutus/Chrysalis.Plutus.csproj -c Release -o out
+          dotnet pack ./src/Chrysalis.Tx/Chrysalis.Tx.csproj -c Release -o out
+          dotnet pack ./src/Chrysalis/Chrysalis.csproj -c Release -o out
           echo "Packed $(ls out/*.nupkg | wc -l) packages:"
           ls -la out/*.nupkg
