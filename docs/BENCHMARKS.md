@@ -21,7 +21,8 @@ All implementations produce identical results and budgets (cpu/mem).
 | **Chrysalis.Plutus** (JIT) | C# / .NET 10 | `dotnet build -c Release`, standard CLR |
 | [plutuz](https://github.com/utxo-company/plutuz) | Zig 0.15.2 | `-Doptimize=ReleaseFast`, arena allocator per eval |
 | [uplc-turbo](https://github.com/pragma-org/uplc) | Rust | `--release`, bumpalo arena allocator |
-| [blaze-plutus](https://github.com/butaneprotocol/blaze-cardano) | TypeScript | Node.js v22, V8 JIT |
+| [blaze-plutus](https://github.com/butaneprotocol/blaze-cardano) (Node) | TypeScript | Node.js v22, V8 JIT |
+| [blaze-plutus](https://github.com/butaneprotocol/blaze-cardano) (Bun) | TypeScript | Bun 1.x, JavaScriptCore |
 | [plutigo](https://github.com/blinklabs-io/plutigo) | Go 1.25 | Used by [gouroboros](https://github.com/blinklabs-io/gouroboros), object pooling |
 | [aiken/uplc](https://github.com/aiken-lang/aiken) | Rust | `--release`, Rc/clone based (no arena) |
 
@@ -41,7 +42,9 @@ All implementations produce identical results and budgets (cpu/mem).
 ├───────────────────────────┼──────────┼──────────┤
 │ Rust (uplc-turbo)         │ 0.076 ms │ 1.1x     │
 ├───────────────────────────┼──────────┼──────────┤
-│ TypeScript (blaze-plutus) │ 0.103 ms │ 1.5x     │
+│ TypeScript/Node (blaze)   │ 0.103 ms │ 1.5x     │
+├───────────────────────────┼──────────┼──────────┤
+│ TypeScript/Bun (blaze)    │ 0.146 ms │ 2.1x     │
 ├───────────────────────────┼──────────┼──────────┤
 │ Rust (aiken uplc)         │ 0.187 ms │ 2.7x *   │
 ├───────────────────────────┼──────────┼──────────┤
@@ -63,7 +66,9 @@ All implementations produce identical results and budgets (cpu/mem).
 ├───────────────────────────┼──────────┼──────────┤
 │ Rust (uplc-turbo)         │ 0.111 ms │ 1.6x     │
 ├───────────────────────────┼──────────┼──────────┤
-│ TypeScript (blaze-plutus) │ 0.114 ms │ 1.6x     │
+│ TypeScript/Node (blaze)   │ 0.114 ms │ 1.6x     │
+├───────────────────────────┼──────────┼──────────┤
+│ TypeScript/Bun (blaze)    │ 0.166 ms │ 2.3x     │
 ├───────────────────────────┼──────────┼──────────┤
 │ Rust (aiken uplc)         │ 0.192 ms │ 2.7x *   │
 ├───────────────────────────┼──────────┼──────────┤
