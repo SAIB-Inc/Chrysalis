@@ -18,12 +18,6 @@ jobs:
         with:
           dotnet-version: '10.0.x'
 
-      - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Make Plutus build script executable
-        run: chmod +x ./src/Chrysalis.Plutus/build-rs.sh
-
       - name: Show .NET version
         run: dotnet --version
 
