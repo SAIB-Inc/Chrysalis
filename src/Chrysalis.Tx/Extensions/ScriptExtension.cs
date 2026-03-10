@@ -67,8 +67,7 @@ public static class ScriptExtension
 
         byte[] originalBytes = self.Bytes().ToArray();
         byte[] parameterCbor = CborSerializer.Serialize(parameter);
-        PlutusData plutusParameter = CborSerializer.Deserialize<PlutusData>(parameterCbor);
-        byte[] parameterizedBytes = ScriptApplicator.ApplyParameters(originalBytes, plutusParameter);
+        byte[] parameterizedBytes = ScriptApplicator.ApplyParameter(originalBytes, parameterCbor);
 
         return self switch
         {
