@@ -7,20 +7,11 @@ namespace Chrysalis.Plutus.Builtins;
 
 internal static class IntegerBuiltins
 {
-    internal static CekValue AddInteger(ImmutableArray<CekValue> args)
-    {
-        return IntegerResult(UnwrapInteger(args[0]) + UnwrapInteger(args[1]));
-    }
+    internal static CekValue AddInteger(ImmutableArray<CekValue> args) => IntegerResult(UnwrapInteger(args[0]) + UnwrapInteger(args[1]));
 
-    internal static CekValue SubtractInteger(ImmutableArray<CekValue> args)
-    {
-        return IntegerResult(UnwrapInteger(args[0]) - UnwrapInteger(args[1]));
-    }
+    internal static CekValue SubtractInteger(ImmutableArray<CekValue> args) => IntegerResult(UnwrapInteger(args[0]) - UnwrapInteger(args[1]));
 
-    internal static CekValue MultiplyInteger(ImmutableArray<CekValue> args)
-    {
-        return IntegerResult(UnwrapInteger(args[0]) * UnwrapInteger(args[1]));
-    }
+    internal static CekValue MultiplyInteger(ImmutableArray<CekValue> args) => IntegerResult(UnwrapInteger(args[0]) * UnwrapInteger(args[1]));
 
     internal static CekValue QuotientInteger(ImmutableArray<CekValue> args)
     {
@@ -80,20 +71,11 @@ internal static class IntegerBuiltins
         return IntegerResult(r);
     }
 
-    internal static CekValue EqualsInteger(ImmutableArray<CekValue> args)
-    {
-        return BoolResult(UnwrapInteger(args[0]) == UnwrapInteger(args[1]));
-    }
+    internal static CekValue EqualsInteger(ImmutableArray<CekValue> args) => BoolResult(UnwrapInteger(args[0]) == UnwrapInteger(args[1]));
 
-    internal static CekValue LessThanInteger(ImmutableArray<CekValue> args)
-    {
-        return BoolResult(UnwrapInteger(args[0]) < UnwrapInteger(args[1]));
-    }
+    internal static CekValue LessThanInteger(ImmutableArray<CekValue> args) => BoolResult(UnwrapInteger(args[0]) < UnwrapInteger(args[1]));
 
-    internal static CekValue LessThanEqualsInteger(ImmutableArray<CekValue> args)
-    {
-        return BoolResult(UnwrapInteger(args[0]) <= UnwrapInteger(args[1]));
-    }
+    internal static CekValue LessThanEqualsInteger(ImmutableArray<CekValue> args) => BoolResult(UnwrapInteger(args[0]) <= UnwrapInteger(args[1]));
 
     internal static CekValue ExpModInteger(ImmutableArray<CekValue> args)
     {

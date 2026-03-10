@@ -88,10 +88,7 @@ public sealed class AgentChannel(
     /// Reads the next available segment payload from this protocol channel.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public ValueTask<ReadOnlyMemory<byte>> ReadSegmentAsync(CancellationToken cancellationToken = default)
-    {
-        return demuxReader.ReadAsync(cancellationToken);
-    }
+    public ValueTask<ReadOnlyMemory<byte>> ReadSegmentAsync(CancellationToken cancellationToken = default) => demuxReader.ReadAsync(cancellationToken);
 
     /// <summary>
     /// Gets the protocol ID for this channel.

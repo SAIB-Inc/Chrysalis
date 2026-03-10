@@ -12,18 +12,12 @@ public static class VKeyWitnessExtensions
     /// </summary>
     /// <param name="self">The VKey witness instance.</param>
     /// <returns>The verification key bytes.</returns>
-    public static ReadOnlyMemory<byte> VKey(this CVKeyWitness self)
-    {
-        return self.VKey;
-    }
+    public static ReadOnlyMemory<byte> VKey(this CVKeyWitness self) => self.VKey;
 
     /// <summary>
     /// Gets the signature bytes.
     /// </summary>
     /// <param name="self">The VKey witness instance.</param>
     /// <returns>The signature bytes.</returns>
-    public static ReadOnlyMemory<byte> Signature(this CVKeyWitness self)
-    {
-        return self.Signature;
-    }
+    public static ReadOnlyMemory<byte> Signature(this CVKeyWitness self) => self.Signature;
 }

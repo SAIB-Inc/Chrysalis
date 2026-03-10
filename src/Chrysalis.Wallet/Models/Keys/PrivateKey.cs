@@ -60,10 +60,7 @@ public class PrivateKey(byte[] key, byte[] chaincode)
     /// <param name="purpose">The BIP-44 purpose type.</param>
     /// <param name="type">The derivation type (hard or soft).</param>
     /// <returns>The derived child private key.</returns>
-    public PrivateKey Derive(PurposeType purpose, DerivationType type = DerivationType.SOFT)
-    {
-        return Derive((int)purpose, type);
-    }
+    public PrivateKey Derive(PurposeType purpose, DerivationType type = DerivationType.SOFT) => Derive((int)purpose, type);
 
     /// <summary>
     /// Derives a child key using a coin type.
@@ -71,10 +68,7 @@ public class PrivateKey(byte[] key, byte[] chaincode)
     /// <param name="coinType">The BIP-44 coin type.</param>
     /// <param name="type">The derivation type (hard or soft).</param>
     /// <returns>The derived child private key.</returns>
-    public PrivateKey Derive(CoinType coinType, DerivationType type = DerivationType.SOFT)
-    {
-        return Derive((int)coinType, type);
-    }
+    public PrivateKey Derive(CoinType coinType, DerivationType type = DerivationType.SOFT) => Derive((int)coinType, type);
 
     /// <summary>
     /// Derives a child key using a role type.
@@ -82,10 +76,7 @@ public class PrivateKey(byte[] key, byte[] chaincode)
     /// <param name="roleType">The CIP-1852 role type.</param>
     /// <param name="type">The derivation type (hard or soft).</param>
     /// <returns>The derived child private key.</returns>
-    public PrivateKey Derive(RoleType roleType, DerivationType type = DerivationType.SOFT)
-    {
-        return Derive((int)roleType, type);
-    }
+    public PrivateKey Derive(RoleType roleType, DerivationType type = DerivationType.SOFT) => Derive((int)roleType, type);
 
     private PrivateKey GetChildKeyDerivation(ulong index)
     {
@@ -195,8 +186,5 @@ public class PrivateKey(byte[] key, byte[] chaincode)
     }
 
     /// <inheritdoc/>
-    public override int GetHashCode()
-    {
-        return HashCode.Combine(Convert.ToHexString(Key), Convert.ToHexString(Chaincode));
-    }
+    public override int GetHashCode() => HashCode.Combine(Convert.ToHexString(Key), Convert.ToHexString(Chaincode));
 }

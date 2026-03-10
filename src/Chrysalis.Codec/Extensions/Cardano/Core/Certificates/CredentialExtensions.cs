@@ -12,18 +12,12 @@ public static class CredentialExtensions
     /// </summary>
     /// <param name="self">The credential instance.</param>
     /// <returns>The credential type value.</returns>
-    public static int Type(this Credential self)
-    {
-        return self.Type;
-    }
+    public static int Type(this Credential self) => self.Type;
 
     /// <summary>
     /// Gets the credential hash bytes.
     /// </summary>
     /// <param name="self">The credential instance.</param>
     /// <returns>The hash bytes.</returns>
-    public static ReadOnlyMemory<byte> Hash(this Credential self)
-    {
-        return self.Hash;
-    }
+    public static ReadOnlyMemory<byte> Hash(this Credential self) => self.Hash;
 }

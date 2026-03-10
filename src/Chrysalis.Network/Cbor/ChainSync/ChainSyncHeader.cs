@@ -46,29 +46,20 @@ public record ChainSyncHeader(
     /// Gets the absolute slot number from this header, regardless of era.
     /// </summary>
     /// <returns>The absolute slot number.</returns>
-    public ulong Slot()
-    {
-        return ExtractPoint().Slot;
-    }
+    public ulong Slot() => ExtractPoint().Slot;
 
     /// <summary>
     /// Computes the Blake2b-256 hash of this header as a lowercase hex string, regardless of era.
     /// </summary>
     /// <returns>The hex-encoded hash string.</returns>
-    public string Hash()
-    {
-        return Convert.ToHexStringLower(ExtractPoint().Hash);
-    }
+    public string Hash() => Convert.ToHexStringLower(ExtractPoint().Hash);
 
     /// <summary>
     /// Gets the block height from this header, regardless of era.
     /// Byron EBBs return 0 as they don't have block numbers.
     /// </summary>
     /// <returns>The block height.</returns>
-    public ulong Height()
-    {
-        return ExtractPoint().BlockNumber;
-    }
+    public ulong Height() => ExtractPoint().BlockNumber;
 
     /// <summary>
     /// Extracts the absolute slot number, block hash, and height from this header, regardless of era.

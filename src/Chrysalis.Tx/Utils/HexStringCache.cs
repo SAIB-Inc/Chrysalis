@@ -17,20 +17,14 @@ public static class HexStringCache
     /// </summary>
     /// <param name="bytes">The memory to convert.</param>
     /// <returns>The hex string representation.</returns>
-    public static string ToHexString(ReadOnlyMemory<byte> bytes)
-    {
-        return bytes.Length == 0 ? string.Empty : Convert.ToHexString(bytes.Span);
-    }
+    public static string ToHexString(ReadOnlyMemory<byte> bytes) => bytes.Length == 0 ? string.Empty : Convert.ToHexString(bytes.Span);
 
     /// <summary>
     /// Converts a byte array to its hex string representation.
     /// </summary>
     /// <param name="bytes">The byte array to convert.</param>
     /// <returns>The hex string representation.</returns>
-    public static string ToHexString(byte[] bytes)
-    {
-        return bytes == null || bytes.Length == 0 ? string.Empty : Convert.ToHexString(bytes);
-    }
+    public static string ToHexString(byte[] bytes) => bytes == null || bytes.Length == 0 ? string.Empty : Convert.ToHexString(bytes);
 
     /// <summary>
     /// Converts a hex string to a byte array, using a cache for repeated lookups.
@@ -64,10 +58,7 @@ public static class HexStringCache
     /// <summary>
     /// Clears both hex conversion caches.
     /// </summary>
-    public static void ClearCache()
-    {
-        HexToBytes.Clear();
-    }
+    public static void ClearCache() => HexToBytes.Clear();
 
     /// <summary>
     /// Gets the current cache sizes for monitoring.

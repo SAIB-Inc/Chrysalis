@@ -12,38 +12,26 @@ public static class BootstrapWitnessExtensions
     /// </summary>
     /// <param name="self">The bootstrap witness instance.</param>
     /// <returns>The public key bytes.</returns>
-    public static ReadOnlyMemory<byte> PublicKey(this CBootstrapWitness self)
-    {
-        return self.PublicKey;
-    }
+    public static ReadOnlyMemory<byte> PublicKey(this CBootstrapWitness self) => self.PublicKey;
 
     /// <summary>
     /// Gets the signature bytes from the bootstrap witness.
     /// </summary>
     /// <param name="self">The bootstrap witness instance.</param>
     /// <returns>The signature bytes.</returns>
-    public static ReadOnlyMemory<byte> Signature(this CBootstrapWitness self)
-    {
-        return self.Signature;
-    }
+    public static ReadOnlyMemory<byte> Signature(this CBootstrapWitness self) => self.Signature;
 
     /// <summary>
     /// Gets the chain code bytes from the bootstrap witness.
     /// </summary>
     /// <param name="self">The bootstrap witness instance.</param>
     /// <returns>The chain code bytes.</returns>
-    public static ReadOnlyMemory<byte> ChainCode(this CBootstrapWitness self)
-    {
-        return self.ChainCode;
-    }
+    public static ReadOnlyMemory<byte> ChainCode(this CBootstrapWitness self) => self.ChainCode;
 
     /// <summary>
     /// Gets the attributes bytes from the bootstrap witness.
     /// </summary>
     /// <param name="self">The bootstrap witness instance.</param>
     /// <returns>The attributes bytes.</returns>
-    public static ReadOnlyMemory<byte> Attributes(this CBootstrapWitness self)
-    {
-        return self.Attributes;
-    }
+    public static ReadOnlyMemory<byte> Attributes(this CBootstrapWitness self) => self.Attributes;
 }

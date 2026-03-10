@@ -49,8 +49,5 @@ internal sealed class Environment
         return null;
     }
 
-    internal static Environment Extend(Environment? env, CekValue value)
-    {
-        return new(value, env);
-    }
+    internal static Environment Extend(Environment? env, CekValue value) => new(value, env);
 }

@@ -140,27 +140,18 @@ public static class ChainSyncMessages
     /// Creates a <see cref="MessageNextRequest"/> to request the next block or header from the ChainSync server.
     /// </summary>
     /// <returns>A new <see cref="MessageNextRequest"/> with the correct CBOR index.</returns>
-    public static MessageNextRequest NextRequest()
-    {
-        return new(0);
-    }
+    public static MessageNextRequest NextRequest() => new(0);
 
     /// <summary>
     /// Creates a <see cref="MessageFindIntersect"/> to find a common intersection point between client and server chains.
     /// </summary>
     /// <param name="points">The list of known points on the client's chain.</param>
     /// <returns>A new <see cref="MessageFindIntersect"/> with the correct CBOR index.</returns>
-    public static MessageFindIntersect FindIntersect(Points points)
-    {
-        return new(4, points);
-    }
+    public static MessageFindIntersect FindIntersect(Points points) => new(4, points);
 
     /// <summary>
     /// Creates a <see cref="MessageDone"/> to signal the end of the ChainSync session.
     /// </summary>
     /// <returns>A new <see cref="MessageDone"/> with the correct CBOR index.</returns>
-    public static MessageDone Done()
-    {
-        return new(7);
-    }
+    public static MessageDone Done() => new(7);
 }

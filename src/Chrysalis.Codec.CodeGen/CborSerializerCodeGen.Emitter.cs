@@ -678,18 +678,15 @@ public sealed partial class CborSerializerCodeGen
             };
         }
 
-        private static ICborSerializerEmitter GetEmitter(SerializableTypeMetadata metadata)
+        private static ICborSerializerEmitter GetEmitter(SerializableTypeMetadata metadata) => metadata.SerializationType switch
         {
-            return metadata.SerializationType switch
-            {
-                SerializationType.Constr => new ConstructorEmitter(),
-                SerializationType.Container => new ContainerEmitter(),
-                SerializationType.List => new ListEmitter(),
-                SerializationType.Map => new MapEmitter(),
-                SerializationType.Union => new UnionEmitter(),
-                _ => throw new NotSupportedException($"Serialization type {metadata.SerializationType} is not supported.")
-            };
-        }
+            SerializationType.Constr => new ConstructorEmitter(),
+            SerializationType.Container => new ContainerEmitter(),
+            SerializationType.List => new ListEmitter(),
+            SerializationType.Map => new MapEmitter(),
+            SerializationType.Union => new UnionEmitter(),
+            _ => throw new NotSupportedException($"Serialization type {metadata.SerializationType} is not supported.")
+        };
 
         public static int ResolveTag(int? index)
         {
@@ -704,36 +701,30 @@ public sealed partial class CborSerializerCodeGen
             }
         }
 
-        private static bool IsReadOnlyMemoryByteType(string type)
-        {
-            return type.Replace("?", "") is "ReadOnlyMemory<byte>" or "System.ReadOnlyMemory<byte>" or "global::System.ReadOnlyMemory<byte>";
-        }
+        private static bool IsReadOnlyMemoryByteType(string type) => type.Replace("?", "") is "ReadOnlyMemory<byte>" or "System.ReadOnlyMemory<byte>" or "global::System.ReadOnlyMemory<byte>";
 
-        private static bool IsPrimitiveType(string type)
+        private static bool IsPrimitiveType(string type) => type.Replace("?", "") switch
         {
-            return type.Replace("?", "") switch
-            {
-                "bool" => true,
-                "int" => true,
-                "long" => true,
-                "ulong" => true,
-                "uint" => true,
-                "float" => true,
-                "double" => true,
-                "decimal" => true,
-                "string" => true,
-                "byte[]" => true,
-                "ReadOnlyMemory<byte>" => true,
-                "System.ReadOnlyMemory<byte>" => true,
-                "global::System.ReadOnlyMemory<byte>" => true,
-                "CborEncodedValue" => true,
-                "Chrysalis.Codec.Types.CborEncodedValue" => true,
-                "global::Chrysalis.Codec.Types.CborEncodedValue" => true,
-                "CborLabel" => true,
-                "Chrysalis.Codec.Types.CborLabel" => true,
-                "global::Chrysalis.Codec.Types.CborLabel" => true,
-                _ => false
-            };
-        }
+            "bool" => true,
+            "int" => true,
+            "long" => true,
+            "ulong" => true,
+            "uint" => true,
+            "float" => true,
+            "double" => true,
+            "decimal" => true,
+            "string" => true,
+            "byte[]" => true,
+            "ReadOnlyMemory<byte>" => true,
+            "System.ReadOnlyMemory<byte>" => true,
+            "global::System.ReadOnlyMemory<byte>" => true,
+            "CborEncodedValue" => true,
+            "Chrysalis.Codec.Types.CborEncodedValue" => true,
+            "global::Chrysalis.Codec.Types.CborEncodedValue" => true,
+            "CborLabel" => true,
+            "Chrysalis.Codec.Types.CborLabel" => true,
+            "global::Chrysalis.Codec.Types.CborLabel" => true,
+            _ => false
+        };
     }
 }

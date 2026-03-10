@@ -51,30 +51,21 @@ public static class RawQueries
     /// </summary>
     /// <param name="query">The inner query to wrap.</param>
     /// <returns>A <see cref="IQueryReq"/> wrapped for the Conway era block query.</returns>
-    public static IQueryReq CreateBlockQuery(IQueryReq query)
-    {
-        return new BaseQuery(0, new BaseQuery(0, new BaseQuery((int)QueryEra.Conway, query)));
-    }
+    public static IQueryReq CreateBlockQuery(IQueryReq query) => new BaseQuery(0, new BaseQuery(0, new BaseQuery((int)QueryEra.Conway, query)));
 
     /// <summary>
     /// Creates a query request to retrieve UTxOs at the specified addresses.
     /// </summary>
     /// <param name="addresses">The list of serialized address bytes to query UTxOs for.</param>
     /// <returns>A <see cref="IQueryReq"/> for retrieving UTxOs by address.</returns>
-    public static IQueryReq GetUtxoByAddress(List<ReadOnlyMemory<byte>> addresses)
-    {
-        return CreateBlockQuery(new UtxoByAddressQuery(6, [.. addresses]));
-    }
+    public static IQueryReq GetUtxoByAddress(List<ReadOnlyMemory<byte>> addresses) => CreateBlockQuery(new UtxoByAddressQuery(6, [.. addresses]));
 
     /// <summary>
     /// Creates a query request to retrieve UTxOs for the specified transaction inputs.
     /// </summary>
     /// <param name="txIns">The list of transaction inputs to query UTxOs for.</param>
     /// <returns>A <see cref="IQueryReq"/> for retrieving UTxOs by transaction input.</returns>
-    public static IQueryReq GetUtxoByTxIns(List<TransactionInput> txIns)
-    {
-        return CreateBlockQuery(new UtxoByTxInQuery(15, [.. txIns]));
-    }
+    public static IQueryReq GetUtxoByTxIns(List<TransactionInput> txIns) => CreateBlockQuery(new UtxoByTxInQuery(15, [.. txIns]));
 }
 
 

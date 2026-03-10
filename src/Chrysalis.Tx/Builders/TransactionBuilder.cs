@@ -107,20 +107,14 @@ public class TransactionBuilder
     /// <summary>
     /// Initializes a new TransactionBuilder with empty state.
     /// </summary>
-    public TransactionBuilder()
-    {
-        _auxiliaryData = null;
-    }
+    public TransactionBuilder() => _auxiliaryData = null;
 
     /// <summary>
     /// Creates a new TransactionBuilder with the given protocol parameters.
     /// </summary>
     /// <param name="pparams">The protocol parameters.</param>
     /// <returns>A new TransactionBuilder instance.</returns>
-    public static TransactionBuilder Create(ProtocolParams pparams)
-    {
-        return new() { Pparams = pparams };
-    }
+    public static TransactionBuilder Create(ProtocolParams pparams) => new() { Pparams = pparams };
 
     #region Transaction Body Methods
 
@@ -545,11 +539,9 @@ public class TransactionBuilder
     /// Builds the ConwayTransactionBody from the current state.
     /// </summary>
     /// <returns>The constructed ConwayTransactionBody.</returns>
-    public ConwayTransactionBody BuildBody()
-    {
-        return CborFactory.CreateConwayTransactionBody(
-            inputs: CborFactory.CreateDefListWithTag<TransactionInput>(_inputs),
-            outputs: CborFactory.CreateDefList<ITransactionOutput>(_outputs),
+    public ConwayTransactionBody BuildBody() => CborFactory.CreateConwayTransactionBody(
+            inputs: CborFactory.CreateDefListWithTag(_inputs),
+            outputs: CborFactory.CreateDefList(_outputs),
             fee: Fee,
             timeToLive: TimeToLive,
             certificates: _certificates != null ? CborFactory.CreateDefListWithTag<ICertificate>(_certificates) : null,
@@ -569,15 +561,12 @@ public class TransactionBuilder
             treasuryValue: _treasuryValue,
             donation: _donation
         );
-    }
 
     /// <summary>
     /// Builds the PostAlonzoTransactionWitnessSet from the current state.
     /// </summary>
     /// <returns>The constructed PostAlonzoTransactionWitnessSet.</returns>
-    public PostAlonzoTransactionWitnessSet BuildWitnessSet()
-    {
-        return CborFactory.CreateWitnessSet(
+    public PostAlonzoTransactionWitnessSet BuildWitnessSet() => CborFactory.CreateWitnessSet(
             vKeyWitnesses: _vkeyWitnesses != null ? CborFactory.CreateDefListWithTag<VKeyWitness>(_vkeyWitnesses) : null,
             nativeScripts: _nativeScripts != null ? CborFactory.CreateDefListWithTag<INativeScript>(_nativeScripts) : null,
             bootstrapWitnesses: _bootstrapWitnesses != null ? CborFactory.CreateDefListWithTag<BootstrapWitness>(_bootstrapWitnesses) : null,
@@ -587,7 +576,6 @@ public class TransactionBuilder
             plutusV2Scripts: _plutusV2Scripts != null ? CborFactory.CreateDefListWithTagBytes(_plutusV2Scripts) : null,
             plutusV3Scripts: _plutusV3Scripts != null ? CborFactory.CreateDefListWithTagBytes(_plutusV3Scripts) : null
         );
-    }
 
     /// <summary>
     /// Builds and returns the complete transaction.

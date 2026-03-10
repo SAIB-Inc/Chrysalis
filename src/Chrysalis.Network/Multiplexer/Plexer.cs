@@ -44,10 +44,7 @@ public sealed class Plexer : IDisposable
     /// </summary>
     /// <param name="protocol">The protocol type to subscribe to.</param>
     /// <returns>A bidirectional agent channel for the specified protocol.</returns>
-    public AgentChannel SubscribeServer(ProtocolType protocol)
-    {
-        return SubscribeClient(protocol);
-    }
+    public AgentChannel SubscribeServer(ProtocolType protocol) => SubscribeClient(protocol);
 
     /// <summary>
     /// Starts the plexer, running both the demuxer and muxer.

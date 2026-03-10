@@ -438,11 +438,9 @@ public class AddressTests
     #region Error Handling
 
     [Fact]
-    public void GetAddressHeader_UnknownType_ThrowsArgumentOutOfRangeException()
-    {
+    public void GetAddressHeader_UnknownType_ThrowsArgumentOutOfRangeException() =>
         // Header byte 0x81 has type nibble 8 which is not a valid CIP-19 type
         _ = Assert.Throws<ArgumentOutOfRangeException>(() => Address.GetAddressHeader(0x81));
-    }
 
     [Fact]
     public void ToHex_ReturnsValidHexString()

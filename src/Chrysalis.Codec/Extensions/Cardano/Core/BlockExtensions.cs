@@ -88,20 +88,17 @@ public static class BlockExtensions
     /// </summary>
     /// <param name="self">The block with era instance.</param>
     /// <returns>The precise era.</returns>
-    public static Era Era(this BlockWithEra self)
+    public static Era Era(this BlockWithEra self) => self.EraNumber switch
     {
-        return self.EraNumber switch
-        {
-            0 or 1 => Types.Cardano.Core.Era.Byron,
-            2 => Types.Cardano.Core.Era.Shelley,
-            3 => Types.Cardano.Core.Era.Allegra,
-            4 => Types.Cardano.Core.Era.Mary,
-            5 => Types.Cardano.Core.Era.Alonzo,
-            6 => Types.Cardano.Core.Era.Babbage,
-            7 => Types.Cardano.Core.Era.Conway,
-            _ => throw new NotSupportedException($"Unknown era number: {self.EraNumber}")
-        };
-    }
+        0 or 1 => Types.Cardano.Core.Era.Byron,
+        2 => Types.Cardano.Core.Era.Shelley,
+        3 => Types.Cardano.Core.Era.Allegra,
+        4 => Types.Cardano.Core.Era.Mary,
+        5 => Types.Cardano.Core.Era.Alonzo,
+        6 => Types.Cardano.Core.Era.Babbage,
+        7 => Types.Cardano.Core.Era.Conway,
+        _ => throw new NotSupportedException($"Unknown era number: {self.EraNumber}")
+    };
 
     /// <summary>
     /// Gets the block header from the block. Only supported for post-Byron eras.
@@ -125,10 +122,7 @@ public static class BlockExtensions
     /// </summary>
     /// <param name="self">The block header instance.</param>
     /// <returns>The hex-encoded hash string.</returns>
-    public static string Hash(this BlockHeader self)
-    {
-        return Convert.ToHexStringLower(Blake2Fast.Blake2b.HashData(32, self.Raw.Span));
-    }
+    public static string Hash(this BlockHeader self) => Convert.ToHexStringLower(Blake2Fast.Blake2b.HashData(32, self.Raw.Span));
 
     /// <summary>
     /// Computes the Byron block hash by wrapping the header in a CBOR tuple [tag, header_bytes] before hashing.

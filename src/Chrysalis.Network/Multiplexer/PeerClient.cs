@@ -37,10 +37,7 @@ public sealed class PeerClient : IDisposable
     /// </summary>
     public BlockFetch BlockFetch { get; private set; } = default!;
 
-    private PeerClient(Plexer plexer)
-    {
-        _plexer = plexer ?? throw new ArgumentNullException(nameof(plexer));
-    }
+    private PeerClient(Plexer plexer) => _plexer = plexer ?? throw new ArgumentNullException(nameof(plexer));
 
     /// <summary>
     /// Creates and connects a new PeerClient instance to a Cardano node over a Unix domain socket.
@@ -129,34 +126,22 @@ public sealed class PeerClient : IDisposable
     /// <summary>
     /// Checks if the plexer (multiplexer/demultiplexer) is healthy and running.
     /// </summary>
-    public bool IsPlexerHealthy()
-    {
-        return _plexerTask is { IsCompleted: false };
-    }
+    public bool IsPlexerHealthy() => _plexerTask is { IsCompleted: false };
 
     /// <summary>
     /// Gets the exception that caused the plexer to fail, if any.
     /// </summary>
-    public Exception? GetPlexerException()
-    {
-        return _plexerTask?.Exception?.GetBaseException();
-    }
+    public Exception? GetPlexerException() => _plexerTask?.Exception?.GetBaseException();
 
     /// <summary>
     /// Checks if the keepalive loop is healthy and running.
     /// </summary>
-    public bool IsKeepAliveHealthy()
-    {
-        return _keepAliveTask is { IsCompleted: false };
-    }
+    public bool IsKeepAliveHealthy() => _keepAliveTask is { IsCompleted: false };
 
     /// <summary>
     /// Gets the exception that caused the keepalive loop to fail, if any.
     /// </summary>
-    public Exception? GetKeepAliveException()
-    {
-        return _keepAliveTask?.Exception?.GetBaseException();
-    }
+    public Exception? GetKeepAliveException() => _keepAliveTask?.Exception?.GetBaseException();
 
     private async Task RunKeepAliveLoop(TimeSpan interval, CancellationToken cancellationToken)
     {

@@ -66,10 +66,7 @@ public class CborLabelTests
     }
 
     [Fact]
-    public void CborLabel_StringConstructor_NullThrows()
-    {
-        _ = Assert.Throws<ArgumentNullException>(() => new CborLabel(null!));
-    }
+    public void CborLabel_StringConstructor_NullThrows() => _ = Assert.Throws<ArgumentNullException>(() => new CborLabel(null!));
 
     [Fact]
     public void CborLabel_ImplicitConversion_Int_Works()

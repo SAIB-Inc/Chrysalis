@@ -20,20 +20,14 @@ public static class AcquireTypes
     /// </summary>
     /// <param name="point">The chain point to acquire, or null for the volatile tip.</param>
     /// <returns>An <see cref="Acquire"/> message for the specified target.</returns>
-    public static Acquire Default(Point? point)
-    {
-        return point is not null ? SpecificPoint(point) : VolatileTip;
-    }
+    public static Acquire Default(Point? point) => point is not null ? SpecificPoint(point) : VolatileTip;
 
     /// <summary>
     /// Creates an Acquire message to acquire the ledger state at a specific chain point.
     /// </summary>
     /// <param name="point">The chain point to acquire.</param>
     /// <returns>A <see cref="Messages.SpecificPoint"/> message.</returns>
-    public static Acquire SpecificPoint(Point point)
-    {
-        return new SpecificPoint(0, point);
-    }
+    public static Acquire SpecificPoint(Point point) => new SpecificPoint(0, point);
 
     /// <summary>
     /// Gets an Acquire message to acquire the ledger state at the volatile (most recent) tip.

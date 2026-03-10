@@ -21,10 +21,7 @@ public partial record CoseSign1(
     /// Converts the COSE message to its CBOR byte representation.
     /// </summary>
     /// <returns>The CBOR-encoded bytes.</returns>
-    public byte[] ToCbor()
-    {
-        return CborSerializer.Serialize(this);
-    }
+    public byte[] ToCbor() => CborSerializer.Serialize(this);
 
     /// <summary>
     /// Deserializes a CoseSign1 from CBOR bytes.

@@ -12,8 +12,5 @@ public static class ProtocolVersionExtensions
     /// </summary>
     /// <param name="self">The protocol version instance.</param>
     /// <returns>The major protocol version.</returns>
-    public static ulong MajorProtocolVersion(this ProtocolVersion self)
-    {
-        return self.Major;
-    }
+    public static ulong MajorProtocolVersion(this ProtocolVersion self) => self.Major;
 }

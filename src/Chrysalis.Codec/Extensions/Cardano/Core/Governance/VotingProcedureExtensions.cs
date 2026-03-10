@@ -13,18 +13,12 @@ public static class VotingProcedureExtensions
     /// </summary>
     /// <param name="self">The voting procedure instance.</param>
     /// <returns>The vote value.</returns>
-    public static int Vote(this CVotingProcedure self)
-    {
-        return self.Vote;
-    }
+    public static int Vote(this CVotingProcedure self) => self.Vote;
 
     /// <summary>
     /// Gets the anchor from the voting procedure, if present.
     /// </summary>
     /// <param name="self">The voting procedure instance.</param>
     /// <returns>The anchor, or null.</returns>
-    public static Anchor? Anchor(this CVotingProcedure self)
-    {
-        return self.Anchor;
-    }
+    public static Anchor? Anchor(this CVotingProcedure self) => self.Anchor;
 }

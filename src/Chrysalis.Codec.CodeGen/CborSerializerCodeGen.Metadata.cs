@@ -46,9 +46,7 @@ public sealed partial class CborSerializerCodeGen
         public List<SerializableTypeMetadata> ChildTypes { get; } = [];
         public List<SerializablePropertyMetadata> Properties { get; } = [];
 
-        public override string ToString()
-        {
-            return $$"""
+        public override string ToString() => $$"""
                 // Keyword: {{Keyword}}
                 // Identifier: {{Indentifier}}
                 // Namespace: {{Namespace}}
@@ -65,7 +63,6 @@ public sealed partial class CborSerializerCodeGen
                 // ChildTypes: {{string.Join(",", ChildTypes.Select(t => t.ToString()))}}
                 // IsTypeNullable: {{IsTypeNullable}}
             """;
-        }
     }
 
     private sealed class SerializablePropertyMetadata(
@@ -143,9 +140,7 @@ public sealed partial class CborSerializerCodeGen
         public Dictionary<int, string> UnionHints { get; } = [];
         public string? UnionHintDiscriminantProperty { get; set; }
 
-        public override string ToString()
-        {
-            return $$"""
+        public override string ToString() => $$"""
                 // PropertyName: {{PropertyName}}
                 // PropertyType: {{PropertyType}}
                 // PropertyTypeFullName: {{PropertyTypeFullName}}
@@ -172,6 +167,5 @@ public sealed partial class CborSerializerCodeGen
                 // IsOpenGeneric: {{IsOpenGeneric}}
                 // IsTypeNullable: {{IsTypeNullable}}
             """;
-        }
     }
 }

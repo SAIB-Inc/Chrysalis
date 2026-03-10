@@ -23,15 +23,9 @@ internal static class ExMem
         return (int)((bits - 1) / 64) + 1;
     }
 
-    internal static int ByteStringExMem(ReadOnlyMemory<byte> bs)
-    {
-        return bs.Length == 0 ? 1 : ((bs.Length - 1) / 8) + 1;
-    }
+    internal static int ByteStringExMem(ReadOnlyMemory<byte> bs) => bs.Length == 0 ? 1 : ((bs.Length - 1) / 8) + 1;
 
-    internal static int StringExMem(string s)
-    {
-        return System.Text.Encoding.UTF8.GetByteCount(s);
-    }
+    internal static int StringExMem(string s) => System.Text.Encoding.UTF8.GetByteCount(s);
 
     internal static int DataExMem(PlutusData d)
     {
@@ -117,10 +111,7 @@ internal static class ExMem
         return total;
     }
 
-    internal static int SizeExMemFromInt(int value)
-    {
-        return value <= 0 ? 0 : ((value - 1) / 8) + 1;
-    }
+    internal static int SizeExMemFromInt(int value) => value <= 0 ? 0 : ((value - 1) / 8) + 1;
 
     internal static long IntegerCostedLiterally(BigInteger n)
     {
@@ -160,67 +151,35 @@ internal static class ExMem
 
     // --- Size extraction helpers (from CekValue) ---
 
-    private static long IntSize(CekValue val)
-    {
-        return val is VConstant { Value: IntegerConstant i } ? IntegerExMem(i.Value) : 1;
-    }
+    private static long IntSize(CekValue val) => val is VConstant { Value: IntegerConstant i } ? IntegerExMem(i.Value) : 1;
 
-    private static long BsSize(CekValue val)
-    {
-        return val is VConstant { Value: ByteStringConstant bs } ? ByteStringExMem(bs.Value) : 0;
-    }
+    private static long BsSize(CekValue val) => val is VConstant { Value: ByteStringConstant bs } ? ByteStringExMem(bs.Value) : 0;
 
-    private static long StrSize(CekValue val)
-    {
-        return val is VConstant { Value: StringConstant s } ? StringExMem(s.Value) : 0;
-    }
+    private static long StrSize(CekValue val) => val is VConstant { Value: StringConstant s } ? StringExMem(s.Value) : 0;
 
-    private static long DataSize(CekValue val)
-    {
-        return val is VConstant { Value: DataConstant d } ? DataExMem(d.Value) : 4;
-    }
+    private static long DataSize(CekValue val) => val is VConstant { Value: DataConstant d } ? DataExMem(d.Value) : 4;
 
-    private static long ListSizeFromArg(CekValue val)
-    {
-        return val is VConstant { Value: ListConstant l } ? l.Values.Length : 0;
-    }
+    private static long ListSizeFromArg(CekValue val) => val is VConstant { Value: ListConstant l } ? l.Values.Length : 0;
 
-    private static long SizeExMemFromArg(CekValue val)
-    {
-        return val is VConstant { Value: IntegerConstant i }
+    private static long SizeExMemFromArg(CekValue val) => val is VConstant { Value: IntegerConstant i }
         && i.Value is var n
         && n <= long.MaxValue
         && n >= -long.MaxValue
             ? SizeExMemFromInt((int)n)
             : 0;
-    }
 
-    private static long IntLiteralValue(CekValue val)
-    {
-        return val is VConstant { Value: IntegerConstant i } ? IntegerCostedLiterally(i.Value) : 0;
-    }
+    private static long IntLiteralValue(CekValue val) => val is VConstant { Value: IntegerConstant i } ? IntegerCostedLiterally(i.Value) : 0;
 
-    private static long ValueSizeFromArg(CekValue val)
-    {
-        return val is VConstant { Value: ValueConstant v } ? ValueSizeExMem(v.Value) : 0;
-    }
+    private static long ValueSizeFromArg(CekValue val) => val is VConstant { Value: ValueConstant v } ? ValueSizeExMem(v.Value) : 0;
 
-    private static long ValueMaxDepthFromArg(CekValue val)
-    {
-        return val is VConstant { Value: ValueConstant v } ? ValueMaxDepth(v.Value) : 0;
-    }
+    private static long ValueMaxDepthFromArg(CekValue val) => val is VConstant { Value: ValueConstant v } ? ValueMaxDepth(v.Value) : 0;
 
-    private static long DataNodeCountFromArg(CekValue val)
-    {
-        return val is VConstant { Value: DataConstant d } ? DataNodeCount(d.Value) : 0;
-    }
+    private static long DataNodeCountFromArg(CekValue val) => val is VConstant { Value: DataConstant d } ? DataNodeCount(d.Value) : 0;
 
     // --- Main dispatch: compute argument sizes for a builtin ---
 
     internal static (long X, long Y, long Z) ComputeArgSizes(
-        DefaultFunction func, ImmutableArray<CekValue> args)
-    {
-        return func switch
+        DefaultFunction func, ImmutableArray<CekValue> args) => func switch
         {
             // 2-arg integer operations: (int, int)
             DefaultFunction.AddInteger or
@@ -406,5 +365,4 @@ internal static class ExMem
 
             _ => (0, 0, 0)
         };
-    }
 }

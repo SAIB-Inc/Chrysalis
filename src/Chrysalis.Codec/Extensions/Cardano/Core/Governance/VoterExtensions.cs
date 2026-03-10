@@ -12,18 +12,12 @@ public static class VoterExtensions
     /// </summary>
     /// <param name="self">The voter instance.</param>
     /// <returns>The type tag value.</returns>
-    public static int Tag(this Voter self)
-    {
-        return self.Tag;
-    }
+    public static int Tag(this Voter self) => self.Tag;
 
     /// <summary>
     /// Gets the voter credential hash.
     /// </summary>
     /// <param name="self">The voter instance.</param>
     /// <returns>The hash bytes.</returns>
-    public static ReadOnlyMemory<byte> Hash(this Voter self)
-    {
-        return self.Hash;
-    }
+    public static ReadOnlyMemory<byte> Hash(this Voter self) => self.Hash;
 }

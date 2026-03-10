@@ -21,10 +21,7 @@ public abstract partial record Point : CborRecord
     /// <param name="slot">The slot number on the blockchain.</param>
     /// <param name="hash">The block header hash identifying the block at the given slot.</param>
     /// <returns>A new <see cref="SpecificPoint"/> for the specified location.</returns>
-    public static Point Specific(ulong slot, ReadOnlyMemory<byte> hash)
-    {
-        return new SpecificPoint(slot, hash);
-    }
+    public static Point Specific(ulong slot, ReadOnlyMemory<byte> hash) => new SpecificPoint(slot, hash);
 }
 
 /// <summary>

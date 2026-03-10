@@ -20,8 +20,8 @@ public sealed class CborUnionAttribute : Attribute;
 [AttributeUsage(AttributeTargets.Class | AttributeTargets.Struct | AttributeTargets.Interface, Inherited = false, AllowMultiple = false)]
 public sealed class CborConstrAttribute : Attribute
 {
-    public CborConstrAttribute() { ConstructorIndex = -1; }
-    public CborConstrAttribute(int constructorIndex) { ConstructorIndex = constructorIndex; }
+    public CborConstrAttribute() => ConstructorIndex = -1;
+    public CborConstrAttribute(int constructorIndex) => ConstructorIndex = constructorIndex;
     public int ConstructorIndex { get; }
     public bool IsAnyIndexAllowed => ConstructorIndex == -1;
 }

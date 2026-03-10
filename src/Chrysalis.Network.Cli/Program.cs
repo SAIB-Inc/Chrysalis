@@ -556,14 +556,11 @@ internal static class Program
         }
     }
 
-    private static string FormatPoint(Point point)
+    private static string FormatPoint(Point point) => point switch
     {
-        return point switch
-        {
-            SpecificPoint sp => $"slot {sp.Slot} hash {Convert.ToHexStringLower(sp.Hash.Span)}",
-            _ => "origin"
-        };
-    }
+        SpecificPoint sp => $"slot {sp.Slot} hash {Convert.ToHexStringLower(sp.Hash.Span)}",
+        _ => "origin"
+    };
 
     #endregion
 
@@ -667,10 +664,7 @@ internal static class Program
         return true;
     }
 
-    private static string? GetValue(Dictionary<string, string> map, string key)
-    {
-        return map.TryGetValue(key, out string? value) ? value : null;
-    }
+    private static string? GetValue(Dictionary<string, string> map, string key) => map.TryGetValue(key, out string? value) ? value : null;
 
     private static string? GetEnv(params string[] names)
     {

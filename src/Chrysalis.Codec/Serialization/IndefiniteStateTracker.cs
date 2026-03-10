@@ -21,8 +21,5 @@ public static class IndefiniteStateTracker
         _states.AddOrUpdate(collection, new IndefiniteState { IsIndefinite = true });
     }
 
-    public static bool IsIndefinite(object collection)
-    {
-        return collection != null && _states.TryGetValue(collection, out IndefiniteState? state) && state.IsIndefinite;
-    }
+    public static bool IsIndefinite(object collection) => collection != null && _states.TryGetValue(collection, out IndefiniteState? state) && state.IsIndefinite;
 }

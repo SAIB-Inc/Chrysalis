@@ -12,18 +12,12 @@ public static class GovActionIdExtensions
     /// </summary>
     /// <param name="self">The governance action ID instance.</param>
     /// <returns>The transaction ID bytes.</returns>
-    public static ReadOnlyMemory<byte> TransactionId(this GovActionId self)
-    {
-        return self.TransactionId;
-    }
+    public static ReadOnlyMemory<byte> TransactionId(this GovActionId self) => self.TransactionId;
 
     /// <summary>
     /// Gets the governance action index within the transaction.
     /// </summary>
     /// <param name="self">The governance action ID instance.</param>
     /// <returns>The governance action index.</returns>
-    public static ulong GovActionIndex(this GovActionId self)
-    {
-        return self.GovActionIndex;
-    }
+    public static ulong GovActionIndex(this GovActionId self) => self.GovActionIndex;
 }

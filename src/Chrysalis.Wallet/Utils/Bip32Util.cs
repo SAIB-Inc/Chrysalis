@@ -103,10 +103,7 @@ public static class Bip32Util
     /// </summary>
     /// <param name="i">The integer value to convert.</param>
     /// <returns>A 4-byte little-endian representation.</returns>
-    public static byte[] Le32(ulong i)
-    {
-        return [(byte)i, (byte)(i >> 8), (byte)(i >> 16), (byte)(i >> 24)];
-    }
+    public static byte[] Le32(ulong i) => [(byte)i, (byte)(i >> 8), (byte)(i >> 16), (byte)(i >> 24)];
 
     /// <summary>
     /// Validates whether a BIP-32 derivation path string has the correct format.
@@ -125,8 +122,5 @@ public static class Bip32Util
     /// </summary>
     /// <param name="index">The derivation index.</param>
     /// <returns>The derivation type based on whether the index is hardened.</returns>
-    public static DerivationType FromIndex(ulong index)
-    {
-        return index >= 0x80000000 ? DerivationType.HARD : DerivationType.SOFT;
-    }
+    public static DerivationType FromIndex(ulong index) => index >= 0x80000000 ? DerivationType.HARD : DerivationType.SOFT;
 }

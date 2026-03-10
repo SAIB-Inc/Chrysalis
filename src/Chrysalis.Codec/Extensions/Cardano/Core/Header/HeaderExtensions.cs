@@ -12,18 +12,12 @@ public static class HeaderExtensions
     /// </summary>
     /// <param name="self">The block header instance.</param>
     /// <returns>The block header body.</returns>
-    public static IBlockHeaderBody HeaderBody(this BlockHeader self)
-    {
-        return self.HeaderBody;
-    }
+    public static IBlockHeaderBody HeaderBody(this BlockHeader self) => self.HeaderBody;
 
     /// <summary>
     /// Gets the body signature from the block header.
     /// </summary>
     /// <param name="self">The block header instance.</param>
     /// <returns>The body signature bytes.</returns>
-    public static ReadOnlyMemory<byte> BodySignature(this BlockHeader self)
-    {
-        return self.BodySignature;
-    }
+    public static ReadOnlyMemory<byte> BodySignature(this BlockHeader self) => self.BodySignature;
 }

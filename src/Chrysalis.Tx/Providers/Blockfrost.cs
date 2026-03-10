@@ -412,64 +412,55 @@ public sealed class Blockfrost : ICardanoDataProvider, IDisposable
         return metadataDict.Count > 0 ? CborFactory.CreateMetadata(metadataDict) : null;
     }
 
-    private static ITransactionMetadatum? ConvertToTransactionMetadatum(object value)
+    private static ITransactionMetadatum? ConvertToTransactionMetadatum(object value) => value switch
     {
-        return value switch
-        {
-            string str => CborFactory.CreateMetadataText(str),
-            long lng => CborFactory.CreateMetadatumIntLong(lng),
-            int i => CborFactory.CreateMetadatumIntLong(i),
-            JsonElement element => ConvertJsonElementToMetadatum(element),
-            Dictionary<string, object> dict => CborFactory.CreateMetadatumMap(
-                dict.ToDictionary(
-                    kv => ConvertToTransactionMetadatum(kv.Key) ?? CborFactory.CreateMetadataText(kv.Key),
-                    kv => ConvertToTransactionMetadatum(kv.Value) ?? CborFactory.CreateMetadataText(kv.Value?.ToString() ?? "")
-                )
-            ),
-            _ => value.ToString() is string s ? CborFactory.CreateMetadataText(s) : null
-        };
-    }
+        string str => CborFactory.CreateMetadataText(str),
+        long lng => CborFactory.CreateMetadatumIntLong(lng),
+        int i => CborFactory.CreateMetadatumIntLong(i),
+        JsonElement element => ConvertJsonElementToMetadatum(element),
+        Dictionary<string, object> dict => CborFactory.CreateMetadatumMap(
+            dict.ToDictionary(
+                kv => ConvertToTransactionMetadatum(kv.Key) ?? CborFactory.CreateMetadataText(kv.Key),
+                kv => ConvertToTransactionMetadatum(kv.Value) ?? CborFactory.CreateMetadataText(kv.Value?.ToString() ?? "")
+            )
+        ),
+        _ => value.ToString() is string s ? CborFactory.CreateMetadataText(s) : null
+    };
 
-    private static ITransactionMetadatum? ConvertJsonElementToMetadatum(JsonElement element)
+    private static ITransactionMetadatum? ConvertJsonElementToMetadatum(JsonElement element) => element.ValueKind switch
     {
-        return element.ValueKind switch
-        {
-            JsonValueKind.String => CborFactory.CreateMetadataText(element.GetString() ?? ""),
-            JsonValueKind.Number when element.TryGetInt64(out long lng) => CborFactory.CreateMetadatumIntLong(lng),
-            JsonValueKind.Number when element.TryGetUInt64(out _) => CborFactory.CreateMetadatumIntUlong(element.GetUInt64()),
-            JsonValueKind.Number => CborFactory.CreateMetadataText(element.ToString()),
-            JsonValueKind.Object => CborFactory.CreateMetadatumMap(
-                element.EnumerateObject().ToDictionary(
-                    prop => (ITransactionMetadatum)CborFactory.CreateMetadataText(prop.Name),
-                    prop => ConvertJsonElementToMetadatum(prop.Value) ?? CborFactory.CreateMetadataText("")
-                )
-            ),
-            JsonValueKind.Array => CborFactory.CreateMetadatumList(
-                [.. element.EnumerateArray()
+        JsonValueKind.String => CborFactory.CreateMetadataText(element.GetString() ?? ""),
+        JsonValueKind.Number when element.TryGetInt64(out long lng) => CborFactory.CreateMetadatumIntLong(lng),
+        JsonValueKind.Number when element.TryGetUInt64(out _) => CborFactory.CreateMetadatumIntUlong(element.GetUInt64()),
+        JsonValueKind.Number => CborFactory.CreateMetadataText(element.ToString()),
+        JsonValueKind.Object => CborFactory.CreateMetadatumMap(
+            element.EnumerateObject().ToDictionary(
+                prop => (ITransactionMetadatum)CborFactory.CreateMetadataText(prop.Name),
+                prop => ConvertJsonElementToMetadatum(prop.Value) ?? CborFactory.CreateMetadataText("")
+            )
+        ),
+        JsonValueKind.Array => CborFactory.CreateMetadatumList(
+            [.. element.EnumerateArray()
                     .Select(ConvertJsonElementToMetadatum)
                     .Where(m => m != null)
                     .Cast<ITransactionMetadatum>()]
-            ),
-            JsonValueKind.Undefined => CborFactory.CreateMetadataText(element.ToString()),
-            JsonValueKind.Null => CborFactory.CreateMetadataText(element.ToString()),
-            JsonValueKind.True => CborFactory.CreateMetadataText(element.ToString()),
-            JsonValueKind.False => CborFactory.CreateMetadataText(element.ToString()),
-            _ => CborFactory.CreateMetadataText(element.ToString())
-        };
-    }
+        ),
+        JsonValueKind.Undefined => CborFactory.CreateMetadataText(element.ToString()),
+        JsonValueKind.Null => CborFactory.CreateMetadataText(element.ToString()),
+        JsonValueKind.True => CborFactory.CreateMetadataText(element.ToString()),
+        JsonValueKind.False => CborFactory.CreateMetadataText(element.ToString()),
+        _ => CborFactory.CreateMetadataText(element.ToString())
+    };
 
-    private string GetBaseUrl()
+    private string GetBaseUrl() => NetworkType switch
     {
-        return NetworkType switch
-        {
-            NetworkType.Mainnet => "https://cardano-mainnet.blockfrost.io/api/v0/",
-            NetworkType.Preview => "https://cardano-preview.blockfrost.io/api/v0/",
-            NetworkType.Preprod => "https://cardano-preprod.blockfrost.io/api/v0/",
-            NetworkType.Testnet => "https://cardano-testnet.blockfrost.io/api/v0/",
-            NetworkType.Unknown => throw new NotImplementedException(),
-            _ => throw new ArgumentException($"Unsupported network type: {NetworkType}")
-        };
-    }
+        NetworkType.Mainnet => "https://cardano-mainnet.blockfrost.io/api/v0/",
+        NetworkType.Preview => "https://cardano-preview.blockfrost.io/api/v0/",
+        NetworkType.Preprod => "https://cardano-preprod.blockfrost.io/api/v0/",
+        NetworkType.Testnet => "https://cardano-testnet.blockfrost.io/api/v0/",
+        NetworkType.Unknown => throw new NotImplementedException(),
+        _ => throw new ArgumentException($"Unsupported network type: {NetworkType}")
+    };
 
     /// <summary>
     /// Gets cache statistics for monitoring.

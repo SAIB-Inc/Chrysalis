@@ -119,10 +119,7 @@ internal static class Pairing
     /// </summary>
     private static Fp12Element ApplyLine(
         Fp12Element f, Fp2Element c0, Fp2Element c1, Fp2Element c2,
-        BigInteger Px, BigInteger Py)
-    {
-        return Fp12.Mul014(f, c0, Fp2.MulScalar(c1, Px), Fp2.MulScalar(c2, Py));
-    }
+        BigInteger Px, BigInteger Py) => Fp12.Mul014(f, c0, Fp2.MulScalar(c1, Px), Fp2.MulScalar(c2, Py));
 
     /// <summary>
     /// Compute miller loop for a batch of (G2 precomputes, G1 affine) pairs.
@@ -209,10 +206,7 @@ internal static class Pairing
     /// Verify pairing equality: e(P1, Q1) == e(P2, Q2)
     /// Equivalent to e(P1, Q1) * e(-P2, Q2) == 1
     /// </summary>
-    internal static bool FinalVerify(Fp12Element lhs, Fp12Element rhs)
-    {
-        return Fp12.Eql(lhs, rhs);
-    }
+    internal static bool FinalVerify(Fp12Element lhs, Fp12Element rhs) => Fp12.Eql(lhs, rhs);
 
     /// <summary>
     /// NAF (Non-Adjacent Form) decomposition.

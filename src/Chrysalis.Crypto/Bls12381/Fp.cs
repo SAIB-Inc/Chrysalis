@@ -28,40 +28,19 @@ internal static class Fp
         return r >= 0 ? r : r + P;
     }
 
-    internal static BigInteger Add(BigInteger a, BigInteger b)
-    {
-        return Mod(a + b);
-    }
+    internal static BigInteger Add(BigInteger a, BigInteger b) => Mod(a + b);
 
-    internal static BigInteger Sub(BigInteger a, BigInteger b)
-    {
-        return Mod(a - b);
-    }
+    internal static BigInteger Sub(BigInteger a, BigInteger b) => Mod(a - b);
 
-    internal static BigInteger Mul(BigInteger a, BigInteger b)
-    {
-        return Mod(a * b);
-    }
+    internal static BigInteger Mul(BigInteger a, BigInteger b) => Mod(a * b);
 
-    internal static BigInteger Sqr(BigInteger a)
-    {
-        return Mod(a * a);
-    }
+    internal static BigInteger Sqr(BigInteger a) => Mod(a * a);
 
-    internal static BigInteger Neg(BigInteger a)
-    {
-        return Mod(-a);
-    }
+    internal static BigInteger Neg(BigInteger a) => Mod(-a);
 
-    internal static BigInteger Inv(BigInteger a)
-    {
-        return a == 0 ? throw new InvalidOperationException("invert: expected non-zero number") : Invert(a, P);
-    }
+    internal static BigInteger Inv(BigInteger a) => a == 0 ? throw new InvalidOperationException("invert: expected non-zero number") : Invert(a, P);
 
-    internal static BigInteger Pow(BigInteger num, BigInteger power)
-    {
-        return BigInteger.ModPow(FpUtils.PosMod(num, P), power, P);
-    }
+    internal static BigInteger Pow(BigInteger num, BigInteger power) => BigInteger.ModPow(FpUtils.PosMod(num, P), power, P);
 
     internal static BigInteger Sqrt(BigInteger n)
     {
@@ -70,30 +49,15 @@ internal static class Fp
         return Mod(root * root) != Mod(n) ? throw new InvalidOperationException("Cannot find square root") : root;
     }
 
-    internal static BigInteger Div(BigInteger a, BigInteger b)
-    {
-        return Mul(a, Inv(b));
-    }
+    internal static BigInteger Div(BigInteger a, BigInteger b) => Mul(a, Inv(b));
 
-    internal static bool IsZero(BigInteger a)
-    {
-        return FpUtils.PosMod(a, P) == 0;
-    }
+    internal static bool IsZero(BigInteger a) => FpUtils.PosMod(a, P) == 0;
 
-    internal static bool Eql(BigInteger a, BigInteger b)
-    {
-        return FpUtils.PosMod(a, P) == FpUtils.PosMod(b, P);
-    }
+    internal static bool Eql(BigInteger a, BigInteger b) => FpUtils.PosMod(a, P) == FpUtils.PosMod(b, P);
 
-    internal static bool IsOdd(BigInteger a)
-    {
-        return (FpUtils.PosMod(a, P) & 1) == 1;
-    }
+    internal static bool IsOdd(BigInteger a) => (FpUtils.PosMod(a, P) & 1) == 1;
 
-    internal static BigInteger Create(BigInteger n)
-    {
-        return FpUtils.PosMod(n, P);
-    }
+    internal static BigInteger Create(BigInteger n) => FpUtils.PosMod(n, P);
 
     /// <summary>
     /// Legendre symbol: returns 1 (QR), -1 (QNR), or 0
@@ -114,15 +78,9 @@ internal static class Fp
         return -1; // powered == P - 1
     }
 
-    internal static byte[] ToBytes(BigInteger n)
-    {
-        return FpUtils.NumberToBytesBE(FpUtils.PosMod(n, P), BYTES);
-    }
+    internal static byte[] ToBytes(BigInteger n) => FpUtils.NumberToBytesBE(FpUtils.PosMod(n, P), BYTES);
 
-    internal static BigInteger FromBytes(ReadOnlySpan<byte> bytes)
-    {
-        return FpUtils.BytesToNumberBE(bytes);
-    }
+    internal static BigInteger FromBytes(ReadOnlySpan<byte> bytes) => FpUtils.BytesToNumberBE(bytes);
 
     /// <summary>
     /// Extended Euclidean GCD inversion.

@@ -122,16 +122,13 @@ public sealed partial class CborSerializerCodeGen
         }
     }
 
-    private static SerializationType GetSerializationType(AttributeSyntax? cborMapAttribute, AttributeSyntax? cborListAttribute, AttributeSyntax? cborUnionAttribute, AttributeSyntax? cborConstrAttribute)
-    {
-        return cborMapAttribute != null
+    private static SerializationType GetSerializationType(AttributeSyntax? cborMapAttribute, AttributeSyntax? cborListAttribute, AttributeSyntax? cborUnionAttribute, AttributeSyntax? cborConstrAttribute) => cborMapAttribute != null
             ? SerializationType.Map
             : cborListAttribute != null
                 ? SerializationType.List
                 : cborUnionAttribute != null
                     ? SerializationType.Union
                     : cborConstrAttribute != null ? SerializationType.Constr : SerializationType.Container;
-    }
 
     private static string? FindValidatorForType(TypeDeclarationSyntax typeDecl, SemanticModel semanticModel, Compilation compilation)
     {
@@ -795,14 +792,11 @@ public sealed partial class CborSerializerCodeGen
         return resultDict.Values;
     }
 
-    private static IEnumerable<INamedTypeSymbol> FindDerivedTypes(INamedTypeSymbol baseType, Compilation compilation)
-    {
-        return compilation
+    private static IEnumerable<INamedTypeSymbol> FindDerivedTypes(INamedTypeSymbol baseType, Compilation compilation) => compilation
             .GetSymbolsWithName(name => true, SymbolFilter.Type)
             .OfType<INamedTypeSymbol>()
             .Where(type => !SymbolEqualityComparer.Default.Equals(type, baseType) && type.BaseType != null && ImplementsOrInheritsFrom(type, baseType)
         );
-    }
 
     private static bool ImplementsOrInheritsFrom(INamedTypeSymbol type, INamedTypeSymbol baseType)
     {
@@ -897,12 +891,9 @@ public sealed partial class CborSerializerCodeGen
         return (typeDecl.GetNamespace() ?? string.Empty, "");
     }
 
-    private static string GetBaseNamespace(TypeDeclarationSyntax typeDecl, SemanticModel model)
-    {
-        return model.GetDeclaredSymbol(typeDecl) is INamedTypeSymbol symbol
+    private static string GetBaseNamespace(TypeDeclarationSyntax typeDecl, SemanticModel model) => model.GetDeclaredSymbol(typeDecl) is INamedTypeSymbol symbol
             ? symbol.ContainingNamespace.ToDisplayString()
             : typeDecl.GetNamespace() ?? string.Empty;
-    }
 
     private static string RemoveGenericPart(string identifier)
     {

@@ -53,15 +53,9 @@ public static class FlatDecoder
         return new VarTerm<DeBruijn>(new DeBruijn(index));
     }
 
-    private static DelayTerm<DeBruijn> DecodeDelay(BitReader reader)
-    {
-        return new(DecodeTerm(reader));
-    }
+    private static DelayTerm<DeBruijn> DecodeDelay(BitReader reader) => new(DecodeTerm(reader));
 
-    private static LambdaTerm<DeBruijn> DecodeLambda(BitReader reader)
-    {
-        return new(new DeBruijn(0), DecodeTerm(reader));
-    }
+    private static LambdaTerm<DeBruijn> DecodeLambda(BitReader reader) => new(new DeBruijn(0), DecodeTerm(reader));
 
     private static ApplyTerm<DeBruijn> DecodeApply(BitReader reader)
     {
@@ -77,15 +71,9 @@ public static class FlatDecoder
         return new ConstTerm<DeBruijn>(value);
     }
 
-    private static ForceTerm<DeBruijn> DecodeForce(BitReader reader)
-    {
-        return new(DecodeTerm(reader));
-    }
+    private static ForceTerm<DeBruijn> DecodeForce(BitReader reader) => new(DecodeTerm(reader));
 
-    private static BuiltinTerm<DeBruijn> DecodeBuiltin(BitReader reader)
-    {
-        return new((DefaultFunction)reader.PopBits(7));
-    }
+    private static BuiltinTerm<DeBruijn> DecodeBuiltin(BitReader reader) => new((DefaultFunction)reader.PopBits(7));
 
     private static ConstrTerm<DeBruijn> DecodeConstr(BitReader reader)
     {
@@ -171,25 +159,22 @@ public static class FlatDecoder
 
     // --- Constant value decoding (spec C.3.4) ---
 
-    private static Constant DecodeConstantValue(BitReader reader, ConstantType type)
+    private static Constant DecodeConstantValue(BitReader reader, ConstantType type) => type switch
     {
-        return type switch
-        {
-            IntegerType => new IntegerConstant(DecodeInteger(reader)),
-            ByteStringType => new ByteStringConstant(DecodeByteString(reader)),
-            StringType => new StringConstant(DecodeString(reader)),
-            BoolType => new BoolConstant(reader.PopBit() == 1),
-            UnitType => UnitConstant.Instance,
-            DataType => new DataConstant(DecodeData(reader)),
-            ListType list => DecodeList(reader, list.Element),
-            PairType pair => DecodePair(reader, pair),
-            ArrayType arr => DecodeArray(reader, arr.Element),
-            Bls12381G1Type => new Bls12381G1Constant(DecodeByteString(reader)),
-            Bls12381G2Type => new Bls12381G2Constant(DecodeByteString(reader)),
-            Bls12381MlResultType => new Bls12381MlResultConstant(DecodeByteString(reader)),
-            _ => throw new InvalidOperationException($"Flat: unknown constant type {type}.")
-        };
-    }
+        IntegerType => new IntegerConstant(DecodeInteger(reader)),
+        ByteStringType => new ByteStringConstant(DecodeByteString(reader)),
+        StringType => new StringConstant(DecodeString(reader)),
+        BoolType => new BoolConstant(reader.PopBit() == 1),
+        UnitType => UnitConstant.Instance,
+        DataType => new DataConstant(DecodeData(reader)),
+        ListType list => DecodeList(reader, list.Element),
+        PairType pair => DecodePair(reader, pair),
+        ArrayType arr => DecodeArray(reader, arr.Element),
+        Bls12381G1Type => new Bls12381G1Constant(DecodeByteString(reader)),
+        Bls12381G2Type => new Bls12381G2Constant(DecodeByteString(reader)),
+        Bls12381MlResultType => new Bls12381MlResultConstant(DecodeByteString(reader)),
+        _ => throw new InvalidOperationException($"Flat: unknown constant type {type}.")
+    };
 
     private static ListConstant DecodeList(BitReader reader, ConstantType elementType)
     {

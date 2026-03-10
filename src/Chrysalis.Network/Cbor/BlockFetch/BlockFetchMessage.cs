@@ -94,17 +94,11 @@ public static class BlockFetchMessages
     /// <param name="from">The starting point of the block range.</param>
     /// <param name="to">The ending point of the block range.</param>
     /// <returns>A new <see cref="RequestRange"/> with the correct CBOR index.</returns>
-    public static RequestRange RequestRange(Point from, Point to)
-    {
-        return new(0, from, to);
-    }
+    public static RequestRange RequestRange(Point from, Point to) => new(0, from, to);
 
     /// <summary>
     /// Creates a <see cref="ClientDone"/> to signal the end of the BlockFetch session.
     /// </summary>
     /// <returns>A new <see cref="ClientDone"/> with the correct CBOR index.</returns>
-    public static ClientDone ClientDone()
-    {
-        return new(1);
-    }
+    public static ClientDone ClientDone() => new(1);
 }

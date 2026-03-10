@@ -18,10 +18,7 @@ public static class GenericSerializationUtil
     private static readonly ConcurrentDictionary<Type, Delegate> WriteMethodCache = [];
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static T? Read<T>(ReadOnlyMemory<byte> data)
-    {
-        return IsPrimitiveType(typeof(T)) ? ReadPrimitive<T>(data) : ReadNonPrimitive<T>(data);
-    }
+    public static T? Read<T>(ReadOnlyMemory<byte> data) => IsPrimitiveType(typeof(T)) ? ReadPrimitive<T>(data) : ReadNonPrimitive<T>(data);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static T? ReadAnyWithConsumed<T>(ReadOnlyMemory<byte> data, out int bytesConsumed)

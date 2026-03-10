@@ -12,18 +12,12 @@ public static class VrfCertExtensions
     /// </summary>
     /// <param name="self">The VRF certificate instance.</param>
     /// <returns>The proof bytes.</returns>
-    public static ReadOnlyMemory<byte> Proof(this VrfCert self)
-    {
-        return self.Proof;
-    }
+    public static ReadOnlyMemory<byte> Proof(this VrfCert self) => self.Proof;
 
     /// <summary>
     /// Gets the VRF output bytes.
     /// </summary>
     /// <param name="self">The VRF certificate instance.</param>
     /// <returns>The output bytes.</returns>
-    public static ReadOnlyMemory<byte> Output(this VrfCert self)
-    {
-        return self.Output;
-    }
+    public static ReadOnlyMemory<byte> Output(this VrfCert self) => self.Output;
 }

@@ -44,10 +44,7 @@ public sealed class NodeClient : IDisposable
     /// Initializes a new instance of the NodeClient class.
     /// </summary>
     /// <param name="plexer">The multiplexer for managing protocol channels.</param>
-    private NodeClient(Plexer plexer)
-    {
-        _plexer = plexer ?? throw new ArgumentNullException(nameof(plexer));
-    }
+    private NodeClient(Plexer plexer) => _plexer = plexer ?? throw new ArgumentNullException(nameof(plexer));
 
     /// <summary>
     /// Creates and connects a new NodeClient instance to a Cardano node.
@@ -140,25 +137,16 @@ public sealed class NodeClient : IDisposable
     /// Task.IsCompleted returns true when the task is in RanToCompletion, Faulted, or Canceled state,
     /// so this single check covers all failure scenarios.
     /// </remarks>
-    public bool IsPlexerHealthy()
-    {
-        return _plexerTask is { IsCompleted: false };
-    }
+    public bool IsPlexerHealthy() => _plexerTask is { IsCompleted: false };
 
     /// <summary>
     /// Gets the exception that caused the plexer to fail, if any.
     /// </summary>
     /// <returns>The base exception from the plexer task, or null if no exception occurred.</returns>
-    public Exception? GetPlexerException()
-    {
-        return _plexerTask?.Exception?.GetBaseException();
-    }
+    public Exception? GetPlexerException() => _plexerTask?.Exception?.GetBaseException();
 
     /// <summary>
     /// Disposes the client and releases all resources.
     /// </summary>
-    public void Dispose()
-    {
-        _plexer.Dispose();
-    }
+    public void Dispose() => _plexer.Dispose();
 }

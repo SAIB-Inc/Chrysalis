@@ -17,20 +17,14 @@ public static class InputExtensions
     /// </summary>
     /// <param name="self">The transaction input instance.</param>
     /// <returns>The transaction ID bytes.</returns>
-    public static ReadOnlyMemory<byte> TransactionId(this TransactionInput self)
-    {
-        return self.TransactionId;
-    }
+    public static ReadOnlyMemory<byte> TransactionId(this TransactionInput self) => self.TransactionId;
 
     /// <summary>
     /// Gets the output index within the referenced transaction.
     /// </summary>
     /// <param name="self">The transaction input instance.</param>
     /// <returns>The output index.</returns>
-    public static ulong Index(this TransactionInput self)
-    {
-        return self.Index;
-    }
+    public static ulong Index(this TransactionInput self) => self.Index;
 
     /// <summary>
     /// Resolves the redeemer for this input within the given block.
@@ -88,7 +82,7 @@ public static class InputExtensions
         };
     }
 
-    private static RedeemerEntry CombineRedeemerEntry(RedeemerKey key, RedeemerValue value)
+    private static Redeemer CombineRedeemerEntry(RedeemerKey key, RedeemerValue value)
     {
         CborReader kr = new(key.Raw.Span);
         kr.ReadBeginArray();

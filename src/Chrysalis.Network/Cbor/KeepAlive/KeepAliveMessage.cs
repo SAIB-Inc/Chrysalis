@@ -57,27 +57,18 @@ public static class KeepAliveMessages
     /// </summary>
     /// <param name="cookie">An opaque cookie value the peer must echo back.</param>
     /// <returns>A new <see cref="MessageKeepAlive"/> with the correct CBOR index.</returns>
-    public static MessageKeepAlive KeepAlive(uint cookie)
-    {
-        return new(0, cookie);
-    }
+    public static MessageKeepAlive KeepAlive(uint cookie) => new(0, cookie);
 
     /// <summary>
     /// Creates a <see cref="MessageKeepAliveResponse"/> echoing back the received cookie.
     /// </summary>
     /// <param name="cookie">The cookie value from the KeepAlive request to echo back.</param>
     /// <returns>A new <see cref="MessageKeepAliveResponse"/> with the correct CBOR index.</returns>
-    public static MessageKeepAliveResponse KeepAliveResponse(uint cookie)
-    {
-        return new(1, cookie);
-    }
+    public static MessageKeepAliveResponse KeepAliveResponse(uint cookie) => new(1, cookie);
 
     /// <summary>
     /// Creates a <see cref="MessageDone"/> to signal the end of the KeepAlive session.
     /// </summary>
     /// <returns>A new <see cref="MessageDone"/> with the correct CBOR index.</returns>
-    public static MessageDone Done()
-    {
-        return new(2);
-    }
+    public static MessageDone Done() => new(2);
 }

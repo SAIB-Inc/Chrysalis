@@ -11,10 +11,7 @@ public class ExtendedHeaderMap
     private readonly Dictionary<string, byte[]> _headers;
 
     /// <summary>Initializes a new empty ExtendedHeaderMap.</summary>
-    public ExtendedHeaderMap()
-    {
-        _headers = [];
-    }
+    public ExtendedHeaderMap() => _headers = [];
 
     /// <summary>Sets a header value by label.</summary>
     public void SetHeader(string label, byte[] value)
@@ -32,10 +29,7 @@ public class ExtendedHeaderMap
     }
 
     /// <summary>Checks if the header map is empty.</summary>
-    public bool IsEmpty()
-    {
-        return _headers.Count == 0;
-    }
+    public bool IsEmpty() => _headers.Count == 0;
 
     /// <summary>Converts to CBOR bytes as a map.</summary>
     public byte[] ToCbor()

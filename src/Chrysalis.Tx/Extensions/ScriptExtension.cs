@@ -54,7 +54,7 @@ public static class ScriptExtension
     /// <param name="self">The script to parameterize.</param>
     /// <param name="parameter">The parameter to apply.</param>
     /// <returns>A new script with the parameter applied.</returns>
-    public static IScript ApplyParameters<T>(this IScript self, T parameter) where T : Chrysalis.Codec.Serialization.ICborType
+    public static IScript ApplyParameters<T>(this IScript self, T parameter) where T : ICborType
     {
         ArgumentNullException.ThrowIfNull(self);
         ArgumentNullException.ThrowIfNull(parameter);
@@ -84,7 +84,7 @@ public static class ScriptExtension
     /// <param name="self">The script to parameterize.</param>
     /// <param name="parameters">The parameters to apply in order.</param>
     /// <returns>A new script with all parameters applied.</returns>
-    public static IScript ApplyParameters<T>(this IScript self, List<T> parameters) where T : Chrysalis.Codec.Serialization.ICborType
+    public static IScript ApplyParameters<T>(this IScript self, List<T> parameters) where T : ICborType
     {
         ArgumentNullException.ThrowIfNull(self);
         ArgumentNullException.ThrowIfNull(parameters);

@@ -138,10 +138,7 @@ public sealed class Kupmios : ICardanoDataProvider, IDisposable
     /// </summary>
     /// <param name="outRef">The transaction input reference.</param>
     /// <returns>The resolved input, or null if not found.</returns>
-    public Task<ResolvedInput?> GetUtxoByOutRefAsync(TransactionInput outRef)
-    {
-        return GetUtxoByOutRefAsync(Convert.ToHexString(outRef.TransactionId.Span), outRef.Index);
-    }
+    public Task<ResolvedInput?> GetUtxoByOutRefAsync(TransactionInput outRef) => GetUtxoByOutRefAsync(Convert.ToHexString(outRef.TransactionId.Span), outRef.Index);
 
     /// <summary>
     /// Retrieves UTxOs by multiple output references.
@@ -308,13 +305,10 @@ public sealed class Kupmios : ICardanoDataProvider, IDisposable
     /// </summary>
     /// <param name="txHash">The transaction hash.</param>
     /// <returns>Always throws NotImplementedException.</returns>
-    public Task<Metadata?> GetTransactionMetadataAsync(string txHash)
-    {
-        throw new NotImplementedException(
+    public Task<Metadata?> GetTransactionMetadataAsync(string txHash) => throw new NotImplementedException(
             "Transaction metadata retrieval by transaction hash is not supported by Kupo. " +
             "Kupo only provides metadata by slot number, which requires Ogmios to resolve " +
             "transaction hash to slot number.");
-    }
 
     private static HttpClient CreateHttpClient(string kupoEndpoint)
     {
@@ -355,10 +349,7 @@ public sealed class Kupmios : ICardanoDataProvider, IDisposable
         return new ResolvedInput(outref, output);
     }
 
-    private static TransactionInput CreateTransactionInput(KupoMatch match)
-    {
-        return CborFactory.CreateTransactionInput(HexStringCache.FromHexString(match.TransactionId), (ulong)match.OutputIndex);
-    }
+    private static TransactionInput CreateTransactionInput(KupoMatch match) => CborFactory.CreateTransactionInput(HexStringCache.FromHexString(match.TransactionId), (ulong)match.OutputIndex);
 
     private static IValue CreateValue(KupoValue kupoValue)
     {
@@ -399,9 +390,7 @@ public sealed class Kupmios : ICardanoDataProvider, IDisposable
         return CborFactory.CreateMultiAssetOutput(assetDict);
     }
 
-    private static IDatumOption? CreateDatumOption(KupoMatch match)
-    {
-        return !string.IsNullOrEmpty(match.Datum)
+    private static IDatumOption? CreateDatumOption(KupoMatch match) => !string.IsNullOrEmpty(match.Datum)
             ? match.DatumType switch
             {
                 "inline" => CborFactory.CreateInlineDatumOption(1, new CborEncodedValue(HexStringCache.FromHexString(match.Datum))),
@@ -409,7 +398,6 @@ public sealed class Kupmios : ICardanoDataProvider, IDisposable
                 _ => null
             }
             : !string.IsNullOrEmpty(match.DatumHash) ? CborFactory.CreateDatumHashOption(0, HexStringCache.FromHexString(match.DatumHash)) : null;
-    }
 
     private static CborEncodedValue? CreateScriptReference(KupoScript? script)
     {
@@ -432,10 +420,7 @@ public sealed class Kupmios : ICardanoDataProvider, IDisposable
         return new CborEncodedValue(CborSerializer.Serialize(scriptObj));
     }
 
-    private static Address CreateAddress(string bech32Address)
-    {
-        return new(Wallet.Models.Addresses.Address.FromBech32(bech32Address).ToBytes());
-    }
+    private static Address CreateAddress(string bech32Address) => new(Wallet.Models.Addresses.Address.FromBech32(bech32Address).ToBytes());
 
     /// <summary>
     /// Disposes the underlying HTTP clients.

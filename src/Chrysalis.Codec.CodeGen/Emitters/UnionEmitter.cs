@@ -43,10 +43,7 @@ public sealed partial class CborSerializerCodeGen
             return sb;
         }
 
-        private static bool IsCborMaybeIndefListUnion(SerializableTypeMetadata metadata)
-        {
-            return metadata.FullyQualifiedName.Contains("ICborMaybeIndefList");
-        }
+        private static bool IsCborMaybeIndefListUnion(SerializableTypeMetadata metadata) => metadata.FullyQualifiedName.Contains("ICborMaybeIndefList");
 
         private static StringBuilder EmitMaybeIndefListProbeReader(StringBuilder sb, SerializableTypeMetadata metadata)
         {
@@ -325,9 +322,7 @@ public sealed partial class CborSerializerCodeGen
             return "unknown";
         }
 
-        private static string GetCborReaderStatePattern(string probeKey)
-        {
-            return probeKey.StartsWith("array:", StringComparison.Ordinal)
+        private static string GetCborReaderStatePattern(string probeKey) => probeKey.StartsWith("array:", StringComparison.Ordinal)
                 ? "CborDataItemType.Array"
                 : probeKey switch
                 {
@@ -341,7 +336,6 @@ public sealed partial class CborSerializerCodeGen
                     "boolean" => "CborDataItemType.Boolean",
                     _ => throw new InvalidOperationException($"Unexpected probe key: {probeKey}")
                 };
-        }
 
         private static StringBuilder EmitTryCatchReader(StringBuilder sb, SerializableTypeMetadata metadata)
         {

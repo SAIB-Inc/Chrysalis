@@ -152,10 +152,7 @@ public class RoundTripBenchmarks
     private byte[] _babbage9 = null!;
 
     [GlobalSetup]
-    public void Setup()
-    {
-        _babbage9 = LoadBlock("babbage9.block");
-    }
+    public void Setup() => _babbage9 = LoadBlock("babbage9.block");
 
     private static byte[] LoadBlock(string filename)
     {

@@ -36,10 +36,7 @@ public static class ByronTxInExtensions
     /// Converts a Byron TxIn [variant, #6.24(cbor([txid, index]))] to a unified TransactionInput.
     /// Throws for non-zero variants.
     /// </summary>
-    public static TransactionInput ToTransactionInput(this ByronTxIn self)
-    {
-        return TryToTransactionInput(self, out TransactionInput input)
+    public static TransactionInput ToTransactionInput(this ByronTxIn self) => TryToTransactionInput(self, out TransactionInput input)
             ? input
             : throw new InvalidOperationException($"Unsupported Byron TxIn variant {self.Variant}.");
-    }
 }

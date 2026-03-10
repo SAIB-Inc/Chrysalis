@@ -14,10 +14,7 @@ internal static class ArrayBuiltins
         return new VConstant(new ArrayConstant(list.ItemType, list.Values));
     }
 
-    internal static CekValue LengthOfArray(ImmutableArray<CekValue> args)
-    {
-        return IntegerResult(UnwrapArrayConstant(args[0]).Values.Length);
-    }
+    internal static CekValue LengthOfArray(ImmutableArray<CekValue> args) => IntegerResult(UnwrapArrayConstant(args[0]).Values.Length);
 
     internal static CekValue IndexArray(ImmutableArray<CekValue> args)
     {

@@ -64,26 +64,14 @@ internal sealed class PointG2
         X = x; Y = y; Z = z;
     }
 
-    internal static PointG2 FromAffine(Fp2Element x, Fp2Element y)
-    {
-        return Fp2.IsZero(x) && Fp2.IsZero(y) ? ZERO : new PointG2(x, y, Fp2.ONE);
-    }
+    internal static PointG2 FromAffine(Fp2Element x, Fp2Element y) => Fp2.IsZero(x) && Fp2.IsZero(y) ? ZERO : new PointG2(x, y, Fp2.ONE);
 
-    internal bool Is0()
-    {
-        return Equals(ZERO);
-    }
+    internal bool Is0() => Equals(ZERO);
 
-    internal bool Equals(PointG2 other)
-    {
-        return Fp2.Eql(Fp2.Mul(X, other.Z), Fp2.Mul(other.X, Z)) &&
+    internal bool Equals(PointG2 other) => Fp2.Eql(Fp2.Mul(X, other.Z), Fp2.Mul(other.X, Z)) &&
         Fp2.Eql(Fp2.Mul(Y, other.Z), Fp2.Mul(other.Y, Z));
-    }
 
-    internal PointG2 Negate()
-    {
-        return new(X, Fp2.Neg(Y), Z);
-    }
+    internal PointG2 Negate() => new(X, Fp2.Neg(Y), Z);
 
     /// <summary>
     /// RCB exception-free doubling (algorithm 3 from eprint 2015/1060).
@@ -176,10 +164,7 @@ internal sealed class PointG2
         return new PointG2(X3, Y3, Z3);
     }
 
-    internal PointG2 Subtract(PointG2 other)
-    {
-        return Add(other.Negate());
-    }
+    internal PointG2 Subtract(PointG2 other) => Add(other.Negate());
 
     /// <summary>
     /// Non-constant-time double-and-add multiplication.
@@ -206,10 +191,7 @@ internal sealed class PointG2
         return result;
     }
 
-    internal PointG2 MultiplyUnsafe(BigInteger scalar)
-    {
-        return scalar == 0 || Is0() ? ZERO : scalar == 1 ? this : Multiply(FpUtils.PosMod(scalar, N));
-    }
+    internal PointG2 MultiplyUnsafe(BigInteger scalar) => scalar == 0 || Is0() ? ZERO : scalar == 1 ? this : Multiply(FpUtils.PosMod(scalar, N));
 
     internal AffineG2 ToAffine()
     {
