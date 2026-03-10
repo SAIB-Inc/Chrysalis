@@ -2,6 +2,9 @@
   <Folder Name="/src/">
     <Project Path="src/Chrysalis.Codec.Cli/Chrysalis.Codec.Cli.csproj" />
     <Project Path="src/Chrysalis.Codec.CodeGen/Chrysalis.Codec.CodeGen.csproj" />
+    <Project Path="src/Chrysalis.Codec.V2.CodeGen/Chrysalis.Codec.V2.CodeGen.csproj" />
+    <Project Path="src/Chrysalis.Codec.V2.Test/Chrysalis.Codec.V2.Test.csproj" />
+    <Project Path="src/Chrysalis.Codec.V2/Chrysalis.Codec.V2.csproj" />
     <Project Path="src/Chrysalis.Codec/Chrysalis.Codec.csproj" />
     <Project Path="src/Chrysalis.Cli/Chrysalis.Cli.csproj" />
     <Project Path="src/Chrysalis.Crypto/Chrysalis.Crypto.csproj" />

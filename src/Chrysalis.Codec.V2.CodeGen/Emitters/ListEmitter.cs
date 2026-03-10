@@ -1,0 +1,35 @@
+using System.Text;
+
+namespace Chrysalis.Codec.V2.CodeGen;
+
+public sealed partial class CborSerializerCodeGen
+{
+    private sealed class ListEmitter : ICborSerializerEmitter
+    {
+        public StringBuilder EmitReader(StringBuilder sb, SerializableTypeMetadata metadata)
+        {
+            _ = Emitter.EmitCborReaderInstance(sb, "data");
+
+            if (metadata.IsRecordStruct)
+            {
+                _ = Emitter.EmitLazyListReader(sb, metadata);
+            }
+            else
+            {
+                _ = Emitter.EmitTagReader(sb, metadata.CborTag, "tagIndex");
+                _ = Emitter.EmitCustomListReader(sb, metadata);
+            }
+
+            return sb;
+        }
+
+        public StringBuilder EmitWriter(StringBuilder sb, SerializableTypeMetadata metadata)
+        {
+            _ = Emitter.EmitPreservedRawWriter(sb);
+            _ = Emitter.EmitWriterValidation(sb, metadata);
+            _ = Emitter.EmitTagWriter(sb, metadata.CborTag);
+            _ = Emitter.EmitCustomListWriter(sb, metadata);
+            return sb;
+        }
+    }
+}
