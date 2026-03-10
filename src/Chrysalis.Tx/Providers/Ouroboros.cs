@@ -13,6 +13,7 @@ using Chrysalis.Wallet.Utils;
 using Chrysalis.Tx.Models.Cbor;
 using Chrysalis.Codec.Types.Cardano.Core;
 using Chrysalis.Wallet.Models.Enums;
+using Chrysalis.Tx.Utils;
 
 namespace Chrysalis.Tx.Providers;
 
@@ -84,20 +85,20 @@ public class Ouroboros(string socketPath, ulong networkMagic = 2) : ICardanoData
         UtxoByAddressResponse utxos = await client.LocalStateQuery.GetUtxosByAddressAsync([.. address.Select(x => Address.FromBech32(x).ToBytes())]).ConfigureAwait(false);
 
         List<ResolvedInput> resolvedInputs = [];
-        foreach ((CborTransactionInput? key, TransactionOutput? value) in utxos.Utxos)
+        foreach ((CborTransactionInput key, ITransactionOutput value) in utxos.Utxos)
         {
             ReadOnlyMemory<byte> txHash = key.TransactionId;
             ulong index = key.Index;
 
             ReadOnlyMemory<byte>? scriptRefBytes = value.ScriptRef();
-            TransactionOutput output = new PostAlonzoTransactionOutput(
+            ITransactionOutput output = CborFactory.CreatePostAlonzoTransactionOutput(
                 new Codec.Types.Cardano.Core.Common.Address(value.Address()),
                 value.Amount(),
                 value.DatumOption(),
                 scriptRefBytes is not null ? new CborEncodedValue(scriptRefBytes.Value) : null
             );
 
-            resolvedInputs.Add(new ResolvedInput(new CborTransactionInput(txHash, index), output));
+            resolvedInputs.Add(new ResolvedInput(CborFactory.CreateTransactionInput(txHash, index), output));
 
         }
         return resolvedInputs;
@@ -108,7 +109,7 @@ public class Ouroboros(string socketPath, ulong networkMagic = 2) : ICardanoData
     /// </summary>
     /// <param name="tx">The signed transaction.</param>
     /// <returns>The transaction hash.</returns>
-    public async Task<string> SubmitTransactionAsync(Transaction tx)
+    public async Task<string> SubmitTransactionAsync(ITransaction tx)
     {
         ArgumentNullException.ThrowIfNull(tx);
 
@@ -117,7 +118,7 @@ public class Ouroboros(string socketPath, ulong networkMagic = 2) : ICardanoData
 
         string txHex = Convert.ToHexString(CborSerializer.Serialize(tx));
         PostMaryTransaction postMaryTx = (PostMaryTransaction)tx;
-        byte[] txBody = CborSerializer.Serialize(postMaryTx.TransactionBody);
+        byte[] txBody = CborSerializer.Serialize(postMaryTx.Body);
 
         EraTx eraTx = new(6, new CborEncodedValue(Convert.FromHexString(txHex)));
         LocalTxSubmissionMessage result = await client.LocalTxSubmit.SubmitTxAsync(new SubmitTx(0, eraTx), CancellationToken.None).ConfigureAwait(false);

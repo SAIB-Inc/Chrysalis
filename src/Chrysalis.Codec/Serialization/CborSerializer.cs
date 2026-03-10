@@ -1,62 +1,47 @@
 using System.Buffers;
 using System.Runtime.CompilerServices;
-using Chrysalis.Codec.Serialization.Utils;
-using Chrysalis.Codec.Types;
 
 namespace Chrysalis.Codec.Serialization;
 
-/// <summary>
-/// Provides methods to serialize and deserialize objects to and from CBOR.
-/// </summary>
 public static class CborSerializer
 {
-    /// <summary>Serializes a CborBase-derived object to a byte array.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static byte[] Serialize<T>(T value) where T : CborBase
+    public static byte[] Serialize<T>(T value) where T : ICborType
     {
-        ArgumentNullException.ThrowIfNull(value);
-
-        if (value.Raw is not null)
+        if (value.Raw.Length > 0)
         {
-            return value.Raw.Value.ToArray();
+            return value.Raw.ToArray();
         }
 
         ArrayBufferWriter<byte> output = new();
         GenericSerializationUtil.Write(output, value);
-
         return output.WrittenSpan.ToArray();
     }
 
-    /// <summary>Serializes a CborBase-derived object to ReadOnlyMemory without copying when pre-serialized data exists.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static ReadOnlyMemory<byte> SerializeToMemory<T>(T value) where T : CborBase
+    public static ReadOnlyMemory<byte> SerializeToMemory<T>(T value) where T : ICborType
     {
-        ArgumentNullException.ThrowIfNull(value);
-
-        if (value.Raw is not null)
+        if (value.Raw.Length > 0)
         {
-            return value.Raw.Value;
+            return value.Raw;
         }
 
         ArrayBufferWriter<byte> output = new();
         GenericSerializationUtil.Write(output, value);
-
         return output.WrittenMemory;
     }
 
-    /// <summary>Deserializes a CBOR byte array into an object of type T.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static T Deserialize<T>(ReadOnlyMemory<byte> data) where T : CborBase
+    public static T Deserialize<T>(ReadOnlyMemory<byte> data)
     {
         T? result = GenericSerializationUtil.Read<T>(data);
         return result ?? throw new InvalidOperationException("Deserialization failed: result is null.");
     }
 
-    /// <summary>Deserializes a single CBOR value and reports how many bytes were consumed.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static T Deserialize<T>(ReadOnlyMemory<byte> data, out int bytesConsumed) where T : CborBase
+    public static T Deserialize<T>(ReadOnlyMemory<byte> data, out int bytesConsumed)
     {
-        T? result = GenericSerializationUtil.ReadWithConsumed<T>(data, out bytesConsumed);
+        T? result = GenericSerializationUtil.ReadAnyWithConsumed<T>(data, out bytesConsumed);
         return result ?? throw new InvalidOperationException("Deserialization failed: result is null.");
     }
 }

@@ -3,7 +3,7 @@ using Chrysalis.Codec.Types.Cardano.Core.Transaction;
 namespace Chrysalis.Codec.Extensions.Cardano.Core.Transaction;
 
 /// <summary>
-/// Extension methods for <see cref="TransactionMetadatum"/> to access raw bytes.
+/// Extension methods for <see cref="ITransactionMetadatum"/> to access raw bytes.
 /// </summary>
 public static class TransactionMetadatumExtensions
 {
@@ -12,9 +12,9 @@ public static class TransactionMetadatumExtensions
     /// </summary>
     /// <param name="self">The transaction metadatum instance.</param>
     /// <returns>The raw bytes, or empty if not available.</returns>
-    public static ReadOnlyMemory<byte> Raw(this TransactionMetadatum self)
+    public static ReadOnlyMemory<byte> Raw(this ITransactionMetadatum self)
     {
         ArgumentNullException.ThrowIfNull(self);
-        return self.Raw ?? ReadOnlyMemory<byte>.Empty;
+        return self.Raw;
     }
 }

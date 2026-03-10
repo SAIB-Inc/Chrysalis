@@ -1,34 +1,21 @@
-using Chrysalis.Codec.Serialization;
 using Chrysalis.Codec.Serialization.Attributes;
 
 namespace Chrysalis.Codec.Types.Cardano.Core.Byron;
 
-/// <summary>
-/// Byron main block: [header, body, extra_attributes].
-/// Structurally different from Shelley+ blocks.
-/// </summary>
-/// <param name="Header">The Byron block header.</param>
-/// <param name="Body">The Byron block body containing transactions and payloads.</param>
-/// <param name="Extra">Extra attributes encoded as CBOR values.</param>
 [CborSerializable]
 [CborList]
-public partial record ByronMainBlock(
-    [CborOrder(0)] ByronBlockHead Header,
-    [CborOrder(1)] ByronBlockBody Body,
-    [CborOrder(2)] CborMaybeIndefList<CborEncodedValue> Extra
-) : Block, ICborPreserveRaw;
+public readonly partial record struct ByronMainBlock : IBlock
+{
+    [CborOrder(0)] public partial ByronBlockHead Header { get; }
+    [CborOrder(1)] public partial ByronBlockBody Body { get; }
+    [CborOrder(2)] public partial CborEncodedValue Extra { get; }
+}
 
-/// <summary>
-/// Byron epoch boundary block (EBB): [header, body, extra_attributes].
-/// EBBs are generated at epoch boundaries with minimal content.
-/// </summary>
-/// <param name="Header">The Byron EBB header.</param>
-/// <param name="Body">The EBB body as a list of byte arrays.</param>
-/// <param name="Extra">Extra attributes encoded as CBOR values.</param>
 [CborSerializable]
 [CborList]
-public partial record ByronEbBlock(
-    [CborOrder(0)] ByronEbbHead Header,
-    [CborOrder(1)] CborMaybeIndefList<ReadOnlyMemory<byte>> Body,
-    [CborOrder(2)] CborMaybeIndefList<CborEncodedValue> Extra
-) : Block, ICborPreserveRaw;
+public readonly partial record struct ByronEbBlock : IBlock
+{
+    [CborOrder(0)] public partial ByronEbbHead Header { get; }
+    [CborOrder(1)] public partial CborEncodedValue Body { get; }
+    [CborOrder(2)] public partial CborEncodedValue Extra { get; }
+}

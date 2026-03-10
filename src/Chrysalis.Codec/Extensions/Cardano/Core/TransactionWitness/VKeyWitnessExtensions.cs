@@ -14,7 +14,6 @@ public static class VKeyWitnessExtensions
     /// <returns>The verification key bytes.</returns>
     public static ReadOnlyMemory<byte> VKey(this CVKeyWitness self)
     {
-        ArgumentNullException.ThrowIfNull(self);
         return self.VKey;
     }
 
@@ -25,7 +24,6 @@ public static class VKeyWitnessExtensions
     /// <returns>The signature bytes.</returns>
     public static ReadOnlyMemory<byte> Signature(this CVKeyWitness self)
     {
-        ArgumentNullException.ThrowIfNull(self);
         return self.Signature;
     }
 }

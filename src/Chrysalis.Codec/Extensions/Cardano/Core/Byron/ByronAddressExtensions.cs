@@ -16,7 +16,6 @@ public static class ByronAddressExtensions
     /// <returns>The base58-encoded address string.</returns>
     public static string ToBase58(this ByronAddress self)
     {
-        ArgumentNullException.ThrowIfNull(self);
         byte[] cborBytes = CborSerializer.Serialize(self);
         return Base58.Bitcoin.Encode(cborBytes);
     }

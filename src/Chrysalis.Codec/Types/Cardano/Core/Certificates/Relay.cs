@@ -1,55 +1,38 @@
+using Chrysalis.Codec.Serialization;
 using Chrysalis.Codec.Serialization.Attributes;
 
 namespace Chrysalis.Codec.Types.Cardano.Core.Certificates;
 
-/// <summary>
-/// Represents a stake pool relay for network connectivity.
-/// </summary>
 [CborSerializable]
 [CborUnion]
-public abstract partial record Relay : CborBase { }
+public partial interface IRelay : ICborType;
 
-/// <summary>
-/// Represents a relay identified by an optional port and IP addresses.
-/// </summary>
-/// <param name="Tag">The certificate tag value.</param>
-/// <param name="Port">The optional port number.</param>
-/// <param name="IPv4">The optional IPv4 address bytes.</param>
-/// <param name="IPv6">The IPv6 address bytes.</param>
 [CborSerializable]
 [CborList]
 [CborIndex(0)]
-public partial record SingleHostAddr(
-   [CborOrder(0)] int Tag,
-   [CborOrder(1)][CborNullable] ulong? Port,
-   [CborOrder(2)][CborNullable] ReadOnlyMemory<byte>? IPv4,
-   [CborOrder(3)][CborNullable] ReadOnlyMemory<byte>? IPv6
-) : Relay;
+public readonly partial record struct SingleHostAddr : IRelay
+{
+    [CborOrder(0)] public partial int Tag { get; }
+    [CborOrder(1)] public partial int? Port { get; }
+    [CborOrder(2)] public partial ReadOnlyMemory<byte>? Ipv4 { get; }
+    [CborOrder(3)] public partial ReadOnlyMemory<byte>? Ipv6 { get; }
+}
 
-/// <summary>
-/// Represents a relay identified by a DNS name and optional port.
-/// </summary>
-/// <param name="Tag">The certificate tag value.</param>
-/// <param name="Port">The optional port number.</param>
-/// <param name="DNSName">The DNS hostname of the relay.</param>
 [CborSerializable]
 [CborList]
 [CborIndex(1)]
-public partial record SingleHostName(
-    [CborOrder(0)] int Tag,
-    [CborOrder(1)][CborNullable] ulong? Port,
-    [CborOrder(2)] string DNSName
-) : Relay;
+public readonly partial record struct SingleHostName : IRelay
+{
+    [CborOrder(0)] public partial int Tag { get; }
+    [CborOrder(1)] public partial int? Port { get; }
+    [CborOrder(2)] public partial string DnsName { get; }
+}
 
-/// <summary>
-/// Represents a relay identified by a DNS name that may resolve to multiple hosts.
-/// </summary>
-/// <param name="Tag">The certificate tag value.</param>
-/// <param name="DNSName">The DNS hostname of the relay.</param>
 [CborSerializable]
 [CborList]
 [CborIndex(2)]
-public partial record MultiHostName(
-    [CborOrder(0)] int Tag,
-    [CborOrder(1)] string DNSName
-) : Relay;
+public readonly partial record struct MultiHostName : IRelay
+{
+    [CborOrder(0)] public partial int Tag { get; }
+    [CborOrder(1)] public partial string DnsName { get; }
+}

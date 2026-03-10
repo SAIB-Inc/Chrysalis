@@ -33,6 +33,7 @@ public sealed partial class CborSerializerCodeGen
         public string? TypeParams { get; } = typeParams;
         public string FullyQualifiedName { get; } = fullyQualifiedName;
         public string Keyword { get; } = keyword;
+        public bool IsRecordStruct => Keyword.Contains("struct");
         public int? CborTag { get; } = cborTag;
         public int? CborIndex { get; } = cborIndex;
         public bool IsIndefinite { get; } = isIndefinite;
@@ -47,7 +48,6 @@ public sealed partial class CborSerializerCodeGen
 
         public override string ToString()
         {
-            // better formatted strring
             return $$"""
                 // Keyword: {{Keyword}}
                 // Identifier: {{Indentifier}}
@@ -98,7 +98,8 @@ public sealed partial class CborSerializerCodeGen
         bool isPropertyTypeUnion = false,
         bool isListItemTypeUnion = false,
         bool isMapKeyTypeUnion = false,
-        bool isMapValueTypeUnion = false
+        bool isMapValueTypeUnion = false,
+        string? cborMaybeIndefListItemTypeFullName = null
     )
     {
         public string PropertyName { get; } = propertyName;
@@ -121,7 +122,6 @@ public sealed partial class CborSerializerCodeGen
         public string? MapKeyTypeNamespace { get; } = mapKeyTypeNamespace;
         public string? MapValueTypeNamespace { get; } = mapValueTypeNamespace;
 
-        // Attributes
         public bool IsNullable { get; } = isNullable;
         public bool IsTypeNullable => PropertyType.Contains("?");
         public bool IsRequired => !IsTypeNullable && !IsNullable;
@@ -133,24 +133,14 @@ public sealed partial class CborSerializerCodeGen
         public int? PropertyKeyInt { get; } = propertyKeyInt;
         public bool IsOpenGeneric { get; } = isOpenGeneric;
 
-        /// <summary>
-        /// True if the property type (or an ancestor) has [CborUnion], meaning it uses try-catch
-        /// dispatch that could greedily consume trailing bytes when given unbounded data.
-        /// </summary>
         public bool IsPropertyTypeUnion { get; } = isPropertyTypeUnion;
         public bool IsListItemTypeUnion { get; } = isListItemTypeUnion;
         public bool IsMapKeyTypeUnion { get; } = isMapKeyTypeUnion;
         public bool IsMapValueTypeUnion { get; } = isMapValueTypeUnion;
 
-        /// <summary>
-        /// Maps discriminant int values to fully-qualified concrete type names for union hint dispatch.
-        /// Key: discriminant value, Value: (concreteTypeFullName, siblingPropertyName).
-        /// </summary>
-        public Dictionary<int, string> UnionHints { get; } = [];
+        public string? CborMaybeIndefListItemTypeFullName { get; } = cborMaybeIndefListItemTypeFullName;
 
-        /// <summary>
-        /// The name of the sibling property used as the discriminant for union hint dispatch.
-        /// </summary>
+        public Dictionary<int, string> UnionHints { get; } = [];
         public string? UnionHintDiscriminantProperty { get; set; }
 
         public override string ToString()

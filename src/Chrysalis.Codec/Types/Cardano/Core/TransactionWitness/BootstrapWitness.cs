@@ -3,18 +3,12 @@ using Chrysalis.Codec.Serialization.Attributes;
 
 namespace Chrysalis.Codec.Types.Cardano.Core.TransactionWitness;
 
-/// <summary>
-/// A bootstrap (Byron-era) witness containing a public key, signature, chain code, and attributes.
-/// </summary>
-/// <param name="PublicKey">The public key bytes.</param>
-/// <param name="Signature">The signature bytes.</param>
-/// <param name="ChainCode">The chain code for HD key derivation.</param>
-/// <param name="Attributes">The Byron address attributes.</param>
 [CborSerializable]
 [CborList]
-public partial record BootstrapWitness(
-   [CborOrder(0)] ReadOnlyMemory<byte> PublicKey,
-   [CborOrder(1)] ReadOnlyMemory<byte> Signature,
-   [CborOrder(2)] ReadOnlyMemory<byte> ChainCode,
-   [CborOrder(3)] ReadOnlyMemory<byte> Attributes
-) : CborBase, ICborPreserveRaw;
+public readonly partial record struct BootstrapWitness : ICborType
+{
+    [CborOrder(0)] public partial ReadOnlyMemory<byte> PublicKey { get; }
+    [CborOrder(1)] public partial ReadOnlyMemory<byte> Signature { get; }
+    [CborOrder(2)] public partial ReadOnlyMemory<byte> ChainCode { get; }
+    [CborOrder(3)] public partial ReadOnlyMemory<byte> Attributes { get; }
+}

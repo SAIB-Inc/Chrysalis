@@ -1,16 +1,18 @@
+using Chrysalis.Codec.Serialization;
 using Chrysalis.Codec.Serialization.Attributes;
 
 namespace Chrysalis.Codec.Types;
 
-/// <summary>
-/// A CBOR-encoded rational number represented as a numerator/denominator pair with tag 30.
-/// </summary>
-/// <param name="Numerator">The numerator of the rational number.</param>
-/// <param name="Denominator">The denominator of the rational number.</param>
 [CborSerializable]
 [CborTag(30)]
 [CborList]
+[CborDefinite]
 public partial record CborRationalNumber(
     [CborOrder(0)] ulong Numerator,
     [CborOrder(1)] ulong Denominator
-) : CborBase;
+) : ICborType
+{
+    public ReadOnlyMemory<byte> Raw { get; set; }
+    public int ConstrIndex { get; set; }
+    public bool IsIndefinite { get; set; }
+}

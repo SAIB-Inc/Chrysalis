@@ -8,4 +8,4 @@ namespace Chrysalis.Network.Cbor.LocalStateQuery;
 /// </summary>
 [CborSerializable]
 [CborUnion]
-public abstract partial record LocalStateQueryMessage : CborBase;
+public abstract partial record LocalStateQueryMessage : CborRecord;

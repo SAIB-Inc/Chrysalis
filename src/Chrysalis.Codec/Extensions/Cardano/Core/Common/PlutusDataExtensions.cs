@@ -1,4 +1,4 @@
-using CPlutusData = Chrysalis.Codec.Types.Cardano.Core.Common.PlutusData;
+using CPlutusData = Chrysalis.Codec.Types.Cardano.Core.Common.IPlutusData;
 
 namespace Chrysalis.Codec.Extensions.Cardano.Core.Common;
 
@@ -15,6 +15,6 @@ public static class PlutusDataExtensions
     public static ReadOnlyMemory<byte> Raw(this CPlutusData self)
     {
         ArgumentNullException.ThrowIfNull(self);
-        return self.Raw ?? ReadOnlyMemory<byte>.Empty;
+        return self.Raw;
     }
 }

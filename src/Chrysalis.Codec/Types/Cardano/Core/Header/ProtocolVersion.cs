@@ -1,15 +1,12 @@
+using Chrysalis.Codec.Serialization;
 using Chrysalis.Codec.Serialization.Attributes;
 
 namespace Chrysalis.Codec.Types.Cardano.Core.Header;
 
-/// <summary>
-/// The protocol version consisting of a major version and a sequence number.
-/// </summary>
-/// <param name="MajorProtocolVersion">The major protocol version number.</param>
-/// <param name="SequenceNumber">The minor version or sequence number.</param>
 [CborSerializable]
 [CborList]
-public partial record ProtocolVersion(
-    [CborOrder(0)] int MajorProtocolVersion,
-    [CborOrder(1)] ulong SequenceNumber
-) : CborBase;
+public readonly partial record struct ProtocolVersion : ICborType
+{
+    [CborOrder(0)] public partial ulong Major { get; }
+    [CborOrder(1)] public partial ulong SequenceNumber { get; }
+}

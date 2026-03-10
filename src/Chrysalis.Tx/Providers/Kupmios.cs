@@ -12,11 +12,9 @@ using Chrysalis.Codec.Types.Cardano.Core.Common;
 using Chrysalis.Codec.Types.Cardano.Core.Scripts;
 using Chrysalis.Tx.Models;
 using Chrysalis.Tx.Utils;
-using Chrysalis.Codec.Types;
-using Chrysalis.Codec.Types.Cardano.Core.Header;
-using Chrysalis.Codec.Types.Cardano.Core.Protocol;
-using Chrysalis.Codec.Types.Cardano.Core.Governance;
 using Chrysalis.Codec.Serialization;
+using Chrysalis.Codec.Types;
+using Chrysalis.Codec.Types.Cardano.Core.Protocol;
 
 namespace Chrysalis.Tx.Providers;
 
@@ -142,7 +140,6 @@ public sealed class Kupmios : ICardanoDataProvider, IDisposable
     /// <returns>The resolved input, or null if not found.</returns>
     public Task<ResolvedInput?> GetUtxoByOutRefAsync(TransactionInput outRef)
     {
-        ArgumentNullException.ThrowIfNull(outRef);
         return GetUtxoByOutRefAsync(Convert.ToHexString(outRef.TransactionId.Span), outRef.Index);
     }
 
@@ -202,7 +199,7 @@ public sealed class Kupmios : ICardanoDataProvider, IDisposable
             _ => throw new ArgumentException($"Unsupported network type: {NetworkType}")
         };
 
-        Dictionary<int, CborMaybeIndefList<long>> costMdls = [];
+        Dictionary<int, ICborMaybeIndefList<long>> costMdls = [];
 
         foreach ((string key, int[] value) in parameters.CostModelsRaw ?? [])
         {
@@ -214,7 +211,7 @@ public sealed class Kupmios : ICardanoDataProvider, IDisposable
                 _ => throw new ArgumentException($"Invalid cost model key: {key}", nameof(key))
             };
 
-            costMdls[version] = new CborDefList<long>([.. value.Select(x => (long)x)]);
+            costMdls[version] = CborFactory.CreateDefListLong([.. value.Select(x => (long)x)]);
         }
 
         ProtocolParams protocolParams = new(
@@ -227,31 +224,31 @@ public sealed class Kupmios : ICardanoDataProvider, IDisposable
             ulong.Parse(parameters.PoolDeposit, CultureInfo.InvariantCulture),
             (ulong)parameters.EMax,
             (ulong)parameters.NOpt,
-            new CborRationalNumber((ulong)(parameters.A0 * 100), 100),
-            new CborRationalNumber((ulong)(parameters.Rho * 100), 100),
-            new CborRationalNumber((ulong)(parameters.Tau * 100), 100),
-            new ProtocolVersion(9, 0),
+            CborFactory.CreateRationalNumber((ulong)(parameters.A0 * 100), 100),
+            CborFactory.CreateRationalNumber((ulong)(parameters.Rho * 100), 100),
+            CborFactory.CreateRationalNumber((ulong)(parameters.Tau * 100), 100),
+            CborFactory.CreateProtocolVersion(9, 0),
             ulong.Parse(parameters.MinPoolCost, CultureInfo.InvariantCulture),
             ulong.Parse(parameters.CoinsPerUtxoSize, CultureInfo.InvariantCulture),
-            new CostMdls(costMdls),
-            new ExUnitPrices(
-                new CborRationalNumber((ulong)(parameters.PriceMem * 1000000), 1000000),
-                new CborRationalNumber((ulong)(parameters.PriceStep * 1000000), 1000000)
+            new CostMdls(costMdls.GetValueOrDefault(0), costMdls.GetValueOrDefault(1), costMdls.GetValueOrDefault(2)),
+            CborFactory.CreateExUnitPrices(
+                CborFactory.CreateRationalNumber((ulong)(parameters.PriceMem * 1000000), 1000000),
+                CborFactory.CreateRationalNumber((ulong)(parameters.PriceStep * 1000000), 1000000)
             ),
-            new ExUnits(ulong.Parse(parameters.MaxTxExMem, CultureInfo.InvariantCulture), ulong.Parse(parameters.MaxTxExSteps, CultureInfo.InvariantCulture)),
-            new ExUnits(ulong.Parse(parameters.MaxBlockExMem, CultureInfo.InvariantCulture), ulong.Parse(parameters.MaxBlockExSteps, CultureInfo.InvariantCulture)),
+            CborFactory.CreateExUnits(ulong.Parse(parameters.MaxTxExMem, CultureInfo.InvariantCulture), ulong.Parse(parameters.MaxTxExSteps, CultureInfo.InvariantCulture)),
+            CborFactory.CreateExUnits(ulong.Parse(parameters.MaxBlockExMem, CultureInfo.InvariantCulture), ulong.Parse(parameters.MaxBlockExSteps, CultureInfo.InvariantCulture)),
             ulong.Parse(parameters.MaxValSize, CultureInfo.InvariantCulture),
             (ulong)parameters.CollateralPercent,
             (ulong)parameters.MaxCollateralInputs,
-            new PoolVotingThresholds(
-                new CborRationalNumber(1, 1), new CborRationalNumber(1, 1), new CborRationalNumber(1, 1),
-                new CborRationalNumber(1, 1), new CborRationalNumber(1, 1)
+            CborFactory.CreatePoolVotingThresholds(
+                CborFactory.CreateRationalNumber(1, 1), CborFactory.CreateRationalNumber(1, 1), CborFactory.CreateRationalNumber(1, 1),
+                CborFactory.CreateRationalNumber(1, 1), CborFactory.CreateRationalNumber(1, 1)
             ),
-            new DRepVotingThresholds(
-                new CborRationalNumber(1, 1), new CborRationalNumber(1, 1), new CborRationalNumber(1, 1),
-                new CborRationalNumber(1, 1), new CborRationalNumber(1, 1), new CborRationalNumber(1, 1),
-                new CborRationalNumber(1, 1), new CborRationalNumber(1, 1), new CborRationalNumber(1, 1),
-                new CborRationalNumber(1, 1)
+            CborFactory.CreateDRepVotingThresholds(
+                CborFactory.CreateRationalNumber(1, 1), CborFactory.CreateRationalNumber(1, 1), CborFactory.CreateRationalNumber(1, 1),
+                CborFactory.CreateRationalNumber(1, 1), CborFactory.CreateRationalNumber(1, 1), CborFactory.CreateRationalNumber(1, 1),
+                CborFactory.CreateRationalNumber(1, 1), CborFactory.CreateRationalNumber(1, 1), CborFactory.CreateRationalNumber(1, 1),
+                CborFactory.CreateRationalNumber(1, 1)
             ),
             1,
             1,
@@ -259,7 +256,7 @@ public sealed class Kupmios : ICardanoDataProvider, IDisposable
             1,
             1,
             1,
-            new CborRationalNumber((ulong)parameters.MinFeeRefScriptCostPerByte, 1)
+            CborFactory.CreateRationalNumber((ulong)parameters.MinFeeRefScriptCostPerByte, 1)
         );
 
         return Task.FromResult(protocolParams);
@@ -270,7 +267,7 @@ public sealed class Kupmios : ICardanoDataProvider, IDisposable
     /// </summary>
     /// <param name="tx">The signed transaction.</param>
     /// <returns>The transaction hash.</returns>
-    public async Task<string> SubmitTransactionAsync(Transaction tx)
+    public async Task<string> SubmitTransactionAsync(ITransaction tx)
     {
         ArgumentNullException.ThrowIfNull(tx);
 
@@ -349,27 +346,27 @@ public sealed class Kupmios : ICardanoDataProvider, IDisposable
     private static ResolvedInput ConvertToResolvedInput(KupoMatch match)
     {
         TransactionInput outref = CreateTransactionInput(match);
-        Value value = CreateValue(match.Value);
-        DatumOption? datum = CreateDatumOption(match);
-        CborEncodedValue? scriptRef = CreateScriptReference(match.Script);
+        IValue value = CreateValue(match.Value);
+        IDatumOption? datum = CreateDatumOption(match);
+        CborEncodedValue? scriptRef = CreateScriptReference(match.IScript);
         Address address = CreateAddress(match.Address);
 
-        PostAlonzoTransactionOutput output = new(address, value, datum, scriptRef);
+        PostAlonzoTransactionOutput output = CborFactory.CreatePostAlonzoTransactionOutput(address, value, datum, scriptRef);
         return new ResolvedInput(outref, output);
     }
 
     private static TransactionInput CreateTransactionInput(KupoMatch match)
     {
-        return new(HexStringCache.FromHexString(match.TransactionId), (ulong)match.OutputIndex);
+        return CborFactory.CreateTransactionInput(HexStringCache.FromHexString(match.TransactionId), (ulong)match.OutputIndex);
     }
 
-    private static Value CreateValue(KupoValue kupoValue)
+    private static IValue CreateValue(KupoValue kupoValue)
     {
-        Lovelace lovelace = new((ulong)kupoValue.Coins);
+        Lovelace lovelace = CborFactory.CreateLovelace((ulong)kupoValue.Coins);
 
         return kupoValue.Assets is null or { Count: 0 }
             ? lovelace
-            : new LovelaceWithMultiAsset(lovelace, CreateMultiAsset(kupoValue.Assets));
+            : CborFactory.CreateLovelaceWithMultiAsset(lovelace.Amount, CreateMultiAsset(kupoValue.Assets));
     }
 
     private static MultiAssetOutput CreateMultiAsset(Dictionary<string, long> assets)
@@ -385,7 +382,7 @@ public sealed class Kupmios : ICardanoDataProvider, IDisposable
             ReadOnlyMemory<byte> policy = HexStringCache.FromHexString(policyId);
             ReadOnlyMemory<byte> assetNameBytes = HexStringCache.FromHexString(assetName);
 
-            if (assetDict.TryGetValue(policy, out TokenBundleOutput? existingBundle))
+            if (assetDict.TryGetValue(policy, out TokenBundleOutput existingBundle))
             {
                 existingBundle.Value[assetNameBytes] = (ulong)quantity;
             }
@@ -395,40 +392,40 @@ public sealed class Kupmios : ICardanoDataProvider, IDisposable
                 {
                     [assetNameBytes] = (ulong)quantity
                 };
-                assetDict[policy] = new TokenBundleOutput(tokenBundle);
+                assetDict[policy] = CborFactory.CreateTokenBundleOutput(tokenBundle);
             }
         }
 
-        return new MultiAssetOutput(assetDict);
+        return CborFactory.CreateMultiAssetOutput(assetDict);
     }
 
-    private static DatumOption? CreateDatumOption(KupoMatch match)
+    private static IDatumOption? CreateDatumOption(KupoMatch match)
     {
         return !string.IsNullOrEmpty(match.Datum)
             ? match.DatumType switch
             {
-                "inline" => new InlineDatumOption(1, new CborEncodedValue(HexStringCache.FromHexString(match.Datum))),
-                "hash" => new DatumHashOption(0, HexStringCache.FromHexString(match.DatumHash!)),
+                "inline" => CborFactory.CreateInlineDatumOption(1, new CborEncodedValue(HexStringCache.FromHexString(match.Datum))),
+                "hash" => CborFactory.CreateDatumHashOption(0, HexStringCache.FromHexString(match.DatumHash!)),
                 _ => null
             }
-            : !string.IsNullOrEmpty(match.DatumHash) ? new DatumHashOption(0, HexStringCache.FromHexString(match.DatumHash)) : null;
+            : !string.IsNullOrEmpty(match.DatumHash) ? CborFactory.CreateDatumHashOption(0, HexStringCache.FromHexString(match.DatumHash)) : null;
     }
 
     private static CborEncodedValue? CreateScriptReference(KupoScript? script)
     {
-        if (string.IsNullOrEmpty(script?.Script) || string.IsNullOrEmpty(script?.Language))
+        if (string.IsNullOrEmpty(script?.IScript) || string.IsNullOrEmpty(script?.Language))
         {
             return null;
         }
 
-        byte[] scriptBytes = HexStringCache.FromHexString(script.Script);
+        byte[] scriptBytes = HexStringCache.FromHexString(script.IScript);
 
-        Script scriptObj = script.Language switch
+        IScript scriptObj = script.Language switch
         {
-            "native" => new MultiSigScript(0, CborSerializer.Deserialize<NativeScript>(scriptBytes)),
-            "plutus:v1" => new PlutusV1Script(1, scriptBytes),
-            "plutus:v2" => new PlutusV2Script(2, scriptBytes),
-            "plutus:v3" => new PlutusV3Script(3, scriptBytes),
+            "native" => CborFactory.CreateMultiSigScript(0, CborSerializer.Deserialize<INativeScript>(scriptBytes)),
+            "plutus:v1" => CborFactory.CreatePlutusV1Script(1, scriptBytes),
+            "plutus:v2" => CborFactory.CreatePlutusV2Script(2, scriptBytes),
+            "plutus:v3" => CborFactory.CreatePlutusV3Script(3, scriptBytes),
             _ => throw new NotSupportedException($"Unsupported script language: {script.Language}")
         };
 

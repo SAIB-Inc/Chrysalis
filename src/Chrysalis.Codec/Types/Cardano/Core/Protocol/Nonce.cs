@@ -1,32 +1,25 @@
+using Chrysalis.Codec.Serialization;
 using Chrysalis.Codec.Serialization.Attributes;
 
 namespace Chrysalis.Codec.Types.Cardano.Core.Protocol;
 
-/// <summary>
-/// Abstract base for nonce values used in the Cardano protocol for randomness.
-/// </summary>
 [CborSerializable]
 [CborUnion]
-public abstract partial record Nonce : CborBase { }
+public partial interface INonce : ICborType;
 
-/// <summary>
-/// A nonce with a hash value, indicating a specific random seed.
-/// </summary>
-/// <param name="Variant">The nonce variant tag.</param>
-/// <param name="Hash">The nonce hash value.</param>
 [CborSerializable]
 [CborList]
-public partial record NonceWithHash(
-    [CborOrder(0)] ulong Variant,
-    [CborOrder(1)] ReadOnlyMemory<byte>? Hash
-) : Nonce;
+[CborIndex(1)]
+public readonly partial record struct NonceWithHash : INonce
+{
+    [CborOrder(0)] public partial int Tag { get; }
+    [CborOrder(1)] public partial ReadOnlyMemory<byte> Hash { get; }
+}
 
-/// <summary>
-/// A nonce without a hash value, indicating the identity (neutral) nonce.
-/// </summary>
-/// <param name="Variant">The nonce variant tag.</param>
 [CborSerializable]
 [CborList]
-public partial record NonceWithoutHash(
-    [CborOrder(0)] ulong Variant
-) : Nonce;
+[CborIndex(0)]
+public readonly partial record struct NonceWithoutHash : INonce
+{
+    [CborOrder(0)] public partial int Tag { get; }
+}

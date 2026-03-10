@@ -21,7 +21,7 @@ public static class CoinSelectionUtil
     /// <returns>A coin selection result with selected inputs and change.</returns>
     public static CoinSelectionResult LargestFirstAlgorithm(
     List<ResolvedInput> availableUtxos,
-    List<Value> requestedAmount,
+    List<IValue> requestedAmount,
     int maxInputs = int.MaxValue
     )
     {
@@ -39,7 +39,7 @@ public static class CoinSelectionUtil
         Dictionary<string, ulong> requiredAssets = [];
         bool isLovelaceOnlyRequest = true;
 
-        foreach (Value value in requestedAmount)
+        foreach (IValue value in requestedAmount)
         {
             requestedLovelace += value.Lovelace();
 
@@ -161,7 +161,7 @@ public static class CoinSelectionUtil
         MultiAssetOutput multiAsset,
         Dictionary<string, ulong> assetDict)
     {
-        if (multiAsset == null || multiAsset.Value == null)
+        if (multiAsset.Value == null)
         {
             return;
         }
@@ -185,7 +185,7 @@ public static class CoinSelectionUtil
 
     private static Dictionary<ReadOnlyMemory<byte>, TokenBundleOutput> CalculateAssetsChange(
     List<ResolvedInput> selectedUtxos,
-    List<Value> requestedAmounts)
+    List<IValue> requestedAmounts)
     {
         Dictionary<ReadOnlyMemory<byte>, Dictionary<ReadOnlyMemory<byte>, ulong>> selectedAssetsByPolicy = new(ReadOnlyMemoryComparer.Instance);
         Dictionary<ReadOnlyMemory<byte>, Dictionary<ReadOnlyMemory<byte>, ulong>> requestedAssetsByPolicy = new(ReadOnlyMemoryComparer.Instance);
@@ -196,7 +196,7 @@ public static class CoinSelectionUtil
             if (utxo.Output.Amount() is LovelaceWithMultiAsset lovelaceWithMultiAsset)
             {
                 MultiAssetOutput multiAsset = lovelaceWithMultiAsset.MultiAsset;
-                if (multiAsset?.Value == null)
+                if (multiAsset.Value == null)
                 {
                     continue;
                 }
@@ -219,12 +219,12 @@ public static class CoinSelectionUtil
         }
 
         // Process requested amounts
-        foreach (Value value in requestedAmounts)
+        foreach (IValue value in requestedAmounts)
         {
             if (value is LovelaceWithMultiAsset lovelaceWithMultiAsset)
             {
                 MultiAssetOutput multiAsset = lovelaceWithMultiAsset.MultiAsset;
-                if (multiAsset?.Value == null)
+                if (multiAsset.Value == null)
                 {
                     continue;
                 }
@@ -274,7 +274,7 @@ public static class CoinSelectionUtil
 
             if (hasChange)
             {
-                assetsChange[policyId] = new TokenBundleOutput(assetChanges);
+                assetsChange[policyId] = CborFactory.CreateTokenBundleOutput(assetChanges);
             }
         }
 

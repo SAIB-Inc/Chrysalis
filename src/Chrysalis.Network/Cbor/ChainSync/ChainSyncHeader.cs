@@ -84,7 +84,7 @@ public record ChainSyncHeader(
             if (IsByronEbb)
             {
                 ByronEbbHead ebbHead = CborSerializer.Deserialize<ByronEbbHead>(HeaderCbor);
-                ulong slot = ebbHead.ConsensusData.EpochId * 21600;
+                ulong slot = ebbHead.ConsensusData.Epoch * 21600;
                 byte[] hash = BlockExtensions.HashByronHeader(0, HeaderCbor.Span);
                 return new ChainPoint(slot, hash, 0);
             }

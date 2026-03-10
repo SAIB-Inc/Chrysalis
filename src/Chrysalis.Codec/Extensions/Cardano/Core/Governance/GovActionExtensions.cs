@@ -3,7 +3,7 @@ using Chrysalis.Codec.Types.Cardano.Core.Governance;
 namespace Chrysalis.Codec.Extensions.Cardano.Core.Governance;
 
 /// <summary>
-/// Extension methods for <see cref="GovAction"/> to access governance action properties.
+/// Extension methods for <see cref="IGovAction"/> to access governance action properties.
 /// </summary>
 public static class GovActionExtensions
 {
@@ -12,17 +12,17 @@ public static class GovActionExtensions
     /// </summary>
     /// <param name="self">The governance action instance.</param>
     /// <returns>The action type value.</returns>
-    public static int Type(this GovAction self)
+    public static int Type(this IGovAction self)
     {
         ArgumentNullException.ThrowIfNull(self);
         return self switch
         {
-            ParameterChangeAction parameterChangeAction => parameterChangeAction.ActionType,
-            HardForkInitiationAction hardForkInitiationAction => hardForkInitiationAction.ActionType,
-            TreasuryWithdrawalsAction treasuryWithdrawalsAction => treasuryWithdrawalsAction.ActionType,
-            NoConfidence noConfidence => noConfidence.ActionType,
-            UpdateCommittee updateCommittee => updateCommittee.ActionType,
-            NewConstitution newConstitution => newConstitution.ActionType,
+            ParameterChangeAction parameterChangeAction => parameterChangeAction.Tag,
+            HardForkInitiationAction hardForkInitiationAction => hardForkInitiationAction.Tag,
+            TreasuryWithdrawalsAction treasuryWithdrawalsAction => treasuryWithdrawalsAction.Tag,
+            NoConfidence noConfidence => noConfidence.Tag,
+            UpdateCommittee updateCommittee => updateCommittee.Tag,
+            NewConstitution newConstitution => newConstitution.Tag,
             _ => throw new NotImplementedException()
         };
     }
@@ -32,16 +32,16 @@ public static class GovActionExtensions
     /// </summary>
     /// <param name="self">The governance action instance.</param>
     /// <returns>The governance action ID, or null.</returns>
-    public static GovActionId? GovActionId(this GovAction self)
+    public static GovActionId? GovActionId(this IGovAction self)
     {
         ArgumentNullException.ThrowIfNull(self);
         return self switch
         {
-            ParameterChangeAction parameterChangeAction => parameterChangeAction.GovActionId,
-            HardForkInitiationAction hardForkInitiationAction => hardForkInitiationAction.GovActionId,
-            NoConfidence noConfidence => noConfidence.GovActionId,
-            UpdateCommittee updateCommittee => updateCommittee.GovActionId,
-            NewConstitution newConstitution => newConstitution.GovActionId,
+            ParameterChangeAction parameterChangeAction => parameterChangeAction.ActionId,
+            HardForkInitiationAction hardForkInitiationAction => hardForkInitiationAction.ActionId,
+            NoConfidence noConfidence => noConfidence.ActionId,
+            UpdateCommittee updateCommittee => updateCommittee.ActionId,
+            NewConstitution newConstitution => newConstitution.ActionId,
             _ => null
         };
     }
@@ -51,7 +51,7 @@ public static class GovActionExtensions
     /// </summary>
     /// <param name="self">The governance action instance.</param>
     /// <returns>The policy hash bytes, or null.</returns>
-    public static ReadOnlyMemory<byte>? PolicyHash(this GovAction self)
+    public static ReadOnlyMemory<byte>? PolicyHash(this IGovAction self)
     {
         ArgumentNullException.ThrowIfNull(self);
         return self switch

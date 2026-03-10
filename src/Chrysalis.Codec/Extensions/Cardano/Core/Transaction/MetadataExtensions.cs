@@ -13,9 +13,8 @@ public static class MetadataExtensions
     /// </summary>
     /// <param name="self">The metadata instance.</param>
     /// <returns>The metadata dictionary.</returns>
-    public static Dictionary<ulong, TransactionMetadatum> Value(this CMetadata self)
+    public static Dictionary<ulong, ITransactionMetadatum> Value(this CMetadata self)
     {
-        ArgumentNullException.ThrowIfNull(self);
         return self.Value;
     }
 }

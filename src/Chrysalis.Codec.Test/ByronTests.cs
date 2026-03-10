@@ -27,15 +27,12 @@ public class ByronTests
         byte[] cborRaw = LoadTestBlock(filename);
 
         BlockWithEra blockWithEra = CborSerializer.Deserialize<BlockWithEra>(cborRaw);
-        Assert.NotNull(blockWithEra);
         Assert.Equal(1, blockWithEra.EraNumber);
 
-        Block block = blockWithEra.Block;
+        IBlock block = blockWithEra.Block;
         _ = Assert.IsType<ByronMainBlock>(block);
 
-        ByronMainBlock byron = (ByronMainBlock)block;
-        Assert.NotNull(byron.Header);
-        Assert.NotNull(byron.Body);
+        _ = (ByronMainBlock)block;
     }
 
     [Fact]
@@ -44,10 +41,9 @@ public class ByronTests
         byte[] cborRaw = LoadTestBlock("genesis.block");
 
         BlockWithEra blockWithEra = CborSerializer.Deserialize<BlockWithEra>(cborRaw);
-        Assert.NotNull(blockWithEra);
         Assert.Equal(0, blockWithEra.EraNumber);
 
-        Block block = blockWithEra.Block;
+        IBlock block = blockWithEra.Block;
         _ = Assert.IsType<ByronEbBlock>(block);
     }
 
@@ -90,9 +86,7 @@ public class ByronTests
         ByronMainBlock byron = (ByronMainBlock)blockWithEra.Block;
 
         Assert.False(byron.Header.PrevBlock.IsEmpty);
-        Assert.NotNull(byron.Header.ConsensusData);
-        Assert.NotNull(byron.Header.ConsensusData.SlotId);
-        Assert.False(byron.Header.ConsensusData.PubKey.IsEmpty);
+        Assert.False(byron.Header.ConsensusData.PublicKey.IsEmpty);
     }
 
     [Fact]
@@ -108,14 +102,12 @@ public class ByronTests
         Assert.True(byron.Body.TxPayload.GetValue().Any());
 
         ByronTxPayload firstTx = byron.Body.TxPayload.GetValue().First();
-        Assert.NotNull(firstTx.Transaction);
         Assert.NotNull(firstTx.Transaction.Inputs);
         Assert.NotNull(firstTx.Transaction.Outputs);
         Assert.True(firstTx.Transaction.Inputs.GetValue().Any());
         Assert.True(firstTx.Transaction.Outputs.GetValue().Any());
 
         ByronTxOut firstOutput = firstTx.Transaction.Outputs.GetValue().First();
-        Assert.NotNull(firstOutput.Address);
         Assert.True(firstOutput.Amount > 0);
     }
 }

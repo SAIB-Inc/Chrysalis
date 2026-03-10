@@ -14,7 +14,6 @@ public static class GovActionIdExtensions
     /// <returns>The transaction ID bytes.</returns>
     public static ReadOnlyMemory<byte> TransactionId(this GovActionId self)
     {
-        ArgumentNullException.ThrowIfNull(self);
         return self.TransactionId;
     }
 
@@ -23,9 +22,8 @@ public static class GovActionIdExtensions
     /// </summary>
     /// <param name="self">The governance action ID instance.</param>
     /// <returns>The governance action index.</returns>
-    public static int GovActionIndex(this GovActionId self)
+    public static ulong GovActionIndex(this GovActionId self)
     {
-        ArgumentNullException.ThrowIfNull(self);
         return self.GovActionIndex;
     }
 }

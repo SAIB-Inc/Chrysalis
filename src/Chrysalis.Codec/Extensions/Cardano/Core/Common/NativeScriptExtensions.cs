@@ -1,6 +1,6 @@
 using Chrysalis.Codec.Types;
 using Chrysalis.Codec.Types.Cardano.Core.Scripts;
-using CNativeScript = Chrysalis.Codec.Types.Cardano.Core.Scripts.NativeScript;
+using CNativeScript = Chrysalis.Codec.Types.Cardano.Core.Scripts.INativeScript;
 
 namespace Chrysalis.Codec.Extensions.Cardano.Core.Common;
 
@@ -39,7 +39,7 @@ public static class NativeScriptExtensions
         ArgumentNullException.ThrowIfNull(self);
         return self switch
         {
-            ScriptPubKey scriptPubKey => scriptPubKey.AddrKeyHash,
+            ScriptPubKey scriptPubKey => scriptPubKey.KeyHash,
             _ => throw new NotSupportedException()
         };
     }

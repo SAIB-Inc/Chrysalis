@@ -1,57 +1,36 @@
-using Chrysalis.Codec.Serialization.Attributes;
 using Chrysalis.Codec.Serialization;
+using Chrysalis.Codec.Serialization.Attributes;
 using Chrysalis.Codec.Types.Cardano.Core.Common;
 using Chrysalis.Codec.Types.Cardano.Core.Scripts;
 
 namespace Chrysalis.Codec.Types.Cardano.Core.TransactionWitness;
 
-/// <summary>
-/// Abstract base for transaction witness sets across different Cardano eras.
-/// </summary>
-public abstract partial record TransactionWitnessSet : CborBase
+[CborSerializable]
+[CborUnion]
+public partial interface ITransactionWitnessSet : ICborType;
+
+[CborSerializable]
+[CborMap]
+public readonly partial record struct AlonzoTransactionWitnessSet : ITransactionWitnessSet
 {
+    [CborProperty(0)] public partial ICborMaybeIndefList<VKeyWitness>? VKeyWitnesses { get; }
+    [CborProperty(1)] public partial ICborMaybeIndefList<INativeScript>? NativeScripts { get; }
+    [CborProperty(2)] public partial ICborMaybeIndefList<BootstrapWitness>? BootstrapWitnesses { get; }
+    [CborProperty(3)] public partial ICborMaybeIndefList<ReadOnlyMemory<byte>>? PlutusV1Scripts { get; }
+    [CborProperty(4)] public partial ICborMaybeIndefList<IPlutusData>? PlutusDataSet { get; }
+    [CborProperty(5)] public partial IRedeemers? Redeemers { get; }
 }
 
-/// <summary>
-/// An Alonzo-era transaction witness set with support for VKey witnesses, native scripts, bootstrap witnesses, Plutus V1 scripts, Plutus data, and redeemers.
-/// </summary>
-/// <param name="VKeyWitnessSet">The optional verification key witnesses.</param>
-/// <param name="NativeScriptSet">The optional native scripts.</param>
-/// <param name="BootstrapWitnessSet">The optional bootstrap (Byron-era) witnesses.</param>
-/// <param name="PlutusV1ScriptSet">The optional Plutus V1 script bytes.</param>
-/// <param name="PlutusDataSet">The optional Plutus data values.</param>
-/// <param name="Redeemers">The optional redeemers.</param>
 [CborSerializable]
 [CborMap]
-public partial record AlonzoTransactionWitnessSet(
-    [CborProperty(0)] CborMaybeIndefList<VKeyWitness>? VKeyWitnessSet,
-    [CborProperty(1)] CborMaybeIndefList<NativeScript>? NativeScriptSet,
-    [CborProperty(2)] CborMaybeIndefList<BootstrapWitness>? BootstrapWitnessSet,
-    [CborProperty(3)] CborMaybeIndefList<ReadOnlyMemory<byte>>? PlutusV1ScriptSet,
-    [CborProperty(4)] CborMaybeIndefList<PlutusData>? PlutusDataSet,
-    [CborProperty(5)] Redeemers? Redeemers
-) : TransactionWitnessSet, ICborPreserveRaw;
-
-/// <summary>
-/// A post-Alonzo transaction witness set with additional support for Plutus V2 and V3 scripts.
-/// </summary>
-/// <param name="VKeyWitnessSet">The optional verification key witnesses.</param>
-/// <param name="NativeScriptSet">The optional native scripts.</param>
-/// <param name="BootstrapWitnessSet">The optional bootstrap (Byron-era) witnesses.</param>
-/// <param name="PlutusV1ScriptSet">The optional Plutus V1 script bytes.</param>
-/// <param name="PlutusDataSet">The optional Plutus data values.</param>
-/// <param name="Redeemers">The optional redeemers.</param>
-/// <param name="PlutusV2ScriptSet">The optional Plutus V2 script bytes.</param>
-/// <param name="PlutusV3ScriptSet">The optional Plutus V3 script bytes.</param>
-[CborSerializable]
-[CborMap]
-public partial record PostAlonzoTransactionWitnessSet(
-    [CborProperty(0)] CborMaybeIndefList<VKeyWitness>? VKeyWitnessSet,
-    [CborProperty(1)] CborMaybeIndefList<NativeScript>? NativeScriptSet,
-    [CborProperty(2)] CborMaybeIndefList<BootstrapWitness>? BootstrapWitnessSet,
-    [CborProperty(3)] CborMaybeIndefList<ReadOnlyMemory<byte>>? PlutusV1ScriptSet,
-    [CborProperty(4)] CborMaybeIndefList<PlutusData>? PlutusDataSet,
-    [CborProperty(5)] Redeemers? Redeemers,
-    [CborProperty(6)] CborMaybeIndefList<ReadOnlyMemory<byte>>? PlutusV2ScriptSet,
-    [CborProperty(7)] CborMaybeIndefList<ReadOnlyMemory<byte>>? PlutusV3ScriptSet
-) : TransactionWitnessSet, ICborPreserveRaw;
+public readonly partial record struct PostAlonzoTransactionWitnessSet : ITransactionWitnessSet
+{
+    [CborProperty(0)] public partial ICborMaybeIndefList<VKeyWitness>? VKeyWitnesses { get; }
+    [CborProperty(1)] public partial ICborMaybeIndefList<INativeScript>? NativeScripts { get; }
+    [CborProperty(2)] public partial ICborMaybeIndefList<BootstrapWitness>? BootstrapWitnesses { get; }
+    [CborProperty(3)] public partial ICborMaybeIndefList<ReadOnlyMemory<byte>>? PlutusV1Scripts { get; }
+    [CborProperty(4)] public partial ICborMaybeIndefList<IPlutusData>? PlutusDataSet { get; }
+    [CborProperty(5)] public partial IRedeemers? Redeemers { get; }
+    [CborProperty(6)] public partial ICborMaybeIndefList<ReadOnlyMemory<byte>>? PlutusV2Scripts { get; }
+    [CborProperty(7)] public partial ICborMaybeIndefList<ReadOnlyMemory<byte>>? PlutusV3Scripts { get; }
+}

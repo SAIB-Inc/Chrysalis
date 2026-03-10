@@ -1,3 +1,4 @@
+using Chrysalis.Codec.Serialization;
 using Chrysalis.Codec.Serialization.Attributes;
 
 namespace Chrysalis.Codec.Types.Plutus.Address;
@@ -7,20 +8,24 @@ namespace Chrysalis.Codec.Types.Plutus.Address;
 /// </summary>
 [CborSerializable]
 [CborUnion]
-public abstract partial record Credential : CborBase;
+public partial interface ICredential : ICborType;
 
 /// <summary>
 /// A credential based on a verification key hash.
 /// </summary>
-/// <param name="VerificationKeyHash">The hash of the verification (public) key.</param>
 [CborSerializable]
 [CborConstr(0)]
-public partial record VerificationKey([CborOrder(0)] ReadOnlyMemory<byte> VerificationKeyHash) : Credential;
+public readonly partial record struct VerificationKey : ICredential
+{
+    [CborOrder(0)] public partial ReadOnlyMemory<byte> VerificationKeyHash { get; }
+}
 
 /// <summary>
 /// A credential based on a script hash.
 /// </summary>
-/// <param name="ScriptHash">The hash of the script.</param>
 [CborSerializable]
 [CborConstr(1)]
-public partial record Script([CborOrder(0)] ReadOnlyMemory<byte> ScriptHash) : Credential;
+public readonly partial record struct Script : ICredential
+{
+    [CborOrder(0)] public partial ReadOnlyMemory<byte> ScriptHash { get; }
+}

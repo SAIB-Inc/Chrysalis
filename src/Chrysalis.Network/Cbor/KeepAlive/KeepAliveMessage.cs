@@ -8,7 +8,7 @@ namespace Chrysalis.Network.Cbor.KeepAlive;
 /// </summary>
 [CborSerializable]
 [CborUnion]
-public abstract partial record KeepAliveMessage : CborBase;
+public abstract partial record KeepAliveMessage : CborRecord;
 
 /// <summary>
 /// KeepAlive ping message sent to verify the remote peer is still responsive (MsgKeepAlive).

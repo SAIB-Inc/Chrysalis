@@ -14,7 +14,6 @@ public static class TokenBundleMintExtensions
     /// <returns>The mint dictionary.</returns>
     public static Dictionary<string, long> Value(this TokenBundleMint self)
     {
-        ArgumentNullException.ThrowIfNull(self);
         return self.Value.ToDictionary(
             kvp => Convert.ToHexString(kvp.Key.Span).ToUpperInvariant(),
             kvp => kvp.Value

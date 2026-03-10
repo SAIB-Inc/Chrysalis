@@ -8,7 +8,7 @@ namespace Chrysalis.Network.Cbor.Handshake;
 /// </summary>
 [CborSerializable]
 [CborUnion]
-public abstract partial record HandshakeMessage : CborBase;
+public abstract partial record HandshakeMessage : CborRecord;
 
 /// <summary>
 /// Factory methods for constructing Ouroboros Handshake mini-protocol messages with correct CBOR indices.

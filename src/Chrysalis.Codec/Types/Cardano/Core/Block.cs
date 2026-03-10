@@ -1,68 +1,44 @@
-using Chrysalis.Codec.Serialization.Attributes;
 using Chrysalis.Codec.Serialization;
+using Chrysalis.Codec.Serialization.Attributes;
 using Chrysalis.Codec.Types.Cardano.Core.Header;
 using Chrysalis.Codec.Types.Cardano.Core.Transaction;
 using Chrysalis.Codec.Types.Cardano.Core.TransactionWitness;
 
 namespace Chrysalis.Codec.Types.Cardano.Core;
 
-/// <summary>
-/// Represents a Cardano block across all supported eras.
-/// </summary>
 [CborSerializable]
 [CborUnion]
-public abstract partial record Block : CborBase { }
+public partial interface IBlock : ICborType;
 
-/// <summary>
-/// Represents an Alonzo-era compatible block containing transactions, witnesses, and auxiliary data.
-/// </summary>
-/// <param name="Header">The block header.</param>
-/// <param name="TransactionBodies">The list of Alonzo transaction bodies in this block.</param>
-/// <param name="TransactionWitnessSets">The list of Alonzo transaction witness sets.</param>
-/// <param name="AuxiliaryDataSet">The auxiliary data set for transactions in this block.</param>
-/// <param name="InvalidTransactions">The optional list of invalid transaction indices.</param>
 [CborSerializable]
 [CborList]
-public partial record AlonzoCompatibleBlock(
-[CborOrder(0)] BlockHeader Header,
-[CborOrder(1)] CborMaybeIndefList<AlonzoTransactionBody> TransactionBodies,
-[CborOrder(2)] CborMaybeIndefList<PostAlonzoTransactionWitnessSet> TransactionWitnessSets,
-[CborOrder(3)] AuxiliaryDataSet AuxiliaryDataSet,
-[CborOrder(4)] CborMaybeIndefList<int>? InvalidTransactions
-) : Block, ICborPreserveRaw;
+public readonly partial record struct AlonzoCompatibleBlock : IBlock
+{
+    [CborOrder(0)] public partial BlockHeader Header { get; }
+    [CborOrder(1)] public partial ICborMaybeIndefList<AlonzoTransactionBody> TransactionBodies { get; }
+    [CborOrder(2)] public partial ICborMaybeIndefList<PostAlonzoTransactionWitnessSet> TransactionWitnessSets { get; }
+    [CborOrder(3)] public partial AuxiliaryDataSet AuxiliaryDataSet { get; }
+    [CborOrder(4)] public partial ICborMaybeIndefList<int>? InvalidTransactions { get; }
+}
 
-/// <summary>
-/// Represents a Babbage-era block containing transactions, witnesses, and auxiliary data.
-/// </summary>
-/// <param name="Header">The block header.</param>
-/// <param name="TransactionBodies">The list of Babbage transaction bodies in this block.</param>
-/// <param name="TransactionWitnessSets">The list of post-Alonzo transaction witness sets.</param>
-/// <param name="AuxiliaryDataSet">The auxiliary data set for transactions in this block.</param>
-/// <param name="InvalidTransactions">The optional list of invalid transaction indices.</param>
 [CborSerializable]
 [CborList]
-public partial record BabbageBlock(
-    [CborOrder(0)] BlockHeader Header,
-    [CborOrder(1)] CborMaybeIndefList<BabbageTransactionBody> TransactionBodies,
-    [CborOrder(2)] CborMaybeIndefList<PostAlonzoTransactionWitnessSet> TransactionWitnessSets,
-    [CborOrder(3)] AuxiliaryDataSet AuxiliaryDataSet,
-    [CborOrder(4)] CborMaybeIndefList<int>? InvalidTransactions
-) : Block, ICborPreserveRaw;
+public readonly partial record struct BabbageBlock : IBlock
+{
+    [CborOrder(0)] public partial BlockHeader Header { get; }
+    [CborOrder(1)] public partial ICborMaybeIndefList<BabbageTransactionBody> TransactionBodies { get; }
+    [CborOrder(2)] public partial ICborMaybeIndefList<PostAlonzoTransactionWitnessSet> TransactionWitnessSets { get; }
+    [CborOrder(3)] public partial AuxiliaryDataSet AuxiliaryDataSet { get; }
+    [CborOrder(4)] public partial ICborMaybeIndefList<int>? InvalidTransactions { get; }
+}
 
-/// <summary>
-/// Represents a Conway-era block containing transactions, witnesses, and auxiliary data.
-/// </summary>
-/// <param name="Header">The block header.</param>
-/// <param name="TransactionBodies">The list of Conway transaction bodies in this block.</param>
-/// <param name="TransactionWitnessSets">The list of post-Alonzo transaction witness sets.</param>
-/// <param name="AuxiliaryDataSet">The auxiliary data set for transactions in this block.</param>
-/// <param name="InvalidTransactions">The optional list of invalid transaction indices.</param>
 [CborSerializable]
 [CborList]
-public partial record ConwayBlock(
-    [CborOrder(0)] BlockHeader Header,
-    [CborOrder(1)] CborMaybeIndefList<ConwayTransactionBody> TransactionBodies,
-    [CborOrder(2)] CborMaybeIndefList<PostAlonzoTransactionWitnessSet> TransactionWitnessSets,
-    [CborOrder(3)] AuxiliaryDataSet AuxiliaryDataSet,
-    [CborOrder(4)] CborMaybeIndefList<int>? InvalidTransactions
-) : Block, ICborPreserveRaw;
+public readonly partial record struct ConwayBlock : IBlock
+{
+    [CborOrder(0)] public partial BlockHeader Header { get; }
+    [CborOrder(1)] public partial ICborMaybeIndefList<ConwayTransactionBody> TransactionBodies { get; }
+    [CborOrder(2)] public partial ICborMaybeIndefList<PostAlonzoTransactionWitnessSet> TransactionWitnessSets { get; }
+    [CborOrder(3)] public partial AuxiliaryDataSet AuxiliaryDataSet { get; }
+    [CborOrder(4)] public partial ICborMaybeIndefList<int>? InvalidTransactions { get; }
+}

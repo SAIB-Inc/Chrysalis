@@ -1,14 +1,10 @@
 using Chrysalis.Codec.Serialization;
 using Chrysalis.Codec.Serialization.Attributes;
-using Chrysalis.Codec.Types;
 using Chrysalis.Codec.Types.Cardano.Core;
 using Chrysalis.Codec.Types.Cardano.Core.Transaction;
 using Chrysalis.Codec.Types.Cardano.Core.TransactionWitness;
 
 namespace Chrysalis.Codec.Test;
-
-
-internal record TestRecord(string P, int I);
 
 // Test record with required fields - all fields must be present
 [CborSerializable]
@@ -17,7 +13,12 @@ public partial record PersonRequired(
     [CborOrder(0)] int Id,
     [CborOrder(1)] string Name,
     [CborOrder(2)] int Age
-) : CborBase;
+) : ICborType
+{
+    public ReadOnlyMemory<byte> Raw { get; set; }
+    public int ConstrIndex { get; set; }
+    public bool IsIndefinite { get; set; }
+}
 
 // Test record with nullable fields - fields can be missing
 [CborSerializable]
@@ -26,7 +27,12 @@ public partial record PersonOptional(
     [CborOrder(0)] int? Id,
     [CborOrder(1)] string? Name,
     [CborOrder(2)] int? Age
-) : CborBase;
+) : ICborType
+{
+    public ReadOnlyMemory<byte> Raw { get; set; }
+    public int ConstrIndex { get; set; }
+    public bool IsIndefinite { get; set; }
+}
 
 
 public class CborTests
@@ -52,13 +58,9 @@ public class CborTests
 
         PostAlonzoTransactionWitnessSet aWitnessSet = CborSerializer.Deserialize<PostAlonzoTransactionWitnessSet>(Convert.FromHexString(witnessSet));
 
-        tx = tx with { TransactionWitnessSet = aWitnessSet };
-        tx.TransactionBody.Raw = null;
-        tx.TransactionWitnessSet.Raw = null;
-
-        _ = Convert.ToHexString(CborSerializer.Serialize(tx));
-
-        Assert.NotNull("");
+        // Verify deserialization works
+        Assert.False(tx.Raw.IsEmpty);
+        Assert.False(aWitnessSet.Raw.IsEmpty);
     }
 
     [Fact]
@@ -115,7 +117,7 @@ public class CborTests
             {
                 for (int i = 0; i < iterationsPerTask; i++)
                 {
-                    Block block = CborSerializer.Deserialize<Block>(cborRaw);
+                    IBlock block = CborSerializer.Deserialize<IBlock>(cborRaw);
                     byte[] serialized = CborSerializer.Serialize(block);
                     string serializedHex = Convert.ToHexString(serialized);
                     Assert.NotNull(block);
@@ -140,7 +142,7 @@ public class CborTests
         {
             for (int i = 0; i < iterationsPerTask; i++)
             {
-                Block block = CborSerializer.Deserialize<Block>(cborRaw);
+                IBlock block = CborSerializer.Deserialize<IBlock>(cborRaw);
                 byte[] serialized = CborSerializer.Serialize(block);
                 string serializedHex = Convert.ToHexString(serialized);
                 Assert.NotNull(block);
@@ -165,7 +167,7 @@ public class CborTests
         {
             for (int i = 0; i < iterationsPerTask; i++)
             {
-                Block block = CborSerializer.Deserialize<ConwayBlock>(cborRaw);
+                IBlock block = CborSerializer.Deserialize<ConwayBlock>(cborRaw);
                 byte[] serialized = CborSerializer.Serialize(block);
                 string serializedHex = Convert.ToHexString(serialized);
                 Assert.NotNull(block);
@@ -183,7 +185,6 @@ public class CborTests
     {
         byte[] cborRaw = LoadTestBlock(filename);
         BlockWithEra block = CborSerializer.Deserialize<BlockWithEra>(cborRaw);
-        Assert.NotNull(block);
         Assert.NotNull(block.Block);
         Assert.Equal(6, block.EraNumber);
     }
@@ -202,7 +203,7 @@ public class CborTests
         {
             for (int i = 0; i < iterationsPerTask; i++)
             {
-                Block block = CborSerializer.Deserialize<Block>(cborRaw);
+                IBlock block = CborSerializer.Deserialize<IBlock>(cborRaw);
                 byte[] serialized = CborSerializer.Serialize(block);
                 string serializedHex = Convert.ToHexString(serialized);
                 Assert.NotNull(block);

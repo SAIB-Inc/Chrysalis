@@ -1,6 +1,7 @@
 using Chrysalis.Codec.Types.Cardano.Core.Protocol;
 using Chrysalis.Codec.Types.Cardano.Core.TransactionWitness;
 using Chrysalis.Tx.Models;
+using Redeemers = Chrysalis.Codec.Types.Cardano.Core.TransactionWitness.IRedeemers;
 
 namespace Chrysalis.Tx.Utils;
 

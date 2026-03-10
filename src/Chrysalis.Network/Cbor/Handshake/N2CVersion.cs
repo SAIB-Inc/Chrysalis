@@ -25,4 +25,4 @@ public static class N2CVersions
 /// </summary>
 /// <param name="Value">The numeric protocol version identifier (high bit set to distinguish from N2N versions).</param>
 [CborSerializable]
-public partial record N2CVersion(int Value) : CborBase;
+public partial record N2CVersion(int Value) : CborRecord;

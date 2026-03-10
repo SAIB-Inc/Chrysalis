@@ -6,7 +6,7 @@ using Chrysalis.Codec.Types.Cardano.Core.Transaction;
 namespace Chrysalis.Codec.Extensions.Cardano.Core.Transaction;
 
 /// <summary>
-/// Extension methods for <see cref="TransactionOutput"/> to access output fields across eras.
+/// Extension methods for <see cref="ITransactionOutput"/> to access output fields across eras.
 /// </summary>
 public static class OutputExtensions
 {
@@ -15,7 +15,7 @@ public static class OutputExtensions
     /// </summary>
     /// <param name="self">The transaction output instance.</param>
     /// <returns>The address bytes.</returns>
-    public static ReadOnlyMemory<byte> Address(this TransactionOutput self)
+    public static ReadOnlyMemory<byte> Address(this ITransactionOutput self)
     {
         ArgumentNullException.ThrowIfNull(self);
         return self switch
@@ -32,12 +32,12 @@ public static class OutputExtensions
     /// </summary>
     /// <param name="self">The transaction output instance.</param>
     /// <returns>The output value.</returns>
-    public static Value Amount(this TransactionOutput self)
+    public static IValue Amount(this ITransactionOutput self)
     {
         ArgumentNullException.ThrowIfNull(self);
         return self switch
         {
-            ByronTransactionOutputAdapter byron => new Lovelace(byron.ByronTxOut.Amount),
+            ByronTransactionOutputAdapter byron => Lovelace.FromAmount(byron.ByronTxOut.Amount),
             AlonzoTransactionOutput alonzoTxOutput => alonzoTxOutput.Amount,
             PostAlonzoTransactionOutput postAlonzoTxOutput => postAlonzoTxOutput.Amount,
             _ => throw new NotImplementedException()
@@ -49,7 +49,7 @@ public static class OutputExtensions
     /// </summary>
     /// <param name="self">The transaction output instance.</param>
     /// <returns>The datum hash bytes, or null.</returns>
-    public static ReadOnlyMemory<byte>? DatumHash(this TransactionOutput self)
+    public static ReadOnlyMemory<byte>? DatumHash(this ITransactionOutput self)
     {
         ArgumentNullException.ThrowIfNull(self);
         return self switch
@@ -69,7 +69,7 @@ public static class OutputExtensions
     /// </summary>
     /// <param name="self">The transaction output instance.</param>
     /// <returns>The datum option, or null.</returns>
-    public static DatumOption? DatumOption(this TransactionOutput self)
+    public static IDatumOption? DatumOption(this ITransactionOutput self)
     {
         ArgumentNullException.ThrowIfNull(self);
         return self switch
@@ -84,7 +84,7 @@ public static class OutputExtensions
     /// </summary>
     /// <param name="self">The transaction output instance.</param>
     /// <returns>The script reference bytes, or null.</returns>
-    public static ReadOnlyMemory<byte>? ScriptRef(this TransactionOutput self)
+    public static ReadOnlyMemory<byte>? ScriptRef(this ITransactionOutput self)
     {
         ArgumentNullException.ThrowIfNull(self);
         return self switch

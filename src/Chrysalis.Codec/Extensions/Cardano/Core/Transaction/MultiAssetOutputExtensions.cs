@@ -14,7 +14,6 @@ public static class MultiAssetOutputExtensions
     /// <returns>The dictionary mapping hex-encoded policy IDs to token bundles.</returns>
     public static Dictionary<string, TokenBundleOutput> ToDict(this MultiAssetOutput self)
     {
-        ArgumentNullException.ThrowIfNull(self);
         return self.Value.ToDictionary(
             kvp => Convert.ToHexString(kvp.Key.Span).ToUpperInvariant(),
             kvp => kvp.Value

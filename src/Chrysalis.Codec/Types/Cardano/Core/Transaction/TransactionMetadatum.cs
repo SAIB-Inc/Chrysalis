@@ -1,67 +1,48 @@
+using Chrysalis.Codec.Serialization;
 using Chrysalis.Codec.Serialization.Attributes;
 
 namespace Chrysalis.Codec.Types.Cardano.Core.Transaction;
 
-/// <summary>
-/// Abstract base for transaction metadata values, supporting maps, lists, bytes, text, and integers.
-/// </summary>
 [CborSerializable]
 [CborUnion]
-public abstract partial record TransactionMetadatum : CborBase
+public partial interface ITransactionMetadatum : ICborType;
+
+[CborSerializable]
+public readonly partial record struct MetadatumMap : ITransactionMetadatum
 {
+    public partial Dictionary<ITransactionMetadatum, ITransactionMetadatum> Value { get; }
 }
 
-/// <summary>
-/// A metadata value containing a map of metadatum key-value pairs.
-/// </summary>
-/// <param name="Value">The dictionary mapping metadatum keys to metadatum values.</param>
 [CborSerializable]
-public partial record MetadatumMap(
-    Dictionary<TransactionMetadatum, TransactionMetadatum> Value
-) : TransactionMetadatum;
+public readonly partial record struct MetadatumList : ITransactionMetadatum
+{
+    public partial List<ITransactionMetadatum> Value { get; }
+}
 
-/// <summary>
-/// A metadata value containing an ordered list of metadatum values.
-/// </summary>
-/// <param name="Value">The list of metadatum values.</param>
 [CborSerializable]
-public partial record MetadatumList(
-    List<TransactionMetadatum> Value
-) : TransactionMetadatum;
+public readonly partial record struct MetadatumBytes : ITransactionMetadatum
+{
+    public partial byte[] Value { get; }
+}
 
-/// <summary>
-/// A metadata value containing raw bytes.
-/// </summary>
-/// <param name="Value">The byte array metadata value.</param>
 [CborSerializable]
-public partial record MetadatumBytes(ReadOnlyMemory<byte> Value) : TransactionMetadatum;
+public readonly partial record struct MetadataText : ITransactionMetadatum
+{
+    public partial string Value { get; }
+}
 
-/// <summary>
-/// A metadata value containing a text string.
-/// </summary>
-/// <param name="Value">The text string metadata value.</param>
-[CborSerializable]
-public partial record MetadataText(string Value) : TransactionMetadatum;
-
-/// <summary>
-/// Abstract base for integer metadata values, which can be signed (long) or unsigned (ulong).
-/// </summary>
 [CborSerializable]
 [CborUnion]
-public abstract partial record MetadatumInt : TransactionMetadatum
+public partial interface IMetadatumInt : ITransactionMetadatum;
+
+[CborSerializable]
+public readonly partial record struct MetadatumIntLong : IMetadatumInt
 {
+    public partial long Value { get; }
 }
 
-/// <summary>
-/// A metadata integer value stored as a signed long.
-/// </summary>
-/// <param name="Value">The signed long integer metadata value.</param>
 [CborSerializable]
-public partial record MetadatumIntLong(long Value) : MetadatumInt;
-
-/// <summary>
-/// A metadata integer value stored as an unsigned long.
-/// </summary>
-/// <param name="Value">The unsigned long integer metadata value.</param>
-[CborSerializable]
-public partial record MetadatumIntUlong(ulong Value) : MetadatumInt;
+public readonly partial record struct MetadatumIntUlong : IMetadatumInt
+{
+    public partial ulong Value { get; }
+}

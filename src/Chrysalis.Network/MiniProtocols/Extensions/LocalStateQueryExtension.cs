@@ -21,7 +21,7 @@ public static class LocalStateQueryExtension
     private static async Task<T> ExecuteWithFreshStateAsync<T>(
         this LocalStateQuery localStateQuery,
         Func<Task<Result>> queryFunc,
-        CancellationToken cancellationToken) where T : CborBase
+        CancellationToken cancellationToken) where T : CborRecord
     {
         // Release if already acquired, then acquire fresh state
         if (localStateQuery.IsAcquired)

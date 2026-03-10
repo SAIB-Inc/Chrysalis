@@ -21,7 +21,7 @@ public partial record Failure(
 /// </summary>
 [CborSerializable]
 [CborUnion]
-public abstract partial record FailureReason : CborBase;
+public abstract partial record FailureReason : CborRecord;
 
 /// <summary>
 /// Indicates that the requested point is too old and has been pruned from the volatile chain.

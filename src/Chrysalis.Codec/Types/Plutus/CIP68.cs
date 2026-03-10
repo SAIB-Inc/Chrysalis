@@ -1,3 +1,4 @@
+using Chrysalis.Codec.Serialization;
 using Chrysalis.Codec.Serialization.Attributes;
 using Chrysalis.Codec.Types.Cardano.Core.Common;
 
@@ -13,7 +14,12 @@ namespace Chrysalis.Codec.Types.Plutus;
 [CborSerializable]
 [CborConstr(0)]
 public partial record Cip68<T>(
-    [CborOrder(0)] PlutusData Metadata,
+    [CborOrder(0)] IPlutusData Metadata,
     [CborOrder(1)] int Version,
     [CborOrder(2)] T? Extra
-) : CborBase;
+) : ICborType
+{
+    public ReadOnlyMemory<byte> Raw { get; set; }
+    public int ConstrIndex { get; set; }
+    public bool IsIndefinite { get; set; }
+}

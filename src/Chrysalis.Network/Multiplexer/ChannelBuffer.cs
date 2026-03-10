@@ -41,7 +41,7 @@ public sealed class ChannelBuffer(AgentChannel channel)
     /// <summary>
     /// Sends a complete CBOR message, chunked into segments if necessary.
     /// </summary>
-    public async Task SendFullMessageAsync<T>(T message, CancellationToken cancellationToken) where T : CborBase
+    public async Task SendFullMessageAsync<T>(T message, CancellationToken cancellationToken) where T : CborRecord
     {
         ReadOnlyMemory<byte> payloadMemory = CborSerializer.SerializeToMemory(message);
         int payloadLength = payloadMemory.Length;
@@ -63,7 +63,7 @@ public sealed class ChannelBuffer(AgentChannel channel)
     /// <summary>
     /// Receives and deserializes a complete CBOR message, accumulating segment payloads as needed.
     /// </summary>
-    public async Task<T> ReceiveFullMessageAsync<T>(CancellationToken cancellationToken) where T : CborBase
+    public async Task<T> ReceiveFullMessageAsync<T>(CancellationToken cancellationToken) where T : CborRecord
     {
         // Try to decode from existing buffer first (may have leftover from previous message)
         int usedLength = _tempLength - _tempOffset;
@@ -122,7 +122,7 @@ public sealed class ChannelBuffer(AgentChannel channel)
     /// <summary>
     /// Tries to deserialize directly from a ReadOnlyMemory without copying to _temp.
     /// </summary>
-    private static bool TryDeserializeDirect<T>(ReadOnlyMemory<byte> data, out T? result, out int consumed) where T : CborBase
+    private static bool TryDeserializeDirect<T>(ReadOnlyMemory<byte> data, out T? result, out int consumed) where T : CborRecord
     {
         consumed = 0;
         result = default;
@@ -217,7 +217,7 @@ public sealed class ChannelBuffer(AgentChannel channel)
     /// <summary>
     /// Tries to deserialize a complete CBOR message from the accumulation buffer.
     /// </summary>
-    private bool TryDeserialize<T>(out T? result, out int consumed) where T : CborBase
+    private bool TryDeserialize<T>(out T? result, out int consumed) where T : CborRecord
     {
         consumed = 0;
         result = default;

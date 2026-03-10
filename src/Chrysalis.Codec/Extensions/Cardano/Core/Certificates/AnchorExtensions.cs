@@ -14,8 +14,7 @@ public static class AnchorExtensions
     /// <returns>The anchor URL.</returns>
     public static Uri Url(this Anchor self)
     {
-        ArgumentNullException.ThrowIfNull(self);
-        return new Uri(self.AnchorUrl);
+        return new Uri(self.Url);
     }
 
     /// <summary>
@@ -25,7 +24,6 @@ public static class AnchorExtensions
     /// <returns>The data hash bytes.</returns>
     public static ReadOnlyMemory<byte> DataHash(this Anchor self)
     {
-        ArgumentNullException.ThrowIfNull(self);
-        return self.AnchorDataHash;
+        return self.ContentHash;
     }
 }

@@ -2,7 +2,7 @@ using Chrysalis.Codec.Types.Cardano.Core.Certificates;
 using Chrysalis.Codec.Types.Cardano.Core.Common;
 using CProposalProcedure = Chrysalis.Codec.Types.Cardano.Core.Governance.ProposalProcedure;
 using Chrysalis.Codec.Types.Cardano.Core.Transaction;
-using CCertificate = Chrysalis.Codec.Types.Cardano.Core.Certificates.Certificate;
+using CCertificate = Chrysalis.Codec.Types.Cardano.Core.Certificates.ICertificate;
 using Chrysalis.Codec.Types.Cardano.Core.Governance;
 using Chrysalis.Codec.Types.Cardano.Core.Byron;
 using Chrysalis.Codec.Extensions.Cardano.Core.Byron;
@@ -12,7 +12,7 @@ using Blake2Fast;
 namespace Chrysalis.Codec.Extensions.Cardano.Core.Transaction;
 
 /// <summary>
-/// Extension methods for <see cref="TransactionBody"/> to access fields across eras.
+/// Extension methods for <see cref="ITransactionBody"/> to access fields across eras.
 /// </summary>
 public static class TransactionBodyExtensions
 {
@@ -21,14 +21,15 @@ public static class TransactionBodyExtensions
     /// </summary>
     /// <param name="self">The transaction body instance.</param>
     /// <returns>The transaction inputs.</returns>
-    public static IEnumerable<TransactionInput> Inputs(this TransactionBody self)
+    public static IEnumerable<TransactionInput> Inputs(this ITransactionBody self)
     {
         ArgumentNullException.ThrowIfNull(self);
         return self switch
         {
-            ByronTransactionBodyAdapter byron => byron.ByronTx.Inputs.GetValue()
-                .Select(i => i.TryToTransactionInput(out TransactionInput? input) ? input : null)
-                .OfType<TransactionInput>(),
+            ByronTransactionBodyAdapter byron => byron.TxPayload.Transaction.Inputs.GetValue()
+                .Select(i => (ok: i.TryToTransactionInput(out TransactionInput input), input))
+                .Where(x => x.ok)
+                .Select(x => x.input),
             AlonzoTransactionBody alonzoTxBody => alonzoTxBody.Inputs.GetValue(),
             BabbageTransactionBody babbageTxBody => babbageTxBody.Inputs.GetValue(),
             ConwayTransactionBody conwayTxBody => conwayTxBody.Inputs.GetValue(),
@@ -41,15 +42,15 @@ public static class TransactionBodyExtensions
     /// </summary>
     /// <param name="self">The transaction body instance.</param>
     /// <returns>The transaction outputs.</returns>
-    public static IEnumerable<TransactionOutput> Outputs(this TransactionBody self)
+    public static IEnumerable<ITransactionOutput> Outputs(this ITransactionBody self)
     {
         ArgumentNullException.ThrowIfNull(self);
         return self switch
         {
-            ByronTransactionBodyAdapter byron => byron.ByronTx.Outputs.GetValue().Select(o => (TransactionOutput)new ByronTransactionOutputAdapter(o)),
-            AlonzoTransactionBody alonzoTxBody => alonzoTxBody.Outputs.GetValue(),
-            BabbageTransactionBody babbageTxBody => babbageTxBody.Outputs.GetValue(),
-            ConwayTransactionBody conwayTxBody => conwayTxBody.Outputs.GetValue(),
+            ByronTransactionBodyAdapter byron => byron.TxPayload.Transaction.Outputs.GetValue().Select(o => (ITransactionOutput)new ByronTransactionOutputAdapter(o)),
+            AlonzoTransactionBody alonzoTxBody => alonzoTxBody.Outputs.GetValue().Cast<ITransactionOutput>(),
+            BabbageTransactionBody babbageTxBody => babbageTxBody.Outputs.GetValue().Cast<ITransactionOutput>(),
+            ConwayTransactionBody conwayTxBody => conwayTxBody.Outputs.GetValue().Cast<ITransactionOutput>(),
             _ => []
         };
     }
@@ -59,7 +60,7 @@ public static class TransactionBodyExtensions
     /// </summary>
     /// <param name="self">The transaction body instance.</param>
     /// <returns>The fee amount.</returns>
-    public static ulong Fee(this TransactionBody self)
+    public static ulong Fee(this ITransactionBody self)
     {
         ArgumentNullException.ThrowIfNull(self);
         return self switch
@@ -76,7 +77,7 @@ public static class TransactionBodyExtensions
     /// </summary>
     /// <param name="self">The transaction body instance.</param>
     /// <returns>The start slot, or null.</returns>
-    public static ulong? ValidFrom(this TransactionBody self)
+    public static ulong? ValidFrom(this ITransactionBody self)
     {
         ArgumentNullException.ThrowIfNull(self);
         return self switch
@@ -93,7 +94,7 @@ public static class TransactionBodyExtensions
     /// </summary>
     /// <param name="self">The transaction body instance.</param>
     /// <returns>The TTL slot, or null.</returns>
-    public static ulong? ValidTo(this TransactionBody self)
+    public static ulong? ValidTo(this ITransactionBody self)
     {
         ArgumentNullException.ThrowIfNull(self);
         return self switch
@@ -110,7 +111,7 @@ public static class TransactionBodyExtensions
     /// </summary>
     /// <param name="self">The transaction body instance.</param>
     /// <returns>The certificates, or null.</returns>
-    public static IEnumerable<CCertificate>? Certificates(this TransactionBody self)
+    public static IEnumerable<CCertificate>? Certificates(this ITransactionBody self)
     {
         ArgumentNullException.ThrowIfNull(self);
         return self switch
@@ -127,7 +128,7 @@ public static class TransactionBodyExtensions
     /// </summary>
     /// <param name="self">The transaction body instance.</param>
     /// <returns>The withdrawals dictionary, or null.</returns>
-    public static Dictionary<RewardAccount, ulong>? Withdrawals(this TransactionBody self)
+    public static Dictionary<RewardAccount, ulong>? Withdrawals(this ITransactionBody self)
     {
         ArgumentNullException.ThrowIfNull(self);
         return self switch
@@ -144,7 +145,7 @@ public static class TransactionBodyExtensions
     /// </summary>
     /// <param name="self">The transaction body instance.</param>
     /// <returns>The auxiliary data hash bytes, or null.</returns>
-    public static ReadOnlyMemory<byte>? AuxiliaryDataHash(this TransactionBody self)
+    public static ReadOnlyMemory<byte>? AuxiliaryDataHash(this ITransactionBody self)
     {
         ArgumentNullException.ThrowIfNull(self);
         return self switch
@@ -161,7 +162,7 @@ public static class TransactionBodyExtensions
     /// </summary>
     /// <param name="self">The transaction body instance.</param>
     /// <returns>The mint dictionary, or null.</returns>
-    public static Dictionary<string, TokenBundleMint>? Mint(this TransactionBody self)
+    public static Dictionary<string, TokenBundleMint>? Mint(this ITransactionBody self)
     {
         ArgumentNullException.ThrowIfNull(self);
         Dictionary<ReadOnlyMemory<byte>, TokenBundleMint>? raw = self switch
@@ -182,7 +183,7 @@ public static class TransactionBodyExtensions
     /// </summary>
     /// <param name="self">The transaction body instance.</param>
     /// <returns>The script data hash bytes, or null.</returns>
-    public static ReadOnlyMemory<byte>? ScriptDataHash(this TransactionBody self)
+    public static ReadOnlyMemory<byte>? ScriptDataHash(this ITransactionBody self)
     {
         ArgumentNullException.ThrowIfNull(self);
         return self switch
@@ -199,7 +200,7 @@ public static class TransactionBodyExtensions
     /// </summary>
     /// <param name="self">The transaction body instance.</param>
     /// <returns>The collateral inputs, or null.</returns>
-    public static IEnumerable<TransactionInput>? Collateral(this TransactionBody self)
+    public static IEnumerable<TransactionInput>? Collateral(this ITransactionBody self)
     {
         ArgumentNullException.ThrowIfNull(self);
         return self switch
@@ -216,7 +217,7 @@ public static class TransactionBodyExtensions
     /// </summary>
     /// <param name="self">The transaction body instance.</param>
     /// <returns>The required signer key hashes, or null.</returns>
-    public static IEnumerable<ReadOnlyMemory<byte>>? RequiredSigners(this TransactionBody self)
+    public static IEnumerable<ReadOnlyMemory<byte>>? RequiredSigners(this ITransactionBody self)
     {
         ArgumentNullException.ThrowIfNull(self);
         return self switch
@@ -233,7 +234,7 @@ public static class TransactionBodyExtensions
     /// </summary>
     /// <param name="self">The transaction body instance.</param>
     /// <returns>The network ID, or null.</returns>
-    public static int? NetworkId(this TransactionBody self)
+    public static int? NetworkId(this ITransactionBody self)
     {
         ArgumentNullException.ThrowIfNull(self);
         return self switch
@@ -249,7 +250,7 @@ public static class TransactionBodyExtensions
     /// </summary>
     /// <param name="self">The transaction body instance.</param>
     /// <returns>The collateral return output, or null.</returns>
-    public static TransactionOutput? CollateralChange(this TransactionBody self)
+    public static ITransactionOutput? CollateralChange(this ITransactionBody self)
     {
         ArgumentNullException.ThrowIfNull(self);
         return self switch
@@ -265,7 +266,7 @@ public static class TransactionBodyExtensions
     /// </summary>
     /// <param name="self">The transaction body instance.</param>
     /// <returns>The total collateral in lovelace, or null.</returns>
-    public static ulong? TotalCollateral(this TransactionBody self)
+    public static ulong? TotalCollateral(this ITransactionBody self)
     {
         ArgumentNullException.ThrowIfNull(self);
         return self switch
@@ -281,7 +282,7 @@ public static class TransactionBodyExtensions
     /// </summary>
     /// <param name="self">The transaction body instance.</param>
     /// <returns>The reference inputs, or null.</returns>
-    public static IEnumerable<TransactionInput>? ReferenceInputs(this TransactionBody self)
+    public static IEnumerable<TransactionInput>? ReferenceInputs(this ITransactionBody self)
     {
         ArgumentNullException.ThrowIfNull(self);
         return self switch
@@ -297,7 +298,7 @@ public static class TransactionBodyExtensions
     /// </summary>
     /// <param name="self">The transaction body instance.</param>
     /// <returns>The voting procedures dictionary, or null.</returns>
-    public static Dictionary<Voter, GovActionIdVotingProcedure>? VotingProcedures(this TransactionBody self)
+    public static Dictionary<Voter, GovActionIdVotingProcedure>? VotingProcedures(this ITransactionBody self)
     {
         ArgumentNullException.ThrowIfNull(self);
         return self switch
@@ -312,7 +313,7 @@ public static class TransactionBodyExtensions
     /// </summary>
     /// <param name="self">The transaction body instance.</param>
     /// <returns>The proposal procedures, or null.</returns>
-    public static IEnumerable<CProposalProcedure>? ProposalProcedures(this TransactionBody self)
+    public static IEnumerable<CProposalProcedure>? ProposalProcedures(this ITransactionBody self)
     {
         ArgumentNullException.ThrowIfNull(self);
         return self switch
@@ -327,7 +328,7 @@ public static class TransactionBodyExtensions
     /// </summary>
     /// <param name="self">The transaction body instance.</param>
     /// <returns>The treasury value in lovelace, or null.</returns>
-    public static ulong? TreasuryValue(this TransactionBody self)
+    public static ulong? TreasuryValue(this ITransactionBody self)
     {
         ArgumentNullException.ThrowIfNull(self);
         return self switch
@@ -342,7 +343,7 @@ public static class TransactionBodyExtensions
     /// </summary>
     /// <param name="self">The transaction body instance.</param>
     /// <returns>The donation in lovelace, or null.</returns>
-    public static ulong? Donation(this TransactionBody self)
+    public static ulong? Donation(this ITransactionBody self)
     {
         ArgumentNullException.ThrowIfNull(self);
         return self switch
@@ -357,10 +358,10 @@ public static class TransactionBodyExtensions
     /// </summary>
     /// <param name="self">The transaction body instance.</param>
     /// <returns>The hex-encoded transaction hash.</returns>
-    public static string Hash(this TransactionBody self)
+    public static string Hash(this ITransactionBody self)
     {
         ArgumentNullException.ThrowIfNull(self);
-        byte[] raw = self.Raw is null ? CborSerializer.Serialize(self) : self.Raw.Value.ToArray();
+        byte[] raw = self.Raw.Length > 0 ? self.Raw.ToArray() : CborSerializer.Serialize(self);
         return Convert.ToHexString(Blake2b.HashData(32, raw)).ToUpperInvariant();
     }
 }

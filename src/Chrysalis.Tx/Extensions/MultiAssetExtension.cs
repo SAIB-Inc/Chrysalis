@@ -12,7 +12,7 @@ public static class MultiAssetExtension
     /// </summary>
     /// <param name="self">The multi-asset value.</param>
     /// <returns>An enumerable of policy ID hex strings.</returns>
-    public static IEnumerable<string> PolicyId(this MultiAsset self)
+    public static IEnumerable<string> PolicyId(this IMultiAsset self)
     {
         ArgumentNullException.ThrowIfNull(self);
 
@@ -33,7 +33,7 @@ public static class MultiAssetExtension
     /// <param name="self">The multi-asset value.</param>
     /// <param name="policyId">The policy ID hex string.</param>
     /// <returns>The token bundle dictionary, or null if not found.</returns>
-    public static Dictionary<string, ulong>? TokenBundleByPolicyId(this MultiAsset self, string policyId)
+    public static Dictionary<string, ulong>? TokenBundleByPolicyId(this IMultiAsset self, string policyId)
     {
         ArgumentNullException.ThrowIfNull(self);
         ArgumentNullException.ThrowIfNull(policyId);

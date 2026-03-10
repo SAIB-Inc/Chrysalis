@@ -11,7 +11,7 @@ public static class RoslynExtension
     /// Gets the namespace of the given type declaration syntax node.
     /// </summary>
     /// <param name="self">The type declaration syntax node.</param>
-    /// <returns>The namespace string, or null if none found.</returns>
+    /// <returns>The namespace string, or <c>null</c> if none found.</returns>
     public static string? GetNamespace(this TypeDeclarationSyntax self)
     {
         if (self is null)
@@ -23,7 +23,6 @@ public static class RoslynExtension
         {
             return namespaceDecl.Name.ToString();
         }
-        // Check if the parent is a FileScopedNamespaceDeclarationSyntax (C# 10+)
         else if (self.Parent is FileScopedNamespaceDeclarationSyntax fileScopedNamespaceDecl)
         {
             return fileScopedNamespaceDecl.Name.ToString();

@@ -1,4 +1,4 @@
-using CBlock = Chrysalis.Codec.Types.Cardano.Core.Block;
+using CBlock = Chrysalis.Codec.Types.Cardano.Core.IBlock;
 using Chrysalis.Codec.Extensions.Cardano.Core.Header;
 using Chrysalis.Codec.Types.Cardano.Core.Byron;
 using Chrysalis.Codec.Types.Cardano.Core.Header;
@@ -24,7 +24,7 @@ public static class BlockExtensions
         return self switch
         {
             ByronMainBlock byron => (byron.Header.ConsensusData.SlotId.Epoch * 21600) + byron.Header.ConsensusData.SlotId.Slot,
-            ByronEbBlock ebb => ebb.Header.ConsensusData.EpochId * 21600,
+            ByronEbBlock ebb => ebb.Header.ConsensusData.Epoch * 21600,
             _ => self.Header().HeaderBody.Slot()
         };
     }
@@ -57,8 +57,8 @@ public static class BlockExtensions
         ArgumentNullException.ThrowIfNull(self);
         return self switch
         {
-            ByronMainBlock byron => Convert.ToHexStringLower(HashByronHeader(1, byron.Header.Raw!.Value.Span)),
-            ByronEbBlock ebb => Convert.ToHexStringLower(HashByronHeader(0, ebb.Header.Raw!.Value.Span)),
+            ByronMainBlock byron => Convert.ToHexStringLower(HashByronHeader(1, byron.Header.Raw.Span)),
+            ByronEbBlock ebb => Convert.ToHexStringLower(HashByronHeader(0, ebb.Header.Raw.Span)),
             _ => self.Header().Hash()
         };
     }
@@ -90,7 +90,6 @@ public static class BlockExtensions
     /// <returns>The precise era.</returns>
     public static Era Era(this BlockWithEra self)
     {
-        ArgumentNullException.ThrowIfNull(self);
         return self.EraNumber switch
         {
             0 or 1 => Types.Cardano.Core.Era.Byron,
@@ -128,8 +127,7 @@ public static class BlockExtensions
     /// <returns>The hex-encoded hash string.</returns>
     public static string Hash(this BlockHeader self)
     {
-        ArgumentNullException.ThrowIfNull(self);
-        return Convert.ToHexStringLower(Blake2Fast.Blake2b.HashData(32, self.Raw!.Value.Span));
+        return Convert.ToHexStringLower(Blake2Fast.Blake2b.HashData(32, self.Raw.Span));
     }
 
     /// <summary>
@@ -155,17 +153,17 @@ public static class BlockExtensions
     /// </summary>
     /// <param name="self">The block instance.</param>
     /// <returns>The transaction bodies.</returns>
-    public static IEnumerable<TransactionBody> TransactionBodies(this CBlock self)
+    public static IEnumerable<ITransactionBody> TransactionBodies(this CBlock self)
     {
         ArgumentNullException.ThrowIfNull(self);
         return self switch
         {
             ByronMainBlock byron => byron.Body.TxPayload.GetValue()
-                .Select(payload => (TransactionBody)new ByronTransactionBodyAdapter(payload)),
+                .Select(payload => (ITransactionBody)new ByronTransactionBodyAdapter(payload)),
             ByronEbBlock => [],
-            AlonzoCompatibleBlock alonzoCompatibleBlock => alonzoCompatibleBlock.TransactionBodies.GetValue(),
-            BabbageBlock babbageBlock => babbageBlock.TransactionBodies.GetValue(),
-            ConwayBlock conwayBlock => conwayBlock.TransactionBodies.GetValue(),
+            AlonzoCompatibleBlock alonzoCompatibleBlock => alonzoCompatibleBlock.TransactionBodies.GetValue().Cast<ITransactionBody>(),
+            BabbageBlock babbageBlock => babbageBlock.TransactionBodies.GetValue().Cast<ITransactionBody>(),
+            ConwayBlock conwayBlock => conwayBlock.TransactionBodies.GetValue().Cast<ITransactionBody>(),
             _ => []
         };
     }
@@ -175,14 +173,14 @@ public static class BlockExtensions
     /// </summary>
     /// <param name="self">The block instance.</param>
     /// <returns>The transaction witness sets.</returns>
-    public static IEnumerable<TransactionWitnessSet> TransactionWitnessSets(this CBlock self)
+    public static IEnumerable<ITransactionWitnessSet> TransactionWitnessSets(this CBlock self)
     {
         ArgumentNullException.ThrowIfNull(self);
         return self switch
         {
-            AlonzoCompatibleBlock alonzoCompatibleBlock => alonzoCompatibleBlock.TransactionWitnessSets.GetValue(),
-            BabbageBlock babbageBlock => babbageBlock.TransactionWitnessSets.GetValue(),
-            ConwayBlock conwayBlock => conwayBlock.TransactionWitnessSets.GetValue(),
+            AlonzoCompatibleBlock alonzoCompatibleBlock => alonzoCompatibleBlock.TransactionWitnessSets.GetValue().Cast<ITransactionWitnessSet>(),
+            BabbageBlock babbageBlock => babbageBlock.TransactionWitnessSets.GetValue().Cast<ITransactionWitnessSet>(),
+            ConwayBlock conwayBlock => conwayBlock.TransactionWitnessSets.GetValue().Cast<ITransactionWitnessSet>(),
             _ => []
         };
     }
@@ -192,7 +190,7 @@ public static class BlockExtensions
     /// </summary>
     /// <param name="self">The block instance.</param>
     /// <returns>The auxiliary data set dictionary.</returns>
-    public static Dictionary<int, AuxiliaryData> AuxiliaryDataSet(this CBlock self)
+    public static Dictionary<int, IAuxiliaryData> AuxiliaryDataSet(this CBlock self)
     {
         ArgumentNullException.ThrowIfNull(self);
         return self switch

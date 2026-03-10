@@ -1,15 +1,12 @@
+using Chrysalis.Codec.Serialization;
 using Chrysalis.Codec.Serialization.Attributes;
 
 namespace Chrysalis.Codec.Types.Cardano.Core.Certificates;
 
-/// <summary>
-/// Represents stake pool metadata containing a URL and its content hash.
-/// </summary>
-/// <param name="Url">The URL pointing to the pool metadata JSON.</param>
-/// <param name="PoolMetadataHash">The hash of the metadata content for verification.</param>
 [CborSerializable]
 [CborList]
-public partial record PoolMetadata(
-    [CborOrder(0)] string Url,
-    [CborOrder(1)] ReadOnlyMemory<byte> PoolMetadataHash
-) : CborBase;
+public readonly partial record struct PoolMetadata : ICborType
+{
+    [CborOrder(0)] public partial string Url { get; }
+    [CborOrder(1)] public partial ReadOnlyMemory<byte> MetadataHash { get; }
+}

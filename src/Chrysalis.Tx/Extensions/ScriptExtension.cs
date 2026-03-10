@@ -1,7 +1,7 @@
 using Chrysalis.Codec.Types.Cardano.Core.Scripts;
-using Chrysalis.Codec.Types;
 using Chrysalis.Codec.Serialization;
 using Chrysalis.Plutus.VM.EvalTx;
+using Chrysalis.Tx.Utils;
 
 namespace Chrysalis.Tx.Extensions;
 
@@ -15,7 +15,7 @@ public static class ScriptExtension
     /// </summary>
     /// <param name="script">The script to check.</param>
     /// <returns>The script version number.</returns>
-    public static int Version(this Script script)
+    public static int Version(this IScript script)
     {
         ArgumentNullException.ThrowIfNull(script);
 
@@ -34,7 +34,7 @@ public static class ScriptExtension
     /// </summary>
     /// <param name="script">The script to extract bytes from.</param>
     /// <returns>The script bytes.</returns>
-    public static ReadOnlyMemory<byte> Bytes(this Script script)
+    public static ReadOnlyMemory<byte> Bytes(this IScript script)
     {
         ArgumentNullException.ThrowIfNull(script);
 
@@ -54,7 +54,7 @@ public static class ScriptExtension
     /// <param name="self">The script to parameterize.</param>
     /// <param name="parameter">The parameter to apply.</param>
     /// <returns>A new script with the parameter applied.</returns>
-    public static Script ApplyParameters<T>(this Script self, T parameter) where T : CborBase
+    public static IScript ApplyParameters<T>(this IScript self, T parameter) where T : Chrysalis.Codec.Serialization.ICborType
     {
         ArgumentNullException.ThrowIfNull(self);
         ArgumentNullException.ThrowIfNull(parameter);
@@ -70,9 +70,9 @@ public static class ScriptExtension
 
         return self switch
         {
-            PlutusV1Script plutusV1 => plutusV1 with { ScriptBytes = parameterizedBytes },
-            PlutusV2Script plutusV2 => plutusV2 with { ScriptBytes = parameterizedBytes },
-            PlutusV3Script plutusV3 => plutusV3 with { ScriptBytes = parameterizedBytes },
+            PlutusV1Script v1 => CborFactory.CreatePlutusV1Script(v1.Tag, parameterizedBytes),
+            PlutusV2Script v2 => CborFactory.CreatePlutusV2Script(v2.Tag, parameterizedBytes),
+            PlutusV3Script v3 => CborFactory.CreatePlutusV3Script(v3.Tag, parameterizedBytes),
             _ => throw new NotSupportedException($"Unsupported script type: {self.GetType()}")
         };
     }
@@ -84,12 +84,12 @@ public static class ScriptExtension
     /// <param name="self">The script to parameterize.</param>
     /// <param name="parameters">The parameters to apply in order.</param>
     /// <returns>A new script with all parameters applied.</returns>
-    public static Script ApplyParameters<T>(this Script self, List<T> parameters) where T : CborBase
+    public static IScript ApplyParameters<T>(this IScript self, List<T> parameters) where T : Chrysalis.Codec.Serialization.ICborType
     {
         ArgumentNullException.ThrowIfNull(self);
         ArgumentNullException.ThrowIfNull(parameters);
 
-        Script current = self;
+        IScript current = self;
         foreach (T parameter in parameters)
         {
             current = current.ApplyParameters(parameter);

@@ -17,7 +17,6 @@ public static class ProposalProcedureExtensions
     /// <returns>The deposit in lovelace.</returns>
     public static ulong Deposit(this CProposalProcedure self)
     {
-        ArgumentNullException.ThrowIfNull(self);
         return self.Deposit;
     }
 
@@ -28,7 +27,6 @@ public static class ProposalProcedureExtensions
     /// <returns>The reward account.</returns>
     public static RewardAccount RewardAccount(this CProposalProcedure self)
     {
-        ArgumentNullException.ThrowIfNull(self);
         return self.RewardAccount;
     }
 
@@ -37,9 +35,8 @@ public static class ProposalProcedureExtensions
     /// </summary>
     /// <param name="self">The proposal procedure instance.</param>
     /// <returns>The governance action.</returns>
-    public static GovAction GovAction(this CProposalProcedure self)
+    public static IGovAction GovAction(this CProposalProcedure self)
     {
-        ArgumentNullException.ThrowIfNull(self);
         return self.GovAction;
     }
 
@@ -50,7 +47,6 @@ public static class ProposalProcedureExtensions
     /// <returns>The anchor.</returns>
     public static Anchor Anchor(this CProposalProcedure self)
     {
-        ArgumentNullException.ThrowIfNull(self);
         return self.Anchor;
     }
 }

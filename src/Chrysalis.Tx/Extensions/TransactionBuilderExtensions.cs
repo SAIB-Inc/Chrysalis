@@ -1,4 +1,3 @@
-using Chrysalis.Codec.Extensions;
 using Chrysalis.Codec.Extensions.Cardano.Core.Common;
 using Chrysalis.Codec.Extensions.Cardano.Core.Transaction;
 using Chrysalis.Codec.Serialization;
@@ -30,14 +29,14 @@ public static class TransactionBuilderExtensions
     /// <param name="mockWitnessFee">Number of mock witnesses for fee estimation.</param>
     /// <param name="availableInputs">Available inputs for collateral selection.</param>
     /// <returns>The transaction builder with fee set.</returns>
-    public static TransactionBuilder CalculateFee(this TransactionBuilder builder, List<Script> scripts, ulong defaultFee = 0, int mockWitnessFee = 1, List<ResolvedInput>? availableInputs = null)
+    public static TransactionBuilder CalculateFee(this TransactionBuilder builder, List<IScript> scripts, ulong defaultFee = 0, int mockWitnessFee = 1, List<ResolvedInput>? availableInputs = null)
     {
         ArgumentNullException.ThrowIfNull(builder);
         ArgumentNullException.ThrowIfNull(scripts);
 
         ulong scriptFee = 0;
         ulong scriptExecutionFee = 0;
-        if (builder.WitnessSet.Redeemers is not null)
+        if (builder.Redeemers is not null)
         {
             _ = builder.SetTotalCollateral(2000000UL);
 
@@ -46,12 +45,23 @@ public static class TransactionBuilderExtensions
                 throw new ArgumentException("Missing script", nameof(scripts));
             }
 
-            CborMaybeIndefList<long> usedLanguage = builder.Pparams!.CostModelsForScriptLanguage!.Value[scripts[0].Version() - 1];
-            CostMdls costModel = new(new Dictionary<int, CborMaybeIndefList<long>>(){
-                 { scripts[0].Version() - 1, usedLanguage }
-            });
+            int langVersion = scripts[0].Version() - 1;
+            CostMdls costMdls = builder.Pparams!.CostModelsForScriptLanguage!;
+            ICborMaybeIndefList<long>? usedLanguage = langVersion switch
+            {
+                0 => costMdls.PlutusV1,
+                1 => costMdls.PlutusV2,
+                2 => costMdls.PlutusV3,
+                _ => throw new ArgumentException($"Unsupported script language version: {langVersion}")
+            };
+            CostMdls costModel = new(
+                langVersion == 0 ? usedLanguage : null,
+                langVersion == 1 ? usedLanguage : null,
+                langVersion == 2 ? usedLanguage : null
+            );
             byte[] costModelBytes = CborSerializer.Serialize(costModel);
-            byte[] scriptDataHash = DataHashUtil.CalculateScriptDataHash(builder.WitnessSet.Redeemers, builder.WitnessSet.PlutusDataSet?.GetValue() as PlutusList, costModelBytes);
+            PostAlonzoTransactionWitnessSet witnessSet = builder.BuildWitnessSet();
+            byte[] scriptDataHash = DataHashUtil.CalculateScriptDataHash(builder.Redeemers, witnessSet.PlutusDataSet, costModelBytes);
             _ = builder.SetScriptDataHash(scriptDataHash);
 
             ulong scriptCostPerByte = builder.Pparams!.MinFeeRefScriptCostPerByte!.Numerator / builder.Pparams.MinFeeRefScriptCostPerByte!.Denominator;
@@ -60,9 +70,9 @@ public static class TransactionBuilderExtensions
             int totalScriptSize = scripts.Sum(script => script.Bytes().Length);
             scriptFee = FeeUtil.CalculateReferenceScriptFee(totalScriptSize, scriptCostPerByte);
 
-            RationalNumber memUnitsCost = new(builder.Pparams!.ExecutionCosts!.MemPrice!.Numerator!, builder.Pparams.ExecutionCosts!.MemPrice!.Denominator!);
-            RationalNumber stepUnitsCost = new(builder.Pparams.ExecutionCosts!.StepPrice!.Numerator!, builder.Pparams.ExecutionCosts!.StepPrice!.Denominator!);
-            scriptExecutionFee = FeeUtil.CalculateScriptExecutionFee(builder.WitnessSet.Redeemers, memUnitsCost, stepUnitsCost);
+            RationalNumber memUnitsCost = new(builder.Pparams!.ExecutionCosts!.Value.MemPrice.Numerator, builder.Pparams.ExecutionCosts!.Value.MemPrice.Denominator);
+            RationalNumber stepUnitsCost = new(builder.Pparams.ExecutionCosts!.Value.StepPrice.Numerator, builder.Pparams.ExecutionCosts!.Value.StepPrice.Denominator);
+            scriptExecutionFee = FeeUtil.CalculateScriptExecutionFee(builder.Redeemers, memUnitsCost, stepUnitsCost);
 
         }
 
@@ -77,7 +87,7 @@ public static class TransactionBuilderExtensions
         while (iterations < maxIterations)
         {
             // Calculate current fee based on current transaction state
-            Transaction draftTx = builder.Build();
+            ITransaction draftTx = builder.Build();
             byte[] draftTxCborBytes = CborSerializer.Serialize(draftTx);
             ulong draftTxCborLength = (ulong)draftTxCborBytes.Length;
 
@@ -93,17 +103,18 @@ public static class TransactionBuilderExtensions
             _ = builder.SetFee(fee);
 
             // Handle collateral if needed
-            if (builder.Body.TotalCollateral is not null && availableInputs != null && availableInputs.Count > 0)
+            if (builder.TotalCollateral is not null && availableInputs != null && availableInputs.Count > 0)
             {
                 ulong totalCollateral = FeeUtil.CalculateRequiredCollateral(fee, builder.Pparams!.CollateralPercentage!.Value);
                 _ = builder.SetTotalCollateral(totalCollateral);
 
                 // Clear any existing collateral settings to start fresh
-                builder.Body = builder.Body with { Collateral = null, CollateralReturn = null };
+                _ = builder.ClearCollateral();
+                _ = builder.ClearCollateralReturn();
 
                 // Estimate minimum ADA needed for return output
                 ResolvedInput firstInput = availableInputs[0];
-                TransactionOutput dummyReturnOutput = firstInput.Output;
+                ITransactionOutput dummyReturnOutput = firstInput.Output;
 
                 byte[] dummyReturnOutputBytes = CborSerializer.Serialize(dummyReturnOutput);
                 ulong estimatedMinLovelaceForReturn = FeeUtil.CalculateMinimumLovelace(
@@ -115,7 +126,7 @@ public static class TransactionBuilderExtensions
                 ulong totalCollateralNeeded = totalCollateral + estimatedMinLovelaceForReturn + (estimatedMinLovelaceForReturn / 2);
 
                 // Use coin selection to get sufficient collateral with buffer
-                List<Value> collateralRequirement = [new Lovelace(totalCollateralNeeded)];
+                List<IValue> collateralRequirement = [CborFactory.CreateLovelace(totalCollateralNeeded)];
                 int maxCollateralInputs = (int)(builder.Pparams!.MaxCollateralInputs ?? 3);
 
                 CoinSelectionResult collateralSelection;
@@ -132,7 +143,7 @@ public static class TransactionBuilderExtensions
                     // Fallback: try with just the required collateral amount
                     collateralSelection = CoinSelectionUtil.LargestFirstAlgorithm(
                         availableInputs,
-                        [new Lovelace(totalCollateral)],
+                        [CborFactory.CreateLovelace(totalCollateral)],
                         maxCollateralInputs
                     );
                 }
@@ -161,11 +172,11 @@ public static class TransactionBuilderExtensions
                 Dictionary<ReadOnlyMemory<byte>, TokenBundleOutput> aggregatedAssets = new(ReadOnlyMemoryComparer.Instance);
                 foreach (ResolvedInput collateralInput in collateralInputs)
                 {
-                    if (collateralInput.Output.Amount() is LovelaceWithMultiAsset multiAsset && multiAsset.MultiAsset?.Value != null)
+                    if (collateralInput.Output.Amount() is LovelaceWithMultiAsset multiAsset)
                     {
                         foreach ((ReadOnlyMemory<byte> policyId, TokenBundleOutput tokenBundle) in multiAsset.MultiAsset.Value)
                         {
-                            if (!aggregatedAssets.TryGetValue(policyId, out TokenBundleOutput? existingBundle))
+                            if (!aggregatedAssets.TryGetValue(policyId, out TokenBundleOutput existingBundle))
                             {
                                 aggregatedAssets[policyId] = tokenBundle;
                             }
@@ -181,31 +192,31 @@ public static class TransactionBuilderExtensions
                                 {
                                     mergedTokens[name] = mergedTokens.TryGetValue(name, out ulong existing) ? existing + amount : amount;
                                 }
-                                aggregatedAssets[policyId] = new TokenBundleOutput(mergedTokens);
+                                aggregatedAssets[policyId] = CborFactory.CreateTokenBundleOutput(mergedTokens);
                             }
                         }
                     }
                 }
 
                 // Build return value
-                Value returnValue = aggregatedAssets.Count > 0
-                    ? new LovelaceWithMultiAsset(
-                        new Lovelace(returnLovelace),
-                        new MultiAssetOutput(aggregatedAssets)
+                IValue returnValue = aggregatedAssets.Count > 0
+                    ? CborFactory.CreateLovelaceWithMultiAsset(
+                        returnLovelace,
+                        CborFactory.CreateMultiAssetOutput(aggregatedAssets)
                     )
-                    : new Lovelace(returnLovelace);
+                    : CborFactory.CreateLovelace(returnLovelace);
 
                 // Create return output using first collateral's address
                 ResolvedInput firstCollateral = collateralInputs[0];
-                TransactionOutput returnOutput = firstCollateral.Output switch
+                ITransactionOutput returnOutput = firstCollateral.Output switch
                 {
-                    AlonzoTransactionOutput alonzo => new AlonzoTransactionOutput(
+                    AlonzoTransactionOutput alonzo => CborFactory.CreateAlonzoTransactionOutput(
                         alonzo.Address,
                         returnValue,
                         null
                     ),
-                    PostAlonzoTransactionOutput postAlonzo => new AlonzoTransactionOutput(
-                        postAlonzo.Address!,
+                    PostAlonzoTransactionOutput postAlonzo => CborFactory.CreateAlonzoTransactionOutput(
+                        postAlonzo.Address,
                         returnValue,
                         null
                     ),
@@ -249,20 +260,20 @@ public static class TransactionBuilderExtensions
             return builder;
         }
 
-        List<TransactionOutput> outputs = [.. builder.Body.Outputs.GetValue()];
+        List<ITransactionOutput> outputs = [.. builder.Outputs];
 
         decimal updatedChangeLovelace = builder.ChangeOutput switch
         {
             AlonzoTransactionOutput alonzo => alonzo.Amount switch
             {
-                Lovelace value => (decimal)value.Value - fee,
-                LovelaceWithMultiAsset multiAsset => multiAsset.LovelaceValue.Value - fee,
+                Lovelace value => (decimal)value.Amount - fee,
+                LovelaceWithMultiAsset multiAsset => multiAsset.Amount - fee,
                 _ => throw new InvalidOperationException("Invalid change output type")
             },
             PostAlonzoTransactionOutput postAlonzoChange => postAlonzoChange.Amount switch
             {
-                Lovelace value => value.Value - fee,
-                LovelaceWithMultiAsset multiAsset => multiAsset.LovelaceValue.Value - fee,
+                Lovelace value => value.Amount - fee,
+                LovelaceWithMultiAsset multiAsset => multiAsset.Amount - fee,
                 _ => throw new InvalidOperationException("Invalid change output type")
             },
             _ => throw new InvalidOperationException("Invalid change output type")
@@ -273,9 +284,9 @@ public static class TransactionBuilderExtensions
             updatedChangeLovelace = 0;
         }
 
-        Value changeValue = new Lovelace((ulong)updatedChangeLovelace);
+        IValue changeValue = CborFactory.CreateLovelace((ulong)updatedChangeLovelace);
 
-        Value changeOutputValue = builder.ChangeOutput switch
+        IValue changeOutputValue = builder.ChangeOutput switch
         {
             AlonzoTransactionOutput alonzo => alonzo.Amount,
             PostAlonzoTransactionOutput postAlonzoChange => postAlonzoChange.Amount,
@@ -284,16 +295,16 @@ public static class TransactionBuilderExtensions
 
         if (changeOutputValue is LovelaceWithMultiAsset lovelaceWithMultiAsset)
         {
-            changeValue = new LovelaceWithMultiAsset(new Lovelace((ulong)updatedChangeLovelace), lovelaceWithMultiAsset.MultiAsset);
+            changeValue = CborFactory.CreateLovelaceWithMultiAsset((ulong)updatedChangeLovelace, lovelaceWithMultiAsset.MultiAsset);
         }
 
-        TransactionOutput? updatedChangeOutput = null;
+        ITransactionOutput? updatedChangeOutput = null;
 
         if (updatedChangeLovelace > 0)
         {
             if (builder.ChangeOutput is AlonzoTransactionOutput change)
             {
-                updatedChangeOutput = new AlonzoTransactionOutput(
+                updatedChangeOutput = CborFactory.CreateAlonzoTransactionOutput(
                     change.Address,
                     changeValue,
                     change.DatumHash
@@ -302,8 +313,8 @@ public static class TransactionBuilderExtensions
             }
             else if (builder.ChangeOutput is PostAlonzoTransactionOutput postAlonzoChange)
             {
-                updatedChangeOutput = new PostAlonzoTransactionOutput(
-                    postAlonzoChange.Address!,
+                updatedChangeOutput = CborFactory.CreatePostAlonzoTransactionOutput(
+                    postAlonzoChange.Address,
                     changeValue,
                     postAlonzoChange.Datum,
                     postAlonzoChange.ScriptRef
@@ -347,10 +358,13 @@ public static class TransactionBuilderExtensions
         ArgumentNullException.ThrowIfNull(utxos);
         ArgumentNullException.ThrowIfNull(slotConfig);
 
-        IReadOnlyList<Plutus.VM.Models.EvaluationResult> evalResult =
-            ScriptContextBuilder.EvaluateTx(builder.Body, builder.WitnessSet, utxos, slotConfig);
+        ConwayTransactionBody body = builder.BuildBody();
+        PostAlonzoTransactionWitnessSet witnessSet = builder.BuildWitnessSet();
 
-        Redeemers? previousRedeemers = builder.WitnessSet.Redeemers;
+        IReadOnlyList<Plutus.VM.Models.EvaluationResult> evalResult =
+            ScriptContextBuilder.EvaluateTx(body, witnessSet, utxos, slotConfig);
+
+        IRedeemers? previousRedeemers = builder.Redeemers;
 
         switch (previousRedeemers)
         {
@@ -362,12 +376,12 @@ public static class TransactionBuilderExtensions
                     {
                         if (redeemer.Tag == result.RedeemerTag && redeemer.Index == result.Index)
                         {
-                            ExUnits exUnits = new(result.ExUnits.Mem, result.ExUnits.Steps);
-                            updatedRedeemersList.Add(new RedeemerEntry(redeemer.Tag, redeemer.Index, redeemer.Data, exUnits));
+                            ExUnits exUnits = CborFactory.CreateExUnits(result.ExUnits.Mem, result.ExUnits.Steps);
+                            updatedRedeemersList.Add(CborFactory.CreateRedeemerEntry(redeemer.Tag, redeemer.Index, redeemer.Data, exUnits));
                         }
                     }
                 }
-                _ = builder.SetRedeemers(new RedeemerList(updatedRedeemersList));
+                _ = builder.SetRedeemers(CborFactory.CreateRedeemerList(updatedRedeemersList));
                 break;
             case RedeemerMap redeemersMap:
                 Dictionary<RedeemerKey, RedeemerValue> updatedRedeemersMap = [];
@@ -377,12 +391,12 @@ public static class TransactionBuilderExtensions
                     {
                         if (kvp.Key.Tag == result.RedeemerTag && kvp.Key.Index == result.Index)
                         {
-                            ExUnits exUnits = new(result.ExUnits.Mem, result.ExUnits.Steps);
-                            updatedRedeemersMap.Add(new RedeemerKey(kvp.Key.Tag, kvp.Key.Index), new RedeemerValue(kvp.Value.Data, exUnits));
+                            ExUnits exUnits = CborFactory.CreateExUnits(result.ExUnits.Mem, result.ExUnits.Steps);
+                            updatedRedeemersMap.Add(CborFactory.CreateRedeemerKey(kvp.Key.Tag, kvp.Key.Index), CborFactory.CreateRedeemerValue(kvp.Value.Data, exUnits));
                         }
                     }
                 }
-                _ = builder.SetRedeemers(new RedeemerMap(updatedRedeemersMap));
+                _ = builder.SetRedeemers(CborFactory.CreateRedeemerMap(updatedRedeemersMap));
                 break;
             default:
                 break;

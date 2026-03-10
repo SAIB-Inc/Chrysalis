@@ -1,3 +1,4 @@
+using Chrysalis.Codec.Serialization;
 using Chrysalis.Codec.Serialization.Attributes;
 
 namespace Chrysalis.Codec.Types.Plutus.Address;
@@ -10,6 +11,11 @@ namespace Chrysalis.Codec.Types.Plutus.Address;
 [CborSerializable]
 [CborConstr(0)]
 public partial record Address(
-    [CborOrder(0)] Credential PaymentCredential,
-    [CborOrder(1)] CborOption<Inline<Credential>> StakeCredential
-) : CborBase;
+    [CborOrder(0)] ICredential PaymentCredential,
+    [CborOrder(1)] ICborOption<Inline<ICredential>> StakeCredential
+) : ICborType
+{
+    public ReadOnlyMemory<byte> Raw { get; set; }
+    public int ConstrIndex { get; set; }
+    public bool IsIndefinite { get; set; }
+}

@@ -14,8 +14,7 @@ public static class CredentialExtensions
     /// <returns>The credential type value.</returns>
     public static int Type(this Credential self)
     {
-        ArgumentNullException.ThrowIfNull(self);
-        return self.CredentialType;
+        return self.Type;
     }
 
     /// <summary>
@@ -25,7 +24,6 @@ public static class CredentialExtensions
     /// <returns>The hash bytes.</returns>
     public static ReadOnlyMemory<byte> Hash(this Credential self)
     {
-        ArgumentNullException.ThrowIfNull(self);
         return self.Hash;
     }
 }

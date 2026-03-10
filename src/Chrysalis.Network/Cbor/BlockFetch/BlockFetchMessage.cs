@@ -9,7 +9,7 @@ namespace Chrysalis.Network.Cbor.BlockFetch;
 /// </summary>
 [CborSerializable]
 [CborUnion]
-public partial record BlockFetchMessage : CborBase;
+public partial record BlockFetchMessage : CborRecord;
 
 /// <summary>
 /// BlockFetch client request to fetch a range of blocks between two points (MsgRequestRange).

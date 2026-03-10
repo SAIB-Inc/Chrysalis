@@ -12,7 +12,7 @@ namespace Chrysalis.Network.Cbor.LocalStateQuery.Messages;
 [CborIndex(3)]
 public partial record Query(
     [CborOrder(0)] int Idx,
-    [CborOrder(1)] QueryReq QueryRequest
+    [CborOrder(1)] IQueryReq QueryRequest
 ) : LocalStateQueryMessage;
 
 /// <summary>
@@ -25,7 +25,7 @@ public static class QueryRequest
     /// </summary>
     /// <param name="queryRequest">The query request payload.</param>
     /// <returns>A <see cref="Query"/> message ready to send to the Cardano node.</returns>
-    public static Query New(QueryReq queryRequest)
+    public static Query New(IQueryReq queryRequest)
     {
         return new Query(3, queryRequest);
     }

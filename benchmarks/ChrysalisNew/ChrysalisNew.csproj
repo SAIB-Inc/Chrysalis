@@ -10,7 +10,6 @@
 
   <ItemGroup>
     <ProjectReference Include="../../src/Chrysalis.Codec/Chrysalis.Codec.csproj" />
-    <ProjectReference Include="../../src/Chrysalis.Codec.V2/Chrysalis.Codec.V2.csproj" />
     <PackageReference Include="BenchmarkDotNet" />
   </ItemGroup>
 

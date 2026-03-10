@@ -106,7 +106,7 @@ public class Address
     /// <param name="paymentBytes">The payment credential bytes (e.g., PaymentKeyHash).</param>
     /// <param name="stakeBytes">Optional stake credential bytes (e.g., StakeKeyHash).</param>
     /// <returns>An <see cref="Address"/> instance.</returns>
-    public static Address FromCredentials(NetworkType networkType, AddressType addressType, Credential paymentBytes, Credential? stakeBytes)
+    public static Address FromCredentials(NetworkType networkType, AddressType addressType, ICredential paymentBytes, ICredential? stakeBytes)
     {
         ArgumentNullException.ThrowIfNull(paymentBytes);
 

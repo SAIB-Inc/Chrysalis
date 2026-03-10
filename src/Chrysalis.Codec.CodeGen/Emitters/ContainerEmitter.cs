@@ -13,13 +13,21 @@ public sealed partial class CborSerializerCodeGen
                 throw new InvalidOperationException($"Container types must have exactly one property. {metadata.FullyQualifiedName}");
             }
 
-            SerializablePropertyMetadata prop = metadata.Properties[0];
             _ = Emitter.EmitCborReaderInstance(sb, "data");
-            _ = Emitter.EmitTagReader(sb, metadata.CborTag, "tagIndex");
-            string propName = $"{metadata.BaseIdentifier}{prop.PropertyName}";
-            _ = Emitter.EmitSerializablePropertyReader(sb, prop, propName);
-            _ = sb.AppendLine($"var result = new {metadata.FullyQualifiedName}({propName});");
-            _ = Emitter.EmitReaderValidationAndResult(sb, metadata, "result");
+
+            if (metadata.IsRecordStruct)
+            {
+                _ = Emitter.EmitLazyContainerReader(sb, metadata);
+            }
+            else
+            {
+                SerializablePropertyMetadata prop = metadata.Properties[0];
+                _ = Emitter.EmitTagReader(sb, metadata.CborTag, "tagIndex");
+                string propName = $"{metadata.BaseIdentifier}{prop.PropertyName}";
+                _ = Emitter.EmitSerializablePropertyReader(sb, prop, propName);
+                _ = sb.AppendLine($"var result = new {metadata.FullyQualifiedName}({propName});");
+                _ = Emitter.EmitReaderValidationAndResult(sb, metadata, "result");
+            }
 
             return sb;
         }

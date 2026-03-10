@@ -1,8 +1,8 @@
 using Chrysalis.Codec.Extensions.Cardano.Core.TransactionWitness;
 using Chrysalis.Codec.Serialization;
-using Chrysalis.Codec.Types;
 using Chrysalis.Codec.Types.Cardano.Core.Transaction;
 using Chrysalis.Codec.Types.Cardano.Core.TransactionWitness;
+using Chrysalis.Tx.Utils;
 using Chrysalis.Wallet.Models.Keys;
 using Chrysalis.Wallet.Utils;
 
@@ -16,10 +16,7 @@ public static class TransactionExtension
     /// <summary>
     /// Signs a transaction with the given private key.
     /// </summary>
-    /// <param name="self">The transaction to sign.</param>
-    /// <param name="privateKey">The private key to sign with.</param>
-    /// <returns>The transaction with the added VKey witness.</returns>
-    public static Transaction Sign(this Transaction self, PrivateKey privateKey)
+    public static ITransaction Sign(this ITransaction self, PrivateKey privateKey)
     {
         ArgumentNullException.ThrowIfNull(self);
         ArgumentNullException.ThrowIfNull(privateKey);
@@ -29,30 +26,21 @@ public static class TransactionExtension
             PostMaryTransaction postMaryTransaction => postMaryTransaction,
             _ => throw new InvalidOperationException("Transaction type not supported")
         };
-        byte[] txBodyBytes = CborSerializer.Serialize(tx.TransactionBody);
+        byte[] txBodyBytes = CborSerializer.Serialize(tx.Body);
         byte[] signature = privateKey.Sign(HashUtil.Blake2b256(txBodyBytes));
-        VKeyWitness vkeyWitness = new(privateKey.GetPublicKey().Key, signature);
-        List<VKeyWitness> vKeyWitnesses = tx.TransactionWitnessSet.VKeyWitnessSet() is not null ?
-            [.. tx.TransactionWitnessSet.VKeyWitnessSet()!] : [];
+        VKeyWitness vkeyWitness = CborFactory.CreateVKeyWitness(privateKey.GetPublicKey().Key, signature);
+        List<VKeyWitness> vKeyWitnesses = tx.Witnesses.VKeyWitnessSet() is not null ?
+            [.. tx.Witnesses.VKeyWitnessSet()!] : [];
 
         vKeyWitnesses.Add(vkeyWitness);
 
-        return tx with
-        {
-            TransactionWitnessSet = tx.TransactionWitnessSet with
-            {
-                VKeyWitnessSet = new CborDefListWithTag<VKeyWitness>(vKeyWitnesses)
-            }
-        };
+        return RebuildWithWitnesses(tx, vKeyWitnesses);
     }
 
     /// <summary>
     /// Signs a transaction with the given list of VKey witnesses.
     /// </summary>
-    /// <param name="self">The transaction to sign.</param>
-    /// <param name="vKeyWitnesses">The VKey witnesses to add.</param>
-    /// <returns>The transaction with the added VKey witnesses.</returns>
-    public static Transaction Sign(this Transaction self, List<VKeyWitness> vKeyWitnesses)
+    public static ITransaction Sign(this ITransaction self, List<VKeyWitness> vKeyWitnesses)
     {
         ArgumentNullException.ThrowIfNull(self);
         ArgumentNullException.ThrowIfNull(vKeyWitnesses);
@@ -62,18 +50,32 @@ public static class TransactionExtension
             PostMaryTransaction postMaryTransaction => postMaryTransaction,
             _ => throw new InvalidOperationException("Transaction type not supported")
         };
-        List<VKeyWitness> vkeyWitnessSet = tx.TransactionWitnessSet.VKeyWitnessSet() is not null ?
-            [.. tx.TransactionWitnessSet.VKeyWitnessSet()!] : [];
+        List<VKeyWitness> vkeyWitnessSet = tx.Witnesses.VKeyWitnessSet() is not null ?
+            [.. tx.Witnesses.VKeyWitnessSet()!] : [];
         vkeyWitnessSet.AddRange(vKeyWitnesses);
 
-        return tx with
+        return RebuildWithWitnesses(tx, vkeyWitnessSet);
+    }
+
+    private static PostMaryTransaction RebuildWithWitnesses(PostMaryTransaction tx, List<VKeyWitness> vKeyWitnesses)
+    {
+        PostAlonzoTransactionWitnessSet existingWitnesses = tx.Witnesses switch
         {
-            TransactionWitnessSet = tx.TransactionWitnessSet with
-            {
-                VKeyWitnessSet = new CborDefListWithTag<VKeyWitness>(vkeyWitnessSet),
-                Raw = null
-            },
-            Raw = null
+            PostAlonzoTransactionWitnessSet ws => ws,
+            _ => default
         };
+
+        PostAlonzoTransactionWitnessSet newWitnessSet = CborFactory.CreateWitnessSet(
+            vKeyWitnesses: CborFactory.CreateDefListWithTag<VKeyWitness>(vKeyWitnesses),
+            nativeScripts: existingWitnesses.NativeScripts,
+            bootstrapWitnesses: existingWitnesses.BootstrapWitnesses,
+            plutusV1Scripts: existingWitnesses.PlutusV1Scripts,
+            plutusDataSet: existingWitnesses.PlutusDataSet,
+            redeemers: existingWitnesses.Redeemers,
+            plutusV2Scripts: existingWitnesses.PlutusV2Scripts,
+            plutusV3Scripts: existingWitnesses.PlutusV3Scripts
+        );
+
+        return CborFactory.CreatePostMaryTransaction(tx.Body, newWitnessSet, tx.IsValid, tx.AuxiliaryData);
     }
 }

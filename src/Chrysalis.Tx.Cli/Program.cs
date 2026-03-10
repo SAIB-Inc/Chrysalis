@@ -6,7 +6,6 @@ using Chrysalis.Codec.Serialization.Utils;
 using Chrysalis.Codec.Types;
 using Chrysalis.Codec.Types.Cardano.Core;
 using Chrysalis.Codec.Types.Cardano.Core.Common;
-using Chrysalis.Codec.Types.Cardano.Core.Protocol;
 using Chrysalis.Codec.Types.Cardano.Core.Transaction;
 using Chrysalis.Tx.Builders;
 using Chrysalis.Tx.Extensions;
@@ -14,6 +13,7 @@ using Chrysalis.Tx.Models;
 using Chrysalis.Tx.Models.Cbor;
 using Chrysalis.Tx.Providers;
 using Chrysalis.Tx.Cli;
+using Chrysalis.Tx.Utils;
 using Chrysalis.Wallet.Models.Enums;
 using WalletAddress = Chrysalis.Wallet.Models.Addresses.Address;
 using Chrysalis.Wallet.Models.Keys;
@@ -132,11 +132,11 @@ TransactionTemplate<CreateOrderParams> createTemplate =
         .Build();
 
 Stopwatch sw = Stopwatch.StartNew();
-Transaction createUnsigned = await createTemplate(createParams).ConfigureAwait(false);
+ITransaction createUnsigned = await createTemplate(createParams).ConfigureAwait(false);
 sw.Stop();
 Console.WriteLine($"   Built ({sw.ElapsedMilliseconds}ms)");
 
-Transaction createSigned = createUnsigned.Sign(paymentKey);
+ITransaction createSigned = createUnsigned.Sign(paymentKey);
 byte[] createCbor = CborSerializer.Serialize(createSigned);
 Console.WriteLine($"   Signed TX: {createCbor.Length} bytes");
 
@@ -205,7 +205,7 @@ Console.WriteLine($"   Current slot: {currentSlot}");
 
 // Calculate the continuing output value after the fill:
 //   subtract amountToBuy USDM, add ceil(amountToBuy * price) lovelace
-Value continuingValue = CalculateNewValue(originalAssets, UsdmUnit, amountToBuy, PriceNum, PriceDen);
+IValue continuingValue = CalculateNewValue(originalAssets, UsdmUnit, amountToBuy, PriceNum, PriceDen);
 
 Console.WriteLine("8. Building fill order transaction...");
 
@@ -228,7 +228,7 @@ TransactionTemplate<FillOrderParams> fillTemplate =
         .AddReferenceInput((options, param) =>
         {
             options.From = "deployAddress";
-            options.UtxoRef = new TransactionInput(
+            options.UtxoRef = CborFactory.CreateTransactionInput(
                 Convert.FromHexString(param.DeployUtxoTxHash),
                 param.DeployUtxoIndex);
             options.Id = "deployRef";
@@ -236,7 +236,7 @@ TransactionTemplate<FillOrderParams> fillTemplate =
         .AddInput((options, param) =>
         {
             options.From = "scriptAddress";
-            options.UtxoRef = new TransactionInput(
+            options.UtxoRef = CborFactory.CreateTransactionInput(
                 Convert.FromHexString(param.ScriptUtxoTxHash),
                 param.ScriptUtxoIndex);
             options.Id = "scriptInput";
@@ -246,7 +246,7 @@ TransactionTemplate<FillOrderParams> fillTemplate =
                 ulong outputIndex = outputIndices.TryGetValue("continuingOutput", out ulong idx) ? idx : 0;
                 // offer_second = true: filler buys the second/offered asset (USDM)
                 BuyRedeemer data = new((long)outputIndex, new PlutusTrue(), new None<OracleFeeds>());
-                return new Redeemer<CborBase>(RedeemerTag.Spend, 0, data, new ExUnits(1_000_000, 400_000_000));
+                return new Redeemer<ICborType>(RedeemerTag.Spend, 0, data, CborFactory.CreateExUnits(1_000_000, 400_000_000));
             };
         })
         .AddOutput((options, param, _) =>
@@ -262,11 +262,11 @@ TransactionTemplate<FillOrderParams> fillTemplate =
         .Build();
 
 sw.Restart();
-Transaction fillUnsigned = await fillTemplate(fillParams).ConfigureAwait(false);
+ITransaction fillUnsigned = await fillTemplate(fillParams).ConfigureAwait(false);
 sw.Stop();
 Console.WriteLine($"   Built ({sw.ElapsedMilliseconds}ms)");
 
-Transaction fillSigned = fillUnsigned.Sign(paymentKey);
+ITransaction fillSigned = fillUnsigned.Sign(paymentKey);
 byte[] fillCbor = CborSerializer.Serialize(fillSigned);
 Console.WriteLine($"   Signed TX: {fillCbor.Length} bytes");
 
@@ -322,7 +322,7 @@ TransactionTemplate<CloseOrderParams> closeTemplate =
         .AddReferenceInput((options, param) =>
         {
             options.From = "deployAddress";
-            options.UtxoRef = new TransactionInput(
+            options.UtxoRef = CborFactory.CreateTransactionInput(
                 Convert.FromHexString(param.DeployUtxoTxHash),
                 param.DeployUtxoIndex);
             options.Id = "deployRef";
@@ -330,22 +330,22 @@ TransactionTemplate<CloseOrderParams> closeTemplate =
         .AddInput((options, param) =>
         {
             options.From = "scriptAddress";
-            options.UtxoRef = new TransactionInput(
+            options.UtxoRef = CborFactory.CreateTransactionInput(
                 Convert.FromHexString(param.ScriptUtxoTxHash),
                 param.ScriptUtxoIndex);
             options.Id = "scriptInput";
             options.RedeemerBuilder = (_, _, _) =>
-                new Redeemer<CborBase>(RedeemerTag.Spend, 0, new CloseRedeemer(), new ExUnits(500_000, 200_000_000));
+                new Redeemer<ICborType>(RedeemerTag.Spend, 0, new CloseRedeemer(), CborFactory.CreateExUnits(500_000, 200_000_000));
         })
         .AddMetadata(_ => CreateMetadata("Chrysalis E2E: close order"))
         .Build();
 
 sw.Restart();
-Transaction closeUnsigned = await closeTemplate(closeParams).ConfigureAwait(false);
+ITransaction closeUnsigned = await closeTemplate(closeParams).ConfigureAwait(false);
 sw.Stop();
 Console.WriteLine($"   Built ({sw.ElapsedMilliseconds}ms)");
 
-Transaction closeSigned = closeUnsigned.Sign(paymentKey);
+ITransaction closeSigned = closeUnsigned.Sign(paymentKey);
 byte[] closeCbor = CborSerializer.Serialize(closeSigned);
 Console.WriteLine($"   Signed TX: {closeCbor.Length} bytes");
 
@@ -378,7 +378,7 @@ return 0;
 // ── Helpers ────────────────────────────────────────────────────────────────
 
 // Build a LovelaceWithMultiAsset value for the create-order UTxO
-static Value CreateMultiAssetValue(ulong lovelace, byte[] policyId, byte[] assetName, ulong amount)
+static IValue CreateMultiAssetValue(ulong lovelace, byte[] policyId, byte[] assetName, ulong amount)
 {
     Dictionary<ReadOnlyMemory<byte>, ulong> tokenBundle = new(ReadOnlyMemoryComparer.Instance)
     {
@@ -386,23 +386,23 @@ static Value CreateMultiAssetValue(ulong lovelace, byte[] policyId, byte[] asset
     };
     Dictionary<ReadOnlyMemory<byte>, TokenBundleOutput> multiAsset = new(ReadOnlyMemoryComparer.Instance)
     {
-        [(ReadOnlyMemory<byte>)policyId] = new TokenBundleOutput(tokenBundle)
+        [(ReadOnlyMemory<byte>)policyId] = CborFactory.CreateTokenBundleOutput(tokenBundle)
     };
-    return new LovelaceWithMultiAsset(new Lovelace(lovelace), new MultiAssetOutput(multiAsset));
+    return CborFactory.CreateLovelaceWithMultiAsset(lovelace, CborFactory.CreateMultiAssetOutput(multiAsset));
 }
 
 // Extract all assets from a UTxO Value into a string-keyed dict.
 // Keys: "lovelace" for ADA, or "{policyId hex}{assetName hex}" for tokens.
-static Dictionary<string, ulong> ExtractAssets(Value value)
+static Dictionary<string, ulong> ExtractAssets(IValue value)
 {
     Dictionary<string, ulong> assets = [];
     switch (value)
     {
         case Lovelace l:
-            assets["lovelace"] = l.Value;
+            assets["lovelace"] = l.Amount;
             break;
         case LovelaceWithMultiAsset m:
-            assets["lovelace"] = m.LovelaceValue.Value;
+            assets["lovelace"] = m.Amount;
             foreach ((ReadOnlyMemory<byte> policyId, TokenBundleOutput bundle) in m.MultiAsset.Value)
             {
                 foreach ((ReadOnlyMemory<byte> assetName, ulong qty) in bundle.Value)
@@ -420,7 +420,7 @@ static Dictionary<string, ulong> ExtractAssets(Value value)
 
 // Port of FillLogic.CalculateNewValue from Wizard demo.
 // Subtracts assetToBuy from the UTxO, adds ceil(amountToBuy * price) lovelace.
-static Value CalculateNewValue(
+static IValue CalculateNewValue(
     Dictionary<string, ulong> originalAssets,
     string assetToBuy,
     ulong amountToBuy,
@@ -446,7 +446,7 @@ static Value CalculateNewValue(
 }
 
 // Build a Value from a string-keyed asset dictionary.
-static Value CreateValueFromAssets(Dictionary<string, ulong> assets)
+static IValue CreateValueFromAssets(Dictionary<string, ulong> assets)
 {
     ulong lovelace = assets.GetValueOrDefault("lovelace", 0UL);
     Dictionary<string, Dictionary<string, ulong>> byPolicy = [];
@@ -470,7 +470,7 @@ static Value CreateValueFromAssets(Dictionary<string, ulong> assets)
 
     if (byPolicy.Count == 0)
     {
-        return new Lovelace(lovelace);
+        return CborFactory.CreateLovelace(lovelace);
     }
 
     Dictionary<ReadOnlyMemory<byte>, TokenBundleOutput> multiAsset = new(ReadOnlyMemoryComparer.Instance);
@@ -481,23 +481,23 @@ static Value CreateValueFromAssets(Dictionary<string, ulong> assets)
         {
             bundle[Convert.FromHexString(nameHex)] = qty;
         }
-        multiAsset[Convert.FromHexString(policyHex)] = new TokenBundleOutput(bundle);
+        multiAsset[Convert.FromHexString(policyHex)] = CborFactory.CreateTokenBundleOutput(bundle);
     }
 
-    return new LovelaceWithMultiAsset(new Lovelace(lovelace), new MultiAssetOutput(multiAsset));
+    return CborFactory.CreateLovelaceWithMultiAsset(lovelace, CborFactory.CreateMultiAssetOutput(multiAsset));
 }
 
 static Metadata CreateMetadata(string message)
 {
-    MetadatumMap msgMap = new(new Dictionary<TransactionMetadatum, TransactionMetadatum>
+    ITransactionMetadatum msgMap = CborFactory.CreateMetadatumMap(new Dictionary<ITransactionMetadatum, ITransactionMetadatum>
     {
         {
-            new MetadataText("msg"),
-            new MetadatumList([new MetadataText(message)])
+            CborFactory.CreateMetadataText("msg"),
+            CborFactory.CreateMetadatumList([CborFactory.CreateMetadataText(message)])
         }
     });
 
-    return new Metadata(new Dictionary<ulong, TransactionMetadatum>
+    return CborFactory.CreateMetadata(new Dictionary<ulong, ITransactionMetadatum>
     {
         { 674, msgMap }
     });

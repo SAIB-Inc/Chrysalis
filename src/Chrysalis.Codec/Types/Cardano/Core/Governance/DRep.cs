@@ -1,58 +1,42 @@
+using Chrysalis.Codec.Serialization;
 using Chrysalis.Codec.Serialization.Attributes;
 
 namespace Chrysalis.Codec.Types.Cardano.Core.Governance;
 
-/// <summary>
-/// Abstract base for delegated representative (DRep) credential types.
-/// </summary>
 [CborSerializable]
 [CborUnion]
-public abstract partial record DRep : CborBase { }
+public partial interface IDRep : ICborType;
 
-/// <summary>
-/// A DRep identified by an address key hash.
-/// </summary>
-/// <param name="Tag">The DRep type tag.</param>
-/// <param name="AddrKeyHash">The address key hash identifying the DRep.</param>
 [CborSerializable]
 [CborList]
 [CborIndex(0)]
-public partial record DRepAddrKeyHash(
-    [CborOrder(0)] int Tag,
-    [CborOrder(1)] ReadOnlyMemory<byte> AddrKeyHash
-) : DRep;
+public readonly partial record struct DRepAddrKeyHash : IDRep
+{
+    [CborOrder(0)] public partial int Tag { get; }
+    [CborOrder(1)] public partial ReadOnlyMemory<byte> KeyHash { get; }
+}
 
-/// <summary>
-/// A DRep identified by a script hash.
-/// </summary>
-/// <param name="Tag">The DRep type tag.</param>
-/// <param name="ScriptHash">The script hash identifying the DRep.</param>
 [CborSerializable]
 [CborList]
 [CborIndex(1)]
-public partial record DRepScriptHash(
-    [CborOrder(0)] int Tag,
-    [CborOrder(1)] ReadOnlyMemory<byte> ScriptHash
-) : DRep;
+public readonly partial record struct DRepScriptHash : IDRep
+{
+    [CborOrder(0)] public partial int Tag { get; }
+    [CborOrder(1)] public partial ReadOnlyMemory<byte> ScriptHash { get; }
+}
 
-/// <summary>
-/// A DRep option representing an explicit abstention from voting.
-/// </summary>
-/// <param name="Tag">The DRep type tag.</param>
 [CborSerializable]
 [CborList]
 [CborIndex(2)]
-public partial record Abstain(
-    [CborOrder(0)] int Tag
-) : DRep;
+public readonly partial record struct Abstain : IDRep
+{
+    [CborOrder(0)] public partial int Tag { get; }
+}
 
-/// <summary>
-/// A DRep option representing a vote of no confidence.
-/// </summary>
-/// <param name="Tag">The DRep type tag.</param>
 [CborSerializable]
 [CborList]
 [CborIndex(3)]
-public partial record DRepNoConfidence(
-    [CborOrder(0)] int Tag
-) : DRep;
+public readonly partial record struct DRepNoConfidence : IDRep
+{
+    [CborOrder(0)] public partial int Tag { get; }
+}

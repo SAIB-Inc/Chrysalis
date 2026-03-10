@@ -15,7 +15,6 @@ public static class VotingProcedureExtensions
     /// <returns>The vote value.</returns>
     public static int Vote(this CVotingProcedure self)
     {
-        ArgumentNullException.ThrowIfNull(self);
         return self.Vote;
     }
 
@@ -26,7 +25,6 @@ public static class VotingProcedureExtensions
     /// <returns>The anchor, or null.</returns>
     public static Anchor? Anchor(this CVotingProcedure self)
     {
-        ArgumentNullException.ThrowIfNull(self);
         return self.Anchor;
     }
 }

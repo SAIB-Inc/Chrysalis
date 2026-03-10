@@ -15,10 +15,10 @@ public record KupoValue(
 /// Represents a script attached to a Kupo UTxO match.
 /// </summary>
 /// <param name="Language">The script language (native, plutus:v1, plutus:v2, plutus:v3).</param>
-/// <param name="Script">The hex-encoded script bytes.</param>
+/// <param name="IScript">The hex-encoded script bytes.</param>
 public record KupoScript(
     [property: JsonPropertyName("language")] string Language,
-    [property: JsonPropertyName("script")] string Script);
+    [property: JsonPropertyName("script")] string IScript);
 
 /// <summary>
 /// Represents the creation point of a Kupo UTxO match.
@@ -56,7 +56,7 @@ public record KupoSpentAt(
 /// <param name="Datum">Optional inline datum hex.</param>
 /// <param name="DatumType">The datum type (inline or hash).</param>
 /// <param name="ScriptHash">Optional script hash.</param>
-/// <param name="Script">Optional attached script.</param>
+/// <param name="IScript">Optional attached script.</param>
 /// <param name="CreatedAt">When the UTxO was created.</param>
 /// <param name="SpentAt">When the UTxO was spent, if applicable.</param>
 public record KupoMatch(
@@ -69,6 +69,6 @@ public record KupoMatch(
     [property: JsonPropertyName("datum")] string? Datum,
     [property: JsonPropertyName("datum_type")] string? DatumType,
     [property: JsonPropertyName("script_hash")] string? ScriptHash,
-    [property: JsonPropertyName("script")] KupoScript? Script,
+    [property: JsonPropertyName("script")] KupoScript? IScript,
     [property: JsonPropertyName("created_at")] KupoCreatedAt CreatedAt,
     [property: JsonPropertyName("spent_at")] KupoSpentAt? SpentAt);

@@ -8,7 +8,7 @@ namespace Chrysalis.Network.Cbor.Common;
 /// </summary>
 [CborSerializable]
 [CborUnion]
-public abstract partial record Point : CborBase
+public abstract partial record Point : CborRecord
 {
     /// <summary>
     /// Gets a <see cref="OriginPoint"/> representing the genesis (origin) of the blockchain.
@@ -51,4 +51,4 @@ public partial record SpecificPoint(
 /// </summary>
 /// <param name="Value">The list of chain points.</param>
 [CborSerializable]
-public partial record Points(List<Point> Value) : CborBase;
+public partial record Points(List<Point> Value) : CborRecord;

@@ -1,3 +1,4 @@
+using Chrysalis.Codec.Serialization;
 using Chrysalis.Codec.Serialization.Attributes;
 using Chrysalis.Codec.Types;
 using Chrysalis.Codec.Types.Cardano.Core.Transaction;
@@ -33,24 +34,24 @@ public static class RawQueries
     /// <summary>
     /// Gets a query request to retrieve the current Cardano era.
     /// </summary>
-    public static QueryReq GetCurrentEra => new BaseQuery(0, new BaseQuery(2, new GlobalQuery(1)));
+    public static IQueryReq GetCurrentEra => new BaseQuery(0, new BaseQuery(2, new GlobalQuery(1)));
 
     /// <summary>
     /// Gets a query request to retrieve the current chain tip.
     /// </summary>
-    public static QueryReq GetTip => CreateBlockQuery(new GlobalQuery(0));
+    public static IQueryReq GetTip => CreateBlockQuery(new GlobalQuery(0));
 
     /// <summary>
     /// Gets a query request to retrieve the current protocol parameters.
     /// </summary>
-    public static QueryReq GetCurrentProtocolParams => CreateBlockQuery(new GlobalQuery(3));
+    public static IQueryReq GetCurrentProtocolParams => CreateBlockQuery(new GlobalQuery(3));
 
     /// <summary>
     /// Wraps a query in the block query envelope targeting the Conway era.
     /// </summary>
     /// <param name="query">The inner query to wrap.</param>
-    /// <returns>A <see cref="QueryReq"/> wrapped for the Conway era block query.</returns>
-    public static QueryReq CreateBlockQuery(QueryReq query)
+    /// <returns>A <see cref="IQueryReq"/> wrapped for the Conway era block query.</returns>
+    public static IQueryReq CreateBlockQuery(IQueryReq query)
     {
         return new BaseQuery(0, new BaseQuery(0, new BaseQuery((int)QueryEra.Conway, query)));
     }
@@ -59,28 +60,30 @@ public static class RawQueries
     /// Creates a query request to retrieve UTxOs at the specified addresses.
     /// </summary>
     /// <param name="addresses">The list of serialized address bytes to query UTxOs for.</param>
-    /// <returns>A <see cref="QueryReq"/> for retrieving UTxOs by address.</returns>
-    public static QueryReq GetUtxoByAddress(List<ReadOnlyMemory<byte>> addresses)
+    /// <returns>A <see cref="IQueryReq"/> for retrieving UTxOs by address.</returns>
+    public static IQueryReq GetUtxoByAddress(List<ReadOnlyMemory<byte>> addresses)
     {
-        return CreateBlockQuery(new UtxoByAddressQuery(6, new(addresses)));
+        return CreateBlockQuery(new UtxoByAddressQuery(6, [.. addresses]));
     }
 
     /// <summary>
     /// Creates a query request to retrieve UTxOs for the specified transaction inputs.
     /// </summary>
     /// <param name="txIns">The list of transaction inputs to query UTxOs for.</param>
-    /// <returns>A <see cref="QueryReq"/> for retrieving UTxOs by transaction input.</returns>
-    public static QueryReq GetUtxoByTxIns(List<TransactionInput> txIns)
+    /// <returns>A <see cref="IQueryReq"/> for retrieving UTxOs by transaction input.</returns>
+    public static IQueryReq GetUtxoByTxIns(List<TransactionInput> txIns)
     {
-        return CreateBlockQuery(new UtxoByTxInQuery(15, new(txIns)));
+        return CreateBlockQuery(new UtxoByTxInQuery(15, [.. txIns]));
     }
 }
 
 
 /// <summary>
-/// Abstract base type for all LocalStateQuery request structures, serialized as CBOR.
+/// Base type for all LocalStateQuery request structures, serialized as CBOR.
 /// </summary>
-public abstract partial record QueryReq : CborBase;
+[CborSerializable]
+[CborUnion]
+public partial interface IQueryReq : ICborType;
 
 /// <summary>
 /// Represents a base query wrapper in the LocalStateQuery mini-protocol that nests an inner query with a numeric selector.
@@ -91,8 +94,8 @@ public abstract partial record QueryReq : CborBase;
 [CborList]
 public partial record BaseQuery(
     [CborOrder(0)] int Query,
-    [CborOrder(1)] QueryReq? InnerQuery
-) : QueryReq;
+    [CborOrder(1)] IQueryReq? InnerQuery
+) : CborRecord, IQueryReq;
 
 /// <summary>
 /// Represents a UTxO-by-address query in the LocalStateQuery mini-protocol.
@@ -103,8 +106,8 @@ public partial record BaseQuery(
 [CborList]
 public partial record UtxoByAddressQuery(
     [CborOrder(0)] ulong Idx,
-    [CborOrder(1)] CborDefList<ReadOnlyMemory<byte>> Addresses
-) : QueryReq;
+    [CborOrder(1)] List<ReadOnlyMemory<byte>> Addresses
+) : CborRecord, IQueryReq;
 
 /// <summary>
 /// Represents a UTxO-by-transaction-input query in the LocalStateQuery mini-protocol.
@@ -115,8 +118,8 @@ public partial record UtxoByAddressQuery(
 [CborList]
 public partial record UtxoByTxInQuery(
     [CborOrder(0)] ulong Idx,
-    [CborOrder(1)] CborDefList<TransactionInput> TxIns
-) : QueryReq;
+    [CborOrder(1)] List<TransactionInput> TxIns
+) : CborRecord, IQueryReq;
 
 /// <summary>
 /// Represents a global (era-independent) query in the LocalStateQuery mini-protocol.
@@ -124,4 +127,4 @@ public partial record UtxoByTxInQuery(
 /// <param name="Query">The numeric identifier of the global query type.</param>
 [CborSerializable]
 [CborList]
-public partial record GlobalQuery([CborOrder(0)] ulong Query) : QueryReq;
+public partial record GlobalQuery([CborOrder(0)] ulong Query) : CborRecord, IQueryReq;

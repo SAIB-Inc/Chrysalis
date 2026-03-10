@@ -8,7 +8,7 @@ namespace Chrysalis.Network.Cbor.LocalTxSubmit;
 /// </summary>
 [CborSerializable]
 [CborUnion]
-public abstract partial record LocalTxSubmissionMessage : CborBase;
+public abstract partial record LocalTxSubmissionMessage : CborRecord;
 
 /// <summary>
 /// Factory methods for creating LocalTxSubmit mini-protocol messages.
@@ -112,4 +112,4 @@ public partial record Done(
 public partial record EraTx(
     [CborOrder(0)] int Era,
     [CborOrder(1)] CborEncodedValue Tx
-) : CborBase;
+) : CborRecord;

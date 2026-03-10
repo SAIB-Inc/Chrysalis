@@ -31,4 +31,4 @@ public static class N2NVersions
 /// </summary>
 /// <param name="Value">The numeric protocol version identifier.</param>
 [CborSerializable]
-public partial record N2NVersion(int Value) : CborBase;
+public partial record N2NVersion(int Value) : CborRecord;

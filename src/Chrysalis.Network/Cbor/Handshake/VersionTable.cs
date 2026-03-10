@@ -8,7 +8,7 @@ namespace Chrysalis.Network.Cbor.Handshake;
 /// </summary>
 [CborSerializable]
 [CborUnion]
-public abstract partial record VersionTable : CborBase;
+public abstract partial record VersionTable : CborRecord;
 
 /// <summary>
 /// A version table mapping node-to-client protocol versions to their corresponding parameters.

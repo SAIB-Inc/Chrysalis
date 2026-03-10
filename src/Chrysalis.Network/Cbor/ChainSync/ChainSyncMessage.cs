@@ -9,7 +9,7 @@ namespace Chrysalis.Network.Cbor.ChainSync;
 /// </summary>
 [CborSerializable]
 [CborUnion]
-public partial record ChainSyncMessage : CborBase;
+public partial record ChainSyncMessage : CborRecord;
 
 /// <summary>
 /// Intermediate union type for ChainSync responses to a next request (roll-forward, roll-backward, or await-reply).

@@ -8,11 +8,19 @@ public sealed partial class CborSerializerCodeGen
     {
         public StringBuilder EmitReader(StringBuilder sb, SerializableTypeMetadata metadata)
         {
-            int constrIndex = Emitter.ResolveTag(metadata.CborIndex);
             _ = Emitter.EmitCborReaderInstance(sb, "data");
-            _ = Emitter.EmitTagReader(sb, metadata.CborTag, "tagIndex");
-            _ = Emitter.EmitTagReader(sb, constrIndex, "constrIndex");
-            _ = Emitter.EmitCustomListReader(sb, metadata);
+
+            if (metadata.IsRecordStruct)
+            {
+                _ = Emitter.EmitLazyListReader(sb, metadata);
+            }
+            else
+            {
+                int constrIndex = Emitter.ResolveTag(metadata.CborIndex);
+                _ = Emitter.EmitTagReader(sb, metadata.CborTag, "tagIndex");
+                _ = Emitter.EmitTagReader(sb, constrIndex, "constrIndex");
+                _ = Emitter.EmitCustomListReader(sb, metadata);
+            }
 
             return sb;
         }

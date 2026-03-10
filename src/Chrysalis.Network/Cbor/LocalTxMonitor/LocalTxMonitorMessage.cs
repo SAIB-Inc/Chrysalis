@@ -9,7 +9,7 @@ namespace Chrysalis.Network.Cbor.LocalTxMonitor;
 /// </summary>
 [CborSerializable]
 [CborUnion]
-public abstract partial record LocalTxMonitorMessage : CborBase;
+public abstract partial record LocalTxMonitorMessage : CborRecord;
 
 /// <summary>
 /// Factory methods for creating LocalTxMonitor mini-protocol request messages.
@@ -220,4 +220,4 @@ public partial record ReplyGetMeasures(
 public partial record Measures(
     [CborOrder(0)] int CurrentSize,
     [CborOrder(1)] int MaxCapacity
-) : CborBase;
+) : CborRecord;

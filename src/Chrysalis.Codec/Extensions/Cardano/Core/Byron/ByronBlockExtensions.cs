@@ -12,9 +12,8 @@ public static class ByronBlockExtensions
     /// </summary>
     /// <param name="self">The Byron main block instance.</param>
     /// <returns>The protocol magic number.</returns>
-    public static uint ProtocolMagic(this ByronMainBlock self)
+    public static ulong ProtocolMagic(this ByronMainBlock self)
     {
-        ArgumentNullException.ThrowIfNull(self);
         return self.Header.ProtocolMagic;
     }
 
@@ -23,9 +22,8 @@ public static class ByronBlockExtensions
     /// </summary>
     /// <param name="self">The Byron epoch boundary block instance.</param>
     /// <returns>The protocol magic number.</returns>
-    public static uint ProtocolMagic(this ByronEbBlock self)
+    public static ulong ProtocolMagic(this ByronEbBlock self)
     {
-        ArgumentNullException.ThrowIfNull(self);
         return self.Header.ProtocolMagic;
     }
 
@@ -36,7 +34,6 @@ public static class ByronBlockExtensions
     /// <returns>The previous block hash bytes.</returns>
     public static ReadOnlyMemory<byte> PrevBlock(this ByronMainBlock self)
     {
-        ArgumentNullException.ThrowIfNull(self);
         return self.Header.PrevBlock;
     }
 
@@ -47,7 +44,6 @@ public static class ByronBlockExtensions
     /// <returns>The previous block hash bytes.</returns>
     public static ReadOnlyMemory<byte> PrevBlock(this ByronEbBlock self)
     {
-        ArgumentNullException.ThrowIfNull(self);
         return self.Header.PrevBlock;
     }
 
@@ -58,7 +54,6 @@ public static class ByronBlockExtensions
     /// <returns>The epoch number.</returns>
     public static ulong Epoch(this ByronMainBlock self)
     {
-        ArgumentNullException.ThrowIfNull(self);
         return self.Header.ConsensusData.SlotId.Epoch;
     }
 
@@ -69,8 +64,7 @@ public static class ByronBlockExtensions
     /// <returns>The epoch number.</returns>
     public static ulong Epoch(this ByronEbBlock self)
     {
-        ArgumentNullException.ThrowIfNull(self);
-        return self.Header.ConsensusData.EpochId;
+        return self.Header.ConsensusData.Epoch;
     }
 
     /// <summary>
@@ -80,7 +74,6 @@ public static class ByronBlockExtensions
     /// <returns>The slot number.</returns>
     public static ulong Slot(this ByronMainBlock self)
     {
-        ArgumentNullException.ThrowIfNull(self);
         return self.Header.ConsensusData.SlotId.Slot;
     }
 
@@ -91,7 +84,6 @@ public static class ByronBlockExtensions
     /// <returns>The Byron transaction payloads.</returns>
     public static IEnumerable<ByronTxPayload> ByronTransactions(this ByronMainBlock self)
     {
-        ArgumentNullException.ThrowIfNull(self);
         return self.Body.TxPayload.GetValue();
     }
 }

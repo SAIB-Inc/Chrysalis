@@ -14,7 +14,6 @@ public static class BootstrapWitnessExtensions
     /// <returns>The public key bytes.</returns>
     public static ReadOnlyMemory<byte> PublicKey(this CBootstrapWitness self)
     {
-        ArgumentNullException.ThrowIfNull(self);
         return self.PublicKey;
     }
 
@@ -25,7 +24,6 @@ public static class BootstrapWitnessExtensions
     /// <returns>The signature bytes.</returns>
     public static ReadOnlyMemory<byte> Signature(this CBootstrapWitness self)
     {
-        ArgumentNullException.ThrowIfNull(self);
         return self.Signature;
     }
 
@@ -36,7 +34,6 @@ public static class BootstrapWitnessExtensions
     /// <returns>The chain code bytes.</returns>
     public static ReadOnlyMemory<byte> ChainCode(this CBootstrapWitness self)
     {
-        ArgumentNullException.ThrowIfNull(self);
         return self.ChainCode;
     }
 
@@ -47,7 +44,6 @@ public static class BootstrapWitnessExtensions
     /// <returns>The attributes bytes.</returns>
     public static ReadOnlyMemory<byte> Attributes(this CBootstrapWitness self)
     {
-        ArgumentNullException.ThrowIfNull(self);
         return self.Attributes;
     }
 }

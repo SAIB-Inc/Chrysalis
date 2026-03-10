@@ -30,8 +30,6 @@ public sealed partial class CborSerializerCodeGen
         public const string CborUnionHintAttribute = "CborUnionHintAttribute";
 
         // Interfaces
-        public const string ICborPreserveRawFullName = "Chrysalis.Codec.Serialization.ICborPreserveRaw";
-        public const string ICborPreserveRaw = "ICborPreserveRaw";
         public const string ICborValidatorFullName = "Chrysalis.Codec.Serialization.ICborValidator`1";
 
         public static SerializableTypeMetadata? ParseSerialazableType(TypeDeclarationSyntax tds, SemanticModel model)
@@ -46,7 +44,12 @@ public sealed partial class CborSerializerCodeGen
 
             string baseNamespace = GetBaseNamespace(tds, model);
             (string path, string parentTypeParams) = GetFullNamespaceWithParentsAndTypeParams(tds, model);
-            string? keyword = tds.Keyword.ToFullString();
+            string? keyword = tds.Keyword.ToFullString().Trim();
+            // Detect record struct via modifiers — readonly on a record indicates record struct
+            if (tds is RecordDeclarationSyntax && tds.Modifiers.Any(SyntaxKind.ReadOnlyKeyword))
+            {
+                keyword = "readonly record struct";
+            }
             string? @namespace = baseNamespace;
 
             string? typeParams = null;
@@ -79,7 +82,9 @@ public sealed partial class CborSerializerCodeGen
             AttributeSyntax? cborIndexAttribute = attributes.FirstOrDefault(a => a.Name.ToString() == CborIndex);
             int? cborIndexValue = cborIndexAttribute?.ArgumentList?.Arguments.FirstOrDefault()?.GetFirstToken().Value as int?;
             int? cborTag = cborTagAttribute?.ArgumentList?.Arguments.FirstOrDefault()?.GetFirstToken().Value as int?;
-            bool shouldPreserveRaw = ShouldPreserveRaw(tds, model);
+
+            // V2: All types preserve raw by default
+            bool shouldPreserveRaw = true;
 
             SerializationType serializationType = GetSerializationType(cborMapAttribute, cborListAttribute, cborUnionAttribute, cborConstrAttribute);
             string? validatorFullyQualifiedName = FindValidatorForType(tds, model, model.Compilation);
@@ -115,33 +120,6 @@ public sealed partial class CborSerializerCodeGen
 
             return typeMetadata;
         }
-    }
-
-    /// <summary>
-    /// Determines whether the given type declaration implements the ICborPreserveRaw interface.
-    /// </summary>
-    /// <param name="tds">The type declaration syntax node.</param>
-    /// <param name="semanticModel">The semantic model for symbol resolution.</param>
-    /// <returns>True if the type preserves raw CBOR data; otherwise false.</returns>
-    public static bool ShouldPreserveRaw(TypeDeclarationSyntax tds, SemanticModel semanticModel)
-    {
-        if (semanticModel is null)
-        {
-            throw new ArgumentNullException(nameof(semanticModel));
-        }
-
-        if (semanticModel.GetDeclaredSymbol(tds) is not INamedTypeSymbol typeSymbol)
-        {
-            return false;
-        }
-
-        INamedTypeSymbol? interfaceSymbol = semanticModel.Compilation.GetTypeByMetadataName(Parser.ICborPreserveRaw);
-        return interfaceSymbol != null
-            ? typeSymbol.AllInterfaces.Contains(interfaceSymbol)
-            : typeSymbol.AllInterfaces.Any(i =>
-            i.ToDisplayString() == Parser.ICborPreserveRaw ||
-            i.ToDisplayString() == Parser.ICborPreserveRawFullName ||
-            i.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) == $"global::{Parser.ICborPreserveRawFullName}");
     }
 
     private static SerializationType GetSerializationType(AttributeSyntax? cborMapAttribute, AttributeSyntax? cborListAttribute, AttributeSyntax? cborUnionAttribute, AttributeSyntax? cborConstrAttribute)
@@ -243,6 +221,17 @@ public sealed partial class CborSerializerCodeGen
 
     private static IEnumerable<SerializablePropertyMetadata> GetRecordPropertyMetadata(RecordDeclarationSyntax recordDecl, SemanticModel model)
     {
+        // For record structs with no constructor params, read partial properties from body
+        bool isRecordStruct = recordDecl.ClassOrStructKeyword.ValueText == "struct";
+        if (isRecordStruct && (recordDecl.ParameterList is null || recordDecl.ParameterList.Parameters.Count == 0))
+        {
+            foreach (SerializablePropertyMetadata bodyProp in GetRecordStructBodyPropertyMetadata(recordDecl, model))
+            {
+                yield return bodyProp;
+            }
+            yield break;
+        }
+
         foreach (ParameterSyntax param in recordDecl.ParameterList?.Parameters ?? [])
         {
             List<AttributeSyntax> paramAttributes = [.. param.AttributeLists.SelectMany(a => a.Attributes)];
@@ -319,7 +308,6 @@ public sealed partial class CborSerializerCodeGen
             string? listItemTypeNamespace = null;
             bool isListItemTypeOpenGeneric = false;
 
-
             bool isMapKeyTypeOpenGeneric = false;
             bool isMapValueTypeOpenGeneric = false;
             string? mapKeyType = null;
@@ -331,7 +319,6 @@ public sealed partial class CborSerializerCodeGen
 
             if (typeSymbol is ITypeSymbol ts)
             {
-
                 if (IsMapType(ts, out ITypeSymbol? keyTypeSymbol, out ITypeSymbol? valueTypeSymbol))
                 {
                     isMap = true;
@@ -356,7 +343,6 @@ public sealed partial class CborSerializerCodeGen
 
                     mapKeyTypeFullName = keyTypeSymbol?.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
                     mapValueTypeFullName = valueTypeSymbol?.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
-
                 }
                 else if (IsListType(ts, out ITypeSymbol? itemTypeSymbol))
                 {
@@ -376,6 +362,8 @@ public sealed partial class CborSerializerCodeGen
             bool isListItemTypeUnion = isList && typeSymbol is ITypeSymbol lts && IsListType(lts, out ITypeSymbol? litSymbol) && litSymbol is not null && HasCborUnionAttribute(litSymbol);
             bool isMapKeyTypeUnion = isMap && typeSymbol is ITypeSymbol mks && IsMapType(mks, out ITypeSymbol? mkSymbol, out _) && mkSymbol is not null && HasCborUnionAttribute(mkSymbol);
             bool isMapValueTypeUnion = isMap && typeSymbol is ITypeSymbol mvs && IsMapType(mvs, out _, out ITypeSymbol? mvSymbol) && mvSymbol is not null && HasCborUnionAttribute(mvSymbol);
+
+            string? cborMaybeIndefListItemType = typeSymbol is ITypeSymbol milts ? ExtractMaybeIndefListItemType(milts) : null;
 
             SerializablePropertyMetadata propMetadata = new(
                 propertyName,
@@ -407,24 +395,194 @@ public sealed partial class CborSerializerCodeGen
                 isPropertyTypeUnion,
                 isListItemTypeUnion,
                 isMapKeyTypeUnion,
-                isMapValueTypeUnion
+                isMapValueTypeUnion,
+                cborMaybeIndefListItemType
             );
 
-            // Parse [CborUnionHint] attributes
             ParseUnionHints(param, model, propMetadata);
 
             yield return propMetadata;
         }
     }
 
-    /// <summary>
-    /// Checks if a type or any of its base types has the [CborUnion] attribute
-    /// AND uses try-catch dispatch (not probe-based). Probe-based unions like
-    /// CborMaybeIndefList correctly report bytesConsumed and are safe with unbounded data.
-    /// </summary>
+    private static IEnumerable<SerializablePropertyMetadata> GetRecordStructBodyPropertyMetadata(RecordDeclarationSyntax recordDecl, SemanticModel model)
+    {
+        IEnumerable<PropertyDeclarationSyntax> properties = recordDecl.Members.OfType<PropertyDeclarationSyntax>()
+            .Where(p => p.Modifiers.Any(m => m.ValueText == "partial"));
+
+        foreach (PropertyDeclarationSyntax prop in properties)
+        {
+            List<AttributeSyntax> propAttributes = [.. prop.AttributeLists.SelectMany(a => a.Attributes)];
+
+            string propertyName = prop.Identifier.Text;
+            string propertyType = prop.Type.ToString();
+            string propertyTypeNamespace = string.Empty;
+            bool isOpenGeneric = false;
+            ISymbol? typeSymbol = model.GetSymbolInfo(prop.Type).Symbol;
+            string propertyTypeFullName = "";
+
+            if (typeSymbol is ITypeSymbol its)
+            {
+                if (its.TypeKind is TypeKind.TypeParameter)
+                {
+                    isOpenGeneric = true;
+                }
+
+                propertyTypeFullName = its.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+            }
+
+            if (typeSymbol != null)
+            {
+                if (typeSymbol is INamedTypeSymbol namedType &&
+                    namedType.ContainingNamespace != null &&
+                    !namedType.ContainingNamespace.IsGlobalNamespace)
+                {
+                    propertyTypeNamespace = namedType.ContainingNamespace.ToDisplayString();
+                }
+                else if (typeSymbol is IArrayTypeSymbol arrayType)
+                {
+                    ITypeSymbol elementType = arrayType.ElementType;
+                    if (elementType.ContainingNamespace != null &&
+                        !elementType.ContainingNamespace.IsGlobalNamespace)
+                    {
+                        propertyTypeNamespace = elementType.ContainingNamespace.ToDisplayString();
+                    }
+                }
+            }
+
+            bool isNullable = propAttributes.Any(a => a.Name.ToString() == Parser.CborNullable);
+            bool isIndefinite = propAttributes.Any(a => a.Name.ToString() == Parser.CborIndefinite);
+            bool isDefinite = propAttributes.Any(a => a.Name.ToString() == Parser.CborDefinite);
+
+            int? size = null;
+            AttributeSyntax sizeAttr = propAttributes.FirstOrDefault(a => a.Name.ToString() == Parser.CborSize);
+            if (sizeAttr?.ArgumentList?.Arguments.FirstOrDefault() is AttributeArgumentSyntax sizeArg)
+            {
+                Optional<object?> constValue = model.GetConstantValue(sizeArg.Expression);
+                if (constValue.HasValue && constValue.Value is int sizeVal)
+                {
+                    size = sizeVal;
+                }
+            }
+
+            int? order = null;
+            AttributeSyntax orderAttr = propAttributes.FirstOrDefault(a => a.Name.ToString() == Parser.CborOrder);
+            if (orderAttr?.ArgumentList?.Arguments.FirstOrDefault() is AttributeArgumentSyntax orderArg)
+            {
+                Optional<object?> constValue = model.GetConstantValue(orderArg.Expression);
+                if (constValue.HasValue && constValue.Value is int orderVal)
+                {
+                    order = orderVal;
+                }
+            }
+
+            GetCborPropertyKey(prop, model, out string? stringKey, out int? intKey);
+
+            bool isList = false;
+            bool isMap = false;
+            string? listItemType = null;
+            string? listItemTypeFullName = null;
+            string? listItemTypeNamespace = null;
+            bool isListItemTypeOpenGeneric = false;
+            bool isMapKeyTypeOpenGeneric = false;
+            bool isMapValueTypeOpenGeneric = false;
+            string? mapKeyType = null;
+            string? mapValueType = null;
+            string? mapKeyTypeFullName = null;
+            string? mapValueTypeFullName = null;
+            string? mapKeyTypeNamespace = null;
+            string? mapValueTypeNamespace = null;
+
+            if (typeSymbol is ITypeSymbol ts)
+            {
+                if (IsMapType(ts, out ITypeSymbol? keyTypeSymbol, out ITypeSymbol? valueTypeSymbol))
+                {
+                    isMap = true;
+                    mapKeyType = keyTypeSymbol?.Name;
+                    mapKeyTypeFullName = keyTypeSymbol?.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+                    mapValueType = valueTypeSymbol?.Name;
+                    mapValueTypeFullName = valueTypeSymbol?.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+                    mapKeyTypeNamespace = keyTypeSymbol?.ContainingNamespace?.IsGlobalNamespace == false ?
+                        keyTypeSymbol.ContainingNamespace.ToDisplayString() : null;
+                    mapValueTypeNamespace = valueTypeSymbol?.ContainingNamespace?.IsGlobalNamespace == false ?
+                        valueTypeSymbol.ContainingNamespace.ToDisplayString() : null;
+
+                    isMapKeyTypeOpenGeneric = (keyTypeSymbol?.TypeKind == TypeKind.TypeParameter) ||
+                        (keyTypeSymbol is INamedTypeSymbol namedKeyType &&
+                            namedKeyType.IsGenericType &&
+                            namedKeyType.TypeArguments.Any(ta => ta.TypeKind == TypeKind.TypeParameter));
+
+                    isMapValueTypeOpenGeneric = (valueTypeSymbol?.TypeKind == TypeKind.TypeParameter) ||
+                        (valueTypeSymbol is INamedTypeSymbol namedValueType &&
+                            namedValueType.IsGenericType &&
+                            namedValueType.TypeArguments.Any(ta => ta.TypeKind == TypeKind.TypeParameter));
+
+                    mapKeyTypeFullName = keyTypeSymbol?.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+                    mapValueTypeFullName = valueTypeSymbol?.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+                }
+                else if (IsListType(ts, out ITypeSymbol? itemTypeSymbol))
+                {
+                    isList = true;
+                    listItemType = itemTypeSymbol?.Name;
+                    listItemTypeFullName = itemTypeSymbol?.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+                    listItemTypeNamespace = itemTypeSymbol?.ContainingNamespace?.IsGlobalNamespace == false ?
+                        itemTypeSymbol.ContainingNamespace.ToDisplayString() : null;
+                    isListItemTypeOpenGeneric = (itemTypeSymbol?.TypeKind == TypeKind.TypeParameter) ||
+                        (itemTypeSymbol is INamedTypeSymbol namedItemType &&
+                            namedItemType.IsGenericType &&
+                            namedItemType.TypeArguments.Any(ta => ta.TypeKind == TypeKind.TypeParameter));
+                }
+            }
+
+            bool isPropertyTypeUnion = typeSymbol is ITypeSymbol pts && HasCborUnionAttribute(pts);
+            bool isListItemTypeUnion = isList && typeSymbol is ITypeSymbol lts && IsListType(lts, out ITypeSymbol? litSymbol) && litSymbol is not null && HasCborUnionAttribute(litSymbol);
+            bool isMapKeyTypeUnion = isMap && typeSymbol is ITypeSymbol mks && IsMapType(mks, out ITypeSymbol? mkSymbol, out _) && mkSymbol is not null && HasCborUnionAttribute(mkSymbol);
+            bool isMapValueTypeUnion = isMap && typeSymbol is ITypeSymbol mvs && IsMapType(mvs, out _, out ITypeSymbol? mvSymbol) && mvSymbol is not null && HasCborUnionAttribute(mvSymbol);
+
+            string? cborMaybeIndefListItemType = typeSymbol is ITypeSymbol milts ? ExtractMaybeIndefListItemType(milts) : null;
+
+            SerializablePropertyMetadata propMetadata = new(
+                propertyName,
+                propertyType,
+                propertyTypeFullName,
+                propertyTypeNamespace,
+                isList,
+                isMap,
+                listItemType,
+                listItemTypeFullName,
+                listItemTypeNamespace,
+                isListItemTypeOpenGeneric,
+                isMapKeyTypeOpenGeneric,
+                isMapValueTypeOpenGeneric,
+                mapKeyType,
+                mapValueType,
+                mapKeyTypeFullName,
+                mapValueTypeFullName,
+                mapKeyTypeNamespace,
+                mapValueTypeNamespace,
+                isNullable,
+                size,
+                isIndefinite,
+                isDefinite,
+                order,
+                stringKey,
+                intKey,
+                isOpenGeneric,
+                isPropertyTypeUnion,
+                isListItemTypeUnion,
+                isMapKeyTypeUnion,
+                isMapValueTypeUnion,
+                cborMaybeIndefListItemType
+            );
+
+            ParseUnionHints(prop, model, propMetadata);
+
+            yield return propMetadata;
+        }
+    }
+
     private static bool HasCborUnionAttribute(ITypeSymbol typeSymbol)
     {
-        // CborMaybeIndefList uses probe-based dispatch, safe with unbounded data
         if (IsCborMaybeIndefListType(typeSymbol))
         {
             return false;
@@ -449,7 +607,7 @@ public sealed partial class CborSerializerCodeGen
         ITypeSymbol? current = typeSymbol;
         while (current != null && current.SpecialType != SpecialType.System_Object)
         {
-            if (current.Name == "CborMaybeIndefList" || (current is INamedTypeSymbol nts && nts.OriginalDefinition.Name == "CborMaybeIndefList"))
+            if (current.Name == "ICborMaybeIndefList" || (current is INamedTypeSymbol nts && nts.OriginalDefinition.Name == "ICborMaybeIndefList"))
             {
                 return true;
             }
@@ -458,6 +616,39 @@ public sealed partial class CborSerializerCodeGen
         }
 
         return false;
+    }
+
+    private static string? ExtractMaybeIndefListItemType(ITypeSymbol typeSymbol)
+    {
+        if (typeSymbol is INamedTypeSymbol namedType)
+        {
+            // Direct match: ICborMaybeIndefList<T>
+            if (namedType.OriginalDefinition.Name == "ICborMaybeIndefList" && namedType.TypeArguments.Length == 1)
+            {
+                ITypeSymbol itemType = namedType.TypeArguments[0];
+                if (itemType.TypeKind == TypeKind.TypeParameter)
+                {
+                    return null;
+                }
+                return itemType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+            }
+
+            // Check interfaces for types implementing ICborMaybeIndefList<T>
+            foreach (INamedTypeSymbol iface in namedType.AllInterfaces)
+            {
+                if (iface.OriginalDefinition.Name == "ICborMaybeIndefList" && iface.TypeArguments.Length == 1)
+                {
+                    ITypeSymbol itemType = iface.TypeArguments[0];
+                    if (itemType.TypeKind == TypeKind.TypeParameter)
+                    {
+                        return null;
+                    }
+                    return itemType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+                }
+            }
+        }
+
+        return null;
     }
 
     private static void GetCborPropertyKey(SyntaxNode node, SemanticModel semanticModel, out string? stringKey, out int? intKey)
@@ -479,6 +670,44 @@ public sealed partial class CborSerializerCodeGen
             else if (arg.Kind == TypedConstantKind.Primitive && arg.Value is string stringValue)
             {
                 stringKey = stringValue;
+            }
+        }
+    }
+
+    private static void ParseUnionHints(PropertyDeclarationSyntax prop, SemanticModel model, SerializablePropertyMetadata propMetadata)
+    {
+        ISymbol? symbol = model.GetDeclaredSymbol(prop);
+        if (symbol is null)
+        {
+            return;
+        }
+
+        AttributeData[] hintAttrs = [.. symbol.GetAttributes()
+            .Where(a => a.AttributeClass?.Name is Parser.CborUnionHint or Parser.CborUnionHintAttribute)];
+
+        if (hintAttrs.Length == 0)
+        {
+            return;
+        }
+
+        foreach (AttributeData attr in hintAttrs)
+        {
+            if (attr.ConstructorArguments.Length < 3)
+            {
+                continue;
+            }
+
+            TypedConstant discriminantPropArg = attr.ConstructorArguments[0];
+            TypedConstant discriminantValueArg = attr.ConstructorArguments[1];
+            TypedConstant typeArg = attr.ConstructorArguments[2];
+
+            if (discriminantPropArg.Kind == TypedConstantKind.Primitive && discriminantPropArg.Value is string discriminantProp
+                && discriminantValueArg.Kind == TypedConstantKind.Primitive && discriminantValueArg.Value is int discriminantValue
+                && typeArg.Kind == TypedConstantKind.Type && typeArg.Value is INamedTypeSymbol concreteType)
+            {
+                string concreteTypeFqn = concreteType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+                propMetadata.UnionHints[discriminantValue] = concreteTypeFqn;
+                propMetadata.UnionHintDiscriminantProperty ??= discriminantProp;
             }
         }
     }
@@ -531,7 +760,6 @@ public sealed partial class CborSerializerCodeGen
         IEnumerable<INamedTypeSymbol> derivedTypes = FindDerivedTypes(typeSymbol, model.Compilation);
         Dictionary<string, SerializableTypeMetadata> resultDict = [];
 
-        // Process nested types
         foreach (TypeDeclarationSyntax nestedType in tds.DescendantNodes().OfType<TypeDeclarationSyntax>())
         {
             if (Parser.ParseSerialazableType(nestedType, model) is SerializableTypeMetadata metadata)
@@ -543,7 +771,6 @@ public sealed partial class CborSerializerCodeGen
             }
         }
 
-        // Process derived types
         foreach (INamedTypeSymbol derivedType in derivedTypes)
         {
             SyntaxReference? syntaxRef = derivedType.DeclaringSyntaxReferences.FirstOrDefault();
@@ -669,6 +896,7 @@ public sealed partial class CborSerializerCodeGen
 
         return (typeDecl.GetNamespace() ?? string.Empty, "");
     }
+
     private static string GetBaseNamespace(TypeDeclarationSyntax typeDecl, SemanticModel model)
     {
         return model.GetDeclaredSymbol(typeDecl) is INamedTypeSymbol symbol

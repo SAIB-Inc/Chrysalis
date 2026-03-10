@@ -15,7 +15,7 @@ public partial record CoseSign1(
     [CborOrder(1)] HeaderMap UnprotectedHeaders,
     [CborOrder(2)][CborNullable] byte[]? Payload,
     [CborOrder(3)] byte[] Signature
-) : CborBase, ICoseMessage
+) : CborRecord, ICoseMessage
 {
     /// <summary>
     /// Converts the COSE message to its CBOR byte representation.

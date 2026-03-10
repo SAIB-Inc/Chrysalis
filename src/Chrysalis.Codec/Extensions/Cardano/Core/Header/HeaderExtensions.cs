@@ -12,9 +12,8 @@ public static class HeaderExtensions
     /// </summary>
     /// <param name="self">The block header instance.</param>
     /// <returns>The block header body.</returns>
-    public static BlockHeaderBody HeaderBody(this BlockHeader self)
+    public static IBlockHeaderBody HeaderBody(this BlockHeader self)
     {
-        ArgumentNullException.ThrowIfNull(self);
         return self.HeaderBody;
     }
 
@@ -25,7 +24,6 @@ public static class HeaderExtensions
     /// <returns>The body signature bytes.</returns>
     public static ReadOnlyMemory<byte> BodySignature(this BlockHeader self)
     {
-        ArgumentNullException.ThrowIfNull(self);
         return self.BodySignature;
     }
 }

@@ -14,7 +14,6 @@ public static class VoterExtensions
     /// <returns>The type tag value.</returns>
     public static int Tag(this Voter self)
     {
-        ArgumentNullException.ThrowIfNull(self);
         return self.Tag;
     }
 
@@ -25,7 +24,6 @@ public static class VoterExtensions
     /// <returns>The hash bytes.</returns>
     public static ReadOnlyMemory<byte> Hash(this Voter self)
     {
-        ArgumentNullException.ThrowIfNull(self);
         return self.Hash;
     }
 }

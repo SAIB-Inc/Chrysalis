@@ -14,8 +14,7 @@ public static class OperationalCertExtensions
     /// <returns>The hot verification key bytes.</returns>
     public static ReadOnlyMemory<byte> HotVKey(this OperationalCert self)
     {
-        ArgumentNullException.ThrowIfNull(self);
-        return self.HotVKey;
+        return self.HotVkey;
     }
 
     /// <summary>
@@ -25,7 +24,6 @@ public static class OperationalCertExtensions
     /// <returns>The sequence number.</returns>
     public static ulong SequenceNumber(this OperationalCert self)
     {
-        ArgumentNullException.ThrowIfNull(self);
         return self.SequenceNumber;
     }
 
@@ -36,7 +34,6 @@ public static class OperationalCertExtensions
     /// <returns>The KES period.</returns>
     public static ulong KesPeriod(this OperationalCert self)
     {
-        ArgumentNullException.ThrowIfNull(self);
         return self.KesPeriod;
     }
 
@@ -47,7 +44,6 @@ public static class OperationalCertExtensions
     /// <returns>The sigma bytes.</returns>
     public static ReadOnlyMemory<byte> Sigma(this OperationalCert self)
     {
-        ArgumentNullException.ThrowIfNull(self);
         return self.Sigma;
     }
 }

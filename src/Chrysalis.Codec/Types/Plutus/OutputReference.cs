@@ -1,3 +1,4 @@
+using Chrysalis.Codec.Serialization;
 using Chrysalis.Codec.Serialization.Attributes;
 
 namespace Chrysalis.Codec.Types.Plutus;
@@ -12,7 +13,12 @@ namespace Chrysalis.Codec.Types.Plutus;
 public partial record OutputReference(
     [CborOrder(0)] TransactionId TransactionId,
     [CborOrder(1)] ulong Index
-) : CborBase;
+) : ICborType
+{
+    public ReadOnlyMemory<byte> Raw { get; set; }
+    public int ConstrIndex { get; set; }
+    public bool IsIndefinite { get; set; }
+}
 
 /// <summary>
 /// A Plutus-style transaction identifier wrapping the transaction hash bytes.
@@ -20,4 +26,9 @@ public partial record OutputReference(
 /// <param name="Hash">The transaction hash bytes.</param>
 [CborSerializable]
 [CborConstr(0)]
-public partial record TransactionId(ReadOnlyMemory<byte> Hash) : CborBase;
+public partial record TransactionId(ReadOnlyMemory<byte> Hash) : ICborType
+{
+    public ReadOnlyMemory<byte> Raw { get; set; }
+    public int ConstrIndex { get; set; }
+    public bool IsIndefinite { get; set; }
+}

@@ -14,7 +14,7 @@ namespace Chrysalis.Network.Cbor.LocalStateQuery;
 [CborSerializable]
 public partial record CurrentEraQueryResponse(
     ulong CurrentEra
-) : CborBase;
+) : CborRecord;
 
 /// <summary>
 /// Represents the response to a UTxO-by-address query in the LocalStateQuery mini-protocol.
@@ -23,8 +23,8 @@ public partial record CurrentEraQueryResponse(
 [CborSerializable]
 [CborList]
 public partial record UtxoByAddressResponse(
-    [CborOrder(0)] Dictionary<TransactionInput, TransactionOutput> Utxos
-) : CborBase;
+    [CborOrder(0)] Dictionary<TransactionInput, ITransactionOutput> Utxos
+) : CborRecord;
 
 /// <summary>
 /// Represents the Cardano protocol parameters returned by the LocalStateQuery mini-protocol.
@@ -94,7 +94,7 @@ public partial record ProtocolParams(
     [CborOrder(31)] ulong? DRepDeposit,
     [CborOrder(32)] ulong? DRepInactivityPeriod,
     [CborOrder(33)] CborRationalNumber? MinFeeRefScriptCostPerByte
-) : CborBase;
+) : CborRecord;
 
 /// <summary>
 /// Represents the response to a current protocol parameters query in the LocalStateQuery mini-protocol.
@@ -104,11 +104,11 @@ public partial record ProtocolParams(
 [CborList]
 public partial record CurrentProtocolParamsResponse(
     [CborOrder(0)] ProtocolParams ProtocolParams
-) : CborBase;
+) : CborRecord;
 
 /// <summary>
 /// Represents a Cardano era identifier used in LocalStateQuery responses.
 /// </summary>
 /// <param name="Era">The numeric identifier of the era.</param>
 [CborSerializable]
-public partial record CurrentEra(ulong Era) : CborBase;
+public partial record CurrentEra(ulong Era) : CborRecord;
