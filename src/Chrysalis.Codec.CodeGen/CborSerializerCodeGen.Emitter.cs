@@ -184,7 +184,7 @@ public sealed partial class CborSerializerCodeGen
             {
                 if (prop.IsTypeNullable)
                 {
-                    _ = sb.AppendLine($"public partial {fqType} {prop.PropertyName} {{ get => {fieldRef}.Length == 0 || {fieldRef}.Span[0] is 0xF6 or 0xF7 ? default : {GenericSerializationUtilFullname}.ReadAnyWithConsumed<{fqType.Replace("?", "")}>({fieldRef}, out _); }}");
+                    _ = sb.AppendLine($"public partial {fqType} {prop.PropertyName} {{ get => {fieldRef}.Length == 0 || {fieldRef}.Span[0] is 0xF6 or 0xF7 ? default({fqType}) : {GenericSerializationUtilFullname}.ReadAnyWithConsumed<{fqType.Replace("?", "")}>({fieldRef}, out _); }}");
                 }
                 else
                 {
@@ -197,7 +197,7 @@ public sealed partial class CborSerializerCodeGen
                 string nonNullType = fqType.Replace("?", "");
                 if (prop.IsTypeNullable)
                 {
-                    _ = sb.AppendLine($"public partial {fqType} {prop.PropertyName} {{ get => {fieldRef}.Length == 0 || {fieldRef}.Span[0] is 0xF6 or 0xF7 ? default : {nonNullType}.Read({fieldRef}); }}");
+                    _ = sb.AppendLine($"public partial {fqType} {prop.PropertyName} {{ get => {fieldRef}.Length == 0 || {fieldRef}.Span[0] is 0xF6 or 0xF7 ? default({fqType}) : {nonNullType}.Read({fieldRef}); }}");
                 }
                 else
                 {
@@ -540,7 +540,7 @@ public sealed partial class CborSerializerCodeGen
         private static StringBuilder EmitPrimitivePartialProperty(StringBuilder sb, SerializablePropertyMetadata prop, string cleanType, string fieldRef, string fqType)
         {
             // For nullable primitives, add CBOR null check
-            string nullGuard = prop.IsTypeNullable ? $"{fieldRef}.Length == 0 || {fieldRef}.Span[0] is 0xF6 or 0xF7 ? default : " : "";
+            string nullGuard = prop.IsTypeNullable ? $"{fieldRef}.Length == 0 || {fieldRef}.Span[0] is 0xF6 or 0xF7 ? default({fqType}) : " : "";
 
             switch (cleanType)
             {
@@ -598,7 +598,7 @@ public sealed partial class CborSerializerCodeGen
                 case "CborEncodedValue":
                 case "Chrysalis.Codec.Types.CborEncodedValue":
                 case "global::Chrysalis.Codec.Types.CborEncodedValue":
-                    _ = sb.AppendLine($"public partial {fqType} {prop.PropertyName} {{ get => new {CborEncodeValueFullName}({fieldRef}); }}");
+                    _ = sb.AppendLine($"public partial {fqType} {prop.PropertyName} {{ get => {nullGuard}new {CborEncodeValueFullName}({fieldRef}); }}");
                     break;
                 case "CborLabel":
                 case "Chrysalis.Codec.Types.CborLabel":
