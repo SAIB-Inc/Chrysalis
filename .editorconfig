@@ -32,6 +32,16 @@ dotnet_diagnostic.CA2007.severity = none
 # ── XML documentation ──
 dotnet_diagnostic.CS1591.severity = warning
 
+# ── Chrysalis.Plutus: suppress noisy rules for record-heavy code ──
+[src/Chrysalis.Plutus/**.cs]
+dotnet_diagnostic.CS1591.severity = none
+# CA1707: underscores in type names — needed for BLS12-381 / crypto naming consistency
+dotnet_diagnostic.CA1707.severity = none
+# CA2225: operator alternates — not needed for internal budget arithmetic
+dotnet_diagnostic.CA2225.severity = none
+# IDE0078: use pattern matching — BigInteger doesn't support constant patterns
+dotnet_diagnostic.IDE0078.severity = none
+
 # ── Generated code ──
 [*.g.cs]
 generated_code = true
@@ -63,6 +73,13 @@ dotnet_diagnostic.CA1852.severity = none
 dotnet_diagnostic.IDE0002.severity = none
 
 [src/Chrysalis.Crypto.Test/**.cs]
+dotnet_diagnostic.CS1591.severity = none
+dotnet_diagnostic.CA1707.severity = none
+dotnet_diagnostic.CA1812.severity = none
+dotnet_diagnostic.CA1852.severity = none
+dotnet_diagnostic.IDE0002.severity = none
+
+[src/Chrysalis.Plutus.Test/**.cs]
 dotnet_diagnostic.CS1591.severity = none
 dotnet_diagnostic.CA1707.severity = none
 dotnet_diagnostic.CA1812.severity = none

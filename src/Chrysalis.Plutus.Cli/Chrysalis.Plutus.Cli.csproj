@@ -2,6 +2,7 @@
 
 <ItemGroup>
     <ProjectReference Include="../Chrysalis.Plutus/Chrysalis.Plutus.csproj" />
+    <ProjectReference Include="../Chrysalis.Tx/Chrysalis.Tx.csproj" />
   </ItemGroup>
 
   <PropertyGroup>

@@ -1,73 +1,122 @@
-using System.Runtime.InteropServices;
+using Chrysalis.Plutus.Cbor;
+using Chrysalis.Plutus.Cek;
+using Chrysalis.Plutus.Flat;
+using Chrysalis.Plutus.Types;
 using Chrysalis.Plutus.VM.Models;
-using Chrysalis.Plutus.VM.Models.Interop;
-using Chrysalis.Plutus.VM.Models.Enums;
-using Chrysalis.Plutus.VM.Interop;
-using Chrysalis.Wallet.Models.Enums;
 
 namespace Chrysalis.Plutus.VM.EvalTx;
 
 /// <summary>
-/// Provides methods to evaluate Plutus scripts within Cardano transactions.
+/// Evaluator for Plutus scripts. Operates on raw bytes only — no Codec/Wallet dependencies.
+/// Chrysalis.Tx is responsible for CBOR deserialization and stitching transaction context.
 /// </summary>
 public static class Evaluator
 {
     /// <summary>
-    /// Evaluates a transaction's Plutus scripts using hex-encoded CBOR representations.
+    /// Evaluates a single Flat-encoded Plutus script with CBOR-encoded PlutusData arguments.
+    /// This is the core evaluation primitive.
     /// </summary>
-    /// <param name="txCborHex">The hex-encoded CBOR of the transaction.</param>
-    /// <param name="utxosCborHex">The hex-encoded CBOR of the UTxO set.</param>
-    /// <param name="networkType">The Cardano network type to use for evaluation.</param>
-    /// <returns>A read-only list of evaluation results for each script in the transaction.</returns>
-    public static IReadOnlyList<EvaluationResult> EvaluateTx(string txCborHex, string utxosCborHex, NetworkType networkType = NetworkType.Preview)
+    /// <param name="scriptBytes">Flat-encoded script bytes (inner script, not the CBOR-wrapped outer layer).</param>
+    /// <param name="argumentsCbor">CBOR-encoded PlutusData arguments (e.g. datum, redeemer, script context).</param>
+    /// <param name="budget">Optional execution budget. Defaults to unlimited.</param>
+    /// <returns>The evaluation result with consumed execution units.</returns>
+    public static EvaluationResult EvaluateScript(
+        byte[] scriptBytes,
+        IReadOnlyList<byte[]> argumentsCbor,
+        ExBudget? budget = null)
     {
-        byte[] txCborBytes = Convert.FromHexString(txCborHex);
-        byte[] utxosCborBytes = Convert.FromHexString(utxosCborHex);
+        ArgumentNullException.ThrowIfNull(scriptBytes);
+        ArgumentNullException.ThrowIfNull(argumentsCbor);
 
-        return EvaluateTx(txCborBytes, utxosCborBytes, networkType);
+        Program<DeBruijn> program = FlatDecoder.DecodeProgram(scriptBytes);
+        Term<DeBruijn> term = program.Term;
+
+        // Apply each CBOR-encoded argument as (con data ...)
+        foreach (byte[] argCbor in argumentsCbor)
+        {
+            PlutusData data = CborReader.DecodePlutusData(argCbor);
+            term = new ApplyTerm<DeBruijn>(term, new ConstTerm<DeBruijn>(new DataConstant(data)));
+        }
+
+        ExBudget initial = budget ?? ExBudget.Unlimited;
+        CekMachine machine = new(initial);
+        _ = machine.Run(term);
+
+        ExBudget remaining = machine.RemainingBudget;
+        long cpuUsed = initial.Cpu - remaining.Cpu;
+        long memUsed = initial.Mem - remaining.Mem;
+
+        return new EvaluationResult(
+            RedeemerTag: 0,
+            Index: 0,
+            ExUnits: new ExUnitsResult(
+                Mem: (ulong)Math.Max(0, memUsed),
+                Steps: (ulong)Math.Max(0, cpuUsed)));
     }
 
     /// <summary>
-    /// Evaluates a transaction's Plutus scripts using raw CBOR byte arrays.
+    /// Evaluates a single Flat-encoded Plutus script with VM PlutusData arguments directly.
+    /// Avoids CBOR round-trip when arguments are already in VM representation.
     /// </summary>
-    /// <param name="txCborBytes">The CBOR-encoded transaction bytes.</param>
-    /// <param name="utxosCborBytes">The CBOR-encoded UTxO set bytes.</param>
-    /// <param name="networkType">The Cardano network type to use for evaluation.</param>
-    /// <returns>A read-only list of evaluation results for each script in the transaction.</returns>
-    public static IReadOnlyList<EvaluationResult> EvaluateTx(byte[] txCborBytes, byte[] utxosCborBytes, NetworkType networkType = NetworkType.Preview)
+    /// <param name="scriptBytes">Flat-encoded script bytes.</param>
+    /// <param name="arguments">VM PlutusData arguments (datum, redeemer, script context).</param>
+    /// <param name="budget">Optional execution budget. Defaults to unlimited.</param>
+    /// <returns>The evaluation result with consumed execution units.</returns>
+    public static EvaluationResult EvaluateScript(
+        byte[] scriptBytes,
+        IReadOnlyList<PlutusData> arguments,
+        ExBudget? budget = null)
     {
-        ArgumentNullException.ThrowIfNull(txCborBytes);
-        ArgumentNullException.ThrowIfNull(utxosCborBytes);
+        ArgumentNullException.ThrowIfNull(scriptBytes);
+        ArgumentNullException.ThrowIfNull(arguments);
 
-        TxEvalResultArray resultArray = NativeMethods.EvalTxRaw(
-            txCborBytes,
-            (nuint)txCborBytes.Length,
-            utxosCborBytes,
-            (nuint)utxosCborBytes.Length,
-            (uint)networkType
-        );
+        Program<DeBruijn> program = FlatDecoder.DecodeProgram(scriptBytes);
+        Term<DeBruijn> term = program.Term;
 
-        try
+        foreach (PlutusData arg in arguments)
         {
-            List<EvaluationResult> results = new((int)resultArray.Length);
-            int structSize = Marshal.SizeOf<TxEvalResult>();
-
-            for (int i = 0; i < (int)resultArray.Length; i++)
-            {
-                IntPtr currentPtr = IntPtr.Add(resultArray.Ptr, i * structSize);
-                TxEvalResult result = Marshal.PtrToStructure<TxEvalResult>(currentPtr);
-                results.Add(new EvaluationResult(
-                    (RedeemerTag)result.Tag,
-                    result.Index,
-                    new ExUnits(result.Memory, result.Steps)
-                ));
-            }
-
-            return results;
+            term = new ApplyTerm<DeBruijn>(term, new ConstTerm<DeBruijn>(new DataConstant(arg)));
         }
-        finally
-        {
-            NativeMethods.FreeEvalResults(resultArray);
-        }
+
+        ExBudget initial = budget ?? ExBudget.Unlimited;
+        CekMachine machine = new(initial);
+        _ = machine.Run(term);
+
+        ExBudget remaining = machine.RemainingBudget;
+        long cpuUsed = initial.Cpu - remaining.Cpu;
+        long memUsed = initial.Mem - remaining.Mem;
+
+        return new EvaluationResult(
+            RedeemerTag: 0,
+            Index: 0,
+            ExUnits: new ExUnitsResult(
+                Mem: (ulong)Math.Max(0, memUsed),
+                Steps: (ulong)Math.Max(0, cpuUsed)));
+    }
+
+    /// <summary>
+    /// Evaluates a raw UPLC term directly (already parsed/decoded).
+    /// Lowest-level API — no Flat decoding or argument application.
+    /// </summary>
+    /// <param name="term">The UPLC term to evaluate.</param>
+    /// <param name="budget">Optional execution budget. Defaults to unlimited.</param>
+    /// <returns>The resulting term and consumed execution units.</returns>
+    public static (Term<DeBruijn> Result, ExUnitsResult ExUnits) EvaluateTerm(
+        Term<DeBruijn> term,
+        ExBudget? budget = null)
+    {
+        ArgumentNullException.ThrowIfNull(term);
+
+        ExBudget initial = budget ?? ExBudget.Unlimited;
+        CekMachine machine = new(initial);
+        Term<DeBruijn> result = machine.Run(term);
+
+        ExBudget remaining = machine.RemainingBudget;
+        long cpuUsed = initial.Cpu - remaining.Cpu;
+        long memUsed = initial.Mem - remaining.Mem;
+
+        return (result, new ExUnitsResult(
+            Mem: (ulong)Math.Max(0, memUsed),
+            Steps: (ulong)Math.Max(0, cpuUsed)));
     }
 }

@@ -1,4 +1,3 @@
-using Chrysalis.Codec.Types.Cardano.Core.Common;
 using Chrysalis.Codec.Types.Cardano.Core.Scripts;
 using Chrysalis.Codec.Types;
 using Chrysalis.Codec.Serialization;
@@ -67,8 +66,7 @@ public static class ScriptExtension
 
         byte[] originalBytes = self.Bytes().ToArray();
         byte[] parameterCbor = CborSerializer.Serialize(parameter);
-        PlutusData plutusParameter = CborSerializer.Deserialize<PlutusData>(parameterCbor);
-        byte[] parameterizedBytes = ScriptApplicator.ApplyParameters(originalBytes, plutusParameter);
+        byte[] parameterizedBytes = ScriptApplicator.ApplyParameter(originalBytes, parameterCbor);
 
         return self switch
         {

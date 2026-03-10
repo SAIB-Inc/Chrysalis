@@ -440,7 +440,7 @@ public sealed class TransactionTemplateBuilder<T>
 
         if (context.IsSmartContractTx && eval)
         {
-            _ = context.TxBuilder.Evaluate(allUtxos, networkType);
+            _ = context.TxBuilder.Evaluate(allUtxos, SlotNetworkConfig.FromNetworkType(networkType));
         }
 
         return context.TxBuilder.CalculateFee(scripts, fee, 1, prioritizedInputsForCollateral).Build();
@@ -454,10 +454,10 @@ public sealed class TransactionTemplateBuilder<T>
     public TransactionTemplate<T> Build(bool eval = true)
     {
         return async param =>
-        {
-            PostMaryTransaction? draftTx = await EvaluateTemplate(param, eval).ConfigureAwait(false) as PostMaryTransaction;
-            return await EvaluateTemplate(param, eval, draftTx?.TransactionBody.Fee() ?? 0).ConfigureAwait(false);
-        };
+                                                                  {
+                                                                      PostMaryTransaction? draftTx = await EvaluateTemplate(param, eval).ConfigureAwait(false) as PostMaryTransaction;
+                                                                      return await EvaluateTemplate(param, eval, draftTx?.TransactionBody.Fee() ?? 0).ConfigureAwait(false);
+                                                                  };
     }
 
     private Dictionary<string, string> ResolveParties(T param)

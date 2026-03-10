@@ -11,8 +11,7 @@ internal static class ByteIntegerConverter
     /// </summary>
     internal static uint LoadLittleEndian32(byte[] buf, int offset)
     {
-        return
-            (uint)buf[offset + 0]
+        return (uint)buf[offset + 0]
             | ((uint)buf[offset + 1] << 8)
             | ((uint)buf[offset + 2] << 16)
             | ((uint)buf[offset + 3] << 24);
@@ -34,8 +33,7 @@ internal static class ByteIntegerConverter
     /// </summary>
     internal static ulong LoadBigEndian64(byte[] buf, int offset)
     {
-        return
-            (ulong)buf[offset + 7]
+        return (ulong)buf[offset + 7]
             | ((ulong)buf[offset + 6] << 8)
             | ((ulong)buf[offset + 5] << 16)
             | ((ulong)buf[offset + 4] << 24)
