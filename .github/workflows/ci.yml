@@ -24,11 +24,11 @@ jobs:
       - name: Restore
         run: dotnet restore
 
-      - name: Check formatting
-        run: dotnet format --no-restore --verify-no-changes
-
       - name: Build
         run: dotnet build --no-restore -warnaserror
+
+      - name: Check formatting
+        run: dotnet format --no-restore --verify-no-changes
 
       - name: Test
         run: dotnet test --no-build --filter "Category!=Integration"
