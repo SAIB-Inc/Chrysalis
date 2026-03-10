@@ -28,15 +28,30 @@ internal static class Fp12
     // Frobenius coefficients
     private static readonly Fp2Element[] FROBENIUS_COEFFICIENTS = ComputeFrobeniusCoeffs();
 
-    internal static bool IsZero(Fp12Element a) => Fp6.IsZero(a.C0) && Fp6.IsZero(a.C1);
-    internal static bool Eql(Fp12Element a, Fp12Element b) => Fp6.Eql(a.C0, b.C0) && Fp6.Eql(a.C1, b.C1);
-    internal static Fp12Element Neg(Fp12Element a) => new(Fp6.Neg(a.C0), Fp6.Neg(a.C1));
+    internal static bool IsZero(Fp12Element a)
+    {
+        return Fp6.IsZero(a.C0) && Fp6.IsZero(a.C1);
+    }
 
-    internal static Fp12Element Add(Fp12Element a, Fp12Element b) =>
-        new(Fp6.Add(a.C0, b.C0), Fp6.Add(a.C1, b.C1));
+    internal static bool Eql(Fp12Element a, Fp12Element b)
+    {
+        return Fp6.Eql(a.C0, b.C0) && Fp6.Eql(a.C1, b.C1);
+    }
 
-    internal static Fp12Element Sub(Fp12Element a, Fp12Element b) =>
-        new(Fp6.Sub(a.C0, b.C0), Fp6.Sub(a.C1, b.C1));
+    internal static Fp12Element Neg(Fp12Element a)
+    {
+        return new(Fp6.Neg(a.C0), Fp6.Neg(a.C1));
+    }
+
+    internal static Fp12Element Add(Fp12Element a, Fp12Element b)
+    {
+        return new(Fp6.Add(a.C0, b.C0), Fp6.Add(a.C1, b.C1));
+    }
+
+    internal static Fp12Element Sub(Fp12Element a, Fp12Element b)
+    {
+        return new(Fp6.Sub(a.C0, b.C0), Fp6.Sub(a.C1, b.C1));
+    }
 
     internal static Fp12Element Mul(Fp12Element a, Fp12Element b)
     {
@@ -48,8 +63,10 @@ internal static class Fp12
         );
     }
 
-    internal static Fp12Element MulScalar(Fp12Element a, BigInteger s) =>
-        new(Fp6.MulScalar(a.C0, s), Fp6.MulScalar(a.C1, s));
+    internal static Fp12Element MulScalar(Fp12Element a, BigInteger s)
+    {
+        return new(Fp6.MulScalar(a.C0, s), Fp6.MulScalar(a.C1, s));
+    }
 
     internal static Fp12Element Sqr(Fp12Element a)
     {
@@ -70,7 +87,10 @@ internal static class Fp12
         return new(Fp6.Mul(a.C0, t), Fp6.Neg(Fp6.Mul(a.C1, t)));
     }
 
-    internal static Fp12Element Div(Fp12Element a, Fp12Element b) => Mul(a, Inv(b));
+    internal static Fp12Element Div(Fp12Element a, Fp12Element b)
+    {
+        return Mul(a, Inv(b));
+    }
 
     internal static Fp12Element Pow(Fp12Element num, BigInteger power)
     {
@@ -104,7 +124,10 @@ internal static class Fp12
         return p;
     }
 
-    internal static Fp12Element Conjugate(Fp12Element a) => new(a.C0, Fp6.Neg(a.C1));
+    internal static Fp12Element Conjugate(Fp12Element a)
+    {
+        return new(a.C0, Fp6.Neg(a.C1));
+    }
 
     /// <summary>
     /// Sparse multiplication for BLS12-381 (multiplicative twist).
@@ -199,8 +222,10 @@ internal static class Fp12
         return Mul(Mul(Mul(t2_t5_pow_q2, t4_t1_pow_q3), t6_t1c_pow_q1), t7_t3c_t1);
     }
 
-    internal static byte[] ToBytes(Fp12Element a) =>
-        [.. Fp6.ToBytes(a.C0), .. Fp6.ToBytes(a.C1)];
+    internal static byte[] ToBytes(Fp12Element a)
+    {
+        return [.. Fp6.ToBytes(a.C0), .. Fp6.ToBytes(a.C1)];
+    }
 
     internal static Fp12Element FromBytes(ReadOnlySpan<byte> bytes)
     {

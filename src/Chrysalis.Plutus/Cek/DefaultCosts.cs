@@ -8,8 +8,10 @@ namespace Chrysalis.Plutus.Cek;
 /// </summary>
 internal static class DefaultCosts
 {
-    private static BuiltinCostModel Const(long cpu, long mem) =>
-        new(new ConstantCost(cpu), new ConstantCost(mem));
+    private static BuiltinCostModel Const(long cpu, long mem)
+    {
+        return new(new ConstantCost(cpu), new ConstantCost(mem));
+    }
 
     private static readonly CostFunction DivCpu = new ConstAboveDiagonalCost(
         85848, 85848, 123203, 1716, 7305, 57, 549, -900);

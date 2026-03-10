@@ -467,9 +467,12 @@ internal static class HashToCurve
     // Coefficients stored in reverse order for Horner evaluation
     private static BigInteger[][] IsogenyCoeffsG1()
     {
-        static BigInteger H(string hex) => BigInteger.Parse(
+        static BigInteger H(string hex)
+        {
+            return BigInteger.Parse(
             hex, System.Globalization.NumberStyles.HexNumber,
             System.Globalization.CultureInfo.InvariantCulture);
+        }
 
         BigInteger[] xNum = [
             H("11a05f2b1e833340b809101dd99815856b303e88a2d7005ff2627b56cdb4e2c85610c2d5f2e62d6eaeac1662734649b7"),
@@ -544,14 +547,20 @@ internal static class HashToCurve
     // 3-isogeny map coefficients for G2 (Fp2)
     private static Fp2Element[][] IsogenyCoeffsG2()
     {
-        static BigInteger H(string hex) => hex is "0x0" or "0" ? BigInteger.Zero :
+        static BigInteger H(string hex)
+        {
+            return hex is "0x0" or "0" ? BigInteger.Zero :
             hex is "0x1" or "1" ? BigInteger.One :
             BigInteger.Parse(
                 hex.StartsWith("0x", StringComparison.Ordinal) ? hex[2..] : hex,
                 System.Globalization.NumberStyles.HexNumber,
                 System.Globalization.CultureInfo.InvariantCulture);
+        }
 
-        static Fp2Element F2(string c0, string c1) => Fp2.Create(Fp.Create(H(c0)), Fp.Create(H(c1)));
+        static Fp2Element F2(string c0, string c1)
+        {
+            return Fp2.Create(Fp.Create(H(c0)), Fp.Create(H(c1)));
+        }
 
         Fp2Element[] xNum = [
             F2("5c759507e8e333ebb5b7a9a47d7ed8532c52d39fd3a042a88b58423c50ae15d5c2638e343d9c71c6238aaaaaaaa97d6",

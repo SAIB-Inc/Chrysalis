@@ -8,5 +8,8 @@ internal static partial class FieldOperations
     /// <summary>
     /// Sets a field element to zero.
     /// </summary>
-    internal static void fe_0(out FieldElement h) => h = default;
+    internal static void fe_0(out FieldElement h)
+    {
+        h = default;
+    }
 }

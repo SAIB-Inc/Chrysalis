@@ -54,15 +54,26 @@ internal sealed class PointG1
         X = x; Y = y; Z = z;
     }
 
-    internal static PointG1 FromAffine(BigInteger x, BigInteger y) => Fp.IsZero(x) && Fp.IsZero(y) ? ZERO : new PointG1(x, y, BigInteger.One);
+    internal static PointG1 FromAffine(BigInteger x, BigInteger y)
+    {
+        return Fp.IsZero(x) && Fp.IsZero(y) ? ZERO : new PointG1(x, y, BigInteger.One);
+    }
 
-    internal bool Is0() => Equals(ZERO);
+    internal bool Is0()
+    {
+        return Equals(ZERO);
+    }
 
-    internal bool Equals(PointG1 other) =>
-        Fp.Eql(Fp.Mul(X, other.Z), Fp.Mul(other.X, Z)) &&
+    internal bool Equals(PointG1 other)
+    {
+        return Fp.Eql(Fp.Mul(X, other.Z), Fp.Mul(other.X, Z)) &&
         Fp.Eql(Fp.Mul(Y, other.Z), Fp.Mul(other.Y, Z));
+    }
 
-    internal PointG1 Negate() => new(X, Fp.Neg(Y), Z);
+    internal PointG1 Negate()
+    {
+        return new(X, Fp.Neg(Y), Z);
+    }
 
     /// <summary>
     /// RCB exception-free doubling (algorithm 3 from eprint 2015/1060).
@@ -155,7 +166,10 @@ internal sealed class PointG1
         return new PointG1(X3, Y3, Z3);
     }
 
-    internal PointG1 Subtract(PointG1 other) => Add(other.Negate());
+    internal PointG1 Subtract(PointG1 other)
+    {
+        return Add(other.Negate());
+    }
 
     /// <summary>
     /// Non-constant-time double-and-add multiplication.
@@ -241,7 +255,10 @@ internal sealed class PointG1
     /// <summary>
     /// Clear cofactor: x*P + P
     /// </summary>
-    internal PointG1 ClearCofactor() => MultiplyUnsafe(BLS_X).Add(this);
+    internal PointG1 ClearCofactor()
+    {
+        return MultiplyUnsafe(BLS_X).Add(this);
+    }
 
     /// <summary>
     /// Compress G1 point to 48 bytes (ZCash format).

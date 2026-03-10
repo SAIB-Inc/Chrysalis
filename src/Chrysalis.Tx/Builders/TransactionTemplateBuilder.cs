@@ -67,7 +67,10 @@ public sealed class TransactionTemplateBuilder<T>
     /// </summary>
     /// <param name="provider">The Cardano data provider.</param>
     /// <returns>A new template builder instance.</returns>
-    internal static TransactionTemplateBuilder<T> CreateInternal(ICardanoDataProvider provider) => new TransactionTemplateBuilder<T>().SetProvider(provider);
+    internal static TransactionTemplateBuilder<T> CreateInternal(ICardanoDataProvider provider)
+    {
+        return new TransactionTemplateBuilder<T>().SetProvider(provider);
+    }
 
     /// <summary>
     /// Adds a pre-build hook for custom transaction modifications.
@@ -448,11 +451,14 @@ public sealed class TransactionTemplateBuilder<T>
     /// </summary>
     /// <param name="eval">Whether to evaluate Plutus scripts.</param>
     /// <returns>A delegate that builds transactions from parameters.</returns>
-    public TransactionTemplate<T> Build(bool eval = true) => async param =>
+    public TransactionTemplate<T> Build(bool eval = true)
+    {
+        return async param =>
                                                                   {
                                                                       PostMaryTransaction? draftTx = await EvaluateTemplate(param, eval).ConfigureAwait(false) as PostMaryTransaction;
                                                                       return await EvaluateTemplate(param, eval, draftTx?.TransactionBody.Fee() ?? 0).ConfigureAwait(false);
                                                                   };
+    }
 
     private Dictionary<string, string> ResolveParties(T param)
     {
@@ -477,9 +483,15 @@ public sealed class TransactionTemplateBuilder<T>
 
     private sealed class TransactionInputEqualityComparer : IEqualityComparer<(ReadOnlyMemory<byte> TransactionId, ulong Index)>
     {
-        public bool Equals((ReadOnlyMemory<byte> TransactionId, ulong Index) x, (ReadOnlyMemory<byte> TransactionId, ulong Index) y) => x.Index == y.Index && ReadOnlyMemoryComparer.Instance.Equals(x.TransactionId, y.TransactionId);
+        public bool Equals((ReadOnlyMemory<byte> TransactionId, ulong Index) x, (ReadOnlyMemory<byte> TransactionId, ulong Index) y)
+        {
+            return x.Index == y.Index && ReadOnlyMemoryComparer.Instance.Equals(x.TransactionId, y.TransactionId);
+        }
 
-        public int GetHashCode((ReadOnlyMemory<byte> TransactionId, ulong Index) obj) => HashCode.Combine(ReadOnlyMemoryComparer.Instance.GetHashCode(obj.TransactionId), obj.Index);
+        public int GetHashCode((ReadOnlyMemory<byte> TransactionId, ulong Index) obj)
+        {
+            return HashCode.Combine(ReadOnlyMemoryComparer.Instance.GetHashCode(obj.TransactionId), obj.Index);
+        }
     }
 
     private static CoinSelectionResult PerformCoinSelection(
@@ -760,12 +772,15 @@ public sealed class TransactionTemplateBuilder<T>
         return (changeUtxos, allUtxos);
     }
 
-    private static string GetAddressFromOutput(TransactionOutput output) => output switch
+    private static string GetAddressFromOutput(TransactionOutput output)
     {
-        AlonzoTransactionOutput alonzo => WalletAddress.FromBytes(alonzo.Address.Value.ToArray()).ToBech32(),
-        PostAlonzoTransactionOutput postAlonzo => WalletAddress.FromBytes(postAlonzo.Address!.Value.ToArray()).ToBech32(),
-        _ => throw new InvalidOperationException("Unknown output type")
-    };
+        return output switch
+        {
+            AlonzoTransactionOutput alonzo => WalletAddress.FromBytes(alonzo.Address.Value.ToArray()).ToBech32(),
+            PostAlonzoTransactionOutput postAlonzo => WalletAddress.FromBytes(postAlonzo.Address!.Value.ToArray()).ToBech32(),
+            _ => throw new InvalidOperationException("Unknown output type")
+        };
+    }
 
     private void BuildRedeemers(
         BuildContext buildContext,

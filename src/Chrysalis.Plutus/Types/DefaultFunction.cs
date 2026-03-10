@@ -174,7 +174,13 @@ public static class DefaultFunctionExtensions
         0, 0, 0, 0, 0, 0, 0,          // 94-100: value ops (no forces)
     ];
 
-    public static int Arity(this DefaultFunction func) => Arities[(int)func];
+    public static int Arity(this DefaultFunction func)
+    {
+        return Arities[(int)func];
+    }
 
-    public static int ForceCount(this DefaultFunction func) => ForceCounts[(int)func];
+    public static int ForceCount(this DefaultFunction func)
+    {
+        return ForceCounts[(int)func];
+    }
 }

@@ -9,8 +9,9 @@ namespace Chrysalis.Plutus.Builtins;
 /// </summary>
 internal static class BuiltinRuntime
 {
-    internal static CekValue Call(DefaultFunction function, ImmutableArray<CekValue> args) =>
-        function switch
+    internal static CekValue Call(DefaultFunction function, ImmutableArray<CekValue> args)
+    {
+        return function switch
         {
             // Integer arithmetic
             DefaultFunction.AddInteger => IntegerBuiltins.AddInteger(args),
@@ -147,4 +148,5 @@ internal static class BuiltinRuntime
 
             _ => throw new EvaluationException($"builtin not implemented: {function}")
         };
+    }
 }

@@ -157,8 +157,10 @@ internal static class CborWriter
         }
     }
 
-    private static void WriteTag(ArrayBufferWriter<byte> buffer, ulong tag) =>
+    private static void WriteTag(ArrayBufferWriter<byte> buffer, ulong tag)
+    {
         WriteUnsigned(buffer, tag, 6);
+    }
 
     private static void WriteByteString(ArrayBufferWriter<byte> buffer, ReadOnlySpan<byte> bytes)
     {

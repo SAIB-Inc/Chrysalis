@@ -157,8 +157,10 @@ internal static class CborReader
         };
     }
 
-    private static int ReadArrayHeader(ReadOnlySpan<byte> span, ref int offset) =>
-        (int)ReadUnsigned(span, ref offset);
+    private static int ReadArrayHeader(ReadOnlySpan<byte> span, ref int offset)
+    {
+        return (int)ReadUnsigned(span, ref offset);
+    }
 
     private static ReadOnlyMemory<byte> ReadByteString(ReadOnlySpan<byte> span, ref int offset)
     {

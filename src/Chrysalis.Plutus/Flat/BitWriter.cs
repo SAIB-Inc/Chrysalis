@@ -75,7 +75,10 @@ internal sealed class BitWriter
 
     internal ReadOnlySpan<byte> WrittenSpan => _buffer.WrittenSpan;
 
-    internal byte[] ToArray() => _buffer.WrittenSpan.ToArray();
+    internal byte[] ToArray()
+    {
+        return _buffer.WrittenSpan.ToArray();
+    }
 
     private void FlushByte()
     {

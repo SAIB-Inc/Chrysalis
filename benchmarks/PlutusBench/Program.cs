@@ -63,7 +63,10 @@ public class PlutusUseCasesBenchmarks
     public string Script { get; set; } = "";
 
     /// <summary>Provides all script names as benchmark parameters.</summary>
-    public static IEnumerable<string> ScriptNames() => AllFiles;
+    public static IEnumerable<string> ScriptNames()
+    {
+        return AllFiles;
+    }
 
     /// <summary>Flat-decode + CEK evaluate a single Plutus script.</summary>
     [Benchmark]

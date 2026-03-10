@@ -8,8 +8,9 @@ namespace Chrysalis.Plutus.Cek;
 /// </summary>
 internal static class Discharge
 {
-    internal static Term<DeBruijn> DischargeValue(CekValue value) =>
-        value switch
+    internal static Term<DeBruijn> DischargeValue(CekValue value)
+    {
+        return value switch
         {
             VConstant c => new ConstTerm<DeBruijn>(c.Value),
             VLambda l => new LambdaTerm<DeBruijn>(l.Parameter, WithEnv(1, l.Env, l.Body)),
@@ -18,6 +19,7 @@ internal static class Discharge
             VConstr constr => new ConstrTerm<DeBruijn>(constr.Index, DischargeAll(constr.Fields)),
             _ => throw new InvalidOperationException($"Unknown CekValue: {value.GetType().Name}")
         };
+    }
 
     private static Term<DeBruijn> DischargeBuiltin(VBuiltin b)
     {
@@ -53,8 +55,9 @@ internal static class Discharge
     /// For each var: if index &lt;= lamCnt, it's bound by an enclosing lambda — leave it.
     /// If index &gt; lamCnt, look up (index - lamCnt) in env and discharge that value.
     /// </summary>
-    internal static Term<DeBruijn> WithEnv(int lamCnt, Environment? env, Term<DeBruijn> term) =>
-        term switch
+    internal static Term<DeBruijn> WithEnv(int lamCnt, Environment? env, Term<DeBruijn> term)
+    {
+        return term switch
         {
             VarTerm<DeBruijn> v => WithEnvVar(lamCnt, env, v),
             LambdaTerm<DeBruijn> l => new LambdaTerm<DeBruijn>(l.Parameter, WithEnv(lamCnt + 1, env, l.Body)),
@@ -70,6 +73,7 @@ internal static class Discharge
             ConstTerm<DeBruijn> or BuiltinTerm<DeBruijn> or ErrorTerm<DeBruijn> => term,
             _ => term
         };
+    }
 
     private static Term<DeBruijn> WithEnvVar(int lamCnt, Environment? env, VarTerm<DeBruijn> v)
     {

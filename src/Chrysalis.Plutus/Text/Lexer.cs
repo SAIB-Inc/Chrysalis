@@ -17,9 +17,15 @@ internal sealed class Lexer
 
     private bool IsAtEnd => _pos >= _source.Length;
 
-    private char Peek() => IsAtEnd ? '\0' : _source[_pos];
+    private char Peek()
+    {
+        return IsAtEnd ? '\0' : _source[_pos];
+    }
 
-    private char PeekNext() => _pos + 1 >= _source.Length ? '\0' : _source[_pos + 1];
+    private char PeekNext()
+    {
+        return _pos + 1 >= _source.Length ? '\0' : _source[_pos + 1];
+    }
 
     private char Advance()
     {
@@ -354,13 +360,40 @@ internal sealed class Lexer
         return c is 'a' or 'b' or 'f' or 'n' or 'r' or 't' or 'v' or '"' or '\\';
     }
 
-    private static bool IsDigit(char c) => c is >= '0' and <= '9';
-    private static bool IsHexDigit(char c) => c is (>= '0' and <= '9') or (>= 'a' and <= 'f') or (>= 'A' and <= 'F');
-    private static bool IsAlpha(char c) => c is (>= 'a' and <= 'z') or (>= 'A' and <= 'Z') or '_';
-    private static bool IsLetter(char c) => c is (>= 'a' and <= 'z') or (>= 'A' and <= 'Z');
-    private static bool IsAlphaNumeric(char c) => IsAlpha(c) || IsDigit(c);
-    private static bool IsWhitespace(char c) => c is ' ' or '\t' or '\n' or '\r';
-    private static bool IsOctalDigit(char c) => c is >= '0' and <= '7';
+    private static bool IsDigit(char c)
+    {
+        return c is >= '0' and <= '9';
+    }
+
+    private static bool IsHexDigit(char c)
+    {
+        return c is (>= '0' and <= '9') or (>= 'a' and <= 'f') or (>= 'A' and <= 'F');
+    }
+
+    private static bool IsAlpha(char c)
+    {
+        return c is (>= 'a' and <= 'z') or (>= 'A' and <= 'Z') or '_';
+    }
+
+    private static bool IsLetter(char c)
+    {
+        return c is (>= 'a' and <= 'z') or (>= 'A' and <= 'Z');
+    }
+
+    private static bool IsAlphaNumeric(char c)
+    {
+        return IsAlpha(c) || IsDigit(c);
+    }
+
+    private static bool IsWhitespace(char c)
+    {
+        return c is ' ' or '\t' or '\n' or '\r';
+    }
+
+    private static bool IsOctalDigit(char c)
+    {
+        return c is >= '0' and <= '7';
+    }
 
     private static readonly Dictionary<string, int> NamedEscapes = new()
     {
@@ -464,6 +497,8 @@ internal static class Keywords
         ["array"] = TokenType.Array,
     };
 
-    internal static TokenType Lookup(string text) =>
-        Map.TryGetValue(text, out TokenType type) ? type : TokenType.Identifier;
+    internal static TokenType Lookup(string text)
+    {
+        return Map.TryGetValue(text, out TokenType type) ? type : TokenType.Identifier;
+    }
 }

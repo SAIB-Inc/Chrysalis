@@ -11,5 +11,8 @@ public sealed record Program<TBinder>(Version Version, Term<TBinder> Term);
 /// </summary>
 public readonly record struct Version(int Major, int Minor, int Patch)
 {
-    public override string ToString() => $"{Major}.{Minor}.{Patch}";
+    public override string ToString()
+    {
+        return $"{Major}.{Minor}.{Patch}";
+    }
 }

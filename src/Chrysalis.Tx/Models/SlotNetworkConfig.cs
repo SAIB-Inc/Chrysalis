@@ -20,6 +20,8 @@ public record SlotNetworkConfig(long ZeroTime, long ZeroSlot, int SlotLength)
     public static readonly SlotNetworkConfig Preview = new(1666656000000, 0, 1000);
 
     /// <summary>Gets the default slot config for a given network type.</summary>
-    public static SlotNetworkConfig FromNetworkType(NetworkType networkType) =>
-        networkType == NetworkType.Mainnet ? Mainnet : Preprod;
+    public static SlotNetworkConfig FromNetworkType(NetworkType networkType)
+    {
+        return networkType == NetworkType.Mainnet ? Mainnet : Preprod;
+    }
 }

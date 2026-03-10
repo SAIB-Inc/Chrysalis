@@ -22,7 +22,10 @@ public sealed class ByteArrayEqualityComparer : IEqualityComparer<byte[]>
     /// <param name="x">The first byte array.</param>
     /// <param name="y">The second byte array.</param>
     /// <returns>True if the arrays are sequence-equal; otherwise, false.</returns>
-    public bool Equals(byte[]? x, byte[]? y) => ReferenceEquals(x, y) || (x is not null && y is not null && x.Length == y.Length && x.AsSpan().SequenceEqual(y.AsSpan()));
+    public bool Equals(byte[]? x, byte[]? y)
+    {
+        return ReferenceEquals(x, y) || (x is not null && y is not null && x.Length == y.Length && x.AsSpan().SequenceEqual(y.AsSpan()));
+    }
 
     /// <summary>
     /// Returns a hash code for the specified byte array.
@@ -63,7 +66,10 @@ public sealed class ByteArrayEqualityComparer : IEqualityComparer<byte[]>
     /// <summary>
     /// Clears the internal hash code cache.
     /// </summary>
-    public void ClearCache() => _hashCodeCache.Clear();
+    public void ClearCache()
+    {
+        _hashCodeCache.Clear();
+    }
 
     /// <summary>
     /// Gets the current number of entries in the hash code cache.

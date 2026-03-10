@@ -11,7 +11,10 @@ internal sealed class BitReader
     private int _byteIndex;
     private int _bitMask = 128; // MSB first
 
-    internal BitReader(ReadOnlyMemory<byte> data) => _data = data;
+    internal BitReader(ReadOnlyMemory<byte> data)
+    {
+        _data = data;
+    }
 
     internal int PopBit()
     {

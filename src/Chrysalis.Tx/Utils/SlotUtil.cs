@@ -28,15 +28,18 @@ public static class SlotUtil
     /// </summary>
     /// <param name="networkType">The Cardano network type.</param>
     /// <returns>The slot network configuration.</returns>
-    public static SlotNetworkConfig GetSlotNetworkConfig(NetworkType networkType) => networkType switch
+    public static SlotNetworkConfig GetSlotNetworkConfig(NetworkType networkType)
     {
-        NetworkType.Mainnet => Mainnet,
-        NetworkType.Preprod => Preprod,
-        NetworkType.Preview => Preview,
-        NetworkType.Testnet => throw new NotImplementedException(),
-        NetworkType.Unknown => throw new NotImplementedException(),
-        _ => new SlotNetworkConfig(0, 0, 0),
-    };
+        return networkType switch
+        {
+            NetworkType.Mainnet => Mainnet,
+            NetworkType.Preprod => Preprod,
+            NetworkType.Preview => Preview,
+            NetworkType.Testnet => throw new NotImplementedException(),
+            NetworkType.Unknown => throw new NotImplementedException(),
+            _ => new SlotNetworkConfig(0, 0, 0),
+        };
+    }
 
     /// <summary>
     /// Converts a Unix timestamp (seconds) to a slot number.

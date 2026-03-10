@@ -10,11 +10,15 @@ public readonly record struct ExBudget(long Cpu, long Mem)
     public static readonly ExBudget Zero = new(0, 0);
     public static readonly ExBudget Unlimited = new(long.MaxValue, long.MaxValue);
 
-    public static ExBudget operator +(ExBudget a, ExBudget b) =>
-        new(SatAdd(a.Cpu, b.Cpu), SatAdd(a.Mem, b.Mem));
+    public static ExBudget operator +(ExBudget a, ExBudget b)
+    {
+        return new(SatAdd(a.Cpu, b.Cpu), SatAdd(a.Mem, b.Mem));
+    }
 
-    public static ExBudget operator -(ExBudget a, ExBudget b) =>
-        new(a.Cpu - b.Cpu, a.Mem - b.Mem);
+    public static ExBudget operator -(ExBudget a, ExBudget b)
+    {
+        return new(a.Cpu - b.Cpu, a.Mem - b.Mem);
+    }
 
     public bool IsExhausted => Cpu < 0 || Mem < 0;
 

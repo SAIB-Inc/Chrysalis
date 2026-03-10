@@ -33,7 +33,10 @@ internal sealed class Parser
         _current = _lexer.NextToken();
     }
 
-    private bool Is(TokenType type) => _current.Type == type;
+    private bool Is(TokenType type)
+    {
+        return _current.Type == type;
+    }
 
     private void Expect(TokenType type)
     {
@@ -56,7 +59,10 @@ internal sealed class Parser
         return new Name(text, unique);
     }
 
-    private bool IsBeforeV1_1_0() => _version.Major < 2 && _version.Minor < 1;
+    private bool IsBeforeV1_1_0()
+    {
+        return _version.Major < 2 && _version.Minor < 1;
+    }
 
     internal Program<Name> ParseProgram()
     {
@@ -983,9 +989,13 @@ internal static class BuiltinNames
         return result;
     }
 
-    internal static bool TryParse(string name, out DefaultFunction func) =>
-        NameToFunction.TryGetValue(name, out func);
+    internal static bool TryParse(string name, out DefaultFunction func)
+    {
+        return NameToFunction.TryGetValue(name, out func);
+    }
 
-    internal static string GetName(DefaultFunction func) =>
-        FunctionToName.TryGetValue(func, out string? name) ? name : func.ToString();
+    internal static string GetName(DefaultFunction func)
+    {
+        return FunctionToName.TryGetValue(func, out string? name) ? name : func.ToString();
+    }
 }

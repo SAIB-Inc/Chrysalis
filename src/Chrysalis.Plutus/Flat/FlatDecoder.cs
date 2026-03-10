@@ -53,11 +53,15 @@ public static class FlatDecoder
         return new VarTerm<DeBruijn>(new DeBruijn(index));
     }
 
-    private static DelayTerm<DeBruijn> DecodeDelay(BitReader reader) =>
-        new(DecodeTerm(reader));
+    private static DelayTerm<DeBruijn> DecodeDelay(BitReader reader)
+    {
+        return new(DecodeTerm(reader));
+    }
 
-    private static LambdaTerm<DeBruijn> DecodeLambda(BitReader reader) =>
-        new(new DeBruijn(0), DecodeTerm(reader));
+    private static LambdaTerm<DeBruijn> DecodeLambda(BitReader reader)
+    {
+        return new(new DeBruijn(0), DecodeTerm(reader));
+    }
 
     private static ApplyTerm<DeBruijn> DecodeApply(BitReader reader)
     {
@@ -73,11 +77,15 @@ public static class FlatDecoder
         return new ConstTerm<DeBruijn>(value);
     }
 
-    private static ForceTerm<DeBruijn> DecodeForce(BitReader reader) =>
-        new(DecodeTerm(reader));
+    private static ForceTerm<DeBruijn> DecodeForce(BitReader reader)
+    {
+        return new(DecodeTerm(reader));
+    }
 
-    private static BuiltinTerm<DeBruijn> DecodeBuiltin(BitReader reader) =>
-        new((DefaultFunction)reader.PopBits(7));
+    private static BuiltinTerm<DeBruijn> DecodeBuiltin(BitReader reader)
+    {
+        return new((DefaultFunction)reader.PopBits(7));
+    }
 
     private static ConstrTerm<DeBruijn> DecodeConstr(BitReader reader)
     {
@@ -163,8 +171,9 @@ public static class FlatDecoder
 
     // --- Constant value decoding (spec C.3.4) ---
 
-    private static Constant DecodeConstantValue(BitReader reader, ConstantType type) =>
-        type switch
+    private static Constant DecodeConstantValue(BitReader reader, ConstantType type)
+    {
+        return type switch
         {
             IntegerType => new IntegerConstant(DecodeInteger(reader)),
             ByteStringType => new ByteStringConstant(DecodeByteString(reader)),
@@ -180,6 +189,7 @@ public static class FlatDecoder
             Bls12381MlResultType => new Bls12381MlResultConstant(DecodeByteString(reader)),
             _ => throw new InvalidOperationException($"Flat: unknown constant type {type}.")
         };
+    }
 
     private static ListConstant DecodeList(BitReader reader, ConstantType elementType)
     {

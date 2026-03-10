@@ -414,55 +414,64 @@ public sealed class Blockfrost : ICardanoDataProvider, IDisposable
         return metadataDict.Count > 0 ? new Metadata(metadataDict) : null;
     }
 
-    private static TransactionMetadatum? ConvertToTransactionMetadatum(object value) => value switch
+    private static TransactionMetadatum? ConvertToTransactionMetadatum(object value)
     {
-        string str => new MetadataText(str),
-        long lng => new MetadatumIntLong(lng),
-        int i => new MetadatumIntLong(i),
-        JsonElement element => ConvertJsonElementToMetadatum(element),
-        Dictionary<string, object> dict => new MetadatumMap(
-            dict.ToDictionary(
-                kv => ConvertToTransactionMetadatum(kv.Key) ?? new MetadataText(kv.Key),
-                kv => ConvertToTransactionMetadatum(kv.Value) ?? new MetadataText(kv.Value?.ToString() ?? "")
-            )
-        ),
-        _ => value.ToString() is string s ? new MetadataText(s) : null
-    };
+        return value switch
+        {
+            string str => new MetadataText(str),
+            long lng => new MetadatumIntLong(lng),
+            int i => new MetadatumIntLong(i),
+            JsonElement element => ConvertJsonElementToMetadatum(element),
+            Dictionary<string, object> dict => new MetadatumMap(
+                dict.ToDictionary(
+                    kv => ConvertToTransactionMetadatum(kv.Key) ?? new MetadataText(kv.Key),
+                    kv => ConvertToTransactionMetadatum(kv.Value) ?? new MetadataText(kv.Value?.ToString() ?? "")
+                )
+            ),
+            _ => value.ToString() is string s ? new MetadataText(s) : null
+        };
+    }
 
-    private static TransactionMetadatum? ConvertJsonElementToMetadatum(JsonElement element) => element.ValueKind switch
+    private static TransactionMetadatum? ConvertJsonElementToMetadatum(JsonElement element)
     {
-        JsonValueKind.String => new MetadataText(element.GetString() ?? ""),
-        JsonValueKind.Number when element.TryGetInt64(out long lng) => new MetadatumIntLong(lng),
-        JsonValueKind.Number when element.TryGetUInt64(out _) => new MetadatumIntUlong(element.GetUInt64()),
-        JsonValueKind.Number => new MetadataText(element.ToString()),
-        JsonValueKind.Object => new MetadatumMap(
-            element.EnumerateObject().ToDictionary(
-                prop => (TransactionMetadatum)new MetadataText(prop.Name),
-                prop => ConvertJsonElementToMetadatum(prop.Value) ?? new MetadataText("")
-            )
-        ),
-        JsonValueKind.Array => new MetadatumList(
-            [.. element.EnumerateArray()
+        return element.ValueKind switch
+        {
+            JsonValueKind.String => new MetadataText(element.GetString() ?? ""),
+            JsonValueKind.Number when element.TryGetInt64(out long lng) => new MetadatumIntLong(lng),
+            JsonValueKind.Number when element.TryGetUInt64(out _) => new MetadatumIntUlong(element.GetUInt64()),
+            JsonValueKind.Number => new MetadataText(element.ToString()),
+            JsonValueKind.Object => new MetadatumMap(
+                element.EnumerateObject().ToDictionary(
+                    prop => (TransactionMetadatum)new MetadataText(prop.Name),
+                    prop => ConvertJsonElementToMetadatum(prop.Value) ?? new MetadataText("")
+                )
+            ),
+            JsonValueKind.Array => new MetadatumList(
+                [.. element.EnumerateArray()
                     .Select(ConvertJsonElementToMetadatum)
                     .Where(m => m != null)
                     .Cast<TransactionMetadatum>()]
-        ),
-        JsonValueKind.Undefined => new MetadataText(element.ToString()),
-        JsonValueKind.Null => new MetadataText(element.ToString()),
-        JsonValueKind.True => new MetadataText(element.ToString()),
-        JsonValueKind.False => new MetadataText(element.ToString()),
-        _ => new MetadataText(element.ToString())
-    };
+            ),
+            JsonValueKind.Undefined => new MetadataText(element.ToString()),
+            JsonValueKind.Null => new MetadataText(element.ToString()),
+            JsonValueKind.True => new MetadataText(element.ToString()),
+            JsonValueKind.False => new MetadataText(element.ToString()),
+            _ => new MetadataText(element.ToString())
+        };
+    }
 
-    private string GetBaseUrl() => NetworkType switch
+    private string GetBaseUrl()
     {
-        NetworkType.Mainnet => "https://cardano-mainnet.blockfrost.io/api/v0/",
-        NetworkType.Preview => "https://cardano-preview.blockfrost.io/api/v0/",
-        NetworkType.Preprod => "https://cardano-preprod.blockfrost.io/api/v0/",
-        NetworkType.Testnet => "https://cardano-testnet.blockfrost.io/api/v0/",
-        NetworkType.Unknown => throw new NotImplementedException(),
-        _ => throw new ArgumentException($"Unsupported network type: {NetworkType}")
-    };
+        return NetworkType switch
+        {
+            NetworkType.Mainnet => "https://cardano-mainnet.blockfrost.io/api/v0/",
+            NetworkType.Preview => "https://cardano-preview.blockfrost.io/api/v0/",
+            NetworkType.Preprod => "https://cardano-preprod.blockfrost.io/api/v0/",
+            NetworkType.Testnet => "https://cardano-testnet.blockfrost.io/api/v0/",
+            NetworkType.Unknown => throw new NotImplementedException(),
+            _ => throw new ArgumentException($"Unsupported network type: {NetworkType}")
+        };
+    }
 
     /// <summary>
     /// Gets cache statistics for monitoring.

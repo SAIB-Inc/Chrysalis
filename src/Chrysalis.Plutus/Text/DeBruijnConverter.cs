@@ -11,38 +11,44 @@ internal sealed class DeBruijnConverter
     private int _currentLevel;
     private readonly List<BiMap> _levels = [new BiMap()];
 
-    internal Program<DeBruijn> Convert(Program<Name> program) => new(program.Version, ConvertTerm(program.Term));
-
-    private Term<DeBruijn> ConvertTerm(Term<Name> term) => term switch
+    internal Program<DeBruijn> Convert(Program<Name> program)
     {
-        VarTerm<Name> v => new VarTerm<DeBruijn>(new DeBruijn(GetIndex(v.Name.Unique))),
+        return new(program.Version, ConvertTerm(program.Term));
+    }
 
-        LambdaTerm<Name> lam => ConvertLambda(lam),
+    private Term<DeBruijn> ConvertTerm(Term<Name> term)
+    {
+        return term switch
+        {
+            VarTerm<Name> v => new VarTerm<DeBruijn>(new DeBruijn(GetIndex(v.Name.Unique))),
 
-        ApplyTerm<Name> app => new ApplyTerm<DeBruijn>(
-            ConvertTerm(app.Function),
-            ConvertTerm(app.Argument)),
+            LambdaTerm<Name> lam => ConvertLambda(lam),
 
-        DelayTerm<Name> delay => new DelayTerm<DeBruijn>(ConvertTerm(delay.Body)),
+            ApplyTerm<Name> app => new ApplyTerm<DeBruijn>(
+                ConvertTerm(app.Function),
+                ConvertTerm(app.Argument)),
 
-        ForceTerm<Name> force => new ForceTerm<DeBruijn>(ConvertTerm(force.Body)),
+            DelayTerm<Name> delay => new DelayTerm<DeBruijn>(ConvertTerm(delay.Body)),
 
-        ConstrTerm<Name> constr => new ConstrTerm<DeBruijn>(
-            constr.Tag,
-            [.. constr.Fields.Select(ConvertTerm)]),
+            ForceTerm<Name> force => new ForceTerm<DeBruijn>(ConvertTerm(force.Body)),
 
-        CaseTerm<Name> caseTerm => new CaseTerm<DeBruijn>(
-            ConvertTerm(caseTerm.Scrutinee),
-            [.. caseTerm.Branches.Select(ConvertTerm)]),
+            ConstrTerm<Name> constr => new ConstrTerm<DeBruijn>(
+                constr.Tag,
+                [.. constr.Fields.Select(ConvertTerm)]),
 
-        ConstTerm<Name> con => new ConstTerm<DeBruijn>(con.Value),
+            CaseTerm<Name> caseTerm => new CaseTerm<DeBruijn>(
+                ConvertTerm(caseTerm.Scrutinee),
+                [.. caseTerm.Branches.Select(ConvertTerm)]),
 
-        BuiltinTerm<Name> builtin => new BuiltinTerm<DeBruijn>(builtin.Function),
+            ConstTerm<Name> con => new ConstTerm<DeBruijn>(con.Value),
 
-        ErrorTerm<Name> => new ErrorTerm<DeBruijn>(),
+            BuiltinTerm<Name> builtin => new BuiltinTerm<DeBruijn>(builtin.Function),
 
-        _ => throw new ConvertException($"unknown term type: {term.GetType().Name}"),
-    };
+            ErrorTerm<Name> => new ErrorTerm<DeBruijn>(),
+
+            _ => throw new ConvertException($"unknown term type: {term.GetType().Name}"),
+        };
+    }
 
     private Term<DeBruijn> ConvertLambda(LambdaTerm<Name> lam)
     {
@@ -55,9 +61,15 @@ internal sealed class DeBruijnConverter
         return new LambdaTerm<DeBruijn>(new DeBruijn(paramIndex), body);
     }
 
-    private void DeclareUnique(int unique) => _levels[_currentLevel].Insert(unique, _currentLevel);
+    private void DeclareUnique(int unique)
+    {
+        _levels[_currentLevel].Insert(unique, _currentLevel);
+    }
 
-    private void RemoveUnique(int unique) => _levels[_currentLevel].Remove(unique);
+    private void RemoveUnique(int unique)
+    {
+        _levels[_currentLevel].Remove(unique);
+    }
 
     private void StartScope()
     {
@@ -104,7 +116,10 @@ internal sealed class DeBruijnConverter
             _ = _uniqueToLevel.Remove(unique);
         }
 
-        internal int? GetLevel(int unique) => _uniqueToLevel.TryGetValue(unique, out int level) ? level : null;
+        internal int? GetLevel(int unique)
+        {
+            return _uniqueToLevel.TryGetValue(unique, out int level) ? level : null;
+        }
     }
 }
 

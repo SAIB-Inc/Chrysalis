@@ -31,11 +31,15 @@ internal static class ListBuiltins
             : (CekValue)new VConstant(new ListConstant(list.ItemType, list.Values.Insert(0, elem)));
     }
 
-    internal static CekValue NullList(ImmutableArray<CekValue> args) =>
-        BoolResult(UnwrapListConstant(args[0]).Values.IsEmpty);
+    internal static CekValue NullList(ImmutableArray<CekValue> args)
+    {
+        return BoolResult(UnwrapListConstant(args[0]).Values.IsEmpty);
+    }
 
-    internal static CekValue ChooseList(ImmutableArray<CekValue> args) =>
-        UnwrapListConstant(args[0]).Values.IsEmpty ? args[1] : args[2];
+    internal static CekValue ChooseList(ImmutableArray<CekValue> args)
+    {
+        return UnwrapListConstant(args[0]).Values.IsEmpty ? args[1] : args[2];
+    }
 
     internal static CekValue DropList(ImmutableArray<CekValue> args)
     {
