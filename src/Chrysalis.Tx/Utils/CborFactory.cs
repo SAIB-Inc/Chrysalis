@@ -365,6 +365,7 @@ public partial record ProtocolVersionMirror(
 
 /// <summary>Mirror for <see cref="CborRationalNumber"/>.</summary>
 [CborSerializable]
+[CborTag(30)]
 [CborList]
 public partial record CborRationalNumberMirror(
     [CborOrder(0)] ulong Numerator,
