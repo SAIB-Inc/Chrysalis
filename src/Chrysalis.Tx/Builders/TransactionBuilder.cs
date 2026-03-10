@@ -47,10 +47,7 @@ public class TransactionBuilder
     /// </summary>
     /// <param name="pparams">The protocol parameters.</param>
     /// <returns>A new TransactionBuilder instance.</returns>
-    public static TransactionBuilder Create(ProtocolParams pparams)
-    {
-        return new TransactionBuilder() { Pparams = pparams };
-    }
+    public static TransactionBuilder Create(ProtocolParams pparams) => new() { Pparams = pparams };
 
     #region Transaction Body Methods
 
@@ -461,10 +458,7 @@ public class TransactionBuilder
     /// Builds and returns the complete transaction.
     /// </summary>
     /// <returns>The constructed PostMaryTransaction.</returns>
-    public PostMaryTransaction Build()
-    {
-        return new PostMaryTransaction(Body, WitnessSet, true, _auxiliaryData);
-    }
+    public PostMaryTransaction Build() => new(Body, WitnessSet, true, _auxiliaryData);
 
     private static MultiAssetMint MergeMints(MultiAssetMint existingMint, MultiAssetMint newMint)
     {

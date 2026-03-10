@@ -42,18 +42,15 @@ public class Ouroboros(string socketPath, ulong networkMagic = 2) : ICardanoData
     /// </summary>
     /// <param name="networkType">The network type.</param>
     /// <returns>The network magic number.</returns>
-    public static ulong GetNetworkMagic(NetworkType networkType)
+    public static ulong GetNetworkMagic(NetworkType networkType) => networkType switch
     {
-        return networkType switch
-        {
-            NetworkType.Mainnet => 764824073UL,
-            NetworkType.Preprod => 1UL,
-            NetworkType.Testnet => throw new NotImplementedException(),
-            NetworkType.Preview => throw new NotImplementedException(),
-            NetworkType.Unknown => throw new NotImplementedException(),
-            _ => 2UL
-        };
-    }
+        NetworkType.Mainnet => 764824073UL,
+        NetworkType.Preprod => 1UL,
+        NetworkType.Testnet => throw new NotImplementedException(),
+        NetworkType.Preview => throw new NotImplementedException(),
+        NetworkType.Unknown => throw new NotImplementedException(),
+        _ => 2UL
+    };
 
     /// <summary>
     /// Retrieves protocol parameters via local state query.
@@ -136,8 +133,5 @@ public class Ouroboros(string socketPath, ulong networkMagic = 2) : ICardanoData
     /// </summary>
     /// <param name="txHash">The transaction hash.</param>
     /// <returns>Always throws NotImplementedException.</returns>
-    public Task<Metadata?> GetTransactionMetadataAsync(string txHash)
-    {
-        throw new NotImplementedException("Transaction metadata retrieval is not supported via Ouroboros protocol");
-    }
+    public Task<Metadata?> GetTransactionMetadataAsync(string txHash) => throw new NotImplementedException("Transaction metadata retrieval is not supported via Ouroboros protocol");
 }

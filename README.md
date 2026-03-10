@@ -35,7 +35,8 @@ Chrysalis is a native .NET toolkit for Cardano blockchain development, providing
 - 🔄 **Node Communication** - Direct interaction with Cardano nodes through Ouroboros mini-protocols
 - 🔑 **Wallet Management** - Address generation and key handling
 - 💳 **Transaction Building** - Simple and advanced transaction construction
-- 📜 **Smart Contract Integration** - Plutus script evaluation and validation via Rust FFI
+- 📜 **Smart Contract Integration** - Pure managed Plutus VM with CEK machine for script evaluation
+- 🧠 **Plutus VM** - Full UPLC interpreter in C# — no native dependencies, no FFI
 
 ## ✨ Features
 
@@ -72,7 +73,7 @@ Chrysalis consists of several specialized libraries:
 | **Chrysalis.Cbor.CodeGen** | Source generation for optimized serialization code |
 | **Chrysalis.Network**      | Implementation of Ouroboros mini-protocols         |
 | **Chrysalis.Tx**           | Transaction building and submission                |
-| **Chrysalis.Plutus**       | Smart contract evaluation and validation           |
+| **Chrysalis.Plutus**       | Pure managed UPLC/CEK machine for Plutus scripts   |
 | **Chrysalis.Wallet**       | Key management and address handling                |
 
 ## 💻 Usage Examples
@@ -280,6 +281,49 @@ var nftMetadata = new Cip68<PlutusData>(
 );
 ```
 
+### 🧠 Plutus VM — Pure Managed Script Evaluation
+
+Chrysalis includes a complete UPLC (Untyped Plutus Lambda Calculus) interpreter written entirely in C#. No Haskell, no Rust, no native dependencies — just managed .NET code.
+
+Given a transaction and its resolved UTxOs, Chrysalis can evaluate all Plutus scripts and return exact execution units:
+
+```csharp
+// Evaluate all scripts in a transaction — pure managed C#
+IReadOnlyList<EvaluationResult> results = ScriptContextBuilder.EvaluateTx(
+    body, witnessSet, utxos, SlotNetworkConfig.Mainnet);
+
+foreach (var result in results)
+{
+    Console.WriteLine($"Tag: {result.RedeemerTag}, Index: {result.Index}");
+    Console.WriteLine($"  Memory: {result.ExUnits.Mem}, Steps: {result.ExUnits.Steps}");
+}
+```
+
+The evaluation pipeline:
+
+1. **ScriptContext building** — Constructs the full Plutus V3 ScriptContext (TxInfo, ScriptPurpose, ScriptInfo) from Codec types, ported from [Aiken](https://github.com/aiken-lang/aiken)
+2. **Script resolution** — Finds scripts from the witness set or UTxO script references
+3. **Flat decoding** — Decodes the UPLC program from Cardano's flat binary encoding
+4. **CEK machine** — Executes the program with all 94 Plutus V3 builtins including BLS12-381 cryptographic primitives
+5. **ExUnits tracking** — Returns precise memory and CPU step consumption
+
+The VM passes 999/999 UPLC conformance tests covering all Plutus versions (V1–V3).
+
+The transaction builder uses this automatically — no external evaluator needed:
+
+```csharp
+var template = TransactionTemplateBuilder<MyParams>.Create(provider)
+    .AddInput((options, p) =>
+    {
+        options.From = "validator";
+        options.SetRedeemerBuilder((_, _, _) => new PlutusConstr([]));
+    })
+    .Build();
+
+// Scripts are evaluated in pure C# during transaction building
+Transaction tx = await template(myParams);
+```
+
 ## ⚡ Performance
 
 .NET can compete with Rust and Go. Chrysalis proves it.
@@ -333,7 +377,7 @@ Chrysalis provides comprehensive support for Cardano's evolution:
     <th>Era</th>
     <th>Phase</th>
     <th>Status</th>
-    <th colspan="3">Feature Support</th>
+    <th colspan="4">Feature Support</th>
   </tr>
   <tr>
     <th></th>
@@ -342,6 +386,7 @@ Chrysalis provides comprehensive support for Cardano's evolution:
     <th align="center">Serialization</th>
     <th align="center">Block Processing</th>
     <th align="center">Transaction Building</th>
+    <th align="center">Script Evaluation</th>
   </tr>
 </thead>
 <tbody>
@@ -352,6 +397,7 @@ Chrysalis provides comprehensive support for Cardano's evolution:
     <td align="center">✅</td>
     <td align="center">✅</td>
     <td align="center">❌</td>
+    <td align="center">❌</td>
   </tr>
   <tr>
     <td><strong>Shelley</strong></td>
@@ -360,6 +406,7 @@ Chrysalis provides comprehensive support for Cardano's evolution:
     <td align="center">✅</td>
     <td align="center">✅</td>
     <td align="center">✅</td>
+    <td align="center">❌</td>
   </tr>
   <tr>
     <td><strong>Allegra</strong></td>
@@ -368,6 +415,7 @@ Chrysalis provides comprehensive support for Cardano's evolution:
     <td align="center">✅</td>
     <td align="center">✅</td>
     <td align="center">✅</td>
+    <td align="center">❌</td>
   </tr>
   <tr>
     <td><strong>Mary</strong></td>
@@ -376,10 +424,12 @@ Chrysalis provides comprehensive support for Cardano's evolution:
     <td align="center">✅</td>
     <td align="center">✅</td>
     <td align="center">✅</td>
+    <td align="center">❌</td>
   </tr>
   <tr>
     <td><strong>Alonzo</strong></td>
     <td>Smart Contracts</td>
+    <td align="center">✅</td>
     <td align="center">✅</td>
     <td align="center">✅</td>
     <td align="center">✅</td>
@@ -392,10 +442,12 @@ Chrysalis provides comprehensive support for Cardano's evolution:
     <td align="center">✅</td>
     <td align="center">✅</td>
     <td align="center">✅</td>
+    <td align="center">✅</td>
   </tr>
   <tr>
     <td><strong>Conway</strong></td>
     <td>Governance</td>
+    <td align="center">✅</td>
     <td align="center">✅</td>
     <td align="center">✅</td>
     <td align="center">✅</td>
@@ -420,15 +472,6 @@ For detailed documentation on each component:
 - [Getting Started Guide](https://docs.chrysalis.dev/guides/getting-started) - Coming soon
 
 > Note: The documentation is currently in development. In the meantime, this README and the code examples provide a good starting point.
-
-### Native Library Dependencies
-
-The Plutus VM integration currently requires Rust-based native libraries that are automatically included with the NuGet package. We are actively working towards a pure .NET implementation of the Plutus Virtual Machine for improved cross-platform compatibility and performance.
-
-Current native dependencies:
-
-- Linux: `libpallas_dotnet_rs.so` and `libplutus_vm_dotnet_rs.so`
-- macOS: `libplutus_vm_dotnet_rs.dylib`
 
 ## 🤝 Contributing
 

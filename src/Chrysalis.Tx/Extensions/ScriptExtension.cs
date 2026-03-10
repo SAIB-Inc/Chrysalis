@@ -1,4 +1,3 @@
-using Chrysalis.Codec.Types.Cardano.Core.Common;
 using Chrysalis.Codec.Types.Cardano.Core.Scripts;
 using Chrysalis.Codec.Types;
 using Chrysalis.Codec.Serialization;

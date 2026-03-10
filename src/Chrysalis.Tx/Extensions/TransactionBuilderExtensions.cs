@@ -9,12 +9,10 @@ using Chrysalis.Codec.Types.Cardano.Core.Scripts;
 using Chrysalis.Codec.Types.Cardano.Core.Protocol;
 using Chrysalis.Codec.Types.Cardano.Core.Transaction;
 using Chrysalis.Codec.Types.Cardano.Core.TransactionWitness;
-using Chrysalis.Plutus.VM.EvalTx;
 using Chrysalis.Tx.Builders;
 using Chrysalis.Tx.Models;
 using Chrysalis.Tx.Models.Cbor;
 using Chrysalis.Tx.Utils;
-using Chrysalis.Wallet.Models.Enums;
 
 namespace Chrysalis.Tx.Extensions;
 
@@ -337,23 +335,22 @@ public static class TransactionBuilderExtensions
 
     /// <summary>
     /// Evaluates Plutus scripts in the transaction and updates execution unit budgets.
+    /// Uses the managed Plutus VM with ScriptContext builder.
     /// </summary>
     /// <param name="builder">The transaction builder.</param>
     /// <param name="utxos">The resolved UTxOs for evaluation context.</param>
-    /// <param name="networkType">The network type for evaluation.</param>
+    /// <param name="slotConfig">The slot-to-posix-time configuration for the network.</param>
     /// <returns>The transaction builder with updated execution units.</returns>
-    public static TransactionBuilder Evaluate(this TransactionBuilder builder, List<ResolvedInput> utxos, NetworkType networkType)
+    public static TransactionBuilder Evaluate(this TransactionBuilder builder, List<ResolvedInput> utxos, SlotNetworkConfig slotConfig)
     {
         ArgumentNullException.ThrowIfNull(builder);
         ArgumentNullException.ThrowIfNull(utxos);
+        ArgumentNullException.ThrowIfNull(slotConfig);
 
-        CborDefList<ResolvedInput> utxoCbor = new(utxos);
-        byte[] utxoCborBytes = CborSerializer.Serialize<CborMaybeIndefList<ResolvedInput>>(utxoCbor);
-        Transaction transaction = builder.Build();
-        byte[] txCborBytes = CborSerializer.Serialize(transaction);
-        IReadOnlyList<Plutus.VM.Models.EvaluationResult> evalResult = Evaluator.EvaluateTx(txCborBytes, utxoCborBytes, networkType);
+        IReadOnlyList<Plutus.VM.Models.EvaluationResult> evalResult =
+            ScriptContextBuilder.EvaluateTx(builder.Body, builder.WitnessSet, utxos, slotConfig);
+
         Redeemers? previousRedeemers = builder.WitnessSet.Redeemers;
-
 
         switch (previousRedeemers)
         {
@@ -363,7 +360,7 @@ public static class TransactionBuilderExtensions
                 {
                     foreach (Plutus.VM.Models.EvaluationResult result in evalResult)
                     {
-                        if (redeemer.Tag == (int)result.RedeemerTag && redeemer.Index == result.Index)
+                        if (redeemer.Tag == result.RedeemerTag && redeemer.Index == result.Index)
                         {
                             ExUnits exUnits = new(result.ExUnits.Mem, result.ExUnits.Steps);
                             updatedRedeemersList.Add(new RedeemerEntry(redeemer.Tag, redeemer.Index, redeemer.Data, exUnits));
@@ -378,7 +375,7 @@ public static class TransactionBuilderExtensions
                 {
                     foreach (Plutus.VM.Models.EvaluationResult result in evalResult)
                     {
-                        if (kvp.Key.Tag == (int)result.RedeemerTag && kvp.Key.Index == result.Index)
+                        if (kvp.Key.Tag == result.RedeemerTag && kvp.Key.Index == result.Index)
                         {
                             ExUnits exUnits = new(result.ExUnits.Mem, result.ExUnits.Steps);
                             updatedRedeemersMap.Add(new RedeemerKey(kvp.Key.Tag, kvp.Key.Index), new RedeemerValue(kvp.Value.Data, exUnits));
@@ -390,7 +387,6 @@ public static class TransactionBuilderExtensions
             default:
                 break;
         }
-
 
         return builder;
     }
