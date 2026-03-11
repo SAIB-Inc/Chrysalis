@@ -71,15 +71,9 @@ internal static class DataBuiltins
         return DataResult(new PlutusDataList(values.MoveToImmutable()));
     }
 
-    internal static CekValue IData(CekValue[] args)
-    {
-        return DataResult(new PlutusDataInteger(UnwrapInteger(args[0])));
-    }
+    internal static CekValue IData(CekValue[] args) => DataResult(new PlutusDataInteger(UnwrapInteger(args[0])));
 
-    internal static CekValue BData(CekValue[] args)
-    {
-        return DataResult(new PlutusDataByteString(UnwrapByteString(args[0])));
-    }
+    internal static CekValue BData(CekValue[] args) => DataResult(new PlutusDataByteString(UnwrapByteString(args[0])));
 
     // --- Deconstructors ---
 
@@ -172,10 +166,7 @@ internal static class DataBuiltins
 
     // --- equalsData ---
 
-    internal static CekValue EqualsData(CekValue[] args)
-    {
-        return BoolResult(PlutusDataEquals(UnwrapData(args[0]), UnwrapData(args[1])));
-    }
+    internal static CekValue EqualsData(CekValue[] args) => BoolResult(PlutusDataEquals(UnwrapData(args[0]), UnwrapData(args[1])));
 
     // --- chooseData ---
 

@@ -6,20 +6,11 @@ namespace Chrysalis.Plutus.Builtins;
 
 internal static class IntegerBuiltins
 {
-    internal static CekValue AddInteger(CekValue[] args)
-    {
-        return IntegerResult(UnwrapInteger(args[0]) + UnwrapInteger(args[1]));
-    }
+    internal static CekValue AddInteger(CekValue[] args) => IntegerResult(UnwrapInteger(args[0]) + UnwrapInteger(args[1]));
 
-    internal static CekValue SubtractInteger(CekValue[] args)
-    {
-        return IntegerResult(UnwrapInteger(args[0]) - UnwrapInteger(args[1]));
-    }
+    internal static CekValue SubtractInteger(CekValue[] args) => IntegerResult(UnwrapInteger(args[0]) - UnwrapInteger(args[1]));
 
-    internal static CekValue MultiplyInteger(CekValue[] args)
-    {
-        return IntegerResult(UnwrapInteger(args[0]) * UnwrapInteger(args[1]));
-    }
+    internal static CekValue MultiplyInteger(CekValue[] args) => IntegerResult(UnwrapInteger(args[0]) * UnwrapInteger(args[1]));
 
     internal static CekValue QuotientInteger(CekValue[] args)
     {
@@ -79,20 +70,11 @@ internal static class IntegerBuiltins
         return IntegerResult(r);
     }
 
-    internal static CekValue EqualsInteger(CekValue[] args)
-    {
-        return BoolResult(UnwrapInteger(args[0]) == UnwrapInteger(args[1]));
-    }
+    internal static CekValue EqualsInteger(CekValue[] args) => BoolResult(UnwrapInteger(args[0]) == UnwrapInteger(args[1]));
 
-    internal static CekValue LessThanInteger(CekValue[] args)
-    {
-        return BoolResult(UnwrapInteger(args[0]) < UnwrapInteger(args[1]));
-    }
+    internal static CekValue LessThanInteger(CekValue[] args) => BoolResult(UnwrapInteger(args[0]) < UnwrapInteger(args[1]));
 
-    internal static CekValue LessThanEqualsInteger(CekValue[] args)
-    {
-        return BoolResult(UnwrapInteger(args[0]) <= UnwrapInteger(args[1]));
-    }
+    internal static CekValue LessThanEqualsInteger(CekValue[] args) => BoolResult(UnwrapInteger(args[0]) <= UnwrapInteger(args[1]));
 
     internal static CekValue ExpModInteger(CekValue[] args)
     {

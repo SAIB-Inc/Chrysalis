@@ -12,10 +12,7 @@ internal static class BuiltinRuntime
     private static readonly Func<CekValue[], CekValue>[] Dispatchers = BuildDispatchers();
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    internal static CekValue Call(DefaultFunction function, CekValue[] args)
-    {
-        return Dispatchers[(int)function](args);
-    }
+    internal static CekValue Call(DefaultFunction function, CekValue[] args) => Dispatchers[(int)function](args);
 
     private static Func<CekValue[], CekValue>[] BuildDispatchers()
     {

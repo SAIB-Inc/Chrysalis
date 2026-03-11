@@ -42,15 +42,9 @@ internal static class ListBuiltins
         return new VConstant(new ListConstant(list.ItemType, builder.MoveToImmutable()));
     }
 
-    internal static CekValue NullList(CekValue[] args)
-    {
-        return BoolResult(UnwrapListConstant(args[0]).IsListEmpty);
-    }
+    internal static CekValue NullList(CekValue[] args) => BoolResult(UnwrapListConstant(args[0]).IsListEmpty);
 
-    internal static CekValue ChooseList(CekValue[] args)
-    {
-        return UnwrapListConstant(args[0]).IsListEmpty ? args[1] : args[2];
-    }
+    internal static CekValue ChooseList(CekValue[] args) => UnwrapListConstant(args[0]).IsListEmpty ? args[1] : args[2];
 
     internal static CekValue DropList(CekValue[] args)
     {

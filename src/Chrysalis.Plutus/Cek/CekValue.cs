@@ -45,8 +45,5 @@ internal sealed class Environment
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    internal static Environment Extend(Environment? env, CekValue value)
-    {
-        return new Environment { Value = value, Next = env };
-    }
+    internal static Environment Extend(Environment? env, CekValue value) => new() { Value = value, Next = env };
 }

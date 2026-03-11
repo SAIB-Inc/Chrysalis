@@ -11,35 +11,17 @@ internal static class CryptoBuiltins
 {
     // --- Hash builtins ---
 
-    internal static CekValue Sha2_256(CekValue[] args)
-    {
-        return HashWith(new Sha256Digest(), UnwrapByteString(args[0]).Span);
-    }
+    internal static CekValue Sha2_256(CekValue[] args) => HashWith(new Sha256Digest(), UnwrapByteString(args[0]).Span);
 
-    internal static CekValue Sha3_256(CekValue[] args)
-    {
-        return HashWith(new Sha3Digest(256), UnwrapByteString(args[0]).Span);
-    }
+    internal static CekValue Sha3_256(CekValue[] args) => HashWith(new Sha3Digest(256), UnwrapByteString(args[0]).Span);
 
-    internal static CekValue Blake2b_256(CekValue[] args)
-    {
-        return HashWith(new Blake2bDigest(256), UnwrapByteString(args[0]).Span);
-    }
+    internal static CekValue Blake2b_256(CekValue[] args) => HashWith(new Blake2bDigest(256), UnwrapByteString(args[0]).Span);
 
-    internal static CekValue Blake2b_224(CekValue[] args)
-    {
-        return HashWith(new Blake2bDigest(224), UnwrapByteString(args[0]).Span);
-    }
+    internal static CekValue Blake2b_224(CekValue[] args) => HashWith(new Blake2bDigest(224), UnwrapByteString(args[0]).Span);
 
-    internal static CekValue Keccak_256(CekValue[] args)
-    {
-        return HashWith(new KeccakDigest(256), UnwrapByteString(args[0]).Span);
-    }
+    internal static CekValue Keccak_256(CekValue[] args) => HashWith(new KeccakDigest(256), UnwrapByteString(args[0]).Span);
 
-    internal static CekValue Ripemd_160(CekValue[] args)
-    {
-        return HashWith(new RipeMD160Digest(), UnwrapByteString(args[0]).Span);
-    }
+    internal static CekValue Ripemd_160(CekValue[] args) => HashWith(new RipeMD160Digest(), UnwrapByteString(args[0]).Span);
 
     // --- Signature verification builtins ---
 

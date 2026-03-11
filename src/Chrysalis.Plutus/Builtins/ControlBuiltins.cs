@@ -5,10 +5,7 @@ namespace Chrysalis.Plutus.Builtins;
 
 internal static class ControlBuiltins
 {
-    internal static CekValue IfThenElse(CekValue[] args)
-    {
-        return UnwrapBool(args[0]) ? args[1] : args[2];
-    }
+    internal static CekValue IfThenElse(CekValue[] args) => UnwrapBool(args[0]) ? args[1] : args[2];
 
     internal static CekValue ChooseUnit(CekValue[] args)
     {
@@ -16,8 +13,5 @@ internal static class ControlBuiltins
         return args[1];
     }
 
-    internal static CekValue Trace(CekValue[] args)
-    {
-        return args[1];
-    }
+    internal static CekValue Trace(CekValue[] args) => args[1];
 }

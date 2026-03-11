@@ -62,22 +62,13 @@ internal sealed class ContextStack
     internal bool IsEmpty => _top == 0;
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    internal ref ContextFrame Peek()
-    {
-        return ref _frames[_top - 1];
-    }
+    internal ref ContextFrame Peek() => ref _frames[_top - 1];
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    internal FrameTag PeekTag()
-    {
-        return _top == 0 ? FrameTag.NoFrame : _frames[_top - 1].Tag;
-    }
+    internal FrameTag PeekTag() => _top == 0 ? FrameTag.NoFrame : _frames[_top - 1].Tag;
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    internal ref ContextFrame Pop()
-    {
-        return ref _frames[--_top];
-    }
+    internal ref ContextFrame Pop() => ref _frames[--_top];
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     internal ref ContextFrame Push()

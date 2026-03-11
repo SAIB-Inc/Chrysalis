@@ -11,20 +11,11 @@ internal static class BitwiseBuiltins
 
     // --- Logical bitwise ops ---
 
-    internal static CekValue AndByteString(CekValue[] args)
-    {
-        return BitwiseOp(args, (a, b) => (byte)(a & b), 0xFF);
-    }
+    internal static CekValue AndByteString(CekValue[] args) => BitwiseOp(args, (a, b) => (byte)(a & b), 0xFF);
 
-    internal static CekValue OrByteString(CekValue[] args)
-    {
-        return BitwiseOp(args, (a, b) => (byte)(a | b), 0x00);
-    }
+    internal static CekValue OrByteString(CekValue[] args) => BitwiseOp(args, (a, b) => (byte)(a | b), 0x00);
 
-    internal static CekValue XorByteString(CekValue[] args)
-    {
-        return BitwiseOp(args, (a, b) => (byte)(a ^ b), 0x00);
-    }
+    internal static CekValue XorByteString(CekValue[] args) => BitwiseOp(args, (a, b) => (byte)(a ^ b), 0x00);
 
     internal static CekValue ComplementByteString(CekValue[] args)
     {

@@ -6,20 +6,11 @@ namespace Chrysalis.Plutus.Builtins;
 
 internal static class StringBuiltins
 {
-    internal static CekValue AppendString(CekValue[] args)
-    {
-        return StringResult(UnwrapString(args[0]) + UnwrapString(args[1]));
-    }
+    internal static CekValue AppendString(CekValue[] args) => StringResult(UnwrapString(args[0]) + UnwrapString(args[1]));
 
-    internal static CekValue EqualsString(CekValue[] args)
-    {
-        return BoolResult(UnwrapString(args[0]) == UnwrapString(args[1]));
-    }
+    internal static CekValue EqualsString(CekValue[] args) => BoolResult(UnwrapString(args[0]) == UnwrapString(args[1]));
 
-    internal static CekValue EncodeUtf8(CekValue[] args)
-    {
-        return ByteStringResult(Encoding.UTF8.GetBytes(UnwrapString(args[0])));
-    }
+    internal static CekValue EncodeUtf8(CekValue[] args) => ByteStringResult(Encoding.UTF8.GetBytes(UnwrapString(args[0])));
 
     internal static CekValue DecodeUtf8(CekValue[] args)
     {

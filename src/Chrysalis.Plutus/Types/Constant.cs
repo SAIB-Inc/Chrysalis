@@ -44,10 +44,7 @@ public sealed record ListConstant(ConstantType ItemType, ImmutableArray<Constant
     internal int Offset { get; init; }
     internal int Count => Values.Length - Offset;
     internal bool IsListEmpty => Offset >= Values.Length;
-    internal Constant ElementAt(int index)
-    {
-        return Values[Offset + index];
-    }
+    internal Constant ElementAt(int index) => Values[Offset + index];
     public override ConstantType ConstantType => new ListType(ItemType);
 }
 

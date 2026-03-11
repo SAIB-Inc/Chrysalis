@@ -27,10 +27,7 @@ public abstract record Term<TBinder>
 {
     internal readonly TermTag TermTag;
 
-    private protected Term(TermTag tag)
-    {
-        TermTag = tag;
-    }
+    private protected Term(TermTag tag) => TermTag = tag;
 }
 
 /// <summary>Variable reference.</summary>

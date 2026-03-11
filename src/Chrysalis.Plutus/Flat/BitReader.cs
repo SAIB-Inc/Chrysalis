@@ -152,8 +152,5 @@ internal sealed class BitReader
         // The terminating 1-bit has been consumed
     }
 
-    private static void ThrowPastEnd()
-    {
-        throw new InvalidOperationException("Flat: read past end of input.");
-    }
+    private static void ThrowPastEnd() => throw new InvalidOperationException("Flat: read past end of input.");
 }
