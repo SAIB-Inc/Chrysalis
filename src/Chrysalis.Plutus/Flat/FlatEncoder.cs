@@ -187,10 +187,10 @@ public static class FlatEncoder
                 EncodeByteString(writer, cborBytes);
                 break;
             case ListConstant list:
-                foreach (Constant item in list.Values)
+                for (int li = 0; li < list.Count; li++)
                 {
                     writer.PushBit(1);
-                    EncodeConstantValue(writer, item);
+                    EncodeConstantValue(writer, list.ElementAt(li));
                 }
                 writer.PushBit(0);
                 break;

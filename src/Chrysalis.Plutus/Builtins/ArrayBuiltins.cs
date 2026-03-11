@@ -8,21 +8,30 @@ namespace Chrysalis.Plutus.Builtins;
 
 internal static class ArrayBuiltins
 {
-    internal static CekValue ListToArray(ImmutableArray<CekValue> args)
+    internal static CekValue ListToArray(CekValue[] args)
     {
         ListConstant list = UnwrapListConstant(args[0]);
-        return new VConstant(new ArrayConstant(list.ItemType, list.Values));
+        if (list.Offset == 0)
+        {
+            return new VConstant(new ArrayConstant(list.ItemType, list.Values));
+        }
+        ImmutableArray<Constant>.Builder builder = ImmutableArray.CreateBuilder<Constant>(list.Count);
+        for (int i = 0; i < list.Count; i++)
+        {
+            builder.Add(list.ElementAt(i));
+        }
+        return new VConstant(new ArrayConstant(list.ItemType, builder.MoveToImmutable()));
     }
 
-    internal static CekValue LengthOfArray(ImmutableArray<CekValue> args) => IntegerResult(UnwrapArrayConstant(args[0]).Values.Length);
+    internal static CekValue LengthOfArray(CekValue[] args) => IntegerResult(UnwrapArrayConstant(args[0]).Values.Length);
 
-    internal static CekValue IndexArray(ImmutableArray<CekValue> args)
+    internal static CekValue IndexArray(CekValue[] args)
     {
         ArrayConstant arr = UnwrapArrayConstant(args[0]);
         BigInteger idx = UnwrapInteger(args[1]);
         return idx < 0 || idx >= arr.Values.Length
             ? throw new EvaluationException(
                 $"indexArray: index {idx} out of bounds for array of length {arr.Values.Length}")
-            : (CekValue)new VConstant(arr.Values[(int)idx]);
+            : new VConstant(arr.Values[(int)idx]);
     }
 }

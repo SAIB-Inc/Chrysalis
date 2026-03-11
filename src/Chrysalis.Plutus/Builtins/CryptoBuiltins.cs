@@ -1,4 +1,3 @@
-using System.Collections.Immutable;
 using Chrysalis.Plutus.Cek;
 using Org.BouncyCastle.Crypto.Digests;
 using Org.BouncyCastle.Crypto.Parameters;
@@ -12,21 +11,21 @@ internal static class CryptoBuiltins
 {
     // --- Hash builtins ---
 
-    internal static CekValue Sha2_256(ImmutableArray<CekValue> args) => HashWith(new Sha256Digest(), UnwrapByteString(args[0]).Span);
+    internal static CekValue Sha2_256(CekValue[] args) => HashWith(new Sha256Digest(), UnwrapByteString(args[0]).Span);
 
-    internal static CekValue Sha3_256(ImmutableArray<CekValue> args) => HashWith(new Sha3Digest(256), UnwrapByteString(args[0]).Span);
+    internal static CekValue Sha3_256(CekValue[] args) => HashWith(new Sha3Digest(256), UnwrapByteString(args[0]).Span);
 
-    internal static CekValue Blake2b_256(ImmutableArray<CekValue> args) => HashWith(new Blake2bDigest(256), UnwrapByteString(args[0]).Span);
+    internal static CekValue Blake2b_256(CekValue[] args) => HashWith(new Blake2bDigest(256), UnwrapByteString(args[0]).Span);
 
-    internal static CekValue Blake2b_224(ImmutableArray<CekValue> args) => HashWith(new Blake2bDigest(224), UnwrapByteString(args[0]).Span);
+    internal static CekValue Blake2b_224(CekValue[] args) => HashWith(new Blake2bDigest(224), UnwrapByteString(args[0]).Span);
 
-    internal static CekValue Keccak_256(ImmutableArray<CekValue> args) => HashWith(new KeccakDigest(256), UnwrapByteString(args[0]).Span);
+    internal static CekValue Keccak_256(CekValue[] args) => HashWith(new KeccakDigest(256), UnwrapByteString(args[0]).Span);
 
-    internal static CekValue Ripemd_160(ImmutableArray<CekValue> args) => HashWith(new RipeMD160Digest(), UnwrapByteString(args[0]).Span);
+    internal static CekValue Ripemd_160(CekValue[] args) => HashWith(new RipeMD160Digest(), UnwrapByteString(args[0]).Span);
 
     // --- Signature verification builtins ---
 
-    internal static CekValue VerifyEd25519Signature(ImmutableArray<CekValue> args)
+    internal static CekValue VerifyEd25519Signature(CekValue[] args)
     {
         ReadOnlyMemory<byte> pk = UnwrapByteString(args[0]);
         ReadOnlyMemory<byte> msg = UnwrapByteString(args[1]);
@@ -58,7 +57,7 @@ internal static class CryptoBuiltins
         }
     }
 
-    internal static CekValue VerifyEcdsaSecp256k1Signature(ImmutableArray<CekValue> args)
+    internal static CekValue VerifyEcdsaSecp256k1Signature(CekValue[] args)
     {
         ReadOnlyMemory<byte> pk = UnwrapByteString(args[0]);
         ReadOnlyMemory<byte> msg = UnwrapByteString(args[1]);
@@ -143,7 +142,7 @@ internal static class CryptoBuiltins
         }
     }
 
-    internal static CekValue VerifySchnorrSecp256k1Signature(ImmutableArray<CekValue> args)
+    internal static CekValue VerifySchnorrSecp256k1Signature(CekValue[] args)
     {
         ReadOnlyMemory<byte> pk = UnwrapByteString(args[0]);
         ReadOnlyMemory<byte> msg = UnwrapByteString(args[1]);

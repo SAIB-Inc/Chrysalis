@@ -1,4 +1,3 @@
-using System.Collections.Immutable;
 using System.Numerics;
 using Chrysalis.Plutus.Types;
 
@@ -159,7 +158,7 @@ internal static class ExMem
 
     private static long DataSize(CekValue val) => val is VConstant { Value: DataConstant d } ? DataExMem(d.Value) : 4;
 
-    private static long ListSizeFromArg(CekValue val) => val is VConstant { Value: ListConstant l } ? l.Values.Length : 0;
+    private static long ListSizeFromArg(CekValue val) => val is VConstant { Value: ListConstant l } ? l.Count : 0;
 
     private static long SizeExMemFromArg(CekValue val) => val is VConstant { Value: IntegerConstant i }
         && i.Value is var n
@@ -179,7 +178,7 @@ internal static class ExMem
     // --- Main dispatch: compute argument sizes for a builtin ---
 
     internal static (long X, long Y, long Z) ComputeArgSizes(
-        DefaultFunction func, ImmutableArray<CekValue> args) => func switch
+        DefaultFunction func, CekValue[] args) => func switch
         {
             // 2-arg integer operations: (int, int)
             DefaultFunction.AddInteger or
