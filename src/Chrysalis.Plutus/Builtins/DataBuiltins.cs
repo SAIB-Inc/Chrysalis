@@ -11,10 +11,10 @@ internal static class DataBuiltins
 {
     // --- Constructors ---
 
-    internal static CekValue ConstrData(ImmutableArray<CekValue> args)
+    internal static CekValue ConstrData(CekValue[] args)
     {
         BigInteger tag = UnwrapInteger(args[0]);
-        ImmutableArray<Constant> fieldConstants = UnwrapList(args[1]);
+        Constant[] fieldConstants = UnwrapList(args[1]);
         ImmutableArray<PlutusData>.Builder fields =
             ImmutableArray.CreateBuilder<PlutusData>(fieldConstants.Length);
         foreach (Constant c in fieldConstants)
@@ -31,9 +31,9 @@ internal static class DataBuiltins
         return DataResult(new PlutusDataConstr(tag, fields.MoveToImmutable()));
     }
 
-    internal static CekValue MapData(ImmutableArray<CekValue> args)
+    internal static CekValue MapData(CekValue[] args)
     {
-        ImmutableArray<Constant> pairConstants = UnwrapList(args[0]);
+        Constant[] pairConstants = UnwrapList(args[0]);
         ImmutableArray<(PlutusData Key, PlutusData Value)>.Builder entries =
             ImmutableArray.CreateBuilder<(PlutusData, PlutusData)>(pairConstants.Length);
         foreach (Constant c in pairConstants)
@@ -52,9 +52,9 @@ internal static class DataBuiltins
         return DataResult(new PlutusDataMap(entries.MoveToImmutable()));
     }
 
-    internal static CekValue ListData(ImmutableArray<CekValue> args)
+    internal static CekValue ListData(CekValue[] args)
     {
-        ImmutableArray<Constant> elConstants = UnwrapList(args[0]);
+        Constant[] elConstants = UnwrapList(args[0]);
         ImmutableArray<PlutusData>.Builder values =
             ImmutableArray.CreateBuilder<PlutusData>(elConstants.Length);
         foreach (Constant c in elConstants)
@@ -71,13 +71,19 @@ internal static class DataBuiltins
         return DataResult(new PlutusDataList(values.MoveToImmutable()));
     }
 
-    internal static CekValue IData(ImmutableArray<CekValue> args) => DataResult(new PlutusDataInteger(UnwrapInteger(args[0])));
+    internal static CekValue IData(CekValue[] args)
+    {
+        return DataResult(new PlutusDataInteger(UnwrapInteger(args[0])));
+    }
 
-    internal static CekValue BData(ImmutableArray<CekValue> args) => DataResult(new PlutusDataByteString(UnwrapByteString(args[0])));
+    internal static CekValue BData(CekValue[] args)
+    {
+        return DataResult(new PlutusDataByteString(UnwrapByteString(args[0])));
+    }
 
     // --- Deconstructors ---
 
-    internal static CekValue UnConstrData(ImmutableArray<CekValue> args)
+    internal static CekValue UnConstrData(CekValue[] args)
     {
         PlutusData d = UnwrapData(args[0]);
         if (d is not PlutusDataConstr constr)
@@ -100,7 +106,7 @@ internal static class DataBuiltins
             new ListConstant(ConstantType.PlutusData, fieldConstants.MoveToImmutable())));
     }
 
-    internal static CekValue UnMapData(ImmutableArray<CekValue> args)
+    internal static CekValue UnMapData(CekValue[] args)
     {
         PlutusData d = UnwrapData(args[0]);
         if (d is not PlutusDataMap map)
@@ -125,7 +131,7 @@ internal static class DataBuiltins
             pairs.MoveToImmutable()));
     }
 
-    internal static CekValue UnListData(ImmutableArray<CekValue> args)
+    internal static CekValue UnListData(CekValue[] args)
     {
         PlutusData d = UnwrapData(args[0]);
         if (d is not PlutusDataList list)
@@ -146,7 +152,7 @@ internal static class DataBuiltins
             constants.MoveToImmutable()));
     }
 
-    internal static CekValue UnIData(ImmutableArray<CekValue> args)
+    internal static CekValue UnIData(CekValue[] args)
     {
         PlutusData d = UnwrapData(args[0]);
         return d is not PlutusDataInteger i
@@ -155,7 +161,7 @@ internal static class DataBuiltins
             : IntegerResult(i.Value);
     }
 
-    internal static CekValue UnBData(ImmutableArray<CekValue> args)
+    internal static CekValue UnBData(CekValue[] args)
     {
         PlutusData d = UnwrapData(args[0]);
         return d is not PlutusDataByteString bs
@@ -166,11 +172,14 @@ internal static class DataBuiltins
 
     // --- equalsData ---
 
-    internal static CekValue EqualsData(ImmutableArray<CekValue> args) => BoolResult(PlutusDataEquals(UnwrapData(args[0]), UnwrapData(args[1])));
+    internal static CekValue EqualsData(CekValue[] args)
+    {
+        return BoolResult(PlutusDataEquals(UnwrapData(args[0]), UnwrapData(args[1])));
+    }
 
     // --- chooseData ---
 
-    internal static CekValue ChooseData(ImmutableArray<CekValue> args)
+    internal static CekValue ChooseData(CekValue[] args)
     {
         PlutusData d = UnwrapData(args[0]);
         return d switch
@@ -187,7 +196,7 @@ internal static class DataBuiltins
 
     // --- mkPairData ---
 
-    internal static CekValue MkPairData(ImmutableArray<CekValue> args)
+    internal static CekValue MkPairData(CekValue[] args)
     {
         PlutusData a = UnwrapData(args[0]);
         PlutusData b = UnwrapData(args[1]);
@@ -200,13 +209,13 @@ internal static class DataBuiltins
 
     // --- mkNilData / mkNilPairData ---
 
-    internal static CekValue MkNilData(ImmutableArray<CekValue> args)
+    internal static CekValue MkNilData(CekValue[] args)
     {
         UnwrapUnit(args[0]);
         return new VConstant(new ListConstant(ConstantType.PlutusData, []));
     }
 
-    internal static CekValue MkNilPairData(ImmutableArray<CekValue> args)
+    internal static CekValue MkNilPairData(CekValue[] args)
     {
         UnwrapUnit(args[0]);
         return new VConstant(new ListConstant(
@@ -215,7 +224,7 @@ internal static class DataBuiltins
 
     // --- serialiseData ---
 
-    internal static CekValue SerialiseData(ImmutableArray<CekValue> args)
+    internal static CekValue SerialiseData(CekValue[] args)
     {
         PlutusData d = UnwrapData(args[0]);
         byte[] encoded = CborWriter.EncodePlutusData(d);

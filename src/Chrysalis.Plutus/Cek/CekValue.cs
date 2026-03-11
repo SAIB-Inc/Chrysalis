@@ -1,10 +1,10 @@
-using System.Collections.Immutable;
+using System.Runtime.CompilerServices;
 using Chrysalis.Plutus.Types;
 
 namespace Chrysalis.Plutus.Cek;
 
 /// <summary>
-/// CEK machine runtime value. Represents evaluated terms during execution.
+/// CEK machine runtime value. Record hierarchy for minimal per-variant allocation size.
 /// </summary>
 internal abstract record CekValue;
 
@@ -14,24 +14,19 @@ internal sealed record VLambda(DeBruijn Parameter, Term<DeBruijn> Body, Environm
 
 internal sealed record VDelay(Term<DeBruijn> Body, Environment? Env) : CekValue;
 
-internal sealed record VBuiltin(DefaultFunction Function, int Forces, ImmutableArray<CekValue> Args) : CekValue;
+internal sealed record VBuiltin(DefaultFunction Function, int Forces, CekValue[] Args, int ArgCount) : CekValue;
 
-internal sealed record VConstr(ulong Index, ImmutableArray<CekValue> Fields) : CekValue;
+internal sealed record VConstr(ulong Index, CekValue[] Fields, int FieldCount) : CekValue;
 
 /// <summary>
 /// Linked-list environment for 1-based DeBruijn index lookup.
 /// </summary>
 internal sealed class Environment
 {
-    internal CekValue Value { get; }
-    internal Environment? Next { get; }
+    internal CekValue Value = null!;
+    internal Environment? Next;
 
-    internal Environment(CekValue value, Environment? next)
-    {
-        Value = value;
-        Next = next;
-    }
-
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     internal static CekValue? Lookup(Environment? env, int index)
     {
         Environment? current = env;
@@ -49,5 +44,9 @@ internal sealed class Environment
         return null;
     }
 
-    internal static Environment Extend(Environment? env, CekValue value) => new(value, env);
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal static Environment Extend(Environment? env, CekValue value)
+    {
+        return new Environment { Value = value, Next = env };
+    }
 }

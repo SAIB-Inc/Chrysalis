@@ -1,4 +1,3 @@
-using System.Collections.Immutable;
 using System.Numerics;
 using Chrysalis.Plutus.Cek;
 using static Chrysalis.Plutus.Builtins.BuiltinHelpers;
@@ -7,7 +6,7 @@ namespace Chrysalis.Plutus.Builtins;
 
 internal static class ByteStringBuiltins
 {
-    internal static CekValue AppendByteString(ImmutableArray<CekValue> args)
+    internal static CekValue AppendByteString(CekValue[] args)
     {
         ReadOnlyMemory<byte> a = UnwrapByteString(args[0]);
         ReadOnlyMemory<byte> b = UnwrapByteString(args[1]);
@@ -17,7 +16,7 @@ internal static class ByteStringBuiltins
         return ByteStringResult(result);
     }
 
-    internal static CekValue ConsByteString(ImmutableArray<CekValue> args)
+    internal static CekValue ConsByteString(CekValue[] args)
     {
         BigInteger n = UnwrapInteger(args[0]);
         ReadOnlyMemory<byte> bs = UnwrapByteString(args[1]);
@@ -33,7 +32,7 @@ internal static class ByteStringBuiltins
         return ByteStringResult(result);
     }
 
-    internal static CekValue SliceByteString(ImmutableArray<CekValue> args)
+    internal static CekValue SliceByteString(CekValue[] args)
     {
         BigInteger skipBig = UnwrapInteger(args[0]);
         BigInteger takeBig = UnwrapInteger(args[1]);
@@ -44,9 +43,12 @@ internal static class ByteStringBuiltins
         return ByteStringResult(bs.Slice(skip, take).ToArray());
     }
 
-    internal static CekValue LengthOfByteString(ImmutableArray<CekValue> args) => IntegerResult(UnwrapByteString(args[0]).Length);
+    internal static CekValue LengthOfByteString(CekValue[] args)
+    {
+        return IntegerResult(UnwrapByteString(args[0]).Length);
+    }
 
-    internal static CekValue IndexByteString(ImmutableArray<CekValue> args)
+    internal static CekValue IndexByteString(CekValue[] args)
     {
         ReadOnlyMemory<byte> bs = UnwrapByteString(args[0]);
         BigInteger idxBig = UnwrapInteger(args[1]);
@@ -56,11 +58,23 @@ internal static class ByteStringBuiltins
             : IntegerResult(bs.Span[(int)idxBig]);
     }
 
-    internal static CekValue EqualsByteString(ImmutableArray<CekValue> args) => BoolResult(UnwrapByteString(args[0]).Span.SequenceEqual(UnwrapByteString(args[1]).Span));
+    internal static CekValue EqualsByteString(CekValue[] args)
+    {
+        return BoolResult(UnwrapByteString(args[0]).Span.SequenceEqual(UnwrapByteString(args[1]).Span));
+    }
 
-    internal static CekValue LessThanByteString(ImmutableArray<CekValue> args) => BoolResult(UnwrapByteString(args[0]).Span.SequenceCompareTo(UnwrapByteString(args[1]).Span) < 0);
+    internal static CekValue LessThanByteString(CekValue[] args)
+    {
+        return BoolResult(UnwrapByteString(args[0]).Span.SequenceCompareTo(UnwrapByteString(args[1]).Span) < 0);
+    }
 
-    internal static CekValue LessThanEqualsByteString(ImmutableArray<CekValue> args) => BoolResult(UnwrapByteString(args[0]).Span.SequenceCompareTo(UnwrapByteString(args[1]).Span) <= 0);
+    internal static CekValue LessThanEqualsByteString(CekValue[] args)
+    {
+        return BoolResult(UnwrapByteString(args[0]).Span.SequenceCompareTo(UnwrapByteString(args[1]).Span) <= 0);
+    }
 
-    private static int ClampToNonNegative(BigInteger n, int max) => n < 0 ? 0 : n > max ? max : (int)n;
+    private static int ClampToNonNegative(BigInteger n, int max)
+    {
+        return n < 0 ? 0 : n > max ? max : (int)n;
+    }
 }

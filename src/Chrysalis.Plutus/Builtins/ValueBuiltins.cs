@@ -66,7 +66,7 @@ internal static class ValueBuiltins
         return BigInteger.Zero;
     }
 
-    internal static CekValue LookupCoin(ImmutableArray<CekValue> args)
+    internal static CekValue LookupCoin(CekValue[] args)
     {
         ReadOnlyMemory<byte> ccy = UnwrapByteString(args[0]);
         ReadOnlyMemory<byte> token = UnwrapByteString(args[1]);
@@ -177,7 +177,7 @@ internal static class ValueBuiltins
         return new LedgerValue(newEntries.ToImmutable());
     }
 
-    internal static CekValue InsertCoin(ImmutableArray<CekValue> args)
+    internal static CekValue InsertCoin(CekValue[] args)
     {
         ReadOnlyMemory<byte> ccy = UnwrapByteString(args[0]);
         ReadOnlyMemory<byte> token = UnwrapByteString(args[1]);
@@ -255,7 +255,7 @@ internal static class ValueBuiltins
         return result.ToImmutable();
     }
 
-    internal static CekValue UnionValue(ImmutableArray<CekValue> args)
+    internal static CekValue UnionValue(CekValue[] args)
     {
         LedgerValue v1 = UnwrapValue(args[0]);
         LedgerValue v2 = UnwrapValue(args[1]);
@@ -306,7 +306,7 @@ internal static class ValueBuiltins
 
     // --- valueContains ---
 
-    internal static CekValue ValueContains(ImmutableArray<CekValue> args)
+    internal static CekValue ValueContains(CekValue[] args)
     {
         LedgerValue v1 = UnwrapValue(args[0]);
         LedgerValue v2 = UnwrapValue(args[1]);
@@ -351,7 +351,7 @@ internal static class ValueBuiltins
 
     // --- scaleValue ---
 
-    internal static CekValue ScaleValue(ImmutableArray<CekValue> args)
+    internal static CekValue ScaleValue(CekValue[] args)
     {
         BigInteger scalar = UnwrapInteger(args[0]);
         LedgerValue v = UnwrapValue(args[1]);
@@ -387,7 +387,7 @@ internal static class ValueBuiltins
 
     // --- valueData ---
 
-    internal static CekValue ValueData(ImmutableArray<CekValue> args)
+    internal static CekValue ValueData(CekValue[] args)
     {
         LedgerValue v = UnwrapValue(args[0]);
 
@@ -414,7 +414,7 @@ internal static class ValueBuiltins
 
     // --- unValueData ---
 
-    internal static CekValue UnValueData(ImmutableArray<CekValue> args)
+    internal static CekValue UnValueData(CekValue[] args)
     {
         PlutusData d = UnwrapData(args[0]);
 

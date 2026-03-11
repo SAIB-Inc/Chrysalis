@@ -1,4 +1,3 @@
-using System.Collections.Immutable;
 using System.Numerics;
 using Chrysalis.Plutus.Cek;
 using static Chrysalis.Plutus.Builtins.BuiltinHelpers;
@@ -7,20 +6,29 @@ namespace Chrysalis.Plutus.Builtins;
 
 internal static class IntegerBuiltins
 {
-    internal static CekValue AddInteger(ImmutableArray<CekValue> args) => IntegerResult(UnwrapInteger(args[0]) + UnwrapInteger(args[1]));
+    internal static CekValue AddInteger(CekValue[] args)
+    {
+        return IntegerResult(UnwrapInteger(args[0]) + UnwrapInteger(args[1]));
+    }
 
-    internal static CekValue SubtractInteger(ImmutableArray<CekValue> args) => IntegerResult(UnwrapInteger(args[0]) - UnwrapInteger(args[1]));
+    internal static CekValue SubtractInteger(CekValue[] args)
+    {
+        return IntegerResult(UnwrapInteger(args[0]) - UnwrapInteger(args[1]));
+    }
 
-    internal static CekValue MultiplyInteger(ImmutableArray<CekValue> args) => IntegerResult(UnwrapInteger(args[0]) * UnwrapInteger(args[1]));
+    internal static CekValue MultiplyInteger(CekValue[] args)
+    {
+        return IntegerResult(UnwrapInteger(args[0]) * UnwrapInteger(args[1]));
+    }
 
-    internal static CekValue QuotientInteger(ImmutableArray<CekValue> args)
+    internal static CekValue QuotientInteger(CekValue[] args)
     {
         BigInteger a = UnwrapInteger(args[0]);
         BigInteger b = UnwrapInteger(args[1]);
         return b.IsZero ? throw new EvaluationException("division by zero") : IntegerResult(BigInteger.DivRem(a, b, out _));
     }
 
-    internal static CekValue RemainderInteger(ImmutableArray<CekValue> args)
+    internal static CekValue RemainderInteger(CekValue[] args)
     {
         BigInteger a = UnwrapInteger(args[0]);
         BigInteger b = UnwrapInteger(args[1]);
@@ -33,7 +41,7 @@ internal static class IntegerBuiltins
         return IntegerResult(rem);
     }
 
-    internal static CekValue DivideInteger(ImmutableArray<CekValue> args)
+    internal static CekValue DivideInteger(CekValue[] args)
     {
         BigInteger a = UnwrapInteger(args[0]);
         BigInteger b = UnwrapInteger(args[1]);
@@ -52,7 +60,7 @@ internal static class IntegerBuiltins
         return IntegerResult(q);
     }
 
-    internal static CekValue ModInteger(ImmutableArray<CekValue> args)
+    internal static CekValue ModInteger(CekValue[] args)
     {
         BigInteger a = UnwrapInteger(args[0]);
         BigInteger b = UnwrapInteger(args[1]);
@@ -71,13 +79,22 @@ internal static class IntegerBuiltins
         return IntegerResult(r);
     }
 
-    internal static CekValue EqualsInteger(ImmutableArray<CekValue> args) => BoolResult(UnwrapInteger(args[0]) == UnwrapInteger(args[1]));
+    internal static CekValue EqualsInteger(CekValue[] args)
+    {
+        return BoolResult(UnwrapInteger(args[0]) == UnwrapInteger(args[1]));
+    }
 
-    internal static CekValue LessThanInteger(ImmutableArray<CekValue> args) => BoolResult(UnwrapInteger(args[0]) < UnwrapInteger(args[1]));
+    internal static CekValue LessThanInteger(CekValue[] args)
+    {
+        return BoolResult(UnwrapInteger(args[0]) < UnwrapInteger(args[1]));
+    }
 
-    internal static CekValue LessThanEqualsInteger(ImmutableArray<CekValue> args) => BoolResult(UnwrapInteger(args[0]) <= UnwrapInteger(args[1]));
+    internal static CekValue LessThanEqualsInteger(CekValue[] args)
+    {
+        return BoolResult(UnwrapInteger(args[0]) <= UnwrapInteger(args[1]));
+    }
 
-    internal static CekValue ExpModInteger(ImmutableArray<CekValue> args)
+    internal static CekValue ExpModInteger(CekValue[] args)
     {
         BigInteger @base = UnwrapInteger(args[0]);
         BigInteger exp = UnwrapInteger(args[1]);
