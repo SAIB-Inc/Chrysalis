@@ -276,7 +276,8 @@ public static class ScriptContextBuilder
     };
 
     /// <summary>
-    /// ScriptRef: Option&lt;ScriptHash&gt; — we convert to Just(hash) or Nothing.
+    /// ScriptRef: Option&lt;ScriptHash&gt; — parse [language, script_bytes], compute proper script hash.
+    /// Port of Aiken ScriptRef::to_plutus_data (compute_hash for each script variant).
     /// </summary>
     private static VmConstr ScriptRefToPlutusData(CborEncodedValue? scriptRef)
     {
@@ -285,9 +286,41 @@ public static class ScriptContextBuilder
             return OptionNone();
         }
 
-        byte[] scriptRefBytes = CborSerializer.Serialize(scriptRef);
-        byte[] hash = HashUtil.Blake2b224(scriptRefBytes);
-        return OptionSome(Bytes(hash));
+        byte[] rawInner = scriptRef.GetValue();
+        if (rawInner.Length < 2 || rawInner[0] != 0x82) // expect definite array of 2
+        {
+            return OptionNone();
+        }
+
+        int language = rawInner[1]; // 0=native, 1=V1, 2=V2, 3=V3
+
+        if (language is >= 1 and <= 3)
+        {
+            // Plutus script: [language, script_bytestring]
+            SAIB.Cbor.Serialization.CborReader reader = new(rawInner.AsSpan(2));
+            byte[] scriptBytes = reader.ReadByteStringToArray();
+            return OptionSome(Bytes(ComputeScriptHash(language, scriptBytes)));
+        }
+
+        if (language == 0)
+        {
+            // Native script: [0, native_script_cbor]
+            ReadOnlySpan<byte> nativeScriptCbor = rawInner.AsSpan(2);
+            return OptionSome(Bytes(ComputeScriptHash(0, nativeScriptCbor)));
+        }
+
+        return OptionNone();
+    }
+
+    /// <summary>
+    /// Computes a Cardano script hash: blake2b-224(language_byte || script_bytes).
+    /// </summary>
+    private static byte[] ComputeScriptHash(int language, ReadOnlySpan<byte> scriptBytes)
+    {
+        byte[] prefixed = new byte[1 + scriptBytes.Length];
+        prefixed[0] = (byte)language;
+        scriptBytes.CopyTo(prefixed.AsSpan(1));
+        return HashUtil.Blake2b224(prefixed);
     }
 
     // ────────────────────── Input Conversion ──────────────────────
@@ -338,7 +371,7 @@ public static class ScriptContextBuilder
     public static VmPlutusData CodecPlutusDataToVm(CodecPlutusData codecData) => codecData switch
     {
         PlutusConstr constr => Constr(
-            constr.ConstrIndex,
+            CborTagToConstrIndex(constr.ConstrIndex),
             constr.Fields.GetValue().Select(CodecPlutusDataToVm).ToImmutableArray()),
 
         PlutusMap map => Map(
@@ -347,6 +380,7 @@ public static class ScriptContextBuilder
         PlutusList list => List(
             list.Value.GetValue().Select(CodecPlutusDataToVm)),
 
+        PlutusInt i32 => Int(i32.Value),
         PlutusInt64 i64 => Int(i64.Value),
         PlutusUint64 u64 => Int(u64.Value),
         PlutusBigUint bigU => new VmInt(new BigInteger(bigU.Value.Span, isUnsigned: true, isBigEndian: true)),
@@ -355,6 +389,17 @@ public static class ScriptContextBuilder
         PlutusBoundedBytes bb => Bytes(bb.Value),
 
         _ => throw new InvalidOperationException($"Unsupported Codec PlutusData type: {codecData.GetType().Name}")
+    };
+
+    /// <summary>
+    /// Converts a raw CBOR alternative tag to a logical Plutus constructor index.
+    /// CBOR tags 121-127 → indices 0-6, tags 1280-1400 → indices 7-127.
+    /// </summary>
+    private static long CborTagToConstrIndex(int cborTag) => cborTag switch
+    {
+        >= 121 and <= 127 => cborTag - 121,
+        >= 1280 and <= 1400 => cborTag - 1280 + 7,
+        _ => cborTag // Already a logical index or unknown
     };
 
     // ────────────────────── Time Range ──────────────────────
@@ -524,10 +569,11 @@ public static class ScriptContextBuilder
 
         List<(VmPlutusData Key, VmPlutusData Value)> entries = [];
 
+        // Sort by parsed address components — port of Aiken sort_reward_accounts:
+        // network first, then credential type (script < key), then hash
         foreach ((RewardAccount account, ulong coin) in
-            withdrawals.Value.OrderBy(kv => kv.Key.Value, ByteMemoryComparer.Instance))
+            withdrawals.Value.OrderBy(kv => kv.Key.Value, RewardAccountComparer.Instance))
         {
-            // Reward account is a stake address
             entries.Add((CredentialFromRewardAccount(account), Int(coin)));
         }
 
@@ -823,10 +869,19 @@ public static class ScriptContextBuilder
 
         List<(VmPlutusData Key, VmPlutusData Value)> entries = [];
 
-        foreach ((Voter voter, GovActionIdVotingProcedure actions) in votingProcedures.Value)
+        // Sort voters by (sort_index, hash) — port of Aiken sort_voters
+        foreach ((Voter voter, GovActionIdVotingProcedure actions) in
+            votingProcedures.Value
+                .OrderBy(kv => VoterSortIndex(kv.Key))
+                .ThenBy(kv => kv.Key.Hash, ByteMemoryComparer.Instance))
         {
             List<(VmPlutusData Key, VmPlutusData Value)> actionEntries = [];
-            foreach ((GovActionId actionId, VotingProcedure procedure) in actions.Value)
+
+            // Sort actions by (tx_id, action_index) — port of Aiken sort_gov_action_id
+            foreach ((GovActionId actionId, VotingProcedure procedure) in
+                actions.Value
+                    .OrderBy(kv => kv.Key.TransactionId, ByteMemoryComparer.Instance)
+                    .ThenBy(kv => kv.Key.GovActionIndex))
             {
                 actionEntries.Add((GovActionIdToPlutusData(actionId), VoteToPlutusData(procedure)));
             }
@@ -835,6 +890,21 @@ public static class ScriptContextBuilder
 
         return Map(entries);
     }
+
+    /// <summary>
+    /// Voter sort index matching Aiken's sort_voters:
+    /// CC script=0, CC key=1, DRep script=2, DRep key=3, SPO key=4.
+    /// CDDL tags: 0=CC key, 1=CC script, 2=DRep key, 3=DRep script, 4=SPO key.
+    /// </summary>
+    private static int VoterSortIndex(Voter voter) => voter.Tag switch
+    {
+        1 => 0, // CC script
+        0 => 1, // CC key
+        3 => 2, // DRep script
+        2 => 3, // DRep key
+        4 => 4, // SPO key
+        _ => 5
+    };
 
     // ────────────────────── TxInfo V3 ──────────────────────
 
@@ -871,18 +941,21 @@ public static class ScriptContextBuilder
         // Certificates
         List<ICertificate> certificates = body.Certificates?.GetValue().ToList() ?? [];
 
-        // Withdrawals
+        // Withdrawals — sorted by parsed address (network, credential type, hash) like Aiken
         List<(RewardAccount Account, ulong Coin)> sortedWithdrawals =
             body.Withdrawals?.Value?
-                .OrderBy(kv => kv.Key.Value, ByteMemoryComparer.Instance)
+                .OrderBy(kv => kv.Key.Value, RewardAccountComparer.Instance)
                 .Select(kv => (kv.Key, kv.Value))
                 .ToList() ?? [];
 
         // Proposals
         List<ProposalProcedure> proposals = body.ProposalProcedures?.GetValue().ToList() ?? [];
 
-        // Voters
-        List<Voter> sortedVoters = body.VotingProcedures?.Value?.Keys.ToList() ?? [];
+        // Voters — sorted by (sort_index, hash) like Aiken sort_voters
+        List<Voter> sortedVoters = body.VotingProcedures?.Value?.Keys
+            .OrderBy(VoterSortIndex)
+            .ThenBy(v => v.Hash, ByteMemoryComparer.Instance)
+            .ToList() ?? [];
 
         // Extract redeemers
         List<RedeemerInfo> redeemers = ExtractRedeemers(witnessSet.Redeemers);
@@ -1053,7 +1126,7 @@ public static class ScriptContextBuilder
                 {
                     List<(RewardAccount Account, ulong Coin)> sortedWithdrawals =
                         body.Withdrawals?.Value?
-                            .OrderBy(kv => kv.Key.Value, ByteMemoryComparer.Instance)
+                            .OrderBy(kv => kv.Key.Value, RewardAccountComparer.Instance)
                             .Select(kv => (kv.Key, kv.Value))
                             .ToList() ?? [];
 
@@ -1185,12 +1258,15 @@ public static class ScriptContextBuilder
 
         List<(RewardAccount Account, ulong Coin)> sortedWithdrawals =
             body.Withdrawals?.Value?
-                .OrderBy(kv => kv.Key.Value, ByteMemoryComparer.Instance)
+                .OrderBy(kv => kv.Key.Value, RewardAccountComparer.Instance)
                 .Select(kv => (kv.Key, kv.Value))
                 .ToList() ?? [];
 
         List<ProposalProcedure> proposals = body.ProposalProcedures?.GetValue().ToList() ?? [];
-        List<Voter> sortedVoters = body.VotingProcedures?.Value?.Keys.ToList() ?? [];
+        List<Voter> sortedVoters = body.VotingProcedures?.Value?.Keys
+            .OrderBy(VoterSortIndex)
+            .ThenBy(v => v.Hash, ByteMemoryComparer.Instance)
+            .ToList() ?? [];
 
         // Build TxInfo once (shared across all redeemers)
         VmPlutusData txInfo = BuildTxInfoV3(body, witnessSet, utxos, slotConfig);
@@ -1385,4 +1461,46 @@ internal sealed class ByteMemoryComparer : IComparer<ReadOnlyMemory<byte>>
     public static readonly ByteMemoryComparer Instance = new();
 
     public int Compare(ReadOnlyMemory<byte> x, ReadOnlyMemory<byte> y) => x.Span.SequenceCompareTo(y.Span);
+}
+
+/// <summary>
+/// Comparer for reward account addresses matching Aiken's sort_reward_accounts:
+/// 1. Compare network tag (testnet=0 &lt; mainnet=1)
+/// 2. Compare credential type (script &lt; key)
+/// 3. Compare credential hash bytes
+/// </summary>
+internal sealed class RewardAccountComparer : IComparer<ReadOnlyMemory<byte>>
+{
+    public static readonly RewardAccountComparer Instance = new();
+
+    public int Compare(ReadOnlyMemory<byte> x, ReadOnlyMemory<byte> y)
+    {
+        ReadOnlySpan<byte> a = x.Span;
+        ReadOnlySpan<byte> b = y.Span;
+
+        if (a.Length < 29 || b.Length < 29)
+        {
+            return a.SequenceCompareTo(b);
+        }
+
+        // Network is lower 4 bits of header byte
+        int networkA = a[0] & 0x0F;
+        int networkB = b[0] & 0x0F;
+        if (networkA != networkB)
+        {
+            return networkA.CompareTo(networkB);
+        }
+
+        // Credential type: bit 4 of header — 1=script, 0=key
+        // Aiken: script < key (script sorts first)
+        bool isScriptA = (a[0] & 0x10) != 0;
+        bool isScriptB = (b[0] & 0x10) != 0;
+        if (isScriptA != isScriptB)
+        {
+            return isScriptA ? -1 : 1;
+        }
+
+        // Same type: compare hash bytes (1..29)
+        return a.Slice(1, 28).SequenceCompareTo(b.Slice(1, 28));
+    }
 }

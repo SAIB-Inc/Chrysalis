@@ -17,6 +17,8 @@ using Chrysalis.Tx.Utils;
 using Chrysalis.Wallet.Models.Enums;
 using WalletAddress = Chrysalis.Wallet.Models.Addresses.Address;
 using Chrysalis.Wallet.Models.Keys;
+using Chrysalis.Codec.Extensions;
+using Chrysalis.Codec.Types.Cardano.Core.Scripts;
 using Chrysalis.Wallet.Words;
 
 // ── Configuration ──────────────────────────────────────────────────────────
@@ -88,6 +90,38 @@ using Blockfrost provider = new(blockfrostKey, NetworkType.Preview);
 using HttpClient bfClient = new();
 bfClient.BaseAddress = new Uri("https://cardano-preview.blockfrost.io/api/v0/");
 bfClient.DefaultRequestHeaders.Add("project_id", blockfrostKey);
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// PHASE 0: MINT TEST TOKENS
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Console.WriteLine();
+Console.WriteLine("══ PHASE 0: MINT TEST TOKENS ══");
+
+string mintTokenName = "TESTV2";
+long mintQuantity = 1_000_000_000;
+
+INativeScript nativeScript = CborFactory.CreateScriptPubKey(paymentKeyHash);
+byte[] nativeScriptCbor = CborSerializer.Serialize(nativeScript);
+byte[] mintPolicyId = Chrysalis.Wallet.Utils.HashUtil.Blake2b224([0x00, .. nativeScriptCbor]);
+string mintPolicyIdHex = Convert.ToHexStringLower(mintPolicyId);
+string mintAssetNameHex = Convert.ToHexStringLower(System.Text.Encoding.UTF8.GetBytes(mintTokenName));
+
+Console.WriteLine($"   Token: {mintTokenName}");
+Console.WriteLine($"   Policy ID: {mintPolicyIdHex}");
+Console.WriteLine($"   Quantity: {mintQuantity:N0}");
+
+TransactionTemplate<object> mintTemplate = TransactionTemplateBuilder.Create<object>(provider)
+    .AddStaticParty("change", walletBech32, true)
+    .AddNativeScript(_ => nativeScript)
+    .AddMint((options, _) =>
+    {
+        options.Policy = mintPolicyIdHex;
+        options.Assets[mintAssetNameHex] = mintQuantity;
+    })
+    .AddMetadata(_ => CreateMetadata("Chrysalis V2 Codec: mint test"))
+    .Build();
+
+Console.WriteLine("   Skipping mint (tokens already minted).");
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // PHASE 1: CREATE ORDER
@@ -176,7 +210,7 @@ Console.WriteLine($"   Found: {createTxId}#{ourUtxo.Outref.Index}");
 // Parse datum and original assets from the UTxO
 PostAlonzoTransactionOutput ourOutput = (PostAlonzoTransactionOutput)ourUtxo.Output;
 InlineDatumOption ourInlineDatum = (InlineDatumOption)ourOutput.Datum!;
-byte[] datumCbor = ourInlineDatum.Data.Value.ToArray();
+byte[] datumCbor = ourInlineDatum.Data.GetValue();
 
 Dictionary<string, ulong> originalAssets = ExtractAssets(ourOutput.Amount);
 ulong originalUsdm = originalAssets.GetValueOrDefault(UsdmUnit, 0UL);
@@ -259,7 +293,7 @@ TransactionTemplate<FillOrderParams> fillTemplate =
         })
         .SetValidTo(currentSlot + 300)
         .AddMetadata(_ => CreateMetadata("Chrysalis E2E: fill order"))
-        .Build();
+        .Build(eval: true);
 
 sw.Restart();
 ITransaction fillUnsigned = await fillTemplate(fillParams).ConfigureAwait(false);
@@ -269,6 +303,23 @@ Console.WriteLine($"   Built ({sw.ElapsedMilliseconds}ms)");
 ITransaction fillSigned = fillUnsigned.Sign(paymentKey);
 byte[] fillCbor = CborSerializer.Serialize(fillSigned);
 Console.WriteLine($"   Signed TX: {fillCbor.Length} bytes");
+
+// Try Blockfrost evaluate endpoint
+Console.WriteLine("8b. Evaluating via Blockfrost...");
+try
+{
+    using HttpRequestMessage evalReq = new(HttpMethod.Post, "utils/txs/evaluate");
+    evalReq.Content = new ByteArrayContent(fillCbor);
+    evalReq.Content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/cbor");
+    HttpResponseMessage evalResp = await bfClient.SendAsync(evalReq).ConfigureAwait(false);
+    string evalBody = await evalResp.Content.ReadAsStringAsync().ConfigureAwait(false);
+    Console.WriteLine($"   Evaluate status: {evalResp.StatusCode}");
+    Console.WriteLine($"   Evaluate response: {evalBody}");
+}
+catch (Exception ex)
+{
+    Console.WriteLine($"   Evaluate error: {ex.Message}");
+}
 
 Console.WriteLine("9. Submitting fill order...");
 sw.Restart();
@@ -338,7 +389,7 @@ TransactionTemplate<CloseOrderParams> closeTemplate =
                 new Redeemer<ICborType>(RedeemerTag.Spend, 0, new CloseRedeemer(), CborFactory.CreateExUnits(500_000, 200_000_000));
         })
         .AddMetadata(_ => CreateMetadata("Chrysalis E2E: close order"))
-        .Build();
+        .Build(eval: true);
 
 sw.Restart();
 ITransaction closeUnsigned = await closeTemplate(closeParams).ConfigureAwait(false);
