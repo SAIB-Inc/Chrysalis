@@ -1042,7 +1042,7 @@ public sealed class TransactionTemplateBuilder<T>
             if (withdrawalOptions.From.Length != 0)
             {
                 WalletAddress withdrawalAddress = WalletAddress.FromBech32(parties[withdrawalOptions.From]);
-                rewards.Add(new RewardAccount(withdrawalAddress.ToBytes()), withdrawalOptions.Amount!);
+                rewards.Add(new RewardAccount(withdrawalAddress.ToBytes()), withdrawalOptions.Amount);
             }
         }
 
