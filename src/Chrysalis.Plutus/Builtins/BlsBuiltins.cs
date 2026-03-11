@@ -1,4 +1,3 @@
-using System.Collections.Immutable;
 using System.Numerics;
 using Chrysalis.Crypto.Bls12381;
 using Chrysalis.Plutus.Cek;
@@ -24,36 +23,36 @@ internal static class BlsBuiltins
 
     // --- G1 operations ---
 
-    internal static CekValue Bls12_381_G1_Add(ImmutableArray<CekValue> args)
+    internal static CekValue Bls12_381_G1_Add(CekValue[] args)
     {
         byte[] a = UnwrapG1(args[0]).ToArray();
         byte[] b = UnwrapG1(args[1]).ToArray();
         return WrapBlsCall(() => G1Result(Bls12381.G1Add(a, b)));
     }
 
-    internal static CekValue Bls12_381_G1_Neg(ImmutableArray<CekValue> args)
+    internal static CekValue Bls12_381_G1_Neg(CekValue[] args)
     {
         byte[] p = UnwrapG1(args[0]).ToArray();
         return WrapBlsCall(() => G1Result(Bls12381.G1Neg(p)));
     }
 
-    internal static CekValue Bls12_381_G1_ScalarMul(ImmutableArray<CekValue> args)
+    internal static CekValue Bls12_381_G1_ScalarMul(CekValue[] args)
     {
         BigInteger scalar = UnwrapInteger(args[0]);
         byte[] p = UnwrapG1(args[1]).ToArray();
         return WrapBlsCall(() => G1Result(Bls12381.G1ScalarMul(scalar, p)));
     }
 
-    internal static CekValue Bls12_381_G1_Equal(ImmutableArray<CekValue> args)
+    internal static CekValue Bls12_381_G1_Equal(CekValue[] args)
     {
         byte[] a = UnwrapG1(args[0]).ToArray();
         byte[] b = UnwrapG1(args[1]).ToArray();
         return WrapBlsCall(() => BoolResult(Bls12381.G1Equal(a, b)));
     }
 
-    internal static CekValue Bls12_381_G1_Compress(ImmutableArray<CekValue> args) => ByteStringResult(UnwrapG1(args[0]));
+    internal static CekValue Bls12_381_G1_Compress(CekValue[] args) => ByteStringResult(UnwrapG1(args[0]));
 
-    internal static CekValue Bls12_381_G1_Uncompress(ImmutableArray<CekValue> args)
+    internal static CekValue Bls12_381_G1_Uncompress(CekValue[] args)
     {
         ReadOnlyMemory<byte> bs = UnwrapByteString(args[0]);
         if (bs.Length != 48)
@@ -70,7 +69,7 @@ internal static class BlsBuiltins
         });
     }
 
-    internal static CekValue Bls12_381_G1_HashToGroup(ImmutableArray<CekValue> args)
+    internal static CekValue Bls12_381_G1_HashToGroup(CekValue[] args)
     {
         ReadOnlyMemory<byte> msg = UnwrapByteString(args[0]);
         ReadOnlyMemory<byte> dst = UnwrapByteString(args[1]);
@@ -79,10 +78,10 @@ internal static class BlsBuiltins
             : WrapBlsCall(() => G1Result(Bls12381.G1HashToGroup(msg.ToArray(), dst.ToArray())));
     }
 
-    internal static CekValue Bls12_381_G1_MultiScalarMul(ImmutableArray<CekValue> args)
+    internal static CekValue Bls12_381_G1_MultiScalarMul(CekValue[] args)
     {
-        ImmutableArray<Constant> scalars = UnwrapList(args[0]);
-        ImmutableArray<Constant> points = UnwrapList(args[1]);
+        Constant[] scalars = UnwrapList(args[0]);
+        Constant[] points = UnwrapList(args[1]);
         int n = Math.Min(scalars.Length, points.Length);
         return n == 0
             ? G1Result(G1ZeroCompressed)
@@ -91,36 +90,36 @@ internal static class BlsBuiltins
 
     // --- G2 operations ---
 
-    internal static CekValue Bls12_381_G2_Add(ImmutableArray<CekValue> args)
+    internal static CekValue Bls12_381_G2_Add(CekValue[] args)
     {
         byte[] a = UnwrapG2(args[0]).ToArray();
         byte[] b = UnwrapG2(args[1]).ToArray();
         return WrapBlsCall(() => G2Result(Bls12381.G2Add(a, b)));
     }
 
-    internal static CekValue Bls12_381_G2_Neg(ImmutableArray<CekValue> args)
+    internal static CekValue Bls12_381_G2_Neg(CekValue[] args)
     {
         byte[] p = UnwrapG2(args[0]).ToArray();
         return WrapBlsCall(() => G2Result(Bls12381.G2Neg(p)));
     }
 
-    internal static CekValue Bls12_381_G2_ScalarMul(ImmutableArray<CekValue> args)
+    internal static CekValue Bls12_381_G2_ScalarMul(CekValue[] args)
     {
         BigInteger scalar = UnwrapInteger(args[0]);
         byte[] p = UnwrapG2(args[1]).ToArray();
         return WrapBlsCall(() => G2Result(Bls12381.G2ScalarMul(scalar, p)));
     }
 
-    internal static CekValue Bls12_381_G2_Equal(ImmutableArray<CekValue> args)
+    internal static CekValue Bls12_381_G2_Equal(CekValue[] args)
     {
         byte[] a = UnwrapG2(args[0]).ToArray();
         byte[] b = UnwrapG2(args[1]).ToArray();
         return WrapBlsCall(() => BoolResult(Bls12381.G2Equal(a, b)));
     }
 
-    internal static CekValue Bls12_381_G2_Compress(ImmutableArray<CekValue> args) => ByteStringResult(UnwrapG2(args[0]));
+    internal static CekValue Bls12_381_G2_Compress(CekValue[] args) => ByteStringResult(UnwrapG2(args[0]));
 
-    internal static CekValue Bls12_381_G2_Uncompress(ImmutableArray<CekValue> args)
+    internal static CekValue Bls12_381_G2_Uncompress(CekValue[] args)
     {
         ReadOnlyMemory<byte> bs = UnwrapByteString(args[0]);
         if (bs.Length != 96)
@@ -137,7 +136,7 @@ internal static class BlsBuiltins
         });
     }
 
-    internal static CekValue Bls12_381_G2_HashToGroup(ImmutableArray<CekValue> args)
+    internal static CekValue Bls12_381_G2_HashToGroup(CekValue[] args)
     {
         ReadOnlyMemory<byte> msg = UnwrapByteString(args[0]);
         ReadOnlyMemory<byte> dst = UnwrapByteString(args[1]);
@@ -146,10 +145,10 @@ internal static class BlsBuiltins
             : WrapBlsCall(() => G2Result(Bls12381.G2HashToGroup(msg.ToArray(), dst.ToArray())));
     }
 
-    internal static CekValue Bls12_381_G2_MultiScalarMul(ImmutableArray<CekValue> args)
+    internal static CekValue Bls12_381_G2_MultiScalarMul(CekValue[] args)
     {
-        ImmutableArray<Constant> scalars = UnwrapList(args[0]);
-        ImmutableArray<Constant> points = UnwrapList(args[1]);
+        Constant[] scalars = UnwrapList(args[0]);
+        Constant[] points = UnwrapList(args[1]);
         int n = Math.Min(scalars.Length, points.Length);
         return n == 0
             ? G2Result(G2ZeroCompressed)
@@ -158,21 +157,21 @@ internal static class BlsBuiltins
 
     // --- Pairing operations ---
 
-    internal static CekValue Bls12_381_MillerLoop(ImmutableArray<CekValue> args)
+    internal static CekValue Bls12_381_MillerLoop(CekValue[] args)
     {
         byte[] g1 = UnwrapG1(args[0]).ToArray();
         byte[] g2 = UnwrapG2(args[1]).ToArray();
         return WrapBlsCall(() => MlResult(Bls12381.MillerLoop(g1, g2)));
     }
 
-    internal static CekValue Bls12_381_MulMlResult(ImmutableArray<CekValue> args)
+    internal static CekValue Bls12_381_MulMlResult(CekValue[] args)
     {
         byte[] a = UnwrapMlResult(args[0]).ToArray();
         byte[] b = UnwrapMlResult(args[1]).ToArray();
         return WrapBlsCall(() => MlResult(Bls12381.MulMlResult(a, b)));
     }
 
-    internal static CekValue Bls12_381_FinalVerify(ImmutableArray<CekValue> args)
+    internal static CekValue Bls12_381_FinalVerify(CekValue[] args)
     {
         byte[] a = UnwrapMlResult(args[0]).ToArray();
         byte[] b = UnwrapMlResult(args[1]).ToArray();
@@ -223,7 +222,7 @@ internal static class BlsBuiltins
         }
     }
 
-    private static CekValue MultiScalarMulG1(ImmutableArray<Constant> scalars, ImmutableArray<Constant> points, int n)
+    private static CekValue MultiScalarMulG1(Constant[] scalars, Constant[] points, int n)
     {
         BigInteger s0 = ((IntegerConstant)scalars[0]).Value;
         ValidateMsmScalar(s0);
@@ -244,7 +243,7 @@ internal static class BlsBuiltins
         return G1Result(result);
     }
 
-    private static CekValue MultiScalarMulG2(ImmutableArray<Constant> scalars, ImmutableArray<Constant> points, int n)
+    private static CekValue MultiScalarMulG2(Constant[] scalars, Constant[] points, int n)
     {
         BigInteger s0 = ((IntegerConstant)scalars[0]).Value;
         ValidateMsmScalar(s0);

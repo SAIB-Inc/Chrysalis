@@ -144,14 +144,14 @@ internal static class PrettyPrinter
                 _ = sb.Append("list ");
                 PrintType(sb, c.ItemType);
                 _ = sb.Append(") [");
-                for (int i = 0; i < c.Values.Length; i++)
+                for (int i = 0; i < c.Count; i++)
                 {
                     if (i > 0)
                     {
                         _ = sb.Append(", ");
                     }
 
-                    PrintConstantInner(sb, c.Values[i]);
+                    PrintConstantInner(sb, c.ElementAt(i));
                 }
                 _ = sb.Append(']');
                 break;

@@ -28,6 +28,8 @@ public sealed record StringConstant(string Value) : Constant
 
 public sealed record BoolConstant(bool Value) : Constant
 {
+    public static readonly BoolConstant True = new(true);
+    public static readonly BoolConstant False = new(false);
     public override ConstantType ConstantType => ConstantType.PlutusBool;
 }
 
@@ -39,6 +41,10 @@ public sealed record UnitConstant : Constant
 
 public sealed record ListConstant(ConstantType ItemType, ImmutableArray<Constant> Values) : Constant
 {
+    internal int Offset { get; init; }
+    internal int Count => Values.Length - Offset;
+    internal bool IsListEmpty => Offset >= Values.Length;
+    internal Constant ElementAt(int index) => Values[Offset + index];
     public override ConstantType ConstantType => new ListType(ItemType);
 }
 

@@ -91,29 +91,41 @@ public static class FlatDecoder
 
     private static ImmutableArray<Term<DeBruijn>> DecodeTermList(BitReader reader)
     {
-        ImmutableArray<Term<DeBruijn>>.Builder builder = ImmutableArray.CreateBuilder<Term<DeBruijn>>();
+        // Most term lists are small (1-5 items). Use a list and convert.
+        List<Term<DeBruijn>>? list = null;
         while (reader.PopBit() == 1)
         {
-            builder.Add(DecodeTerm(reader));
+            list ??= [];
+            list.Add(DecodeTerm(reader));
         }
-        return builder.ToImmutable();
+        return list is null ? [] : [.. list];
     }
 
     // --- Type decoding (spec C.3.3) ---
 
     private static ConstantType DecodeConstantType(BitReader reader)
     {
-        ImmutableArray<int>.Builder tags = ImmutableArray.CreateBuilder<int>();
+        // Stack-allocate tag buffer for common cases (most types have 1-4 tags)
+        Span<int> tagBuf = stackalloc int[8];
+        int tagCount = 0;
+
         while (reader.PopBit() == 1)
         {
-            tags.Add(reader.PopBits(4));
+            if (tagCount >= tagBuf.Length)
+            {
+                // Rare: more than 8 tags, fall back to heap
+                int[] heapBuf = new int[tagCount * 2];
+                tagBuf[..tagCount].CopyTo(heapBuf);
+                tagBuf = heapBuf;
+            }
+            tagBuf[tagCount++] = reader.PopBits(4);
         }
 
         int index = 0;
-        return ParseType(tags.ToImmutable(), ref index);
+        return ParseType(tagBuf[..tagCount], ref index);
     }
 
-    private static ConstantType ParseType(ImmutableArray<int> tags, ref int index)
+    private static ConstantType ParseType(ReadOnlySpan<int> tags, ref int index)
     {
         if (index >= tags.Length)
         {
@@ -140,7 +152,7 @@ public static class FlatDecoder
         };
     }
 
-    private static ConstantType ParseTypeApplication(ImmutableArray<int> tags, ref int index)
+    private static ConstantType ParseTypeApplication(ReadOnlySpan<int> tags, ref int index)
     {
         if (index >= tags.Length)
         {
@@ -164,7 +176,7 @@ public static class FlatDecoder
         IntegerType => new IntegerConstant(DecodeInteger(reader)),
         ByteStringType => new ByteStringConstant(DecodeByteString(reader)),
         StringType => new StringConstant(DecodeString(reader)),
-        BoolType => new BoolConstant(reader.PopBit() == 1),
+        BoolType => reader.PopBit() == 1 ? BoolConstant.True : BoolConstant.False,
         UnitType => UnitConstant.Instance,
         DataType => new DataConstant(DecodeData(reader)),
         ListType list => DecodeList(reader, list.Element),
@@ -207,59 +219,75 @@ public static class FlatDecoder
 
     private static int DecodeNatural(BitReader reader)
     {
-        int result = 0;
-        int shift = 0;
-        bool more;
+        // Read continuation bit + 7 data bits as single 8-bit read
+        int byte8 = reader.PopBits(8);
+        if ((byte8 >> 7) == 0)
+        {
+            return byte8;
+        }
 
+        int result = byte8 & 0x7F;
+        int shift = 7;
         do
         {
-            more = reader.PopBit() == 1;
-            int block = reader.PopBits(7);
-            result |= block << shift;
+            byte8 = reader.PopBits(8);
+            result |= (byte8 & 0x7F) << shift;
             shift += 7;
-        } while (more);
+        } while ((byte8 >> 7) != 0);
 
         return result;
     }
 
     private static ulong DecodeWord(BitReader reader)
     {
-        ulong result = 0;
-        int shift = 0;
-        bool more;
+        int byte8 = reader.PopBits(8);
+        if ((byte8 >> 7) == 0)
+        {
+            return (ulong)byte8;
+        }
 
+        ulong result = (ulong)(byte8 & 0x7F);
+        int shift = 7;
         do
         {
-            more = reader.PopBit() == 1;
-            ulong block = (ulong)reader.PopBits(7);
-            result |= block << shift;
+            byte8 = reader.PopBits(8);
+            result |= (ulong)(byte8 & 0x7F) << shift;
             shift += 7;
-        } while (more);
+        } while ((byte8 >> 7) != 0);
 
         return result;
     }
 
     private static BigInteger DecodeInteger(BitReader reader)
     {
-        BigInteger natural = DecodeBigNatural(reader);
-        return natural % 2 == 0 ? natural / 2 : -(natural + 1) / 2;
-    }
-
-    private static BigInteger DecodeBigNatural(BitReader reader)
-    {
-        BigInteger result = BigInteger.Zero;
+        // Fast path: decode natural + zigzag as long (most integers fit in 56 bits)
+        long small = 0;
         int shift = 0;
-        bool more;
 
+        while (shift < 56)
+        {
+            int byte8 = reader.PopBits(8);
+            small |= (long)(byte8 & 0x7F) << shift;
+            shift += 7;
+            if ((byte8 >> 7) == 0)
+            {
+                // Zigzag decode on long — avoids BigInteger division
+                return (small & 1) == 0 ? new BigInteger(small >> 1) : new BigInteger(-(small >> 1) - 1);
+            }
+        }
+
+        // Slow path: overflow to BigInteger
+        BigInteger result = new(small);
+        bool cont;
         do
         {
-            more = reader.PopBit() == 1;
-            int block = reader.PopBits(7);
-            result |= (BigInteger)block << shift;
+            int byte8 = reader.PopBits(8);
+            result |= (BigInteger)(byte8 & 0x7F) << shift;
             shift += 7;
-        } while (more);
+            cont = (byte8 >> 7) != 0;
+        } while (cont);
 
-        return result;
+        return result % 2 == 0 ? result / 2 : -(result + 1) / 2;
     }
 
     private static ReadOnlyMemory<byte> DecodeByteString(BitReader reader)
@@ -280,18 +308,24 @@ public static class FlatDecoder
             return firstChunk;
         }
 
-        // Multi-chunk: need to concatenate
-        ImmutableArray<byte>.Builder result = ImmutableArray.CreateBuilder<byte>(firstLen + nextLen);
-        result.AddRange(firstChunk.Span);
+        // Multi-chunk: concatenate into byte array
+        int totalLen = firstLen + nextLen;
+        byte[] buffer = new byte[totalLen];
+        firstChunk.Span.CopyTo(buffer);
+        int pos = firstLen;
 
         do
         {
-            ReadOnlyMemory<byte> chunk = reader.TakeBytes(nextLen);
-            result.AddRange(chunk.Span);
+            if (pos + nextLen > buffer.Length)
+            {
+                Array.Resize(ref buffer, buffer.Length * 2);
+            }
+            reader.TakeBytes(nextLen).Span.CopyTo(buffer.AsSpan(pos));
+            pos += nextLen;
             nextLen = reader.PopByte();
         } while (nextLen != 0);
 
-        return result.ToArray();
+        return new ReadOnlyMemory<byte>(buffer, 0, pos);
     }
 
     private static string DecodeString(BitReader reader)

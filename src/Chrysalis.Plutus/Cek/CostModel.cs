@@ -160,8 +160,30 @@ internal sealed record WithInteractionCost(long C00, long C10, long C01, long C1
 
 /// <summary>
 /// Cost model for a single builtin function: one CostFunction for CPU, one for MEM.
+/// When both are constant, CachedCost is precomputed to skip virtual dispatch + arg size computation.
 /// </summary>
-internal readonly record struct BuiltinCostModel(CostFunction Cpu, CostFunction Mem)
+internal readonly struct BuiltinCostModel
 {
+    internal readonly CostFunction Cpu;
+    internal readonly CostFunction Mem;
+    internal readonly ExBudget CachedCost;
+    internal readonly bool IsConstant;
+
+    internal BuiltinCostModel(CostFunction cpu, CostFunction mem)
+    {
+        Cpu = cpu;
+        Mem = mem;
+        if (cpu is ConstantCost cc && mem is ConstantCost mc)
+        {
+            CachedCost = new ExBudget(cc.Value, mc.Value);
+            IsConstant = true;
+        }
+        else
+        {
+            CachedCost = default;
+            IsConstant = false;
+        }
+    }
+
     internal ExBudget Eval(long x, long y, long z) => new(Cpu.Eval(x, y, z), Mem.Eval(x, y, z));
 }

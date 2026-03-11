@@ -1,5 +1,6 @@
 using System.Collections.Immutable;
 using System.Numerics;
+using System.Runtime.CompilerServices;
 using Chrysalis.Plutus.Types;
 
 namespace Chrysalis.Plutus.Cek;
@@ -11,11 +12,11 @@ namespace Chrysalis.Plutus.Cek;
 public sealed class CekMachine
 {
     private ExBudget _budget;
-    private readonly int[] _unbudgetedSteps;
+    private int _unbudgetedSteps;
     private readonly BuiltinCostModel[] _builtinCosts;
 
     // Machine state (mutable for zero-allocation hot loop)
-    private Context _ctx;
+    private readonly ContextStack _ctxStack = new();
     private Environment? _env;
     private Term<DeBruijn>? _computeTerm;
     private CekValue? _returnValue;
@@ -24,17 +25,15 @@ public sealed class CekMachine
     {
         ExBudget initial = initialBudget ?? ExBudget.Unlimited;
         _budget = initial - MachineCosts.StartupCost;
-        _unbudgetedSteps = new int[MachineCosts.StepKindCount + 1];
+        _unbudgetedSteps = 0;
         _builtinCosts = DefaultCosts.Create();
-        _ctx = NoFrame.Instance;
     }
 
     internal CekMachine(ExBudget initialBudget, BuiltinCostModel[] builtinCosts)
     {
         _budget = initialBudget - MachineCosts.StartupCost;
-        _unbudgetedSteps = new int[MachineCosts.StepKindCount + 1];
+        _unbudgetedSteps = 0;
         _builtinCosts = builtinCosts;
-        _ctx = NoFrame.Instance;
     }
 
     public ExBudget RemainingBudget
@@ -51,7 +50,7 @@ public sealed class CekMachine
     /// </summary>
     public Term<DeBruijn> Run(Term<DeBruijn> term)
     {
-        _ctx = NoFrame.Instance;
+        _ctxStack.Reset();
         _env = null;
         _computeTerm = term;
         _returnValue = null;
@@ -64,7 +63,7 @@ public sealed class CekMachine
             }
             else
             {
-                if (_ctx is NoFrame)
+                if (_ctxStack.IsEmpty)
                 {
                     SpendUnbudgetedSteps();
                     return Discharge.DischargeValue(_returnValue!);
@@ -76,11 +75,10 @@ public sealed class CekMachine
 
     // --- Budget tracking ---
 
-    private void StepAndMaybeSpend(int step)
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private void StepAndMaybeSpend()
     {
-        _unbudgetedSteps[step]++;
-        _unbudgetedSteps[MachineCosts.StepKindCount]++;
-        if (_unbudgetedSteps[MachineCosts.StepKindCount] >= MachineCosts.Slippage)
+        if (++_unbudgetedSteps >= MachineCosts.Slippage)
         {
             SpendUnbudgetedSteps();
         }
@@ -88,20 +86,11 @@ public sealed class CekMachine
 
     private void SpendUnbudgetedSteps()
     {
-        long cpu = 0;
-        long mem = 0;
-        for (int i = 0; i < MachineCosts.StepKindCount; i++)
-        {
-            int count = _unbudgetedSteps[i];
-            if (count > 0)
-            {
-                cpu += count * MachineCosts.StepCost.Cpu;
-                mem += count * MachineCosts.StepCost.Mem;
-                _unbudgetedSteps[i] = 0;
-            }
-        }
-        _budget = new ExBudget(_budget.Cpu - cpu, _budget.Mem - mem);
-        _unbudgetedSteps[MachineCosts.StepKindCount] = 0;
+        int count = _unbudgetedSteps;
+        _budget = new ExBudget(
+            _budget.Cpu - (count * MachineCosts.StepCost.Cpu),
+            _budget.Mem - (count * MachineCosts.StepCost.Mem));
+        _unbudgetedSteps = 0;
     }
 
     // --- Compute step: evaluate a term in the current environment ---
@@ -111,68 +100,149 @@ public sealed class CekMachine
         Term<DeBruijn> term = _computeTerm!;
         _computeTerm = null;
 
-        switch (term)
+        switch (term.TermTag)
         {
-            case VarTerm<DeBruijn> v:
-                StepAndMaybeSpend(MachineCosts.StepVar);
-                _returnValue = Environment.Lookup(_env, v.Name.Index)
-                    ?? throw new EvaluationException($"Unbound variable: index {v.Name.Index}");
-                break;
-
-            case ConstTerm<DeBruijn> c:
-                StepAndMaybeSpend(MachineCosts.StepConstant);
-                _returnValue = new VConstant(c.Value);
-                break;
-
-            case LambdaTerm<DeBruijn> l:
-                StepAndMaybeSpend(MachineCosts.StepLambda);
-                _returnValue = new VLambda(l.Parameter, l.Body, _env);
-                break;
-
-            case DelayTerm<DeBruijn> d:
-                StepAndMaybeSpend(MachineCosts.StepDelay);
-                _returnValue = new VDelay(d.Body, _env);
-                break;
-
-            case ForceTerm<DeBruijn> f:
-                StepAndMaybeSpend(MachineCosts.StepForce);
-                _ctx = new FrameForce(_ctx);
-                _computeTerm = f.Body;
-                break;
-
-            case ApplyTerm<DeBruijn> a:
-                StepAndMaybeSpend(MachineCosts.StepApply);
-                _ctx = new FrameAwaitFunTerm(_env, a.Argument, _ctx);
-                _computeTerm = a.Function;
-                break;
-
-            case BuiltinTerm<DeBruijn> b:
-                StepAndMaybeSpend(MachineCosts.StepBuiltin);
-                _returnValue = new VBuiltin(b.Function, 0, []);
-                break;
-
-            case ConstrTerm<DeBruijn> constr:
-                StepAndMaybeSpend(MachineCosts.StepConstr);
-                if (constr.Fields.IsEmpty)
+            case TermTag.Var:
                 {
-                    _returnValue = new VConstr(constr.Tag, []);
+                    VarTerm<DeBruijn> v = Unsafe.As<VarTerm<DeBruijn>>(term);
+                    StepAndMaybeSpend();
+                    _returnValue = Environment.Lookup(_env, v.Name.Index)
+                        ?? throw new EvaluationException($"Unbound variable: index {v.Name.Index}");
+                    break;
                 }
-                else
+
+            case TermTag.Const:
                 {
-                    _ctx = new FrameConstr(
-                        _env, constr.Tag, constr.Fields, 1,
-                        [], _ctx);
-                    _computeTerm = constr.Fields[0];
+                    ConstTerm<DeBruijn> c = Unsafe.As<ConstTerm<DeBruijn>>(term);
+                    StepAndMaybeSpend();
+                    _returnValue = new VConstant(c.Value);
+                    break;
                 }
-                break;
 
-            case CaseTerm<DeBruijn> cs:
-                StepAndMaybeSpend(MachineCosts.StepCase);
-                _ctx = new FrameCases(_env, cs.Branches, _ctx);
-                _computeTerm = cs.Scrutinee;
-                break;
+            case TermTag.Lambda:
+                {
+                    LambdaTerm<DeBruijn> l = Unsafe.As<LambdaTerm<DeBruijn>>(term);
+                    StepAndMaybeSpend();
+                    _returnValue = new VLambda(l.Parameter, l.Body, _env);
+                    break;
+                }
 
-            case ErrorTerm<DeBruijn>:
+            case TermTag.Delay:
+                {
+                    DelayTerm<DeBruijn> d = Unsafe.As<DelayTerm<DeBruijn>>(term);
+                    StepAndMaybeSpend();
+                    _returnValue = new VDelay(d.Body, _env);
+                    break;
+                }
+
+            case TermTag.Force:
+                {
+                    ForceTerm<DeBruijn> f = Unsafe.As<ForceTerm<DeBruijn>>(term);
+                    StepAndMaybeSpend();
+                    // Fast path: Force(Delay(body)) — skip VDelay allocation + frame roundtrip
+                    if (f.Body.TermTag == TermTag.Delay)
+                    {
+                        DelayTerm<DeBruijn> d = Unsafe.As<DelayTerm<DeBruijn>>(f.Body);
+                        StepAndMaybeSpend(); // charge for the Delay step
+                        _computeTerm = d.Body;
+                    }
+                    // Fast path: Force(Builtin(f)) — skip unforced VBuiltin + frame roundtrip
+                    else if (f.Body.TermTag == TermTag.Builtin)
+                    {
+                        BuiltinTerm<DeBruijn> b = Unsafe.As<BuiltinTerm<DeBruijn>>(f.Body);
+                        StepAndMaybeSpend(); // charge for the Builtin step
+                        DefaultFunction func = b.Function;
+                        int expectedForces = func.ForceCount();
+                        if (expectedForces < 1)
+                        {
+                            throw new EvaluationException(
+                                $"builtin {func}: too many forces (expected {expectedForces})");
+                        }
+                        int expectedArity = func.Arity();
+                        _returnValue = 1 == expectedForces && expectedArity == 0
+                            ? CallBuiltin(func, [])
+                            : new VBuiltin(func, 1,
+                                expectedArity > 0 ? new CekValue[expectedArity] : [], 0);
+                    }
+                    else
+                    {
+                        ref ContextFrame frame = ref _ctxStack.Push();
+                        frame.Tag = FrameTag.Force;
+                        _computeTerm = f.Body;
+                    }
+                    break;
+                }
+
+            case TermTag.Apply:
+                {
+                    ApplyTerm<DeBruijn> a = Unsafe.As<ApplyTerm<DeBruijn>>(term);
+                    StepAndMaybeSpend();
+                    // Fast path: Apply(Lambda(body), arg) — skip VLambda allocation + 2 frame steps
+                    if (a.Function.TermTag == TermTag.Lambda)
+                    {
+                        LambdaTerm<DeBruijn> l = Unsafe.As<LambdaTerm<DeBruijn>>(a.Function);
+                        StepAndMaybeSpend(); // charge for the Lambda step
+                        ref ContextFrame frame = ref _ctxStack.Push();
+                        frame.Tag = FrameTag.AwaitArgDirect;
+                        frame.Env = _env;
+                        frame.Term = l.Body;
+                        _computeTerm = a.Argument;
+                    }
+                    else
+                    {
+                        ref ContextFrame frame = ref _ctxStack.Push();
+                        frame.Tag = FrameTag.AwaitFunTerm;
+                        frame.Env = _env;
+                        frame.Term = a.Argument;
+                        _computeTerm = a.Function;
+                    }
+                    break;
+                }
+
+            case TermTag.Builtin:
+                {
+                    BuiltinTerm<DeBruijn> b = Unsafe.As<BuiltinTerm<DeBruijn>>(term);
+                    StepAndMaybeSpend();
+                    _returnValue = new VBuiltin(b.Function, 0, [], 0);
+                    break;
+                }
+
+            case TermTag.Constr:
+                {
+                    ConstrTerm<DeBruijn> constr = Unsafe.As<ConstrTerm<DeBruijn>>(term);
+                    StepAndMaybeSpend();
+                    if (constr.Fields.IsEmpty)
+                    {
+                        _returnValue = new VConstr(constr.Tag, [], 0);
+                    }
+                    else
+                    {
+                        ref ContextFrame frame = ref _ctxStack.Push();
+                        frame.Tag = FrameTag.Constr;
+                        frame.Env = _env;
+                        frame.ConstrIndex = constr.Tag;
+                        frame.ConstrFields = constr.Fields;
+                        frame.NextFieldIndex = 1;
+                        frame.Resolved = new CekValue[constr.Fields.Length];
+                        frame.ResolvedCount = 0;
+                        _computeTerm = constr.Fields[0];
+                    }
+                    break;
+                }
+
+            case TermTag.Case:
+                {
+                    CaseTerm<DeBruijn> cs = Unsafe.As<CaseTerm<DeBruijn>>(term);
+                    StepAndMaybeSpend();
+                    ref ContextFrame frame = ref _ctxStack.Push();
+                    frame.Tag = FrameTag.Cases;
+                    frame.Env = _env;
+                    frame.Branches = cs.Branches;
+                    _computeTerm = cs.Scrutinee;
+                    break;
+                }
+
+            case TermTag.Error:
                 throw new EvaluationException("ExplicitErrorTerm");
 
             default:
@@ -187,60 +257,101 @@ public sealed class CekMachine
         CekValue value = _returnValue!;
         _returnValue = null;
 
-        switch (_ctx)
+        switch (_ctxStack.PeekTag())
         {
-            case FrameAwaitFunTerm fat:
-                _ctx = new FrameAwaitArg(value, fat.Ctx);
-                _env = fat.Env;
-                _computeTerm = fat.Term;
-                break;
+            case FrameTag.AwaitFunTerm:
+                {
+                    // Transform in-place: AwaitFunTerm → AwaitArg
+                    ref ContextFrame f = ref _ctxStack.Peek();
+                    Environment? env = f.Env;
+                    Term<DeBruijn>? term = f.Term;
+                    f.Tag = FrameTag.AwaitArg;
+                    f.Value = value;
+                    f.Term = null;
+                    f.Env = null;
+                    _env = env;
+                    _computeTerm = term;
+                    break;
+                }
 
-            case FrameAwaitArg faa:
-                _ctx = faa.Ctx;
-                ApplyEvaluate(faa.Value, value);
-                break;
+            case FrameTag.AwaitArg:
+                {
+                    ref ContextFrame f = ref _ctxStack.Pop();
+                    CekValue funValue = f.Value!;
+                    f.Value = null;
+                    ApplyEvaluate(funValue, value);
+                    break;
+                }
 
-            case FrameAwaitFunValue fafv:
-                _ctx = fafv.Ctx;
-                ApplyEvaluate(value, fafv.Value);
-                break;
+            case FrameTag.AwaitArgDirect:
+                {
+                    // Direct lambda application: extend env and evaluate body
+                    ref ContextFrame f = ref _ctxStack.Pop();
+                    _env = Environment.Extend(f.Env, value);
+                    _computeTerm = f.Term;
+                    f.Term = null;
+                    f.Env = null;
+                    break;
+                }
 
-            case FrameForce ff:
-                _ctx = ff.Ctx;
+            case FrameTag.AwaitFunValue:
+                {
+                    ref ContextFrame f = ref _ctxStack.Pop();
+                    CekValue argValue = f.Value!;
+                    f.Value = null;
+                    ApplyEvaluate(value, argValue);
+                    break;
+                }
+
+            case FrameTag.Force:
+                _ctxStack.Drop();
                 ForceEvaluate(value);
                 break;
 
-            case FrameConstr fc:
+            case FrameTag.Constr:
                 {
-                    ImmutableArray<CekValue> newResolved = fc.Resolved.Add(value);
-                    if (fc.NextFieldIndex >= fc.Fields.Length)
+                    ref ContextFrame fc = ref _ctxStack.Peek();
+                    fc.Resolved![fc.ResolvedCount++] = value;
+
+                    if (fc.NextFieldIndex >= fc.ConstrFields.Length)
                     {
-                        _ctx = fc.Ctx;
-                        _returnValue = new VConstr(fc.Index, newResolved);
+                        CekValue[] resolved = fc.Resolved;
+                        int resolvedCount = fc.ResolvedCount;
+                        ulong constrIndex = fc.ConstrIndex;
+                        _ctxStack.Drop();
+                        _returnValue = new VConstr(constrIndex, resolved, resolvedCount);
                     }
                     else
                     {
-                        _ctx = new FrameConstr(
-                            fc.Env, fc.Index, fc.Fields,
-                            fc.NextFieldIndex + 1, newResolved, fc.Ctx);
                         _env = fc.Env;
-                        _computeTerm = fc.Fields[fc.NextFieldIndex];
+                        _computeTerm = fc.ConstrFields[fc.NextFieldIndex];
+                        fc.NextFieldIndex++;
                     }
                     break;
                 }
 
-            case FrameCases fcs:
+            case FrameTag.Cases:
                 {
+                    // Extract all needed data BEFORE any push (Pop ref is invalidated by Push)
+                    ref ContextFrame fcs = ref _ctxStack.Pop();
+                    ImmutableArray<Term<DeBruijn>> branches = fcs.Branches;
+                    Environment? casesEnv = fcs.Env;
+                    int branchCount = branches.Length;
+                    fcs.Env = null;
+
                     ulong tag;
-                    ImmutableArray<CekValue> fields;
+                    CekValue[]? fields;
+                    int fieldCount;
+
                     if (value is VConstr constr)
                     {
                         tag = constr.Index;
                         fields = constr.Fields;
+                        fieldCount = constr.FieldCount;
                     }
                     else if (value is VConstant vc)
                     {
-                        (tag, fields) = ConstantToConstr(vc.Value, fcs.Branches.Length);
+                        (tag, fields, fieldCount) = ConstantToConstr(vc.Value, branchCount);
                     }
                     else
                     {
@@ -248,20 +359,24 @@ public sealed class CekMachine
                             $"case: expected constr or constant, got {value.GetType().Name}");
                     }
 
-                    if (tag >= (ulong)fcs.Branches.Length)
+                    if (tag >= (ulong)branchCount)
                     {
                         throw new EvaluationException(
-                            $"case: constructor tag {tag} out of range ({fcs.Branches.Length} branches)");
+                            $"case: constructor tag {tag} out of range ({branchCount} branches)");
                     }
 
-                    _ctx = ContextHelpers.TransferArgStack(fields, fcs.Ctx);
-                    _env = fcs.Env;
-                    _computeTerm = fcs.Branches[(int)tag];
+                    if (fields != null && fieldCount > 0)
+                    {
+                        _ctxStack.TransferArgStack(fields, fieldCount);
+                    }
+                    _env = casesEnv;
+                    _computeTerm = branches[(int)tag];
                     break;
                 }
 
+            case FrameTag.NoFrame:
             default:
-                throw new EvaluationException($"Unknown context frame: {_ctx.GetType().Name}");
+                throw new EvaluationException("Unexpected NoFrame in return step");
         }
     }
 
@@ -286,10 +401,27 @@ public sealed class CekMachine
                             $"builtin {builtin.Function}: expected {expectedForces} force(s), got {builtin.Forces}");
                     }
 
-                    ImmutableArray<CekValue> newArgs = builtin.Args.Add(arg);
-                    _returnValue = newArgs.Length == expectedArity
+                    int newArgCount = builtin.ArgCount + 1;
+
+                    // Reuse existing array if it has capacity, otherwise allocate
+                    CekValue[] newArgs;
+                    if (builtin.Args.Length >= newArgCount)
+                    {
+                        newArgs = builtin.Args;
+                    }
+                    else
+                    {
+                        newArgs = new CekValue[expectedArity];
+                        if (builtin.ArgCount > 0)
+                        {
+                            Array.Copy(builtin.Args, newArgs, builtin.ArgCount);
+                        }
+                    }
+                    newArgs[builtin.ArgCount] = arg;
+
+                    _returnValue = newArgCount == expectedArity
                         ? CallBuiltin(builtin.Function, newArgs)
-                        : new VBuiltin(builtin.Function, builtin.Forces, newArgs);
+                        : new VBuiltin(builtin.Function, builtin.Forces, newArgs, newArgCount);
                     break;
                 }
 
@@ -323,7 +455,7 @@ public sealed class CekMachine
                     int expectedArity = builtin.Function.Arity();
                     _returnValue = newForces == expectedForces && expectedArity == 0
                         ? CallBuiltin(builtin.Function, [])
-                        : new VBuiltin(builtin.Function, newForces, builtin.Args);
+                        : new VBuiltin(builtin.Function, newForces, builtin.Args, builtin.ArgCount);
                     break;
                 }
 
@@ -335,18 +467,24 @@ public sealed class CekMachine
 
     // --- Builtin invocation with cost tracking ---
 
-    private CekValue CallBuiltin(DefaultFunction func, ImmutableArray<CekValue> args)
+    private CekValue CallBuiltin(DefaultFunction func, CekValue[] args)
     {
-        (long x, long y, long z) = ExMem.ComputeArgSizes(func, args);
         BuiltinCostModel model = _builtinCosts[(int)func];
-        ExBudget cost = model.Eval(x, y, z);
-        _budget -= cost;
+        if (model.IsConstant)
+        {
+            _budget -= model.CachedCost;
+        }
+        else
+        {
+            (long x, long y, long z) = ExMem.ComputeArgSizes(func, args);
+            _budget -= model.Eval(x, y, z);
+        }
         return Builtins.BuiltinRuntime.Call(func, args);
     }
 
     // --- Constant case decomposition (UPLC 1.1.0) ---
 
-    private static (ulong Tag, ImmutableArray<CekValue> Fields) ConstantToConstr(
+    private static (ulong Tag, CekValue[]? Fields, int FieldCount) ConstantToConstr(
         Constant c, int numBranches)
     {
         switch (c)
@@ -358,7 +496,7 @@ public sealed class CekMachine
                         ? throw new EvaluationException("case: negative integer tag")
                         : n > ulong.MaxValue
                             ? throw new EvaluationException("case: integer tag too large")
-                            : ((ulong)n, []);
+                            : ((ulong)n, null, 0);
                 }
 
             case BoolConstant b:
@@ -368,7 +506,7 @@ public sealed class CekMachine
                         $"case: bool expects at most 2 branches, got {numBranches}");
                 }
 
-                return (b.Value ? 1UL : 0UL, []);
+                return (b.Value ? 1UL : 0UL, null, 0);
 
             case UnitConstant:
                 if (numBranches > 1)
@@ -377,7 +515,7 @@ public sealed class CekMachine
                         $"case: unit expects at most 1 branch, got {numBranches}");
                 }
 
-                return (0UL, []);
+                return (0UL, null, 0);
 
             case PairConstant p:
                 if (numBranches > 1)
@@ -388,7 +526,7 @@ public sealed class CekMachine
 
                 return (0UL, [
                     new VConstant(p.First),
-                    new VConstant(p.Second)]);
+                    new VConstant(p.Second)], 2);
 
             case ListConstant list:
                 if (numBranches > 2)
@@ -397,14 +535,14 @@ public sealed class CekMachine
                         $"case: list expects at most 2 branches, got {numBranches}");
                 }
 
-                if (list.Values.IsEmpty)
+                if (list.IsListEmpty)
                 {
-                    return (1UL, []);
+                    return (1UL, null, 0);
                 }
 
                 return (0UL, [
-                    new VConstant(list.Values[0]),
-                    new VConstant(new ListConstant(list.ItemType, list.Values.RemoveAt(0)))]);
+                    new VConstant(list.ElementAt(0)),
+                    new VConstant(new ListConstant(list.ItemType, list.Values) { Offset = list.Offset + 1 })], 2);
 
             default:
                 throw new EvaluationException(

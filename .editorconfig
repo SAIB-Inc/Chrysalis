@@ -38,6 +38,8 @@ dotnet_diagnostic.CA1054.severity = none
 dotnet_diagnostic.CA1056.severity = none
 dotnet_diagnostic.CA1303.severity = none
 dotnet_diagnostic.CA1031.severity = none
+# IDE0370: null-forgiving operator — needed for late-initialized properties (set in StartAsync)
+dotnet_diagnostic.IDE0370.severity = none
 # CA2007: ConfigureAwait — no SynchronizationContext in .NET 6+ ASP.NET Core / console / gRPC consumers
 dotnet_diagnostic.CA2007.severity = none
 

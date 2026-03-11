@@ -1,4 +1,3 @@
-using System.Collections.Immutable;
 using System.Text;
 using Chrysalis.Plutus.Cek;
 using static Chrysalis.Plutus.Builtins.BuiltinHelpers;
@@ -7,13 +6,13 @@ namespace Chrysalis.Plutus.Builtins;
 
 internal static class StringBuiltins
 {
-    internal static CekValue AppendString(ImmutableArray<CekValue> args) => StringResult(UnwrapString(args[0]) + UnwrapString(args[1]));
+    internal static CekValue AppendString(CekValue[] args) => StringResult(UnwrapString(args[0]) + UnwrapString(args[1]));
 
-    internal static CekValue EqualsString(ImmutableArray<CekValue> args) => BoolResult(UnwrapString(args[0]) == UnwrapString(args[1]));
+    internal static CekValue EqualsString(CekValue[] args) => BoolResult(UnwrapString(args[0]) == UnwrapString(args[1]));
 
-    internal static CekValue EncodeUtf8(ImmutableArray<CekValue> args) => ByteStringResult(Encoding.UTF8.GetBytes(UnwrapString(args[0])));
+    internal static CekValue EncodeUtf8(CekValue[] args) => ByteStringResult(Encoding.UTF8.GetBytes(UnwrapString(args[0])));
 
-    internal static CekValue DecodeUtf8(ImmutableArray<CekValue> args)
+    internal static CekValue DecodeUtf8(CekValue[] args)
     {
         ReadOnlyMemory<byte> bs = UnwrapByteString(args[0]);
         try

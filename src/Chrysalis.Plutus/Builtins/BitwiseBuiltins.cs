@@ -1,4 +1,3 @@
-using System.Collections.Immutable;
 using System.Numerics;
 using Chrysalis.Plutus.Cek;
 using Chrysalis.Plutus.Types;
@@ -12,13 +11,13 @@ internal static class BitwiseBuiltins
 
     // --- Logical bitwise ops ---
 
-    internal static CekValue AndByteString(ImmutableArray<CekValue> args) => BitwiseOp(args, (a, b) => (byte)(a & b), 0xFF);
+    internal static CekValue AndByteString(CekValue[] args) => BitwiseOp(args, (a, b) => (byte)(a & b), 0xFF);
 
-    internal static CekValue OrByteString(ImmutableArray<CekValue> args) => BitwiseOp(args, (a, b) => (byte)(a | b), 0x00);
+    internal static CekValue OrByteString(CekValue[] args) => BitwiseOp(args, (a, b) => (byte)(a | b), 0x00);
 
-    internal static CekValue XorByteString(ImmutableArray<CekValue> args) => BitwiseOp(args, (a, b) => (byte)(a ^ b), 0x00);
+    internal static CekValue XorByteString(CekValue[] args) => BitwiseOp(args, (a, b) => (byte)(a ^ b), 0x00);
 
-    internal static CekValue ComplementByteString(ImmutableArray<CekValue> args)
+    internal static CekValue ComplementByteString(CekValue[] args)
     {
         ReadOnlySpan<byte> bs = UnwrapByteString(args[0]).Span;
         byte[] result = new byte[bs.Length];
@@ -32,7 +31,7 @@ internal static class BitwiseBuiltins
 
     // --- Shift & Rotate ---
 
-    internal static CekValue ShiftByteString(ImmutableArray<CekValue> args)
+    internal static CekValue ShiftByteString(CekValue[] args)
     {
         ReadOnlyMemory<byte> bsMem = UnwrapByteString(args[0]);
         BigInteger shiftAmount = UnwrapInteger(args[1]);
@@ -87,7 +86,7 @@ internal static class BitwiseBuiltins
         return ByteStringResult(result);
     }
 
-    internal static CekValue RotateByteString(ImmutableArray<CekValue> args)
+    internal static CekValue RotateByteString(CekValue[] args)
     {
         ReadOnlyMemory<byte> bsMem = UnwrapByteString(args[0]);
         BigInteger rotAmount = UnwrapInteger(args[1]);
@@ -124,7 +123,7 @@ internal static class BitwiseBuiltins
 
     // --- Bit access ---
 
-    internal static CekValue ReadBit(ImmutableArray<CekValue> args)
+    internal static CekValue ReadBit(CekValue[] args)
     {
         ReadOnlySpan<byte> bs = UnwrapByteString(args[0]).Span;
         BigInteger idx = UnwrapInteger(args[1]);
@@ -147,10 +146,10 @@ internal static class BitwiseBuiltins
         return BoolResult(((bs[flippedIndex] >>> bitOffset) & 1) == 1);
     }
 
-    internal static CekValue WriteBits(ImmutableArray<CekValue> args)
+    internal static CekValue WriteBits(CekValue[] args)
     {
         ReadOnlyMemory<byte> bsMem = UnwrapByteString(args[0]);
-        ImmutableArray<Constant> indices = UnwrapList(args[1]);
+        Constant[] indices = UnwrapList(args[1]);
         bool setVal = UnwrapBool(args[2]);
 
         ReadOnlySpan<byte> bs = bsMem.Span;
@@ -192,7 +191,7 @@ internal static class BitwiseBuiltins
 
     // --- Count / Find ---
 
-    internal static CekValue CountSetBits(ImmutableArray<CekValue> args)
+    internal static CekValue CountSetBits(CekValue[] args)
     {
         ReadOnlySpan<byte> bs = UnwrapByteString(args[0]).Span;
         int count = 0;
@@ -204,7 +203,7 @@ internal static class BitwiseBuiltins
         return IntegerResult(count);
     }
 
-    internal static CekValue FindFirstSetBit(ImmutableArray<CekValue> args)
+    internal static CekValue FindFirstSetBit(CekValue[] args)
     {
         ReadOnlySpan<byte> bs = UnwrapByteString(args[0]).Span;
 
@@ -225,7 +224,7 @@ internal static class BitwiseBuiltins
 
     // --- Replicate ---
 
-    internal static CekValue ReplicateByte(ImmutableArray<CekValue> args)
+    internal static CekValue ReplicateByte(CekValue[] args)
     {
         BigInteger size = UnwrapInteger(args[0]);
         BigInteger byteVal = UnwrapInteger(args[1]);
@@ -252,7 +251,7 @@ internal static class BitwiseBuiltins
 
     // --- Integer/ByteString conversion ---
 
-    internal static CekValue IntegerToByteString(ImmutableArray<CekValue> args)
+    internal static CekValue IntegerToByteString(CekValue[] args)
     {
         bool bigEndian = UnwrapBool(args[0]);
         BigInteger size = UnwrapInteger(args[1]);
@@ -321,7 +320,7 @@ internal static class BitwiseBuiltins
         return ByteStringResult(result);
     }
 
-    internal static CekValue ByteStringToInteger(ImmutableArray<CekValue> args)
+    internal static CekValue ByteStringToInteger(CekValue[] args)
     {
         bool bigEndian = UnwrapBool(args[0]);
         ReadOnlyMemory<byte> bsMem = UnwrapByteString(args[1]);
@@ -345,7 +344,7 @@ internal static class BitwiseBuiltins
     // --- Private helpers ---
 
     private static CekValue BitwiseOp(
-        ImmutableArray<CekValue> args,
+        CekValue[] args,
         Func<byte, byte, byte> op,
         byte padByte)
     {

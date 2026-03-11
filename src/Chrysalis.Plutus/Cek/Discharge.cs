@@ -10,12 +10,12 @@ internal static class Discharge
 {
     internal static Term<DeBruijn> DischargeValue(CekValue value) => value switch
     {
-        VConstant c => new ConstTerm<DeBruijn>(c.Value),
-        VLambda l => new LambdaTerm<DeBruijn>(l.Parameter, WithEnv(1, l.Env, l.Body)),
-        VDelay d => new DelayTerm<DeBruijn>(WithEnv(0, d.Env, d.Body)),
-        VBuiltin b => DischargeBuiltin(b),
-        VConstr constr => new ConstrTerm<DeBruijn>(constr.Index, DischargeAll(constr.Fields)),
-        _ => throw new InvalidOperationException($"Unknown CekValue: {value.GetType().Name}")
+        VConstant vc => new ConstTerm<DeBruijn>(vc.Value),
+        VLambda vl => new LambdaTerm<DeBruijn>(vl.Parameter, WithEnv(1, vl.Env, vl.Body)),
+        VDelay vd => new DelayTerm<DeBruijn>(WithEnv(0, vd.Env, vd.Body)),
+        VBuiltin vb => DischargeBuiltin(vb),
+        VConstr vcr => new ConstrTerm<DeBruijn>(vcr.Index, DischargeAll(vcr.Fields, vcr.FieldCount)),
+        _ => throw new InvalidOperationException($"Unknown CekValue type: {value.GetType().Name}")
     };
 
     private static Term<DeBruijn> DischargeBuiltin(VBuiltin b)
@@ -27,21 +27,21 @@ internal static class Discharge
             term = new ForceTerm<DeBruijn>(term);
         }
 
-        foreach (CekValue arg in b.Args)
+        for (int i = 0; i < b.ArgCount; i++)
         {
-            term = new ApplyTerm<DeBruijn>(term, DischargeValue(arg));
+            term = new ApplyTerm<DeBruijn>(term, DischargeValue(b.Args[i]));
         }
 
         return term;
     }
 
-    private static ImmutableArray<Term<DeBruijn>> DischargeAll(ImmutableArray<CekValue> fields)
+    private static ImmutableArray<Term<DeBruijn>> DischargeAll(CekValue[] fields, int count)
     {
         ImmutableArray<Term<DeBruijn>>.Builder builder =
-            ImmutableArray.CreateBuilder<Term<DeBruijn>>(fields.Length);
-        foreach (CekValue field in fields)
+            ImmutableArray.CreateBuilder<Term<DeBruijn>>(count);
+        for (int i = 0; i < count; i++)
         {
-            builder.Add(DischargeValue(field));
+            builder.Add(DischargeValue(fields[i]));
         }
         return builder.MoveToImmutable();
     }

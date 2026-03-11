@@ -1,4 +1,3 @@
-using System.Collections.Immutable;
 using System.Numerics;
 using Chrysalis.Plutus.Cek;
 using Chrysalis.Plutus.Types;
@@ -37,18 +36,29 @@ internal static class BuiltinHelpers
             : throw new EvaluationException(
                 $"expected data constant, got {DescribeValue(val)}");
 
-    internal static ImmutableArray<Constant> UnwrapList(CekValue val) => val is VConstant { Value: ListConstant l }
-            ? l.Values
-            : throw new EvaluationException(
+    internal static Constant[] UnwrapList(CekValue val)
+    {
+        if (val is not VConstant { Value: ListConstant l })
+        {
+            throw new EvaluationException(
                 $"expected list constant, got {DescribeValue(val)}");
+        }
+
+        Constant[] result = new Constant[l.Count];
+        for (int i = 0; i < l.Count; i++)
+        {
+            result[i] = l.ElementAt(i);
+        }
+        return result;
+    }
 
     internal static ListConstant UnwrapListConstant(CekValue val) => val is VConstant { Value: ListConstant l }
             ? l
             : throw new EvaluationException(
                 $"expected list constant, got {DescribeValue(val)}");
 
-    internal static Constant UnwrapConstant(CekValue val) => val is VConstant c
-            ? c.Value
+    internal static Constant UnwrapConstant(CekValue val) => val is VConstant vc
+            ? vc.Value
             : throw new EvaluationException(
                 $"expected constant, got {val.GetType().Name}");
 
@@ -81,21 +91,43 @@ internal static class BuiltinHelpers
         }
     }
 
+    // --- Cached singleton CekValues for common constants ---
+
+    private static readonly CekValue CekTrue = new VConstant(BoolConstant.True);
+    private static readonly CekValue CekFalse = new VConstant(BoolConstant.False);
+    private static readonly CekValue CekUnit = new VConstant(UnitConstant.Instance);
+
+    private const int SmallIntMin = -8;
+    private const int SmallIntMax = 8;
+    private static readonly CekValue[] SmallIntegers = CreateSmallIntegerCache();
+
+    private static CekValue[] CreateSmallIntegerCache()
+    {
+        CekValue[] cache = new CekValue[SmallIntMax - SmallIntMin + 1];
+        for (int i = SmallIntMin; i <= SmallIntMax; i++)
+        {
+            cache[i - SmallIntMin] = new VConstant(new IntegerConstant(i));
+        }
+        return cache;
+    }
+
     // --- Result builders ---
 
-    internal static CekValue IntegerResult(BigInteger n) => new VConstant(new IntegerConstant(n));
+    internal static CekValue IntegerResult(BigInteger n) => n >= SmallIntMin && n <= SmallIntMax
+            ? SmallIntegers[(int)n - SmallIntMin]
+            : new VConstant(new IntegerConstant(n));
 
     internal static CekValue ByteStringResult(byte[] bs) => new VConstant(new ByteStringConstant(bs));
 
     internal static CekValue ByteStringResult(ReadOnlyMemory<byte> bs) => new VConstant(new ByteStringConstant(bs));
 
-    internal static CekValue BoolResult(bool b) => new VConstant(new BoolConstant(b));
+    internal static CekValue BoolResult(bool b) => b ? CekTrue : CekFalse;
 
     internal static CekValue StringResult(string s) => new VConstant(new StringConstant(s));
 
     internal static CekValue DataResult(PlutusData d) => new VConstant(new DataConstant(d));
 
-    internal static CekValue UnitResult() => new VConstant(UnitConstant.Instance);
+    internal static CekValue UnitResult() => CekUnit;
 
     internal static CekValue G1Result(byte[] bytes) => new VConstant(new Bls12381G1Constant(bytes));
 
@@ -112,5 +144,5 @@ internal static class BuiltinHelpers
 
     // --- Description ---
 
-    private static string DescribeValue(CekValue val) => val is VConstant c ? c.Value.GetType().Name : val.GetType().Name;
+    private static string DescribeValue(CekValue val) => val is VConstant vc ? vc.Value.GetType().Name : val.GetType().Name;
 }
