@@ -1,5 +1,6 @@
 using Chrysalis.Codec.Serialization.Attributes;
 using Chrysalis.Codec.Types;
+using Chrysalis.Codec.Types.Cardano.Core.Common;
 
 namespace Chrysalis.Tx.Cli;
 
@@ -12,26 +13,13 @@ public abstract partial record WizardRedeemer : CborRecord;
 [CborConstr(0)]
 public partial record BuyRedeemer(
     long OutputIndex,
-    PlutusBool OfferSecond,
+    IPlutusBool OfferSecond,
     ICborOption<OracleFeeds> OracleFeeds
 ) : WizardRedeemer;
 
 [CborSerializable]
 [CborConstr(1)]
 public partial record CloseRedeemer : WizardRedeemer;
-
-// Aiken Bool: Constr(0,[]) = False, Constr(1,[]) = True
-[CborSerializable]
-[CborUnion]
-public abstract partial record PlutusBool : CborRecord;
-
-[CborSerializable]
-[CborConstr(0)]
-public partial record PlutusFalse : PlutusBool;
-
-[CborSerializable]
-[CborConstr(1)]
-public partial record PlutusTrue : PlutusBool;
 
 // Oracle feeds
 [CborSerializable]

@@ -93,15 +93,13 @@ public class TransactionBuilder
     public IReadOnlyList<IPlutusData>? PlutusDataSet => _plutusData;
 
     /// <summary>Gets the current certificates as a CBOR list.</summary>
-    public ICborMaybeIndefList<ICertificate>? Certificates =>
-        _certificates != null ? CborDefListWithTag<ICertificate>.Create(_certificates) : null;
+    public ICborMaybeIndefList<ICertificate>? Certificates => WrapIfNotNull(_certificates);
 
     /// <summary>Gets the current collateral return output.</summary>
     public ITransactionOutput? CollateralReturn { get; private set; }
 
     /// <summary>Gets the current proposal procedures as a CBOR list.</summary>
-    public ICborMaybeIndefList<ProposalProcedure>? ProposalProcedures =>
-        _proposals != null ? CborDefListWithTag<ProposalProcedure>.Create(_proposals) : null;
+    public ICborMaybeIndefList<ProposalProcedure>? ProposalProcedures => WrapIfNotNull(_proposals);
 
     /// <summary>
     /// Initializes a new TransactionBuilder with empty state.
@@ -140,6 +138,30 @@ public class TransactionBuilder
     }
 
     /// <summary>
+    /// Adds a transaction input from a hex-encoded transaction hash and index.
+    /// </summary>
+    /// <param name="txHashHex">The hex-encoded transaction hash (64 characters).</param>
+    /// <param name="index">The output index.</param>
+    /// <returns>This builder for chaining.</returns>
+    public TransactionBuilder AddInput(string txHashHex, ulong index)
+    {
+        _inputs.Add(TransactionInput.Create(Convert.FromHexString(txHashHex), index));
+        return this;
+    }
+
+    /// <summary>
+    /// Adds a transaction input from a UTxO reference string in <c>"txHash#index"</c> format.
+    /// </summary>
+    /// <param name="utxoRef">The UTxO reference (e.g., <c>"abcd...1234#0"</c>).</param>
+    /// <returns>This builder for chaining.</returns>
+    public TransactionBuilder AddInput(string utxoRef)
+    {
+        ArgumentNullException.ThrowIfNull(utxoRef);
+        (string txHash, ulong index) = ParseUtxoRef(utxoRef);
+        return AddInput(txHash, index);
+    }
+
+    /// <summary>
     /// Replaces all transaction inputs.
     /// </summary>
     /// <param name="inputs">The inputs to set.</param>
@@ -166,6 +188,31 @@ public class TransactionBuilder
         _outputs.Add(output);
 
         return this;
+    }
+
+    /// <summary>
+    /// Starts building a transaction output with the given bech32 address and value.
+    /// Call terminal methods on the returned <see cref="OutputBuilder"/> to configure and add the output.
+    /// </summary>
+    /// <param name="bech32Address">The bech32-encoded destination address.</param>
+    /// <param name="amount">The output value.</param>
+    /// <returns>An <see cref="OutputBuilder"/> for fluent configuration.</returns>
+    public OutputBuilder AddOutput(string bech32Address, IValue amount)
+    {
+        byte[] addressBytes = Wallet.Models.Addresses.Address.FromBech32(bech32Address).ToBytes();
+        return new OutputBuilder(this, addressBytes, amount);
+    }
+
+    /// <summary>
+    /// Starts building a transaction output with raw address bytes and value.
+    /// Call terminal methods on the returned <see cref="OutputBuilder"/> to configure and add the output.
+    /// </summary>
+    /// <param name="addressBytes">The raw address bytes.</param>
+    /// <param name="amount">The output value.</param>
+    /// <returns>An <see cref="OutputBuilder"/> for fluent configuration.</returns>
+    public OutputBuilder AddOutput(byte[] addressBytes, IValue amount)
+    {
+        return new OutputBuilder(this, addressBytes, amount);
     }
 
     /// <summary>
@@ -263,6 +310,18 @@ public class TransactionBuilder
     }
 
     /// <summary>
+    /// Adds a single token mint/burn, merging with any existing mints.
+    /// </summary>
+    /// <param name="policyHex">The hex-encoded policy ID (56 characters).</param>
+    /// <param name="assetNameHex">The hex-encoded asset name.</param>
+    /// <param name="amount">The quantity to mint (positive) or burn (negative).</param>
+    /// <returns>This builder for chaining.</returns>
+    public TransactionBuilder AddMint(string policyHex, string assetNameHex, long amount)
+    {
+        return AddMint(MintBuilder.Create().AddToken(policyHex, assetNameHex, amount).Build());
+    }
+
+    /// <summary>
     /// Replaces the entire mint operation.
     /// </summary>
     /// <param name="mint">The mint to set.</param>
@@ -296,6 +355,30 @@ public class TransactionBuilder
     }
 
     /// <summary>
+    /// Adds a collateral input from a hex-encoded transaction hash and index.
+    /// </summary>
+    /// <param name="txHashHex">The hex-encoded transaction hash (64 characters).</param>
+    /// <param name="index">The output index.</param>
+    /// <returns>This builder for chaining.</returns>
+    public TransactionBuilder AddCollateral(string txHashHex, ulong index)
+    {
+        (_collateral ??= []).Add(TransactionInput.Create(Convert.FromHexString(txHashHex), index));
+        return this;
+    }
+
+    /// <summary>
+    /// Adds a collateral input from a UTxO reference string in <c>"txHash#index"</c> format.
+    /// </summary>
+    /// <param name="utxoRef">The UTxO reference (e.g., <c>"abcd...1234#0"</c>).</param>
+    /// <returns>This builder for chaining.</returns>
+    public TransactionBuilder AddCollateral(string utxoRef)
+    {
+        ArgumentNullException.ThrowIfNull(utxoRef);
+        (string txHash, ulong index) = ParseUtxoRef(utxoRef);
+        return AddCollateral(txHash, index);
+    }
+
+    /// <summary>
     /// Clears all collateral inputs.
     /// </summary>
     /// <returns>This builder for chaining.</returns>
@@ -313,6 +396,17 @@ public class TransactionBuilder
     public TransactionBuilder AddRequiredSigner(ReadOnlyMemory<byte> signer)
     {
         (_requiredSigners ??= []).Add(signer);
+        return this;
+    }
+
+    /// <summary>
+    /// Adds a required signer from a hex-encoded public key hash.
+    /// </summary>
+    /// <param name="pkhHex">The hex-encoded public key hash (56 characters).</param>
+    /// <returns>This builder for chaining.</returns>
+    public TransactionBuilder AddRequiredSigner(string pkhHex)
+    {
+        (_requiredSigners ??= []).Add(Convert.FromHexString(pkhHex));
         return this;
     }
 
@@ -357,6 +451,30 @@ public class TransactionBuilder
     {
         (_referenceInputs ??= []).Add(referenceInput);
         return this;
+    }
+
+    /// <summary>
+    /// Adds a reference input from a hex-encoded transaction hash and index.
+    /// </summary>
+    /// <param name="txHashHex">The hex-encoded transaction hash (64 characters).</param>
+    /// <param name="index">The output index.</param>
+    /// <returns>This builder for chaining.</returns>
+    public TransactionBuilder AddReferenceInput(string txHashHex, ulong index)
+    {
+        (_referenceInputs ??= []).Add(TransactionInput.Create(Convert.FromHexString(txHashHex), index));
+        return this;
+    }
+
+    /// <summary>
+    /// Adds a reference input from a UTxO reference string in <c>"txHash#index"</c> format.
+    /// </summary>
+    /// <param name="utxoRef">The UTxO reference (e.g., <c>"abcd...1234#0"</c>).</param>
+    /// <returns>This builder for chaining.</returns>
+    public TransactionBuilder AddReferenceInput(string utxoRef)
+    {
+        ArgumentNullException.ThrowIfNull(utxoRef);
+        (string txHash, ulong index) = ParseUtxoRef(utxoRef);
+        return AddReferenceInput(txHash, index);
     }
 
     /// <summary>
@@ -463,6 +581,17 @@ public class TransactionBuilder
     }
 
     /// <summary>
+    /// Adds a Plutus V1 script from a hex-encoded string.
+    /// </summary>
+    /// <param name="scriptHex">The hex-encoded Plutus V1 script.</param>
+    /// <returns>This builder for chaining.</returns>
+    public TransactionBuilder AddPlutusV1Script(string scriptHex)
+    {
+        (_plutusV1Scripts ??= []).Add(Convert.FromHexString(scriptHex));
+        return this;
+    }
+
+    /// <summary>
     /// Adds a Plutus V2 script to the witness set.
     /// </summary>
     /// <param name="script">The Plutus V2 script bytes.</param>
@@ -474,6 +603,17 @@ public class TransactionBuilder
     }
 
     /// <summary>
+    /// Adds a Plutus V2 script from a hex-encoded string.
+    /// </summary>
+    /// <param name="scriptHex">The hex-encoded Plutus V2 script.</param>
+    /// <returns>This builder for chaining.</returns>
+    public TransactionBuilder AddPlutusV2Script(string scriptHex)
+    {
+        (_plutusV2Scripts ??= []).Add(Convert.FromHexString(scriptHex));
+        return this;
+    }
+
+    /// <summary>
     /// Adds a Plutus V3 script to the witness set.
     /// </summary>
     /// <param name="script">The Plutus V3 script bytes.</param>
@@ -481,6 +621,17 @@ public class TransactionBuilder
     public TransactionBuilder AddPlutusV3Script(ReadOnlyMemory<byte> script)
     {
         (_plutusV3Scripts ??= []).Add(script);
+        return this;
+    }
+
+    /// <summary>
+    /// Adds a Plutus V3 script from a hex-encoded string.
+    /// </summary>
+    /// <param name="scriptHex">The hex-encoded Plutus V3 script.</param>
+    /// <returns>This builder for chaining.</returns>
+    public TransactionBuilder AddPlutusV3Script(string scriptHex)
+    {
+        (_plutusV3Scripts ??= []).Add(Convert.FromHexString(scriptHex));
         return this;
     }
 
@@ -543,20 +694,20 @@ public class TransactionBuilder
             outputs: CborDefList<ITransactionOutput>.Create(_outputs),
             fee: Fee,
             timeToLive: TimeToLive,
-            certificates: _certificates != null ? CborDefListWithTag<ICertificate>.Create(_certificates) : null,
+            certificates: WrapIfNotNull(_certificates),
             withdrawals: _withdrawals,
             auxiliaryDataHash: _auxDataHash != null ? (ReadOnlyMemory<byte>?)new ReadOnlyMemory<byte>(_auxDataHash) : null,
             validityIntervalStart: _validityStart,
             mint: Mint,
             scriptDataHash: _scriptDataHash != null ? (ReadOnlyMemory<byte>?)new ReadOnlyMemory<byte>(_scriptDataHash) : null,
-            collateral: _collateral != null ? CborDefListWithTag<TransactionInput>.Create(_collateral) : null,
-            requiredSigners: _requiredSigners != null ? CborDefListWithTag<ReadOnlyMemory<byte>>.Create(_requiredSigners) : null,
+            collateral: WrapIfNotNull(_collateral),
+            requiredSigners: WrapIfNotNull(_requiredSigners),
             networkId: _networkId,
             collateralReturn: CollateralReturn,
             totalCollateral: TotalCollateral,
-            referenceInputs: _referenceInputs != null ? CborDefListWithTag<TransactionInput>.Create(_referenceInputs) : null,
+            referenceInputs: WrapIfNotNull(_referenceInputs),
             votingProcedures: _votingProcedures,
-            proposalProcedures: _proposals != null ? CborDefListWithTag<ProposalProcedure>.Create(_proposals) : null,
+            proposalProcedures: WrapIfNotNull(_proposals),
             treasuryValue: _treasuryValue,
             donation: _donation
         );
@@ -566,14 +717,14 @@ public class TransactionBuilder
     /// </summary>
     /// <returns>The constructed PostAlonzoTransactionWitnessSet.</returns>
     public PostAlonzoTransactionWitnessSet BuildWitnessSet() => PostAlonzoTransactionWitnessSet.Create(
-            vKeyWitnesses: _vkeyWitnesses != null ? CborDefListWithTag<VKeyWitness>.Create(_vkeyWitnesses) : null,
-            nativeScripts: _nativeScripts != null ? CborDefListWithTag<INativeScript>.Create(_nativeScripts) : null,
-            bootstrapWitnesses: _bootstrapWitnesses != null ? CborDefListWithTag<BootstrapWitness>.Create(_bootstrapWitnesses) : null,
-            plutusV1Scripts: _plutusV1Scripts != null ? CborDefListWithTag<ReadOnlyMemory<byte>>.Create(_plutusV1Scripts) : null,
-            plutusDataSet: _plutusData != null ? CborDefListWithTag<IPlutusData>.Create(_plutusData) : null,
+            vKeyWitnesses: WrapIfNotNull(_vkeyWitnesses),
+            nativeScripts: WrapIfNotNull(_nativeScripts),
+            bootstrapWitnesses: WrapIfNotNull(_bootstrapWitnesses),
+            plutusV1Scripts: WrapIfNotNull(_plutusV1Scripts),
+            plutusDataSet: WrapIfNotNull(_plutusData),
             redeemers: Redeemers,
-            plutusV2Scripts: _plutusV2Scripts != null ? CborDefListWithTag<ReadOnlyMemory<byte>>.Create(_plutusV2Scripts) : null,
-            plutusV3Scripts: _plutusV3Scripts != null ? CborDefListWithTag<ReadOnlyMemory<byte>>.Create(_plutusV3Scripts) : null
+            plutusV2Scripts: WrapIfNotNull(_plutusV2Scripts),
+            plutusV3Scripts: WrapIfNotNull(_plutusV3Scripts)
         );
 
     /// <summary>
@@ -586,6 +737,25 @@ public class TransactionBuilder
         PostAlonzoTransactionWitnessSet witnessSet = BuildWitnessSet();
 
         return PostMaryTransaction.Create(body, witnessSet, true, _auxiliaryData);
+    }
+
+    private static CborDefListWithTag<T>? WrapIfNotNull<T>(List<T>? list)
+        => list != null ? CborDefListWithTag<T>.Create(list) : null;
+
+    /// <summary>
+    /// Parses a UTxO reference in <c>"txHash#index"</c> format into its components.
+    /// </summary>
+    private static (string TxHash, ulong Index) ParseUtxoRef(string utxoRef)
+    {
+        ArgumentNullException.ThrowIfNull(utxoRef);
+
+        int hashIndex = utxoRef.IndexOf('#', StringComparison.Ordinal);
+        if (hashIndex < 0)
+        {
+            throw new FormatException($"Invalid UTxO reference '{utxoRef}'. Expected format: txHash#index");
+        }
+
+        return (utxoRef[..hashIndex], ulong.Parse(utxoRef[(hashIndex + 1)..], System.Globalization.CultureInfo.InvariantCulture));
     }
 
     private static MultiAssetMint MergeMints(MultiAssetMint existingMint, MultiAssetMint newMint)

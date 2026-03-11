@@ -1,6 +1,7 @@
 using Chrysalis.Codec.Types.Cardano.Core.Scripts;
 using Chrysalis.Codec.Serialization;
 using Chrysalis.Plutus.VM.EvalTx;
+using Chrysalis.Wallet.Utils;
 
 namespace Chrysalis.Tx.Extensions;
 
@@ -27,6 +28,59 @@ public static class ScriptExtension
             _ => throw new NotSupportedException($"Unsupported script type: {script.GetType()}")
         };
     }
+
+    /// <summary>
+    /// Computes the script hash (blake2b-224 of version-prefixed script bytes).
+    /// </summary>
+    /// <param name="script">The script to hash.</param>
+    /// <returns>The 28-byte script hash.</returns>
+    public static byte[] Hash(this IScript script)
+    {
+        ArgumentNullException.ThrowIfNull(script);
+
+        int version = script.Version();
+        ReadOnlySpan<byte> scriptBytes = script switch
+        {
+            MultiSigScript ms => CborSerializer.Serialize(ms.NativeScript),
+            _ => script.Bytes().Span
+        };
+
+        byte[] prefixed = new byte[1 + scriptBytes.Length];
+        prefixed[0] = (byte)version;
+        scriptBytes.CopyTo(prefixed.AsSpan(1));
+        return HashUtil.Blake2b224(prefixed);
+    }
+
+    /// <summary>
+    /// Computes the script hash and returns it as a lowercase hex string.
+    /// </summary>
+    /// <param name="script">The script to hash.</param>
+    /// <returns>The 56-character hex-encoded script hash.</returns>
+    public static string HashHex(this IScript script) =>
+        Convert.ToHexStringLower(script.Hash());
+
+    /// <summary>
+    /// Computes the hash of a native script (blake2b-224 of 0x00 || cbor-serialized script).
+    /// </summary>
+    /// <param name="script">The native script to hash.</param>
+    /// <returns>The 28-byte script hash.</returns>
+    public static byte[] Hash(this INativeScript script)
+    {
+        ArgumentNullException.ThrowIfNull(script);
+        byte[] cborBytes = CborSerializer.Serialize(script);
+        byte[] prefixed = new byte[1 + cborBytes.Length];
+        prefixed[0] = 0x00;
+        cborBytes.CopyTo(prefixed, 1);
+        return HashUtil.Blake2b224(prefixed);
+    }
+
+    /// <summary>
+    /// Computes the native script hash and returns it as a lowercase hex string.
+    /// </summary>
+    /// <param name="script">The native script to hash.</param>
+    /// <returns>The 56-character hex-encoded script hash.</returns>
+    public static string HashHex(this INativeScript script) =>
+        Convert.ToHexStringLower(script.Hash());
 
     /// <summary>
     /// Gets the raw bytes of a Plutus script.

@@ -61,6 +61,26 @@ public record InputOptions<T>
         };
         return this;
     }
+
+    /// <summary>
+    /// Sets a simplified redeemer builder that only needs the context parameter.
+    /// </summary>
+    /// <typeparam name="TData">The redeemer data type.</typeparam>
+    /// <param name="factory">The factory function that builds redeemer data from the context.</param>
+    /// <param name="tag">The redeemer tag (defaults to Spend).</param>
+    /// <returns>This options instance for chaining.</returns>
+    public InputOptions<T> SetRedeemerBuilder<TData>(Func<T, TData> factory, RedeemerTag tag = RedeemerTag.Spend)
+        where TData : ICborType
+    {
+        ArgumentNullException.ThrowIfNull(factory);
+
+        RedeemerBuilder = (mapping, context, transactionBuilder) =>
+        {
+            TData data = factory(context);
+            return new Redeemer<ICborType>(tag, 0, data, ExUnits.Create(157374, 49443675));
+        };
+        return this;
+    }
 }
 
 /// <summary>
@@ -110,10 +130,7 @@ public record OutputOptions
     public void SetDatum<TDatum>(TDatum datum)
         where TDatum : ICborType
     {
-        ArgumentNullException.ThrowIfNull(datum);
-        byte[] plutusBytes = CborSerializer.Serialize(
-            CborSerializer.Deserialize<IPlutusData>(CborSerializer.Serialize(datum)));
-        Datum = InlineDatumOption.Create(1, CborEncodedValue.WrapTag24(plutusBytes));
+        Datum = DatumOptionExtensions.InlineDatumFrom(datum);
     }
 
     /// <summary>
@@ -199,6 +216,25 @@ public record MintOptions<T>
         return this;
     }
 
+    /// <summary>
+    /// Sets a simplified redeemer builder that only needs the context parameter.
+    /// </summary>
+    /// <typeparam name="TData">The redeemer data type.</typeparam>
+    /// <param name="factory">The factory function that builds redeemer data from the context.</param>
+    /// <returns>This options instance for chaining.</returns>
+    public MintOptions<T> SetRedeemerBuilder<TData>(Func<T, TData> factory)
+        where TData : ICborType
+    {
+        ArgumentNullException.ThrowIfNull(factory);
+
+        RedeemerBuilder = (mapping, context, transactionBuilder) =>
+        {
+            TData data = factory(context);
+            return new Redeemer<ICborType>(RedeemerTag.Mint, 0, data, ExUnits.Create(98397, 25938682));
+        };
+        return this;
+    }
+
     /// <summary>Gets or sets the identifier for this mint configuration.</summary>
     public string? Id { get; set; }
 }
@@ -238,6 +274,25 @@ public record WithdrawalOptions<T>
         RedeemerBuilder = (mapping, context, transactionBuilder) =>
         {
             TData data = factory(mapping, context, transactionBuilder);
+            return new Redeemer<ICborType>(RedeemerTag.Reward, 0, data, ExUnits.Create(1648071, 497378507));
+        };
+        return this;
+    }
+
+    /// <summary>
+    /// Sets a simplified redeemer builder that only needs the context parameter.
+    /// </summary>
+    /// <typeparam name="TData">The redeemer data type.</typeparam>
+    /// <param name="factory">The factory function that builds redeemer data from the context.</param>
+    /// <returns>This options instance for chaining.</returns>
+    public WithdrawalOptions<T> SetRedeemerBuilder<TData>(Func<T, TData> factory)
+        where TData : ICborType
+    {
+        ArgumentNullException.ThrowIfNull(factory);
+
+        RedeemerBuilder = (mapping, context, transactionBuilder) =>
+        {
+            TData data = factory(context);
             return new Redeemer<ICborType>(RedeemerTag.Reward, 0, data, ExUnits.Create(1648071, 497378507));
         };
         return this;
