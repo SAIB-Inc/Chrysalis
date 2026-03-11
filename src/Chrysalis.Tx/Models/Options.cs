@@ -7,6 +7,7 @@ using Chrysalis.Codec.Types.Cardano.Core.Scripts;
 using Chrysalis.Codec.Types.Cardano.Core.Transaction;
 using Chrysalis.Codec.Types.Cardano.Core.TransactionWitness;
 using Chrysalis.Tx.Builders;
+using Chrysalis.Codec.Types.Cardano.Core.Protocol;
 using Chrysalis.Tx.Utils;
 using WalletAddress = Chrysalis.Wallet.Models.Addresses.Address;
 using Address = Chrysalis.Codec.Types.Cardano.Core.Common.Address;
@@ -56,7 +57,7 @@ public record InputOptions<T>
         RedeemerBuilder = (mapping, context, transactionBuilder) =>
         {
             TData data = factory(mapping, context, transactionBuilder);
-            return new Redeemer<ICborType>(tag, 0, data, CborFactory.CreateExUnits(157374, 49443675));
+            return new Redeemer<ICborType>(tag, 0, data, ExUnits.Create(157374, 49443675));
         };
         return this;
     }
@@ -110,7 +111,9 @@ public record OutputOptions
         where TDatum : ICborType
     {
         ArgumentNullException.ThrowIfNull(datum);
-        Datum = CborFactory.CreateInlineDatumOption(1, new CborEncodedValue(CborSerializer.Serialize(CborSerializer.Deserialize<IPlutusData>(CborSerializer.Serialize(datum)))));
+        byte[] plutusBytes = CborSerializer.Serialize(
+            CborSerializer.Deserialize<IPlutusData>(CborSerializer.Serialize(datum)));
+        Datum = InlineDatumOption.Create(1, CborEncodedValue.WrapTag24(plutusBytes));
     }
 
     /// <summary>
@@ -125,11 +128,11 @@ public record OutputOptions
 
         Address address = new(WalletAddress.FromBech32(parties[To]).ToBytes());
         CborEncodedValue? script = IScript is not null ? new CborEncodedValue(CborSerializer.Serialize(IScript)) : null;
-        ITransactionOutput output = CborFactory.CreateAlonzoTransactionOutput(address, Amount ?? CborFactory.CreateLovelace(1000000), null);
+        ITransactionOutput output = AlonzoTransactionOutput.Create(address, Amount ?? Lovelace.Create(1000000), null);
 
         if (Datum is not null || IScript is not null)
         {
-            output = CborFactory.CreatePostAlonzoTransactionOutput(address, Amount ?? CborFactory.CreateLovelace(1000000), Datum, script);
+            output = PostAlonzoTransactionOutput.Create(address, Amount ?? Lovelace.Create(1000000), Datum, script);
         }
 
         ulong minLovelace = FeeUtil.CalculateMinimumLovelace(adaPerUtxoByte, CborSerializer.Serialize(output));
@@ -140,14 +143,14 @@ public record OutputOptions
             IValue amount = output.Amount();
             amount = amount switch
             {
-                LovelaceWithMultiAsset multiAsset => CborFactory.CreateLovelaceWithMultiAsset(minLovelace, multiAsset.MultiAsset),
-                _ => CborFactory.CreateLovelace(minLovelace)
+                LovelaceWithMultiAsset multiAsset => LovelaceWithMultiAsset.Create(minLovelace, multiAsset.MultiAsset),
+                _ => Lovelace.Create(minLovelace)
             };
 
             output = output switch
             {
-                AlonzoTransactionOutput alonzoOutput => CborFactory.CreateAlonzoTransactionOutput(alonzoOutput.Address, amount, alonzoOutput.DatumHash),
-                PostAlonzoTransactionOutput postAlonzoOutput => CborFactory.CreatePostAlonzoTransactionOutput(postAlonzoOutput.Address, amount, postAlonzoOutput.Datum, postAlonzoOutput.ScriptRef),
+                AlonzoTransactionOutput alonzoOutput => AlonzoTransactionOutput.Create(alonzoOutput.Address, amount, alonzoOutput.DatumHash),
+                PostAlonzoTransactionOutput postAlonzoOutput => PostAlonzoTransactionOutput.Create(postAlonzoOutput.Address, amount, postAlonzoOutput.Datum, postAlonzoOutput.ScriptRef),
                 _ => throw new InvalidOperationException("Unsupported transaction output type")
             };
 
@@ -191,7 +194,7 @@ public record MintOptions<T>
         RedeemerBuilder = (mapping, context, transactionBuilder) =>
         {
             TData data = factory(mapping, context, transactionBuilder);
-            return new Redeemer<ICborType>(RedeemerTag.Mint, 0, data, CborFactory.CreateExUnits(98397, 25938682));
+            return new Redeemer<ICborType>(RedeemerTag.Mint, 0, data, ExUnits.Create(98397, 25938682));
         };
         return this;
     }
@@ -235,7 +238,7 @@ public record WithdrawalOptions<T>
         RedeemerBuilder = (mapping, context, transactionBuilder) =>
         {
             TData data = factory(mapping, context, transactionBuilder);
-            return new Redeemer<ICborType>(RedeemerTag.Reward, 0, data, CborFactory.CreateExUnits(1648071, 497378507));
+            return new Redeemer<ICborType>(RedeemerTag.Reward, 0, data, ExUnits.Create(1648071, 497378507));
         };
         return this;
     }

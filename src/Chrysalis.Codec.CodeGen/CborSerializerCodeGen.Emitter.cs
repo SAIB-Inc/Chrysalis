@@ -99,6 +99,12 @@ public sealed partial class CborSerializerCodeGen
 
             _ = EmitSerializableTypeWriter(sb, metadata!);
 
+            if (metadata?.IsRecordStruct == true)
+            {
+                _ = sb.AppendLine();
+                _ = EmitCreateMethod(sb, metadata);
+            }
+
             _ = sb.AppendLine("}");
             _ = sb.AppendLine();
             _ = sb.AppendLine("#pragma warning restore CS0109, CS8669");

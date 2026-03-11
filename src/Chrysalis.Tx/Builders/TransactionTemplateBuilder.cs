@@ -1,4 +1,5 @@
 using System.Text;
+using Chrysalis.Codec.Extensions;
 using Chrysalis.Codec.Extensions.Cardano.Core.Common;
 using Chrysalis.Codec.Extensions.Cardano.Core.Transaction;
 using Chrysalis.Codec.Serialization;
@@ -290,7 +291,7 @@ public sealed class TransactionTemplateBuilder<T>
         }
 
         ulong totalLovelaceChange = coinSelectionResult.LovelaceChange + feeBuffer;
-        Lovelace lovelaceChange = CborFactory.CreateLovelace(totalLovelaceChange);
+        Lovelace lovelaceChange = Lovelace.Create(totalLovelaceChange);
 
         Dictionary<ReadOnlyMemory<byte>, TokenBundleOutput> assetsChange = coinSelectionResult.AssetsChange;
 
@@ -301,10 +302,10 @@ public sealed class TransactionTemplateBuilder<T>
         }
 
         IValue changeValue = assetsChange.Count > 0
-            ? CborFactory.CreateLovelaceWithMultiAsset(lovelaceChange.Amount, CborFactory.CreateMultiAssetOutput(assetsChange))
+            ? LovelaceWithMultiAsset.Create(lovelaceChange.Amount, MultiAssetOutput.Create(assetsChange))
             : lovelaceChange;
 
-        ITransactionOutput changeOutput = CborFactory.CreateAlonzoTransactionOutput(new Address(changeAddress.ToBytes()), changeValue, null);
+        ITransactionOutput changeOutput = AlonzoTransactionOutput.Create(new Address(changeAddress.ToBytes()), changeValue, null);
 
         if (!string.IsNullOrEmpty(_changeAddress) && lovelaceChange.Amount > 0)
         {
@@ -385,7 +386,7 @@ public sealed class TransactionTemplateBuilder<T>
 
             if (context.Redeemers.Count > 0)
             {
-                RedeemerMap redeemerMap = CborFactory.CreateRedeemerMap(context.Redeemers);
+                RedeemerMap redeemerMap = RedeemerMap.Create(context.Redeemers);
 
                 _ = context.TxBuilder.SetRedeemers(redeemerMap);
             }
@@ -490,7 +491,7 @@ public sealed class TransactionTemplateBuilder<T>
     )
     {
         RequirementsResult requirements = CalculateRequirements(requiredAmount, specifiedInputsUtxos, context.Mints);
-        requirements.RequiredAmounts.Add(CborFactory.CreateLovelace(feeBuffer));
+        requirements.RequiredAmounts.Add(Lovelace.Create(feeBuffer));
         // Step 2: Perform coin selection
         CoinSelectionResult selection = CoinSelectionUtil.LargestFirstAlgorithm(utxos, requirements.RequiredAmounts);
 
@@ -642,7 +643,7 @@ public sealed class TransactionTemplateBuilder<T>
     private static List<IValue> BuildRequiredAmounts(ulong adjustedLovelace, Dictionary<string, ulong> adjustedAssets)
     {
         List<IValue> requiredAmounts = [];
-        Lovelace lovelace = CborFactory.CreateLovelace(adjustedLovelace);
+        Lovelace lovelace = Lovelace.Create(adjustedLovelace);
 
         if (adjustedAssets.Count == 0)
         {
@@ -668,11 +669,11 @@ public sealed class TransactionTemplateBuilder<T>
                     tokenBundle[assetNameBytes] = asset.Value;
                 }
 
-                multiAssetDict[policyId] = CborFactory.CreateTokenBundleOutput(tokenBundle);
+                multiAssetDict[policyId] = TokenBundleOutput.Create(tokenBundle);
             }
 
-            MultiAssetOutput multiAssetOutput = CborFactory.CreateMultiAssetOutput(multiAssetDict);
-            LovelaceWithMultiAsset lovelaceWithAssets = CborFactory.CreateLovelaceWithMultiAsset(lovelace.Amount, multiAssetOutput);
+            MultiAssetOutput multiAssetOutput = MultiAssetOutput.Create(multiAssetDict);
+            LovelaceWithMultiAsset lovelaceWithAssets = LovelaceWithMultiAsset.Create(lovelace.Amount, multiAssetOutput);
             requiredAmounts.Add(lovelaceWithAssets);
         }
 
@@ -904,9 +905,9 @@ public sealed class TransactionTemplateBuilder<T>
 
                 redeemerExUnits = redeemer.ExUnits;
 
-                RedeemerKey key = CborFactory.CreateRedeemerKey((int)redeemerTag, index);
+                RedeemerKey key = RedeemerKey.Create((int)redeemerTag, index);
 
-                RedeemerValue value = CborFactory.CreateRedeemerValue(redeemerData, redeemerExUnits);
+                RedeemerValue value = RedeemerValue.Create(redeemerData, redeemerExUnits);
 
                 buildContext.Redeemers[key] = value;
             }
@@ -996,9 +997,9 @@ public sealed class TransactionTemplateBuilder<T>
             foreach ((string assetName, long amount) in mintOptions.Assets)
             {
                 value[assetName] = amount;
-                _ = context.TxBuilder.AddMint(CborFactory.CreateMultiAssetMint(new Dictionary<ReadOnlyMemory<byte>, TokenBundleMint>(ReadOnlyMemoryComparer.Instance)
+                _ = context.TxBuilder.AddMint(MultiAssetMint.Create(new Dictionary<ReadOnlyMemory<byte>, TokenBundleMint>(ReadOnlyMemoryComparer.Instance)
                 {
-                    { HexStringCache.FromHexString(mintOptions.Policy), CborFactory.CreateTokenBundleMint(new Dictionary<ReadOnlyMemory<byte>, long>(ReadOnlyMemoryComparer.Instance)
+                    { HexStringCache.FromHexString(mintOptions.Policy), TokenBundleMint.Create(new Dictionary<ReadOnlyMemory<byte>, long>(ReadOnlyMemoryComparer.Instance)
                     { { HexStringCache.FromHexString(assetName), amount } }) }
                 }));
             }
@@ -1076,7 +1077,7 @@ public sealed class TransactionTemplateBuilder<T>
                 if (utxo.Output is PostAlonzoTransactionOutput postAlonzoOutput &&
                     postAlonzoOutput.ScriptRef is not null)
                 {
-                    IScript script = CborSerializer.Deserialize<IScript>(postAlonzoOutput.ScriptRef.Value.ToArray());
+                    IScript script = CborSerializer.Deserialize<IScript>(postAlonzoOutput.ScriptRef.GetValue());
                     scripts.Add(script);
                 }
             }
@@ -1179,7 +1180,9 @@ public sealed class TransactionTemplateBuilder<T>
     {
         if (assetsChange.TryGetValue(policyId, out TokenBundleOutput existingPolicy))
         {
-            Dictionary<ReadOnlyMemory<byte>, ulong> tokenBundle = existingPolicy.Value;
+            // TokenBundleOutput is a readonly record struct with lazy-decoded Value.
+            // Each .Value access returns a NEW dictionary, so we must copy, modify, and replace.
+            Dictionary<ReadOnlyMemory<byte>, ulong> tokenBundle = new(existingPolicy.Value, ReadOnlyMemoryComparer.Instance);
 
             if (tokenBundle.TryGetValue(assetName, out ulong existingAmount))
             {
@@ -1197,6 +1200,8 @@ public sealed class TransactionTemplateBuilder<T>
             {
                 tokenBundle[assetName] = amount;
             }
+
+            assetsChange[policyId] = TokenBundleOutput.Create(tokenBundle);
         }
         else if (amount > 0)
         {
@@ -1204,7 +1209,7 @@ public sealed class TransactionTemplateBuilder<T>
             {
                 [assetName] = amount
             };
-            assetsChange[policyId] = CborFactory.CreateTokenBundleOutput(tokenBundle);
+            assetsChange[policyId] = TokenBundleOutput.Create(tokenBundle);
         }
     }
 

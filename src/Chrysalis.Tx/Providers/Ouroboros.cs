@@ -13,7 +13,6 @@ using Chrysalis.Wallet.Utils;
 using Chrysalis.Tx.Models.Cbor;
 using Chrysalis.Codec.Types.Cardano.Core;
 using Chrysalis.Wallet.Models.Enums;
-using Chrysalis.Tx.Utils;
 
 namespace Chrysalis.Tx.Providers;
 
@@ -88,14 +87,14 @@ public class Ouroboros(string socketPath, ulong networkMagic = 2) : ICardanoData
             ulong index = key.Index;
 
             ReadOnlyMemory<byte>? scriptRefBytes = value.ScriptRef();
-            ITransactionOutput output = CborFactory.CreatePostAlonzoTransactionOutput(
+            ITransactionOutput output = PostAlonzoTransactionOutput.Create(
                 new Codec.Types.Cardano.Core.Common.Address(value.Address()),
                 value.Amount(),
                 value.DatumOption(),
                 scriptRefBytes is not null ? new CborEncodedValue(scriptRefBytes.Value) : null
             );
 
-            resolvedInputs.Add(new ResolvedInput(CborFactory.CreateTransactionInput(txHash, index), output));
+            resolvedInputs.Add(new ResolvedInput(TransactionInput.Create(txHash, index), output));
 
         }
         return resolvedInputs;

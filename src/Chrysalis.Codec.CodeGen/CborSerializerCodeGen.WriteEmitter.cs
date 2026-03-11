@@ -25,9 +25,12 @@ public sealed partial class CborSerializerCodeGen
         }
 
         public static StringBuilder EmitSerializablePropertyWriter(StringBuilder sb, SerializablePropertyMetadata metadata)
-        {
-            string propertyName = $"data.{metadata.PropertyName}";
+            => EmitSerializablePropertyWriter(sb, metadata, $"data.{metadata.PropertyName}");
 
+        public static StringBuilder EmitSerializablePropertyWriter(StringBuilder sb, SerializablePropertyMetadata metadata, string propertyName)
+        {
+
+            // Special handling for CborLabel's Value property
             if (metadata.PropertyName == "Value" && metadata.PropertyType == "object")
             {
                 _ = sb.AppendLine($"switch ({propertyName})");
@@ -49,6 +52,8 @@ public sealed partial class CborSerializerCodeGen
 
             if (metadata.IsNullable)
             {
+                // ReadOnlyMemory<byte> is a value type and cannot be null;
+                // use Length == 0 as the sentinel for CBOR null when the C# type is non-nullable.
                 bool isValueTypeMemory = !metadata.IsTypeNullable && IsReadOnlyMemoryByteType(metadata.PropertyTypeFullName);
                 string nullCheck = isValueTypeMemory
                     ? $"{propertyName}.Length == 0"
@@ -138,6 +143,7 @@ public sealed partial class CborSerializerCodeGen
                     {
                         _ = sb.AppendLine($"if ({propertyName}.Length > {size})");
                         _ = sb.AppendLine("{");
+                        // Manual indefinite byte string: write 0x5F, chunks, 0xFF
                         _ = sb.AppendLine($"output.GetSpan(1)[0] = 0x5F; output.Advance(1);");
                         _ = sb.AppendLine($"var {propertyName.Replace(".", "")}Chunks = {propertyName}.Chunk({size});");
                         _ = sb.AppendLine($"foreach (var chunk in {propertyName.Replace(".", "")}Chunks)");
@@ -155,6 +161,7 @@ public sealed partial class CborSerializerCodeGen
                     {
                         _ = sb.AppendLine($"writer.WriteByteString({propertyName});");
                     }
+
                     break;
                 case "ReadOnlyMemory<byte>?":
                 case "ReadOnlyMemory<byte>":
@@ -185,10 +192,11 @@ public sealed partial class CborSerializerCodeGen
                     {
                         _ = sb.AppendLine($"writer.WriteByteString({spanAccess});");
                     }
+
                     break;
                 case "CborEncodedValue":
-                case "Chrysalis.Codec.Types.CborEncodedValue":
-                case "global::Chrysalis.Codec.Types.CborEncodedValue":
+                case "Chrysalis.Codec.Types.Primitives.CborEncodedValue":
+                case "global::Chrysalis.Codec.Types.Primitives.CborEncodedValue":
                     _ = sb.AppendLine($"writer.BufferWriter.Write({propertyName}.Value.Span);");
                     break;
                 case "CborLabel":
@@ -225,6 +233,7 @@ public sealed partial class CborSerializerCodeGen
                     throw new InvalidOperationException($"List item type is null for property {metadata.PropertyName}");
                 }
 
+                // Check attribute, runtime flag, or tracked indefinite state
                 _ = sb.AppendLine($"bool useIndefiniteFor{metadata.PropertyName} = {(metadata.IsIndefinite ? "true" : "false")} || ");
                 _ = sb.AppendLine($"    Chrysalis.Codec.Serialization.IndefiniteStateTracker.IsIndefinite({propertyName});");
                 _ = sb.AppendLine($"int {metadata.PropertyName}ArraySize;");
@@ -247,6 +256,7 @@ public sealed partial class CborSerializerCodeGen
                         ? EmitPrimitivePropertyWriter(sb, metadata.ListItemTypeFullName, "item")
                         : sb.AppendLine($"{metadata.ListItemTypeFullName}.Write(output, ({metadata.ListItemTypeFullName})item);");
 
+
                 _ = sb.AppendLine("}");
                 _ = sb.AppendLine($"writer.WriteEndArray({metadata.PropertyName}ArraySize);");
 
@@ -260,6 +270,7 @@ public sealed partial class CborSerializerCodeGen
                     throw new InvalidOperationException($"Map key or value type is null for property {metadata.PropertyName}");
                 }
 
+                // Check attribute, runtime flag, or tracked indefinite state
                 _ = sb.AppendLine($"bool useIndefiniteMapFor{metadata.PropertyName} = {(metadata.IsIndefinite ? "true" : "false")} || ");
                 _ = sb.AppendLine($"    Chrysalis.Codec.Serialization.IndefiniteStateTracker.IsIndefinite({propertyName});");
                 _ = sb.AppendLine($"int {metadata.PropertyName}MapSize;");
@@ -351,6 +362,7 @@ public sealed partial class CborSerializerCodeGen
             _ = EmitPropertyCountWriter(sb, metadata);
             if (!(metadata.SerializationType == SerializationType.Constr && (metadata.CborIndex is null || metadata.CborIndex < 0)))
             {
+                // Track array size for WriteEndArray
                 _ = sb.AppendLine("int _arraySize;");
                 if (metadata.IsIndefinite)
                 {
@@ -380,7 +392,24 @@ public sealed partial class CborSerializerCodeGen
 
             foreach (SerializablePropertyMetadata prop in metadata.Properties)
             {
-                _ = EmitSerializablePropertyWriter(sb, prop);
+                // [CborDefinite] List: type-nullable fields must write null instead of being skipped
+                if (metadata.IsDefinite && metadata.SerializationType == SerializationType.List
+                    && prop.IsTypeNullable && !prop.IsNullable)
+                {
+                    _ = sb.AppendLine($"if (data.{prop.PropertyName} is not null)");
+                    _ = sb.AppendLine("{");
+                    _ = EmitPrimitiveOrObjectWriter(sb, prop, $"data.{prop.PropertyName}");
+                    _ = sb.AppendLine("}");
+                    _ = sb.AppendLine("else");
+                    _ = sb.AppendLine("{");
+                    _ = sb.AppendLine("writer.WriteNull();");
+                    _ = sb.AppendLine("}");
+                    _ = sb.AppendLine();
+                }
+                else
+                {
+                    _ = EmitSerializablePropertyWriter(sb, prop);
+                }
             }
 
             if (!(metadata.SerializationType == SerializationType.Constr && (metadata.CborIndex is null || metadata.CborIndex < 0)))
@@ -415,6 +444,15 @@ public sealed partial class CborSerializerCodeGen
 
         public static StringBuilder EmitPropertyCountWriter(StringBuilder sb, SerializableTypeMetadata metadata)
         {
+            // [CborDefinite] List types always write all fields (null for missing)
+            if (metadata.IsDefinite && metadata.SerializationType == SerializationType.List)
+            {
+                int fixedSize = metadata.DefiniteSize ?? metadata.Properties.Count;
+                _ = sb.AppendLine($"int propCount = {fixedSize};");
+                _ = sb.AppendLine();
+                return sb;
+            }
+
             _ = sb.AppendLine($"int propCount = 0;");
 
             foreach (SerializablePropertyMetadata prop in metadata.Properties)

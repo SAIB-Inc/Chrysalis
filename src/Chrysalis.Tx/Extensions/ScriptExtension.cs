@@ -1,7 +1,6 @@
 using Chrysalis.Codec.Types.Cardano.Core.Scripts;
 using Chrysalis.Codec.Serialization;
 using Chrysalis.Plutus.VM.EvalTx;
-using Chrysalis.Tx.Utils;
 
 namespace Chrysalis.Tx.Extensions;
 
@@ -70,9 +69,9 @@ public static class ScriptExtension
 
         return self switch
         {
-            PlutusV1Script v1 => CborFactory.CreatePlutusV1Script(v1.Tag, parameterizedBytes),
-            PlutusV2Script v2 => CborFactory.CreatePlutusV2Script(v2.Tag, parameterizedBytes),
-            PlutusV3Script v3 => CborFactory.CreatePlutusV3Script(v3.Tag, parameterizedBytes),
+            PlutusV1Script v1 => PlutusV1Script.Create(v1.Tag, parameterizedBytes),
+            PlutusV2Script v2 => PlutusV2Script.Create(v2.Tag, parameterizedBytes),
+            PlutusV3Script v3 => PlutusV3Script.Create(v3.Tag, parameterizedBytes),
             _ => throw new NotSupportedException($"Unsupported script type: {self.GetType()}")
         };
     }

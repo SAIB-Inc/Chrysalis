@@ -6,7 +6,6 @@ using Chrysalis.Codec.Types.Cardano.Core.Common;
 using Chrysalis.Codec.Types.Cardano.Core.Scripts;
 using Chrysalis.Codec.Types.Cardano.Core.Governance;
 using Chrysalis.Codec.Types;
-using Chrysalis.Tx.Utils;
 using Chrysalis.Codec.Serialization.Utils;
 using Chrysalis.Network.Cbor.LocalStateQuery;
 
@@ -95,14 +94,14 @@ public class TransactionBuilder
 
     /// <summary>Gets the current certificates as a CBOR list.</summary>
     public ICborMaybeIndefList<ICertificate>? Certificates =>
-        _certificates != null ? CborFactory.CreateDefListWithTag<ICertificate>(_certificates) : null;
+        _certificates != null ? CborDefListWithTag<ICertificate>.Create(_certificates) : null;
 
     /// <summary>Gets the current collateral return output.</summary>
     public ITransactionOutput? CollateralReturn { get; private set; }
 
     /// <summary>Gets the current proposal procedures as a CBOR list.</summary>
     public ICborMaybeIndefList<ProposalProcedure>? ProposalProcedures =>
-        _proposals != null ? CborFactory.CreateDefListWithTag<ProposalProcedure>(_proposals) : null;
+        _proposals != null ? CborDefListWithTag<ProposalProcedure>.Create(_proposals) : null;
 
     /// <summary>
     /// Initializes a new TransactionBuilder with empty state.
@@ -529,7 +528,7 @@ public class TransactionBuilder
     /// <returns>This builder for chaining.</returns>
     public TransactionBuilder SetMetadata(Metadata metadata)
     {
-        _auxiliaryData = CborFactory.CreateAuxiliaryData(transactionMetadata: metadata);
+        _auxiliaryData = PostAlonzoAuxiliaryDataMap.Create(transactionMetadata: metadata);
         return this;
     }
 
@@ -539,42 +538,45 @@ public class TransactionBuilder
     /// Builds the ConwayTransactionBody from the current state.
     /// </summary>
     /// <returns>The constructed ConwayTransactionBody.</returns>
-    public ConwayTransactionBody BuildBody() => CborFactory.CreateConwayTransactionBody(
-            inputs: CborFactory.CreateDefListWithTag(_inputs),
-            outputs: CborFactory.CreateDefList(_outputs),
+    public ConwayTransactionBody BuildBody()
+    {
+        return ConwayTransactionBody.Create(
+            inputs: CborDefListWithTag<TransactionInput>.Create(_inputs),
+            outputs: CborDefList<ITransactionOutput>.Create(_outputs),
             fee: Fee,
             timeToLive: TimeToLive,
-            certificates: _certificates != null ? CborFactory.CreateDefListWithTag<ICertificate>(_certificates) : null,
+            certificates: _certificates != null ? CborDefListWithTag<ICertificate>.Create(_certificates) : null,
             withdrawals: _withdrawals,
-            auxiliaryDataHash: _auxDataHash != null ? new ReadOnlyMemory<byte>(_auxDataHash) : null,
+            auxiliaryDataHash: _auxDataHash != null ? (ReadOnlyMemory<byte>?)new ReadOnlyMemory<byte>(_auxDataHash) : null,
             validityIntervalStart: _validityStart,
             mint: Mint,
-            scriptDataHash: _scriptDataHash != null ? new ReadOnlyMemory<byte>(_scriptDataHash) : null,
-            collateral: _collateral != null ? CborFactory.CreateDefListWithTag<TransactionInput>(_collateral) : null,
-            requiredSigners: _requiredSigners != null ? CborFactory.CreateDefListWithTagBytes(_requiredSigners) : null,
+            scriptDataHash: _scriptDataHash != null ? (ReadOnlyMemory<byte>?)new ReadOnlyMemory<byte>(_scriptDataHash) : null,
+            collateral: _collateral != null ? CborDefListWithTag<TransactionInput>.Create(_collateral) : null,
+            requiredSigners: _requiredSigners != null ? CborDefListWithTag<ReadOnlyMemory<byte>>.Create(_requiredSigners) : null,
             networkId: _networkId,
             collateralReturn: CollateralReturn,
             totalCollateral: TotalCollateral,
-            referenceInputs: _referenceInputs != null ? CborFactory.CreateDefListWithTag<TransactionInput>(_referenceInputs) : null,
+            referenceInputs: _referenceInputs != null ? CborDefListWithTag<TransactionInput>.Create(_referenceInputs) : null,
             votingProcedures: _votingProcedures,
-            proposalProcedures: _proposals != null ? CborFactory.CreateDefListWithTag<ProposalProcedure>(_proposals) : null,
+            proposalProcedures: _proposals != null ? CborDefListWithTag<ProposalProcedure>.Create(_proposals) : null,
             treasuryValue: _treasuryValue,
             donation: _donation
         );
+    }
 
     /// <summary>
     /// Builds the PostAlonzoTransactionWitnessSet from the current state.
     /// </summary>
     /// <returns>The constructed PostAlonzoTransactionWitnessSet.</returns>
-    public PostAlonzoTransactionWitnessSet BuildWitnessSet() => CborFactory.CreateWitnessSet(
-            vKeyWitnesses: _vkeyWitnesses != null ? CborFactory.CreateDefListWithTag<VKeyWitness>(_vkeyWitnesses) : null,
-            nativeScripts: _nativeScripts != null ? CborFactory.CreateDefListWithTag<INativeScript>(_nativeScripts) : null,
-            bootstrapWitnesses: _bootstrapWitnesses != null ? CborFactory.CreateDefListWithTag<BootstrapWitness>(_bootstrapWitnesses) : null,
-            plutusV1Scripts: _plutusV1Scripts != null ? CborFactory.CreateDefListWithTagBytes(_plutusV1Scripts) : null,
-            plutusDataSet: _plutusData != null ? CborFactory.CreateDefListWithTag<IPlutusData>(_plutusData) : null,
+    public PostAlonzoTransactionWitnessSet BuildWitnessSet() => PostAlonzoTransactionWitnessSet.Create(
+            vKeyWitnesses: _vkeyWitnesses != null ? CborDefListWithTag<VKeyWitness>.Create(_vkeyWitnesses) : null,
+            nativeScripts: _nativeScripts != null ? CborDefListWithTag<INativeScript>.Create(_nativeScripts) : null,
+            bootstrapWitnesses: _bootstrapWitnesses != null ? CborDefListWithTag<BootstrapWitness>.Create(_bootstrapWitnesses) : null,
+            plutusV1Scripts: _plutusV1Scripts != null ? CborDefListWithTag<ReadOnlyMemory<byte>>.Create(_plutusV1Scripts) : null,
+            plutusDataSet: _plutusData != null ? CborDefListWithTag<IPlutusData>.Create(_plutusData) : null,
             redeemers: Redeemers,
-            plutusV2Scripts: _plutusV2Scripts != null ? CborFactory.CreateDefListWithTagBytes(_plutusV2Scripts) : null,
-            plutusV3Scripts: _plutusV3Scripts != null ? CborFactory.CreateDefListWithTagBytes(_plutusV3Scripts) : null
+            plutusV2Scripts: _plutusV2Scripts != null ? CborDefListWithTag<ReadOnlyMemory<byte>>.Create(_plutusV2Scripts) : null,
+            plutusV3Scripts: _plutusV3Scripts != null ? CborDefListWithTag<ReadOnlyMemory<byte>>.Create(_plutusV3Scripts) : null
         );
 
     /// <summary>
@@ -586,7 +588,7 @@ public class TransactionBuilder
         ConwayTransactionBody body = BuildBody();
         PostAlonzoTransactionWitnessSet witnessSet = BuildWitnessSet();
 
-        return CborFactory.CreatePostMaryTransaction(body, witnessSet, true, _auxiliaryData);
+        return PostMaryTransaction.Create(body, witnessSet, true, _auxiliaryData);
     }
 
     private static MultiAssetMint MergeMints(MultiAssetMint existingMint, MultiAssetMint newMint)
@@ -622,7 +624,7 @@ public class TransactionBuilder
                         : tokenEntry.Value;
                 }
 
-                result[policyEntry.Key] = CborFactory.CreateTokenBundleMint(mergedTokens);
+                result[policyEntry.Key] = TokenBundleMint.Create(mergedTokens);
             }
             else
             {
@@ -630,7 +632,7 @@ public class TransactionBuilder
             }
         }
 
-        return CborFactory.CreateMultiAssetMint(result);
+        return MultiAssetMint.Create(result);
     }
 
 }

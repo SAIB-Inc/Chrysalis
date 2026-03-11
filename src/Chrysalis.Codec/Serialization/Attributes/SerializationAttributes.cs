@@ -77,7 +77,12 @@ public sealed class CborSizeAttribute(int size) : Attribute
 public sealed class CborIndefiniteAttribute : Attribute;
 
 [AttributeUsage(AttributeTargets.Class | AttributeTargets.Struct | AttributeTargets.Interface | AttributeTargets.Property | AttributeTargets.Parameter, Inherited = false, AllowMultiple = false)]
-public sealed class CborDefiniteAttribute : Attribute;
+public sealed class CborDefiniteAttribute : Attribute
+{
+    public CborDefiniteAttribute() { }
+    public CborDefiniteAttribute(int size) => Size = size;
+    public int? Size { get; }
+}
 
 [AttributeUsage(AttributeTargets.Property | AttributeTargets.Parameter, Inherited = false, AllowMultiple = true)]
 public sealed class CborUnionHintAttribute(string discriminantProperty, int discriminantValue, Type concreteType) : Attribute

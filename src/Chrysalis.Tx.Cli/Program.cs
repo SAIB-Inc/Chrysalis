@@ -13,12 +13,12 @@ using Chrysalis.Tx.Models;
 using Chrysalis.Tx.Models.Cbor;
 using Chrysalis.Tx.Providers;
 using Chrysalis.Tx.Cli;
-using Chrysalis.Tx.Utils;
+using Chrysalis.Codec.Types.Cardano.Core.Protocol;
+using Chrysalis.Codec.Types.Cardano.Core.Scripts;
 using Chrysalis.Wallet.Models.Enums;
 using WalletAddress = Chrysalis.Wallet.Models.Addresses.Address;
 using Chrysalis.Wallet.Models.Keys;
 using Chrysalis.Codec.Extensions;
-using Chrysalis.Codec.Types.Cardano.Core.Scripts;
 using Chrysalis.Wallet.Words;
 
 // ── Configuration ──────────────────────────────────────────────────────────
@@ -100,7 +100,7 @@ Console.WriteLine("══ PHASE 0: MINT TEST TOKENS ══");
 string mintTokenName = "TESTV2";
 long mintQuantity = 1_000_000_000;
 
-INativeScript nativeScript = CborFactory.CreateScriptPubKey(paymentKeyHash);
+INativeScript nativeScript = ScriptPubKey.Create(0, paymentKeyHash);
 byte[] nativeScriptCbor = CborSerializer.Serialize(nativeScript);
 byte[] mintPolicyId = Chrysalis.Wallet.Utils.HashUtil.Blake2b224([0x00, .. nativeScriptCbor]);
 string mintPolicyIdHex = Convert.ToHexStringLower(mintPolicyId);
@@ -262,7 +262,7 @@ TransactionTemplate<FillOrderParams> fillTemplate =
         .AddReferenceInput((options, param) =>
         {
             options.From = "deployAddress";
-            options.UtxoRef = CborFactory.CreateTransactionInput(
+            options.UtxoRef = TransactionInput.Create(
                 Convert.FromHexString(param.DeployUtxoTxHash),
                 param.DeployUtxoIndex);
             options.Id = "deployRef";
@@ -270,7 +270,7 @@ TransactionTemplate<FillOrderParams> fillTemplate =
         .AddInput((options, param) =>
         {
             options.From = "scriptAddress";
-            options.UtxoRef = CborFactory.CreateTransactionInput(
+            options.UtxoRef = TransactionInput.Create(
                 Convert.FromHexString(param.ScriptUtxoTxHash),
                 param.ScriptUtxoIndex);
             options.Id = "scriptInput";
@@ -280,7 +280,7 @@ TransactionTemplate<FillOrderParams> fillTemplate =
                 ulong outputIndex = outputIndices.TryGetValue("continuingOutput", out ulong idx) ? idx : 0;
                 // offer_second = true: filler buys the second/offered asset (USDM)
                 BuyRedeemer data = new((long)outputIndex, new PlutusTrue(), new None<OracleFeeds>());
-                return new Redeemer<ICborType>(RedeemerTag.Spend, 0, data, CborFactory.CreateExUnits(1_000_000, 400_000_000));
+                return new Redeemer<ICborType>(RedeemerTag.Spend, 0, data, ExUnits.Create(1_000_000, 400_000_000));
             };
         })
         .AddOutput((options, param, _) =>
@@ -373,7 +373,7 @@ TransactionTemplate<CloseOrderParams> closeTemplate =
         .AddReferenceInput((options, param) =>
         {
             options.From = "deployAddress";
-            options.UtxoRef = CborFactory.CreateTransactionInput(
+            options.UtxoRef = TransactionInput.Create(
                 Convert.FromHexString(param.DeployUtxoTxHash),
                 param.DeployUtxoIndex);
             options.Id = "deployRef";
@@ -381,12 +381,12 @@ TransactionTemplate<CloseOrderParams> closeTemplate =
         .AddInput((options, param) =>
         {
             options.From = "scriptAddress";
-            options.UtxoRef = CborFactory.CreateTransactionInput(
+            options.UtxoRef = TransactionInput.Create(
                 Convert.FromHexString(param.ScriptUtxoTxHash),
                 param.ScriptUtxoIndex);
             options.Id = "scriptInput";
             options.RedeemerBuilder = (_, _, _) =>
-                new Redeemer<ICborType>(RedeemerTag.Spend, 0, new CloseRedeemer(), CborFactory.CreateExUnits(500_000, 200_000_000));
+                new Redeemer<ICborType>(RedeemerTag.Spend, 0, new CloseRedeemer(), ExUnits.Create(500_000, 200_000_000));
         })
         .AddMetadata(_ => CreateMetadata("Chrysalis E2E: close order"))
         .Build(eval: true);
@@ -437,9 +437,9 @@ static IValue CreateMultiAssetValue(ulong lovelace, byte[] policyId, byte[] asse
     };
     Dictionary<ReadOnlyMemory<byte>, TokenBundleOutput> multiAsset = new(ReadOnlyMemoryComparer.Instance)
     {
-        [(ReadOnlyMemory<byte>)policyId] = CborFactory.CreateTokenBundleOutput(tokenBundle)
+        [(ReadOnlyMemory<byte>)policyId] = TokenBundleOutput.Create(tokenBundle)
     };
-    return CborFactory.CreateLovelaceWithMultiAsset(lovelace, CborFactory.CreateMultiAssetOutput(multiAsset));
+    return LovelaceWithMultiAsset.Create(lovelace, MultiAssetOutput.Create(multiAsset));
 }
 
 // Extract all assets from a UTxO Value into a string-keyed dict.
@@ -521,7 +521,7 @@ static IValue CreateValueFromAssets(Dictionary<string, ulong> assets)
 
     if (byPolicy.Count == 0)
     {
-        return CborFactory.CreateLovelace(lovelace);
+        return Lovelace.Create(lovelace);
     }
 
     Dictionary<ReadOnlyMemory<byte>, TokenBundleOutput> multiAsset = new(ReadOnlyMemoryComparer.Instance);
@@ -532,23 +532,23 @@ static IValue CreateValueFromAssets(Dictionary<string, ulong> assets)
         {
             bundle[Convert.FromHexString(nameHex)] = qty;
         }
-        multiAsset[Convert.FromHexString(policyHex)] = CborFactory.CreateTokenBundleOutput(bundle);
+        multiAsset[Convert.FromHexString(policyHex)] = TokenBundleOutput.Create(bundle);
     }
 
-    return CborFactory.CreateLovelaceWithMultiAsset(lovelace, CborFactory.CreateMultiAssetOutput(multiAsset));
+    return LovelaceWithMultiAsset.Create(lovelace, MultiAssetOutput.Create(multiAsset));
 }
 
 static Metadata CreateMetadata(string message)
 {
-    ITransactionMetadatum msgMap = CborFactory.CreateMetadatumMap(new Dictionary<ITransactionMetadatum, ITransactionMetadatum>
+    ITransactionMetadatum msgMap = MetadatumMap.Create(new Dictionary<ITransactionMetadatum, ITransactionMetadatum>
     {
         {
-            CborFactory.CreateMetadataText("msg"),
-            CborFactory.CreateMetadatumList([CborFactory.CreateMetadataText(message)])
+            MetadataText.Create("msg"),
+            MetadatumList.Create([MetadataText.Create(message)])
         }
     });
 
-    return CborFactory.CreateMetadata(new Dictionary<ulong, ITransactionMetadatum>
+    return Metadata.Create(new Dictionary<ulong, ITransactionMetadatum>
     {
         { 674, msgMap }
     });

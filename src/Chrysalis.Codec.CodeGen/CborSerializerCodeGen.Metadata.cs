@@ -22,6 +22,7 @@ public sealed partial class CborSerializerCodeGen
         int? cborIndex,
         bool isIndefinite,
         bool isDefinite,
+        int? definiteSize,
         SerializationType serializationType,
         string? validator,
         bool shouldPreserveRaw
@@ -38,6 +39,7 @@ public sealed partial class CborSerializerCodeGen
         public int? CborIndex { get; } = cborIndex;
         public bool IsIndefinite { get; } = isIndefinite;
         public bool IsDefinite { get; } = isDefinite;
+        public int? DefiniteSize { get; } = definiteSize;
         public SerializationType SerializationType { get; } = serializationType;
         public string? Validator { get; } = validator;
         public bool ShouldPreserveRaw { get; } = shouldPreserveRaw;

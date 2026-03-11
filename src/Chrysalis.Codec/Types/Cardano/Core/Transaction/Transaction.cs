@@ -28,6 +28,7 @@ public readonly partial record struct AllegraTransaction : ITransaction
 
 [CborSerializable]
 [CborList]
+[CborDefinite(4)]
 public readonly partial record struct PostMaryTransaction : ITransaction
 {
     [CborOrder(0)] public partial ITransactionBody Body { get; }

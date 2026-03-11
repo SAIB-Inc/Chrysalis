@@ -656,6 +656,10 @@ public sealed partial class CborSerializerCodeGen
                     "{ byte _b = reader.Buffer[0]; if (_b != 0xFB) throw new Exception(\"Expected CBOR float64\"); }",
                 "byte[]" =>
                     "{ byte _mt = (byte)(reader.Buffer[0] >> 5); if (_mt != 2) throw new Exception(\"Expected CBOR byte string\"); }",
+                _ when cleanType.Contains("Dictionary<") =>
+                    "{ byte _mt = (byte)(reader.Buffer[0] >> 5); if (_mt != 5) throw new Exception(\"Expected CBOR map\"); }",
+                _ when cleanType.Contains("List<") || cleanType.Contains("ICborMaybeIndefList<") =>
+                    "{ byte _mt = (byte)(reader.Buffer[0] >> 5); if (_mt != 4 && _mt != 6) throw new Exception(\"Expected CBOR array\"); }",
                 _ => null
             };
         }

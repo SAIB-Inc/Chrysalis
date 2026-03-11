@@ -1,8 +1,8 @@
 using Chrysalis.Codec.Extensions.Cardano.Core.TransactionWitness;
 using Chrysalis.Codec.Serialization;
+using Chrysalis.Codec.Types;
 using Chrysalis.Codec.Types.Cardano.Core.Transaction;
 using Chrysalis.Codec.Types.Cardano.Core.TransactionWitness;
-using Chrysalis.Tx.Utils;
 using Chrysalis.Wallet.Models.Keys;
 using Chrysalis.Wallet.Utils;
 
@@ -28,7 +28,7 @@ public static class TransactionExtension
         };
         byte[] txBodyBytes = CborSerializer.Serialize(tx.Body);
         byte[] signature = privateKey.Sign(HashUtil.Blake2b256(txBodyBytes));
-        VKeyWitness vkeyWitness = CborFactory.CreateVKeyWitness(privateKey.GetPublicKey().Key, signature);
+        VKeyWitness vkeyWitness = VKeyWitness.Create(privateKey.GetPublicKey().Key, signature);
         List<VKeyWitness> vKeyWitnesses = tx.Witnesses.VKeyWitnessSet() is not null ?
             [.. tx.Witnesses.VKeyWitnessSet()!] : [];
 
@@ -65,8 +65,8 @@ public static class TransactionExtension
             _ => default
         };
 
-        PostAlonzoTransactionWitnessSet newWitnessSet = CborFactory.CreateWitnessSet(
-            vKeyWitnesses: CborFactory.CreateDefListWithTag(vKeyWitnesses),
+        PostAlonzoTransactionWitnessSet newWitnessSet = PostAlonzoTransactionWitnessSet.Create(
+            vKeyWitnesses: CborDefListWithTag<VKeyWitness>.Create(vKeyWitnesses),
             nativeScripts: existingWitnesses.NativeScripts,
             bootstrapWitnesses: existingWitnesses.BootstrapWitnesses,
             plutusV1Scripts: existingWitnesses.PlutusV1Scripts,
@@ -76,6 +76,6 @@ public static class TransactionExtension
             plutusV3Scripts: existingWitnesses.PlutusV3Scripts
         );
 
-        return CborFactory.CreatePostMaryTransaction(tx.Body, newWitnessSet, tx.IsValid, tx.AuxiliaryData);
+        return PostMaryTransaction.Create(tx.Body, newWitnessSet, tx.IsValid, tx.AuxiliaryData);
     }
 }

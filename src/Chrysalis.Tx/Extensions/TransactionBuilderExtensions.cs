@@ -126,7 +126,7 @@ public static class TransactionBuilderExtensions
                 ulong totalCollateralNeeded = totalCollateral + estimatedMinLovelaceForReturn + (estimatedMinLovelaceForReturn / 2);
 
                 // Use coin selection to get sufficient collateral with buffer
-                List<IValue> collateralRequirement = [CborFactory.CreateLovelace(totalCollateralNeeded)];
+                List<IValue> collateralRequirement = [Lovelace.Create(totalCollateralNeeded)];
                 int maxCollateralInputs = (int)(builder.Pparams!.MaxCollateralInputs ?? 3);
 
                 CoinSelectionResult collateralSelection;
@@ -143,7 +143,7 @@ public static class TransactionBuilderExtensions
                     // Fallback: try with just the required collateral amount
                     collateralSelection = CoinSelectionUtil.LargestFirstAlgorithm(
                         availableInputs,
-                        [CborFactory.CreateLovelace(totalCollateral)],
+                        [Lovelace.Create(totalCollateral)],
                         maxCollateralInputs
                     );
                 }
@@ -192,7 +192,7 @@ public static class TransactionBuilderExtensions
                                 {
                                     mergedTokens[name] = mergedTokens.TryGetValue(name, out ulong existing) ? existing + amount : amount;
                                 }
-                                aggregatedAssets[policyId] = CborFactory.CreateTokenBundleOutput(mergedTokens);
+                                aggregatedAssets[policyId] = TokenBundleOutput.Create(mergedTokens);
                             }
                         }
                     }
@@ -200,22 +200,22 @@ public static class TransactionBuilderExtensions
 
                 // Build return value
                 IValue returnValue = aggregatedAssets.Count > 0
-                    ? CborFactory.CreateLovelaceWithMultiAsset(
+                    ? LovelaceWithMultiAsset.Create(
                         returnLovelace,
-                        CborFactory.CreateMultiAssetOutput(aggregatedAssets)
+                        MultiAssetOutput.Create(aggregatedAssets)
                     )
-                    : CborFactory.CreateLovelace(returnLovelace);
+                    : Lovelace.Create(returnLovelace);
 
                 // Create return output using first collateral's address
                 ResolvedInput firstCollateral = collateralInputs[0];
                 ITransactionOutput returnOutput = firstCollateral.Output switch
                 {
-                    AlonzoTransactionOutput alonzo => CborFactory.CreateAlonzoTransactionOutput(
+                    AlonzoTransactionOutput alonzo => AlonzoTransactionOutput.Create(
                         alonzo.Address,
                         returnValue,
                         null
                     ),
-                    PostAlonzoTransactionOutput postAlonzo => CborFactory.CreateAlonzoTransactionOutput(
+                    PostAlonzoTransactionOutput postAlonzo => AlonzoTransactionOutput.Create(
                         postAlonzo.Address,
                         returnValue,
                         null
@@ -284,7 +284,7 @@ public static class TransactionBuilderExtensions
             updatedChangeLovelace = 0;
         }
 
-        IValue changeValue = CborFactory.CreateLovelace((ulong)updatedChangeLovelace);
+        IValue changeValue = Lovelace.Create((ulong)updatedChangeLovelace);
 
         IValue changeOutputValue = builder.ChangeOutput switch
         {
@@ -295,7 +295,7 @@ public static class TransactionBuilderExtensions
 
         if (changeOutputValue is LovelaceWithMultiAsset lovelaceWithMultiAsset)
         {
-            changeValue = CborFactory.CreateLovelaceWithMultiAsset((ulong)updatedChangeLovelace, lovelaceWithMultiAsset.MultiAsset);
+            changeValue = LovelaceWithMultiAsset.Create((ulong)updatedChangeLovelace, lovelaceWithMultiAsset.MultiAsset);
         }
 
         ITransactionOutput? updatedChangeOutput = null;
@@ -304,7 +304,7 @@ public static class TransactionBuilderExtensions
         {
             if (builder.ChangeOutput is AlonzoTransactionOutput change)
             {
-                updatedChangeOutput = CborFactory.CreateAlonzoTransactionOutput(
+                updatedChangeOutput = AlonzoTransactionOutput.Create(
                     change.Address,
                     changeValue,
                     change.DatumHash
@@ -313,7 +313,7 @@ public static class TransactionBuilderExtensions
             }
             else if (builder.ChangeOutput is PostAlonzoTransactionOutput postAlonzoChange)
             {
-                updatedChangeOutput = CborFactory.CreatePostAlonzoTransactionOutput(
+                updatedChangeOutput = PostAlonzoTransactionOutput.Create(
                     postAlonzoChange.Address,
                     changeValue,
                     postAlonzoChange.Datum,
@@ -376,12 +376,12 @@ public static class TransactionBuilderExtensions
                     {
                         if (redeemer.Tag == result.RedeemerTag && redeemer.Index == result.Index)
                         {
-                            ExUnits exUnits = CborFactory.CreateExUnits(result.ExUnits.Mem, result.ExUnits.Steps);
-                            updatedRedeemersList.Add(CborFactory.CreateRedeemerEntry(redeemer.Tag, redeemer.Index, redeemer.Data, exUnits));
+                            ExUnits exUnits = ExUnits.Create(result.ExUnits.Mem, result.ExUnits.Steps);
+                            updatedRedeemersList.Add(RedeemerEntry.Create(redeemer.Tag, redeemer.Index, redeemer.Data, exUnits));
                         }
                     }
                 }
-                _ = builder.SetRedeemers(CborFactory.CreateRedeemerList(updatedRedeemersList));
+                _ = builder.SetRedeemers(RedeemerList.Create(updatedRedeemersList));
                 break;
             case RedeemerMap redeemersMap:
                 Dictionary<RedeemerKey, RedeemerValue> updatedRedeemersMap = [];
@@ -391,12 +391,12 @@ public static class TransactionBuilderExtensions
                     {
                         if (kvp.Key.Tag == result.RedeemerTag && kvp.Key.Index == result.Index)
                         {
-                            ExUnits exUnits = CborFactory.CreateExUnits(result.ExUnits.Mem, result.ExUnits.Steps);
-                            updatedRedeemersMap.Add(CborFactory.CreateRedeemerKey(kvp.Key.Tag, kvp.Key.Index), CborFactory.CreateRedeemerValue(kvp.Value.Data, exUnits));
+                            ExUnits exUnits = ExUnits.Create(result.ExUnits.Mem, result.ExUnits.Steps);
+                            updatedRedeemersMap.Add(RedeemerKey.Create(kvp.Key.Tag, kvp.Key.Index), RedeemerValue.Create(kvp.Value.Data, exUnits));
                         }
                     }
                 }
-                _ = builder.SetRedeemers(CborFactory.CreateRedeemerMap(updatedRedeemersMap));
+                _ = builder.SetRedeemers(RedeemerMap.Create(updatedRedeemersMap));
                 break;
             default:
                 break;

@@ -274,7 +274,7 @@ public static class CoinSelectionUtil
 
             if (hasChange)
             {
-                assetsChange[policyId] = CborFactory.CreateTokenBundleOutput(assetChanges);
+                assetsChange[policyId] = TokenBundleOutput.Create(assetChanges);
             }
         }
 
