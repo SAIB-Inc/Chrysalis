@@ -538,9 +538,7 @@ public class TransactionBuilder
     /// Builds the ConwayTransactionBody from the current state.
     /// </summary>
     /// <returns>The constructed ConwayTransactionBody.</returns>
-    public ConwayTransactionBody BuildBody()
-    {
-        return ConwayTransactionBody.Create(
+    public ConwayTransactionBody BuildBody() => ConwayTransactionBody.Create(
             inputs: CborDefListWithTag<TransactionInput>.Create(_inputs),
             outputs: CborDefList<ITransactionOutput>.Create(_outputs),
             fee: Fee,
@@ -562,7 +560,6 @@ public class TransactionBuilder
             treasuryValue: _treasuryValue,
             donation: _donation
         );
-    }
 
     /// <summary>
     /// Builds the PostAlonzoTransactionWitnessSet from the current state.

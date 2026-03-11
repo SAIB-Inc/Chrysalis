@@ -1,4 +1,3 @@
-using CborTransactionInput = Chrysalis.Codec.Types.Cardano.Core.Transaction.TransactionInput;
 using Chrysalis.Network.Cbor.LocalStateQuery;
 using Chrysalis.Network.MiniProtocols.Extensions;
 using Chrysalis.Network.Multiplexer;
@@ -81,7 +80,7 @@ public class Ouroboros(string socketPath, ulong networkMagic = 2) : ICardanoData
         UtxoByAddressResponse utxos = await client.LocalStateQuery.GetUtxosByAddressAsync([.. address.Select(x => Address.FromBech32(x).ToBytes())]).ConfigureAwait(false);
 
         List<ResolvedInput> resolvedInputs = [];
-        foreach ((CborTransactionInput key, ITransactionOutput value) in utxos.Utxos)
+        foreach ((TransactionInput key, ITransactionOutput value) in utxos.Utxos)
         {
             ReadOnlyMemory<byte> txHash = key.TransactionId;
             ulong index = key.Index;
