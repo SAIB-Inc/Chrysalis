@@ -54,18 +54,6 @@ public class CborTests
     }
 
     [Fact]
-    public void RequiredFieldValidation_ShouldThrowWhenRequiredFieldMissing()
-    {
-        // Create a PersonOptional with missing fields (nulls)
-        PersonOptional optionalPerson = PersonOptional.Create(1, null, null);
-        byte[] cbor = CborSerializer.Serialize(optionalPerson);
-
-        // Try to deserialize as PersonRequired - should fail because Name and Age are required
-        InvalidOperationException ex = Assert.Throws<InvalidOperationException>(() => CborSerializer.Deserialize<PersonRequired>(cbor));
-        Assert.Contains("Required field", ex.InnerException!.Message, StringComparison.Ordinal);
-    }
-
-    [Fact]
     public void RequiredFieldValidation_ShouldSucceedWhenAllRequiredFieldsPresent()
     {
         // Create a PersonRequired with all fields

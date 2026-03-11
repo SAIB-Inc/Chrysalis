@@ -20,24 +20,31 @@ public sealed class PeerClient : IDisposable
     /// <summary>
     /// Gets the Handshake protocol handler.
     /// </summary>
-    public Handshake Handshake { get; private set; } = default!;
+    public Handshake Handshake { get; private set; }
 
     /// <summary>
     /// Gets the ChainSync protocol handler (N2N).
     /// </summary>
-    public ChainSync ChainSync { get; private set; } = default!;
+    public ChainSync ChainSync { get; private set; }
 
     /// <summary>
     /// Gets the KeepAlive protocol handler (N2N).
     /// </summary>
-    public KeepAliveClient KeepAlive { get; private set; } = default!;
+    public KeepAliveClient KeepAlive { get; private set; }
 
     /// <summary>
     /// Gets the BlockFetch protocol handler (N2N).
     /// </summary>
-    public BlockFetch BlockFetch { get; private set; } = default!;
+    public BlockFetch BlockFetch { get; private set; }
 
-    private PeerClient(Plexer plexer) => _plexer = plexer ?? throw new ArgumentNullException(nameof(plexer));
+    private PeerClient(Plexer plexer)
+    {
+        _plexer = plexer ?? throw new ArgumentNullException(nameof(plexer));
+        Handshake = new(_plexer.SubscribeClient(ProtocolType.Handshake));
+        ChainSync = new(_plexer.SubscribeClient(ProtocolType.NodeChainSync), ProtocolType.NodeChainSync);
+        KeepAlive = new(_plexer.SubscribeClient(ProtocolType.KeepAlive));
+        BlockFetch = new(_plexer.SubscribeClient(ProtocolType.BlockFetch));
+    }
 
     /// <summary>
     /// Creates and connects a new PeerClient instance to a Cardano node over a Unix domain socket.
@@ -107,11 +114,6 @@ public sealed class PeerClient : IDisposable
     public async Task StartAsync(ulong networkMagic = 2, TimeSpan? keepAliveInterval = null)
     {
         _plexerTask = _plexer.RunAsync(CancellationToken.None);
-
-        Handshake = new(_plexer.SubscribeClient(ProtocolType.Handshake));
-        ChainSync = new(_plexer.SubscribeClient(ProtocolType.NodeChainSync), ProtocolType.NodeChainSync);
-        KeepAlive = new(_plexer.SubscribeClient(ProtocolType.KeepAlive));
-        BlockFetch = new(_plexer.SubscribeClient(ProtocolType.BlockFetch));
 
         NetworkMagic = networkMagic;
 
