@@ -8,7 +8,7 @@ namespace Chrysalis.Network.Cbor.Common;
 /// </summary>
 [CborSerializable]
 [CborUnion]
-public abstract partial record Point : CborBase
+public abstract partial record Point : CborRecord
 {
     /// <summary>
     /// Gets a <see cref="OriginPoint"/> representing the genesis (origin) of the blockchain.
@@ -21,10 +21,7 @@ public abstract partial record Point : CborBase
     /// <param name="slot">The slot number on the blockchain.</param>
     /// <param name="hash">The block header hash identifying the block at the given slot.</param>
     /// <returns>A new <see cref="SpecificPoint"/> for the specified location.</returns>
-    public static Point Specific(ulong slot, ReadOnlyMemory<byte> hash)
-    {
-        return new SpecificPoint(slot, hash);
-    }
+    public static Point Specific(ulong slot, ReadOnlyMemory<byte> hash) => new SpecificPoint(slot, hash);
 }
 
 /// <summary>
@@ -51,4 +48,4 @@ public partial record SpecificPoint(
 /// </summary>
 /// <param name="Value">The list of chain points.</param>
 [CborSerializable]
-public partial record Points(List<Point> Value) : CborBase;
+public partial record Points(List<Point> Value) : CborRecord;

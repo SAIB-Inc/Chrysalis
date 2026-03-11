@@ -13,5 +13,5 @@ namespace Chrysalis.Tx.Models.Cbor;
 [CborList]
 public partial record ResolvedInput(
     [CborOrder(0)] TransactionInput Outref,
-    [CborOrder(1)] TransactionOutput Output
-) : CborBase;
+    [CborOrder(1)] ITransactionOutput Output
+) : CborRecord;

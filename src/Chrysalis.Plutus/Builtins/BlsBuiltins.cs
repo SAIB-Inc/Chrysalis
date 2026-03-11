@@ -51,10 +51,7 @@ internal static class BlsBuiltins
         return WrapBlsCall(() => BoolResult(Bls12381.G1Equal(a, b)));
     }
 
-    internal static CekValue Bls12_381_G1_Compress(ImmutableArray<CekValue> args)
-    {
-        return ByteStringResult(UnwrapG1(args[0]));
-    }
+    internal static CekValue Bls12_381_G1_Compress(ImmutableArray<CekValue> args) => ByteStringResult(UnwrapG1(args[0]));
 
     internal static CekValue Bls12_381_G1_Uncompress(ImmutableArray<CekValue> args)
     {
@@ -121,10 +118,7 @@ internal static class BlsBuiltins
         return WrapBlsCall(() => BoolResult(Bls12381.G2Equal(a, b)));
     }
 
-    internal static CekValue Bls12_381_G2_Compress(ImmutableArray<CekValue> args)
-    {
-        return ByteStringResult(UnwrapG2(args[0]));
-    }
+    internal static CekValue Bls12_381_G2_Compress(ImmutableArray<CekValue> args) => ByteStringResult(UnwrapG2(args[0]));
 
     internal static CekValue Bls12_381_G2_Uncompress(ImmutableArray<CekValue> args)
     {

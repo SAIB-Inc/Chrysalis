@@ -12,20 +12,12 @@ public static class AnchorExtensions
     /// </summary>
     /// <param name="self">The anchor instance.</param>
     /// <returns>The anchor URL.</returns>
-    public static Uri Url(this Anchor self)
-    {
-        ArgumentNullException.ThrowIfNull(self);
-        return new Uri(self.AnchorUrl);
-    }
+    public static Uri Url(this Anchor self) => new(self.Url);
 
     /// <summary>
     /// Gets the anchor data hash bytes.
     /// </summary>
     /// <param name="self">The anchor instance.</param>
     /// <returns>The data hash bytes.</returns>
-    public static ReadOnlyMemory<byte> DataHash(this Anchor self)
-    {
-        ArgumentNullException.ThrowIfNull(self);
-        return self.AnchorDataHash;
-    }
+    public static ReadOnlyMemory<byte> DataHash(this Anchor self) => self.ContentHash;
 }

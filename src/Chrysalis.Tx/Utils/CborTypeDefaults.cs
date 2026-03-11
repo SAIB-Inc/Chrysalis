@@ -1,4 +1,3 @@
-using Chrysalis.Codec.Types;
 using Chrysalis.Codec.Types.Cardano.Core;
 using Chrysalis.Codec.Types.Cardano.Core.Transaction;
 using Chrysalis.Codec.Types.Cardano.Core.TransactionWitness;
@@ -10,27 +9,12 @@ namespace Chrysalis.Tx.Utils;
 /// </summary>
 public static class CborTypeDefaults
 {
-    /// <summary>
-    /// Gets a default empty Conway transaction body.
-    /// </summary>
-    public static ConwayTransactionBody TransactionBody => new(
-        new CborDefListWithTag<TransactionInput>([]),
-        new CborDefList<TransactionOutput>([]), 0, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null
-    );
+    /// <summary>Gets the default empty <see cref="ConwayTransactionBody"/>.</summary>
+    public static ConwayTransactionBody TransactionBody => default;
 
-    /// <summary>
-    /// Gets a default empty post-Alonzo transaction witness set.
-    /// </summary>
-    public static PostAlonzoTransactionWitnessSet TransactionWitnessSet => new(null, null, null, null, null, null, null, null);
+    /// <summary>Gets the default empty <see cref="PostAlonzoTransactionWitnessSet"/>.</summary>
+    public static PostAlonzoTransactionWitnessSet TransactionWitnessSet => default;
 
-    /// <summary>
-    /// Gets a default empty post-Alonzo auxiliary data map.
-    /// </summary>
-    public static PostAlonzoAuxiliaryDataMap AuxiliaryData => new(
-        null,
-        null,
-        null,
-        null,
-        null
-    );
+    /// <summary>Gets the default empty <see cref="PostAlonzoAuxiliaryDataMap"/>.</summary>
+    public static PostAlonzoAuxiliaryDataMap AuxiliaryData => default;
 }

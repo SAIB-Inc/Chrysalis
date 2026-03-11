@@ -1,8 +1,9 @@
 using Chrysalis.Codec.Extensions;
 using Chrysalis.Codec.Serialization;
+using Chrysalis.Codec.Types;
 using Chrysalis.Codec.Types.Cardano.Core.Common;
-using Chrysalis.Codec.Types.Cardano.Core.TransactionWitness;
 using Chrysalis.Wallet.Utils;
+using Redeemers = Chrysalis.Codec.Types.Cardano.Core.TransactionWitness.IRedeemers;
 
 namespace Chrysalis.Tx.Utils;
 
@@ -15,12 +16,12 @@ public static class DataHashUtil
     /// Calculates the script data hash from redeemers, datums, and language views.
     /// </summary>
     /// <param name="redeemers">The transaction redeemers.</param>
-    /// <param name="datums">Optional Plutus data list.</param>
+    /// <param name="datums">Optional Plutus data set from witness set.</param>
     /// <param name="languageViews">The CBOR-encoded cost model language views.</param>
     /// <returns>The Blake2b-256 hash of the script data.</returns>
     public static byte[] CalculateScriptDataHash(
         Redeemers redeemers,
-        PlutusList? datums,
+        ICborMaybeIndefList<IPlutusData>? datums,
         byte[] languageViews
     )
     {
@@ -36,9 +37,9 @@ public static class DataHashUtil
         // field is an empty string.
 
         byte[] plutusDataBytes = [];
-        if (datums != null && datums.PlutusData.GetValue().Any())
+        if (datums != null && datums.GetValue().Any())
         {
-            plutusDataBytes = CborSerializer.Serialize<PlutusData>(datums);
+            plutusDataBytes = CborSerializer.Serialize(datums);
         }
 
         byte[] redeemerBytes = CborSerializer.Serialize(redeemers) ?? [];

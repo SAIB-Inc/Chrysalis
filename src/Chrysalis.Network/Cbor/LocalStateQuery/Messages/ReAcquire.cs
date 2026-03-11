@@ -20,20 +20,14 @@ public static class ReAcquireIdxs
     /// </summary>
     /// <param name="point">The chain point to re-acquire, or null for the volatile tip.</param>
     /// <returns>A <see cref="ReAcquire"/> message for the specified target.</returns>
-    public static ReAcquire Default(Point? point = null)
-    {
-        return point is not null ? SpecificPoint(point) : VolatileTip;
-    }
+    public static ReAcquire Default(Point? point = null) => point is not null ? SpecificPoint(point) : VolatileTip;
 
     /// <summary>
     /// Creates a ReAcquire message to re-acquire the ledger state at a specific chain point.
     /// </summary>
     /// <param name="point">The chain point to re-acquire.</param>
     /// <returns>A <see cref="ReAcquireSpecificPoint"/> message.</returns>
-    public static ReAcquireSpecificPoint SpecificPoint(Point point)
-    {
-        return new(6, point);
-    }
+    public static ReAcquireSpecificPoint SpecificPoint(Point point) => new(6, point);
 
     /// <summary>
     /// Gets a ReAcquire message to re-acquire the ledger state at the volatile (most recent) tip.

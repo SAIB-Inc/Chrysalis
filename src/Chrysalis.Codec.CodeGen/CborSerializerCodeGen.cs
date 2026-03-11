@@ -5,13 +5,14 @@ using Microsoft.CodeAnalysis.CSharp.Syntax;
 namespace Chrysalis.Codec.CodeGen;
 
 /// <summary>
-/// Incremental source generator that emits CBOR serializers and metadata for types annotated with CborSerializable.
+/// Incremental source generator that emits CBOR serializers and metadata
+/// for types annotated with <c>[CborSerializable]</c>.
 /// </summary>
 [Generator]
 public sealed partial class CborSerializerCodeGen : IIncrementalGenerator
 {
     /// <summary>
-    /// Initializes the incremental generator by registering syntax and compilation providers.
+    /// Registers syntax and compilation providers for incremental code generation.
     /// </summary>
     /// <param name="context">The generator initialization context.</param>
     public void Initialize(IncrementalGeneratorInitializationContext context)
@@ -43,4 +44,3 @@ public sealed partial class CborSerializerCodeGen : IIncrementalGenerator
         }
     }
 }
-

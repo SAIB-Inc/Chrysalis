@@ -51,10 +51,7 @@ internal abstract record CostFunction
 
 internal sealed record ConstantCost(long Value) : CostFunction
 {
-    internal override long Eval(long x, long y, long z)
-    {
-        return Value;
-    }
+    internal override long Eval(long x, long y, long z) => Value;
 }
 
 internal sealed record LinearCost(int ArgIndex, long Intercept, long Slope) : CostFunction
@@ -65,68 +62,41 @@ internal sealed record LinearCost(int ArgIndex, long Intercept, long Slope) : Co
         return SatMath.Add(Intercept, SatMath.Mul(Slope, v));
     }
 
-    internal static LinearCost InX(long intercept, long slope)
-    {
-        return new(0, intercept, slope);
-    }
+    internal static LinearCost InX(long intercept, long slope) => new(0, intercept, slope);
 
-    internal static LinearCost InY(long intercept, long slope)
-    {
-        return new(1, intercept, slope);
-    }
+    internal static LinearCost InY(long intercept, long slope) => new(1, intercept, slope);
 
-    internal static LinearCost InZ(long intercept, long slope)
-    {
-        return new(2, intercept, slope);
-    }
+    internal static LinearCost InZ(long intercept, long slope) => new(2, intercept, slope);
 }
 
 internal sealed record AddedSizesCost(long Intercept, long Slope) : CostFunction
 {
-    internal override long Eval(long x, long y, long z)
-    {
-        return SatMath.Add(Intercept, SatMath.Mul(Slope, SatMath.Add(x, y)));
-    }
+    internal override long Eval(long x, long y, long z) => SatMath.Add(Intercept, SatMath.Mul(Slope, SatMath.Add(x, y)));
 }
 
 internal sealed record SubtractedSizesCost(long Intercept, long Slope, long Minimum) : CostFunction
 {
-    internal override long Eval(long x, long y, long z)
-    {
-        return Math.Max(Minimum, SatMath.Add(Intercept, SatMath.Mul(Slope, x - y)));
-    }
+    internal override long Eval(long x, long y, long z) => Math.Max(Minimum, SatMath.Add(Intercept, SatMath.Mul(Slope, x - y)));
 }
 
 internal sealed record MultipliedSizesCost(long Intercept, long Slope) : CostFunction
 {
-    internal override long Eval(long x, long y, long z)
-    {
-        return SatMath.Add(Intercept, SatMath.Mul(Slope, SatMath.Mul(x, y)));
-    }
+    internal override long Eval(long x, long y, long z) => SatMath.Add(Intercept, SatMath.Mul(Slope, SatMath.Mul(x, y)));
 }
 
 internal sealed record MinSizeCost(long Intercept, long Slope) : CostFunction
 {
-    internal override long Eval(long x, long y, long z)
-    {
-        return SatMath.Add(Intercept, SatMath.Mul(Slope, Math.Min(x, y)));
-    }
+    internal override long Eval(long x, long y, long z) => SatMath.Add(Intercept, SatMath.Mul(Slope, Math.Min(x, y)));
 }
 
 internal sealed record MaxSizeCost(long Intercept, long Slope) : CostFunction
 {
-    internal override long Eval(long x, long y, long z)
-    {
-        return SatMath.Add(Intercept, SatMath.Mul(Slope, Math.Max(x, y)));
-    }
+    internal override long Eval(long x, long y, long z) => SatMath.Add(Intercept, SatMath.Mul(Slope, Math.Max(x, y)));
 }
 
 internal sealed record LinearOnDiagonalCost(long Intercept, long Slope, long ConstantValue) : CostFunction
 {
-    internal override long Eval(long x, long y, long z)
-    {
-        return x == y ? SatMath.Add(Intercept, SatMath.Mul(Slope, x)) : ConstantValue;
-    }
+    internal override long Eval(long x, long y, long z) => x == y ? SatMath.Add(Intercept, SatMath.Mul(Slope, x)) : ConstantValue;
 }
 
 internal sealed record QuadraticCost(int ArgIndex, long Coeff0, long Coeff1, long Coeff2) : CostFunction
@@ -139,20 +109,11 @@ internal sealed record QuadraticCost(int ArgIndex, long Coeff0, long Coeff1, lon
             SatMath.Mul(Coeff2, SatMath.Mul(v, v)));
     }
 
-    internal static QuadraticCost InX(long c0, long c1, long c2)
-    {
-        return new(0, c0, c1, c2);
-    }
+    internal static QuadraticCost InX(long c0, long c1, long c2) => new(0, c0, c1, c2);
 
-    internal static QuadraticCost InY(long c0, long c1, long c2)
-    {
-        return new(1, c0, c1, c2);
-    }
+    internal static QuadraticCost InY(long c0, long c1, long c2) => new(1, c0, c1, c2);
 
-    internal static QuadraticCost InZ(long c0, long c1, long c2)
-    {
-        return new(2, c0, c1, c2);
-    }
+    internal static QuadraticCost InZ(long c0, long c1, long c2) => new(2, c0, c1, c2);
 }
 
 internal sealed record ConstAboveDiagonalCost(
@@ -160,34 +121,22 @@ internal sealed record ConstAboveDiagonalCost(
     long C00, long C10, long C01, long C20, long C11, long C02
 ) : CostFunction
 {
-    internal override long Eval(long x, long y, long z)
-    {
-        return x < y ? ConstantValue : TwoVarQuadratic(Minimum, C00, C10, C01, C20, C11, C02, x, y);
-    }
+    internal override long Eval(long x, long y, long z) => x < y ? ConstantValue : TwoVarQuadratic(Minimum, C00, C10, C01, C20, C11, C02, x, y);
 }
 
 internal sealed record LiteralInYOrLinearInZCost(long Intercept, long Slope) : CostFunction
 {
-    internal override long Eval(long x, long y, long z)
-    {
-        return Math.Max(y, SatMath.Add(Intercept, SatMath.Mul(Slope, z)));
-    }
+    internal override long Eval(long x, long y, long z) => Math.Max(y, SatMath.Add(Intercept, SatMath.Mul(Slope, z)));
 }
 
 internal sealed record LinearInYAndZCost(long Intercept, long SlopeY, long SlopeZ) : CostFunction
 {
-    internal override long Eval(long x, long y, long z)
-    {
-        return SatMath.Add(Intercept, SatMath.Add(SatMath.Mul(SlopeY, y), SatMath.Mul(SlopeZ, z)));
-    }
+    internal override long Eval(long x, long y, long z) => SatMath.Add(Intercept, SatMath.Add(SatMath.Mul(SlopeY, y), SatMath.Mul(SlopeZ, z)));
 }
 
 internal sealed record LinearInMaxYZCost(long Intercept, long Slope) : CostFunction
 {
-    internal override long Eval(long x, long y, long z)
-    {
-        return SatMath.Add(Intercept, SatMath.Mul(Slope, Math.Max(y, z)));
-    }
+    internal override long Eval(long x, long y, long z) => SatMath.Add(Intercept, SatMath.Mul(Slope, Math.Max(y, z)));
 }
 
 internal sealed record ExpModCost(long Coeff00, long Coeff11, long Coeff12) : CostFunction
@@ -204,12 +153,9 @@ internal sealed record ExpModCost(long Coeff00, long Coeff11, long Coeff12) : Co
 
 internal sealed record WithInteractionCost(long C00, long C10, long C01, long C11) : CostFunction
 {
-    internal override long Eval(long x, long y, long z)
-    {
-        return SatMath.Add(
+    internal override long Eval(long x, long y, long z) => SatMath.Add(
             SatMath.Add(C00, SatMath.Mul(C10, x)),
             SatMath.Add(SatMath.Mul(C01, y), SatMath.Mul(C11, SatMath.Mul(x, y))));
-    }
 }
 
 /// <summary>
@@ -217,8 +163,5 @@ internal sealed record WithInteractionCost(long C00, long C10, long C01, long C1
 /// </summary>
 internal readonly record struct BuiltinCostModel(CostFunction Cpu, CostFunction Mem)
 {
-    internal ExBudget Eval(long x, long y, long z)
-    {
-        return new(Cpu.Eval(x, y, z), Mem.Eval(x, y, z));
-    }
+    internal ExBudget Eval(long x, long y, long z) => new(Cpu.Eval(x, y, z), Mem.Eval(x, y, z));
 }

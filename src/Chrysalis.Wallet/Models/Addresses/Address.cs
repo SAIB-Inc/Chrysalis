@@ -83,20 +83,14 @@ public class Address
     /// </summary>
     /// <param name="addressBytes">The raw byte representation of the address.</param>
     /// <returns>An <see cref="Address"/> instance.</returns>
-    public static Address FromBytes(byte[] addressBytes)
-    {
-        return new Address(addressBytes);
-    }
+    public static Address FromBytes(byte[] addressBytes) => new(addressBytes);
 
     /// <summary>
     /// Creates an <see cref="Address"/> instance from a Bech32-encoded address string.
     /// </summary>
     /// <param name="bech32String">The Bech32-encoded Cardano address string.</param>
     /// <returns>An <see cref="Address"/> instance.</returns>
-    public static Address FromBech32(string bech32String)
-    {
-        return new(bech32String);
-    }
+    public static Address FromBech32(string bech32String) => new(bech32String);
 
     /// <summary>
     /// Creates an <see cref="Address"/> instance from payment and optional stake credentials.
@@ -106,7 +100,7 @@ public class Address
     /// <param name="paymentBytes">The payment credential bytes (e.g., PaymentKeyHash).</param>
     /// <param name="stakeBytes">Optional stake credential bytes (e.g., StakeKeyHash).</param>
     /// <returns>An <see cref="Address"/> instance.</returns>
-    public static Address FromCredentials(NetworkType networkType, AddressType addressType, Credential paymentBytes, Credential? stakeBytes)
+    public static Address FromCredentials(NetworkType networkType, AddressType addressType, ICredential paymentBytes, ICredential? stakeBytes)
     {
         ArgumentNullException.ThrowIfNull(paymentBytes);
 
@@ -162,10 +156,7 @@ public class Address
     /// Returns the raw byte representation of the address.
     /// </summary>
     /// <returns>The address bytes.</returns>
-    public byte[] ToBytes()
-    {
-        return _addressBytes;
-    }
+    public byte[] ToBytes() => _addressBytes;
 
     /// <summary>
     /// Encodes the address as a Bech32 string.
@@ -181,58 +172,46 @@ public class Address
     /// Returns the hexadecimal representation of the address bytes.
     /// </summary>
     /// <returns>The hex-encoded address string.</returns>
-    public string ToHex()
-    {
-        return Convert.ToHexStringLower(_addressBytes);
-    }
+    public string ToHex() => Convert.ToHexStringLower(_addressBytes);
 
     /// <summary>
     /// Gets the Bech32 prefix for this address.
     /// </summary>
     /// <returns>The address prefix string.</returns>
-    public string GetPrefix()
-    {
-        return GetAddressHeader(_addressBytes[0]).Prefix;
-    }
+    public string GetPrefix() => GetAddressHeader(_addressBytes[0]).Prefix;
 
     /// <summary>
     /// Extracts the payment key hash from the address bytes.
     /// </summary>
     /// <returns>The 28-byte payment key hash, or null if not applicable.</returns>
-    public byte[]? GetPaymentKeyHash()
-    {
-        return Type is AddressType.Delegation or AddressType.ScriptDelegation
+    public byte[]? GetPaymentKeyHash() => Type is AddressType.Delegation or AddressType.ScriptDelegation
             ? null
             : _addressBytes.Length >= 29 ? _addressBytes[1..29] : null;
-    }
 
     /// <summary>
     /// Extracts the stake key hash from the address bytes.
     /// </summary>
     /// <returns>The 28-byte stake key hash, or null if not applicable.</returns>
-    public byte[]? GetStakeKeyHash()
+    public byte[]? GetStakeKeyHash() => Type switch
     {
-        return Type switch
-        {
-            // Payment (28 bytes) + Stake (28 bytes)
-            AddressType.Base
-            or AddressType.ScriptPaymentWithDelegation
-            or AddressType.PaymentWithScriptDelegation
-            or AddressType.ScriptPaymentWithScriptDelegation
-                => _addressBytes.Length >= 57 ? _addressBytes[29..57] : null,
+        // Payment (28 bytes) + Stake (28 bytes)
+        AddressType.Base
+        or AddressType.ScriptPaymentWithDelegation
+        or AddressType.PaymentWithScriptDelegation
+        or AddressType.ScriptPaymentWithScriptDelegation
+            => _addressBytes.Length >= 57 ? _addressBytes[29..57] : null,
 
-            // Stake-only addresses (stake hash at offset 1)
-            AddressType.Delegation
-            or AddressType.ScriptDelegation
-                => _addressBytes.Length >= 29 ? _addressBytes[1..29] : null,
-            // Pointer and enterprise addresses have no stake key hash
-            AddressType.PaymentWithPointerDelegation
-            or AddressType.ScriptPaymentWithPointerDelegation
-            or AddressType.EnterprisePayment
-            or AddressType.EnterpriseScriptPayment => null,
-            _ => null
-        };
-    }
+        // Stake-only addresses (stake hash at offset 1)
+        AddressType.Delegation
+        or AddressType.ScriptDelegation
+            => _addressBytes.Length >= 29 ? _addressBytes[1..29] : null,
+        // Pointer and enterprise addresses have no stake key hash
+        AddressType.PaymentWithPointerDelegation
+        or AddressType.ScriptPaymentWithPointerDelegation
+        or AddressType.EnterprisePayment
+        or AddressType.EnterpriseScriptPayment => null,
+        _ => null
+    };
 
     /// <summary>
     /// Parses a header byte into an AddressHeader containing the address type and network type.

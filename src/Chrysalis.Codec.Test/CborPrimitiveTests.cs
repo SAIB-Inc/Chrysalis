@@ -6,68 +6,47 @@ namespace Chrysalis.Codec.Test;
 public class CborPrimitiveTests
 {
     [Fact]
-    public void CborPrimitive_ImplicitConversions_Work()
-    {
-        // Arrange & Act
-        CborPrimitive intPrimitive = 42;
-        CborPrimitive longPrimitive = 42L;
-        CborPrimitive stringPrimitive = "test";
-        CborPrimitive boolPrimitive = true;
-        CborPrimitive bytesPrimitive = new byte[] { 1, 2, 3 };
-
-        // Assert
-        _ = Assert.IsType<CborInt>(intPrimitive);
-        _ = Assert.IsType<CborLong>(longPrimitive);
-        _ = Assert.IsType<CborString>(stringPrimitive);
-        _ = Assert.IsType<CborBool>(boolPrimitive);
-        _ = Assert.IsType<CborBytes>(bytesPrimitive);
-    }
-
-    [Fact]
     public void CborPrimitive_Int_RoundTrip()
     {
-        // Arrange
-        CborPrimitive primitive = 42;
+        // CBOR encoding of integer 42: 0x18 0x2a
+        byte[] bytes = [0x18, 0x2a];
 
-        // Act
-        byte[] bytes = CborSerializer.Serialize(primitive);
-        CborPrimitive deserialized = CborSerializer.Deserialize<CborPrimitive>(bytes);
+        ICborPrimitive deserialized = CborSerializer.Deserialize<ICborPrimitive>(bytes);
 
-        // Assert
-        _ = Assert.IsType<CborInt>(deserialized);
-        CborInt result = (CborInt)deserialized;
+        CborInt result = Assert.IsType<CborInt>(deserialized);
         Assert.Equal(42, result.Value);
+
+        byte[] reserialized = CborSerializer.Serialize(result);
+        Assert.Equal(bytes, reserialized);
     }
 
     [Fact]
     public void CborPrimitive_String_RoundTrip()
     {
-        // Arrange
-        CborPrimitive primitive = "hello";
+        // CBOR encoding of "hello": 0x65 + UTF8 bytes
+        byte[] bytes = [0x65, 0x68, 0x65, 0x6c, 0x6c, 0x6f];
 
-        // Act
-        byte[] bytes = CborSerializer.Serialize(primitive);
-        CborPrimitive deserialized = CborSerializer.Deserialize<CborPrimitive>(bytes);
+        ICborPrimitive deserialized = CborSerializer.Deserialize<ICborPrimitive>(bytes);
 
-        // Assert
-        _ = Assert.IsType<CborString>(deserialized);
-        CborString result = (CborString)deserialized;
+        CborString result = Assert.IsType<CborString>(deserialized);
         Assert.Equal("hello", result.Value);
+
+        byte[] reserialized = CborSerializer.Serialize(result);
+        Assert.Equal(bytes, reserialized);
     }
 
     [Fact]
     public void CborPrimitive_Bool_RoundTrip()
     {
-        // Arrange
-        CborPrimitive primitive = true;
+        // CBOR encoding of true: 0xf5
+        byte[] bytes = [0xf5];
 
-        // Act
-        byte[] bytes = CborSerializer.Serialize(primitive);
-        CborPrimitive deserialized = CborSerializer.Deserialize<CborPrimitive>(bytes);
+        ICborPrimitive deserialized = CborSerializer.Deserialize<ICborPrimitive>(bytes);
 
-        // Assert
-        _ = Assert.IsType<CborBool>(deserialized);
-        CborBool result = (CborBool)deserialized;
+        CborBool result = Assert.IsType<CborBool>(deserialized);
         Assert.True(result.Value);
+
+        byte[] reserialized = CborSerializer.Serialize(result);
+        Assert.Equal(bytes, reserialized);
     }
 }

@@ -1,7 +1,7 @@
 using Chrysalis.Codec.Types.Cardano.Core.Certificates;
 using Chrysalis.Codec.Types.Cardano.Core.Governance;
 using Chrysalis.Codec.Types.Cardano.Core.Transaction;
-using CCertificate = Chrysalis.Codec.Types.Cardano.Core.Certificates.Certificate;
+using CCertificate = Chrysalis.Codec.Types.Cardano.Core.Certificates.ICertificate;
 
 namespace Chrysalis.Codec.Extensions.Cardano.Core.Certificates;
 
@@ -74,8 +74,8 @@ public static class CertificateExtensions
         return self switch
         {
             RegDrepCert regDrepCert => regDrepCert.DRepCredential,
-            UnRegDrepCert unRegDrepCert => unRegDrepCert.DrepCredential,
-            UpdateDrepCert updateDrepCert => updateDrepCert.DrepCredential,
+            UnRegDrepCert unRegDrepCert => unRegDrepCert.DRepCredential,
+            UpdateDrepCert updateDrepCert => updateDrepCert.DRepCredential,
             _ => null
         };
     }
@@ -125,7 +125,7 @@ public static class CertificateExtensions
     /// </summary>
     /// <param name="self">The certificate instance.</param>
     /// <returns>The DRep, or null.</returns>
-    public static DRep? DRep(this CCertificate self)
+    public static IDRep? DRep(this CCertificate self)
     {
         ArgumentNullException.ThrowIfNull(self);
         return self switch
@@ -133,7 +133,7 @@ public static class CertificateExtensions
             VoteDelegCert voteDelegCert => voteDelegCert.DRep,
             StakeVoteDelegCert stakeVoteDelegCert => stakeVoteDelegCert.DRep,
             VoteRegDelegCert voteRegDelegCert => voteRegDelegCert.DRep,
-            StakeVoteRegDelegCert stakeVoteRegDelegCert => stakeVoteRegDelegCert.Drep,
+            StakeVoteRegDelegCert stakeVoteRegDelegCert => stakeVoteRegDelegCert.DRep,
             _ => null
         };
     }

@@ -6,14 +6,14 @@ namespace Chrysalis.Tx.Cli;
 // Wizard validator redeemer
 [CborSerializable]
 [CborUnion]
-public abstract partial record WizardRedeemer : CborBase;
+public abstract partial record WizardRedeemer : CborRecord;
 
 [CborSerializable]
 [CborConstr(0)]
 public partial record BuyRedeemer(
     long OutputIndex,
     PlutusBool OfferSecond,
-    CborOption<OracleFeeds> OracleFeeds
+    ICborOption<OracleFeeds> OracleFeeds
 ) : WizardRedeemer;
 
 [CborSerializable]
@@ -23,7 +23,7 @@ public partial record CloseRedeemer : WizardRedeemer;
 // Aiken Bool: Constr(0,[]) = False, Constr(1,[]) = True
 [CborSerializable]
 [CborUnion]
-public abstract partial record PlutusBool : CborBase;
+public abstract partial record PlutusBool : CborRecord;
 
 [CborSerializable]
 [CborConstr(0)]
@@ -36,22 +36,22 @@ public partial record PlutusTrue : PlutusBool;
 // Oracle feeds
 [CborSerializable]
 [CborList]
-public partial record OracleFeeds(SignedPriceFeed OfferedFeed, SignedPriceFeed ReceivedFeed) : CborBase;
+public partial record OracleFeeds(SignedPriceFeed OfferedFeed, SignedPriceFeed ReceivedFeed) : CborRecord;
 
 [CborSerializable]
 [CborConstr(0)]
 [CborIndefinite]
-public partial record PriceFeed(long Price, [CborSize(64)] byte[] Name, long Timestamp) : CborBase;
+public partial record PriceFeed(long Price, [CborSize(64)] byte[] Name, long Timestamp) : CborRecord;
 
 [CborSerializable]
 [CborConstr(0)]
 [CborIndefinite]
-public partial record SignedPriceFeed(PriceFeed Data, byte[] Signature) : CborBase;
+public partial record SignedPriceFeed(PriceFeed Data, byte[] Signature) : CborRecord;
 
 // Wizard datum types
 [CborSerializable]
 [CborUnion]
-public abstract partial record OrderKind : CborBase;
+public abstract partial record OrderKind : CborRecord;
 
 [CborSerializable]
 [CborConstr(0)]
@@ -63,19 +63,19 @@ public partial record FixedPriceKind : OrderKind;
 
 [CborSerializable]
 [CborList]
-public partial record WizardAsset(byte[] PolicyId, byte[] AssetName) : CborBase;
+public partial record WizardAsset(byte[] PolicyId, byte[] AssetName) : CborRecord;
 
 [CborSerializable]
 [CborList]
-public partial record AssetPair(WizardAsset First, WizardAsset Second) : CborBase;
+public partial record AssetPair(WizardAsset First, WizardAsset Second) : CborRecord;
 
 [CborSerializable]
 [CborConstr(0)]
-public partial record RationalC(long Num, long Den) : CborBase;
+public partial record RationalC(long Num, long Den) : CborRecord;
 
 [CborSerializable]
 [CborUnion]
-public abstract partial record Swap : CborBase;
+public abstract partial record Swap : CborRecord;
 
 [CborSerializable]
 [CborConstr(0)]
@@ -88,7 +88,7 @@ public partial record TwoWays(RationalC Rational1, RationalC Rational2) : Swap;
 // MultisigScript owner types
 [CborSerializable]
 [CborUnion]
-public abstract partial record MultisigScript : CborBase;
+public abstract partial record MultisigScript : CborRecord;
 
 [CborSerializable]
 [CborConstr(0)]
@@ -125,11 +125,11 @@ public partial record WizardDatum(
     OrderKind Kind,
     AssetPair AssetPair,
     Swap SwapPrice,
-    CborOption<Swap> MinimumPrice,
+    ICborOption<Swap> MinimumPrice,
     MultisigScript Owner
-) : CborBase;
+) : CborRecord;
 
 // Template wrapper: ["wizard", datum]
 [CborSerializable]
 [CborList]
-public partial record TemplateWizardDatum(byte[] Tag, WizardDatum Datum) : CborBase;
+public partial record TemplateWizardDatum(byte[] Tag, WizardDatum Datum) : CborRecord;

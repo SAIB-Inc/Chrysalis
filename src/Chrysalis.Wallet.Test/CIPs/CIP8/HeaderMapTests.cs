@@ -1,6 +1,7 @@
 using Chrysalis.Codec.Serialization;
 using Chrysalis.Codec.Types;
 using Chrysalis.Wallet.CIPs.CIP8.Models;
+using SAIB.Cbor.Serialization;
 
 namespace Chrysalis.Wallet.Test.CIPs.CIP8;
 
@@ -16,8 +17,8 @@ public class HeaderMapTests
         _ = Assert.Single(headerMap.Headers);
         Assert.True(headerMap.Headers.ContainsKey("hashed"));
 
-        CborBool boolValue = (CborBool)headerMap.Headers["hashed"];
-        Assert.True(boolValue.Value);
+        bool boolValue = DecodeBool(headerMap.Headers["hashed"]);
+        Assert.True(boolValue);
     }
 
     [Fact]
@@ -33,8 +34,8 @@ public class HeaderMapTests
         _ = Assert.Single(result.Headers);
         Assert.True(result.Headers.ContainsKey(1));
 
-        CborInt intValue = (CborInt)result.Headers[1];
-        Assert.Equal(-7, intValue.Value);
+        int intValue = DecodeInt(result.Headers[1]);
+        Assert.Equal(-7, intValue);
     }
 
     [Fact]
@@ -43,15 +44,15 @@ public class HeaderMapTests
         // Arrange
         HeaderMap headerMap = HeaderMap.Empty;
 
-        // Act  
+        // Act
         HeaderMap result = headerMap.WithHeader("custom", "value");
 
         // Assert
         _ = Assert.Single(result.Headers);
         Assert.True(result.Headers.ContainsKey("custom"));
 
-        CborString stringValue = (CborString)result.Headers["custom"];
-        Assert.Equal("value", stringValue.Value);
+        string stringValue = DecodeString(result.Headers["custom"]);
+        Assert.Equal("value", stringValue);
     }
 
     [Fact]
@@ -59,7 +60,7 @@ public class HeaderMapTests
     {
         // Arrange & Act - Real-world COSE header usage
         HeaderMap headers = HeaderMap.Empty
-            .WithHeader(1, -7)                    // Algorithm: ES256 
+            .WithHeader(1, -7)                    // Algorithm: ES256
             .WithHeader(4, "my-key-id")          // Key ID
             .WithHeader("iss", "https://issuer") // Custom issuer
             .WithHeader("hashed", true);         // Custom hashed flag
@@ -68,20 +69,20 @@ public class HeaderMapTests
         Assert.Equal(4, headers.Headers.Count);
 
         // Check algorithm
-        CborInt algorithm = (CborInt)headers.Headers[1];
-        Assert.Equal(-7, algorithm.Value);
+        int algorithm = DecodeInt(headers.Headers[1]);
+        Assert.Equal(-7, algorithm);
 
         // Check key ID
-        CborString keyId = (CborString)headers.Headers[4];
-        Assert.Equal("my-key-id", keyId.Value);
+        string keyId = DecodeString(headers.Headers[4]);
+        Assert.Equal("my-key-id", keyId);
 
         // Check custom issuer
-        CborString issuer = (CborString)headers.Headers["iss"];
-        Assert.Equal("https://issuer", issuer.Value);
+        string issuer = DecodeString(headers.Headers["iss"]);
+        Assert.Equal("https://issuer", issuer);
 
         // Check hashed flag
-        CborBool hashed = (CborBool)headers.Headers["hashed"];
-        Assert.True(hashed.Value);
+        bool hashed = DecodeBool(headers.Headers["hashed"]);
+        Assert.True(hashed);
     }
 
     [Fact]
@@ -99,26 +100,24 @@ public class HeaderMapTests
         // Assert
         Assert.Equal(2, deserialized.Headers.Count);
 
-        // Note: CBOR deserialization may convert int to long
-
         // Check that we can find the keys by iterating
         bool foundIntKey = false;
         bool foundStringKey = false;
 
-        foreach ((CborLabel key, CborPrimitive value) in deserialized.Headers)
+        foreach ((CborLabel key, CborEncodedValue value) in deserialized.Headers)
         {
             switch (key.Value)
             {
                 case long l when l == 1:
                 case int i when i == 1:
                     foundIntKey = true;
-                    CborInt algorithm = (CborInt)value;
-                    Assert.Equal(-7, algorithm.Value);
+                    int algorithm = DecodeInt(value);
+                    Assert.Equal(-7, algorithm);
                     break;
                 case string s when s == "custom":
                     foundStringKey = true;
-                    CborString custom = (CborString)value;
-                    Assert.Equal("test", custom.Value);
+                    string custom = DecodeString(value);
+                    Assert.Equal("test", custom);
                     break;
                 default:
                     break;
@@ -127,5 +126,23 @@ public class HeaderMapTests
 
         Assert.True(foundIntKey, "Should find integer key");
         Assert.True(foundStringKey, "Should find string key");
+    }
+
+    private static bool DecodeBool(CborEncodedValue encoded)
+    {
+        CborReader reader = new(encoded.Value.Span);
+        return reader.ReadBoolean();
+    }
+
+    private static int DecodeInt(CborEncodedValue encoded)
+    {
+        CborReader reader = new(encoded.Value.Span);
+        return reader.ReadInt32();
+    }
+
+    private static string DecodeString(CborEncodedValue encoded)
+    {
+        CborReader reader = new(encoded.Value.Span);
+        return reader.ReadString()!;
     }
 }

@@ -1,6 +1,7 @@
 using Chrysalis.Codec.Types.Cardano.Core.Protocol;
 using Chrysalis.Codec.Types.Cardano.Core.TransactionWitness;
 using Chrysalis.Tx.Models;
+using Redeemers = Chrysalis.Codec.Types.Cardano.Core.TransactionWitness.IRedeemers;
 
 namespace Chrysalis.Tx.Utils;
 
@@ -73,12 +74,9 @@ public static class FeeUtil
     /// <param name="minFeeA">Linear fee coefficient (per-byte fee).</param>
     /// <param name="minFeeB">Constant fee component.</param>
     /// <returns>The calculated fee in lovelace.</returns>
-    public static ulong CalculateFee(ulong txSizeInBytes, ulong minFeeA, ulong minFeeB)
-    {
-        return txSizeInBytes <= 0
+    public static ulong CalculateFee(ulong txSizeInBytes, ulong minFeeA, ulong minFeeB) => txSizeInBytes <= 0
             ? throw new ArgumentException("Transaction size must be greater than 0", nameof(txSizeInBytes))
             : (minFeeA * txSizeInBytes) + minFeeB;
-    }
 
     /// <summary>
     /// Calculates fee including additional witness signature overhead.
@@ -155,8 +153,5 @@ public static class FeeUtil
     /// <param name="fee">The transaction fee in lovelace.</param>
     /// <param name="collateralPercentage">The collateral percentage from protocol parameters.</param>
     /// <returns>The required collateral in lovelace.</returns>
-    public static ulong CalculateRequiredCollateral(ulong fee, ulong collateralPercentage)
-    {
-        return (ulong)Math.Ceiling((decimal)fee * collateralPercentage / 100);
-    }
+    public static ulong CalculateRequiredCollateral(ulong fee, ulong collateralPercentage) => (ulong)Math.Ceiling((decimal)fee * collateralPercentage / 100);
 }

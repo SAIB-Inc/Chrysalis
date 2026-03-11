@@ -1,15 +1,12 @@
+using Chrysalis.Codec.Serialization;
 using Chrysalis.Codec.Serialization.Attributes;
 
 namespace Chrysalis.Codec.Types.Cardano.Core.Header;
 
-/// <summary>
-/// A Verifiable Random Function (VRF) certificate containing a proof and its output.
-/// </summary>
-/// <param name="Proof">The VRF proof bytes.</param>
-/// <param name="Output">The VRF output bytes.</param>
 [CborSerializable]
 [CborList]
-public partial record VrfCert(
-    [CborOrder(0)] ReadOnlyMemory<byte> Proof,
-    [CborOrder(1)] ReadOnlyMemory<byte> Output
-) : CborBase;
+public readonly partial record struct VrfCert : ICborType
+{
+    [CborOrder(0)] public partial ReadOnlyMemory<byte> Proof { get; }
+    [CborOrder(1)] public partial ReadOnlyMemory<byte> Output { get; }
+}

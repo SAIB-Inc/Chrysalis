@@ -17,7 +17,7 @@ using VmMap = Chrysalis.Plutus.Types.PlutusDataMap;
 using VmList = Chrysalis.Plutus.Types.PlutusDataList;
 using VmInt = Chrysalis.Plutus.Types.PlutusDataInteger;
 using VmBytes = Chrysalis.Plutus.Types.PlutusDataByteString;
-using CodecPlutusData = Chrysalis.Codec.Types.Cardano.Core.Common.PlutusData;
+using CodecPlutusData = Chrysalis.Codec.Types.Cardano.Core.Common.IPlutusData;
 
 namespace Chrysalis.Tx.Extensions;
 
@@ -29,75 +29,33 @@ public static class ScriptContextBuilder
 {
     // ────────────────────── VM PlutusData Helpers ──────────────────────
 
-    private static VmConstr Constr(long tag, params VmPlutusData[] fields)
-    {
-        return new(new BigInteger(tag), [.. fields]);
-    }
+    private static VmConstr Constr(long tag, params VmPlutusData[] fields) => new(new BigInteger(tag), [.. fields]);
 
-    private static VmConstr Constr(long tag, ImmutableArray<VmPlutusData> fields)
-    {
-        return new(new BigInteger(tag), fields);
-    }
+    private static VmConstr Constr(long tag, ImmutableArray<VmPlutusData> fields) => new(new BigInteger(tag), fields);
 
-    private static VmConstr EmptyConstr(long tag)
-    {
-        return new(new BigInteger(tag), []);
-    }
+    private static VmConstr EmptyConstr(long tag) => new(new BigInteger(tag), []);
 
-    private static VmList List(IEnumerable<VmPlutusData> items)
-    {
-        return new([.. items]);
-    }
+    private static VmList List(IEnumerable<VmPlutusData> items) => new([.. items]);
 
-    private static VmList EmptyList()
-    {
-        return new([]);
-    }
+    private static VmList EmptyList() => new([]);
 
-    private static VmMap Map(IEnumerable<(VmPlutusData Key, VmPlutusData Value)> entries)
-    {
-        return new([.. entries]);
-    }
+    private static VmMap Map(IEnumerable<(VmPlutusData Key, VmPlutusData Value)> entries) => new([.. entries]);
 
-    private static VmMap EmptyMap()
-    {
-        return new([]);
-    }
+    private static VmMap EmptyMap() => new([]);
 
-    private static VmInt Int(long value)
-    {
-        return new(new BigInteger(value));
-    }
+    private static VmInt Int(long value) => new(new BigInteger(value));
 
-    private static VmInt Int(ulong value)
-    {
-        return new(new BigInteger(value));
-    }
+    private static VmInt Int(ulong value) => new(new BigInteger(value));
 
-    private static VmBytes Bytes(ReadOnlyMemory<byte> value)
-    {
-        return new(value);
-    }
+    private static VmBytes Bytes(ReadOnlyMemory<byte> value) => new(value);
 
-    private static VmBytes EmptyBytes()
-    {
-        return new(ReadOnlyMemory<byte>.Empty);
-    }
+    private static VmBytes EmptyBytes() => new(ReadOnlyMemory<byte>.Empty);
 
-    private static VmConstr OptionSome(VmPlutusData value)
-    {
-        return Constr(0, value);
-    }
+    private static VmConstr OptionSome(VmPlutusData value) => Constr(0, value);
 
-    private static VmConstr OptionNone()
-    {
-        return EmptyConstr(1);
-    }
+    private static VmConstr OptionNone() => EmptyConstr(1);
 
-    private static VmConstr BoolData(bool value)
-    {
-        return EmptyConstr(value ? 1 : 0);
-    }
+    private static VmConstr BoolData(bool value) => EmptyConstr(value ? 1 : 0);
 
     // ────────────────────── Address Parsing ──────────────────────
 
@@ -213,14 +171,14 @@ public static class ScriptContextBuilder
     /// Converts Codec Value to VM PlutusData (Map format for Plutus).
     /// Value = Map&lt;PolicyId, Map&lt;AssetName, Quantity&gt;&gt;
     /// </summary>
-    private static VmMap ValueToPlutusData(Value value)
+    private static VmMap ValueToPlutusData(IValue value)
     {
         List<(VmPlutusData Key, VmPlutusData Value)> entries = [];
 
         ulong lovelace = value switch
         {
-            Lovelace l => l.Value,
-            LovelaceWithMultiAsset lma => lma.LovelaceValue.Value,
+            Lovelace l => l.Amount,
+            LovelaceWithMultiAsset lma => lma.Amount,
             _ => 0
         };
 
@@ -234,7 +192,7 @@ public static class ScriptContextBuilder
         }
 
         // Multi-asset entries
-        if (value is LovelaceWithMultiAsset multiAsset && multiAsset.MultiAsset?.Value is not null)
+        if (value is LovelaceWithMultiAsset multiAsset && multiAsset.MultiAsset.Value is not null)
         {
             foreach ((ReadOnlyMemory<byte> policyId, TokenBundleOutput bundle) in
                 multiAsset.MultiAsset.Value.OrderBy(kv => kv.Key, ByteMemoryComparer.Instance))
@@ -257,7 +215,7 @@ public static class ScriptContextBuilder
     /// </summary>
     private static VmMap MintToPlutusData(MultiAssetMint? mint)
     {
-        if (mint?.Value is null || mint.Value.Count == 0)
+        if (mint?.Value is null || mint.Value.Value.Count == 0)
         {
             return EmptyMap();
         }
@@ -265,7 +223,7 @@ public static class ScriptContextBuilder
         List<(VmPlutusData Key, VmPlutusData Value)> entries = [];
 
         foreach ((ReadOnlyMemory<byte> policyId, TokenBundleMint bundle) in
-            mint.Value.OrderBy(kv => kv.Key, ByteMemoryComparer.Instance))
+            mint.Value.Value.OrderBy(kv => kv.Key, ByteMemoryComparer.Instance))
         {
             List<(VmPlutusData Key, VmPlutusData Value)> assetEntries = [];
             foreach ((ReadOnlyMemory<byte> assetName, long amount) in
@@ -282,49 +240,44 @@ public static class ScriptContextBuilder
     // ────────────────────── Output Conversion ──────────────────────
 
     /// <summary>
-    /// Converts a Codec TransactionOutput to VM PlutusData (V3 format).
+    /// Converts a Codec ITransactionOutput to VM PlutusData (V3 format).
     /// TxOut = Constr 0 [address, value, datum_option, script_ref_option]
     /// </summary>
-    private static VmConstr OutputToPlutusData(TransactionOutput output)
+    private static VmConstr OutputToPlutusData(ITransactionOutput output) => output switch
     {
-        return output switch
-        {
-            PostAlonzoTransactionOutput postAlonzo => Constr(0,
-                AddressToPlutusData(postAlonzo.Address.Value),
-                ValueToPlutusData(postAlonzo.Amount),
-                DatumOptionToPlutusData(postAlonzo.Datum),
-                ScriptRefToPlutusData(postAlonzo.ScriptRef)
-            ),
-            AlonzoTransactionOutput alonzo => Constr(0,
-                AddressToPlutusData(alonzo.Address.Value),
-                ValueToPlutusData(alonzo.Amount),
-                alonzo.DatumHash is not null
-                    ? Constr(1, Bytes(alonzo.DatumHash.Value))  // OutputDatumHash
-                    : EmptyConstr(0),  // NoOutputDatum
-                OptionNone()  // No script ref in Alonzo
-            ),
-            _ => throw new InvalidOperationException($"Unsupported output type: {output.GetType().Name}")
-        };
-    }
+        PostAlonzoTransactionOutput postAlonzo => Constr(0,
+            AddressToPlutusData(postAlonzo.Address.Value),
+            ValueToPlutusData(postAlonzo.Amount),
+            DatumOptionToPlutusData(postAlonzo.Datum),
+            ScriptRefToPlutusData(postAlonzo.ScriptRef)
+        ),
+        AlonzoTransactionOutput alonzo => Constr(0,
+            AddressToPlutusData(alonzo.Address.Value),
+            ValueToPlutusData(alonzo.Amount),
+            alonzo.DatumHash is not null
+                ? Constr(1, Bytes(alonzo.DatumHash.Value))  // OutputDatumHash
+                : EmptyConstr(0),  // NoOutputDatum
+            OptionNone()  // No script ref in Alonzo
+        ),
+        _ => throw new InvalidOperationException($"Unsupported output type: {output.GetType().Name}")
+    };
 
     /// <summary>
     /// DatumOption: NoOutputDatum = Constr 0 [] | OutputDatumHash = Constr 1 [hash] | OutputDatum = Constr 2 [data]
     /// </summary>
-    private static VmConstr DatumOptionToPlutusData(DatumOption? datum)
+    private static VmConstr DatumOptionToPlutusData(IDatumOption? datum) => datum switch
     {
-        return datum switch
-        {
-            null => EmptyConstr(0),
-            DatumHashOption dh => Constr(1, Bytes(dh.DatumHash)),
-            InlineDatumOption inline => Constr(2, CodecPlutusDataToVm(
-                inline.Data.Deserialize<CodecPlutusData>()
-            )),
-            _ => EmptyConstr(0)
-        };
-    }
+        null => EmptyConstr(0),
+        DatumHashOption dh => Constr(1, Bytes(dh.DatumHash)),
+        InlineDatumOption inline => Constr(2, CodecPlutusDataToVm(
+            inline.Data.Deserialize<CodecPlutusData>()
+        )),
+        _ => EmptyConstr(0)
+    };
 
     /// <summary>
-    /// ScriptRef: Option&lt;ScriptHash&gt; — we convert to Just(hash) or Nothing.
+    /// ScriptRef: Option&lt;ScriptHash&gt; — parse [language, script_bytes], compute proper script hash.
+    /// Port of Aiken ScriptRef::to_plutus_data (compute_hash for each script variant).
     /// </summary>
     private static VmConstr ScriptRefToPlutusData(CborEncodedValue? scriptRef)
     {
@@ -333,9 +286,41 @@ public static class ScriptContextBuilder
             return OptionNone();
         }
 
-        byte[] scriptRefBytes = CborSerializer.Serialize(scriptRef);
-        byte[] hash = HashUtil.Blake2b224(scriptRefBytes);
-        return OptionSome(Bytes(hash));
+        byte[] rawInner = scriptRef.GetValue();
+        if (rawInner.Length < 2 || rawInner[0] != 0x82) // expect definite array of 2
+        {
+            return OptionNone();
+        }
+
+        int language = rawInner[1]; // 0=native, 1=V1, 2=V2, 3=V3
+
+        if (language is >= 1 and <= 3)
+        {
+            // Plutus script: [language, script_bytestring]
+            SAIB.Cbor.Serialization.CborReader reader = new(rawInner.AsSpan(2));
+            byte[] scriptBytes = reader.ReadByteStringToArray();
+            return OptionSome(Bytes(ComputeScriptHash(language, scriptBytes)));
+        }
+
+        if (language == 0)
+        {
+            // Native script: [0, native_script_cbor]
+            ReadOnlySpan<byte> nativeScriptCbor = rawInner.AsSpan(2);
+            return OptionSome(Bytes(ComputeScriptHash(0, nativeScriptCbor)));
+        }
+
+        return OptionNone();
+    }
+
+    /// <summary>
+    /// Computes a Cardano script hash: blake2b-224(language_byte || script_bytes).
+    /// </summary>
+    private static byte[] ComputeScriptHash(int language, ReadOnlySpan<byte> scriptBytes)
+    {
+        byte[] prefixed = new byte[1 + scriptBytes.Length];
+        prefixed[0] = (byte)language;
+        scriptBytes.CopyTo(prefixed.AsSpan(1));
+        return HashUtil.Blake2b224(prefixed);
     }
 
     // ────────────────────── Input Conversion ──────────────────────
@@ -344,26 +329,18 @@ public static class ScriptContextBuilder
     /// TransactionInput to VM PlutusData.
     /// TxOutRef = Constr 0 [tx_id, index]
     /// </summary>
-    private static VmConstr TxOutRefToPlutusData(TransactionInput input)
-    {
-        return Constr(0, Bytes(input.TransactionId), Int(input.Index));
-    }
+    private static VmConstr TxOutRefToPlutusData(TransactionInput input) => Constr(0, Bytes(input.TransactionId), Int(input.Index));
 
     /// <summary>
     /// TxInInfo = Constr 0 [out_ref, resolved_output]
     /// </summary>
-    private static VmConstr TxInInfoToPlutusData(TransactionInput input, TransactionOutput output)
-    {
-        return Constr(0, TxOutRefToPlutusData(input), OutputToPlutusData(output));
-    }
+    private static VmConstr TxInInfoToPlutusData(TransactionInput input, ITransactionOutput output) => Constr(0, TxOutRefToPlutusData(input), OutputToPlutusData(output));
 
     // ────────────────────── Sorted Inputs ──────────────────────
 
-    private static List<(TransactionInput Input, TransactionOutput Output)> SortAndResolveInputs(
+    private static List<(TransactionInput Input, ITransactionOutput Output)> SortAndResolveInputs(
         IEnumerable<TransactionInput> inputs,
-        IReadOnlyList<ResolvedInput> utxos)
-    {
-        return [.. inputs
+        IReadOnlyList<ResolvedInput> utxos) => [.. inputs
             .OrderBy(i => i.TransactionId, ByteMemoryComparer.Instance)
             .ThenBy(i => i.Index)
             .Select(input =>
@@ -377,47 +354,53 @@ public static class ScriptContextBuilder
                     : throw new InvalidOperationException(
                         $"Input not found in UTxO set: {Convert.ToHexString(input.TransactionId.Span)}#{input.Index}");
             })];
-    }
 
     // ────────────────────── Credential Conversion ──────────────────────
 
-    private static VmConstr CredentialToPlutusData(Credential credential)
-    {
+    private static VmConstr CredentialToPlutusData(Credential credential) =>
         // 0 = AddrKeyhash, 1 = ScriptHash
-        return credential.CredentialType == 0
+        credential.Type == 0
             ? Constr(0, Bytes(credential.Hash))
             : Constr(1, Bytes(credential.Hash));
-    }
 
     // ────────────────────── Codec PlutusData → VM PlutusData ──────────────────────
 
     /// <summary>
     /// Converts Codec PlutusData to VM PlutusData.
     /// </summary>
-    public static VmPlutusData CodecPlutusDataToVm(CodecPlutusData codecData)
+    public static VmPlutusData CodecPlutusDataToVm(CodecPlutusData codecData) => codecData switch
     {
-        return codecData switch
-        {
-            PlutusConstr constr => Constr(
-                constr.ConstructorIndex ?? 0,
-                constr.PlutusData.GetValue().Select(CodecPlutusDataToVm).ToImmutableArray()),
+        PlutusConstr constr => Constr(
+            CborTagToConstrIndex(constr.ConstrIndex),
+            constr.Fields.GetValue().Select(CodecPlutusDataToVm).ToImmutableArray()),
 
-            PlutusMap map => Map(
-                map.PlutusData.Select(kv => (CodecPlutusDataToVm(kv.Key), CodecPlutusDataToVm(kv.Value)))),
+        PlutusMap map => Map(
+            map.Value.Select(kv => (CodecPlutusDataToVm(kv.Key), CodecPlutusDataToVm(kv.Value)))),
 
-            PlutusList list => List(
-                list.PlutusData.GetValue().Select(CodecPlutusDataToVm)),
+        PlutusList list => List(
+            list.Value.GetValue().Select(CodecPlutusDataToVm)),
 
-            PlutusInt64 i64 => Int(i64.Value),
-            PlutusUint64 u64 => Int(u64.Value),
-            PlutusBigUint bigU => new VmInt(new BigInteger(bigU.Value.Span, isUnsigned: true, isBigEndian: true)),
-            PlutusBigNint bigN => new VmInt(-1 - new BigInteger(bigN.Value.Span, isUnsigned: true, isBigEndian: true)),
+        PlutusInt i32 => Int(i32.Value),
+        PlutusInt64 i64 => Int(i64.Value),
+        PlutusUint64 u64 => Int(u64.Value),
+        PlutusBigUint bigU => new VmInt(new BigInteger(bigU.Value.Span, isUnsigned: true, isBigEndian: true)),
+        PlutusBigNint bigN => new VmInt(-1 - new BigInteger(bigN.Value.Span, isUnsigned: true, isBigEndian: true)),
 
-            PlutusBoundedBytes bb => Bytes(bb.Value),
+        PlutusBoundedBytes bb => Bytes(bb.Value),
 
-            _ => throw new InvalidOperationException($"Unsupported Codec PlutusData type: {codecData.GetType().Name}")
-        };
-    }
+        _ => throw new InvalidOperationException($"Unsupported Codec PlutusData type: {codecData.GetType().Name}")
+    };
+
+    /// <summary>
+    /// Converts a raw CBOR alternative tag to a logical Plutus constructor index.
+    /// CBOR tags 121-127 → indices 0-6, tags 1280-1400 → indices 7-127.
+    /// </summary>
+    private static long CborTagToConstrIndex(int cborTag) => cborTag switch
+    {
+        >= 121 and <= 127 => cborTag - 121,
+        >= 1280 and <= 1400 => cborTag - 1280 + 7,
+        _ => cborTag // Already a logical index or unknown
+    };
 
     // ────────────────────── Time Range ──────────────────────
 
@@ -448,115 +431,108 @@ public static class ScriptContextBuilder
         return (ulong)config.ZeroTime + msAfterBegin;
     }
 
-    // ────────────────────── Certificate Conversion (V3) ──────────────────────
+    // ────────────────────── ICertificate Conversion (V3) ──────────────────────
 
-    private static VmConstr CertificateToPlutusData(Certificate cert)
+    private static VmConstr CertificateToPlutusData(ICertificate cert) => cert switch
     {
-        return cert switch
-        {
-            // Reg = Constr 0 [credential, deposit_option]
-            StakeRegistration reg => Constr(0,
-                CredentialToPlutusData(reg.StakeCredential),
-                OptionNone()),
-            RegCert reg => Constr(0,
-                CredentialToPlutusData(reg.StakeCredential),
-                OptionNone()),
+        // Reg = Constr 0 [credential, deposit_option]
+        StakeRegistration reg => Constr(0,
+            CredentialToPlutusData(reg.StakeCredential),
+            OptionNone()),
+        RegCert reg => Constr(0,
+            CredentialToPlutusData(reg.StakeCredential),
+            OptionNone()),
 
-            // UnReg = Constr 1 [credential, deposit_option]
-            StakeDeregistration dereg => Constr(1,
-                CredentialToPlutusData(dereg.StakeCredential),
-                OptionNone()),
-            UnRegCert unreg => Constr(1,
-                CredentialToPlutusData(unreg.StakeCredential),
-                OptionNone()),
+        // UnReg = Constr 1 [credential, deposit_option]
+        StakeDeregistration dereg => Constr(1,
+            CredentialToPlutusData(dereg.StakeCredential),
+            OptionNone()),
+        UnRegCert unreg => Constr(1,
+            CredentialToPlutusData(unreg.StakeCredential),
+            OptionNone()),
 
-            // Deleg = Constr 2 [credential, delegatee]
-            StakeDelegation deleg => Constr(2,
-                CredentialToPlutusData(deleg.StakeCredential),
-                Constr(0, Bytes(deleg.PoolKeyHash))),
-            VoteDelegCert voteDeleg => Constr(2,
-                CredentialToPlutusData(voteDeleg.StakeCredential),
-                Constr(1, DRepToPlutusData(voteDeleg.DRep))),
-            StakeVoteDelegCert svDeleg => Constr(2,
-                CredentialToPlutusData(svDeleg.StakeCredential),
-                Constr(2, Bytes(svDeleg.PoolKeyHash), DRepToPlutusData(svDeleg.DRep))),
+        // Deleg = Constr 2 [credential, delegatee]
+        StakeDelegation deleg => Constr(2,
+            CredentialToPlutusData(deleg.StakeCredential),
+            Constr(0, Bytes(deleg.PoolKeyHash))),
+        VoteDelegCert voteDeleg => Constr(2,
+            CredentialToPlutusData(voteDeleg.StakeCredential),
+            Constr(1, DRepToPlutusData(voteDeleg.DRep))),
+        StakeVoteDelegCert svDeleg => Constr(2,
+            CredentialToPlutusData(svDeleg.StakeCredential),
+            Constr(2, Bytes(svDeleg.PoolKeyHash), DRepToPlutusData(svDeleg.DRep))),
 
-            // RegDeleg = Constr 3 [credential, delegatee, deposit]
-            StakeRegDelegCert srd => Constr(3,
-                CredentialToPlutusData(srd.StakeCredential),
-                Constr(0, Bytes(srd.PoolKeyHash)),
-                Int(srd.Coin)),
-            VoteRegDelegCert vrd => Constr(3,
-                CredentialToPlutusData(vrd.StakeCredential),
-                Constr(1, DRepToPlutusData(vrd.DRep)),
-                Int(vrd.Coin)),
-            StakeVoteRegDelegCert svrd => Constr(3,
-                CredentialToPlutusData(svrd.StakeCredential),
-                Constr(2, Bytes(svrd.PoolKeyHash), DRepToPlutusData(svrd.Drep)),
-                Int(svrd.Coin)),
+        // RegDeleg = Constr 3 [credential, delegatee, deposit]
+        StakeRegDelegCert srd => Constr(3,
+            CredentialToPlutusData(srd.StakeCredential),
+            Constr(0, Bytes(srd.PoolKeyHash)),
+            Int(srd.Coin)),
+        VoteRegDelegCert vrd => Constr(3,
+            CredentialToPlutusData(vrd.StakeCredential),
+            Constr(1, DRepToPlutusData(vrd.DRep)),
+            Int(vrd.Coin)),
+        StakeVoteRegDelegCert svrd => Constr(3,
+            CredentialToPlutusData(svrd.StakeCredential),
+            Constr(2, Bytes(svrd.PoolKeyHash), DRepToPlutusData(svrd.DRep)),
+            Int(svrd.Coin)),
 
-            // RegDRep = Constr 4 [credential, deposit]
-            RegDrepCert regDrep => Constr(4,
-                CredentialToPlutusData(regDrep.DRepCredential),
-                Int(regDrep.Coin)),
+        // RegDRep = Constr 4 [credential, deposit]
+        RegDrepCert regDrep => Constr(4,
+            CredentialToPlutusData(regDrep.DRepCredential),
+            Int(regDrep.Coin)),
 
-            // UpdateDRep = Constr 5 [credential]
-            UpdateDrepCert updateDrep => Constr(5,
-                CredentialToPlutusData(updateDrep.DrepCredential)),
+        // UpdateDRep = Constr 5 [credential]
+        UpdateDrepCert updateDrep => Constr(5,
+            CredentialToPlutusData(updateDrep.DRepCredential)),
 
-            // UnRegDRep = Constr 6 [credential, deposit]
-            UnRegDrepCert unregDrep => Constr(6,
-                CredentialToPlutusData(unregDrep.DrepCredential),
-                Int(unregDrep.Coin)),
+        // UnRegDRep = Constr 6 [credential, deposit]
+        UnRegDrepCert unregDrep => Constr(6,
+            CredentialToPlutusData(unregDrep.DRepCredential),
+            Int(unregDrep.Coin)),
 
-            // PoolRegistration = Constr 7 [operator, vrf_keyhash]
-            PoolRegistration poolReg => Constr(7,
-                Bytes(poolReg.Operator),
-                Bytes(poolReg.VrfKeyHash)),
+        // PoolRegistration = Constr 7 [operator, vrf_keyhash]
+        PoolRegistration poolReg => Constr(7,
+            Bytes(poolReg.Operator),
+            Bytes(poolReg.VrfKeyHash)),
 
-            // PoolRetirement = Constr 8 [pool_keyhash, epoch]
-            PoolRetirement poolRet => Constr(8,
-                Bytes(poolRet.PoolKeyHash),
-                Int(poolRet.EpochNo)),
+        // PoolRetirement = Constr 8 [pool_keyhash, epoch]
+        PoolRetirement poolRet => Constr(8,
+            Bytes(poolRet.PoolKeyHash),
+            Int(poolRet.Epoch)),
 
-            // AuthCommitteeHot = Constr 9 [cold_credential, hot_credential]
-            AuthCommitteeHotCert authHot => Constr(9,
-                CredentialToPlutusData(authHot.CommitteeColdCredential),
-                CredentialToPlutusData(authHot.CommitteeHotCredential)),
+        // AuthCommitteeHot = Constr 9 [cold_credential, hot_credential]
+        AuthCommitteeHotCert authHot => Constr(9,
+            CredentialToPlutusData(authHot.ColdCredential),
+            CredentialToPlutusData(authHot.HotCredential)),
 
-            // ResignCommitteeCold = Constr 10 [cold_credential]
-            ResignCommitteeColdCert resign => Constr(10,
-                Bytes(resign.CommitteeColdCredential)),
+        // ResignCommitteeCold = Constr 10 [cold_credential]
+        ResignCommitteeColdCert resign => Constr(10,
+            CredentialToPlutusData(resign.ColdCredential)),
 
-            _ => throw new InvalidOperationException($"Unsupported certificate type: {cert.GetType().Name}")
-        };
-    }
+        _ => throw new InvalidOperationException($"Unsupported certificate type: {cert.GetType().Name}")
+    };
 
-    private static VmConstr DRepToPlutusData(DRep drep)
+    private static VmConstr DRepToPlutusData(IDRep drep) => drep switch
     {
-        return drep switch
-        {
-            DRepAddrKeyHash key => Constr(0, Constr(0, Bytes(key.AddrKeyHash))),
-            DRepScriptHash script => Constr(0, Constr(1, Bytes(script.ScriptHash))),
-            Abstain => EmptyConstr(1),
-            DRepNoConfidence => EmptyConstr(2),
-            _ => throw new InvalidOperationException($"Unknown DRep type: {drep.GetType().Name}")
-        };
-    }
+        DRepAddrKeyHash key => Constr(0, Constr(0, Bytes(key.KeyHash))),
+        DRepScriptHash script => Constr(0, Constr(1, Bytes(script.ScriptHash))),
+        Abstain => EmptyConstr(1),
+        DRepNoConfidence => EmptyConstr(2),
+        _ => throw new InvalidOperationException($"Unknown IDRep type: {drep.GetType().Name}")
+    };
 
     // ────────────────────── Voter/Vote Conversion ──────────────────────
 
-    private static VmConstr VoterToPlutusData(Voter voter)
-    {
-        // Voter tag: 0=ConstitutionalCommittee, 1=DRep, 2=StakePool
+    private static VmConstr VoterToPlutusData(Voter voter) =>
+        // Voter tag: 0=ConstitutionalCommittee, 1=IDRep, 2=StakePool
         // But credential type is encoded in the hash lookup:
         // CC key → Constr 0 [Constr 0 [hash]]  (key credential)
         // CC script → Constr 0 [Constr 1 [hash]]  (script credential)
-        // DRep key → Constr 1 [Constr 0 [hash]]
-        // DRep script → Constr 1 [Constr 1 [hash]]
+        // IDRep key → Constr 1 [Constr 0 [hash]]
+        // IDRep script → Constr 1 [Constr 1 [hash]]
         // StakePool → Constr 2 [hash]
 
-        // The Codec Voter stores Tag (0-4 in Aiken) but Chrysalis uses (0=CC, 1=DRep, 2=StakePool)
+        // The Codec Voter stores Tag (0-4 in Aiken) but Chrysalis uses (0=CC, 1=IDRep, 2=StakePool)
         // with a separate credential type. Need to check the actual encoding.
         // Looking at the Voter record: Tag and Hash. The full Aiken voters are:
         // ConstitutionalCommitteeScript(hash), ConstitutionalCommitteeKey(hash),
@@ -565,28 +541,22 @@ public static class ScriptContextBuilder
 
         // Tag 0 = ConstitutionalCommitteeKey, 1 = ConstitutionalCommitteeScript (reversed from Aiken?)
         // Actually looking at the CDDL: voter = [0, addr_keyhash | 1, script_hash | 2, addr_keyhash | 3, script_hash | 4, addr_keyhash]
-        // So: 0=CC hot key, 1=CC hot script, 2=DRep key, 3=DRep script, 4=SPO key
-        return voter.Tag switch
+        // So: 0=CC hot key, 1=CC hot script, 2=IDRep key, 3=IDRep script, 4=SPO key
+        voter.Tag switch
         {
             0 => Constr(0, Constr(0, Bytes(voter.Hash))), // CC key
             1 => Constr(0, Constr(1, Bytes(voter.Hash))), // CC script
-            2 => Constr(1, Constr(0, Bytes(voter.Hash))), // DRep key
-            3 => Constr(1, Constr(1, Bytes(voter.Hash))), // DRep script
+            2 => Constr(1, Constr(0, Bytes(voter.Hash))), // IDRep key
+            3 => Constr(1, Constr(1, Bytes(voter.Hash))), // IDRep script
             4 => Constr(2, Bytes(voter.Hash)),             // SPO key
             _ => throw new InvalidOperationException($"Unknown voter tag: {voter.Tag}")
         };
-    }
 
-    private static VmConstr VoteToPlutusData(VotingProcedure procedure)
-    {
+    private static VmConstr VoteToPlutusData(VotingProcedure procedure) =>
         // Vote: 0=No, 1=Yes, 2=Abstain
-        return EmptyConstr(procedure.Vote);
-    }
+        EmptyConstr(procedure.Vote);
 
-    private static VmConstr GovActionIdToPlutusData(GovActionId actionId)
-    {
-        return Constr(0, Bytes(actionId.TransactionId), Int(actionId.GovActionIndex));
-    }
+    private static VmConstr GovActionIdToPlutusData(GovActionId actionId) => Constr(0, Bytes(actionId.TransactionId), Int(actionId.GovActionIndex));
 
     // ────────────────────── Withdrawals ──────────────────────
 
@@ -599,10 +569,11 @@ public static class ScriptContextBuilder
 
         List<(VmPlutusData Key, VmPlutusData Value)> entries = [];
 
+        // Sort by parsed address components — port of Aiken sort_reward_accounts:
+        // network first, then credential type (script < key), then hash
         foreach ((RewardAccount account, ulong coin) in
-            withdrawals.Value.OrderBy(kv => kv.Key.Value, ByteMemoryComparer.Instance))
+            withdrawals.Value.OrderBy(kv => kv.Key.Value, RewardAccountComparer.Instance))
         {
-            // Reward account is a stake address
             entries.Add((CredentialFromRewardAccount(account), Int(coin)));
         }
 
@@ -626,7 +597,7 @@ public static class ScriptContextBuilder
             : Constr(0, Bytes(hash));
     }
 
-    // ────────────────────── Script Purpose / Script Info ──────────────────────
+    // ────────────────────── IScript Purpose / IScript Info ──────────────────────
 
     /// <summary>
     /// Builds ScriptPurpose from a redeemer key, matching against sorted inputs/mints/etc.
@@ -634,9 +605,9 @@ public static class ScriptContextBuilder
     /// </summary>
     private static VmConstr? BuildScriptPurpose(
         int tag, ulong index,
-        List<(TransactionInput Input, TransactionOutput Output)> sortedInputs,
+        List<(TransactionInput Input, ITransactionOutput Output)> sortedInputs,
         List<(ReadOnlyMemory<byte> PolicyId, TokenBundleMint Bundle)>? sortedMint,
-        List<Certificate> certificates,
+        List<ICertificate> certificates,
         List<(RewardAccount Account, ulong Coin)> sortedWithdrawals,
         List<Voter> sortedVoters,
         List<ProposalProcedure> proposals)
@@ -684,9 +655,9 @@ public static class ScriptContextBuilder
     /// </summary>
     private static VmConstr? BuildScriptInfo(
         int tag, ulong index,
-        List<(TransactionInput Input, TransactionOutput Output)> sortedInputs,
+        List<(TransactionInput Input, ITransactionOutput Output)> sortedInputs,
         List<(ReadOnlyMemory<byte> PolicyId, TokenBundleMint Bundle)>? sortedMint,
-        List<Certificate> certificates,
+        List<ICertificate> certificates,
         List<(RewardAccount Account, ulong Coin)> sortedWithdrawals,
         List<Voter> sortedVoters,
         List<ProposalProcedure> proposals,
@@ -732,7 +703,7 @@ public static class ScriptContextBuilder
 
     private static VmConstr BuildSpendScriptInfo(
         TransactionInput input,
-        TransactionOutput output,
+        ITransactionOutput output,
         DataLookupTable lookupTable)
     {
         VmPlutusData? datum = null;
@@ -770,61 +741,55 @@ public static class ScriptContextBuilder
         return CodecPlutusDataToVm(codecDatum);
     }
 
-    private static VmConstr ProposalProcedureToPlutusData(ProposalProcedure procedure)
-    {
-        return Constr(0,
+    private static VmConstr ProposalProcedureToPlutusData(ProposalProcedure procedure) => Constr(0,
             Int(procedure.Deposit),
             AddressToPlutusData(procedure.RewardAccount.Value),
             GovActionToPlutusData(procedure.GovAction));
-    }
 
-    private static VmConstr GovActionToPlutusData(GovAction action)
+    private static VmConstr GovActionToPlutusData(IGovAction action) => action switch
     {
-        return action switch
-        {
-            ParameterChangeAction pca => Constr(0,
-                pca.GovActionId is not null ? OptionSome(GovActionIdToPlutusData(pca.GovActionId)) : OptionNone(),
-                EmptyMap(), // TODO: ProtocolParamUpdate to PlutusData
-                pca.PolicyHash is not null ? OptionSome(Bytes(pca.PolicyHash.Value)) : OptionNone()),
+        ParameterChangeAction pca => Constr(0,
+            pca.ActionId is not null ? OptionSome(GovActionIdToPlutusData(pca.ActionId.Value)) : OptionNone(),
+            EmptyMap(), // TODO: ProtocolParamUpdate to PlutusData
+            pca.PolicyHash is not null ? OptionSome(Bytes(pca.PolicyHash.Value)) : OptionNone()),
 
-            HardForkInitiationAction hf => Constr(1,
-                hf.GovActionId is not null ? OptionSome(GovActionIdToPlutusData(hf.GovActionId)) : OptionNone(),
-                List([Int(hf.ProtocolVersion.MajorProtocolVersion), Int(hf.ProtocolVersion.SequenceNumber)])),
+        HardForkInitiationAction hf => Constr(1,
+            hf.ActionId is not null ? OptionSome(GovActionIdToPlutusData(hf.ActionId.Value)) : OptionNone(),
+            List([Int(hf.ProtocolVersion.Major), Int(hf.ProtocolVersion.SequenceNumber)])),
 
-            TreasuryWithdrawalsAction tw => Constr(2,
-                WithdrawalsMapToPlutusData(tw.Withdrawals),
-                tw.PolicyHash is not null ? OptionSome(Bytes(tw.PolicyHash.Value)) : OptionNone()),
+        TreasuryWithdrawalsAction tw => Constr(2,
+            WithdrawalsMapToPlutusData(tw.Withdrawals),
+            tw.PolicyHash is not null ? OptionSome(Bytes(tw.PolicyHash.Value)) : OptionNone()),
 
-            NoConfidence nc => Constr(3,
-                nc.GovActionId is not null ? OptionSome(GovActionIdToPlutusData(nc.GovActionId)) : OptionNone()),
+        NoConfidence nc => Constr(3,
+            nc.ActionId is not null ? OptionSome(GovActionIdToPlutusData(nc.ActionId.Value)) : OptionNone()),
 
-            UpdateCommittee uc => Constr(4,
-                uc.GovActionId is not null ? OptionSome(GovActionIdToPlutusData(uc.GovActionId)) : OptionNone(),
-                EmptyList(), // removed members
-                EmptyMap(),  // added members
-                EmptyConstr(0)), // quorum
+        UpdateCommittee uc => Constr(4,
+            uc.ActionId is not null ? OptionSome(GovActionIdToPlutusData(uc.ActionId.Value)) : OptionNone(),
+            EmptyList(), // removed members
+            EmptyMap(),  // added members
+            EmptyConstr(0)), // quorum
 
-            NewConstitution nca => Constr(5,
-                nca.GovActionId is not null ? OptionSome(GovActionIdToPlutusData(nca.GovActionId)) : OptionNone(),
-                Constr(0, nca.Constitution.ScriptHash is not null
-                    ? OptionSome(Bytes(nca.Constitution.ScriptHash.Value))
-                    : OptionNone())),
+        NewConstitution nca => Constr(5,
+            nca.ActionId is not null ? OptionSome(GovActionIdToPlutusData(nca.ActionId.Value)) : OptionNone(),
+            Constr(0, nca.Constitution.GuardrailsScriptHash is not null
+                ? OptionSome(Bytes(nca.Constitution.GuardrailsScriptHash.Value))
+                : OptionNone())),
 
-            InfoAction => EmptyConstr(6),
+        InfoAction => EmptyConstr(6),
 
-            _ => throw new InvalidOperationException($"Unsupported GovAction type: {action.GetType().Name}")
-        };
-    }
+        _ => throw new InvalidOperationException($"Unsupported IGovAction type: {action.GetType().Name}")
+    };
 
-    private static VmMap WithdrawalsMapToPlutusData(Withdrawals withdrawals)
+    private static VmMap WithdrawalsMapToPlutusData(Dictionary<RewardAccount, ulong> withdrawals)
     {
-        if (withdrawals?.Value is null || withdrawals.Value.Count == 0)
+        if (withdrawals is null || withdrawals.Count == 0)
         {
             return EmptyMap();
         }
 
         List<(VmPlutusData Key, VmPlutusData Value)> entries = [];
-        foreach ((RewardAccount account, ulong coin) in withdrawals.Value)
+        foreach ((RewardAccount account, ulong coin) in withdrawals)
         {
             entries.Add((AddressToPlutusData(account.Value), Int(coin)));
         }
@@ -835,9 +800,9 @@ public static class ScriptContextBuilder
 
     private static VmMap RedeemersToPlutusData(
         List<RedeemerInfo> redeemers,
-        List<(TransactionInput Input, TransactionOutput Output)> sortedInputs,
+        List<(TransactionInput Input, ITransactionOutput Output)> sortedInputs,
         List<(ReadOnlyMemory<byte> PolicyId, TokenBundleMint Bundle)>? sortedMint,
-        List<Certificate> certificates,
+        List<ICertificate> certificates,
         List<(RewardAccount Account, ulong Coin)> sortedWithdrawals,
         List<Voter> sortedVoters,
         List<ProposalProcedure> proposals)
@@ -904,10 +869,19 @@ public static class ScriptContextBuilder
 
         List<(VmPlutusData Key, VmPlutusData Value)> entries = [];
 
-        foreach ((Voter voter, GovActionIdVotingProcedure actions) in votingProcedures.Value)
+        // Sort voters by (sort_index, hash) — port of Aiken sort_voters
+        foreach ((Voter voter, GovActionIdVotingProcedure actions) in
+            votingProcedures.Value
+                .OrderBy(kv => VoterSortIndex(kv.Key))
+                .ThenBy(kv => kv.Key.Hash, ByteMemoryComparer.Instance))
         {
             List<(VmPlutusData Key, VmPlutusData Value)> actionEntries = [];
-            foreach ((GovActionId actionId, VotingProcedure procedure) in actions.Value)
+
+            // Sort actions by (tx_id, action_index) — port of Aiken sort_gov_action_id
+            foreach ((GovActionId actionId, VotingProcedure procedure) in
+                actions.Value
+                    .OrderBy(kv => kv.Key.TransactionId, ByteMemoryComparer.Instance)
+                    .ThenBy(kv => kv.Key.GovActionIndex))
             {
                 actionEntries.Add((GovActionIdToPlutusData(actionId), VoteToPlutusData(procedure)));
             }
@@ -916,6 +890,21 @@ public static class ScriptContextBuilder
 
         return Map(entries);
     }
+
+    /// <summary>
+    /// Voter sort index matching Aiken's sort_voters:
+    /// CC script=0, CC key=1, DRep script=2, DRep key=3, SPO key=4.
+    /// CDDL tags: 0=CC key, 1=CC script, 2=DRep key, 3=DRep script, 4=SPO key.
+    /// </summary>
+    private static int VoterSortIndex(Voter voter) => voter.Tag switch
+    {
+        1 => 0, // CC script
+        0 => 1, // CC key
+        3 => 2, // DRep script
+        2 => 3, // DRep key
+        4 => 4, // SPO key
+        _ => 5
+    };
 
     // ────────────────────── TxInfo V3 ──────────────────────
 
@@ -929,17 +918,15 @@ public static class ScriptContextBuilder
         IReadOnlyList<ResolvedInput> utxos,
         SlotNetworkConfig slotConfig)
     {
-        ArgumentNullException.ThrowIfNull(body);
-        ArgumentNullException.ThrowIfNull(witnessSet);
         ArgumentNullException.ThrowIfNull(utxos);
         ArgumentNullException.ThrowIfNull(slotConfig);
 
         // Sort and resolve inputs
-        List<(TransactionInput Input, TransactionOutput Output)> sortedInputs =
+        List<(TransactionInput Input, ITransactionOutput Output)> sortedInputs =
             SortAndResolveInputs(body.Inputs.GetValue(), utxos);
 
         // Reference inputs
-        List<(TransactionInput Input, TransactionOutput Output)> referenceInputs =
+        List<(TransactionInput Input, ITransactionOutput Output)> referenceInputs =
             body.ReferenceInputs is not null
                 ? SortAndResolveInputs(body.ReferenceInputs.GetValue(), utxos)
                 : [];
@@ -952,26 +939,29 @@ public static class ScriptContextBuilder
                 .ToList();
 
         // Certificates
-        List<Certificate> certificates = body.Certificates?.GetValue().ToList() ?? [];
+        List<ICertificate> certificates = body.Certificates?.GetValue().ToList() ?? [];
 
-        // Withdrawals
+        // Withdrawals — sorted by parsed address (network, credential type, hash) like Aiken
         List<(RewardAccount Account, ulong Coin)> sortedWithdrawals =
             body.Withdrawals?.Value?
-                .OrderBy(kv => kv.Key.Value, ByteMemoryComparer.Instance)
+                .OrderBy(kv => kv.Key.Value, RewardAccountComparer.Instance)
                 .Select(kv => (kv.Key, kv.Value))
                 .ToList() ?? [];
 
         // Proposals
         List<ProposalProcedure> proposals = body.ProposalProcedures?.GetValue().ToList() ?? [];
 
-        // Voters
-        List<Voter> sortedVoters = body.VotingProcedures?.Value?.Keys.ToList() ?? [];
+        // Voters — sorted by (sort_index, hash) like Aiken sort_voters
+        List<Voter> sortedVoters = body.VotingProcedures?.Value?.Keys
+            .OrderBy(VoterSortIndex)
+            .ThenBy(v => v.Hash, ByteMemoryComparer.Instance)
+            .ToList() ?? [];
 
         // Extract redeemers
         List<RedeemerInfo> redeemers = ExtractRedeemers(witnessSet.Redeemers);
 
         // Build TxId (hash of serialized body)
-        byte[] txBodyBytes = CborSerializer.Serialize<TransactionBody>(body);
+        byte[] txBodyBytes = CborSerializer.Serialize(body);
         byte[] txId = HashUtil.Blake2b256(txBodyBytes);
 
         // TxInfoV3 = Constr 0 [inputs, ref_inputs, outputs, fee, mint, certs, withdrawals,
@@ -1016,7 +1006,7 @@ public static class ScriptContextBuilder
         );
     }
 
-    // ────────────────────── Script Context V3 ──────────────────────
+    // ────────────────────── IScript Context V3 ──────────────────────
 
     /// <summary>
     /// Builds a V3 ScriptContext for a specific redeemer.
@@ -1025,9 +1015,9 @@ public static class ScriptContextBuilder
     public static VmPlutusData BuildScriptContextV3(
         VmPlutusData txInfo,
         RedeemerInfo redeemer,
-        List<(TransactionInput Input, TransactionOutput Output)> sortedInputs,
+        List<(TransactionInput Input, ITransactionOutput Output)> sortedInputs,
         List<(ReadOnlyMemory<byte> PolicyId, TokenBundleMint Bundle)>? sortedMint,
-        List<Certificate> certificates,
+        List<ICertificate> certificates,
         List<(RewardAccount Account, ulong Coin)> sortedWithdrawals,
         List<Voter> sortedVoters,
         List<ProposalProcedure> proposals,
@@ -1053,7 +1043,7 @@ public static class ScriptContextBuilder
         return Constr(0, txInfo, redeemerData, scriptInfo);
     }
 
-    // ────────────────────── Find Script ──────────────────────
+    // ────────────────────── Find IScript ──────────────────────
 
     /// <summary>
     /// Finds the script bytes and optional datum for a redeemer.
@@ -1066,11 +1056,10 @@ public static class ScriptContextBuilder
         DataLookupTable lookupTable)
     {
         ArgumentNullException.ThrowIfNull(redeemer);
-        ArgumentNullException.ThrowIfNull(body);
         ArgumentNullException.ThrowIfNull(utxos);
         ArgumentNullException.ThrowIfNull(lookupTable);
 
-        List<(TransactionInput Input, TransactionOutput Output)> sortedInputs =
+        List<(TransactionInput Input, ITransactionOutput Output)> sortedInputs =
             SortAndResolveInputs(body.Inputs.GetValue(), utxos);
 
         List<(ReadOnlyMemory<byte> PolicyId, TokenBundleMint Bundle)>? sortedMint =
@@ -1089,7 +1078,7 @@ public static class ScriptContextBuilder
                         throw new InvalidOperationException("Spend redeemer index out of range");
                     }
 
-                    (TransactionInput input, TransactionOutput output) = sortedInputs[idx];
+                    (TransactionInput input, ITransactionOutput output) = sortedInputs[idx];
                     ReadOnlyMemory<byte> addressBytes = output switch
                     {
                         PostAlonzoTransactionOutput p => p.Address.Value,
@@ -1098,7 +1087,7 @@ public static class ScriptContextBuilder
                     };
 
                     byte[]? scriptHash = GetPaymentScriptHash(addressBytes) ?? throw new InvalidOperationException("Spend input does not have a script payment credential");
-                    (byte[] scriptBytes, int version)? script = lookupTable.GetScript(scriptHash) ?? throw new InvalidOperationException($"Script not found: {Convert.ToHexString(scriptHash)}");
+                    (byte[] scriptBytes, int version)? script = lookupTable.GetScript(scriptHash) ?? throw new InvalidOperationException($"IScript not found: {Convert.ToHexString(scriptHash)}");
 
                     // Resolve datum
                     VmPlutusData? datum = null;
@@ -1137,7 +1126,7 @@ public static class ScriptContextBuilder
                 {
                     List<(RewardAccount Account, ulong Coin)> sortedWithdrawals =
                         body.Withdrawals?.Value?
-                            .OrderBy(kv => kv.Key.Value, ByteMemoryComparer.Instance)
+                            .OrderBy(kv => kv.Key.Value, RewardAccountComparer.Instance)
                             .Select(kv => (kv.Key, kv.Value))
                             .ToList() ?? [];
 
@@ -1166,16 +1155,16 @@ public static class ScriptContextBuilder
 
             case 2: // Cert
                 {
-                    List<Certificate> certificates = body.Certificates?.GetValue().ToList() ?? [];
+                    List<ICertificate> certificates = body.Certificates?.GetValue().ToList() ?? [];
                     int idx = (int)redeemer.Index;
                     if (idx >= certificates.Count)
                     {
                         throw new InvalidOperationException("Cert redeemer index out of range");
                     }
 
-                    Certificate cert = certificates[idx];
-                    byte[]? hash = GetCertificateScriptHash(cert) ?? throw new InvalidOperationException("Certificate does not have a script credential");
-                    (byte[] scriptBytes, int version)? script = lookupTable.GetScript(hash) ?? throw new InvalidOperationException($"Certificate script not found: {Convert.ToHexString(hash)}");
+                    ICertificate cert = certificates[idx];
+                    byte[]? hash = GetCertificateScriptHash(cert) ?? throw new InvalidOperationException("ICertificate does not have a script credential");
+                    (byte[] scriptBytes, int version)? script = lookupTable.GetScript(hash) ?? throw new InvalidOperationException($"ICertificate script not found: {Convert.ToHexString(hash)}");
                     return (script.Value.scriptBytes, script.Value.version, null);
                 }
 
@@ -1184,7 +1173,7 @@ public static class ScriptContextBuilder
         }
     }
 
-    private static byte[]? GetCertificateScriptHash(Certificate cert)
+    private static byte[]? GetCertificateScriptHash(ICertificate cert)
     {
         Credential? credential = cert switch
         {
@@ -1197,9 +1186,9 @@ public static class ScriptContextBuilder
             VoteRegDelegCert vr => vr.StakeCredential,
             StakeVoteRegDelegCert svr => svr.StakeCredential,
             RegDrepCert r => r.DRepCredential,
-            UnRegDrepCert u => u.DrepCredential,
-            UpdateDrepCert u => u.DrepCredential,
-            AuthCommitteeHotCert a => a.CommitteeColdCredential,
+            UnRegDrepCert u => u.DRepCredential,
+            UpdateDrepCert u => u.DRepCredential,
+            AuthCommitteeHotCert a => a.ColdCredential,
             _ => null
         };
 
@@ -1209,15 +1198,13 @@ public static class ScriptContextBuilder
         }
 
         // CredentialType 1 = ScriptHash
-        return credential.CredentialType == 1 ? credential.Hash.ToArray() : null;
+        return credential.Value.Type == 1 ? credential.Value.Hash.ToArray() : null;
     }
 
     // ────────────────────── Redeemer Extraction ──────────────────────
 
     /// <inheritdoc/>
-    public static List<RedeemerInfo> ExtractRedeemers(Redeemers? redeemers)
-    {
-        return redeemers is null
+    public static List<RedeemerInfo> ExtractRedeemers(IRedeemers? redeemers) => redeemers is null
             ? []
             : redeemers switch
             {
@@ -1233,7 +1220,6 @@ public static class ScriptContextBuilder
 
                 _ => []
             };
-    }
 
     // ────────────────────── Top-Level: Evaluate All Redeemers ──────────────────────
 
@@ -1247,8 +1233,6 @@ public static class ScriptContextBuilder
         IReadOnlyList<ResolvedInput> utxos,
         SlotNetworkConfig slotConfig)
     {
-        ArgumentNullException.ThrowIfNull(body);
-        ArgumentNullException.ThrowIfNull(witnessSet);
         ArgumentNullException.ThrowIfNull(utxos);
         ArgumentNullException.ThrowIfNull(slotConfig);
 
@@ -1261,7 +1245,7 @@ public static class ScriptContextBuilder
         DataLookupTable lookupTable = DataLookupTable.FromTransaction(witnessSet, utxos);
 
         // Pre-compute sorted collections (shared across all redeemers)
-        List<(TransactionInput Input, TransactionOutput Output)> sortedInputs =
+        List<(TransactionInput Input, ITransactionOutput Output)> sortedInputs =
             SortAndResolveInputs(body.Inputs.GetValue(), utxos);
 
         List<(ReadOnlyMemory<byte> PolicyId, TokenBundleMint Bundle)>? sortedMint =
@@ -1270,16 +1254,19 @@ public static class ScriptContextBuilder
                 .Select(kv => (kv.Key, kv.Value))
                 .ToList();
 
-        List<Certificate> certificates = body.Certificates?.GetValue().ToList() ?? [];
+        List<ICertificate> certificates = body.Certificates?.GetValue().ToList() ?? [];
 
         List<(RewardAccount Account, ulong Coin)> sortedWithdrawals =
             body.Withdrawals?.Value?
-                .OrderBy(kv => kv.Key.Value, ByteMemoryComparer.Instance)
+                .OrderBy(kv => kv.Key.Value, RewardAccountComparer.Instance)
                 .Select(kv => (kv.Key, kv.Value))
                 .ToList() ?? [];
 
         List<ProposalProcedure> proposals = body.ProposalProcedures?.GetValue().ToList() ?? [];
-        List<Voter> sortedVoters = body.VotingProcedures?.Value?.Keys.ToList() ?? [];
+        List<Voter> sortedVoters = body.VotingProcedures?.Value?.Keys
+            .OrderBy(VoterSortIndex)
+            .ThenBy(v => v.Hash, ByteMemoryComparer.Instance)
+            .ToList() ?? [];
 
         // Build TxInfo once (shared across all redeemers)
         VmPlutusData txInfo = BuildTxInfoV3(body, witnessSet, utxos, slotConfig);
@@ -1359,33 +1346,32 @@ public sealed class DataLookupTable
         PostAlonzoTransactionWitnessSet witnessSet,
         IReadOnlyList<ResolvedInput> utxos)
     {
-        ArgumentNullException.ThrowIfNull(witnessSet);
         ArgumentNullException.ThrowIfNull(utxos);
 
         DataLookupTable table = new();
 
         // Witness set scripts — hash is blake2b-224(version_byte || script_cbor)
-        if (witnessSet.PlutusV1ScriptSet is not null)
+        if (witnessSet.PlutusV1Scripts is not null)
         {
-            foreach (ReadOnlyMemory<byte> script in witnessSet.PlutusV1ScriptSet.GetValue())
+            foreach (ReadOnlyMemory<byte> script in witnessSet.PlutusV1Scripts.GetValue())
             {
                 byte[] hash = ScriptHash(1, script.Span);
                 table._scripts[Convert.ToHexString(hash)] = (script.ToArray(), 1);
             }
         }
 
-        if (witnessSet.PlutusV2ScriptSet is not null)
+        if (witnessSet.PlutusV2Scripts is not null)
         {
-            foreach (ReadOnlyMemory<byte> script in witnessSet.PlutusV2ScriptSet.GetValue())
+            foreach (ReadOnlyMemory<byte> script in witnessSet.PlutusV2Scripts.GetValue())
             {
                 byte[] hash = ScriptHash(2, script.Span);
                 table._scripts[Convert.ToHexString(hash)] = (script.ToArray(), 2);
             }
         }
 
-        if (witnessSet.PlutusV3ScriptSet is not null)
+        if (witnessSet.PlutusV3Scripts is not null)
         {
-            foreach (ReadOnlyMemory<byte> script in witnessSet.PlutusV3ScriptSet.GetValue())
+            foreach (ReadOnlyMemory<byte> script in witnessSet.PlutusV3Scripts.GetValue())
             {
                 byte[] hash = ScriptHash(3, script.Span);
                 table._scripts[Convert.ToHexString(hash)] = (script.ToArray(), 3);
@@ -1474,8 +1460,47 @@ internal sealed class ByteMemoryComparer : IComparer<ReadOnlyMemory<byte>>
 {
     public static readonly ByteMemoryComparer Instance = new();
 
+    public int Compare(ReadOnlyMemory<byte> x, ReadOnlyMemory<byte> y) => x.Span.SequenceCompareTo(y.Span);
+}
+
+/// <summary>
+/// Comparer for reward account addresses matching Aiken's sort_reward_accounts:
+/// 1. Compare network tag (testnet=0 &lt; mainnet=1)
+/// 2. Compare credential type (script &lt; key)
+/// 3. Compare credential hash bytes
+/// </summary>
+internal sealed class RewardAccountComparer : IComparer<ReadOnlyMemory<byte>>
+{
+    public static readonly RewardAccountComparer Instance = new();
+
     public int Compare(ReadOnlyMemory<byte> x, ReadOnlyMemory<byte> y)
     {
-        return x.Span.SequenceCompareTo(y.Span);
+        ReadOnlySpan<byte> a = x.Span;
+        ReadOnlySpan<byte> b = y.Span;
+
+        if (a.Length < 29 || b.Length < 29)
+        {
+            return a.SequenceCompareTo(b);
+        }
+
+        // Network is lower 4 bits of header byte
+        int networkA = a[0] & 0x0F;
+        int networkB = b[0] & 0x0F;
+        if (networkA != networkB)
+        {
+            return networkA.CompareTo(networkB);
+        }
+
+        // Credential type: bit 4 of header — 1=script, 0=key
+        // Aiken: script < key (script sorts first)
+        bool isScriptA = (a[0] & 0x10) != 0;
+        bool isScriptB = (b[0] & 0x10) != 0;
+        if (isScriptA != isScriptB)
+        {
+            return isScriptA ? -1 : 1;
+        }
+
+        // Same type: compare hash bytes (1..29)
+        return a.Slice(1, 28).SequenceCompareTo(b.Slice(1, 28));
     }
 }

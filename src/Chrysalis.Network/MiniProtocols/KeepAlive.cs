@@ -110,10 +110,7 @@ public sealed class KeepAliveClient(AgentChannel channel) : IMiniProtocol
         }
     }
 
-    private static uint GenerateCookie()
-    {
-        return (uint)RandomNumberGenerator.GetInt32(0, ushort.MaxValue + 1);
-    }
+    private static uint GenerateCookie() => (uint)RandomNumberGenerator.GetInt32(0, ushort.MaxValue + 1);
 
     private static void EnsureCookieInRange(uint cookie)
     {

@@ -15,42 +15,26 @@ public static class ProposalProcedureExtensions
     /// </summary>
     /// <param name="self">The proposal procedure instance.</param>
     /// <returns>The deposit in lovelace.</returns>
-    public static ulong Deposit(this CProposalProcedure self)
-    {
-        ArgumentNullException.ThrowIfNull(self);
-        return self.Deposit;
-    }
+    public static ulong Deposit(this CProposalProcedure self) => self.Deposit;
 
     /// <summary>
     /// Gets the reward account that receives the deposit return.
     /// </summary>
     /// <param name="self">The proposal procedure instance.</param>
     /// <returns>The reward account.</returns>
-    public static RewardAccount RewardAccount(this CProposalProcedure self)
-    {
-        ArgumentNullException.ThrowIfNull(self);
-        return self.RewardAccount;
-    }
+    public static RewardAccount RewardAccount(this CProposalProcedure self) => self.RewardAccount;
 
     /// <summary>
     /// Gets the governance action from the proposal.
     /// </summary>
     /// <param name="self">The proposal procedure instance.</param>
     /// <returns>The governance action.</returns>
-    public static GovAction GovAction(this CProposalProcedure self)
-    {
-        ArgumentNullException.ThrowIfNull(self);
-        return self.GovAction;
-    }
+    public static IGovAction GovAction(this CProposalProcedure self) => self.GovAction;
 
     /// <summary>
     /// Gets the anchor from the proposal.
     /// </summary>
     /// <param name="self">The proposal procedure instance.</param>
     /// <returns>The anchor.</returns>
-    public static Anchor Anchor(this CProposalProcedure self)
-    {
-        ArgumentNullException.ThrowIfNull(self);
-        return self.Anchor;
-    }
+    public static Anchor Anchor(this CProposalProcedure self) => self.Anchor;
 }

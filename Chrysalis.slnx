@@ -1,7 +1,7 @@
 <Solution>
   <Folder Name="/src/">
-    <Project Path="src/Chrysalis.Codec.Cli/Chrysalis.Codec.Cli.csproj" />
     <Project Path="src/Chrysalis.Codec.CodeGen/Chrysalis.Codec.CodeGen.csproj" />
+    <Project Path="src/Chrysalis.Codec.Test/Chrysalis.Codec.Test.csproj" />
     <Project Path="src/Chrysalis.Codec/Chrysalis.Codec.csproj" />
     <Project Path="src/Chrysalis.Cli/Chrysalis.Cli.csproj" />
     <Project Path="src/Chrysalis.Crypto/Chrysalis.Crypto.csproj" />
@@ -18,9 +18,6 @@
     <Project Path="src/Chrysalis.Wallet.Test/Chrysalis.Wallet.Test.csproj" />
     <Project Path="src/Chrysalis.Wallet/Chrysalis.Wallet.csproj" />
     <Project Path="src/Chrysalis/Chrysalis.csproj" />
-  </Folder>
-  <Folder Name="/src/Chrysalis.Codec.Test/">
-    <Project Path="src/Chrysalis.Codec.Test/Chrysalis.Codec.Test.csproj" />
   </Folder>
   <Folder Name="/benchmarks/">
     <Project Path="benchmarks/ChrysalisNew/ChrysalisNew.csproj" />

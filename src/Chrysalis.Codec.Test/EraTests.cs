@@ -16,7 +16,7 @@ public class EraTests
         return Convert.FromHexString(hex);
     }
 
-    // ─── Deserialization ────────────────────────────────────────────────────────
+    // --- Deserialization ---
 
     [Fact]
     public void DeserializeShelleyBlock()
@@ -25,7 +25,6 @@ public class EraTests
 
         BlockWithEra blockWithEra = CborSerializer.Deserialize<BlockWithEra>(cborRaw);
 
-        Assert.NotNull(blockWithEra);
         Assert.Equal(2, blockWithEra.EraNumber);
         _ = Assert.IsType<AlonzoCompatibleBlock>(blockWithEra.Block);
     }
@@ -37,7 +36,6 @@ public class EraTests
 
         BlockWithEra blockWithEra = CborSerializer.Deserialize<BlockWithEra>(cborRaw);
 
-        Assert.NotNull(blockWithEra);
         Assert.Equal(3, blockWithEra.EraNumber);
         _ = Assert.IsType<AlonzoCompatibleBlock>(blockWithEra.Block);
     }
@@ -49,12 +47,11 @@ public class EraTests
 
         BlockWithEra blockWithEra = CborSerializer.Deserialize<BlockWithEra>(cborRaw);
 
-        Assert.NotNull(blockWithEra);
         Assert.Equal(4, blockWithEra.EraNumber);
         _ = Assert.IsType<AlonzoCompatibleBlock>(blockWithEra.Block);
     }
 
-    // ─── Isomorphic round-trips ─────────────────────────────────────────────────
+    // --- Isomorphic round-trips ---
 
     [Fact]
     public void ShelleyBlockIsomorphicRoundTrip()

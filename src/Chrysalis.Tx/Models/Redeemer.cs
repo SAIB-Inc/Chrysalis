@@ -1,4 +1,4 @@
-using Chrysalis.Codec.Types;
+using Chrysalis.Codec.Serialization;
 using Chrysalis.Codec.Types.Cardano.Core.Protocol;
 using Chrysalis.Tx.Builders;
 
@@ -32,7 +32,7 @@ public enum RedeemerTag
 /// <param name="context">The transaction context parameter.</param>
 /// <param name="transactionBuilder">The transaction builder instance.</param>
 /// <returns>The constructed redeemer data.</returns>
-public delegate TData RedeemerDataBuilder<TContext, TData>(InputOutputMapping mapping, TContext context, TransactionBuilder transactionBuilder) where TData : CborBase;
+public delegate TData RedeemerDataBuilder<TContext, TData>(InputOutputMapping mapping, TContext context, TransactionBuilder transactionBuilder) where TData : ICborType;
 
 /// <summary>
 /// Represents a typed redeemer with its tag, index, data, and execution units.
@@ -42,4 +42,4 @@ public delegate TData RedeemerDataBuilder<TContext, TData>(InputOutputMapping ma
 /// <param name="Index">The index into the sorted inputs/mints/etc.</param>
 /// <param name="Data">The redeemer data payload.</param>
 /// <param name="ExUnits">The execution units budget.</param>
-public record Redeemer<T>(RedeemerTag Tag, ulong Index, T Data, ExUnits ExUnits) where T : CborBase;
+public record Redeemer<T>(RedeemerTag Tag, ulong Index, T Data, ExUnits ExUnits) where T : ICborType;

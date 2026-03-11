@@ -15,16 +15,13 @@ public partial record CoseSign1(
     [CborOrder(1)] HeaderMap UnprotectedHeaders,
     [CborOrder(2)][CborNullable] byte[]? Payload,
     [CborOrder(3)] byte[] Signature
-) : CborBase, ICoseMessage
+) : CborRecord, ICoseMessage
 {
     /// <summary>
     /// Converts the COSE message to its CBOR byte representation.
     /// </summary>
     /// <returns>The CBOR-encoded bytes.</returns>
-    public byte[] ToCbor()
-    {
-        return CborSerializer.Serialize(this);
-    }
+    public byte[] ToCbor() => CborSerializer.Serialize(this);
 
     /// <summary>
     /// Deserializes a CoseSign1 from CBOR bytes.

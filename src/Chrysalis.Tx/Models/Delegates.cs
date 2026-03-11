@@ -52,7 +52,7 @@ public delegate void WithdrawalConfig<T>(WithdrawalOptions<T> options, T paramet
 /// <typeparam name="T">The transaction parameter type.</typeparam>
 /// <param name="parameter">The transaction parameters.</param>
 /// <returns>The built transaction.</returns>
-public delegate Task<Transaction> TransactionTemplate<T>(T parameter);
+public delegate Task<ITransaction> TransactionTemplate<T>(T parameter);
 
 /// <summary>
 /// Hook invoked before final transaction build for custom modifications.
@@ -69,7 +69,7 @@ public delegate void PreBuildHook<T>(TransactionBuilder builder, InputOutputMapp
 /// <typeparam name="T">The transaction parameter type.</typeparam>
 /// <param name="parameter">The transaction parameters.</param>
 /// <returns>The constructed native script.</returns>
-public delegate NativeScript NativeScriptBuilder<T>(T parameter);
+public delegate INativeScript NativeScriptBuilder<T>(T parameter);
 
 /// <summary>
 /// Builds transaction metadata from the given parameters.

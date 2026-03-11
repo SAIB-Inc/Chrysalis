@@ -1,13 +1,19 @@
 using BenchmarkDotNet.Attributes;
+using BenchmarkDotNet.Configs;
 using BenchmarkDotNet.Running;
+
 using Chrysalis.Codec.Serialization;
 using Chrysalis.Codec.Types.Cardano.Core;
+using Chrysalis.Codec.Extensions.Cardano.Core;
+using Chrysalis.Codec.Extensions.Cardano.Core.Transaction;
 
-BenchmarkRunner.Run<BlockDeserializationBenchmarks>();
+BenchmarkRunner.Run(typeof(Program).Assembly, DefaultConfig.Instance);
 
-/// <summary>Benchmarks for block deserialization across all Cardano eras.</summary>
+/// <summary>Block deserialization benchmarks.</summary>
 [MemoryDiagnoser]
-public class BlockDeserializationBenchmarks
+[GroupBenchmarksBy(BenchmarkLogicalGroupRule.ByCategory)]
+[CategoriesColumn]
+public class DeserializationBenchmarks
 {
     private static string FindDataDir([System.Runtime.CompilerServices.CallerFilePath] string sourceFile = "")
     {
@@ -26,31 +32,16 @@ public class BlockDeserializationBenchmarks
 
     private static readonly string DataDir = FindDataDir();
 
-    private byte[] _byron1 = null!;
     private byte[] _byron7 = null!;
-    private byte[] _genesis = null!;
-    private byte[] _shelley1 = null!;
-    private byte[] _allegra1 = null!;
-    private byte[] _mary1 = null!;
-    private byte[] _alonzo1 = null!;
     private byte[] _alonzo14 = null!;
-    private byte[] _babbage1 = null!;
     private byte[] _babbage9 = null!;
     private byte[] _conway1 = null!;
 
-    /// <summary>Loads all test block data from hex files.</summary>
     [GlobalSetup]
     public void Setup()
     {
-        _byron1 = LoadBlock("byron1.block");
         _byron7 = LoadBlock("byron7.block");
-        _genesis = LoadBlock("genesis.block");
-        _shelley1 = LoadBlock("shelley1.block");
-        _allegra1 = LoadBlock("allegra1.block");
-        _mary1 = LoadBlock("mary1.block");
-        _alonzo1 = LoadBlock("alonzo1.block");
         _alonzo14 = LoadBlock("alonzo14.block");
-        _babbage1 = LoadBlock("babbage1.block");
         _babbage9 = LoadBlock("babbage9.block");
         _conway1 = LoadBlock("conway1.block");
     }
@@ -61,80 +52,118 @@ public class BlockDeserializationBenchmarks
         return Convert.FromHexString(hex);
     }
 
-    /// <summary>Deserialize Byron era block (variant 1).</summary>
-    [Benchmark]
-    public BlockWithEra Byron1()
+    [Benchmark, BenchmarkCategory("Byron 19KB")]
+    public BlockWithEra Byron7() => CborSerializer.Deserialize<BlockWithEra>(_byron7);
+
+    [Benchmark, BenchmarkCategory("Alonzo 140KB")]
+    public BlockWithEra Alonzo14() => CborSerializer.Deserialize<BlockWithEra>(_alonzo14);
+
+    [Benchmark, BenchmarkCategory("Babbage 160KB")]
+    public BlockWithEra Babbage9() => CborSerializer.Deserialize<BlockWithEra>(_babbage9);
+
+    [Benchmark, BenchmarkCategory("Conway 3KB")]
+    public BlockWithEra Conway1() => CborSerializer.Deserialize<BlockWithEra>(_conway1);
+}
+
+/// <summary>Field access: deserialize + access slot number.</summary>
+[MemoryDiagnoser]
+[GroupBenchmarksBy(BenchmarkLogicalGroupRule.ByCategory)]
+[CategoriesColumn]
+public class FieldAccessBenchmarks
+{
+    private static string FindDataDir([System.Runtime.CompilerServices.CallerFilePath] string sourceFile = "")
     {
-        return CborSerializer.Deserialize<BlockWithEra>(_byron1);
+        DirectoryInfo? dir = new FileInfo(sourceFile).Directory;
+        while (dir is not null)
+        {
+            string candidate = Path.Combine(dir.FullName, "data");
+            if (Directory.Exists(candidate))
+            {
+                return candidate;
+            }
+            dir = dir.Parent;
+        }
+        throw new DirectoryNotFoundException("Cannot find benchmarks/data directory");
     }
 
-    /// <summary>Deserialize Byron era block (variant 7).</summary>
-    [Benchmark]
-    public BlockWithEra Byron7()
+    private static readonly string DataDir = FindDataDir();
+
+    private byte[] _babbage9 = null!;
+    private byte[] _conway1 = null!;
+
+    [GlobalSetup]
+    public void Setup()
     {
-        return CborSerializer.Deserialize<BlockWithEra>(_byron7);
+        _babbage9 = LoadBlock("babbage9.block");
+        _conway1 = LoadBlock("conway1.block");
     }
 
-    /// <summary>Deserialize Byron genesis/EBB block.</summary>
-    [Benchmark]
-    public BlockWithEra Genesis()
+    private static byte[] LoadBlock(string filename)
     {
-        return CborSerializer.Deserialize<BlockWithEra>(_genesis);
+        string hex = File.ReadAllText(Path.Combine(DataDir, filename)).Trim();
+        return Convert.FromHexString(hex);
     }
 
-    /// <summary>Deserialize Shelley era block.</summary>
-    [Benchmark]
-    public BlockWithEra Shelley1()
+    [Benchmark, BenchmarkCategory("Slot Babbage 160KB")]
+    public ulong Slot_Babbage9()
     {
-        return CborSerializer.Deserialize<BlockWithEra>(_shelley1);
+        BlockWithEra block = CborSerializer.Deserialize<BlockWithEra>(_babbage9);
+        return BlockExtensions.Slot(block.Block);
     }
 
-    /// <summary>Deserialize Allegra era block.</summary>
-    [Benchmark]
-    public BlockWithEra Allegra1()
+    [Benchmark, BenchmarkCategory("TxInputs Babbage 160KB")]
+    public int TxInputs_Babbage9()
     {
-        return CborSerializer.Deserialize<BlockWithEra>(_allegra1);
+        BlockWithEra block = CborSerializer.Deserialize<BlockWithEra>(_babbage9);
+        return BlockExtensions.TransactionBodies(block.Block).Sum(tx => tx.Inputs().Count());
     }
 
-    /// <summary>Deserialize Mary era block.</summary>
-    [Benchmark]
-    public BlockWithEra Mary1()
+    [Benchmark, BenchmarkCategory("Slot Conway 3KB")]
+    public ulong Slot_Conway1()
     {
-        return CborSerializer.Deserialize<BlockWithEra>(_mary1);
+        BlockWithEra block = CborSerializer.Deserialize<BlockWithEra>(_conway1);
+        return BlockExtensions.Slot(block.Block);
+    }
+}
+
+/// <summary>Round-trip: deserialize then serialize back.</summary>
+[MemoryDiagnoser]
+[GroupBenchmarksBy(BenchmarkLogicalGroupRule.ByCategory)]
+[CategoriesColumn]
+public class RoundTripBenchmarks
+{
+    private static string FindDataDir([System.Runtime.CompilerServices.CallerFilePath] string sourceFile = "")
+    {
+        DirectoryInfo? dir = new FileInfo(sourceFile).Directory;
+        while (dir is not null)
+        {
+            string candidate = Path.Combine(dir.FullName, "data");
+            if (Directory.Exists(candidate))
+            {
+                return candidate;
+            }
+            dir = dir.Parent;
+        }
+        throw new DirectoryNotFoundException("Cannot find benchmarks/data directory");
     }
 
-    /// <summary>Deserialize Alonzo era block (variant 1).</summary>
-    [Benchmark]
-    public BlockWithEra Alonzo1()
+    private static readonly string DataDir = FindDataDir();
+
+    private byte[] _babbage9 = null!;
+
+    [GlobalSetup]
+    public void Setup() => _babbage9 = LoadBlock("babbage9.block");
+
+    private static byte[] LoadBlock(string filename)
     {
-        return CborSerializer.Deserialize<BlockWithEra>(_alonzo1);
+        string hex = File.ReadAllText(Path.Combine(DataDir, filename)).Trim();
+        return Convert.FromHexString(hex);
     }
 
-    /// <summary>Deserialize Alonzo era block (variant 14).</summary>
-    [Benchmark]
-    public BlockWithEra Alonzo14()
+    [Benchmark, BenchmarkCategory("RoundTrip Babbage 160KB")]
+    public byte[] RoundTrip_Babbage9()
     {
-        return CborSerializer.Deserialize<BlockWithEra>(_alonzo14);
-    }
-
-    /// <summary>Deserialize Babbage era block (variant 1).</summary>
-    [Benchmark]
-    public BlockWithEra Babbage1()
-    {
-        return CborSerializer.Deserialize<BlockWithEra>(_babbage1);
-    }
-
-    /// <summary>Deserialize Babbage era block (variant 9).</summary>
-    [Benchmark]
-    public BlockWithEra Babbage9()
-    {
-        return CborSerializer.Deserialize<BlockWithEra>(_babbage9);
-    }
-
-    /// <summary>Deserialize Conway era block.</summary>
-    [Benchmark]
-    public BlockWithEra Conway1()
-    {
-        return CborSerializer.Deserialize<BlockWithEra>(_conway1);
+        BlockWithEra block = CborSerializer.Deserialize<BlockWithEra>(_babbage9);
+        return CborSerializer.Serialize(block);
     }
 }

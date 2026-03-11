@@ -12,42 +12,26 @@ public static class OperationalCertExtensions
     /// </summary>
     /// <param name="self">The operational certificate instance.</param>
     /// <returns>The hot verification key bytes.</returns>
-    public static ReadOnlyMemory<byte> HotVKey(this OperationalCert self)
-    {
-        ArgumentNullException.ThrowIfNull(self);
-        return self.HotVKey;
-    }
+    public static ReadOnlyMemory<byte> HotVKey(this OperationalCert self) => self.HotVkey;
 
     /// <summary>
     /// Gets the sequence number from the operational certificate.
     /// </summary>
     /// <param name="self">The operational certificate instance.</param>
     /// <returns>The sequence number.</returns>
-    public static ulong SequenceNumber(this OperationalCert self)
-    {
-        ArgumentNullException.ThrowIfNull(self);
-        return self.SequenceNumber;
-    }
+    public static ulong SequenceNumber(this OperationalCert self) => self.SequenceNumber;
 
     /// <summary>
     /// Gets the KES period from the operational certificate.
     /// </summary>
     /// <param name="self">The operational certificate instance.</param>
     /// <returns>The KES period.</returns>
-    public static ulong KesPeriod(this OperationalCert self)
-    {
-        ArgumentNullException.ThrowIfNull(self);
-        return self.KesPeriod;
-    }
+    public static ulong KesPeriod(this OperationalCert self) => self.KesPeriod;
 
     /// <summary>
     /// Gets the sigma (signature) from the operational certificate.
     /// </summary>
     /// <param name="self">The operational certificate instance.</param>
     /// <returns>The sigma bytes.</returns>
-    public static ReadOnlyMemory<byte> Sigma(this OperationalCert self)
-    {
-        ArgumentNullException.ThrowIfNull(self);
-        return self.Sigma;
-    }
+    public static ReadOnlyMemory<byte> Sigma(this OperationalCert self) => self.Sigma;
 }

@@ -4,7 +4,6 @@ using Chrysalis.Codec.Extensions.Cardano.Core.Common;
 using Chrysalis.Codec.Extensions.Cardano.Core.Transaction;
 using Chrysalis.Codec.Serialization;
 using Chrysalis.Codec.Serialization.Utils;
-using Chrysalis.Codec.Types;
 using Chrysalis.Codec.Types.Cardano.Core;
 using Chrysalis.Codec.Types.Cardano.Core.Certificates;
 using Chrysalis.Codec.Types.Cardano.Core.Common;
@@ -67,10 +66,7 @@ public sealed class TransactionTemplateBuilder<T>
     /// </summary>
     /// <param name="provider">The Cardano data provider.</param>
     /// <returns>A new template builder instance.</returns>
-    internal static TransactionTemplateBuilder<T> CreateInternal(ICardanoDataProvider provider)
-    {
-        return new TransactionTemplateBuilder<T>().SetProvider(provider);
-    }
+    internal static TransactionTemplateBuilder<T> CreateInternal(ICardanoDataProvider provider) => new TransactionTemplateBuilder<T>().SetProvider(provider);
 
     /// <summary>
     /// Adds a pre-build hook for custom transaction modifications.
@@ -229,7 +225,7 @@ public sealed class TransactionTemplateBuilder<T>
     }
 
 
-    private async Task<Transaction> EvaluateTemplate(T param, bool eval = true, ulong fee = 0)
+    private async Task<ITransaction> EvaluateTemplate(T param, bool eval = true, ulong fee = 0)
     {
         BuildContext context = new()
         {
@@ -258,13 +254,13 @@ public sealed class TransactionTemplateBuilder<T>
         ProcessMints(param, context);
 
         ulong feeBuffer = 5000000;
-        List<Value> requiredAmount = [];
+        List<IValue> requiredAmount = [];
         int changeIndex = 0;
         ProcessOutputs(param, context, parties, requiredAmount, ref changeIndex, fee);
 
         (List<ResolvedInput> utxos, List<ResolvedInput> allUtxos) = await GetAllUtxos(parties, context).ConfigureAwait(false);
 
-        List<Script> scripts = GetScripts(context.IsSmartContractTx, context.ReferenceInputs, allUtxos);
+        List<IScript> scripts = GetScripts(context.IsSmartContractTx, context.ReferenceInputs, allUtxos);
 
         List<ResolvedInput> specifiedInputsUtxos = GetSpecifiedInputsUtxos(context.SpecifiedInputs, allUtxos);
         context.ResolvedInputs.AddRange(specifiedInputsUtxos);
@@ -295,7 +291,7 @@ public sealed class TransactionTemplateBuilder<T>
         }
 
         ulong totalLovelaceChange = coinSelectionResult.LovelaceChange + feeBuffer;
-        Lovelace lovelaceChange = new(totalLovelaceChange);
+        Lovelace lovelaceChange = Lovelace.Create(totalLovelaceChange);
 
         Dictionary<ReadOnlyMemory<byte>, TokenBundleOutput> assetsChange = coinSelectionResult.AssetsChange;
 
@@ -305,26 +301,26 @@ public sealed class TransactionTemplateBuilder<T>
             _ = context.TxBuilder.AddInput(consumedInput.Outref);
         }
 
-        Value changeValue = assetsChange.Count > 0
-            ? new LovelaceWithMultiAsset(lovelaceChange, new MultiAssetOutput(assetsChange))
+        IValue changeValue = assetsChange.Count > 0
+            ? LovelaceWithMultiAsset.Create(lovelaceChange.Amount, MultiAssetOutput.Create(assetsChange))
             : lovelaceChange;
 
-        TransactionOutput changeOutput = new AlonzoTransactionOutput(new Address(changeAddress.ToBytes()), changeValue, null);
+        ITransactionOutput changeOutput = AlonzoTransactionOutput.Create(new Address(changeAddress.ToBytes()), changeValue, null);
 
-        if (!string.IsNullOrEmpty(_changeAddress) && lovelaceChange.Value > 0)
+        if (!string.IsNullOrEmpty(_changeAddress) && lovelaceChange.Amount > 0)
         {
             _ = context.TxBuilder.AddOutput(changeOutput, true);
         }
 
-        List<TransactionInput> sortedInputs = [.. context.TxBuilder.Body.Inputs.GetValue()
+        List<TransactionInput> sortedInputs = [.. context.TxBuilder.Inputs
             .OrderBy(e => HexStringCache.ToHexString(e.TransactionId))
             .ThenBy(e => e.Index)];
         _ = context.TxBuilder.SetInputs(sortedInputs);
 
         List<TransactionInput> sortedRefInputs = [];
-        if (context.TxBuilder.Body.ReferenceInputs?.GetValue() != null)
+        if (context.TxBuilder.ReferenceInputs != null)
         {
-            sortedRefInputs = [.. context.TxBuilder.Body.ReferenceInputs.GetValue()
+            sortedRefInputs = [.. context.TxBuilder.ReferenceInputs
                 .OrderBy(e => HexStringCache.ToHexString(e.TransactionId))
                 .ThenBy(e => e.Index)];
 
@@ -390,7 +386,7 @@ public sealed class TransactionTemplateBuilder<T>
 
             if (context.Redeemers.Count > 0)
             {
-                RedeemerMap redeemerMap = new(context.Redeemers);
+                RedeemerMap redeemerMap = RedeemerMap.Create(context.Redeemers);
 
                 _ = context.TxBuilder.SetRedeemers(redeemerMap);
             }
@@ -402,14 +398,14 @@ public sealed class TransactionTemplateBuilder<T>
             _ = context.TxBuilder.SetMetadata(metadata);
 
             PostMaryTransaction tx = context.TxBuilder.Build();
-            AuxiliaryData auxData = tx.AuxiliaryData!;
+            IAuxiliaryData auxData = tx.AuxiliaryData!;
 
             _ = context.TxBuilder.SetAuxiliaryDataHash(HashUtil.Blake2b256(CborSerializer.Serialize(auxData)));
         }
 
         if (_nativeScriptBuilder is not null)
         {
-            NativeScript nativeScript = _nativeScriptBuilder(param);
+            INativeScript nativeScript = _nativeScriptBuilder(param);
             _ = context.TxBuilder.AddNativeScript(nativeScript);
         }
 
@@ -451,14 +447,12 @@ public sealed class TransactionTemplateBuilder<T>
     /// </summary>
     /// <param name="eval">Whether to evaluate Plutus scripts.</param>
     /// <returns>A delegate that builds transactions from parameters.</returns>
-    public TransactionTemplate<T> Build(bool eval = true)
-    {
-        return async param =>
-                                                                  {
-                                                                      PostMaryTransaction? draftTx = await EvaluateTemplate(param, eval).ConfigureAwait(false) as PostMaryTransaction;
-                                                                      return await EvaluateTemplate(param, eval, draftTx?.TransactionBody.Fee() ?? 0).ConfigureAwait(false);
-                                                                  };
-    }
+    public TransactionTemplate<T> Build(bool eval = true) => async param =>
+                                                                                                                            {
+                                                                                                                                ITransaction draftTx = await EvaluateTemplate(param, eval).ConfigureAwait(false);
+                                                                                                                                ulong draftFee = draftTx is PostMaryTransaction postMary ? postMary.Body.Fee() : 0;
+                                                                                                                                return await EvaluateTemplate(param, eval, draftFee).ConfigureAwait(false);
+                                                                                                                            };
 
     private Dictionary<string, string> ResolveParties(T param)
     {
@@ -483,27 +477,21 @@ public sealed class TransactionTemplateBuilder<T>
 
     private sealed class TransactionInputEqualityComparer : IEqualityComparer<(ReadOnlyMemory<byte> TransactionId, ulong Index)>
     {
-        public bool Equals((ReadOnlyMemory<byte> TransactionId, ulong Index) x, (ReadOnlyMemory<byte> TransactionId, ulong Index) y)
-        {
-            return x.Index == y.Index && ReadOnlyMemoryComparer.Instance.Equals(x.TransactionId, y.TransactionId);
-        }
+        public bool Equals((ReadOnlyMemory<byte> TransactionId, ulong Index) x, (ReadOnlyMemory<byte> TransactionId, ulong Index) y) => x.Index == y.Index && ReadOnlyMemoryComparer.Instance.Equals(x.TransactionId, y.TransactionId);
 
-        public int GetHashCode((ReadOnlyMemory<byte> TransactionId, ulong Index) obj)
-        {
-            return HashCode.Combine(ReadOnlyMemoryComparer.Instance.GetHashCode(obj.TransactionId), obj.Index);
-        }
+        public int GetHashCode((ReadOnlyMemory<byte> TransactionId, ulong Index) obj) => HashCode.Combine(ReadOnlyMemoryComparer.Instance.GetHashCode(obj.TransactionId), obj.Index);
     }
 
     private static CoinSelectionResult PerformCoinSelection(
         List<ResolvedInput> utxos,
-        List<Value> requiredAmount,
+        List<IValue> requiredAmount,
         List<ResolvedInput> specifiedInputsUtxos,
         ulong feeBuffer,
         BuildContext context
     )
     {
         RequirementsResult requirements = CalculateRequirements(requiredAmount, specifiedInputsUtxos, context.Mints);
-        requirements.RequiredAmounts.Add(new Lovelace(feeBuffer));
+        requirements.RequiredAmounts.Add(Lovelace.Create(feeBuffer));
         // Step 2: Perform coin selection
         CoinSelectionResult selection = CoinSelectionUtil.LargestFirstAlgorithm(utxos, requirements.RequiredAmounts);
 
@@ -514,7 +502,7 @@ public sealed class TransactionTemplateBuilder<T>
     }
 
     private static RequirementsResult CalculateRequirements(
-        List<Value> requiredAmount,
+        List<IValue> requiredAmount,
         List<ResolvedInput> specifiedInputsUtxos,
         Dictionary<string, Dictionary<string, long>> mints)
     {
@@ -522,7 +510,7 @@ public sealed class TransactionTemplateBuilder<T>
         Dictionary<string, ulong> requestedAssets = [];
 
         // Extract requested assets
-        foreach (Value amount in requiredAmount)
+        foreach (IValue amount in requiredAmount)
         {
             if (amount is LovelaceWithMultiAsset lovelaceWithMultiAsset)
             {
@@ -558,7 +546,7 @@ public sealed class TransactionTemplateBuilder<T>
         Dictionary<string, ulong> adjustedAssets = AdjustAssetsForMintsAndInputs(requestedAssets, mintedAssets, specifiedInputsAssets);
 
         // Build required amounts for coin selection
-        List<Value> requiredAmounts = BuildRequiredAmounts(adjustedLovelace, adjustedAssets);
+        List<IValue> requiredAmounts = BuildRequiredAmounts(adjustedLovelace, adjustedAssets);
 
         return new RequirementsResult
         {
@@ -578,7 +566,7 @@ public sealed class TransactionTemplateBuilder<T>
             return;
         }
 
-        foreach ((ReadOnlyMemory<byte> policyId, TokenBundleOutput tokenBundle) in multiAsset.Value)
+        foreach ((ReadOnlyMemory<byte> policyId, TokenBundleOutput tokenBundle) in multiAsset.Value.Value)
         {
             string policyHex = HexStringCache.ToHexString(policyId);
 
@@ -652,10 +640,10 @@ public sealed class TransactionTemplateBuilder<T>
         return adjusted;
     }
 
-    private static List<Value> BuildRequiredAmounts(ulong adjustedLovelace, Dictionary<string, ulong> adjustedAssets)
+    private static List<IValue> BuildRequiredAmounts(ulong adjustedLovelace, Dictionary<string, ulong> adjustedAssets)
     {
-        List<Value> requiredAmounts = [];
-        Lovelace lovelace = new(adjustedLovelace);
+        List<IValue> requiredAmounts = [];
+        Lovelace lovelace = Lovelace.Create(adjustedLovelace);
 
         if (adjustedAssets.Count == 0)
         {
@@ -681,11 +669,11 @@ public sealed class TransactionTemplateBuilder<T>
                     tokenBundle[assetNameBytes] = asset.Value;
                 }
 
-                multiAssetDict[policyId] = new TokenBundleOutput(tokenBundle);
+                multiAssetDict[policyId] = TokenBundleOutput.Create(tokenBundle);
             }
 
-            MultiAssetOutput multiAssetOutput = new(multiAssetDict);
-            LovelaceWithMultiAsset lovelaceWithAssets = new(lovelace, multiAssetOutput);
+            MultiAssetOutput multiAssetOutput = MultiAssetOutput.Create(multiAssetDict);
+            LovelaceWithMultiAsset lovelaceWithAssets = LovelaceWithMultiAsset.Create(lovelace.Amount, multiAssetOutput);
             requiredAmounts.Add(lovelaceWithAssets);
         }
 
@@ -739,7 +727,7 @@ public sealed class TransactionTemplateBuilder<T>
         public required Dictionary<string, ulong> OriginalRequestedAssets { get; init; }
         public required Dictionary<string, ulong> OriginalSpecifiedInputsAssets { get; init; }
         public required Dictionary<string, ulong> OriginalMintedAssets { get; init; }
-        public required List<Value> RequiredAmounts { get; init; }
+        public required List<IValue> RequiredAmounts { get; init; }
         public required ulong SpecifiedInputsLovelace { get; init; }
     }
 
@@ -772,15 +760,12 @@ public sealed class TransactionTemplateBuilder<T>
         return (changeUtxos, allUtxos);
     }
 
-    private static string GetAddressFromOutput(TransactionOutput output)
+    private static string GetAddressFromOutput(ITransactionOutput output) => output switch
     {
-        return output switch
-        {
-            AlonzoTransactionOutput alonzo => WalletAddress.FromBytes(alonzo.Address.Value.ToArray()).ToBech32(),
-            PostAlonzoTransactionOutput postAlonzo => WalletAddress.FromBytes(postAlonzo.Address!.Value.ToArray()).ToBech32(),
-            _ => throw new InvalidOperationException("Unknown output type")
-        };
-    }
+        AlonzoTransactionOutput alonzo => WalletAddress.FromBytes(alonzo.Address.Value.ToArray()).ToBech32(),
+        PostAlonzoTransactionOutput postAlonzo => WalletAddress.FromBytes(postAlonzo.Address.Value.ToArray()).ToBech32(),
+        _ => throw new InvalidOperationException("Unknown output type")
+    };
 
     private void BuildRedeemers(
         BuildContext buildContext,
@@ -816,9 +801,9 @@ public sealed class TransactionTemplateBuilder<T>
 
             if (inputOptions.Redeemer != null)
             {
-                foreach (RedeemerKey key in inputOptions.Redeemer.Value.Keys)
+                foreach (RedeemerKey key in inputOptions.Redeemer.Value.Value.Keys)
                 {
-                    buildContext.Redeemers[key] = inputOptions.Redeemer.Value[key];
+                    buildContext.Redeemers[key] = inputOptions.Redeemer.Value.Value[key];
                 }
             }
 
@@ -827,7 +812,7 @@ public sealed class TransactionTemplateBuilder<T>
                 if (inputOptions.Id is not null)
                 {
                     ulong inputIndex = inputIdToIndex[inputOptions.Id];
-                    Redeemer<CborBase> redeemerObj = inputOptions.RedeemerBuilder(mapping, param, buildContext.TxBuilder);
+                    Redeemer<ICborType> redeemerObj = inputOptions.RedeemerBuilder(mapping, param, buildContext.TxBuilder);
 
                     if (redeemerObj != null)
                     {
@@ -845,15 +830,15 @@ public sealed class TransactionTemplateBuilder<T>
 
             if (withdrawalOptions.Redeemer != null)
             {
-                foreach (RedeemerKey key in withdrawalOptions.Redeemer.Value.Keys)
+                foreach (RedeemerKey key in withdrawalOptions.Redeemer.Value.Value.Keys)
                 {
-                    buildContext.Redeemers[key] = withdrawalOptions.Redeemer.Value[key];
+                    buildContext.Redeemers[key] = withdrawalOptions.Redeemer.Value.Value[key];
                 }
             }
 
             if (withdrawalOptions.RedeemerBuilder != null)
             {
-                Redeemer<CborBase> redeemerObj = withdrawalOptions.RedeemerBuilder(mapping, param, buildContext.TxBuilder);
+                Redeemer<ICborType> redeemerObj = withdrawalOptions.RedeemerBuilder(mapping, param, buildContext.TxBuilder);
 
                 if (redeemerObj != null)
                 {
@@ -872,15 +857,15 @@ public sealed class TransactionTemplateBuilder<T>
 
             if (mintOptions.Redeemer != null)
             {
-                foreach (RedeemerKey key in mintOptions.Redeemer.Value.Keys)
+                foreach (RedeemerKey key in mintOptions.Redeemer.Value.Value.Keys)
                 {
-                    buildContext.Redeemers[key] = mintOptions.Redeemer.Value[key];
+                    buildContext.Redeemers[key] = mintOptions.Redeemer.Value.Value[key];
                 }
             }
 
             if (mintOptions.RedeemerBuilder != null)
             {
-                Redeemer<CborBase> redeemer = mintOptions.RedeemerBuilder(mapping, param, buildContext.TxBuilder);
+                Redeemer<ICborType> redeemer = mintOptions.RedeemerBuilder(mapping, param, buildContext.TxBuilder);
 
                 if (redeemer != null)
                 {
@@ -900,7 +885,7 @@ public sealed class TransactionTemplateBuilder<T>
         {
             dynamic redeemer = redeemerObj;
             RedeemerTag redeemerTag;
-            PlutusData redeemerData;
+            IPlutusData redeemerData;
             ExUnits redeemerExUnits;
 
             try
@@ -908,21 +893,21 @@ public sealed class TransactionTemplateBuilder<T>
                 redeemerTag = redeemer.Tag;
 
                 dynamic dataObj = redeemer.Data;
-                if (dataObj is PlutusData pd)
+                if (dataObj is IPlutusData pd)
                 {
                     redeemerData = pd;
                 }
                 else
                 {
                     byte[] dataBytes = CborSerializer.Serialize(dataObj);
-                    redeemerData = CborSerializer.Deserialize<PlutusData>(dataBytes);
+                    redeemerData = CborSerializer.Deserialize<IPlutusData>(dataBytes);
                 }
 
                 redeemerExUnits = redeemer.ExUnits;
 
-                RedeemerKey key = new((int)redeemerTag, index);
+                RedeemerKey key = RedeemerKey.Create((int)redeemerTag, index);
 
-                RedeemerValue value = new(redeemerData, redeemerExUnits);
+                RedeemerValue value = RedeemerValue.Create(redeemerData, redeemerExUnits);
 
                 buildContext.Redeemers[key] = value;
             }
@@ -946,15 +931,15 @@ public sealed class TransactionTemplateBuilder<T>
 
             if (!string.IsNullOrEmpty(inputOptions.Id) && inputOptions.UtxoRef != null)
             {
-                context.InputsById[inputOptions.Id] = inputOptions.UtxoRef;
+                context.InputsById[inputOptions.Id] = inputOptions.UtxoRef.Value;
                 context.AssociationsByInputId[inputOptions.Id] = [];
             }
 
             if (inputOptions.UtxoRef is not null)
             {
 
-                context.SpecifiedInputs.Add(inputOptions.UtxoRef);
-                _ = context.TxBuilder.AddInput(inputOptions.UtxoRef);
+                context.SpecifiedInputs.Add(inputOptions.UtxoRef.Value);
+                _ = context.TxBuilder.AddInput(inputOptions.UtxoRef.Value);
 
             }
             if (inputOptions.Redeemer is not null || inputOptions.RedeemerBuilder is not null)
@@ -982,11 +967,11 @@ public sealed class TransactionTemplateBuilder<T>
             {
                 if (!string.IsNullOrEmpty(referenceInputOptions.Id))
                 {
-                    context.ReferenceInputsById[referenceInputOptions.Id] = referenceInputOptions.UtxoRef;
+                    context.ReferenceInputsById[referenceInputOptions.Id] = referenceInputOptions.UtxoRef.Value;
                 }
                 context.InputAddresses.Add(referenceInputOptions.From);
-                context.ReferenceInputs.Add(referenceInputOptions.UtxoRef);
-                _ = context.TxBuilder.AddReferenceInput(referenceInputOptions.UtxoRef);
+                context.ReferenceInputs.Add(referenceInputOptions.UtxoRef.Value);
+                _ = context.TxBuilder.AddReferenceInput(referenceInputOptions.UtxoRef.Value);
             }
         }
 
@@ -1012,16 +997,16 @@ public sealed class TransactionTemplateBuilder<T>
             foreach ((string assetName, long amount) in mintOptions.Assets)
             {
                 value[assetName] = amount;
-                _ = context.TxBuilder.AddMint(new MultiAssetMint(new Dictionary<ReadOnlyMemory<byte>, TokenBundleMint>(ReadOnlyMemoryComparer.Instance)
+                _ = context.TxBuilder.AddMint(MultiAssetMint.Create(new Dictionary<ReadOnlyMemory<byte>, TokenBundleMint>(ReadOnlyMemoryComparer.Instance)
                 {
-                    { HexStringCache.FromHexString(mintOptions.Policy), new TokenBundleMint(new Dictionary<ReadOnlyMemory<byte>, long>(ReadOnlyMemoryComparer.Instance)
+                    { HexStringCache.FromHexString(mintOptions.Policy), TokenBundleMint.Create(new Dictionary<ReadOnlyMemory<byte>, long>(ReadOnlyMemoryComparer.Instance)
                     { { HexStringCache.FromHexString(assetName), amount } }) }
                 }));
             }
         }
     }
 
-    private void ProcessOutputs(T param, BuildContext context, Dictionary<string, string> parties, List<Value> requiredAmount, ref int changeIndex, ulong fee)
+    private void ProcessOutputs(T param, BuildContext context, Dictionary<string, string> parties, List<IValue> requiredAmount, ref int changeIndex, ulong fee)
     {
         int outputIndex = 0;
         foreach (OutputConfig<T> config in _outputConfigs)
@@ -1037,7 +1022,7 @@ public sealed class TransactionTemplateBuilder<T>
                 associations[outputOptions.Id] = outputIndex;
             }
 
-            TransactionOutput output = outputOptions.BuildOutput(parties, context.TxBuilder.Pparams?.AdaPerUTxOByte ?? 4310);
+            ITransactionOutput output = outputOptions.BuildOutput(parties, context.TxBuilder.Pparams?.AdaPerUTxOByte ?? 4310);
 
             _ = context.TxBuilder.AddOutput(output);
             requiredAmount.Add(output.Amount());
@@ -1057,7 +1042,7 @@ public sealed class TransactionTemplateBuilder<T>
             if (withdrawalOptions.From.Length != 0)
             {
                 WalletAddress withdrawalAddress = WalletAddress.FromBech32(parties[withdrawalOptions.From]);
-                rewards.Add(new RewardAccount(withdrawalAddress.ToBytes()), withdrawalOptions.Amount!);
+                rewards.Add(new RewardAccount(withdrawalAddress.ToBytes()), withdrawalOptions.Amount);
             }
         }
 
@@ -1067,14 +1052,14 @@ public sealed class TransactionTemplateBuilder<T>
         }
     }
 
-    private static List<Script> GetScripts(bool isSmartContractTx, List<TransactionInput> referenceInputs, List<ResolvedInput> allUtxos)
+    private static List<IScript> GetScripts(bool isSmartContractTx, List<TransactionInput> referenceInputs, List<ResolvedInput> allUtxos)
     {
         if (!isSmartContractTx || referenceInputs == null || referenceInputs.Count == 0)
         {
             return [];
         }
 
-        List<Script> scripts = [];
+        List<IScript> scripts = [];
 
         // Create lookup dictionary for faster matching
         Dictionary<(ReadOnlyMemory<byte>, ulong), ResolvedInput> utxoLookup = new(new TransactionInputEqualityComparer());
@@ -1092,7 +1077,7 @@ public sealed class TransactionTemplateBuilder<T>
                 if (utxo.Output is PostAlonzoTransactionOutput postAlonzoOutput &&
                     postAlonzoOutput.ScriptRef is not null)
                 {
-                    Script script = CborSerializer.Deserialize<Script>(postAlonzoOutput.ScriptRef.Value.ToArray());
+                    IScript script = CborSerializer.Deserialize<IScript>(postAlonzoOutput.ScriptRef.GetValue());
                     scripts.Add(script);
                 }
             }
@@ -1193,9 +1178,11 @@ public sealed class TransactionTemplateBuilder<T>
         ulong amount
     )
     {
-        if (assetsChange.TryGetValue(policyId, out TokenBundleOutput? existingPolicy))
+        if (assetsChange.TryGetValue(policyId, out TokenBundleOutput existingPolicy))
         {
-            Dictionary<ReadOnlyMemory<byte>, ulong> tokenBundle = existingPolicy.Value;
+            // TokenBundleOutput is a readonly record struct with lazy-decoded Value.
+            // Each .Value access returns a NEW dictionary, so we must copy, modify, and replace.
+            Dictionary<ReadOnlyMemory<byte>, ulong> tokenBundle = new(existingPolicy.Value, ReadOnlyMemoryComparer.Instance);
 
             if (tokenBundle.TryGetValue(assetName, out ulong existingAmount))
             {
@@ -1213,6 +1200,8 @@ public sealed class TransactionTemplateBuilder<T>
             {
                 tokenBundle[assetName] = amount;
             }
+
+            assetsChange[policyId] = TokenBundleOutput.Create(tokenBundle);
         }
         else if (amount > 0)
         {
@@ -1220,7 +1209,7 @@ public sealed class TransactionTemplateBuilder<T>
             {
                 [assetName] = amount
             };
-            assetsChange[policyId] = new TokenBundleOutput(tokenBundle);
+            assetsChange[policyId] = TokenBundleOutput.Create(tokenBundle);
         }
     }
 

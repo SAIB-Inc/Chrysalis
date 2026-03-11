@@ -22,10 +22,7 @@ public class MnemonicTests
     [InlineData(9)]
     [InlineData(11)]
     [InlineData(25)]
-    public void Generate_InvalidWordLength_ThrowsArgumentOutOfRangeException(int wordLength)
-    {
-        _ = Assert.Throws<ArgumentOutOfRangeException>(() => Mnemonic.Generate(English.Words, wordLength));
-    }
+    public void Generate_InvalidWordLength_ThrowsArgumentOutOfRangeException(int wordLength) => _ = Assert.Throws<ArgumentOutOfRangeException>(() => Mnemonic.Generate(English.Words, wordLength));
 
     [Fact]
     public void Generate_InvalidWordList_ThrowsArgumentOutOfRangeException()
@@ -108,10 +105,8 @@ public class MnemonicTests
     }
 
     [Fact]
-    public void Restore_9WordMnemonic_ThrowsFormatException()
-    {
+    public void Restore_9WordMnemonic_ThrowsFormatException() =>
         // 9-word mnemonics are non-standard and should be rejected
         _ = Assert.Throws<FormatException>(() =>
             Mnemonic.Restore("abandon abandon abandon abandon abandon abandon abandon abandon about", English.Words));
-    }
 }

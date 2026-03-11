@@ -135,10 +135,28 @@ while (!exitProgram)
                 }
                 else if (kvp.Value is CostMdls costMdls)
                 {
-                    foreach (KeyValuePair<int, CborMaybeIndefList<long>> costMdl in costMdls.Value)
+                    if (costMdls.PlutusV1 is { } v1)
                     {
-                        Console.WriteLine($"{costMdl.Key}: [");
-                        foreach (long item in costMdl.Value.GetValue())
+                        Console.WriteLine("PlutusV1: [");
+                        foreach (long item in v1.GetValue())
+                        {
+                            Console.WriteLine($"\t{item}, ");
+                        }
+                        Console.WriteLine("]");
+                    }
+                    if (costMdls.PlutusV2 is { } v2)
+                    {
+                        Console.WriteLine("PlutusV2: [");
+                        foreach (long item in v2.GetValue())
+                        {
+                            Console.WriteLine($"\t{item}, ");
+                        }
+                        Console.WriteLine("]");
+                    }
+                    if (costMdls.PlutusV3 is { } v3)
+                    {
+                        Console.WriteLine("PlutusV3: [");
+                        foreach (long item in v3.GetValue())
                         {
                             Console.WriteLine($"\t{item}, ");
                         }
@@ -176,7 +194,7 @@ while (!exitProgram)
             Console.WriteLine($"Querying UTXOs for address: {address}");
             UtxoByAddressResponse utxos = await nodeService.GetUtxoByAddressAsync(address).ConfigureAwait(false);
             Console.WriteLine("[");
-            foreach (KeyValuePair<TransactionInput, TransactionOutput> utxo in utxos.Utxos)
+            foreach (KeyValuePair<TransactionInput, ITransactionOutput> utxo in utxos.Utxos)
             {
                 Console.WriteLine(" {");
                 Console.WriteLine("     transactionId: " + Convert.ToHexString(utxo.Key.TransactionId.Span));

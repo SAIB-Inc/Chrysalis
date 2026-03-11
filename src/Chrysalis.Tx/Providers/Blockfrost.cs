@@ -44,7 +44,7 @@ public sealed class Blockfrost : ICardanoDataProvider, IDisposable
     /// </summary>
     public NetworkType NetworkType { get; }
 
-    private readonly ConcurrentDictionary<string, Script> _scriptCache = new();
+    private readonly ConcurrentDictionary<string, IScript> _scriptCache = new();
 
     /// <summary>
     /// Initializes a new Blockfrost provider with the given API key and network.
@@ -91,7 +91,7 @@ public sealed class Blockfrost : ICardanoDataProvider, IDisposable
         BlockfrostProtocolParametersResponse parameters = JsonSerializer.Deserialize<BlockfrostProtocolParametersResponse>(content) ??
             throw new InvalidOperationException("GetParameters: Could not parse response json");
 
-        Dictionary<int, CborMaybeIndefList<long>> costMdls = [];
+        Dictionary<int, ICborMaybeIndefList<long>> costMdls = [];
 
         foreach ((string key, int[] value) in parameters.CostModelsRaw ?? [])
         {
@@ -103,7 +103,7 @@ public sealed class Blockfrost : ICardanoDataProvider, IDisposable
                 _ => throw new ArgumentException($"Invalid cost model key: {key}", nameof(key))
             };
 
-            costMdls[version] = new CborDefList<long>([.. value.Select(x => (long)x)]);
+            costMdls[version] = CborDefList<long>.Create([.. value.Select(x => (long)x)]);
         }
 
         return new ProtocolParams(
@@ -116,28 +116,28 @@ public sealed class Blockfrost : ICardanoDataProvider, IDisposable
             ulong.Parse(parameters.PoolDeposit ?? "0", CultureInfo.InvariantCulture),
             (ulong)(parameters.EMax ?? 0),
             (ulong)(parameters.NOpt ?? 0),
-            new CborRationalNumber((ulong)((parameters.A0 ?? 0) * 100), 100),
-            new CborRationalNumber((ulong)((parameters.Rho ?? 0) * 100), 100),
-            new CborRationalNumber((ulong)((parameters.Tau ?? 0) * 100), 100),
-            new ProtocolVersion(9, 0),
+            CborRationalNumber.Create((ulong)((parameters.A0 ?? 0) * 100), 100),
+            CborRationalNumber.Create((ulong)((parameters.Rho ?? 0) * 100), 100),
+            CborRationalNumber.Create((ulong)((parameters.Tau ?? 0) * 100), 100),
+            ProtocolVersion.Create(9, 0),
             ulong.Parse(parameters.MinPoolCost ?? "0", CultureInfo.InvariantCulture),
             ulong.Parse(parameters.CoinsPerUtxoSize, CultureInfo.InvariantCulture),
-            new CostMdls(costMdls),
-            new ExUnitPrices(new CborRationalNumber((ulong)(parameters.PriceMem * 1000000), 1000000), new CborRationalNumber((ulong)(parameters.PriceStep * 1000000), 1000000)),
-            new ExUnits(ulong.Parse(parameters.MaxTxExMem, CultureInfo.InvariantCulture), ulong.Parse(parameters.MaxTxExSteps, CultureInfo.InvariantCulture)),
-            new ExUnits(ulong.Parse(parameters.MaxBlockExMem, CultureInfo.InvariantCulture), ulong.Parse(parameters.MaxBlockExSteps, CultureInfo.InvariantCulture)),
+            new CostMdls(costMdls.GetValueOrDefault(0), costMdls.GetValueOrDefault(1), costMdls.GetValueOrDefault(2)),
+            ExUnitPrices.Create(CborRationalNumber.Create((ulong)(parameters.PriceMem * 1000000), 1000000), CborRationalNumber.Create((ulong)(parameters.PriceStep * 1000000), 1000000)),
+            ExUnits.Create(ulong.Parse(parameters.MaxTxExMem, CultureInfo.InvariantCulture), ulong.Parse(parameters.MaxTxExSteps, CultureInfo.InvariantCulture)),
+            ExUnits.Create(ulong.Parse(parameters.MaxBlockExMem, CultureInfo.InvariantCulture), ulong.Parse(parameters.MaxBlockExSteps, CultureInfo.InvariantCulture)),
             ulong.Parse(parameters.MaxValSize, CultureInfo.InvariantCulture),
             (ulong)parameters.CollateralPercent,
             (ulong)parameters.MaxCollateralInputs,
-            new PoolVotingThresholds(new CborRationalNumber(1, 1), new CborRationalNumber(1, 1), new CborRationalNumber(1, 1), new CborRationalNumber(1, 1), new CborRationalNumber(1, 1)),
-            new DRepVotingThresholds(new CborRationalNumber(1, 1), new CborRationalNumber(1, 1), new CborRationalNumber(1, 1), new CborRationalNumber(1, 1), new CborRationalNumber(1, 1), new CborRationalNumber(1, 1), new CborRationalNumber(1, 1), new CborRationalNumber(1, 1), new CborRationalNumber(1, 1), new CborRationalNumber(1, 1)),
+            PoolVotingThresholds.Create(CborRationalNumber.Create(1, 1), CborRationalNumber.Create(1, 1), CborRationalNumber.Create(1, 1), CborRationalNumber.Create(1, 1), CborRationalNumber.Create(1, 1)),
+            DRepVotingThresholds.Create(CborRationalNumber.Create(1, 1), CborRationalNumber.Create(1, 1), CborRationalNumber.Create(1, 1), CborRationalNumber.Create(1, 1), CborRationalNumber.Create(1, 1), CborRationalNumber.Create(1, 1), CborRationalNumber.Create(1, 1), CborRationalNumber.Create(1, 1), CborRationalNumber.Create(1, 1), CborRationalNumber.Create(1, 1)),
             1,
             1,
             1,
             1,
             1,
             1,
-            new CborRationalNumber((ulong)parameters.MinFeeRefScriptCostPerByte!, 1)
+            CborRationalNumber.Create((ulong)parameters.MinFeeRefScriptCostPerByte!, 1)
         );
     }
 
@@ -191,7 +191,9 @@ public sealed class Blockfrost : ICardanoDataProvider, IDisposable
     {
         ulong lovelace = 0;
 
-        Dictionary<ReadOnlyMemory<byte>, TokenBundleOutput> assets = new(ReadOnlyMemoryComparer.Instance);
+        // Build mutable dictionaries first, then create immutable TokenBundleOutput at the end.
+        // TokenBundleOutput is a readonly record struct with lazy-decoded Value — mutating .Value is a no-op.
+        Dictionary<ReadOnlyMemory<byte>, Dictionary<ReadOnlyMemory<byte>, ulong>> assetsByPolicy = new(ReadOnlyMemoryComparer.Instance);
 
         foreach (Amount amount in utxo.Amount!)
         {
@@ -204,24 +206,25 @@ public sealed class Blockfrost : ICardanoDataProvider, IDisposable
                 ReadOnlyMemory<byte> policy = HexStringCache.FromHexString(amount.Unit![..56]);
                 ReadOnlyMemory<byte> assetName = HexStringCache.FromHexString(amount.Unit![56..]);
 
-                if (assets.TryGetValue(policy, out TokenBundleOutput? existingBundle))
+                if (!assetsByPolicy.TryGetValue(policy, out Dictionary<ReadOnlyMemory<byte>, ulong>? tokenBundle))
                 {
-                    existingBundle.Value[assetName] = ulong.Parse(amount.Quantity!, CultureInfo.InvariantCulture);
+                    tokenBundle = new Dictionary<ReadOnlyMemory<byte>, ulong>(ReadOnlyMemoryComparer.Instance);
+                    assetsByPolicy[policy] = tokenBundle;
                 }
-                else
-                {
-                    assets[policy] = new TokenBundleOutput(new Dictionary<ReadOnlyMemory<byte>, ulong>(ReadOnlyMemoryComparer.Instance)
-                    {
-                        [assetName] = ulong.Parse(amount.Quantity!, CultureInfo.InvariantCulture)
-                    });
-                }
+                tokenBundle[assetName] = ulong.Parse(amount.Quantity!, CultureInfo.InvariantCulture);
             }
         }
 
-        TransactionInput outref = new(HexStringCache.FromHexString(utxo.TxHash!), (ulong)utxo.TxIndex!);
-        Lovelace cborLovelace = new(lovelace);
-        Value value = assets.Count > 0
-            ? new LovelaceWithMultiAsset(cborLovelace, new MultiAssetOutput(assets))
+        Dictionary<ReadOnlyMemory<byte>, TokenBundleOutput> assets = new(ReadOnlyMemoryComparer.Instance);
+        foreach ((ReadOnlyMemory<byte> policy, Dictionary<ReadOnlyMemory<byte>, ulong> tokenBundle) in assetsByPolicy)
+        {
+            assets[policy] = TokenBundleOutput.Create(tokenBundle);
+        }
+
+        TransactionInput outref = TransactionInput.Create(HexStringCache.FromHexString(utxo.TxHash!), (ulong)utxo.TxIndex!);
+        Lovelace cborLovelace = Lovelace.Create(lovelace);
+        IValue value = assets.Count > 0
+            ? LovelaceWithMultiAsset.Create(lovelace, MultiAssetOutput.Create(assets))
             : cborLovelace;
 
         ChrysalisWallet.Address outputAddress = ChrysalisWallet.Address.FromBech32(utxo.Address!);
@@ -229,17 +232,17 @@ public sealed class Blockfrost : ICardanoDataProvider, IDisposable
         CborEncodedValue? scriptRef = null;
         if (utxo.ReferenceScriptHash is not null)
         {
-            Script scriptRefValue = await GetScriptCached(utxo.ReferenceScriptHash).ConfigureAwait(false);
-            scriptRef = new CborEncodedValue(CborSerializer.Serialize(scriptRefValue));
+            IScript scriptRefValue = await GetScriptCached(utxo.ReferenceScriptHash).ConfigureAwait(false);
+            scriptRef = CborEncodedValue.WrapTag24(CborSerializer.Serialize(scriptRefValue));
         }
 
-        DatumOption? datum = null;
+        IDatumOption? datum = null;
         if (utxo.InlineDatum is not null)
         {
-            datum = new InlineDatumOption(1, new CborEncodedValue(HexStringCache.FromHexString(utxo.InlineDatum)));
+            datum = InlineDatumOption.Create(1, CborEncodedValue.WrapTag24(HexStringCache.FromHexString(utxo.InlineDatum)));
         }
 
-        TransactionOutput output = new PostAlonzoTransactionOutput(
+        ITransactionOutput output = PostAlonzoTransactionOutput.Create(
             new Address(outputAddress.ToBytes()),
             value,
             datum,
@@ -248,14 +251,14 @@ public sealed class Blockfrost : ICardanoDataProvider, IDisposable
         return new ResolvedInput(outref, output);
     }
 
-    private async Task<Script> GetScriptCached(string scriptHash)
+    private async Task<IScript> GetScriptCached(string scriptHash)
     {
-        if (_scriptCache.TryGetValue(scriptHash, out Script? cachedScript))
+        if (_scriptCache.TryGetValue(scriptHash, out IScript? cachedScript))
         {
             return cachedScript;
         }
 
-        Script script = await GetScript(scriptHash).ConfigureAwait(false);
+        IScript script = await GetScript(scriptHash).ConfigureAwait(false);
         _ = _scriptCache.TryAdd(scriptHash, script);
         return script;
     }
@@ -265,7 +268,7 @@ public sealed class Blockfrost : ICardanoDataProvider, IDisposable
     /// </summary>
     /// <param name="scriptHash">The script hash.</param>
     /// <returns>The script object.</returns>
-    public async Task<Script> GetScript(string scriptHash)
+    public async Task<IScript> GetScript(string scriptHash)
     {
         ArgumentNullException.ThrowIfNull(scriptHash);
 
@@ -303,11 +306,11 @@ public sealed class Blockfrost : ICardanoDataProvider, IDisposable
         string cborHex = cborElement.GetString() ?? throw new InvalidOperationException("GetScriptRef: Could not parse CBOR from response");
 
         byte[] cborBytes = HexStringCache.FromHexString(cborHex);
-        Script script = type switch
+        IScript script = type switch
         {
-            "plutusV1" => new PlutusV1Script(1, cborBytes),
-            "plutusV2" => new PlutusV2Script(2, cborBytes),
-            "plutusV3" => new PlutusV3Script(3, cborBytes),
+            "plutusV1" => PlutusV1Script.Create(1, cborBytes),
+            "plutusV2" => PlutusV2Script.Create(2, cborBytes),
+            "plutusV3" => PlutusV3Script.Create(3, cborBytes),
             _ => throw new InvalidOperationException($"GetScriptRef: Unsupported script type: {type}")
         };
 
@@ -348,7 +351,7 @@ public sealed class Blockfrost : ICardanoDataProvider, IDisposable
     /// </summary>
     /// <param name="tx">The signed transaction.</param>
     /// <returns>The transaction hash.</returns>
-    public async Task<string> SubmitTransactionAsync(Transaction tx)
+    public async Task<string> SubmitTransactionAsync(ITransaction tx)
     {
         ArgumentNullException.ThrowIfNull(tx);
 
@@ -398,12 +401,12 @@ public sealed class Blockfrost : ICardanoDataProvider, IDisposable
             return null;
         }
 
-        Dictionary<ulong, TransactionMetadatum> metadataDict = [];
+        Dictionary<ulong, ITransactionMetadatum> metadataDict = [];
         foreach (BlockfrostMetadataResponse item in rawMetadata)
         {
             if (ulong.TryParse(item.Label, CultureInfo.InvariantCulture, out ulong label))
             {
-                TransactionMetadatum? metadatum = ConvertToTransactionMetadatum(item.JsonMetadata);
+                ITransactionMetadatum? metadatum = ConvertToTransactionMetadatum(item.JsonMetadata);
                 if (metadatum != null)
                 {
                     metadataDict[label] = metadatum;
@@ -411,67 +414,58 @@ public sealed class Blockfrost : ICardanoDataProvider, IDisposable
             }
         }
 
-        return metadataDict.Count > 0 ? new Metadata(metadataDict) : null;
+        return metadataDict.Count > 0 ? Metadata.Create(metadataDict) : null;
     }
 
-    private static TransactionMetadatum? ConvertToTransactionMetadatum(object value)
+    private static ITransactionMetadatum? ConvertToTransactionMetadatum(object value) => value switch
     {
-        return value switch
-        {
-            string str => new MetadataText(str),
-            long lng => new MetadatumIntLong(lng),
-            int i => new MetadatumIntLong(i),
-            JsonElement element => ConvertJsonElementToMetadatum(element),
-            Dictionary<string, object> dict => new MetadatumMap(
-                dict.ToDictionary(
-                    kv => ConvertToTransactionMetadatum(kv.Key) ?? new MetadataText(kv.Key),
-                    kv => ConvertToTransactionMetadatum(kv.Value) ?? new MetadataText(kv.Value?.ToString() ?? "")
-                )
-            ),
-            _ => value.ToString() is string s ? new MetadataText(s) : null
-        };
-    }
+        string str => MetadataText.Create(str),
+        long lng => MetadatumIntLong.Create(lng),
+        int i => MetadatumIntLong.Create(i),
+        JsonElement element => ConvertJsonElementToMetadatum(element),
+        Dictionary<string, object> dict => MetadatumMap.Create(
+            dict.ToDictionary(
+                kv => ConvertToTransactionMetadatum(kv.Key) ?? MetadataText.Create(kv.Key),
+                kv => ConvertToTransactionMetadatum(kv.Value) ?? MetadataText.Create(kv.Value?.ToString() ?? "")
+            )
+        ),
+        _ => value.ToString() is string s ? MetadataText.Create(s) : null
+    };
 
-    private static TransactionMetadatum? ConvertJsonElementToMetadatum(JsonElement element)
+    private static ITransactionMetadatum? ConvertJsonElementToMetadatum(JsonElement element) => element.ValueKind switch
     {
-        return element.ValueKind switch
-        {
-            JsonValueKind.String => new MetadataText(element.GetString() ?? ""),
-            JsonValueKind.Number when element.TryGetInt64(out long lng) => new MetadatumIntLong(lng),
-            JsonValueKind.Number when element.TryGetUInt64(out _) => new MetadatumIntUlong(element.GetUInt64()),
-            JsonValueKind.Number => new MetadataText(element.ToString()),
-            JsonValueKind.Object => new MetadatumMap(
-                element.EnumerateObject().ToDictionary(
-                    prop => (TransactionMetadatum)new MetadataText(prop.Name),
-                    prop => ConvertJsonElementToMetadatum(prop.Value) ?? new MetadataText("")
-                )
-            ),
-            JsonValueKind.Array => new MetadatumList(
-                [.. element.EnumerateArray()
+        JsonValueKind.String => MetadataText.Create(element.GetString() ?? ""),
+        JsonValueKind.Number when element.TryGetInt64(out long lng) => MetadatumIntLong.Create(lng),
+        JsonValueKind.Number when element.TryGetUInt64(out _) => MetadatumIntUlong.Create(element.GetUInt64()),
+        JsonValueKind.Number => MetadataText.Create(element.ToString()),
+        JsonValueKind.Object => MetadatumMap.Create(
+            element.EnumerateObject().ToDictionary(
+                prop => (ITransactionMetadatum)MetadataText.Create(prop.Name),
+                prop => ConvertJsonElementToMetadatum(prop.Value) ?? MetadataText.Create("")
+            )
+        ),
+        JsonValueKind.Array => MetadatumList.Create(
+            [.. element.EnumerateArray()
                     .Select(ConvertJsonElementToMetadatum)
                     .Where(m => m != null)
-                    .Cast<TransactionMetadatum>()]
-            ),
-            JsonValueKind.Undefined => new MetadataText(element.ToString()),
-            JsonValueKind.Null => new MetadataText(element.ToString()),
-            JsonValueKind.True => new MetadataText(element.ToString()),
-            JsonValueKind.False => new MetadataText(element.ToString()),
-            _ => new MetadataText(element.ToString())
-        };
-    }
+                    .Cast<ITransactionMetadatum>()]
+        ),
+        JsonValueKind.Undefined => MetadataText.Create(element.ToString()),
+        JsonValueKind.Null => MetadataText.Create(element.ToString()),
+        JsonValueKind.True => MetadataText.Create(element.ToString()),
+        JsonValueKind.False => MetadataText.Create(element.ToString()),
+        _ => MetadataText.Create(element.ToString())
+    };
 
-    private string GetBaseUrl()
+    private string GetBaseUrl() => NetworkType switch
     {
-        return NetworkType switch
-        {
-            NetworkType.Mainnet => "https://cardano-mainnet.blockfrost.io/api/v0/",
-            NetworkType.Preview => "https://cardano-preview.blockfrost.io/api/v0/",
-            NetworkType.Preprod => "https://cardano-preprod.blockfrost.io/api/v0/",
-            NetworkType.Testnet => "https://cardano-testnet.blockfrost.io/api/v0/",
-            NetworkType.Unknown => throw new NotImplementedException(),
-            _ => throw new ArgumentException($"Unsupported network type: {NetworkType}")
-        };
-    }
+        NetworkType.Mainnet => "https://cardano-mainnet.blockfrost.io/api/v0/",
+        NetworkType.Preview => "https://cardano-preview.blockfrost.io/api/v0/",
+        NetworkType.Preprod => "https://cardano-preprod.blockfrost.io/api/v0/",
+        NetworkType.Testnet => "https://cardano-testnet.blockfrost.io/api/v0/",
+        NetworkType.Unknown => throw new NotImplementedException(),
+        _ => throw new ArgumentException($"Unsupported network type: {NetworkType}")
+    };
 
     /// <summary>
     /// Gets cache statistics for monitoring.

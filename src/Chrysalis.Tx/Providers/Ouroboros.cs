@@ -1,4 +1,3 @@
-using CborTransactionInput = Chrysalis.Codec.Types.Cardano.Core.Transaction.TransactionInput;
 using Chrysalis.Network.Cbor.LocalStateQuery;
 using Chrysalis.Network.MiniProtocols.Extensions;
 using Chrysalis.Network.Multiplexer;
@@ -42,18 +41,15 @@ public class Ouroboros(string socketPath, ulong networkMagic = 2) : ICardanoData
     /// </summary>
     /// <param name="networkType">The network type.</param>
     /// <returns>The network magic number.</returns>
-    public static ulong GetNetworkMagic(NetworkType networkType)
+    public static ulong GetNetworkMagic(NetworkType networkType) => networkType switch
     {
-        return networkType switch
-        {
-            NetworkType.Mainnet => 764824073UL,
-            NetworkType.Preprod => 1UL,
-            NetworkType.Testnet => throw new NotImplementedException(),
-            NetworkType.Preview => throw new NotImplementedException(),
-            NetworkType.Unknown => throw new NotImplementedException(),
-            _ => 2UL
-        };
-    }
+        NetworkType.Mainnet => 764824073UL,
+        NetworkType.Preprod => 1UL,
+        NetworkType.Testnet => throw new NotImplementedException(),
+        NetworkType.Preview => throw new NotImplementedException(),
+        NetworkType.Unknown => throw new NotImplementedException(),
+        _ => 2UL
+    };
 
     /// <summary>
     /// Retrieves protocol parameters via local state query.
@@ -84,20 +80,20 @@ public class Ouroboros(string socketPath, ulong networkMagic = 2) : ICardanoData
         UtxoByAddressResponse utxos = await client.LocalStateQuery.GetUtxosByAddressAsync([.. address.Select(x => Address.FromBech32(x).ToBytes())]).ConfigureAwait(false);
 
         List<ResolvedInput> resolvedInputs = [];
-        foreach ((CborTransactionInput? key, TransactionOutput? value) in utxos.Utxos)
+        foreach ((TransactionInput key, ITransactionOutput value) in utxos.Utxos)
         {
             ReadOnlyMemory<byte> txHash = key.TransactionId;
             ulong index = key.Index;
 
             ReadOnlyMemory<byte>? scriptRefBytes = value.ScriptRef();
-            TransactionOutput output = new PostAlonzoTransactionOutput(
+            ITransactionOutput output = PostAlonzoTransactionOutput.Create(
                 new Codec.Types.Cardano.Core.Common.Address(value.Address()),
                 value.Amount(),
                 value.DatumOption(),
                 scriptRefBytes is not null ? new CborEncodedValue(scriptRefBytes.Value) : null
             );
 
-            resolvedInputs.Add(new ResolvedInput(new CborTransactionInput(txHash, index), output));
+            resolvedInputs.Add(new ResolvedInput(TransactionInput.Create(txHash, index), output));
 
         }
         return resolvedInputs;
@@ -108,7 +104,7 @@ public class Ouroboros(string socketPath, ulong networkMagic = 2) : ICardanoData
     /// </summary>
     /// <param name="tx">The signed transaction.</param>
     /// <returns>The transaction hash.</returns>
-    public async Task<string> SubmitTransactionAsync(Transaction tx)
+    public async Task<string> SubmitTransactionAsync(ITransaction tx)
     {
         ArgumentNullException.ThrowIfNull(tx);
 
@@ -117,7 +113,7 @@ public class Ouroboros(string socketPath, ulong networkMagic = 2) : ICardanoData
 
         string txHex = Convert.ToHexString(CborSerializer.Serialize(tx));
         PostMaryTransaction postMaryTx = (PostMaryTransaction)tx;
-        byte[] txBody = CborSerializer.Serialize(postMaryTx.TransactionBody);
+        byte[] txBody = CborSerializer.Serialize(postMaryTx.Body);
 
         EraTx eraTx = new(6, new CborEncodedValue(Convert.FromHexString(txHex)));
         LocalTxSubmissionMessage result = await client.LocalTxSubmit.SubmitTxAsync(new SubmitTx(0, eraTx), CancellationToken.None).ConfigureAwait(false);
@@ -136,8 +132,5 @@ public class Ouroboros(string socketPath, ulong networkMagic = 2) : ICardanoData
     /// </summary>
     /// <param name="txHash">The transaction hash.</param>
     /// <returns>Always throws NotImplementedException.</returns>
-    public Task<Metadata?> GetTransactionMetadataAsync(string txHash)
-    {
-        throw new NotImplementedException("Transaction metadata retrieval is not supported via Ouroboros protocol");
-    }
+    public Task<Metadata?> GetTransactionMetadataAsync(string txHash) => throw new NotImplementedException("Transaction metadata retrieval is not supported via Ouroboros protocol");
 }

@@ -189,9 +189,9 @@ public class CIP8Tests
         Assert.NotNull(messageWithUnderscore);
         Assert.NotNull(cip8WithUnderscore);
 
-        CoseSign1 parsed = CoseMessageExtensions.FromCip8Format(cip8WithUnderscore!);
+        CoseSign1 parsed = CoseMessageExtensions.FromCip8Format(cip8WithUnderscore);
 
-        Assert.Equal(messageWithUnderscore!.ProtectedHeaders, parsed.ProtectedHeaders);
+        Assert.Equal(messageWithUnderscore.ProtectedHeaders, parsed.ProtectedHeaders);
         Assert.Equal(messageWithUnderscore.UnprotectedHeaders.Headers, parsed.UnprotectedHeaders.Headers);
         Assert.Equal(messageWithUnderscore.Payload, parsed.Payload);
         Assert.Equal(messageWithUnderscore.Signature, parsed.Signature);

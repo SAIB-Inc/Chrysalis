@@ -175,10 +175,7 @@ public sealed class Ed25519Tests
         return [.. i.ToByteArray().Concat(Enumerable.Repeat((byte)0, 32)).Take(32)];
     }
 
-    private static byte[] AddLToSignature(byte[] signature)
-    {
-        return [.. signature[..32], .. AddL(signature[32..])];
-    }
+    private static byte[] AddLToSignature(byte[] signature) => [.. signature[..32], .. AddL(signature[32..])];
 
     private static IEnumerable<byte[]> WithChangedBit(byte[] array)
     {

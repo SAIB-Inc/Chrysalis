@@ -41,26 +41,17 @@ internal static class FpUtils
     /// <summary>
     /// Convert big-endian bytes to BigInteger (unsigned).
     /// </summary>
-    internal static BigInteger BytesToNumberBE(ReadOnlySpan<byte> bytes)
-    {
-        return new(bytes, isUnsigned: true, isBigEndian: true);
-    }
+    internal static BigInteger BytesToNumberBE(ReadOnlySpan<byte> bytes) => new(bytes, isUnsigned: true, isBigEndian: true);
 
     /// <summary>
     /// Bit length of a BigInteger.
     /// </summary>
-    internal static int BitLen(BigInteger n)
-    {
-        return n <= 0 ? 0 : (int)n.GetBitLength();
-    }
+    internal static int BitLen(BigInteger n) => n <= 0 ? 0 : (int)n.GetBitLength();
 
     /// <summary>
     /// Get bit at position i (0 = LSB).
     /// </summary>
-    internal static bool BitGet(BigInteger n, int i)
-    {
-        return ((n >> i) & 1) == 1;
-    }
+    internal static bool BitGet(BigInteger n, int i) => ((n >> i) & 1) == 1;
 
     /// <summary>
     /// Montgomery batch inversion.

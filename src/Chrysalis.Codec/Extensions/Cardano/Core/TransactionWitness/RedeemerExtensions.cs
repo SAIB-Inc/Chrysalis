@@ -3,7 +3,7 @@ using Chrysalis.Codec.Types.Cardano.Core.TransactionWitness;
 namespace Chrysalis.Codec.Extensions.Cardano.Core.TransactionWitness;
 
 /// <summary>
-/// Extension methods for <see cref="Redeemers"/> to convert to list or dictionary form.
+/// Extension methods for <see cref="IRedeemers"/> to convert to list or dictionary form.
 /// </summary>
 public static class RedeemerExtensions
 {
@@ -12,7 +12,7 @@ public static class RedeemerExtensions
     /// </summary>
     /// <param name="self">The redeemers instance.</param>
     /// <returns>The read-only list of redeemer entries, or empty if not a list format.</returns>
-    public static IReadOnlyList<RedeemerEntry> ToList(this Redeemers self)
+    public static IReadOnlyList<RedeemerEntry> ToList(this IRedeemers self)
     {
         ArgumentNullException.ThrowIfNull(self);
         return self switch
@@ -27,7 +27,7 @@ public static class RedeemerExtensions
     /// </summary>
     /// <param name="self">The redeemers instance.</param>
     /// <returns>The dictionary of redeemer entries, or empty if not a map format.</returns>
-    public static Dictionary<RedeemerKey, RedeemerValue> ToDict(this Redeemers self)
+    public static Dictionary<RedeemerKey, RedeemerValue> ToDict(this IRedeemers self)
     {
         ArgumentNullException.ThrowIfNull(self);
         return self switch

@@ -9,13 +9,10 @@ internal static class ByteIntegerConverter
     /// <summary>
     /// Loads a 32-bit unsigned integer from a byte array in little-endian format.
     /// </summary>
-    internal static uint LoadLittleEndian32(byte[] buf, int offset)
-    {
-        return (uint)buf[offset + 0]
+    internal static uint LoadLittleEndian32(byte[] buf, int offset) => (uint)buf[offset + 0]
             | ((uint)buf[offset + 1] << 8)
             | ((uint)buf[offset + 2] << 16)
             | ((uint)buf[offset + 3] << 24);
-    }
 
     /// <summary>
     /// Stores a 32-bit unsigned integer into a byte array in little-endian format.
@@ -31,9 +28,7 @@ internal static class ByteIntegerConverter
     /// <summary>
     /// Loads a 64-bit unsigned integer from a byte array in big-endian format.
     /// </summary>
-    internal static ulong LoadBigEndian64(byte[] buf, int offset)
-    {
-        return (ulong)buf[offset + 7]
+    internal static ulong LoadBigEndian64(byte[] buf, int offset) => (ulong)buf[offset + 7]
             | ((ulong)buf[offset + 6] << 8)
             | ((ulong)buf[offset + 5] << 16)
             | ((ulong)buf[offset + 4] << 24)
@@ -41,7 +36,6 @@ internal static class ByteIntegerConverter
             | ((ulong)buf[offset + 2] << 40)
             | ((ulong)buf[offset + 1] << 48)
             | ((ulong)buf[offset + 0] << 56);
-    }
 
     /// <summary>
     /// Stores a 64-bit unsigned integer into a byte array in big-endian format.

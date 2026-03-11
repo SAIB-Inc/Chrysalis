@@ -7,7 +7,7 @@ using CVKeyWitness = Chrysalis.Codec.Types.Cardano.Core.TransactionWitness.VKeyW
 namespace Chrysalis.Codec.Extensions.Cardano.Core.TransactionWitness;
 
 /// <summary>
-/// Extension methods for <see cref="TransactionWitnessSet"/> to access witness components.
+/// Extension methods for <see cref="ITransactionWitnessSet"/> to access witness components.
 /// </summary>
 public static class TransactionWitnessSetExtensions
 {
@@ -16,13 +16,13 @@ public static class TransactionWitnessSetExtensions
     /// </summary>
     /// <param name="self">The transaction witness set instance.</param>
     /// <returns>The VKey witnesses, or null.</returns>
-    public static IEnumerable<CVKeyWitness>? VKeyWitnessSet(this TransactionWitnessSet self)
+    public static IEnumerable<CVKeyWitness>? VKeyWitnessSet(this ITransactionWitnessSet self)
     {
         ArgumentNullException.ThrowIfNull(self);
         return self switch
         {
-            AlonzoTransactionWitnessSet alonzoTxWitnessSet => alonzoTxWitnessSet.VKeyWitnessSet?.GetValue(),
-            PostAlonzoTransactionWitnessSet postAlonzoTxWitnessSet => postAlonzoTxWitnessSet.VKeyWitnessSet?.GetValue(),
+            AlonzoTransactionWitnessSet alonzoTxWitnessSet => alonzoTxWitnessSet.VKeyWitnesses?.GetValue(),
+            PostAlonzoTransactionWitnessSet postAlonzoTxWitnessSet => postAlonzoTxWitnessSet.VKeyWitnesses?.GetValue(),
             _ => null
         };
     }
@@ -32,13 +32,13 @@ public static class TransactionWitnessSetExtensions
     /// </summary>
     /// <param name="self">The transaction witness set instance.</param>
     /// <returns>The native scripts, or null.</returns>
-    public static IEnumerable<NativeScript>? NativeScriptSet(this TransactionWitnessSet self)
+    public static IEnumerable<INativeScript>? NativeScriptSet(this ITransactionWitnessSet self)
     {
         ArgumentNullException.ThrowIfNull(self);
         return self switch
         {
-            AlonzoTransactionWitnessSet alonzoTxWitnessSet => alonzoTxWitnessSet.NativeScriptSet?.GetValue(),
-            PostAlonzoTransactionWitnessSet postAlonzoTxWitnessSet => postAlonzoTxWitnessSet.NativeScriptSet?.GetValue(),
+            AlonzoTransactionWitnessSet alonzoTxWitnessSet => alonzoTxWitnessSet.NativeScripts?.GetValue(),
+            PostAlonzoTransactionWitnessSet postAlonzoTxWitnessSet => postAlonzoTxWitnessSet.NativeScripts?.GetValue(),
             _ => null
         };
     }
@@ -48,13 +48,13 @@ public static class TransactionWitnessSetExtensions
     /// </summary>
     /// <param name="self">The transaction witness set instance.</param>
     /// <returns>The bootstrap witnesses, or null.</returns>
-    public static IEnumerable<CBootstrapWitness>? BootstrapWitnessSet(this TransactionWitnessSet self)
+    public static IEnumerable<CBootstrapWitness>? BootstrapWitnessSet(this ITransactionWitnessSet self)
     {
         ArgumentNullException.ThrowIfNull(self);
         return self switch
         {
-            AlonzoTransactionWitnessSet alonzoTxWitnessSet => alonzoTxWitnessSet.BootstrapWitnessSet?.GetValue(),
-            PostAlonzoTransactionWitnessSet postAlonzoTxWitnessSet => postAlonzoTxWitnessSet.BootstrapWitnessSet?.GetValue(),
+            AlonzoTransactionWitnessSet alonzoTxWitnessSet => alonzoTxWitnessSet.BootstrapWitnesses?.GetValue(),
+            PostAlonzoTransactionWitnessSet postAlonzoTxWitnessSet => postAlonzoTxWitnessSet.BootstrapWitnesses?.GetValue(),
             _ => null
         };
     }
@@ -64,13 +64,13 @@ public static class TransactionWitnessSetExtensions
     /// </summary>
     /// <param name="self">The transaction witness set instance.</param>
     /// <returns>The Plutus V1 scripts, or null.</returns>
-    public static IEnumerable<ReadOnlyMemory<byte>>? PlutusV1ScriptSet(this TransactionWitnessSet self)
+    public static IEnumerable<ReadOnlyMemory<byte>>? PlutusV1ScriptSet(this ITransactionWitnessSet self)
     {
         ArgumentNullException.ThrowIfNull(self);
         return self switch
         {
-            AlonzoTransactionWitnessSet alonzoTxWitnessSet => alonzoTxWitnessSet.PlutusV1ScriptSet?.GetValue(),
-            PostAlonzoTransactionWitnessSet postAlonzoTxWitnessSet => postAlonzoTxWitnessSet.PlutusV1ScriptSet?.GetValue(),
+            AlonzoTransactionWitnessSet alonzoTxWitnessSet => alonzoTxWitnessSet.PlutusV1Scripts?.GetValue(),
+            PostAlonzoTransactionWitnessSet postAlonzoTxWitnessSet => postAlonzoTxWitnessSet.PlutusV1Scripts?.GetValue(),
             _ => null
         };
     }
@@ -80,7 +80,7 @@ public static class TransactionWitnessSetExtensions
     /// </summary>
     /// <param name="self">The transaction witness set instance.</param>
     /// <returns>The Plutus data items, or null.</returns>
-    public static IEnumerable<PlutusData>? PlutusDataSet(this TransactionWitnessSet self)
+    public static IEnumerable<IPlutusData>? PlutusDataSet(this ITransactionWitnessSet self)
     {
         ArgumentNullException.ThrowIfNull(self);
         return self switch
@@ -96,7 +96,7 @@ public static class TransactionWitnessSetExtensions
     /// </summary>
     /// <param name="self">The transaction witness set instance.</param>
     /// <returns>The redeemers, or null.</returns>
-    public static Redeemers? Redeemers(this TransactionWitnessSet self)
+    public static IRedeemers? Redeemers(this ITransactionWitnessSet self)
     {
         ArgumentNullException.ThrowIfNull(self);
         return self switch
@@ -112,12 +112,12 @@ public static class TransactionWitnessSetExtensions
     /// </summary>
     /// <param name="self">The transaction witness set instance.</param>
     /// <returns>The Plutus V2 scripts, or null.</returns>
-    public static IEnumerable<ReadOnlyMemory<byte>>? PlutusV2ScriptSet(this TransactionWitnessSet self)
+    public static IEnumerable<ReadOnlyMemory<byte>>? PlutusV2ScriptSet(this ITransactionWitnessSet self)
     {
         ArgumentNullException.ThrowIfNull(self);
         return self switch
         {
-            PostAlonzoTransactionWitnessSet postAlonzoTxWitnessSet => postAlonzoTxWitnessSet.PlutusV2ScriptSet?.GetValue(),
+            PostAlonzoTransactionWitnessSet postAlonzoTxWitnessSet => postAlonzoTxWitnessSet.PlutusV2Scripts?.GetValue(),
             _ => null
         };
     }
@@ -127,12 +127,12 @@ public static class TransactionWitnessSetExtensions
     /// </summary>
     /// <param name="self">The transaction witness set instance.</param>
     /// <returns>The Plutus V3 scripts, or null.</returns>
-    public static IEnumerable<ReadOnlyMemory<byte>>? PlutusV3ScriptSet(this TransactionWitnessSet self)
+    public static IEnumerable<ReadOnlyMemory<byte>>? PlutusV3ScriptSet(this ITransactionWitnessSet self)
     {
         ArgumentNullException.ThrowIfNull(self);
         return self switch
         {
-            PostAlonzoTransactionWitnessSet postAlonzoTxWitnessSet => postAlonzoTxWitnessSet.PlutusV3ScriptSet?.GetValue(),
+            PostAlonzoTransactionWitnessSet postAlonzoTxWitnessSet => postAlonzoTxWitnessSet.PlutusV3Scripts?.GetValue(),
             _ => null
         };
     }

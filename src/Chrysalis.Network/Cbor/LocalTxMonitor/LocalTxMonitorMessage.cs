@@ -9,7 +9,7 @@ namespace Chrysalis.Network.Cbor.LocalTxMonitor;
 /// </summary>
 [CborSerializable]
 [CborUnion]
-public abstract partial record LocalTxMonitorMessage : CborBase;
+public abstract partial record LocalTxMonitorMessage : CborRecord;
 
 /// <summary>
 /// Factory methods for creating LocalTxMonitor mini-protocol request messages.
@@ -20,38 +20,26 @@ public static class LocalTxMonitorMessages
     /// Creates an Acquire message to snapshot the current mempool state.
     /// </summary>
     /// <returns>An <see cref="Acquire"/> message.</returns>
-    public static Acquire Acquire()
-    {
-        return new(1);
-    }
+    public static Acquire Acquire() => new(1);
 
     /// <summary>
     /// Creates a Release message to release the current mempool snapshot.
     /// </summary>
     /// <returns>A <see cref="Release"/> message.</returns>
-    public static Release Release()
-    {
-        return new(3);
-    }
+    public static Release Release() => new(3);
 
     /// <summary>
     /// Creates a NextTx message to request the next transaction from the mempool snapshot.
     /// </summary>
     /// <returns>A <see cref="NextTx"/> message.</returns>
-    public static NextTx NextTx()
-    {
-        return new(5);
-    }
+    public static NextTx NextTx() => new(5);
 
     /// <summary>
     /// Creates a HasTx message to check whether a transaction exists in the mempool.
     /// </summary>
     /// <param name="txId">The transaction ID to look up.</param>
     /// <returns>A <see cref="HasTx"/> message.</returns>
-    public static HasTx HasTx(string txId)
-    {
-        return new(7, txId);
-    }
+    public static HasTx HasTx(string txId) => new(7, txId);
 
     /// <summary>
     /// Gets a default GetSizes message to query the mempool capacity and sizes.
@@ -220,4 +208,4 @@ public partial record ReplyGetMeasures(
 public partial record Measures(
     [CborOrder(0)] int CurrentSize,
     [CborOrder(1)] int MaxCapacity
-) : CborBase;
+) : CborRecord;

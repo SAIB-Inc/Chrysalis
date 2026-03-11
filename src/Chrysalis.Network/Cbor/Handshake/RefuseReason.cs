@@ -9,7 +9,7 @@ namespace Chrysalis.Network.Cbor.Handshake;
 /// </summary>
 [CborSerializable]
 [CborUnion]
-public partial record RefuseReason : CborBase;
+public partial record RefuseReason : CborRecord;
 
 /// <summary>
 /// Handshake refusal indicating no mutually supported protocol version was found.

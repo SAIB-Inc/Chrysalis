@@ -29,7 +29,7 @@ public interface ICardanoDataProvider
     /// </summary>
     /// <param name="tx">The signed transaction to submit.</param>
     /// <returns>The transaction hash on successful submission.</returns>
-    Task<string> SubmitTransactionAsync(Transaction tx);
+    Task<string> SubmitTransactionAsync(ITransaction tx);
 
     /// <summary>
     /// Retrieves transaction metadata by transaction hash.

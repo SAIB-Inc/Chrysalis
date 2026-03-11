@@ -23,7 +23,7 @@ public class LocalStateQuery(AgentChannel channel) : IAsyncDisposable
     /// <param name="cancellationToken">Token to cancel the operation.</param>
     /// <returns>The query result from the Cardano node.</returns>
     /// <exception cref="InvalidOperationException">Thrown if no state has been acquired.</exception>
-    public async Task<Result> QueryAsync(QueryReq query, CancellationToken cancellationToken)
+    public async Task<Result> QueryAsync(IQueryReq query, CancellationToken cancellationToken)
     {
         if (!IsAcquired)
         {

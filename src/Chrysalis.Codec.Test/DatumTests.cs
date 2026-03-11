@@ -16,14 +16,24 @@ namespace Chrysalis.Codec.Test;
 public partial record AssetClass(
     [CborOrder(0)] byte[] PolicyId,
     [CborOrder(1)] byte[] AssetName
-) : CborBase;
+) : ICborType
+{
+    public ReadOnlyMemory<byte> Raw { get; set; }
+    public int ConstrIndex { get; set; }
+    public bool IsIndefinite { get; set; }
+}
 
 /// <summary>
 /// MultisigScript for SundaeSwap testing
 /// </summary>
 [CborSerializable]
 [CborUnion]
-public abstract partial record MultisigScript : CborBase;
+public abstract partial record MultisigScript : ICborType
+{
+    public ReadOnlyMemory<byte> Raw { get; set; }
+    public int ConstrIndex { get; set; }
+    public bool IsIndefinite { get; set; }
+}
 
 [CborSerializable]
 [CborConstr(0)]
@@ -95,13 +105,18 @@ public partial record SundaeSwapPoolDatum(
 
     [CborOrder(5)]
     [CborIndefinite]
-    CborOption<MultisigScript> FeeManager,  // Optional fee manager script
+    ICborOption<MultisigScript> FeeManager,  // Optional fee manager script
 
     [CborOrder(6)]
     ulong MarketOpen,  // UNIX timestamp when trading is allowed (0 = open)
     [CborOrder(7)]
     ulong ProtocolFees  // ADA set aside for protocol fees
-) : CborBase;
+) : ICborType
+{
+    public ReadOnlyMemory<byte> Raw { get; set; }
+    public int ConstrIndex { get; set; }
+    public bool IsIndefinite { get; set; }
+}
 
 public class DatumTests
 {
@@ -137,11 +152,8 @@ public class DatumTests
         Assert.Equal(0UL, poolDatum.MarketOpen); // Market is open
         Assert.Equal(1076872000UL, poolDatum.ProtocolFees);
         // Verify fee manager
-        _ = Assert.IsType<Some<MultisigScript>>(poolDatum.FeeManager);
-        Some<MultisigScript> feeManager = (poolDatum.FeeManager as Some<MultisigScript>)!;
-        Assert.NotNull(feeManager);
-        _ = Assert.IsType<Signature>(feeManager.Value);
-        Signature signature = (feeManager.Value as Signature)!;
+        Some<MultisigScript> feeManager = Assert.IsType<Some<MultisigScript>>(poolDatum.FeeManager);
+        Signature signature = Assert.IsType<Signature>(feeManager.Value);
         Assert.Equal("0BC4DF2C05DA7920FE0825B68F83FD96D84F215DA6EF360F7057AD83", Convert.ToHexString(signature.KeyHash).ToUpperInvariant());
     }
     [Theory]
@@ -153,7 +165,7 @@ public class DatumTests
 
         // Deserialize the CBOR data
         SundaeSwapPoolDatum poolDatum = CborSerializer.Deserialize<SundaeSwapPoolDatum>(originalBytes);
-        PlutusData plutusDataDatum = CborSerializer.Deserialize<PlutusData>(originalBytes);
+        IPlutusData plutusDataDatum = CborSerializer.Deserialize<IPlutusData>(originalBytes);
 
         // Re-serialize
         byte[] reserializedBytes = CborSerializer.Serialize(poolDatum);

@@ -42,10 +42,7 @@ internal static class ValueBuiltins
         return a.Length - b.Length;
     }
 
-    private static bool BytesEqual(ReadOnlySpan<byte> a, ReadOnlySpan<byte> b)
-    {
-        return a.SequenceEqual(b);
-    }
+    private static bool BytesEqual(ReadOnlySpan<byte> a, ReadOnlySpan<byte> b) => a.SequenceEqual(b);
 
     // --- lookupCoin ---
 

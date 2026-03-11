@@ -1,10 +1,12 @@
+using Chrysalis.Codec.Serialization;
 using Chrysalis.Codec.Serialization.Attributes;
 
 namespace Chrysalis.Codec.Types.Cardano.Core.Common;
 
-/// <summary>
-/// Represents a CBOR-encoded bounded byte string with a maximum size of 64 bytes.
-/// </summary>
-/// <param name="Value">The bounded byte array value.</param>
 [CborSerializable]
-public partial record CborBoundedBytes([CborSize(64)] ReadOnlyMemory<byte> Value) : CborBase;
+public partial record CborBoundedBytes(ReadOnlyMemory<byte> Value) : ICborType
+{
+    public ReadOnlyMemory<byte> Raw { get; set; }
+    public int ConstrIndex { get; set; }
+    public bool IsIndefinite { get; set; }
+}

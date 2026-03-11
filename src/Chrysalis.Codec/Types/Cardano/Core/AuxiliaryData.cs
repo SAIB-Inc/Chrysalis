@@ -1,58 +1,44 @@
-using Chrysalis.Codec.Serialization.Attributes;
 using Chrysalis.Codec.Serialization;
-using Chrysalis.Codec.Types.Cardano.Core.Scripts;
+using Chrysalis.Codec.Serialization.Attributes;
 using Chrysalis.Codec.Types.Cardano.Core.Transaction;
+using Chrysalis.Codec.Types.Cardano.Core.Scripts;
 
 namespace Chrysalis.Codec.Types.Cardano.Core;
 
-/// <summary>
-/// Represents auxiliary data attached to a Cardano transaction.
-/// </summary>
 [CborSerializable]
 [CborUnion]
-public abstract partial record AuxiliaryData : CborBase { }
+public partial interface IAuxiliaryData : ICborType;
 
-/// <summary>
-/// Represents post-Alonzo auxiliary data containing metadata, native scripts, and Plutus scripts.
-/// </summary>
-/// <param name="MetadataValue">The optional transaction metadata.</param>
-/// <param name="NativeScriptSet">The optional set of native scripts.</param>
-/// <param name="PlutusV1ScriptSet">The optional set of Plutus V1 scripts.</param>
-/// <param name="PlutusV2ScriptSet">The optional set of Plutus V2 scripts.</param>
-/// <param name="PlutusV3ScriptSet">The optional set of Plutus V3 scripts.</param>
 [CborSerializable]
 [CborMap]
 [CborTag(259)]
-public partial record PostAlonzoAuxiliaryDataMap(
-    [CborProperty(0)] Metadata? MetadataValue,
-    [CborProperty(1)] CborDefList<NativeScript>? NativeScriptSet,
-    [CborProperty(2)] CborDefList<ReadOnlyMemory<byte>>? PlutusV1ScriptSet,
-    [CborProperty(3)] CborDefList<ReadOnlyMemory<byte>>? PlutusV2ScriptSet,
-    [CborProperty(4)] CborDefList<ReadOnlyMemory<byte>>? PlutusV3ScriptSet
-) : AuxiliaryData, ICborPreserveRaw;
+public readonly partial record struct PostAlonzoAuxiliaryDataMap : IAuxiliaryData
+{
+    [CborProperty(0)] public partial Metadata? TransactionMetadata { get; }
+    [CborProperty(1)] public partial ICborMaybeIndefList<INativeScript>? NativeScripts { get; }
+    [CborProperty(2)] public partial ICborMaybeIndefList<ReadOnlyMemory<byte>>? PlutusV1Scripts { get; }
+    [CborProperty(3)] public partial ICborMaybeIndefList<ReadOnlyMemory<byte>>? PlutusV2Scripts { get; }
+    [CborProperty(4)] public partial ICborMaybeIndefList<ReadOnlyMemory<byte>>? PlutusV3Scripts { get; }
+}
 
-/// <summary>
-/// Represents transaction metadata as a dictionary of metadatum entries keyed by label.
-/// </summary>
-/// <param name="Value">The dictionary mapping metadata labels to their values.</param>
 [CborSerializable]
-public partial record Metadata(Dictionary<ulong, TransactionMetadatum> Value) : AuxiliaryData;
+public readonly partial record struct Metadata : IAuxiliaryData
+{
+    public partial Dictionary<ulong, ITransactionMetadatum> Value { get; }
+}
 
-/// <summary>
-/// Represents Shelley/Mary era auxiliary data containing metadata and native scripts.
-/// </summary>
-/// <param name="TransactionMetadata">The transaction metadata.</param>
-/// <param name="AuxiliaryScripts">The auxiliary native scripts.</param>
 [CborSerializable]
 [CborList]
-public partial record ShellyMaAuxiliaryData(
-   [CborOrder(0)] Metadata TransactionMetadata,
-   [CborOrder(1)] CborDefList<NativeScript> AuxiliaryScripts
-) : AuxiliaryData, ICborPreserveRaw;
+public readonly partial record struct ShellyMaAuxiliaryData : IAuxiliaryData
+{
+    [CborOrder(0)] public partial Metadata TransactionMetadata { get; }
+    [CborOrder(1)] public partial ICborMaybeIndefList<INativeScript> AuxiliaryScripts { get; }
+}
 
-/// <summary>
-/// Represents a set of auxiliary data entries keyed by transaction index within a block.
-/// </summary>
-/// <param name="Value">The dictionary mapping transaction indices to their auxiliary data.</param>
 [CborSerializable]
-public partial record AuxiliaryDataSet(Dictionary<int, AuxiliaryData> Value) : CborBase;
+public partial record AuxiliaryDataSet(Dictionary<int, IAuxiliaryData> Value) : ICborType
+{
+    public ReadOnlyMemory<byte> Raw { get; set; }
+    public int ConstrIndex { get; set; }
+    public bool IsIndefinite { get; set; }
+}

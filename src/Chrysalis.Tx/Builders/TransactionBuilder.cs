@@ -6,8 +6,6 @@ using Chrysalis.Codec.Types.Cardano.Core.Common;
 using Chrysalis.Codec.Types.Cardano.Core.Scripts;
 using Chrysalis.Codec.Types.Cardano.Core.Governance;
 using Chrysalis.Codec.Types;
-using Chrysalis.Tx.Utils;
-using Chrysalis.Codec.Extensions;
 using Chrysalis.Codec.Serialization.Utils;
 using Chrysalis.Network.Cbor.LocalStateQuery;
 
@@ -15,42 +13,107 @@ namespace Chrysalis.Tx.Builders;
 
 /// <summary>
 /// Fluent builder for constructing Cardano transactions.
+/// Stores mutable internal state and constructs V2 readonly record structs only at Build() time.
 /// </summary>
 public class TransactionBuilder
 {
-    /// <summary>Gets or sets the transaction body being built.</summary>
-    public ConwayTransactionBody Body { get; set; }
+    // ──────────── Transaction Body State ────────────
 
-    /// <summary>Gets or sets the transaction witness set.</summary>
-    public PostAlonzoTransactionWitnessSet WitnessSet { get; set; }
+    private List<TransactionInput> _inputs = [];
+    private List<ITransactionOutput> _outputs = [];
+    private ulong? _validityStart;
+    private List<ICertificate>? _certificates;
+    private Withdrawals? _withdrawals;
+    private byte[]? _auxDataHash;
+    private byte[]? _scriptDataHash;
+    private List<TransactionInput>? _collateral;
+    private List<ReadOnlyMemory<byte>>? _requiredSigners;
+    private List<TransactionInput>? _referenceInputs;
+    private VotingProcedures? _votingProcedures;
+    private List<ProposalProcedure>? _proposals;
+    private ulong? _treasuryValue;
+    private ulong? _donation;
+    private int? _networkId;
+
+    // ──────────── Witness Set State ────────────
+
+    private List<VKeyWitness>? _vkeyWitnesses;
+    private List<INativeScript>? _nativeScripts;
+    private List<BootstrapWitness>? _bootstrapWitnesses;
+    private List<ReadOnlyMemory<byte>>? _plutusV1Scripts;
+    private List<ReadOnlyMemory<byte>>? _plutusV2Scripts;
+    private List<ReadOnlyMemory<byte>>? _plutusV3Scripts;
+    private List<IPlutusData>? _plutusData;
+
+    // ──────────── Auxiliary Data ────────────
+
+    private PostAlonzoAuxiliaryDataMap? _auxiliaryData;
+
+    // ──────────── Other Properties ────────────
 
     /// <summary>Gets or sets the protocol parameters used for fee calculation.</summary>
     public ProtocolParams? Pparams { get; set; }
 
     /// <summary>Gets or sets the change output for fee adjustment.</summary>
-    public TransactionOutput? ChangeOutput { get; set; }
+    public ITransactionOutput? ChangeOutput { get; set; }
 
-    private PostAlonzoAuxiliaryDataMap? _auxiliaryData;
+    // ──────────── Read-Only Accessors ────────────
+
+    /// <summary>Gets the current transaction inputs.</summary>
+    public IReadOnlyList<TransactionInput> Inputs => _inputs;
+
+    /// <summary>Gets the current transaction outputs.</summary>
+    public IReadOnlyList<ITransactionOutput> Outputs => _outputs;
+
+    /// <summary>Gets the current fee.</summary>
+    public ulong Fee { get; private set; }
+
+    /// <summary>Gets the current time-to-live.</summary>
+    public ulong? TimeToLive { get; private set; }
+
+    /// <summary>Gets the current total collateral.</summary>
+    public ulong? TotalCollateral { get; private set; }
+
+    /// <summary>Gets the current mint.</summary>
+    public MultiAssetMint? Mint { get; private set; }
+
+    /// <summary>Gets the current collateral inputs.</summary>
+    public IReadOnlyList<TransactionInput>? Collateral => _collateral;
+
+    /// <summary>Gets the current reference inputs.</summary>
+    public IReadOnlyList<TransactionInput>? ReferenceInputs => _referenceInputs;
+
+    /// <summary>Gets the current required signers.</summary>
+    public IReadOnlyList<ReadOnlyMemory<byte>>? RequiredSigners => _requiredSigners;
+
+    /// <summary>Gets the current redeemers.</summary>
+    public IRedeemers? Redeemers { get; private set; }
+
+    /// <summary>Gets the current Plutus data set.</summary>
+    public IReadOnlyList<IPlutusData>? PlutusDataSet => _plutusData;
+
+    /// <summary>Gets the current certificates as a CBOR list.</summary>
+    public ICborMaybeIndefList<ICertificate>? Certificates =>
+        _certificates != null ? CborDefListWithTag<ICertificate>.Create(_certificates) : null;
+
+    /// <summary>Gets the current collateral return output.</summary>
+    public ITransactionOutput? CollateralReturn { get; private set; }
+
+    /// <summary>Gets the current proposal procedures as a CBOR list.</summary>
+    public ICborMaybeIndefList<ProposalProcedure>? ProposalProcedures =>
+        _proposals != null ? CborDefListWithTag<ProposalProcedure>.Create(_proposals) : null;
 
     /// <summary>
-    /// Initializes a new TransactionBuilder with default empty body and witness set.
+    /// Initializes a new TransactionBuilder with empty state.
     /// </summary>
-    public TransactionBuilder()
-    {
-        Body = CborTypeDefaults.TransactionBody;
-        WitnessSet = CborTypeDefaults.TransactionWitnessSet;
-        _auxiliaryData = null;
-    }
+    public TransactionBuilder() => _auxiliaryData = null;
 
     /// <summary>
     /// Creates a new TransactionBuilder with the given protocol parameters.
     /// </summary>
     /// <param name="pparams">The protocol parameters.</param>
     /// <returns>A new TransactionBuilder instance.</returns>
-    public static TransactionBuilder Create(ProtocolParams pparams)
-    {
-        return new() { Pparams = pparams };
-    }
+    public static TransactionBuilder Create(ProtocolParams pparams) => new() { Pparams = pparams };
 
     #region Transaction Body Methods
 
@@ -61,7 +124,7 @@ public class TransactionBuilder
     /// <returns>This builder for chaining.</returns>
     public TransactionBuilder SetNetworkId(int networkId)
     {
-        Body = Body with { NetworkId = networkId };
+        _networkId = networkId;
         return this;
     }
 
@@ -72,7 +135,7 @@ public class TransactionBuilder
     /// <returns>This builder for chaining.</returns>
     public TransactionBuilder AddInput(TransactionInput input)
     {
-        Body = Body with { Inputs = new CborDefListWithTag<TransactionInput>([.. Body.Inputs.GetValue(), input]) };
+        _inputs.Add(input);
         return this;
     }
 
@@ -83,7 +146,7 @@ public class TransactionBuilder
     /// <returns>This builder for chaining.</returns>
     public TransactionBuilder SetInputs(List<TransactionInput> inputs)
     {
-        Body = Body with { Inputs = new CborDefListWithTag<TransactionInput>(inputs) };
+        _inputs = [.. inputs];
         return this;
     }
 
@@ -93,14 +156,14 @@ public class TransactionBuilder
     /// <param name="output">The transaction output to add.</param>
     /// <param name="isChange">Whether this is the change output for fee adjustment.</param>
     /// <returns>This builder for chaining.</returns>
-    public TransactionBuilder AddOutput(TransactionOutput output, bool isChange = false)
+    public TransactionBuilder AddOutput(ITransactionOutput output, bool isChange = false)
     {
         if (isChange)
         {
             ChangeOutput = output;
         }
 
-        Body = Body with { Outputs = new CborDefList<TransactionOutput>([.. Body.Outputs.GetValue(), output]) };
+        _outputs.Add(output);
 
         return this;
     }
@@ -110,9 +173,9 @@ public class TransactionBuilder
     /// </summary>
     /// <param name="outputs">The outputs to set.</param>
     /// <returns>This builder for chaining.</returns>
-    public TransactionBuilder SetOutputs(List<TransactionOutput> outputs)
+    public TransactionBuilder SetOutputs(List<ITransactionOutput> outputs)
     {
-        Body = Body with { Outputs = new CborDefList<TransactionOutput>(outputs) };
+        _outputs = [.. outputs];
         return this;
     }
 
@@ -123,7 +186,7 @@ public class TransactionBuilder
     /// <returns>This builder for chaining.</returns>
     public TransactionBuilder SetFee(ulong feeAmount)
     {
-        Body = Body with { Fee = feeAmount };
+        Fee = feeAmount;
         return this;
     }
 
@@ -134,7 +197,7 @@ public class TransactionBuilder
     /// <returns>This builder for chaining.</returns>
     public TransactionBuilder SetTtl(ulong ttl)
     {
-        Body = Body with { TimeToLive = ttl };
+        TimeToLive = ttl;
         return this;
     }
 
@@ -145,7 +208,7 @@ public class TransactionBuilder
     /// <returns>This builder for chaining.</returns>
     public TransactionBuilder SetValidityIntervalStart(ulong validityStart)
     {
-        Body = Body with { ValidityIntervalStart = validityStart };
+        _validityStart = validityStart;
         return this;
     }
 
@@ -154,9 +217,9 @@ public class TransactionBuilder
     /// </summary>
     /// <param name="certificate">The certificate to add.</param>
     /// <returns>This builder for chaining.</returns>
-    public TransactionBuilder AddCertificate(Certificate certificate)
+    public TransactionBuilder AddCertificate(ICertificate certificate)
     {
-        Body = Body with { Certificates = new CborDefListWithTag<Certificate>([.. Body.Certificates is not null ? Body.Certificates.GetValue() : [], certificate]) };
+        (_certificates ??= []).Add(certificate);
         return this;
     }
 
@@ -167,7 +230,7 @@ public class TransactionBuilder
     /// <returns>This builder for chaining.</returns>
     public TransactionBuilder SetWithdrawals(Withdrawals withdrawals)
     {
-        Body = Body with { Withdrawals = withdrawals };
+        _withdrawals = withdrawals;
         return this;
     }
 
@@ -178,7 +241,7 @@ public class TransactionBuilder
     /// <returns>This builder for chaining.</returns>
     public TransactionBuilder SetAuxiliaryDataHash(byte[] hash)
     {
-        Body = Body with { AuxiliaryDataHash = hash };
+        _auxDataHash = hash;
         return this;
     }
 
@@ -189,16 +252,13 @@ public class TransactionBuilder
     /// <returns>This builder for chaining.</returns>
     public TransactionBuilder AddMint(MultiAssetMint mint)
     {
-        ArgumentNullException.ThrowIfNull(mint);
-
-        if (Body.Mint == null)
+        if (Mint == null)
         {
-            Body = Body with { Mint = mint };
+            Mint = mint;
             return this;
         }
-        MultiAssetMint mergedMint = MergeMints(Body.Mint, mint);
 
-        Body = Body with { Mint = mergedMint };
+        Mint = MergeMints(Mint.Value, mint);
         return this;
     }
 
@@ -209,7 +269,7 @@ public class TransactionBuilder
     /// <returns>This builder for chaining.</returns>
     public TransactionBuilder SetMint(MultiAssetMint mint)
     {
-        Body = Body with { Mint = mint };
+        Mint = mint;
         return this;
     }
 
@@ -220,7 +280,7 @@ public class TransactionBuilder
     /// <returns>This builder for chaining.</returns>
     public TransactionBuilder SetScriptDataHash(byte[] hash)
     {
-        Body = Body with { ScriptDataHash = hash };
+        _scriptDataHash = hash;
         return this;
     }
 
@@ -231,7 +291,17 @@ public class TransactionBuilder
     /// <returns>This builder for chaining.</returns>
     public TransactionBuilder AddCollateral(TransactionInput collateral)
     {
-        Body = Body with { Collateral = new CborDefListWithTag<TransactionInput>([.. Body.Collateral is not null ? Body.Collateral.GetValue() : [], collateral]) };
+        (_collateral ??= []).Add(collateral);
+        return this;
+    }
+
+    /// <summary>
+    /// Clears all collateral inputs.
+    /// </summary>
+    /// <returns>This builder for chaining.</returns>
+    public TransactionBuilder ClearCollateral()
+    {
+        _collateral = null;
         return this;
     }
 
@@ -242,7 +312,7 @@ public class TransactionBuilder
     /// <returns>This builder for chaining.</returns>
     public TransactionBuilder AddRequiredSigner(ReadOnlyMemory<byte> signer)
     {
-        Body = Body with { RequiredSigners = new CborDefListWithTag<ReadOnlyMemory<byte>>([.. Body.RequiredSigners is not null ? Body.RequiredSigners.GetValue() : [], signer]) };
+        (_requiredSigners ??= []).Add(signer);
         return this;
     }
 
@@ -251,9 +321,19 @@ public class TransactionBuilder
     /// </summary>
     /// <param name="collateralReturn">The collateral return output.</param>
     /// <returns>This builder for chaining.</returns>
-    public TransactionBuilder SetCollateralReturn(TransactionOutput collateralReturn)
+    public TransactionBuilder SetCollateralReturn(ITransactionOutput collateralReturn)
     {
-        Body = Body with { CollateralReturn = collateralReturn };
+        CollateralReturn = collateralReturn;
+        return this;
+    }
+
+    /// <summary>
+    /// Clears the collateral return output.
+    /// </summary>
+    /// <returns>This builder for chaining.</returns>
+    public TransactionBuilder ClearCollateralReturn()
+    {
+        CollateralReturn = null;
         return this;
     }
 
@@ -264,7 +344,7 @@ public class TransactionBuilder
     /// <returns>This builder for chaining.</returns>
     public TransactionBuilder SetTotalCollateral(ulong totalCollateral)
     {
-        Body = Body with { TotalCollateral = totalCollateral };
+        TotalCollateral = totalCollateral;
         return this;
     }
 
@@ -275,7 +355,7 @@ public class TransactionBuilder
     /// <returns>This builder for chaining.</returns>
     public TransactionBuilder AddReferenceInput(TransactionInput referenceInput)
     {
-        Body = Body with { ReferenceInputs = new CborDefListWithTag<TransactionInput>([.. Body.ReferenceInputs is not null ? Body.ReferenceInputs.GetValue() : [], referenceInput]) };
+        (_referenceInputs ??= []).Add(referenceInput);
         return this;
     }
 
@@ -286,7 +366,7 @@ public class TransactionBuilder
     /// <returns>This builder for chaining.</returns>
     public TransactionBuilder SetReferenceInputs(List<TransactionInput> referenceInputs)
     {
-        Body = Body with { ReferenceInputs = new CborDefListWithTag<TransactionInput>(referenceInputs) };
+        _referenceInputs = [.. referenceInputs];
         return this;
     }
 
@@ -297,7 +377,7 @@ public class TransactionBuilder
     /// <returns>This builder for chaining.</returns>
     public TransactionBuilder SetVotingProcedures(VotingProcedures votingProcedures)
     {
-        Body = Body with { VotingProcedures = votingProcedures };
+        _votingProcedures = votingProcedures;
         return this;
     }
 
@@ -308,7 +388,7 @@ public class TransactionBuilder
     /// <returns>This builder for chaining.</returns>
     public TransactionBuilder AddProposalProcedure(ProposalProcedure proposal)
     {
-        Body = Body with { ProposalProcedures = new CborDefListWithTag<ProposalProcedure>([.. Body.ProposalProcedures is not null ? Body.ProposalProcedures.GetValue() : [], proposal]) };
+        (_proposals ??= []).Add(proposal);
         return this;
     }
 
@@ -319,7 +399,7 @@ public class TransactionBuilder
     /// <returns>This builder for chaining.</returns>
     public TransactionBuilder SetTreasuryValue(ulong treasuryValue)
     {
-        Body = Body with { TreasuryValue = treasuryValue };
+        _treasuryValue = treasuryValue;
         return this;
     }
 
@@ -330,7 +410,7 @@ public class TransactionBuilder
     /// <returns>This builder for chaining.</returns>
     public TransactionBuilder SetDonation(ulong donation)
     {
-        Body = Body with { Donation = donation };
+        _donation = donation;
         return this;
     }
 
@@ -345,7 +425,7 @@ public class TransactionBuilder
     /// <returns>This builder for chaining.</returns>
     public TransactionBuilder AddVKeyWitness(VKeyWitness witness)
     {
-        WitnessSet = WitnessSet with { VKeyWitnessSet = new CborDefListWithTag<VKeyWitness>([.. WitnessSet.VKeyWitnessSet is not null ? WitnessSet.VKeyWitnessSet.GetValue() : [], witness]) };
+        (_vkeyWitnesses ??= []).Add(witness);
         return this;
     }
 
@@ -354,9 +434,9 @@ public class TransactionBuilder
     /// </summary>
     /// <param name="script">The native script to add.</param>
     /// <returns>This builder for chaining.</returns>
-    public TransactionBuilder AddNativeScript(NativeScript script)
+    public TransactionBuilder AddNativeScript(INativeScript script)
     {
-        WitnessSet = WitnessSet with { NativeScriptSet = new CborDefListWithTag<NativeScript>([.. WitnessSet.NativeScriptSet is not null ? WitnessSet.NativeScriptSet.GetValue() : [], script]) };
+        (_nativeScripts ??= []).Add(script);
         return this;
     }
 
@@ -367,7 +447,7 @@ public class TransactionBuilder
     /// <returns>This builder for chaining.</returns>
     public TransactionBuilder AddBootstrapWitness(BootstrapWitness witness)
     {
-        WitnessSet = WitnessSet with { BootstrapWitnessSet = new CborDefListWithTag<BootstrapWitness>([.. WitnessSet.BootstrapWitnessSet is not null ? WitnessSet.BootstrapWitnessSet.GetValue() : [], witness]) };
+        (_bootstrapWitnesses ??= []).Add(witness);
         return this;
     }
 
@@ -378,7 +458,7 @@ public class TransactionBuilder
     /// <returns>This builder for chaining.</returns>
     public TransactionBuilder AddPlutusV1Script(ReadOnlyMemory<byte> script)
     {
-        WitnessSet = WitnessSet with { PlutusV1ScriptSet = new CborDefListWithTag<ReadOnlyMemory<byte>>([.. WitnessSet.PlutusV1ScriptSet is not null ? WitnessSet.PlutusV1ScriptSet.GetValue() : [], script]) };
+        (_plutusV1Scripts ??= []).Add(script);
         return this;
     }
 
@@ -389,7 +469,7 @@ public class TransactionBuilder
     /// <returns>This builder for chaining.</returns>
     public TransactionBuilder AddPlutusV2Script(ReadOnlyMemory<byte> script)
     {
-        WitnessSet = WitnessSet with { PlutusV2ScriptSet = new CborDefListWithTag<ReadOnlyMemory<byte>>([.. WitnessSet.PlutusV2ScriptSet is not null ? WitnessSet.PlutusV2ScriptSet.GetValue() : [], script]) };
+        (_plutusV2Scripts ??= []).Add(script);
         return this;
     }
 
@@ -400,7 +480,7 @@ public class TransactionBuilder
     /// <returns>This builder for chaining.</returns>
     public TransactionBuilder AddPlutusV3Script(ReadOnlyMemory<byte> script)
     {
-        WitnessSet = WitnessSet with { PlutusV3ScriptSet = new CborDefListWithTag<ReadOnlyMemory<byte>>([.. WitnessSet.PlutusV3ScriptSet is not null ? WitnessSet.PlutusV3ScriptSet.GetValue() : [], script]) };
+        (_plutusV3Scripts ??= []).Add(script);
         return this;
     }
 
@@ -409,9 +489,9 @@ public class TransactionBuilder
     /// </summary>
     /// <param name="data">The Plutus data to add.</param>
     /// <returns>This builder for chaining.</returns>
-    public TransactionBuilder AddPlutusData(PlutusData data)
+    public TransactionBuilder AddPlutusData(IPlutusData data)
     {
-        WitnessSet = WitnessSet with { PlutusDataSet = new CborDefListWithTag<PlutusData>([.. WitnessSet.PlutusDataSet is not null ? WitnessSet.PlutusDataSet.GetValue() : [], data]) };
+        (_plutusData ??= []).Add(data);
         return this;
     }
 
@@ -420,9 +500,9 @@ public class TransactionBuilder
     /// </summary>
     /// <param name="redeemers">The redeemers to set.</param>
     /// <returns>This builder for chaining.</returns>
-    public TransactionBuilder SetRedeemers(Redeemers redeemers)
+    public TransactionBuilder SetRedeemers(IRedeemers redeemers)
     {
-        WitnessSet = WitnessSet with { Redeemers = redeemers };
+        Redeemers = redeemers;
         return this;
     }
 
@@ -448,14 +528,53 @@ public class TransactionBuilder
     /// <returns>This builder for chaining.</returns>
     public TransactionBuilder SetMetadata(Metadata metadata)
     {
-        _auxiliaryData = _auxiliaryData == null
-            ? new PostAlonzoAuxiliaryDataMap(metadata, null, null, null, null)
-            : _auxiliaryData with { MetadataValue = metadata };
-
+        _auxiliaryData = PostAlonzoAuxiliaryDataMap.Create(transactionMetadata: metadata);
         return this;
     }
 
     #endregion
+
+    /// <summary>
+    /// Builds the ConwayTransactionBody from the current state.
+    /// </summary>
+    /// <returns>The constructed ConwayTransactionBody.</returns>
+    public ConwayTransactionBody BuildBody() => ConwayTransactionBody.Create(
+            inputs: CborDefListWithTag<TransactionInput>.Create(_inputs),
+            outputs: CborDefList<ITransactionOutput>.Create(_outputs),
+            fee: Fee,
+            timeToLive: TimeToLive,
+            certificates: _certificates != null ? CborDefListWithTag<ICertificate>.Create(_certificates) : null,
+            withdrawals: _withdrawals,
+            auxiliaryDataHash: _auxDataHash != null ? (ReadOnlyMemory<byte>?)new ReadOnlyMemory<byte>(_auxDataHash) : null,
+            validityIntervalStart: _validityStart,
+            mint: Mint,
+            scriptDataHash: _scriptDataHash != null ? (ReadOnlyMemory<byte>?)new ReadOnlyMemory<byte>(_scriptDataHash) : null,
+            collateral: _collateral != null ? CborDefListWithTag<TransactionInput>.Create(_collateral) : null,
+            requiredSigners: _requiredSigners != null ? CborDefListWithTag<ReadOnlyMemory<byte>>.Create(_requiredSigners) : null,
+            networkId: _networkId,
+            collateralReturn: CollateralReturn,
+            totalCollateral: TotalCollateral,
+            referenceInputs: _referenceInputs != null ? CborDefListWithTag<TransactionInput>.Create(_referenceInputs) : null,
+            votingProcedures: _votingProcedures,
+            proposalProcedures: _proposals != null ? CborDefListWithTag<ProposalProcedure>.Create(_proposals) : null,
+            treasuryValue: _treasuryValue,
+            donation: _donation
+        );
+
+    /// <summary>
+    /// Builds the PostAlonzoTransactionWitnessSet from the current state.
+    /// </summary>
+    /// <returns>The constructed PostAlonzoTransactionWitnessSet.</returns>
+    public PostAlonzoTransactionWitnessSet BuildWitnessSet() => PostAlonzoTransactionWitnessSet.Create(
+            vKeyWitnesses: _vkeyWitnesses != null ? CborDefListWithTag<VKeyWitness>.Create(_vkeyWitnesses) : null,
+            nativeScripts: _nativeScripts != null ? CborDefListWithTag<INativeScript>.Create(_nativeScripts) : null,
+            bootstrapWitnesses: _bootstrapWitnesses != null ? CborDefListWithTag<BootstrapWitness>.Create(_bootstrapWitnesses) : null,
+            plutusV1Scripts: _plutusV1Scripts != null ? CborDefListWithTag<ReadOnlyMemory<byte>>.Create(_plutusV1Scripts) : null,
+            plutusDataSet: _plutusData != null ? CborDefListWithTag<IPlutusData>.Create(_plutusData) : null,
+            redeemers: Redeemers,
+            plutusV2Scripts: _plutusV2Scripts != null ? CborDefListWithTag<ReadOnlyMemory<byte>>.Create(_plutusV2Scripts) : null,
+            plutusV3Scripts: _plutusV3Scripts != null ? CborDefListWithTag<ReadOnlyMemory<byte>>.Create(_plutusV3Scripts) : null
+        );
 
     /// <summary>
     /// Builds and returns the complete transaction.
@@ -463,7 +582,10 @@ public class TransactionBuilder
     /// <returns>The constructed PostMaryTransaction.</returns>
     public PostMaryTransaction Build()
     {
-        return new(Body, WitnessSet, true, _auxiliaryData);
+        ConwayTransactionBody body = BuildBody();
+        PostAlonzoTransactionWitnessSet witnessSet = BuildWitnessSet();
+
+        return PostMaryTransaction.Create(body, witnessSet, true, _auxiliaryData);
     }
 
     private static MultiAssetMint MergeMints(MultiAssetMint existingMint, MultiAssetMint newMint)
@@ -480,7 +602,7 @@ public class TransactionBuilder
         // Merge new mints
         foreach (KeyValuePair<ReadOnlyMemory<byte>, TokenBundleMint> policyEntry in newMint.Value)
         {
-            if (result.TryGetValue(policyEntry.Key, out TokenBundleMint? existingTokenBundle))
+            if (result.TryGetValue(policyEntry.Key, out TokenBundleMint existingTokenBundle))
             {
                 // Merge token bundles using the same pattern
                 Dictionary<ReadOnlyMemory<byte>, long> mergedTokens = new(ReadOnlyMemoryComparer.Instance);
@@ -499,7 +621,7 @@ public class TransactionBuilder
                         : tokenEntry.Value;
                 }
 
-                result[policyEntry.Key] = new TokenBundleMint(mergedTokens);
+                result[policyEntry.Key] = TokenBundleMint.Create(mergedTokens);
             }
             else
             {
@@ -507,7 +629,7 @@ public class TransactionBuilder
             }
         }
 
-        return new MultiAssetMint(result);
+        return MultiAssetMint.Create(result);
     }
 
 }

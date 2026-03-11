@@ -21,35 +21,17 @@ internal static class Fp6
     private static readonly Fp2Element[] FROBENIUS_COEFFICIENTS_1 = ComputeFrobeniusCoeffs1();
     private static readonly Fp2Element[] FROBENIUS_COEFFICIENTS_2 = ComputeFrobeniusCoeffs2();
 
-    internal static bool IsZero(Fp6Element a)
-    {
-        return Fp2.IsZero(a.C0) && Fp2.IsZero(a.C1) && Fp2.IsZero(a.C2);
-    }
+    internal static bool IsZero(Fp6Element a) => Fp2.IsZero(a.C0) && Fp2.IsZero(a.C1) && Fp2.IsZero(a.C2);
 
-    internal static bool Eql(Fp6Element a, Fp6Element b)
-    {
-        return Fp2.Eql(a.C0, b.C0) && Fp2.Eql(a.C1, b.C1) && Fp2.Eql(a.C2, b.C2);
-    }
+    internal static bool Eql(Fp6Element a, Fp6Element b) => Fp2.Eql(a.C0, b.C0) && Fp2.Eql(a.C1, b.C1) && Fp2.Eql(a.C2, b.C2);
 
-    internal static Fp6Element Neg(Fp6Element a)
-    {
-        return new(Fp2.Neg(a.C0), Fp2.Neg(a.C1), Fp2.Neg(a.C2));
-    }
+    internal static Fp6Element Neg(Fp6Element a) => new(Fp2.Neg(a.C0), Fp2.Neg(a.C1), Fp2.Neg(a.C2));
 
-    internal static Fp6Element Add(Fp6Element a, Fp6Element b)
-    {
-        return new(Fp2.Add(a.C0, b.C0), Fp2.Add(a.C1, b.C1), Fp2.Add(a.C2, b.C2));
-    }
+    internal static Fp6Element Add(Fp6Element a, Fp6Element b) => new(Fp2.Add(a.C0, b.C0), Fp2.Add(a.C1, b.C1), Fp2.Add(a.C2, b.C2));
 
-    internal static Fp6Element Sub(Fp6Element a, Fp6Element b)
-    {
-        return new(Fp2.Sub(a.C0, b.C0), Fp2.Sub(a.C1, b.C1), Fp2.Sub(a.C2, b.C2));
-    }
+    internal static Fp6Element Sub(Fp6Element a, Fp6Element b) => new(Fp2.Sub(a.C0, b.C0), Fp2.Sub(a.C1, b.C1), Fp2.Sub(a.C2, b.C2));
 
-    internal static Fp6Element MulScalar(Fp6Element a, BigInteger s)
-    {
-        return new(Fp2.MulScalar(a.C0, s), Fp2.MulScalar(a.C1, s), Fp2.MulScalar(a.C2, s));
-    }
+    internal static Fp6Element MulScalar(Fp6Element a, BigInteger s) => new(Fp2.MulScalar(a.C0, s), Fp2.MulScalar(a.C1, s), Fp2.MulScalar(a.C2, s));
 
     internal static Fp6Element Mul(Fp6Element a, Fp6Element b)
     {
@@ -98,10 +80,7 @@ internal static class Fp6
         return new(Fp2.Mul(t4, t0), Fp2.Mul(t4, t1), Fp2.Mul(t4, t2));
     }
 
-    internal static Fp6Element Div(Fp6Element a, Fp6Element b)
-    {
-        return Mul(a, Inv(b));
-    }
+    internal static Fp6Element Div(Fp6Element a, Fp6Element b) => Mul(a, Inv(b));
 
     internal static Fp6Element Pow(Fp6Element num, BigInteger power)
     {
@@ -138,22 +117,16 @@ internal static class Fp6
     /// <summary>
     /// Cyclic shift: mulByNonresidue({c0,c1,c2}) = {nonresidue*c2, c0, c1}
     /// </summary>
-    internal static Fp6Element MulByNonresidue(Fp6Element a)
-    {
-        return new(Fp2.MulByNonresidue(a.C2), a.C0, a.C1);
-    }
+    internal static Fp6Element MulByNonresidue(Fp6Element a) => new(Fp2.MulByNonresidue(a.C2), a.C0, a.C1);
 
     /// <summary>
     /// Sparse multiplication by (b1) in position 1: {0, b1, 0}
     /// </summary>
-    internal static Fp6Element Mul1(Fp6Element a, Fp2Element b1)
-    {
-        return new(
+    internal static Fp6Element Mul1(Fp6Element a, Fp2Element b1) => new(
             Fp2.MulByNonresidue(Fp2.Mul(a.C2, b1)),
             Fp2.Mul(a.C0, b1),
             Fp2.Mul(a.C1, b1)
         );
-    }
 
     /// <summary>
     /// Sparse multiplication by {b0, b1, 0}
@@ -169,24 +142,15 @@ internal static class Fp6
         );
     }
 
-    internal static Fp6Element MulByFp2(Fp6Element a, Fp2Element rhs)
-    {
-        return new(Fp2.Mul(a.C0, rhs), Fp2.Mul(a.C1, rhs), Fp2.Mul(a.C2, rhs));
-    }
+    internal static Fp6Element MulByFp2(Fp6Element a, Fp2Element rhs) => new(Fp2.Mul(a.C0, rhs), Fp2.Mul(a.C1, rhs), Fp2.Mul(a.C2, rhs));
 
-    internal static Fp6Element FrobeniusMap(Fp6Element a, int power)
-    {
-        return new(
+    internal static Fp6Element FrobeniusMap(Fp6Element a, int power) => new(
             Fp2.FrobeniusMap(a.C0, power),
             Fp2.Mul(Fp2.FrobeniusMap(a.C1, power), FROBENIUS_COEFFICIENTS_1[power % 6]),
             Fp2.Mul(Fp2.FrobeniusMap(a.C2, power), FROBENIUS_COEFFICIENTS_2[power % 6])
         );
-    }
 
-    internal static byte[] ToBytes(Fp6Element a)
-    {
-        return [.. Fp2.ToBytes(a.C0), .. Fp2.ToBytes(a.C1), .. Fp2.ToBytes(a.C2)];
-    }
+    internal static byte[] ToBytes(Fp6Element a) => [.. Fp2.ToBytes(a.C0), .. Fp2.ToBytes(a.C1), .. Fp2.ToBytes(a.C2)];
 
     internal static Fp6Element FromBytes(ReadOnlySpan<byte> bytes)
     {

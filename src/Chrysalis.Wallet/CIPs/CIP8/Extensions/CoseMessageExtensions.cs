@@ -131,13 +131,10 @@ public static class CoseMessageExtensions
     /// <summary>
     /// Base64 URL encoding without padding.
     /// </summary>
-    private static string Base64UrlEncode(byte[] data)
-    {
-        return Convert.ToBase64String(data)
+    private static string Base64UrlEncode(byte[] data) => Convert.ToBase64String(data)
             .TrimEnd('=')
             .Replace('+', '-')
             .Replace('/', '_');
-    }
 
     /// <summary>
     /// Base64 URL decoding.

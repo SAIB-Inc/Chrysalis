@@ -26,35 +26,17 @@ internal static class Fp2
     // 1/2 in Fp (for sqrt)
     private static readonly BigInteger FP_DIV2 = Fp.Inv(2);
 
-    internal static Fp2Element Create(BigInteger c0, BigInteger c1)
-    {
-        return new(Fp.Create(c0), Fp.Create(c1));
-    }
+    internal static Fp2Element Create(BigInteger c0, BigInteger c1) => new(Fp.Create(c0), Fp.Create(c1));
 
-    internal static bool IsZero(Fp2Element a)
-    {
-        return Fp.IsZero(a.C0) && Fp.IsZero(a.C1);
-    }
+    internal static bool IsZero(Fp2Element a) => Fp.IsZero(a.C0) && Fp.IsZero(a.C1);
 
-    internal static bool Eql(Fp2Element a, Fp2Element b)
-    {
-        return Fp.Eql(a.C0, b.C0) && Fp.Eql(a.C1, b.C1);
-    }
+    internal static bool Eql(Fp2Element a, Fp2Element b) => Fp.Eql(a.C0, b.C0) && Fp.Eql(a.C1, b.C1);
 
-    internal static Fp2Element Neg(Fp2Element a)
-    {
-        return new(Fp.Neg(a.C0), Fp.Neg(a.C1));
-    }
+    internal static Fp2Element Neg(Fp2Element a) => new(Fp.Neg(a.C0), Fp.Neg(a.C1));
 
-    internal static Fp2Element Add(Fp2Element a, Fp2Element b)
-    {
-        return new(Fp.Add(a.C0, b.C0), Fp.Add(a.C1, b.C1));
-    }
+    internal static Fp2Element Add(Fp2Element a, Fp2Element b) => new(Fp.Add(a.C0, b.C0), Fp.Add(a.C1, b.C1));
 
-    internal static Fp2Element Sub(Fp2Element a, Fp2Element b)
-    {
-        return new(Fp.Sub(a.C0, b.C0), Fp.Sub(a.C1, b.C1));
-    }
+    internal static Fp2Element Sub(Fp2Element a, Fp2Element b) => new(Fp.Sub(a.C0, b.C0), Fp.Sub(a.C1, b.C1));
 
     /// <summary>
     /// (a + bi)(c + di) = (ac - bd) + (ad + bc)i  where i² = -1
@@ -73,10 +55,7 @@ internal static class Fp2
     /// <summary>
     /// Multiply by scalar (BigInteger from Fp).
     /// </summary>
-    internal static Fp2Element MulScalar(Fp2Element a, BigInteger s)
-    {
-        return new(Fp.Mul(a.C0, s), Fp.Mul(a.C1, s));
-    }
+    internal static Fp2Element MulScalar(Fp2Element a, BigInteger s) => new(Fp.Mul(a.C0, s), Fp.Mul(a.C1, s));
 
     /// <summary>
     /// Optimized squaring: (a+bi)² = (a+b)(a-b) + 2ab*i
@@ -99,10 +78,7 @@ internal static class Fp2
         return new(Fp.Mul(factor, Fp.Create(a.C0)), Fp.Mul(factor, Fp.Create(-a.C1)));
     }
 
-    internal static Fp2Element Div(Fp2Element a, Fp2Element b)
-    {
-        return Mul(a, Inv(b));
-    }
+    internal static Fp2Element Div(Fp2Element a, Fp2Element b) => Mul(a, Inv(b));
 
     internal static Fp2Element Pow(Fp2Element num, BigInteger power)
     {
@@ -191,10 +167,7 @@ internal static class Fp2
     /// <summary>
     /// Multiply by the non-residue (1 + u): used in tower construction.
     /// </summary>
-    internal static Fp2Element MulByNonresidue(Fp2Element a)
-    {
-        return Mul(a, NONRESIDUE);
-    }
+    internal static Fp2Element MulByNonresidue(Fp2Element a) => Mul(a, NONRESIDUE);
 
     /// <summary>
     /// Multiply by b' = 4(1+i) for BLS12-381 twisted curve.
@@ -210,10 +183,7 @@ internal static class Fp2
     /// <summary>
     /// Frobenius map: conjugation when power is odd.
     /// </summary>
-    internal static Fp2Element FrobeniusMap(Fp2Element a, int power)
-    {
-        return power % 2 == 0 ? a : new(a.C0, Fp.Mul(a.C1, FROBENIUS_COEFF));
-    }
+    internal static Fp2Element FrobeniusMap(Fp2Element a, int power) => power % 2 == 0 ? a : new(a.C0, Fp.Mul(a.C1, FROBENIUS_COEFF));
 
     /// <summary>
     /// Fp4Square used in cyclotomic squaring.
@@ -228,18 +198,9 @@ internal static class Fp2
         );
     }
 
-    internal static Fp2Element Cmov(Fp2Element a, Fp2Element b, bool c)
-    {
-        return c ? b : a;
-    }
+    internal static Fp2Element Cmov(Fp2Element a, Fp2Element b, bool c) => c ? b : a;
 
-    internal static byte[] ToBytes(Fp2Element a)
-    {
-        return [.. Fp.ToBytes(a.C0), .. Fp.ToBytes(a.C1)];
-    }
+    internal static byte[] ToBytes(Fp2Element a) => [.. Fp.ToBytes(a.C0), .. Fp.ToBytes(a.C1)];
 
-    internal static Fp2Element FromBytes(ReadOnlySpan<byte> bytes)
-    {
-        return new(Fp.FromBytes(bytes[..Fp.BYTES]), Fp.FromBytes(bytes[Fp.BYTES..]));
-    }
+    internal static Fp2Element FromBytes(ReadOnlySpan<byte> bytes) => new(Fp.FromBytes(bytes[..Fp.BYTES]), Fp.FromBytes(bytes[Fp.BYTES..]));
 }

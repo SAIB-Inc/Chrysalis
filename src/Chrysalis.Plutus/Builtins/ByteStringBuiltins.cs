@@ -44,10 +44,7 @@ internal static class ByteStringBuiltins
         return ByteStringResult(bs.Slice(skip, take).ToArray());
     }
 
-    internal static CekValue LengthOfByteString(ImmutableArray<CekValue> args)
-    {
-        return IntegerResult(UnwrapByteString(args[0]).Length);
-    }
+    internal static CekValue LengthOfByteString(ImmutableArray<CekValue> args) => IntegerResult(UnwrapByteString(args[0]).Length);
 
     internal static CekValue IndexByteString(ImmutableArray<CekValue> args)
     {
@@ -59,23 +56,11 @@ internal static class ByteStringBuiltins
             : IntegerResult(bs.Span[(int)idxBig]);
     }
 
-    internal static CekValue EqualsByteString(ImmutableArray<CekValue> args)
-    {
-        return BoolResult(UnwrapByteString(args[0]).Span.SequenceEqual(UnwrapByteString(args[1]).Span));
-    }
+    internal static CekValue EqualsByteString(ImmutableArray<CekValue> args) => BoolResult(UnwrapByteString(args[0]).Span.SequenceEqual(UnwrapByteString(args[1]).Span));
 
-    internal static CekValue LessThanByteString(ImmutableArray<CekValue> args)
-    {
-        return BoolResult(UnwrapByteString(args[0]).Span.SequenceCompareTo(UnwrapByteString(args[1]).Span) < 0);
-    }
+    internal static CekValue LessThanByteString(ImmutableArray<CekValue> args) => BoolResult(UnwrapByteString(args[0]).Span.SequenceCompareTo(UnwrapByteString(args[1]).Span) < 0);
 
-    internal static CekValue LessThanEqualsByteString(ImmutableArray<CekValue> args)
-    {
-        return BoolResult(UnwrapByteString(args[0]).Span.SequenceCompareTo(UnwrapByteString(args[1]).Span) <= 0);
-    }
+    internal static CekValue LessThanEqualsByteString(ImmutableArray<CekValue> args) => BoolResult(UnwrapByteString(args[0]).Span.SequenceCompareTo(UnwrapByteString(args[1]).Span) <= 0);
 
-    private static int ClampToNonNegative(BigInteger n, int max)
-    {
-        return n < 0 ? 0 : n > max ? max : (int)n;
-    }
+    private static int ClampToNonNegative(BigInteger n, int max) => n < 0 ? 0 : n > max ? max : (int)n;
 }

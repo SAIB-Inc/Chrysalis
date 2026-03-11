@@ -3,7 +3,7 @@ using Chrysalis.Codec.Types.Cardano.Core.Header;
 namespace Chrysalis.Codec.Extensions.Cardano.Core.Header;
 
 /// <summary>
-/// Extension methods for <see cref="BlockHeaderBody"/> to access header fields across eras.
+/// Extension methods for <see cref="IBlockHeaderBody"/> to access header fields across eras.
 /// </summary>
 public static class HeaderBodyExtensions
 {
@@ -12,7 +12,7 @@ public static class HeaderBodyExtensions
     /// </summary>
     /// <param name="self">The block header body instance.</param>
     /// <returns>The block number.</returns>
-    public static ulong BlockNumber(this BlockHeaderBody self)
+    public static ulong BlockNumber(this IBlockHeaderBody self)
     {
         ArgumentNullException.ThrowIfNull(self);
         return self switch
@@ -28,7 +28,7 @@ public static class HeaderBodyExtensions
     /// </summary>
     /// <param name="self">The block header body instance.</param>
     /// <returns>The slot number.</returns>
-    public static ulong Slot(this BlockHeaderBody self)
+    public static ulong Slot(this IBlockHeaderBody self)
     {
         ArgumentNullException.ThrowIfNull(self);
         return self switch
@@ -44,7 +44,7 @@ public static class HeaderBodyExtensions
     /// </summary>
     /// <param name="self">The block header body instance.</param>
     /// <returns>The previous block hash bytes.</returns>
-    public static ReadOnlyMemory<byte>? PrevHash(this BlockHeaderBody self)
+    public static ReadOnlyMemory<byte>? PrevHash(this IBlockHeaderBody self)
     {
         ArgumentNullException.ThrowIfNull(self);
         return self switch
@@ -60,12 +60,12 @@ public static class HeaderBodyExtensions
     /// </summary>
     /// <param name="self">The block header body instance.</param>
     /// <returns>The issuer verification key bytes.</returns>
-    public static ReadOnlyMemory<byte> IssuerVKey(this BlockHeaderBody self)
+    public static ReadOnlyMemory<byte> IssuerVKey(this IBlockHeaderBody self)
     {
         ArgumentNullException.ThrowIfNull(self);
         return self switch
         {
-            BabbageHeaderBody babbageHeaderBody => babbageHeaderBody.IssuerVKey,
+            BabbageHeaderBody babbageHeaderBody => babbageHeaderBody.IssuerVkey,
             _ => throw new NotSupportedException()
         };
     }
@@ -75,13 +75,13 @@ public static class HeaderBodyExtensions
     /// </summary>
     /// <param name="self">The block header body instance.</param>
     /// <returns>The VRF verification key bytes.</returns>
-    public static ReadOnlyMemory<byte> VrfKey(this BlockHeaderBody self)
+    public static ReadOnlyMemory<byte> VrfKey(this IBlockHeaderBody self)
     {
         ArgumentNullException.ThrowIfNull(self);
         return self switch
         {
-            AlonzoHeaderBody alonzoHeaderBody => alonzoHeaderBody.VrfVKey,
-            BabbageHeaderBody babbageHeaderBody => babbageHeaderBody.VrfVKey,
+            AlonzoHeaderBody alonzoHeaderBody => alonzoHeaderBody.VrfVkey,
+            BabbageHeaderBody babbageHeaderBody => babbageHeaderBody.VrfVkey,
             _ => throw new NotSupportedException()
         };
     }
@@ -91,7 +91,7 @@ public static class HeaderBodyExtensions
     /// </summary>
     /// <param name="self">The block header body instance.</param>
     /// <returns>The VRF certificate.</returns>
-    public static VrfCert VrfResult(this BlockHeaderBody self)
+    public static VrfCert VrfResult(this IBlockHeaderBody self)
     {
         ArgumentNullException.ThrowIfNull(self);
         return self switch
@@ -106,13 +106,13 @@ public static class HeaderBodyExtensions
     /// </summary>
     /// <param name="self">The block header body instance.</param>
     /// <returns>The block body size in bytes.</returns>
-    public static ulong BlockBodySize(this BlockHeaderBody self)
+    public static ulong BlockBodySize(this IBlockHeaderBody self)
     {
         ArgumentNullException.ThrowIfNull(self);
         return self switch
         {
-            AlonzoHeaderBody alonzoHeaderBody => alonzoHeaderBody.BlockBodySize,
-            BabbageHeaderBody babbageHeaderBody => babbageHeaderBody.BlockBodySize,
+            AlonzoHeaderBody alonzoHeaderBody => alonzoHeaderBody.BodySize,
+            BabbageHeaderBody babbageHeaderBody => babbageHeaderBody.BodySize,
             _ => throw new NotSupportedException()
         };
     }
@@ -122,13 +122,13 @@ public static class HeaderBodyExtensions
     /// </summary>
     /// <param name="self">The block header body instance.</param>
     /// <returns>The block body hash bytes.</returns>
-    public static ReadOnlyMemory<byte> BlockBodyHash(this BlockHeaderBody self)
+    public static ReadOnlyMemory<byte> BlockBodyHash(this IBlockHeaderBody self)
     {
         ArgumentNullException.ThrowIfNull(self);
         return self switch
         {
-            AlonzoHeaderBody alonzoHeaderBody => alonzoHeaderBody.BlockBodyHash,
-            BabbageHeaderBody babbageHeaderBody => babbageHeaderBody.BlockBodyHash,
+            AlonzoHeaderBody alonzoHeaderBody => alonzoHeaderBody.BodyHash,
+            BabbageHeaderBody babbageHeaderBody => babbageHeaderBody.BodyHash,
             _ => throw new NotSupportedException()
         };
     }
@@ -138,7 +138,7 @@ public static class HeaderBodyExtensions
     /// </summary>
     /// <param name="self">The block header body instance.</param>
     /// <returns>The sequence number.</returns>
-    public static ulong OperationalCertSequenceNumber(this BlockHeaderBody self)
+    public static ulong OperationalCertSequenceNumber(this IBlockHeaderBody self)
     {
         ArgumentNullException.ThrowIfNull(self);
         return self switch
@@ -154,7 +154,7 @@ public static class HeaderBodyExtensions
     /// </summary>
     /// <param name="self">The block header body instance.</param>
     /// <returns>The KES period.</returns>
-    public static ulong OperationalCertKesPeriod(this BlockHeaderBody self)
+    public static ulong OperationalCertKesPeriod(this IBlockHeaderBody self)
     {
         ArgumentNullException.ThrowIfNull(self);
         return self switch
@@ -170,7 +170,7 @@ public static class HeaderBodyExtensions
     /// </summary>
     /// <param name="self">The block header body instance.</param>
     /// <returns>The sigma bytes.</returns>
-    public static ReadOnlyMemory<byte> OperationalCertSigma(this BlockHeaderBody self)
+    public static ReadOnlyMemory<byte> OperationalCertSigma(this IBlockHeaderBody self)
     {
         ArgumentNullException.ThrowIfNull(self);
         return self switch
@@ -186,7 +186,7 @@ public static class HeaderBodyExtensions
     /// </summary>
     /// <param name="self">The block header body instance.</param>
     /// <returns>The operational certificate.</returns>
-    public static OperationalCert OperationalCert(this BlockHeaderBody self)
+    public static OperationalCert OperationalCert(this IBlockHeaderBody self)
     {
         ArgumentNullException.ThrowIfNull(self);
         return self switch
@@ -201,7 +201,7 @@ public static class HeaderBodyExtensions
     /// </summary>
     /// <param name="self">The block header body instance.</param>
     /// <returns>The protocol version.</returns>
-    public static ProtocolVersion ProtocolVersion(this BlockHeaderBody self)
+    public static ProtocolVersion ProtocolVersion(this IBlockHeaderBody self)
     {
         ArgumentNullException.ThrowIfNull(self);
         return self switch

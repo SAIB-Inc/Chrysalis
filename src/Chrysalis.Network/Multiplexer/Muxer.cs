@@ -63,10 +63,7 @@ public sealed class Muxer(PipeWriter bearerWriter, ProtocolMode muxerMode, Semap
     /// </summary>
     /// <returns>The transmission time in milliseconds.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private uint CalculateTransmissionTime()
-    {
-        return (uint)Math.Min((DateTimeOffset.UtcNow - _startTime).TotalMilliseconds, uint.MaxValue);
-    }
+    private uint CalculateTransmissionTime() => (uint)Math.Min((DateTimeOffset.UtcNow - _startTime).TotalMilliseconds, uint.MaxValue);
 
     /// <summary>
     /// Runs the muxer, continuously reading messages from the channel and writing them to the bearer.

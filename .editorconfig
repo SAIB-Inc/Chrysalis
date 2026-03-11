@@ -6,6 +6,18 @@ root = true
 # ── Style preferences ──
 csharp_style_namespace_declarations = file_scoped
 
+# ── Expression-body preferences: allow either style ──
+csharp_style_expression_bodied_methods = true:silent
+csharp_style_expression_bodied_constructors = true:silent
+csharp_style_expression_bodied_operators = true:silent
+csharp_style_expression_bodied_properties = true:silent
+csharp_style_expression_bodied_indexers = true:silent
+csharp_style_expression_bodied_accessors = true:silent
+csharp_style_expression_bodied_lambdas = true:silent
+csharp_style_expression_bodied_local_functions = true:silent
+dotnet_diagnostic.IDE0045.severity = suggestion
+dotnet_diagnostic.IDE0046.severity = suggestion
+
 # ── Promote ALL Roslyn style suggestions to warnings. ──
 # Combined with TreatWarningsAsErrors in Directory.Build.props,
 # every IDE suggestion becomes a build error.
@@ -98,6 +110,18 @@ dotnet_diagnostic.CA1849.severity = none
 [src/Chrysalis.Wallet.Cli/**.cs]
 dotnet_diagnostic.CS1591.severity = none
 dotnet_diagnostic.CA1849.severity = none
+
+# ── V2 Codec types ──
+[src/Chrysalis.Codec.V2/**.cs]
+dotnet_diagnostic.CS1591.severity = none
+
+# ── V2 Test project ──
+[src/Chrysalis.Codec.V2.Test/**.cs]
+dotnet_diagnostic.CS1591.severity = none
+dotnet_diagnostic.CA1707.severity = none
+dotnet_diagnostic.CA1812.severity = none
+dotnet_diagnostic.CA1852.severity = none
+dotnet_diagnostic.IDE0002.severity = none
 
 # ── Benchmarks ──
 [benchmarks/**.cs]

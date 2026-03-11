@@ -15,7 +15,7 @@ public sealed class CekMachine
     private readonly BuiltinCostModel[] _builtinCosts;
 
     // Machine state (mutable for zero-allocation hot loop)
-    private Context _ctx = null!;
+    private Context _ctx;
     private Environment? _env;
     private Term<DeBruijn>? _computeTerm;
     private CekValue? _returnValue;
@@ -26,6 +26,7 @@ public sealed class CekMachine
         _budget = initial - MachineCosts.StartupCost;
         _unbudgetedSteps = new int[MachineCosts.StepKindCount + 1];
         _builtinCosts = DefaultCosts.Create();
+        _ctx = NoFrame.Instance;
     }
 
     internal CekMachine(ExBudget initialBudget, BuiltinCostModel[] builtinCosts)
@@ -33,6 +34,7 @@ public sealed class CekMachine
         _budget = initialBudget - MachineCosts.StartupCost;
         _unbudgetedSteps = new int[MachineCosts.StepKindCount + 1];
         _builtinCosts = builtinCosts;
+        _ctx = NoFrame.Instance;
     }
 
     public ExBudget RemainingBudget

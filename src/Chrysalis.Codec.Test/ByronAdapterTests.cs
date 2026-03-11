@@ -63,9 +63,9 @@ public class ByronAdapterTests
     {
         byte[] cborRaw = LoadTestBlock("byron2.block");
         BlockWithEra blockWithEra = CborSerializer.Deserialize<BlockWithEra>(cborRaw);
-        Block block = blockWithEra.Block;
+        IBlock block = blockWithEra.Block;
 
-        IEnumerable<TransactionBody> txBodies = block.TransactionBodies();
+        IEnumerable<ITransactionBody> txBodies = block.TransactionBodies();
 
         Assert.NotEmpty(txBodies);
         Assert.All(txBodies, txBody => Assert.IsType<ByronTransactionBodyAdapter>(txBody));
@@ -76,9 +76,9 @@ public class ByronAdapterTests
     {
         byte[] cborRaw = LoadTestBlock("genesis.block");
         BlockWithEra blockWithEra = CborSerializer.Deserialize<BlockWithEra>(cborRaw);
-        Block block = blockWithEra.Block;
+        IBlock block = blockWithEra.Block;
 
-        IEnumerable<TransactionBody> txBodies = block.TransactionBodies();
+        IEnumerable<ITransactionBody> txBodies = block.TransactionBodies();
 
         Assert.Empty(txBodies);
     }
@@ -88,9 +88,9 @@ public class ByronAdapterTests
     {
         byte[] cborRaw = LoadTestBlock("byron2.block");
         BlockWithEra blockWithEra = CborSerializer.Deserialize<BlockWithEra>(cborRaw);
-        Block block = blockWithEra.Block;
+        IBlock block = blockWithEra.Block;
 
-        TransactionBody firstTx = block.TransactionBodies().First();
+        ITransactionBody firstTx = block.TransactionBodies().First();
         IEnumerable<TransactionInput> inputs = firstTx.Inputs();
 
         Assert.NotEmpty(inputs);
@@ -106,10 +106,10 @@ public class ByronAdapterTests
     {
         byte[] cborRaw = LoadTestBlock("byron2.block");
         BlockWithEra blockWithEra = CborSerializer.Deserialize<BlockWithEra>(cborRaw);
-        Block block = blockWithEra.Block;
+        IBlock block = blockWithEra.Block;
 
-        TransactionBody firstTx = block.TransactionBodies().First();
-        IEnumerable<TransactionOutput> outputs = firstTx.Outputs();
+        ITransactionBody firstTx = block.TransactionBodies().First();
+        IEnumerable<ITransactionOutput> outputs = firstTx.Outputs();
 
         Assert.NotEmpty(outputs);
         Assert.All(outputs, output => Assert.IsType<ByronTransactionOutputAdapter>(output));
@@ -120,9 +120,9 @@ public class ByronAdapterTests
     {
         byte[] cborRaw = LoadTestBlock("byron2.block");
         BlockWithEra blockWithEra = CborSerializer.Deserialize<BlockWithEra>(cborRaw);
-        Block block = blockWithEra.Block;
+        IBlock block = blockWithEra.Block;
 
-        TransactionOutput firstOutput = block.TransactionBodies().First().Outputs().First();
+        ITransactionOutput firstOutput = block.TransactionBodies().First().Outputs().First();
         ReadOnlyMemory<byte> address = firstOutput.Address();
 
         Assert.False(address.IsEmpty);
@@ -133,13 +133,13 @@ public class ByronAdapterTests
     {
         byte[] cborRaw = LoadTestBlock("byron2.block");
         BlockWithEra blockWithEra = CborSerializer.Deserialize<BlockWithEra>(cborRaw);
-        Block block = blockWithEra.Block;
+        IBlock block = blockWithEra.Block;
 
-        TransactionOutput firstOutput = block.TransactionBodies().First().Outputs().First();
-        Value amount = firstOutput.Amount();
+        ITransactionOutput firstOutput = block.TransactionBodies().First().Outputs().First();
+        IValue amount = firstOutput.Amount();
 
         Lovelace lovelace = Assert.IsType<Lovelace>(amount);
-        Assert.True(lovelace.Value > 0);
+        Assert.True(lovelace.Amount > 0);
     }
 
     [Fact]
@@ -147,9 +147,9 @@ public class ByronAdapterTests
     {
         byte[] cborRaw = LoadTestBlock("byron2.block");
         BlockWithEra blockWithEra = CborSerializer.Deserialize<BlockWithEra>(cborRaw);
-        Block block = blockWithEra.Block;
+        IBlock block = blockWithEra.Block;
 
-        TransactionBody firstTx = block.TransactionBodies().First();
+        ITransactionBody firstTx = block.TransactionBodies().First();
         ulong fee = firstTx.Fee();
 
         Assert.Equal(0UL, fee);
@@ -160,9 +160,9 @@ public class ByronAdapterTests
     {
         byte[] cborRaw = LoadTestBlock("byron2.block");
         BlockWithEra blockWithEra = CborSerializer.Deserialize<BlockWithEra>(cborRaw);
-        Block block = blockWithEra.Block;
+        IBlock block = blockWithEra.Block;
 
-        TransactionBody firstTx = block.TransactionBodies().First();
+        ITransactionBody firstTx = block.TransactionBodies().First();
         string hash = firstTx.Hash();
 
         Assert.NotNull(hash);
@@ -174,9 +174,9 @@ public class ByronAdapterTests
     {
         byte[] cborRaw = LoadTestBlock("byron2.block");
         BlockWithEra blockWithEra = CborSerializer.Deserialize<BlockWithEra>(cborRaw);
-        Block block = blockWithEra.Block;
+        IBlock block = blockWithEra.Block;
 
-        TransactionBody firstTx = block.TransactionBodies().First();
+        ITransactionBody firstTx = block.TransactionBodies().First();
 
         Assert.Null(firstTx.ValidFrom());
         Assert.Null(firstTx.ValidTo());
@@ -198,9 +198,9 @@ public class ByronAdapterTests
     {
         byte[] cborRaw = LoadTestBlock("byron2.block");
         BlockWithEra blockWithEra = CborSerializer.Deserialize<BlockWithEra>(cborRaw);
-        Block block = blockWithEra.Block;
+        IBlock block = blockWithEra.Block;
 
-        TransactionOutput firstOutput = block.TransactionBodies().First().Outputs().First();
+        ITransactionOutput firstOutput = block.TransactionBodies().First().Outputs().First();
 
         Assert.Null(firstOutput.DatumHash());
         Assert.Null(firstOutput.DatumOption());
@@ -233,16 +233,16 @@ public class ByronAdapterTests
     {
         byte[] cborRaw = LoadTestBlock(filename);
         BlockWithEra blockWithEra = CborSerializer.Deserialize<BlockWithEra>(cborRaw);
-        Block block = blockWithEra.Block;
+        IBlock block = blockWithEra.Block;
 
         _ = block.Slot();
         _ = block.Height();
         string hash = block.Hash();
-        IEnumerable<TransactionBody> txBodies = block.TransactionBodies();
+        IEnumerable<ITransactionBody> txBodies = block.TransactionBodies();
 
         Assert.True(hash.Length == 64);
 
-        foreach (TransactionBody txBody in txBodies)
+        foreach (ITransactionBody txBody in txBodies)
         {
             string txHash = txBody.Hash();
             Assert.Equal(64, txHash.Length);
@@ -250,17 +250,17 @@ public class ByronAdapterTests
             IEnumerable<TransactionInput> inputs = txBody.Inputs();
             Assert.NotEmpty(inputs);
 
-            IEnumerable<TransactionOutput> outputs = txBody.Outputs();
+            IEnumerable<ITransactionOutput> outputs = txBody.Outputs();
             Assert.NotEmpty(outputs);
 
-            foreach (TransactionOutput output in outputs)
+            foreach (ITransactionOutput output in outputs)
             {
                 ReadOnlyMemory<byte> address = output.Address();
                 Assert.False(address.IsEmpty);
 
-                Value amount = output.Amount();
+                IValue amount = output.Amount();
                 Lovelace lovelace = Assert.IsType<Lovelace>(amount);
-                Assert.True(lovelace.Value > 0);
+                Assert.True(lovelace.Amount > 0);
             }
         }
     }

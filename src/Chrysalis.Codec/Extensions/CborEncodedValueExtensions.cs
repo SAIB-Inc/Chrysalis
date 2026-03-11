@@ -25,7 +25,7 @@ public static class CborEncodedValueExtensions
     /// Unwraps the CBOR tag 24 envelope and deserializes the inner byte string directly
     /// as <typeparamref name="T"/> without allocating an intermediate byte[].
     /// </summary>
-    public static T Deserialize<T>(this CborEncodedValue self) where T : CborBase
+    public static T Deserialize<T>(this CborEncodedValue self) where T : ICborType
     {
         ArgumentNullException.ThrowIfNull(self);
         ReadOnlySpan<byte> span = self.Value.Span;

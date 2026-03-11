@@ -37,19 +37,13 @@ public class PublicKey(byte[] key, byte[] chaincode)
     /// Returns the hexadecimal string representation of the public key.
     /// </summary>
     /// <returns>The hex-encoded public key string.</returns>
-    public string ToHex()
-    {
-        return Convert.ToHexString(Key);
-    }
+    public string ToHex() => Convert.ToHexString(Key);
 
     /// <summary>
     /// Computes the Blake2b-224 hash of the public key bytes.
     /// </summary>
     /// <returns>The 28-byte Blake2b-224 hash.</returns>
-    public byte[] ToBlake2b224()
-    {
-        return Blake2Fast.Blake2b.HashData(28, Key);
-    }
+    public byte[] ToBlake2b224() => Blake2Fast.Blake2b.HashData(28, Key);
 
     /// <inheritdoc/>
     public override bool Equals(object? obj)
@@ -64,8 +58,5 @@ public class PublicKey(byte[] key, byte[] chaincode)
     }
 
     /// <inheritdoc/>
-    public override int GetHashCode()
-    {
-        return HashCode.Combine(Convert.ToHexString(Key), Convert.ToHexString(Chaincode));
-    }
+    public override int GetHashCode() => HashCode.Combine(Convert.ToHexString(Key), Convert.ToHexString(Chaincode));
 }

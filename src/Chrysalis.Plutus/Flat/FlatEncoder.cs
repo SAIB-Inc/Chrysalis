@@ -222,10 +222,7 @@ public static class FlatEncoder
 
     // --- Primitive encoders ---
 
-    private static void EncodeNatural(BitWriter writer, int value)
-    {
-        EncodeNaturalCore(writer, (ulong)value);
-    }
+    private static void EncodeNatural(BitWriter writer, int value) => EncodeNaturalCore(writer, (ulong)value);
 
     private static void EncodeNaturalCore(BitWriter writer, BigInteger value)
     {

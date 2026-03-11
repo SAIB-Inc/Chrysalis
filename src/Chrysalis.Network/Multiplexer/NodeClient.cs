@@ -18,27 +18,27 @@ public sealed class NodeClient : IDisposable
     /// <summary>
     /// Gets the Handshake protocol handler.
     /// </summary>
-    public Handshake Handshake { get; private set; } = default!;
+    public Handshake Handshake { get; private set; }
 
     /// <summary>
     /// Gets the LocalStateQuery protocol handler.
     /// </summary>
-    public LocalStateQuery LocalStateQuery { get; private set; } = default!;
+    public LocalStateQuery LocalStateQuery { get; private set; }
 
     /// <summary>
     /// Gets the ChainSync protocol handler.
     /// </summary>
-    public ChainSync ChainSync { get; private set; } = default!;
+    public ChainSync ChainSync { get; private set; }
 
     /// <summary>
     /// Gets the LocalTxSubmit protocol handler.
     /// </summary>
-    public LocalTxSubmit LocalTxSubmit { get; private set; } = default!;
+    public LocalTxSubmit LocalTxSubmit { get; private set; }
 
     /// <summary>
     /// Gets the LocalTxMonitor protocol handler.
     /// </summary>
-    public LocalTxMonitor LocalTxMonitor { get; private set; } = default!;
+    public LocalTxMonitor LocalTxMonitor { get; private set; }
 
     /// <summary>
     /// Initializes a new instance of the NodeClient class.
@@ -47,6 +47,11 @@ public sealed class NodeClient : IDisposable
     private NodeClient(Plexer plexer)
     {
         _plexer = plexer ?? throw new ArgumentNullException(nameof(plexer));
+        Handshake = new(_plexer.SubscribeClient(ProtocolType.Handshake));
+        ChainSync = new(_plexer.SubscribeClient(ProtocolType.ClientChainSync));
+        LocalTxSubmit = new(_plexer.SubscribeClient(ProtocolType.LocalTxSubmission));
+        LocalStateQuery = new(_plexer.SubscribeClient(ProtocolType.LocalStateQuery));
+        LocalTxMonitor = new(_plexer.SubscribeClient(ProtocolType.LocalTxMonitor));
     }
 
     /// <summary>
@@ -120,12 +125,6 @@ public sealed class NodeClient : IDisposable
         // Store plexer task so we can observe failures
         _plexerTask = _plexer.RunAsync(CancellationToken.None);
 
-        Handshake = new(_plexer.SubscribeClient(ProtocolType.Handshake));
-        ChainSync = new(_plexer.SubscribeClient(ProtocolType.ClientChainSync));
-        LocalTxSubmit = new(_plexer.SubscribeClient(ProtocolType.LocalTxSubmission));
-        LocalStateQuery = new(_plexer.SubscribeClient(ProtocolType.LocalStateQuery));
-        LocalTxMonitor = new(_plexer.SubscribeClient(ProtocolType.LocalTxMonitor));
-
         NetworkMagic = networkMagic;
 
         ProposeVersions proposeVersion = HandshakeMessages.ProposeVersions(VersionTables.N2cV10AndAbove(networkMagic));
@@ -140,25 +139,16 @@ public sealed class NodeClient : IDisposable
     /// Task.IsCompleted returns true when the task is in RanToCompletion, Faulted, or Canceled state,
     /// so this single check covers all failure scenarios.
     /// </remarks>
-    public bool IsPlexerHealthy()
-    {
-        return _plexerTask is { IsCompleted: false };
-    }
+    public bool IsPlexerHealthy() => _plexerTask is { IsCompleted: false };
 
     /// <summary>
     /// Gets the exception that caused the plexer to fail, if any.
     /// </summary>
     /// <returns>The base exception from the plexer task, or null if no exception occurred.</returns>
-    public Exception? GetPlexerException()
-    {
-        return _plexerTask?.Exception?.GetBaseException();
-    }
+    public Exception? GetPlexerException() => _plexerTask?.Exception?.GetBaseException();
 
     /// <summary>
     /// Disposes the client and releases all resources.
     /// </summary>
-    public void Dispose()
-    {
-        _plexer.Dispose();
-    }
+    public void Dispose() => _plexer.Dispose();
 }

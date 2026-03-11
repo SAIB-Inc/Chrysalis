@@ -12,20 +12,5 @@ public static class ProtocolVersionExtensions
     /// </summary>
     /// <param name="self">The protocol version instance.</param>
     /// <returns>The major protocol version.</returns>
-    public static int MajorProtocolVersion(this ProtocolVersion self)
-    {
-        ArgumentNullException.ThrowIfNull(self);
-        return self.MajorProtocolVersion;
-    }
-
-    /// <summary>
-    /// Gets the sequence number of the protocol version.
-    /// </summary>
-    /// <param name="self">The protocol version instance.</param>
-    /// <returns>The sequence number.</returns>
-    public static ulong SequenceNumber(this ProtocolVersion self)
-    {
-        ArgumentNullException.ThrowIfNull(self);
-        return self.SequenceNumber;
-    }
+    public static ulong MajorProtocolVersion(this ProtocolVersion self) => self.Major;
 }

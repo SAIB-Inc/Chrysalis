@@ -33,10 +33,7 @@ internal sealed class Parser
         _current = _lexer.NextToken();
     }
 
-    private bool Is(TokenType type)
-    {
-        return _current.Type == type;
-    }
+    private bool Is(TokenType type) => _current.Type == type;
 
     private void Expect(TokenType type)
     {
@@ -59,10 +56,7 @@ internal sealed class Parser
         return new Name(text, unique);
     }
 
-    private bool IsBeforeV1_1_0()
-    {
-        return _version.Major < 2 && _version.Minor < 1;
-    }
+    private bool IsBeforeV1_1_0() => _version.Major < 2 && _version.Minor < 1;
 
     internal Program<Name> ParseProgram()
     {
@@ -849,12 +843,9 @@ internal sealed class Parser
             $"expected PlutusData constructor (I, B, List, Map, Constr), got {_current.Type} at position {_current.Position}");
     }
 
-    private static ulong ParseConstrTag(string value, int position)
-    {
-        return !BigInteger.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out BigInteger n)
+    private static ulong ParseConstrTag(string value, int position) => !BigInteger.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out BigInteger n)
             ? throw new ParseException($"invalid constr tag {value} at position {position}")
             : n < 0 || n > ulong.MaxValue ? throw new ParseException($"invalid constr tag {value} at position {position}") : (ulong)n;
-    }
 
     private static byte[] HexToBytes(string hex)
     {
@@ -989,13 +980,7 @@ internal static class BuiltinNames
         return result;
     }
 
-    internal static bool TryParse(string name, out DefaultFunction func)
-    {
-        return NameToFunction.TryGetValue(name, out func);
-    }
+    internal static bool TryParse(string name, out DefaultFunction func) => NameToFunction.TryGetValue(name, out func);
 
-    internal static string GetName(DefaultFunction func)
-    {
-        return FunctionToName.TryGetValue(func, out string? name) ? name : func.ToString();
-    }
+    internal static string GetName(DefaultFunction func) => FunctionToName.TryGetValue(func, out string? name) ? name : func.ToString();
 }

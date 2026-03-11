@@ -14,7 +14,7 @@ public record SigStructure(
     byte[] SignProtected,
     byte[] ExternalAad,
     byte[] Payload
-) : CborBase
+) : CborRecord
 {
     /// <summary>
     /// Serializes the SigStructure to CBOR bytes.
@@ -57,7 +57,7 @@ public record SigStructure(
     /// <summary>
     /// Reads a SigStructure from CBOR byte data.
     /// </summary>
-    public static new SigStructure Read(ReadOnlyMemory<byte> data)
+    public static SigStructure Read(ReadOnlyMemory<byte> data)
     {
         CborReader reader = new(data.Span);
         reader.ReadBeginArray();

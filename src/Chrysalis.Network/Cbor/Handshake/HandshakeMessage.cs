@@ -8,7 +8,7 @@ namespace Chrysalis.Network.Cbor.Handshake;
 /// </summary>
 [CborSerializable]
 [CborUnion]
-public abstract partial record HandshakeMessage : CborBase;
+public abstract partial record HandshakeMessage : CborRecord;
 
 /// <summary>
 /// Factory methods for constructing Ouroboros Handshake mini-protocol messages with correct CBOR indices.
@@ -20,10 +20,7 @@ public static class HandshakeMessages
     /// </summary>
     /// <param name="versionTable">The table of supported versions and their parameters.</param>
     /// <returns>A new <see cref="Handshake.ProposeVersions"/> with the correct CBOR index.</returns>
-    public static ProposeVersions ProposeVersions(VersionTable versionTable)
-    {
-        return new(0, versionTable);
-    }
+    public static ProposeVersions ProposeVersions(VersionTable versionTable) => new(0, versionTable);
 
     /// <summary>
     /// Creates a node-to-node <see cref="N2NAcceptVersion"/> message accepting a specific protocol version.
@@ -31,10 +28,7 @@ public static class HandshakeMessages
     /// <param name="version">The accepted node-to-node protocol version.</param>
     /// <param name="versionData">The parameters for the accepted version.</param>
     /// <returns>A new <see cref="N2NAcceptVersion"/> with the correct CBOR index.</returns>
-    public static N2NAcceptVersion N2NAcceptVersion(N2NVersion version, N2NVersionData versionData)
-    {
-        return new(1, version, versionData);
-    }
+    public static N2NAcceptVersion N2NAcceptVersion(N2NVersion version, N2NVersionData versionData) => new(1, version, versionData);
 
     /// <summary>
     /// Creates a node-to-client <see cref="N2CAcceptVersion"/> message accepting a specific protocol version.
@@ -42,40 +36,28 @@ public static class HandshakeMessages
     /// <param name="version">The accepted node-to-client protocol version.</param>
     /// <param name="versionData">The parameters for the accepted version.</param>
     /// <returns>A new <see cref="N2CAcceptVersion"/> with the correct CBOR index.</returns>
-    public static N2CAcceptVersion N2CAcceptVersion(N2CVersion version, N2CVersionData versionData)
-    {
-        return new(1, version, versionData);
-    }
+    public static N2CAcceptVersion N2CAcceptVersion(N2CVersion version, N2CVersionData versionData) => new(1, version, versionData);
 
     /// <summary>
     /// Creates a <see cref="Handshake.Refuse"/> message refusing the handshake with a specified reason.
     /// </summary>
     /// <param name="reason">The reason the handshake was refused.</param>
     /// <returns>A new <see cref="Handshake.Refuse"/> with the correct CBOR index.</returns>
-    public static Refuse Refuse(RefuseReason reason)
-    {
-        return new(2, reason);
-    }
+    public static Refuse Refuse(RefuseReason reason) => new(2, reason);
 
     /// <summary>
     /// Creates a node-to-node <see cref="N2NQueryReply"/> message containing the server's supported version table.
     /// </summary>
     /// <param name="versionTable">The server's supported node-to-node versions.</param>
     /// <returns>A new <see cref="N2NQueryReply"/> with the correct CBOR index.</returns>
-    public static N2NQueryReply N2NQueryReply(N2NVersionTable versionTable)
-    {
-        return new(3, versionTable);
-    }
+    public static N2NQueryReply N2NQueryReply(N2NVersionTable versionTable) => new(3, versionTable);
 
     /// <summary>
     /// Creates a node-to-client <see cref="N2CQueryReply"/> message containing the server's supported version table.
     /// </summary>
     /// <param name="versionTable">The server's supported node-to-client versions.</param>
     /// <returns>A new <see cref="N2CQueryReply"/> with the correct CBOR index.</returns>
-    public static N2CQueryReply N2CQueryReply(N2CVersionTable versionTable)
-    {
-        return new(3, versionTable);
-    }
+    public static N2CQueryReply N2CQueryReply(N2CVersionTable versionTable) => new(3, versionTable);
 }
 
 #region ProposeVersions

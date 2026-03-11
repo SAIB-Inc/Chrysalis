@@ -8,7 +8,7 @@ namespace Chrysalis.Network.Cbor.LocalTxSubmit;
 /// </summary>
 [CborSerializable]
 [CborUnion]
-public abstract partial record LocalTxSubmissionMessage : CborBase;
+public abstract partial record LocalTxSubmissionMessage : CborRecord;
 
 /// <summary>
 /// Factory methods for creating LocalTxSubmit mini-protocol messages.
@@ -20,38 +20,26 @@ public static class LocalTxSubmissionMessages
     /// </summary>
     /// <param name="eraTx">The era-tagged transaction to submit.</param>
     /// <returns>A <see cref="SubmitTx"/> message.</returns>
-    public static SubmitTx SubmitTx(EraTx eraTx)
-    {
-        return new(0, eraTx);
-    }
+    public static SubmitTx SubmitTx(EraTx eraTx) => new(0, eraTx);
 
     /// <summary>
     /// Creates an AcceptTx message indicating the submitted transaction was accepted.
     /// </summary>
     /// <returns>An <see cref="AcceptTx"/> message.</returns>
-    public static AcceptTx AcceptTx()
-    {
-        return new(1);
-    }
+    public static AcceptTx AcceptTx() => new(1);
 
     /// <summary>
     /// Creates a RejectTx message indicating the submitted transaction was rejected.
     /// </summary>
     /// <param name="rejectReason">The CBOR-encoded reason for the transaction rejection.</param>
     /// <returns>A <see cref="RejectTx"/> message.</returns>
-    public static RejectTx RejectTx(CborEncodedValue rejectReason)
-    {
-        return new(2, rejectReason);
-    }
+    public static RejectTx RejectTx(CborEncodedValue rejectReason) => new(2, rejectReason);
 
     /// <summary>
     /// Creates a Done message to terminate the LocalTxSubmit protocol session.
     /// </summary>
     /// <returns>A <see cref="Done"/> message.</returns>
-    public static Done Done()
-    {
-        return new(3);
-    }
+    public static Done Done() => new(3);
 }
 
 /// <summary>
@@ -112,4 +100,4 @@ public partial record Done(
 public partial record EraTx(
     [CborOrder(0)] int Era,
     [CborOrder(1)] CborEncodedValue Tx
-) : CborBase;
+) : CborRecord;

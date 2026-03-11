@@ -20,26 +20,30 @@ public sealed class PeerClient : IDisposable
     /// <summary>
     /// Gets the Handshake protocol handler.
     /// </summary>
-    public Handshake Handshake { get; private set; } = default!;
+    public Handshake Handshake { get; private set; }
 
     /// <summary>
     /// Gets the ChainSync protocol handler (N2N).
     /// </summary>
-    public ChainSync ChainSync { get; private set; } = default!;
+    public ChainSync ChainSync { get; private set; }
 
     /// <summary>
     /// Gets the KeepAlive protocol handler (N2N).
     /// </summary>
-    public KeepAliveClient KeepAlive { get; private set; } = default!;
+    public KeepAliveClient KeepAlive { get; private set; }
 
     /// <summary>
     /// Gets the BlockFetch protocol handler (N2N).
     /// </summary>
-    public BlockFetch BlockFetch { get; private set; } = default!;
+    public BlockFetch BlockFetch { get; private set; }
 
     private PeerClient(Plexer plexer)
     {
         _plexer = plexer ?? throw new ArgumentNullException(nameof(plexer));
+        Handshake = new(_plexer.SubscribeClient(ProtocolType.Handshake));
+        ChainSync = new(_plexer.SubscribeClient(ProtocolType.NodeChainSync), ProtocolType.NodeChainSync);
+        KeepAlive = new(_plexer.SubscribeClient(ProtocolType.KeepAlive));
+        BlockFetch = new(_plexer.SubscribeClient(ProtocolType.BlockFetch));
     }
 
     /// <summary>
@@ -111,11 +115,6 @@ public sealed class PeerClient : IDisposable
     {
         _plexerTask = _plexer.RunAsync(CancellationToken.None);
 
-        Handshake = new(_plexer.SubscribeClient(ProtocolType.Handshake));
-        ChainSync = new(_plexer.SubscribeClient(ProtocolType.NodeChainSync), ProtocolType.NodeChainSync);
-        KeepAlive = new(_plexer.SubscribeClient(ProtocolType.KeepAlive));
-        BlockFetch = new(_plexer.SubscribeClient(ProtocolType.BlockFetch));
-
         NetworkMagic = networkMagic;
 
         ProposeVersions proposeVersion = HandshakeMessages.ProposeVersions(VersionTables.N2nV11AndAbove(networkMagic));
@@ -129,34 +128,22 @@ public sealed class PeerClient : IDisposable
     /// <summary>
     /// Checks if the plexer (multiplexer/demultiplexer) is healthy and running.
     /// </summary>
-    public bool IsPlexerHealthy()
-    {
-        return _plexerTask is { IsCompleted: false };
-    }
+    public bool IsPlexerHealthy() => _plexerTask is { IsCompleted: false };
 
     /// <summary>
     /// Gets the exception that caused the plexer to fail, if any.
     /// </summary>
-    public Exception? GetPlexerException()
-    {
-        return _plexerTask?.Exception?.GetBaseException();
-    }
+    public Exception? GetPlexerException() => _plexerTask?.Exception?.GetBaseException();
 
     /// <summary>
     /// Checks if the keepalive loop is healthy and running.
     /// </summary>
-    public bool IsKeepAliveHealthy()
-    {
-        return _keepAliveTask is { IsCompleted: false };
-    }
+    public bool IsKeepAliveHealthy() => _keepAliveTask is { IsCompleted: false };
 
     /// <summary>
     /// Gets the exception that caused the keepalive loop to fail, if any.
     /// </summary>
-    public Exception? GetKeepAliveException()
-    {
-        return _keepAliveTask?.Exception?.GetBaseException();
-    }
+    public Exception? GetKeepAliveException() => _keepAliveTask?.Exception?.GetBaseException();
 
     private async Task RunKeepAliveLoop(TimeSpan interval, CancellationToken cancellationToken)
     {

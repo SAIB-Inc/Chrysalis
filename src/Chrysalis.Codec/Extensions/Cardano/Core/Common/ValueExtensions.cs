@@ -4,7 +4,7 @@ using Chrysalis.Codec.Types.Cardano.Core.Common;
 namespace Chrysalis.Codec.Extensions.Cardano.Core.Common;
 
 /// <summary>
-/// Extension methods for <see cref="Value"/> to access lovelace and multi-asset amounts.
+/// Extension methods for <see cref="IValue"/> to access lovelace and multi-asset amounts.
 /// </summary>
 public static class ValueExtensions
 {
@@ -13,13 +13,13 @@ public static class ValueExtensions
     /// </summary>
     /// <param name="self">The value instance.</param>
     /// <returns>The lovelace amount.</returns>
-    public static ulong Lovelace(this Value self)
+    public static ulong Lovelace(this IValue self)
     {
         ArgumentNullException.ThrowIfNull(self);
         return self switch
         {
-            Lovelace lovelace => lovelace.Value,
-            LovelaceWithMultiAsset lovelaceWithMultiAsset => lovelaceWithMultiAsset.LovelaceValue.Value,
+            Lovelace lovelace => lovelace.Amount,
+            LovelaceWithMultiAsset lovelaceWithMultiAsset => lovelaceWithMultiAsset.Amount,
             _ => default
         };
     }
@@ -29,7 +29,7 @@ public static class ValueExtensions
     /// </summary>
     /// <param name="self">The value instance.</param>
     /// <returns>The multi-asset dictionary mapping hex-encoded policy IDs to token bundles.</returns>
-    public static Dictionary<string, TokenBundleOutput> MultiAsset(this Value self)
+    public static Dictionary<string, TokenBundleOutput> MultiAsset(this IValue self)
     {
         ArgumentNullException.ThrowIfNull(self);
         return self switch
@@ -49,7 +49,7 @@ public static class ValueExtensions
     /// <param name="self">The value instance.</param>
     /// <param name="subject">The subject string (hex-encoded policy ID concatenated with hex-encoded asset name).</param>
     /// <returns>The quantity, or null if the asset is not present or the value has no multi-assets.</returns>
-    public static ulong? QuantityOf(this Value self, string subject)
+    public static ulong? QuantityOf(this IValue self, string subject)
     {
         ArgumentNullException.ThrowIfNull(self);
         ArgumentNullException.ThrowIfNull(subject);

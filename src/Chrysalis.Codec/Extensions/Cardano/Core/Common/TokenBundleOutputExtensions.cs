@@ -12,12 +12,8 @@ public static class TokenBundleOutputExtensions
     /// </summary>
     /// <param name="self">The token bundle output instance.</param>
     /// <returns>The dictionary mapping hex-encoded asset names to quantities.</returns>
-    public static Dictionary<string, ulong> ToDict(this TokenBundleOutput self)
-    {
-        ArgumentNullException.ThrowIfNull(self);
-        return self.Value.ToDictionary(
+    public static Dictionary<string, ulong> ToDict(this TokenBundleOutput self) => self.Value.ToDictionary(
             kvp => Convert.ToHexString(kvp.Key.Span).ToUpperInvariant(),
             kvp => kvp.Value
         );
-    }
 }

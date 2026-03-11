@@ -1,5 +1,5 @@
 using CMetadata = Chrysalis.Codec.Types.Cardano.Core.Metadata;
-using CAuxiliaryData = Chrysalis.Codec.Types.Cardano.Core.AuxiliaryData;
+using CAuxiliaryData = Chrysalis.Codec.Types.Cardano.Core.IAuxiliaryData;
 using Chrysalis.Codec.Types.Cardano.Core;
 using Chrysalis.Codec.Types.Cardano.Core.Scripts;
 
@@ -20,7 +20,7 @@ public static class AuxiliaryDataExtensions
         ArgumentNullException.ThrowIfNull(self);
         return self switch
         {
-            PostAlonzoAuxiliaryDataMap postAlonzoAuxiliaryDataMap => postAlonzoAuxiliaryDataMap.MetadataValue,
+            PostAlonzoAuxiliaryDataMap postAlonzoAuxiliaryDataMap => postAlonzoAuxiliaryDataMap.TransactionMetadata,
             CMetadata metadata => metadata,
             ShellyMaAuxiliaryData shellyMaAuxiliaryData => shellyMaAuxiliaryData.TransactionMetadata,
             _ => null
@@ -32,13 +32,13 @@ public static class AuxiliaryDataExtensions
     /// </summary>
     /// <param name="self">The auxiliary data instance.</param>
     /// <returns>The native scripts, or null if not present.</returns>
-    public static IEnumerable<NativeScript>? NativeScriptSet(this CAuxiliaryData self)
+    public static IEnumerable<INativeScript>? NativeScriptSet(this CAuxiliaryData self)
     {
         ArgumentNullException.ThrowIfNull(self);
         return self switch
         {
-            PostAlonzoAuxiliaryDataMap postAlonzoAuxiliaryDataMap => postAlonzoAuxiliaryDataMap.NativeScriptSet?.Value,
-            ShellyMaAuxiliaryData shellyMaAuxiliaryData => shellyMaAuxiliaryData.AuxiliaryScripts.Value,
+            PostAlonzoAuxiliaryDataMap postAlonzoAuxiliaryDataMap => postAlonzoAuxiliaryDataMap.NativeScripts?.GetValue(),
+            ShellyMaAuxiliaryData shellyMaAuxiliaryData => shellyMaAuxiliaryData.AuxiliaryScripts.GetValue(),
             _ => null
         };
     }
@@ -53,7 +53,7 @@ public static class AuxiliaryDataExtensions
         ArgumentNullException.ThrowIfNull(self);
         return self switch
         {
-            PostAlonzoAuxiliaryDataMap postAlonzoAuxiliaryDataMap => postAlonzoAuxiliaryDataMap.PlutusV1ScriptSet?.Value,
+            PostAlonzoAuxiliaryDataMap postAlonzoAuxiliaryDataMap => postAlonzoAuxiliaryDataMap.PlutusV1Scripts?.GetValue(),
             _ => null
         };
     }
@@ -68,7 +68,7 @@ public static class AuxiliaryDataExtensions
         ArgumentNullException.ThrowIfNull(self);
         return self switch
         {
-            PostAlonzoAuxiliaryDataMap postAlonzoAuxiliaryDataMap => postAlonzoAuxiliaryDataMap.PlutusV2ScriptSet?.Value,
+            PostAlonzoAuxiliaryDataMap postAlonzoAuxiliaryDataMap => postAlonzoAuxiliaryDataMap.PlutusV2Scripts?.GetValue(),
             _ => null
         };
     }
@@ -83,7 +83,7 @@ public static class AuxiliaryDataExtensions
         ArgumentNullException.ThrowIfNull(self);
         return self switch
         {
-            PostAlonzoAuxiliaryDataMap postAlonzoAuxiliaryDataMap => postAlonzoAuxiliaryDataMap.PlutusV3ScriptSet?.Value,
+            PostAlonzoAuxiliaryDataMap postAlonzoAuxiliaryDataMap => postAlonzoAuxiliaryDataMap.PlutusV3Scripts?.GetValue(),
             _ => null
         };
     }

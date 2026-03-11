@@ -3,7 +3,7 @@ using Chrysalis.Codec.Types.Cardano.Core.Common;
 namespace Chrysalis.Codec.Extensions.Cardano.Core.Common;
 
 /// <summary>
-/// Extension methods for <see cref="DatumOption"/> to access option tag and data.
+/// Extension methods for <see cref="IDatumOption"/> to access option tag and data.
 /// </summary>
 public static class DatumOptionExtensions
 {
@@ -12,13 +12,13 @@ public static class DatumOptionExtensions
     /// </summary>
     /// <param name="self">The datum option instance.</param>
     /// <returns>The option tag value.</returns>
-    public static int Option(this DatumOption self)
+    public static int Option(this IDatumOption self)
     {
         ArgumentNullException.ThrowIfNull(self);
         return self switch
         {
-            DatumHashOption datumHashOption => datumHashOption.Option,
-            InlineDatumOption inlineDatumOption => inlineDatumOption.Option,
+            DatumHashOption datumHashOption => datumHashOption.Tag,
+            InlineDatumOption inlineDatumOption => inlineDatumOption.Tag,
             _ => throw new NotImplementedException()
         };
     }
@@ -28,7 +28,7 @@ public static class DatumOptionExtensions
     /// </summary>
     /// <param name="self">The datum option instance.</param>
     /// <returns>The datum data bytes.</returns>
-    public static ReadOnlyMemory<byte> Data(this DatumOption self)
+    public static ReadOnlyMemory<byte> Data(this IDatumOption self)
     {
         ArgumentNullException.ThrowIfNull(self);
         return self switch

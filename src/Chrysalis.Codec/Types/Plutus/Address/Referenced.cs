@@ -1,3 +1,4 @@
+using Chrysalis.Codec.Serialization;
 using Chrysalis.Codec.Serialization.Attributes;
 
 namespace Chrysalis.Codec.Types.Plutus.Address;
@@ -8,28 +9,28 @@ namespace Chrysalis.Codec.Types.Plutus.Address;
 /// <typeparam name="T">The type of the referenced value.</typeparam>
 [CborSerializable]
 [CborUnion]
-public abstract partial record Referenced<T> : CborBase;
+public partial interface IReferenced<T> : ICborType;
 
 /// <summary>
 /// An inline referenced value directly containing its data.
 /// </summary>
 /// <typeparam name="T">The type of the inline value.</typeparam>
-/// <param name="Value">The inline value.</param>
 [CborSerializable]
 [CborConstr(0)]
-public partial record Inline<T>([CborOrder(0)] T Value) : Referenced<T>;
+public readonly partial record struct Inline<T> : IReferenced<T>
+{
+    [CborOrder(0)] public partial T Value { get; }
+}
 
 /// <summary>
 /// A pointer-based reference to a value using chain position coordinates.
 /// </summary>
 /// <typeparam name="T">The type of the pointed-to value.</typeparam>
-/// <param name="SlotNumber">The slot number containing the referenced registration.</param>
-/// <param name="TransactionIndex">The transaction index within the slot.</param>
-/// <param name="CertificateIndex">The certificate index within the transaction.</param>
 [CborSerializable]
 [CborConstr(1)]
-public partial record PointerRef<T>(
-    [CborOrder(0)] ulong SlotNumber,
-    [CborOrder(1)] ulong TransactionIndex,
-    [CborOrder(2)] ulong CertificateIndex
-) : Referenced<T>;
+public readonly partial record struct PointerRef<T> : IReferenced<T>
+{
+    [CborOrder(0)] public partial ulong SlotNumber { get; }
+    [CborOrder(1)] public partial ulong TransactionIndex { get; }
+    [CborOrder(2)] public partial ulong CertificateIndex { get; }
+}

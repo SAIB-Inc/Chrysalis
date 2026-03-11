@@ -1,8 +1,9 @@
-using CBlock = Chrysalis.Codec.Types.Cardano.Core.Block;
+using CBlock = Chrysalis.Codec.Types.Cardano.Core.IBlock;
 using Chrysalis.Codec.Types.Cardano.Core.Transaction;
 using Chrysalis.Codec.Types.Cardano.Core.TransactionWitness;
 using Redeemer = Chrysalis.Codec.Types.Cardano.Core.TransactionWitness.RedeemerEntry;
 using Chrysalis.Codec.Extensions.Cardano.Core.TransactionWitness;
+using SAIB.Cbor.Serialization;
 
 namespace Chrysalis.Codec.Extensions.Cardano.Core.Transaction;
 
@@ -16,22 +17,14 @@ public static class InputExtensions
     /// </summary>
     /// <param name="self">The transaction input instance.</param>
     /// <returns>The transaction ID bytes.</returns>
-    public static ReadOnlyMemory<byte> TransactionId(this TransactionInput self)
-    {
-        ArgumentNullException.ThrowIfNull(self);
-        return self.TransactionId;
-    }
+    public static ReadOnlyMemory<byte> TransactionId(this TransactionInput self) => self.TransactionId;
 
     /// <summary>
     /// Gets the output index within the referenced transaction.
     /// </summary>
     /// <param name="self">The transaction input instance.</param>
     /// <returns>The output index.</returns>
-    public static ulong Index(this TransactionInput self)
-    {
-        ArgumentNullException.ThrowIfNull(self);
-        return self.Index;
-    }
+    public static ulong Index(this TransactionInput self) => self.Index;
 
     /// <summary>
     /// Resolves the redeemer for this input within the given block.
@@ -44,7 +37,6 @@ public static class InputExtensions
         CBlock block
     )
     {
-        ArgumentNullException.ThrowIfNull(self);
         ArgumentNullException.ThrowIfNull(block);
 
         int txBodyIndex = block.TransactionBodies()
@@ -65,7 +57,7 @@ public static class InputExtensions
                     .FirstOrDefault())
             .FirstOrDefault();
 
-        TransactionWitnessSet? witnessSet = block.TransactionWitnessSets()
+        ITransactionWitnessSet? witnessSet = block.TransactionWitnessSets()
             .Select((witnessSet, index) => new { witnessSet, index })
             .Where(e => e.index == txBodyIndex)
             .Select(e => e.witnessSet)
@@ -76,22 +68,39 @@ public static class InputExtensions
             return null;
         }
 
-        Redeemer? redeemer = witnessSet.Redeemers() switch
+        return witnessSet.Redeemers() switch
         {
             RedeemerList list => list.Value
-                .FirstOrDefault(re => re.Index == inputIndex),
+                .Where(re => re.Index == inputIndex)
+                .Select(re => (Redeemer?)re)
+                .FirstOrDefault(),
             RedeemerMap map => map.Value
                 .Where(dict => dict.Key.Index == inputIndex)
-                .Select(e => new Redeemer(
-                    e.Key.Tag,
-                    e.Key.Index,
-                    e.Value.Data,
-                    e.Value.ExUnits
-                ))
+                .Select(e => (Redeemer?)CombineRedeemerEntry(e.Key, e.Value))
                 .FirstOrDefault(),
             _ => null
         };
+    }
 
-        return redeemer;
+    private static Redeemer CombineRedeemerEntry(RedeemerKey key, RedeemerValue value)
+    {
+        CborReader kr = new(key.Raw.Span);
+        kr.ReadBeginArray();
+        _ = kr.ReadSize();
+        int keyContentStart = key.Raw.Length - kr.Buffer.Length;
+
+        CborReader vr = new(value.Raw.Span);
+        vr.ReadBeginArray();
+        _ = vr.ReadSize();
+        int valueContentStart = value.Raw.Length - vr.Buffer.Length;
+
+        ReadOnlySpan<byte> keyContent = key.Raw.Span[keyContentStart..];
+        ReadOnlySpan<byte> valueContent = value.Raw.Span[valueContentStart..];
+
+        byte[] result = new byte[1 + keyContent.Length + valueContent.Length];
+        result[0] = 0x84;
+        keyContent.CopyTo(result.AsSpan(1));
+        valueContent.CopyTo(result.AsSpan(1 + keyContent.Length));
+        return RedeemerEntry.Read(result);
     }
 }

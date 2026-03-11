@@ -21,3 +21,6 @@
 out
 build
 .fake.env
+
+# Benchmark artifacts
+**/BenchmarkDotNet.Artifacts/

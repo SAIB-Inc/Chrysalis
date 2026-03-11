@@ -1,6 +1,6 @@
 using System.Runtime.CompilerServices;
 using Chrysalis.Codec.Extensions;
-using Chrysalis.Codec.Types;
+using Chrysalis.Codec.Serialization;
 using Chrysalis.Network.Cbor.BlockFetch;
 using Chrysalis.Network.Cbor.Common;
 using Chrysalis.Network.Multiplexer;
@@ -70,7 +70,7 @@ public class BlockFetch(AgentChannel channel) : IMiniProtocol
     /// <param name="cancellationToken">Token to cancel the operation.</param>
     /// <returns>An async enumerable of deserialized block objects.</returns>
     public async IAsyncEnumerable<T> ReceiveBlocksAsync<T>(
-        [EnumeratorCancellation] CancellationToken cancellationToken) where T : CborBase
+        [EnumeratorCancellation] CancellationToken cancellationToken) where T : ICborType
     {
         if (State != BlockFetchState.Busy)
         {
@@ -183,7 +183,7 @@ public class BlockFetch(AgentChannel channel) : IMiniProtocol
     /// <returns>An async enumerable of deserialized block objects.</returns>
     public async IAsyncEnumerable<T> FetchRangeAsync<T>(
         Point from, Point to,
-        [EnumeratorCancellation] CancellationToken cancellationToken) where T : CborBase
+        [EnumeratorCancellation] CancellationToken cancellationToken) where T : ICborType
     {
         await RequestRangeAsync(from, to, cancellationToken).ConfigureAwait(false);
         await foreach (T block in ReceiveBlocksAsync<T>(cancellationToken).ConfigureAwait(false))
@@ -199,11 +199,11 @@ public class BlockFetch(AgentChannel channel) : IMiniProtocol
     /// <param name="point">The point identifying the block to fetch.</param>
     /// <param name="cancellationToken">Token to cancel the operation.</param>
     /// <returns>The deserialized block, or null if the block was not found.</returns>
-    public async Task<T?> FetchSingleAsync<T>(Point point, CancellationToken cancellationToken) where T : CborBase
+    public async Task<T?> FetchSingleAsync<T>(Point point, CancellationToken cancellationToken) where T : ICborType
     {
         await RequestRangeAsync(point, point, cancellationToken).ConfigureAwait(false);
 
-        T? result = null;
+        T? result = default;
         await foreach (T block in ReceiveBlocksAsync<T>(cancellationToken).ConfigureAwait(false))
         {
             result = block;
