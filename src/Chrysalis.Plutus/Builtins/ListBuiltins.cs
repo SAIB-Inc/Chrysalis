@@ -11,9 +11,11 @@ internal static class ListBuiltins
     internal static CekValue HeadList(CekValue[] args)
     {
         ListConstant list = UnwrapListConstant(args[0]);
-        return list.IsListEmpty
-            ? throw new EvaluationException("headList: empty list")
-            : new VConstant(list.ElementAt(0));
+        if (list.IsListEmpty)
+        {
+            throw new EvaluationException("headList: empty list");
+        }
+        return new VConstant(list.ElementAt(0));
     }
 
     internal static CekValue TailList(CekValue[] args)
