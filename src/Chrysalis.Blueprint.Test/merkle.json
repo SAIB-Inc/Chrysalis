@@ -1,0 +1,227 @@
+{
+  "preamble": {
+    "title": "merkle/merkle",
+    "description": "Aiken contracts for project 'merkle/merkle'",
+    "version": "0.0.0",
+    "plutusVersion": "v2",
+    "compiler": {
+      "name": "Aiken",
+      "version": "v1.0.29-alpha+16fb02e"
+    },
+    "license": "Apache-2.0"
+  },
+  "validators": [
+    {
+      "title": "fruit.eat",
+      "datum": {
+        "title": "datum",
+        "schema": {
+          "$ref": "#/definitions/merkle~1types~1Datum"
+        }
+      },
+      "redeemer": {
+        "title": "redeemer",
+        "schema": {
+          "$ref": "#/definitions/merkle~1types~1Redeemer"
+        }
+      },
+      "compiledCode": "590d5b0100003232323232323223232322323225333009323232533300c3006300d37540022646464a66601e601a60206ea80044c8c94ccc044c02cc048dd50008991929998099808980a1baa00113232323232323232323232323232323232323232323232533302a33302a32533302e302d0011533302b3025302c00114a22a6660566052605800229405858dd5181798181818181818161baa0154a094454ccc0a800840045280a503371e666444a66605866e3cccc01400c0580080604ccc01400c00400858dd7180e98159baa301d302b37540486eb0c068c0acdd50121919191919191919b8a001489017d003371400291010474727565003371400291010a222c22656174656e223a00337140026eb8c070c0bcdd500c19b8a00148810b222c22696d616765223a2200337140026eb8c070c0b4dd500b19b8a00148810b222c227461737465223a2200337149110a7b22636f6c6f72223a2200375c603a60566ea8050c058dd7181718159baa323200230270013018302b3754605c60566ea805ccdc79998009bae301c302a3754603860546ea808c048dd6180c98151baa023014222332232333001001480000108894ccc0c80044cc060cc0240140080104c8c94c8ccc0c8c0c0c0ccdd50018991919911980f99980a80600498090019999991111299981d99b89005480384cc090ccccc07401401c00c0080040104cc090010ccccc074c06001401c00c008004cc05c030c04800cccdc6240009020000999b8c481012040001333718904000a4080002666e3120c00148100004ccc020020004010dd7181c981d00118011bad30380013034375400626464a666068605c606a6ea80084c8c8ccccc044030024004ccc02802800400cc0ecc0f0008c010dd6981d000981b1baa0021323232323333301300e00b00133300c00c001303e00a302b3303c3750660320046028002660786ea4cc048008004cc0f0c0f4c0f800d2f5c0600c6eb4c0f000cdd7181d800981d800981b1baa30390063039005303700437006022008606c00460680026e5000cdca001112999814181319b86001480104c8cdc5a41fc060026600c00466e0c00520041323233716900000099b8b3300a003002001330060023370660100029002111111919299981619981619b87002375a6040605c6ea800d282511330150013322533302e3371000890080a99981719b88002480404cc05ccccc04401001800800522120b22df1a126b5ba4e33c16fd6157507610e55ffce20dae7ac44cae168a463612a001330173333301000400648812085c09af929492a871e4fae32d9d5c36e352471cd659bcdb61de08f1722acc3b1004881200eb923b0cbd24df54401d998531feead35a47a99f4deed205de4af81120f97610048812000000000000000000000000000000000000000000000000000000000000000000033333010300b00200148812085c09af929492a871e4fae32d9d5c36e352471cd659bcdb61de08f1722acc3b1004881200eb923b0cbd24df54401d998531feead35a47a99f4deed205de4af81120f9761004881200000000000000000000000000000000000000000000000000000000000000000001533302e33712900800109980ba44120b22df1a126b5ba4e33c16fd6157507610e55ffce20dae7ac44cae168a463612a003333011300b004006300b002001133017333330100020014892085c09af929492a871e4fae32d9d5c36e352471cd659bcdb61de08f1722acc3b1004881200eb923b0cbd24df54401d998531feead35a47a99f4deed205de4af81120f97610048812000000000000000000000000000000000000000000000000000000000000000000033333010300b00400648812085c09af929492a871e4fae32d9d5c36e352471cd659bcdb61de08f1722acc3b1004881200eb923b0cbd24df54401d998531feead35a47a99f4deed205de4af81120f976100488120000000000000000000000000000000000000000000000000000000000000000000375a6040605c6ea800ccc054dd7180e98171baa003375c6036605c6ea800c58ccc028018014c01c010cc02c014c01800cdc0240026e01200f2233371800266e04dc6801000801111191980080080191299981319b8900300114881001337166600e00a00266004004600c0026e012002225333021301f3370c0029002099b833371c00466e0c0052004480804cdc319b8e0023370600290022404044444a66604666e24015200613300c333300800500400200100313300c00333330083007005004002001222253330213371000890040a99981099b88002480204cc028cccc01c01000c0080052212085c09af929492a871e4fae32d9d5c36e352471cd659bcdb61de08f1722acc3b10013300a3333006004003489200eb923b0cbd24df54401d998531feead35a47a99f4deed205de4af81120f97610048812000000000000000000000000000000000000000000000000000000000000000000033330063005002001489200eb923b0cbd24df54401d998531feead35a47a99f4deed205de4af81120f9761004881200000000000000000000000000000000000000000000000000000000000000000001533302133712900400109980524412085c09af929492a871e4fae32d9d5c36e352471cd659bcdb61de08f1722acc3b10033330073005004003300500200113300a33330060020014881200eb923b0cbd24df54401d998531feead35a47a99f4deed205de4af81120f97610048812000000000000000000000000000000000000000000000000000000000000000000033330063005004003489200eb923b0cbd24df54401d998531feead35a47a99f4deed205de4af81120f976100488120000000000000000000000000000000000000000000000000000000000000000000370090039111299980f99b89004480084cc020ccc01c01000c0040084cc020008ccc01cc01801000c00488894ccc078cdc4002240082a66603c66e2000920041330073330060040030014881200eb923b0cbd24df54401d998531feead35a47a99f4deed205de4af81120f97610013300733300600400348812000000000000000000000000000000000000000000000000000000000000000000033300630050020014881200000000000000000000000000000000000000000000000000000000000000000001533301e337129002001099803a441200eb923b0cbd24df54401d998531feead35a47a99f4deed205de4af81120f976100333006300500400300113300733300600200148920000000000000000000000000000000000000000000000000000000000000000000333006300500400348812000000000000000000000000000000000000000000000000000000000000000000037009001911299980d99b89003480004cc0100080044cc01000400888dca19b8a0020013232323232323233714002911017d003371400291010566616c7365003371400291010a222c22656174656e223a00337140026eb8c024c070dd500299b8a00148810b222c22696d616765223a2200337140026eb8c024c068dd500199b8a00148810b222c227461737465223a2200337149110a7b22636f6c6f72223a2200375c601460306ea8004c018c05cdd51804980b9baa0103001375c6010602c6ea804c94ccc050cdc39b8d0014810040045858c94ccc058004530103d87a8000130063301730180014bd701991191980080080191299980c8008a5eb804c8c94ccc060c94ccc064c04cc068dd5000899b8f006375c603c60366ea80045281806180d1baa300c301a375400426603800466008008002266008008002603a00460360026eb0c004c050dd50041bae3017301437540044602e603060300022c600860246ea8c010c048dd5180098091baa3015301237540044602a602c0022c6644646600200200644a66602a0022980103d87a80001323253330143375e6010602c6ea80080144c01ccc0600092f5c02660080080026032004602e0026eb0c008c040dd5002180998081baa003374a9000118090008b18081808801180780098059baa00114984d9594ccc01cc014c020dd5001099191919299980718088010991924c646600200200644a66602200229309919801801980a801191929998081807000899191919299980b980d0010a4c2c6eb8c060004c060008dd6980b00098091baa00215333010300a0011323232325333017301a0021324994ccc050c048c054dd50008991919191919299980e98100010a4c2c6eb8c078004c078008dd7180e000980e0011bad301a001301637540022c2c603000260300046eb4c058004c048dd50010a99980819b87480100044c8c8c8c8c8c94ccc064c07000852616375c603400260340046eb8c060004c060008dd6980b00098091baa00216301037540026026002a666016601260186ea800c4c8c8c8c94ccc048c0540084c926533300f300d3010375400226464646464646464a666034603a0042930b19299980d180c8008a99980b9808980c0008a51153330173015301800114a02c2c6ea8c06c004c06c008dd7180c800980c8011bae30170013017002375c602a00260226ea80045858c04c004c04c008dd7180880098069baa00316163758601e002601e004601a00260126ea800858dc3a400460020064a6660086004600a6ea80044c8c94ccc024c03000852616375c6014002600c6ea800458dc3a4000ae6955ceaab9e5573eae815d0aba21",
+      "hash": "ea0698aec4a23c10e935c03e6fc30ab9e51a8171fe03d8ccde7db3a7"
+    }
+  ],
+  "definitions": {
+    "Bool": {
+      "title": "Bool",
+      "anyOf": [
+        {
+          "title": "False",
+          "dataType": "constructor",
+          "index": 0,
+          "fields": []
+        },
+        {
+          "title": "True",
+          "dataType": "constructor",
+          "index": 1,
+          "fields": []
+        }
+      ]
+    },
+    "ByteArray": {
+      "dataType": "bytes"
+    },
+    "Int": {
+      "dataType": "integer"
+    },
+    "List$aiken/merkle_patricia_forestry/ProofStep": {
+      "dataType": "list",
+      "items": {
+        "$ref": "#/definitions/aiken~1merkle_patricia_forestry~1ProofStep"
+      }
+    },
+    "aiken/merkle_patricia_forestry/Neighbor": {
+      "title": "Neighbor",
+      "description": "A neighbor node used in a proof. See [Proof](#Proof) for details.",
+      "anyOf": [
+        {
+          "title": "Neighbor",
+          "dataType": "constructor",
+          "index": 0,
+          "fields": [
+            {
+              "title": "nibble",
+              "$ref": "#/definitions/Int"
+            },
+            {
+              "title": "prefix",
+              "$ref": "#/definitions/ByteArray"
+            },
+            {
+              "title": "root",
+              "$ref": "#/definitions/ByteArray"
+            }
+          ]
+        }
+      ]
+    },
+    "aiken/merkle_patricia_forestry/ProofStep": {
+      "title": "ProofStep",
+      "description": "We distinguish three kind of proof steps: Branch, Fork and Leaf. Each step\n contains a `skip` value which corresponds to the length of the common prefix\n at that particular level.\n\n The details of each level is documented [in the wiki :: Proof Format](https://github.com/aiken-lang/merkle-patricia-forestry/wiki/Proof-format).",
+      "anyOf": [
+        {
+          "title": "Branch",
+          "dataType": "constructor",
+          "index": 0,
+          "fields": [
+            {
+              "title": "skip",
+              "$ref": "#/definitions/Int"
+            },
+            {
+              "title": "neighbors",
+              "$ref": "#/definitions/ByteArray"
+            }
+          ]
+        },
+        {
+          "title": "Fork",
+          "dataType": "constructor",
+          "index": 1,
+          "fields": [
+            {
+              "title": "skip",
+              "$ref": "#/definitions/Int"
+            },
+            {
+              "title": "neighbor",
+              "$ref": "#/definitions/aiken~1merkle_patricia_forestry~1Neighbor"
+            }
+          ]
+        },
+        {
+          "title": "Leaf",
+          "dataType": "constructor",
+          "index": 2,
+          "fields": [
+            {
+              "title": "skip",
+              "$ref": "#/definitions/Int"
+            },
+            {
+              "title": "key",
+              "$ref": "#/definitions/ByteArray"
+            },
+            {
+              "title": "value",
+              "$ref": "#/definitions/ByteArray"
+            }
+          ]
+        }
+      ]
+    },
+    "merkle/types/Datum": {
+      "title": "Datum",
+      "anyOf": [
+        {
+          "title": "Datum",
+          "dataType": "constructor",
+          "index": 0,
+          "fields": [
+            {
+              "title": "root",
+              "$ref": "#/definitions/ByteArray"
+            }
+          ]
+        }
+      ]
+    },
+    "merkle/types/Fruit": {
+      "title": "Fruit",
+      "anyOf": [
+        {
+          "title": "Fruit",
+          "dataType": "constructor",
+          "index": 0,
+          "fields": [
+            {
+              "title": "color",
+              "$ref": "#/definitions/ByteArray"
+            },
+            {
+              "title": "taste",
+              "$ref": "#/definitions/ByteArray"
+            },
+            {
+              "title": "image",
+              "$ref": "#/definitions/ByteArray"
+            },
+            {
+              "title": "eaten",
+              "$ref": "#/definitions/Bool"
+            }
+          ]
+        }
+      ]
+    },
+    "merkle/types/FruitTrie": {
+      "title": "FruitTrie",
+      "anyOf": [
+        {
+          "title": "FruitTrie",
+          "dataType": "constructor",
+          "index": 0,
+          "fields": [
+            {
+              "title": "key",
+              "$ref": "#/definitions/ByteArray"
+            },
+            {
+              "title": "value",
+              "$ref": "#/definitions/merkle~1types~1Fruit"
+            }
+          ]
+        }
+      ]
+    },
+    "merkle/types/Redeemer": {
+      "title": "Redeemer",
+      "anyOf": [
+        {
+          "title": "Redeemer",
+          "dataType": "constructor",
+          "index": 0,
+          "fields": [
+            {
+              "title": "fruit",
+              "$ref": "#/definitions/merkle~1types~1FruitTrie"
+            },
+            {
+              "title": "proof",
+              "$ref": "#/definitions/List$aiken~1merkle_patricia_forestry~1ProofStep"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

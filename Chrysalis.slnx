@@ -18,6 +18,8 @@
     <Project Path="src/Chrysalis.Wallet.Test/Chrysalis.Wallet.Test.csproj" />
     <Project Path="src/Chrysalis.Wallet/Chrysalis.Wallet.csproj" />
     <Project Path="src/Chrysalis/Chrysalis.csproj" />
+    <Project Path="src/Chrysalis.Blueprint.CodeGen/Chrysalis.Blueprint.CodeGen.csproj" />
+    <Project Path="src/Chrysalis.Blueprint.Test/Chrysalis.Blueprint.Test.csproj" />
   </Folder>
 
 </Solution>
