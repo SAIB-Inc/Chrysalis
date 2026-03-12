@@ -3,7 +3,7 @@
   <p><strong>A native .NET toolkit for Cardano blockchain development</strong></p>
 
   <a href="https://www.nuget.org/packages/Chrysalis">
-    <img src="https://img.shields.io/nuget/v/Chrysalis.svg?style=flat-square" alt="NuGet">
+    <img src="https://img.shields.io/nuget/vpre/Chrysalis.svg?style=flat-square" alt="NuGet">
   </a>
   <a href="https://github.com/SAIB-Inc/Chrysalis/blob/main/LICENSE.md">
     <img src="https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square" alt="License">
@@ -26,17 +26,17 @@ CBOR serialization, transaction building, wallet management, Ouroboros mini-prot
 ## Installation
 
 ```bash
-dotnet add package Chrysalis
+dotnet add package Chrysalis --prerelease
 ```
 
 Or install individual packages:
 
 ```bash
-dotnet add package Chrysalis.Codec      # CBOR serialization + source generation
-dotnet add package Chrysalis.Network    # Ouroboros mini-protocols (N2C/N2N)
-dotnet add package Chrysalis.Tx         # Transaction building + fee calculation
-dotnet add package Chrysalis.Wallet     # Key management + address handling
-dotnet add package Chrysalis.Plutus     # Pure managed UPLC/CEK machine
+dotnet add package Chrysalis.Codec   --prerelease   # CBOR serialization + source generation
+dotnet add package Chrysalis.Network --prerelease   # Ouroboros mini-protocols (N2C/N2N)
+dotnet add package Chrysalis.Tx      --prerelease   # Transaction building + fee calculation
+dotnet add package Chrysalis.Wallet  --prerelease   # Key management + address handling
+dotnet add package Chrysalis.Plutus  --prerelease   # Pure managed UPLC/CEK machine
 ```
 
 ## Architecture
