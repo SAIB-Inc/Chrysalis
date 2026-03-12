@@ -1,22 +1,16 @@
 <div align="center">
-  <img src="assets/banner.png" alt="Chrysalis Banner" width="100%">
-  
+  <h1>Chrysalis</h1>
+  <p><strong>A native .NET toolkit for Cardano blockchain development</strong></p>
+
   <a href="https://www.nuget.org/packages/Chrysalis">
     <img src="https://img.shields.io/nuget/v/Chrysalis.svg?style=flat-square" alt="NuGet">
   </a>
   <a href="https://github.com/SAIB-Inc/Chrysalis/blob/main/LICENSE.md">
     <img src="https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square" alt="License">
   </a>
-  <a href="https://github.com/SAIB-Inc/Chrysalis/fork">
-    <img src="https://img.shields.io/github/forks/SAIB-Inc/Chrysalis.svg?style=flat-square" alt="Forks">
-  </a>
   <a href="https://github.com/SAIB-Inc/Chrysalis/stargazers">
     <img src="https://img.shields.io/github/stars/SAIB-Inc/Chrysalis.svg?style=flat-square" alt="Stars">
   </a>
-  <a href="https://github.com/SAIB-Inc/Chrysalis/graphs/contributors">
-    <img src="https://img.shields.io/github/contributors/SAIB-Inc/Chrysalis.svg?style=flat-square" alt="Contributors">
-  </a>
-  <br>
   <a href="https://dotnet.microsoft.com/download">
     <img src="https://img.shields.io/badge/.NET-10.0-512BD4?style=flat-square" alt=".NET">
   </a>
@@ -25,328 +19,253 @@
   </a>
 </div>
 
-## 📖 Overview
+<br>
 
-Chrysalis is a native .NET toolkit for Cardano blockchain development, providing everything needed to build applications on Cardano. From CBOR serialization to transaction building and smart contract interaction, Chrysalis offers a complete solution for .NET developers.
+CBOR serialization, transaction building, wallet management, Ouroboros mini-protocols, and a pure managed Plutus VM — everything you need to build on Cardano in .NET.
 
-**Key Components:**
-
-- 📦 **Serialization** - Efficient CBOR encoding/decoding for Cardano data structures
-- 🔄 **Node Communication** - Direct interaction with Cardano nodes through Ouroboros mini-protocols
-- 🔑 **Wallet Management** - Address generation and key handling
-- 💳 **Transaction Building** - Simple and advanced transaction construction
-- 📜 **Smart Contract Integration** - Pure managed Plutus VM with CEK machine for script evaluation
-- 🧠 **Plutus VM** - Full UPLC interpreter in C# — no native dependencies, no FFI
-
-## ✨ Features
-
-- 🔐 **Type-Safe Data Models** - Strong typing for all Cardano blockchain structures
-- ⚡ **High Performance** - Optimized for speed and efficiency
-- 🧩 **Modular Architecture** - Use only what you need
-- 🚀 **Modern C# API** - Takes advantage of the latest .NET features
-- 🔗 **Complete Cardano Support** - Works with all major Cardano eras and protocols
-
-## 📥 Installation
+## Installation
 
 ```bash
-# Install the main package
 dotnet add package Chrysalis
 ```
 
-Or install individual components:
+Or install individual packages:
 
 ```bash
-dotnet add package Chrysalis.Cbor
-dotnet add package Chrysalis.Network
-dotnet add package Chrysalis.Tx
-dotnet add package Chrysalis.Plutus
-dotnet add package Chrysalis.Wallet
+dotnet add package Chrysalis.Codec      # CBOR serialization + source generation
+dotnet add package Chrysalis.Network    # Ouroboros mini-protocols (N2C/N2N)
+dotnet add package Chrysalis.Tx         # Transaction building + fee calculation
+dotnet add package Chrysalis.Wallet     # Key management + address handling
+dotnet add package Chrysalis.Plutus     # Pure managed UPLC/CEK machine
 ```
 
-## 🧩 Architecture
+## Architecture
 
-Chrysalis consists of several specialized libraries:
+| Package | Description |
+|---|---|
+| **Chrysalis.Codec** | Attribute-driven CBOR serialization with source-generated encoders/decoders |
+| **Chrysalis.Codec.CodeGen** | Source generator for compile-time CBOR dispatch |
+| **Chrysalis.Network** | Ouroboros N2C/N2N mini-protocols with pipelined ChainSync + BlockFetch |
+| **Chrysalis.Tx** | `TransactionBuilder`, `MintBuilder`, `OutputBuilder`, fee/collateral calculation |
+| **Chrysalis.Plutus** | Pure C# UPLC interpreter — 999/999 conformance tests, no native dependencies |
+| **Chrysalis.Wallet** | BIP-39 mnemonic, BIP-32 HD key derivation, Bech32 addresses |
+| **Chrysalis.Crypto** | Ed25519 signatures, Blake2b hashing |
 
-| Module                     | Description                                        |
-| -------------------------- | -------------------------------------------------- |
-| **Chrysalis.Cbor**         | CBOR serialization for Cardano data structures     |
-| **Chrysalis.Cbor.CodeGen** | Source generation for optimized serialization code |
-| **Chrysalis.Network**      | Implementation of Ouroboros mini-protocols         |
-| **Chrysalis.Tx**           | Transaction building and submission                |
-| **Chrysalis.Plutus**       | Pure managed UPLC/CEK machine for Plutus scripts   |
-| **Chrysalis.Wallet**       | Key management and address handling                |
+## Quick Start
 
-## 💻 Usage Examples
-
-### 📦 CBOR Serialization
-
-Define and use CBOR-serializable types with attribute-based serialization:
+### Define Plutus Data Types
 
 ```csharp
-// Define CBOR-serializable types
+using Chrysalis.Codec.Serialization;
+using Chrysalis.Codec.Serialization.Attributes;
+
+// Single attribute for Plutus datum/redeemer types
+[PlutusData(0)]
+public partial record MyDatum(
+    [CborOrder(0)] byte[] Owner,
+    [CborOrder(1)] ulong Amount
+) : CborRecord;
+
+// Union types for redeemers with multiple constructors
 [CborSerializable]
-[CborConstr(0)]
-public partial record AssetDetails(
-    [CborOrder(0)] byte[] PolicyId,
-    [CborOrder(1)] AssetClass Asset,
-    [CborOrder(2)] ulong Amount
-): CborBase;
+[CborUnion]
+public abstract partial record MyRedeemer : CborRecord;
 
-[CborSerializable]
-[CborList]
-public partial record AssetClass(
-    [CborOrder(0)] byte[] PolicyId,
-    [CborOrder(1)] byte[] AssetName
-) : CborBase;
+[PlutusData(0)]
+public partial record Spend(
+    [CborOrder(0)] long OutputIndex
+) : MyRedeemer;
 
-// Deserialize from CBOR hex
-var data = "d8799f581cc05cb5c5f43aac9d9e057286e094f60d09ae61e8962ad5c42196180c9f4040ff1a00989680ff";
-AssetDetails details = CborSerializer.Deserialize<AssetDetails>(data);
-
-// Serialize back to CBOR
-byte[] serialized = CborSerializer.Serialize(details);
+[PlutusData(1)]
+public partial record Cancel() : MyRedeemer;
 ```
 
-#### Extension Method Pattern
-
-Chrysalis uses extension methods extensively to provide clean access to nested data structures:
+### Wallet
 
 ```csharp
-// Without extensions, deep property access is verbose and differs by era
-var hash = transaction.TransactionBody.Inputs.GetValue()[0].TransactionId;
+using Chrysalis.Wallet.Models.Keys;
+using Chrysalis.Wallet.Models.Addresses;
+using Chrysalis.Wallet.Models.Enums;
 
-// With extension methods, access is simplified and era-agnostic
-var hash = transaction.TransactionBody.Inputs().First().TransactionId();
+// Generate a 24-word mnemonic (English word list is the default)
+Mnemonic mnemonic = Mnemonic.Generate(24);
 
-// Extensions support common operations
-Transaction signedTx = transaction.Sign(privateKey);
-```
-
-### 🔑 Wallet Management
-
-Generate and manage addresses and keys:
-
-```csharp
-// Create wallet from mnemonic
-var mnemonic = Mnemonic.Generate(English.Words, 24);
-
-var accountKey = mnemonic
-            .GetRootKey()
-            .Derive(PurposeType.Shelley, DerivationType.HARD)
-            .Derive(CoinType.Ada, DerivationType.HARD)
-            .Derive(0, DerivationType.HARD);
-
-var privateKey = accountKey
-            .Derive(RoleType.ExternalChain)
-            .Derive(0);
-
-var paymentKey = privateKey.GetPublicKey();
-
-var stakingKey = accountKey
-            .Derive(RoleType.Staking)
-            .Derive(0)
-            .GetPublicKey();
+// Derive keys with BIP-44 helpers
+PrivateKey accountKey = mnemonic.GetRootKey().DeriveCardanoAccountKey();
+PrivateKey paymentKey = accountKey.DerivePaymentKey();
+PublicKey stakingPub = accountKey.DeriveStakeKey().GetPublicKey();
 
 // Generate address
-var address = Address.FromPublicKeys(
+Address address = Address.FromPublicKeys(
     NetworkType.Testnet,
     AddressType.BasePayment,
-    paymentKey,
-    stakingKey
+    paymentKey.GetPublicKey(),
+    stakingPub
 );
 
-string bech32Address = address.ToBech32();
-
-Console.WriteLine($"Bech32 Address: {bech32Address}");
+Console.WriteLine(address.ToBech32());
+// addr_test1qz...
 ```
 
-### 🔄 Node Communication
-
-Connect directly to a Cardano node:
+### Build Transactions
 
 ```csharp
-try {
-    // Connect to a local node
-    NodeClient client = await NodeClient.ConnectAsync("/ipc/node.socket");
-    await client.StartAsync(2);
+using Chrysalis.Tx.Builders;
+using Chrysalis.Codec.Types.Cardano.Core.Common;
+using Chrysalis.Codec.Extensions.Cardano.Core.Common;
 
-    // Query UTXOs by address
-    var addressBytes = Convert.FromHexString("00a7e1d2e57b1f9aa851b08c8934a315ffd97397fa997bb3851c626d3bb8d804d91fa134757d1a41b0b12762f8922fe4b4c6faa5ffec1bc9cf");
-    var utxos = await client.LocalStateQuery.GetUtxosByAddressAsync([addressBytes]);
+TransactionBuilder builder = TransactionBuilder.Create(pparams);
 
-    // Synchronize with the chain
-    var tip = await client.LocalStateQuery.GetTipAsync();
-    Console.WriteLine($"Chain tip: {tip}");
+// Add inputs (hex strings or txid#index format)
+builder.AddInput("a1b2c3d4...#0");
 
-    // Available mini-protocols - accessed as properties
-    var localTxSubmit = client.LocalTxSubmit;
-    var localStateQuery = client.LocalStateQuery;
-    var localTxMonitor = client.LocalTxMonitor;
-}
-catch (InvalidOperationException ex) {
-    Console.WriteLine($"Connection failed: {ex.Message}");
-}
-catch (Exception ex) {
-    Console.WriteLine($"Protocol error: {ex.Message}");
-}
+// Fluent output builder with auto min-ADA
+builder.AddOutput("addr_test1qz...", Lovelace.Create(5_000_000))
+    .WithInlineDatum(myDatum)
+    .WithMinAda(pparams.AdaPerUTxOByte)
+    .Add();
+
+// Simple ADA-only output
+builder.AddOutput("addr_test1qz...", Lovelace.Create(2_000_000))
+    .Add();
+
+// Multi-asset output — no nested dictionary ceremony
+IValue value = Value.FromLovelace(2_000_000)
+    .WithToken(policyHex, assetNameHex, 100)
+    .WithToken(policyHex, assetNameHex2, 50);
+
+builder.AddOutput("addr_test1qz...", value).Add();
 ```
 
-### 💳 Transaction Building
-
-Build and sign transactions with the fluent API or template builder:
+### Mint Tokens
 
 ```csharp
-// Simple transaction using template builder
-var senderAddress = address.ToBech32();
-var receiverAddress = "addr_test1qpcxqfg6xrzqus5qshxmgaa2pj5yv2h9mzm22hj7jct2ad59q2pfxagx7574360xl47vhw79wxtdtze2z83k5a4xpptsm6dhy7";
-var provider = new Blockfrost("apiKeyHere");
+using Chrysalis.Tx.Builders;
 
-var transfer = TransactionTemplateBuilder<ulong>.Create(provider)
-    .AddStaticParty("sender", senderAddress, true)
-    .AddStaticParty("receiver", receiverAddress)
-    .AddInput((options, amount) =>
-    {
-        options.From = "sender";
-    })
-    .AddOutput((options, amount) =>
-    {
-        options.To = "receiver";
-        options.Amount = new Lovelace(amount);
-    })
+// Fluent mint builder
+MultiAssetMint mint = MintBuilder.Create()
+    .AddToken(policyHex, assetNameHex, 1_000)   // mint
+    .AddToken(policyHex, assetNameHex2, -1)      // burn
     .Build();
 
-// Execute the template with a specific amount
-Transaction tx = await transfer(5_000_000UL);
-Transaction signedTx = tx.Sign(privateKey);
+builder.SetMint(mint);
+
+// Or directly on the builder
+builder.AddMint(policyHex, assetNameHex, 1_000);
 ```
 
-### 📜 Smart Contract Interaction
-
-Interact with and validate Plutus scripts:
+### Value Arithmetic
 
 ```csharp
-var provider = new Blockfrost("project_id");
-var ownerAddress = "your address";
-var alwaysTrueValidatorAddress = "your validator address";
+// Merge two values (adds lovelace + combines tokens)
+IValue total = value1.Merge(value2);
 
-var spendRedeemerBuilder = (_, _, _) =>
-{
-    // Custom Logic and return type as long as it inherits from CborBase
-    // ex: returns an empty list
-    return new PlutusConstr([]);
-};
+// Subtract
+IValue remaining = total.Subtract(spent);
 
-var lockTxHash = "your locked tx hash";
-var scriptRefTxHash = "your script ref tx hash";
+// Query token amounts
+ulong? qty = value.QuantityOf(policyHex, assetNameHex);
 
-var unlockLovelace = TransactionTemplateBuilder<UnlockParameters>.Create(provider)
-    .AddStaticParty("owner", ownerAddress, true)
-    .AddStaticParty("alwaysTrueValidator", alwaysTrueValidatorAddress)
-    .AddReferenceInput((options, unlockParams) =>
-    {
-        options.From = "alwaysTrueValidator";
-        options.UtxoRef = unlockParams.ScriptRefUtxoOutref;
-    })
-    .AddInput((options, unlockParams) =>
-    {
-        options.From = "alwaysTrueValidator";
-        options.UtxoRef = unlockParams.LockedUtxoOutRef;
-        options.SetRedeemerBuilder(spendRedeemerBuilder);
-    })
-    .Build();
-
-
-var unlockParams = new(
-    new TransactionInput(Convert.FromHexString(lockTxHash), 0),
-    new TransactionInput(Convert.FromHexString(scriptRefTxHash), 0)
-);
-
-var unlockUnsignedTx = await unlockLovelace(unlockParams);
-var unlockSignedTx = unlockUnsignedTx.Sign(privateKey);
-var unlockTxHash = await provider.SubmitTransactionAsync(unlockSignedTx);
-
-Console.WriteLine($"Unlock Tx Hash: {unlockTxHash}");
+// Flat dictionary of all assets
+Dictionary<string, ulong> assets = value.ToAssetDictionary();
+// Keys: "lovelace", "policyHex+assetNameHex"
 ```
 
-#### CIP Implementation Support
-
-Chrysalis supports various Cardano Improvement Proposals (CIPs), including:
+### Sign and Submit
 
 ```csharp
-// CIP-68 NFT standard implementation
-var nftMetadata = new Cip68<PlutusData>(
-    Metadata: metadata,
-    Version: 1,
-    Extra: null
-);
+using Chrysalis.Tx.Extensions;
+
+// Single key
+ITransaction signed = tx.Sign(paymentKey);
+
+// Multiple keys (hashes tx body once)
+ITransaction signed = tx.Sign(paymentKey, stakeKey, scriptKey);
+
+// Submit via Blockfrost
+string txHash = await provider.SubmitTransactionAsync(signed);
 ```
 
-### 🧠 Plutus VM — Pure Managed Script Evaluation
-
-Chrysalis includes a complete UPLC (Untyped Plutus Lambda Calculus) interpreter written entirely in C#. No Haskell, no Rust, no native dependencies — just managed .NET code.
-
-Given a transaction and its resolved UTxOs, Chrysalis can evaluate all Plutus scripts and return exact execution units:
+### Read Inline Datums
 
 ```csharp
-// Evaluate all scripts in a transaction — pure managed C#
+using Chrysalis.Codec.Extensions.Cardano.Core.Transaction;
+
+// One-liner datum access — no triple-casting
+MyDatum? datum = output.InlineDatum<MyDatum>();
+ReadOnlyMemory<byte>? rawCbor = output.InlineDatumRaw();
+```
+
+### Node Communication
+
+```csharp
+using Chrysalis.Network.Multiplexer;
+
+// N2C: connect to local node via Unix socket
+NodeClient node = await NodeClient.ConnectAsync("/ipc/node.socket");
+await node.StartAsync(networkMagic);
+
+// Query chain tip
+var tip = await node.LocalStateQuery.GetTipAsync();
+
+// Query UTxOs
+var utxos = await node.LocalStateQuery.GetUtxosByAddressAsync([addressBytes]);
+
+// Submit transactions
+await node.LocalTxSubmit.SubmitTxAsync(signedTxBytes);
+
+// N2N: connect to remote node via TCP
+PeerClient peer = await PeerClient.ConnectAsync("relay.cardano.org", 3001);
+await peer.StartAsync(networkMagic);
+
+// Pipelined ChainSync + BlockFetch
+await peer.ChainSync.FindIntersectionAsync([Point.Origin], ct);
+```
+
+### Plutus VM
+
+Pure managed UPLC interpreter — no Haskell, no Rust, no FFI.
+
+```csharp
+using Chrysalis.Tx.Extensions;
+
+// Evaluate all scripts in a transaction
 IReadOnlyList<EvaluationResult> results = ScriptContextBuilder.EvaluateTx(
-    body, witnessSet, utxos, SlotNetworkConfig.Mainnet);
+    body, witnessSet, utxos, SlotNetworkConfig.Preview);
 
-foreach (var result in results)
-{
-    Console.WriteLine($"Tag: {result.RedeemerTag}, Index: {result.Index}");
-    Console.WriteLine($"  Memory: {result.ExUnits.Mem}, Steps: {result.ExUnits.Steps}");
-}
+foreach (var r in results)
+    Console.WriteLine($"Redeemer [{r.RedeemerTag}:{r.Index}] mem={r.ExUnits.Mem} steps={r.ExUnits.Steps}");
 ```
 
-The evaluation pipeline:
+The VM passes **999/999 UPLC conformance tests** covering Plutus V1-V3, including all 94 builtins and BLS12-381 cryptographic primitives. The transaction builder uses it automatically — no external evaluator needed.
 
-1. **ScriptContext building** — Constructs the full Plutus V3 ScriptContext (TxInfo, ScriptPurpose, ScriptInfo) from Codec types, ported from [Aiken](https://github.com/aiken-lang/aiken)
-2. **Script resolution** — Finds scripts from the witness set or UTxO script references
-3. **Flat decoding** — Decodes the UPLC program from Cardano's flat binary encoding
-4. **CEK machine** — Executes the program with all 94 Plutus V3 builtins including BLS12-381 cryptographic primitives
-5. **ExUnits tracking** — Returns precise memory and CPU step consumption
-
-The VM passes 999/999 UPLC conformance tests covering all Plutus versions (V1–V3).
-
-The transaction builder uses this automatically — no external evaluator needed:
+### Script Addresses
 
 ```csharp
-var template = TransactionTemplateBuilder<MyParams>.Create(provider)
-    .AddInput((options, p) =>
-    {
-        options.From = "validator";
-        options.SetRedeemerBuilder((_, _, _) => new PlutusConstr([]));
-    })
-    .Build();
+using Chrysalis.Wallet.Models.Addresses;
 
-// Scripts are evaluated in pure C# during transaction building
-Transaction tx = await template(myParams);
+// Compute script hash from IScript
+string scriptHash = myScript.HashHex();
+
+// Create script address
+Address scriptAddr = Address.FromScriptHash(NetworkType.Testnet, scriptHash);
+
+// With staking credential
+Address scriptAddr = Address.FromScriptHashWithStake(
+    NetworkType.Testnet, scriptHash, stakeKeyHash);
 ```
 
-## ⚡ Performance
+## Performance
 
-.NET can compete with Rust and Go. Chrysalis proves it.
+Benchmarks against [Pallas](https://github.com/txpipe/pallas) (Rust) and [Gouroboros](https://github.com/blinklabs-io/gouroboros) (Go) on Conway-era blocks, local Cardano Preview node.
 
-Benchmarks compare Chrysalis against [Pallas](https://github.com/txpipe/pallas) (Rust) and [Gouroboros](https://github.com/blinklabs-io/gouroboros) (Go) — the two most established Cardano client libraries in systems languages — on Conway-era blocks against a local Cardano Preview testnet node.
+**N2N (TCP) — Pipelined ChainSync from origin:**
 
-**N2N (TCP) — Pipelined Header Sync from origin (apples-to-apples):**
-
-| | blk/s |
-|---|---|
-| **Chrysalis (.NET)** | **~40,000** |
-| **Gouroboros (Go)** | ~14,500 |
-| **Pallas (Rust)** | ~722 |
-
-> Chrysalis is **2.8x faster than Go** and **55x faster than Rust** on raw pipelined header throughput — same pipeline depth (100), same workload, same node.
-
-**N2N (TCP) — Full Block Download + Deserialization from origin:**
-
-| | blk/s | Notes |
+| | Headers Only | Full Blocks + Deser |
 |---|---|---|
-| **Chrysalis (.NET)** | **~9,500** | Pipelined ChainSync + BlockFetch + full deserialization |
-| **Gouroboros (Go)** | — | Cannot run concurrent ChainSync + BlockFetch (node queue overflow) |
-| **Pallas (Rust)** | ~722 | Sequential (no pipelining) |
+| **Chrysalis (.NET)** | **~35,000 blk/s** | **~9,500 blk/s** |
+| **Gouroboros (Go)** | ~15,000 blk/s | N/A |
+| **Pallas (Rust)** | N/A | ~720 blk/s |
 
 **N2C (Unix Socket) — 10,000 blocks, sequential:**
 
@@ -354,143 +273,46 @@ Benchmarks compare Chrysalis against [Pallas](https://github.com/txpipe/pallas) 
 |---|---|---|
 | **Pallas (Rust)** | 3,097 blk/s | 3,280 blk/s |
 | **Chrysalis (.NET)** | 2,747 blk/s | 2,977 blk/s |
-| **Gouroboros (Go)** | 2,735 blk/s | — |
+| **Gouroboros (Go)** | 2,735 blk/s | N/A |
 
-> N2C is bottlenecked by the node, not the client — all three converge around 2,700–3,300 blk/s. Chrysalis reaches 89% of Rust here.
+N2C is bottlenecked by the node — all three converge around 2,700-3,300 blk/s. On N2N where pipelining matters, Chrysalis is **2.3x faster than Go** and **13x faster than Rust** on full block download.
 
-**How:**
+<details>
+<summary>How it's fast</summary>
 
-- **Batch burst pipelining** — send N requests, drain N responses, BlockFetch the batch. Eliminates per-block round-trip latency
-- **Zero-copy deserialization** — `ReadOnlyMemory<byte>` throughout the pipeline, no intermediate allocations
-- **Source-generated CBOR dispatch** — compile-time probe-based union resolution via PeekState/PeekTag instead of try-catch
+- **Batch burst pipelining** — send N header requests, drain N responses, BlockFetch the batch
+- **Zero-copy deserialization** — `ReadOnlyMemory<byte>` throughout, no intermediate allocations
+- **Source-generated CBOR dispatch** — compile-time probe-based union resolution via PeekState/PeekTag
 - **System.IO.Pipelines** — backpressure-aware async I/O with minimal buffer copies
 
-Benchmarks run on AMD Ryzen 9 9900X3D, .NET 10. Full results and methodology in [`benchmarks/BENCHMARKS.md`](benchmarks/BENCHMARKS.md).
+AMD Ryzen 9 9900X3D, .NET 10. Full results in [`benchmarks/BENCHMARKS.md`](benchmarks/BENCHMARKS.md).
+</details>
 
-## 🔄 Cardano Era Support
+## Era Support
 
-Chrysalis provides comprehensive support for Cardano's evolution:
+| Era | Serialization | Block Processing | Tx Building | Script Eval |
+|---|:---:|:---:|:---:|:---:|
+| **Byron** | ✅ | ✅ | — | — |
+| **Shelley** | ✅ | ✅ | ✅ | — |
+| **Allegra** | ✅ | ✅ | ✅ | — |
+| **Mary** | ✅ | ✅ | ✅ | — |
+| **Alonzo** | ✅ | ✅ | ✅ | ✅ |
+| **Babbage** | ✅ | ✅ | ✅ | ✅ |
+| **Conway** | ✅ | ✅ | ✅ | ✅ |
 
-<table>
-<thead>
-  <tr>
-    <th>Era</th>
-    <th>Phase</th>
-    <th>Status</th>
-    <th colspan="4">Feature Support</th>
-  </tr>
-  <tr>
-    <th></th>
-    <th></th>
-    <th></th>
-    <th align="center">Serialization</th>
-    <th align="center">Block Processing</th>
-    <th align="center">Transaction Building</th>
-    <th align="center">Script Evaluation</th>
-  </tr>
-</thead>
-<tbody>
-  <tr>
-    <td><strong>Byron</strong></td>
-    <td>Foundation</td>
-    <td align="center">✅</td>
-    <td align="center">✅</td>
-    <td align="center">✅</td>
-    <td align="center">❌</td>
-    <td align="center">❌</td>
-  </tr>
-  <tr>
-    <td><strong>Shelley</strong></td>
-    <td>Decentralization</td>
-    <td align="center">✅</td>
-    <td align="center">✅</td>
-    <td align="center">✅</td>
-    <td align="center">✅</td>
-    <td align="center">❌</td>
-  </tr>
-  <tr>
-    <td><strong>Allegra</strong></td>
-    <td>Token Locking</td>
-    <td align="center">✅</td>
-    <td align="center">✅</td>
-    <td align="center">✅</td>
-    <td align="center">✅</td>
-    <td align="center">❌</td>
-  </tr>
-  <tr>
-    <td><strong>Mary</strong></td>
-    <td>Multi-Asset</td>
-    <td align="center">✅</td>
-    <td align="center">✅</td>
-    <td align="center">✅</td>
-    <td align="center">✅</td>
-    <td align="center">❌</td>
-  </tr>
-  <tr>
-    <td><strong>Alonzo</strong></td>
-    <td>Smart Contracts</td>
-    <td align="center">✅</td>
-    <td align="center">✅</td>
-    <td align="center">✅</td>
-    <td align="center">✅</td>
-    <td align="center">✅</td>
-  </tr>
-  <tr>
-    <td><strong>Babbage/Vasil</strong></td>
-    <td>Scaling</td>
-    <td align="center">✅</td>
-    <td align="center">✅</td>
-    <td align="center">✅</td>
-    <td align="center">✅</td>
-    <td align="center">✅</td>
-  </tr>
-  <tr>
-    <td><strong>Conway</strong></td>
-    <td>Governance</td>
-    <td align="center">✅</td>
-    <td align="center">✅</td>
-    <td align="center">✅</td>
-    <td align="center">✅</td>
-    <td align="center">✅</td>
-  </tr>
-</tbody>
-</table>
-
-**Legend**:
-
-- ✅ Fully Supported
-- 🚧 Planned for Future Release
-- ❌ Not Supported Yet
-
-## 📚 Documentation
-
-For detailed documentation on each component:
-
-- [Chrysalis.Cbor Documentation](./docs/CBOR.md)
-- [Chrysalis.Tx Documentation](./docs/TX.md)
-- [API Documentation](https://docs.chrysalis.dev) - Coming soon
-- [Getting Started Guide](https://docs.chrysalis.dev/guides/getting-started) - Coming soon
-
-> Note: The documentation is currently in development. In the meantime, this README and the code examples provide a good starting point.
-
-## 🤝 Contributing
-
-We welcome contributions! To get started:
+## Contributing
 
 1. Fork the repository
-2. Create a feature branch: `git checkout -b feature/amazing-feature`
-3. Commit your changes: `git commit -m 'feat: add amazing feature'`
-4. Push to the branch: `git push origin feature/amazing-feature`
-5. Open a Pull Request
+2. Create a feature branch: `git checkout -b feature/my-feature`
+3. Commit your changes: `git commit -m 'feat: add my feature'`
+4. Push and open a Pull Request
 
-Please make sure to update tests as appropriate.
+## License
 
-## 📄 License
-
-This project is licensed under the MIT License - see the [LICENSE.md](LICENSE.md) file for details.
+MIT — see [LICENSE.md](LICENSE.md).
 
 ---
 
 <div align="center">
-  <p>Made with ❤️ by <a href="https://saib.dev">SAIB Inc</a> for the Cardano community</p>
+  <p>Built by <a href="https://saib.dev">SAIB Inc</a> for the Cardano community</p>
 </div>
