@@ -13,27 +13,45 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Detect code changes
+        id: changes
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            code:
+              - 'src/**'
+              - '*.slnx'
+              - 'Directory.Build.props'
+              - '.github/workflows/ci.yml'
+
       - name: Setup .NET 10
+        if: steps.changes.outputs.code == 'true'
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '10.0.x'
 
       - name: Show .NET version
+        if: steps.changes.outputs.code == 'true'
         run: dotnet --version
 
       - name: Restore
+        if: steps.changes.outputs.code == 'true'
         run: dotnet restore
 
       - name: Build
+        if: steps.changes.outputs.code == 'true'
         run: dotnet build --no-restore -warnaserror
 
       - name: Check formatting
+        if: steps.changes.outputs.code == 'true'
         run: dotnet format --no-restore --verify-no-changes
 
       - name: Test
+        if: steps.changes.outputs.code == 'true'
         run: dotnet test --no-build --filter "Category!=Integration"
 
       - name: Pack (dry run)
+        if: steps.changes.outputs.code == 'true'
         run: |
           mkdir -p out
           dotnet pack ./src/Chrysalis.Codec.CodeGen/Chrysalis.Codec.CodeGen.csproj -c Release -o out
@@ -46,3 +64,7 @@ jobs:
           dotnet pack ./src/Chrysalis/Chrysalis.csproj -c Release -o out
           echo "Packed $(ls out/*.nupkg | wc -l) packages:"
           ls -la out/*.nupkg
+
+      - name: Skip reason
+        if: steps.changes.outputs.code != 'true'
+        run: echo "No source code changes detected — skipping build/test/pack."
