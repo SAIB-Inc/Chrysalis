@@ -45,6 +45,12 @@ public class PublicKey(byte[] key, byte[] chaincode)
     /// <returns>The 28-byte Blake2b-224 hash.</returns>
     public byte[] ToBlake2b224() => Blake2Fast.Blake2b.HashData(28, Key);
 
+    /// <summary>
+    /// Returns the hex-encoded Blake2b-224 hash of the public key (the key hash).
+    /// </summary>
+    /// <returns>The 56-character lowercase hex key hash string.</returns>
+    public string ToKeyHashHex() => Convert.ToHexStringLower(ToBlake2b224());
+
     /// <inheritdoc/>
     public override bool Equals(object? obj)
     {

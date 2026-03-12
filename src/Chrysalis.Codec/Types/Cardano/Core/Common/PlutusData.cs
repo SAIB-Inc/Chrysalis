@@ -67,3 +67,15 @@ public readonly partial record struct PlutusBoundedBytes : IPlutusData
 {
     public partial ReadOnlyMemory<byte> Value { get; }
 }
+
+[CborSerializable]
+[CborUnion]
+public partial interface IPlutusBool : IPlutusData;
+
+[CborSerializable]
+[CborConstr(0)]
+public readonly partial record struct PlutusFalse : IPlutusBool;
+
+[CborSerializable]
+[CborConstr(1)]
+public readonly partial record struct PlutusTrue : IPlutusBool;

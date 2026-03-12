@@ -148,6 +148,41 @@ public class Address
         return new Address(networkType, addressType, paymentHash, stakeHash2);
     }
 
+    /// <summary>
+    /// Creates an enterprise script address from a script hash.
+    /// </summary>
+    /// <param name="networkType">The Cardano network type.</param>
+    /// <param name="scriptHash">The 28-byte script hash.</param>
+    /// <returns>An enterprise script payment address.</returns>
+    public static Address FromScriptHash(NetworkType networkType, byte[] scriptHash) =>
+        new(networkType, AddressType.EnterpriseScriptPayment, scriptHash, null);
+
+    /// <summary>
+    /// Creates an enterprise script address from a hex-encoded script hash.
+    /// </summary>
+    /// <param name="networkType">The Cardano network type.</param>
+    /// <param name="scriptHashHex">The 56-character hex-encoded script hash.</param>
+    /// <returns>An enterprise script payment address.</returns>
+    public static Address FromScriptHash(NetworkType networkType, string scriptHashHex) =>
+        FromScriptHash(networkType, Convert.FromHexString(scriptHashHex));
+
+    /// <summary>
+    /// Creates an <see cref="Address"/> from a hex-encoded address string.
+    /// </summary>
+    /// <param name="hex">The hex-encoded address bytes.</param>
+    /// <returns>An <see cref="Address"/> instance.</returns>
+    public static Address FromHex(string hex) => new(Convert.FromHexString(hex));
+
+    /// <summary>
+    /// Creates a base script address (script payment + stake delegation) from a script hash and stake key hash.
+    /// </summary>
+    /// <param name="networkType">The Cardano network type.</param>
+    /// <param name="scriptHash">The 28-byte script hash.</param>
+    /// <param name="stakeKeyHash">The 28-byte stake key hash.</param>
+    /// <returns>A script payment address with stake delegation.</returns>
+    public static Address FromScriptHashWithStake(NetworkType networkType, byte[] scriptHash, byte[] stakeKeyHash) =>
+        new(networkType, AddressType.ScriptPaymentWithDelegation, scriptHash, stakeKeyHash);
+
     #endregion
 
     #region Public Instance Methods
@@ -187,6 +222,26 @@ public class Address
     public byte[]? GetPaymentKeyHash() => Type is AddressType.Delegation or AddressType.ScriptDelegation
             ? null
             : _addressBytes.Length >= 29 ? _addressBytes[1..29] : null;
+
+    /// <summary>
+    /// Extracts the payment key hash as a lowercase hex string.
+    /// </summary>
+    /// <returns>The 56-character hex payment key hash, or null if not applicable.</returns>
+    public string? GetPaymentKeyHashHex()
+    {
+        byte[]? hash = GetPaymentKeyHash();
+        return hash is not null ? Convert.ToHexStringLower(hash) : null;
+    }
+
+    /// <summary>
+    /// Extracts the stake key hash as a lowercase hex string.
+    /// </summary>
+    /// <returns>The 56-character hex stake key hash, or null if not applicable.</returns>
+    public string? GetStakeKeyHashHex()
+    {
+        byte[]? hash = GetStakeKeyHash();
+        return hash is not null ? Convert.ToHexStringLower(hash) : null;
+    }
 
     /// <summary>
     /// Extracts the stake key hash from the address bytes.

@@ -1,3 +1,4 @@
+using Chrysalis.Codec.Types.Cardano.Core.Common;
 using CPlutusData = Chrysalis.Codec.Types.Cardano.Core.Common.IPlutusData;
 
 namespace Chrysalis.Codec.Extensions.Cardano.Core.Common;
@@ -17,4 +18,19 @@ public static class PlutusDataExtensions
         ArgumentNullException.ThrowIfNull(self);
         return self.Raw;
     }
+}
+
+/// <summary>
+/// Factory methods for <see cref="IPlutusBool"/>.
+/// </summary>
+public static class PlutusBool
+{
+    /// <summary>
+    /// Creates a Plutus-compatible boolean value.
+    /// Maps <c>true</c> to <see cref="PlutusTrue"/> (Constr 1) and
+    /// <c>false</c> to <see cref="PlutusFalse"/> (Constr 0).
+    /// </summary>
+    public static IPlutusBool From(bool value) => value
+        ? PlutusTrue.Create()
+        : PlutusFalse.Create();
 }

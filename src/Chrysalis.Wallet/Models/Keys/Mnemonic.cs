@@ -87,6 +87,30 @@ public record Mnemonic
     }
 
     /// <summary>
+    /// Generates a new mnemonic using the English word list.
+    /// </summary>
+    /// <param name="wordLength">The desired mnemonic length (12, 15, 18, 21, or 24).</param>
+    /// <returns>A new Mnemonic instance.</returns>
+    public static Mnemonic Generate(int wordLength = 24) =>
+        Generate(Wallet.Words.English.Words, wordLength);
+
+    /// <summary>
+    /// Restores a mnemonic from a space-separated string using the English word list.
+    /// </summary>
+    /// <param name="mnemonic">The space-separated mnemonic phrase.</param>
+    /// <returns>A restored Mnemonic instance.</returns>
+    public static Mnemonic Restore(string mnemonic) =>
+        Restore(mnemonic, Wallet.Words.English.Words);
+
+    /// <summary>
+    /// Restores a mnemonic from an array of words using the English word list.
+    /// </summary>
+    /// <param name="mnemonicWords">The array of mnemonic words.</param>
+    /// <returns>A restored Mnemonic instance.</returns>
+    public static Mnemonic Restore(string[] mnemonicWords) =>
+        Restore(mnemonicWords, Wallet.Words.English.Words);
+
+    /// <summary>
     /// Restores a mnemonic from a space-separated string.
     /// </summary>
     /// <param name="mnemonic">The space-separated mnemonic phrase.</param>

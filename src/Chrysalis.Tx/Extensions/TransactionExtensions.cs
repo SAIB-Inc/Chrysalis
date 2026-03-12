@@ -38,6 +38,45 @@ public static class TransactionExtension
     }
 
     /// <summary>
+    /// Signs a transaction with multiple private keys in a single call.
+    /// Hashes the transaction body once and accumulates all witnesses.
+    /// </summary>
+    public static ITransaction Sign(this ITransaction self, params PrivateKey[] keys)
+    {
+        ArgumentNullException.ThrowIfNull(self);
+        ArgumentNullException.ThrowIfNull(keys);
+
+        if (keys.Length == 0)
+        {
+            return self;
+        }
+
+        if (keys.Length == 1)
+        {
+            return self.Sign(keys[0]);
+        }
+
+        PostMaryTransaction tx = self switch
+        {
+            PostMaryTransaction postMaryTransaction => postMaryTransaction,
+            _ => throw new InvalidOperationException("Transaction type not supported")
+        };
+
+        byte[] txHash = HashUtil.Blake2b256(CborSerializer.Serialize(tx.Body));
+        List<VKeyWitness> vKeyWitnesses = tx.Witnesses.VKeyWitnessSet() is not null
+            ? [.. tx.Witnesses.VKeyWitnessSet()!]
+            : [];
+
+        foreach (PrivateKey key in keys)
+        {
+            byte[] signature = key.Sign(txHash);
+            vKeyWitnesses.Add(VKeyWitness.Create(key.GetPublicKey().Key, signature));
+        }
+
+        return RebuildWithWitnesses(tx, vKeyWitnesses);
+    }
+
+    /// <summary>
     /// Signs a transaction with the given list of VKey witnesses.
     /// </summary>
     public static ITransaction Sign(this ITransaction self, List<VKeyWitness> vKeyWitnesses)

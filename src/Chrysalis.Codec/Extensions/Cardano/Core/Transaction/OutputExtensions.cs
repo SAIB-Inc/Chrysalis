@@ -93,4 +93,32 @@ public static class OutputExtensions
             _ => null
         };
     }
+
+    /// <summary>
+    /// Deserializes the inline datum from the output as <typeparamref name="T"/>.
+    /// Returns default if the output has no inline datum.
+    /// </summary>
+    public static T? InlineDatum<T>(this ITransactionOutput self) where T : ICborType
+    {
+        ArgumentNullException.ThrowIfNull(self);
+        if (self is PostAlonzoTransactionOutput post && post.Datum is InlineDatumOption inline)
+        {
+            return inline.Data.Deserialize<T>();
+        }
+        return default;
+    }
+
+    /// <summary>
+    /// Gets the raw inline datum CBOR bytes from the output, stripping the tag-24 envelope.
+    /// Returns null if the output has no inline datum.
+    /// </summary>
+    public static ReadOnlyMemory<byte>? InlineDatumRaw(this ITransactionOutput self)
+    {
+        ArgumentNullException.ThrowIfNull(self);
+        if (self is PostAlonzoTransactionOutput post && post.Datum is InlineDatumOption inline)
+        {
+            return inline.Data.GetValue();
+        }
+        return null;
+    }
 }

@@ -28,6 +28,7 @@ public sealed partial class CborSerializerCodeGen
         public const string CborDefinite = "CborDefinite";
         public const string CborUnionHint = "CborUnionHint";
         public const string CborUnionHintAttribute = "CborUnionHintAttribute";
+        public const string PlutusData = "PlutusData";
 
         // Interfaces
         public const string ICborValidatorFullName = "Chrysalis.Codec.Serialization.ICborValidator`1";
@@ -36,8 +37,9 @@ public sealed partial class CborSerializerCodeGen
         {
             List<AttributeSyntax> attributes = [.. tds.AttributeLists.SelectMany(a => a.Attributes)];
             AttributeSyntax? cborSerializableAttribute = attributes.FirstOrDefault(a => a.Name.ToString() == CborSerializable);
+            AttributeSyntax? plutusDataAttribute = attributes.FirstOrDefault(a => a.Name.ToString() == PlutusData);
 
-            if (cborSerializableAttribute == null)
+            if (cborSerializableAttribute == null && plutusDataAttribute == null)
             {
                 return null;
             }
@@ -74,6 +76,8 @@ public sealed partial class CborSerializerCodeGen
             AttributeSyntax? cborListAttribute = attributes.FirstOrDefault(a => a.Name.ToString() == CborList);
             AttributeSyntax? cborUnionAttribute = attributes.FirstOrDefault(a => a.Name.ToString() == CborUnion);
             AttributeSyntax? cborConstrAttribute = attributes.FirstOrDefault(a => a.Name.ToString() == CborConstr);
+            // [PlutusData(N)] implies [CborConstr(N)]
+            cborConstrAttribute ??= plutusDataAttribute;
             AttributeSyntax? cborTagAttribute = attributes.FirstOrDefault(a => a.Name.ToString() == CborTag);
             AttributeSyntax? cborIndefiniteAttribute = attributes.FirstOrDefault(a => a.Name.ToString() == CborIndefinite);
             AttributeSyntax? cborDefiniteAttribute = attributes.FirstOrDefault(a => a.Name.ToString() == CborDefinite);

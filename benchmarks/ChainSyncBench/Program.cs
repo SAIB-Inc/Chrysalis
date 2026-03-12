@@ -1,12 +1,7 @@
 using System.Diagnostics;
 using System.Globalization;
 using Chrysalis.Codec.Extensions;
-using Chrysalis.Codec.Extensions.Cardano.Core;
-using Chrysalis.Codec.Extensions.Cardano.Core.Header;
-using Chrysalis.Codec.Serialization;
 using Chrysalis.Codec.Types.Cardano.Core;
-using Chrysalis.Codec.Types.Cardano.Core.Byron;
-using Chrysalis.Codec.Types.Cardano.Core.Header;
 using Chrysalis.Network.Cbor.ChainSync;
 using Chrysalis.Network.Cbor.Common;
 using Chrysalis.Network.MiniProtocols;
@@ -85,9 +80,9 @@ using (client)
     }
     ChainSyncMessage intersect = await chainSync.FindIntersectionAsync([startPoint], cts.Token).ConfigureAwait(false);
     Console.WriteLine($"Intersection response type: {intersect?.GetType().FullName ?? "null"}");
-    if (intersect?.Raw is not null)
+    if (intersect is not null)
     {
-        Console.WriteLine($"Intersection raw hex: {Convert.ToHexString(intersect.Raw.Value.Span[..Math.Min(100, intersect.Raw.Value.Length)])}");
+        Console.WriteLine($"Intersection raw hex: {Convert.ToHexString(intersect.Raw.Span[..Math.Min(100, intersect.Raw.Length)])}");
     }
     if (intersect is not MessageIntersectFound)
     {
@@ -215,15 +210,11 @@ using (client)
             {
                 try
                 {
-                    BlockWithEra? block = await blockFetch!.FetchSingleAsync<BlockWithEra>(headerBatch[i].Point, cts.Token).ConfigureAwait(false);
-                    if (block is null)
-                    {
-                        continue;
-                    }
+                    BlockWithEra block = await blockFetch!.FetchSingleAsync<BlockWithEra>(headerBatch[i].Point, cts.Token).ConfigureAwait(false);
 
                     totalBlocksSynced++;
                     windowBlocks++;
-                    int blockLen = block.Raw?.Length ?? 0;
+                    int blockLen = block.Raw.Length;
                     totalBytesDownloaded += blockLen;
                     windowBytes += blockLen;
                 }
@@ -313,40 +304,10 @@ static void PrintProgress(Stopwatch totalTimer, Stopwatch windowTimer,
 
 static (Point Point, string Era, ulong Slot, ulong BlockNum) ExtractPoint(MessageRollForward rollForward)
 {
-    HeaderContent header = HeaderContent.Decode(rollForward.Payload.Value);
-
-    if (header.IsByron)
-    {
-        return ExtractByronPoint(header);
-    }
-
-    BlockHeader blockHeader = CborSerializer.Deserialize<BlockHeader>(header.HeaderCbor);
-    ulong slot = blockHeader.HeaderBody.Slot();
-    ulong blockNumber = blockHeader.HeaderBody.BlockNumber();
-    byte[] hash = Convert.FromHexString(blockHeader.Hash());
-    Point point = Point.Specific(slot, hash);
-    return (point, header.Era, slot, blockNumber);
-}
-
-static (Point Point, string Era, ulong Slot, ulong BlockNum) ExtractByronPoint(HeaderContent header)
-{
-    byte[] hash = Blake2Fast.Blake2b.HashData(32, header.HeaderCbor.Span);
-
-    if (header.IsByronEbb)
-    {
-        ByronEbbHead ebbHead = CborSerializer.Deserialize<ByronEbbHead>(header.HeaderCbor);
-        ulong ebbSlot = ebbHead.ConsensusData.EpochId * 21600;
-        Point point = Point.Specific(ebbSlot, hash);
-        return (point, header.Era, ebbSlot, 0);
-    }
-
-    ByronBlockHead blockHead = CborSerializer.Deserialize<ByronBlockHead>(header.HeaderCbor);
-    ulong epoch = blockHead.ConsensusData.SlotId.Epoch;
-    ulong relSlot = blockHead.ConsensusData.SlotId.Slot;
-    ulong absSlot = (epoch * 21600) + relSlot;
-    ulong blockNumber = blockHead.ConsensusData.Difficulty.GetValue().FirstOrDefault();
-    Point point2 = Point.Specific(absSlot, hash);
-    return (point2, header.Era, absSlot, blockNumber);
+    ChainSyncHeader header = ChainSyncHeader.Decode(rollForward.Payload.Value);
+    ChainPoint chainPoint = header.ExtractPoint();
+    Point point = Point.Specific(chainPoint.Slot, chainPoint.Hash);
+    return (point, header.Era, chainPoint.Slot, chainPoint.BlockNumber);
 }
 
 static string FormatBytes(double bytes)

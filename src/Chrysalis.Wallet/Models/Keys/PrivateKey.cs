@@ -78,6 +78,34 @@ public class PrivateKey(byte[] key, byte[] chaincode)
     /// <returns>The derived child private key.</returns>
     public PrivateKey Derive(RoleType roleType, DerivationType type = DerivationType.SOFT) => Derive((int)roleType, type);
 
+    /// <summary>
+    /// Derives the Cardano account key at path m/1852'/1815'/<paramref name="account"/>'.
+    /// </summary>
+    /// <param name="account">The account index (default 0).</param>
+    /// <returns>The account-level private key.</returns>
+    public PrivateKey DeriveCardanoAccountKey(int account = 0) =>
+        Derive(PurposeType.Shelley, DerivationType.HARD)
+        .Derive(CoinType.Ada, DerivationType.HARD)
+        .Derive(account, DerivationType.HARD);
+
+    /// <summary>
+    /// Derives a payment key at role=ExternalChain for the given index.
+    /// Intended to be called on an account-level key.
+    /// </summary>
+    /// <param name="index">The address index (default 0).</param>
+    /// <returns>The payment private key.</returns>
+    public PrivateKey DerivePaymentKey(int index = 0) =>
+        Derive(RoleType.ExternalChain).Derive(index);
+
+    /// <summary>
+    /// Derives a stake key at role=Staking for the given index.
+    /// Intended to be called on an account-level key.
+    /// </summary>
+    /// <param name="index">The address index (default 0).</param>
+    /// <returns>The staking private key.</returns>
+    public PrivateKey DeriveStakeKey(int index = 0) =>
+        Derive(RoleType.Staking).Derive(index);
+
     private PrivateKey GetChildKeyDerivation(ulong index)
     {
         // Split the 64-byte private key into two 32-byte halves.

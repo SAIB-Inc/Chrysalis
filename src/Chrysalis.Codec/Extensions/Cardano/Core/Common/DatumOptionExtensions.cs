@@ -1,3 +1,5 @@
+using Chrysalis.Codec.Serialization;
+using Chrysalis.Codec.Types;
 using Chrysalis.Codec.Types.Cardano.Core.Common;
 
 namespace Chrysalis.Codec.Extensions.Cardano.Core.Common;
@@ -36,5 +38,17 @@ public static class DatumOptionExtensions
             InlineDatumOption inlineDatumOption => inlineDatumOption.Data.Value,
             _ => ReadOnlyMemory<byte>.Empty
         };
+    }
+
+    /// <summary>
+    /// Creates an <see cref="InlineDatumOption"/> from a typed CBOR value.
+    /// Handles the serialize → PlutusData roundtrip → tag-24 wrapping automatically.
+    /// </summary>
+    public static InlineDatumOption InlineDatumFrom<T>(T value) where T : ICborType
+    {
+        ArgumentNullException.ThrowIfNull(value);
+        byte[] plutusBytes = CborSerializer.Serialize(
+            CborSerializer.Deserialize<IPlutusData>(CborSerializer.Serialize(value)));
+        return InlineDatumOption.Create(1, CborEncodedValue.WrapTag24(plutusBytes));
     }
 }

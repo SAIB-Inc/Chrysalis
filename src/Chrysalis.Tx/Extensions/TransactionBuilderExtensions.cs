@@ -331,7 +331,43 @@ public static class TransactionBuilderExtensions
 
             if (updatedChangeLovelace < minLovelace)
             {
-                _ = builder.SetFee(fee + (ulong)updatedChangeLovelace);
+                ulong adjustedFee = fee + (ulong)updatedChangeLovelace;
+                _ = builder.SetFee(adjustedFee);
+
+                // Recalculate collateral for the higher fee
+                if (builder.TotalCollateral is not null && builder.Pparams?.CollateralPercentage is not null)
+                {
+                    ulong newTotalCollateral = FeeUtil.CalculateRequiredCollateral(adjustedFee, builder.Pparams.CollateralPercentage.Value);
+                    ulong oldTotalCollateral = builder.TotalCollateral.Value;
+
+                    _ = builder.SetTotalCollateral(newTotalCollateral);
+
+                    if (newTotalCollateral > oldTotalCollateral && builder.CollateralReturn is not null)
+                    {
+                        ulong increase = newTotalCollateral - oldTotalCollateral;
+                        ulong currentReturnLovelace = builder.CollateralReturn.Amount().Lovelace();
+
+                        if (currentReturnLovelace <= increase)
+                        {
+                            throw new InvalidOperationException(
+                                $"Insufficient collateral: return output ({currentReturnLovelace} lovelace) cannot cover additional {increase} lovelace needed for increased fee.");
+                        }
+
+                        ulong newReturnLovelace = currentReturnLovelace - increase;
+                        IValue newReturnValue = builder.CollateralReturn.Amount().WithLovelace(newReturnLovelace);
+
+                        ITransactionOutput updatedReturn = builder.CollateralReturn switch
+                        {
+                            AlonzoTransactionOutput alonzo => AlonzoTransactionOutput.Create(
+                                alonzo.Address, newReturnValue, null),
+                            PostAlonzoTransactionOutput postAlonzo => PostAlonzoTransactionOutput.Create(
+                                postAlonzo.Address, newReturnValue, postAlonzo.Datum, postAlonzo.ScriptRef),
+                            _ => throw new InvalidOperationException("Invalid collateral return output type")
+                        };
+
+                        _ = builder.SetCollateralReturn(updatedReturn);
+                    }
+                }
             }
             else
             {
