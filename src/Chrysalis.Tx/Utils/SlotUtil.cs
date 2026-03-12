@@ -9,34 +9,12 @@ namespace Chrysalis.Tx.Utils;
 public static class SlotUtil
 {
     /// <summary>
-    /// Gets the slot network configuration for Cardano mainnet.
-    /// </summary>
-    public static SlotNetworkConfig Mainnet { get; } = new SlotNetworkConfig(1596059091000L, 4492800L, 1000);
-
-    /// <summary>
-    /// Gets the slot network configuration for Cardano preprod.
-    /// </summary>
-    public static SlotNetworkConfig Preprod { get; } = new SlotNetworkConfig(1655769600000L, 86400L, 1000);
-
-    /// <summary>
-    /// Gets the slot network configuration for Cardano preview.
-    /// </summary>
-    public static SlotNetworkConfig Preview { get; } = new SlotNetworkConfig(1666656000000L, 0L, 1000);
-
-    /// <summary>
     /// Gets the slot network configuration for the specified network type.
     /// </summary>
     /// <param name="networkType">The Cardano network type.</param>
     /// <returns>The slot network configuration.</returns>
-    public static SlotNetworkConfig GetSlotNetworkConfig(NetworkType networkType) => networkType switch
-    {
-        NetworkType.Mainnet => Mainnet,
-        NetworkType.Preprod => Preprod,
-        NetworkType.Preview => Preview,
-        NetworkType.Testnet => throw new NotImplementedException(),
-        NetworkType.Unknown => throw new NotImplementedException(),
-        _ => new SlotNetworkConfig(0, 0, 0),
-    };
+    public static SlotNetworkConfig GetSlotNetworkConfig(NetworkType networkType) =>
+        SlotNetworkConfig.FromNetworkType(networkType);
 
     /// <summary>
     /// Converts a Unix timestamp (seconds) to a slot number.

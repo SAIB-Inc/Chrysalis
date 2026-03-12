@@ -124,6 +124,23 @@ public static class ValueExtensions
     }
 
     /// <summary>
+    /// Gets the quantity of a specific asset identified by hex-encoded policy ID and asset name.
+    /// </summary>
+    /// <param name="self">The value instance.</param>
+    /// <param name="policyIdHex">The hex-encoded policy ID (56 characters).</param>
+    /// <param name="assetNameHex">The hex-encoded asset name.</param>
+    /// <returns>The quantity, or null if the asset is not present.</returns>
+    public static ulong? QuantityOf(this IValue self, string policyIdHex, string assetNameHex)
+    {
+        ArgumentNullException.ThrowIfNull(self);
+        ArgumentNullException.ThrowIfNull(policyIdHex);
+        ArgumentNullException.ThrowIfNull(assetNameHex);
+        return self.QuantityOf(
+            (ReadOnlyMemory<byte>)Convert.FromHexString(policyIdHex),
+            (ReadOnlyMemory<byte>)Convert.FromHexString(assetNameHex));
+    }
+
+    /// <summary>
     /// Adds a token to the value, returning a new <see cref="LovelaceWithMultiAsset"/>.
     /// If the value is <see cref="Types.Cardano.Core.Common.Lovelace"/>, promotes it automatically.
     /// If a token with the same policy and name already exists, the quantities are added.

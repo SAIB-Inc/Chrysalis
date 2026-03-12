@@ -167,6 +167,13 @@ public class Address
         FromScriptHash(networkType, Convert.FromHexString(scriptHashHex));
 
     /// <summary>
+    /// Creates an <see cref="Address"/> from a hex-encoded address string.
+    /// </summary>
+    /// <param name="hex">The hex-encoded address bytes.</param>
+    /// <returns>An <see cref="Address"/> instance.</returns>
+    public static Address FromHex(string hex) => new(Convert.FromHexString(hex));
+
+    /// <summary>
     /// Creates a base script address (script payment + stake delegation) from a script hash and stake key hash.
     /// </summary>
     /// <param name="networkType">The Cardano network type.</param>
@@ -215,6 +222,26 @@ public class Address
     public byte[]? GetPaymentKeyHash() => Type is AddressType.Delegation or AddressType.ScriptDelegation
             ? null
             : _addressBytes.Length >= 29 ? _addressBytes[1..29] : null;
+
+    /// <summary>
+    /// Extracts the payment key hash as a lowercase hex string.
+    /// </summary>
+    /// <returns>The 56-character hex payment key hash, or null if not applicable.</returns>
+    public string? GetPaymentKeyHashHex()
+    {
+        byte[]? hash = GetPaymentKeyHash();
+        return hash is not null ? Convert.ToHexStringLower(hash) : null;
+    }
+
+    /// <summary>
+    /// Extracts the stake key hash as a lowercase hex string.
+    /// </summary>
+    /// <returns>The 56-character hex stake key hash, or null if not applicable.</returns>
+    public string? GetStakeKeyHashHex()
+    {
+        byte[]? hash = GetStakeKeyHash();
+        return hash is not null ? Convert.ToHexStringLower(hash) : null;
+    }
 
     /// <summary>
     /// Extracts the stake key hash from the address bytes.
