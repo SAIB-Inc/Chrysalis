@@ -164,6 +164,7 @@ public static class FlatDecoder
         {
             5 => new ListType(ParseType(tags, ref index)),
             6 => new PairType(ParseType(tags, ref index), ParseType(tags, ref index)),
+            7 => ParseTypeApplication(tags, ref index), // curried application (e.g. Pair encoded as Apply(Apply(Pair, A), B))
             12 => new ArrayType(ParseType(tags, ref index)),
             _ => throw new InvalidOperationException($"Flat: unsupported type application operator {operatorTag}.")
         };

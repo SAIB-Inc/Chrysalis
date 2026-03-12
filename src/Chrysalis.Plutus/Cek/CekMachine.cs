@@ -403,19 +403,15 @@ public sealed class CekMachine
 
                     int newArgCount = builtin.ArgCount + 1;
 
-                    // Reuse existing array if it has capacity, otherwise allocate
-                    CekValue[] newArgs;
-                    if (builtin.Args.Length >= newArgCount)
+                    // Always allocate a new array — never reuse builtin.Args.
+                    // The same VBuiltin can be looked up from the environment multiple
+                    // times (e.g., a shared `force (builtin mkCons)` variable).
+                    // Reusing the array causes aliasing: nested applications overwrite
+                    // earlier arguments, producing wrong results.
+                    CekValue[] newArgs = new CekValue[expectedArity];
+                    if (builtin.ArgCount > 0)
                     {
-                        newArgs = builtin.Args;
-                    }
-                    else
-                    {
-                        newArgs = new CekValue[expectedArity];
-                        if (builtin.ArgCount > 0)
-                        {
-                            Array.Copy(builtin.Args, newArgs, builtin.ArgCount);
-                        }
+                        Array.Copy(builtin.Args, newArgs, builtin.ArgCount);
                     }
                     newArgs[builtin.ArgCount] = arg;
 
@@ -479,6 +475,7 @@ public sealed class CekMachine
             (long x, long y, long z) = ExMem.ComputeArgSizes(func, args);
             _budget -= model.Eval(x, y, z);
         }
+
         return Builtins.BuiltinRuntime.Call(func, args);
     }
 

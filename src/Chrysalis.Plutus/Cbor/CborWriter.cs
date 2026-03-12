@@ -10,10 +10,11 @@ namespace Chrysalis.Plutus.Cbor;
 /// Implements spec Appendix B (sections B.3–B.7).
 /// Uses ArrayBufferWriter for efficient output.
 /// </summary>
-internal static class CborWriter
+public static class CborWriter
 {
-    internal static byte[] EncodePlutusData(PlutusData data)
+    public static byte[] EncodePlutusData(PlutusData data)
     {
+        ArgumentNullException.ThrowIfNull(data);
         ArrayBufferWriter<byte> buffer = new();
         WriteData(buffer, data);
         return buffer.WrittenSpan.ToArray();
