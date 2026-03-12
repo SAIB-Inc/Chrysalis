@@ -19,8 +19,5 @@
     <Project Path="src/Chrysalis.Wallet/Chrysalis.Wallet.csproj" />
     <Project Path="src/Chrysalis/Chrysalis.csproj" />
   </Folder>
-  <Folder Name="/benchmarks/">
-    <Project Path="benchmarks/ChrysalisNew/ChrysalisNew.csproj" />
-    <Project Path="benchmarks/PlutusBench/PlutusBench.csproj" />
-  </Folder>
+
 </Solution>
