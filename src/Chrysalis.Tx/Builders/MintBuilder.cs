@@ -25,10 +25,8 @@ public class MintBuilder
     /// <param name="assetNameHex">The hex-encoded asset name.</param>
     /// <param name="amount">The quantity to mint (positive) or burn (negative).</param>
     /// <returns>This builder for chaining.</returns>
-    public MintBuilder AddToken(string policyHex, string assetNameHex, long amount)
-    {
-        return AddToken(Convert.FromHexString(policyHex), Convert.FromHexString(assetNameHex), amount);
-    }
+    public MintBuilder AddToken(string policyHex, string assetNameHex, long amount) =>
+        AddToken(Convert.FromHexString(policyHex), Convert.FromHexString(assetNameHex), amount);
 
     /// <summary>
     /// Adds a token to mint or burn using raw byte arrays.

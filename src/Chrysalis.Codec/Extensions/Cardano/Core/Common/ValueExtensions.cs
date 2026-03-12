@@ -14,7 +14,7 @@ public static class Value
     /// </summary>
     /// <param name="lovelace">The lovelace amount.</param>
     /// <returns>A new lovelace-only value.</returns>
-    public static IValue FromLovelace(ulong lovelace) => Types.Cardano.Core.Common.Lovelace.Create(lovelace);
+    public static IValue FromLovelace(ulong lovelace) => Lovelace.Create(lovelace);
 }
 
 /// <summary>

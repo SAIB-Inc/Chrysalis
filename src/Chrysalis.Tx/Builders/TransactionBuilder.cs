@@ -210,10 +210,8 @@ public class TransactionBuilder
     /// <param name="addressBytes">The raw address bytes.</param>
     /// <param name="amount">The output value.</param>
     /// <returns>An <see cref="OutputBuilder"/> for fluent configuration.</returns>
-    public OutputBuilder AddOutput(byte[] addressBytes, IValue amount)
-    {
-        return new OutputBuilder(this, addressBytes, amount);
-    }
+    public OutputBuilder AddOutput(byte[] addressBytes, IValue amount) =>
+        new(this, addressBytes, amount);
 
     /// <summary>
     /// Replaces all transaction outputs.
@@ -316,10 +314,8 @@ public class TransactionBuilder
     /// <param name="assetNameHex">The hex-encoded asset name.</param>
     /// <param name="amount">The quantity to mint (positive) or burn (negative).</param>
     /// <returns>This builder for chaining.</returns>
-    public TransactionBuilder AddMint(string policyHex, string assetNameHex, long amount)
-    {
-        return AddMint(MintBuilder.Create().AddToken(policyHex, assetNameHex, amount).Build());
-    }
+    public TransactionBuilder AddMint(string policyHex, string assetNameHex, long amount) =>
+        AddMint(MintBuilder.Create().AddToken(policyHex, assetNameHex, amount).Build());
 
     /// <summary>
     /// Replaces the entire mint operation.

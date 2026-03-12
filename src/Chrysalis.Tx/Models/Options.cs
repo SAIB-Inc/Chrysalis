@@ -128,10 +128,8 @@ public record OutputOptions
     /// <typeparam name="TDatum">The datum type.</typeparam>
     /// <param name="datum">The datum value to serialize.</param>
     public void SetDatum<TDatum>(TDatum datum)
-        where TDatum : ICborType
-    {
+        where TDatum : ICborType =>
         Datum = DatumOptionExtensions.InlineDatumFrom(datum);
-    }
 
     /// <summary>
     /// Builds a transaction output from these options.
