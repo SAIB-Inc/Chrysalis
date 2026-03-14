@@ -1,6 +1,6 @@
-using Chrysalis.Blueprint.CodeGen.Models;
+using Chrysalis.Codec.CodeGen.Blueprint.Models;
 
-namespace Chrysalis.Blueprint.CodeGen.Analysis;
+namespace Chrysalis.Codec.CodeGen.Blueprint.Analysis;
 
 /// <summary>
 /// Classifies what kind of C# type each schema node should map to.

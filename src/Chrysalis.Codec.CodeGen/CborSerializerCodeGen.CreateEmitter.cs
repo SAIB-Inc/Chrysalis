@@ -5,11 +5,11 @@ namespace Chrysalis.Codec.CodeGen;
 
 public sealed partial class CborSerializerCodeGen
 {
-    private static partial class Emitter
+    internal static partial class Emitter
     {
         public static StringBuilder EmitCreateMethod(StringBuilder sb, SerializableTypeMetadata metadata)
         {
-            if (!metadata.IsRecordStruct || metadata.SerializationType == SerializationType.Union)
+            if (metadata.SerializationType == SerializationType.Union)
             {
                 return sb;
             }
@@ -194,7 +194,14 @@ public sealed partial class CborSerializerCodeGen
             // Count non-null properties for array size
             EmitCreatePropertyCount(sb, metadata);
 
-            _ = sb.AppendLine("writer.WriteBeginArray(propCount);");
+            if (metadata.IsIndefinite)
+            {
+                _ = sb.AppendLine("writer.WriteBeginArray(-1);");
+            }
+            else
+            {
+                _ = sb.AppendLine("writer.WriteBeginArray(propCount);");
+            }
 
             foreach (SerializablePropertyMetadata prop in metadata.Properties)
             {
@@ -212,7 +219,14 @@ public sealed partial class CborSerializerCodeGen
                 }
             }
 
-            _ = sb.AppendLine("writer.WriteEndArray(propCount);");
+            if (metadata.IsIndefinite)
+            {
+                _ = sb.AppendLine("output.GetSpan(1)[0] = 0xFF; output.Advance(1);");
+            }
+            else
+            {
+                _ = sb.AppendLine("writer.WriteEndArray(propCount);");
+            }
         }
 
         private static void EmitCreatePropertyCount(StringBuilder sb, SerializableTypeMetadata metadata)

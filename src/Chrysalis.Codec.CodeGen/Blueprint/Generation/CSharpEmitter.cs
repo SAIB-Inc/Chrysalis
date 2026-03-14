@@ -1,7 +1,7 @@
 using System.Text;
-using Chrysalis.Blueprint.CodeGen.Analysis;
+using Chrysalis.Codec.CodeGen.Blueprint.Analysis;
 
-namespace Chrysalis.Blueprint.CodeGen.Generation;
+namespace Chrysalis.Codec.CodeGen.Blueprint.Generation;
 
 /// <summary>
 /// Generates C# source text from resolved blueprint types.

@@ -19,17 +19,15 @@
     <ProjectReference Include="../Chrysalis.Codec/Chrysalis.Codec.csproj" />
     <ProjectReference Include="../Chrysalis.Codec.CodeGen/Chrysalis.Codec.CodeGen.csproj"
                       OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
-    <ProjectReference Include="../Chrysalis.Blueprint.CodeGen/Chrysalis.Blueprint.CodeGen.csproj"
-                      OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
   </ItemGroup>
 
   <ItemGroup>
-    <AdditionalFiles Include="plutus.json" />
-    <AdditionalFiles Include="sundae.json" />
-    <AdditionalFiles Include="crashr.json" />
-    <AdditionalFiles Include="minswap.json" />
-    <AdditionalFiles Include="merkle.json" />
-    <AdditionalFiles Include="cbor-vectors.json" />
+    <AdditionalFiles Include="data/plutus.json" />
+    <AdditionalFiles Include="data/sundae.json" />
+    <AdditionalFiles Include="data/crashr.json" />
+    <AdditionalFiles Include="data/minswap.json" />
+    <AdditionalFiles Include="data/merkle.json" />
+    <AdditionalFiles Include="data/cbor-vectors.json" />
   </ItemGroup>
 
 </Project>

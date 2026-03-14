@@ -1,10 +1,10 @@
-using Chrysalis.Blueprint.CodeGen.Analysis;
-using Chrysalis.Blueprint.CodeGen.Generation;
-using Chrysalis.Blueprint.CodeGen.Models;
+using Chrysalis.Codec.CodeGen.Blueprint.Analysis;
+using Chrysalis.Codec.CodeGen.Blueprint.Generation;
+using Chrysalis.Codec.CodeGen.Blueprint.Models;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.Text;
 
-namespace Chrysalis.Blueprint.CodeGen;
+namespace Chrysalis.Codec.CodeGen.Blueprint;
 
 /// <summary>
 /// Incremental source generator that reads CIP-0057 blueprint JSON files
@@ -273,6 +273,25 @@ public sealed class BlueprintSourceGenerator : IIncrementalGenerator
         string safeTitle = NamingConventions.SanitizeIdentifier(
             NamingConventions.ToPascalCase(blueprint.Preamble?.Title ?? "Blueprint"));
         context.AddSource($"{safeTitle}.Types.g.cs", SourceText.From(typesSource, System.Text.Encoding.UTF8));
+
+        // Emit CBOR serializers for the generated types
+        try
+        {
+            MetadataConverter.EmitSerializers(context, ns, resolvedTypes);
+        }
+        catch (Exception serEx)
+        {
+            context.ReportDiagnostic(Diagnostic.Create(
+                new DiagnosticDescriptor(
+                    "BLUEPRINT002",
+                    "Blueprint serializer generation failed",
+                    "Failed to generate serializers: {0}",
+                    "Chrysalis.Blueprint",
+                    DiagnosticSeverity.Warning,
+                    isEnabledByDefault: true),
+                Location.None,
+                serEx.Message));
+        }
 
         if (blueprint.Validators.Count > 0)
         {

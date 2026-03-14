@@ -40,7 +40,6 @@ jobs:
         run: |
           mkdir -p out
           dotnet pack ./src/Chrysalis.Codec.CodeGen/Chrysalis.Codec.CodeGen.csproj -c Release -o out -p:Version=${{ steps.version.outputs.version }}
-          dotnet pack ./src/Chrysalis.Blueprint.CodeGen/Chrysalis.Blueprint.CodeGen.csproj -c Release -o out -p:Version=${{ steps.version.outputs.version }}
           dotnet pack ./src/Chrysalis.Codec/Chrysalis.Codec.csproj -c Release -o out -p:Version=${{ steps.version.outputs.version }}
           dotnet pack ./src/Chrysalis.Crypto/Chrysalis.Crypto.csproj -c Release -o out -p:Version=${{ steps.version.outputs.version }}
           dotnet pack ./src/Chrysalis.Wallet/Chrysalis.Wallet.csproj -c Release -o out -p:Version=${{ steps.version.outputs.version }}

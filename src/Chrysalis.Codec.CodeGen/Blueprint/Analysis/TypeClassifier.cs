@@ -1,7 +1,7 @@
-using Chrysalis.Blueprint.CodeGen.Generation;
-using Chrysalis.Blueprint.CodeGen.Models;
+using Chrysalis.Codec.CodeGen.Blueprint.Generation;
+using Chrysalis.Codec.CodeGen.Blueprint.Models;
 
-namespace Chrysalis.Blueprint.CodeGen.Analysis;
+namespace Chrysalis.Codec.CodeGen.Blueprint.Analysis;
 
 /// <summary>
 /// Classifies a schema node into a C# type category and resolves its fields.

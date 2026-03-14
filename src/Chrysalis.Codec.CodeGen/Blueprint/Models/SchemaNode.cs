@@ -1,4 +1,4 @@
-namespace Chrysalis.Blueprint.CodeGen.Models;
+namespace Chrysalis.Codec.CodeGen.Blueprint.Models;
 
 /// <summary>
 /// A node in the CIP-0057 type schema.

@@ -1,7 +1,7 @@
 using System.Text;
-using Chrysalis.Blueprint.CodeGen.Models;
+using Chrysalis.Codec.CodeGen.Blueprint.Models;
 
-namespace Chrysalis.Blueprint.CodeGen.Generation;
+namespace Chrysalis.Codec.CodeGen.Blueprint.Generation;
 
 /// <summary>
 /// Converts blueprint identifiers to valid C# names.
@@ -124,6 +124,7 @@ internal static class NamingConventions
 
     /// <summary>
     /// Derives a C# namespace from the blueprint preamble title.
+    /// Splits on "/" to produce dotted namespaces (e.g. "cbor-vectors/cbor-vectors" → "CborVectors.CborVectors.Blueprint").
     /// </summary>
     public static string NamespaceFromTitle(string? title)
     {
@@ -132,7 +133,28 @@ internal static class NamingConventions
             return "Blueprint";
         }
 
-        return SanitizeIdentifier(ToPascalCase(title!)) + ".Blueprint";
+        string[] segments = title!.Split('/');
+        StringBuilder ns = new();
+        foreach (string segment in segments)
+        {
+            string sanitized = SanitizeIdentifier(ToPascalCase(segment.Trim()));
+            if (sanitized.Length > 0)
+            {
+                if (ns.Length > 0)
+                {
+                    _ = ns.Append('.');
+                }
+
+                _ = ns.Append(sanitized);
+            }
+        }
+
+        if (ns.Length == 0)
+        {
+            return "Blueprint";
+        }
+
+        return ns + ".Blueprint";
     }
 
     /// <summary>

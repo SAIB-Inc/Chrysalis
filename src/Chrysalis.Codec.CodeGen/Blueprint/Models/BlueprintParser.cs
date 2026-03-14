@@ -1,7 +1,7 @@
 using System.Globalization;
 using System.Text;
 
-namespace Chrysalis.Blueprint.CodeGen.Models;
+namespace Chrysalis.Codec.CodeGen.Blueprint.Models;
 
 /// <summary>
 /// Minimal recursive-descent JSON parser for CIP-0057 blueprint files.

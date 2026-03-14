@@ -1,4 +1,4 @@
-namespace Chrysalis.Blueprint.CodeGen.Models;
+namespace Chrysalis.Codec.CodeGen.Blueprint.Models;
 
 /// <summary>
 /// Top-level CIP-0057 blueprint file.

@@ -1,7 +1,7 @@
 using System.Text;
-using Chrysalis.Blueprint.CodeGen.Models;
+using Chrysalis.Codec.CodeGen.Blueprint.Models;
 
-namespace Chrysalis.Blueprint.CodeGen.Generation;
+namespace Chrysalis.Codec.CodeGen.Blueprint.Generation;
 
 /// <summary>
 /// Generates static validator wrapper classes from blueprint validators.
