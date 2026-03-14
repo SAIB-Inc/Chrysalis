@@ -44,7 +44,7 @@ dotnet add package Chrysalis.Plutus  --prerelease   # Pure managed UPLC/CEK mach
 | Package | Description |
 |---|---|
 | **Chrysalis.Codec** | Attribute-driven CBOR serialization with source-generated encoders/decoders |
-| **Chrysalis.Codec.CodeGen** | Source generator for compile-time CBOR dispatch |
+| **Chrysalis.Codec.CodeGen** | Source generator for compile-time CBOR dispatch + CIP-0057 blueprint codegen |
 | **Chrysalis.Network** | Ouroboros N2C/N2N mini-protocols with pipelined ChainSync + BlockFetch |
 | **Chrysalis.Tx** | `TransactionBuilder`, `MintBuilder`, `OutputBuilder`, fee/collateral calculation |
 | **Chrysalis.Plutus** | Pure C# UPLC interpreter — 999/999 conformance tests, no native dependencies |
@@ -53,7 +53,44 @@ dotnet add package Chrysalis.Plutus  --prerelease   # Pure managed UPLC/CEK mach
 
 ## Quick Start
 
-### Define Plutus Data Types
+### Generate Types from Aiken Blueprints
+
+Drop an Aiken-compiled `plutus.json` into your project and get fully typed, serializable C# types at compile time — no manual type definitions needed.
+
+```xml
+<!-- .csproj -->
+<ItemGroup>
+  <ProjectReference Include="Chrysalis.Codec.CodeGen"
+                    OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+  <AdditionalFiles Include="plutus.json" />
+</ItemGroup>
+```
+
+The source generator reads CIP-0057 blueprint schemas and emits records with full CBOR serialization:
+
+```csharp
+// Auto-generated from plutus.json — these types appear in IntelliSense immediately
+using WizardProtocol.P2p.Blueprint;
+
+// Construct values with Create()
+var datum = WizardDatum.Create(
+    kind: AutoLimit.Create(),
+    assetPair: TupleTypesAssetTypesAsset.Create(asset1, asset2),
+    swapPrice: OneWay.Create(rational),
+    minimumPrice: None<ISwap>.Create(),
+    owner: Signature.Create(PlutusBoundedBytes.Create(ownerKeyHash))
+);
+
+// Serialize — produces byte-identical CBOR to Aiken's cbor.serialise
+byte[] cbor = CborSerializer.Serialize(datum);
+
+// Deserialize
+WizardDatum decoded = CborSerializer.Deserialize<WizardDatum>(cbor);
+```
+
+### Define Plutus Data Types Manually
+
+For types not in a blueprint, define them with attributes:
 
 ```csharp
 using Chrysalis.Codec.Serialization;
