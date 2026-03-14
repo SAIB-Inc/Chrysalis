@@ -8,6 +8,7 @@ using Chrysalis.Codec.Types.Cardano.Core.Governance;
 using Chrysalis.Codec.Types;
 using Chrysalis.Codec.Serialization.Utils;
 using Chrysalis.Network.Cbor.LocalStateQuery;
+using Chrysalis.Tx.Extensions;
 
 namespace Chrysalis.Tx.Builders;
 
@@ -49,6 +50,8 @@ public class TransactionBuilder
 
     private PostAlonzoAuxiliaryDataMap? _auxiliaryData;
 
+    // ──────────── Builder Integration ────────────
+
     // ──────────── Other Properties ────────────
 
     /// <summary>Gets or sets the protocol parameters used for fee calculation.</summary>
@@ -56,6 +59,15 @@ public class TransactionBuilder
 
     /// <summary>Gets or sets the change output for fee adjustment.</summary>
     public ITransactionOutput? ChangeOutput { get; set; }
+
+    /// <summary>Gets the redeemer builder for deferred index computation.</summary>
+    public RedeemerBuilder RedeemerSet { get; } = new();
+
+    /// <summary>Gets the aggregate witness requirements.</summary>
+    public WitnessRequirements WitnessReqs { get; } = new();
+
+    /// <summary>Gets or sets the change output index for fee adjustment.</summary>
+    public int? ChangeOutputIndex { get; set; }
 
     // ──────────── Read-Only Accessors ────────────
 
@@ -159,6 +171,37 @@ public class TransactionBuilder
         ArgumentNullException.ThrowIfNull(utxoRef);
         (string txHash, ulong index) = ParseUtxoRef(utxoRef);
         return AddInput(txHash, index);
+    }
+
+    /// <summary>
+    /// Adds an input built with <see cref="InputBuilder"/>, automatically tracking
+    /// witness requirements, scripts, datums, and redeemers.
+    /// </summary>
+    /// <param name="result">The input builder result with witness requirements.</param>
+    /// <returns>This builder for chaining.</returns>
+    public TransactionBuilder AddInput(InputBuilderResult result)
+    {
+        ArgumentNullException.ThrowIfNull(result);
+        _inputs.Add(result.Input);
+        WitnessReqs.Add(result.Requirements);
+        RedeemerSet.AddSpend(result);
+
+        foreach (IScript script in result.Requirements.ScriptWitnesses)
+        {
+            _ = AddPlutusScript(script);
+        }
+
+        foreach (IPlutusData datum in result.Requirements.Datums)
+        {
+            _ = AddPlutusData(datum);
+        }
+
+        foreach (string signer in result.Requirements.RequiredSigners)
+        {
+            _ = AddRequiredSigner(Convert.FromHexString(signer));
+        }
+
+        return this;
     }
 
     /// <summary>
@@ -563,6 +606,23 @@ public class TransactionBuilder
     {
         (_bootstrapWitnesses ??= []).Add(witness);
         return this;
+    }
+
+    /// <summary>
+    /// Adds a Plutus script to the witness set, automatically routing by version.
+    /// </summary>
+    /// <param name="script">The Plutus script.</param>
+    /// <returns>This builder for chaining.</returns>
+    public TransactionBuilder AddPlutusScript(IScript script)
+    {
+        ReadOnlyMemory<byte> bytes = script.Bytes();
+        return script.Version() switch
+        {
+            1 => AddPlutusV1Script(bytes),
+            2 => AddPlutusV2Script(bytes),
+            3 => AddPlutusV3Script(bytes),
+            _ => AddPlutusV3Script(bytes),
+        };
     }
 
     /// <summary>
