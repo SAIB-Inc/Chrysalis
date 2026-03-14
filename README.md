@@ -213,9 +213,11 @@ Benchmarks against [Pallas](https://github.com/txpipe/pallas) (Rust) and [Gourob
 
 | | With Deserialization | Network Only |
 |---|---|---|
-| **Pallas (Rust)** | 3,097 blk/s | 3,280 blk/s |
-| **Chrysalis (.NET)** | 2,747 blk/s | 2,977 blk/s |
-| **Gouroboros (Go)** | 2,735 blk/s | N/A |
+| **Chrysalis (.NET)** | ~3,050 blk/s | ~3,080 blk/s |
+| **Pallas (Rust)** | ~3,040 blk/s | ~3,010 blk/s |
+| **Gouroboros (Go)** | ~2,600 blk/s | — |
+
+N2C is bottlenecked by the node — all three converge around the same throughput. Chrysalis and Pallas are neck and neck.
 
 <details>
 <summary>How it's fast</summary>
