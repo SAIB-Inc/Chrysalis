@@ -11,26 +11,12 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Content Include="..\Chrysalis.Plutus\lib\libplutus_vm_dotnet_rs.dylib" Condition="Exists('..\Chrysalis.Plutus\lib\libplutus_vm_dotnet_rs.dylib')">
-      <Pack>true</Pack>
-      <PackageCopyToOutput>true</PackageCopyToOutput>
-      <PackagePath>runtimes/osx-arm64/native/libplutus_vm_dotnet_rs.dylib</PackagePath>
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-    <Content Include="..\Chrysalis.Plutus\lib\libplutus_vm_dotnet_rs.so" Condition="Exists('..\Chrysalis.Plutus\lib\libplutus_vm_dotnet_rs.so')">
-      <Pack>true</Pack>
-      <PackageCopyToOutput>true</PackageCopyToOutput>
-      <PackagePath>runtimes/linux-x64/native/libplutus_vm_dotnet_rs.so</PackagePath>
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-  </ItemGroup>
-
-  <ItemGroup>
     <ProjectReference Include="..\Chrysalis.Codec\Chrysalis.Codec.csproj" PrivateAssets="All" />
     <ProjectReference Include="..\Chrysalis.Codec.CodeGen\Chrysalis.Codec.CodeGen.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
     <ProjectReference Include="..\Chrysalis.Network\Chrysalis.Network.csproj" PrivateAssets="All" />
     <ProjectReference Include="..\Chrysalis.Tx\Chrysalis.Tx.csproj" PrivateAssets="All" />
     <ProjectReference Include="..\Chrysalis.Wallet\Chrysalis.Wallet.csproj" PrivateAssets="All" />
+    <ProjectReference Include="..\Chrysalis.Plutus\Chrysalis.Plutus.csproj" PrivateAssets="All" />
     <ProjectReference Include="..\Chrysalis.Crypto\Chrysalis.Crypto.csproj" PrivateAssets="All" />
   </ItemGroup>
 
