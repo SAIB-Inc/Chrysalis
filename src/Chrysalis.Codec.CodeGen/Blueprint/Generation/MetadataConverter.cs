@@ -204,14 +204,12 @@ internal static class MetadataConverter
         );
     }
 
-    private static bool IsUnionType(string typeName)
-    {
-        return typeName.StartsWith("I", StringComparison.Ordinal) &&
-               typeName.Length > 1 &&
-               char.IsUpper(typeName[1]) &&
-               !typeName.StartsWith("ICborOption<", StringComparison.Ordinal) &&
-               !typeName.StartsWith("ICborMaybeIndefList<", StringComparison.Ordinal);
-    }
+    private static bool IsUnionType(string typeName) =>
+        typeName.StartsWith("I", StringComparison.Ordinal) &&
+        typeName.Length > 1 &&
+        char.IsUpper(typeName[1]) &&
+        !typeName.StartsWith("ICborOption<", StringComparison.Ordinal) &&
+        !typeName.StartsWith("ICborMaybeIndefList<", StringComparison.Ordinal);
 
     private static string ResolveFullyQualifiedName(string csharpType)
     {
@@ -231,21 +229,18 @@ internal static class MetadataConverter
         return ResolveSimpleType(baseType);
     }
 
-    private static string ResolveSimpleType(string typeName)
+    private static string ResolveSimpleType(string typeName) => typeName switch
     {
-        return typeName switch
-        {
-            "IPlutusBigInt" => "global::Chrysalis.Codec.Types.Cardano.Core.Common.IPlutusBigInt",
-            "IPlutusBool" => "global::Chrysalis.Codec.Types.Cardano.Core.Common.IPlutusBool",
-            "IPlutusData" => "global::Chrysalis.Codec.Types.Cardano.Core.Common.IPlutusData",
-            "PlutusBoundedBytes" => "global::Chrysalis.Codec.Types.Cardano.Core.Common.PlutusBoundedBytes",
-            "ICborOption" => "global::Chrysalis.Codec.Types.ICborOption",
-            "CborDefList" => "global::Chrysalis.Codec.Types.CborDefList",
-            "CborIndefList" => "global::Chrysalis.Codec.Types.CborIndefList",
-            "ICborMaybeIndefList" => "global::Chrysalis.Codec.Types.ICborMaybeIndefList",
-            _ => typeName,
-        };
-    }
+        "IPlutusBigInt" => "global::Chrysalis.Codec.Types.Cardano.Core.Common.IPlutusBigInt",
+        "IPlutusBool" => "global::Chrysalis.Codec.Types.Cardano.Core.Common.IPlutusBool",
+        "IPlutusData" => "global::Chrysalis.Codec.Types.Cardano.Core.Common.IPlutusData",
+        "PlutusBoundedBytes" => "global::Chrysalis.Codec.Types.Cardano.Core.Common.PlutusBoundedBytes",
+        "ICborOption" => "global::Chrysalis.Codec.Types.ICborOption",
+        "CborDefList" => "global::Chrysalis.Codec.Types.CborDefList",
+        "CborIndefList" => "global::Chrysalis.Codec.Types.CborIndefList",
+        "ICborMaybeIndefList" => "global::Chrysalis.Codec.Types.ICborMaybeIndefList",
+        _ => typeName,
+    };
 
     private static string ExtractNamespace(string fqn)
     {
