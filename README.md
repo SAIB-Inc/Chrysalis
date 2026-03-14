@@ -39,7 +39,7 @@ dotnet add package Chrysalis.Wallet  --prerelease   # Key management + address h
 dotnet add package Chrysalis.Plutus  --prerelease   # Pure managed UPLC/CEK machine
 ```
 
-## Architecture
+## Packages
 
 | Package | Description |
 |---|---|
@@ -51,250 +51,155 @@ dotnet add package Chrysalis.Plutus  --prerelease   # Pure managed UPLC/CEK mach
 | **Chrysalis.Wallet** | BIP-39 mnemonic, BIP-32 HD key derivation, Bech32 addresses |
 | **Chrysalis.Crypto** | Ed25519 signatures, Blake2b hashing |
 
-## Quick Start
+## Blueprint Codegen
 
-### Generate Types from Aiken Blueprints
-
-Drop an Aiken-compiled `plutus.json` into your project and get fully typed, serializable C# types at compile time — no manual type definitions needed.
+Drop an Aiken-compiled `plutus.json` into your project and get fully typed, serializable C# types at compile time.
 
 ```xml
 <!-- .csproj -->
 <ItemGroup>
-  <ProjectReference Include="Chrysalis.Codec.CodeGen"
+  <PackageReference Include="Chrysalis.Codec" Version="*-*" />
+  <PackageReference Include="Chrysalis.Codec.CodeGen" Version="*-*"
                     OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
   <AdditionalFiles Include="plutus.json" />
 </ItemGroup>
 ```
 
-The source generator reads CIP-0057 blueprint schemas and emits records with full CBOR serialization:
+The source generator reads [CIP-0057](https://cips.cardano.org/cip/CIP-0057) blueprint schemas and emits records with full CBOR serialization — types appear in IntelliSense immediately:
 
 ```csharp
-// Auto-generated from plutus.json — these types appear in IntelliSense immediately
-using WizardProtocol.P2p.Blueprint;
+using MyProject.Blueprint;
 
-// Construct values with Create()
-var datum = WizardDatum.Create(
-    kind: AutoLimit.Create(),
-    assetPair: TupleTypesAssetTypesAsset.Create(asset1, asset2),
-    swapPrice: OneWay.Create(rational),
-    minimumPrice: None<ISwap>.Create(),
-    owner: Signature.Create(PlutusBoundedBytes.Create(ownerKeyHash))
-);
+// Construct from values — serializes byte-identical to Aiken's cbor.serialise
+var credential = VerificationKeyCredential.Create(PlutusBoundedBytes.Create(keyHash));
+var address = Address.Create(credential, None<ICredential>.Create());
+var datum = SimpleDatum.Create(address, PlutusInt.Create(1_000_000),
+    PlutusBoundedBytes.Create(tag), PlutusTrue.Create());
 
-// Serialize — produces byte-identical CBOR to Aiken's cbor.serialise
 byte[] cbor = CborSerializer.Serialize(datum);
 
-// Deserialize
-WizardDatum decoded = CborSerializer.Deserialize<WizardDatum>(cbor);
+// Deserialize back into the generated type
+SimpleDatum decoded = CborSerializer.Deserialize<SimpleDatum>(cbor);
 ```
 
-### Define Plutus Data Types Manually
-
-For types not in a blueprint, define them with attributes:
+<details>
+<summary>Define types manually (without a blueprint)</summary>
 
 ```csharp
-using Chrysalis.Codec.Serialization;
-using Chrysalis.Codec.Serialization.Attributes;
-
-// Single attribute for Plutus datum/redeemer types
 [PlutusData(0)]
 public partial record MyDatum(
     [CborOrder(0)] byte[] Owner,
     [CborOrder(1)] ulong Amount
 ) : CborRecord;
 
-// Union types for redeemers with multiple constructors
 [CborSerializable]
 [CborUnion]
 public abstract partial record MyRedeemer : CborRecord;
 
 [PlutusData(0)]
-public partial record Spend(
-    [CborOrder(0)] long OutputIndex
-) : MyRedeemer;
+public partial record Spend([CborOrder(0)] long OutputIndex) : MyRedeemer;
 
 [PlutusData(1)]
 public partial record Cancel() : MyRedeemer;
 ```
 
-### Wallet
+</details>
+
+## Transaction Building
 
 ```csharp
-using Chrysalis.Wallet.Models.Keys;
-using Chrysalis.Wallet.Models.Addresses;
-using Chrysalis.Wallet.Models.Enums;
-
-// Generate a 24-word mnemonic (English word list is the default)
-Mnemonic mnemonic = Mnemonic.Generate(24);
-
-// Derive keys with BIP-44 helpers
-PrivateKey accountKey = mnemonic.GetRootKey().DeriveCardanoAccountKey();
-PrivateKey paymentKey = accountKey.DerivePaymentKey();
-PublicKey stakingPub = accountKey.DeriveStakeKey().GetPublicKey();
-
-// Generate address
-Address address = Address.FromPublicKeys(
-    NetworkType.Testnet,
-    AddressType.BasePayment,
-    paymentKey.GetPublicKey(),
-    stakingPub
-);
-
-Console.WriteLine(address.ToBech32());
-// addr_test1qz...
-```
-
-### Build Transactions
-
-```csharp
-using Chrysalis.Tx.Builders;
-using Chrysalis.Codec.Types.Cardano.Core.Common;
-using Chrysalis.Codec.Extensions.Cardano.Core.Common;
-
 TransactionBuilder builder = TransactionBuilder.Create(pparams);
 
-// Add inputs (hex strings or txid#index format)
 builder.AddInput("a1b2c3d4...#0");
 
-// Fluent output builder with auto min-ADA
 builder.AddOutput("addr_test1qz...", Lovelace.Create(5_000_000))
     .WithInlineDatum(myDatum)
     .WithMinAda(pparams.AdaPerUTxOByte)
     .Add();
 
-// Simple ADA-only output
-builder.AddOutput("addr_test1qz...", Lovelace.Create(2_000_000))
-    .Add();
-
-// Multi-asset output — no nested dictionary ceremony
+// Multi-asset outputs
 IValue value = Value.FromLovelace(2_000_000)
-    .WithToken(policyHex, assetNameHex, 100)
-    .WithToken(policyHex, assetNameHex2, 50);
-
+    .WithToken(policyHex, assetNameHex, 100);
 builder.AddOutput("addr_test1qz...", value).Add();
-```
 
-### Mint Tokens
-
-```csharp
-using Chrysalis.Tx.Builders;
-
-// Fluent mint builder
-MultiAssetMint mint = MintBuilder.Create()
-    .AddToken(policyHex, assetNameHex, 1_000)   // mint
-    .AddToken(policyHex, assetNameHex2, -1)      // burn
-    .Build();
-
-builder.SetMint(mint);
-
-// Or directly on the builder
+// Minting
 builder.AddMint(policyHex, assetNameHex, 1_000);
-```
 
-### Value Arithmetic
-
-```csharp
-// Merge two values (adds lovelace + combines tokens)
-IValue total = value1.Merge(value2);
-
-// Subtract
-IValue remaining = total.Subtract(spent);
-
-// Query token amounts
-ulong? qty = value.QuantityOf(policyHex, assetNameHex);
-
-// Flat dictionary of all assets
-Dictionary<string, ulong> assets = value.ToAssetDictionary();
-// Keys: "lovelace", "policyHex+assetNameHex"
-```
-
-### Sign and Submit
-
-```csharp
-using Chrysalis.Tx.Extensions;
-
-// Single key
-ITransaction signed = tx.Sign(paymentKey);
-
-// Multiple keys (hashes tx body once)
-ITransaction signed = tx.Sign(paymentKey, stakeKey, scriptKey);
-
-// Submit via Blockfrost
+// Sign and submit
+ITransaction signed = tx.Sign(paymentKey, stakeKey);
 string txHash = await provider.SubmitTransactionAsync(signed);
 ```
 
-### Read Inline Datums
+<details>
+<summary>Value arithmetic</summary>
 
 ```csharp
-using Chrysalis.Codec.Extensions.Cardano.Core.Transaction;
+IValue total = value1.Merge(value2);
+IValue remaining = total.Subtract(spent);
+ulong? qty = value.QuantityOf(policyHex, assetNameHex);
+Dictionary<string, ulong> assets = value.ToAssetDictionary();
+```
 
-// One-liner datum access — no triple-casting
+</details>
+
+<details>
+<summary>Read inline datums</summary>
+
+```csharp
 MyDatum? datum = output.InlineDatum<MyDatum>();
 ReadOnlyMemory<byte>? rawCbor = output.InlineDatumRaw();
 ```
 
-### Node Communication
+</details>
+
+## Wallet
 
 ```csharp
-using Chrysalis.Network.Multiplexer;
+Mnemonic mnemonic = Mnemonic.Generate(24);
 
-// N2C: connect to local node via Unix socket
+PrivateKey accountKey = mnemonic.GetRootKey().DeriveCardanoAccountKey();
+PrivateKey paymentKey = accountKey.DerivePaymentKey();
+PublicKey stakingPub = accountKey.DeriveStakeKey().GetPublicKey();
+
+Address address = Address.FromPublicKeys(
+    NetworkType.Testnet, AddressType.BasePayment,
+    paymentKey.GetPublicKey(), stakingPub);
+```
+
+## Node Communication
+
+```csharp
+// N2C: local node via Unix socket
 NodeClient node = await NodeClient.ConnectAsync("/ipc/node.socket");
 await node.StartAsync(networkMagic);
 
-// Query chain tip
 var tip = await node.LocalStateQuery.GetTipAsync();
-
-// Query UTxOs
 var utxos = await node.LocalStateQuery.GetUtxosByAddressAsync([addressBytes]);
-
-// Submit transactions
 await node.LocalTxSubmit.SubmitTxAsync(signedTxBytes);
 
-// N2N: connect to remote node via TCP
+// N2N: remote node via TCP with pipelined sync
 PeerClient peer = await PeerClient.ConnectAsync("relay.cardano.org", 3001);
 await peer.StartAsync(networkMagic);
-
-// Pipelined ChainSync + BlockFetch
 await peer.ChainSync.FindIntersectionAsync([Point.Origin], ct);
 ```
 
-### Plutus VM
+## Plutus VM
 
-Pure managed UPLC interpreter — no Haskell, no Rust, no FFI.
+Pure managed UPLC interpreter — no Haskell, no Rust, no FFI. **999/999 conformance tests** covering Plutus V1-V3, all 94 builtins, and BLS12-381 cryptographic primitives.
 
 ```csharp
-using Chrysalis.Tx.Extensions;
-
-// Evaluate all scripts in a transaction
 IReadOnlyList<EvaluationResult> results = ScriptContextBuilder.EvaluateTx(
     body, witnessSet, utxos, SlotNetworkConfig.Preview);
 
 foreach (var r in results)
-    Console.WriteLine($"Redeemer [{r.RedeemerTag}:{r.Index}] mem={r.ExUnits.Mem} steps={r.ExUnits.Steps}");
+    Console.WriteLine($"[{r.RedeemerTag}:{r.Index}] mem={r.ExUnits.Mem} steps={r.ExUnits.Steps}");
 ```
 
-The VM passes **999/999 UPLC conformance tests** covering Plutus V1-V3, including all 94 builtins and BLS12-381 cryptographic primitives. The transaction builder uses it automatically — no external evaluator needed.
-
-### Script Addresses
-
-```csharp
-using Chrysalis.Wallet.Models.Addresses;
-
-// Compute script hash from IScript
-string scriptHash = myScript.HashHex();
-
-// Create script address
-Address scriptAddr = Address.FromScriptHash(NetworkType.Testnet, scriptHash);
-
-// With staking credential
-Address scriptAddr = Address.FromScriptHashWithStake(
-    NetworkType.Testnet, scriptHash, stakeKeyHash);
-```
+The transaction builder uses the VM automatically — no external evaluator needed.
 
 ## Performance
 
-Benchmarks against [Pallas](https://github.com/txpipe/pallas) (Rust) and [Gouroboros](https://github.com/blinklabs-io/gouroboros) (Go) on Conway-era blocks, local Cardano Preview node.
+Benchmarks against [Pallas](https://github.com/txpipe/pallas) (Rust) and [Gouroboros](https://github.com/blinklabs-io/gouroboros) (Go) on Conway-era blocks.
 
 **N2N (TCP) — Pipelined ChainSync from origin:**
 
@@ -312,8 +217,6 @@ Benchmarks against [Pallas](https://github.com/txpipe/pallas) (Rust) and [Gourob
 | **Chrysalis (.NET)** | 2,747 blk/s | 2,977 blk/s |
 | **Gouroboros (Go)** | 2,735 blk/s | N/A |
 
-N2C is bottlenecked by the node — all three converge around 2,700-3,300 blk/s. On N2N where pipelining matters, Chrysalis is **2.3x faster than Go** and **13x faster than Rust** on full block download.
-
 <details>
 <summary>How it's fast</summary>
 
@@ -329,13 +232,13 @@ AMD Ryzen 9 9900X3D, .NET 10. Full results in [`benchmarks/BENCHMARKS.md`](bench
 
 | Era | Serialization | Block Processing | Tx Building | Script Eval |
 |---|:---:|:---:|:---:|:---:|
-| **Byron** | ✅ | ✅ | — | — |
-| **Shelley** | ✅ | ✅ | ✅ | — |
-| **Allegra** | ✅ | ✅ | ✅ | — |
-| **Mary** | ✅ | ✅ | ✅ | — |
-| **Alonzo** | ✅ | ✅ | ✅ | ✅ |
-| **Babbage** | ✅ | ✅ | ✅ | ✅ |
-| **Conway** | ✅ | ✅ | ✅ | ✅ |
+| **Byron** | yes | yes | — | — |
+| **Shelley** | yes | yes | yes | — |
+| **Allegra** | yes | yes | yes | — |
+| **Mary** | yes | yes | yes | — |
+| **Alonzo** | yes | yes | yes | yes |
+| **Babbage** | yes | yes | yes | yes |
+| **Conway** | yes | yes | yes | yes |
 
 ## Contributing
 

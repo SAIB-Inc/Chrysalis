@@ -39,14 +39,15 @@ jobs:
       - name: Pack packages
         run: |
           mkdir -p out
-          dotnet pack ./src/Chrysalis.Codec.CodeGen/Chrysalis.Codec.CodeGen.csproj -c Release -o out -p:Version=${{ steps.version.outputs.version }}
-          dotnet pack ./src/Chrysalis.Codec/Chrysalis.Codec.csproj -c Release -o out -p:Version=${{ steps.version.outputs.version }}
-          dotnet pack ./src/Chrysalis.Crypto/Chrysalis.Crypto.csproj -c Release -o out -p:Version=${{ steps.version.outputs.version }}
-          dotnet pack ./src/Chrysalis.Wallet/Chrysalis.Wallet.csproj -c Release -o out -p:Version=${{ steps.version.outputs.version }}
-          dotnet pack ./src/Chrysalis.Network/Chrysalis.Network.csproj -c Release -o out -p:Version=${{ steps.version.outputs.version }}
-          dotnet pack ./src/Chrysalis.Plutus/Chrysalis.Plutus.csproj -c Release -o out -p:Version=${{ steps.version.outputs.version }}
-          dotnet pack ./src/Chrysalis.Tx/Chrysalis.Tx.csproj -c Release -o out -p:Version=${{ steps.version.outputs.version }}
-          dotnet pack ./src/Chrysalis/Chrysalis.csproj -c Release -o out -p:Version=${{ steps.version.outputs.version }}
+          for proj in src/Chrysalis*/Chrysalis*.csproj; do
+            if grep -q '<IsPackable>false</IsPackable>' "$proj" 2>/dev/null || \
+               grep -q '<IsTestProject>true</IsTestProject>' "$proj" 2>/dev/null || \
+               echo "$proj" | grep -qi "cli"; then
+              continue
+            fi
+            echo "Packing $proj..."
+            dotnet pack "$proj" -c Release -o out -p:Version=${{ steps.version.outputs.version }}
+          done
 
       - name: Push to NuGet
         run: dotnet nuget push ./out/*.nupkg --api-key ${{ secrets.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate
