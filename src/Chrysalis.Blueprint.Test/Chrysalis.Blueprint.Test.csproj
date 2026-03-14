@@ -29,6 +29,7 @@
     <AdditionalFiles Include="crashr.json" />
     <AdditionalFiles Include="minswap.json" />
     <AdditionalFiles Include="merkle.json" />
+    <AdditionalFiles Include="cbor-vectors.json" />
   </ItemGroup>
 
 </Project>
