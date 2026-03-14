@@ -232,13 +232,13 @@ AMD Ryzen 9 9900X3D, .NET 10. Full results in [`benchmarks/BENCHMARKS.md`](bench
 
 | Era | Serialization | Block Processing | Tx Building | Script Eval |
 |---|:---:|:---:|:---:|:---:|
-| **Byron** | yes | yes | — | — |
-| **Shelley** | yes | yes | yes | — |
-| **Allegra** | yes | yes | yes | — |
-| **Mary** | yes | yes | yes | — |
-| **Alonzo** | yes | yes | yes | yes |
-| **Babbage** | yes | yes | yes | yes |
-| **Conway** | yes | yes | yes | yes |
+| **Byron** | ✅ | ✅ | — | — |
+| **Shelley** | ✅ | ✅ | ✅ | — |
+| **Allegra** | ✅ | ✅ | ✅ | — |
+| **Mary** | ✅ | ✅ | ✅ | — |
+| **Alonzo** | ✅ | ✅ | ✅ | ✅ |
+| **Babbage** | ✅ | ✅ | ✅ | ✅ |
+| **Conway** | ✅ | ✅ | ✅ | ✅ |
 
 ## Contributing
 
