@@ -2,7 +2,7 @@ namespace Chrysalis.Codec.CodeGen;
 
 public sealed partial class CborSerializerCodeGen
 {
-    private enum SerializationType
+    internal enum SerializationType
     {
         Container,
         Map,
@@ -11,7 +11,7 @@ public sealed partial class CborSerializerCodeGen
         Union
     }
 
-    private sealed class SerializableTypeMetadata(
+    internal sealed class SerializableTypeMetadata(
         string baseIdentifier,
         string identifier,
         string? @namespace,
@@ -67,7 +67,7 @@ public sealed partial class CborSerializerCodeGen
             """;
     }
 
-    private sealed class SerializablePropertyMetadata(
+    internal sealed class SerializablePropertyMetadata(
         string propertyName,
         string propertyType,
         string propertyTypeFullName,

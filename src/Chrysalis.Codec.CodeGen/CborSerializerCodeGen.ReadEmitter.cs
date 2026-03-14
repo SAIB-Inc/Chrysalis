@@ -4,7 +4,7 @@ namespace Chrysalis.Codec.CodeGen;
 
 public sealed partial class CborSerializerCodeGen
 {
-    private static partial class Emitter
+    internal static partial class Emitter
     {
         public static StringBuilder EmitSerializableTypeReader(StringBuilder sb, SerializableTypeMetadata metadata)
         {

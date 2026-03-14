@@ -1,0 +1,165 @@
+{
+  "preamble": {
+    "title": "cbor-vectors/cbor-vectors",
+    "description": "Aiken contracts for project 'cbor-vectors/cbor-vectors'",
+    "version": "0.0.0",
+    "plutusVersion": "v3",
+    "compiler": {
+      "name": "Aiken",
+      "version": "v1.1.21+42babe5"
+    },
+    "license": "Apache-2.0"
+  },
+  "validators": [
+    {
+      "title": "vectors.vectors.spend",
+      "datum": {
+        "title": "datum",
+        "schema": {
+          "$ref": "#/definitions/types~1SimpleDatum"
+        }
+      },
+      "redeemer": {
+        "title": "_redeemer",
+        "schema": {
+          "$ref": "#/definitions/Data"
+        }
+      },
+      "compiledCode": "586a01010029800aba2aba1aab9eaab9dab9a4888896600264653001300600198031803800cc0180092225980099b8748008c01cdd500144c8c96600266e1d2000300937546016601800514a314a28040c028004c020dd50014590060c018004c00cdd5003452689b2b20021",
+      "hash": "8cd3c788bfb0226d2efa0c5775a91fd697364628cbd449315430f779"
+    },
+    {
+      "title": "vectors.vectors.else",
+      "redeemer": {
+        "schema": {}
+      },
+      "compiledCode": "586a01010029800aba2aba1aab9eaab9dab9a4888896600264653001300600198031803800cc0180092225980099b8748008c01cdd500144c8c96600266e1d2000300937546016601800514a314a28040c028004c020dd50014590060c018004c00cdd5003452689b2b20021",
+      "hash": "8cd3c788bfb0226d2efa0c5775a91fd697364628cbd449315430f779"
+    }
+  ],
+  "definitions": {
+    "Bool": {
+      "title": "Bool",
+      "anyOf": [
+        {
+          "title": "False",
+          "dataType": "constructor",
+          "index": 0,
+          "fields": []
+        },
+        {
+          "title": "True",
+          "dataType": "constructor",
+          "index": 1,
+          "fields": []
+        }
+      ]
+    },
+    "ByteArray": {
+      "dataType": "bytes"
+    },
+    "Data": {
+      "title": "Data",
+      "description": "Any Plutus data."
+    },
+    "Int": {
+      "dataType": "integer"
+    },
+    "Option<types/Credential>": {
+      "title": "Option",
+      "anyOf": [
+        {
+          "title": "Some",
+          "description": "An optional value.",
+          "dataType": "constructor",
+          "index": 0,
+          "fields": [
+            {
+              "$ref": "#/definitions/types~1Credential"
+            }
+          ]
+        },
+        {
+          "title": "None",
+          "description": "Nothing.",
+          "dataType": "constructor",
+          "index": 1,
+          "fields": []
+        }
+      ]
+    },
+    "types/Address": {
+      "title": "Address",
+      "anyOf": [
+        {
+          "title": "Address",
+          "dataType": "constructor",
+          "index": 0,
+          "fields": [
+            {
+              "title": "payment_credential",
+              "$ref": "#/definitions/types~1Credential"
+            },
+            {
+              "title": "stake_credential",
+              "$ref": "#/definitions/Option<types~1Credential>"
+            }
+          ]
+        }
+      ]
+    },
+    "types/Credential": {
+      "title": "Credential",
+      "anyOf": [
+        {
+          "title": "VerificationKeyCredential",
+          "dataType": "constructor",
+          "index": 0,
+          "fields": [
+            {
+              "$ref": "#/definitions/ByteArray"
+            }
+          ]
+        },
+        {
+          "title": "ScriptCredential",
+          "dataType": "constructor",
+          "index": 1,
+          "fields": [
+            {
+              "$ref": "#/definitions/ByteArray"
+            }
+          ]
+        }
+      ]
+    },
+    "types/SimpleDatum": {
+      "title": "SimpleDatum",
+      "anyOf": [
+        {
+          "title": "SimpleDatum",
+          "dataType": "constructor",
+          "index": 0,
+          "fields": [
+            {
+              "title": "owner",
+              "$ref": "#/definitions/types~1Address"
+            },
+            {
+              "title": "amount",
+              "$ref": "#/definitions/Int"
+            },
+            {
+              "title": "tag",
+              "$ref": "#/definitions/ByteArray"
+            },
+            {
+              "title": "active",
+              "$ref": "#/definitions/Bool"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}
