@@ -517,14 +517,27 @@ public class TxBuilder
         {
             if (input.Redeemer is not null)
             {
-                IScript script = ResolveScriptForInput(input.Utxo);
+                (IScript script, bool isReference) = ResolveScriptForInput(input.Utxo);
                 allScripts.Add(script);
 
-                InputBuilderResult result = input.Datum is not null
-                    ? new InputBuilder(input.Utxo.Outref, input.Utxo.Output)
-                        .PlutusScript(script, input.Redeemer, input.Datum)
-                    : new InputBuilder(input.Utxo.Outref, input.Utxo.Output)
+                InputBuilderResult result;
+                if (isReference)
+                {
+                    // Script is in a reference input — don't add to witness set
+                    string scriptHash = script.HashHex();
+                    result = new InputBuilder(input.Utxo.Outref, input.Utxo.Output)
+                        .PlutusScriptRef(scriptHash, input.Redeemer, input.Datum);
+                }
+                else if (input.Datum is not null)
+                {
+                    result = new InputBuilder(input.Utxo.Outref, input.Utxo.Output)
+                        .PlutusScript(script, input.Redeemer, input.Datum);
+                }
+                else
+                {
+                    result = new InputBuilder(input.Utxo.Outref, input.Utxo.Output)
                         .PlutusScriptInlineDatum(script, input.Redeemer);
+                }
 
                 _ = builder.AddInput(result);
             }
@@ -855,35 +868,36 @@ public class TxBuilder
 
     // ── Script Resolution ──
 
-    private IScript ResolveScriptForInput(ResolvedInput utxo)
+    private (IScript Script, bool IsReference) ResolveScriptForInput(ResolvedInput utxo)
     {
-        // 1. Check UTxO output for inline script reference
-        if (utxo.Output is PostAlonzoTransactionOutput postAlonzo && postAlonzo.ScriptRef is not null)
-        {
-            return CborSerializer.Deserialize<IScript>(postAlonzo.ScriptRef.Value);
-        }
-
-        // 2. Check reference inputs for matching script
         byte[] scriptHash = ExtractScriptHash(utxo.Output);
+        string hashHex = Convert.ToHexString(scriptHash);
+
+        // 1. Check reference inputs for matching script (preferred — avoids witness bloat)
         foreach (ResolvedInput refInput in _referenceInputs)
         {
             if (refInput.Output is PostAlonzoTransactionOutput refOutput && refOutput.ScriptRef is not null)
             {
                 IScript refScript = refOutput.ScriptRef.Deserialize<IScript>();
-                if (refScript.HashHex().Equals(Convert.ToHexString(scriptHash), StringComparison.OrdinalIgnoreCase))
+                if (refScript.HashHex().Equals(hashHex, StringComparison.OrdinalIgnoreCase))
                 {
-                    return refScript;
+                    return (refScript, true);
                 }
             }
         }
 
+        // 2. Check UTxO output for inline script reference
+        if (utxo.Output is PostAlonzoTransactionOutput postAlonzo && postAlonzo.ScriptRef is not null)
+        {
+            return (postAlonzo.ScriptRef.Deserialize<IScript>(), false);
+        }
+
         // 3. Check provided scripts
-        string hashHex = Convert.ToHexString(scriptHash);
         foreach (IScript provided in _providedScripts)
         {
             if (provided.HashHex().Equals(hashHex, StringComparison.OrdinalIgnoreCase))
             {
-                return provided;
+                return (provided, false);
             }
         }
 
