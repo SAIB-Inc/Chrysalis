@@ -192,8 +192,11 @@ public class TransactionBuilder
     // ── Outputs ──
 
     /// <summary>Adds a raw transaction output.</summary>
-    public TransactionBuilder AddOutput(ITransactionOutput output, bool isChange = false) =>
-        AddOutputInternal(output, isChange);
+    public TransactionBuilder AddOutput(ITransactionOutput output, bool isChange = false)
+    {
+        ArgumentNullException.ThrowIfNull(output);
+        return AddOutputInternal(output, isChange);
+    }
 
     /// <summary>Adds an output with a bech32 address and value.</summary>
     public TransactionBuilder AddOutput(string bech32Address, IValue amount, bool isChange = false) =>
@@ -301,6 +304,7 @@ public class TransactionBuilder
     /// <summary>Adds a certificate.</summary>
     public TransactionBuilder AddCertificate(ICertificate certificate)
     {
+        ArgumentNullException.ThrowIfNull(certificate);
         (_certificates ??= []).Add(certificate);
         return this;
     }
@@ -528,12 +532,20 @@ public class TransactionBuilder
         return this;
     }
 
+    /// <summary>Sets the auxiliary data hash from a hex string.</summary>
+    public TransactionBuilder SetAuxiliaryDataHash(string hashHex) =>
+        SetAuxiliaryDataHash(Convert.FromHexString(hashHex));
+
     /// <summary>Sets the script data hash.</summary>
     public TransactionBuilder SetScriptDataHash(byte[] hash)
     {
         _scriptDataHash = hash;
         return this;
     }
+
+    /// <summary>Sets the script data hash from a hex string.</summary>
+    public TransactionBuilder SetScriptDataHash(string hashHex) =>
+        SetScriptDataHash(Convert.FromHexString(hashHex));
 
     /// <summary>Sets the network ID.</summary>
     public TransactionBuilder SetNetworkId(int networkId)
@@ -554,6 +566,7 @@ public class TransactionBuilder
     /// <summary>Adds a native script.</summary>
     public TransactionBuilder AddNativeScript(INativeScript script)
     {
+        ArgumentNullException.ThrowIfNull(script);
         (_nativeScripts ??= []).Add(script);
         return this;
     }
@@ -568,6 +581,7 @@ public class TransactionBuilder
     /// <summary>Adds a Plutus script, automatically routing by version.</summary>
     public TransactionBuilder AddPlutusScript(IScript script)
     {
+        ArgumentNullException.ThrowIfNull(script);
         _plutusScripts.Add((script.Bytes(), script.Version()));
         return this;
     }
@@ -617,6 +631,7 @@ public class TransactionBuilder
     /// <summary>Adds Plutus data to the witness set.</summary>
     public TransactionBuilder AddPlutusData(IPlutusData data)
     {
+        ArgumentNullException.ThrowIfNull(data);
         (_plutusData ??= []).Add(data);
         return this;
     }
@@ -651,6 +666,7 @@ public class TransactionBuilder
     /// <summary>Adds a metadata entry under the given label.</summary>
     public TransactionBuilder AddMetadata(ulong label, ITransactionMetadatum value)
     {
+        ArgumentNullException.ThrowIfNull(value);
         (_metadata ??= [])[label] = value;
         return this;
     }

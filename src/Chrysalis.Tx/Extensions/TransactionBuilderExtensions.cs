@@ -128,7 +128,7 @@ public static class TransactionBuilderExtensions
         RationalNumber stepUnitsCost = new(
             builder.Pparams.ExecutionCosts!.Value.StepPrice.Numerator,
             builder.Pparams.ExecutionCosts!.Value.StepPrice.Denominator);
-        ulong executionFee = FeeUtil.CalculateScriptExecutionFee(builder.Redeemers!, memUnitsCost, stepUnitsCost);
+        ulong executionFee = FeeUtil.CalculateScriptExecutionFee(builder.Redeemers!, stepUnitsCost, memUnitsCost);
 
         return (scriptFee, executionFee);
     }
