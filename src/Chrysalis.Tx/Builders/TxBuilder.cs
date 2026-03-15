@@ -746,43 +746,15 @@ public class TxBuilder
             // Select collateral (inside loop so it's included in fee calculation)
             if (hasScripts)
             {
-                _ = builder.ClearCollateral();
-                _ = builder.ClearCollateralReturn();
-
-                ulong requiredCollateral = FeeUtil.CalculateRequiredCollateral(
-                    builder.Fee, _pparams.CollateralPercentage!.Value);
-                _ = builder.SetTotalCollateral(requiredCollateral);
-
                 List<ResolvedInput> collateralPool = _collateralPool ?? selectedInputs;
                 if (collateralPool.Count == 0)
                 {
                     collateralPool = [.. _unspentOutputs
                         .Where(u => !_explicitInputs.Any(e => e.Utxo.Outref.Equals(u.Outref)))];
                 }
-
                 if (collateralPool.Count > 0)
                 {
-                    int maxCollateralInputs = (int)(_pparams.MaxCollateralInputs ?? 3);
-                    CoinSelectionResult collateralSelection = CoinSelectionUtil.Select(
-                        collateralPool, [Lovelace.Create(requiredCollateral)],
-                        CoinSelectionStrategy.LargestFirst, maxCollateralInputs);
-
-                    IValue totalCollateralValue = Lovelace.Create(0);
-                    foreach (ResolvedInput input in collateralSelection.Inputs)
-                    {
-                        _ = builder.AddCollateral(input.Outref);
-                        totalCollateralValue = totalCollateralValue.Merge(input.Output.Amount());
-                    }
-
-                    ulong collateralLovelace = totalCollateralValue.Lovelace();
-                    if (collateralLovelace > requiredCollateral)
-                    {
-                        IValue returnValue = totalCollateralValue.Subtract(Lovelace.Create(requiredCollateral));
-                        byte[] changeAddrBytes = Wallet.Models.Addresses.Address.FromBech32(_changeAddress).ToBytes();
-                        ITransactionOutput collateralReturn = PostAlonzoTransactionOutput.Create(
-                            new Address(changeAddrBytes), returnValue, null, null);
-                        _ = builder.SetCollateralReturn(collateralReturn);
-                    }
+                    TransactionBuilderExtensions.SelectCollateral(builder, builder.Fee, collateralPool);
                 }
             }
 
@@ -860,37 +832,13 @@ public class TxBuilder
             _ = builder.SetFee(finalFee);
 
             // Adjust change output if fee changed
-            if (finalFee != previousFinalFee && builder.ChangeOutputIndex is not null)
+            if (finalFee != previousFinalFee)
             {
-                List<ITransactionOutput> outputs = [.. builder.Outputs];
-                outputs.RemoveAt(builder.ChangeOutputIndex.Value);
-                _ = builder.SetOutputs(outputs);
-                builder.ChangeOutputIndex = null;
-                builder.ChangeOutput = null;
-
-                ulong totalIn = _explicitInputs.Aggregate(0UL, (sum, i) => sum + i.Utxo.Output.Amount().Lovelace())
-                    + selectedInputs.Aggregate(0UL, (sum, i) => sum + i.Output.Amount().Lovelace())
-                    + _withdrawalDirectives.Aggregate(0UL, (sum, w) => sum + w.Amount);
-                ulong totalOut = 0;
-                for (int i = 0; i < builder.Outputs.Count; i++)
-                {
-                    totalOut += builder.Outputs[i].Amount().Lovelace();
-                }
-                ulong changeSurplus = totalIn > totalOut + finalFee ? totalIn - totalOut - finalFee : 0;
-                if (changeSurplus > 0)
-                {
-                    IValue changeValue = ComputeChangeValue(changeSurplus, _explicitInputs, selectedInputs, builder.Outputs, builder.Mint);
-                    _ = builder.AddOutput(_changeAddress, changeValue, isChange: true);
-                }
+                List<ResolvedInput> allResolved = [.. _explicitInputs.Select(i => i.Utxo), .. selectedInputs];
+                TransactionBuilderExtensions.BuildChangeOutput(builder, allResolved, _changeAddress);
             }
 
             // Recalculate collateral for new fee
-            _ = builder.ClearCollateral();
-            _ = builder.ClearCollateralReturn();
-            ulong requiredCollateral = FeeUtil.CalculateRequiredCollateral(
-                finalFee, _pparams.CollateralPercentage!.Value);
-            _ = builder.SetTotalCollateral(requiredCollateral);
-
             List<ResolvedInput> finalCollateralPool = _collateralPool ?? selectedInputs;
             if (finalCollateralPool.Count == 0)
             {
@@ -899,25 +847,7 @@ public class TxBuilder
             }
             if (finalCollateralPool.Count > 0)
             {
-                int maxCollateralInputs = (int)(_pparams.MaxCollateralInputs ?? 3);
-                CoinSelectionResult collateralSelection = CoinSelectionUtil.Select(
-                    finalCollateralPool, [Lovelace.Create(requiredCollateral)],
-                    CoinSelectionStrategy.LargestFirst, maxCollateralInputs);
-                IValue totalCollateralValue = Lovelace.Create(0);
-                foreach (ResolvedInput input in collateralSelection.Inputs)
-                {
-                    _ = builder.AddCollateral(input.Outref);
-                    totalCollateralValue = totalCollateralValue.Merge(input.Output.Amount());
-                }
-                ulong collateralLovelace = totalCollateralValue.Lovelace();
-                if (collateralLovelace > requiredCollateral)
-                {
-                    IValue returnValue = totalCollateralValue.Subtract(Lovelace.Create(requiredCollateral));
-                    byte[] changeAddrBytes = Wallet.Models.Addresses.Address.FromBech32(_changeAddress).ToBytes();
-                    ITransactionOutput collateralReturn = PostAlonzoTransactionOutput.Create(
-                        new Address(changeAddrBytes), returnValue, null, null);
-                    _ = builder.SetCollateralReturn(collateralReturn);
-                }
+                TransactionBuilderExtensions.SelectCollateral(builder, finalFee, finalCollateralPool);
             }
         }
 

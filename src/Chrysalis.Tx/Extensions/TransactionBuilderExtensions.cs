@@ -246,9 +246,14 @@ public static class TransactionBuilderExtensions
 
     // ──────────── Collateral Selection ────────────
 
-    private static void SelectCollateral(
+    /// <summary>
+    /// Selects collateral inputs and builds a collateral return output.
+    /// </summary>
+    public static void SelectCollateral(
         TransactionBuilder builder, ulong fee, List<ResolvedInput> availableInputs)
     {
+        ArgumentNullException.ThrowIfNull(builder);
+        ArgumentNullException.ThrowIfNull(availableInputs);
         ulong totalCollateral = FeeUtil.CalculateRequiredCollateral(fee, builder.Pparams!.CollateralPercentage!.Value);
         _ = builder.SetTotalCollateral(totalCollateral);
         _ = builder.ClearCollateral();
@@ -331,9 +336,15 @@ public static class TransactionBuilderExtensions
 
     // ──────────── Change Output Building ────────────
 
-    private static void BuildChangeOutput(
+    /// <summary>
+    /// Builds a multi-asset change output from the difference between resolved inputs and current outputs.
+    /// </summary>
+    public static void BuildChangeOutput(
         TransactionBuilder builder, List<ResolvedInput> resolvedInputs, string changeAddress)
     {
+        ArgumentNullException.ThrowIfNull(builder);
+        ArgumentNullException.ThrowIfNull(resolvedInputs);
+        ArgumentNullException.ThrowIfNull(changeAddress);
         // Remove existing change output
         if (builder.ChangeOutputIndex is not null)
         {
