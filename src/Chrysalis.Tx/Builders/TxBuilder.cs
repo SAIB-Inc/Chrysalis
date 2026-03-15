@@ -1,6 +1,8 @@
+using Chrysalis.Codec.Extensions;
 using Chrysalis.Codec.Extensions.Cardano.Core.Common;
 using Chrysalis.Codec.Extensions.Cardano.Core.Transaction;
 using Chrysalis.Codec.Serialization;
+using Chrysalis.Codec.Serialization.Utils;
 using Chrysalis.Codec.Types;
 using Chrysalis.Codec.Types.Cardano.Core.Certificates;
 using Chrysalis.Codec.Types.Cardano.Core.Common;
@@ -232,6 +234,7 @@ public class TxBuilder
     /// <summary>Delegate stake credential to a pool with script witness.</summary>
     public TxBuilder AddDelegation(Credential delegator, string poolIdHex, IScript script, ICborType redeemer)
     {
+        ArgumentNullException.ThrowIfNull(redeemer);
         ICertificate cert = StakeDelegation.Create(2, delegator, Convert.FromHexString(poolIdHex));
         _certificateDirectives.Add(new CertificateDirective(cert, script, ToPlutusData(redeemer)));
         return this;
@@ -254,6 +257,7 @@ public class TxBuilder
     /// <summary>Deregister a stake credential with script witness.</summary>
     public TxBuilder AddDeregisterStake(Credential credential, IScript script, ICborType redeemer)
     {
+        ArgumentNullException.ThrowIfNull(redeemer);
         _certificateDirectives.Add(new CertificateDirective(StakeDeregistration.Create(1, credential), script, ToPlutusData(redeemer)));
         return this;
     }
@@ -284,6 +288,7 @@ public class TxBuilder
     /// <summary>Withdraw staking rewards with script witness.</summary>
     public TxBuilder AddWithdrawal(string rewardAddressHex, ulong amount, IScript script, ICborType redeemer)
     {
+        ArgumentNullException.ThrowIfNull(redeemer);
         _withdrawalDirectives.Add(new WithdrawalDirective(rewardAddressHex, amount, script, ToPlutusData(redeemer)));
         return this;
     }
@@ -321,6 +326,7 @@ public class TxBuilder
     /// <summary>Delegate voting power to a DRep with script witness.</summary>
     public TxBuilder AddVoteDelegation(Credential delegator, IDRep drep, IScript script, ICborType redeemer)
     {
+        ArgumentNullException.ThrowIfNull(redeemer);
         _certificateDirectives.Add(new CertificateDirective(VoteDelegCert.Create(9, delegator, drep), script, ToPlutusData(redeemer)));
         return this;
     }
@@ -660,14 +666,15 @@ public class TxBuilder
                 outputsWithoutChange += builder.Outputs[i].Amount().Lovelace();
             }
 
-            // Build change output
+            // Build change output (ADA + native assets)
             ulong surplus = updatedAvailable > outputsWithoutChange + builder.Fee
                 ? updatedAvailable - outputsWithoutChange - builder.Fee
                 : 0;
 
             if (surplus > 0)
             {
-                _ = builder.AddOutput(_changeAddress, Lovelace.Create(surplus), isChange: true);
+                IValue changeValue = ComputeChangeValue(surplus, _explicitInputs, selectedInputs, builder.Outputs, builder.Mint);
+                _ = builder.AddOutput(_changeAddress, changeValue, isChange: true);
             }
 
             // Calculate fee from draft
@@ -722,6 +729,105 @@ public class TxBuilder
         return builder.Build();
     }
 
+    // ── Change Value Computation ──
+
+    private static IValue ComputeChangeValue(
+        ulong surplusLovelace,
+        List<InputDirective> explicitInputs,
+        List<ResolvedInput> selectedInputs,
+        IReadOnlyList<ITransactionOutput> outputs,
+        MultiAssetMint? mint)
+    {
+        // Aggregate all native assets from inputs
+        Dictionary<ReadOnlyMemory<byte>, Dictionary<ReadOnlyMemory<byte>, long>> assetBalance = new(ReadOnlyMemoryComparer.Instance);
+
+        foreach (InputDirective input in explicitInputs)
+        {
+            AddAssetsFromValue(assetBalance, input.Utxo.Output.Amount(), positive: true);
+        }
+
+        foreach (ResolvedInput input in selectedInputs)
+        {
+            AddAssetsFromValue(assetBalance, input.Output.Amount(), positive: true);
+        }
+
+        // Subtract native assets going to outputs
+        for (int i = 0; i < outputs.Count; i++)
+        {
+            AddAssetsFromValue(assetBalance, outputs[i].Amount(), positive: false);
+        }
+
+        // Add minted assets
+        if (mint is not null)
+        {
+            foreach (KeyValuePair<ReadOnlyMemory<byte>, TokenBundleMint> policy in mint.Value.Value)
+            {
+                if (!assetBalance.TryGetValue(policy.Key, out Dictionary<ReadOnlyMemory<byte>, long>? bundle))
+                {
+                    bundle = new(ReadOnlyMemoryComparer.Instance);
+                    assetBalance[policy.Key] = bundle;
+                }
+
+                foreach (KeyValuePair<ReadOnlyMemory<byte>, long> token in policy.Value.Value)
+                {
+                    bundle[token.Key] = bundle.TryGetValue(token.Key, out long existing) ? existing + token.Value : token.Value;
+                }
+            }
+        }
+
+        // Build change value from remaining positive balances
+        Dictionary<ReadOnlyMemory<byte>, TokenBundleOutput> changeAssets = new(ReadOnlyMemoryComparer.Instance);
+        foreach (KeyValuePair<ReadOnlyMemory<byte>, Dictionary<ReadOnlyMemory<byte>, long>> policy in assetBalance)
+        {
+            Dictionary<ReadOnlyMemory<byte>, ulong> positiveTokens = new(ReadOnlyMemoryComparer.Instance);
+            foreach (KeyValuePair<ReadOnlyMemory<byte>, long> token in policy.Value)
+            {
+                if (token.Value > 0)
+                {
+                    positiveTokens[token.Key] = (ulong)token.Value;
+                }
+            }
+
+            if (positiveTokens.Count > 0)
+            {
+                changeAssets[policy.Key] = TokenBundleOutput.Create(positiveTokens);
+            }
+        }
+
+        if (changeAssets.Count > 0)
+        {
+            return LovelaceWithMultiAsset.Create(surplusLovelace, MultiAssetOutput.Create(changeAssets));
+        }
+
+        return Lovelace.Create(surplusLovelace);
+    }
+
+    private static void AddAssetsFromValue(
+        Dictionary<ReadOnlyMemory<byte>, Dictionary<ReadOnlyMemory<byte>, long>> balance,
+        IValue value,
+        bool positive)
+    {
+        if (value is not LovelaceWithMultiAsset multiAsset)
+        {
+            return;
+        }
+
+        foreach (KeyValuePair<ReadOnlyMemory<byte>, TokenBundleOutput> policy in multiAsset.MultiAsset.Value)
+        {
+            if (!balance.TryGetValue(policy.Key, out Dictionary<ReadOnlyMemory<byte>, long>? bundle))
+            {
+                bundle = new(ReadOnlyMemoryComparer.Instance);
+                balance[policy.Key] = bundle;
+            }
+
+            foreach (KeyValuePair<ReadOnlyMemory<byte>, ulong> token in policy.Value.Value)
+            {
+                long delta = positive ? (long)token.Value : -(long)token.Value;
+                bundle[token.Key] = bundle.TryGetValue(token.Key, out long existing) ? existing + delta : delta;
+            }
+        }
+    }
+
     // ── Type Conversion ──
 
     private static IPlutusData ToPlutusData(ICborType value)
@@ -731,8 +837,20 @@ public class TxBuilder
             return plutusData;
         }
 
-        byte[] cbor = CborSerializer.Serialize(value);
+        // Use Raw bytes if available (deserialized types have this populated)
+        byte[] cbor = value.Raw.Length > 0
+            ? value.Raw.ToArray()
+            : SerializeUsingRuntimeType(value);
         return CborSerializer.Deserialize<IPlutusData>(cbor);
+    }
+
+    private static byte[] SerializeUsingRuntimeType(ICborType value)
+    {
+        // Use dynamic dispatch to call Serialize with the concrete runtime type
+        System.Reflection.MethodInfo serializeMethod = typeof(CborSerializer)
+            .GetMethod(nameof(CborSerializer.Serialize))!
+            .MakeGenericMethod(value.GetType());
+        return (byte[])serializeMethod.Invoke(null, [value])!;
     }
 
     // ── Script Resolution ──
@@ -751,7 +869,7 @@ public class TxBuilder
         {
             if (refInput.Output is PostAlonzoTransactionOutput refOutput && refOutput.ScriptRef is not null)
             {
-                IScript refScript = CborSerializer.Deserialize<IScript>(refOutput.ScriptRef.Value);
+                IScript refScript = refOutput.ScriptRef.Deserialize<IScript>();
                 if (refScript.HashHex().Equals(Convert.ToHexString(scriptHash), StringComparison.OrdinalIgnoreCase))
                 {
                     return refScript;
