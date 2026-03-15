@@ -781,6 +781,66 @@ public class TxBuilder
             _ = builder.SetFee(fee);
         }
 
+        // ── Recompute redeemer indices with final input set ──
+        if (hasScripts && builder.Redeemers is RedeemerList existingRedeemers)
+        {
+            List<string> finalSortedKeys = [.. builder.Inputs
+                .Select(i => Convert.ToHexString(i.TransactionId.Span) + i.Index.ToString("D10", System.Globalization.CultureInfo.InvariantCulture))
+                .Order(StringComparer.Ordinal)];
+
+            List<RedeemerEntry> updatedEntries = [];
+            foreach (InputDirective directive in _explicitInputs)
+            {
+                if (directive.Redeemer is null)
+                {
+                    continue;
+                }
+
+                string inputKey = Convert.ToHexString(directive.Utxo.Outref.TransactionId.Span)
+                    + directive.Utxo.Outref.Index.ToString("D10", System.Globalization.CultureInfo.InvariantCulture);
+                int sortedIndex = finalSortedKeys.IndexOf(inputKey);
+                if (sortedIndex >= 0)
+                {
+                    // Find the matching evaluated ExUnits from existing redeemers
+                    ExUnits exUnits = ExUnits.Create(0, 0);
+                    foreach (RedeemerEntry existing in existingRedeemers.Value)
+                    {
+                        if (existing.Tag == 0)
+                        {
+                            exUnits = existing.ExUnits;
+                            break;
+                        }
+                    }
+
+                    updatedEntries.Add(RedeemerEntry.Create(0, (ulong)sortedIndex, directive.Redeemer, exUnits));
+                }
+            }
+
+            if (updatedEntries.Count > 0)
+            {
+                _ = builder.SetRedeemers(RedeemerList.Create(updatedEntries));
+
+                // Recompute script data hash with updated redeemers
+                int langVersion = allScripts[0].Version() - 1;
+                CostMdls costMdls = _pparams.CostModelsForScriptLanguage!;
+                ICborMaybeIndefList<long>? usedLanguage = langVersion switch
+                {
+                    0 => costMdls.PlutusV1,
+                    1 => costMdls.PlutusV2,
+                    2 => costMdls.PlutusV3,
+                    _ => costMdls.PlutusV3
+                };
+                CostMdls costModel = new(
+                    langVersion == 0 ? usedLanguage : null,
+                    langVersion == 1 ? usedLanguage : null,
+                    langVersion == 2 ? usedLanguage : null);
+                byte[] costModelBytes = CborSerializer.Serialize(costModel);
+                PostAlonzoTransactionWitnessSet ws = builder.BuildWitnessSet();
+                byte[] scriptDataHash = DataHashUtil.CalculateScriptDataHash(builder.Redeemers!, ws.PlutusDataSet, costModelBytes);
+                _ = builder.SetScriptDataHash(scriptDataHash);
+            }
+        }
+
         // ── Collateral (after fee stabilization) ──
         if (hasScripts)
         {

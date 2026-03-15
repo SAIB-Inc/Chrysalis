@@ -345,7 +345,20 @@ ITransaction fillUnsigned;
 
 if (mode == "MID")
 {
-    List<ResolvedInput> walletUtxos = await provider.GetUtxosAsync([walletBech32]).ConfigureAwait(false);
+    // Wait for wallet UTxO index to update (change output from Create tx must appear)
+    List<ResolvedInput> walletUtxos = [];
+    for (int wait = 0; wait < 60; wait += 4)
+    {
+        walletUtxos = await provider.GetUtxosAsync([walletBech32]).ConfigureAwait(false);
+        bool hasCreateChange = walletUtxos.Any(u => Convert.ToHexStringLower(u.Outref.TransactionId.Span) == createTxId);
+        if (hasCreateChange)
+        {
+            break;
+        }
+
+        await Task.Delay(4000).ConfigureAwait(false);
+        Console.Write(".");
+    }
     List<ResolvedInput> deployUtxos = await provider.GetUtxosAsync([DeployAddress]).ConfigureAwait(false);
     ResolvedInput deployRef = deployUtxos.First(u =>
         Convert.ToHexStringLower(u.Outref.TransactionId.Span) == DeployUtxoTxHash && u.Outref.Index == DeployUtxoIndex);
