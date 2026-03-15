@@ -6,8 +6,10 @@ using Chrysalis.Codec.Serialization.Utils;
 using Chrysalis.Codec.Types;
 using Chrysalis.Codec.Types.Cardano.Core.Certificates;
 using Chrysalis.Codec.Types.Cardano.Core.Common;
+using Chrysalis.Codec.Types.Cardano.Core.Protocol;
 using Chrysalis.Codec.Types.Cardano.Core.Governance;
 using Chrysalis.Codec.Types.Cardano.Core.Scripts;
+using Chrysalis.Codec.Types.Cardano.Core.TransactionWitness;
 using Chrysalis.Codec.Types.Cardano.Core.Transaction;
 using Chrysalis.Network.Cbor.LocalStateQuery;
 using Chrysalis.Tx.Extensions;
@@ -603,26 +605,103 @@ public class TxBuilder
             _ = builder.AddOutput(built);
         }
 
-        // ── Stabilization loop ──
-        bool hasScripts = allScripts.Count > 0 || builder.RedeemerSet.HasRedeemers;
+        // ── Stabilization setup ──
+        bool hasScripts = allScripts.Count > 0;
         List<ResolvedInput> selectedInputs = [];
+        bool evaluated = false;
 
-        // Evaluate scripts if present
-        if (hasScripts)
+        // Pre-compute reference script fee (fixed, doesn't depend on evaluation)
+        ulong refScriptFee = 0;
+        if (hasScripts && _pparams.MinFeeRefScriptCostPerByte is not null)
         {
-            List<ResolvedInput> allResolvedInputs = [.. _explicitInputs.Select(i => i.Utxo), .. _referenceInputs];
-            SlotNetworkConfig slotConfig = SlotNetworkConfig.FromNetworkType(_provider.NetworkType);
-            _ = builder.Evaluate(allResolvedInputs, slotConfig);
+            ulong scriptCostPerByte = _pparams.MinFeeRefScriptCostPerByte.Numerator
+                / _pparams.MinFeeRefScriptCostPerByte.Denominator;
+            int totalScriptSize = allScripts.Sum(s => s.Bytes().Length);
+            refScriptFee = FeeUtil.CalculateReferenceScriptFee(totalScriptSize, scriptCostPerByte);
         }
 
-        _ = builder.SetFee(300_000);
+        ulong scriptExecFee = 0;
 
+        // ── Stabilization loop ──
+        _ = builder.SetFee(300_000);
         ulong previousFee = 0;
+
         for (int iteration = 0; iteration < MaxStabilizationIterations; iteration++)
         {
-            // Calculate deficit
+            // Compute redeemer indices + evaluate scripts (once, when all initial inputs are set)
+            if (hasScripts && !evaluated)
+            {
+                // Build redeemers with correct indices based on current sorted inputs
+                List<string> sortedInputKeys = [.. builder.Inputs
+                    .Select(i => Convert.ToHexString(i.TransactionId.Span) + i.Index.ToString("D10", System.Globalization.CultureInfo.InvariantCulture))
+                    .Order(StringComparer.Ordinal)];
+
+                List<RedeemerEntry> redeemerEntries = [];
+                foreach (InputDirective directive in _explicitInputs)
+                {
+                    if (directive.Redeemer is null)
+                    {
+                        continue;
+                    }
+
+                    string inputKey = Convert.ToHexString(directive.Utxo.Outref.TransactionId.Span)
+                        + directive.Utxo.Outref.Index.ToString("D10", System.Globalization.CultureInfo.InvariantCulture);
+                    int sortedIndex = sortedInputKeys.IndexOf(inputKey);
+                    if (sortedIndex >= 0)
+                    {
+                        redeemerEntries.Add(RedeemerEntry.Create(0, (ulong)sortedIndex, directive.Redeemer,
+                            ExUnits.Create(1_000_000, 400_000_000)));
+                    }
+                }
+
+                if (redeemerEntries.Count > 0)
+                {
+                    _ = builder.SetRedeemers(RedeemerList.Create(redeemerEntries));
+                }
+
+                // Evaluate scripts with the Plutus VM
+                List<ResolvedInput> allResolvedInputs = [.. _explicitInputs.Select(i => i.Utxo), .. _referenceInputs, .. selectedInputs];
+                SlotNetworkConfig slotConfig = SlotNetworkConfig.FromNetworkType(_provider.NetworkType);
+                _ = builder.Evaluate(allResolvedInputs, slotConfig);
+                evaluated = true;
+
+                // Compute script execution fee from evaluated ExUnits
+                if (builder.Redeemers is not null)
+                {
+                    RationalNumber memPrice = new(
+                        _pparams.ExecutionCosts!.Value.MemPrice.Numerator,
+                        _pparams.ExecutionCosts.Value.MemPrice.Denominator);
+                    RationalNumber stepPrice = new(
+                        _pparams.ExecutionCosts.Value.StepPrice.Numerator,
+                        _pparams.ExecutionCosts.Value.StepPrice.Denominator);
+                    scriptExecFee = FeeUtil.CalculateScriptExecutionFee(builder.Redeemers, stepPrice, memPrice);
+                }
+
+                // Compute script data hash
+                int langVersion = allScripts[0].Version() - 1;
+                CostMdls costMdls = _pparams.CostModelsForScriptLanguage!;
+                ICborMaybeIndefList<long>? usedLanguage = langVersion switch
+                {
+                    0 => costMdls.PlutusV1,
+                    1 => costMdls.PlutusV2,
+                    2 => costMdls.PlutusV3,
+                    _ => costMdls.PlutusV3
+                };
+                CostMdls costModel = new(
+                    langVersion == 0 ? usedLanguage : null,
+                    langVersion == 1 ? usedLanguage : null,
+                    langVersion == 2 ? usedLanguage : null);
+                byte[] costModelBytes = CborSerializer.Serialize(costModel);
+                PostAlonzoTransactionWitnessSet ws = builder.BuildWitnessSet();
+                byte[] scriptDataHash = DataHashUtil.CalculateScriptDataHash(builder.Redeemers!, ws.PlutusDataSet, costModelBytes);
+                _ = builder.SetScriptDataHash(scriptDataHash);
+            }
+
+            // Calculate surplus/deficit
             ulong totalInputLovelace = _explicitInputs.Aggregate(0UL, (sum, i) => sum + i.Utxo.Output.Amount().Lovelace())
                 + selectedInputs.Aggregate(0UL, (sum, i) => sum + i.Output.Amount().Lovelace());
+            ulong totalWithdrawals = _withdrawalDirectives.Aggregate(0UL, (sum, w) => sum + w.Amount);
+            ulong available = totalInputLovelace + totalWithdrawals;
 
             ulong totalOutputLovelace = 0;
             for (int i = 0; i < builder.Outputs.Count; i++)
@@ -630,8 +709,6 @@ public class TxBuilder
                 totalOutputLovelace += builder.Outputs[i].Amount().Lovelace();
             }
 
-            ulong totalWithdrawals = _withdrawalDirectives.Aggregate(0UL, (sum, w) => sum + w.Amount);
-            ulong available = totalInputLovelace + totalWithdrawals;
             ulong required = totalOutputLovelace + builder.Fee;
 
             // Coin selection if deficit
@@ -645,9 +722,7 @@ public class TxBuilder
                 {
                     ulong deficit = required - available;
                     CoinSelectionResult selection = CoinSelectionUtil.Select(
-                        pool,
-                        [Lovelace.Create(deficit)],
-                        _coinSelectionStrategy);
+                        pool, [Lovelace.Create(deficit)], _coinSelectionStrategy);
 
                     foreach (ResolvedInput selected in selection.Inputs)
                     {
@@ -657,12 +732,7 @@ public class TxBuilder
                 }
             }
 
-            // Rebuild available after coin selection
-            ulong updatedInputLovelace = _explicitInputs.Aggregate(0UL, (sum, i) => sum + i.Utxo.Output.Amount().Lovelace())
-                + selectedInputs.Aggregate(0UL, (sum, i) => sum + i.Output.Amount().Lovelace());
-            ulong updatedAvailable = updatedInputLovelace + totalWithdrawals;
-
-            // Remove old change output if present
+            // Remove old change output
             if (builder.ChangeOutputIndex is not null)
             {
                 List<ITransactionOutput> outputs = [.. builder.Outputs];
@@ -672,7 +742,11 @@ public class TxBuilder
                 builder.ChangeOutput = null;
             }
 
-            // Recalculate outputs total (without change)
+            // Recalculate available and outputs (without change)
+            ulong updatedInputLovelace = _explicitInputs.Aggregate(0UL, (sum, i) => sum + i.Utxo.Output.Amount().Lovelace())
+                + selectedInputs.Aggregate(0UL, (sum, i) => sum + i.Output.Amount().Lovelace());
+            ulong updatedAvailable = updatedInputLovelace + totalWithdrawals;
+
             ulong outputsWithoutChange = 0;
             for (int i = 0; i < builder.Outputs.Count; i++)
             {
@@ -690,25 +764,12 @@ public class TxBuilder
                 _ = builder.AddOutput(_changeAddress, changeValue, isChange: true);
             }
 
-            // Calculate fee from draft
+            // Calculate fee = tx size fee + script exec fee + reference script fee
             PostMaryTransaction draftTx = builder.Build();
             byte[] draftBytes = CborSerializer.Serialize(draftTx);
             ulong fee = FeeUtil.CalculateFeeWithWitness(
-                (ulong)draftBytes.Length,
-                _pparams.MinFeeA!.Value,
-                _pparams.MinFeeB!.Value,
-                1);
-
-            if (hasScripts && builder.Redeemers is not null)
-            {
-                RationalNumber memPrice = new(
-                    _pparams.ExecutionCosts!.Value.MemPrice.Numerator,
-                    _pparams.ExecutionCosts.Value.MemPrice.Denominator);
-                RationalNumber stepPrice = new(
-                    _pparams.ExecutionCosts.Value.StepPrice.Numerator,
-                    _pparams.ExecutionCosts.Value.StepPrice.Denominator);
-                fee += FeeUtil.CalculateScriptExecutionFee(builder.Redeemers, stepPrice, memPrice);
-            }
+                (ulong)draftBytes.Length, _pparams.MinFeeA!.Value, _pparams.MinFeeB!.Value, 1)
+                + scriptExecFee + refScriptFee;
 
             if (Math.Abs((long)fee - (long)previousFee) < FeeConvergenceTolerance)
             {
@@ -720,22 +781,60 @@ public class TxBuilder
             _ = builder.SetFee(fee);
         }
 
-        // ── Collateral ──
+        // ── Collateral (after fee stabilization) ──
         if (hasScripts)
         {
-            List<ResolvedInput> collateralPool = _collateralPool ?? [.. _unspentOutputs, .. selectedInputs];
-            _ = builder.CalculateFee(allScripts, builder.Fee, 1, collateralPool);
+            ulong requiredCollateral = FeeUtil.CalculateRequiredCollateral(
+                builder.Fee, _pparams.CollateralPercentage!.Value);
+            _ = builder.SetTotalCollateral(requiredCollateral);
+
+            List<ResolvedInput> collateralPool = _collateralPool ??
+                [.. _unspentOutputs
+                    .Where(u => !_explicitInputs.Any(e => e.Utxo.Outref.Equals(u.Outref)))
+                    .Where(u => u.Output.Amount() is Lovelace)];
+
+            // Fallback: include multi-asset UTxOs if no ADA-only available
+            if (collateralPool.Count == 0)
+            {
+                collateralPool = [.. _unspentOutputs
+                    .Where(u => !_explicitInputs.Any(e => e.Utxo.Outref.Equals(u.Outref)))];
+            }
+
+            if (collateralPool.Count > 0)
+            {
+                int maxCollateralInputs = (int)(_pparams.MaxCollateralInputs ?? 3);
+                CoinSelectionResult collateralSelection = CoinSelectionUtil.Select(
+                    collateralPool, [Lovelace.Create(requiredCollateral)],
+                    CoinSelectionStrategy.LargestFirst, maxCollateralInputs);
+
+                foreach (ResolvedInput input in collateralSelection.Inputs)
+                {
+                    _ = builder.AddCollateral(input.Outref);
+                }
+
+                ulong collateralLovelace = collateralSelection.Inputs.Aggregate(
+                    0UL, (sum, i) => sum + i.Output.Amount().Lovelace());
+
+                if (collateralLovelace > requiredCollateral)
+                {
+                    byte[] changeAddrBytes = Wallet.Models.Addresses.Address.FromBech32(_changeAddress).ToBytes();
+                    ITransactionOutput collateralReturn = AlonzoTransactionOutput.Create(
+                        new Address(changeAddrBytes),
+                        Lovelace.Create(collateralLovelace - requiredCollateral),
+                        null);
+                    _ = builder.SetCollateralReturn(collateralReturn);
+                }
+            }
         }
 
         // ── Auxiliary data hash ──
         if (_metadata.Count > 0)
         {
-            builder.IntegrateRedeemerSet();
             PostMaryTransaction preFinal = builder.Build();
             if (preFinal.AuxiliaryData is not null)
             {
                 byte[] auxBytes = CborSerializer.Serialize(preFinal.AuxiliaryData);
-                _ = builder.SetAuxiliaryDataHash(Chrysalis.Wallet.Utils.HashUtil.Blake2b256(auxBytes));
+                _ = builder.SetAuxiliaryDataHash(Wallet.Utils.HashUtil.Blake2b256(auxBytes));
             }
         }
 
