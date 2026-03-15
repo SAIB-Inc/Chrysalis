@@ -20,8 +20,6 @@ using Chrysalis.Wallet.Models.Enums;
 using WalletAddress = Chrysalis.Wallet.Models.Addresses.Address;
 using Chrysalis.Wallet.Models.Keys;
 using Chrysalis.Codec.Extensions;
-using Chrysalis.Codec.Extensions.Cardano.Core.Common;
-using Chrysalis.Codec.Extensions.Cardano.Core.Transaction;
 using Chrysalis.Network.Cbor.LocalStateQuery;
 using Chrysalis.Wallet.Words;
 
@@ -179,9 +177,8 @@ else if (mode == "LOW")
         .SetFee(0);
 
     _ = lowBuilder.ComputeAndSetAuxDataHash();
-    AddChangeEstimate(lowBuilder, walletUtxos, []);
-    _ = lowBuilder.CalculateFee([], 0, 1, walletUtxos);
-    RebuildChange(lowBuilder, walletUtxos, []);
+    _ = lowBuilder.CalculateFee([], 0, 1, walletUtxos,
+        changeAddress: walletBech32, resolvedInputs: walletUtxos);
 
     createUnsigned = lowBuilder.Build();
 }
@@ -298,9 +295,8 @@ else if (mode == "LOW")
     }
 
     _ = lowBuilder.ComputeAndSetAuxDataHash();
-    AddChangeEstimate(lowBuilder, walletUtxos, [ourUtxo]);
-    _ = lowBuilder.CalculateFee([validatorScript], 0, 1, walletUtxos);
-    RebuildChange(lowBuilder, walletUtxos, [ourUtxo]);
+    _ = lowBuilder.CalculateFee([validatorScript], 0, 1, walletUtxos,
+        changeAddress: walletBech32, resolvedInputs: [ourUtxo, .. walletUtxos]);
 
     fillUnsigned = lowBuilder.Build();
 }
@@ -415,9 +411,8 @@ else if (mode == "LOW")
     }
 
     _ = lowBuilder.ComputeAndSetAuxDataHash();
-    AddChangeEstimate(lowBuilder, walletUtxos, [fillUtxo]);
-    _ = lowBuilder.CalculateFee([validatorScript], 0, 1, walletUtxos);
-    RebuildChange(lowBuilder, walletUtxos, [fillUtxo]);
+    _ = lowBuilder.CalculateFee([validatorScript], 0, 1, walletUtxos,
+        changeAddress: walletBech32, resolvedInputs: [fillUtxo, .. walletUtxos]);
 
     closeUnsigned = lowBuilder.Build();
 }
@@ -519,61 +514,6 @@ static async Task<ResolvedInput> GetDeployRef(ICardanoDataProvider prov,
     List<ResolvedInput> deployUtxos = await prov.GetUtxosAsync([deployAddress]).ConfigureAwait(false);
     return deployUtxos.First(u =>
         Convert.ToHexStringLower(u.Outref.TransactionId.Span) == deployTxHash && u.Outref.Index == deployIndex);
-}
-
-// Add a change estimate output before fee calculation (so fee accounts for CBOR size)
-static void AddChangeEstimate(TransactionBuilder builder, List<ResolvedInput> walletUtxos, List<ResolvedInput> scriptUtxos)
-{
-    IValue totalIn = Lovelace.Create(0);
-    foreach (ResolvedInput utxo in walletUtxos) { totalIn = totalIn.Merge(utxo.Output.Amount()); }
-    foreach (ResolvedInput utxo in scriptUtxos) { totalIn = totalIn.Merge(utxo.Output.Amount()); }
-
-    IValue totalOut = Lovelace.Create(0);
-    for (int i = 0; i < builder.Outputs.Count; i++) { totalOut = totalOut.Merge(builder.Outputs[i].Amount()); }
-
-    IValue changeEst = totalIn.Subtract(totalOut).Subtract(Lovelace.Create(300_000));
-    if (changeEst.Lovelace() > 0)
-    {
-        _ = builder.AddOutput(walletUtxos[0].Output switch
-        {
-            AlonzoTransactionOutput a => WalletAddress.FromBytes(a.Address.Value.ToArray()).ToBech32(),
-            PostAlonzoTransactionOutput p => WalletAddress.FromBytes(p.Address.Value.ToArray()).ToBech32(),
-            _ => throw new InvalidOperationException("Unsupported output type")
-        }, changeEst, isChange: true);
-    }
-}
-
-// Rebuild change output after fee calculation with the final fee
-static void RebuildChange(TransactionBuilder builder, List<ResolvedInput> walletUtxos, List<ResolvedInput> scriptUtxos)
-{
-    string changeAddr = walletUtxos[0].Output switch
-    {
-        AlonzoTransactionOutput a => WalletAddress.FromBytes(a.Address.Value.ToArray()).ToBech32(),
-        PostAlonzoTransactionOutput p => WalletAddress.FromBytes(p.Address.Value.ToArray()).ToBech32(),
-        _ => throw new InvalidOperationException("Unsupported output type")
-    };
-
-    if (builder.ChangeOutputIndex is not null)
-    {
-        List<ITransactionOutput> outputs = [.. builder.Outputs];
-        outputs.RemoveAt(builder.ChangeOutputIndex.Value);
-        _ = builder.SetOutputs(outputs);
-        builder.ChangeOutputIndex = null;
-        builder.ChangeOutput = null;
-    }
-
-    IValue totalIn = Lovelace.Create(0);
-    foreach (ResolvedInput utxo in walletUtxos) { totalIn = totalIn.Merge(utxo.Output.Amount()); }
-    foreach (ResolvedInput utxo in scriptUtxos) { totalIn = totalIn.Merge(utxo.Output.Amount()); }
-
-    IValue totalOut = Lovelace.Create(0);
-    for (int i = 0; i < builder.Outputs.Count; i++) { totalOut = totalOut.Merge(builder.Outputs[i].Amount()); }
-
-    IValue change = totalIn.Subtract(totalOut).Subtract(Lovelace.Create(builder.Fee));
-    if (change.Lovelace() > 0)
-    {
-        _ = builder.AddOutput(changeAddr, change, isChange: true);
-    }
 }
 
 static IValue CreateMultiAssetValue(ulong lovelace, byte[] policyId, byte[] assetName, ulong amount)

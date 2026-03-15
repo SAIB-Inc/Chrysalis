@@ -32,7 +32,9 @@ public static class TransactionBuilderExtensions
         List<IScript> scripts,
         ulong defaultFee = 0,
         int mockWitnessFee = 1,
-        List<ResolvedInput>? availableInputs = null)
+        List<ResolvedInput>? availableInputs = null,
+        string? changeAddress = null,
+        List<ResolvedInput>? resolvedInputs = null)
     {
         ArgumentNullException.ThrowIfNull(builder);
         ArgumentNullException.ThrowIfNull(scripts);
@@ -48,6 +50,12 @@ public static class TransactionBuilderExtensions
         }
 
         _ = builder.SetFee(defaultFee == 0 ? InitialFeePlaceholder : defaultFee);
+
+        // Build change output before convergence (so fee accounts for its CBOR size)
+        if (changeAddress is not null && resolvedInputs is not null)
+        {
+            BuildChangeOutput(builder, resolvedInputs, changeAddress);
+        }
 
         ulong fee = ConvergeFee(builder, scriptFee, scriptExecutionFee, mockWitnessFee, availableInputs);
 
@@ -66,7 +74,15 @@ public static class TransactionBuilderExtensions
             AdjustCollateralForFeeIncrease(builder, previousFee, fee);
         }
 
-        AdjustChangeOutput(builder, fee);
+        // Rebuild change with final fee
+        if (changeAddress is not null && resolvedInputs is not null)
+        {
+            BuildChangeOutput(builder, resolvedInputs, changeAddress);
+        }
+        else
+        {
+            AdjustChangeOutput(builder, fee);
+        }
 
         return builder;
     }
@@ -311,6 +327,42 @@ public static class TransactionBuilderExtensions
         }
 
         _ = builder.SetCollateralReturn(returnOutput);
+    }
+
+    // ──────────── Change Output Building ────────────
+
+    private static void BuildChangeOutput(
+        TransactionBuilder builder, List<ResolvedInput> resolvedInputs, string changeAddress)
+    {
+        // Remove existing change output
+        if (builder.ChangeOutputIndex is not null)
+        {
+            List<ITransactionOutput> outputs = [.. builder.Outputs];
+            outputs.RemoveAt(builder.ChangeOutputIndex.Value);
+            _ = builder.SetOutputs(outputs);
+            builder.ChangeOutputIndex = null;
+            builder.ChangeOutput = null;
+        }
+
+        // Compute total input value from resolved inputs
+        IValue totalIn = Lovelace.Create(0);
+        foreach (ResolvedInput utxo in resolvedInputs)
+        {
+            totalIn = totalIn.Merge(utxo.Output.Amount());
+        }
+
+        // Compute total output value (excluding change)
+        IValue totalOut = Lovelace.Create(0);
+        for (int i = 0; i < builder.Outputs.Count; i++)
+        {
+            totalOut = totalOut.Merge(builder.Outputs[i].Amount());
+        }
+
+        IValue change = totalIn.Subtract(totalOut).Subtract(Lovelace.Create(builder.Fee));
+        if (change.Lovelace() > 0)
+        {
+            _ = builder.AddOutput(changeAddress, change, isChange: true);
+        }
     }
 
     // ──────────── Change Output Adjustment ────────────
