@@ -56,7 +56,15 @@ public static class TransactionBuilderExtensions
             fee = defaultFee;
         }
 
+        ulong previousFee = builder.Fee;
         _ = builder.SetFee(fee);
+
+        // Sync totalCollateral with the final fee — the convergence loop may have
+        // exited before SelectCollateral ran with the last fee value.
+        if (builder.Redeemers is not null && fee != previousFee)
+        {
+            AdjustCollateralForFeeIncrease(builder, previousFee, fee);
+        }
 
         AdjustChangeOutput(builder, fee);
 
