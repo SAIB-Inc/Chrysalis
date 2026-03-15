@@ -6,6 +6,7 @@ using Chrysalis.Codec.Serialization.Utils;
 using Chrysalis.Codec.Types;
 using Chrysalis.Codec.Types.Cardano.Core;
 using Chrysalis.Codec.Types.Cardano.Core.Common;
+using IPlutusData = Chrysalis.Codec.Types.Cardano.Core.Common.IPlutusData;
 using Chrysalis.Codec.Types.Cardano.Core.Transaction;
 using Chrysalis.Tx.Builders;
 using Chrysalis.Tx.Extensions;
@@ -19,6 +20,7 @@ using Chrysalis.Wallet.Models.Enums;
 using WalletAddress = Chrysalis.Wallet.Models.Addresses.Address;
 using Chrysalis.Wallet.Models.Keys;
 using Chrysalis.Codec.Extensions;
+using Chrysalis.Network.Cbor.LocalStateQuery;
 using Chrysalis.Wallet.Words;
 
 // ── Configuration ──────────────────────────────────────────────────────────
@@ -27,14 +29,26 @@ const string DeployUtxoTxHash = "3fb269ab071b9cefb81d6133516d36309a087c244a1401f
 const ulong DeployUtxoIndex = 0;
 const string DeployAddress = "addr_test1wzwkpt2sdeyms08pnarwr3pkag9exwc0fwvp8ldr8fy0evgs34phf";
 
-// USDM: policyId (56 hex chars = 28 bytes) + assetName hex "USDM"
-const string UsdmUnit = "e31a9fbefc4375176e289ca986067fa179440409abfe58f27fb8d0b95553444d";
-const ulong OrderUsdmAmount = 5_000_000; // 5 USDM (6 decimal places)
+// TESTV2: policyId (56 hex chars = 28 bytes) + assetName hex "TESTV2"
+const string UsdmUnit = "e31a9fbefc4375176e289ca986067fa179440409abfe58f27fb8d0b9544553545632";
+const ulong OrderUsdmAmount = 5_000_000; // 5 TESTV2 units
 const ulong MinAdaInScript = 2_000_000;  // 2 ADA min-ADA in script UTxO
 const ulong FillPercent = 90;            // Fill 90% of the order
 const long PriceNum = 1;
 const long PriceDen = 1;                 // 1 lovelace per USDM unit = 1 ADA per USDM
 
+// ── Mode selection ────────────────────────────────────────────────────────
+string mode = "HIGH";
+foreach (string arg in args)
+{
+    if (arg.StartsWith("--mode", StringComparison.OrdinalIgnoreCase))
+    {
+        string modeValue = arg.Contains('=', StringComparison.Ordinal) ? arg.Split('=')[1] : args[Array.IndexOf(args, arg) + 1];
+        mode = modeValue.ToUpperInvariant();
+    }
+}
+
+// ── Blockfrost key ────────────────────────────────────────────────────────
 string? blockfrostKey = Environment.GetEnvironmentVariable("BLOCKFROST_API_KEY");
 if (string.IsNullOrWhiteSpace(blockfrostKey))
 {
@@ -43,15 +57,21 @@ if (string.IsNullOrWhiteSpace(blockfrostKey))
     return 1;
 }
 
-byte[] usdmPolicyId = Convert.FromHexString(UsdmUnit[..56]);
-byte[] usdmAssetName = Convert.FromHexString(UsdmUnit[56..]);
+// ── Banner ─────────────────────────────────────────────────────────────────
+string modeLabel = mode switch
+{
+    "MID" => "TxBuilder (mid-level)",
+    "LOW" => "TransactionBuilder (low-level)",
+    _ => "TransactionTemplateBuilder (high-level)"
+};
 
-Console.WriteLine("=== Chrysalis E2E: Create Order → Fill Order (USDM/ADA) ===");
+Console.WriteLine($"=== Chrysalis E2E: Create Order → Fill Order → Close Order ===");
+Console.WriteLine($"  Mode:  {modeLabel}");
 Console.WriteLine($"  Order: Sell {OrderUsdmAmount} USDM units, price {PriceNum}/{PriceDen} (lovelace per USDM unit)");
 Console.WriteLine($"  Fill:  Buy {FillPercent}% of locked USDM, pay equal ADA");
-Console.WriteLine();
 
-// ── Step 1: Restore wallet ──────────────────────────────────────────────────
+// ── Step 1: Restore wallet ─────────────────────────────────────────────────
+Console.WriteLine();
 Console.WriteLine("1. Restoring Wizard demo wallet...");
 const string WizardMnemonic = "time gold spatial rookie simple rely across divorce man ugly train great into loud myself ancient omit addict beauty truck found space planet garage";
 Mnemonic mnemonic = Mnemonic.Restore(WizardMnemonic, English.Words);
@@ -72,9 +92,10 @@ string walletBech32 = walletAddress.ToBech32();
 
 byte[] paymentKeyHash = walletAddress.GetPaymentKeyHash()
     ?? throw new InvalidOperationException("Could not derive payment key hash.");
+string paymentKeyHashHex = Convert.ToHexStringLower(paymentKeyHash);
 
 Console.WriteLine($"   Wallet:   {walletBech32}");
-Console.WriteLine($"   Key hash: {Convert.ToHexStringLower(paymentKeyHash)}");
+Console.WriteLine($"   Key hash: {paymentKeyHashHex}");
 
 // ── Step 2: Derive script address ───────────────────────────────────────────
 Console.WriteLine("2. Deriving script address...");
@@ -91,36 +112,15 @@ using HttpClient bfClient = new();
 bfClient.BaseAddress = new Uri("https://cardano-preview.blockfrost.io/api/v0/");
 bfClient.DefaultRequestHeaders.Add("project_id", blockfrostKey);
 
+// ── Shared derived values ───────────────────────────────────────────────────
+byte[] usdmPolicyId = Convert.FromHexString(UsdmUnit[..56]);
+byte[] usdmAssetName = Convert.FromHexString(UsdmUnit[56..]);
+
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// PHASE 0: MINT TEST TOKENS
+// PHASE 0: MINT TEST TOKENS (skipped — already minted)
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 Console.WriteLine();
 Console.WriteLine("══ PHASE 0: MINT TEST TOKENS ══");
-
-string mintTokenName = "TESTV2";
-long mintQuantity = 1_000_000_000;
-
-INativeScript nativeScript = ScriptPubKey.Create(0, paymentKeyHash);
-byte[] nativeScriptCbor = CborSerializer.Serialize(nativeScript);
-byte[] mintPolicyId = Chrysalis.Wallet.Utils.HashUtil.Blake2b224([0x00, .. nativeScriptCbor]);
-string mintPolicyIdHex = Convert.ToHexStringLower(mintPolicyId);
-string mintAssetNameHex = Convert.ToHexStringLower(System.Text.Encoding.UTF8.GetBytes(mintTokenName));
-
-Console.WriteLine($"   Token: {mintTokenName}");
-Console.WriteLine($"   Policy ID: {mintPolicyIdHex}");
-Console.WriteLine($"   Quantity: {mintQuantity:N0}");
-
-TransactionTemplate<object> mintTemplate = TransactionTemplateBuilder.Create<object>(provider)
-    .AddStaticParty("change", walletBech32, true)
-    .AddNativeScript(_ => nativeScript)
-    .AddMint((options, _) =>
-    {
-        options.Policy = mintPolicyIdHex;
-        options.Assets[mintAssetNameHex] = mintQuantity;
-    })
-    .AddMetadata(_ => CreateMetadata("Chrysalis V2 Codec: mint test"))
-    .Build();
-
 Console.WriteLine("   Skipping mint (tokens already minted).");
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -129,9 +129,6 @@ Console.WriteLine("   Skipping mint (tokens already minted).");
 Console.WriteLine();
 Console.WriteLine("══ PHASE 1: CREATE ORDER ══");
 
-// Datum: FixedPrice, USDM/ADA
-//   asset_pair.1st = received = ADA   (enters the UTxO from the filler)
-//   asset_pair.2nd = offered  = USDM  (leaves the UTxO to the filler)
 TemplateWizardDatum orderDatum = new(
     "wizard"u8.ToArray(),
     new WizardDatum(
@@ -143,52 +140,69 @@ TemplateWizardDatum orderDatum = new(
         new None<Swap>(),
         new Signature(paymentKeyHash)));
 
-Console.WriteLine("4. Building create order transaction...");
+Console.WriteLine($"4. Building create order transaction ({mode})...");
 
-CreateOrderParams createParams = new(
-    OwnerAddress: walletBech32,
-    LovelaceAmount: MinAdaInScript,
-    PriceNum: PriceNum,
-    PriceDen: PriceDen,
-    ContractAddress: scriptAddress,
-    ChangeAddress: walletBech32);
-
-TransactionTemplate<CreateOrderParams> createTemplate =
-    TransactionTemplateBuilder.Create<CreateOrderParams>(provider)
-        .AddStaticParty("change", walletBech32, true)
-        .AddOutput((options, _, _) =>
-        {
-            options.To = "contract";
-            options.Amount = CreateMultiAssetValue(MinAdaInScript, usdmPolicyId, usdmAssetName, OrderUsdmAmount);
-            options.SetDatum(orderDatum);
-        })
-        .AddMetadata(_ => CreateMetadata("Chrysalis E2E: create order"))
-        .Build();
+IValue createOutputValue = CreateMultiAssetValue(MinAdaInScript, usdmPolicyId, usdmAssetName, OrderUsdmAmount);
 
 Stopwatch sw = Stopwatch.StartNew();
-ITransaction createUnsigned = await createTemplate(createParams).ConfigureAwait(false);
+ITransaction createUnsigned;
+
+if (mode == "MID")
+{
+    List<ResolvedInput> walletUtxos = await provider.GetUtxosAsync([walletBech32]).ConfigureAwait(false);
+    ulong createSlot = await GetCurrentSlot(bfClient).ConfigureAwait(false);
+    PostMaryTransaction tx = await new TxBuilder(provider)
+        .AddUnspentOutputs(walletUtxos)
+        .SetChangeAddress(walletBech32)
+        .LockAssets(scriptAddress, createOutputValue, orderDatum)
+        .AddMetadata(674, CreateMsgMetadatum("Chrysalis E2E: create order"))
+        .SetValidUntil(createSlot + 300)
+        .Complete().ConfigureAwait(false);
+    createUnsigned = tx;
+}
+else if (mode == "LOW")
+{
+    List<ResolvedInput> walletUtxos = await provider.GetUtxosAsync([walletBech32]).ConfigureAwait(false);
+    ProtocolParams pparams = await provider.GetParametersAsync().ConfigureAwait(false);
+
+    TransactionBuilder lowBuilder = TransactionBuilder.Create(pparams);
+    foreach (ResolvedInput utxo in walletUtxos)
+    {
+        _ = lowBuilder.AddInput(utxo.Outref);
+    }
+
+    _ = lowBuilder
+        .AddOutput(scriptAddress, createOutputValue, orderDatum)
+        .AddMetadata(674, CreateMsgMetadatum("Chrysalis E2E: create order"))
+        .SetFee(0);
+
+    _ = lowBuilder.CalculateFee([], 0, 1, walletUtxos,
+        changeAddress: walletBech32, resolvedInputs: walletUtxos);
+
+    createUnsigned = lowBuilder.Build();
+}
+else
+{
+    TransactionTemplate<CreateOrderParams> createTemplate =
+        TransactionTemplateBuilder.Create<CreateOrderParams>(provider)
+            .AddStaticParty("change", walletBech32, true)
+            .AddOutput((options, _, _) =>
+            {
+                options.To = "contract";
+                options.Amount = createOutputValue;
+                options.SetDatum(orderDatum);
+            })
+            .AddMetadata(_ => CreateMetadata("Chrysalis E2E: create order"))
+            .Build();
+
+    createUnsigned = await createTemplate(new CreateOrderParams(
+        walletBech32, MinAdaInScript, PriceNum, PriceDen, scriptAddress, walletBech32)).ConfigureAwait(false);
+}
+
 sw.Stop();
 Console.WriteLine($"   Built ({sw.ElapsedMilliseconds}ms)");
 
-ITransaction createSigned = createUnsigned.Sign(paymentKey);
-byte[] createCbor = CborSerializer.Serialize(createSigned);
-Console.WriteLine($"   Signed TX: {createCbor.Length} bytes");
-
-Console.WriteLine("5. Submitting create order...");
-sw.Restart();
-string createTxId = await provider.SubmitTransactionAsync(createSigned).ConfigureAwait(false);
-sw.Stop();
-Console.WriteLine($"   TxHash: {createTxId} ({sw.ElapsedMilliseconds}ms)");
-Console.WriteLine($"   https://preview.cardanoscan.io/transaction/{createTxId}");
-
-Console.WriteLine("6. Waiting for confirmation...");
-bool createConfirmed = await WaitForConfirmations(bfClient, createTxId).ConfigureAwait(false);
-if (!createConfirmed)
-{
-    await Console.Error.WriteLineAsync("   Create order timed out!").ConfigureAwait(false);
-    return 1;
-}
-Console.WriteLine("   Confirmed!");
+string createTxId = await SubmitAndConfirm(provider, bfClient, createUnsigned, paymentKey, "create order", 5).ConfigureAwait(false);
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // PHASE 2: FILL ORDER
@@ -197,17 +211,10 @@ Console.WriteLine();
 Console.WriteLine("══ PHASE 2: FILL ORDER ══");
 
 Console.WriteLine("7. Waiting for script UTxO indexing...");
-ResolvedInput? ourUtxo = await WaitForScriptUtxo(provider, scriptAddress, createTxId).ConfigureAwait(false);
-
-if (ourUtxo is null)
-{
-    await Console.Error.WriteLineAsync($"   Could not find our UTxO {createTxId} at script address!").ConfigureAwait(false);
-    return 1;
-}
-
+ResolvedInput ourUtxo = await WaitForScriptUtxo(provider, scriptAddress, createTxId).ConfigureAwait(false)
+    ?? throw new InvalidOperationException($"Could not find UTxO {createTxId} at script address!");
 Console.WriteLine($"   Found: {createTxId}#{ourUtxo.Outref.Index}");
 
-// Parse datum and original assets from the UTxO
 PostAlonzoTransactionOutput ourOutput = (PostAlonzoTransactionOutput)ourUtxo.Output;
 InlineDatumOption ourInlineDatum = (InlineDatumOption)ourOutput.Datum!;
 byte[] datumCbor = ourInlineDatum.Data.GetValue();
@@ -216,206 +223,232 @@ Dictionary<string, ulong> originalAssets = ExtractAssets(ourOutput.Amount);
 ulong originalUsdm = originalAssets.GetValueOrDefault(UsdmUnit, 0UL);
 if (originalUsdm == 0)
 {
-    await Console.Error.WriteLineAsync("   No USDM found in script UTxO!").ConfigureAwait(false);
-    return 1;
+    throw new InvalidOperationException("No USDM found in script UTxO!");
 }
 
 ulong amountToBuy = originalUsdm * FillPercent / 100;
-if (amountToBuy == 0)
-{
-    await Console.Error.WriteLineAsync("   Fill amount rounded to 0.").ConfigureAwait(false);
-    return 1;
-}
 
-// Verify datum round-trip
 TemplateWizardDatum parsedDatum = CborSerializer.Deserialize<TemplateWizardDatum>(datumCbor);
 byte[] reserializedDatum = CborSerializer.Serialize(parsedDatum);
 Console.WriteLine($"   Datum round-trip: {(reserializedDatum.AsSpan().SequenceEqual(datumCbor) ? "OK" : "MISMATCH")}");
 Console.WriteLine($"   Original USDM: {originalUsdm}, buying {amountToBuy} ({FillPercent}%)");
 
-// Get current slot for validity window
 ulong currentSlot = await GetCurrentSlot(bfClient).ConfigureAwait(false);
 Console.WriteLine($"   Current slot: {currentSlot}");
 
-// Calculate the continuing output value after the fill:
-//   subtract amountToBuy USDM, add ceil(amountToBuy * price) lovelace
 IValue continuingValue = CalculateNewValue(originalAssets, UsdmUnit, amountToBuy, PriceNum, PriceDen);
+TemplateWizardDatum continuingDatum = CborSerializer.Deserialize<TemplateWizardDatum>(datumCbor);
+BuyRedeemer fillRedeemerData = new(0, new PlutusTrue(), new None<OracleFeeds>());
 
-Console.WriteLine("8. Building fill order transaction...");
-
-FillOrderParams fillParams = new(
-    ScriptUtxoTxHash: createTxId,
-    ScriptUtxoIndex: ourUtxo.Outref.Index,
-    ScriptAddress: scriptAddress,
-    DatumCbor: datumCbor,
-    AmountToBuy: amountToBuy,
-    PriceNum: PriceNum,
-    PriceDen: PriceDen,
-    DeployUtxoTxHash: DeployUtxoTxHash,
-    DeployUtxoIndex: DeployUtxoIndex,
-    DeployAddress: DeployAddress,
-    ChangeAddress: walletBech32);
-
-TransactionTemplate<FillOrderParams> fillTemplate =
-    TransactionTemplateBuilder.Create<FillOrderParams>(provider)
-        .AddStaticParty("change", walletBech32, true)
-        .AddReferenceInput((options, param) =>
-        {
-            options.From = "deployAddress";
-            options.UtxoRef = TransactionInput.Create(
-                Convert.FromHexString(param.DeployUtxoTxHash),
-                param.DeployUtxoIndex);
-            options.Id = "deployRef";
-        })
-        .AddInput((options, param) =>
-        {
-            options.From = "scriptAddress";
-            options.UtxoRef = TransactionInput.Create(
-                Convert.FromHexString(param.ScriptUtxoTxHash),
-                param.ScriptUtxoIndex);
-            options.Id = "scriptInput";
-            options.RedeemerBuilder = (mapping, _, _) =>
-            {
-                (_, Dictionary<string, ulong> outputIndices) = mapping.GetInput("scriptInput");
-                ulong outputIndex = outputIndices.TryGetValue("continuingOutput", out ulong idx) ? idx : 0;
-                // offer_second = true: filler buys the second/offered asset (USDM)
-                BuyRedeemer data = new((long)outputIndex, new PlutusTrue(), new None<OracleFeeds>());
-                return new Redeemer<ICborType>(RedeemerTag.Spend, 0, data, ExUnits.Create(1_000_000, 400_000_000));
-            };
-        })
-        .AddOutput((options, param, _) =>
-        {
-            options.To = "scriptAddress";
-            options.Amount = continuingValue;
-            options.SetDatum(CborSerializer.Deserialize<TemplateWizardDatum>(param.DatumCbor));
-            options.AssociatedInputId = "scriptInput";
-            options.Id = "continuingOutput";
-        })
-        .SetValidTo(currentSlot + 300)
-        .AddMetadata(_ => CreateMetadata("Chrysalis E2E: fill order"))
-        .Build(eval: true);
-
+Console.WriteLine($"8. Building fill order transaction ({mode})...");
 sw.Restart();
-ITransaction fillUnsigned = await fillTemplate(fillParams).ConfigureAwait(false);
+ITransaction fillUnsigned;
+
+if (mode == "MID")
+{
+    List<ResolvedInput> walletUtxos = await WaitForWalletUtxos(provider, walletBech32, createTxId).ConfigureAwait(false);
+    ResolvedInput deployRef = await GetDeployRef(provider, DeployAddress, DeployUtxoTxHash, DeployUtxoIndex).ConfigureAwait(false);
+
+    PostMaryTransaction tx = await new TxBuilder(provider)
+        .AddUnspentOutputs(walletUtxos)
+        .SetChangeAddress(walletBech32)
+        .AddReferenceInput(deployRef)
+        .AddInput(ourUtxo, fillRedeemerData)
+        .AddRequiredSigner(paymentKeyHashHex)
+        .LockAssets(scriptAddress, continuingValue, continuingDatum)
+        .SetValidFrom(currentSlot)
+        .SetValidUntil(currentSlot + 300)
+        .AddMetadata(674, CreateMsgMetadatum("Chrysalis E2E: fill order"))
+        .Complete().ConfigureAwait(false);
+    fillUnsigned = tx;
+}
+else if (mode == "LOW")
+{
+    List<ResolvedInput> walletUtxos = await WaitForWalletUtxos(provider, walletBech32, createTxId).ConfigureAwait(false);
+    ResolvedInput deployRef = await GetDeployRef(provider, DeployAddress, DeployUtxoTxHash, DeployUtxoIndex).ConfigureAwait(false);
+
+    PostAlonzoTransactionOutput deployOutput = (PostAlonzoTransactionOutput)deployRef.Output;
+    IScript validatorScript = deployOutput.ScriptRef!.Deserialize<IScript>();
+    ProtocolParams pparams = await provider.GetParametersAsync().ConfigureAwait(false);
+
+    IPlutusData fillPlutusData = CborSerializer.Deserialize<IPlutusData>(CborSerializer.Serialize(fillRedeemerData));
+    InputBuilderResult scriptInputResult = new InputBuilder(ourUtxo.Outref, ourUtxo.Output)
+        .PlutusScriptRef(validatorScript.HashHex(), fillPlutusData, null, paymentKeyHashHex);
+
+    TransactionBuilder lowBuilder = TransactionBuilder.Create(pparams)
+        .AddInput(scriptInputResult)
+        .AddReferenceInput(deployRef.Outref)
+        .AddOutput(scriptAddress, continuingValue, continuingDatum)
+        .SetValidityIntervalStart(currentSlot)
+        .SetTtl(currentSlot + 300)
+        .AddMetadata(674, CreateMsgMetadatum("Chrysalis E2E: fill order"))
+        .SetFee(0);
+
+    // Evaluate BEFORE adding wallet inputs (so redeemer index 0 = script input)
+    _ = lowBuilder.Evaluate([ourUtxo, deployRef, .. walletUtxos],
+        SlotNetworkConfig.FromNetworkType(provider.NetworkType));
+
+    foreach (ResolvedInput utxo in walletUtxos)
+    {
+        _ = lowBuilder.AddInput(utxo.Outref);
+    }
+
+    _ = lowBuilder.CalculateFee([validatorScript], 0, 1, walletUtxos,
+        changeAddress: walletBech32, resolvedInputs: [ourUtxo, .. walletUtxos]);
+
+    fillUnsigned = lowBuilder.Build();
+}
+else
+{
+    FillOrderParams fillParams = new(createTxId, ourUtxo.Outref.Index, scriptAddress,
+        datumCbor, amountToBuy, PriceNum, PriceDen, DeployUtxoTxHash, DeployUtxoIndex, DeployAddress, walletBech32);
+
+    TransactionTemplate<FillOrderParams> fillTemplate =
+        TransactionTemplateBuilder.Create<FillOrderParams>(provider)
+            .AddStaticParty("change", walletBech32, true)
+            .AddReferenceInput((options, param) =>
+            {
+                options.From = "deployAddress";
+                options.UtxoRef = TransactionInput.Create(
+                    Convert.FromHexString(param.DeployUtxoTxHash), param.DeployUtxoIndex);
+                options.Id = "deployRef";
+            })
+            .AddInput((options, param) =>
+            {
+                options.From = "scriptAddress";
+                options.UtxoRef = TransactionInput.Create(
+                    Convert.FromHexString(param.ScriptUtxoTxHash), param.ScriptUtxoIndex);
+                options.Id = "scriptInput";
+                options.RedeemerBuilder = (mapping, _, _) =>
+                {
+                    (_, Dictionary<string, ulong> outputIndices) = mapping.GetInput("scriptInput");
+                    ulong outputIndex = outputIndices.TryGetValue("continuingOutput", out ulong idx) ? idx : 0;
+                    BuyRedeemer data = new((long)outputIndex, new PlutusTrue(), new None<OracleFeeds>());
+                    return new Redeemer<ICborType>(RedeemerTag.Spend, 0, data, ExUnits.Create(1_000_000, 400_000_000));
+                };
+            })
+            .AddOutput((options, param, _) =>
+            {
+                options.To = "scriptAddress";
+                options.Amount = continuingValue;
+                options.SetDatum(CborSerializer.Deserialize<TemplateWizardDatum>(param.DatumCbor));
+                options.AssociatedInputId = "scriptInput";
+                options.Id = "continuingOutput";
+            })
+            .SetValidTo(currentSlot + 300)
+            .AddMetadata(_ => CreateMetadata("Chrysalis E2E: fill order"))
+            .Build(eval: true);
+
+    fillUnsigned = await fillTemplate(fillParams).ConfigureAwait(false);
+}
+
 sw.Stop();
 Console.WriteLine($"   Built ({sw.ElapsedMilliseconds}ms)");
 
-ITransaction fillSigned = fillUnsigned.Sign(paymentKey);
-byte[] fillCbor = CborSerializer.Serialize(fillSigned);
-Console.WriteLine($"   Signed TX: {fillCbor.Length} bytes");
-
-// Try Blockfrost evaluate endpoint
-Console.WriteLine("8b. Evaluating via Blockfrost...");
-try
-{
-    using HttpRequestMessage evalReq = new(HttpMethod.Post, "utils/txs/evaluate");
-    evalReq.Content = new ByteArrayContent(fillCbor);
-    evalReq.Content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/cbor");
-    HttpResponseMessage evalResp = await bfClient.SendAsync(evalReq).ConfigureAwait(false);
-    string evalBody = await evalResp.Content.ReadAsStringAsync().ConfigureAwait(false);
-    Console.WriteLine($"   Evaluate status: {evalResp.StatusCode}");
-    Console.WriteLine($"   Evaluate response: {evalBody}");
-}
-catch (Exception ex)
-{
-    Console.WriteLine($"   Evaluate error: {ex.Message}");
-}
-
-Console.WriteLine("9. Submitting fill order...");
-sw.Restart();
-string fillTxId = await provider.SubmitTransactionAsync(fillSigned).ConfigureAwait(false);
-sw.Stop();
-Console.WriteLine($"   TxHash: {fillTxId} ({sw.ElapsedMilliseconds}ms)");
-Console.WriteLine($"   https://preview.cardanoscan.io/transaction/{fillTxId}");
-
-Console.WriteLine("10. Waiting for confirmation...");
-bool fillConfirmed = await WaitForConfirmations(bfClient, fillTxId).ConfigureAwait(false);
-if (!fillConfirmed)
-{
-    await Console.Error.WriteLineAsync("   Fill order timed out!").ConfigureAwait(false);
-    return 1;
-}
-Console.WriteLine("   Confirmed!");
+string fillTxId = await SubmitAndConfirm(provider, bfClient, fillUnsigned, paymentKey, "fill order", 9).ConfigureAwait(false);
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// PHASE 3: CLOSE ORDER (reclaim remaining position)
+// PHASE 3: CLOSE ORDER
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 Console.WriteLine();
 Console.WriteLine("══ PHASE 3: CLOSE ORDER ══");
 
 Console.WriteLine("11. Waiting for fill's continuing UTxO indexing...");
-ResolvedInput? fillUtxo = await WaitForScriptUtxo(provider, scriptAddress, fillTxId).ConfigureAwait(false);
-
-if (fillUtxo is null)
-{
-    await Console.Error.WriteLineAsync($"   Could not find fill UTxO {fillTxId} at script address!").ConfigureAwait(false);
-    return 1;
-}
-
+ResolvedInput fillUtxo = await WaitForScriptUtxo(provider, scriptAddress, fillTxId).ConfigureAwait(false)
+    ?? throw new InvalidOperationException($"Could not find fill UTxO {fillTxId} at script address!");
 Console.WriteLine($"   Found: {fillTxId}#{fillUtxo.Outref.Index}");
 
-Console.WriteLine("12. Building close order transaction...");
-
-CloseOrderParams closeParams = new(
-    ScriptUtxoTxHash: fillTxId,
-    ScriptUtxoIndex: fillUtxo.Outref.Index,
-    ScriptAddress: scriptAddress,
-    DeployUtxoTxHash: DeployUtxoTxHash,
-    DeployUtxoIndex: DeployUtxoIndex,
-    DeployAddress: DeployAddress,
-    OwnerAddress: walletBech32,
-    ChangeAddress: walletBech32);
-
-TransactionTemplate<CloseOrderParams> closeTemplate =
-    TransactionTemplateBuilder.Create<CloseOrderParams>(provider)
-        .AddStaticParty("change", walletBech32, true)
-        .AddRequiredSigner("owner")
-        .AddReferenceInput((options, param) =>
-        {
-            options.From = "deployAddress";
-            options.UtxoRef = TransactionInput.Create(
-                Convert.FromHexString(param.DeployUtxoTxHash),
-                param.DeployUtxoIndex);
-            options.Id = "deployRef";
-        })
-        .AddInput((options, param) =>
-        {
-            options.From = "scriptAddress";
-            options.UtxoRef = TransactionInput.Create(
-                Convert.FromHexString(param.ScriptUtxoTxHash),
-                param.ScriptUtxoIndex);
-            options.Id = "scriptInput";
-            options.RedeemerBuilder = (_, _, _) =>
-                new Redeemer<ICborType>(RedeemerTag.Spend, 0, new CloseRedeemer(), ExUnits.Create(500_000, 200_000_000));
-        })
-        .AddMetadata(_ => CreateMetadata("Chrysalis E2E: close order"))
-        .Build(eval: true);
+Console.WriteLine($"12. Building close order transaction ({mode})...");
+CloseRedeemer closeRedeemerData = new();
 
 sw.Restart();
-ITransaction closeUnsigned = await closeTemplate(closeParams).ConfigureAwait(false);
+ITransaction closeUnsigned;
+
+if (mode == "MID")
+{
+    List<ResolvedInput> walletUtxos = await WaitForWalletUtxos(provider, walletBech32, fillTxId).ConfigureAwait(false);
+    ResolvedInput deployRef = await GetDeployRef(provider, DeployAddress, DeployUtxoTxHash, DeployUtxoIndex).ConfigureAwait(false);
+
+    PostMaryTransaction tx = await new TxBuilder(provider)
+        .AddUnspentOutputs(walletUtxos)
+        .SetChangeAddress(walletBech32)
+        .AddReferenceInput(deployRef)
+        .AddInput(fillUtxo, closeRedeemerData)
+        .AddRequiredSigner(paymentKeyHashHex)
+        .AddMetadata(674, CreateMsgMetadatum("Chrysalis E2E: close order"))
+        .Complete().ConfigureAwait(false);
+    closeUnsigned = tx;
+}
+else if (mode == "LOW")
+{
+    List<ResolvedInput> walletUtxos = await WaitForWalletUtxos(provider, walletBech32, fillTxId).ConfigureAwait(false);
+    ResolvedInput deployRef = await GetDeployRef(provider, DeployAddress, DeployUtxoTxHash, DeployUtxoIndex).ConfigureAwait(false);
+
+    PostAlonzoTransactionOutput deployOutput = (PostAlonzoTransactionOutput)deployRef.Output;
+    IScript validatorScript = deployOutput.ScriptRef!.Deserialize<IScript>();
+    ProtocolParams pparams = await provider.GetParametersAsync().ConfigureAwait(false);
+
+    IPlutusData closePlutusData = CborSerializer.Deserialize<IPlutusData>(CborSerializer.Serialize(closeRedeemerData));
+    InputBuilderResult scriptInputResult = new InputBuilder(fillUtxo.Outref, fillUtxo.Output)
+        .PlutusScriptRef(validatorScript.HashHex(), closePlutusData, null, paymentKeyHashHex);
+
+    TransactionBuilder lowBuilder = TransactionBuilder.Create(pparams)
+        .AddInput(scriptInputResult)
+        .AddReferenceInput(deployRef.Outref)
+        .AddRequiredSigner(paymentKeyHashHex)
+        .AddMetadata(674, CreateMsgMetadatum("Chrysalis E2E: close order"))
+        .SetFee(0);
+
+    // Evaluate BEFORE adding wallet inputs
+    _ = lowBuilder.Evaluate([fillUtxo, deployRef, .. walletUtxos],
+        SlotNetworkConfig.FromNetworkType(provider.NetworkType));
+
+    foreach (ResolvedInput utxo in walletUtxos)
+    {
+        _ = lowBuilder.AddInput(utxo.Outref);
+    }
+
+    _ = lowBuilder.CalculateFee([validatorScript], 0, 1, walletUtxos,
+        changeAddress: walletBech32, resolvedInputs: [fillUtxo, .. walletUtxos]);
+
+    closeUnsigned = lowBuilder.Build();
+}
+else
+{
+    TransactionTemplate<CloseOrderParams> closeTemplate =
+        TransactionTemplateBuilder.Create<CloseOrderParams>(provider)
+            .AddStaticParty("change", walletBech32, true)
+            .AddRequiredSigner("owner")
+            .AddReferenceInput((options, param) =>
+            {
+                options.From = "deployAddress";
+                options.UtxoRef = TransactionInput.Create(
+                    Convert.FromHexString(param.DeployUtxoTxHash), param.DeployUtxoIndex);
+                options.Id = "deployRef";
+            })
+            .AddInput((options, param) =>
+            {
+                options.From = "scriptAddress";
+                options.UtxoRef = TransactionInput.Create(
+                    Convert.FromHexString(param.ScriptUtxoTxHash), param.ScriptUtxoIndex);
+                options.Id = "scriptInput";
+                options.RedeemerBuilder = (_, _, _) =>
+                    new Redeemer<ICborType>(RedeemerTag.Spend, 0, new CloseRedeemer(), ExUnits.Create(500_000, 200_000_000));
+            })
+            .AddMetadata(_ => CreateMetadata("Chrysalis E2E: close order"))
+            .Build(eval: true);
+
+    closeUnsigned = await closeTemplate(new CloseOrderParams(
+        fillTxId, fillUtxo.Outref.Index, scriptAddress, DeployUtxoTxHash, DeployUtxoIndex,
+        DeployAddress, walletBech32, walletBech32)).ConfigureAwait(false);
+}
+
 sw.Stop();
 Console.WriteLine($"   Built ({sw.ElapsedMilliseconds}ms)");
 
-ITransaction closeSigned = closeUnsigned.Sign(paymentKey);
-byte[] closeCbor = CborSerializer.Serialize(closeSigned);
-Console.WriteLine($"   Signed TX: {closeCbor.Length} bytes");
+string closeTxId = await SubmitAndConfirm(provider, bfClient, closeUnsigned, paymentKey, "close order", 13).ConfigureAwait(false);
 
-Console.WriteLine("13. Submitting close order...");
-sw.Restart();
-string closeTxId = await provider.SubmitTransactionAsync(closeSigned).ConfigureAwait(false);
-sw.Stop();
-Console.WriteLine($"   TxHash: {closeTxId} ({sw.ElapsedMilliseconds}ms)");
-Console.WriteLine($"   https://preview.cardanoscan.io/transaction/{closeTxId}");
-
-Console.WriteLine("14. Waiting for confirmation...");
-bool closeConfirmed = await WaitForConfirmations(bfClient, closeTxId).ConfigureAwait(false);
-if (!closeConfirmed)
-{
-    await Console.Error.WriteLineAsync("   Close order timed out!").ConfigureAwait(false);
-    return 1;
-}
-Console.WriteLine("   Confirmed!");
-
+// ── Done ────────────────────────────────────────────────────────────────────
 Console.WriteLine();
 Console.WriteLine("══════════════════════════════════════════════════");
 Console.WriteLine("=== SUCCESS: Create → Fill → Close E2E confirmed! ===");
@@ -426,9 +459,60 @@ Console.WriteLine("════════════════════�
 
 return 0;
 
-// ── Helpers ────────────────────────────────────────────────────────────────
+// ── Shared Helpers ──────────────────────────────────────────────────────────
 
-// Build a LovelaceWithMultiAsset value for the create-order UTxO
+// Submit, sign, print, confirm — shared across all phases
+static async Task<string> SubmitAndConfirm(
+    ICardanoDataProvider provider, HttpClient bfClient,
+    ITransaction unsigned, PrivateKey key, string label, int stepNum)
+{
+    ITransaction signed = unsigned.Sign(key);
+    byte[] cbor = CborSerializer.Serialize(signed);
+    Console.WriteLine($"   Signed TX: {cbor.Length} bytes");
+
+    Console.WriteLine($"{stepNum}. Submitting {label}...");
+    Stopwatch sw = Stopwatch.StartNew();
+    string txId = await provider.SubmitTransactionAsync(signed).ConfigureAwait(false);
+    sw.Stop();
+    Console.WriteLine($"   TxHash: {txId} ({sw.ElapsedMilliseconds}ms)");
+    Console.WriteLine($"   https://preview.cardanoscan.io/transaction/{txId}");
+
+    Console.WriteLine($"{stepNum + 1}. Waiting for confirmation...");
+    bool confirmed = await WaitForConfirmations(bfClient, txId).ConfigureAwait(false);
+    if (!confirmed)
+    {
+        throw new InvalidOperationException($"   {label} timed out!");
+    }
+    Console.WriteLine("   Confirmed!");
+    return txId;
+}
+
+// Poll wallet UTxOs until a specific tx's change output appears
+static async Task<List<ResolvedInput>> WaitForWalletUtxos(
+    ICardanoDataProvider provider, string walletBech32, string expectedTxId)
+{
+    for (int wait = 0; wait < 60; wait += 4)
+    {
+        List<ResolvedInput> utxos = await provider.GetUtxosAsync([walletBech32]).ConfigureAwait(false);
+        if (utxos.Any(u => Convert.ToHexStringLower(u.Outref.TransactionId.Span) == expectedTxId))
+        {
+            return utxos;
+        }
+        await Task.Delay(4000).ConfigureAwait(false);
+        Console.Write(".");
+    }
+    throw new InvalidOperationException($"Wallet UTxO index did not update for tx {expectedTxId}");
+}
+
+// Get the deploy reference UTxO
+static async Task<ResolvedInput> GetDeployRef(ICardanoDataProvider prov,
+    string deployAddress, string deployTxHash, ulong deployIndex)
+{
+    List<ResolvedInput> deployUtxos = await prov.GetUtxosAsync([deployAddress]).ConfigureAwait(false);
+    return deployUtxos.First(u =>
+        Convert.ToHexStringLower(u.Outref.TransactionId.Span) == deployTxHash && u.Outref.Index == deployIndex);
+}
+
 static IValue CreateMultiAssetValue(ulong lovelace, byte[] policyId, byte[] assetName, ulong amount)
 {
     Dictionary<ReadOnlyMemory<byte>, ulong> tokenBundle = new(ReadOnlyMemoryComparer.Instance)
@@ -442,73 +526,49 @@ static IValue CreateMultiAssetValue(ulong lovelace, byte[] policyId, byte[] asse
     return LovelaceWithMultiAsset.Create(lovelace, MultiAssetOutput.Create(multiAsset));
 }
 
-// Extract all assets from a UTxO Value into a string-keyed dict.
-// Keys: "lovelace" for ADA, or "{policyId hex}{assetName hex}" for tokens.
 static Dictionary<string, ulong> ExtractAssets(IValue value)
 {
     Dictionary<string, ulong> assets = [];
-    switch (value)
+    if (value is Lovelace l)
     {
-        case Lovelace l:
-            assets["lovelace"] = l.Amount;
-            break;
-        case LovelaceWithMultiAsset m:
-            assets["lovelace"] = m.Amount;
-            foreach ((ReadOnlyMemory<byte> policyId, TokenBundleOutput bundle) in m.MultiAsset.Value)
+        assets["lovelace"] = l.Amount;
+    }
+    else if (value is LovelaceWithMultiAsset m)
+    {
+        assets["lovelace"] = m.Amount;
+        foreach ((ReadOnlyMemory<byte> policyId, TokenBundleOutput bundle) in m.MultiAsset.Value)
+        {
+            foreach ((ReadOnlyMemory<byte> assetName, ulong qty) in bundle.Value)
             {
-                foreach ((ReadOnlyMemory<byte> assetName, ulong qty) in bundle.Value)
-                {
-                    string unit = Convert.ToHexStringLower(policyId.Span) + Convert.ToHexStringLower(assetName.Span);
-                    assets[unit] = qty;
-                }
+                assets[Convert.ToHexStringLower(policyId.Span) + Convert.ToHexStringLower(assetName.Span)] = qty;
             }
-            break;
-        default:
-            break;
+        }
     }
     return assets;
 }
 
-// Port of FillLogic.CalculateNewValue from Wizard demo.
-// Subtracts assetToBuy from the UTxO, adds ceil(amountToBuy * price) lovelace.
 static IValue CalculateNewValue(
-    Dictionary<string, ulong> originalAssets,
-    string assetToBuy,
-    ulong amountToBuy,
-    long priceNum,
-    long priceDen)
+    Dictionary<string, ulong> originalAssets, string assetToBuy,
+    ulong amountToBuy, long priceNum, long priceDen)
 {
     BigInteger sellAmount = ((new BigInteger(amountToBuy) * priceNum) + priceDen - 1) / priceDen;
     Dictionary<string, ulong> newAssets = new(originalAssets);
 
     ulong currentBuy = newAssets.GetValueOrDefault(assetToBuy, 0UL);
-    if (amountToBuy >= currentBuy)
-    {
-        _ = newAssets.Remove(assetToBuy);
-    }
-    else
-    {
-        newAssets[assetToBuy] = currentBuy - amountToBuy;
-    }
+    if (amountToBuy >= currentBuy) { _ = newAssets.Remove(assetToBuy); }
+    else { newAssets[assetToBuy] = currentBuy - amountToBuy; }
 
     newAssets["lovelace"] = newAssets.GetValueOrDefault("lovelace", 0UL) + (ulong)sellAmount;
-
     return CreateValueFromAssets(newAssets);
 }
 
-// Build a Value from a string-keyed asset dictionary.
 static IValue CreateValueFromAssets(Dictionary<string, ulong> assets)
 {
     ulong lovelace = assets.GetValueOrDefault("lovelace", 0UL);
     Dictionary<string, Dictionary<string, ulong>> byPolicy = [];
-
     foreach ((string unit, ulong qty) in assets)
     {
-        if (unit == "lovelace" || qty == 0)
-        {
-            continue;
-        }
-
+        if (unit == "lovelace" || qty == 0) { continue; }
         string policyHex = unit[..56];
         string nameHex = unit.Length > 56 ? unit[56..] : "";
         if (!byPolicy.TryGetValue(policyHex, out Dictionary<string, ulong>? tokens))
@@ -519,56 +579,39 @@ static IValue CreateValueFromAssets(Dictionary<string, ulong> assets)
         tokens[nameHex] = qty;
     }
 
-    if (byPolicy.Count == 0)
-    {
-        return Lovelace.Create(lovelace);
-    }
+    if (byPolicy.Count == 0) { return Lovelace.Create(lovelace); }
 
     Dictionary<ReadOnlyMemory<byte>, TokenBundleOutput> multiAsset = new(ReadOnlyMemoryComparer.Instance);
     foreach ((string policyHex, Dictionary<string, ulong> tokens) in byPolicy)
     {
         Dictionary<ReadOnlyMemory<byte>, ulong> bundle = new(ReadOnlyMemoryComparer.Instance);
-        foreach ((string nameHex, ulong qty) in tokens)
-        {
-            bundle[Convert.FromHexString(nameHex)] = qty;
-        }
+        foreach ((string nameHex, ulong qty) in tokens) { bundle[Convert.FromHexString(nameHex)] = qty; }
         multiAsset[Convert.FromHexString(policyHex)] = TokenBundleOutput.Create(bundle);
     }
-
     return LovelaceWithMultiAsset.Create(lovelace, MultiAssetOutput.Create(multiAsset));
 }
 
-static Metadata CreateMetadata(string message)
-{
-    ITransactionMetadatum msgMap = MetadatumMap.Create(new Dictionary<ITransactionMetadatum, ITransactionMetadatum>
+static ITransactionMetadatum CreateMsgMetadatum(string message) =>
+    MetadatumMap.Create(new Dictionary<ITransactionMetadatum, ITransactionMetadatum>
     {
-        {
-            MetadataText.Create("msg"),
-            MetadatumList.Create([MetadataText.Create(message)])
-        }
+        { MetadataText.Create("msg"), MetadatumList.Create([MetadataText.Create(message)]) }
     });
 
-    return Metadata.Create(new Dictionary<ulong, ITransactionMetadatum>
+static Metadata CreateMetadata(string message) =>
+    Metadata.Create(new Dictionary<ulong, ITransactionMetadatum>
     {
-        { 674, msgMap }
+        { 674, CreateMsgMetadatum(message) }
     });
-}
 
-static async Task<bool> WaitForConfirmations(
-    HttpClient client,
-    string txHash,
-    int requiredConfirmations = 1,
-    int maxWaitSeconds = 240,
-    int pollSeconds = 5)
+static async Task<bool> WaitForConfirmations(HttpClient client, string txHash,
+    int requiredConfirmations = 1, int maxWaitSeconds = 240, int pollSeconds = 5)
 {
     Stopwatch sw = Stopwatch.StartNew();
     for (int elapsed = 0; elapsed < maxWaitSeconds; elapsed += pollSeconds)
     {
         await Task.Delay(TimeSpan.FromSeconds(pollSeconds)).ConfigureAwait(false);
-
         using HttpResponseMessage response = await client
-            .GetAsync(new Uri($"txs/{txHash}", UriKind.Relative))
-            .ConfigureAwait(false);
+            .GetAsync(new Uri($"txs/{txHash}", UriKind.Relative)).ConfigureAwait(false);
 
         if (response.IsSuccessStatusCode)
         {
@@ -577,96 +620,38 @@ static async Task<bool> WaitForConfirmations(
             JsonElement root = doc.RootElement;
 
             ulong confirmations = 0;
-            if (TryReadUlong(root, "confirmations", out ulong confValue))
-            {
-                confirmations = confValue;
-            }
-            else if (TryReadUlong(root, "block_height", out ulong blockHeight) && blockHeight > 0)
-            {
-                if (requiredConfirmations <= 1)
-                {
-                    confirmations = 1;
-                }
-                else
-                {
-                    ulong latestHeight = await GetCurrentBlockHeight(client).ConfigureAwait(false);
-                    confirmations = latestHeight >= blockHeight
-                        ? latestHeight - blockHeight + 1
-                        : 0;
-                }
-            }
-            else if (root.TryGetProperty("block", out JsonElement block) &&
-                block.ValueKind == JsonValueKind.String &&
-                !string.IsNullOrWhiteSpace(block.GetString()))
+            if (root.TryGetProperty("block", out JsonElement block) &&
+                block.ValueKind == JsonValueKind.String && !string.IsNullOrWhiteSpace(block.GetString()))
             {
                 confirmations = 1;
             }
-
             if (confirmations >= (ulong)requiredConfirmations)
             {
                 sw.Stop();
                 Console.Write($" ({sw.ElapsedMilliseconds / 1000}s, {confirmations} conf)");
                 return true;
             }
-
-            Console.Write($".[{confirmations}]");
-            continue;
         }
-
         Console.Write(".");
     }
-
     Console.WriteLine();
     return false;
 }
 
-static bool TryReadUlong(JsonElement root, string property, out ulong value)
-{
-    value = 0;
-    if (!root.TryGetProperty(property, out JsonElement elem))
-    {
-        return false;
-    }
-
-    if (elem.ValueKind == JsonValueKind.Number && elem.TryGetUInt64(out ulong numberValue))
-    {
-        value = numberValue;
-        return true;
-    }
-
-    if (elem.ValueKind == JsonValueKind.String &&
-        ulong.TryParse(elem.GetString(), out ulong stringValue))
-    {
-        value = stringValue;
-        return true;
-    }
-
-    return false;
-}
-
 static async Task<ResolvedInput?> WaitForScriptUtxo(
-    ICardanoDataProvider provider,
-    string scriptAddress,
-    string txHash,
-    int maxWaitSeconds = 120,
-    int pollSeconds = 4)
+    ICardanoDataProvider provider, string scriptAddress, string txHash,
+    int maxWaitSeconds = 120, int pollSeconds = 4)
 {
     for (int elapsed = 0; elapsed < maxWaitSeconds; elapsed += pollSeconds)
     {
         List<ResolvedInput> scriptUtxos = await provider.GetUtxosAsync([scriptAddress]).ConfigureAwait(false);
         foreach (ResolvedInput utxo in scriptUtxos)
         {
-            string currentTxHash = Convert.ToHexStringLower(utxo.Outref.TransactionId.Span);
-            if (currentTxHash == txHash)
-            {
-                return utxo;
-            }
+            if (Convert.ToHexStringLower(utxo.Outref.TransactionId.Span) == txHash) { return utxo; }
         }
-
         await Task.Delay(TimeSpan.FromSeconds(pollSeconds)).ConfigureAwait(false);
         Console.Write(".");
     }
-
     Console.WriteLine();
     return null;
 }
@@ -674,23 +659,9 @@ static async Task<ResolvedInput?> WaitForScriptUtxo(
 static async Task<ulong> GetCurrentSlot(HttpClient client)
 {
     using HttpResponseMessage response = await client
-        .GetAsync(new Uri("blocks/latest", UriKind.Relative))
-        .ConfigureAwait(false);
-
+        .GetAsync(new Uri("blocks/latest", UriKind.Relative)).ConfigureAwait(false);
     _ = response.EnsureSuccessStatusCode();
     string json = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
     using JsonDocument doc = JsonDocument.Parse(json);
     return doc.RootElement.GetProperty("slot").GetUInt64();
-}
-
-static async Task<ulong> GetCurrentBlockHeight(HttpClient client)
-{
-    using HttpResponseMessage response = await client
-        .GetAsync(new Uri("blocks/latest", UriKind.Relative))
-        .ConfigureAwait(false);
-
-    _ = response.EnsureSuccessStatusCode();
-    string json = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-    using JsonDocument doc = JsonDocument.Parse(json);
-    return doc.RootElement.GetProperty("height").GetUInt64();
 }

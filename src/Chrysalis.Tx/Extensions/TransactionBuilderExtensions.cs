@@ -32,12 +32,15 @@ public static class TransactionBuilderExtensions
         List<IScript> scripts,
         ulong defaultFee = 0,
         int mockWitnessFee = 1,
-        List<ResolvedInput>? availableInputs = null)
+        List<ResolvedInput>? availableInputs = null,
+        string? changeAddress = null,
+        List<ResolvedInput>? resolvedInputs = null)
     {
         ArgumentNullException.ThrowIfNull(builder);
         ArgumentNullException.ThrowIfNull(scripts);
 
         builder.IntegrateRedeemerSet();
+        _ = builder.ComputeAndSetAuxDataHash();
 
         ulong scriptFee = 0;
         ulong scriptExecutionFee = 0;
@@ -48,6 +51,12 @@ public static class TransactionBuilderExtensions
         }
 
         _ = builder.SetFee(defaultFee == 0 ? InitialFeePlaceholder : defaultFee);
+
+        // Build change output before convergence (so fee accounts for its CBOR size)
+        if (changeAddress is not null && resolvedInputs is not null)
+        {
+            BuildChangeOutput(builder, resolvedInputs, changeAddress);
+        }
 
         ulong fee = ConvergeFee(builder, scriptFee, scriptExecutionFee, mockWitnessFee, availableInputs);
 
@@ -66,7 +75,15 @@ public static class TransactionBuilderExtensions
             AdjustCollateralForFeeIncrease(builder, previousFee, fee);
         }
 
-        AdjustChangeOutput(builder, fee);
+        // Rebuild change with final fee
+        if (changeAddress is not null && resolvedInputs is not null)
+        {
+            BuildChangeOutput(builder, resolvedInputs, changeAddress);
+        }
+        else
+        {
+            AdjustChangeOutput(builder, fee);
+        }
 
         return builder;
     }
@@ -91,6 +108,69 @@ public static class TransactionBuilderExtensions
         return builder;
     }
 
+    // ──────────── Shared Helpers ────────────
+
+    /// <summary>
+    /// Computes and sets the script data hash on the builder from the current redeemers and script language.
+    /// </summary>
+    public static TransactionBuilder ComputeAndSetScriptDataHash(this TransactionBuilder builder, List<IScript> scripts)
+    {
+        ArgumentNullException.ThrowIfNull(builder);
+        ArgumentNullException.ThrowIfNull(scripts);
+        int langVersion = scripts[0].Version() - 1;
+        CostMdls costMdls = builder.Pparams!.CostModelsForScriptLanguage!;
+        ICborMaybeIndefList<long>? usedLanguage = langVersion switch
+        {
+            0 => costMdls.PlutusV1,
+            1 => costMdls.PlutusV2,
+            2 => costMdls.PlutusV3,
+            _ => costMdls.PlutusV3
+        };
+        CostMdls costModel = new(
+            langVersion == 0 ? usedLanguage : null,
+            langVersion == 1 ? usedLanguage : null,
+            langVersion == 2 ? usedLanguage : null);
+        byte[] costModelBytes = CborSerializer.Serialize(costModel);
+        PostAlonzoTransactionWitnessSet ws = builder.BuildWitnessSet();
+        byte[] scriptDataHash = DataHashUtil.CalculateScriptDataHash(builder.Redeemers!, ws.PlutusDataSet, costModelBytes);
+        return builder.SetScriptDataHash(scriptDataHash);
+    }
+
+    /// <summary>
+    /// Computes the script execution fee from the builder's current redeemers and protocol parameters.
+    /// </summary>
+    public static ulong ComputeScriptExecutionFee(this TransactionBuilder builder)
+    {
+        ArgumentNullException.ThrowIfNull(builder);
+        if (builder.Redeemers is null)
+        {
+            return 0;
+        }
+
+        RationalNumber memPrice = new(
+            builder.Pparams!.ExecutionCosts!.Value.MemPrice.Numerator,
+            builder.Pparams.ExecutionCosts.Value.MemPrice.Denominator);
+        RationalNumber stepPrice = new(
+            builder.Pparams.ExecutionCosts!.Value.StepPrice.Numerator,
+            builder.Pparams.ExecutionCosts.Value.StepPrice.Denominator);
+        return FeeUtil.CalculateScriptExecutionFee(builder.Redeemers, stepPrice, memPrice);
+    }
+
+    /// <summary>
+    /// Computes and sets the auxiliary data hash from the builder's current metadata.
+    /// </summary>
+    public static TransactionBuilder ComputeAndSetAuxDataHash(this TransactionBuilder builder)
+    {
+        ArgumentNullException.ThrowIfNull(builder);
+        PostMaryTransaction tx = builder.Build();
+        if (tx.AuxiliaryData is not null)
+        {
+            byte[] auxBytes = CborSerializer.Serialize(tx.AuxiliaryData);
+            _ = builder.SetAuxiliaryDataHash(Wallet.Utils.HashUtil.Blake2b256(auxBytes));
+        }
+        return builder;
+    }
+
     // ──────────── Script Fee Calculation ────────────
 
     private static (ulong ScriptFee, ulong ExecutionFee) CalculateScriptFees(
@@ -101,27 +181,7 @@ public static class TransactionBuilderExtensions
             throw new ArgumentException("Missing script", nameof(scripts));
         }
 
-        // Compute script data hash
-        int langVersion = scripts[0].Version() - 1;
-        CostMdls costMdls = builder.Pparams!.CostModelsForScriptLanguage!;
-        ICborMaybeIndefList<long>? usedLanguage = langVersion switch
-        {
-            0 => costMdls.PlutusV1,
-            1 => costMdls.PlutusV2,
-            2 => costMdls.PlutusV3,
-            _ => throw new ArgumentException($"Unsupported script language version: {langVersion}", nameof(scripts))
-        };
-
-        CostMdls costModel = new(
-            langVersion == 0 ? usedLanguage : null,
-            langVersion == 1 ? usedLanguage : null,
-            langVersion == 2 ? usedLanguage : null
-        );
-
-        byte[] costModelBytes = CborSerializer.Serialize(costModel);
-        PostAlonzoTransactionWitnessSet witnessSet = builder.BuildWitnessSet();
-        byte[] scriptDataHash = DataHashUtil.CalculateScriptDataHash(builder.Redeemers!, witnessSet.PlutusDataSet, costModelBytes);
-        _ = builder.SetScriptDataHash(scriptDataHash);
+        _ = builder.ComputeAndSetScriptDataHash(scripts);
 
         // Reference script fee (tiered pricing on total script size)
         ulong scriptCostPerByte = builder.Pparams!.MinFeeRefScriptCostPerByte!.Numerator
@@ -129,14 +189,7 @@ public static class TransactionBuilderExtensions
         int totalScriptSize = scripts.Sum(script => script.Bytes().Length);
         ulong scriptFee = FeeUtil.CalculateReferenceScriptFee(totalScriptSize, scriptCostPerByte);
 
-        // Execution fee from redeemers
-        RationalNumber memUnitsCost = new(
-            builder.Pparams!.ExecutionCosts!.Value.MemPrice.Numerator,
-            builder.Pparams.ExecutionCosts!.Value.MemPrice.Denominator);
-        RationalNumber stepUnitsCost = new(
-            builder.Pparams.ExecutionCosts!.Value.StepPrice.Numerator,
-            builder.Pparams.ExecutionCosts!.Value.StepPrice.Denominator);
-        ulong executionFee = FeeUtil.CalculateScriptExecutionFee(builder.Redeemers!, stepUnitsCost, memUnitsCost);
+        ulong executionFee = builder.ComputeScriptExecutionFee();
 
         return (scriptFee, executionFee);
     }
@@ -194,9 +247,14 @@ public static class TransactionBuilderExtensions
 
     // ──────────── Collateral Selection ────────────
 
-    private static void SelectCollateral(
+    /// <summary>
+    /// Selects collateral inputs and builds a collateral return output.
+    /// </summary>
+    public static void SelectCollateral(
         TransactionBuilder builder, ulong fee, List<ResolvedInput> availableInputs)
     {
+        ArgumentNullException.ThrowIfNull(builder);
+        ArgumentNullException.ThrowIfNull(availableInputs);
         ulong totalCollateral = FeeUtil.CalculateRequiredCollateral(fee, builder.Pparams!.CollateralPercentage!.Value);
         _ = builder.SetTotalCollateral(totalCollateral);
         _ = builder.ClearCollateral();
@@ -262,7 +320,7 @@ public static class TransactionBuilderExtensions
             _ => throw new InvalidOperationException("Invalid transaction output type")
         };
 
-        ITransactionOutput returnOutput = AlonzoTransactionOutput.Create(returnAddress, returnValue, null);
+        ITransactionOutput returnOutput = PostAlonzoTransactionOutput.Create(returnAddress, returnValue, null, null);
 
         byte[] returnOutputBytes = CborSerializer.Serialize(returnOutput);
         ulong minReturn = FeeUtil.CalculateMinimumLovelace(
@@ -275,6 +333,48 @@ public static class TransactionBuilderExtensions
         }
 
         _ = builder.SetCollateralReturn(returnOutput);
+    }
+
+    // ──────────── Change Output Building ────────────
+
+    /// <summary>
+    /// Builds a multi-asset change output from the difference between resolved inputs and current outputs.
+    /// </summary>
+    public static void BuildChangeOutput(
+        TransactionBuilder builder, List<ResolvedInput> resolvedInputs, string changeAddress)
+    {
+        ArgumentNullException.ThrowIfNull(builder);
+        ArgumentNullException.ThrowIfNull(resolvedInputs);
+        ArgumentNullException.ThrowIfNull(changeAddress);
+        // Remove existing change output
+        if (builder.ChangeOutputIndex is not null)
+        {
+            List<ITransactionOutput> outputs = [.. builder.Outputs];
+            outputs.RemoveAt(builder.ChangeOutputIndex.Value);
+            _ = builder.SetOutputs(outputs);
+            builder.ChangeOutputIndex = null;
+            builder.ChangeOutput = null;
+        }
+
+        // Compute total input value from resolved inputs
+        IValue totalIn = Lovelace.Create(0);
+        foreach (ResolvedInput utxo in resolvedInputs)
+        {
+            totalIn = totalIn.Merge(utxo.Output.Amount());
+        }
+
+        // Compute total output value (excluding change)
+        IValue totalOut = Lovelace.Create(0);
+        for (int i = 0; i < builder.Outputs.Count; i++)
+        {
+            totalOut = totalOut.Merge(builder.Outputs[i].Amount());
+        }
+
+        IValue change = totalIn.Subtract(totalOut).Subtract(Lovelace.Create(builder.Fee));
+        if (change.Lovelace() > 0)
+        {
+            _ = builder.AddOutput(changeAddress, change, isChange: true);
+        }
     }
 
     // ──────────── Change Output Adjustment ────────────
