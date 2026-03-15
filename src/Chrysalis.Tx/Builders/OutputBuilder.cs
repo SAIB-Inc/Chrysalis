@@ -88,14 +88,37 @@ public class OutputBuilder
 
     /// <summary>
     /// Adjusts the output amount to satisfy minimum ADA requirements and adds the output.
-    /// Uses the protocol parameter for cost per UTxO byte to calculate and enforce the minimum.
+    /// Uses an explicit ADA-per-UTxO-byte value.
+    /// Prefer <see cref="Add"/> which reads this from protocol parameters automatically.
     /// </summary>
     /// <param name="adaPerUtxoByte">The protocol parameter for ADA cost per UTxO byte.</param>
     /// <returns>The parent <see cref="TransactionBuilder"/> for continued chaining.</returns>
     public TransactionBuilder WithMinAda(ulong adaPerUtxoByte)
     {
-        ITransactionOutput output = BuildOutput();
+        EnforceMinAda(adaPerUtxoByte);
+        _ = _parent.AddOutput(BuildOutput(), _isChange);
+        return _parent;
+    }
 
+    /// <summary>
+    /// Builds and adds the output to the transaction.
+    /// Automatically enforces minimum ADA if protocol parameters are available.
+    /// </summary>
+    /// <returns>The parent <see cref="TransactionBuilder"/> for continued chaining.</returns>
+    public TransactionBuilder Add()
+    {
+        if (_parent.Pparams?.AdaPerUTxOByte is not null)
+        {
+            EnforceMinAda((ulong)_parent.Pparams.AdaPerUTxOByte);
+        }
+
+        _ = _parent.AddOutput(BuildOutput(), _isChange);
+        return _parent;
+    }
+
+    private void EnforceMinAda(ulong adaPerUtxoByte)
+    {
+        ITransactionOutput output = BuildOutput();
         ulong minLovelace = FeeUtil.CalculateMinimumLovelace(adaPerUtxoByte, CborSerializer.Serialize(output));
         ulong currentLovelace = output.Amount().Lovelace();
 
@@ -111,19 +134,6 @@ public class OutputBuilder
             minLovelace = FeeUtil.CalculateMinimumLovelace(adaPerUtxoByte, CborSerializer.Serialize(output));
             currentLovelace = output.Amount().Lovelace();
         }
-
-        _ = _parent.AddOutput(output, _isChange);
-        return _parent;
-    }
-
-    /// <summary>
-    /// Builds and adds the output to the transaction without minimum ADA adjustment.
-    /// </summary>
-    /// <returns>The parent <see cref="TransactionBuilder"/> for continued chaining.</returns>
-    public TransactionBuilder Add()
-    {
-        _ = _parent.AddOutput(BuildOutput(), _isChange);
-        return _parent;
     }
 
     private ITransactionOutput BuildOutput()
