@@ -1,6 +1,7 @@
 using Chrysalis.Codec.Extensions.Cardano.Core.Common;
 using Chrysalis.Codec.Extensions.Cardano.Core.Transaction;
 using Chrysalis.Codec.Serialization;
+using Chrysalis.Codec.Types;
 using Chrysalis.Codec.Types.Cardano.Core.Certificates;
 using Chrysalis.Codec.Types.Cardano.Core.Common;
 using Chrysalis.Codec.Types.Cardano.Core.Governance;
@@ -142,7 +143,7 @@ public class TxBuilder
     /// <summary>Lock ADA at a script address with an inline datum.</summary>
     public TxBuilder LockLovelace<T>(string bech32Address, ulong lovelace, T datum) where T : ICborType
     {
-        _outputDirectives.Add(new OutputDirective(bech32Address, Lovelace.Create(lovelace), datum));
+        _outputDirectives.Add(new OutputDirective(bech32Address, Lovelace.Create(lovelace), CborSerializer.Serialize(datum)));
         return this;
     }
 
@@ -150,7 +151,7 @@ public class TxBuilder
     public TxBuilder LockAssets<T>(string bech32Address, IValue value, T datum) where T : ICborType
     {
         ArgumentNullException.ThrowIfNull(value);
-        _outputDirectives.Add(new OutputDirective(bech32Address, value, datum));
+        _outputDirectives.Add(new OutputDirective(bech32Address, value, CborSerializer.Serialize(datum)));
         return this;
     }
 
@@ -159,7 +160,7 @@ public class TxBuilder
     {
         ArgumentNullException.ThrowIfNull(value);
         ArgumentNullException.ThrowIfNull(scriptRef);
-        _outputDirectives.Add(new OutputDirective(bech32Address, value, datum, scriptRef));
+        _outputDirectives.Add(new OutputDirective(bech32Address, value, CborSerializer.Serialize(datum), scriptRef));
         return this;
     }
 
@@ -176,7 +177,7 @@ public class TxBuilder
     {
         ArgumentNullException.ThrowIfNull(script);
         byte[] burnAddr = [0x61, .. new byte[28]];
-        _outputDirectives.Add(new OutputDirective(burnAddr, Lovelace.Create(0), null, script));
+        _outputDirectives.Add(new OutputDirective(burnAddr, Lovelace.Create(0), datumCbor: null, script));
         return this;
     }
 
@@ -184,7 +185,7 @@ public class TxBuilder
     public TxBuilder DeployScript(IScript script, string bech32Address)
     {
         ArgumentNullException.ThrowIfNull(script);
-        _outputDirectives.Add(new OutputDirective(bech32Address, Lovelace.Create(0), null, script));
+        _outputDirectives.Add(new OutputDirective(bech32Address, Lovelace.Create(0), datumCbor: null, script));
         return this;
     }
 
@@ -787,9 +788,10 @@ public class TxBuilder
             ? new OutputBuilder(directive.AddressBytes, directive.Amount!)
             : new OutputBuilder(directive.Bech32Address!, directive.Amount!);
 
-        if (directive.Datum is not null)
+        if (directive.DatumCbor is not null)
         {
-            _ = ob.WithInlineDatum(directive.Datum);
+            IDatumOption inlineDatum = InlineDatumOption.Create(1, new CborEncodedValue(directive.DatumCbor));
+            ob.SetDatumOption(inlineDatum);
         }
 
         if (directive.ScriptRef is not null)
@@ -819,9 +821,9 @@ public class TxBuilder
                     ? new OutputBuilder(directive.AddressBytes, newAmount)
                     : new OutputBuilder(directive.Bech32Address!, newAmount);
 
-                if (directive.Datum is not null)
+                if (directive.DatumCbor is not null)
                 {
-                    _ = ob.WithInlineDatum(directive.Datum);
+                    ob.SetDatumOption(InlineDatumOption.Create(1, new CborEncodedValue(directive.DatumCbor)));
                 }
 
                 if (directive.ScriptRef is not null)
@@ -856,23 +858,23 @@ public class TxBuilder
         public string? Bech32Address { get; }
         public byte[]? AddressBytes { get; }
         public IValue? Amount { get; }
-        public ICborType? Datum { get; }
+        public byte[]? DatumCbor { get; }
         public IScript? ScriptRef { get; }
         public ITransactionOutput? RawOutput { get; }
 
-        public OutputDirective(string bech32Address, IValue amount, ICborType? datum = null, IScript? scriptRef = null)
+        public OutputDirective(string bech32Address, IValue amount, byte[]? datumCbor = null, IScript? scriptRef = null)
         {
             Bech32Address = bech32Address;
             Amount = amount;
-            Datum = datum;
+            DatumCbor = datumCbor;
             ScriptRef = scriptRef;
         }
 
-        public OutputDirective(byte[] addressBytes, IValue amount, ICborType? datum = null, IScript? scriptRef = null)
+        public OutputDirective(byte[] addressBytes, IValue amount, byte[]? datumCbor = null, IScript? scriptRef = null)
         {
             AddressBytes = addressBytes;
             Amount = amount;
-            Datum = datum;
+            DatumCbor = datumCbor;
             ScriptRef = scriptRef;
         }
 

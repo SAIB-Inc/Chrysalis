@@ -21,6 +21,9 @@ public sealed class OutputBuilder
     /// <summary>Whether this output is the change output.</summary>
     internal bool IsChange { get; set; }
 
+    /// <summary>Sets the datum option directly (for pre-serialized datums).</summary>
+    internal void SetDatumOption(IDatumOption datum) => _datum = datum;
+
     /// <summary>Gets or sets the output amount.</summary>
     internal IValue Amount { get; set; }
 
