@@ -841,6 +841,17 @@ public class TxBuilder
             }
         }
 
+        // ── Recalculate fee after redeemer reindex (tx size may have changed) ──
+        if (hasScripts)
+        {
+            PostMaryTransaction postReindexTx = builder.Build();
+            byte[] postReindexBytes = CborSerializer.Serialize(postReindexTx);
+            ulong finalFee = FeeUtil.CalculateFeeWithWitness(
+                (ulong)postReindexBytes.Length, _pparams.MinFeeA!.Value, _pparams.MinFeeB!.Value, 1)
+                + scriptExecFee + refScriptFee;
+            _ = builder.SetFee(finalFee);
+        }
+
         // ── Collateral (after fee stabilization) ──
         if (hasScripts)
         {
@@ -848,14 +859,11 @@ public class TxBuilder
                 builder.Fee, _pparams.CollateralPercentage!.Value);
             _ = builder.SetTotalCollateral(requiredCollateral);
 
-            List<ResolvedInput> collateralPool = _collateralPool ??
-                [.. _unspentOutputs
-                    .Where(u => !_explicitInputs.Any(e => e.Utxo.Outref.Equals(u.Outref)))
-                    .Where(u => u.Output.Amount() is Lovelace)];
-
-            // Fallback: include multi-asset UTxOs if no ADA-only available
+            // Use coin-selected inputs as collateral (they're already in the tx and valid)
+            List<ResolvedInput> collateralPool = _collateralPool ?? selectedInputs;
             if (collateralPool.Count == 0)
             {
+                // Fallback: any available wallet UTxOs
                 collateralPool = [.. _unspentOutputs
                     .Where(u => !_explicitInputs.Any(e => e.Utxo.Outref.Equals(u.Outref)))];
             }
