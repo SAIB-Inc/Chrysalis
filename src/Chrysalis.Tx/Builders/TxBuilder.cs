@@ -91,19 +91,19 @@ public class TxBuilder
     }
 
     /// <summary>Explicitly spend a script UTxO with redeemer. Auto-detects script from UTxO output or reference inputs.</summary>
-    public TxBuilder AddInput(ResolvedInput utxo, IPlutusData redeemer)
+    public TxBuilder AddInput(ResolvedInput utxo, ICborType redeemer)
     {
         ArgumentNullException.ThrowIfNull(redeemer);
-        _explicitInputs.Add(new InputDirective(utxo, redeemer, null));
+        _explicitInputs.Add(new InputDirective(utxo, ToPlutusData(redeemer), null));
         return this;
     }
 
     /// <summary>Explicitly spend a script UTxO with redeemer and explicit datum (for datum-hash UTxOs).</summary>
-    public TxBuilder AddInput(ResolvedInput utxo, IPlutusData redeemer, IPlutusData datum)
+    public TxBuilder AddInput(ResolvedInput utxo, ICborType redeemer, ICborType datum)
     {
         ArgumentNullException.ThrowIfNull(redeemer);
         ArgumentNullException.ThrowIfNull(datum);
-        _explicitInputs.Add(new InputDirective(utxo, redeemer, datum));
+        _explicitInputs.Add(new InputDirective(utxo, ToPlutusData(redeemer), ToPlutusData(datum)));
         return this;
     }
 
@@ -191,12 +191,12 @@ public class TxBuilder
     // ── Minting ──
 
     /// <summary>Mint/burn assets with a Plutus script.</summary>
-    public TxBuilder AddMint(string policyHex, Dictionary<string, long> assets, IScript script, IPlutusData redeemer)
+    public TxBuilder AddMint(string policyHex, Dictionary<string, long> assets, IScript script, ICborType redeemer)
     {
         ArgumentNullException.ThrowIfNull(assets);
         ArgumentNullException.ThrowIfNull(script);
         ArgumentNullException.ThrowIfNull(redeemer);
-        _mintDirectives.Add(new MintDirective(policyHex, assets, script, null, redeemer));
+        _mintDirectives.Add(new MintDirective(policyHex, assets, script, null, ToPlutusData(redeemer)));
         return this;
     }
 
@@ -210,11 +210,11 @@ public class TxBuilder
     }
 
     /// <summary>Mint/burn assets with a reference script.</summary>
-    public TxBuilder AddMint(string policyHex, Dictionary<string, long> assets, string scriptHash, IPlutusData redeemer)
+    public TxBuilder AddMint(string policyHex, Dictionary<string, long> assets, string scriptHash, ICborType redeemer)
     {
         ArgumentNullException.ThrowIfNull(assets);
         ArgumentNullException.ThrowIfNull(redeemer);
-        _mintDirectives.Add(new MintDirective(policyHex, assets, null, null, redeemer) { ScriptRefHash = scriptHash });
+        _mintDirectives.Add(new MintDirective(policyHex, assets, null, null, ToPlutusData(redeemer)) { ScriptRefHash = scriptHash });
         return this;
     }
 
@@ -229,10 +229,10 @@ public class TxBuilder
     }
 
     /// <summary>Delegate stake credential to a pool with script witness.</summary>
-    public TxBuilder AddDelegation(Credential delegator, string poolIdHex, IScript script, IPlutusData redeemer)
+    public TxBuilder AddDelegation(Credential delegator, string poolIdHex, IScript script, ICborType redeemer)
     {
         ICertificate cert = StakeDelegation.Create(2, delegator, Convert.FromHexString(poolIdHex));
-        _certificateDirectives.Add(new CertificateDirective(cert, script, redeemer));
+        _certificateDirectives.Add(new CertificateDirective(cert, script, ToPlutusData(redeemer)));
         return this;
     }
 
@@ -251,9 +251,9 @@ public class TxBuilder
     }
 
     /// <summary>Deregister a stake credential with script witness.</summary>
-    public TxBuilder AddDeregisterStake(Credential credential, IScript script, IPlutusData redeemer)
+    public TxBuilder AddDeregisterStake(Credential credential, IScript script, ICborType redeemer)
     {
-        _certificateDirectives.Add(new CertificateDirective(StakeDeregistration.Create(1, credential), script, redeemer));
+        _certificateDirectives.Add(new CertificateDirective(StakeDeregistration.Create(1, credential), script, ToPlutusData(redeemer)));
         return this;
     }
 
@@ -281,9 +281,9 @@ public class TxBuilder
     }
 
     /// <summary>Withdraw staking rewards with script witness.</summary>
-    public TxBuilder AddWithdrawal(string rewardAddressHex, ulong amount, IScript script, IPlutusData redeemer)
+    public TxBuilder AddWithdrawal(string rewardAddressHex, ulong amount, IScript script, ICborType redeemer)
     {
-        _withdrawalDirectives.Add(new WithdrawalDirective(rewardAddressHex, amount, script, redeemer));
+        _withdrawalDirectives.Add(new WithdrawalDirective(rewardAddressHex, amount, script, ToPlutusData(redeemer)));
         return this;
     }
 
@@ -318,9 +318,9 @@ public class TxBuilder
     }
 
     /// <summary>Delegate voting power to a DRep with script witness.</summary>
-    public TxBuilder AddVoteDelegation(Credential delegator, IDRep drep, IScript script, IPlutusData redeemer)
+    public TxBuilder AddVoteDelegation(Credential delegator, IDRep drep, IScript script, ICborType redeemer)
     {
-        _certificateDirectives.Add(new CertificateDirective(VoteDelegCert.Create(9, delegator, drep), script, redeemer));
+        _certificateDirectives.Add(new CertificateDirective(VoteDelegCert.Create(9, delegator, drep), script, ToPlutusData(redeemer)));
         return this;
     }
 
@@ -707,6 +707,19 @@ public class TxBuilder
         }
 
         return builder.Build();
+    }
+
+    // ── Type Conversion ──
+
+    private static IPlutusData ToPlutusData(ICborType value)
+    {
+        if (value is IPlutusData plutusData)
+        {
+            return plutusData;
+        }
+
+        byte[] cbor = CborSerializer.Serialize(value);
+        return CborSerializer.Deserialize<IPlutusData>(cbor);
     }
 
     // ── Script Resolution ──
