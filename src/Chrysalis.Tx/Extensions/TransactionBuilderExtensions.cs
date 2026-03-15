@@ -37,6 +37,8 @@ public static class TransactionBuilderExtensions
         ArgumentNullException.ThrowIfNull(builder);
         ArgumentNullException.ThrowIfNull(scripts);
 
+        builder.IntegrateRedeemerSet();
+
         ulong scriptFee = 0;
         ulong scriptExecutionFee = 0;
 

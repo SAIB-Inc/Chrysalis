@@ -48,6 +48,14 @@ public class TransactionBuilder
     private readonly List<(ReadOnlyMemory<byte> Bytes, int Version)> _plutusScripts = [];
     private List<IPlutusData>? _plutusData;
 
+    // ── Withdrawals (incremental) ──
+
+    private Dictionary<RewardAccount, ulong>? _withdrawalEntries;
+
+    // ── Metadata (incremental) ──
+
+    private Dictionary<ulong, ITransactionMetadatum>? _metadata;
+
     // ── Auxiliary Data ──
 
     private PostAlonzoAuxiliaryDataMap? _auxiliaryData;
@@ -215,11 +223,6 @@ public class TransactionBuilder
     public TransactionBuilder AddOutput(OutputBuilder output, bool isChange = false)
     {
         ArgumentNullException.ThrowIfNull(output);
-        if (isChange || output.IsChange)
-        {
-            EnforceMinAda(output);
-        }
-
         EnforceMinAda(output);
         return AddOutputInternal(output.Build(), isChange || output.IsChange);
     }
@@ -302,10 +305,39 @@ public class TransactionBuilder
         return this;
     }
 
-    /// <summary>Sets the withdrawals.</summary>
+    /// <summary>Adds a certificate with a Plutus script witness, automatically tracking redeemers and scripts.</summary>
+    public TransactionBuilder AddCertificate(ICertificate certificate, IScript script, IPlutusData redeemer, params string[] requiredSigners)
+    {
+        ArgumentNullException.ThrowIfNull(requiredSigners);
+        (_certificates ??= []).Add(certificate);
+        _ = AddPlutusScript(script);
+        _ = RedeemerSet.AddCert(_certificates.Count - 1, redeemer);
+        AddSignersInternal(requiredSigners);
+        return this;
+    }
+
+    /// <summary>Sets the withdrawals (replaces any existing).</summary>
     public TransactionBuilder SetWithdrawals(Withdrawals withdrawals)
     {
         _withdrawals = withdrawals;
+        return this;
+    }
+
+    /// <summary>Adds a withdrawal from a reward address.</summary>
+    public TransactionBuilder AddWithdrawal(string rewardAddressHex, ulong amount)
+    {
+        (_withdrawalEntries ??= [])[new RewardAccount(Convert.FromHexString(rewardAddressHex))] = amount;
+        return this;
+    }
+
+    /// <summary>Adds a withdrawal with a Plutus script witness, automatically tracking redeemers and scripts.</summary>
+    public TransactionBuilder AddWithdrawal(string rewardAddressHex, ulong amount, IScript script, IPlutusData redeemer, params string[] requiredSigners)
+    {
+        ArgumentNullException.ThrowIfNull(requiredSigners);
+        (_withdrawalEntries ??= [])[new RewardAccount(Convert.FromHexString(rewardAddressHex))] = amount;
+        _ = AddPlutusScript(script);
+        _ = RedeemerSet.AddReward(rewardAddressHex, redeemer);
+        AddSignersInternal(requiredSigners);
         return this;
     }
 
@@ -327,6 +359,29 @@ public class TransactionBuilder
     /// <summary>Adds a single token mint/burn.</summary>
     public TransactionBuilder AddMint(string policyHex, string assetNameHex, long amount) =>
         AddMint(MintBuilder.Create().AddToken(policyHex, assetNameHex, amount).Build());
+
+    /// <summary>Adds a single token mint/burn with a Plutus script witness, automatically tracking redeemers and scripts.</summary>
+    public TransactionBuilder AddMint(string policyHex, string assetNameHex, long amount, IScript script, IPlutusData redeemer, params string[] requiredSigners)
+    {
+        ArgumentNullException.ThrowIfNull(requiredSigners);
+        _ = AddMint(policyHex, assetNameHex, amount);
+        _ = AddPlutusScript(script);
+        _ = RedeemerSet.AddMint(policyHex, redeemer);
+        AddSignersInternal(requiredSigners);
+        return this;
+    }
+
+    /// <summary>Adds a mint operation with a Plutus script witness, automatically tracking redeemers and scripts.</summary>
+    public TransactionBuilder AddMint(MultiAssetMint mint, IScript script, IPlutusData redeemer, params string[] requiredSigners)
+    {
+        ArgumentNullException.ThrowIfNull(requiredSigners);
+        _ = AddMint(mint);
+        string policyHex = Convert.ToHexString(script.Hash());
+        _ = AddPlutusScript(script);
+        _ = RedeemerSet.AddMint(policyHex, redeemer);
+        AddSignersInternal(requiredSigners);
+        return this;
+    }
 
     /// <summary>Replaces the entire mint operation.</summary>
     public TransactionBuilder SetMint(MultiAssetMint mint)
@@ -566,57 +621,75 @@ public class TransactionBuilder
         return this;
     }
 
-    /// <summary>Sets the redeemers.</summary>
+    /// <summary>
+    /// Sets the redeemers directly (manual override).
+    /// Prefer using AddInput(InputBuilderResult), AddMint with script, or AddCertificate with script
+    /// which auto-populate RedeemerSet. Only use this for pre-built redeemers.
+    /// </summary>
     public TransactionBuilder SetRedeemers(IRedeemers redeemers)
     {
         Redeemers = redeemers;
         return this;
     }
 
-    // ── Auxiliary Data ──
+    // ── Auxiliary Data / Metadata ──
 
-    /// <summary>Sets the auxiliary data.</summary>
+    /// <summary>Sets the auxiliary data (replaces any existing).</summary>
     public TransactionBuilder SetAuxiliaryData(PostAlonzoAuxiliaryDataMap data)
     {
         _auxiliaryData = data;
         return this;
     }
 
-    /// <summary>Sets the metadata.</summary>
+    /// <summary>Sets the metadata (replaces any existing).</summary>
     public TransactionBuilder SetMetadata(Metadata metadata)
     {
         _auxiliaryData = PostAlonzoAuxiliaryDataMap.Create(transactionMetadata: metadata);
         return this;
     }
 
+    /// <summary>Adds a metadata entry under the given label.</summary>
+    public TransactionBuilder AddMetadata(ulong label, ITransactionMetadatum value)
+    {
+        (_metadata ??= [])[label] = value;
+        return this;
+    }
+
     // ── Build ──
 
     /// <summary>Builds the transaction body.</summary>
-    public ConwayTransactionBody BuildBody() => ConwayTransactionBody.Create(
-        inputs: CborDefListWithTag<TransactionInput>.Create(_inputs),
-        outputs: CborDefList<ITransactionOutput>.Create(_outputs),
-        fee: Fee,
-        timeToLive: TimeToLive,
-        certificates: WrapIfNotNull(_certificates),
-        withdrawals: _withdrawals,
-        auxiliaryDataHash: _auxDataHash is not null ? (ReadOnlyMemory<byte>?)new ReadOnlyMemory<byte>(_auxDataHash) : null,
-        validityIntervalStart: _validityStart,
-        mint: Mint,
-        scriptDataHash: _scriptDataHash is not null ? (ReadOnlyMemory<byte>?)new ReadOnlyMemory<byte>(_scriptDataHash) : null,
-        collateral: WrapIfNotNull(_collateral),
-        requiredSigners: WrapIfNotNull(_requiredSigners),
-        networkId: _networkId,
-        collateralReturn: CollateralReturn,
-        totalCollateral: TotalCollateral,
-        referenceInputs: WrapIfNotNull(_referenceInputs),
-        votingProcedures: _votingProcedures,
-        proposalProcedures: WrapIfNotNull(_proposals),
-        treasuryValue: _treasuryValue,
-        donation: _donation);
+    public ConwayTransactionBody BuildBody()
+    {
+        IntegrateWithdrawals();
+
+        return ConwayTransactionBody.Create(
+            inputs: CborDefListWithTag<TransactionInput>.Create(_inputs),
+            outputs: CborDefList<ITransactionOutput>.Create(_outputs),
+            fee: Fee,
+            timeToLive: TimeToLive,
+            certificates: WrapIfNotNull(_certificates),
+            withdrawals: _withdrawals,
+            auxiliaryDataHash: _auxDataHash is not null ? (ReadOnlyMemory<byte>?)new ReadOnlyMemory<byte>(_auxDataHash) : null,
+            validityIntervalStart: _validityStart,
+            mint: Mint,
+            scriptDataHash: _scriptDataHash is not null ? (ReadOnlyMemory<byte>?)new ReadOnlyMemory<byte>(_scriptDataHash) : null,
+            collateral: WrapIfNotNull(_collateral),
+            requiredSigners: WrapIfNotNull(_requiredSigners),
+            networkId: _networkId,
+            collateralReturn: CollateralReturn,
+            totalCollateral: TotalCollateral,
+            referenceInputs: WrapIfNotNull(_referenceInputs),
+            votingProcedures: _votingProcedures,
+            proposalProcedures: WrapIfNotNull(_proposals),
+            treasuryValue: _treasuryValue,
+            donation: _donation);
+    }
 
     /// <summary>Builds the witness set.</summary>
     public PostAlonzoTransactionWitnessSet BuildWitnessSet()
     {
+        IntegrateRedeemerSet();
+
         List<ReadOnlyMemory<byte>>? v1 = null, v2 = null, v3 = null;
         foreach ((ReadOnlyMemory<byte> bytes, int version) in _plutusScripts)
         {
@@ -641,10 +714,69 @@ public class TransactionBuilder
     }
 
     /// <summary>Builds and returns the complete transaction.</summary>
-    public PostMaryTransaction Build() =>
-        PostMaryTransaction.Create(BuildBody(), BuildWitnessSet(), true, _auxiliaryData);
+    public PostMaryTransaction Build()
+    {
+        IntegrateMetadata();
+        return PostMaryTransaction.Create(BuildBody(), BuildWitnessSet(), true, _auxiliaryData);
+    }
+
+    // ── Integration (called at Build time) ──
+
+    /// <summary>
+    /// Auto-builds redeemers from RedeemerSet if no redeemers were set manually.
+    /// Called by BuildWitnessSet() and available to extension methods.
+    /// </summary>
+    internal void IntegrateRedeemerSet()
+    {
+        if (Redeemers is null && RedeemerSet.HasRedeemers)
+        {
+            Redeemers = RedeemerSet.Build();
+        }
+    }
+
+    private void IntegrateWithdrawals()
+    {
+        if (_withdrawalEntries is { Count: > 0 })
+        {
+            if (_withdrawals is not null)
+            {
+                foreach (KeyValuePair<RewardAccount, ulong> kvp in _withdrawalEntries)
+                {
+                    _withdrawals.Value[kvp.Key] = kvp.Value;
+                }
+            }
+            else
+            {
+                _withdrawals = new Withdrawals(_withdrawalEntries);
+            }
+        }
+    }
+
+    private void IntegrateMetadata()
+    {
+        if (_metadata is not { Count: > 0 })
+        {
+            return;
+        }
+
+        Metadata metadata = Metadata.Create(_metadata);
+        _auxiliaryData = PostAlonzoAuxiliaryDataMap.Create(
+            transactionMetadata: metadata,
+            nativeScripts: _auxiliaryData?.NativeScripts,
+            plutusV1Scripts: _auxiliaryData?.PlutusV1Scripts,
+            plutusV2Scripts: _auxiliaryData?.PlutusV2Scripts,
+            plutusV3Scripts: _auxiliaryData?.PlutusV3Scripts);
+    }
 
     // ── Helpers ──
+
+    private void AddSignersInternal(string[] requiredSigners)
+    {
+        foreach (string signer in requiredSigners)
+        {
+            _ = AddRequiredSigner(Convert.FromHexString(signer));
+        }
+    }
 
     private static CborDefListWithTag<T>? WrapIfNotNull<T>(List<T>? list) =>
         list is not null ? CborDefListWithTag<T>.Create(list) : null;
