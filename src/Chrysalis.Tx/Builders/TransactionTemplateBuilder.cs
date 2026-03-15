@@ -1,4 +1,3 @@
-using System.Text;
 using Chrysalis.Codec.Extensions;
 using Chrysalis.Codec.Extensions.Cardano.Core.Common;
 using Chrysalis.Codec.Extensions.Cardano.Core.Transaction;
@@ -59,7 +58,6 @@ public sealed class TransactionTemplateBuilder<T>
     private NativeScriptBuilder<T>? _nativeScriptBuilder;
     private ulong _validFrom;
     private ulong _validTo;
-    private static readonly Lock BuilderLock = new();
 
     /// <summary>
     /// Internal factory method called by the non-generic companion class.
@@ -493,7 +491,7 @@ public sealed class TransactionTemplateBuilder<T>
         RequirementsResult requirements = CalculateRequirements(requiredAmount, specifiedInputsUtxos, context.Mints);
         requirements.RequiredAmounts.Add(Lovelace.Create(feeBuffer));
         // Step 2: Perform coin selection
-        CoinSelectionResult selection = CoinSelectionUtil.LargestFirstAlgorithm(utxos, requirements.RequiredAmounts);
+        CoinSelectionResult selection = CoinSelectionUtil.Select(utxos, requirements.RequiredAmounts);
 
         // Step 3: Calculate change
         CalculateChange(selection, requirements);
@@ -580,17 +578,8 @@ public sealed class TransactionTemplateBuilder<T>
         }
     }
 
-    private static string BuildAssetKey(string policyId, string assetName)
-    {
-        lock (BuilderLock)
-        {
-            int capacity = policyId.Length + assetName.Length;
-            StringBuilder builder = new(capacity);
-            _ = builder.Append(policyId);
-            _ = builder.Append(assetName);
-            return builder.ToString().ToUpperInvariant();
-        }
-    }
+    private static string BuildAssetKey(string policyId, string assetName) =>
+        string.Concat(policyId, assetName).ToUpperInvariant();
 
     private static Dictionary<string, ulong> AdjustAssetsForMintsAndInputs(
     Dictionary<string, ulong> requestedAssets,

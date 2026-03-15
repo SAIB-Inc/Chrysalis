@@ -134,6 +134,15 @@ dotnet_diagnostic.CA1852.severity = none
 dotnet_diagnostic.IDE0002.severity = none
 dotnet_diagnostic.IDE0058.severity = none
 
+# ── Tx test project ──
+[src/Chrysalis.Tx.Test/**.cs]
+dotnet_diagnostic.CS1591.severity = none
+dotnet_diagnostic.CA1707.severity = none
+dotnet_diagnostic.CA1812.severity = none
+dotnet_diagnostic.CA1852.severity = none
+dotnet_diagnostic.IDE0002.severity = none
+dotnet_diagnostic.IDE0058.severity = none
+
 # ── Benchmarks ──
 [benchmarks/**.cs]
 dotnet_diagnostic.CS1591.severity = none
