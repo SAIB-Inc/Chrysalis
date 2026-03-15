@@ -24,41 +24,43 @@ public sealed class RedeemerBuilder
     /// <summary>
     /// Adds a spend redeemer for an input. Key is tx_hash + index for lexicographic ordering.
     /// </summary>
-    public void AddSpend(InputBuilderResult result)
+    public RedeemerBuilder AddSpend(InputBuilderResult result)
     {
         ArgumentNullException.ThrowIfNull(result);
-        if (result.Requirements.RedeemerData is null)
+        if (result.Requirements.RedeemerData is not null)
         {
-            return;
+            string key = Convert.ToHexString(result.Input.TransactionId.Span)
+                + result.Input.Index.ToString("D10", System.Globalization.CultureInfo.InvariantCulture);
+            _spend[key] = new UntaggedRedeemer(result.Requirements.RedeemerData);
         }
 
-        string key = Convert.ToHexString(result.Input.TransactionId.Span)
-            + result.Input.Index.ToString("D10", System.Globalization.CultureInfo.InvariantCulture);
-        _spend[key] = new UntaggedRedeemer(result.Requirements.RedeemerData);
+        return this;
     }
 
     /// <summary>
     /// Adds a mint redeemer for a policy. Key is the policy hash for lexicographic ordering.
     /// </summary>
-    public void AddMint(string policyIdHex, IPlutusData redeemer)
+    public RedeemerBuilder AddMint(string policyIdHex, IPlutusData redeemer)
     {
         ArgumentNullException.ThrowIfNull(policyIdHex);
         _mint[policyIdHex.ToUpperInvariant()] = new UntaggedRedeemer(redeemer);
+        return this;
     }
 
     /// <summary>
     /// Adds a reward withdrawal redeemer. Key is the reward address for ordering.
     /// </summary>
-    public void AddReward(string rewardAddressHex, IPlutusData redeemer)
+    public RedeemerBuilder AddReward(string rewardAddressHex, IPlutusData redeemer)
     {
         ArgumentNullException.ThrowIfNull(rewardAddressHex);
         _reward[rewardAddressHex.ToUpperInvariant()] = new UntaggedRedeemer(redeemer);
+        return this;
     }
 
     /// <summary>
     /// Adds a certificate redeemer at the given position.
     /// </summary>
-    public void AddCert(int position, IPlutusData redeemer)
+    public RedeemerBuilder AddCert(int position, IPlutusData redeemer)
     {
         while (_cert.Count <= position)
         {
@@ -66,12 +68,13 @@ public sealed class RedeemerBuilder
         }
 
         _cert[position] = new UntaggedRedeemer(redeemer);
+        return this;
     }
 
     /// <summary>
     /// Updates execution units for a redeemer after script evaluation.
     /// </summary>
-    public void UpdateExUnits(int tag, int index, ExUnits exUnits)
+    public RedeemerBuilder UpdateExUnits(int tag, int index, ExUnits exUnits)
     {
         IEnumerable<UntaggedRedeemer> redeemers = tag switch
         {
@@ -84,6 +87,7 @@ public sealed class RedeemerBuilder
 
         UntaggedRedeemer? target = redeemers.ElementAtOrDefault(index);
         target?.SetExUnits(exUnits);
+        return this;
     }
 
     /// <summary>

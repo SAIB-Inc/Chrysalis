@@ -1,150 +1,89 @@
 using Chrysalis.Codec.Extensions.Cardano.Core.Common;
-using Chrysalis.Codec.Extensions.Cardano.Core.Transaction;
 using Chrysalis.Codec.Serialization;
 using Chrysalis.Codec.Types;
 using Chrysalis.Codec.Types.Cardano.Core.Common;
 using Chrysalis.Codec.Types.Cardano.Core.Scripts;
 using Chrysalis.Codec.Types.Cardano.Core.Transaction;
-using Chrysalis.Tx.Utils;
 using Address = Chrysalis.Codec.Types.Cardano.Core.Common.Address;
 
 namespace Chrysalis.Tx.Builders;
 
 /// <summary>
-/// Fluent builder for constructing a single transaction output.
-/// Obtained from <see cref="TransactionBuilder.AddOutput(string, IValue)"/> or
-/// <see cref="TransactionBuilder.AddOutput(byte[], IValue)"/>.
+/// Self-contained output configuration. Address and value are required (constructor),
+/// everything else is optional (fluent methods). Pass to TransactionBuilder.AddOutput.
 /// </summary>
-public class OutputBuilder
+public sealed class OutputBuilder
 {
-    private readonly TransactionBuilder _parent;
     private readonly byte[] _addressBytes;
-    private IValue _amount;
     private IDatumOption? _datum;
     private CborEncodedValue? _scriptRef;
-    private bool _isChange;
 
-    internal OutputBuilder(TransactionBuilder parent, byte[] addressBytes, IValue amount)
+    /// <summary>Whether this output is the change output.</summary>
+    internal bool IsChange { get; set; }
+
+    /// <summary>Gets or sets the output amount.</summary>
+    internal IValue Amount { get; set; }
+
+    /// <summary>Creates an output builder with a bech32 address and value.</summary>
+    public OutputBuilder(string bech32Address, IValue amount)
     {
-        _parent = parent;
-        _addressBytes = addressBytes;
-        _amount = amount;
+        _addressBytes = Wallet.Models.Addresses.Address.FromBech32(bech32Address).ToBytes();
+        Amount = amount;
     }
 
-    /// <summary>
-    /// Attaches an inline datum to this output.
-    /// </summary>
-    /// <typeparam name="T">The datum type.</typeparam>
-    /// <param name="datum">The datum value to serialize as inline datum.</param>
-    /// <returns>This builder for chaining.</returns>
+    /// <summary>Creates an output builder with raw address bytes and value.</summary>
+    public OutputBuilder(byte[] addressBytes, IValue amount)
+    {
+        _addressBytes = addressBytes;
+        Amount = amount;
+    }
+
+    /// <summary>Attaches an inline datum.</summary>
     public OutputBuilder WithInlineDatum<T>(T datum) where T : ICborType
     {
         _datum = DatumOptionExtensions.InlineDatumFrom(datum);
         return this;
     }
 
-    /// <summary>
-    /// Attaches a datum hash to this output.
-    /// </summary>
-    /// <param name="datumHash">The datum hash bytes.</param>
-    /// <returns>This builder for chaining.</returns>
+    /// <summary>Attaches a datum hash.</summary>
     public OutputBuilder WithDatumHash(byte[] datumHash)
     {
         _datum = DatumHashOption.Create(0, datumHash);
         return this;
     }
 
-    /// <summary>
-    /// Attaches a datum hash from a hex string to this output.
-    /// </summary>
-    /// <param name="datumHashHex">The hex-encoded datum hash.</param>
-    /// <returns>This builder for chaining.</returns>
+    /// <summary>Attaches a datum hash from hex.</summary>
     public OutputBuilder WithDatumHash(string datumHashHex)
     {
         _datum = DatumHashOption.Create(0, Convert.FromHexString(datumHashHex));
         return this;
     }
 
-    /// <summary>
-    /// Attaches a script reference to this output.
-    /// </summary>
-    /// <param name="script">The script to attach.</param>
-    /// <returns>This builder for chaining.</returns>
+    /// <summary>Attaches a script reference.</summary>
     public OutputBuilder WithScriptRef(IScript script)
     {
         _scriptRef = new CborEncodedValue(CborSerializer.Serialize(script));
         return this;
     }
 
-    /// <summary>
-    /// Marks this output as the change output for fee adjustment.
-    /// </summary>
-    /// <returns>This builder for chaining.</returns>
+    /// <summary>Marks this as the change output.</summary>
     public OutputBuilder AsChange()
     {
-        _isChange = true;
+        IsChange = true;
         return this;
     }
 
-    /// <summary>
-    /// Adjusts the output amount to satisfy minimum ADA requirements and adds the output.
-    /// Uses an explicit ADA-per-UTxO-byte value.
-    /// Prefer <see cref="Add"/> which reads this from protocol parameters automatically.
-    /// </summary>
-    /// <param name="adaPerUtxoByte">The protocol parameter for ADA cost per UTxO byte.</param>
-    /// <returns>The parent <see cref="TransactionBuilder"/> for continued chaining.</returns>
-    public TransactionBuilder WithMinAda(ulong adaPerUtxoByte)
-    {
-        EnforceMinAda(adaPerUtxoByte);
-        _ = _parent.AddOutput(BuildOutput(), _isChange);
-        return _parent;
-    }
-
-    /// <summary>
-    /// Builds and adds the output to the transaction.
-    /// Automatically enforces minimum ADA if protocol parameters are available.
-    /// </summary>
-    /// <returns>The parent <see cref="TransactionBuilder"/> for continued chaining.</returns>
-    public TransactionBuilder Add()
-    {
-        if (_parent.Pparams?.AdaPerUTxOByte is not null)
-        {
-            EnforceMinAda((ulong)_parent.Pparams.AdaPerUTxOByte);
-        }
-
-        _ = _parent.AddOutput(BuildOutput(), _isChange);
-        return _parent;
-    }
-
-    private void EnforceMinAda(ulong adaPerUtxoByte)
-    {
-        ITransactionOutput output = BuildOutput();
-        ulong minLovelace = FeeUtil.CalculateMinimumLovelace(adaPerUtxoByte, CborSerializer.Serialize(output));
-        ulong currentLovelace = output.Amount().Lovelace();
-
-        while (currentLovelace < minLovelace)
-        {
-            _amount = _amount switch
-            {
-                LovelaceWithMultiAsset multiAsset => LovelaceWithMultiAsset.Create(minLovelace, multiAsset.MultiAsset),
-                _ => Lovelace.Create(minLovelace)
-            };
-
-            output = BuildOutput();
-            minLovelace = FeeUtil.CalculateMinimumLovelace(adaPerUtxoByte, CborSerializer.Serialize(output));
-            currentLovelace = output.Amount().Lovelace();
-        }
-    }
-
-    private ITransactionOutput BuildOutput()
+    /// <summary>Builds the transaction output. Called internally by TransactionBuilder.</summary>
+    internal ITransactionOutput Build()
     {
         Address address = new(_addressBytes);
 
         if (_datum is not null || _scriptRef is not null)
         {
-            return PostAlonzoTransactionOutput.Create(address, _amount, _datum, _scriptRef);
+            return PostAlonzoTransactionOutput.Create(address, Amount, _datum, _scriptRef);
         }
 
-        return AlonzoTransactionOutput.Create(address, _amount, null);
+        return AlonzoTransactionOutput.Create(address, Amount, null);
     }
+
 }

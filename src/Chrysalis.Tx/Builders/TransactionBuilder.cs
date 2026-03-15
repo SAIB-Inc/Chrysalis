@@ -6,9 +6,13 @@ using Chrysalis.Codec.Types.Cardano.Core.Common;
 using Chrysalis.Codec.Types.Cardano.Core.Scripts;
 using Chrysalis.Codec.Types.Cardano.Core.Governance;
 using Chrysalis.Codec.Types;
+using Chrysalis.Codec.Extensions.Cardano.Core.Common;
+using Chrysalis.Codec.Extensions.Cardano.Core.Transaction;
+using Chrysalis.Codec.Serialization;
 using Chrysalis.Codec.Serialization.Utils;
 using Chrysalis.Network.Cbor.LocalStateQuery;
 using Chrysalis.Tx.Extensions;
+using Chrysalis.Tx.Utils;
 
 namespace Chrysalis.Tx.Builders;
 
@@ -150,7 +154,7 @@ public class TransactionBuilder
         ArgumentNullException.ThrowIfNull(result);
         _inputs.Add(result.Input);
         WitnessReqs.Add(result.Requirements);
-        RedeemerSet.AddSpend(result);
+        _ = RedeemerSet.AddSpend(result);
 
         foreach (IScript script in result.Requirements.ScriptWitnesses)
         {
@@ -179,8 +183,48 @@ public class TransactionBuilder
 
     // ── Outputs ──
 
-    /// <summary>Adds a transaction output, optionally marking it as the change output.</summary>
-    public TransactionBuilder AddOutput(ITransactionOutput output, bool isChange = false)
+    /// <summary>Adds a raw transaction output.</summary>
+    public TransactionBuilder AddOutput(ITransactionOutput output, bool isChange = false) =>
+        AddOutputInternal(output, isChange);
+
+    /// <summary>Adds an output with a bech32 address and value.</summary>
+    public TransactionBuilder AddOutput(string bech32Address, IValue amount, bool isChange = false) =>
+        AddOutput(new OutputBuilder(bech32Address, amount) { }, isChange);
+
+    /// <summary>Adds an output with raw address bytes and value.</summary>
+    public TransactionBuilder AddOutput(byte[] addressBytes, IValue amount, bool isChange = false) =>
+        AddOutput(new OutputBuilder(addressBytes, amount), isChange);
+
+    /// <summary>Adds an output with an inline datum.</summary>
+    public TransactionBuilder AddOutput<T>(string bech32Address, IValue amount, T datum, bool isChange = false) where T : ICborType =>
+        AddOutput(new OutputBuilder(bech32Address, amount).WithInlineDatum(datum), isChange);
+
+    /// <summary>Adds an output with an inline datum (byte[] address).</summary>
+    public TransactionBuilder AddOutput<T>(byte[] addressBytes, IValue amount, T datum, bool isChange = false) where T : ICborType =>
+        AddOutput(new OutputBuilder(addressBytes, amount).WithInlineDatum(datum), isChange);
+
+    /// <summary>Adds an output with an inline datum and script reference.</summary>
+    public TransactionBuilder AddOutput<T>(string bech32Address, IValue amount, T datum, IScript scriptRef, bool isChange = false) where T : ICborType =>
+        AddOutput(new OutputBuilder(bech32Address, amount).WithInlineDatum(datum).WithScriptRef(scriptRef), isChange);
+
+    /// <summary>Adds an output with an inline datum and script reference (byte[] address).</summary>
+    public TransactionBuilder AddOutput<T>(byte[] addressBytes, IValue amount, T datum, IScript scriptRef, bool isChange = false) where T : ICborType =>
+        AddOutput(new OutputBuilder(addressBytes, amount).WithInlineDatum(datum).WithScriptRef(scriptRef), isChange);
+
+    /// <summary>Adds a fully configured output from an OutputBuilder.</summary>
+    public TransactionBuilder AddOutput(OutputBuilder output, bool isChange = false)
+    {
+        ArgumentNullException.ThrowIfNull(output);
+        if (isChange || output.IsChange)
+        {
+            EnforceMinAda(output);
+        }
+
+        EnforceMinAda(output);
+        return AddOutputInternal(output.Build(), isChange || output.IsChange);
+    }
+
+    private TransactionBuilder AddOutputInternal(ITransactionOutput output, bool isChange)
     {
         if (isChange)
         {
@@ -192,16 +236,32 @@ public class TransactionBuilder
         return this;
     }
 
-    /// <summary>Starts building an output with a bech32 address and value.</summary>
-    public OutputBuilder AddOutput(string bech32Address, IValue amount)
+    private void EnforceMinAda(OutputBuilder output)
     {
-        byte[] addressBytes = Wallet.Models.Addresses.Address.FromBech32(bech32Address).ToBytes();
-        return new OutputBuilder(this, addressBytes, amount);
-    }
+        if (Pparams?.AdaPerUTxOByte is null)
+        {
+            return;
+        }
 
-    /// <summary>Starts building an output with raw address bytes and value.</summary>
-    public OutputBuilder AddOutput(byte[] addressBytes, IValue amount) =>
-        new(this, addressBytes, amount);
+        ulong adaPerByte = (ulong)Pparams.AdaPerUTxOByte;
+        ITransactionOutput built = output.Build();
+        ulong minLovelace = FeeUtil.CalculateMinimumLovelace(adaPerByte, CborSerializer.Serialize(built));
+        ulong currentLovelace = built.Amount().Lovelace();
+
+        while (currentLovelace < minLovelace)
+        {
+            IValue newAmount = output.Amount switch
+            {
+                LovelaceWithMultiAsset lma => LovelaceWithMultiAsset.Create(minLovelace, lma.MultiAsset),
+                _ => Lovelace.Create(minLovelace)
+            };
+            output.Amount = newAmount;
+
+            built = output.Build();
+            minLovelace = FeeUtil.CalculateMinimumLovelace(adaPerByte, CborSerializer.Serialize(built));
+            currentLovelace = built.Amount().Lovelace();
+        }
+    }
 
     /// <summary>Replaces all transaction outputs.</summary>
     public TransactionBuilder SetOutputs(List<ITransactionOutput> outputs)
