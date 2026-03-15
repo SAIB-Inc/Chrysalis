@@ -707,6 +707,18 @@ public class TxBuilder
             _ = builder.CalculateFee(allScripts, builder.Fee, 1, collateralPool);
         }
 
+        // ── Auxiliary data hash ──
+        if (_metadata.Count > 0)
+        {
+            builder.IntegrateRedeemerSet();
+            PostMaryTransaction preFinal = builder.Build();
+            if (preFinal.AuxiliaryData is not null)
+            {
+                byte[] auxBytes = CborSerializer.Serialize(preFinal.AuxiliaryData);
+                _ = builder.SetAuxiliaryDataHash(Chrysalis.Wallet.Utils.HashUtil.Blake2b256(auxBytes));
+            }
+        }
+
         return builder.Build();
     }
 
@@ -790,8 +802,8 @@ public class TxBuilder
 
         if (directive.DatumCbor is not null)
         {
-            IDatumOption inlineDatum = InlineDatumOption.Create(1, new CborEncodedValue(directive.DatumCbor));
-            ob.SetDatumOption(inlineDatum);
+            IPlutusData datumValue = CborSerializer.Deserialize<IPlutusData>(directive.DatumCbor);
+            _ = ob.WithInlineDatum(datumValue);
         }
 
         if (directive.ScriptRef is not null)

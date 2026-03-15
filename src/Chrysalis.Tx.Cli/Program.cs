@@ -191,11 +191,13 @@ ITransaction createUnsigned;
 if (mode == "MID")
 {
     List<ResolvedInput> walletUtxos = await provider.GetUtxosAsync([walletBech32]).ConfigureAwait(false);
+    ulong createSlot = await GetCurrentSlot(bfClient).ConfigureAwait(false);
     PostMaryTransaction tx = await new TxBuilder(provider)
         .AddUnspentOutputs(walletUtxos)
         .SetChangeAddress(walletBech32)
         .LockAssets(scriptAddress, createOutputValue, orderDatum)
         .AddMetadata(674, createMsg)
+        .SetValidUntil(createSlot + 300)
         .Complete().ConfigureAwait(false);
     createUnsigned = tx;
 }
@@ -263,6 +265,7 @@ Console.WriteLine($"   Built ({sw.ElapsedMilliseconds}ms)");
 ITransaction createSigned = createUnsigned.Sign(paymentKey);
 byte[] createCbor = CborSerializer.Serialize(createSigned);
 Console.WriteLine($"   Signed TX: {createCbor.Length} bytes");
+Console.WriteLine($"   CBOR hex: {Convert.ToHexString(createCbor)}");
 
 Console.WriteLine("5. Submitting create order...");
 sw.Restart();
