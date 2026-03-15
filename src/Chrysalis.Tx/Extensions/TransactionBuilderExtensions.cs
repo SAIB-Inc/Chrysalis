@@ -91,6 +91,69 @@ public static class TransactionBuilderExtensions
         return builder;
     }
 
+    // ──────────── Shared Helpers ────────────
+
+    /// <summary>
+    /// Computes and sets the script data hash on the builder from the current redeemers and script language.
+    /// </summary>
+    public static TransactionBuilder ComputeAndSetScriptDataHash(this TransactionBuilder builder, List<IScript> scripts)
+    {
+        ArgumentNullException.ThrowIfNull(builder);
+        ArgumentNullException.ThrowIfNull(scripts);
+        int langVersion = scripts[0].Version() - 1;
+        CostMdls costMdls = builder.Pparams!.CostModelsForScriptLanguage!;
+        ICborMaybeIndefList<long>? usedLanguage = langVersion switch
+        {
+            0 => costMdls.PlutusV1,
+            1 => costMdls.PlutusV2,
+            2 => costMdls.PlutusV3,
+            _ => costMdls.PlutusV3
+        };
+        CostMdls costModel = new(
+            langVersion == 0 ? usedLanguage : null,
+            langVersion == 1 ? usedLanguage : null,
+            langVersion == 2 ? usedLanguage : null);
+        byte[] costModelBytes = CborSerializer.Serialize(costModel);
+        PostAlonzoTransactionWitnessSet ws = builder.BuildWitnessSet();
+        byte[] scriptDataHash = DataHashUtil.CalculateScriptDataHash(builder.Redeemers!, ws.PlutusDataSet, costModelBytes);
+        return builder.SetScriptDataHash(scriptDataHash);
+    }
+
+    /// <summary>
+    /// Computes the script execution fee from the builder's current redeemers and protocol parameters.
+    /// </summary>
+    public static ulong ComputeScriptExecutionFee(this TransactionBuilder builder)
+    {
+        ArgumentNullException.ThrowIfNull(builder);
+        if (builder.Redeemers is null)
+        {
+            return 0;
+        }
+
+        RationalNumber memPrice = new(
+            builder.Pparams!.ExecutionCosts!.Value.MemPrice.Numerator,
+            builder.Pparams.ExecutionCosts.Value.MemPrice.Denominator);
+        RationalNumber stepPrice = new(
+            builder.Pparams.ExecutionCosts!.Value.StepPrice.Numerator,
+            builder.Pparams.ExecutionCosts.Value.StepPrice.Denominator);
+        return FeeUtil.CalculateScriptExecutionFee(builder.Redeemers, stepPrice, memPrice);
+    }
+
+    /// <summary>
+    /// Computes and sets the auxiliary data hash from the builder's current metadata.
+    /// </summary>
+    public static TransactionBuilder ComputeAndSetAuxDataHash(this TransactionBuilder builder)
+    {
+        ArgumentNullException.ThrowIfNull(builder);
+        PostMaryTransaction tx = builder.Build();
+        if (tx.AuxiliaryData is not null)
+        {
+            byte[] auxBytes = CborSerializer.Serialize(tx.AuxiliaryData);
+            _ = builder.SetAuxiliaryDataHash(Wallet.Utils.HashUtil.Blake2b256(auxBytes));
+        }
+        return builder;
+    }
+
     // ──────────── Script Fee Calculation ────────────
 
     private static (ulong ScriptFee, ulong ExecutionFee) CalculateScriptFees(
@@ -101,27 +164,7 @@ public static class TransactionBuilderExtensions
             throw new ArgumentException("Missing script", nameof(scripts));
         }
 
-        // Compute script data hash
-        int langVersion = scripts[0].Version() - 1;
-        CostMdls costMdls = builder.Pparams!.CostModelsForScriptLanguage!;
-        ICborMaybeIndefList<long>? usedLanguage = langVersion switch
-        {
-            0 => costMdls.PlutusV1,
-            1 => costMdls.PlutusV2,
-            2 => costMdls.PlutusV3,
-            _ => throw new ArgumentException($"Unsupported script language version: {langVersion}", nameof(scripts))
-        };
-
-        CostMdls costModel = new(
-            langVersion == 0 ? usedLanguage : null,
-            langVersion == 1 ? usedLanguage : null,
-            langVersion == 2 ? usedLanguage : null
-        );
-
-        byte[] costModelBytes = CborSerializer.Serialize(costModel);
-        PostAlonzoTransactionWitnessSet witnessSet = builder.BuildWitnessSet();
-        byte[] scriptDataHash = DataHashUtil.CalculateScriptDataHash(builder.Redeemers!, witnessSet.PlutusDataSet, costModelBytes);
-        _ = builder.SetScriptDataHash(scriptDataHash);
+        _ = builder.ComputeAndSetScriptDataHash(scripts);
 
         // Reference script fee (tiered pricing on total script size)
         ulong scriptCostPerByte = builder.Pparams!.MinFeeRefScriptCostPerByte!.Numerator
@@ -129,14 +172,7 @@ public static class TransactionBuilderExtensions
         int totalScriptSize = scripts.Sum(script => script.Bytes().Length);
         ulong scriptFee = FeeUtil.CalculateReferenceScriptFee(totalScriptSize, scriptCostPerByte);
 
-        // Execution fee from redeemers
-        RationalNumber memUnitsCost = new(
-            builder.Pparams!.ExecutionCosts!.Value.MemPrice.Numerator,
-            builder.Pparams.ExecutionCosts!.Value.MemPrice.Denominator);
-        RationalNumber stepUnitsCost = new(
-            builder.Pparams.ExecutionCosts!.Value.StepPrice.Numerator,
-            builder.Pparams.ExecutionCosts!.Value.StepPrice.Denominator);
-        ulong executionFee = FeeUtil.CalculateScriptExecutionFee(builder.Redeemers!, stepUnitsCost, memUnitsCost);
+        ulong executionFee = builder.ComputeScriptExecutionFee();
 
         return (scriptFee, executionFee);
     }

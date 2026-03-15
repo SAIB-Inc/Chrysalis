@@ -15,7 +15,6 @@ using Chrysalis.Tx.Models;
 using Chrysalis.Tx.Models.Cbor;
 using Chrysalis.Tx.Utils;
 using Chrysalis.Wallet.Models.Enums;
-using Chrysalis.Wallet.Utils;
 using WalletAddress = Chrysalis.Wallet.Models.Addresses.Address;
 
 namespace Chrysalis.Tx.Builders;
@@ -394,11 +393,7 @@ public sealed class TransactionTemplateBuilder<T>
         {
             Metadata metadata = _metadataConfig(param);
             _ = context.TxBuilder.SetMetadata(metadata);
-
-            PostMaryTransaction tx = context.TxBuilder.Build();
-            IAuxiliaryData auxData = tx.AuxiliaryData!;
-
-            _ = context.TxBuilder.SetAuxiliaryDataHash(HashUtil.Blake2b256(CborSerializer.Serialize(auxData)));
+            _ = context.TxBuilder.ComputeAndSetAuxDataHash();
         }
 
         if (_nativeScriptBuilder is not null)

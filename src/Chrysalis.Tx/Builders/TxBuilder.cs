@@ -509,12 +509,7 @@ public class TxBuilder
         // ── Auxiliary data hash (must be set before fee calculation) ──
         if (_metadata.Count > 0)
         {
-            PostMaryTransaction auxTx = builder.Build();
-            if (auxTx.AuxiliaryData is not null)
-            {
-                byte[] auxBytes = CborSerializer.Serialize(auxTx.AuxiliaryData);
-                _ = builder.SetAuxiliaryDataHash(Wallet.Utils.HashUtil.Blake2b256(auxBytes));
-            }
+            _ = builder.ComputeAndSetAuxDataHash();
         }
 
         // ── Add reference inputs ──
@@ -676,36 +671,9 @@ public class TxBuilder
                 _ = builder.Evaluate(allResolvedInputs, slotConfig);
                 evaluated = true;
 
-                // Compute script execution fee from evaluated ExUnits
-                if (builder.Redeemers is not null)
-                {
-                    RationalNumber memPrice = new(
-                        _pparams.ExecutionCosts!.Value.MemPrice.Numerator,
-                        _pparams.ExecutionCosts.Value.MemPrice.Denominator);
-                    RationalNumber stepPrice = new(
-                        _pparams.ExecutionCosts.Value.StepPrice.Numerator,
-                        _pparams.ExecutionCosts.Value.StepPrice.Denominator);
-                    scriptExecFee = FeeUtil.CalculateScriptExecutionFee(builder.Redeemers, stepPrice, memPrice);
-                }
-
-                // Compute script data hash
-                int langVersion = allScripts[0].Version() - 1;
-                CostMdls costMdls = _pparams.CostModelsForScriptLanguage!;
-                ICborMaybeIndefList<long>? usedLanguage = langVersion switch
-                {
-                    0 => costMdls.PlutusV1,
-                    1 => costMdls.PlutusV2,
-                    2 => costMdls.PlutusV3,
-                    _ => costMdls.PlutusV3
-                };
-                CostMdls costModel = new(
-                    langVersion == 0 ? usedLanguage : null,
-                    langVersion == 1 ? usedLanguage : null,
-                    langVersion == 2 ? usedLanguage : null);
-                byte[] costModelBytes = CborSerializer.Serialize(costModel);
-                PostAlonzoTransactionWitnessSet ws = builder.BuildWitnessSet();
-                byte[] scriptDataHash = DataHashUtil.CalculateScriptDataHash(builder.Redeemers!, ws.PlutusDataSet, costModelBytes);
-                _ = builder.SetScriptDataHash(scriptDataHash);
+                // Compute script execution fee and script data hash
+                scriptExecFee = builder.ComputeScriptExecutionFee();
+                _ = builder.ComputeAndSetScriptDataHash(allScripts);
             }
 
             // Calculate surplus/deficit
@@ -877,36 +845,9 @@ public class TxBuilder
             SlotNetworkConfig finalSlotConfig = SlotNetworkConfig.FromNetworkType(_provider.NetworkType);
             _ = builder.Evaluate(finalResolvedInputs, finalSlotConfig);
 
-            // Recompute script execution fee from re-evaluated ExUnits
-            if (builder.Redeemers is not null)
-            {
-                RationalNumber memPrice = new(
-                    _pparams.ExecutionCosts!.Value.MemPrice.Numerator,
-                    _pparams.ExecutionCosts.Value.MemPrice.Denominator);
-                RationalNumber stepPrice = new(
-                    _pparams.ExecutionCosts.Value.StepPrice.Numerator,
-                    _pparams.ExecutionCosts.Value.StepPrice.Denominator);
-                scriptExecFee = FeeUtil.CalculateScriptExecutionFee(builder.Redeemers, stepPrice, memPrice);
-            }
-
-            // Recompute script data hash with final redeemers
-            int langVersion = allScripts[0].Version() - 1;
-            CostMdls costMdls = _pparams.CostModelsForScriptLanguage!;
-            ICborMaybeIndefList<long>? usedLanguage = langVersion switch
-            {
-                0 => costMdls.PlutusV1,
-                1 => costMdls.PlutusV2,
-                2 => costMdls.PlutusV3,
-                _ => costMdls.PlutusV3
-            };
-            CostMdls costModel = new(
-                langVersion == 0 ? usedLanguage : null,
-                langVersion == 1 ? usedLanguage : null,
-                langVersion == 2 ? usedLanguage : null);
-            byte[] costModelBytes = CborSerializer.Serialize(costModel);
-            PostAlonzoTransactionWitnessSet ws = builder.BuildWitnessSet();
-            byte[] scriptDataHash = DataHashUtil.CalculateScriptDataHash(builder.Redeemers!, ws.PlutusDataSet, costModelBytes);
-            _ = builder.SetScriptDataHash(scriptDataHash);
+            // Recompute script execution fee and script data hash with final redeemers
+            scriptExecFee = builder.ComputeScriptExecutionFee();
+            _ = builder.ComputeAndSetScriptDataHash(allScripts);
 
             // Recalculate fee with final ExUnits
             ulong previousFinalFee = builder.Fee;
