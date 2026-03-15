@@ -80,13 +80,7 @@ public sealed class OutputBuilder
     internal ITransactionOutput Build()
     {
         Address address = new(_addressBytes);
-
-        if (_datum is not null || _scriptRef is not null)
-        {
-            return PostAlonzoTransactionOutput.Create(address, Amount, _datum, _scriptRef);
-        }
-
-        return AlonzoTransactionOutput.Create(address, Amount, null);
+        return PostAlonzoTransactionOutput.Create(address, Amount, _datum, _scriptRef);
     }
 
 }

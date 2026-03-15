@@ -262,7 +262,7 @@ public static class TransactionBuilderExtensions
             _ => throw new InvalidOperationException("Invalid transaction output type")
         };
 
-        ITransactionOutput returnOutput = AlonzoTransactionOutput.Create(returnAddress, returnValue, null);
+        ITransactionOutput returnOutput = PostAlonzoTransactionOutput.Create(returnAddress, returnValue, null, null);
 
         byte[] returnOutputBytes = CborSerializer.Serialize(returnOutput);
         ulong minReturn = FeeUtil.CalculateMinimumLovelace(

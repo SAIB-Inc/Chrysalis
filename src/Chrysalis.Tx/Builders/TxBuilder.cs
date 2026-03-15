@@ -506,6 +506,17 @@ public class TxBuilder
             _ = builder.AddMetadata(kv.Key, kv.Value);
         }
 
+        // ── Auxiliary data hash (must be set before fee calculation) ──
+        if (_metadata.Count > 0)
+        {
+            PostMaryTransaction auxTx = builder.Build();
+            if (auxTx.AuxiliaryData is not null)
+            {
+                byte[] auxBytes = CborSerializer.Serialize(auxTx.AuxiliaryData);
+                _ = builder.SetAuxiliaryDataHash(Wallet.Utils.HashUtil.Blake2b256(auxBytes));
+            }
+        }
+
         // ── Add reference inputs ──
         foreach (ResolvedInput refInput in _referenceInputs)
         {
@@ -764,11 +775,57 @@ public class TxBuilder
                 _ = builder.AddOutput(_changeAddress, changeValue, isChange: true);
             }
 
+            // Select collateral (inside loop so it's included in fee calculation)
+            if (hasScripts)
+            {
+                _ = builder.ClearCollateral();
+                _ = builder.ClearCollateralReturn();
+
+                ulong requiredCollateral = FeeUtil.CalculateRequiredCollateral(
+                    builder.Fee, _pparams.CollateralPercentage!.Value);
+                _ = builder.SetTotalCollateral(requiredCollateral);
+
+                List<ResolvedInput> collateralPool = _collateralPool ?? selectedInputs;
+                if (collateralPool.Count == 0)
+                {
+                    collateralPool = [.. _unspentOutputs
+                        .Where(u => !_explicitInputs.Any(e => e.Utxo.Outref.Equals(u.Outref)))];
+                }
+
+                if (collateralPool.Count > 0)
+                {
+                    int maxCollateralInputs = (int)(_pparams.MaxCollateralInputs ?? 3);
+                    CoinSelectionResult collateralSelection = CoinSelectionUtil.Select(
+                        collateralPool, [Lovelace.Create(requiredCollateral)],
+                        CoinSelectionStrategy.LargestFirst, maxCollateralInputs);
+
+                    IValue totalCollateralValue = Lovelace.Create(0);
+                    foreach (ResolvedInput input in collateralSelection.Inputs)
+                    {
+                        _ = builder.AddCollateral(input.Outref);
+                        totalCollateralValue = totalCollateralValue.Merge(input.Output.Amount());
+                    }
+
+                    ulong collateralLovelace = totalCollateralValue.Lovelace();
+                    if (collateralLovelace > requiredCollateral)
+                    {
+                        IValue returnValue = totalCollateralValue.Subtract(Lovelace.Create(requiredCollateral));
+                        byte[] changeAddrBytes = Wallet.Models.Addresses.Address.FromBech32(_changeAddress).ToBytes();
+                        ITransactionOutput collateralReturn = PostAlonzoTransactionOutput.Create(
+                            new Address(changeAddrBytes), returnValue, null, null);
+                        _ = builder.SetCollateralReturn(collateralReturn);
+                    }
+                }
+            }
+
+            // Inject placeholder witnesses for accurate size estimation
+            InjectPlaceholderWitnesses(builder);
+
             // Calculate fee = tx size fee + script exec fee + reference script fee
             PostMaryTransaction draftTx = builder.Build();
             byte[] draftBytes = CborSerializer.Serialize(draftTx);
-            ulong fee = FeeUtil.CalculateFeeWithWitness(
-                (ulong)draftBytes.Length, _pparams.MinFeeA!.Value, _pparams.MinFeeB!.Value, 1)
+            ulong fee = FeeUtil.CalculateFee(
+                (ulong)draftBytes.Length, _pparams.MinFeeA!.Value, _pparams.MinFeeB!.Value)
                 + scriptExecFee + refScriptFee;
 
             if (Math.Abs((long)fee - (long)previousFee) < FeeConvergenceTolerance)
@@ -781,9 +838,12 @@ public class TxBuilder
             _ = builder.SetFee(fee);
         }
 
-        // ── Recompute redeemer indices with final input set ──
-        if (hasScripts && builder.Redeemers is RedeemerList existingRedeemers)
+        // ── Re-evaluate scripts with final transaction state ──
+        // The initial evaluation happened before coin selection, so the ScriptContext
+        // had different inputs/outputs. Re-evaluate now with the complete transaction.
+        if (hasScripts)
         {
+            // Recompute redeemer indices with final input set
             List<string> finalSortedKeys = [.. builder.Inputs
                 .Select(i => Convert.ToHexString(i.TransactionId.Span) + i.Index.ToString("D10", System.Globalization.CultureInfo.InvariantCulture))
                 .Order(StringComparer.Ordinal)];
@@ -801,112 +861,196 @@ public class TxBuilder
                 int sortedIndex = finalSortedKeys.IndexOf(inputKey);
                 if (sortedIndex >= 0)
                 {
-                    // Find the matching evaluated ExUnits from existing redeemers
-                    ExUnits exUnits = ExUnits.Create(0, 0);
-                    foreach (RedeemerEntry existing in existingRedeemers.Value)
-                    {
-                        if (existing.Tag == 0)
-                        {
-                            exUnits = existing.ExUnits;
-                            break;
-                        }
-                    }
-
-                    updatedEntries.Add(RedeemerEntry.Create(0, (ulong)sortedIndex, directive.Redeemer, exUnits));
+                    // Use placeholder ExUnits — will be replaced by re-evaluation
+                    updatedEntries.Add(RedeemerEntry.Create(0, (ulong)sortedIndex, directive.Redeemer,
+                        ExUnits.Create(14_000_000, 10_000_000_000)));
                 }
             }
 
             if (updatedEntries.Count > 0)
             {
                 _ = builder.SetRedeemers(RedeemerList.Create(updatedEntries));
-
-                // Recompute script data hash with updated redeemers
-                int langVersion = allScripts[0].Version() - 1;
-                CostMdls costMdls = _pparams.CostModelsForScriptLanguage!;
-                ICborMaybeIndefList<long>? usedLanguage = langVersion switch
-                {
-                    0 => costMdls.PlutusV1,
-                    1 => costMdls.PlutusV2,
-                    2 => costMdls.PlutusV3,
-                    _ => costMdls.PlutusV3
-                };
-                CostMdls costModel = new(
-                    langVersion == 0 ? usedLanguage : null,
-                    langVersion == 1 ? usedLanguage : null,
-                    langVersion == 2 ? usedLanguage : null);
-                byte[] costModelBytes = CborSerializer.Serialize(costModel);
-                PostAlonzoTransactionWitnessSet ws = builder.BuildWitnessSet();
-                byte[] scriptDataHash = DataHashUtil.CalculateScriptDataHash(builder.Redeemers!, ws.PlutusDataSet, costModelBytes);
-                _ = builder.SetScriptDataHash(scriptDataHash);
             }
-        }
 
-        // ── Recalculate fee after redeemer reindex (tx size may have changed) ──
-        if (hasScripts)
-        {
-            PostMaryTransaction postReindexTx = builder.Build();
-            byte[] postReindexBytes = CborSerializer.Serialize(postReindexTx);
-            ulong finalFee = FeeUtil.CalculateFeeWithWitness(
-                (ulong)postReindexBytes.Length, _pparams.MinFeeA!.Value, _pparams.MinFeeB!.Value, 1)
+            // Re-evaluate with the final transaction (all inputs, outputs, change, collateral)
+            List<ResolvedInput> finalResolvedInputs = [.. _explicitInputs.Select(i => i.Utxo), .. _referenceInputs, .. selectedInputs];
+            SlotNetworkConfig finalSlotConfig = SlotNetworkConfig.FromNetworkType(_provider.NetworkType);
+            _ = builder.Evaluate(finalResolvedInputs, finalSlotConfig);
+
+            // Recompute script execution fee from re-evaluated ExUnits
+            if (builder.Redeemers is not null)
+            {
+                RationalNumber memPrice = new(
+                    _pparams.ExecutionCosts!.Value.MemPrice.Numerator,
+                    _pparams.ExecutionCosts.Value.MemPrice.Denominator);
+                RationalNumber stepPrice = new(
+                    _pparams.ExecutionCosts.Value.StepPrice.Numerator,
+                    _pparams.ExecutionCosts.Value.StepPrice.Denominator);
+                scriptExecFee = FeeUtil.CalculateScriptExecutionFee(builder.Redeemers, stepPrice, memPrice);
+            }
+
+            // Recompute script data hash with final redeemers
+            int langVersion = allScripts[0].Version() - 1;
+            CostMdls costMdls = _pparams.CostModelsForScriptLanguage!;
+            ICborMaybeIndefList<long>? usedLanguage = langVersion switch
+            {
+                0 => costMdls.PlutusV1,
+                1 => costMdls.PlutusV2,
+                2 => costMdls.PlutusV3,
+                _ => costMdls.PlutusV3
+            };
+            CostMdls costModel = new(
+                langVersion == 0 ? usedLanguage : null,
+                langVersion == 1 ? usedLanguage : null,
+                langVersion == 2 ? usedLanguage : null);
+            byte[] costModelBytes = CborSerializer.Serialize(costModel);
+            PostAlonzoTransactionWitnessSet ws = builder.BuildWitnessSet();
+            byte[] scriptDataHash = DataHashUtil.CalculateScriptDataHash(builder.Redeemers!, ws.PlutusDataSet, costModelBytes);
+            _ = builder.SetScriptDataHash(scriptDataHash);
+
+            // Recalculate fee with final ExUnits
+            ulong previousFinalFee = builder.Fee;
+            InjectPlaceholderWitnesses(builder);
+            PostMaryTransaction postEvalTx = builder.Build();
+            byte[] postEvalBytes = CborSerializer.Serialize(postEvalTx);
+            ulong finalFee = FeeUtil.CalculateFee(
+                (ulong)postEvalBytes.Length, _pparams.MinFeeA!.Value, _pparams.MinFeeB!.Value)
                 + scriptExecFee + refScriptFee;
             _ = builder.SetFee(finalFee);
-        }
 
-        // ── Collateral (after fee stabilization) ──
-        if (hasScripts)
-        {
-            ulong requiredCollateral = FeeUtil.CalculateRequiredCollateral(
-                builder.Fee, _pparams.CollateralPercentage!.Value);
-            _ = builder.SetTotalCollateral(requiredCollateral);
-
-            // Use coin-selected inputs as collateral (they're already in the tx and valid)
-            List<ResolvedInput> collateralPool = _collateralPool ?? selectedInputs;
-            if (collateralPool.Count == 0)
+            // Adjust change output if fee changed
+            if (finalFee != previousFinalFee && builder.ChangeOutputIndex is not null)
             {
-                // Fallback: any available wallet UTxOs
-                collateralPool = [.. _unspentOutputs
-                    .Where(u => !_explicitInputs.Any(e => e.Utxo.Outref.Equals(u.Outref)))];
+                List<ITransactionOutput> outputs = [.. builder.Outputs];
+                outputs.RemoveAt(builder.ChangeOutputIndex.Value);
+                _ = builder.SetOutputs(outputs);
+                builder.ChangeOutputIndex = null;
+                builder.ChangeOutput = null;
+
+                ulong totalIn = _explicitInputs.Aggregate(0UL, (sum, i) => sum + i.Utxo.Output.Amount().Lovelace())
+                    + selectedInputs.Aggregate(0UL, (sum, i) => sum + i.Output.Amount().Lovelace())
+                    + _withdrawalDirectives.Aggregate(0UL, (sum, w) => sum + w.Amount);
+                ulong totalOut = 0;
+                for (int i = 0; i < builder.Outputs.Count; i++)
+                {
+                    totalOut += builder.Outputs[i].Amount().Lovelace();
+                }
+                ulong changeSurplus = totalIn > totalOut + finalFee ? totalIn - totalOut - finalFee : 0;
+                if (changeSurplus > 0)
+                {
+                    IValue changeValue = ComputeChangeValue(changeSurplus, _explicitInputs, selectedInputs, builder.Outputs, builder.Mint);
+                    _ = builder.AddOutput(_changeAddress, changeValue, isChange: true);
+                }
             }
 
-            if (collateralPool.Count > 0)
+            // Recalculate collateral for new fee
+            _ = builder.ClearCollateral();
+            _ = builder.ClearCollateralReturn();
+            ulong requiredCollateral = FeeUtil.CalculateRequiredCollateral(
+                finalFee, _pparams.CollateralPercentage!.Value);
+            _ = builder.SetTotalCollateral(requiredCollateral);
+
+            List<ResolvedInput> finalCollateralPool = _collateralPool ?? selectedInputs;
+            if (finalCollateralPool.Count == 0)
+            {
+                finalCollateralPool = [.. _unspentOutputs
+                    .Where(u => !_explicitInputs.Any(e => e.Utxo.Outref.Equals(u.Outref)))];
+            }
+            if (finalCollateralPool.Count > 0)
             {
                 int maxCollateralInputs = (int)(_pparams.MaxCollateralInputs ?? 3);
                 CoinSelectionResult collateralSelection = CoinSelectionUtil.Select(
-                    collateralPool, [Lovelace.Create(requiredCollateral)],
+                    finalCollateralPool, [Lovelace.Create(requiredCollateral)],
                     CoinSelectionStrategy.LargestFirst, maxCollateralInputs);
-
+                IValue totalCollateralValue = Lovelace.Create(0);
                 foreach (ResolvedInput input in collateralSelection.Inputs)
                 {
                     _ = builder.AddCollateral(input.Outref);
+                    totalCollateralValue = totalCollateralValue.Merge(input.Output.Amount());
                 }
-
-                ulong collateralLovelace = collateralSelection.Inputs.Aggregate(
-                    0UL, (sum, i) => sum + i.Output.Amount().Lovelace());
-
+                ulong collateralLovelace = totalCollateralValue.Lovelace();
                 if (collateralLovelace > requiredCollateral)
                 {
+                    IValue returnValue = totalCollateralValue.Subtract(Lovelace.Create(requiredCollateral));
                     byte[] changeAddrBytes = Wallet.Models.Addresses.Address.FromBech32(_changeAddress).ToBytes();
-                    ITransactionOutput collateralReturn = AlonzoTransactionOutput.Create(
-                        new Address(changeAddrBytes),
-                        Lovelace.Create(collateralLovelace - requiredCollateral),
-                        null);
+                    ITransactionOutput collateralReturn = PostAlonzoTransactionOutput.Create(
+                        new Address(changeAddrBytes), returnValue, null, null);
                     _ = builder.SetCollateralReturn(collateralReturn);
                 }
             }
         }
 
-        // ── Auxiliary data hash ──
-        if (_metadata.Count > 0)
+        // Clear placeholder witnesses before final build
+        _ = builder.ClearVKeyWitnesses();
+
+        return builder.Build();
+    }
+
+    // ── Placeholder Witnesses ──
+
+    private int CountRequiredWitnesses()
+    {
+        HashSet<string> uniquePkhs = new(StringComparer.OrdinalIgnoreCase);
+
+        // Change address (wallet always signs)
+        if (_changeAddress is not null)
         {
-            PostMaryTransaction preFinal = builder.Build();
-            if (preFinal.AuxiliaryData is not null)
+            string? changePkh = Wallet.Models.Addresses.Address.FromBech32(_changeAddress).GetPaymentKeyHashHex();
+            if (changePkh is not null)
             {
-                byte[] auxBytes = CborSerializer.Serialize(preFinal.AuxiliaryData);
-                _ = builder.SetAuxiliaryDataHash(Wallet.Utils.HashUtil.Blake2b256(auxBytes));
+                _ = uniquePkhs.Add(changePkh);
             }
         }
 
-        return builder.Build();
+        // Required signers (Plutus script demands)
+        foreach (string signer in _requiredSigners)
+        {
+            _ = uniquePkhs.Add(signer);
+        }
+
+        // Key-based explicit inputs (non-script spends)
+        foreach (InputDirective input in _explicitInputs)
+        {
+            if (input.Redeemer is not null)
+            {
+                continue; // script input, signer comes from _requiredSigners
+            }
+            ReadOnlyMemory<byte> addrBytes = input.Utxo.Output switch
+            {
+                AlonzoTransactionOutput a => a.Address.Value,
+                PostAlonzoTransactionOutput p => p.Address.Value,
+                _ => ReadOnlyMemory<byte>.Empty
+            };
+            if (addrBytes.Length >= 29)
+            {
+                int credType = (addrBytes.Span[0] >> 4) & 0x01; // 0 = key, 1 = script
+                if (credType == 0)
+                {
+                    _ = uniquePkhs.Add(Convert.ToHexString(addrBytes.Slice(1, 28).Span));
+                }
+            }
+        }
+
+        return Math.Max(1, uniquePkhs.Count);
+    }
+
+    private static VKeyWitness CreatePlaceholderVKeyWitness(int index)
+    {
+        byte[] vkey = new byte[32];
+        byte[] sig = new byte[64];
+        _ = BitConverter.TryWriteBytes(vkey.AsSpan(), index);
+        _ = BitConverter.TryWriteBytes(sig.AsSpan(), index);
+        return VKeyWitness.Create(vkey, sig);
+    }
+
+    private void InjectPlaceholderWitnesses(TransactionBuilder builder)
+    {
+        _ = builder.ClearVKeyWitnesses();
+        int count = CountRequiredWitnesses();
+        for (int i = 0; i < count; i++)
+        {
+            _ = builder.AddVKeyWitness(CreatePlaceholderVKeyWitness(i));
+        }
     }
 
     // ── Change Value Computation ──

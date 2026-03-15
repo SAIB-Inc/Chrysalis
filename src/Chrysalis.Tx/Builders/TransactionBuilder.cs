@@ -479,19 +479,20 @@ public class TransactionBuilder
 
     // ── Required Signers ──
 
-    /// <summary>Adds a required signer key hash.</summary>
+    /// <summary>Adds a required signer key hash (deduplicates).</summary>
     public TransactionBuilder AddRequiredSigner(ReadOnlyMemory<byte> signer)
     {
-        (_requiredSigners ??= []).Add(signer);
+        _requiredSigners ??= [];
+        if (!_requiredSigners.Any(s => s.Span.SequenceEqual(signer.Span)))
+        {
+            _requiredSigners.Add(signer);
+        }
         return this;
     }
 
-    /// <summary>Adds a required signer from a hex-encoded key hash.</summary>
-    public TransactionBuilder AddRequiredSigner(string pkhHex)
-    {
-        (_requiredSigners ??= []).Add(Convert.FromHexString(pkhHex));
-        return this;
-    }
+    /// <summary>Adds a required signer from a hex-encoded key hash (deduplicates).</summary>
+    public TransactionBuilder AddRequiredSigner(string pkhHex) =>
+        AddRequiredSigner(Convert.FromHexString(pkhHex));
 
     // ── Governance ──
 
@@ -555,6 +556,13 @@ public class TransactionBuilder
     }
 
     // ── Witnesses ──
+
+    /// <summary>Clears all VKey witnesses (used to remove placeholder witnesses after fee estimation).</summary>
+    public TransactionBuilder ClearVKeyWitnesses()
+    {
+        _vkeyWitnesses = null;
+        return this;
+    }
 
     /// <summary>Adds a VKey witness.</summary>
     public TransactionBuilder AddVKeyWitness(VKeyWitness witness)

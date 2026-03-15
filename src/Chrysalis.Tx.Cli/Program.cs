@@ -31,9 +31,9 @@ const string DeployUtxoTxHash = "3fb269ab071b9cefb81d6133516d36309a087c244a1401f
 const ulong DeployUtxoIndex = 0;
 const string DeployAddress = "addr_test1wzwkpt2sdeyms08pnarwr3pkag9exwc0fwvp8ldr8fy0evgs34phf";
 
-// USDM: policyId (56 hex chars = 28 bytes) + assetName hex "USDM"
-const string UsdmUnit = "e31a9fbefc4375176e289ca986067fa179440409abfe58f27fb8d0b95553444d";
-const ulong OrderUsdmAmount = 5_000_000; // 5 USDM (6 decimal places)
+// TESTV2: policyId (56 hex chars = 28 bytes) + assetName hex "TESTV2"
+const string UsdmUnit = "e31a9fbefc4375176e289ca986067fa179440409abfe58f27fb8d0b9544553545632";
+const ulong OrderUsdmAmount = 5_000_000; // 5 TESTV2 units
 const ulong MinAdaInScript = 2_000_000;  // 2 ADA min-ADA in script UTxO
 const ulong FillPercent = 90;            // Fill 90% of the order
 const long PriceNum = 1;
@@ -217,19 +217,51 @@ else if (mode == "LOW")
         .AddMetadata(674, createMsg)
         .SetFee(0);
 
-    _ = lowBuilder.CalculateFee([], 0, 1, walletUtxos);
-
-    ulong totalIn = walletUtxos.Aggregate(0UL, (sum, u) => sum + u.Output.Amount().Lovelace());
-    ulong totalOut = 0;
-    for (int i = 0; i < lowBuilder.Outputs.Count; i++)
+    // Compute aux data hash before fee calculation (so body size is accurate)
+    PostMaryTransaction auxTx = lowBuilder.Build();
+    if (auxTx.AuxiliaryData is not null)
     {
-        totalOut += lowBuilder.Outputs[i].Amount().Lovelace();
+        byte[] auxBytes = CborSerializer.Serialize(auxTx.AuxiliaryData);
+        _ = lowBuilder.SetAuxiliaryDataHash(Chrysalis.Wallet.Utils.HashUtil.Blake2b256(auxBytes));
     }
 
-    ulong changeLov = totalIn > totalOut + lowBuilder.Fee ? totalIn - totalOut - lowBuilder.Fee : 0;
-    if (changeLov > 0)
+    // Add change output BEFORE fee calc (so fee accounts for its CBOR size)
+    IValue totalInputValue = Lovelace.Create(0);
+    foreach (ResolvedInput utxo in walletUtxos)
     {
-        _ = lowBuilder.AddOutput(walletBech32, Lovelace.Create(changeLov), isChange: true);
+        totalInputValue = totalInputValue.Merge(utxo.Output.Amount());
+    }
+    IValue totalOutputValue = Lovelace.Create(0);
+    for (int i = 0; i < lowBuilder.Outputs.Count; i++)
+    {
+        totalOutputValue = totalOutputValue.Merge(lowBuilder.Outputs[i].Amount());
+    }
+    IValue changeEstimate = totalInputValue.Subtract(totalOutputValue).Subtract(Lovelace.Create(300_000));
+    if (changeEstimate.Lovelace() > 0)
+    {
+        _ = lowBuilder.AddOutput(walletBech32, changeEstimate, isChange: true);
+    }
+
+    _ = lowBuilder.CalculateFee([], 0, 1, walletUtxos);
+
+    // Rebuild change with final fee
+    if (lowBuilder.ChangeOutputIndex is not null)
+    {
+        List<ITransactionOutput> outputs = [.. lowBuilder.Outputs];
+        outputs.RemoveAt(lowBuilder.ChangeOutputIndex.Value);
+        _ = lowBuilder.SetOutputs(outputs);
+        lowBuilder.ChangeOutputIndex = null;
+        lowBuilder.ChangeOutput = null;
+    }
+    IValue finalOutputValue = Lovelace.Create(0);
+    for (int i = 0; i < lowBuilder.Outputs.Count; i++)
+    {
+        finalOutputValue = finalOutputValue.Merge(lowBuilder.Outputs[i].Amount());
+    }
+    IValue changeValue = totalInputValue.Subtract(finalOutputValue).Subtract(Lovelace.Create(lowBuilder.Fee));
+    if (changeValue.Lovelace() > 0)
+    {
+        _ = lowBuilder.AddOutput(walletBech32, changeValue, isChange: true);
     }
 
     createUnsigned = lowBuilder.Build();
@@ -368,7 +400,9 @@ if (mode == "MID")
         .SetChangeAddress(walletBech32)
         .AddReferenceInput(deployRef)
         .AddInput(ourUtxo, fillRedeemerData)
+        .AddRequiredSigner(Convert.ToHexStringLower(paymentKeyHash))
         .LockAssets(scriptAddress, continuingValue, continuingDatum)
+        .SetValidFrom(currentSlot)
         .SetValidUntil(currentSlot + 300)
         .AddMetadata(674, fillMsg)
         .Complete().ConfigureAwait(false);
@@ -376,51 +410,99 @@ if (mode == "MID")
 }
 else if (mode == "LOW")
 {
-    List<ResolvedInput> walletUtxos = await provider.GetUtxosAsync([walletBech32]).ConfigureAwait(false);
+    // Wait for wallet UTxO index to update
+    List<ResolvedInput> walletUtxos = [];
+    for (int wait = 0; wait < 60; wait += 4)
+    {
+        walletUtxos = await provider.GetUtxosAsync([walletBech32]).ConfigureAwait(false);
+        bool hasCreateChange = walletUtxos.Any(u => Convert.ToHexStringLower(u.Outref.TransactionId.Span) == createTxId);
+        if (hasCreateChange)
+        {
+            break;
+        }
+
+        await Task.Delay(4000).ConfigureAwait(false);
+        Console.Write(".");
+    }
     List<ResolvedInput> deployUtxos = await provider.GetUtxosAsync([DeployAddress]).ConfigureAwait(false);
     ResolvedInput deployRef = deployUtxos.First(u =>
         Convert.ToHexStringLower(u.Outref.TransactionId.Span) == DeployUtxoTxHash && u.Outref.Index == DeployUtxoIndex);
 
     PostAlonzoTransactionOutput deployOutput = (PostAlonzoTransactionOutput)deployRef.Output;
-    IScript validatorScript = CborSerializer.Deserialize<IScript>(deployOutput.ScriptRef!.Value);
+    IScript validatorScript = deployOutput.ScriptRef!.Deserialize<IScript>();
+    string fillScriptHash = validatorScript.HashHex();
     ProtocolParams pparams = await provider.GetParametersAsync().ConfigureAwait(false);
 
+    // Use PlutusScriptRef (not PlutusScriptInlineDatum) since script is a reference input
     IPlutusData fillPlutusData = CborSerializer.Deserialize<IPlutusData>(CborSerializer.Serialize(fillRedeemerData));
     InputBuilderResult scriptInputResult = new InputBuilder(ourUtxo.Outref, ourUtxo.Output)
-        .PlutusScriptInlineDatum(validatorScript, fillPlutusData, Convert.ToHexStringLower(paymentKeyHash));
+        .PlutusScriptRef(fillScriptHash, fillPlutusData, null, Convert.ToHexStringLower(paymentKeyHash));
 
     TransactionBuilder lowBuilder = TransactionBuilder.Create(pparams)
         .AddInput(scriptInputResult)
-        .AddReferenceInput(deployRef.Outref);
-
-    foreach (ResolvedInput utxo in walletUtxos)
-    {
-        _ = lowBuilder.AddInput(utxo.Outref);
-    }
-
-    _ = lowBuilder
+        .AddReferenceInput(deployRef.Outref)
         .AddOutput(scriptAddress, continuingValue, continuingDatum)
         .SetValidityIntervalStart(currentSlot)
         .SetTtl(currentSlot + 300)
         .AddMetadata(674, fillMsg)
         .SetFee(0);
 
+    // Evaluate BEFORE adding wallet inputs (so redeemer index 0 = script input)
     List<ResolvedInput> allResolved = [ourUtxo, deployRef, .. walletUtxos];
     SlotNetworkConfig slotConfig = SlotNetworkConfig.FromNetworkType(provider.NetworkType);
     _ = lowBuilder.Evaluate(allResolved, slotConfig);
-    _ = lowBuilder.CalculateFee([validatorScript], 0, 1, walletUtxos);
 
-    ulong totalIn = walletUtxos.Aggregate(0UL, (sum, u) => sum + u.Output.Amount().Lovelace());
-    ulong totalOut = 0;
-    for (int i = 0; i < lowBuilder.Outputs.Count; i++)
+    // Now add wallet inputs
+    foreach (ResolvedInput utxo in walletUtxos)
     {
-        totalOut += lowBuilder.Outputs[i].Amount().Lovelace();
+        _ = lowBuilder.AddInput(utxo.Outref);
     }
 
-    ulong changeLov = totalIn > totalOut + lowBuilder.Fee ? totalIn - totalOut - lowBuilder.Fee : 0;
-    if (changeLov > 0)
+    // Compute aux data hash before fee calculation
+    PostMaryTransaction fillAuxTx = lowBuilder.Build();
+    if (fillAuxTx.AuxiliaryData is not null)
     {
-        _ = lowBuilder.AddOutput(walletBech32, Lovelace.Create(changeLov), isChange: true);
+        byte[] auxBytes = CborSerializer.Serialize(fillAuxTx.AuxiliaryData);
+        _ = lowBuilder.SetAuxiliaryDataHash(Chrysalis.Wallet.Utils.HashUtil.Blake2b256(auxBytes));
+    }
+
+    // Add change estimate before fee calc (so fee accounts for change CBOR size)
+    IValue fillTotalIn = ourUtxo.Output.Amount();
+    foreach (ResolvedInput utxo in walletUtxos)
+    {
+        fillTotalIn = fillTotalIn.Merge(utxo.Output.Amount());
+    }
+    IValue fillEstOut = Lovelace.Create(0);
+    for (int i = 0; i < lowBuilder.Outputs.Count; i++)
+    {
+        fillEstOut = fillEstOut.Merge(lowBuilder.Outputs[i].Amount());
+    }
+    IValue fillChangeEst = fillTotalIn.Subtract(fillEstOut).Subtract(Lovelace.Create(300_000));
+    if (fillChangeEst.Lovelace() > 0)
+    {
+        _ = lowBuilder.AddOutput(walletBech32, fillChangeEst, isChange: true);
+    }
+
+    _ = lowBuilder.CalculateFee([validatorScript], 0, 1, walletUtxos);
+
+    // Rebuild change with final fee
+    if (lowBuilder.ChangeOutputIndex is not null)
+    {
+        List<ITransactionOutput> fillOutputs = [.. lowBuilder.Outputs];
+        fillOutputs.RemoveAt(lowBuilder.ChangeOutputIndex.Value);
+        _ = lowBuilder.SetOutputs(fillOutputs);
+        lowBuilder.ChangeOutputIndex = null;
+        lowBuilder.ChangeOutput = null;
+    }
+    IValue fillFinalOut = Lovelace.Create(0);
+    for (int i = 0; i < lowBuilder.Outputs.Count; i++)
+    {
+        fillFinalOut = fillFinalOut.Merge(lowBuilder.Outputs[i].Amount());
+    }
+    IValue fillChange = fillTotalIn.Subtract(fillFinalOut).Subtract(Lovelace.Create(lowBuilder.Fee));
+    if (fillChange.Lovelace() > 0)
+    {
+        _ = lowBuilder.AddOutput(walletBech32, fillChange, isChange: true);
     }
 
     fillUnsigned = lowBuilder.Build();
@@ -572,12 +654,13 @@ else if (mode == "LOW")
         Convert.ToHexStringLower(u.Outref.TransactionId.Span) == DeployUtxoTxHash && u.Outref.Index == DeployUtxoIndex);
 
     PostAlonzoTransactionOutput deployOutput = (PostAlonzoTransactionOutput)deployRef.Output;
-    IScript validatorScript = CborSerializer.Deserialize<IScript>(deployOutput.ScriptRef!.Value);
+    IScript validatorScript = deployOutput.ScriptRef!.Deserialize<IScript>();
     ProtocolParams pparams = await provider.GetParametersAsync().ConfigureAwait(false);
 
+    string closeScriptHash = validatorScript.HashHex();
     IPlutusData closePlutusData = CborSerializer.Deserialize<IPlutusData>(CborSerializer.Serialize(closeRedeemerData));
     InputBuilderResult scriptInputResult = new InputBuilder(fillUtxo.Outref, fillUtxo.Output)
-        .PlutusScriptInlineDatum(validatorScript, closePlutusData, paymentKeyHashHex);
+        .PlutusScriptRef(closeScriptHash, closePlutusData, null, paymentKeyHashHex);
 
     TransactionBuilder lowBuilder = TransactionBuilder.Create(pparams)
         .AddInput(scriptInputResult)
@@ -586,28 +669,62 @@ else if (mode == "LOW")
         .AddMetadata(674, closeMsg)
         .SetFee(0);
 
+    // Evaluate BEFORE adding wallet inputs
+    List<ResolvedInput> allResolved = [fillUtxo, deployRef, .. walletUtxos];
+    SlotNetworkConfig slotConfig = SlotNetworkConfig.FromNetworkType(provider.NetworkType);
+    _ = lowBuilder.Evaluate(allResolved, slotConfig);
+
+    // Now add wallet inputs
     foreach (ResolvedInput utxo in walletUtxos)
     {
         _ = lowBuilder.AddInput(utxo.Outref);
     }
 
-    List<ResolvedInput> allResolved = [fillUtxo, deployRef, .. walletUtxos];
-    SlotNetworkConfig slotConfig = SlotNetworkConfig.FromNetworkType(provider.NetworkType);
-    _ = lowBuilder.Evaluate(allResolved, slotConfig);
-    _ = lowBuilder.CalculateFee([validatorScript], 0, 1, walletUtxos);
-
-    ulong totalIn = walletUtxos.Aggregate(0UL, (sum, u) => sum + u.Output.Amount().Lovelace())
-        + fillUtxo.Output.Amount().Lovelace();
-    ulong totalOut = 0;
-    for (int i = 0; i < lowBuilder.Outputs.Count; i++)
+    // Compute aux data hash before fee calculation
+    PostMaryTransaction closeAuxTx = lowBuilder.Build();
+    if (closeAuxTx.AuxiliaryData is not null)
     {
-        totalOut += lowBuilder.Outputs[i].Amount().Lovelace();
+        byte[] auxBytes = CborSerializer.Serialize(closeAuxTx.AuxiliaryData);
+        _ = lowBuilder.SetAuxiliaryDataHash(Chrysalis.Wallet.Utils.HashUtil.Blake2b256(auxBytes));
     }
 
-    ulong changeLov = totalIn > totalOut + lowBuilder.Fee ? totalIn - totalOut - lowBuilder.Fee : 0;
-    if (changeLov > 0)
+    // Add change estimate before fee calc
+    IValue closeTotalIn = fillUtxo.Output.Amount();
+    foreach (ResolvedInput utxo in walletUtxos)
     {
-        _ = lowBuilder.AddOutput(walletBech32, Lovelace.Create(changeLov), isChange: true);
+        closeTotalIn = closeTotalIn.Merge(utxo.Output.Amount());
+    }
+    IValue closeEstOut = Lovelace.Create(0);
+    for (int i = 0; i < lowBuilder.Outputs.Count; i++)
+    {
+        closeEstOut = closeEstOut.Merge(lowBuilder.Outputs[i].Amount());
+    }
+    IValue closeChangeEst = closeTotalIn.Subtract(closeEstOut).Subtract(Lovelace.Create(300_000));
+    if (closeChangeEst.Lovelace() > 0)
+    {
+        _ = lowBuilder.AddOutput(walletBech32, closeChangeEst, isChange: true);
+    }
+
+    _ = lowBuilder.CalculateFee([validatorScript], 0, 1, walletUtxos);
+
+    // Rebuild change with final fee
+    if (lowBuilder.ChangeOutputIndex is not null)
+    {
+        List<ITransactionOutput> closeOutputs = [.. lowBuilder.Outputs];
+        closeOutputs.RemoveAt(lowBuilder.ChangeOutputIndex.Value);
+        _ = lowBuilder.SetOutputs(closeOutputs);
+        lowBuilder.ChangeOutputIndex = null;
+        lowBuilder.ChangeOutput = null;
+    }
+    IValue closeFinalOut = Lovelace.Create(0);
+    for (int i = 0; i < lowBuilder.Outputs.Count; i++)
+    {
+        closeFinalOut = closeFinalOut.Merge(lowBuilder.Outputs[i].Amount());
+    }
+    IValue closeChange = closeTotalIn.Subtract(closeFinalOut).Subtract(Lovelace.Create(lowBuilder.Fee));
+    if (closeChange.Lovelace() > 0)
+    {
+        _ = lowBuilder.AddOutput(walletBech32, closeChange, isChange: true);
     }
 
     closeUnsigned = lowBuilder.Build();
@@ -658,6 +775,8 @@ Console.WriteLine($"   Built ({sw.ElapsedMilliseconds}ms)");
 ITransaction closeSigned = closeUnsigned.Sign(paymentKey);
 byte[] closeCbor = CborSerializer.Serialize(closeSigned);
 Console.WriteLine($"   Signed TX: {closeCbor.Length} bytes");
+Console.WriteLine($"   CBOR first bytes: {Convert.ToHexString(closeCbor.AsSpan(0, Math.Min(20, closeCbor.Length)))}");
+Console.WriteLine($"   CBOR hex: {Convert.ToHexString(closeCbor)}");
 
 Console.WriteLine("13. Submitting close order...");
 sw.Restart();
