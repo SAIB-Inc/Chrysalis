@@ -1204,10 +1204,7 @@ public class TxBuilder
             ScriptRef = scriptRef;
         }
 
-        public OutputDirective(ITransactionOutput rawOutput)
-        {
-            RawOutput = rawOutput;
-        }
+        public OutputDirective(ITransactionOutput rawOutput) => RawOutput = rawOutput;
     }
 
     private sealed record MintDirective(
