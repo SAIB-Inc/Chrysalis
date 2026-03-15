@@ -40,6 +40,7 @@ public static class TransactionBuilderExtensions
         ArgumentNullException.ThrowIfNull(scripts);
 
         builder.IntegrateRedeemerSet();
+        _ = builder.ComputeAndSetAuxDataHash();
 
         ulong scriptFee = 0;
         ulong scriptExecutionFee = 0;

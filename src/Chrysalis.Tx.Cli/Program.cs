@@ -176,7 +176,6 @@ else if (mode == "LOW")
         .AddMetadata(674, CreateMsgMetadatum("Chrysalis E2E: create order"))
         .SetFee(0);
 
-    _ = lowBuilder.ComputeAndSetAuxDataHash();
     _ = lowBuilder.CalculateFee([], 0, 1, walletUtxos,
         changeAddress: walletBech32, resolvedInputs: walletUtxos);
 
@@ -294,7 +293,6 @@ else if (mode == "LOW")
         _ = lowBuilder.AddInput(utxo.Outref);
     }
 
-    _ = lowBuilder.ComputeAndSetAuxDataHash();
     _ = lowBuilder.CalculateFee([validatorScript], 0, 1, walletUtxos,
         changeAddress: walletBech32, resolvedInputs: [ourUtxo, .. walletUtxos]);
 
@@ -410,7 +408,6 @@ else if (mode == "LOW")
         _ = lowBuilder.AddInput(utxo.Outref);
     }
 
-    _ = lowBuilder.ComputeAndSetAuxDataHash();
     _ = lowBuilder.CalculateFee([validatorScript], 0, 1, walletUtxos,
         changeAddress: walletBech32, resolvedInputs: [fillUtxo, .. walletUtxos]);
 
