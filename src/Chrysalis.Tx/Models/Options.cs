@@ -7,6 +7,7 @@ using Chrysalis.Codec.Types.Cardano.Core.Scripts;
 using Chrysalis.Codec.Types.Cardano.Core.Transaction;
 using Chrysalis.Codec.Types.Cardano.Core.TransactionWitness;
 using Chrysalis.Tx.Builders;
+using Chrysalis.Tx.Models.Cbor;
 using Chrysalis.Codec.Types.Cardano.Core.Protocol;
 using Chrysalis.Tx.Utils;
 using WalletAddress = Chrysalis.Wallet.Models.Addresses.Address;
@@ -21,8 +22,11 @@ namespace Chrysalis.Tx.Models;
 /// <typeparam name="T">The transaction parameter type.</typeparam>
 public record InputOptions<T>
 {
-    /// <summary>Gets or sets the party identifier for the input address.</summary>
+    /// <summary>Gets or sets the party identifier for the input address. Optional when Utxo or UtxoRef is set.</summary>
     public string From { get; set; } = string.Empty;
+
+    /// <summary>Gets or sets a pre-resolved UTxO to consume directly (skips provider fetch).</summary>
+    public ResolvedInput? Utxo { get; set; }
 
     /// <summary>Gets or sets the minimum required value for the input.</summary>
     public IValue? MinAmount { get; set; }
@@ -88,8 +92,11 @@ public record InputOptions<T>
 /// </summary>
 public record ReferenceInputOptions
 {
-    /// <summary>Gets or sets the party identifier for the reference input address.</summary>
+    /// <summary>Gets or sets the party identifier for the reference input address. Optional when Utxo or UtxoRef is set.</summary>
     public string From { get; set; } = string.Empty;
+
+    /// <summary>Gets or sets a pre-resolved UTxO to use directly (skips provider fetch).</summary>
+    public ResolvedInput? Utxo { get; set; }
 
     /// <summary>Gets or sets a specific UTxO reference.</summary>
     public TransactionInput? UtxoRef { get; set; }
@@ -143,12 +150,7 @@ public record OutputOptions
 
         Address address = new(WalletAddress.FromBech32(parties[To]).ToBytes());
         CborEncodedValue? script = IScript is not null ? new CborEncodedValue(CborSerializer.Serialize(IScript)) : null;
-        ITransactionOutput output = AlonzoTransactionOutput.Create(address, Amount ?? Lovelace.Create(1000000), null);
-
-        if (Datum is not null || IScript is not null)
-        {
-            output = PostAlonzoTransactionOutput.Create(address, Amount ?? Lovelace.Create(1000000), Datum, script);
-        }
+        ITransactionOutput output = PostAlonzoTransactionOutput.Create(address, Amount ?? Lovelace.Create(1000000), Datum, script);
 
         ulong minLovelace = FeeUtil.CalculateMinimumLovelace(adaPerUtxoByte, CborSerializer.Serialize(output));
         ulong currentLovelace = output.Amount().Lovelace();
@@ -162,12 +164,8 @@ public record OutputOptions
                 _ => Lovelace.Create(minLovelace)
             };
 
-            output = output switch
-            {
-                AlonzoTransactionOutput alonzoOutput => AlonzoTransactionOutput.Create(alonzoOutput.Address, amount, alonzoOutput.DatumHash),
-                PostAlonzoTransactionOutput postAlonzoOutput => PostAlonzoTransactionOutput.Create(postAlonzoOutput.Address, amount, postAlonzoOutput.Datum, postAlonzoOutput.ScriptRef),
-                _ => throw new InvalidOperationException("Unsupported transaction output type")
-            };
+            PostAlonzoTransactionOutput postAlonzo = (PostAlonzoTransactionOutput)output;
+            output = PostAlonzoTransactionOutput.Create(postAlonzo.Address, amount, postAlonzo.Datum, postAlonzo.ScriptRef);
 
             minLovelace = FeeUtil.CalculateMinimumLovelace(adaPerUtxoByte, CborSerializer.Serialize(output));
             currentLovelace = output.Amount().Lovelace();

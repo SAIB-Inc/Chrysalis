@@ -185,7 +185,7 @@ else
 {
     TransactionTemplate<CreateOrderParams> createTemplate =
         TransactionTemplateBuilder.Create<CreateOrderParams>(provider)
-            .AddStaticParty("change", walletBech32, true)
+            .SetChangeAddress(walletBech32)
             .AddOutput((options, _, _) =>
             {
                 options.To = "contract";
@@ -305,17 +305,15 @@ else
 
     TransactionTemplate<FillOrderParams> fillTemplate =
         TransactionTemplateBuilder.Create<FillOrderParams>(provider)
-            .AddStaticParty("change", walletBech32, true)
+            .SetChangeAddress(walletBech32)
             .AddReferenceInput((options, param) =>
             {
-                options.From = "deployAddress";
                 options.UtxoRef = TransactionInput.Create(
                     Convert.FromHexString(param.DeployUtxoTxHash), param.DeployUtxoIndex);
                 options.Id = "deployRef";
             })
             .AddInput((options, param) =>
             {
-                options.From = "scriptAddress";
                 options.UtxoRef = TransactionInput.Create(
                     Convert.FromHexString(param.ScriptUtxoTxHash), param.ScriptUtxoIndex);
                 options.Id = "scriptInput";
@@ -417,18 +415,16 @@ else
 {
     TransactionTemplate<CloseOrderParams> closeTemplate =
         TransactionTemplateBuilder.Create<CloseOrderParams>(provider)
-            .AddStaticParty("change", walletBech32, true)
+            .SetChangeAddress(walletBech32)
             .AddRequiredSigner("owner")
             .AddReferenceInput((options, param) =>
             {
-                options.From = "deployAddress";
                 options.UtxoRef = TransactionInput.Create(
                     Convert.FromHexString(param.DeployUtxoTxHash), param.DeployUtxoIndex);
                 options.Id = "deployRef";
             })
             .AddInput((options, param) =>
             {
-                options.From = "scriptAddress";
                 options.UtxoRef = TransactionInput.Create(
                     Convert.FromHexString(param.ScriptUtxoTxHash), param.ScriptUtxoIndex);
                 options.Id = "scriptInput";

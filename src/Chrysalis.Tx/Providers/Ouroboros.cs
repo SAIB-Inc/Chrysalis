@@ -100,6 +100,13 @@ public class Ouroboros(string socketPath, ulong networkMagic = 2) : ICardanoData
     }
 
     /// <summary>
+    /// Retrieves a specific UTxO by its output reference.
+    /// Not supported by Ouroboros — provide the UTxO directly via InputOptions.Utxo.
+    /// </summary>
+    public Task<ResolvedInput?> GetUtxoByOutRefAsync(string txHash, ulong index) =>
+        throw new NotSupportedException("Ouroboros provider does not support UTxO lookup by output reference. Provide the UTxO directly via InputOptions.Utxo.");
+
+    /// <summary>
     /// Submits a signed transaction via the local tx submission mini-protocol.
     /// </summary>
     /// <param name="tx">The signed transaction.</param>
