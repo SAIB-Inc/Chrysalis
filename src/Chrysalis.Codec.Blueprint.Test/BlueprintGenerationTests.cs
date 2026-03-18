@@ -1,6 +1,10 @@
 using Chrysalis.Codec.Serialization;
 using Chrysalis.Codec.Types;
 using Chrysalis.Codec.Types.Cardano.Core.Common;
+using Chrysalis.Codec.Types.Cardano.Core.Scripts;
+using Chrysalis.Tx.Extensions;
+using Chrysalis.Wallet.Models.Enums;
+using WalletAddress = Chrysalis.Wallet.Models.Addresses.Address;
 using WizardProtocol.P2p.Blueprint;
 using Xunit;
 
@@ -50,6 +54,46 @@ public class BlueprintGenerationTests
         Assert.False(string.IsNullOrEmpty(WizardScriptSpend.CompiledCode));
         Assert.False(string.IsNullOrEmpty(WizardScriptSpend.Hash));
         Assert.Equal("v3", WizardScriptSpend.PlutusVersion);
+    }
+
+    [Fact]
+    public void ScriptPropertyReturnsValidPlutusV3Script()
+    {
+        IScript script = WizardScriptSpend.Script;
+        Assert.NotNull(script);
+        Assert.IsType<PlutusV3Script>(script);
+    }
+
+    [Fact]
+    public void ScriptHashMatchesConstant()
+    {
+        IScript script = WizardScriptSpend.Script;
+        Assert.Equal(WizardScriptSpend.Hash, script.HashHex(), StringComparer.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void TestnetAddressIsBech32()
+    {
+        WalletAddress addr = WizardScriptSpend.TestnetAddress;
+        string bech32 = addr.ToBech32();
+        Assert.StartsWith("addr_test1", bech32, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void MainnetAddressIsBech32()
+    {
+        WalletAddress addr = WizardScriptSpend.MainnetAddress;
+        string bech32 = addr.ToBech32();
+        Assert.StartsWith("addr1", bech32, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void GetAddressWithStakeKeyProducesDelegationAddress()
+    {
+        byte[] stakeKeyHash = new byte[28];
+        WalletAddress addr = WizardScriptSpend.GetAddress(NetworkType.Testnet, stakeKeyHash);
+        string bech32 = addr.ToBech32();
+        Assert.StartsWith("addr_test1", bech32, StringComparison.Ordinal);
     }
 }
 

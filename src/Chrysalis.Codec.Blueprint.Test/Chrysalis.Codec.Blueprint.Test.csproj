@@ -17,6 +17,8 @@
 
   <ItemGroup>
     <ProjectReference Include="../Chrysalis.Codec/Chrysalis.Codec.csproj" />
+    <ProjectReference Include="../Chrysalis.Wallet/Chrysalis.Wallet.csproj" />
+    <ProjectReference Include="../Chrysalis.Tx/Chrysalis.Tx.csproj" />
     <ProjectReference Include="../Chrysalis.Codec.CodeGen/Chrysalis.Codec.CodeGen.csproj"
                       OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
   </ItemGroup>
