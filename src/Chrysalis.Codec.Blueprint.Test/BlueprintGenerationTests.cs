@@ -4,6 +4,7 @@ using Chrysalis.Codec.Types.Cardano.Core.Common;
 using Chrysalis.Codec.Types.Cardano.Core.Scripts;
 using Chrysalis.Tx.Extensions;
 using Chrysalis.Wallet.Models.Enums;
+using WalletAddress = Chrysalis.Wallet.Models.Addresses.Address;
 using WizardProtocol.P2p.Blueprint;
 using Xunit;
 
@@ -73,7 +74,7 @@ public class BlueprintGenerationTests
     [Fact]
     public void TestnetAddressIsBech32()
     {
-        Chrysalis.Wallet.Models.Addresses.Address addr = WizardScriptSpend.TestnetAddress;
+        WalletAddress addr = WizardScriptSpend.TestnetAddress;
         string bech32 = addr.ToBech32();
         Assert.StartsWith("addr_test1", bech32, StringComparison.Ordinal);
     }
@@ -81,7 +82,7 @@ public class BlueprintGenerationTests
     [Fact]
     public void MainnetAddressIsBech32()
     {
-        Chrysalis.Wallet.Models.Addresses.Address addr = WizardScriptSpend.MainnetAddress;
+        WalletAddress addr = WizardScriptSpend.MainnetAddress;
         string bech32 = addr.ToBech32();
         Assert.StartsWith("addr1", bech32, StringComparison.Ordinal);
     }
@@ -90,7 +91,7 @@ public class BlueprintGenerationTests
     public void GetAddressWithStakeKeyProducesDelegationAddress()
     {
         byte[] stakeKeyHash = new byte[28];
-        Chrysalis.Wallet.Models.Addresses.Address addr = WizardScriptSpend.GetAddress(NetworkType.Testnet, stakeKeyHash);
+        WalletAddress addr = WizardScriptSpend.GetAddress(NetworkType.Testnet, stakeKeyHash);
         string bech32 = addr.ToBech32();
         Assert.StartsWith("addr_test1", bech32, StringComparison.Ordinal);
     }
