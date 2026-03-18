@@ -251,7 +251,11 @@ public sealed class TransactionTemplateBuilder<T>
             _ = context.TxBuilder.SetTtl(_validTo);
         }
 
-        WalletAddress changeAddress = WalletAddress.FromBech32(parties["change"]);
+        if (!parties.TryGetValue("change", out string? changeAddrBech32))
+        {
+            throw new InvalidOperationException("Change address not configured. Call SetChangeAddress() or AddStaticParty(\"change\", address, true).");
+        }
+        WalletAddress changeAddress = WalletAddress.FromBech32(changeAddrBech32);
 
         context.AssociationsByInputId["fee"] = [];
 
@@ -310,7 +314,7 @@ public sealed class TransactionTemplateBuilder<T>
             ? LovelaceWithMultiAsset.Create(lovelaceChange.Amount, MultiAssetOutput.Create(assetsChange))
             : lovelaceChange;
 
-        ITransactionOutput changeOutput = AlonzoTransactionOutput.Create(new Address(changeAddress.ToBytes()), changeValue, null);
+        ITransactionOutput changeOutput = PostAlonzoTransactionOutput.Create(new Address(changeAddress.ToBytes()), changeValue, null, null);
 
         if (!string.IsNullOrEmpty(_changeAddress) && lovelaceChange.Amount > 0)
         {
@@ -333,17 +337,8 @@ public sealed class TransactionTemplateBuilder<T>
         }
 
         Dictionary<string, int> inputIdToOrderedIndex = GetInputIdToOrderedIndex(context.InputsById, sortedInputs);
-        Dictionary<int, Dictionary<string, int>> intIndexedAssociations = [];
         Dictionary<string, (ulong inputIndex, Dictionary<string, int> outputIndices)> stringIndexedAssociations = GetIndexedAssociations(context.AssociationsByInputId, inputIdToOrderedIndex);
         Dictionary<string, ulong> refInputIdToOrderedIndex = GetRefInputIdToOrderedIndex(context.ReferenceInputsById, sortedRefInputs);
-
-        foreach ((string inputId, (ulong inputIndex, Dictionary<string, int> outputIndices) data) in stringIndexedAssociations)
-        {
-            if (int.TryParse(inputId, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out int intKey))
-            {
-                intIndexedAssociations[intKey] = data.outputIndices;
-            }
-        }
 
         ProcessWithdrawals(param, context, parties);
 
@@ -728,7 +723,7 @@ public sealed class TransactionTemplateBuilder<T>
     BuildContext context)
     {
         // Collect all unique addresses that need UTxO fetching
-        HashSet<string> addressesToFetch = [parties["change"]];
+        HashSet<string> addressesToFetch = [parties["change"]!];
 
         foreach (string address in context.InputAddresses.Distinct())
         {
@@ -750,11 +745,9 @@ public sealed class TransactionTemplateBuilder<T>
         foreach (TransactionInput outRef in context.UnresolvedOutRefs)
         {
             string txHash = Convert.ToHexStringLower(outRef.TransactionId.Span);
-            ResolvedInput? resolved = await _provider!.GetUtxoByOutRefAsync(txHash, outRef.Index).ConfigureAwait(false);
-            if (resolved is not null)
-            {
-                allUtxos.Add(resolved);
-            }
+            ResolvedInput resolved = await _provider!.GetUtxoByOutRefAsync(txHash, outRef.Index).ConfigureAwait(false)
+                ?? throw new InvalidOperationException($"UTxO not found: {txHash}#{outRef.Index}. The UTxO may have been spent or the provider may not have indexed it yet.");
+            allUtxos.Add(resolved);
         }
 
         // Separate change UTxOs for specific processing
@@ -804,7 +797,7 @@ public sealed class TransactionTemplateBuilder<T>
 
         foreach (InputConfig<T> config in _inputConfigs)
         {
-            InputOptions<T> inputOptions = new() { From = "", Id = null };
+            InputOptions<T> inputOptions = new();
             config(inputOptions, param);
 
             if (inputOptions.Redeemer != null)
@@ -934,7 +927,7 @@ public sealed class TransactionTemplateBuilder<T>
     {
         foreach (InputConfig<T> config in _inputConfigs)
         {
-            InputOptions<T> inputOptions = new() { From = "", Id = null };
+            InputOptions<T> inputOptions = new();
             config(inputOptions, param);
 
             // Resolve UtxoRef from Utxo if provided directly
@@ -961,12 +954,7 @@ public sealed class TransactionTemplateBuilder<T>
                 context.IsSmartContractTx = true;
             }
 
-            if (inputOptions.MinAmount is not null)
-            {
-                context.MinimumLovelace += inputOptions.MinAmount.Lovelace();
-            }
-
-            if (!string.IsNullOrEmpty(inputOptions.From))
+            if (inputOptions.From is not null)
             {
                 context.InputAddresses.Add(inputOptions.From);
             }
@@ -979,7 +967,7 @@ public sealed class TransactionTemplateBuilder<T>
 
         foreach (ReferenceInputConfig<T> config in _referenceInputConfigs)
         {
-            ReferenceInputOptions referenceInputOptions = new() { From = "", UtxoRef = null, Id = null };
+            ReferenceInputOptions referenceInputOptions = new();
             config(referenceInputOptions, param);
 
             // Resolve UtxoRef from Utxo if provided directly
@@ -995,7 +983,7 @@ public sealed class TransactionTemplateBuilder<T>
                 {
                     context.ReferenceInputsById[referenceInputOptions.Id] = referenceInputOptions.UtxoRef.Value;
                 }
-                if (!string.IsNullOrEmpty(referenceInputOptions.From))
+                if (referenceInputOptions.From is not null)
                 {
                     context.InputAddresses.Add(referenceInputOptions.From);
                 }
@@ -1265,7 +1253,6 @@ public sealed class TransactionTemplateBuilder<T>
         public TransactionBuilder TxBuilder { get; set; } = null!;
         public bool IsSmartContractTx { get; set; }
         public List<TransactionInput> ReferenceInputs { get; set; } = [];
-        public ulong MinimumLovelace { get; set; }
         public Dictionary<string, TransactionInput> InputsById { get; } = [];
         public Dictionary<string, TransactionInput> ReferenceInputsById { get; } = [];
         public Dictionary<string, Dictionary<string, int>> AssociationsByInputId { get; } = [];

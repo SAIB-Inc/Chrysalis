@@ -23,7 +23,7 @@ namespace Chrysalis.Tx.Models;
 public record InputOptions<T>
 {
     /// <summary>Gets or sets the party identifier for the input address. Optional when Utxo or UtxoRef is set.</summary>
-    public string From { get; set; } = string.Empty;
+    public string? From { get; set; }
 
     /// <summary>Gets or sets a pre-resolved UTxO to consume directly (skips provider fetch).</summary>
     public ResolvedInput? Utxo { get; set; }
@@ -93,7 +93,7 @@ public record InputOptions<T>
 public record ReferenceInputOptions
 {
     /// <summary>Gets or sets the party identifier for the reference input address. Optional when Utxo or UtxoRef is set.</summary>
-    public string From { get; set; } = string.Empty;
+    public string? From { get; set; }
 
     /// <summary>Gets or sets a pre-resolved UTxO to use directly (skips provider fetch).</summary>
     public ResolvedInput? Utxo { get; set; }
@@ -127,7 +127,7 @@ public record OutputOptions
     public string? Id { get; set; }
 
     /// <summary>Gets or sets the script to attach to the output.</summary>
-    public IScript? IScript { get; set; }
+    public IScript? Script { get; set; }
 
     /// <summary>
     /// Sets an inline datum on this output from a typed CBOR value.
@@ -149,7 +149,7 @@ public record OutputOptions
         ArgumentNullException.ThrowIfNull(parties);
 
         Address address = new(WalletAddress.FromBech32(parties[To]).ToBytes());
-        CborEncodedValue? script = IScript is not null ? new CborEncodedValue(CborSerializer.Serialize(IScript)) : null;
+        CborEncodedValue? script = Script is not null ? new CborEncodedValue(CborSerializer.Serialize(Script)) : null;
         ITransactionOutput output = PostAlonzoTransactionOutput.Create(address, Amount ?? Lovelace.Create(1000000), Datum, script);
 
         ulong minLovelace = FeeUtil.CalculateMinimumLovelace(adaPerUtxoByte, CborSerializer.Serialize(output));
