@@ -864,6 +864,8 @@ public class TxBuilder
         HashSet<string> uniquePkhs = new(StringComparer.OrdinalIgnoreCase);
 
         // Change address (wallet always signs)
+        // Change address (wallet always signs). Script-locked change addresses
+        // return null here — they don't require key witnesses, so this is intentional.
         if (_changeAddress is not null)
         {
             string? changePkh = Wallet.Models.Addresses.Address.FromBech32(_changeAddress).GetPaymentKeyHashHex();
@@ -938,18 +940,18 @@ public class TxBuilder
 
         foreach (InputDirective input in explicitInputs)
         {
-            AddAssetsFromValue(assetBalance, input.Utxo.Output.Amount(), positive: true);
+            AddAssetsFromValue(assetBalance, input.Utxo.Output.Amount(), subtract: false);
         }
 
         foreach (ResolvedInput input in selectedInputs)
         {
-            AddAssetsFromValue(assetBalance, input.Output.Amount(), positive: true);
+            AddAssetsFromValue(assetBalance, input.Output.Amount(), subtract: false);
         }
 
         // Subtract native assets going to outputs
         for (int i = 0; i < outputs.Count; i++)
         {
-            AddAssetsFromValue(assetBalance, outputs[i].Amount(), positive: false);
+            AddAssetsFromValue(assetBalance, outputs[i].Amount(), subtract: true);
         }
 
         // Add minted assets
@@ -1000,7 +1002,7 @@ public class TxBuilder
     private static void AddAssetsFromValue(
         Dictionary<ReadOnlyMemory<byte>, Dictionary<ReadOnlyMemory<byte>, long>> balance,
         IValue value,
-        bool positive)
+        bool subtract = false)
     {
         if (value is not LovelaceWithMultiAsset multiAsset)
         {
@@ -1017,7 +1019,7 @@ public class TxBuilder
 
             foreach (KeyValuePair<ReadOnlyMemory<byte>, ulong> token in policy.Value.Value)
             {
-                long delta = positive ? (long)token.Value : -(long)token.Value;
+                long delta = subtract ? -(long)token.Value : (long)token.Value;
                 bundle[token.Key] = bundle.TryGetValue(token.Key, out long existing) ? existing + delta : delta;
             }
         }

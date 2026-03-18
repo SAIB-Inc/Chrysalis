@@ -347,6 +347,52 @@ public sealed class Blockfrost : ICardanoDataProvider, IDisposable
     }
 
     /// <summary>
+    /// Retrieves a specific UTxO by its output reference.
+    /// </summary>
+    public async Task<ResolvedInput?> GetUtxoByOutRefAsync(string txHash, ulong index)
+    {
+        ArgumentNullException.ThrowIfNull(txHash);
+
+        string query = $"txs/{txHash}/utxos";
+        using HttpResponseMessage response = await _httpClient.GetAsync(new Uri(query, UriKind.Relative)).ConfigureAwait(false);
+
+        if (!response.IsSuccessStatusCode)
+        {
+            return null;
+        }
+
+        string content = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+        using JsonDocument doc = JsonDocument.Parse(content);
+        JsonElement root = doc.RootElement;
+
+        if (!root.TryGetProperty("outputs", out JsonElement outputs))
+        {
+            return null;
+        }
+
+        foreach (JsonElement output in outputs.EnumerateArray())
+        {
+            if (output.TryGetProperty("output_index", out JsonElement idxElem) &&
+                idxElem.GetUInt64() == index)
+            {
+                // Reconstruct as a UTxO query for the address and filter
+                string? address = output.GetProperty("address").GetString();
+                if (address is null)
+                {
+                    return null;
+                }
+
+                List<ResolvedInput> utxos = await GetUtxosAsync(address).ConfigureAwait(false);
+                return utxos.Find(u =>
+                    Convert.ToHexStringLower(u.Outref.TransactionId.Span).Equals(txHash, StringComparison.OrdinalIgnoreCase) &&
+                    u.Outref.Index == index);
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
     /// Submits a signed transaction to the Blockfrost API.
     /// </summary>
     /// <param name="tx">The signed transaction.</param>

@@ -221,6 +221,14 @@ public sealed class TransactionTemplateBuilder<T>
         return this;
     }
 
+    /// <summary>
+    /// Sets the change address directly. Shorthand for AddStaticParty("change", address, true).
+    /// </summary>
+    public TransactionTemplateBuilder<T> SetChangeAddress(string bech32Address)
+    {
+        ArgumentNullException.ThrowIfNull(bech32Address);
+        return AddStaticParty("change", bech32Address, true);
+    }
 
     private async Task<ITransaction> EvaluateTemplate(T param, bool eval = true, ulong fee = 0)
     {
@@ -243,7 +251,11 @@ public sealed class TransactionTemplateBuilder<T>
             _ = context.TxBuilder.SetTtl(_validTo);
         }
 
-        WalletAddress changeAddress = WalletAddress.FromBech32(parties["change"]);
+        if (!parties.TryGetValue("change", out string? changeAddrBech32))
+        {
+            throw new InvalidOperationException("Change address not configured. Call SetChangeAddress() or AddStaticParty(\"change\", address, true).");
+        }
+        WalletAddress changeAddress = WalletAddress.FromBech32(changeAddrBech32);
 
         context.AssociationsByInputId["fee"] = [];
 
@@ -302,7 +314,7 @@ public sealed class TransactionTemplateBuilder<T>
             ? LovelaceWithMultiAsset.Create(lovelaceChange.Amount, MultiAssetOutput.Create(assetsChange))
             : lovelaceChange;
 
-        ITransactionOutput changeOutput = AlonzoTransactionOutput.Create(new Address(changeAddress.ToBytes()), changeValue, null);
+        ITransactionOutput changeOutput = PostAlonzoTransactionOutput.Create(new Address(changeAddress.ToBytes()), changeValue, null, null);
 
         if (!string.IsNullOrEmpty(_changeAddress) && lovelaceChange.Amount > 0)
         {
@@ -325,17 +337,8 @@ public sealed class TransactionTemplateBuilder<T>
         }
 
         Dictionary<string, int> inputIdToOrderedIndex = GetInputIdToOrderedIndex(context.InputsById, sortedInputs);
-        Dictionary<int, Dictionary<string, int>> intIndexedAssociations = [];
         Dictionary<string, (ulong inputIndex, Dictionary<string, int> outputIndices)> stringIndexedAssociations = GetIndexedAssociations(context.AssociationsByInputId, inputIdToOrderedIndex);
         Dictionary<string, ulong> refInputIdToOrderedIndex = GetRefInputIdToOrderedIndex(context.ReferenceInputsById, sortedRefInputs);
-
-        foreach ((string inputId, (ulong inputIndex, Dictionary<string, int> outputIndices) data) in stringIndexedAssociations)
-        {
-            if (int.TryParse(inputId, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out int intKey))
-            {
-                intIndexedAssociations[intKey] = data.outputIndices;
-            }
-        }
 
         ProcessWithdrawals(param, context, parties);
 
@@ -720,7 +723,7 @@ public sealed class TransactionTemplateBuilder<T>
     BuildContext context)
     {
         // Collect all unique addresses that need UTxO fetching
-        HashSet<string> addressesToFetch = [parties["change"]];
+        HashSet<string> addressesToFetch = [parties["change"]!];
 
         foreach (string address in context.InputAddresses.Distinct())
         {
@@ -731,7 +734,21 @@ public sealed class TransactionTemplateBuilder<T>
         }
 
         // Single batched call instead of multiple sequential calls
-        List<ResolvedInput> allUtxos = await _provider!.GetUtxosAsync([.. addressesToFetch]).ConfigureAwait(false);
+        List<ResolvedInput> allUtxos = addressesToFetch.Count > 0
+            ? await _provider!.GetUtxosAsync([.. addressesToFetch]).ConfigureAwait(false)
+            : [];
+
+        // Add pre-resolved UTxOs (from InputOptions.Utxo / ReferenceInputOptions.Utxo)
+        allUtxos.AddRange(context.PreResolvedUtxos);
+
+        // Fetch unresolved outrefs (UtxoRef without From or Utxo)
+        foreach (TransactionInput outRef in context.UnresolvedOutRefs)
+        {
+            string txHash = Convert.ToHexStringLower(outRef.TransactionId.Span);
+            ResolvedInput resolved = await _provider!.GetUtxoByOutRefAsync(txHash, outRef.Index).ConfigureAwait(false)
+                ?? throw new InvalidOperationException($"UTxO not found: {txHash}#{outRef.Index}. The UTxO may have been spent or the provider may not have indexed it yet.");
+            allUtxos.Add(resolved);
+        }
 
         // Separate change UTxOs for specific processing
         string changeAddr = parties["change"];
@@ -780,7 +797,7 @@ public sealed class TransactionTemplateBuilder<T>
 
         foreach (InputConfig<T> config in _inputConfigs)
         {
-            InputOptions<T> inputOptions = new() { From = "", Id = null };
+            InputOptions<T> inputOptions = new();
             config(inputOptions, param);
 
             if (inputOptions.Redeemer != null)
@@ -910,8 +927,15 @@ public sealed class TransactionTemplateBuilder<T>
     {
         foreach (InputConfig<T> config in _inputConfigs)
         {
-            InputOptions<T> inputOptions = new() { From = "", Id = null };
+            InputOptions<T> inputOptions = new();
             config(inputOptions, param);
+
+            // Resolve UtxoRef from Utxo if provided directly
+            if (inputOptions.Utxo is not null)
+            {
+                inputOptions.UtxoRef ??= inputOptions.Utxo.Outref;
+                context.PreResolvedUtxos.Add(inputOptions.Utxo);
+            }
 
             if (!string.IsNullOrEmpty(inputOptions.Id) && inputOptions.UtxoRef != null)
             {
@@ -921,31 +945,37 @@ public sealed class TransactionTemplateBuilder<T>
 
             if (inputOptions.UtxoRef is not null)
             {
-
                 context.SpecifiedInputs.Add(inputOptions.UtxoRef.Value);
                 _ = context.TxBuilder.AddInput(inputOptions.UtxoRef.Value);
-
             }
+
             if (inputOptions.Redeemer is not null || inputOptions.RedeemerBuilder is not null)
             {
                 context.IsSmartContractTx = true;
             }
 
-            if (inputOptions.MinAmount is not null)
-            {
-                context.MinimumLovelace += inputOptions.MinAmount.Lovelace();
-            }
-
-            if (!string.IsNullOrEmpty(inputOptions.From))
+            if (inputOptions.From is not null)
             {
                 context.InputAddresses.Add(inputOptions.From);
+            }
+            else if (inputOptions.UtxoRef is not null && inputOptions.Utxo is null)
+            {
+                // No address and no pre-resolved UTxO — will need provider fetch by outref
+                context.UnresolvedOutRefs.Add(inputOptions.UtxoRef.Value);
             }
         }
 
         foreach (ReferenceInputConfig<T> config in _referenceInputConfigs)
         {
-            ReferenceInputOptions referenceInputOptions = new() { From = "", UtxoRef = null, Id = null };
+            ReferenceInputOptions referenceInputOptions = new();
             config(referenceInputOptions, param);
+
+            // Resolve UtxoRef from Utxo if provided directly
+            if (referenceInputOptions.Utxo is not null)
+            {
+                referenceInputOptions.UtxoRef ??= referenceInputOptions.Utxo.Outref;
+                context.PreResolvedUtxos.Add(referenceInputOptions.Utxo);
+            }
 
             if (referenceInputOptions.UtxoRef is not null)
             {
@@ -953,7 +983,14 @@ public sealed class TransactionTemplateBuilder<T>
                 {
                     context.ReferenceInputsById[referenceInputOptions.Id] = referenceInputOptions.UtxoRef.Value;
                 }
-                context.InputAddresses.Add(referenceInputOptions.From);
+                if (referenceInputOptions.From is not null)
+                {
+                    context.InputAddresses.Add(referenceInputOptions.From);
+                }
+                else if (referenceInputOptions.Utxo is null)
+                {
+                    context.UnresolvedOutRefs.Add(referenceInputOptions.UtxoRef.Value);
+                }
                 context.ReferenceInputs.Add(referenceInputOptions.UtxoRef.Value);
                 _ = context.TxBuilder.AddReferenceInput(referenceInputOptions.UtxoRef.Value);
             }
@@ -1216,13 +1253,14 @@ public sealed class TransactionTemplateBuilder<T>
         public TransactionBuilder TxBuilder { get; set; } = null!;
         public bool IsSmartContractTx { get; set; }
         public List<TransactionInput> ReferenceInputs { get; set; } = [];
-        public ulong MinimumLovelace { get; set; }
         public Dictionary<string, TransactionInput> InputsById { get; } = [];
         public Dictionary<string, TransactionInput> ReferenceInputsById { get; } = [];
         public Dictionary<string, Dictionary<string, int>> AssociationsByInputId { get; } = [];
         public List<string> InputAddresses { get; } = [];
         public List<ResolvedInput> ResolvedInputs { get; } = [];
         public List<TransactionInput> SpecifiedInputs { get; set; } = [];
+        public List<ResolvedInput> PreResolvedUtxos { get; } = [];
+        public List<TransactionInput> UnresolvedOutRefs { get; } = [];
         public Dictionary<RedeemerKey, RedeemerValue> Redeemers { get; } = [];
         public Dictionary<string, Dictionary<string, long>> Mints { get; } = [];
     }

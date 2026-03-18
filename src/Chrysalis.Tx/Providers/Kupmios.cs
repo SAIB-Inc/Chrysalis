@@ -109,13 +109,13 @@ public sealed class Kupmios : ICardanoDataProvider, IDisposable
     /// Retrieves a UTxO by its output reference (transaction hash + index).
     /// </summary>
     /// <param name="txHash">The transaction hash.</param>
-    /// <param name="outputIndex">The output index.</param>
+    /// <param name="index">The output index.</param>
     /// <returns>The resolved input, or null if not found.</returns>
-    public async Task<ResolvedInput?> GetUtxoByOutRefAsync(string txHash, ulong outputIndex)
+    public async Task<ResolvedInput?> GetUtxoByOutRefAsync(string txHash, ulong index)
     {
         ArgumentNullException.ThrowIfNull(txHash);
 
-        string pattern = string.Create(CultureInfo.InvariantCulture, $"{outputIndex}@{txHash}");
+        string pattern = string.Create(CultureInfo.InvariantCulture, $"{index}@{txHash}");
 
         using HttpResponseMessage response = await _httpClient.GetAsync(new Uri($"matches/{pattern}?unspent&resolve_hashes", UriKind.Relative)).ConfigureAwait(false);
 

@@ -30,6 +30,8 @@ public sealed class OutputBuilder
     /// <summary>Creates an output builder with a bech32 address and value.</summary>
     public OutputBuilder(string bech32Address, IValue amount)
     {
+        ArgumentException.ThrowIfNullOrEmpty(bech32Address, nameof(bech32Address));
+        ArgumentNullException.ThrowIfNull(amount);
         _addressBytes = Wallet.Models.Addresses.Address.FromBech32(bech32Address).ToBytes();
         Amount = amount;
     }

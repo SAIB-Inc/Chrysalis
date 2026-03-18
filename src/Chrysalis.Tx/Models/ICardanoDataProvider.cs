@@ -32,6 +32,14 @@ public interface ICardanoDataProvider
     Task<string> SubmitTransactionAsync(ITransaction tx);
 
     /// <summary>
+    /// Retrieves a specific UTxO by its output reference (transaction hash + index).
+    /// </summary>
+    /// <param name="txHash">The transaction hash (hex).</param>
+    /// <param name="index">The output index.</param>
+    /// <returns>The resolved input if found, or null.</returns>
+    Task<ResolvedInput?> GetUtxoByOutRefAsync(string txHash, ulong index);
+
+    /// <summary>
     /// Retrieves transaction metadata by transaction hash.
     /// </summary>
     /// <param name="txHash">The transaction hash.</param>
