@@ -141,6 +141,7 @@ public class TransactionBuilder
     /// <summary>Adds a transaction input from hex hash and index.</summary>
     public TransactionBuilder AddInput(string txHashHex, ulong index)
     {
+        ArgumentException.ThrowIfNullOrEmpty(txHashHex, nameof(txHashHex));
         _inputs.Add(TransactionInput.Create(Convert.FromHexString(txHashHex), index));
         return this;
     }
@@ -809,12 +810,18 @@ public class TransactionBuilder
     {
         ArgumentNullException.ThrowIfNull(utxoRef);
         int hashIndex = utxoRef.IndexOf('#', StringComparison.Ordinal);
-        if (hashIndex < 0)
+        if (hashIndex <= 0 || hashIndex >= utxoRef.Length - 1)
         {
             throw new FormatException($"Invalid UTxO reference '{utxoRef}'. Expected format: txHash#index");
         }
 
-        return (utxoRef[..hashIndex], ulong.Parse(utxoRef[(hashIndex + 1)..], System.Globalization.CultureInfo.InvariantCulture));
+        if (!ulong.TryParse(utxoRef.AsSpan(hashIndex + 1), System.Globalization.NumberStyles.None,
+            System.Globalization.CultureInfo.InvariantCulture, out ulong index))
+        {
+            throw new FormatException($"Invalid UTxO index in '{utxoRef}'. Index must be a non-negative integer.");
+        }
+
+        return (utxoRef[..hashIndex], index);
     }
 
     private static MultiAssetMint MergeMints(MultiAssetMint existingMint, MultiAssetMint newMint)

@@ -250,11 +250,15 @@ public static class TransactionBuilderExtensions
     /// <summary>
     /// Selects collateral inputs and builds a collateral return output.
     /// </summary>
-    public static void SelectCollateral(
+    internal static void SelectCollateral(
         TransactionBuilder builder, ulong fee, List<ResolvedInput> availableInputs)
     {
         ArgumentNullException.ThrowIfNull(builder);
         ArgumentNullException.ThrowIfNull(availableInputs);
+        if (availableInputs.Count == 0)
+        {
+            throw new ArgumentException("Available inputs for collateral selection cannot be empty.", nameof(availableInputs));
+        }
         ulong totalCollateral = FeeUtil.CalculateRequiredCollateral(fee, builder.Pparams!.CollateralPercentage!.Value);
         _ = builder.SetTotalCollateral(totalCollateral);
         _ = builder.ClearCollateral();
@@ -340,7 +344,7 @@ public static class TransactionBuilderExtensions
     /// <summary>
     /// Builds a multi-asset change output from the difference between resolved inputs and current outputs.
     /// </summary>
-    public static void BuildChangeOutput(
+    internal static void BuildChangeOutput(
         TransactionBuilder builder, List<ResolvedInput> resolvedInputs, string changeAddress)
     {
         ArgumentNullException.ThrowIfNull(builder);
@@ -381,12 +385,17 @@ public static class TransactionBuilderExtensions
 
     private static void AdjustChangeOutput(TransactionBuilder builder, ulong fee)
     {
-        if (builder.ChangeOutput is null)
+        if (builder.ChangeOutput is null || builder.ChangeOutputIndex is null)
         {
             return;
         }
 
         List<ITransactionOutput> outputs = [.. builder.Outputs];
+        int changeIndex = builder.ChangeOutputIndex.Value;
+        if (changeIndex < 0 || changeIndex >= outputs.Count)
+        {
+            return;
+        }
 
         ulong currentChangeLovelace = builder.ChangeOutput.Amount().Lovelace();
         ulong updatedChangeLovelace = currentChangeLovelace > fee ? currentChangeLovelace - fee : 0;
@@ -396,16 +405,11 @@ public static class TransactionBuilderExtensions
             ? LovelaceWithMultiAsset.Create(updatedChangeLovelace, lma.MultiAsset)
             : Lovelace.Create(updatedChangeLovelace);
 
-        // Remove last output (assumed to be change)
-        int changeIndex = builder.ChangeOutputIndex ?? (outputs.Count - 1);
-        if (changeIndex >= 0 && changeIndex < outputs.Count)
-        {
-            outputs.RemoveAt(changeIndex);
-        }
+        outputs.RemoveAt(changeIndex);
 
         if (updatedChangeLovelace > 0)
         {
-            ITransactionOutput updatedChange = RebuildOutput(builder.ChangeOutput, updatedValue);
+            ITransactionOutput updatedChange = WithAmount(builder.ChangeOutput, updatedValue);
 
             byte[] updatedBytes = CborSerializer.Serialize(updatedChange);
             ulong minLovelace = FeeUtil.CalculateMinimumLovelace(
@@ -452,7 +456,7 @@ public static class TransactionBuilderExtensions
             }
 
             IValue newReturnValue = builder.CollateralReturn.Amount().WithLovelace(currentReturn - increase);
-            _ = builder.SetCollateralReturn(RebuildOutput(builder.CollateralReturn, newReturnValue));
+            _ = builder.SetCollateralReturn(WithAmount(builder.CollateralReturn, newReturnValue));
         }
     }
 
@@ -545,12 +549,12 @@ public static class TransactionBuilderExtensions
         return result;
     }
 
-    private static ITransactionOutput RebuildOutput(ITransactionOutput output, IValue newValue) => output switch
+    private static ITransactionOutput WithAmount(ITransactionOutput output, IValue newValue) => output switch
     {
         AlonzoTransactionOutput alonzo => AlonzoTransactionOutput.Create(
             alonzo.Address, newValue, alonzo.DatumHash),
         PostAlonzoTransactionOutput postAlonzo => PostAlonzoTransactionOutput.Create(
             postAlonzo.Address, newValue, postAlonzo.Datum, postAlonzo.ScriptRef),
-        _ => throw new InvalidOperationException("Unsupported transaction output type")
+        _ => throw new InvalidOperationException($"Unsupported transaction output type: {output.GetType().Name}")
     };
 }
