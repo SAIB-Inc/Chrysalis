@@ -90,7 +90,7 @@ public class Ouroboros(string socketPath, ulong networkMagic = 2) : ICardanoData
                 new Codec.Types.Cardano.Core.Common.Address(value.Address()),
                 value.Amount(),
                 value.DatumOption(),
-                scriptRefBytes is not null ? new CborEncodedValue(scriptRefBytes.Value) : null
+                scriptRefBytes is not null ? CborEncodedValue.Read(scriptRefBytes.Value) : null
             );
 
             resolvedInputs.Add(new ResolvedInput(TransactionInput.Create(txHash, index), output));

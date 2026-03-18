@@ -1,5 +1,6 @@
 using System.Buffers;
 using System.Text;
+using Chrysalis.Codec.Types;
 using Chrysalis.Wallet.CIPs.CIP8.Models;
 using Chrysalis.Wallet.Models.Addresses;
 using Chrysalis.Wallet.Models.Keys;
@@ -109,7 +110,10 @@ public class CoseSign1Builder
             protectedHeaderBytes = [];
         }
 
-        HeaderMap unprotectedHeaderMap = HeaderMap.WithHashed(_hashPayload);
+        CborMap unprotectedHeaders = CborMap.Create(new Dictionary<ICborPrimitive, ICborPrimitive>
+        {
+            { CborString.Create("hashed"), CborBool.Create(_hashPayload) }
+        });
 
         SigStructure sigStructure = new(
             Context: SigContext.Signature1,
@@ -124,7 +128,7 @@ public class CoseSign1Builder
 
         return new CoseSign1(
             ProtectedHeaders: protectedHeaderBytes,
-            UnprotectedHeaders: unprotectedHeaderMap,
+            UnprotectedHeaders: unprotectedHeaders,
             Payload: _isPayloadExternal ? null : payload,
             Signature: signature
         );

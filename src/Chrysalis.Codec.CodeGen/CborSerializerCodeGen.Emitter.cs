@@ -94,14 +94,22 @@ public sealed partial class CborSerializerCodeGen
                 _ = sb.AppendLine();
             }
 
-            _ = EmitSerializableTypeReader(sb, metadata!);
+            // Skip Read/Write/Create generation for Container types with no properties
+            // (e.g. CborAny which has custom Read/Write methods)
+            bool skipSerialization = metadata!.SerializationType == SerializationType.Container
+                && metadata.Properties.Count == 0;
 
-            _ = sb.AppendLine();
+            if (!skipSerialization)
+            {
+                _ = EmitSerializableTypeReader(sb, metadata);
 
-            _ = EmitSerializableTypeWriter(sb, metadata!);
+                _ = sb.AppendLine();
 
-            _ = sb.AppendLine();
-            _ = EmitCreateMethod(sb, metadata!);
+                _ = EmitSerializableTypeWriter(sb, metadata);
+
+                _ = sb.AppendLine();
+                _ = EmitCreateMethod(sb, metadata);
+            }
 
             _ = sb.AppendLine("}");
             _ = sb.AppendLine();
@@ -307,9 +315,18 @@ public sealed partial class CborSerializerCodeGen
                 case "Chrysalis.Codec.Types.CborEncodedValue":
                 case "global::Chrysalis.Codec.Types.CborEncodedValue":
                     _ = sb.AppendLine("{");
+                    _ = sb.AppendLine("_r.TryReadSemanticTag(out ulong _);");
+                    _ = sb.AppendLine("_list.Add(new global::Chrysalis.Codec.Types.CborEncodedValue((ReadOnlyMemory<byte>)_r.ReadByteStringToArray()));");
+                    _ = sb.AppendLine("}");
+                    break;
+                case "CborAny":
+                case "Chrysalis.Codec.Types.CborAny":
+                case "global::Chrysalis.Codec.Types.CborAny":
+                    _ = sb.AppendLine("{");
                     _ = sb.AppendLine($"int _pos = {fieldRef}.Length - _r.Buffer.Length;");
-                    _ = sb.AppendLine("var _span = _r.ReadDataItem();");
-                    _ = sb.AppendLine($"_list.Add(new {CborEncodeValueFullName}({fieldRef}.Slice(_pos, _span.Length)));");
+                    _ = sb.AppendLine("_r.ReadDataItem();");
+                    _ = sb.AppendLine($"int _end = {fieldRef}.Length - _r.Buffer.Length;");
+                    _ = sb.AppendLine($"_list.Add(new global::Chrysalis.Codec.Types.CborAny({fieldRef}[_pos.._end]));");
                     _ = sb.AppendLine("}");
                     break;
                 case "CborLabel":
@@ -456,9 +473,17 @@ public sealed partial class CborSerializerCodeGen
                 case "Chrysalis.Codec.Types.CborEncodedValue":
                 case "global::Chrysalis.Codec.Types.CborEncodedValue":
                     _ = sb.AppendLine("{");
+                    _ = sb.AppendLine("_r.TryReadSemanticTag(out ulong _);");
+                    _ = sb.AppendLine($"var _key = new {CborEncodeValueFullName}((ReadOnlyMemory<byte>)_r.ReadByteStringToArray());");
+                    break;
+                case "CborAny":
+                case "Chrysalis.Codec.Types.CborAny":
+                case "global::Chrysalis.Codec.Types.CborAny":
+                    _ = sb.AppendLine("{");
                     _ = sb.AppendLine($"int _kPos = {fieldRef}.Length - _r.Buffer.Length;");
-                    _ = sb.AppendLine("var _span = _r.ReadDataItem();");
-                    _ = sb.AppendLine($"var _key = new {CborEncodeValueFullName}({fieldRef}.Slice(_kPos, _span.Length));");
+                    _ = sb.AppendLine("_r.ReadDataItem();");
+                    _ = sb.AppendLine($"int _kEnd = {fieldRef}.Length - _r.Buffer.Length;");
+                    _ = sb.AppendLine($"var _key = new global::Chrysalis.Codec.Types.CborAny({fieldRef}[_kPos.._kEnd]);");
                     break;
                 case "CborLabel":
                 case "Chrysalis.Codec.Types.CborLabel":
@@ -520,9 +545,17 @@ public sealed partial class CborSerializerCodeGen
                 case "Chrysalis.Codec.Types.CborEncodedValue":
                 case "global::Chrysalis.Codec.Types.CborEncodedValue":
                     _ = sb.AppendLine("{");
+                    _ = sb.AppendLine("_r.TryReadSemanticTag(out ulong _);");
+                    _ = sb.AppendLine($"var _val = new {CborEncodeValueFullName}((ReadOnlyMemory<byte>)_r.ReadByteStringToArray());");
+                    break;
+                case "CborAny":
+                case "Chrysalis.Codec.Types.CborAny":
+                case "global::Chrysalis.Codec.Types.CborAny":
+                    _ = sb.AppendLine("{");
                     _ = sb.AppendLine($"int _vPos = {fieldRef}.Length - _r.Buffer.Length;");
-                    _ = sb.AppendLine("var _span = _r.ReadDataItem();");
-                    _ = sb.AppendLine($"var _val = new {CborEncodeValueFullName}({fieldRef}.Slice(_vPos, _span.Length));");
+                    _ = sb.AppendLine("_r.ReadDataItem();");
+                    _ = sb.AppendLine($"int _vEnd = {fieldRef}.Length - _r.Buffer.Length;");
+                    _ = sb.AppendLine($"var _val = new global::Chrysalis.Codec.Types.CborAny({fieldRef}[_vPos.._vEnd]);");
                     break;
                 case "CborLabel":
                 case "Chrysalis.Codec.Types.CborLabel":
@@ -602,7 +635,12 @@ public sealed partial class CborSerializerCodeGen
                 case "CborEncodedValue":
                 case "Chrysalis.Codec.Types.CborEncodedValue":
                 case "global::Chrysalis.Codec.Types.CborEncodedValue":
-                    _ = sb.AppendLine($"public partial {fqType} {prop.PropertyName} {{ get => {nullGuard}new {CborEncodeValueFullName}({fieldRef}); }}");
+                    _ = sb.AppendLine($"public partial {fqType} {prop.PropertyName} {{ get => {nullGuard}{CborEncodeValueFullName}.Read({fieldRef}); }}");
+                    break;
+                case "CborAny":
+                case "Chrysalis.Codec.Types.CborAny":
+                case "global::Chrysalis.Codec.Types.CborAny":
+                    _ = sb.AppendLine($"public partial {fqType} {prop.PropertyName} {{ get => {nullGuard}new global::Chrysalis.Codec.Types.CborAny({fieldRef}); }}");
                     break;
                 case "CborLabel":
                 case "Chrysalis.Codec.Types.CborLabel":
@@ -725,6 +763,9 @@ public sealed partial class CborSerializerCodeGen
             "CborEncodedValue" => true,
             "Chrysalis.Codec.Types.CborEncodedValue" => true,
             "global::Chrysalis.Codec.Types.CborEncodedValue" => true,
+            "CborAny" => true,
+            "Chrysalis.Codec.Types.CborAny" => true,
+            "global::Chrysalis.Codec.Types.CborAny" => true,
             "CborLabel" => true,
             "Chrysalis.Codec.Types.CborLabel" => true,
             "global::Chrysalis.Codec.Types.CborLabel" => true,

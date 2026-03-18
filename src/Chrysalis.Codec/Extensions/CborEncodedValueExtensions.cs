@@ -1,6 +1,5 @@
 using Chrysalis.Codec.Serialization;
 using Chrysalis.Codec.Types;
-using SAIB.Cbor.Serialization;
 
 namespace Chrysalis.Codec.Extensions;
 
@@ -10,45 +9,23 @@ namespace Chrysalis.Codec.Extensions;
 public static class CborEncodedValueExtensions
 {
     /// <summary>
-    /// Extracts the inner byte string from a CBOR encoded value by reading past the tag.
-    /// Allocates a new byte[] for the result.
+    /// Returns the inner CBOR bytes from a CborEncodedValue.
+    /// Since <see cref="CborEncodedValue.Value"/> now stores the inner bytes
+    /// directly (tag 24 + bytestring wrapping is handled by the codegen),
+    /// this simply returns <see cref="CborEncodedValue.Value"/> as a byte[].
     /// </summary>
     public static byte[] GetValue(this CborEncodedValue self)
     {
         ArgumentNullException.ThrowIfNull(self);
-        CborReader reader = new(self.Value.Span);
-        _ = reader.TryReadSemanticTag(out _);
-        return reader.ReadByteString().ToArray();
+        return self.Value.ToArray();
     }
 
     /// <summary>
-    /// Unwraps the CBOR tag 24 envelope and deserializes the inner byte string directly
-    /// as <typeparamref name="T"/> without allocating an intermediate byte[].
+    /// Deserializes the inner CBOR bytes as <typeparamref name="T"/>.
     /// </summary>
     public static T Deserialize<T>(this CborEncodedValue self) where T : ICborType
     {
         ArgumentNullException.ThrowIfNull(self);
-        ReadOnlySpan<byte> span = self.Value.Span;
-        int tagHeaderSize = CborHeaderSize(span);
-        int bstrHeaderSize = CborHeaderSize(span[tagHeaderSize..]);
-        return CborSerializer.Deserialize<T>(self.Value[(tagHeaderSize + bstrHeaderSize)..]);
-    }
-
-    /// <summary>
-    /// Computes the CBOR initial byte + additional info header size.
-    /// Works for any major type (tags, byte strings, etc.).
-    /// </summary>
-    private static int CborHeaderSize(ReadOnlySpan<byte> data)
-    {
-        int additionalInfo = data[0] & 0x1F;
-        return additionalInfo switch
-        {
-            < 24 => 1,
-            24 => 2,
-            25 => 3,
-            26 => 5,
-            27 => 9,
-            _ => throw new FormatException($"Unexpected CBOR additional info: {additionalInfo}")
-        };
+        return CborSerializer.Deserialize<T>(self.Value);
     }
 }

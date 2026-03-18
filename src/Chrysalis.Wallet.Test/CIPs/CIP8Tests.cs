@@ -1,5 +1,6 @@
 using System.Text;
 using Chrysalis.Codec.Serialization;
+using Chrysalis.Codec.Types;
 using Chrysalis.Wallet.CIPs.CIP8.Builders;
 using Chrysalis.Wallet.CIPs.CIP8.Extensions;
 using Chrysalis.Wallet.CIPs.CIP8.Models;
@@ -29,7 +30,6 @@ public class CIP8Tests
 
         Assert.NotNull(coseSign1);
         Assert.NotNull(coseSign1.ProtectedHeaders);
-        Assert.NotNull(coseSign1.UnprotectedHeaders);
         Assert.NotNull(coseSign1.Payload);
         Assert.NotNull(coseSign1.Signature);
 
@@ -172,7 +172,7 @@ public class CIP8Tests
         for (int i = 0; i < 500; i++)
         {
             byte[] payload = Encoding.UTF8.GetBytes($"payload-{i}");
-            CoseSign1 candidate = new(protectedHeaders, HeaderMap.Empty, payload, signature);
+            CoseSign1 candidate = new(protectedHeaders, CborMap.Create([]), payload, signature);
             string cip8 = candidate.ToCip8Format();
             string checksum = cip8[^encodedChecksumLength..];
 
@@ -192,7 +192,7 @@ public class CIP8Tests
         CoseSign1 parsed = CoseMessageExtensions.FromCip8Format(cip8WithUnderscore);
 
         Assert.Equal(messageWithUnderscore.ProtectedHeaders, parsed.ProtectedHeaders);
-        Assert.Equal(messageWithUnderscore.UnprotectedHeaders.Headers, parsed.UnprotectedHeaders.Headers);
+        Assert.Equal(messageWithUnderscore.UnprotectedHeaders.Value, parsed.UnprotectedHeaders.Value);
         Assert.Equal(messageWithUnderscore.Payload, parsed.Payload);
         Assert.Equal(messageWithUnderscore.Signature, parsed.Signature);
     }

@@ -130,7 +130,7 @@ public static class GenericSerializationUtil
             _ when type == typeof(string) => (T)(object)reader.ReadString()!,
             _ when type == typeof(byte[]) => (T)(object)ReadByteArray(ref reader),
             _ when type == typeof(ReadOnlyMemory<byte>) => (T)(object)(ReadOnlyMemory<byte>)ReadByteArray(ref reader),
-            _ when type == typeof(CborEncodedValue) => (T)(object)new CborEncodedValue(data),
+            _ when type == typeof(CborEncodedValue) => (T)(object)CborEncodedValue.Read(data),
             _ when type == typeof(CborLabel) => (T)(object)ReadCborLabel(ref reader),
             _ => throw new NotSupportedException($"Type {type} is not supported as a primitive type.")
         };
@@ -161,7 +161,7 @@ public static class GenericSerializationUtil
             _ when type == typeof(string) => reader.ReadString()!,
             _ when type == typeof(byte[]) => ReadByteArray(ref reader),
             _ when type == typeof(ReadOnlyMemory<byte>) => (ReadOnlyMemory<byte>)ReadByteArray(ref reader),
-            _ when type == typeof(CborEncodedValue) => new CborEncodedValue(data),
+            _ when type == typeof(CborEncodedValue) => CborEncodedValue.Read(data),
             _ when type == typeof(CborLabel) => ReadCborLabel(ref reader),
             _ => throw new NotSupportedException($"Type {type} is not supported as a primitive type.")
         };
@@ -180,9 +180,9 @@ public static class GenericSerializationUtil
         if (type == typeof(CborEncodedValue))
         {
             int pos = data.Length - reader.Buffer.Length;
-            _ = reader.ReadDataItem();
-            bytesConsumed = data.Length - reader.Buffer.Length;
-            return new CborEncodedValue(data[pos..bytesConsumed]);
+            CborEncodedValue cev = CborEncodedValue.Read(data[pos..], out int consumed);
+            bytesConsumed = pos + consumed;
+            return cev;
         }
 
         object? result = true switch
@@ -242,9 +242,9 @@ public static class GenericSerializationUtil
     private static T ReadCborEncodedValueAsT<T>(ref CborReader reader, ReadOnlyMemory<byte> data)
     {
         int pos = data.Length - reader.Buffer.Length;
-        _ = reader.ReadDataItem();
-        int consumed = data.Length - reader.Buffer.Length - pos;
-        return (T)(object)new CborEncodedValue(data.Slice(pos, consumed));
+        CborEncodedValue cev = CborEncodedValue.Read(data[pos..], out int consumed);
+        reader = new(data.Span[(pos + consumed)..]);
+        return (T)(object)cev;
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]

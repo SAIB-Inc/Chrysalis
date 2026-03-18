@@ -49,6 +49,6 @@ public static class DatumOptionExtensions
         ArgumentNullException.ThrowIfNull(value);
         byte[] plutusBytes = CborSerializer.Serialize(
             CborSerializer.Deserialize<IPlutusData>(CborSerializer.Serialize(value)));
-        return InlineDatumOption.Create(1, CborEncodedValue.WrapTag24(plutusBytes));
+        return InlineDatumOption.Create(1, new CborEncodedValue(plutusBytes));
     }
 }
