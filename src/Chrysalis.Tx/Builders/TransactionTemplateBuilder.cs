@@ -1,4 +1,5 @@
 using Chrysalis.Codec.Extensions;
+using Chrysalis.Codec.Extensions.Cardano.Core.Certificates;
 using Chrysalis.Codec.Extensions.Cardano.Core.Common;
 using Chrysalis.Codec.Extensions.Cardano.Core.Transaction;
 using Chrysalis.Codec.Serialization;
@@ -287,6 +288,32 @@ public sealed class TransactionTemplateBuilder<T>
         int changeIndex = 0;
         ProcessOutputs(param, context, parties, requiredAmount, ref changeIndex, fee);
 
+        // Compute certificate deposits/refunds for the balance equation:
+        // inputs + withdrawals + refunds = outputs + fee + deposits
+        ulong totalCertDeposits = 0;
+        ulong totalCertRefunds = 0;
+        if (_certificateConfigs.Count > 0)
+        {
+            ulong keyDeposit = context.TxBuilder.Pparams?.KeyDeposit ?? 2_000_000;
+            ulong poolDeposit = context.TxBuilder.Pparams?.PoolDeposit ?? 500_000_000;
+
+            foreach (CertificateConfig<T> config in _certificateConfigs)
+            {
+                CertificateOptions<T> certOpts = new();
+                config(certOpts, param);
+                if (certOpts.Certificate is not null)
+                {
+                    totalCertDeposits += certOpts.Certificate.GetDeposit(keyDeposit, poolDeposit);
+                    totalCertRefunds += certOpts.Certificate.GetRefund(keyDeposit, poolDeposit);
+                }
+            }
+
+            if (totalCertDeposits > 0)
+            {
+                requiredAmount.Add(Lovelace.Create(totalCertDeposits));
+            }
+        }
+
         (List<ResolvedInput> utxos, List<ResolvedInput> allUtxos) = await GetAllUtxos(parties, context).ConfigureAwait(false);
 
         List<IScript> scripts = GetScripts(context.IsSmartContractTx, context.ReferenceInputs, allUtxos);
@@ -319,7 +346,7 @@ public sealed class TransactionTemplateBuilder<T>
             prioritizedInputsForCollateral.AddRange(remainingUtxos);
         }
 
-        ulong totalLovelaceChange = coinSelectionResult.LovelaceChange + feeBuffer;
+        ulong totalLovelaceChange = coinSelectionResult.LovelaceChange + feeBuffer + totalCertRefunds;
         Lovelace lovelaceChange = Lovelace.Create(totalLovelaceChange);
 
         Dictionary<ReadOnlyMemory<byte>, TokenBundleOutput> assetsChange = coinSelectionResult.AssetsChange;

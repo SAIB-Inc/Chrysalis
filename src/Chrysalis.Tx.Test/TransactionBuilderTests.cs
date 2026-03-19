@@ -1,3 +1,4 @@
+using Chrysalis.Codec.Extensions.Cardano.Core.Certificates;
 using Chrysalis.Codec.Types.Cardano.Core.Certificates;
 using Chrysalis.Codec.Types.Cardano.Core.Common;
 using Chrysalis.Codec.Types.Cardano.Core.Protocol;
@@ -204,5 +205,65 @@ public class TransactionBuilderTests
 
         PostMaryTransaction tx = builder.Build();
         Assert.NotNull(tx.AuxiliaryData);
+    }
+
+    // ── Certificate Deposit/Refund ──
+
+    private static readonly byte[] FakeCredentialHash = new byte[28];
+
+    [Fact]
+    public void GetDeposit_RegCert_ReturnsCoinValue()
+    {
+        // Conway RegCert (tag 7) carries deposit in the certificate itself
+        RegCert cert = RegCert.Create(7, Credential.Create(0, FakeCredentialHash), 2_000_000);
+        Assert.Equal(2_000_000UL, cert.GetDeposit(2_000_000, 500_000_000));
+    }
+
+    [Fact]
+    public void GetDeposit_StakeRegistration_ReturnsKeyDeposit()
+    {
+        // Legacy StakeRegistration uses protocol parameter keyDeposit
+        StakeRegistration cert = StakeRegistration.Create(0, Credential.Create(0, FakeCredentialHash));
+        Assert.Equal(2_000_000UL, cert.GetDeposit(2_000_000, 500_000_000));
+    }
+
+    [Fact]
+    public void GetDeposit_StakeDelegation_ReturnsZero()
+    {
+        // Non-registration certs return 0 deposit
+        StakeDelegation cert = StakeDelegation.Create(2, Credential.Create(0, FakeCredentialHash), new byte[28]);
+        Assert.Equal(0UL, cert.GetDeposit(2_000_000, 500_000_000));
+    }
+
+    [Fact]
+    public void GetRefund_UnRegCert_ReturnsCoinValue()
+    {
+        // Conway UnRegCert (tag 8) carries refund in the certificate
+        UnRegCert cert = UnRegCert.Create(8, Credential.Create(0, FakeCredentialHash), 2_000_000);
+        Assert.Equal(2_000_000UL, cert.GetRefund(2_000_000, 500_000_000));
+    }
+
+    [Fact]
+    public void GetRefund_StakeDeregistration_ReturnsKeyDeposit()
+    {
+        // Legacy StakeDeregistration refunds keyDeposit from protocol params
+        StakeDeregistration cert = StakeDeregistration.Create(1, Credential.Create(0, FakeCredentialHash));
+        Assert.Equal(2_000_000UL, cert.GetRefund(2_000_000, 500_000_000));
+    }
+
+    [Fact]
+    public void GetRefund_RegCert_ReturnsZero()
+    {
+        // Registration certs do not produce refunds
+        RegCert cert = RegCert.Create(7, Credential.Create(0, FakeCredentialHash), 2_000_000);
+        Assert.Equal(0UL, cert.GetRefund(2_000_000, 500_000_000));
+    }
+
+    [Fact]
+    public void GetDeposit_UnRegCert_ReturnsZero()
+    {
+        // Deregistration certs do not require deposits
+        UnRegCert cert = UnRegCert.Create(8, Credential.Create(0, FakeCredentialHash), 2_000_000);
+        Assert.Equal(0UL, cert.GetDeposit(2_000_000, 500_000_000));
     }
 }

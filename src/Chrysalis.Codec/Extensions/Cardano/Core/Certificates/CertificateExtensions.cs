@@ -121,6 +121,44 @@ public static class CertificateExtensions
     }
 
     /// <summary>
+    /// Returns the deposit amount this certificate requires, or 0.
+    /// Conway certs (RegCert, etc.) carry the deposit in the certificate itself.
+    /// Legacy certs (StakeRegistration, PoolRegistration) use protocol parameters.
+    /// </summary>
+    public static ulong GetDeposit(this CCertificate self, ulong keyDeposit, ulong poolDeposit)
+    {
+        ArgumentNullException.ThrowIfNull(self);
+        return self switch
+        {
+            StakeRegistration => keyDeposit,
+            PoolRegistration => poolDeposit,
+            RegCert r => r.Coin,
+            StakeRegDelegCert r => r.Coin,
+            VoteRegDelegCert r => r.Coin,
+            StakeVoteRegDelegCert r => r.Coin,
+            RegDrepCert r => r.Coin,
+            _ => 0
+        };
+    }
+
+    /// <summary>
+    /// Returns the refund amount this certificate returns, or 0.
+    /// Deregistration certificates refund the original deposit.
+    /// </summary>
+    public static ulong GetRefund(this CCertificate self, ulong keyDeposit, ulong poolDeposit)
+    {
+        ArgumentNullException.ThrowIfNull(self);
+        return self switch
+        {
+            StakeDeregistration => keyDeposit,
+            PoolRetirement => poolDeposit,
+            UnRegCert r => r.Coin,
+            UnRegDrepCert r => r.Coin,
+            _ => 0
+        };
+    }
+
+    /// <summary>
     /// Gets the DRep from the certificate, if applicable.
     /// </summary>
     /// <param name="self">The certificate instance.</param>
