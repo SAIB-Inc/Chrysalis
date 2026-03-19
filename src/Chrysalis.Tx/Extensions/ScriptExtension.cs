@@ -117,15 +117,26 @@ public static class ScriptExtension
             throw new NotSupportedException("MultiSig scripts do not support parameterization");
         }
 
-        byte[] originalBytes = self.Bytes().ToArray();
+        // ScriptBytes is CBOR-encoded (bytestring wrapping Flat program bytes).
+        // Unwrap the CBOR bytestring to get raw Flat bytes for the applicator.
+        byte[] cborWrapped = self.Bytes().ToArray();
+        SAIB.Cbor.Serialization.CborReader reader = new(cborWrapped);
+        byte[] flatBytes = reader.ReadByteStringToArray();
+
         byte[] parameterCbor = CborSerializer.Serialize(parameter);
-        byte[] parameterizedBytes = ScriptApplicator.ApplyParameter(originalBytes, parameterCbor);
+        byte[] appliedFlat = ScriptApplicator.ApplyParameter(flatBytes, parameterCbor);
+
+        // Re-wrap the applied Flat bytes in a CBOR bytestring for ScriptBytes storage.
+        System.Buffers.ArrayBufferWriter<byte> buffer = new();
+        SAIB.Cbor.Serialization.CborWriter writer = new(buffer);
+        writer.WriteByteString(appliedFlat);
+        byte[] appliedCbor = buffer.WrittenMemory.ToArray();
 
         return self switch
         {
-            PlutusV1Script v1 => PlutusV1Script.Create(v1.Tag, parameterizedBytes),
-            PlutusV2Script v2 => PlutusV2Script.Create(v2.Tag, parameterizedBytes),
-            PlutusV3Script v3 => PlutusV3Script.Create(v3.Tag, parameterizedBytes),
+            PlutusV1Script v1 => PlutusV1Script.Create(v1.Tag, appliedCbor),
+            PlutusV2Script v2 => PlutusV2Script.Create(v2.Tag, appliedCbor),
+            PlutusV3Script v3 => PlutusV3Script.Create(v3.Tag, appliedCbor),
             _ => throw new NotSupportedException($"Unsupported script type: {self.GetType()}")
         };
     }
