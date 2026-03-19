@@ -1,5 +1,6 @@
 using Chrysalis.Codec.Serialization;
 using Chrysalis.Codec.Serialization.Attributes;
+using Chrysalis.Codec.Types;
 using Chrysalis.Codec.Types.Cardano.Core;
 using Chrysalis.Codec.Types.Cardano.Core.Common;
 using Chrysalis.Codec.Types.Cardano.Core.Protocol;
@@ -273,5 +274,31 @@ public class CborTests
         Assert.Equal(1, deserialized.Id);
         Assert.Null(deserialized.Name);
         Assert.Null(deserialized.Age);
+    }
+
+    [Fact]
+    public void PlutusVoid_Serializes_To_D87980()
+    {
+        PlutusVoid v = new();
+        byte[] serialized = CborSerializer.Serialize(v);
+        Assert.Equal("D87980", Convert.ToHexString(serialized));
+    }
+
+    [Fact]
+    public void PlutusVoid_Deserializes_From_D87980()
+    {
+        byte[] cbor = Convert.FromHexString("D87980");
+        PlutusVoid v = CborSerializer.Deserialize<PlutusVoid>(cbor);
+        _ = Assert.IsType<PlutusVoid>(v);
+    }
+
+    [Fact]
+    public void PlutusVoid_RoundTrip()
+    {
+        PlutusVoid v = new();
+        byte[] serialized = CborSerializer.Serialize(v);
+        PlutusVoid deserialized = CborSerializer.Deserialize<PlutusVoid>(serialized);
+        byte[] reserialized = CborSerializer.Serialize(deserialized);
+        Assert.Equal(serialized, reserialized);
     }
 }
