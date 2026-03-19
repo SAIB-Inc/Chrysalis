@@ -1,8 +1,10 @@
+using Chrysalis.Codec.Types;
 using Chrysalis.Codec.Types.Plutus.Address;
 using Chrysalis.Wallet.Extensions;
 using Chrysalis.Wallet.Models.Enums;
 using Chrysalis.Wallet.Models.Keys;
 using Chrysalis.Wallet.Utils;
+using PlutusAddress = Chrysalis.Codec.Types.Plutus.Address.Address;
 
 namespace Chrysalis.Wallet.Models.Addresses;
 
@@ -267,6 +269,57 @@ public class Address
         or AddressType.EnterpriseScriptPayment => null,
         _ => null
     };
+
+    /// <summary>
+    /// Converts this address to a Plutus script context address.
+    /// Maps payment and stake credentials to their Plutus equivalents.
+    /// </summary>
+    /// <returns>A Plutus Address with the correct credential types.</returns>
+    public PlutusAddress ToPlutusAddress()
+    {
+        ICredential paymentCred = Type switch
+        {
+            AddressType.Base
+            or AddressType.EnterprisePayment
+            or AddressType.PaymentWithScriptDelegation
+            or AddressType.PaymentWithPointerDelegation
+            or AddressType.Delegation
+                => Chrysalis.Codec.Types.Plutus.Address.VerificationKey.Create(GetPaymentKeyHash()!),
+            AddressType.ScriptPaymentWithDelegation
+            or AddressType.EnterpriseScriptPayment
+            or AddressType.ScriptPaymentWithScriptDelegation
+            or AddressType.ScriptPaymentWithPointerDelegation
+            or AddressType.ScriptDelegation
+                => Chrysalis.Codec.Types.Plutus.Address.Script.Create(GetPaymentKeyHash()!),
+            _ => throw new InvalidOperationException($"Unsupported address type: {Type}")
+        };
+
+        byte[]? stakeHash = GetStakeKeyHash();
+        if (stakeHash is not null)
+        {
+            ICredential stakeCred = Type switch
+            {
+                AddressType.Base
+                or AddressType.ScriptPaymentWithDelegation
+                or AddressType.Delegation
+                or AddressType.EnterprisePayment
+                or AddressType.EnterpriseScriptPayment
+                or AddressType.PaymentWithPointerDelegation
+                or AddressType.ScriptPaymentWithPointerDelegation
+                    => Chrysalis.Codec.Types.Plutus.Address.VerificationKey.Create(stakeHash),
+                AddressType.PaymentWithScriptDelegation
+                or AddressType.ScriptPaymentWithScriptDelegation
+                or AddressType.ScriptDelegation
+                    => Chrysalis.Codec.Types.Plutus.Address.Script.Create(stakeHash),
+                _ => throw new InvalidOperationException($"Unsupported address type for stake: {Type}")
+            };
+            return new PlutusAddress(
+                paymentCred,
+                Some<Inline<ICredential>>.Create(Inline<ICredential>.Create(stakeCred)));
+        }
+
+        return new PlutusAddress(paymentCred, new None<Inline<ICredential>>());
+    }
 
     /// <summary>
     /// Parses a header byte into an AddressHeader containing the address type and network type.
