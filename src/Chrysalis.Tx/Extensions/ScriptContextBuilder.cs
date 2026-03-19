@@ -1409,7 +1409,6 @@ public sealed class DataLookupTable
                     if (language is >= 1 and <= 3)
                     {
                         byte[] hash = ScriptHash(language, scriptBytes);
-                        Console.WriteLine($"   [DEBUG] ScriptRef hash: {Convert.ToHexStringLower(hash)}, scriptBytes.Length={scriptBytes.Length}, language={language}");
                         table._scripts[Convert.ToHexString(hash)] = (scriptBytes, language);
                     }
                 }
