@@ -1177,6 +1177,7 @@ public static class ScriptContextBuilder
     {
         Credential? credential = cert switch
         {
+            RegCert r => r.StakeCredential,
             StakeDeregistration d => d.StakeCredential,
             UnRegCert u => u.StakeCredential,
             StakeDelegation d => d.StakeCredential,

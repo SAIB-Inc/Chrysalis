@@ -305,12 +305,12 @@ public record CertificateOptions<T>
     /// <summary>Gets or sets the certificate to publish.</summary>
     public ICertificate? Certificate { get; set; }
 
-    /// <summary>Gets or sets the redeemer data for script-witnessed certificates.
+    /// <summary>Gets or sets the redeemer as PlutusData for script-witnessed certificates.
     /// When set, the certificate requires a script witness (resolved via reference inputs).</summary>
-    public ICborType? RedeemerData { get; set; }
+    public IPlutusData? RedeemerData { get; set; }
 
     /// <summary>
-    /// Sets a typed redeemer for this certificate.
+    /// Sets a typed redeemer for this certificate. Serializes at call time using the concrete type.
     /// </summary>
     /// <typeparam name="TData">The redeemer data type.</typeparam>
     /// <param name="data">The redeemer data.</param>
@@ -318,7 +318,7 @@ public record CertificateOptions<T>
     public CertificateOptions<T> SetRedeemer<TData>(TData data)
         where TData : ICborType
     {
-        RedeemerData = data;
+        RedeemerData = CborSerializer.Deserialize<IPlutusData>(CborSerializer.Serialize(data));
         return this;
     }
 }

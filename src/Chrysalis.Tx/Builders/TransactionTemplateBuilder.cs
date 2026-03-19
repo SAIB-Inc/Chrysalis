@@ -276,6 +276,12 @@ public sealed class TransactionTemplateBuilder<T>
         ProcessInputs(param, context);
         ProcessMints(param, context);
 
+        // Mark as smart contract tx if any certificate has a redeemer
+        if (_certificateConfigs.Count > 0)
+        {
+            context.IsSmartContractTx = true;
+        }
+
         ulong feeBuffer = 5000000;
         List<IValue> requiredAmount = [];
         int changeIndex = 0;
@@ -914,9 +920,7 @@ public sealed class TransactionTemplateBuilder<T>
 
                 if (certOptions.RedeemerData is not null)
                 {
-                    IPlutusData plutusRedeemer = CborSerializer.Deserialize<IPlutusData>(
-                        CborSerializer.Serialize(certOptions.RedeemerData));
-                    _ = buildContext.TxBuilder.RedeemerSet.AddCert(certIndex, plutusRedeemer);
+                    _ = buildContext.TxBuilder.RedeemerSet.AddCert(certIndex, certOptions.RedeemerData);
                     buildContext.IsSmartContractTx = true;
                 }
             }

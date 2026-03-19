@@ -80,8 +80,8 @@ public sealed class RedeemerBuilder
         {
             0 => _spend.Values,
             1 => _mint.Values,
-            2 => _reward.Values,
-            3 => _cert.OfType<UntaggedRedeemer>(),
+            2 => _cert.OfType<UntaggedRedeemer>(),
+            3 => _reward.Values,
             _ => []
         };
 
@@ -112,7 +112,7 @@ public sealed class RedeemerBuilder
         idx = 0;
         foreach (UntaggedRedeemer redeemer in _reward.Values)
         {
-            entries.Add(RedeemerEntry.Create(2, idx++, redeemer.Data, redeemer.ExUnits ?? DefaultExUnits()));
+            entries.Add(RedeemerEntry.Create(3, idx++, redeemer.Data, redeemer.ExUnits ?? DefaultExUnits()));
         }
 
         idx = 0;
@@ -120,7 +120,7 @@ public sealed class RedeemerBuilder
         {
             if (redeemer is not null)
             {
-                entries.Add(RedeemerEntry.Create(3, idx, redeemer.Data, redeemer.ExUnits ?? DefaultExUnits()));
+                entries.Add(RedeemerEntry.Create(2, idx, redeemer.Data, redeemer.ExUnits ?? DefaultExUnits()));
             }
 
             idx++;
