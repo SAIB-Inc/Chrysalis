@@ -126,7 +126,13 @@ public sealed class RedeemerBuilder
             idx++;
         }
 
-        return RedeemerList.Create(entries);
+        // Conway uses RedeemerMap {[tag, index] => [data, exunits]}
+        Dictionary<RedeemerKey, RedeemerValue> map = [];
+        foreach (RedeemerEntry entry in entries)
+        {
+            map[RedeemerKey.Create(entry.Tag, entry.Index)] = RedeemerValue.Create(entry.Data, entry.ExUnits);
+        }
+        return RedeemerMap.Create(map);
     }
 
     private static ExUnits DefaultExUnits() => ExUnits.Create(0, 0);

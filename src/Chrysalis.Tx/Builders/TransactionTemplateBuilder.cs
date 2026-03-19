@@ -742,11 +742,20 @@ public sealed class TransactionTemplateBuilder<T>
         allUtxos.AddRange(context.PreResolvedUtxos);
 
         // Fetch unresolved outrefs (UtxoRef without From or Utxo)
+        Console.WriteLine($"   [DEBUG] UnresolvedOutRefs: {context.UnresolvedOutRefs.Count}");
         foreach (TransactionInput outRef in context.UnresolvedOutRefs)
         {
             string txHash = Convert.ToHexStringLower(outRef.TransactionId.Span);
+            Console.WriteLine($"   [DEBUG] Fetching UTxO: {txHash}#{outRef.Index}");
             ResolvedInput resolved = await _provider!.GetUtxoByOutRefAsync(txHash, outRef.Index).ConfigureAwait(false)
                 ?? throw new InvalidOperationException($"UTxO not found: {txHash}#{outRef.Index}. The UTxO may have been spent or the provider may not have indexed it yet.");
+            bool hasScriptRef = resolved.Output is PostAlonzoTransactionOutput p && p.ScriptRef is not null;
+            Console.WriteLine($"   [DEBUG] Resolved: hasScriptRef={hasScriptRef}");
+            if (hasScriptRef && resolved.Output is PostAlonzoTransactionOutput pp && pp.ScriptRef is not null)
+            {
+                byte[] inner = pp.ScriptRef.Value.ToArray();
+                Console.WriteLine($"   [DEBUG] ScriptRef inner bytes ({inner.Length}): {Convert.ToHexStringLower(inner[..Math.Min(20, inner.Length)])}");
+            }
             allUtxos.Add(resolved);
         }
 

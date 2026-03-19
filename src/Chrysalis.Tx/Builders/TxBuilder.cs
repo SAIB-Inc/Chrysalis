@@ -662,7 +662,12 @@ public class TxBuilder
 
                 if (redeemerEntries.Count > 0)
                 {
-                    _ = builder.SetRedeemers(RedeemerList.Create(redeemerEntries));
+                    Dictionary<RedeemerKey, RedeemerValue> redeemerMap = [];
+                    foreach (RedeemerEntry entry in redeemerEntries)
+                    {
+                        redeemerMap[RedeemerKey.Create(entry.Tag, entry.Index)] = RedeemerValue.Create(entry.Data, entry.ExUnits);
+                    }
+                    _ = builder.SetRedeemers(RedeemerMap.Create(redeemerMap));
                 }
 
                 // Evaluate scripts with the Plutus VM
