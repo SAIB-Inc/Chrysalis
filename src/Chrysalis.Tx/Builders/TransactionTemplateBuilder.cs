@@ -51,6 +51,7 @@ public sealed class TransactionTemplateBuilder<T>
     private readonly List<OutputConfig<T>> _outputConfigs = [];
     private readonly List<MintConfig<T>> _mintConfigs = [];
     private readonly List<WithdrawalConfig<T>> _withdrawalConfigs = [];
+    private readonly List<CertificateConfig<T>> _certificateConfigs = [];
     private MetadataConfig<T>? _metadataConfig;
     private readonly List<PreBuildHook<T>> _preBuildHooks = [];
     private readonly List<string> _requiredSigners = [];
@@ -152,6 +153,19 @@ public sealed class TransactionTemplateBuilder<T>
     {
         ArgumentNullException.ThrowIfNull(config);
         _withdrawalConfigs.Add(config);
+        return this;
+    }
+
+    /// <summary>
+    /// Adds a certificate configuration to the template.
+    /// Script-witnessed certificates use reference inputs for the script (no inline embedding).
+    /// </summary>
+    /// <param name="config">The certificate configuration delegate.</param>
+    /// <returns>This builder for chaining.</returns>
+    public TransactionTemplateBuilder<T> AddCertificate(CertificateConfig<T> config)
+    {
+        ArgumentNullException.ThrowIfNull(config);
+        _certificateConfigs.Add(config);
         return this;
     }
 
@@ -884,6 +898,30 @@ public sealed class TransactionTemplateBuilder<T>
             }
 
             mintIndex++;
+        }
+
+        // Process certificates — use RedeemerSet.AddCert so the tag is correct (3 = Cert)
+        // Script is resolved from reference inputs, NOT embedded inline
+        int certIndex = 0;
+        foreach (CertificateConfig<T> config in _certificateConfigs)
+        {
+            CertificateOptions<T> certOptions = new();
+            config(certOptions, param);
+
+            if (certOptions.Certificate is not null)
+            {
+                _ = buildContext.TxBuilder.AddCertificate(certOptions.Certificate);
+
+                if (certOptions.RedeemerData is not null)
+                {
+                    IPlutusData plutusRedeemer = CborSerializer.Deserialize<IPlutusData>(
+                        CborSerializer.Serialize(certOptions.RedeemerData));
+                    _ = buildContext.TxBuilder.RedeemerSet.AddCert(certIndex, plutusRedeemer);
+                    buildContext.IsSmartContractTx = true;
+                }
+            }
+
+            certIndex++;
         }
     }
 

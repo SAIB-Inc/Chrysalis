@@ -47,6 +47,14 @@ public delegate void MintConfig<T>(MintOptions<T> options, T parameter);
 public delegate void WithdrawalConfig<T>(WithdrawalOptions<T> options, T parameter);
 
 /// <summary>
+/// Configures certificate operations for a transaction template.
+/// </summary>
+/// <typeparam name="T">The transaction parameter type.</typeparam>
+/// <param name="options">The certificate options to configure.</param>
+/// <param name="parameter">The transaction parameters.</param>
+public delegate void CertificateConfig<T>(CertificateOptions<T> options, T parameter);
+
+/// <summary>
 /// Builds a complete transaction from the given parameters.
 /// </summary>
 /// <typeparam name="T">The transaction parameter type.</typeparam>
