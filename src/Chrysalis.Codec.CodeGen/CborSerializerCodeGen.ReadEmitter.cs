@@ -382,9 +382,20 @@ public sealed partial class CborSerializerCodeGen
                 case "Chrysalis.Codec.Types.CborEncodedValue":
                 case "global::Chrysalis.Codec.Types.CborEncodedValue":
                     _ = sb.AppendLine("{");
+                    _ = sb.AppendLine($"reader.TryReadSemanticTag(out ulong _);");
+                    _ = sb.AppendLine($"bool _isIndef = reader.Buffer.Length > 0 && reader.Buffer[0] == 0x5F;");
+                    _ = sb.AppendLine($"if (_isIndef) {{ {propertyName} = new {CborEncodeValueFullName}((ReadOnlyMemory<byte>)reader.ReadByteStringToArray()); }}");
+                    _ = sb.AppendLine($"else {{ var _bs = reader.ReadByteString(); int _after = data.Length - reader.Buffer.Length; {propertyName} = new {CborEncodeValueFullName}(data.Slice(_after - _bs.Length, _bs.Length)); }}");
+                    _ = sb.AppendLine("}");
+                    break;
+                case "CborAny":
+                case "Chrysalis.Codec.Types.CborAny":
+                case "global::Chrysalis.Codec.Types.CborAny":
+                    _ = sb.AppendLine("{");
                     _ = sb.AppendLine($"int _pos = data.Length - reader.Buffer.Length;");
-                    _ = sb.AppendLine($"var _span = reader.ReadDataItem();");
-                    _ = sb.AppendLine($"{propertyName} = new {CborEncodeValueFullName}(data.Slice(_pos, _span.Length));");
+                    _ = sb.AppendLine($"reader.ReadDataItem();");
+                    _ = sb.AppendLine($"int _end = data.Length - reader.Buffer.Length;");
+                    _ = sb.AppendLine($"{propertyName} = new global::Chrysalis.Codec.Types.CborAny(data[_pos.._end]);");
                     _ = sb.AppendLine("}");
                     break;
                 case "CborLabel":

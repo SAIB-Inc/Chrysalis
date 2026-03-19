@@ -1,4 +1,5 @@
 using Chrysalis.Codec.Extensions;
+using Chrysalis.Codec.Extensions.Cardano.Core.Certificates;
 using Chrysalis.Codec.Extensions.Cardano.Core.Common;
 using Chrysalis.Codec.Extensions.Cardano.Core.Transaction;
 using Chrysalis.Codec.Serialization;
@@ -51,6 +52,7 @@ public sealed class TransactionTemplateBuilder<T>
     private readonly List<OutputConfig<T>> _outputConfigs = [];
     private readonly List<MintConfig<T>> _mintConfigs = [];
     private readonly List<WithdrawalConfig<T>> _withdrawalConfigs = [];
+    private readonly List<CertificateConfig<T>> _certificateConfigs = [];
     private MetadataConfig<T>? _metadataConfig;
     private readonly List<PreBuildHook<T>> _preBuildHooks = [];
     private readonly List<string> _requiredSigners = [];
@@ -152,6 +154,19 @@ public sealed class TransactionTemplateBuilder<T>
     {
         ArgumentNullException.ThrowIfNull(config);
         _withdrawalConfigs.Add(config);
+        return this;
+    }
+
+    /// <summary>
+    /// Adds a certificate configuration to the template.
+    /// Script-witnessed certificates use reference inputs for the script (no inline embedding).
+    /// </summary>
+    /// <param name="config">The certificate configuration delegate.</param>
+    /// <returns>This builder for chaining.</returns>
+    public TransactionTemplateBuilder<T> AddCertificate(CertificateConfig<T> config)
+    {
+        ArgumentNullException.ThrowIfNull(config);
+        _certificateConfigs.Add(config);
         return this;
     }
 
@@ -262,10 +277,42 @@ public sealed class TransactionTemplateBuilder<T>
         ProcessInputs(param, context);
         ProcessMints(param, context);
 
+        // Mark as smart contract tx if any certificate has a redeemer
+        if (_certificateConfigs.Count > 0)
+        {
+            context.IsSmartContractTx = true;
+        }
+
         ulong feeBuffer = 5000000;
         List<IValue> requiredAmount = [];
         int changeIndex = 0;
         ProcessOutputs(param, context, parties, requiredAmount, ref changeIndex, fee);
+
+        // Compute certificate deposits/refunds for the balance equation:
+        // inputs + withdrawals + refunds = outputs + fee + deposits
+        ulong totalCertDeposits = 0;
+        ulong totalCertRefunds = 0;
+        if (_certificateConfigs.Count > 0)
+        {
+            ulong keyDeposit = context.TxBuilder.Pparams?.KeyDeposit ?? 2_000_000;
+            ulong poolDeposit = context.TxBuilder.Pparams?.PoolDeposit ?? 500_000_000;
+
+            foreach (CertificateConfig<T> config in _certificateConfigs)
+            {
+                CertificateOptions<T> certOpts = new();
+                config(certOpts, param);
+                if (certOpts.Certificate is not null)
+                {
+                    totalCertDeposits += certOpts.Certificate.GetDeposit(keyDeposit, poolDeposit);
+                    totalCertRefunds += certOpts.Certificate.GetRefund(keyDeposit, poolDeposit);
+                }
+            }
+
+            if (totalCertDeposits > 0)
+            {
+                requiredAmount.Add(Lovelace.Create(totalCertDeposits));
+            }
+        }
 
         (List<ResolvedInput> utxos, List<ResolvedInput> allUtxos) = await GetAllUtxos(parties, context).ConfigureAwait(false);
 
@@ -299,7 +346,7 @@ public sealed class TransactionTemplateBuilder<T>
             prioritizedInputsForCollateral.AddRange(remainingUtxos);
         }
 
-        ulong totalLovelaceChange = coinSelectionResult.LovelaceChange + feeBuffer;
+        ulong totalLovelaceChange = coinSelectionResult.LovelaceChange + feeBuffer + totalCertRefunds;
         Lovelace lovelaceChange = Lovelace.Create(totalLovelaceChange);
 
         Dictionary<ReadOnlyMemory<byte>, TokenBundleOutput> assetsChange = coinSelectionResult.AssetsChange;
@@ -875,6 +922,28 @@ public sealed class TransactionTemplateBuilder<T>
             }
 
             mintIndex++;
+        }
+
+        // Process certificates — use RedeemerSet.AddCert so the tag is correct (3 = Cert)
+        // Script is resolved from reference inputs, NOT embedded inline
+        int certIndex = 0;
+        foreach (CertificateConfig<T> config in _certificateConfigs)
+        {
+            CertificateOptions<T> certOptions = new();
+            config(certOptions, param);
+
+            if (certOptions.Certificate is not null)
+            {
+                _ = buildContext.TxBuilder.AddCertificate(certOptions.Certificate);
+
+                if (certOptions.RedeemerData is not null)
+                {
+                    _ = buildContext.TxBuilder.RedeemerSet.AddCert(certIndex, certOptions.RedeemerData);
+                    buildContext.IsSmartContractTx = true;
+                }
+            }
+
+            certIndex++;
         }
     }
 

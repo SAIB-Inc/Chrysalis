@@ -1,5 +1,7 @@
+using Chrysalis.Codec.Extensions.Cardano.Core.Certificates;
 using Chrysalis.Codec.Extensions.Cardano.Core.Common;
 using Chrysalis.Codec.Extensions.Cardano.Core.Transaction;
+using Chrysalis.Codec.Types.Cardano.Core.Certificates;
 using Chrysalis.Codec.Serialization;
 using Chrysalis.Codec.Serialization.Utils;
 using Chrysalis.Codec.Types;
@@ -374,7 +376,33 @@ public static class TransactionBuilderExtensions
             totalOut = totalOut.Merge(builder.Outputs[i].Amount());
         }
 
-        IValue change = totalIn.Subtract(totalOut).Subtract(Lovelace.Create(builder.Fee));
+        // Account for implicit inputs (withdrawals, refunds) and implicit outputs (deposits)
+        ulong deposits = 0;
+        ulong refunds = 0;
+        if (builder.CertificatesList is not null)
+        {
+            ulong keyDep = builder.Pparams?.KeyDeposit ?? 2_000_000;
+            ulong poolDep = builder.Pparams?.PoolDeposit ?? 500_000_000;
+            foreach (ICertificate cert in builder.CertificatesList)
+            {
+                deposits += cert.GetDeposit(keyDep, poolDep);
+                refunds += cert.GetRefund(keyDep, poolDep);
+            }
+        }
+
+        ulong totalWithdrawals = 0;
+        if (builder.CurrentWithdrawals is not null)
+        {
+            foreach (KeyValuePair<RewardAccount, ulong> kvp in builder.CurrentWithdrawals.Value)
+            {
+                totalWithdrawals += kvp.Value;
+            }
+        }
+
+        IValue change = totalIn
+            .Merge(Lovelace.Create(totalWithdrawals + refunds))
+            .Subtract(totalOut)
+            .Subtract(Lovelace.Create(builder.Fee + deposits));
         if (change.Lovelace() > 0)
         {
             _ = builder.AddOutput(changeAddress, change, isChange: true);

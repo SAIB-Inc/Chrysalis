@@ -2,6 +2,7 @@ using Chrysalis.Codec.Extensions.Cardano.Core.Common;
 using Chrysalis.Codec.Extensions.Cardano.Core.Transaction;
 using Chrysalis.Codec.Serialization;
 using Chrysalis.Codec.Types;
+using Chrysalis.Codec.Types.Cardano.Core.Certificates;
 using Chrysalis.Codec.Types.Cardano.Core.Common;
 using Chrysalis.Codec.Types.Cardano.Core.Scripts;
 using Chrysalis.Codec.Types.Cardano.Core.Transaction;
@@ -291,6 +292,33 @@ public record WithdrawalOptions<T>
             TData data = factory(context);
             return new Redeemer<ICborType>(RedeemerTag.Reward, 0, data, ExUnits.Create(1648071, 497378507));
         };
+        return this;
+    }
+}
+
+/// <summary>
+/// Configuration options for certificate operations.
+/// </summary>
+/// <typeparam name="T">The transaction parameter type.</typeparam>
+public record CertificateOptions<T>
+{
+    /// <summary>Gets or sets the certificate to publish.</summary>
+    public ICertificate? Certificate { get; set; }
+
+    /// <summary>Gets or sets the redeemer as PlutusData for script-witnessed certificates.
+    /// When set, the certificate requires a script witness (resolved via reference inputs).</summary>
+    public IPlutusData? RedeemerData { get; set; }
+
+    /// <summary>
+    /// Sets a typed redeemer for this certificate. Serializes at call time using the concrete type.
+    /// </summary>
+    /// <typeparam name="TData">The redeemer data type.</typeparam>
+    /// <param name="data">The redeemer data.</param>
+    /// <returns>This options instance for chaining.</returns>
+    public CertificateOptions<T> SetRedeemer<TData>(TData data)
+        where TData : ICborType
+    {
+        RedeemerData = CborSerializer.Deserialize<IPlutusData>(CborSerializer.Serialize(data));
         return this;
     }
 }

@@ -81,6 +81,11 @@ public sealed partial class CborSerializerCodeGen
 
         private static void EmitCreateBodyContainer(StringBuilder sb, SerializableTypeMetadata metadata)
         {
+            if (metadata.Properties.Count == 0)
+            {
+                return;
+            }
+
             _ = EmitTagWriter(sb, metadata.CborTag);
             SerializablePropertyMetadata prop = metadata.Properties[0];
             string paramName = ToCamelCase(prop.PropertyName);

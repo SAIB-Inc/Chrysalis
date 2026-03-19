@@ -233,13 +233,13 @@ public sealed class Blockfrost : ICardanoDataProvider, IDisposable
         if (utxo.ReferenceScriptHash is not null)
         {
             IScript scriptRefValue = await GetScriptCached(utxo.ReferenceScriptHash).ConfigureAwait(false);
-            scriptRef = CborEncodedValue.WrapTag24(CborSerializer.Serialize(scriptRefValue));
+            scriptRef = new CborEncodedValue(CborSerializer.Serialize(scriptRefValue));
         }
 
         IDatumOption? datum = null;
         if (utxo.InlineDatum is not null)
         {
-            datum = InlineDatumOption.Create(1, CborEncodedValue.WrapTag24(HexStringCache.FromHexString(utxo.InlineDatum)));
+            datum = InlineDatumOption.Create(1, new CborEncodedValue(HexStringCache.FromHexString(utxo.InlineDatum)));
         }
 
         ITransactionOutput output = PostAlonzoTransactionOutput.Create(

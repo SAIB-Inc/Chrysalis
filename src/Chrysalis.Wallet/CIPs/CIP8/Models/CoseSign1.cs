@@ -12,7 +12,7 @@ namespace Chrysalis.Wallet.CIPs.CIP8.Models;
 [CborList]
 public partial record CoseSign1(
     [CborOrder(0)] byte[] ProtectedHeaders,
-    [CborOrder(1)] HeaderMap UnprotectedHeaders,
+    [CborOrder(1)] CborMap UnprotectedHeaders,
     [CborOrder(2)][CborNullable] byte[]? Payload,
     [CborOrder(3)] byte[] Signature
 ) : CborRecord, ICoseMessage

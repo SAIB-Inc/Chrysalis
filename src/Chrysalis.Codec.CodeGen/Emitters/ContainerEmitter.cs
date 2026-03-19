@@ -8,9 +8,14 @@ public sealed partial class CborSerializerCodeGen
     {
         public StringBuilder EmitReader(StringBuilder sb, SerializableTypeMetadata metadata)
         {
-            if (metadata.Properties.Count is > 1 or < 1)
+            if (metadata.Properties.Count == 0)
             {
-                throw new InvalidOperationException($"Container types must have exactly one property. {metadata.FullyQualifiedName}");
+                return sb;
+            }
+
+            if (metadata.Properties.Count > 1)
+            {
+                throw new InvalidOperationException($"Container types must have at most one property. {metadata.FullyQualifiedName}");
             }
 
             _ = Emitter.EmitCborReaderInstance(sb, "data");
@@ -34,9 +39,14 @@ public sealed partial class CborSerializerCodeGen
 
         public StringBuilder EmitWriter(StringBuilder sb, SerializableTypeMetadata metadata)
         {
-            if (metadata.Properties.Count is > 1 or < 1)
+            if (metadata.Properties.Count == 0)
             {
-                throw new InvalidOperationException($"Container types must have exactly one property. {metadata.FullyQualifiedName}");
+                return sb;
+            }
+
+            if (metadata.Properties.Count > 1)
+            {
+                throw new InvalidOperationException($"Container types must have at most one property. {metadata.FullyQualifiedName}");
             }
 
             _ = Emitter.EmitPreservedRawWriter(sb);

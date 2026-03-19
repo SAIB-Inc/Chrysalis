@@ -28,7 +28,6 @@ public class TransactionBuilder
     private List<ITransactionOutput> _outputs = [];
     private ulong? _validityStart;
     private List<ICertificate>? _certificates;
-    private Withdrawals? _withdrawals;
     private byte[]? _auxDataHash;
     private byte[]? _scriptDataHash;
     private List<TransactionInput>? _collateral;
@@ -114,6 +113,12 @@ public class TransactionBuilder
 
     /// <summary>Gets the current certificates.</summary>
     public ICborMaybeIndefList<ICertificate>? Certificates => WrapIfNotNull(_certificates);
+
+    /// <summary>Gets the current certificates as a list.</summary>
+    public IReadOnlyList<ICertificate>? CertificatesList => _certificates;
+
+    /// <summary>Gets the current withdrawals.</summary>
+    public Withdrawals? CurrentWithdrawals { get; private set; }
 
     /// <summary>Gets the current collateral return output.</summary>
     public ITransactionOutput? CollateralReturn { get; private set; }
@@ -324,7 +329,7 @@ public class TransactionBuilder
     /// <summary>Sets the withdrawals (replaces any existing).</summary>
     public TransactionBuilder SetWithdrawals(Withdrawals withdrawals)
     {
-        _withdrawals = withdrawals;
+        CurrentWithdrawals = withdrawals;
         return this;
     }
 
@@ -693,7 +698,7 @@ public class TransactionBuilder
             fee: Fee,
             timeToLive: TimeToLive,
             certificates: WrapIfNotNull(_certificates),
-            withdrawals: _withdrawals,
+            withdrawals: CurrentWithdrawals,
             auxiliaryDataHash: _auxDataHash is not null ? (ReadOnlyMemory<byte>?)new ReadOnlyMemory<byte>(_auxDataHash) : null,
             validityIntervalStart: _validityStart,
             mint: Mint,
@@ -763,16 +768,16 @@ public class TransactionBuilder
     {
         if (_withdrawalEntries is { Count: > 0 })
         {
-            if (_withdrawals is not null)
+            if (CurrentWithdrawals is not null)
             {
                 foreach (KeyValuePair<RewardAccount, ulong> kvp in _withdrawalEntries)
                 {
-                    _withdrawals.Value[kvp.Key] = kvp.Value;
+                    CurrentWithdrawals.Value[kvp.Key] = kvp.Value;
                 }
             }
             else
             {
-                _withdrawals = new Withdrawals(_withdrawalEntries);
+                CurrentWithdrawals = new Withdrawals(_withdrawalEntries);
             }
         }
     }
