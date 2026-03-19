@@ -24,10 +24,7 @@ public partial record CborAny : ICborType
     public bool IsIndefinite { get; set; }
 
     /// <summary>Creates a CborAny from raw CBOR bytes.</summary>
-    public CborAny(ReadOnlyMemory<byte> raw)
-    {
-        Raw = raw;
-    }
+    public CborAny(ReadOnlyMemory<byte> raw) => Raw = raw;
 
     /// <summary>Deserializes the raw CBOR into a concrete type.</summary>
     public T To<T>() where T : ICborType => CborSerializer.Deserialize<T>(Raw);

@@ -284,13 +284,13 @@ public class Address
             or AddressType.PaymentWithScriptDelegation
             or AddressType.PaymentWithPointerDelegation
             or AddressType.Delegation
-                => Chrysalis.Codec.Types.Plutus.Address.VerificationKey.Create(GetPaymentKeyHash()!),
+                => VerificationKey.Create(GetPaymentKeyHash()!),
             AddressType.ScriptPaymentWithDelegation
             or AddressType.EnterpriseScriptPayment
             or AddressType.ScriptPaymentWithScriptDelegation
             or AddressType.ScriptPaymentWithPointerDelegation
             or AddressType.ScriptDelegation
-                => Chrysalis.Codec.Types.Plutus.Address.Script.Create(GetPaymentKeyHash()!),
+                => Script.Create(GetPaymentKeyHash()!),
             _ => throw new InvalidOperationException($"Unsupported address type: {Type}")
         };
 
@@ -306,11 +306,11 @@ public class Address
                 or AddressType.EnterpriseScriptPayment
                 or AddressType.PaymentWithPointerDelegation
                 or AddressType.ScriptPaymentWithPointerDelegation
-                    => Chrysalis.Codec.Types.Plutus.Address.VerificationKey.Create(stakeHash),
+                    => VerificationKey.Create(stakeHash),
                 AddressType.PaymentWithScriptDelegation
                 or AddressType.ScriptPaymentWithScriptDelegation
                 or AddressType.ScriptDelegation
-                    => Chrysalis.Codec.Types.Plutus.Address.Script.Create(stakeHash),
+                    => Script.Create(stakeHash),
                 _ => throw new InvalidOperationException($"Unsupported address type for stake: {Type}")
             };
             return new PlutusAddress(

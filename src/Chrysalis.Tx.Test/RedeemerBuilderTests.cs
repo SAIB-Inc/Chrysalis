@@ -106,10 +106,8 @@ public class RedeemerBuilderTests
     }
 
     [Fact]
-    public void HasRedeemersReturnsFalseWhenEmpty()
-    {
+    public void HasRedeemersReturnsFalseWhenEmpty() =>
         Assert.False(new RedeemerBuilder().HasRedeemers);
-    }
 
     [Fact]
     public void HasRedeemersReturnsTrueAfterAddingSpend()
