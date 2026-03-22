@@ -283,6 +283,21 @@ public sealed class TransactionTemplateBuilder<T>
             context.IsSmartContractTx = true;
         }
 
+        // Mark as smart contract tx if any withdrawal has a redeemer
+        if (!context.IsSmartContractTx)
+        {
+            foreach (WithdrawalConfig<T> config in _withdrawalConfigs)
+            {
+                WithdrawalOptions<T> probeOptions = new() { From = "", Amount = 0 };
+                config(probeOptions, param);
+                if (probeOptions.RedeemerBuilder is not null || probeOptions.Redeemer is not null)
+                {
+                    context.IsSmartContractTx = true;
+                    break;
+                }
+            }
+        }
+
         ulong feeBuffer = 5000000;
         List<IValue> requiredAmount = [];
         int changeIndex = 0;
@@ -1133,6 +1148,10 @@ public sealed class TransactionTemplateBuilder<T>
             {
                 WalletAddress withdrawalAddress = WalletAddress.FromBech32(parties[withdrawalOptions.From]);
                 rewards.Add(new RewardAccount(withdrawalAddress.ToBytes()), withdrawalOptions.Amount);
+            }
+            if (withdrawalOptions.RedeemerBuilder is not null || withdrawalOptions.Redeemer is not null)
+            {
+                context.IsSmartContractTx = true;
             }
         }
 
