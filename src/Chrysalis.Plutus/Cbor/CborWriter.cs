@@ -28,14 +28,10 @@ public static class CborWriter
                 WriteInteger(buffer, i.Value);
                 break;
             case PlutusDataByteString bs:
-                WriteByteString(buffer, bs.Value.Span);
+                WritePlutusByteString(buffer, bs.Value.Span);
                 break;
             case PlutusDataList list:
-                WriteUnsigned(buffer, (ulong)list.Values.Length, 4);
-                foreach (PlutusData item in list.Values)
-                {
-                    WriteData(buffer, item);
-                }
+                WriteIndefiniteArray(buffer, list.Values);
                 break;
             case PlutusDataMap map:
                 WriteUnsigned(buffer, (ulong)map.Entries.Length, 5);
@@ -60,31 +56,32 @@ public static class CborWriter
         if (tag is >= 0 and <= 6)
         {
             WriteTag(buffer, (ulong)(121 + tag));
-            WriteDefiniteArray(buffer, constr.Fields);
+            WriteIndefiniteArray(buffer, constr.Fields);
         }
         else if (tag is >= 7 and <= 127)
         {
             WriteTag(buffer, (ulong)(1280 + tag - 7));
-            WriteDefiniteArray(buffer, constr.Fields);
+            WriteIndefiniteArray(buffer, constr.Fields);
         }
         else
         {
             WriteTag(buffer, 102);
             WriteUnsigned(buffer, 2, 4);
             WriteUnsigned(buffer, (ulong)tag, 0);
-            WriteDefiniteArray(buffer, constr.Fields);
+            WriteIndefiniteArray(buffer, constr.Fields);
         }
     }
 
-    private static void WriteDefiniteArray(
+    private static void WriteIndefiniteArray(
         ArrayBufferWriter<byte> buffer,
         System.Collections.Immutable.ImmutableArray<PlutusData> items)
     {
-        WriteUnsigned(buffer, (ulong)items.Length, 4);
+        WriteSingleByte(buffer, 0x9F);
         foreach (PlutusData item in items)
         {
             WriteData(buffer, item);
         }
+        WriteSingleByte(buffer, 0xFF);
     }
 
     private static void WriteInteger(ArrayBufferWriter<byte> buffer, BigInteger value)
@@ -99,7 +96,7 @@ public static class CborWriter
             {
                 WriteTag(buffer, 2);
                 byte[] bytes = value.ToByteArray(isUnsigned: true, isBigEndian: true);
-                WriteByteString(buffer, bytes);
+                WritePlutusByteString(buffer, bytes);
             }
         }
         else
@@ -113,7 +110,7 @@ public static class CborWriter
             {
                 WriteTag(buffer, 3);
                 byte[] bytes = encoded.ToByteArray(isUnsigned: true, isBigEndian: true);
-                WriteByteString(buffer, bytes);
+                WritePlutusByteString(buffer, bytes);
             }
         }
     }
@@ -160,7 +157,30 @@ public static class CborWriter
 
     private static void WriteTag(ArrayBufferWriter<byte> buffer, ulong tag) => WriteUnsigned(buffer, tag, 6);
 
-    private static void WriteByteString(ArrayBufferWriter<byte> buffer, ReadOnlySpan<byte> bytes)
+    private static void WritePlutusByteString(ArrayBufferWriter<byte> buffer, ReadOnlySpan<byte> bytes)
+    {
+        const int ChunkSize = 64;
+
+        if (bytes.Length <= ChunkSize)
+        {
+            WriteDefiniteByteString(buffer, bytes);
+        }
+        else
+        {
+            WriteSingleByte(buffer, 0x5F); // indefinite-length bytestring
+            int offset = 0;
+            while (offset < bytes.Length)
+            {
+                int remaining = bytes.Length - offset;
+                int chunkLen = remaining < ChunkSize ? remaining : ChunkSize;
+                WriteDefiniteByteString(buffer, bytes.Slice(offset, chunkLen));
+                offset += chunkLen;
+            }
+            WriteSingleByte(buffer, 0xFF); // break
+        }
+    }
+
+    private static void WriteDefiniteByteString(ArrayBufferWriter<byte> buffer, ReadOnlySpan<byte> bytes)
     {
         WriteUnsigned(buffer, (ulong)bytes.Length, 2);
         Span<byte> span = buffer.GetSpan(bytes.Length);
