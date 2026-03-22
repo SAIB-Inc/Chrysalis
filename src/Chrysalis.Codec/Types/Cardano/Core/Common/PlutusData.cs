@@ -31,9 +31,9 @@ public readonly partial record struct PlutusList : IPlutusData
 public partial interface IPlutusBigInt : IPlutusData;
 
 [CborSerializable]
-public readonly partial record struct PlutusInt : IPlutusBigInt
+public readonly partial record struct PlutusUint64 : IPlutusBigInt
 {
-    public partial int Value { get; }
+    public partial ulong Value { get; }
 }
 
 [CborSerializable]
@@ -43,9 +43,9 @@ public readonly partial record struct PlutusInt64 : IPlutusBigInt
 }
 
 [CborSerializable]
-public readonly partial record struct PlutusUint64 : IPlutusBigInt
+public readonly partial record struct PlutusInt : IPlutusBigInt
 {
-    public partial ulong Value { get; }
+    public partial int Value { get; }
 }
 
 [CborSerializable]
