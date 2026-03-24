@@ -380,8 +380,7 @@ public static class ScriptContextBuilder
         PlutusList list => List(
             list.Value.GetValue().Select(CodecPlutusDataToVm)),
 
-        PlutusInt i32 => Int(i32.Value),
-        PlutusInt64 i64 => Int(i64.Value),
+        PlutusInt i => Int(i.Value),
         PlutusUint64 u64 => Int(u64.Value),
         PlutusBigUint bigU => new VmInt(new BigInteger(bigU.Value.Span, isUnsigned: true, isBigEndian: true)),
         PlutusBigNint bigN => new VmInt(-1 - new BigInteger(bigN.Value.Span, isUnsigned: true, isBigEndian: true)),

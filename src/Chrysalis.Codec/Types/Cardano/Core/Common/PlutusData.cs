@@ -37,15 +37,9 @@ public readonly partial record struct PlutusUint64 : IPlutusBigInt
 }
 
 [CborSerializable]
-public readonly partial record struct PlutusInt64 : IPlutusBigInt
-{
-    public partial long Value { get; }
-}
-
-[CborSerializable]
 public readonly partial record struct PlutusInt : IPlutusBigInt
 {
-    public partial int Value { get; }
+    public partial long Value { get; }
 }
 
 [CborSerializable]
