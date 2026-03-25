@@ -933,6 +933,9 @@ public class TxBuilder
     {
         _pparams ??= await _provider.GetParametersAsync().ConfigureAwait(false);
 
+        // Integrate any redeemers from RedeemerSet (e.g. cert redeemers added by template builder)
+        builder.IntegrateRedeemerSet();
+
         bool hasScripts = builder.Redeemers is not null;
 
         // Pre-compute reference script fee from reference inputs on the builder
