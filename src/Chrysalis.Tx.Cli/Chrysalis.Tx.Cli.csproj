@@ -16,4 +16,9 @@
       OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
   </ItemGroup>
 
+  <ItemGroup>
+    <AdditionalFiles Include="plutus.json" />
+    <Content Include="wizard.plutus" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>
