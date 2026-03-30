@@ -245,7 +245,7 @@ public sealed class TransactionTemplateBuilder<T>
         return AddStaticParty("change", bech32Address, true);
     }
 
-    private async Task<ITransaction> EvaluateTemplate(T param, bool eval = true, ulong fee = 0)
+    private async Task<PostMaryTransaction> EvaluateTemplate(T param, bool eval = true)
     {
         BuildContext context = new()
         {
@@ -301,7 +301,7 @@ public sealed class TransactionTemplateBuilder<T>
         ulong feeBuffer = 5000000;
         List<IValue> requiredAmount = [];
         int changeIndex = 0;
-        ProcessOutputs(param, context, parties, requiredAmount, ref changeIndex, fee);
+        ProcessOutputs(param, context, parties, requiredAmount, ref changeIndex, 0);
 
         // Compute certificate deposits/refunds for the balance equation:
         // inputs + withdrawals + refunds = outputs + fee + deposits
@@ -331,8 +331,6 @@ public sealed class TransactionTemplateBuilder<T>
 
         (List<ResolvedInput> utxos, List<ResolvedInput> allUtxos) = await GetAllUtxos(parties, context).ConfigureAwait(false);
 
-        List<IScript> scripts = GetScripts(context.IsSmartContractTx, context.ReferenceInputs, allUtxos);
-
         List<ResolvedInput> specifiedInputsUtxos = GetSpecifiedInputsUtxos(context.SpecifiedInputs, allUtxos);
         context.ResolvedInputs.AddRange(specifiedInputsUtxos);
 
@@ -361,26 +359,11 @@ public sealed class TransactionTemplateBuilder<T>
             prioritizedInputsForCollateral.AddRange(remainingUtxos);
         }
 
-        ulong totalLovelaceChange = coinSelectionResult.LovelaceChange + feeBuffer + totalCertRefunds;
-        Lovelace lovelaceChange = Lovelace.Create(totalLovelaceChange);
-
-        Dictionary<ReadOnlyMemory<byte>, TokenBundleOutput> assetsChange = coinSelectionResult.AssetsChange;
-
+        // Add coin-selected inputs (change output built by Finalize)
         foreach (ResolvedInput consumedInput in coinSelectionResult.Inputs)
         {
             context.ResolvedInputs.Add(consumedInput);
             _ = context.TxBuilder.AddInput(consumedInput.Outref);
-        }
-
-        IValue changeValue = assetsChange.Count > 0
-            ? LovelaceWithMultiAsset.Create(lovelaceChange.Amount, MultiAssetOutput.Create(assetsChange))
-            : lovelaceChange;
-
-        ITransactionOutput changeOutput = PostAlonzoTransactionOutput.Create(new Address(changeAddress.ToBytes()), changeValue, null, null);
-
-        if (!string.IsNullOrEmpty(_changeAddress) && lovelaceChange.Amount > 0)
-        {
-            _ = context.TxBuilder.AddOutput(changeOutput, true);
         }
 
         List<TransactionInput> sortedInputs = [.. context.TxBuilder.Inputs
@@ -492,12 +475,14 @@ public sealed class TransactionTemplateBuilder<T>
             hook(context.TxBuilder, mapping, param);
         }
 
-        if (context.IsSmartContractTx && eval)
-        {
-            _ = context.TxBuilder.Evaluate(allUtxos, SlotNetworkConfig.FromNetworkType(networkType));
-        }
-
-        return context.TxBuilder.CalculateFee(scripts, fee, 1, prioritizedInputsForCollateral).Build();
+        // ── Finalize via TxBuilder (shared fee convergence + change + collateral) ──
+        // resolvedInputs = actual consumed inputs (for change calculation)
+        // allUtxos = all UTxOs including reference inputs (for script evaluation)
+        TxBuilder txBuilder = new(_provider!);
+        _ = txBuilder.SetChangeAddress(changeAddrBech32);
+        return await txBuilder.Finalize(
+            context.TxBuilder, changeAddrBech32, context.ResolvedInputs, allUtxos,
+            prioritizedInputsForCollateral, eval).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -506,11 +491,7 @@ public sealed class TransactionTemplateBuilder<T>
     /// <param name="eval">Whether to evaluate Plutus scripts.</param>
     /// <returns>A delegate that builds transactions from parameters.</returns>
     public TransactionTemplate<T> Build(bool eval = true) => async param =>
-                                                                                                                            {
-                                                                                                                                ITransaction draftTx = await EvaluateTemplate(param, eval).ConfigureAwait(false);
-                                                                                                                                ulong draftFee = draftTx is PostMaryTransaction postMary ? postMary.Body.Fee() : 0;
-                                                                                                                                return await EvaluateTemplate(param, eval, draftFee).ConfigureAwait(false);
-                                                                                                                            };
+        await EvaluateTemplate(param, eval).ConfigureAwait(false);
 
     private Dictionary<string, string> ResolveParties(T param)
     {
@@ -1161,14 +1142,14 @@ public sealed class TransactionTemplateBuilder<T>
         }
     }
 
-    private static List<IScript> GetScripts(bool isSmartContractTx, List<TransactionInput> referenceInputs, List<ResolvedInput> allUtxos)
+    private static List<(IScript Script, int RawSize)> GetScripts(bool isSmartContractTx, List<TransactionInput> referenceInputs, List<ResolvedInput> allUtxos)
     {
         if (!isSmartContractTx || referenceInputs == null || referenceInputs.Count == 0)
         {
             return [];
         }
 
-        List<IScript> scripts = [];
+        List<(IScript Script, int RawSize)> scripts = [];
 
         // Create lookup dictionary for faster matching
         Dictionary<(ReadOnlyMemory<byte>, ulong), ResolvedInput> utxoLookup = new(new TransactionInputEqualityComparer());
@@ -1187,7 +1168,8 @@ public sealed class TransactionTemplateBuilder<T>
                     postAlonzoOutput.ScriptRef is not null)
                 {
                     IScript script = CborSerializer.Deserialize<IScript>(postAlonzoOutput.ScriptRef.GetValue());
-                    scripts.Add(script);
+                    int rawSize = postAlonzoOutput.ScriptRef.Raw.Length;
+                    scripts.Add((script, rawSize));
                 }
             }
         }

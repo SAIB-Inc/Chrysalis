@@ -38,6 +38,24 @@ public static class TransactionBuilderExtensions
         string? changeAddress = null,
         List<ResolvedInput>? resolvedInputs = null)
     {
+        // Convert to sized tuples using serialized length as size estimate
+        List<(IScript Script, int RawSize)> sized = [.. scripts
+            .Select(s => (s, CborSerializer.Serialize(s).Length))];
+        return builder.CalculateFee(sized, defaultFee, mockWitnessFee, availableInputs, changeAddress, resolvedInputs);
+    }
+
+    /// <summary>
+    /// Calculates and sets the transaction fee with exact reference script sizes.
+    /// </summary>
+    internal static TransactionBuilder CalculateFee(
+        this TransactionBuilder builder,
+        List<(IScript Script, int RawSize)> scripts,
+        ulong defaultFee = 0,
+        int mockWitnessFee = 1,
+        List<ResolvedInput>? availableInputs = null,
+        string? changeAddress = null,
+        List<ResolvedInput>? resolvedInputs = null)
+    {
         ArgumentNullException.ThrowIfNull(builder);
         ArgumentNullException.ThrowIfNull(scripts);
 
@@ -176,19 +194,20 @@ public static class TransactionBuilderExtensions
     // ──────────── Script Fee Calculation ────────────
 
     private static (ulong ScriptFee, ulong ExecutionFee) CalculateScriptFees(
-        TransactionBuilder builder, List<IScript> scripts)
+        TransactionBuilder builder, List<(IScript Script, int RawSize)> scripts)
     {
         if (scripts.Count <= 0)
         {
             throw new ArgumentException("Missing script", nameof(scripts));
         }
 
-        _ = builder.ComputeAndSetScriptDataHash(scripts);
+        List<IScript> scriptList = [.. scripts.Select(s => s.Script)];
+        _ = builder.ComputeAndSetScriptDataHash(scriptList);
 
-        // Reference script fee (tiered pricing on total script size)
+        // Reference script fee (tiered pricing on full CBOR-encoded ScriptRef size)
         ulong scriptCostPerByte = builder.Pparams!.MinFeeRefScriptCostPerByte!.Numerator
             / builder.Pparams.MinFeeRefScriptCostPerByte!.Denominator;
-        int totalScriptSize = scripts.Sum(script => script.Bytes().Length);
+        int totalScriptSize = scripts.Sum(s => s.RawSize);
         ulong scriptFee = FeeUtil.CalculateReferenceScriptFee(totalScriptSize, scriptCostPerByte);
 
         ulong executionFee = builder.ComputeScriptExecutionFee();
@@ -275,12 +294,17 @@ public static class TransactionBuilderExtensions
         ulong totalCollateralNeeded = totalCollateral + estimatedMinReturn + (estimatedMinReturn / 2);
         int maxCollateralInputs = (int)(builder.Pparams!.MaxCollateralInputs ?? 3);
 
+        // Prefer ADA-only UTxOs for collateral (Cardano rejects collateral with native assets)
+        List<ResolvedInput> adaOnlyInputs = [.. availableInputs.Where(
+            u => u.Output.Amount() is Lovelace)];
+        List<ResolvedInput> collateralCandidates = adaOnlyInputs.Count > 0 ? adaOnlyInputs : availableInputs;
+
         // Select collateral UTxOs
         CoinSelectionResult collateralSelection;
         try
         {
             collateralSelection = CoinSelectionUtil.Select(
-                availableInputs,
+                collateralCandidates,
                 [Lovelace.Create(totalCollateralNeeded)],
                 CoinSelectionStrategy.LargestFirst,
                 maxCollateralInputs);
@@ -288,7 +312,7 @@ public static class TransactionBuilderExtensions
         catch (InvalidOperationException)
         {
             collateralSelection = CoinSelectionUtil.Select(
-                availableInputs,
+                collateralCandidates,
                 [Lovelace.Create(totalCollateral)],
                 CoinSelectionStrategy.LargestFirst,
                 maxCollateralInputs);
@@ -490,7 +514,7 @@ public static class TransactionBuilderExtensions
 
     // ──────────── Redeemer Update ────────────
 
-    private static void UpdateRedeemersWithEvalResults(
+    internal static void UpdateRedeemersWithEvalResults(
         TransactionBuilder builder,
         IReadOnlyList<Plutus.VM.Models.EvaluationResult> evalResult)
     {

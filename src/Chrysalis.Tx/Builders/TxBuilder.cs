@@ -77,6 +77,13 @@ public class TxBuilder
     private ulong? _treasuryValue;
     private ulong? _donation;
 
+    // ── Fee tuning ──
+    private ulong _feePadding;
+    private ulong? _minimumFee;
+
+    // ── External evaluator ──
+    private Func<PostMaryTransaction, IReadOnlyList<ResolvedInput>, Task<IReadOnlyList<Plutus.VM.Models.EvaluationResult>>>? _evaluator;
+
     // ── Constructor ──
 
     /// <summary>Creates a new mid-level transaction builder with a data provider.</summary>
@@ -295,6 +302,14 @@ public class TxBuilder
         return this;
     }
 
+    /// <summary>Withdraw staking rewards with a reference script.</summary>
+    public TxBuilder AddWithdrawal(string rewardAddressHex, ulong amount, string scriptHash, ICborType redeemer)
+    {
+        ArgumentNullException.ThrowIfNull(redeemer);
+        _withdrawalDirectives.Add(new WithdrawalDirective(rewardAddressHex, amount, null, ToPlutusData(redeemer)) { ScriptRefHash = scriptHash });
+        return this;
+    }
+
     // ── Governance (Conway) ──
 
     /// <summary>Register a delegate representative.</summary>
@@ -437,6 +452,28 @@ public class TxBuilder
         return this;
     }
 
+    /// <summary>Add fee padding (added to every fee calculation).</summary>
+    public TxBuilder SetFeePadding(ulong padding)
+    {
+        _feePadding = padding;
+        return this;
+    }
+
+    /// <summary>Set a minimum fee floor.</summary>
+    public TxBuilder SetMinimumFee(ulong minFee)
+    {
+        _minimumFee = minFee;
+        return this;
+    }
+
+    /// <summary>Use an external script evaluator instead of the built-in Plutus VM.</summary>
+    public TxBuilder UseEvaluator(
+        Func<PostMaryTransaction, IReadOnlyList<ResolvedInput>, Task<IReadOnlyList<Plutus.VM.Models.EvaluationResult>>> evaluator)
+    {
+        _evaluator = evaluator;
+        return this;
+    }
+
     // ── Finalization ──
 
     /// <summary>
@@ -565,6 +602,11 @@ public class TxBuilder
                 allScripts.Add(mint.Script);
                 _ = builder.AddMint(mintValue, mint.Script, mint.Redeemer!);
             }
+            else if (mint.ScriptRefHash is not null && mint.Redeemer is not null)
+            {
+                // Mint via reference script — add mint only, redeemer built from directives in stabilization loop
+                _ = builder.AddMint(mintValue);
+            }
             else if (mint.NativeScript is not null)
             {
                 _ = builder.AddNativeScript(mint.NativeScript);
@@ -598,9 +640,40 @@ public class TxBuilder
                 allScripts.Add(wd.Script);
                 _ = builder.AddWithdrawal(wd.RewardAddressHex, wd.Amount, wd.Script, wd.Redeemer);
             }
+            else if (wd.ScriptRefHash is not null && wd.Redeemer is not null)
+            {
+                // Withdrawal via reference script — add withdrawal only, redeemer built from directives
+                _ = builder.AddWithdrawal(wd.RewardAddressHex, wd.Amount);
+            }
             else
             {
                 _ = builder.AddWithdrawal(wd.RewardAddressHex, wd.Amount);
+            }
+        }
+
+        // ── Resolve reference scripts for directives (for fee + data hash, NOT witness set) ──
+        List<IScript> refScripts = [];
+        foreach (MintDirective mint in _mintDirectives)
+        {
+            if (mint.ScriptRefHash is not null)
+            {
+                IScript? resolved = ResolveScriptFromReferenceInputs(mint.ScriptRefHash);
+                if (resolved is not null)
+                {
+                    refScripts.Add(resolved);
+                }
+            }
+        }
+
+        foreach (WithdrawalDirective wd in _withdrawalDirectives)
+        {
+            if (wd.ScriptRefHash is not null)
+            {
+                IScript? resolved = ResolveScriptFromReferenceInputs(wd.ScriptRefHash);
+                if (resolved is not null)
+                {
+                    refScripts.Add(resolved);
+                }
             }
         }
 
@@ -612,17 +685,29 @@ public class TxBuilder
         }
 
         // ── Stabilization setup ──
-        bool hasScripts = allScripts.Count > 0;
+        bool hasScripts = allScripts.Count > 0
+            || refScripts.Count > 0
+            || _mintDirectives.Any(m => m.Redeemer is not null)
+            || _withdrawalDirectives.Any(w => w.Script is not null || w.Redeemer is not null)
+            || _certificateDirectives.Any(c => c.Redeemer is not null);
         List<ResolvedInput> selectedInputs = [];
         bool evaluated = false;
 
-        // Pre-compute reference script fee (fixed, doesn't depend on evaluation)
+        // Pre-compute reference script fee (reference inputs only — witness set scripts don't incur this fee)
         ulong refScriptFee = 0;
         if (hasScripts && _pparams.MinFeeRefScriptCostPerByte is not null)
         {
             ulong scriptCostPerByte = _pparams.MinFeeRefScriptCostPerByte.Numerator
                 / _pparams.MinFeeRefScriptCostPerByte.Denominator;
-            int totalScriptSize = allScripts.Sum(s => s.Bytes().Length);
+            int totalScriptSize = 0;
+            foreach (ResolvedInput refInput in _referenceInputs)
+            {
+                ReadOnlyMemory<byte>? scriptRef = refInput.Output.ScriptRef();
+                if (scriptRef is not null)
+                {
+                    totalScriptSize += scriptRef.Value.Length;
+                }
+            }
             refScriptFee = FeeUtil.CalculateReferenceScriptFee(totalScriptSize, scriptCostPerByte);
         }
 
@@ -642,43 +727,24 @@ public class TxBuilder
                     .Select(i => Convert.ToHexString(i.TransactionId.Span) + i.Index.ToString("D10", System.Globalization.CultureInfo.InvariantCulture))
                     .Order(StringComparer.Ordinal)];
 
-                List<RedeemerEntry> redeemerEntries = [];
-                foreach (InputDirective directive in _explicitInputs)
-                {
-                    if (directive.Redeemer is null)
-                    {
-                        continue;
-                    }
+                // Build ALL redeemers from directive lists (don't use RedeemerSet — it gets
+                // bypassed when SetRedeemers is called directly, causing silent redeemer loss)
+                Dictionary<RedeemerKey, RedeemerValue> redeemerMap = BuildRedeemerMapFromDirectives(
+                    builder, sortedInputKeys);
 
-                    string inputKey = Convert.ToHexString(directive.Utxo.Outref.TransactionId.Span)
-                        + directive.Utxo.Outref.Index.ToString("D10", System.Globalization.CultureInfo.InvariantCulture);
-                    int sortedIndex = sortedInputKeys.IndexOf(inputKey);
-                    if (sortedIndex >= 0)
-                    {
-                        redeemerEntries.Add(RedeemerEntry.Create(0, (ulong)sortedIndex, directive.Redeemer,
-                            ExUnits.Create(1_000_000, 400_000_000)));
-                    }
-                }
-
-                if (redeemerEntries.Count > 0)
-                {
-                    Dictionary<RedeemerKey, RedeemerValue> redeemerMap = [];
-                    foreach (RedeemerEntry entry in redeemerEntries)
-                    {
-                        redeemerMap[RedeemerKey.Create(entry.Tag, entry.Index)] = RedeemerValue.Create(entry.Data, entry.ExUnits);
-                    }
-                    _ = builder.SetRedeemers(RedeemerMap.Create(redeemerMap));
-                }
-
-                // Evaluate scripts with the Plutus VM
+                // Evaluate scripts
                 List<ResolvedInput> allResolvedInputs = [.. _explicitInputs.Select(i => i.Utxo), .. _referenceInputs, .. selectedInputs];
-                SlotNetworkConfig slotConfig = SlotNetworkConfig.FromNetworkType(_provider.NetworkType);
-                _ = builder.Evaluate(allResolvedInputs, slotConfig);
+                await EvaluateScripts(builder, allResolvedInputs).ConfigureAwait(false);
                 evaluated = true;
 
                 // Compute script execution fee and script data hash
                 scriptExecFee = builder.ComputeScriptExecutionFee();
-                _ = builder.ComputeAndSetScriptDataHash(allScripts);
+
+                List<IScript> scriptsForHash = [.. allScripts, .. refScripts];
+                if (scriptsForHash.Count > 0)
+                {
+                    _ = builder.ComputeAndSetScriptDataHash(scriptsForHash);
+                }
             }
 
             // Calculate surplus/deficit
@@ -771,7 +837,11 @@ public class TxBuilder
             byte[] draftBytes = CborSerializer.Serialize(draftTx);
             ulong fee = FeeUtil.CalculateFee(
                 (ulong)draftBytes.Length, _pparams.MinFeeA!.Value, _pparams.MinFeeB!.Value)
-                + scriptExecFee + refScriptFee;
+                + scriptExecFee + refScriptFee + _feePadding;
+            if (_minimumFee.HasValue)
+            {
+                fee = Math.Max(fee, _minimumFee.Value);
+            }
 
             if (Math.Abs((long)fee - (long)previousFee) < FeeConvergenceTolerance)
             {
@@ -788,43 +858,25 @@ public class TxBuilder
         // had different inputs/outputs. Re-evaluate now with the complete transaction.
         if (hasScripts)
         {
-            // Recompute redeemer indices with final input set
+            // Recompute all redeemers with final input set (indices may have shifted after coin selection)
             List<string> finalSortedKeys = [.. builder.Inputs
                 .Select(i => Convert.ToHexString(i.TransactionId.Span) + i.Index.ToString("D10", System.Globalization.CultureInfo.InvariantCulture))
                 .Order(StringComparer.Ordinal)];
 
-            List<RedeemerEntry> updatedEntries = [];
-            foreach (InputDirective directive in _explicitInputs)
-            {
-                if (directive.Redeemer is null)
-                {
-                    continue;
-                }
-
-                string inputKey = Convert.ToHexString(directive.Utxo.Outref.TransactionId.Span)
-                    + directive.Utxo.Outref.Index.ToString("D10", System.Globalization.CultureInfo.InvariantCulture);
-                int sortedIndex = finalSortedKeys.IndexOf(inputKey);
-                if (sortedIndex >= 0)
-                {
-                    // Use placeholder ExUnits — will be replaced by re-evaluation
-                    updatedEntries.Add(RedeemerEntry.Create(0, (ulong)sortedIndex, directive.Redeemer,
-                        ExUnits.Create(14_000_000, 10_000_000_000)));
-                }
-            }
-
-            if (updatedEntries.Count > 0)
-            {
-                _ = builder.SetRedeemers(RedeemerList.Create(updatedEntries));
-            }
+            _ = BuildRedeemerMapFromDirectives(builder, finalSortedKeys);
 
             // Re-evaluate with the final transaction (all inputs, outputs, change, collateral)
             List<ResolvedInput> finalResolvedInputs = [.. _explicitInputs.Select(i => i.Utxo), .. _referenceInputs, .. selectedInputs];
-            SlotNetworkConfig finalSlotConfig = SlotNetworkConfig.FromNetworkType(_provider.NetworkType);
-            _ = builder.Evaluate(finalResolvedInputs, finalSlotConfig);
+            await EvaluateScripts(builder, finalResolvedInputs).ConfigureAwait(false);
 
             // Recompute script execution fee and script data hash with final redeemers
             scriptExecFee = builder.ComputeScriptExecutionFee();
-            _ = builder.ComputeAndSetScriptDataHash(allScripts);
+
+            List<IScript> finalScriptsForHash = [.. allScripts, .. refScripts];
+            if (finalScriptsForHash.Count > 0)
+            {
+                _ = builder.ComputeAndSetScriptDataHash(finalScriptsForHash);
+            }
 
             // Recalculate fee with final ExUnits
             ulong previousFinalFee = builder.Fee;
@@ -833,7 +885,11 @@ public class TxBuilder
             byte[] postEvalBytes = CborSerializer.Serialize(postEvalTx);
             ulong finalFee = FeeUtil.CalculateFee(
                 (ulong)postEvalBytes.Length, _pparams.MinFeeA!.Value, _pparams.MinFeeB!.Value)
-                + scriptExecFee + refScriptFee;
+                + scriptExecFee + refScriptFee + _feePadding;
+            if (_minimumFee.HasValue)
+            {
+                finalFee = Math.Max(finalFee, _minimumFee.Value);
+            }
             _ = builder.SetFee(finalFee);
 
             // Adjust change output if fee changed
@@ -854,6 +910,130 @@ public class TxBuilder
             {
                 TransactionBuilderExtensions.SelectCollateral(builder, finalFee, finalCollateralPool);
             }
+        }
+
+        // Clear placeholder witnesses before final build
+        _ = builder.ClearVKeyWitnesses();
+
+        return builder.Build();
+    }
+
+    /// <summary>
+    /// Finalizes a pre-populated TransactionBuilder: computes fee, builds change, selects collateral, evaluates scripts.
+    /// Used by TransactionTemplateBuilder to share finalization logic without duplicating it.
+    /// The builder must already have all inputs, outputs (except change), mints, withdrawals, certs, and redeemers set.
+    /// </summary>
+    internal async Task<PostMaryTransaction> Finalize(
+        TransactionBuilder builder,
+        string changeAddress,
+        List<ResolvedInput> resolvedInputs,
+        List<ResolvedInput> allUtxos,
+        List<ResolvedInput> collateralPool,
+        bool evaluate = true)
+    {
+        _pparams ??= await _provider.GetParametersAsync().ConfigureAwait(false);
+
+        // Integrate any redeemers from RedeemerSet (e.g. cert redeemers added by template builder)
+        builder.IntegrateRedeemerSet();
+
+        bool hasScripts = builder.Redeemers is not null;
+
+        // Pre-compute reference script fee from reference inputs on the builder
+        ulong refScriptFee = 0;
+        if (_pparams.MinFeeRefScriptCostPerByte is not null)
+        {
+            ulong scriptCostPerByte = _pparams.MinFeeRefScriptCostPerByte.Numerator
+                / _pparams.MinFeeRefScriptCostPerByte.Denominator;
+            int totalScriptSize = 0;
+            foreach (ResolvedInput refInput in allUtxos)
+            {
+                ReadOnlyMemory<byte>? scriptRef = refInput.Output.ScriptRef();
+                if (scriptRef is not null)
+                {
+                    totalScriptSize += scriptRef.Value.Length;
+                }
+            }
+            refScriptFee = FeeUtil.CalculateReferenceScriptFee(totalScriptSize, scriptCostPerByte);
+        }
+
+        ulong scriptExecFee = 0;
+
+        // ── Stabilization loop ──
+        _ = builder.SetFee(300_000);
+        ulong previousFee = 0;
+
+        for (int iteration = 0; iteration < MaxStabilizationIterations; iteration++)
+        {
+            // Evaluate scripts (once)
+            if (hasScripts && evaluate && scriptExecFee == 0)
+            {
+                await EvaluateScripts(builder, allUtxos).ConfigureAwait(false);
+                scriptExecFee = builder.ComputeScriptExecutionFee();
+
+                // Compute script data hash from reference input scripts
+                List<IScript> scripts = [];
+                foreach (ResolvedInput ri in allUtxos)
+                {
+                    if (ri.Output is PostAlonzoTransactionOutput p && p.ScriptRef is not null)
+                    {
+                        try
+                        {
+                            IScript s = CborSerializer.Deserialize<IScript>(p.ScriptRef.GetValue());
+                            scripts.Add(s);
+                        }
+                        catch
+                        {
+                            // Skip unparseable script refs
+                        }
+                    }
+                }
+                if (scripts.Count > 0)
+                {
+                    _ = builder.ComputeAndSetScriptDataHash(scripts);
+                }
+            }
+
+            // Remove old change output
+            if (builder.ChangeOutputIndex is not null)
+            {
+                List<ITransactionOutput> outputs = [.. builder.Outputs];
+                outputs.RemoveAt(builder.ChangeOutputIndex.Value);
+                _ = builder.SetOutputs(outputs);
+                builder.ChangeOutputIndex = null;
+                builder.ChangeOutput = null;
+            }
+
+            // Build change output from balance
+            TransactionBuilderExtensions.BuildChangeOutput(builder, resolvedInputs, changeAddress);
+
+            // Select collateral
+            if (hasScripts && collateralPool.Count > 0)
+            {
+                TransactionBuilderExtensions.SelectCollateral(builder, builder.Fee, collateralPool);
+            }
+
+            // Inject placeholder witnesses for accurate size estimation
+            InjectPlaceholderWitnesses(builder);
+
+            // Calculate fee = tx size fee + script exec fee + reference script fee
+            PostMaryTransaction draftTx = builder.Build();
+            byte[] draftBytes = CborSerializer.Serialize(draftTx);
+            ulong fee = FeeUtil.CalculateFee(
+                (ulong)draftBytes.Length, _pparams.MinFeeA!.Value, _pparams.MinFeeB!.Value)
+                + scriptExecFee + refScriptFee + _feePadding;
+            if (_minimumFee.HasValue)
+            {
+                fee = Math.Max(fee, _minimumFee.Value);
+            }
+
+            if (Math.Abs((long)fee - (long)previousFee) < FeeConvergenceTolerance)
+            {
+                _ = builder.SetFee(fee);
+                break;
+            }
+
+            previousFee = fee;
+            _ = builder.SetFee(fee);
         }
 
         // Clear placeholder witnesses before final build
@@ -1095,6 +1275,138 @@ public class TxBuilder
             "Provide the script via ProvideScript() or AddReferenceInput().");
     }
 
+    /// <summary>
+    /// Evaluates scripts using the external evaluator if provided, otherwise the built-in Plutus VM.
+    /// </summary>
+    private async Task EvaluateScripts(TransactionBuilder builder, List<ResolvedInput> resolvedInputs)
+    {
+        if (_evaluator is not null)
+        {
+            PostMaryTransaction draftTx = builder.Build();
+            IReadOnlyList<Plutus.VM.Models.EvaluationResult> results =
+                await _evaluator(draftTx, resolvedInputs).ConfigureAwait(false);
+            TransactionBuilderExtensions.UpdateRedeemersWithEvalResults(builder, results);
+        }
+        else
+        {
+            SlotNetworkConfig slotConfig = SlotNetworkConfig.FromNetworkType(_provider.NetworkType);
+            _ = builder.Evaluate(resolvedInputs, slotConfig);
+        }
+    }
+
+    /// <summary>
+    /// Builds a complete redeemer map from ALL directive lists (spend, mint, withdrawal, cert).
+    /// This avoids using RedeemerSet which gets bypassed when SetRedeemers is called directly.
+    /// </summary>
+    private Dictionary<RedeemerKey, RedeemerValue> BuildRedeemerMapFromDirectives(
+        TransactionBuilder builder, List<string> sortedInputKeys)
+    {
+        ExUnits placeholderExUnits = ExUnits.Create(14_000_000, 10_000_000_000);
+        Dictionary<RedeemerKey, RedeemerValue> redeemerMap = [];
+
+        // ── Tag 0: Spend redeemers (sorted by tx_hash + index) ──
+        foreach (InputDirective directive in _explicitInputs)
+        {
+            if (directive.Redeemer is null)
+            {
+                continue;
+            }
+
+            string inputKey = Convert.ToHexString(directive.Utxo.Outref.TransactionId.Span)
+                + directive.Utxo.Outref.Index.ToString("D10", System.Globalization.CultureInfo.InvariantCulture);
+            int sortedIndex = sortedInputKeys.IndexOf(inputKey);
+            if (sortedIndex >= 0)
+            {
+                redeemerMap[RedeemerKey.Create(0, (ulong)sortedIndex)] =
+                    RedeemerValue.Create(directive.Redeemer, placeholderExUnits);
+            }
+        }
+
+        // ── Tag 1: Mint redeemers (sorted by policy hash) ──
+        if (builder.Mint is not null)
+        {
+            List<string> sortedMintPolicies = [.. builder.Mint.Value.Value.Keys
+                .Select(k => Convert.ToHexString(k.Span))
+                .Order(StringComparer.OrdinalIgnoreCase)];
+
+            foreach (MintDirective mint in _mintDirectives)
+            {
+                if (mint.Redeemer is null)
+                {
+                    continue;
+                }
+
+                string policyUpper = mint.PolicyHex.ToUpperInvariant();
+                int mintIndex = sortedMintPolicies.FindIndex(
+                    p => p.Equals(policyUpper, StringComparison.OrdinalIgnoreCase));
+                if (mintIndex >= 0)
+                {
+                    redeemerMap[RedeemerKey.Create(1, (ulong)mintIndex)] =
+                        RedeemerValue.Create(mint.Redeemer, placeholderExUnits);
+                }
+            }
+        }
+
+        // ── Tag 2: Certificate redeemers (by position in cert list) ──
+        for (int i = 0; i < _certificateDirectives.Count; i++)
+        {
+            CertificateDirective cert = _certificateDirectives[i];
+            if (cert.Redeemer is not null)
+            {
+                redeemerMap[RedeemerKey.Create(2, (ulong)i)] =
+                    RedeemerValue.Create(cert.Redeemer, placeholderExUnits);
+            }
+        }
+
+        // ── Tag 3: Withdrawal redeemers (sorted by reward address) ──
+        if (builder.CurrentWithdrawals?.Value is not null)
+        {
+            List<string> sortedWithdrawalAddresses = [.. builder.CurrentWithdrawals.Value.Keys
+                .Select(k => Convert.ToHexString(k.Value.Span))
+                .Order(StringComparer.OrdinalIgnoreCase)];
+
+            foreach (WithdrawalDirective wd in _withdrawalDirectives)
+            {
+                if (wd.Redeemer is null)
+                {
+                    continue;
+                }
+
+                string addrUpper = wd.RewardAddressHex.ToUpperInvariant();
+                int wdIndex = sortedWithdrawalAddresses.FindIndex(
+                    a => a.Equals(addrUpper, StringComparison.OrdinalIgnoreCase));
+                if (wdIndex >= 0)
+                {
+                    redeemerMap[RedeemerKey.Create(3, (ulong)wdIndex)] =
+                        RedeemerValue.Create(wd.Redeemer, placeholderExUnits);
+                }
+            }
+        }
+
+        if (redeemerMap.Count > 0)
+        {
+            _ = builder.SetRedeemers(RedeemerMap.Create(redeemerMap));
+        }
+
+        return redeemerMap;
+    }
+
+    private IScript? ResolveScriptFromReferenceInputs(string scriptHashHex)
+    {
+        foreach (ResolvedInput refInput in _referenceInputs)
+        {
+            if (refInput.Output is PostAlonzoTransactionOutput refOutput && refOutput.ScriptRef is not null)
+            {
+                IScript refScript = CborSerializer.Deserialize<IScript>(refOutput.ScriptRef.GetValue());
+                if (refScript.HashHex().Equals(scriptHashHex, StringComparison.OrdinalIgnoreCase))
+                {
+                    return refScript;
+                }
+            }
+        }
+        return null;
+    }
+
     private static byte[] ExtractScriptHash(ITransactionOutput output)
     {
         ReadOnlyMemory<byte> addressBytes = output switch
@@ -1144,27 +1456,38 @@ public class TxBuilder
 
             if (currentLovelace < minLovelace)
             {
-                IValue newAmount = directive.Amount switch
+                // Recalculate with the new lovelace value (its CBOR size may differ)
+                for (int pass = 0; pass < 3; pass++)
                 {
-                    LovelaceWithMultiAsset lma => LovelaceWithMultiAsset.Create(minLovelace, lma.MultiAsset),
-                    _ => Lovelace.Create(minLovelace)
-                };
+                    IValue newAmount = directive.Amount switch
+                    {
+                        LovelaceWithMultiAsset lma => LovelaceWithMultiAsset.Create(minLovelace, lma.MultiAsset),
+                        _ => Lovelace.Create(minLovelace)
+                    };
 
-                ob = directive.AddressBytes is not null
-                    ? new OutputBuilder(directive.AddressBytes, newAmount)
-                    : new OutputBuilder(directive.Bech32Address!, newAmount);
+                    ob = directive.AddressBytes is not null
+                        ? new OutputBuilder(directive.AddressBytes, newAmount)
+                        : new OutputBuilder(directive.Bech32Address!, newAmount);
 
-                if (directive.DatumCbor is not null)
-                {
-                    ob.SetDatumOption(InlineDatumOption.Create(1, new CborEncodedValue(directive.DatumCbor)));
+                    if (directive.DatumCbor is not null)
+                    {
+                        ob.SetDatumOption(InlineDatumOption.Create(1, new CborEncodedValue(directive.DatumCbor)));
+                    }
+
+                    if (directive.ScriptRef is not null)
+                    {
+                        _ = ob.WithScriptRef(directive.ScriptRef);
+                    }
+
+                    built = ob.Build();
+                    ulong recalcMin = FeeUtil.CalculateMinimumLovelace(adaPerByte, CborSerializer.Serialize(built));
+                    if (minLovelace >= recalcMin)
+                    {
+                        break;
+                    }
+
+                    minLovelace = recalcMin;
                 }
-
-                if (directive.ScriptRef is not null)
-                {
-                    _ = ob.WithScriptRef(directive.ScriptRef);
-                }
-
-                built = ob.Build();
             }
         }
 
@@ -1233,5 +1556,8 @@ public class TxBuilder
         string RewardAddressHex,
         ulong Amount,
         IScript? Script = null,
-        IPlutusData? Redeemer = null);
+        IPlutusData? Redeemer = null)
+    {
+        public string? ScriptRefHash { get; init; }
+    }
 }
