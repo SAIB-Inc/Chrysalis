@@ -56,19 +56,30 @@ public static class CborWriter
         if (tag is >= 0 and <= 6)
         {
             WriteTag(buffer, (ulong)(121 + tag));
-            WriteIndefiniteArray(buffer, constr.Fields);
+            WriteDefiniteArray(buffer, constr.Fields);
         }
         else if (tag is >= 7 and <= 127)
         {
             WriteTag(buffer, (ulong)(1280 + tag - 7));
-            WriteIndefiniteArray(buffer, constr.Fields);
+            WriteDefiniteArray(buffer, constr.Fields);
         }
         else
         {
             WriteTag(buffer, 102);
             WriteUnsigned(buffer, 2, 4);
             WriteUnsigned(buffer, (ulong)tag, 0);
-            WriteIndefiniteArray(buffer, constr.Fields);
+            WriteDefiniteArray(buffer, constr.Fields);
+        }
+    }
+
+    private static void WriteDefiniteArray(
+        ArrayBufferWriter<byte> buffer,
+        System.Collections.Immutable.ImmutableArray<PlutusData> items)
+    {
+        WriteUnsigned(buffer, (ulong)items.Length, 4);
+        foreach (PlutusData item in items)
+        {
+            WriteData(buffer, item);
         }
     }
 

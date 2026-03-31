@@ -52,7 +52,7 @@ internal static class MetadataConverter
         }
 
         ResolvedConstructor ctor = type.Constructors[0];
-        SerializableTypeMetadata metadata = CreateConstrMetadata(ns, type.TypeName, ctor.Index, ctor.Fields, hasFields: ctor.Fields.Count > 0);
+        SerializableTypeMetadata metadata = CreateConstrMetadata(ns, type.TypeName, ctor.Index, ctor.Fields);
         Emitter.EmitSerializerAndMetadata(context, metadata);
     }
 
@@ -69,7 +69,7 @@ internal static class MetadataConverter
         List<SerializableTypeMetadata> childMetadatas = [];
         foreach (ResolvedConstructor ctor in type.Constructors)
         {
-            SerializableTypeMetadata childMeta = CreateConstrMetadata(ns, ctor.Name, ctor.Index, ctor.Fields, hasFields: ctor.Fields.Count > 0);
+            SerializableTypeMetadata childMeta = CreateConstrMetadata(ns, ctor.Name, ctor.Index, ctor.Fields);
             childMetadatas.Add(childMeta);
             Emitter.EmitSerializerAndMetadata(context, childMeta);
         }
@@ -134,7 +134,7 @@ internal static class MetadataConverter
 
     private static SerializableTypeMetadata CreateConstrMetadata(
         string ns, string typeName, int constrIndex,
-        List<ResolvedField> fields, bool hasFields)
+        List<ResolvedField> fields)
     {
         SerializableTypeMetadata metadata = new(
             baseIdentifier: typeName,
@@ -145,9 +145,9 @@ internal static class MetadataConverter
             keyword: "record",
             cborTag: null,
             cborIndex: constrIndex,
-            isIndefinite: hasFields,
-            isDefinite: !hasFields,
-            definiteSize: hasFields ? null : 0,
+            isIndefinite: false,
+            isDefinite: false,
+            definiteSize: null,
             serializationType: SerializationType.Constr,
             validator: null,
             shouldPreserveRaw: true
