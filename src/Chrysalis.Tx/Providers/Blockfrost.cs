@@ -375,17 +375,15 @@ public sealed class Blockfrost : ICardanoDataProvider, IDisposable
             if (output.TryGetProperty("output_index", out JsonElement idxElem) &&
                 idxElem.GetUInt64() == index)
             {
-                // Reconstruct as a UTxO query for the address and filter
-                string? address = output.GetProperty("address").GetString();
-                if (address is null)
+                BlockfrostUtxo? utxo = output.Deserialize<BlockfrostUtxo>();
+                if (utxo is null)
                 {
                     return null;
                 }
 
-                List<ResolvedInput> utxos = await GetUtxosAsync(address).ConfigureAwait(false);
-                return utxos.Find(u =>
-                    Convert.ToHexStringLower(u.Outref.TransactionId.Span).Equals(txHash, StringComparison.OrdinalIgnoreCase) &&
-                    u.Outref.Index == index);
+                utxo.TxHash = txHash;
+                utxo.TxIndex = (int)index;
+                return await ProcessUtxo(utxo).ConfigureAwait(false);
             }
         }
 

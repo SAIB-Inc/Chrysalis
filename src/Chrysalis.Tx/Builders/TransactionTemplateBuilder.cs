@@ -57,6 +57,7 @@ public sealed class TransactionTemplateBuilder<T>
     private readonly List<PreBuildHook<T>> _preBuildHooks = [];
     private readonly List<string> _requiredSigners = [];
     private NativeScriptBuilder<T>? _nativeScriptBuilder;
+    private readonly List<TransactionInput> _excludedUtxos = [];
     private ulong _validFrom;
     private ulong _validTo;
 
@@ -245,6 +246,19 @@ public sealed class TransactionTemplateBuilder<T>
         return AddStaticParty("change", bech32Address, true);
     }
 
+    /// <summary>
+    /// Excludes a specific UTxO from coin selection. Use this to reserve UTxOs
+    /// that should not be consumed by automatic coin selection (e.g., boot UTxOs
+    /// needed by future transactions).
+    /// </summary>
+    /// <param name="utxoRef">The transaction outref to exclude.</param>
+    /// <returns>This builder for chaining.</returns>
+    public TransactionTemplateBuilder<T> ExcludeUtxo(TransactionInput utxoRef)
+    {
+        _excludedUtxos.Add(utxoRef);
+        return this;
+    }
+
     private async Task<PostMaryTransaction> EvaluateTemplate(T param, bool eval = true)
     {
         BuildContext context = new()
@@ -334,8 +348,22 @@ public sealed class TransactionTemplateBuilder<T>
         List<ResolvedInput> specifiedInputsUtxos = GetSpecifiedInputsUtxos(context.SpecifiedInputs, allUtxos);
         context.ResolvedInputs.AddRange(specifiedInputsUtxos);
 
+        // Remove specified inputs and excluded UTxOs from the coin selection pool
+        HashSet<(string TxHash, ulong Index)> excludedOutRefs = [];
+        foreach (TransactionInput specInput in context.SpecifiedInputs)
+        {
+            _ = excludedOutRefs.Add((Convert.ToHexStringLower(specInput.TransactionId.Span), specInput.Index));
+        }
+        foreach (TransactionInput exclInput in _excludedUtxos)
+        {
+            _ = excludedOutRefs.Add((Convert.ToHexStringLower(exclInput.TransactionId.Span), exclInput.Index));
+        }
+
+        List<ResolvedInput> coinSelectionPool = [.. utxos
+            .Where(u => !excludedOutRefs.Contains((Convert.ToHexStringLower(u.Outref.TransactionId.Span), u.Outref.Index)))];
+
         CoinSelectionResult coinSelectionResult = PerformCoinSelection(
-            utxos,
+            coinSelectionPool,
             requiredAmount,
             specifiedInputsUtxos,
             feeBuffer,

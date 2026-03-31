@@ -535,6 +535,9 @@ else if (mode == "LOW")
 }
 else
 {
+    // Wait for wallet UTxO set to reflect fill TX before building close
+    _ = await WaitForWalletUtxos(provider, walletBech32, fillTxId).ConfigureAwait(false);
+
     TransactionTemplate<CloseOrderParams> closeTemplate =
         TransactionTemplateBuilder.Create<CloseOrderParams>(provider)
             .SetChangeAddress(walletBech32)

@@ -94,7 +94,6 @@ internal sealed class CSharpEmitter(string ns)
         }
         else
         {
-            _ = sb.AppendLine("[CborIndefinite]");
             _ = sb.Append($"public partial record {type.TypeName}(");
             _ = sb.AppendLine();
             EmitFieldParameters(sb, ctor.Fields);
@@ -130,7 +129,6 @@ internal sealed class CSharpEmitter(string ns)
             }
             else
             {
-                _ = sb.AppendLine("[CborIndefinite]");
                 _ = sb.Append($"public partial record {ctor.Name}(");
                 _ = sb.AppendLine();
                 EmitFieldParameters(sb, ctor.Fields);
