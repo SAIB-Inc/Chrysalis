@@ -12,15 +12,17 @@ public class CborWriterTests
 {
     private static string Hex(byte[] bytes) => Convert.ToHexString(bytes);
 
-    // --- Constructor encoding (indefinite-length arrays) ---
+    // --- Constructor encoding ---
+    // Non-empty fields use indefinite-length arrays (0x9F...0xFF), matching Aiken/Cardano node.
+    // Empty fields use definite-length (0x80).
 
     [Fact]
-    public void Constr0_WithInteger_UsesDefiniteArray()
+    public void Constr0_WithInteger_UsesIndefiniteArray()
     {
-        // Constr 0 [I 42] → tag 121 + 81 18 2A
+        // Constr 0 [I 42] → tag 121 + 9F 18 2A FF
         PlutusData data = new PlutusDataConstr(0, [new PlutusDataInteger(42)]);
         byte[] result = CborWriter.EncodePlutusData(data);
-        Assert.Equal("D87981182A", Hex(result));
+        Assert.Equal("D8799F182AFF", Hex(result));
     }
 
     [Fact]
@@ -35,28 +37,28 @@ public class CborWriterTests
     [Fact]
     public void Constr6_UsesTag127()
     {
-        // Constr 6 [I 1] → tag 127 + 81 01
+        // Constr 6 [I 1] → tag 127 + 9F 01 FF
         PlutusData data = new PlutusDataConstr(6, [new PlutusDataInteger(1)]);
         byte[] result = CborWriter.EncodePlutusData(data);
-        Assert.Equal("D87F8101", Hex(result));
+        Assert.Equal("D87F9F01FF", Hex(result));
     }
 
     [Fact]
     public void Constr7_UsesTag1280()
     {
-        // Constr 7 [I 1] → tag 1280 + 81 01
+        // Constr 7 [I 1] → tag 1280 + 9F 01 FF
         PlutusData data = new PlutusDataConstr(7, [new PlutusDataInteger(1)]);
         byte[] result = CborWriter.EncodePlutusData(data);
-        Assert.Equal("D905008101", Hex(result));
+        Assert.Equal("D905009F01FF", Hex(result));
     }
 
     [Fact]
-    public void Constr200_UsesTag102_WithDefiniteArrays()
+    public void Constr200_UsesTag102_WithIndefiniteFields()
     {
-        // Constr 200 [B #CAFE] → tag 102 + definite [200, definite [42 CAFE]]
+        // Constr 200 [B #CAFE] → tag 102 + definite [200, indef [42 CAFE FF]]
         PlutusData data = new PlutusDataConstr(200, [new PlutusDataByteString(new byte[] { 0xCA, 0xFE })]);
         byte[] result = CborWriter.EncodePlutusData(data);
-        Assert.Equal("D8668218C88142CAFE", Hex(result));
+        Assert.Equal("D8668218C89F42CAFEFF", Hex(result));
     }
 
     // --- List encoding (indefinite-length arrays) ---
@@ -200,9 +202,9 @@ public class CborWriterTests
     [Fact]
     public void SpecExample_Constr0_I42()
     {
-        // Definite-length: D8 79 81 18 2A
+        // Non-empty: D8 79 9F 18 2A FF (indefinite array, matching Aiken)
         PlutusData data = new PlutusDataConstr(0, [new PlutusDataInteger(42)]);
         byte[] result = CborWriter.EncodePlutusData(data);
-        Assert.Equal("D87981182A", Hex(result));
+        Assert.Equal("D8799F182AFF", Hex(result));
     }
 }

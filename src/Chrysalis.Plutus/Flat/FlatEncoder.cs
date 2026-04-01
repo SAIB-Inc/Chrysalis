@@ -183,7 +183,7 @@ public static class FlatEncoder
             case UnitConstant:
                 break;
             case DataConstant d:
-                byte[] cborBytes = Cbor.CborWriter.EncodePlutusData(d.Value);
+                byte[] cborBytes = Cbor.CborWriter.EncodePlutusDataDefinite(d.Value);
                 EncodeByteString(writer, cborBytes);
                 break;
             case ListConstant list:

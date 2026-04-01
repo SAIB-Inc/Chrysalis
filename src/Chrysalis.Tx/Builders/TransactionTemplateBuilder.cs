@@ -60,6 +60,7 @@ public sealed class TransactionTemplateBuilder<T>
     private readonly List<TransactionInput> _excludedUtxos = [];
     private ulong _validFrom;
     private ulong _validTo;
+    private Func<PostMaryTransaction, IReadOnlyList<ResolvedInput>, Task<IReadOnlyList<Plutus.VM.Models.EvaluationResult>>>? _evaluator;
 
     /// <summary>
     /// Internal factory method called by the non-generic companion class.
@@ -67,6 +68,18 @@ public sealed class TransactionTemplateBuilder<T>
     /// <param name="provider">The Cardano data provider.</param>
     /// <returns>A new template builder instance.</returns>
     internal static TransactionTemplateBuilder<T> CreateInternal(ICardanoDataProvider provider) => new TransactionTemplateBuilder<T>().SetProvider(provider);
+
+    /// <summary>
+    /// Sets a custom evaluator for computing script execution units.
+    /// Use this to delegate evaluation to an external service (e.g., Blockfrost/Ogmios)
+    /// instead of using the built-in Plutus VM.
+    /// </summary>
+    public TransactionTemplateBuilder<T> UseEvaluator(
+        Func<PostMaryTransaction, IReadOnlyList<ResolvedInput>, Task<IReadOnlyList<Plutus.VM.Models.EvaluationResult>>> evaluator)
+    {
+        _evaluator = evaluator;
+        return this;
+    }
 
     /// <summary>
     /// Adds a pre-build hook for custom transaction modifications.
@@ -508,6 +521,10 @@ public sealed class TransactionTemplateBuilder<T>
         // allUtxos = all UTxOs including reference inputs (for script evaluation)
         TxBuilder txBuilder = new(_provider!);
         _ = txBuilder.SetChangeAddress(changeAddrBech32);
+        if (_evaluator is not null)
+        {
+            _ = txBuilder.UseEvaluator(_evaluator);
+        }
         return await txBuilder.Finalize(
             context.TxBuilder, changeAddrBech32, context.ResolvedInputs, allUtxos,
             prioritizedInputsForCollateral, eval).ConfigureAwait(false);

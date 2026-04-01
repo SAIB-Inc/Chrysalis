@@ -12,15 +12,29 @@ namespace Chrysalis.Plutus.Cbor;
 /// </summary>
 public static class CborWriter
 {
+    /// <summary>
+    /// Encodes PlutusData to CBOR using indefinite-length Constr arrays (matching Aiken/Cardano node ScriptContext encoding).
+    /// </summary>
     public static byte[] EncodePlutusData(PlutusData data)
     {
         ArgumentNullException.ThrowIfNull(data);
         ArrayBufferWriter<byte> buffer = new();
-        WriteData(buffer, data);
+        WriteData(buffer, data, constrIndefinite: true);
         return buffer.WrittenSpan.ToArray();
     }
 
-    private static void WriteData(ArrayBufferWriter<byte> buffer, PlutusData data)
+    /// <summary>
+    /// Encodes PlutusData to CBOR using definite-length Constr arrays (matching Flat-embedded constant encoding).
+    /// </summary>
+    public static byte[] EncodePlutusDataDefinite(PlutusData data)
+    {
+        ArgumentNullException.ThrowIfNull(data);
+        ArrayBufferWriter<byte> buffer = new();
+        WriteData(buffer, data, constrIndefinite: false);
+        return buffer.WrittenSpan.ToArray();
+    }
+
+    private static void WriteData(ArrayBufferWriter<byte> buffer, PlutusData data, bool constrIndefinite = true)
     {
         switch (data)
         {
@@ -31,66 +45,92 @@ public static class CborWriter
                 WritePlutusByteString(buffer, bs.Value.Span);
                 break;
             case PlutusDataList list:
-                WriteIndefiniteArray(buffer, list.Values);
+                if (list.IsDefinite)
+                {
+                    WriteUnsigned(buffer, (ulong)list.Values.Length, 4);
+                    foreach (PlutusData item in list.Values)
+                    {
+                        WriteData(buffer, item, constrIndefinite);
+                    }
+                }
+                else
+                {
+                    WriteIndefiniteArray(buffer, list.Values, constrIndefinite);
+                }
                 break;
             case PlutusDataMap map:
                 WriteUnsigned(buffer, (ulong)map.Entries.Length, 5);
                 foreach ((PlutusData key, PlutusData value) in map.Entries)
                 {
-                    WriteData(buffer, key);
-                    WriteData(buffer, value);
+                    WriteData(buffer, key, constrIndefinite);
+                    WriteData(buffer, value, constrIndefinite);
                 }
                 break;
             case PlutusDataConstr constr:
-                WriteConstrData(buffer, constr);
+                WriteConstrData(buffer, constr, constrIndefinite);
                 break;
             default:
                 throw new InvalidOperationException($"CBOR: cannot encode {data.GetType().Name}.");
         }
     }
 
-    private static void WriteConstrData(ArrayBufferWriter<byte> buffer, PlutusDataConstr constr)
+    private static void WriteConstrData(ArrayBufferWriter<byte> buffer, PlutusDataConstr constr, bool useIndefinite)
     {
+        // When useIndefinite is true (ScriptContext encoding), respect the Constr's own IsDefinite flag
+        // for preserved data (inline datums from TX body). For freshly-built ScriptContext nodes
+        // (IsDefinite=false, the default), use indefinite for non-empty fields (matching Aiken's wrap_with_constr).
+        bool writeDefinite = constr.IsDefinite || !useIndefinite;
+
         long tag = (long)constr.Tag;
 
         if (tag is >= 0 and <= 6)
         {
             WriteTag(buffer, (ulong)(121 + tag));
-            WriteDefiniteArray(buffer, constr.Fields);
+            WriteConstrFields(buffer, constr.Fields, writeDefinite, useIndefinite);
         }
         else if (tag is >= 7 and <= 127)
         {
             WriteTag(buffer, (ulong)(1280 + tag - 7));
-            WriteDefiniteArray(buffer, constr.Fields);
+            WriteConstrFields(buffer, constr.Fields, writeDefinite, useIndefinite);
         }
         else
         {
             WriteTag(buffer, 102);
             WriteUnsigned(buffer, 2, 4);
             WriteUnsigned(buffer, (ulong)tag, 0);
-            WriteDefiniteArray(buffer, constr.Fields);
+            WriteConstrFields(buffer, constr.Fields, writeDefinite, useIndefinite);
         }
     }
 
-    private static void WriteDefiniteArray(
+    private static void WriteConstrFields(
         ArrayBufferWriter<byte> buffer,
-        System.Collections.Immutable.ImmutableArray<PlutusData> items)
+        System.Collections.Immutable.ImmutableArray<PlutusData> fields,
+        bool writeDefinite,
+        bool constrIndefinite)
     {
-        WriteUnsigned(buffer, (ulong)items.Length, 4);
-        foreach (PlutusData item in items)
+        if (writeDefinite || fields.IsEmpty)
         {
-            WriteData(buffer, item);
+            WriteUnsigned(buffer, (ulong)fields.Length, 4);
+            foreach (PlutusData item in fields)
+            {
+                WriteData(buffer, item, constrIndefinite);
+            }
+        }
+        else
+        {
+            WriteIndefiniteArray(buffer, fields, constrIndefinite);
         }
     }
 
     private static void WriteIndefiniteArray(
         ArrayBufferWriter<byte> buffer,
-        System.Collections.Immutable.ImmutableArray<PlutusData> items)
+        System.Collections.Immutable.ImmutableArray<PlutusData> items,
+        bool constrIndefinite = true)
     {
         WriteSingleByte(buffer, 0x9F);
         foreach (PlutusData item in items)
         {
-            WriteData(buffer, item);
+            WriteData(buffer, item, constrIndefinite);
         }
         WriteSingleByte(buffer, 0xFF);
     }

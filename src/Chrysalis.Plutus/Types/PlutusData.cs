@@ -11,13 +11,13 @@ namespace Chrysalis.Plutus.Types;
 public abstract record PlutusData;
 
 /// <summary>Constructor application: a tag index plus a list of fields.</summary>
-public sealed record PlutusDataConstr(BigInteger Tag, ImmutableArray<PlutusData> Fields) : PlutusData;
+public sealed record PlutusDataConstr(BigInteger Tag, ImmutableArray<PlutusData> Fields, bool IsDefinite = false) : PlutusData;
 
 /// <summary>An association list of key-value pairs.</summary>
 public sealed record PlutusDataMap(ImmutableArray<(PlutusData Key, PlutusData Value)> Entries) : PlutusData;
 
 /// <summary>A list of data values.</summary>
-public sealed record PlutusDataList(ImmutableArray<PlutusData> Values) : PlutusData;
+public sealed record PlutusDataList(ImmutableArray<PlutusData> Values, bool IsDefinite = false) : PlutusData;
 
 /// <summary>An arbitrary-precision integer.</summary>
 public sealed record PlutusDataInteger(BigInteger Value) : PlutusData;
