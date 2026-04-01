@@ -35,9 +35,13 @@ public static class ScriptContextBuilder
 
     private static VmConstr EmptyConstr(long tag) => new(new BigInteger(tag), []);
 
-    private static VmList List(IEnumerable<VmPlutusData> items) => new([.. items]);
+    private static VmList List(IEnumerable<VmPlutusData> items)
+    {
+        ImmutableArray<VmPlutusData> arr = [.. items];
+        return new VmList(arr, IsDefinite: arr.IsEmpty);
+    }
 
-    private static VmList EmptyList() => new([]);
+    private static VmList EmptyList() => new([], IsDefinite: true);
 
     private static VmMap Map(IEnumerable<(VmPlutusData Key, VmPlutusData Value)> entries) => new([.. entries]);
 
@@ -269,9 +273,8 @@ public static class ScriptContextBuilder
     {
         null => EmptyConstr(0),
         DatumHashOption dh => Constr(1, Bytes(dh.DatumHash)),
-        InlineDatumOption inline => Constr(2, CodecPlutusDataToVm(
-            inline.Data.Deserialize<CodecPlutusData>()
-        )),
+        InlineDatumOption inline => Constr(2,
+            Plutus.Cbor.CborReader.DecodePlutusData(inline.Data.GetValue())),
         _ => EmptyConstr(0)
     };
 
@@ -714,8 +717,8 @@ public static class ScriptContextBuilder
             datum = postAlonzo.Datum switch
             {
                 DatumHashOption dh => ResolveDatum(dh.DatumHash, lookupTable),
-                InlineDatumOption inline => CodecPlutusDataToVm(
-                    inline.Data.Deserialize<CodecPlutusData>()),
+                InlineDatumOption inline => Plutus.Cbor.CborReader.DecodePlutusData(
+                    inline.Data.GetValue()),
                 _ => null
             };
         }
@@ -1096,8 +1099,8 @@ public static class ScriptContextBuilder
                         datum = postAlonzo.Datum switch
                         {
                             DatumHashOption dh => ResolveDatum(dh.DatumHash, lookupTable),
-                            InlineDatumOption inline => CodecPlutusDataToVm(
-                                inline.Data.Deserialize<CodecPlutusData>()),
+                            InlineDatumOption inline => Plutus.Cbor.CborReader.DecodePlutusData(
+                                inline.Data.GetValue()),
                             _ => null
                         };
                     }

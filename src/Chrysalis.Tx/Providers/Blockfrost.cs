@@ -418,6 +418,93 @@ public sealed class Blockfrost : ICardanoDataProvider, IDisposable
     }
 
     /// <summary>
+    /// Evaluates a transaction using the Blockfrost/Ogmios evaluate endpoint.
+    /// Returns execution units for each redeemer as computed by the Cardano node.
+    /// </summary>
+    /// <param name="tx">The unsigned transaction to evaluate.</param>
+    /// <returns>A dictionary mapping (tag, index) to (mem, steps) execution units.</returns>
+    public async Task<Dictionary<(int Tag, ulong Index), (ulong Mem, ulong Steps)>> EvaluateTransactionAsync(ITransaction tx)
+    {
+        ArgumentNullException.ThrowIfNull(tx);
+
+        using ByteArrayContent content = new(CborSerializer.Serialize(tx));
+        content.Headers.ContentType = new MediaTypeHeaderValue("application/cbor");
+
+        using HttpResponseMessage response = await _httpClient.PostAsync(
+            new Uri("utils/txs/evaluate", UriKind.Relative), content).ConfigureAwait(false);
+
+        string responseBody = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+
+        using JsonDocument doc = JsonDocument.Parse(responseBody);
+        JsonElement root = doc.RootElement;
+
+        Dictionary<(int, ulong), (ulong, ulong)> results = [];
+
+        // Parse Ogmios EvaluateTx response format
+        if (root.TryGetProperty("result", out JsonElement result))
+        {
+            if (result.TryGetProperty("EvaluationResult", out JsonElement evalResult))
+            {
+                foreach (JsonProperty prop in evalResult.EnumerateObject())
+                {
+                    // Key format: "spend:0", "mint:0", etc.
+                    string[] parts = prop.Name.Split(':');
+                    int tag = parts[0] switch
+                    {
+                        "spend" => 0,
+                        "mint" => 1,
+                        "cert" => 2,
+                        "reward" => 3,
+                        "vote" => 4,
+                        "propose" => 5,
+                        _ => -1
+                    };
+
+                    if (tag >= 0 && ulong.TryParse(parts[1], CultureInfo.InvariantCulture, out ulong index))
+                    {
+                        // Ogmios returns {memory, steps} directly (no "budget" wrapper)
+                        ulong mem = prop.Value.GetProperty("memory").GetUInt64();
+                        ulong steps = prop.Value.GetProperty("steps").GetUInt64();
+                        results[(tag, index)] = (mem, steps);
+                    }
+                }
+            }
+            else if (result.TryGetProperty("EvaluationFailure", out JsonElement failure))
+            {
+                throw new InvalidOperationException(
+                    $"EvaluateTransactionAsync: evaluation failed: {failure}");
+            }
+        }
+
+        if (results.Count == 0)
+        {
+            throw new InvalidOperationException(
+                $"EvaluateTransactionAsync: no evaluation results. Response: {responseBody[..Math.Min(1000, responseBody.Length)]}");
+        }
+
+        return results;
+    }
+
+    /// <summary>
+    /// Creates an evaluator function that uses the Blockfrost evaluate endpoint.
+    /// Pass the returned function to <see cref="Builders.TxBuilder.UseEvaluator"/> or
+    /// <see cref="Builders.TransactionTemplateBuilder{T}.UseEvaluator"/>.
+    /// </summary>
+    public Func<PostMaryTransaction, IReadOnlyList<ResolvedInput>, Task<IReadOnlyList<Plutus.VM.Models.EvaluationResult>>> CreateEvaluator()
+    {
+        return async (tx, _) =>
+        {
+            Dictionary<(int Tag, ulong Index), (ulong Mem, ulong Steps)> results =
+                await EvaluateTransactionAsync(tx).ConfigureAwait(false);
+
+            return [.. results.Select(kv => new Plutus.VM.Models.EvaluationResult(
+                kv.Key.Tag, kv.Key.Index,
+                new Plutus.VM.Models.ExUnitsResult(kv.Value.Mem, kv.Value.Steps)
+            ))];
+        };
+    }
+
+    /// <summary>
     /// Retrieves transaction metadata by transaction hash.
     /// </summary>
     /// <param name="txHash">The transaction hash.</param>

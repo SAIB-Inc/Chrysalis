@@ -958,38 +958,44 @@ public class TxBuilder
 
         ulong scriptExecFee = 0;
 
+        // Collect reference scripts once for script data hash computation
+        List<IScript> refScripts = [];
+        if (hasScripts)
+        {
+            foreach (ResolvedInput ri in allUtxos)
+            {
+                if (ri.Output is PostAlonzoTransactionOutput p && p.ScriptRef is not null)
+                {
+                    try
+                    {
+                        IScript s = CborSerializer.Deserialize<IScript>(p.ScriptRef.GetValue());
+                        refScripts.Add(s);
+                    }
+                    catch
+                    {
+                        // Skip unparseable script refs
+                    }
+                }
+            }
+        }
+
         // ── Stabilization loop ──
         _ = builder.SetFee(300_000);
         ulong previousFee = 0;
 
         for (int iteration = 0; iteration < MaxStabilizationIterations; iteration++)
         {
-            // Evaluate scripts (once)
-            if (hasScripts && evaluate && scriptExecFee == 0)
+            // Evaluate scripts every iteration — ex-units depend on the current fee/change/TxId
+            // (matching Blaze-Cardano's approach: redeemer budgets are corrected each pass)
+            if (hasScripts && evaluate)
             {
                 await EvaluateScripts(builder, allUtxos).ConfigureAwait(false);
                 scriptExecFee = builder.ComputeScriptExecutionFee();
 
-                // Compute script data hash from reference input scripts
-                List<IScript> scripts = [];
-                foreach (ResolvedInput ri in allUtxos)
+                // Recompute script data hash (depends on redeemers which change each iteration)
+                if (refScripts.Count > 0)
                 {
-                    if (ri.Output is PostAlonzoTransactionOutput p && p.ScriptRef is not null)
-                    {
-                        try
-                        {
-                            IScript s = CborSerializer.Deserialize<IScript>(p.ScriptRef.GetValue());
-                            scripts.Add(s);
-                        }
-                        catch
-                        {
-                            // Skip unparseable script refs
-                        }
-                    }
-                }
-                if (scripts.Count > 0)
-                {
-                    _ = builder.ComputeAndSetScriptDataHash(scripts);
+                    _ = builder.ComputeAndSetScriptDataHash(refScripts);
                 }
             }
 

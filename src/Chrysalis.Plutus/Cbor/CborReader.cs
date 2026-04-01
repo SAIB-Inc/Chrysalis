@@ -10,9 +10,9 @@ namespace Chrysalis.Plutus.Cbor;
 /// Implements spec Appendix B (sections B.3–B.7).
 /// Works over ReadOnlyMemory to avoid copying.
 /// </summary>
-internal static class CborReader
+public static class CborReader
 {
-    internal static PlutusData DecodePlutusData(ReadOnlyMemory<byte> data)
+    public static PlutusData DecodePlutusData(ReadOnlyMemory<byte> data)
     {
         int offset = 0;
         return ReadData(data.Span, ref offset);
@@ -33,7 +33,7 @@ internal static class CborReader
             0 => new PlutusDataInteger(new BigInteger(ReadUnsigned(span, ref offset))),
             1 => new PlutusDataInteger(-1 - new BigInteger(ReadUnsigned(span, ref offset))),
             2 => new PlutusDataByteString(ReadByteString(span, ref offset)),
-            4 => new PlutusDataList(ReadDataList(span, ref offset)),
+            4 => DecodeList(span, ref offset),
             5 => DecodeMap(span, ref offset),
             _ => throw new InvalidOperationException($"CBOR: unexpected major type {majorType} for PlutusData.")
         };
@@ -55,14 +55,14 @@ internal static class CborReader
 
         if (tag is >= 121 and <= 127)
         {
-            ImmutableArray<PlutusData> fields = ReadDataList(span, ref offset);
-            return new PlutusDataConstr(new BigInteger(tag - 121), fields);
+            (ImmutableArray<PlutusData> fields, bool isDefinite) = ReadDataListWithEncoding(span, ref offset);
+            return new PlutusDataConstr(new BigInteger(tag - 121), fields, isDefinite);
         }
 
         if (tag is >= 1280 and <= 1400)
         {
-            ImmutableArray<PlutusData> fields = ReadDataList(span, ref offset);
-            return new PlutusDataConstr(new BigInteger(tag - 1280 + 7), fields);
+            (ImmutableArray<PlutusData> fields, bool isDefinite) = ReadDataListWithEncoding(span, ref offset);
+            return new PlutusDataConstr(new BigInteger(tag - 1280 + 7), fields, isDefinite);
         }
 
         if (tag == 102)
@@ -73,11 +73,17 @@ internal static class CborReader
                 throw new InvalidOperationException($"CBOR: tag 102 expects 2-element array, got {count}.");
             }
             ulong constrIndex = ReadUnsigned(span, ref offset);
-            ImmutableArray<PlutusData> fields = ReadDataList(span, ref offset);
-            return new PlutusDataConstr(new BigInteger(constrIndex), fields);
+            (ImmutableArray<PlutusData> fields, bool isDefinite) = ReadDataListWithEncoding(span, ref offset);
+            return new PlutusDataConstr(new BigInteger(constrIndex), fields, isDefinite);
         }
 
         throw new InvalidOperationException($"CBOR: unexpected tag {tag} for PlutusData.");
+    }
+
+    private static PlutusDataList DecodeList(ReadOnlySpan<byte> span, ref int offset)
+    {
+        (ImmutableArray<PlutusData> items, bool isDefinite) = ReadDataListWithEncoding(span, ref offset);
+        return new PlutusDataList(items, isDefinite);
     }
 
     private static PlutusDataMap DecodeMap(ReadOnlySpan<byte> span, ref int offset)
@@ -112,7 +118,7 @@ internal static class CborReader
         return new PlutusDataMap(entries.ToImmutable());
     }
 
-    private static ImmutableArray<PlutusData> ReadDataList(ReadOnlySpan<byte> span, ref int offset)
+    private static (ImmutableArray<PlutusData> Items, bool IsDefinite) ReadDataListWithEncoding(ReadOnlySpan<byte> span, ref int offset)
     {
         int additionalInfo = span[offset] & 0x1F;
 
@@ -126,6 +132,7 @@ internal static class CborReader
                 items.Add(ReadData(span, ref offset));
             }
             offset++;
+            return (items.ToImmutable(), false);
         }
         else
         {
@@ -134,9 +141,8 @@ internal static class CborReader
             {
                 items.Add(ReadData(span, ref offset));
             }
+            return (items.ToImmutable(), true);
         }
-
-        return items.ToImmutable();
     }
 
     // --- Low-level CBOR primitives ---

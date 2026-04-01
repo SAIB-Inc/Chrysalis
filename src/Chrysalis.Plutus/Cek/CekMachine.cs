@@ -21,6 +21,11 @@ public sealed class CekMachine
     private Term<DeBruijn>? _computeTerm;
     private CekValue? _returnValue;
 
+    // Debug counters (only allocated when debugging)
+    private int[]? _stepCounts;
+    private long[]? _builtinCpu;
+    private long[]? _builtinMem;
+
     public CekMachine(ExBudget? initialBudget = null)
     {
         ExBudget initial = initialBudget ?? ExBudget.Unlimited;
@@ -35,6 +40,18 @@ public sealed class CekMachine
         _unbudgetedSteps = 0;
         _builtinCosts = builtinCosts;
     }
+
+    /// <summary>Enables per-step-kind and per-builtin cost tracking for debugging.</summary>
+    public CekMachine EnableDebugCounters()
+    {
+        _stepCounts = new int[MachineCosts.StepKindCount];
+        _builtinCpu = new long[_builtinCosts.Length];
+        _builtinMem = new long[_builtinCosts.Length];
+        return this;
+    }
+
+    /// <summary>Returns (stepCounts[9], builtinCpu[N], builtinMem[N]) if debug enabled.</summary>
+    public (int[]? Steps, long[]? BuiltinCpu, long[]? BuiltinMem) DebugCounters => (_stepCounts, _builtinCpu, _builtinMem);
 
     public ExBudget RemainingBudget
     {
@@ -76,8 +93,13 @@ public sealed class CekMachine
     // --- Budget tracking ---
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private void StepAndMaybeSpend()
+    private void StepAndMaybeSpend(int stepKind = -1)
     {
+        if (_stepCounts is not null && stepKind >= 0)
+        {
+            _stepCounts[stepKind]++;
+        }
+
         if (++_unbudgetedSteps >= MachineCosts.Slippage)
         {
             SpendUnbudgetedSteps();
@@ -105,7 +127,7 @@ public sealed class CekMachine
             case TermTag.Var:
                 {
                     VarTerm<DeBruijn> v = Unsafe.As<VarTerm<DeBruijn>>(term);
-                    StepAndMaybeSpend();
+                    StepAndMaybeSpend(MachineCosts.StepVar);
                     _returnValue = Environment.Lookup(_env, v.Name.Index)
                         ?? throw new EvaluationException($"Unbound variable: index {v.Name.Index}");
                     break;
@@ -114,7 +136,7 @@ public sealed class CekMachine
             case TermTag.Const:
                 {
                     ConstTerm<DeBruijn> c = Unsafe.As<ConstTerm<DeBruijn>>(term);
-                    StepAndMaybeSpend();
+                    StepAndMaybeSpend(MachineCosts.StepConstant);
                     _returnValue = new VConstant(c.Value);
                     break;
                 }
@@ -122,7 +144,7 @@ public sealed class CekMachine
             case TermTag.Lambda:
                 {
                     LambdaTerm<DeBruijn> l = Unsafe.As<LambdaTerm<DeBruijn>>(term);
-                    StepAndMaybeSpend();
+                    StepAndMaybeSpend(MachineCosts.StepLambda);
                     _returnValue = new VLambda(l.Parameter, l.Body, _env);
                     break;
                 }
@@ -130,7 +152,7 @@ public sealed class CekMachine
             case TermTag.Delay:
                 {
                     DelayTerm<DeBruijn> d = Unsafe.As<DelayTerm<DeBruijn>>(term);
-                    StepAndMaybeSpend();
+                    StepAndMaybeSpend(MachineCosts.StepDelay);
                     _returnValue = new VDelay(d.Body, _env);
                     break;
                 }
@@ -138,19 +160,19 @@ public sealed class CekMachine
             case TermTag.Force:
                 {
                     ForceTerm<DeBruijn> f = Unsafe.As<ForceTerm<DeBruijn>>(term);
-                    StepAndMaybeSpend();
+                    StepAndMaybeSpend(MachineCosts.StepForce);
                     // Fast path: Force(Delay(body)) — skip VDelay allocation + frame roundtrip
                     if (f.Body.TermTag == TermTag.Delay)
                     {
                         DelayTerm<DeBruijn> d = Unsafe.As<DelayTerm<DeBruijn>>(f.Body);
-                        StepAndMaybeSpend(); // charge for the Delay step
+                        StepAndMaybeSpend(MachineCosts.StepDelay); // charge for the Delay step
                         _computeTerm = d.Body;
                     }
                     // Fast path: Force(Builtin(f)) — skip unforced VBuiltin + frame roundtrip
                     else if (f.Body.TermTag == TermTag.Builtin)
                     {
                         BuiltinTerm<DeBruijn> b = Unsafe.As<BuiltinTerm<DeBruijn>>(f.Body);
-                        StepAndMaybeSpend(); // charge for the Builtin step
+                        StepAndMaybeSpend(MachineCosts.StepBuiltin); // charge for the Builtin step
                         DefaultFunction func = b.Function;
                         int expectedForces = func.ForceCount();
                         if (expectedForces < 1)
@@ -176,12 +198,12 @@ public sealed class CekMachine
             case TermTag.Apply:
                 {
                     ApplyTerm<DeBruijn> a = Unsafe.As<ApplyTerm<DeBruijn>>(term);
-                    StepAndMaybeSpend();
+                    StepAndMaybeSpend(MachineCosts.StepApply);
                     // Fast path: Apply(Lambda(body), arg) — skip VLambda allocation + 2 frame steps
                     if (a.Function.TermTag == TermTag.Lambda)
                     {
                         LambdaTerm<DeBruijn> l = Unsafe.As<LambdaTerm<DeBruijn>>(a.Function);
-                        StepAndMaybeSpend(); // charge for the Lambda step
+                        StepAndMaybeSpend(MachineCosts.StepLambda); // charge for the Lambda step
                         ref ContextFrame frame = ref _ctxStack.Push();
                         frame.Tag = FrameTag.AwaitArgDirect;
                         frame.Env = _env;
@@ -202,7 +224,7 @@ public sealed class CekMachine
             case TermTag.Builtin:
                 {
                     BuiltinTerm<DeBruijn> b = Unsafe.As<BuiltinTerm<DeBruijn>>(term);
-                    StepAndMaybeSpend();
+                    StepAndMaybeSpend(MachineCosts.StepBuiltin);
                     _returnValue = new VBuiltin(b.Function, 0, [], 0);
                     break;
                 }
@@ -210,7 +232,7 @@ public sealed class CekMachine
             case TermTag.Constr:
                 {
                     ConstrTerm<DeBruijn> constr = Unsafe.As<ConstrTerm<DeBruijn>>(term);
-                    StepAndMaybeSpend();
+                    StepAndMaybeSpend(MachineCosts.StepConstr);
                     if (constr.Fields.IsEmpty)
                     {
                         _returnValue = new VConstr(constr.Tag, [], 0);
@@ -233,7 +255,7 @@ public sealed class CekMachine
             case TermTag.Case:
                 {
                     CaseTerm<DeBruijn> cs = Unsafe.As<CaseTerm<DeBruijn>>(term);
-                    StepAndMaybeSpend();
+                    StepAndMaybeSpend(MachineCosts.StepCase);
                     ref ContextFrame frame = ref _ctxStack.Push();
                     frame.Tag = FrameTag.Cases;
                     frame.Env = _env;
@@ -466,14 +488,24 @@ public sealed class CekMachine
     private CekValue CallBuiltin(DefaultFunction func, CekValue[] args)
     {
         BuiltinCostModel model = _builtinCosts[(int)func];
+        ExBudget cost;
         if (model.IsConstant)
         {
-            _budget -= model.CachedCost;
+            cost = model.CachedCost;
         }
         else
         {
             (long x, long y, long z) = ExMem.ComputeArgSizes(func, args);
-            _budget -= model.Eval(x, y, z);
+            cost = model.Eval(x, y, z);
+        }
+
+        _budget -= cost;
+
+        if (_builtinCpu is not null)
+        {
+            int idx = (int)func;
+            _builtinCpu[idx] += cost.Cpu;
+            _builtinMem![idx] += cost.Mem;
         }
 
         return Builtins.BuiltinRuntime.Call(func, args);
