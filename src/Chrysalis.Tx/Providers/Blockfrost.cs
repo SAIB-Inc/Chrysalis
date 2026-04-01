@@ -490,9 +490,8 @@ public sealed class Blockfrost : ICardanoDataProvider, IDisposable
     /// Pass the returned function to <see cref="Builders.TxBuilder.UseEvaluator"/> or
     /// <see cref="Builders.TransactionTemplateBuilder{T}.UseEvaluator"/>.
     /// </summary>
-    public Func<PostMaryTransaction, IReadOnlyList<ResolvedInput>, Task<IReadOnlyList<Plutus.VM.Models.EvaluationResult>>> CreateEvaluator()
-    {
-        return async (tx, _) =>
+    public Func<PostMaryTransaction, IReadOnlyList<ResolvedInput>, Task<IReadOnlyList<Plutus.VM.Models.EvaluationResult>>> CreateEvaluator() =>
+        async (tx, _) =>
         {
             Dictionary<(int Tag, ulong Index), (ulong Mem, ulong Steps)> results =
                 await EvaluateTransactionAsync(tx).ConfigureAwait(false);
@@ -502,7 +501,6 @@ public sealed class Blockfrost : ICardanoDataProvider, IDisposable
                 new Plutus.VM.Models.ExUnitsResult(kv.Value.Mem, kv.Value.Steps)
             ))];
         };
-    }
 
     /// <summary>
     /// Retrieves transaction metadata by transaction hash.
