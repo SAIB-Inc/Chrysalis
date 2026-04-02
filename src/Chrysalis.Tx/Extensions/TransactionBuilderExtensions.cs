@@ -423,7 +423,62 @@ public static class TransactionBuilderExtensions
             }
         }
 
+        // Account for minted/burned tokens in value conservation:
+        // inputs + mint + withdrawals + refunds = outputs + fee + deposits
+        IValue mintValue = Lovelace.Create(0);
+        if (builder.Mint is not null)
+        {
+            Dictionary<ReadOnlyMemory<byte>, Dictionary<ReadOnlyMemory<byte>, ulong>> positiveAssets = new(ReadOnlyMemoryComparer.Instance);
+            Dictionary<ReadOnlyMemory<byte>, Dictionary<ReadOnlyMemory<byte>, ulong>> negativeAssets = new(ReadOnlyMemoryComparer.Instance);
+
+            foreach (KeyValuePair<ReadOnlyMemory<byte>, TokenBundleMint> policy in builder.Mint.Value.Value)
+            {
+                foreach (KeyValuePair<ReadOnlyMemory<byte>, long> asset in policy.Value.Value)
+                {
+                    if (asset.Value > 0)
+                    {
+                        if (!positiveAssets.TryGetValue(policy.Key, out Dictionary<ReadOnlyMemory<byte>, ulong>? bundle))
+                        {
+                            bundle = new(ReadOnlyMemoryComparer.Instance);
+                            positiveAssets[policy.Key] = bundle;
+                        }
+                        bundle[asset.Key] = (ulong)asset.Value;
+                    }
+                    else if (asset.Value < 0)
+                    {
+                        if (!negativeAssets.TryGetValue(policy.Key, out Dictionary<ReadOnlyMemory<byte>, ulong>? bundle))
+                        {
+                            bundle = new(ReadOnlyMemoryComparer.Instance);
+                            negativeAssets[policy.Key] = bundle;
+                        }
+                        bundle[asset.Key] = (ulong)-asset.Value;
+                    }
+                }
+            }
+
+            if (positiveAssets.Count > 0)
+            {
+                Dictionary<ReadOnlyMemory<byte>, TokenBundleOutput> posMulti = new(ReadOnlyMemoryComparer.Instance);
+                foreach (KeyValuePair<ReadOnlyMemory<byte>, Dictionary<ReadOnlyMemory<byte>, ulong>> kv in positiveAssets)
+                {
+                    posMulti[kv.Key] = TokenBundleOutput.Create(kv.Value);
+                }
+                mintValue = mintValue.Merge(LovelaceWithMultiAsset.Create(0, MultiAssetOutput.Create(posMulti)));
+            }
+
+            if (negativeAssets.Count > 0)
+            {
+                Dictionary<ReadOnlyMemory<byte>, TokenBundleOutput> negMulti = new(ReadOnlyMemoryComparer.Instance);
+                foreach (KeyValuePair<ReadOnlyMemory<byte>, Dictionary<ReadOnlyMemory<byte>, ulong>> kv in negativeAssets)
+                {
+                    negMulti[kv.Key] = TokenBundleOutput.Create(kv.Value);
+                }
+                totalOut = totalOut.Merge(LovelaceWithMultiAsset.Create(0, MultiAssetOutput.Create(negMulti)));
+            }
+        }
+
         IValue change = totalIn
+            .Merge(mintValue)
             .Merge(Lovelace.Create(totalWithdrawals + refunds))
             .Subtract(totalOut)
             .Subtract(Lovelace.Create(builder.Fee + deposits));
