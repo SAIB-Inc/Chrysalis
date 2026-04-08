@@ -1311,13 +1311,24 @@ public static class ScriptContextBuilder
             byte[] flatBytes = UnwrapCborByteString(scriptBytes);
 
             // Evaluate
-            Plutus.VM.Models.EvaluationResult result =
-                Plutus.VM.EvalTx.Evaluator.EvaluateScript(flatBytes, arguments);
+            try
+            {
+                Plutus.VM.Models.EvaluationResult result =
+                    Plutus.VM.EvalTx.Evaluator.EvaluateScript(flatBytes, arguments);
 
-            results.Add(new Plutus.VM.Models.EvaluationResult(
-                redeemer.Tag,
-                redeemer.Index,
-                result.ExUnits));
+                results.Add(new Plutus.VM.Models.EvaluationResult(
+                    redeemer.Tag,
+                    redeemer.Index,
+                    result.ExUnits));
+            }
+            catch (Exception ex)
+            {
+                string tag = redeemer.Tag switch { 0 => "spend", 1 => "mint", 3 => "reward", _ => $"tag{redeemer.Tag}" };
+
+                throw new InvalidOperationException(
+                    $"Script evaluation failed: {tag}:{redeemer.Index} " +
+                    $"(script={Convert.ToHexString(HashUtil.Blake2b224(scriptBytes)).ToUpperInvariant()[..16]}...)", ex);
+            }
         }
 
         return results;

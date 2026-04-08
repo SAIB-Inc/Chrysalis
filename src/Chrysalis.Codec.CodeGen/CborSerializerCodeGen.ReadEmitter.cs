@@ -800,7 +800,7 @@ public sealed partial class CborSerializerCodeGen
                 _ = sb.AppendLine($"int {metadata.BaseIdentifier}ArrayRemaining = arraySize;");
                 detectIndefinite = true;
 
-                if (metadata.IsIndefinite)
+                if (metadata.IsIndefinite && metadata.SerializationType is not (SerializationType.Constr or SerializationType.List))
                 {
                     _ = sb.AppendLine("if (!isIndefiniteArray)");
                     _ = sb.AppendLine($"    throw new InvalidOperationException(\"Type '{metadata.FullyQualifiedName}' requires indefinite CBOR array encoding due to [CborIndefinite] attribute\");");

@@ -118,6 +118,55 @@ public partial record SundaeSwapPoolDatum(
     public bool IsIndefinite { get; set; }
 }
 
+public class PlutusConstrTests
+{
+    [Fact]
+    public void PlutusConstr_Create_Empty_NoDoubleNesting()
+    {
+        // Constr(0, []) should produce Tag(121) + empty array
+        // D879 = Tag(121), 80 = 0-element definite array
+        PlutusConstr constr = PlutusConstr.Create(0, CborDefList<IPlutusData>.Create([]));
+        string hex = Convert.ToHexString(constr.Raw.ToArray());
+        Assert.Equal("D87980", hex);
+    }
+
+    [Fact]
+    public void PlutusConstr_Create_WithFields_NoDoubleNesting()
+    {
+        // Constr(0, [42]) should produce Tag(121) + 1-element array + int 42
+        // D879 = Tag(121), 81 = 1-element array, 182A = int 42
+        PlutusConstr constr = PlutusConstr.Create(0, CborDefList<IPlutusData>.Create([PlutusInt64.Create(42)]));
+        string hex = Convert.ToHexString(constr.Raw.ToArray());
+        Assert.Equal("D87981182A", hex);
+    }
+
+    [Fact]
+    public void PlutusConstr_Create_HighTag_NoDoubleNesting()
+    {
+        // Constr(7, [42]) should produce Tag(1280) + 1-element array + int 42
+        // D90500 = Tag(1280), 81 = 1-element array, 182A = int 42
+        PlutusConstr constr = PlutusConstr.Create(7, CborDefList<IPlutusData>.Create([PlutusInt64.Create(42)]));
+        string hex = Convert.ToHexString(constr.Raw.ToArray());
+        Assert.Equal("D9050081182A", hex);
+    }
+
+    [Fact]
+    public void PlutusConstr_Create_RoundTrip()
+    {
+        // Create, then read back and verify fields
+        PlutusConstr constr = PlutusConstr.Create(0, CborDefList<IPlutusData>.Create([
+            PlutusInt64.Create(1),
+            PlutusInt64.Create(2),
+            PlutusBoundedBytes.Create(new byte[] { 0xCA, 0xFE })
+        ]));
+
+        // Read back
+        PlutusConstr readBack = PlutusConstr.Read(constr.Raw);
+        CborDefList<IPlutusData> fields = Assert.IsType<CborDefList<IPlutusData>>(readBack.Fields);
+        Assert.Equal(3, fields.Value.Count);
+    }
+}
+
 public class DatumTests
 {
     [Theory]

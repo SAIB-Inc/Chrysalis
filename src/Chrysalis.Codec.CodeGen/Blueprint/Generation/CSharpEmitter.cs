@@ -87,6 +87,10 @@ internal sealed class CSharpEmitter(string ns)
         ResolvedConstructor ctor = type.Constructors[0];
         _ = sb.AppendLine("[CborSerializable]");
         _ = sb.AppendLine($"[CborConstr({ctor.Index})]");
+        if (ctor.Fields.Count > 0)
+        {
+            _ = sb.AppendLine("[CborIndefinite]");
+        }
 
         if (ctor.Fields.Count == 0)
         {
@@ -122,6 +126,10 @@ internal sealed class CSharpEmitter(string ns)
         {
             _ = sb.AppendLine("[CborSerializable]");
             _ = sb.AppendLine($"[CborConstr({ctor.Index})]");
+            if (ctor.Fields.Count > 0)
+            {
+                _ = sb.AppendLine("[CborIndefinite]");
+            }
 
             if (ctor.Fields.Count == 0)
             {
@@ -148,6 +156,7 @@ internal sealed class CSharpEmitter(string ns)
 
         _ = sb.AppendLine("[CborSerializable]");
         _ = sb.AppendLine("[CborList]");
+        _ = sb.AppendLine("[CborIndefinite]");
         _ = sb.Append($"public partial record {type.TypeName}(");
         _ = sb.AppendLine();
         EmitFieldParameters(sb, type.TupleFields);

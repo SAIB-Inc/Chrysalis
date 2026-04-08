@@ -62,7 +62,7 @@ public record InputOptions<T>
         RedeemerBuilder = (mapping, context, transactionBuilder) =>
         {
             TData data = factory(mapping, context, transactionBuilder);
-            return new Redeemer<ICborType>(tag, 0, data, ExUnits.Create(157374, 49443675));
+            return new Redeemer<ICborType>(tag, 0, data, ExUnits.Create(14_000_000, 10_000_000_000));
         };
         return this;
     }
@@ -82,7 +82,7 @@ public record InputOptions<T>
         RedeemerBuilder = (mapping, context, transactionBuilder) =>
         {
             TData data = factory(context);
-            return new Redeemer<ICborType>(tag, 0, data, ExUnits.Create(157374, 49443675));
+            return new Redeemer<ICborType>(tag, 0, data, ExUnits.Create(14_000_000, 10_000_000_000));
         };
         return this;
     }
