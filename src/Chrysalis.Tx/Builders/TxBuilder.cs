@@ -985,21 +985,7 @@ public class TxBuilder
 
         for (int iteration = 0; iteration < MaxStabilizationIterations; iteration++)
         {
-            // Evaluate scripts every iteration — ex-units depend on the current fee/change/TxId
-            // (matching Blaze-Cardano's approach: redeemer budgets are corrected each pass)
-            if (hasScripts && evaluate)
-            {
-                await EvaluateScripts(builder, allUtxos).ConfigureAwait(false);
-                scriptExecFee = builder.ComputeScriptExecutionFee();
-
-                // Recompute script data hash (depends on redeemers which change each iteration)
-                if (refScripts.Count > 0)
-                {
-                    _ = builder.ComputeAndSetScriptDataHash(refScripts);
-                }
-            }
-
-            // Remove old change output
+            // 1. Remove old change output
             if (builder.ChangeOutputIndex is not null)
             {
                 List<ITransactionOutput> outputs = [.. builder.Outputs];
@@ -1009,16 +995,42 @@ public class TxBuilder
                 builder.ChangeOutput = null;
             }
 
-            // Build change output from balance
+            // 2. Build change output (must be present before script evaluation
+            // so validators see all outputs including the change output)
             TransactionBuilderExtensions.BuildChangeOutput(builder, resolvedInputs, changeAddress);
 
-            // Select collateral
+            // 3. Select collateral BEFORE evaluation so body hash includes keys 13/16/17
             if (hasScripts && collateralPool.Count > 0)
             {
                 TransactionBuilderExtensions.SelectCollateral(builder, builder.Fee, collateralPool);
             }
 
-            // Inject placeholder witnesses for accurate size estimation
+            // 4. Compute script data hash BEFORE evaluation so body hash includes key 11
+            // (uses current redeemer ExUnits — placeholder on first iteration, updated on subsequent)
+            if (hasScripts && refScripts.Count > 0)
+            {
+                _ = builder.ComputeAndSetScriptDataHash(refScripts);
+            }
+
+            // 5. Evaluate scripts — body now includes all fields for accurate tx_id in ScriptContext
+            if (hasScripts && evaluate)
+            {
+                await EvaluateScripts(builder, allUtxos).ConfigureAwait(false);
+
+                // 6. Recompute script data hash with updated ExUnits from evaluation
+                if (refScripts.Count > 0)
+                {
+                    _ = builder.ComputeAndSetScriptDataHash(refScripts);
+                }
+            }
+
+            // Always compute script execution fee from current redeemers (placeholder or evaluated)
+            if (hasScripts)
+            {
+                scriptExecFee = builder.ComputeScriptExecutionFee();
+            }
+
+            // 7. Inject placeholder witnesses for accurate size estimation
             InjectPlaceholderWitnesses(builder);
 
             // Calculate fee = tx size fee + script exec fee + reference script fee

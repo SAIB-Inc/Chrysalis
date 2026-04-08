@@ -10,6 +10,7 @@ public partial interface ICborOption<T> : ICborType;
 
 [CborSerializable]
 [CborConstr(0)]
+[CborIndefinite]
 public readonly partial record struct Some<T> : ICborOption<T>
 {
     [CborOrder(0)] public partial T Value { get; }

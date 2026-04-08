@@ -196,16 +196,24 @@ public sealed partial class CborSerializerCodeGen
                 _ = sb.AppendLine($"writer.WriteSemanticTag((ulong){ResolveTag(metadata.CborIndex)});");
             }
 
-            // Count non-null properties for array size
-            EmitCreatePropertyCount(sb, metadata);
+            // Dynamic CborConstr (e.g. PlutusConstr) has a single ICborMaybeIndefList
+            // property that writes its own array — skip the outer array wrapper to
+            // match the Write and Read paths (WriteEmitter.cs:369, ReadEmitter.cs:58).
+            bool isDynamicConstr = metadata.CborIndex is null or < 0;
 
-            if (metadata.IsIndefinite)
+            if (!isDynamicConstr)
             {
-                _ = sb.AppendLine("writer.WriteBeginArray(-1);");
-            }
-            else
-            {
-                _ = sb.AppendLine("writer.WriteBeginArray(propCount);");
+                // Count non-null properties for array size
+                EmitCreatePropertyCount(sb, metadata);
+
+                if (metadata.IsIndefinite)
+                {
+                    _ = sb.AppendLine("writer.WriteBeginArray(-1);");
+                }
+                else
+                {
+                    _ = sb.AppendLine("writer.WriteBeginArray(propCount);");
+                }
             }
 
             foreach (SerializablePropertyMetadata prop in metadata.Properties)
@@ -224,13 +232,16 @@ public sealed partial class CborSerializerCodeGen
                 }
             }
 
-            if (metadata.IsIndefinite)
+            if (!isDynamicConstr)
             {
-                _ = sb.AppendLine("output.GetSpan(1)[0] = 0xFF; output.Advance(1);");
-            }
-            else
-            {
-                _ = sb.AppendLine("writer.WriteEndArray(propCount);");
+                if (metadata.IsIndefinite)
+                {
+                    _ = sb.AppendLine("output.GetSpan(1)[0] = 0xFF; output.Advance(1);");
+                }
+                else
+                {
+                    _ = sb.AppendLine("writer.WriteEndArray(propCount);");
+                }
             }
         }
 
