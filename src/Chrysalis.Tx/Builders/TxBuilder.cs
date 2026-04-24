@@ -938,16 +938,36 @@ public class TxBuilder
 
         bool hasScripts = builder.Redeemers is not null;
 
-        // Pre-compute reference script fee from reference inputs on the builder
+        // Pre-compute reference script fee from the tx's declared
+        // reference inputs. The prior implementation summed every ScriptRef
+        // it saw in `allUtxos`, which wrongly billed ref-script fees for
+        // dormant script-ref UTxOs at the change address (e.g. a wallet
+        // that happens to hold deployed reference scripts was paying
+        // tens of ADA on every ordinary payment). Per Cardano ledger:
+        // refScriptFee is computed only over scripts referenced by
+        // `tx.reference_inputs`.
         ulong refScriptFee = 0;
-        if (_pparams.MinFeeRefScriptCostPerByte is not null)
+        if (_pparams.MinFeeRefScriptCostPerByte is not null
+            && builder.ReferenceInputs is { Count: > 0 } referenceInputs)
         {
             ulong scriptCostPerByte = _pparams.MinFeeRefScriptCostPerByte.Numerator
                 / _pparams.MinFeeRefScriptCostPerByte.Denominator;
-            int totalScriptSize = 0;
-            foreach (ResolvedInput refInput in allUtxos)
+
+            HashSet<(string, ulong)> referenced = new(referenceInputs.Count);
+            foreach (TransactionInput r in referenceInputs)
             {
-                ReadOnlyMemory<byte>? scriptRef = refInput.Output.ScriptRef();
+                _ = referenced.Add((Convert.ToHexStringLower(r.TransactionId.Span), r.Index));
+            }
+
+            int totalScriptSize = 0;
+            foreach (ResolvedInput utxo in allUtxos)
+            {
+                string txHash = Convert.ToHexStringLower(utxo.Outref.TransactionId.Span);
+                if (!referenced.Contains((txHash, utxo.Outref.Index)))
+                {
+                    continue;
+                }
+                ReadOnlyMemory<byte>? scriptRef = utxo.Output.ScriptRef();
                 if (scriptRef is not null)
                 {
                     totalScriptSize += scriptRef.Value.Length;
