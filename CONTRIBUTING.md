@@ -181,11 +181,13 @@ After approval, merge the PR into `main`.
 ```bash
 gh release create v1.0.X-alpha \
   --title "v1.0.X-alpha" \
-  --generate-notes \
-  --prerelease
+  --prerelease \
+  --notes ""
 ```
 
-The tag triggers the release workflow, which builds, tests, packs, and publishes the packages. The `--generate-notes` flag automatically creates a changelog from merged PRs since the last release.
+Leave the body empty — the release workflow's `softprops/action-gh-release` step runs on the tag push and populates the release notes via GitHub's auto-changelog. Passing `--generate-notes` here would double the body because the workflow would then append a second copy.
+
+The tag also triggers build, test, pack, and publish of all packages.
 
 #### 6. Verify CI/CD
 
