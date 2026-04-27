@@ -123,7 +123,16 @@ public sealed class Blockfrost : ICardanoDataProvider, IDisposable
             ulong.Parse(parameters.MinPoolCost ?? "0", CultureInfo.InvariantCulture),
             ulong.Parse(parameters.CoinsPerUtxoSize, CultureInfo.InvariantCulture),
             new CostMdls(costMdls.GetValueOrDefault(0), costMdls.GetValueOrDefault(1), costMdls.GetValueOrDefault(2)),
-            ExUnitPrices.Create(CborRationalNumber.Create((ulong)(parameters.PriceMem * 1000000), 1000000), CborRationalNumber.Create((ulong)(parameters.PriceStep * 1000000), 1000000)),
+            // Conway's price_step is 721/10_000_000 (= 0.0000721). At a 1e6 scale,
+            // (ulong)(0.0000721 * 1_000_000) = (ulong)72.1 truncates to 72,
+            // storing 72/1_000_000 = 0.000072 — a 0.14% under-count that
+            // underpays script-execution fees on every redeemer. Use a 1e7 scale
+            // so the chain's denominator (10_000_000) is preserved exactly,
+            // and Math.Round defends against IEEE-754 representation noise
+            // (e.g. 0.0000721 * 1e7 may compute as 720.999… in double).
+            ExUnitPrices.Create(
+                CborRationalNumber.Create((ulong)Math.Round((decimal)parameters.PriceMem * 10_000_000m), 10_000_000),
+                CborRationalNumber.Create((ulong)Math.Round((decimal)parameters.PriceStep * 10_000_000m), 10_000_000)),
             ExUnits.Create(ulong.Parse(parameters.MaxTxExMem, CultureInfo.InvariantCulture), ulong.Parse(parameters.MaxTxExSteps, CultureInfo.InvariantCulture)),
             ExUnits.Create(ulong.Parse(parameters.MaxBlockExMem, CultureInfo.InvariantCulture), ulong.Parse(parameters.MaxBlockExSteps, CultureInfo.InvariantCulture)),
             ulong.Parse(parameters.MaxValSize, CultureInfo.InvariantCulture),
