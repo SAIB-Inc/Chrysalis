@@ -693,19 +693,40 @@ public class TxBuilder
         List<ResolvedInput> selectedInputs = [];
         bool evaluated = false;
 
-        // Pre-compute reference script fee (reference inputs only — witness set scripts don't incur this fee)
+        // Pre-compute reference script fee. cardano-node bills for script-refs
+        // attached to ANY input — regular spend inputs that happen to carry a
+        // script-ref count too, not just `tx.reference_inputs`. Mirrors blaze
+        // (`packages/blaze-tx/src/TxBuilder.ts:1450-1466`) and the cardano-ledger
+        // Conway rule (sum over `inputs ∪ reference_inputs`).
         ulong refScriptFee = 0;
         if (hasScripts && _pparams.MinFeeRefScriptCostPerByte is not null)
         {
             ulong scriptCostPerByte = _pparams.MinFeeRefScriptCostPerByte.Numerator
                 / _pparams.MinFeeRefScriptCostPerByte.Denominator;
             int totalScriptSize = 0;
+            HashSet<(string, ulong)> seenOutrefs = [];
             foreach (ResolvedInput refInput in _referenceInputs)
             {
                 ReadOnlyMemory<byte>? scriptRef = refInput.Output.ScriptRef();
                 if (scriptRef is not null)
                 {
-                    totalScriptSize += scriptRef.Value.Length;
+                    string txHash = Convert.ToHexStringLower(refInput.Outref.TransactionId.Span);
+                    if (seenOutrefs.Add((txHash, refInput.Outref.Index)))
+                    {
+                        totalScriptSize += scriptRef.Value.Length;
+                    }
+                }
+            }
+            foreach (InputDirective input in _explicitInputs)
+            {
+                ReadOnlyMemory<byte>? scriptRef = input.Utxo.Output.ScriptRef();
+                if (scriptRef is not null)
+                {
+                    string txHash = Convert.ToHexStringLower(input.Utxo.Outref.TransactionId.Span);
+                    if (seenOutrefs.Add((txHash, input.Utxo.Outref.Index)))
+                    {
+                        totalScriptSize += scriptRef.Value.Length;
+                    }
                 }
             }
             refScriptFee = FeeUtil.CalculateReferenceScriptFee(totalScriptSize, scriptCostPerByte);
@@ -938,34 +959,52 @@ public class TxBuilder
 
         bool hasScripts = builder.Redeemers is not null;
 
-        // Pre-compute reference script fee from the tx's declared
-        // reference inputs. The prior implementation summed every ScriptRef
-        // it saw in `allUtxos`, which wrongly billed ref-script fees for
-        // dormant script-ref UTxOs at the change address (e.g. a wallet
-        // that happens to hold deployed reference scripts was paying
-        // tens of ADA on every ordinary payment). Per Cardano ledger:
-        // refScriptFee is computed only over scripts referenced by
-        // `tx.reference_inputs`.
+        // Pre-compute reference script fee. cardano-node bills for script-refs
+        // attached to ANY input in the tx — regular spend inputs that happen to
+        // carry a script-ref count too, not just `tx.reference_inputs`. Use the
+        // FINAL inputs/referenceInputs lists from the builder (not the
+        // directives) because additional inputs may have been added by coin
+        // selection / script context. The prior implementation iterated only
+        // `referenceInputs`, missing fees for spend-input script-refs and
+        // tripping `FeeTooSmallUTxO` whenever a wallet happened to spend a
+        // UTxO that carried a deployed validator (issue #375). Mirrors blaze
+        // (`packages/blaze-tx/src/TxBuilder.ts:1450-1466`) and the cardano-ledger
+        // Conway rule (sum over `inputs ∪ reference_inputs`).
         ulong refScriptFee = 0;
-        if (_pparams.MinFeeRefScriptCostPerByte is not null
-            && builder.ReferenceInputs is { Count: > 0 } referenceInputs)
+        if (_pparams.MinFeeRefScriptCostPerByte is not null)
         {
             ulong scriptCostPerByte = _pparams.MinFeeRefScriptCostPerByte.Numerator
                 / _pparams.MinFeeRefScriptCostPerByte.Denominator;
 
-            HashSet<(string, ulong)> referenced = new(referenceInputs.Count);
-            foreach (TransactionInput r in referenceInputs)
+            HashSet<(string, ulong)> billable = [];
+            if (builder.ReferenceInputs is { Count: > 0 } refIns)
             {
-                _ = referenced.Add((Convert.ToHexStringLower(r.TransactionId.Span), r.Index));
+                foreach (TransactionInput r in refIns)
+                {
+                    _ = billable.Add((Convert.ToHexStringLower(r.TransactionId.Span), r.Index));
+                }
+            }
+            if (builder.Inputs is { Count: > 0 } regIns)
+            {
+                foreach (TransactionInput r in regIns)
+                {
+                    _ = billable.Add((Convert.ToHexStringLower(r.TransactionId.Span), r.Index));
+                }
             }
 
             int totalScriptSize = 0;
+            HashSet<(string, ulong)> counted = [];
             foreach (ResolvedInput utxo in allUtxos)
             {
                 string txHash = Convert.ToHexStringLower(utxo.Outref.TransactionId.Span);
-                if (!referenced.Contains((txHash, utxo.Outref.Index)))
+                (string, ulong) key = (txHash, utxo.Outref.Index);
+                if (!billable.Contains(key))
                 {
                     continue;
+                }
+                if (!counted.Add(key))
+                {
+                    continue;  // de-dup if a UTxO appears twice in allUtxos
                 }
                 ReadOnlyMemory<byte>? scriptRef = utxo.Output.ScriptRef();
                 if (scriptRef is not null)
