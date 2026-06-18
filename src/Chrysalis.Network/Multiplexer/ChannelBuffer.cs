@@ -12,6 +12,12 @@ namespace Chrysalis.Network.Multiplexer;
 /// Uses a Pallas-style accumulation buffer: segment payloads are appended to a temp buffer,
 /// CBOR decode is attempted after each append, and consumed bytes are drained on success.
 /// Single-segment messages are deserialized directly from the received array (zero extra copy).
+/// <para>
+/// INVARIANT: a returned message may be a zero-copy view into the internal buffer (e.g. a
+/// <c>CborEncodedValue</c> body the caller reads lazily). The buffer must therefore never be moved
+/// in place while a result is outstanding. Callers consume each message before the next receive,
+/// so any in-place reclamation (<see cref="Compact"/>) is only safe at the start of the next receive.
+/// </para>
 /// </remarks>
 public sealed class ChannelBuffer(AgentChannel channel)
 {
@@ -66,7 +72,7 @@ public sealed class ChannelBuffer(AgentChannel channel)
             if (TryDeserialize(out T? result, out int consumed))
             {
                 _tempOffset += consumed;
-                CompactIfNeeded();
+                ResetIfDrained();
                 return result!;
             }
         }
@@ -104,7 +110,7 @@ public sealed class ChannelBuffer(AgentChannel channel)
             if (TryDeserialize(out T? result, out int consumed))
             {
                 _tempOffset += consumed;
-                CompactIfNeeded();
+                ResetIfDrained();
                 return result!;
             }
 
@@ -177,20 +183,21 @@ public sealed class ChannelBuffer(AgentChannel channel)
     }
 
     /// <summary>
-    /// Compacts the buffer by moving data to the front if offset is too large.
+    /// Resets the read window to the front of the buffer once it is fully drained. Deliberately does
+    /// NOT move data in place — that would corrupt an outstanding zero-copy result (see the class
+    /// invariant). Reclamation of leftover bytes happens at the start of the next receive instead.
     /// </summary>
-    private void CompactIfNeeded()
+    private void ResetIfDrained()
     {
-        // Compact when offset exceeds half the buffer or all data consumed
+        // In-place compaction here was a bug: a just-returned message can still be a view into _temp
+        // (e.g. a CborEncodedValue body the caller reads lazily), so moving _temp would shift those
+        // bytes out from under it — flaky "Expected major type Array" when BlockFetch streamed many
+        // large blocks. Only the offset reset (no data move) is safe at this point.
         int usedLength = _tempLength - _tempOffset;
         if (usedLength == 0)
         {
             _tempOffset = 0;
             _tempLength = 0;
-        }
-        else if (_tempOffset > _temp.Length / 2)
-        {
-            Compact();
         }
     }
 
