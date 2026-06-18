@@ -126,11 +126,11 @@ public class ChainSync : IMiniProtocol
                 // Fast-path: write pre-encoded segment directly to bearer
                 await _buffer.SendPreEncodedSegmentAsync(_preEncodedNextRequest, cancellationToken).ConfigureAwait(false);
                 State = ChainSyncState.CanAwait;
-                response = await _buffer.ReceiveFullMessageAsync<MessageNextResponse>(cancellationToken).ConfigureAwait(false);
+                response = await ReceiveNextResponseAsync(cancellationToken).ConfigureAwait(false);
                 break;
 
             case ChainSyncState.MustReply:
-                response = await _buffer.ReceiveFullMessageAsync<MessageNextResponse>(cancellationToken).ConfigureAwait(false);
+                response = await ReceiveNextResponseAsync(cancellationToken).ConfigureAwait(false);
                 break;
             case ChainSyncState.CanAwait:
                 break;
@@ -142,15 +142,14 @@ public class ChainSync : IMiniProtocol
                 throw new InvalidOperationException($"Cannot request next in state {State}");
         }
 
-        // Update state based on response
+        // Update state based on response. N2C and N2N RollForward follow the same agency rules.
         switch (response)
         {
             case MessageAwaitReply:
                 State = ChainSyncState.MustReply;
                 break;
-            case MessageRollForward:
-                State = ChainSyncState.Idle;
-                break;
+            case N2CMessageRollForward:
+            case N2NMessageRollForward:
             case MessageRollBackward:
                 State = ChainSyncState.Idle;
                 break;
@@ -174,8 +173,10 @@ public class ChainSync : IMiniProtocol
     public async Task SendNextRequestBatchAsync(int count, CancellationToken cancellationToken) => await _buffer.SendPreEncodedSegmentBatchAsync(_preEncodedNextRequest, count, cancellationToken).ConfigureAwait(false);
 
     /// <summary>
-    /// Receives the next response from the server without sending a request.
-    /// For use in pipelined sync where requests were sent separately.
+    /// Receives the next chain-sync response. A single <see cref="MessageNextResponse"/> union serves
+    /// both N2C and N2N: its two index-2 RollForward members (<see cref="N2CMessageRollForward"/> and
+    /// <see cref="N2NMessageRollForward"/>) are resolved by the serializer's structural probe on the
+    /// payload shape. Deserialization reports the exact consumed length, keeping the buffer in sync.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public async Task<MessageNextResponse> ReceiveNextResponseAsync(CancellationToken cancellationToken) => await _buffer.ReceiveFullMessageAsync<MessageNextResponse>(cancellationToken).ConfigureAwait(false);

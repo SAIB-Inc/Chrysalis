@@ -18,6 +18,7 @@ internal static class Program
     private const int DefaultKeepAliveSeconds = 20;
     private const int DefaultBlockCount = 100;
     private const int DefaultPipelineDepth = 50;
+    private const int BlockFetchBatch = 100; // headers collected then fetched per batch; matches Pallas bench default
 
     private sealed record Options(
         string Command,
@@ -29,6 +30,7 @@ internal static class Program
         int BlockCount,
         int PipelineDepth,
         bool HeadersOnly,
+        bool SingleFetch,
         ulong? Slot,
         string? Hash
     );
@@ -115,7 +117,7 @@ internal static class Program
 
             switch (response)
             {
-                case MessageRollForward rollForward:
+                case N2CMessageRollForward rollForward:
                     atTip = false;
                     totalBlocks++;
                     windowBlocks++;
@@ -207,7 +209,7 @@ internal static class Program
 
                 switch (response)
                 {
-                    case MessageRollForward rollForward:
+                    case N2NMessageRollForward rollForward:
                         tipPoint = rollForward.Tip.Slot;
                         ExtractHeaderPoint(rollForward, out Point? headerPoint);
                         if (headerPoint is not null)
@@ -220,7 +222,7 @@ internal static class Program
                         }
                         else
                         {
-                            Console.WriteLine($"  WARN: skipped unparseable header (payload {rollForward.Payload.Value.Length} bytes)");
+                            Console.WriteLine($"  WARN: skipped unparseable header (payload {rollForward.Payload.HeaderCbor.Value.Length} bytes)");
                         }
                         break;
                     case MessageRollBackward rollBackward:
@@ -334,12 +336,12 @@ internal static class Program
                         Console.WriteLine($"rollback to {FormatPoint(rollBackward.Point)}");
                     }
 
-                    if (response is MessageRollForward rollForward)
+                    if (response is N2NMessageRollForward rollForward)
                     {
                         tipPoint = rollForward.Tip.Slot;
                     }
 
-                    if (response is MessageRollForward or MessageRollBackward)
+                    if (response is N2NMessageRollForward or MessageRollBackward)
                     {
                         tipBackoffLogged = false;
                         break;
@@ -388,7 +390,8 @@ internal static class Program
             ? Point.Specific(options.Slot.Value, Convert.FromHexString(options.Hash))
             : Point.Origin;
 
-        Console.WriteLine($"BlockFetch: syncing headers from {FormatPoint(startPoint)}, then fetching {options.BlockCount} blocks...");
+        string mode = options.SingleFetch ? "single" : "range";
+        Console.WriteLine($"BlockFetch ({mode}): {options.BlockCount} blocks from {FormatPoint(startPoint)} (batch {BlockFetchBatch})...");
 
         ChainSyncMessage intersect = await peer.ChainSync.FindIntersectionAsync([startPoint], ct).ConfigureAwait(false);
         if (intersect is not MessageIntersectFound)
@@ -397,39 +400,7 @@ internal static class Program
             return 2;
         }
 
-        // Collect header points via ChainSync
-        List<Point> points = [];
-        while (points.Count < options.BlockCount && !ct.IsCancellationRequested)
-        {
-            MessageNextResponse? response = await peer.ChainSync.NextRequestAsync(ct).ConfigureAwait(false);
-            switch (response)
-            {
-                case MessageRollForward rollForward:
-                    ExtractHeaderPoint(rollForward, out Point? headerPoint);
-                    if (headerPoint is not null)
-                    {
-                        points.Add(headerPoint);
-                    }
-                    break;
-                case MessageRollBackward:
-                    break;
-                case MessageAwaitReply:
-                    Console.WriteLine("Reached chain tip during header collection.");
-                    goto fetchBlocks;
-                default:
-                    break;
-            }
-        }
-
-    fetchBlocks:
-        if (points.Count == 0)
-        {
-            Console.WriteLine("No headers collected.");
-            return 2;
-        }
-
-        Console.WriteLine($"Collected {points.Count} headers. Fetching blocks...");
-
+        // Timer covers the whole collect+fetch loop (excludes connect + intersect), matching Pallas's total_timer.
         Stopwatch timer = Stopwatch.StartNew();
         Stopwatch windowTimer = Stopwatch.StartNew();
         int totalFetched = 0;
@@ -437,32 +408,83 @@ internal static class Program
         Era lastEra = Era.Byron;
         ulong lastSlot = 0;
         ulong lastHeight = 0;
+        bool atTip = false;
 
-        // Fetch in batches using FetchRangeAsync (start..end of each batch)
-        int batchSize = Math.Min(100, points.Count);
-        for (int i = 0; i < points.Count && !ct.IsCancellationRequested; i += batchSize)
+        void Record(BlockWithEra block)
         {
-            int end = Math.Min(i + batchSize - 1, points.Count - 1);
-            await foreach (BlockWithEra block in peer.BlockFetch.FetchRangeAsync<BlockWithEra>(points[i], points[end], ct).ConfigureAwait(false))
+            totalFetched++;
+            windowFetched++;
+
+            if (block.Block is not null)
             {
-                totalFetched++;
-                windowFetched++;
+                lastEra = block.Era();
+                lastSlot = block.Block.Slot();
+                lastHeight = block.Block.Height();
+            }
 
-                if (block.Block is not null)
+            if (windowTimer.Elapsed.TotalSeconds >= 3)
+            {
+                double blkPerSec = windowFetched / windowTimer.Elapsed.TotalSeconds;
+                Console.WriteLine(
+                    $"[{timer.Elapsed:hh\\:mm\\:ss}] slot {lastSlot,10} block {lastHeight,8} [{lastEra,-10}] | " +
+                    $"{blkPerSec,7:F1} blk/s | {totalFetched}/{options.BlockCount} fetched");
+                windowTimer.Restart();
+                windowFetched = 0;
+            }
+        }
+
+        // Interleave header collection and block fetch in batches — identical structure to the Pallas
+        // benchmark (collect a batch of header points via ChainSync, then fetch that batch). The only
+        // difference between the modes is single (one RequestRange per block) vs range (one per batch).
+        while (totalFetched < options.BlockCount && !atTip && !ct.IsCancellationRequested)
+        {
+            int target = Math.Min(BlockFetchBatch, options.BlockCount - totalFetched);
+            List<Point> batch = new(target);
+
+            while (batch.Count < target && !ct.IsCancellationRequested)
+            {
+                MessageNextResponse? response = await peer.ChainSync.NextRequestAsync(ct).ConfigureAwait(false);
+                if (response is N2NMessageRollForward rollForward)
                 {
-                    lastEra = block.Era();
-                    lastSlot = block.Block.Slot();
-                    lastHeight = block.Block.Height();
+                    ExtractHeaderPoint(rollForward, out Point? headerPoint);
+                    if (headerPoint is not null)
+                    {
+                        batch.Add(headerPoint);
+                    }
                 }
-
-                if (windowTimer.Elapsed.TotalSeconds >= 3)
+                else if (response is MessageAwaitReply)
                 {
-                    double blkPerSec = windowFetched / windowTimer.Elapsed.TotalSeconds;
-                    Console.WriteLine(
-                        $"[{timer.Elapsed:hh\\:mm\\:ss}] slot {lastSlot,10} block {lastHeight,8} [{lastEra,-10}] | " +
-                        $"{blkPerSec,7:F1} blk/s | {totalFetched}/{points.Count} fetched");
-                    windowTimer.Restart();
-                    windowFetched = 0;
+                    atTip = true;
+                    break;
+                }
+            }
+
+            if (batch.Count == 0)
+            {
+                break;
+            }
+
+            if (options.SingleFetch)
+            {
+                foreach (Point point in batch)
+                {
+                    if (ct.IsCancellationRequested)
+                    {
+                        break;
+                    }
+
+                    BlockWithEra? block = await peer.BlockFetch.FetchSingleAsync<BlockWithEra>(point, ct).ConfigureAwait(false);
+                    if (block is { } fetched)
+                    {
+                        Record(fetched);
+                    }
+                }
+            }
+            else
+            {
+                await foreach (BlockWithEra block in peer.BlockFetch.FetchRangeAsync<BlockWithEra>(batch[0], batch[^1], ct).ConfigureAwait(false))
+                {
+                    Record(block);
                 }
             }
         }
@@ -481,12 +503,13 @@ internal static class Program
         return 0;
     }
 
-    private static void ExtractHeaderPoint(MessageRollForward rollForward, out Point? point)
+    private static void ExtractHeaderPoint(N2NMessageRollForward rollForward, out Point? point)
     {
         point = null;
         try
         {
-            ChainSyncHeader header = ChainSyncHeader.Decode(rollForward.Payload.Value);
+            // N2N RollForward payload is the typed [era, #6.24(header)]; decode the header for its point.
+            ChainSyncHeader header = new((byte)rollForward.Payload.EraTag, null, rollForward.Payload.HeaderCbor.Value);
             ChainPoint cp = header.ExtractPoint();
             point = Point.Specific(cp.Slot, cp.Hash);
         }
@@ -500,7 +523,7 @@ internal static class Program
 
     #region Formatting
 
-    private static void ExtractBlockInfo(MessageRollForward rollForward, ref Era era, ref ulong slot, ref ulong blockNumber)
+    private static void ExtractBlockInfo(N2CMessageRollForward rollForward, ref Era era, ref ulong slot, ref ulong blockNumber)
     {
         try
         {
@@ -593,7 +616,7 @@ internal static class Program
 
         HashSet<string> flags = new(StringComparer.OrdinalIgnoreCase);
         Dictionary<string, string> map = new(StringComparer.OrdinalIgnoreCase);
-        HashSet<string> booleanFlags = new(StringComparer.OrdinalIgnoreCase) { "headers-only" };
+        HashSet<string> booleanFlags = new(StringComparer.OrdinalIgnoreCase) { "headers-only", "single" };
 
         for (int i = startIdx; i < args.Length; i++)
         {
@@ -639,6 +662,7 @@ internal static class Program
             DefaultBlockCount, "block count", ref error);
         int pipelineDepth = ParseInt(GetValue(map, "pipeline"), DefaultPipelineDepth, "pipeline depth", ref error);
         bool headersOnly = flags.Contains("headers-only");
+        bool singleFetch = flags.Contains("single");
 
         ulong? slot = null;
         string? hash = null;
@@ -660,7 +684,7 @@ internal static class Program
             return false;
         }
 
-        options = new Options(command, socket, host, port, magic, keepAlive, blockCount, pipelineDepth, headersOnly, slot, hash);
+        options = new Options(command, socket, host, port, magic, keepAlive, blockCount, pipelineDepth, headersOnly, singleFetch, slot, hash);
         return true;
     }
 
