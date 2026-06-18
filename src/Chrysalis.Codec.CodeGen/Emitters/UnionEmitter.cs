@@ -99,9 +99,34 @@ public sealed partial class CborSerializerCodeGen
                 group.Add(child);
             }
 
-            if (probeGroups.ContainsKey("unknown") || probeGroups.Values.Any(g => g.Count > 1))
+            if (probeGroups.ContainsKey("unknown"))
             {
                 return false;
+            }
+
+            // Same-index collisions: members that share a leading index but differ in a deeper
+            // field. Rather than dropping the whole union to fragile try/catch, resolve the
+            // colliding members with a secondary structural probe on the first field whose CBOR
+            // shape distinguishes them. Only the index-discriminated case is handled here; a
+            // collision under any other top-level discriminator still falls back.
+            if (probeGroups.Values.Any(g => g.Count > 1))
+            {
+                bool allIdx = probeGroups.Keys.All(k => k.StartsWith("idx:", StringComparison.Ordinal));
+                if (!allIdx)
+                {
+                    return false;
+                }
+
+                foreach (List<SerializableTypeMetadata> colliding in probeGroups.Values.Where(g => g.Count > 1))
+                {
+                    if (FindSeparatingDepth(colliding) < 0)
+                    {
+                        return false;
+                    }
+                }
+
+                EmitIdxBranchWithNesting(sb, metadata, probeGroups);
+                return true;
             }
 
             bool hasTagChildren = probeGroups.Keys.Any(k => k.StartsWith("tag:", StringComparison.Ordinal));
@@ -199,6 +224,168 @@ public sealed partial class CborSerializerCodeGen
             _ = sb.AppendLine("};");
             _ = sb.AppendLine($"return _idxResult;");
         }
+
+        /// <summary>
+        /// Emits an index switch where each colliding index group (more than one member sharing a
+        /// leading index) is routed to a generated local function that resolves the variant by a
+        /// secondary structural probe. Non-colliding indices read their single member directly.
+        /// </summary>
+        private static void EmitIdxBranchWithNesting(StringBuilder sb, SerializableTypeMetadata metadata, Dictionary<string, List<SerializableTypeMetadata>> probeGroups)
+        {
+            // Emit one resolver local function per colliding index group.
+            Dictionary<string, string> resolvers = [];
+            foreach (KeyValuePair<string, List<SerializableTypeMetadata>> group in probeGroups.Where(g => g.Value.Count > 1))
+            {
+                int idxValue = int.Parse(group.Key.Substring(4), CultureInfo.InvariantCulture);
+                string resolverName = $"_ResolveIdx{idxValue}";
+                EmitSecondaryProbeLocalFunction(sb, metadata, resolverName, group.Value);
+                resolvers[group.Key] = resolverName;
+            }
+
+            _ = sb.AppendLine($"var _idxReader = new CborReader(data.Span);");
+            _ = sb.AppendLine($"_idxReader.ReadBeginArray();");
+            _ = sb.AppendLine($"_idxReader.ReadSize();");
+            _ = sb.AppendLine($"int _idx = _idxReader.ReadInt32();");
+            _ = sb.AppendLine($"{metadata.FullyQualifiedName} _idxResult = _idx switch");
+            _ = sb.AppendLine("{");
+            foreach (KeyValuePair<string, List<SerializableTypeMetadata>> group in probeGroups)
+            {
+                int idxValue = int.Parse(group.Key.Substring(4), CultureInfo.InvariantCulture);
+                _ = group.Value.Count == 1
+                    ? sb.AppendLine($"    {idxValue} => ({metadata.FullyQualifiedName}){group.Value[0].FullyQualifiedName}.Read(data, out bytesConsumed),")
+                    : sb.AppendLine($"    {idxValue} => {resolvers[group.Key]}(data, out bytesConsumed),");
+            }
+            _ = sb.AppendLine($"    _ => throw new Exception(\"Union deserialization failed. {metadata.FullyQualifiedName}: unexpected idx \" + _idx)");
+            _ = sb.AppendLine("};");
+            _ = sb.AppendLine($"return _idxResult;");
+        }
+
+        /// <summary>
+        /// Emits a local function that resolves between members sharing a leading index by reading
+        /// the CBOR data-item type of the first field that distinguishes them (skipping any
+        /// semantic tag), then dispatching to the matching member's reader.
+        /// </summary>
+        private static void EmitSecondaryProbeLocalFunction(StringBuilder sb, SerializableTypeMetadata metadata, string resolverName, List<SerializableTypeMetadata> members)
+        {
+            int depth = FindSeparatingDepth(members);
+
+            _ = sb.AppendLine($"{metadata.FullyQualifiedName} {resolverName}(ReadOnlyMemory<byte> _d, out int _bc)");
+            _ = sb.AppendLine("{");
+            _ = sb.AppendLine($"var _pr = new CborReader(_d.Span);");
+            _ = sb.AppendLine($"_pr.ReadBeginArray();");
+            _ = sb.AppendLine($"_pr.ReadSize();");
+            for (int i = 0; i < depth; i++)
+            {
+                _ = sb.AppendLine($"_pr.ReadDataItem();");
+            }
+            _ = sb.AppendLine($"var _shape = _pr.GetCurrentDataItemType();");
+            _ = sb.AppendLine($"{metadata.FullyQualifiedName} _r = _shape switch");
+            _ = sb.AppendLine("{");
+            foreach (SerializableTypeMetadata member in members)
+            {
+                string statePattern = GetCborReaderStatePattern(ClassifyProbeAtDepth(member, depth));
+                _ = sb.AppendLine($"    {statePattern} => ({metadata.FullyQualifiedName}){member.FullyQualifiedName}.Read(_d, out _bc),");
+            }
+            _ = sb.AppendLine($"    _ => throw new Exception(\"Union deserialization failed. {metadata.FullyQualifiedName}: ambiguous variant at shared index\")");
+            _ = sb.AppendLine("};");
+            _ = sb.AppendLine($"return _r;");
+            _ = sb.AppendLine("}");
+        }
+
+        /// <summary>
+        /// Returns the shallowest field depth (>= 1) at which the given members have pairwise
+        /// distinct, known CBOR shapes, or -1 if no field separates them structurally.
+        /// </summary>
+        private static int FindSeparatingDepth(List<SerializableTypeMetadata> members)
+        {
+            int maxDepth = members.Min(m => m.Properties.Count);
+            for (int depth = 1; depth < maxDepth; depth++)
+            {
+                List<string> keys = [.. members.Select(m => ClassifyProbeAtDepth(m, depth))];
+                if (keys.Any(k => k == "unknown"))
+                {
+                    continue;
+                }
+                if (keys.Distinct().Count() == keys.Count)
+                {
+                    return depth;
+                }
+            }
+            return -1;
+        }
+
+        /// <summary>
+        /// Classifies the CBOR data-item shape of the field at the given CBOR order within a
+        /// member, as a probe key understood by <see cref="GetCborReaderStatePattern"/>.
+        /// </summary>
+        private static string ClassifyProbeAtDepth(SerializableTypeMetadata member, int depth)
+        {
+            List<SerializablePropertyMetadata> ordered = [.. member.Properties.OrderBy(p => p.Order ?? int.MaxValue)];
+            return depth < 0 || depth >= ordered.Count
+                ? "unknown"
+                : ClassifyPropertyShape(ordered[depth]);
+        }
+
+        /// <summary>
+        /// Maps a property to the CBOR data-item shape it deserializes from. Tag-wrapped values
+        /// (e.g. <c>CborEncodedValue</c>) resolve to their inner shape because
+        /// <c>GetCurrentDataItemType</c> skips semantic tags.
+        /// </summary>
+        private static string ClassifyPropertyShape(SerializablePropertyMetadata prop)
+        {
+            string cleanType = NormalizeTypeName(prop.PropertyTypeFullName);
+
+            if (cleanType is "Chrysalis.Codec.Types.CborEncodedValue" or "CborEncodedValue")
+            {
+                return "bytes";
+            }
+            if (prop.IsList)
+            {
+                return "array";
+            }
+            if (prop.IsMap)
+            {
+                return "map";
+            }
+
+            switch (cleanType)
+            {
+                case "string":
+                    return "text";
+                case "bool":
+                    return "boolean";
+                case "byte[]":
+                case "ReadOnlyMemory<byte>":
+                case "System.ReadOnlyMemory<byte>":
+                    return "bytes";
+                case "int":
+                case "long":
+                case "uint":
+                case "ulong":
+                    return "integer";
+                default:
+                    break;
+            }
+
+            return TypeRegistry.TryGetValue(cleanType, out SerializableTypeMetadata? typeMeta) && typeMeta is not null
+                ? ClassifyTypeShape(typeMeta)
+                : "unknown";
+        }
+
+        /// <summary>
+        /// Maps a record type to the CBOR data-item shape it serializes as, ignoring any semantic
+        /// tag (which <c>GetCurrentDataItemType</c> skips). Constr types encode as a (possibly
+        /// tagged) array.
+        /// </summary>
+        private static string ClassifyTypeShape(SerializableTypeMetadata meta) => meta.SerializationType switch
+        {
+            SerializationType.List => "array",
+            SerializationType.Constr => "array",
+            SerializationType.Map => "map",
+            SerializationType.Container => "unknown",
+            SerializationType.Union => "unknown",
+            _ => "unknown"
+        };
 
         private static void EmitArraySizeBranch(StringBuilder sb, SerializableTypeMetadata metadata, Dictionary<string, List<SerializableTypeMetadata>> probeGroups)
         {
