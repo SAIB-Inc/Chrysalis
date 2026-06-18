@@ -46,13 +46,20 @@ public static class VersionTables
     /// <summary>
     /// Creates a node-to-node version table proposing versions 11 through 14.
     /// </summary>
+    /// <remarks>
+    /// Declares <c>InitiatorOnlyDiffusionMode = true</c>: this client only initiates the
+    /// chain-sync/block-fetch/keep-alive mini-protocols and does not service responder duties.
+    /// A P2P node (e.g. cardano-node 11+) that negotiates InitiatorAndResponder would promote
+    /// the connection to a hot peer and initiate protocols back toward us, stalling the
+    /// multiplexer. Keep this <c>true</c> unless responder-side protocols are implemented.
+    /// </remarks>
     /// <param name="networkMagic">The network magic number (default is 2 for preview testnet).</param>
     /// <returns>A new <see cref="N2NVersionTable"/> with versions V11 through V14.</returns>
     public static N2NVersionTable N2nV11AndAbove(ulong networkMagic = 2) => new(new()
         {
-            {N2NVersions.V11, new N2NVersionData(networkMagic, false, 0, false)},
-            {N2NVersions.V12, new N2NVersionData(networkMagic, false, 0, false)},
-            {N2NVersions.V13, new N2NVersionData(networkMagic, false, 0, false)},
-            {N2NVersions.V14, new N2NVersionData(networkMagic, false, 0, false)},
+            {N2NVersions.V11, new N2NVersionData(networkMagic, true, 0, false)},
+            {N2NVersions.V12, new N2NVersionData(networkMagic, true, 0, false)},
+            {N2NVersions.V13, new N2NVersionData(networkMagic, true, 0, false)},
+            {N2NVersions.V14, new N2NVersionData(networkMagic, true, 0, false)},
         });
 }

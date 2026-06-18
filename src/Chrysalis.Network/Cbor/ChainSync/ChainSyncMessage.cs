@@ -12,7 +12,10 @@ namespace Chrysalis.Network.Cbor.ChainSync;
 public partial record ChainSyncMessage : CborRecord;
 
 /// <summary>
-/// Intermediate union type for ChainSync responses to a next request (roll-forward, roll-backward, or await-reply).
+/// Intermediate union type for ChainSync responses to a next request (roll-forward, roll-backward,
+/// or await-reply). Await/RollBackward are protocol-agnostic; RollForward has two members sharing
+/// index 2 — <see cref="N2CMessageRollForward"/> (block) and <see cref="N2NMessageRollForward"/>
+/// (header) — which <see cref="ChainSync"/> picks between by its known protocol.
 /// </summary>
 [CborSerializable]
 [CborUnion]
@@ -41,15 +44,19 @@ public partial record MessageAwaitReply(
 ) : MessageNextResponse;
 
 /// <summary>
-/// ChainSync server response carrying a new block or header and the current tip (MsgRollForward).
+/// Node-to-client (N2C) ChainSync server response carrying a new block and the current tip
+/// (MsgRollForward). Shares chain-sync index 2 with the node-to-node
+/// <see cref="N2NMessageRollForward"/> but carries a tag-24 block (<see cref="CborEncodedValue"/>)
+/// rather than an <c>[era, #6.24(header)]</c> header; the serializer's structural probe selects
+/// between them by the payload's CBOR shape.
 /// </summary>
 /// <param name="Idx">The CBOR message index identifier (always 2 for this message type).</param>
-/// <param name="Payload">The CBOR-encoded block or header payload.</param>
+/// <param name="Payload">The tag-24-wrapped block payload.</param>
 /// <param name="Tip">The current tip of the chain as reported by the server.</param>
 [CborSerializable]
 [CborList]
 [CborIndex(2)]
-public partial record MessageRollForward(
+public partial record N2CMessageRollForward(
     [CborOrder(0)] int Idx,
     [CborOrder(1)] CborEncodedValue Payload,
     [CborOrder(2)] Tip Tip
