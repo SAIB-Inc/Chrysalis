@@ -222,7 +222,7 @@ internal static class Program
                         }
                         else
                         {
-                            Console.WriteLine($"  WARN: skipped unparseable header (payload {rollForward.Payload.HeaderCbor.Value.Length} bytes)");
+                            Console.WriteLine($"  WARN: skipped unparseable header (payload {rollForward.Payload.Raw.Length} bytes)");
                         }
                         break;
                     case MessageRollBackward rollBackward:
@@ -508,8 +508,8 @@ internal static class Program
         point = null;
         try
         {
-            // N2N RollForward payload is the typed [era, #6.24(header)]; decode the header for its point.
-            ChainSyncHeader header = new((byte)rollForward.Payload.EraTag, null, rollForward.Payload.HeaderCbor.Value);
+            // N2N RollForward payload is [era, header]; decode era-aware (Byron through Conway) for its point.
+            ChainSyncHeader header = ChainSyncHeader.Decode(rollForward.Payload.Raw);
             ChainPoint cp = header.ExtractPoint();
             point = Point.Specific(cp.Slot, cp.Hash);
         }

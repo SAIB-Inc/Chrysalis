@@ -75,14 +75,14 @@ public record ChainSyncHeader(
             if (IsByronEbb)
             {
                 ByronEbbHead ebbHead = CborSerializer.Deserialize<ByronEbbHead>(HeaderCbor);
-                ulong slot = ebbHead.ConsensusData.Epoch * 21600;
+                ulong slot = ebbHead.ConsensusData.ToAbsoluteSlot();
                 byte[] hash = BlockExtensions.HashByronHeader(0, HeaderCbor.Span);
                 return new ChainPoint(slot, hash, 0);
             }
             else
             {
                 ByronBlockHead blockHead = CborSerializer.Deserialize<ByronBlockHead>(HeaderCbor);
-                ulong slot = (blockHead.ConsensusData.SlotId.Epoch * 21600) + blockHead.ConsensusData.SlotId.Slot;
+                ulong slot = blockHead.ConsensusData.ToAbsoluteSlot();
                 byte[] hash = BlockExtensions.HashByronHeader(1, HeaderCbor.Span);
                 ulong height = blockHead.ConsensusData.Difficulty.GetValue().FirstOrDefault();
                 return new ChainPoint(slot, hash, height);
