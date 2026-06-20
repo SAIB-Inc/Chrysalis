@@ -23,8 +23,8 @@ public static class BlockExtensions
         ArgumentNullException.ThrowIfNull(self);
         return self switch
         {
-            ByronMainBlock byron => (byron.Header.ConsensusData.SlotId.Epoch * 21600) + byron.Header.ConsensusData.SlotId.Slot,
-            ByronEbBlock ebb => ebb.Header.ConsensusData.Epoch * 21600,
+            ByronMainBlock byron => byron.Header.ConsensusData.ToAbsoluteSlot(),
+            ByronEbBlock ebb => ebb.Header.ConsensusData.ToAbsoluteSlot(),
             _ => self.Header().HeaderBody.Slot()
         };
     }
@@ -141,6 +141,22 @@ public static class BlockExtensions
         headerCbor.CopyTo(wrapped.AsSpan(2));
         return Blake2Fast.Blake2b.HashData(32, wrapped);
     }
+
+    /// <summary>The number of slots per epoch in the Byron era (fixed at 21600).</summary>
+    public const ulong ByronSlotsPerEpoch = 21600;
+
+    /// <summary>
+    /// Converts a Byron main-block consensus slot id to an absolute slot:
+    /// <c>epoch * <see cref="ByronSlotsPerEpoch"/> + intra-epoch slot</c>.
+    /// </summary>
+    public static ulong ToAbsoluteSlot(this ByronBlockCons consensus) =>
+        (consensus.SlotId.Epoch * ByronSlotsPerEpoch) + consensus.SlotId.Slot;
+
+    /// <summary>
+    /// Converts a Byron epoch-boundary block (EBB) consensus to an absolute slot:
+    /// <c>epoch * <see cref="ByronSlotsPerEpoch"/></c> (an EBB sits at the first slot of its epoch).
+    /// </summary>
+    public static ulong ToAbsoluteSlot(this ByronEbbCons consensus) => consensus.Epoch * ByronSlotsPerEpoch;
 
     /// <summary>
     /// Gets the transaction bodies from the block.
