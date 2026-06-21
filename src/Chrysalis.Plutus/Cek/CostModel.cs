@@ -124,6 +124,21 @@ internal sealed record ConstAboveDiagonalCost(
     internal override long Eval(long x, long y, long z) => x < y ? ConstantValue : TwoVarQuadratic(Minimum, C00, C10, C01, C20, C11, C02, x, y);
 }
 
+/// <summary>
+/// Protocol-11 ("semantics E") division CPU shape: the two-variable quadratic evaluated on the
+/// SORTED arguments (max, min) on BOTH sides of the diagonal — no constant-below-diagonal branch.
+/// Used by divideInteger/modInteger/remainderInteger at protocol ≥ 11. Mirrors aiken's
+/// <c>AboveAndBelowDiagonal(QuadraticInXAndY)</c> (cost_model.rs: 5591-5594, 5604-5612).
+/// Agrees with <see cref="ConstAboveDiagonalCost"/> when x ≥ y; differs only when x &lt; y.
+/// </summary>
+internal sealed record AboveAndBelowDiagonalCost(
+    long Minimum, long C00, long C10, long C01, long C20, long C11, long C02
+) : CostFunction
+{
+    internal override long Eval(long x, long y, long z) =>
+        TwoVarQuadratic(Minimum, C00, C10, C01, C20, C11, C02, Math.Max(x, y), Math.Min(x, y));
+}
+
 internal sealed record LiteralInYOrLinearInZCost(long Intercept, long Slope) : CostFunction
 {
     internal override long Eval(long x, long y, long z) => Math.Max(y, SatMath.Add(Intercept, SatMath.Mul(Slope, z)));

@@ -120,8 +120,11 @@ public static class TransactionBuilderExtensions
         ConwayTransactionBody body = builder.BuildBody();
         PostAlonzoTransactionWitnessSet witnessSet = builder.BuildWitnessSet();
 
+        // Source the cost model from the provider's protocol params; falls back to the
+        // evaluator's baked-in latest PlutusV3 model when Pparams (or its cost models) are absent.
         IReadOnlyList<Plutus.VM.Models.EvaluationResult> evalResult =
-            ScriptContextBuilder.EvaluateTx(body, witnessSet, utxos, slotConfig);
+            ScriptContextBuilder.EvaluateTx(
+                body, witnessSet, utxos, slotConfig, builder.Pparams?.CostModelsForScriptLanguage);
 
         UpdateRedeemersWithEvalResults(builder, evalResult);
 
