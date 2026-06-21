@@ -19,7 +19,7 @@ Please be respectful and constructive in all interactions. We're building softwa
 
 ### Prerequisites
 
-- .NET 9.0 SDK
+- .NET 10.0 SDK
 - Rust toolchain (for Plutus module)
 - Git
 
@@ -137,53 +137,36 @@ docs: update README with new examples
 
 ## Release Process
 
-> **IMPORTANT**: All releases MUST go through the Pull Request process. Never push version changes directly to `main`.
+> **IMPORTANT**: Code reaches `main` only through Pull Requests. A release is then cut by **pushing a version tag to `main`** — the `release.yml` workflow builds, tests, packs, and publishes to NuGet. There is **no version-bump commit and no separate release PR**.
 
 ### Version Scheme
 
-We use semantic versioning with pre-release suffixes:
+We use semantic versioning with pre-release suffixes (current series: `v1.7.x`):
 
-- **Alpha**: `v1.0.x-alpha` - Active development, may have breaking changes
-- **Beta**: `v1.0.x-beta` - Feature complete, bug fixes only
-- **Stable**: `v1.0.x` - Production ready
+- **Alpha**: `vX.Y.Z-alpha` - Active development, may have breaking changes
+- **Beta**: `vX.Y.Z-beta` - Feature complete, bug fixes only
+- **Stable**: `vX.Y.Z` - Production ready
 
 ### Step-by-Step Release Process
 
-#### 1. Create a Release Branch
+> **No version file to bump.** `Directory.Build.props` stays at the `0.0.0-dev` placeholder; the published version is taken from the tag (the release workflow packs with `-p:Version=<tag>`).
+
+#### 1. Merge the change(s)
+
+Get the feature/fix PR(s) reviewed, green on CI, and squash-merged into `main` (see the Pull Request Process above). There is no separate release branch or version-bump commit.
+
+#### 2. Create the Git Tag / GitHub Release
+
+From an up-to-date `main` (`git checkout main && git pull origin main`):
 
 ```bash
-git checkout main
-git pull origin main
-git checkout -b release/v1.0.X-alpha
-```
-
-#### 2. Prepare the Release Changes
-
-If the release requires packaging or workflow changes, make them on the release branch and commit them with a conventional commit message.
-
-#### 3. Create a Pull Request
-
-```bash
-git push origin release/v1.0.X-alpha
-```
-
-Then create a PR on GitHub:
-- **Title**: `chore(release): bump version to v1.0.X-alpha`
-- **Description**: List the changes included in this release
-- **Target branch**: `main`
-
-#### 4. Merge the PR
-
-After approval, merge the PR into `main`.
-
-#### 5. Create the Git Tag / GitHub Release
-
-```bash
-gh release create v1.0.X-alpha \
-  --title "v1.0.X-alpha" \
+gh release create vX.Y.Z-alpha \
+  --title "vX.Y.Z-alpha" \
   --prerelease \
   --notes ""
 ```
+
+Pick the next version per the scheme above (increment the patch for a fix). Omit `--prerelease` only for a stable `vX.Y.Z` tag (no `-` suffix); the workflow auto-marks any tag containing `-` as a pre-release.
 
 Leave the body empty — the release workflow's `softprops/action-gh-release` step runs on the tag push and populates the release notes via GitHub's auto-changelog. Passing `--generate-notes` here would double the body because the workflow would then append a second copy.
 
@@ -207,12 +190,12 @@ The release will trigger the CI/CD pipeline which:
 
 ### Release Checklist
 
-- [ ] Release changes committed with proper message format
-- [ ] Pull Request created and approved
-- [ ] PR merged to `main`
-- [ ] GitHub release created with `--generate-notes`
-- [ ] Release marked as pre-release (if alpha/beta)
-- [ ] NuGet packages published for the umbrella package and supported leaf packages
+- [ ] Feature/fix PR(s) merged to `main`, CI green
+- [ ] `main` pulled locally and up to date
+- [ ] `gh release create vX.Y.Z[-alpha] --prerelease --notes ""` (empty notes — the workflow generates them; passing `--generate-notes` here would duplicate the body)
+- [ ] Release marked as pre-release (auto for any tag containing `-`)
+- [ ] Release workflow succeeded: build, test, pack, NuGet push
+- [ ] NuGet packages visible on NuGet.org
 - [ ] Release notes reviewed for accuracy
 
 ### Hotfix Releases
@@ -226,10 +209,10 @@ For urgent fixes:
 
 ### What NOT to Do
 
-- **Never push directly to `main`** - Always use Pull Requests
+- **Never push code directly to `main`** - Always use Pull Requests
 - **Never force push to `main`** - This destroys history
-- **Never skip the PR for release changes** - The PR provides audit trail
-- **Never create releases without the release PR merged first**
+- **Never hand-edit the published version** - it comes from the tag, not a file
+- **Never tag `main` before the change PR(s) are merged and CI is green**
 
 ## Questions?
 
