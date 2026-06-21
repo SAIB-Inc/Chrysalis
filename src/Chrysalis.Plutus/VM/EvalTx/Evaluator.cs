@@ -18,11 +18,15 @@ public static class Evaluator
     /// </summary>
     /// <param name="scriptBytes">Flat-encoded script bytes (inner script, not the CBOR-wrapped outer layer).</param>
     /// <param name="argumentsCbor">CBOR-encoded PlutusData arguments (e.g. datum, redeemer, script context).</param>
+    /// <param name="costModel">Optional flat PlutusV3 cost-model array (from protocol params). Defaults to the latest baked-in model.</param>
+    /// <param name="plutusVersion">Plutus language version of the script (currently 3). Defaults to 3.</param>
     /// <param name="budget">Optional execution budget. Defaults to unlimited.</param>
     /// <returns>The evaluation result with consumed execution units.</returns>
     public static EvaluationResult EvaluateScript(
         byte[] scriptBytes,
         IReadOnlyList<byte[]> argumentsCbor,
+        IReadOnlyList<long>? costModel = null,
+        int plutusVersion = 3,
         ExBudget? budget = null)
     {
         ArgumentNullException.ThrowIfNull(scriptBytes);
@@ -39,7 +43,8 @@ public static class Evaluator
         }
 
         ExBudget initial = budget ?? ExBudget.Unlimited;
-        CekMachine machine = new(initial);
+        // V3: provider model (costModel) or the latest baked-in default; V1/V2: reference default.
+        CekMachine machine = new(initial, CostModelLoader.FromFlat(costModel, plutusVersion));
         _ = machine.Run(term);
 
         ExBudget remaining = machine.RemainingBudget;
@@ -60,11 +65,15 @@ public static class Evaluator
     /// </summary>
     /// <param name="scriptBytes">Flat-encoded script bytes.</param>
     /// <param name="arguments">VM PlutusData arguments (datum, redeemer, script context).</param>
+    /// <param name="costModel">Optional flat PlutusV3 cost-model array (from protocol params). Defaults to the latest baked-in model.</param>
+    /// <param name="plutusVersion">Plutus language version of the script (currently 3). Defaults to 3.</param>
     /// <param name="budget">Optional execution budget. Defaults to unlimited.</param>
     /// <returns>The evaluation result with consumed execution units.</returns>
     public static EvaluationResult EvaluateScript(
         byte[] scriptBytes,
         IReadOnlyList<PlutusData> arguments,
+        IReadOnlyList<long>? costModel = null,
+        int plutusVersion = 3,
         ExBudget? budget = null)
     {
         ArgumentNullException.ThrowIfNull(scriptBytes);
@@ -79,7 +88,8 @@ public static class Evaluator
         }
 
         ExBudget initial = budget ?? ExBudget.Unlimited;
-        CekMachine machine = new(initial);
+        // V3: provider model (costModel) or the latest baked-in default; V1/V2: reference default.
+        CekMachine machine = new(initial, CostModelLoader.FromFlat(costModel, plutusVersion));
         _ = machine.Run(term);
 
         ExBudget remaining = machine.RemainingBudget;

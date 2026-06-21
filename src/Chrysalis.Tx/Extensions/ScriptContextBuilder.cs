@@ -6,6 +6,7 @@ using Chrysalis.Codec.Types;
 using Chrysalis.Codec.Types.Cardano.Core.Certificates;
 using Chrysalis.Codec.Types.Cardano.Core.Common;
 using Chrysalis.Codec.Types.Cardano.Core.Governance;
+using Chrysalis.Codec.Types.Cardano.Core.Protocol;
 using Chrysalis.Codec.Types.Cardano.Core.Transaction;
 using Chrysalis.Codec.Types.Cardano.Core.TransactionWitness;
 using Chrysalis.Tx.Models;
@@ -1235,10 +1236,21 @@ public static class ScriptContextBuilder
         ConwayTransactionBody body,
         PostAlonzoTransactionWitnessSet witnessSet,
         IReadOnlyList<ResolvedInput> utxos,
-        SlotNetworkConfig slotConfig)
+        SlotNetworkConfig slotConfig,
+        CostMdls? costModels = null)
     {
         ArgumentNullException.ThrowIfNull(utxos);
         ArgumentNullException.ThrowIfNull(slotConfig);
+
+        // Per-language flat cost array from the provider's protocol params (null → evaluator default).
+        static IReadOnlyList<long>? FlatCosts(ICborMaybeIndefList<long>? c) => c switch
+        {
+            CborDefList<long> d => d.Value,
+            CborIndefList<long> d => d.Value,
+            CborDefListWithTag<long> d => d.Value,
+            CborIndefListWithTag<long> d => d.Value,
+            _ => null,
+        };
 
         List<RedeemerInfo> redeemers = ExtractRedeemers(witnessSet.Redeemers);
         if (redeemers.Count == 0)
@@ -1313,8 +1325,14 @@ public static class ScriptContextBuilder
             // Evaluate
             try
             {
+                IReadOnlyList<long>? langCosts = version switch
+                {
+                    1 => FlatCosts(costModels?.PlutusV1),
+                    2 => FlatCosts(costModels?.PlutusV2),
+                    _ => FlatCosts(costModels?.PlutusV3),
+                };
                 Plutus.VM.Models.EvaluationResult result =
-                    Plutus.VM.EvalTx.Evaluator.EvaluateScript(flatBytes, arguments);
+                    Plutus.VM.EvalTx.Evaluator.EvaluateScript(flatBytes, arguments, langCosts, version);
 
                 results.Add(new Plutus.VM.Models.EvaluationResult(
                     redeemer.Tag,
