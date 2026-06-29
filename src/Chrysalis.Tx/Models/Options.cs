@@ -251,6 +251,15 @@ public record WithdrawalOptions<T>
     /// <summary>Gets or sets the identifier for this withdrawal.</summary>
     public string? Id { get; set; }
 
+    /// <summary>
+    /// Gets or sets an inline witness script for this withdrawal. When set, the
+    /// script is embedded in the transaction's witness set instead of being
+    /// supplied via a reference input — useful when a reference input would
+    /// perturb ordering that a co-spent script depends on (e.g. a DEX that reads
+    /// its settings as the first reference input).
+    /// </summary>
+    public IScript? Script { get; set; }
+
     /// <summary>Gets or sets the redeemer map for script validation.</summary>
     public RedeemerMap? Redeemer { get; set; }
 
