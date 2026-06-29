@@ -468,7 +468,7 @@ public sealed class TransactionTemplateBuilder<T>
                 }
             }
 
-            BuildRedeemers(context, param, inputIdToIndex, refInputIdToOrderedIndex, outputMappings);
+            BuildRedeemers(context, param, parties, inputIdToIndex, refInputIdToOrderedIndex, outputMappings);
 
             if (context.Redeemers.Count > 0)
             {
@@ -859,6 +859,7 @@ public sealed class TransactionTemplateBuilder<T>
     private void BuildRedeemers(
         BuildContext buildContext,
         T param,
+        Dictionary<string, string> parties,
         Dictionary<string, ulong> inputIdToIndex,
         Dictionary<string, ulong> refInputIdToIndex,
         Dictionary<string, Dictionary<string, ulong>> outputMappings)
@@ -911,6 +912,35 @@ public sealed class TransactionTemplateBuilder<T>
             }
         }
 
+        // Withdrawal redeemer pointers are keyed by the reward account's index in
+        // the ledger's *sorted* withdrawal map (the same order FindScript and the
+        // Plutus script context use), NOT the order withdrawals were added to the
+        // template. With a single withdrawal these coincide; with two or more they
+        // diverge, and an insertion-ordered pointer feeds the wrong redeemer to a
+        // script. Resolve each withdrawal's reward account and rank them.
+        Dictionary<int, ulong> withdrawalSortedIndex = [];
+        {
+            List<(int Insertion, byte[] Account)> accounts = [];
+            int wi = 0;
+            foreach (WithdrawalConfig<T> config in _withdrawalConfigs)
+            {
+                WithdrawalOptions<T> probe = new() { From = "", Amount = 0 };
+                config(probe, param);
+                byte[] account = probe.From.Length != 0 && parties.TryGetValue(probe.From, out string? bech)
+                    ? WalletAddress.FromBech32(bech).ToBytes()
+                    : [];
+                accounts.Add((wi, account));
+                wi++;
+            }
+
+            int rank = 0;
+            foreach ((int insertion, byte[] _) in accounts.OrderBy(a => (ReadOnlyMemory<byte>)a.Account, RewardAccountComparer.Instance))
+            {
+                withdrawalSortedIndex[insertion] = (ulong)rank;
+                rank++;
+            }
+        }
+
         int withdrawalIndex = 0;
         foreach (WithdrawalConfig<T> config in _withdrawalConfigs)
         {
@@ -931,7 +961,7 @@ public sealed class TransactionTemplateBuilder<T>
 
                 if (redeemerObj != null)
                 {
-                    ProcessRedeemer(buildContext, redeemerObj, (ulong)withdrawalIndex);
+                    ProcessRedeemer(buildContext, redeemerObj, withdrawalSortedIndex[withdrawalIndex]);
                 }
             }
 
@@ -1174,6 +1204,11 @@ public sealed class TransactionTemplateBuilder<T>
             {
                 WalletAddress withdrawalAddress = WalletAddress.FromBech32(parties[withdrawalOptions.From]);
                 rewards.Add(new RewardAccount(withdrawalAddress.ToBytes()), withdrawalOptions.Amount);
+            }
+            // Inline witness script (no reference input) — embed it in the witness set.
+            if (withdrawalOptions.Script is not null)
+            {
+                _ = context.TxBuilder.AddPlutusScript(withdrawalOptions.Script);
             }
             if (withdrawalOptions.RedeemerBuilder is not null || withdrawalOptions.Redeemer is not null)
             {
