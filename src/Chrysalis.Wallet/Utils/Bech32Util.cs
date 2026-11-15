@@ -104,7 +104,7 @@ public static class Bech32Util
         });
 
         // Find the separator
-        int pos = bech32.LastIndexOf(Separator);
+        int pos = bech32.LastIndexOf(Separator, StringComparison.Ordinal);
         if (pos < 1 || pos + 7 > bech32.Length)
         {
             throw new FormatException("Invalid separator position");
@@ -171,7 +171,7 @@ public static class Bech32Util
     {
         ArgumentNullException.ThrowIfNull(address);
 
-        int pos = address.LastIndexOf(Separator);
+        int pos = address.LastIndexOf(Separator, StringComparison.Ordinal);
         return pos < 1 ? throw new FormatException("Invalid Bech32 string") : address[..pos];
     }
 
