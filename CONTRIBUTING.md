@@ -141,11 +141,11 @@ docs: update README with new examples
 
 ### Version Scheme
 
-We use semantic versioning with pre-release suffixes (current series: `v1.7.x`):
+We use one shared semantic version in the **`v2.x` series**:
 
-- **Alpha**: `vX.Y.Z-alpha` - Active development, may have breaking changes
-- **Beta**: `vX.Y.Z-beta` - Feature complete, bug fixes only
-- **Stable**: `vX.Y.Z` - Production ready
+- **Alpha**: Start at `v2.0.0-alpha`. Each later alpha takes its own rising `v2.Y.Z-alpha` number: the **next minor** for a feature release (patch reset to zero), the **next patch** for a fix. **`v2.0.0-alpha.N` is not used.**
+- **Beta**: `v2.Y.Z-beta` - Feature complete, bug fixes only
+- **Stable**: Take the **next minor after the last alpha**, without a suffix; for example, last alpha `v2.3.x-alpha` → stable `v2.4.0`.
 
 ### Step-by-Step Release Process
 
@@ -166,7 +166,7 @@ gh release create vX.Y.Z-alpha \
   --notes ""
 ```
 
-Pick the next version per the scheme above (increment the patch for a fix). Omit `--prerelease` only for a stable `vX.Y.Z` tag (no `-` suffix); the workflow auto-marks any tag containing `-` as a pre-release.
+Use `v2.0.0-alpha` first. For each later alpha, take the **next minor for a feature release** or the **next patch for a fix**, not `v2.0.0-alpha.N`. The stable takes the **next minor after the last alpha**, without a suffix (for example, after `v2.3.x-alpha`, use `v2.4.0`). Omit `--prerelease` only for that stable tag; the workflow auto-marks any tag containing `-` as a pre-release.
 
 Leave the body empty — the release workflow's `softprops/action-gh-release` step runs on the tag push and populates the release notes via GitHub's auto-changelog. Passing `--generate-notes` here would double the body because the workflow would then append a second copy.
 
@@ -190,6 +190,7 @@ The release will trigger the CI/CD pipeline which:
 
 ### Release Checklist
 
+- [ ] Update [`docs/MANIFEST.md`](docs/MANIFEST.md) for this release and complete its pre-release checklist (matrix, node-pinned dependencies, local-package integration, performance/results evidence and known limitations); obtain the owner's word before any push or publication.
 - [ ] Feature/fix PR(s) merged to `main`, CI green
 - [ ] `main` pulled locally and up to date
 - [ ] `gh release create vX.Y.Z[-alpha] --prerelease --notes ""` (empty notes — the workflow generates them; passing `--generate-notes` here would duplicate the body)

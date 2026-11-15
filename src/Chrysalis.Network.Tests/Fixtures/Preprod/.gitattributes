@@ -1,0 +1,2 @@
+*.cbor binary
+*.json -text

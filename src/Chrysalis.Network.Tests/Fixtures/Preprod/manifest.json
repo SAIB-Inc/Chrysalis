@@ -1,0 +1,2367 @@
+{
+  "network": "Preprod",
+  "networkMagic": 1,
+  "nodeVersion": "11.1.3",
+  "capturedDate": "2026-11-15",
+  "wire": [
+    {
+      "file": "wire/c1-in-p0-001.cbor",
+      "bytes": 8,
+      "sha256": "5161290cbc290544d973e0d47a035f8b85368ad816ef93ca6fc139e97fccffae",
+      "connection": 1,
+      "direction": "in",
+      "protocol": 0,
+      "sequence": 1
+    },
+    {
+      "file": "wire/c1-in-p7-002.cbor",
+      "bytes": 2,
+      "sha256": "ac38783f6a3b2fe3b579718d6ba8493a456d800665b4433a0e7c823cff90a603",
+      "connection": 1,
+      "direction": "in",
+      "protocol": 7,
+      "sequence": 2
+    },
+    {
+      "file": "wire/c1-in-p7-003.cbor",
+      "bytes": 43,
+      "sha256": "67d15a74e094524e21bc3d54cadeeefdc4e56f341e0f897fefa89ffbddbd9e33",
+      "connection": 1,
+      "direction": "in",
+      "protocol": 7,
+      "sequence": 3
+    },
+    {
+      "file": "wire/c1-in-p7-004.cbor",
+      "bytes": 2,
+      "sha256": "ac38783f6a3b2fe3b579718d6ba8493a456d800665b4433a0e7c823cff90a603",
+      "connection": 1,
+      "direction": "in",
+      "protocol": 7,
+      "sequence": 4
+    },
+    {
+      "file": "wire/c1-in-p7-005.cbor",
+      "bytes": 3,
+      "sha256": "5d2f8feb3960c1aba05199e0981839150634fa11a992702ab27c97a305584ef1",
+      "connection": 1,
+      "direction": "in",
+      "protocol": 7,
+      "sequence": 5
+    },
+    {
+      "file": "wire/c1-in-p7-006.cbor",
+      "bytes": 2,
+      "sha256": "ac38783f6a3b2fe3b579718d6ba8493a456d800665b4433a0e7c823cff90a603",
+      "connection": 1,
+      "direction": "in",
+      "protocol": 7,
+      "sequence": 6
+    },
+    {
+      "file": "wire/c1-in-p7-007.cbor",
+      "bytes": 2993,
+      "sha256": "d6fb98127a9055f34ba610c4e9c0afdd71390a79f86365ee495a5deb807b6cc6",
+      "connection": 1,
+      "direction": "in",
+      "protocol": 7,
+      "sequence": 7
+    },
+    {
+      "file": "wire/c1-in-p7-008.cbor",
+      "bytes": 2,
+      "sha256": "ac38783f6a3b2fe3b579718d6ba8493a456d800665b4433a0e7c823cff90a603",
+      "connection": 1,
+      "direction": "in",
+      "protocol": 7,
+      "sequence": 8
+    },
+    {
+      "file": "wire/c1-in-p7-009.cbor",
+      "bytes": 109,
+      "sha256": "59e54b77e4b32a1be510999389100d96e63558e6b785cb294201a480122988ef",
+      "connection": 1,
+      "direction": "in",
+      "protocol": 7,
+      "sequence": 9
+    },
+    {
+      "file": "wire/c1-in-p7-010.cbor",
+      "bytes": 2,
+      "sha256": "ac38783f6a3b2fe3b579718d6ba8493a456d800665b4433a0e7c823cff90a603",
+      "connection": 1,
+      "direction": "in",
+      "protocol": 7,
+      "sequence": 10
+    },
+    {
+      "file": "wire/c1-in-p7-011.cbor",
+      "bytes": 4,
+      "sha256": "e4f60dc6149b323237f8b6bb6e53dc38fe12cdbf36cf0f817d9b6f183d3a16b5",
+      "connection": 1,
+      "direction": "in",
+      "protocol": 7,
+      "sequence": 11
+    },
+    {
+      "file": "wire/c1-in-p9-012.cbor",
+      "bytes": 7,
+      "sha256": "456cf8135db10f189ad16532293f3de9c1cc2ec5f11949f8c94373b0b2ed47bf",
+      "connection": 1,
+      "direction": "in",
+      "protocol": 9,
+      "sequence": 12
+    },
+    {
+      "file": "wire/c1-in-p9-013.cbor",
+      "bytes": 10,
+      "sha256": "fc4d216b514c670fa97eec6a73f90cbebf8989270a2b1ab7b6497ca0a3fd789d",
+      "connection": 1,
+      "direction": "in",
+      "protocol": 9,
+      "sequence": 13
+    },
+    {
+      "file": "wire/c1-in-p9-014.cbor",
+      "bytes": 2,
+      "sha256": "faa91ec04eac213b9d65920869044f61931075524874227e2591e982605d4f9b",
+      "connection": 1,
+      "direction": "in",
+      "protocol": 9,
+      "sequence": 14
+    },
+    {
+      "file": "wire/c1-in-p9-015.cbor",
+      "bytes": 109,
+      "sha256": "12c349a71371796ebcd4470a30548af61fb366929a00e2f20d4309c8aab82735",
+      "connection": 1,
+      "direction": "in",
+      "protocol": 9,
+      "sequence": 15
+    },
+    {
+      "file": "wire/c1-out-p0-001.cbor",
+      "bytes": 33,
+      "sha256": "dd867f34cd1024f52a27cf960627d892b05fb9884dd7997d289c810c1c567ee2",
+      "connection": 1,
+      "direction": "out",
+      "protocol": 0,
+      "sequence": 1
+    },
+    {
+      "file": "wire/c1-out-p7-002.cbor",
+      "bytes": 2,
+      "sha256": "4ef9b8db14255b82ffe22037b1302b96053e37aa3206627e5b52f24ab324af72",
+      "connection": 1,
+      "direction": "out",
+      "protocol": 7,
+      "sequence": 2
+    },
+    {
+      "file": "wire/c1-out-p7-003.cbor",
+      "bytes": 10,
+      "sha256": "9abb1094200052161ba6fc62d59b516d5d0c0c95a28565cdc2ebeec4e31fe5bd",
+      "connection": 1,
+      "direction": "out",
+      "protocol": 7,
+      "sequence": 3
+    },
+    {
+      "file": "wire/c1-out-p7-004.cbor",
+      "bytes": 2,
+      "sha256": "b8aa8c1e3b7597cd09410468c2d70dcc83a8cb1c3663fd1b2a4b4290daba16d7",
+      "connection": 1,
+      "direction": "out",
+      "protocol": 7,
+      "sequence": 4
+    },
+    {
+      "file": "wire/c1-out-p7-005.cbor",
+      "bytes": 2,
+      "sha256": "4ef9b8db14255b82ffe22037b1302b96053e37aa3206627e5b52f24ab324af72",
+      "connection": 1,
+      "direction": "out",
+      "protocol": 7,
+      "sequence": 5
+    },
+    {
+      "file": "wire/c1-out-p7-006.cbor",
+      "bytes": 8,
+      "sha256": "68405edb339d8c64f9d87213db53255ad341ccb71c6fbcc676c3dd392b1d30f9",
+      "connection": 1,
+      "direction": "out",
+      "protocol": 7,
+      "sequence": 6
+    },
+    {
+      "file": "wire/c1-out-p7-007.cbor",
+      "bytes": 2,
+      "sha256": "b8aa8c1e3b7597cd09410468c2d70dcc83a8cb1c3663fd1b2a4b4290daba16d7",
+      "connection": 1,
+      "direction": "out",
+      "protocol": 7,
+      "sequence": 7
+    },
+    {
+      "file": "wire/c1-out-p7-008.cbor",
+      "bytes": 2,
+      "sha256": "4ef9b8db14255b82ffe22037b1302b96053e37aa3206627e5b52f24ab324af72",
+      "connection": 1,
+      "direction": "out",
+      "protocol": 7,
+      "sequence": 8
+    },
+    {
+      "file": "wire/c1-out-p7-009.cbor",
+      "bytes": 10,
+      "sha256": "1fa93ba389ee9ca796ad5bb7ac8226dc709472b94da1c96559e1f6e876d4fcd7",
+      "connection": 1,
+      "direction": "out",
+      "protocol": 7,
+      "sequence": 9
+    },
+    {
+      "file": "wire/c1-out-p7-010.cbor",
+      "bytes": 2,
+      "sha256": "b8aa8c1e3b7597cd09410468c2d70dcc83a8cb1c3663fd1b2a4b4290daba16d7",
+      "connection": 1,
+      "direction": "out",
+      "protocol": 7,
+      "sequence": 10
+    },
+    {
+      "file": "wire/c1-out-p7-011.cbor",
+      "bytes": 2,
+      "sha256": "4ef9b8db14255b82ffe22037b1302b96053e37aa3206627e5b52f24ab324af72",
+      "connection": 1,
+      "direction": "out",
+      "protocol": 7,
+      "sequence": 11
+    },
+    {
+      "file": "wire/c1-out-p7-012.cbor",
+      "bytes": 70,
+      "sha256": "531c6a33153b1d66e33caefd552acd5edd09fe1585fd832b3c55f99f3d7e96fe",
+      "connection": 1,
+      "direction": "out",
+      "protocol": 7,
+      "sequence": 12
+    },
+    {
+      "file": "wire/c1-out-p7-013.cbor",
+      "bytes": 2,
+      "sha256": "b8aa8c1e3b7597cd09410468c2d70dcc83a8cb1c3663fd1b2a4b4290daba16d7",
+      "connection": 1,
+      "direction": "out",
+      "protocol": 7,
+      "sequence": 13
+    },
+    {
+      "file": "wire/c1-out-p7-014.cbor",
+      "bytes": 2,
+      "sha256": "4ef9b8db14255b82ffe22037b1302b96053e37aa3206627e5b52f24ab324af72",
+      "connection": 1,
+      "direction": "out",
+      "protocol": 7,
+      "sequence": 14
+    },
+    {
+      "file": "wire/c1-out-p7-015.cbor",
+      "bytes": 11,
+      "sha256": "ce12f66fa0b364e6c33ea8bd4ea74f90d30c412ee82ac6a67e0fac3b524a7f7b",
+      "connection": 1,
+      "direction": "out",
+      "protocol": 7,
+      "sequence": 15
+    },
+    {
+      "file": "wire/c1-out-p7-016.cbor",
+      "bytes": 2,
+      "sha256": "b8aa8c1e3b7597cd09410468c2d70dcc83a8cb1c3663fd1b2a4b4290daba16d7",
+      "connection": 1,
+      "direction": "out",
+      "protocol": 7,
+      "sequence": 16
+    },
+    {
+      "file": "wire/c1-out-p9-017.cbor",
+      "bytes": 2,
+      "sha256": "ac38783f6a3b2fe3b579718d6ba8493a456d800665b4433a0e7c823cff90a603",
+      "connection": 1,
+      "direction": "out",
+      "protocol": 9,
+      "sequence": 17
+    },
+    {
+      "file": "wire/c1-out-p9-018.cbor",
+      "bytes": 2,
+      "sha256": "7df06f917bc6b10d149af69c683f9b2cd614f10a8eb7901a7eafaaea44a17da0",
+      "connection": 1,
+      "direction": "out",
+      "protocol": 9,
+      "sequence": 18
+    },
+    {
+      "file": "wire/c1-out-p9-019.cbor",
+      "bytes": 2,
+      "sha256": "b8aa8c1e3b7597cd09410468c2d70dcc83a8cb1c3663fd1b2a4b4290daba16d7",
+      "connection": 1,
+      "direction": "out",
+      "protocol": 9,
+      "sequence": 19
+    },
+    {
+      "file": "wire/c1-out-p9-020.cbor",
+      "bytes": 2,
+      "sha256": "e92f5db43e501345e6b4b255bc299df49d038356f6244f5f51ecf58697f89de4",
+      "connection": 1,
+      "direction": "out",
+      "protocol": 9,
+      "sequence": 20
+    },
+    {
+      "file": "wire/c1-out-p9-021.cbor",
+      "bytes": 68,
+      "sha256": "1113f66b47a2a8fe2f4df879fafa8f27e0457fe4bce0072b91eec204a17a5bd9",
+      "connection": 1,
+      "direction": "out",
+      "protocol": 9,
+      "sequence": 21
+    },
+    {
+      "file": "wire/c10-in-p0-001.cbor",
+      "bytes": 8,
+      "sha256": "5161290cbc290544d973e0d47a035f8b85368ad816ef93ca6fc139e97fccffae",
+      "connection": 10,
+      "direction": "in",
+      "protocol": 0,
+      "sequence": 1
+    },
+    {
+      "file": "wire/c10-in-p6-002.cbor",
+      "bytes": 78,
+      "sha256": "0a99b7afe335906b4a98ddd67bfbe4aa514306c4077774b472058bcc1a11f97d",
+      "connection": 10,
+      "direction": "in",
+      "protocol": 6,
+      "sequence": 2
+    },
+    {
+      "file": "wire/c10-out-p0-001.cbor",
+      "bytes": 33,
+      "sha256": "dd867f34cd1024f52a27cf960627d892b05fb9884dd7997d289c810c1c567ee2",
+      "connection": 10,
+      "direction": "out",
+      "protocol": 0,
+      "sequence": 1
+    },
+    {
+      "file": "wire/c10-out-p6-002.cbor",
+      "bytes": 21,
+      "sha256": "dd832cf2c56585bda54a1b075968bef56c5871091328c878d3bc1663a9d2c8c7",
+      "connection": 10,
+      "direction": "out",
+      "protocol": 6,
+      "sequence": 2
+    },
+    {
+      "file": "wire/c11-in-p0-001.cbor",
+      "bytes": 8,
+      "sha256": "5161290cbc290544d973e0d47a035f8b85368ad816ef93ca6fc139e97fccffae",
+      "connection": 11,
+      "direction": "in",
+      "protocol": 0,
+      "sequence": 1
+    },
+    {
+      "file": "wire/c11-in-p6-002.cbor",
+      "bytes": 2,
+      "sha256": "ac38783f6a3b2fe3b579718d6ba8493a456d800665b4433a0e7c823cff90a603",
+      "connection": 11,
+      "direction": "in",
+      "protocol": 6,
+      "sequence": 2
+    },
+    {
+      "file": "wire/c11-out-p0-001.cbor",
+      "bytes": 33,
+      "sha256": "dd867f34cd1024f52a27cf960627d892b05fb9884dd7997d289c810c1c567ee2",
+      "connection": 11,
+      "direction": "out",
+      "protocol": 0,
+      "sequence": 1
+    },
+    {
+      "file": "wire/c11-out-p6-002.cbor",
+      "bytes": 346,
+      "sha256": "6e4164fead21277dfa25c19c123ae0e214918adcd946840ae7ade5e557cf76d7",
+      "connection": 11,
+      "direction": "out",
+      "protocol": 6,
+      "sequence": 2
+    },
+    {
+      "file": "wire/c12-in-p0-001.cbor",
+      "bytes": 8,
+      "sha256": "5161290cbc290544d973e0d47a035f8b85368ad816ef93ca6fc139e97fccffae",
+      "connection": 12,
+      "direction": "in",
+      "protocol": 0,
+      "sequence": 1
+    },
+    {
+      "file": "wire/c12-in-p6-002.cbor",
+      "bytes": 2,
+      "sha256": "ac38783f6a3b2fe3b579718d6ba8493a456d800665b4433a0e7c823cff90a603",
+      "connection": 12,
+      "direction": "in",
+      "protocol": 6,
+      "sequence": 2
+    },
+    {
+      "file": "wire/c12-out-p0-001.cbor",
+      "bytes": 33,
+      "sha256": "dd867f34cd1024f52a27cf960627d892b05fb9884dd7997d289c810c1c567ee2",
+      "connection": 12,
+      "direction": "out",
+      "protocol": 0,
+      "sequence": 1
+    },
+    {
+      "file": "wire/c12-out-p6-002.cbor",
+      "bytes": 275,
+      "sha256": "da2df5a0e3267479327180e09c0312023fa195722ccd7a3bdd630ae9d79d91e8",
+      "connection": 12,
+      "direction": "out",
+      "protocol": 6,
+      "sequence": 2
+    },
+    {
+      "file": "wire/c13-in-p0-001.cbor",
+      "bytes": 8,
+      "sha256": "5161290cbc290544d973e0d47a035f8b85368ad816ef93ca6fc139e97fccffae",
+      "connection": 13,
+      "direction": "in",
+      "protocol": 0,
+      "sequence": 1
+    },
+    {
+      "file": "wire/c13-in-p6-002.cbor",
+      "bytes": 2,
+      "sha256": "ac38783f6a3b2fe3b579718d6ba8493a456d800665b4433a0e7c823cff90a603",
+      "connection": 13,
+      "direction": "in",
+      "protocol": 6,
+      "sequence": 2
+    },
+    {
+      "file": "wire/c13-out-p0-001.cbor",
+      "bytes": 33,
+      "sha256": "dd867f34cd1024f52a27cf960627d892b05fb9884dd7997d289c810c1c567ee2",
+      "connection": 13,
+      "direction": "out",
+      "protocol": 0,
+      "sequence": 1
+    },
+    {
+      "file": "wire/c13-out-p6-002.cbor",
+      "bytes": 481,
+      "sha256": "046d3492e5dfb458e5c0478da354f49733ef954f465819c8e55de00770d53696",
+      "connection": 13,
+      "direction": "out",
+      "protocol": 6,
+      "sequence": 2
+    },
+    {
+      "file": "wire/c2-in-p0-001.cbor",
+      "bytes": 8,
+      "sha256": "5161290cbc290544d973e0d47a035f8b85368ad816ef93ca6fc139e97fccffae",
+      "connection": 2,
+      "direction": "in",
+      "protocol": 0,
+      "sequence": 1
+    },
+    {
+      "file": "wire/c2-out-p0-001.cbor",
+      "bytes": 33,
+      "sha256": "dd867f34cd1024f52a27cf960627d892b05fb9884dd7997d289c810c1c567ee2",
+      "connection": 2,
+      "direction": "out",
+      "protocol": 0,
+      "sequence": 1
+    },
+    {
+      "file": "wire/c3-in-p0-001.cbor",
+      "bytes": 8,
+      "sha256": "5161290cbc290544d973e0d47a035f8b85368ad816ef93ca6fc139e97fccffae",
+      "connection": 3,
+      "direction": "in",
+      "protocol": 0,
+      "sequence": 1
+    },
+    {
+      "file": "wire/c3-in-p9-002.cbor",
+      "bytes": 7,
+      "sha256": "456cf8135db10f189ad16532293f3de9c1cc2ec5f11949f8c94373b0b2ed47bf",
+      "connection": 3,
+      "direction": "in",
+      "protocol": 9,
+      "sequence": 2
+    },
+    {
+      "file": "wire/c3-out-p0-001.cbor",
+      "bytes": 33,
+      "sha256": "dd867f34cd1024f52a27cf960627d892b05fb9884dd7997d289c810c1c567ee2",
+      "connection": 3,
+      "direction": "out",
+      "protocol": 0,
+      "sequence": 1
+    },
+    {
+      "file": "wire/c3-out-p9-002.cbor",
+      "bytes": 2,
+      "sha256": "ac38783f6a3b2fe3b579718d6ba8493a456d800665b4433a0e7c823cff90a603",
+      "connection": 3,
+      "direction": "out",
+      "protocol": 9,
+      "sequence": 2
+    },
+    {
+      "file": "wire/c3-out-p9-003.cbor",
+      "bytes": 2,
+      "sha256": "9ab801dcef11b73fbe8e3f6a5724152b3079cd8cabb4446e060d5ca55bd30865",
+      "connection": 3,
+      "direction": "out",
+      "protocol": 9,
+      "sequence": 3
+    },
+    {
+      "file": "wire/c4-in-p0-001.cbor",
+      "bytes": 8,
+      "sha256": "62d804b226ab5020c7f762e4a75739b7216f0bcb2d07a914151d97ef10f01a6b",
+      "connection": 4,
+      "direction": "in",
+      "protocol": 0,
+      "sequence": 1
+    },
+    {
+      "file": "wire/c4-in-p7-002.cbor",
+      "bytes": 2,
+      "sha256": "ac38783f6a3b2fe3b579718d6ba8493a456d800665b4433a0e7c823cff90a603",
+      "connection": 4,
+      "direction": "in",
+      "protocol": 7,
+      "sequence": 2
+    },
+    {
+      "file": "wire/c4-in-p7-003.cbor",
+      "bytes": 3,
+      "sha256": "5d2f8feb3960c1aba05199e0981839150634fa11a992702ab27c97a305584ef1",
+      "connection": 4,
+      "direction": "in",
+      "protocol": 7,
+      "sequence": 3
+    },
+    {
+      "file": "wire/c4-out-p0-001.cbor",
+      "bytes": 45,
+      "sha256": "ce1b252d961226acce0f3d6639f8ad0d99fce705b650b4846adcdf2ed56f0b0f",
+      "connection": 4,
+      "direction": "out",
+      "protocol": 0,
+      "sequence": 1
+    },
+    {
+      "file": "wire/c4-out-p7-002.cbor",
+      "bytes": 2,
+      "sha256": "4ef9b8db14255b82ffe22037b1302b96053e37aa3206627e5b52f24ab324af72",
+      "connection": 4,
+      "direction": "out",
+      "protocol": 7,
+      "sequence": 2
+    },
+    {
+      "file": "wire/c4-out-p7-003.cbor",
+      "bytes": 8,
+      "sha256": "68405edb339d8c64f9d87213db53255ad341ccb71c6fbcc676c3dd392b1d30f9",
+      "connection": 4,
+      "direction": "out",
+      "protocol": 7,
+      "sequence": 3
+    },
+    {
+      "file": "wire/c4-out-p7-004.cbor",
+      "bytes": 4,
+      "sha256": "8436844e1e3d5dbf4c508b87bbccde715ef05c946b46fa38d3a27b02fc4c19cb",
+      "connection": 4,
+      "direction": "out",
+      "protocol": 7,
+      "sequence": 4
+    },
+    {
+      "file": "wire/c5-in-p0-001.cbor",
+      "bytes": 8,
+      "sha256": "62d804b226ab5020c7f762e4a75739b7216f0bcb2d07a914151d97ef10f01a6b",
+      "connection": 5,
+      "direction": "in",
+      "protocol": 0,
+      "sequence": 1
+    },
+    {
+      "file": "wire/c5-in-p9-002.cbor",
+      "bytes": 7,
+      "sha256": "456cf8135db10f189ad16532293f3de9c1cc2ec5f11949f8c94373b0b2ed47bf",
+      "connection": 5,
+      "direction": "in",
+      "protocol": 9,
+      "sequence": 2
+    },
+    {
+      "file": "wire/c5-in-p9-003.cbor",
+      "bytes": 3,
+      "sha256": "912e57df0c6a865f7a1c7d8dcac7b31560cbb5b35f915d284d68d91541c36f0f",
+      "connection": 5,
+      "direction": "in",
+      "protocol": 9,
+      "sequence": 3
+    },
+    {
+      "file": "wire/c5-out-p0-001.cbor",
+      "bytes": 45,
+      "sha256": "ce1b252d961226acce0f3d6639f8ad0d99fce705b650b4846adcdf2ed56f0b0f",
+      "connection": 5,
+      "direction": "out",
+      "protocol": 0,
+      "sequence": 1
+    },
+    {
+      "file": "wire/c5-out-p9-002.cbor",
+      "bytes": 2,
+      "sha256": "ac38783f6a3b2fe3b579718d6ba8493a456d800665b4433a0e7c823cff90a603",
+      "connection": 5,
+      "direction": "out",
+      "protocol": 9,
+      "sequence": 2
+    },
+    {
+      "file": "wire/c5-out-p9-003.cbor",
+      "bytes": 38,
+      "sha256": "66af1a2f34acf24bf6c14bbeba5687f23f9a88e7882ec72cf81e348b24ae5de8",
+      "connection": 5,
+      "direction": "out",
+      "protocol": 9,
+      "sequence": 3
+    },
+    {
+      "file": "wire/c5-out-p9-004.cbor",
+      "bytes": 4,
+      "sha256": "f68622634ea241003c11ef893d857df3c416a1e46791681d76749b602527ed68",
+      "connection": 5,
+      "direction": "out",
+      "protocol": 9,
+      "sequence": 4
+    },
+    {
+      "file": "wire/c6-in-p0-001.cbor",
+      "bytes": 8,
+      "sha256": "5161290cbc290544d973e0d47a035f8b85368ad816ef93ca6fc139e97fccffae",
+      "connection": 6,
+      "direction": "in",
+      "protocol": 0,
+      "sequence": 1
+    },
+    {
+      "file": "wire/c6-in-p7-002.cbor",
+      "bytes": 2,
+      "sha256": "ac38783f6a3b2fe3b579718d6ba8493a456d800665b4433a0e7c823cff90a603",
+      "connection": 6,
+      "direction": "in",
+      "protocol": 7,
+      "sequence": 2
+    },
+    {
+      "file": "wire/c6-out-p0-001.cbor",
+      "bytes": 33,
+      "sha256": "dd867f34cd1024f52a27cf960627d892b05fb9884dd7997d289c810c1c567ee2",
+      "connection": 6,
+      "direction": "out",
+      "protocol": 0,
+      "sequence": 1
+    },
+    {
+      "file": "wire/c6-out-p7-002.cbor",
+      "bytes": 2,
+      "sha256": "4ef9b8db14255b82ffe22037b1302b96053e37aa3206627e5b52f24ab324af72",
+      "connection": 6,
+      "direction": "out",
+      "protocol": 7,
+      "sequence": 2
+    },
+    {
+      "file": "wire/c6-out-p7-003.cbor",
+      "bytes": 2,
+      "sha256": "b8aa8c1e3b7597cd09410468c2d70dcc83a8cb1c3663fd1b2a4b4290daba16d7",
+      "connection": 6,
+      "direction": "out",
+      "protocol": 7,
+      "sequence": 3
+    },
+    {
+      "file": "wire/c7-in-p0-001.cbor",
+      "bytes": 8,
+      "sha256": "5161290cbc290544d973e0d47a035f8b85368ad816ef93ca6fc139e97fccffae",
+      "connection": 7,
+      "direction": "in",
+      "protocol": 0,
+      "sequence": 1
+    },
+    {
+      "file": "wire/c7-in-p5-002.cbor",
+      "bytes": 88,
+      "sha256": "85c5923915706dd440b0d7580aea81cec83464d21518a84e00cf7705dd6e98e4",
+      "connection": 7,
+      "direction": "in",
+      "protocol": 5,
+      "sequence": 2
+    },
+    {
+      "file": "wire/c7-in-p5-003.cbor",
+      "bytes": 88,
+      "sha256": "e2c0d8930657b8fc1118923eac78bcf24c83c3b1ad9647f070365053d1d24914",
+      "connection": 7,
+      "direction": "in",
+      "protocol": 5,
+      "sequence": 3
+    },
+    {
+      "file": "wire/c7-in-p5-004.cbor",
+      "bytes": 12288,
+      "sha256": "5c4c9f6323f3c6c77b78fb0f1a8798166e5cae0a492365401577167914977e4c",
+      "connection": 7,
+      "direction": "in",
+      "protocol": 5,
+      "sequence": 4
+    },
+    {
+      "file": "wire/c7-in-p5-005.cbor",
+      "bytes": 12288,
+      "sha256": "ac0bffd32fae7fa0da472d76d34ce989f2c53fb3ca511784fc3caa73c6ccc6b6",
+      "connection": 7,
+      "direction": "in",
+      "protocol": 5,
+      "sequence": 5
+    },
+    {
+      "file": "wire/c7-in-p5-006.cbor",
+      "bytes": 1316,
+      "sha256": "8bab3c447768bc7115fbf8982a9da98d9d47892dafe20dceb55ab7bff13c7484",
+      "connection": 7,
+      "direction": "in",
+      "protocol": 5,
+      "sequence": 6
+    },
+    {
+      "file": "wire/c7-in-p5-007.cbor",
+      "bytes": 7580,
+      "sha256": "beca94edddaf0610bd543e43a0aa039e8e4f2711ce73947fce9572b6220bd6cb",
+      "connection": 7,
+      "direction": "in",
+      "protocol": 5,
+      "sequence": 7
+    },
+    {
+      "file": "wire/c7-in-p5-008.cbor",
+      "bytes": 1525,
+      "sha256": "82d0ed835d105ba674da0aebf491f10568971a772a58345c2233ff2b20eb0305",
+      "connection": 7,
+      "direction": "in",
+      "protocol": 5,
+      "sequence": 8
+    },
+    {
+      "file": "wire/c7-out-p0-001.cbor",
+      "bytes": 33,
+      "sha256": "dd867f34cd1024f52a27cf960627d892b05fb9884dd7997d289c810c1c567ee2",
+      "connection": 7,
+      "direction": "out",
+      "protocol": 0,
+      "sequence": 1
+    },
+    {
+      "file": "wire/c7-out-p5-002.cbor",
+      "bytes": 43,
+      "sha256": "e5880265d92ab5333687293252d5e74db7225091e1d40cac2ce881fd76fa9d87",
+      "connection": 7,
+      "direction": "out",
+      "protocol": 5,
+      "sequence": 2
+    },
+    {
+      "file": "wire/c7-out-p5-003.cbor",
+      "bytes": 2,
+      "sha256": "9037f92bc91fdcc764a89d9144c341d887ffc83351cc8cf0530555c89920a47d",
+      "connection": 7,
+      "direction": "out",
+      "protocol": 5,
+      "sequence": 3
+    },
+    {
+      "file": "wire/c7-out-p5-004.cbor",
+      "bytes": 2,
+      "sha256": "9037f92bc91fdcc764a89d9144c341d887ffc83351cc8cf0530555c89920a47d",
+      "connection": 7,
+      "direction": "out",
+      "protocol": 5,
+      "sequence": 4
+    },
+    {
+      "file": "wire/c7-out-p5-005.cbor",
+      "bytes": 2,
+      "sha256": "9037f92bc91fdcc764a89d9144c341d887ffc83351cc8cf0530555c89920a47d",
+      "connection": 7,
+      "direction": "out",
+      "protocol": 5,
+      "sequence": 5
+    },
+    {
+      "file": "wire/c7-out-p5-006.cbor",
+      "bytes": 2,
+      "sha256": "9037f92bc91fdcc764a89d9144c341d887ffc83351cc8cf0530555c89920a47d",
+      "connection": 7,
+      "direction": "out",
+      "protocol": 5,
+      "sequence": 6
+    },
+    {
+      "file": "wire/c7-out-p5-007.cbor",
+      "bytes": 2,
+      "sha256": "8b59b58bc827052cf9e09597ac7684b7e0c855ee7848316b4c70763455587517",
+      "connection": 7,
+      "direction": "out",
+      "protocol": 5,
+      "sequence": 7
+    },
+    {
+      "file": "wire/c8-in-p0-001.cbor",
+      "bytes": 8,
+      "sha256": "5161290cbc290544d973e0d47a035f8b85368ad816ef93ca6fc139e97fccffae",
+      "connection": 8,
+      "direction": "in",
+      "protocol": 0,
+      "sequence": 1
+    },
+    {
+      "file": "wire/c8-in-p9-002.cbor",
+      "bytes": 7,
+      "sha256": "33dfd6d089d1e3c3232eaa43f4a58219aca1b33ce8e50ccb139dec8d905ee386",
+      "connection": 8,
+      "direction": "in",
+      "protocol": 9,
+      "sequence": 2
+    },
+    {
+      "file": "wire/c8-out-p0-001.cbor",
+      "bytes": 33,
+      "sha256": "dd867f34cd1024f52a27cf960627d892b05fb9884dd7997d289c810c1c567ee2",
+      "connection": 8,
+      "direction": "out",
+      "protocol": 0,
+      "sequence": 1
+    },
+    {
+      "file": "wire/c8-out-p9-002.cbor",
+      "bytes": 2,
+      "sha256": "ac38783f6a3b2fe3b579718d6ba8493a456d800665b4433a0e7c823cff90a603",
+      "connection": 8,
+      "direction": "out",
+      "protocol": 9,
+      "sequence": 2
+    },
+    {
+      "file": "wire/c8-out-p9-003.cbor",
+      "bytes": 68,
+      "sha256": "1113f66b47a2a8fe2f4df879fafa8f27e0457fe4bce0072b91eec204a17a5bd9",
+      "connection": 8,
+      "direction": "out",
+      "protocol": 9,
+      "sequence": 3
+    },
+    {
+      "file": "wire/c9-in-p0-001.cbor",
+      "bytes": 8,
+      "sha256": "5161290cbc290544d973e0d47a035f8b85368ad816ef93ca6fc139e97fccffae",
+      "connection": 9,
+      "direction": "in",
+      "protocol": 0,
+      "sequence": 1
+    },
+    {
+      "file": "wire/c9-in-p9-002.cbor",
+      "bytes": 7,
+      "sha256": "33dfd6d089d1e3c3232eaa43f4a58219aca1b33ce8e50ccb139dec8d905ee386",
+      "connection": 9,
+      "direction": "in",
+      "protocol": 9,
+      "sequence": 2
+    },
+    {
+      "file": "wire/c9-in-p9-003.cbor",
+      "bytes": 109,
+      "sha256": "12c349a71371796ebcd4470a30548af61fb366929a00e2f20d4309c8aab82735",
+      "connection": 9,
+      "direction": "in",
+      "protocol": 9,
+      "sequence": 3
+    },
+    {
+      "file": "wire/c9-out-p0-001.cbor",
+      "bytes": 33,
+      "sha256": "dd867f34cd1024f52a27cf960627d892b05fb9884dd7997d289c810c1c567ee2",
+      "connection": 9,
+      "direction": "out",
+      "protocol": 0,
+      "sequence": 1
+    },
+    {
+      "file": "wire/c9-out-p9-002.cbor",
+      "bytes": 2,
+      "sha256": "ac38783f6a3b2fe3b579718d6ba8493a456d800665b4433a0e7c823cff90a603",
+      "connection": 9,
+      "direction": "out",
+      "protocol": 9,
+      "sequence": 2
+    },
+    {
+      "file": "wire/c9-out-p9-003.cbor",
+      "bytes": 2,
+      "sha256": "e92f5db43e501345e6b4b255bc299df49d038356f6244f5f51ecf58697f89de4",
+      "connection": 9,
+      "direction": "out",
+      "protocol": 9,
+      "sequence": 3
+    }
+  ],
+  "blocks": [
+    {
+      "file": "blocks/block-139039741.cbor",
+      "bytes": 25839,
+      "sha256": "c19b63dbc65508c74204682bbf89a304568f016ff96404d52ec68a1c08e60767",
+      "slot": 139039741,
+      "eraTag": 7,
+      "transactions": 17,
+      "headerHash": "36d07ba75f963ceebcc5e17941376d0e70a9cca564f1aab29bd69321bae68e23"
+    },
+    {
+      "file": "blocks/block-139039769.cbor",
+      "bytes": 7527,
+      "sha256": "01c0cc8a84cbd37e6643b988112ce5408a8bee3cc17aebdb4b354d24e140755c",
+      "slot": 139039769,
+      "eraTag": 7,
+      "transactions": 6,
+      "headerHash": "a0d71e9720c1105ba547ccfff3a8bff722b07893d2a27350ad2b124c60da4274"
+    },
+    {
+      "file": "blocks/block-139039773.cbor",
+      "bytes": 1472,
+      "sha256": "50470caaaf74b2a66097b3a0b4ec6a3cbae3dae25d25b78d930a522915e23004",
+      "slot": 139039773,
+      "eraTag": 7,
+      "transactions": 1,
+      "headerHash": "9591364785ece36f37ea2cc60f30ebf4def35c4baf36d6855f52e6c6091c1bf7"
+    },
+    {
+      "file": "blocks/block-139039794.cbor",
+      "bytes": 7424,
+      "sha256": "719efc950a14182330fa72531014bc810f014828996b272826dac33cb3c78be6",
+      "slot": 139039794,
+      "eraTag": 7,
+      "transactions": 6,
+      "headerHash": "20869051ebc9ea0d97fd8745cece46bb07af5e68e41f7a551e2f8c479ced7743"
+    },
+    {
+      "file": "blocks/block-139039813.cbor",
+      "bytes": 10506,
+      "sha256": "1930c78153146c1d10a4c6e5bbd265df904a13d7e40de4eeee56e67bb6be0030",
+      "slot": 139039813,
+      "eraTag": 7,
+      "transactions": 5,
+      "headerHash": "ba195e3dd8058c9e078b1a810bca8fd425b875df93bc64a24cfe75f189e21bdf"
+    },
+    {
+      "file": "blocks/block-139039823.cbor",
+      "bytes": 9997,
+      "sha256": "49d8d552f42c1aad5f6bf06c1cddbefe95421a309e2a4517e2923fdbbb388d6a",
+      "slot": 139039823,
+      "eraTag": 7,
+      "transactions": 5,
+      "headerHash": "9fdb1ca185ea8662805e3b7f9a69020e38219cb7fefefe55da01e8c34ee4f713"
+    },
+    {
+      "file": "blocks/block-139039836.cbor",
+      "bytes": 2593,
+      "sha256": "018f3920d6db401e18b710bbcb5f4f8c9aa07e5ccf1b9ecf27cda9862ccb75fd",
+      "slot": 139039836,
+      "eraTag": 7,
+      "transactions": 2,
+      "headerHash": "55d75b61a307cf8884647e17f01d04bc941cd01814817329c59f41170e2f0a36"
+    },
+    {
+      "file": "blocks/block-139039846.cbor",
+      "bytes": 8595,
+      "sha256": "f5cb100d12732f7e057f22140dd6f0c15a8cf77c9f8d32c19c493c6beab13d94",
+      "slot": 139039846,
+      "eraTag": 7,
+      "transactions": 6,
+      "headerHash": "f1fa4251a0b506dd8a481f701b2aff0e004f12dc0e8570a76099e060dbe10896"
+    },
+    {
+      "file": "blocks/block-139040159.cbor",
+      "bytes": 14769,
+      "sha256": "b0335f5d68bd9515b59bd43ecbd53143c6f6808fe5ea418ade85f1dd984df5c9",
+      "slot": 139040159,
+      "eraTag": 7,
+      "transactions": 9,
+      "headerHash": "d22072ae08143d16072a800030f09d3153bb5b55b74d8b9183eaaf3c8a0b01b7"
+    },
+    {
+      "file": "blocks/block-139041912.cbor",
+      "bytes": 12091,
+      "sha256": "be5b486e44795708c8bc81f3bc34fe0642c7d9feb0b2e4a86efd27134da9dac7",
+      "slot": 139041912,
+      "eraTag": 7,
+      "transactions": 7,
+      "headerHash": "31749c774c3617bd60c799c723083c6680916e8075f6e9e0215846c64d054241"
+    }
+  ],
+  "transactions": [
+    {
+      "file": "transactions/transfer-direct.cbor",
+      "bytes": 337,
+      "sha256": "389ccc466ce1939a61a4c13442f8b14836530b8854b45faa7ea8f1696bc3123f",
+      "txId": "54439784ea11b89f3ce3b696e37699666bb30cefd870c1610998e9e8f65e895e",
+      "fee": 170209,
+      "inputs": 1,
+      "outputs": 3,
+      "bodyBytes": 227
+    },
+    {
+      "file": "transactions/transfer-ouroboros.cbor",
+      "bytes": 266,
+      "sha256": "099c91d499fe700dbebef41ea8e0ccc2c89be8e289388ca4ecc0775ecd476d26",
+      "txId": "cdd34e23d6e866bcb60cdfd4d2ec195ec7755a2d10ab530de0391ba9620a062a",
+      "fee": 167085,
+      "inputs": 1,
+      "outputs": 2,
+      "bodyBytes": 156
+    },
+    {
+      "file": "transactions/transfer-kupmios-deposit.cbor",
+      "bytes": 318,
+      "sha256": "61661aca12257b232378220619039aeff72bed8997a141aefc137fea3cc80bc5",
+      "txId": "5f3cbcc9cbcf620be453bb8da8c49dfcc00da12d64136c8ffb0ac3b072968fdb",
+      "fee": 169373,
+      "inputs": 1,
+      "outputs": 3,
+      "bodyBytes": 208
+    },
+    {
+      "file": "transactions/script-spend.cbor",
+      "bytes": 472,
+      "sha256": "249d01cd022c5d68ed9e98a6f4422bb09147b5f60e1c75b6282e0de0dd239699",
+      "txId": "ac981dcdb75d942c0f9041af458d7d0d85983bc7cef6107387cab3c004bd61a1",
+      "fee": 176181,
+      "inputs": 1,
+      "outputs": 2,
+      "bodyBytes": 334
+    }
+  ],
+  "parameters": {
+    "file": "current-protocol-parameters.json",
+    "bytes": 19560,
+    "sha256": "66eb079185333cf62ef1efe26c29efce6f32ef6ef17ae44402f67c42fee1b6a7"
+  },
+  "messages": [
+    {
+      "id": "c1-in-p0-001",
+      "files": [
+        "wire/c1-in-p0-001.cbor"
+      ],
+      "offset": 0,
+      "bytes": 8,
+      "protocol": 0,
+      "index": 1,
+      "version": 32788,
+      "networkMagic": 1
+    },
+    {
+      "id": "c1-in-p7-002",
+      "files": [
+        "wire/c1-in-p7-002.cbor"
+      ],
+      "offset": 0,
+      "bytes": 2,
+      "protocol": 7,
+      "index": 1
+    },
+    {
+      "id": "c1-in-p7-003",
+      "files": [
+        "wire/c1-in-p7-003.cbor"
+      ],
+      "offset": 0,
+      "bytes": 43,
+      "protocol": 7,
+      "index": 4,
+      "defect": "B2"
+    },
+    {
+      "id": "c1-in-p7-004",
+      "files": [
+        "wire/c1-in-p7-004.cbor"
+      ],
+      "offset": 0,
+      "bytes": 2,
+      "protocol": 7,
+      "index": 1
+    },
+    {
+      "id": "c1-in-p7-005",
+      "files": [
+        "wire/c1-in-p7-005.cbor"
+      ],
+      "offset": 0,
+      "bytes": 3,
+      "protocol": 7,
+      "index": 4,
+      "defect": "B2"
+    },
+    {
+      "id": "c1-in-p7-006",
+      "files": [
+        "wire/c1-in-p7-006.cbor"
+      ],
+      "offset": 0,
+      "bytes": 2,
+      "protocol": 7,
+      "index": 1
+    },
+    {
+      "id": "c1-in-p7-007",
+      "files": [
+        "wire/c1-in-p7-007.cbor"
+      ],
+      "offset": 0,
+      "bytes": 2993,
+      "protocol": 7,
+      "index": 4,
+      "defect": "B2"
+    },
+    {
+      "id": "c1-in-p7-008",
+      "files": [
+        "wire/c1-in-p7-008.cbor"
+      ],
+      "offset": 0,
+      "bytes": 2,
+      "protocol": 7,
+      "index": 1
+    },
+    {
+      "id": "c1-in-p7-009",
+      "files": [
+        "wire/c1-in-p7-009.cbor"
+      ],
+      "offset": 0,
+      "bytes": 109,
+      "protocol": 7,
+      "index": 4,
+      "defect": "B2"
+    },
+    {
+      "id": "c1-in-p7-010",
+      "files": [
+        "wire/c1-in-p7-010.cbor"
+      ],
+      "offset": 0,
+      "bytes": 2,
+      "protocol": 7,
+      "index": 1
+    },
+    {
+      "id": "c1-in-p7-011",
+      "files": [
+        "wire/c1-in-p7-011.cbor"
+      ],
+      "offset": 0,
+      "bytes": 4,
+      "protocol": 7,
+      "index": 4,
+      "defect": "B2"
+    },
+    {
+      "id": "c1-in-p9-012",
+      "files": [
+        "wire/c1-in-p9-012.cbor"
+      ],
+      "offset": 0,
+      "bytes": 7,
+      "protocol": 9,
+      "index": 2,
+      "slot": 139040667
+    },
+    {
+      "id": "c1-in-p9-013",
+      "files": [
+        "wire/c1-in-p9-013.cbor"
+      ],
+      "offset": 0,
+      "bytes": 10,
+      "protocol": 9,
+      "index": 10,
+      "sizes": [
+        178176,
+        0,
+        0
+      ]
+    },
+    {
+      "id": "c1-in-p9-014",
+      "files": [
+        "wire/c1-in-p9-014.cbor"
+      ],
+      "offset": 0,
+      "bytes": 2,
+      "protocol": 9,
+      "index": 6
+    },
+    {
+      "id": "c1-in-p9-015",
+      "files": [
+        "wire/c1-in-p9-015.cbor"
+      ],
+      "offset": 0,
+      "bytes": 109,
+      "protocol": 9,
+      "index": 12,
+      "defect": "B4",
+      "txCount": 0,
+      "measures": {
+        "ex_units_memory": [
+          0,
+          155000000
+        ],
+        "ex_units_steps": [
+          0,
+          40000000000
+        ],
+        "reference_scripts_bytes": [
+          0,
+          2097152
+        ],
+        "transaction_bytes": [
+          0,
+          178176
+        ]
+      }
+    },
+    {
+      "id": "c1-out-p0-001",
+      "files": [
+        "wire/c1-out-p0-001.cbor"
+      ],
+      "offset": 0,
+      "bytes": 33,
+      "protocol": 0,
+      "index": 0,
+      "versions": [
+        32784,
+        32785,
+        32786,
+        32787,
+        32788
+      ],
+      "networkMagic": 1
+    },
+    {
+      "id": "c1-out-p7-002",
+      "files": [
+        "wire/c1-out-p7-002.cbor"
+      ],
+      "offset": 0,
+      "bytes": 2,
+      "protocol": 7,
+      "index": 8
+    },
+    {
+      "id": "c1-out-p7-003",
+      "files": [
+        "wire/c1-out-p7-003.cbor"
+      ],
+      "offset": 0,
+      "bytes": 10,
+      "protocol": 7,
+      "index": 3,
+      "queryHex": "8200820082068100"
+    },
+    {
+      "id": "c1-out-p7-004",
+      "files": [
+        "wire/c1-out-p7-004.cbor"
+      ],
+      "offset": 0,
+      "bytes": 2,
+      "protocol": 7,
+      "index": 5
+    },
+    {
+      "id": "c1-out-p7-005",
+      "files": [
+        "wire/c1-out-p7-005.cbor"
+      ],
+      "offset": 0,
+      "bytes": 2,
+      "protocol": 7,
+      "index": 8
+    },
+    {
+      "id": "c1-out-p7-006",
+      "files": [
+        "wire/c1-out-p7-006.cbor"
+      ],
+      "offset": 0,
+      "bytes": 8,
+      "protocol": 7,
+      "index": 3,
+      "queryHex": "820082028101"
+    },
+    {
+      "id": "c1-out-p7-007",
+      "files": [
+        "wire/c1-out-p7-007.cbor"
+      ],
+      "offset": 0,
+      "bytes": 2,
+      "protocol": 7,
+      "index": 5
+    },
+    {
+      "id": "c1-out-p7-008",
+      "files": [
+        "wire/c1-out-p7-008.cbor"
+      ],
+      "offset": 0,
+      "bytes": 2,
+      "protocol": 7,
+      "index": 8
+    },
+    {
+      "id": "c1-out-p7-009",
+      "files": [
+        "wire/c1-out-p7-009.cbor"
+      ],
+      "offset": 0,
+      "bytes": 10,
+      "protocol": 7,
+      "index": 3,
+      "queryHex": "8200820082068103"
+    },
+    {
+      "id": "c1-out-p7-010",
+      "files": [
+        "wire/c1-out-p7-010.cbor"
+      ],
+      "offset": 0,
+      "bytes": 2,
+      "protocol": 7,
+      "index": 5
+    },
+    {
+      "id": "c1-out-p7-011",
+      "files": [
+        "wire/c1-out-p7-011.cbor"
+      ],
+      "offset": 0,
+      "bytes": 2,
+      "protocol": 7,
+      "index": 8
+    },
+    {
+      "id": "c1-out-p7-012",
+      "files": [
+        "wire/c1-out-p7-012.cbor"
+      ],
+      "offset": 0,
+      "bytes": 70,
+      "protocol": 7,
+      "index": 3,
+      "queryHex": "820082008206820681583900be24c465cc6f85347f42c8eccdc56974e9e0674d5818606e5f62484158aecebf53bfaa2e1d25d6d69fcf5f2a7af047cd22f41d84e1c983d3"
+    },
+    {
+      "id": "c1-out-p7-013",
+      "files": [
+        "wire/c1-out-p7-013.cbor"
+      ],
+      "offset": 0,
+      "bytes": 2,
+      "protocol": 7,
+      "index": 5
+    },
+    {
+      "id": "c1-out-p7-014",
+      "files": [
+        "wire/c1-out-p7-014.cbor"
+      ],
+      "offset": 0,
+      "bytes": 2,
+      "protocol": 7,
+      "index": 8
+    },
+    {
+      "id": "c1-out-p7-015",
+      "files": [
+        "wire/c1-out-p7-015.cbor"
+      ],
+      "offset": 0,
+      "bytes": 11,
+      "protocol": 7,
+      "index": 3,
+      "queryHex": "820082008206820f80"
+    },
+    {
+      "id": "c1-out-p7-016",
+      "files": [
+        "wire/c1-out-p7-016.cbor"
+      ],
+      "offset": 0,
+      "bytes": 2,
+      "protocol": 7,
+      "index": 5
+    },
+    {
+      "id": "c1-out-p9-017",
+      "files": [
+        "wire/c1-out-p9-017.cbor"
+      ],
+      "offset": 0,
+      "bytes": 2,
+      "protocol": 9,
+      "index": 1
+    },
+    {
+      "id": "c1-out-p9-018",
+      "files": [
+        "wire/c1-out-p9-018.cbor"
+      ],
+      "offset": 0,
+      "bytes": 2,
+      "protocol": 9,
+      "index": 9
+    },
+    {
+      "id": "c1-out-p9-019",
+      "files": [
+        "wire/c1-out-p9-019.cbor"
+      ],
+      "offset": 0,
+      "bytes": 2,
+      "protocol": 9,
+      "index": 5
+    },
+    {
+      "id": "c1-out-p9-020",
+      "files": [
+        "wire/c1-out-p9-020.cbor"
+      ],
+      "offset": 0,
+      "bytes": 2,
+      "protocol": 9,
+      "index": 11
+    },
+    {
+      "id": "c1-out-p9-021",
+      "files": [
+        "wire/c1-out-p9-021.cbor"
+      ],
+      "offset": 0,
+      "bytes": 68,
+      "protocol": 9,
+      "index": 7,
+      "defect": "B4-legacy-malformed",
+      "legacyMalformedTxId": "0000000000000000000000000000000000000000000000000000000000000000"
+    },
+    {
+      "id": "c10-in-p0-001",
+      "files": [
+        "wire/c10-in-p0-001.cbor"
+      ],
+      "offset": 0,
+      "bytes": 8,
+      "protocol": 0,
+      "index": 1,
+      "version": 32788,
+      "networkMagic": 1
+    },
+    {
+      "id": "c10-in-p6-002",
+      "files": [
+        "wire/c10-in-p6-002.cbor"
+      ],
+      "offset": 0,
+      "bytes": 78,
+      "protocol": 6,
+      "index": 2,
+      "defect": "B3"
+    },
+    {
+      "id": "c10-out-p0-001",
+      "files": [
+        "wire/c10-out-p0-001.cbor"
+      ],
+      "offset": 0,
+      "bytes": 33,
+      "protocol": 0,
+      "index": 0,
+      "versions": [
+        32784,
+        32785,
+        32786,
+        32787,
+        32788
+      ],
+      "networkMagic": 1
+    },
+    {
+      "id": "c10-out-p6-002",
+      "files": [
+        "wire/c10-out-p6-002.cbor"
+      ],
+      "offset": 0,
+      "bytes": 21,
+      "protocol": 6,
+      "index": 0,
+      "era": 6,
+      "transactionHex": "84a300d901028001800200a0f5f6"
+    },
+    {
+      "id": "c11-in-p0-001",
+      "files": [
+        "wire/c11-in-p0-001.cbor"
+      ],
+      "offset": 0,
+      "bytes": 8,
+      "protocol": 0,
+      "index": 1,
+      "version": 32788,
+      "networkMagic": 1
+    },
+    {
+      "id": "c11-in-p6-002",
+      "files": [
+        "wire/c11-in-p6-002.cbor"
+      ],
+      "offset": 0,
+      "bytes": 2,
+      "protocol": 6,
+      "index": 1
+    },
+    {
+      "id": "c11-out-p0-001",
+      "files": [
+        "wire/c11-out-p0-001.cbor"
+      ],
+      "offset": 0,
+      "bytes": 33,
+      "protocol": 0,
+      "index": 0,
+      "versions": [
+        32784,
+        32785,
+        32786,
+        32787,
+        32788
+      ],
+      "networkMagic": 1
+    },
+    {
+      "id": "c11-out-p6-002",
+      "files": [
+        "wire/c11-out-p6-002.cbor"
+      ],
+      "offset": 0,
+      "bytes": 346,
+      "protocol": 6,
+      "index": 0,
+      "era": 6,
+      "transactionHex": "84a300d901028182582061ca9620c4203111cf895efd1814ef7618777e19ff88f8cca4cfcadb66d46a1f000183a200581d60be24c465cc6f85347f42c8eccdc56974e9e0674d5818606e5f624841011a004c4b40a200583900be24c465cc6f85347f42c8eccdc56974e9e0674d5818606e5f62484158aecebf53bfaa2e1d25d6d69fcf5f2a7af047cd22f41d84e1c983d3011a01312d00a200583900be24c465cc6f85347f42c8eccdc56974e9e0674d5818606e5f62484158aecebf53bfaa2e1d25d6d69fcf5f2a7af047cd22f41d84e1c983d3011b00000002528bd2df021a000298e1a100d9010281825820ec0cb41983633fbda92efe20095bc73fcf57dea148434fab1786395c9b6a71a958405197010019513a38acb85d3dd95ec17513fbe304294d12c5e207b740b61550357bfc1591874c426504031bf603f0761cddc0d498bb9a4ae450178ccaa192970ff5f6"
+    },
+    {
+      "id": "c12-in-p0-001",
+      "files": [
+        "wire/c12-in-p0-001.cbor"
+      ],
+      "offset": 0,
+      "bytes": 8,
+      "protocol": 0,
+      "index": 1,
+      "version": 32788,
+      "networkMagic": 1
+    },
+    {
+      "id": "c12-in-p6-002",
+      "files": [
+        "wire/c12-in-p6-002.cbor"
+      ],
+      "offset": 0,
+      "bytes": 2,
+      "protocol": 6,
+      "index": 1
+    },
+    {
+      "id": "c12-out-p0-001",
+      "files": [
+        "wire/c12-out-p0-001.cbor"
+      ],
+      "offset": 0,
+      "bytes": 33,
+      "protocol": 0,
+      "index": 0,
+      "versions": [
+        32784,
+        32785,
+        32786,
+        32787,
+        32788
+      ],
+      "networkMagic": 1
+    },
+    {
+      "id": "c12-out-p6-002",
+      "files": [
+        "wire/c12-out-p6-002.cbor"
+      ],
+      "offset": 0,
+      "bytes": 275,
+      "protocol": 6,
+      "index": 0,
+      "era": 6,
+      "transactionHex": "84a300d901028182582054439784ea11b89f3ce3b696e37699666bb30cefd870c1610998e9e8f65e895e000182a200583900be24c465cc6f85347f42c8eccdc56974e9e0674d5818606e5f62484158aecebf53bfaa2e1d25d6d69fcf5f2a7af047cd22f41d84e1c983d3011a001e8480a200581d60be24c465cc6f85347f42c8eccdc56974e9e0674d5818606e5f624841011a002b3a13021a00028cada100d9010281825820ec0cb41983633fbda92efe20095bc73fcf57dea148434fab1786395c9b6a71a9584043c4b511a3d38d9feb7f3b445f75c23bb9b92d509c961cb0bea83cf1d57e5130c9a9c0237036439e2e1fb97dd68e1b28f69d4d26bcb6953294786052431ec30df5f6"
+    },
+    {
+      "id": "c13-in-p0-001",
+      "files": [
+        "wire/c13-in-p0-001.cbor"
+      ],
+      "offset": 0,
+      "bytes": 8,
+      "protocol": 0,
+      "index": 1,
+      "version": 32788,
+      "networkMagic": 1
+    },
+    {
+      "id": "c13-in-p6-002",
+      "files": [
+        "wire/c13-in-p6-002.cbor"
+      ],
+      "offset": 0,
+      "bytes": 2,
+      "protocol": 6,
+      "index": 1
+    },
+    {
+      "id": "c13-out-p0-001",
+      "files": [
+        "wire/c13-out-p0-001.cbor"
+      ],
+      "offset": 0,
+      "bytes": 33,
+      "protocol": 0,
+      "index": 0,
+      "versions": [
+        32784,
+        32785,
+        32786,
+        32787,
+        32788
+      ],
+      "networkMagic": 1
+    },
+    {
+      "id": "c13-out-p6-002",
+      "files": [
+        "wire/c13-out-p6-002.cbor"
+      ],
+      "offset": 0,
+      "bytes": 481,
+      "protocol": 6,
+      "index": 0,
+      "era": 6,
+      "transactionHex": "84a700d90102818258205f3cbcc9cbcf620be453bb8da8c49dfcc00da12d64136c8ffb0ac3b072968fdb010182a200583900be24c465cc6f85347f42c8eccdc56974e9e0674d5818606e5f62484158aecebf53bfaa2e1d25d6d69fcf5f2a7af047cd22f41d84e1c983d3011a0016e360a200583900be24c465cc6f85347f42c8eccdc56974e9e0674d5818606e5f62484158aecebf53bfaa2e1d25d6d69fcf5f2a7af047cd22f41d84e1c983d3011a0014332b021a0002b0350b58209a05f31c960920a19a22fbcbb179faa37bf1d8309452ee892e09545a4efeadb90dd901028182582054439784ea11b89f3ce3b696e37699666bb30cefd870c1610998e9e8f65e895e0110a200583900be24c465cc6f85347f42c8eccdc56974e9e0674d5818606e5f62484158aecebf53bfaa2e1d25d6d69fcf5f2a7af047cd22f41d84e1c983d3011a012d24b0111a00040850a300d9010281825820ec0cb41983633fbda92efe20095bc73fcf57dea148434fab1786395c9b6a71a95840e129fae8a8545cdfdf842796567fa22ecb7071c70fcf0c38700fcf7a49f44d18a8c292cef0b150928047e5fcf1c560c9ffec27e44324d062616459d34ee4f30c05a182000082d87980821901f419fa6407d901028146450101002499f5f6"
+    },
+    {
+      "id": "c2-in-p0-001",
+      "files": [
+        "wire/c2-in-p0-001.cbor"
+      ],
+      "offset": 0,
+      "bytes": 8,
+      "protocol": 0,
+      "index": 1,
+      "version": 32788,
+      "networkMagic": 1
+    },
+    {
+      "id": "c2-out-p0-001",
+      "files": [
+        "wire/c2-out-p0-001.cbor"
+      ],
+      "offset": 0,
+      "bytes": 33,
+      "protocol": 0,
+      "index": 0,
+      "versions": [
+        32784,
+        32785,
+        32786,
+        32787,
+        32788
+      ],
+      "networkMagic": 1
+    },
+    {
+      "id": "c3-in-p0-001",
+      "files": [
+        "wire/c3-in-p0-001.cbor"
+      ],
+      "offset": 0,
+      "bytes": 8,
+      "protocol": 0,
+      "index": 1,
+      "version": 32788,
+      "networkMagic": 1
+    },
+    {
+      "id": "c3-in-p9-002",
+      "files": [
+        "wire/c3-in-p9-002.cbor"
+      ],
+      "offset": 0,
+      "bytes": 7,
+      "protocol": 9,
+      "index": 2,
+      "slot": 139040667
+    },
+    {
+      "id": "c3-out-p0-001",
+      "files": [
+        "wire/c3-out-p0-001.cbor"
+      ],
+      "offset": 0,
+      "bytes": 33,
+      "protocol": 0,
+      "index": 0,
+      "versions": [
+        32784,
+        32785,
+        32786,
+        32787,
+        32788
+      ],
+      "networkMagic": 1
+    },
+    {
+      "id": "c3-out-p9-002",
+      "files": [
+        "wire/c3-out-p9-002.cbor"
+      ],
+      "offset": 0,
+      "bytes": 2,
+      "protocol": 9,
+      "index": 1
+    },
+    {
+      "id": "c3-out-p9-003",
+      "files": [
+        "wire/c3-out-p9-003.cbor"
+      ],
+      "offset": 0,
+      "bytes": 2,
+      "protocol": 9,
+      "index": 3
+    },
+    {
+      "id": "c4-in-p0-001",
+      "files": [
+        "wire/c4-in-p0-001.cbor"
+      ],
+      "offset": 0,
+      "bytes": 8,
+      "protocol": 0,
+      "index": 1,
+      "version": 32790,
+      "networkMagic": 1
+    },
+    {
+      "id": "c4-in-p7-002",
+      "files": [
+        "wire/c4-in-p7-002.cbor"
+      ],
+      "offset": 0,
+      "bytes": 2,
+      "protocol": 7,
+      "index": 1
+    },
+    {
+      "id": "c4-in-p7-003",
+      "files": [
+        "wire/c4-in-p7-003.cbor"
+      ],
+      "offset": 0,
+      "bytes": 3,
+      "protocol": 7,
+      "index": 4,
+      "defect": "B2"
+    },
+    {
+      "id": "c4-out-p0-001",
+      "files": [
+        "wire/c4-out-p0-001.cbor"
+      ],
+      "offset": 0,
+      "bytes": 45,
+      "protocol": 0,
+      "index": 0,
+      "versions": [
+        32784,
+        32785,
+        32786,
+        32787,
+        32788,
+        32789,
+        32790
+      ],
+      "networkMagic": 1
+    },
+    {
+      "id": "c4-out-p7-002",
+      "files": [
+        "wire/c4-out-p7-002.cbor"
+      ],
+      "offset": 0,
+      "bytes": 2,
+      "protocol": 7,
+      "index": 8
+    },
+    {
+      "id": "c4-out-p7-003",
+      "files": [
+        "wire/c4-out-p7-003.cbor"
+      ],
+      "offset": 0,
+      "bytes": 8,
+      "protocol": 7,
+      "index": 3,
+      "queryHex": "820082028101"
+    },
+    {
+      "id": "c4-out-p7-004",
+      "files": [
+        "wire/c4-out-p7-004.cbor"
+      ],
+      "offset": 0,
+      "bytes": 2,
+      "protocol": 7,
+      "index": 5
+    },
+    {
+      "id": "c4-out-p7-004-2",
+      "files": [
+        "wire/c4-out-p7-004.cbor"
+      ],
+      "offset": 2,
+      "bytes": 2,
+      "protocol": 7,
+      "index": 7
+    },
+    {
+      "id": "c5-in-p0-001",
+      "files": [
+        "wire/c5-in-p0-001.cbor"
+      ],
+      "offset": 0,
+      "bytes": 8,
+      "protocol": 0,
+      "index": 1,
+      "version": 32790,
+      "networkMagic": 1
+    },
+    {
+      "id": "c5-in-p9-002",
+      "files": [
+        "wire/c5-in-p9-002.cbor"
+      ],
+      "offset": 0,
+      "bytes": 7,
+      "protocol": 9,
+      "index": 2,
+      "slot": 139040667
+    },
+    {
+      "id": "c5-in-p9-003",
+      "files": [
+        "wire/c5-in-p9-003.cbor"
+      ],
+      "offset": 0,
+      "bytes": 3,
+      "protocol": 9,
+      "index": 8,
+      "hasTx": false
+    },
+    {
+      "id": "c5-out-p0-001",
+      "files": [
+        "wire/c5-out-p0-001.cbor"
+      ],
+      "offset": 0,
+      "bytes": 45,
+      "protocol": 0,
+      "index": 0,
+      "versions": [
+        32784,
+        32785,
+        32786,
+        32787,
+        32788,
+        32789,
+        32790
+      ],
+      "networkMagic": 1
+    },
+    {
+      "id": "c5-out-p9-002",
+      "files": [
+        "wire/c5-out-p9-002.cbor"
+      ],
+      "offset": 0,
+      "bytes": 2,
+      "protocol": 9,
+      "index": 1
+    },
+    {
+      "id": "c5-out-p9-003",
+      "files": [
+        "wire/c5-out-p9-003.cbor"
+      ],
+      "offset": 0,
+      "bytes": 38,
+      "protocol": 9,
+      "index": 7,
+      "defect": "B4",
+      "era": 6,
+      "txId": "0000000000000000000000000000000000000000000000000000000000000000"
+    },
+    {
+      "id": "c5-out-p9-004",
+      "files": [
+        "wire/c5-out-p9-004.cbor"
+      ],
+      "offset": 0,
+      "bytes": 2,
+      "protocol": 9,
+      "index": 3
+    },
+    {
+      "id": "c5-out-p9-004-2",
+      "files": [
+        "wire/c5-out-p9-004.cbor"
+      ],
+      "offset": 2,
+      "bytes": 2,
+      "protocol": 9,
+      "index": 0
+    },
+    {
+      "id": "c6-in-p0-001",
+      "files": [
+        "wire/c6-in-p0-001.cbor"
+      ],
+      "offset": 0,
+      "bytes": 8,
+      "protocol": 0,
+      "index": 1,
+      "version": 32788,
+      "networkMagic": 1
+    },
+    {
+      "id": "c6-in-p7-002",
+      "files": [
+        "wire/c6-in-p7-002.cbor"
+      ],
+      "offset": 0,
+      "bytes": 2,
+      "protocol": 7,
+      "index": 1
+    },
+    {
+      "id": "c6-out-p0-001",
+      "files": [
+        "wire/c6-out-p0-001.cbor"
+      ],
+      "offset": 0,
+      "bytes": 33,
+      "protocol": 0,
+      "index": 0,
+      "versions": [
+        32784,
+        32785,
+        32786,
+        32787,
+        32788
+      ],
+      "networkMagic": 1
+    },
+    {
+      "id": "c6-out-p7-002",
+      "files": [
+        "wire/c6-out-p7-002.cbor"
+      ],
+      "offset": 0,
+      "bytes": 2,
+      "protocol": 7,
+      "index": 8
+    },
+    {
+      "id": "c6-out-p7-003",
+      "files": [
+        "wire/c6-out-p7-003.cbor"
+      ],
+      "offset": 0,
+      "bytes": 2,
+      "protocol": 7,
+      "index": 5
+    },
+    {
+      "id": "c7-in-p0-001",
+      "files": [
+        "wire/c7-in-p0-001.cbor"
+      ],
+      "offset": 0,
+      "bytes": 8,
+      "protocol": 0,
+      "index": 1,
+      "version": 32788,
+      "networkMagic": 1
+    },
+    {
+      "id": "c7-in-p5-002",
+      "files": [
+        "wire/c7-in-p5-002.cbor"
+      ],
+      "offset": 0,
+      "bytes": 88,
+      "protocol": 5,
+      "index": 5,
+      "pointSlot": 139039659,
+      "pointHash": "4801f95176e8326a3c3fdeb10cac0fec5c19a934f7f5be8e9c34fafd3660ed0e",
+      "tipSlot": 139040937,
+      "tipHash": "ba6b0ddb45bb1820268b78cea2166061cb8bbe8e11fd321429546b5fcc9f9707",
+      "tipBlock": 5414273
+    },
+    {
+      "id": "c7-in-p5-003",
+      "files": [
+        "wire/c7-in-p5-003.cbor"
+      ],
+      "offset": 0,
+      "bytes": 88,
+      "protocol": 5,
+      "index": 3,
+      "pointSlot": 139039659,
+      "pointHash": "4801f95176e8326a3c3fdeb10cac0fec5c19a934f7f5be8e9c34fafd3660ed0e",
+      "tipSlot": 139040937,
+      "tipHash": "ba6b0ddb45bb1820268b78cea2166061cb8bbe8e11fd321429546b5fcc9f9707",
+      "tipBlock": 5414273
+    },
+    {
+      "id": "c7-in-p5-004",
+      "files": [
+        "wire/c7-in-p5-004.cbor",
+        "wire/c7-in-p5-005.cbor",
+        "wire/c7-in-p5-006.cbor"
+      ],
+      "offset": 0,
+      "bytes": 25892,
+      "protocol": 5,
+      "index": 2,
+      "blockFile": "blocks/block-139039741.cbor",
+      "slot": 139039741,
+      "tipSlot": 139040937,
+      "tipHash": "ba6b0ddb45bb1820268b78cea2166061cb8bbe8e11fd321429546b5fcc9f9707",
+      "tipBlock": 5414273
+    },
+    {
+      "id": "c7-in-p5-007",
+      "files": [
+        "wire/c7-in-p5-007.cbor"
+      ],
+      "offset": 0,
+      "bytes": 7580,
+      "protocol": 5,
+      "index": 2,
+      "blockFile": "blocks/block-139039769.cbor",
+      "slot": 139039769,
+      "tipSlot": 139040937,
+      "tipHash": "ba6b0ddb45bb1820268b78cea2166061cb8bbe8e11fd321429546b5fcc9f9707",
+      "tipBlock": 5414273
+    },
+    {
+      "id": "c7-in-p5-008",
+      "files": [
+        "wire/c7-in-p5-008.cbor"
+      ],
+      "offset": 0,
+      "bytes": 1525,
+      "protocol": 5,
+      "index": 2,
+      "blockFile": "blocks/block-139039773.cbor",
+      "slot": 139039773,
+      "tipSlot": 139040937,
+      "tipHash": "ba6b0ddb45bb1820268b78cea2166061cb8bbe8e11fd321429546b5fcc9f9707",
+      "tipBlock": 5414273
+    },
+    {
+      "id": "c7-out-p0-001",
+      "files": [
+        "wire/c7-out-p0-001.cbor"
+      ],
+      "offset": 0,
+      "bytes": 33,
+      "protocol": 0,
+      "index": 0,
+      "versions": [
+        32784,
+        32785,
+        32786,
+        32787,
+        32788
+      ],
+      "networkMagic": 1
+    },
+    {
+      "id": "c7-out-p5-002",
+      "files": [
+        "wire/c7-out-p5-002.cbor"
+      ],
+      "offset": 0,
+      "bytes": 43,
+      "protocol": 5,
+      "index": 4,
+      "pointSlot": 139039659,
+      "pointHash": "4801f95176e8326a3c3fdeb10cac0fec5c19a934f7f5be8e9c34fafd3660ed0e"
+    },
+    {
+      "id": "c7-out-p5-003",
+      "files": [
+        "wire/c7-out-p5-003.cbor"
+      ],
+      "offset": 0,
+      "bytes": 2,
+      "protocol": 5,
+      "index": 0
+    },
+    {
+      "id": "c7-out-p5-004",
+      "files": [
+        "wire/c7-out-p5-004.cbor"
+      ],
+      "offset": 0,
+      "bytes": 2,
+      "protocol": 5,
+      "index": 0
+    },
+    {
+      "id": "c7-out-p5-005",
+      "files": [
+        "wire/c7-out-p5-005.cbor"
+      ],
+      "offset": 0,
+      "bytes": 2,
+      "protocol": 5,
+      "index": 0
+    },
+    {
+      "id": "c7-out-p5-006",
+      "files": [
+        "wire/c7-out-p5-006.cbor"
+      ],
+      "offset": 0,
+      "bytes": 2,
+      "protocol": 5,
+      "index": 0
+    },
+    {
+      "id": "c7-out-p5-007",
+      "files": [
+        "wire/c7-out-p5-007.cbor"
+      ],
+      "offset": 0,
+      "bytes": 2,
+      "protocol": 5,
+      "index": 7
+    },
+    {
+      "id": "c8-in-p0-001",
+      "files": [
+        "wire/c8-in-p0-001.cbor"
+      ],
+      "offset": 0,
+      "bytes": 8,
+      "protocol": 0,
+      "index": 1,
+      "version": 32788,
+      "networkMagic": 1
+    },
+    {
+      "id": "c8-in-p9-002",
+      "files": [
+        "wire/c8-in-p9-002.cbor"
+      ],
+      "offset": 0,
+      "bytes": 7,
+      "protocol": 9,
+      "index": 2,
+      "slot": 139040938
+    },
+    {
+      "id": "c8-out-p0-001",
+      "files": [
+        "wire/c8-out-p0-001.cbor"
+      ],
+      "offset": 0,
+      "bytes": 33,
+      "protocol": 0,
+      "index": 0,
+      "versions": [
+        32784,
+        32785,
+        32786,
+        32787,
+        32788
+      ],
+      "networkMagic": 1
+    },
+    {
+      "id": "c8-out-p9-002",
+      "files": [
+        "wire/c8-out-p9-002.cbor"
+      ],
+      "offset": 0,
+      "bytes": 2,
+      "protocol": 9,
+      "index": 1
+    },
+    {
+      "id": "c8-out-p9-003",
+      "files": [
+        "wire/c8-out-p9-003.cbor"
+      ],
+      "offset": 0,
+      "bytes": 68,
+      "protocol": 9,
+      "index": 7,
+      "defect": "B4-legacy-malformed",
+      "legacyMalformedTxId": "0000000000000000000000000000000000000000000000000000000000000000"
+    },
+    {
+      "id": "c9-in-p0-001",
+      "files": [
+        "wire/c9-in-p0-001.cbor"
+      ],
+      "offset": 0,
+      "bytes": 8,
+      "protocol": 0,
+      "index": 1,
+      "version": 32788,
+      "networkMagic": 1
+    },
+    {
+      "id": "c9-in-p9-002",
+      "files": [
+        "wire/c9-in-p9-002.cbor"
+      ],
+      "offset": 0,
+      "bytes": 7,
+      "protocol": 9,
+      "index": 2,
+      "slot": 139040938
+    },
+    {
+      "id": "c9-in-p9-003",
+      "files": [
+        "wire/c9-in-p9-003.cbor"
+      ],
+      "offset": 0,
+      "bytes": 109,
+      "protocol": 9,
+      "index": 12,
+      "defect": "B4",
+      "txCount": 0,
+      "measures": {
+        "ex_units_memory": [
+          0,
+          155000000
+        ],
+        "ex_units_steps": [
+          0,
+          40000000000
+        ],
+        "reference_scripts_bytes": [
+          0,
+          2097152
+        ],
+        "transaction_bytes": [
+          0,
+          178176
+        ]
+      }
+    },
+    {
+      "id": "c9-out-p0-001",
+      "files": [
+        "wire/c9-out-p0-001.cbor"
+      ],
+      "offset": 0,
+      "bytes": 33,
+      "protocol": 0,
+      "index": 0,
+      "versions": [
+        32784,
+        32785,
+        32786,
+        32787,
+        32788
+      ],
+      "networkMagic": 1
+    },
+    {
+      "id": "c9-out-p9-002",
+      "files": [
+        "wire/c9-out-p9-002.cbor"
+      ],
+      "offset": 0,
+      "bytes": 2,
+      "protocol": 9,
+      "index": 1
+    },
+    {
+      "id": "c9-out-p9-003",
+      "files": [
+        "wire/c9-out-p9-003.cbor"
+      ],
+      "offset": 0,
+      "bytes": 2,
+      "protocol": 9,
+      "index": 11
+    }
+  ]
+}
