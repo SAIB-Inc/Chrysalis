@@ -548,7 +548,7 @@ public sealed class TransactionTemplateBuilder<T>
 
     private static Dictionary<(ReadOnlyMemory<byte> TransactionId, ulong Index), int> CreateInputLookup(List<TransactionInput> sortedInputs)
     {
-        Dictionary<(ReadOnlyMemory<byte>, ulong), int> inputLookup = new(new TransactionInputEqualityComparer());
+        Dictionary<(ReadOnlyMemory<byte>, ulong), int> inputLookup = [with(new TransactionInputEqualityComparer())];
 
         for (int i = 0; i < sortedInputs.Count; i++)
         {
@@ -635,7 +635,7 @@ public sealed class TransactionTemplateBuilder<T>
         return new RequirementsResult
         {
             OriginalRequestedLovelace = requestedLovelace,
-            OriginalRequestedAssets = new Dictionary<string, ulong>(requestedAssets),
+            OriginalRequestedAssets = [with(requestedAssets)],
             OriginalSpecifiedInputsAssets = specifiedInputsAssets,
             OriginalMintedAssets = mintedAssets,
             RequiredAmounts = requiredAmounts,
@@ -672,7 +672,7 @@ public sealed class TransactionTemplateBuilder<T>
     Dictionary<string, ulong> mintedAssets,
     Dictionary<string, ulong> specifiedInputsAssets)
     {
-        Dictionary<string, ulong> adjusted = new(requestedAssets);
+        Dictionary<string, ulong> adjusted = [with(requestedAssets)];
 
         // Subtract minted assets
         foreach ((string assetKey, ulong mintAmount) in mintedAssets)
@@ -726,7 +726,7 @@ public sealed class TransactionTemplateBuilder<T>
         }
         else
         {
-            Dictionary<ReadOnlyMemory<byte>, TokenBundleOutput> multiAssetDict = new(ReadOnlyMemoryComparer.Instance);
+            Dictionary<ReadOnlyMemory<byte>, TokenBundleOutput> multiAssetDict = [with(ReadOnlyMemoryComparer.Instance)];
 
             Dictionary<string, List<KeyValuePair<string, ulong>>> assetsByPolicy = adjustedAssets
                 .Where(a => a.Value > 0)
@@ -736,7 +736,7 @@ public sealed class TransactionTemplateBuilder<T>
             foreach ((string policyIdHex, List<KeyValuePair<string, ulong>> assets) in assetsByPolicy)
             {
                 ReadOnlyMemory<byte> policyId = HexStringCache.FromHexString(policyIdHex);
-                Dictionary<ReadOnlyMemory<byte>, ulong> tokenBundle = new(ReadOnlyMemoryComparer.Instance);
+                Dictionary<ReadOnlyMemory<byte>, ulong> tokenBundle = [with(ReadOnlyMemoryComparer.Instance)];
 
                 foreach (KeyValuePair<string, ulong> asset in assets)
                 {
@@ -1232,7 +1232,7 @@ public sealed class TransactionTemplateBuilder<T>
         List<(IScript Script, int RawSize)> scripts = [];
 
         // Create lookup dictionary for faster matching
-        Dictionary<(ReadOnlyMemory<byte>, ulong), ResolvedInput> utxoLookup = new(new TransactionInputEqualityComparer());
+        Dictionary<(ReadOnlyMemory<byte>, ulong), ResolvedInput> utxoLookup = [with(new TransactionInputEqualityComparer())];
 
         foreach (ResolvedInput utxo in allUtxos)
         {
@@ -1260,14 +1260,14 @@ public sealed class TransactionTemplateBuilder<T>
     private static List<ResolvedInput> GetSpecifiedInputsUtxos(List<TransactionInput> specifiedInputs, List<ResolvedInput> allUtxos)
     {
         // Create lookup dictionary for O(1) access instead of O(n) per input
-        Dictionary<(ReadOnlyMemory<byte>, ulong), ResolvedInput> utxoLookup = new(new TransactionInputEqualityComparer());
+        Dictionary<(ReadOnlyMemory<byte>, ulong), ResolvedInput> utxoLookup = [with(new TransactionInputEqualityComparer())];
 
         foreach (ResolvedInput utxo in allUtxos)
         {
             utxoLookup[(utxo.Outref.TransactionId, utxo.Outref.Index)] = utxo;
         }
 
-        List<ResolvedInput> specifiedInputsUtxos = new(specifiedInputs.Count);
+        List<ResolvedInput> specifiedInputsUtxos = [with(specifiedInputs.Count)];
 
         foreach (TransactionInput input in specifiedInputs)
         {
@@ -1285,7 +1285,7 @@ public sealed class TransactionTemplateBuilder<T>
         Dictionary<string, TransactionInput> inputsById,
         List<TransactionInput> sortedInputs)
     {
-        Dictionary<string, int> inputIdToOrderedIndex = new(inputsById.Count);
+        Dictionary<string, int> inputIdToOrderedIndex = [with(inputsById.Count)];
 
         // Create lookup dictionary using memory comparer for transaction IDs
         Dictionary<(ReadOnlyMemory<byte> TransactionId, ulong Index), int> inputLookup = CreateInputLookup(sortedInputs);
@@ -1309,7 +1309,7 @@ public sealed class TransactionTemplateBuilder<T>
         Dictionary<string, ulong> refInputIdToOrderedIndex = [];
 
         // Create lookup dictionary to avoid nested loops
-        Dictionary<(ReadOnlyMemory<byte>, ulong), int> refInputLookup = new(new TransactionInputEqualityComparer());
+        Dictionary<(ReadOnlyMemory<byte>, ulong), int> refInputLookup = [with(new TransactionInputEqualityComparer())];
 
         for (int i = 0; i < sortedRefInputs.Count; i++)
         {
@@ -1386,7 +1386,7 @@ public sealed class TransactionTemplateBuilder<T>
 
     private Dictionary<string, string> MergeParties(Dictionary<string, string> staticParties, Dictionary<string, (string address, bool isChange)> dynamicParties)
     {
-        Dictionary<string, string> result = new(staticParties);
+        Dictionary<string, string> result = [with(staticParties)];
         foreach ((string key, (string address, bool isChange) value) in dynamicParties)
         {
             if (value.isChange)

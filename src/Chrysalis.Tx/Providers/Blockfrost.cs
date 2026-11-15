@@ -202,7 +202,7 @@ public sealed class Blockfrost : ICardanoDataProvider, IDisposable
 
         // Build mutable dictionaries first, then create immutable TokenBundleOutput at the end.
         // TokenBundleOutput is a readonly record struct with lazy-decoded Value — mutating .Value is a no-op.
-        Dictionary<ReadOnlyMemory<byte>, Dictionary<ReadOnlyMemory<byte>, ulong>> assetsByPolicy = new(ReadOnlyMemoryComparer.Instance);
+        Dictionary<ReadOnlyMemory<byte>, Dictionary<ReadOnlyMemory<byte>, ulong>> assetsByPolicy = [with(ReadOnlyMemoryComparer.Instance)];
 
         foreach (Amount amount in utxo.Amount!)
         {
@@ -217,14 +217,14 @@ public sealed class Blockfrost : ICardanoDataProvider, IDisposable
 
                 if (!assetsByPolicy.TryGetValue(policy, out Dictionary<ReadOnlyMemory<byte>, ulong>? tokenBundle))
                 {
-                    tokenBundle = new Dictionary<ReadOnlyMemory<byte>, ulong>(ReadOnlyMemoryComparer.Instance);
+                    tokenBundle = [with(ReadOnlyMemoryComparer.Instance)];
                     assetsByPolicy[policy] = tokenBundle;
                 }
                 tokenBundle[assetName] = ulong.Parse(amount.Quantity!, CultureInfo.InvariantCulture);
             }
         }
 
-        Dictionary<ReadOnlyMemory<byte>, TokenBundleOutput> assets = new(ReadOnlyMemoryComparer.Instance);
+        Dictionary<ReadOnlyMemory<byte>, TokenBundleOutput> assets = [with(ReadOnlyMemoryComparer.Instance)];
         foreach ((ReadOnlyMemory<byte> policy, Dictionary<ReadOnlyMemory<byte>, ulong> tokenBundle) in assetsByPolicy)
         {
             assets[policy] = TokenBundleOutput.Create(tokenBundle);

@@ -364,7 +364,7 @@ public sealed class Kupmios : ICardanoDataProvider, IDisposable
 
     private static MultiAssetOutput CreateMultiAsset(Dictionary<string, long> assets)
     {
-        Dictionary<ReadOnlyMemory<byte>, TokenBundleOutput> assetDict = new(ReadOnlyMemoryComparer.Instance);
+        Dictionary<ReadOnlyMemory<byte>, TokenBundleOutput> assetDict = [with(ReadOnlyMemoryComparer.Instance)];
 
         foreach ((string fullAssetName, long quantity) in assets)
         {

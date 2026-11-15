@@ -375,8 +375,8 @@ public static class CoinSelectionUtil
     List<ResolvedInput> selectedUtxos,
     List<IValue> requestedAmounts)
     {
-        Dictionary<ReadOnlyMemory<byte>, Dictionary<ReadOnlyMemory<byte>, ulong>> selectedAssetsByPolicy = new(ReadOnlyMemoryComparer.Instance);
-        Dictionary<ReadOnlyMemory<byte>, Dictionary<ReadOnlyMemory<byte>, ulong>> requestedAssetsByPolicy = new(ReadOnlyMemoryComparer.Instance);
+        Dictionary<ReadOnlyMemory<byte>, Dictionary<ReadOnlyMemory<byte>, ulong>> selectedAssetsByPolicy = [with(ReadOnlyMemoryComparer.Instance)];
+        Dictionary<ReadOnlyMemory<byte>, Dictionary<ReadOnlyMemory<byte>, ulong>> requestedAssetsByPolicy = [with(ReadOnlyMemoryComparer.Instance)];
 
         // Process selected UTXOs
         foreach (ResolvedInput utxo in selectedUtxos)
@@ -393,7 +393,7 @@ public static class CoinSelectionUtil
                 {
                     if (!selectedAssetsByPolicy.TryGetValue(policyEntry.Key, out Dictionary<ReadOnlyMemory<byte>, ulong>? selectedAssets))
                     {
-                        selectedAssets = new Dictionary<ReadOnlyMemory<byte>, ulong>(ReadOnlyMemoryComparer.Instance);
+                        selectedAssets = [with(ReadOnlyMemoryComparer.Instance)];
                         selectedAssetsByPolicy[policyEntry.Key] = selectedAssets;
                     }
 
@@ -421,7 +421,7 @@ public static class CoinSelectionUtil
                 {
                     if (!requestedAssetsByPolicy.TryGetValue(policyEntry.Key, out Dictionary<ReadOnlyMemory<byte>, ulong>? requestedAssets))
                     {
-                        requestedAssets = new Dictionary<ReadOnlyMemory<byte>, ulong>(ReadOnlyMemoryComparer.Instance);
+                        requestedAssets = [with(ReadOnlyMemoryComparer.Instance)];
                         requestedAssetsByPolicy[policyEntry.Key] = requestedAssets;
                     }
 
@@ -435,11 +435,11 @@ public static class CoinSelectionUtil
         }
 
         // Calculate change using optimized lookups
-        Dictionary<ReadOnlyMemory<byte>, TokenBundleOutput> assetsChange = new(ReadOnlyMemoryComparer.Instance);
+        Dictionary<ReadOnlyMemory<byte>, TokenBundleOutput> assetsChange = [with(ReadOnlyMemoryComparer.Instance)];
 
         foreach ((ReadOnlyMemory<byte> policyId, Dictionary<ReadOnlyMemory<byte>, ulong> selectedAssets) in selectedAssetsByPolicy)
         {
-            Dictionary<ReadOnlyMemory<byte>, ulong> assetChanges = new(ReadOnlyMemoryComparer.Instance);
+            Dictionary<ReadOnlyMemory<byte>, ulong> assetChanges = [with(ReadOnlyMemoryComparer.Instance)];
             bool hasChange = false;
 
             foreach ((ReadOnlyMemory<byte> assetName, ulong selectedAmount) in selectedAssets)

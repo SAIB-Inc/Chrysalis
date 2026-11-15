@@ -11,9 +11,9 @@ namespace Chrysalis.Tx.Builders;
 /// </summary>
 public sealed class RedeemerBuilder
 {
-    private readonly SortedDictionary<string, UntaggedRedeemer> _spend = new(StringComparer.Ordinal);
-    private readonly SortedDictionary<string, UntaggedRedeemer> _mint = new(StringComparer.Ordinal);
-    private readonly SortedDictionary<string, UntaggedRedeemer> _reward = new(StringComparer.Ordinal);
+    private readonly SortedDictionary<string, UntaggedRedeemer> _spend = [with(StringComparer.Ordinal)];
+    private readonly SortedDictionary<string, UntaggedRedeemer> _mint = [with(StringComparer.Ordinal)];
+    private readonly SortedDictionary<string, UntaggedRedeemer> _reward = [with(StringComparer.Ordinal)];
     private readonly List<UntaggedRedeemer?> _cert = [];
 
     /// <summary>

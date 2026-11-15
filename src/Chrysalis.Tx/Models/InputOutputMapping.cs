@@ -108,7 +108,7 @@ public class InputOutputMapping
     /// Gets a copy of all input/output mappings.
     /// </summary>
     public Dictionary<string, (ulong InputIndex, Dictionary<string, ulong> OutputIndexes)> Mappings =>
-        new(_inputOutputMapping);
+        [with(_inputOutputMapping)];
 
     /// <summary>
     /// Gets the collection of input identifiers.

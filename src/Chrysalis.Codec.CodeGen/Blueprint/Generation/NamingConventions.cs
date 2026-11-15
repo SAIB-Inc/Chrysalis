@@ -212,7 +212,7 @@ internal static class NamingConventions
             list.Add(kv.Key);
         }
 
-        Dictionary<string, string> result = new(defKeyToName);
+        Dictionary<string, string> result = [with(defKeyToName)];
         foreach (KeyValuePair<string, List<string>> kv in nameToKeys)
         {
             if (kv.Value.Count <= 1)
