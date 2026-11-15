@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net11.0</TargetFramework>
+    <PackageId>Chrysalis.Tx.Providers.UtxoRpc</PackageId>
+    <RootNamespace>Chrysalis.Tx.Providers</RootNamespace>
+    <Authors>Clark Alesna, Rico Quiblat</Authors>
+    <Company>SAIB Inc</Company>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageLicenseFile>LICENSE.md</PackageLicenseFile>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Chrysalis.Tx/Chrysalis.Tx.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Google.Protobuf" />
+    <PackageReference Include="Grpc.Net.Client" />
+    <PackageReference Include="Grpc.Tools" PrivateAssets="all" />
+    <Protobuf Include="Protos/**/*.proto" ProtoRoot="Protos" GrpcServices="None" Access="Internal" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="../../LICENSE.md" Pack="true" PackagePath="" />
+    <None Include="../../README.md" Pack="true" PackagePath="" />
+    <None Remove="Protos/utxorpc/LICENSE" />
+    <None Include="Protos/utxorpc/LICENSE" Pack="true" PackagePath="licenses/utxorpc-spec/" />
+  </ItemGroup>
+</Project>

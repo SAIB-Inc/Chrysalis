@@ -1,0 +1,7 @@
+file	repository	tag	commit	path at that commit	licence	sha256	derived from
+Protos/utxorpc/v1beta/cardano/cardano.proto	https://github.com/utxorpc/spec	v0.19.2	4ef539ab4a47418e6666600ba83a145682779995	proto/utxorpc/v1beta/cardano/cardano.proto	Apache-2.0	f684bd1f6eddad5f3771f2a0b8df8a3aaaba0c424b0694eb10a496022e98b9a2	-
+Protos/utxorpc/v1beta/query/query.proto	https://github.com/utxorpc/spec	v0.19.2	4ef539ab4a47418e6666600ba83a145682779995	proto/utxorpc/v1beta/query/query.proto	Apache-2.0	3c804927fd579aead4bfb4ae1348e2455733c6d271e328750ebea8a42ba62bbd	-
+Protos/utxorpc/v1beta/submit/submit.proto	https://github.com/utxorpc/spec	v0.19.2	4ef539ab4a47418e6666600ba83a145682779995	proto/utxorpc/v1beta/submit/submit.proto	Apache-2.0	efabae19df6f293e7718b1db08fcb1fa8afe859e04f9273c1e8f4ba6aea953af	-
+Protos/utxorpc/LICENSE	https://github.com/utxorpc/spec	v0.19.2	4ef539ab4a47418e6666600ba83a145682779995	LICENSE	Apache-2.0	995a0c52dc120e4b886991e9fc7b636f31277071addaabc6439409c610f3a5c1	-
+Golden/gouroboros/pparams.json	https://github.com/blinklabs-io/gouroboros	v0.220.0	4c0cdda8e13f300b1f86b56d42e7bdcd1bf1c06f	ledger/conway/pparams_test.go	Apache-2.0	1575a8438c33abc33ecfc0006d47509efbe5430f8d349f0563651c58299ec0ea	ledger/conway/pparams_test.go; sha256 0f8911731d435af1ec54695ec1d82eba710e26721fdea457f42fc7b37389d898; values transcribed to JSON, none changed
+Golden/gouroboros/LICENSE	https://github.com/blinklabs-io/gouroboros	v0.220.0	4c0cdda8e13f300b1f86b56d42e7bdcd1bf1c06f	LICENSE	Apache-2.0	3054693cfff21b5ec4a96925d4c79594ad6d8ae65e3c570da98c4bcd429b68bf	-
