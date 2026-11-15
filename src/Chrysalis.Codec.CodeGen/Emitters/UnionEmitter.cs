@@ -5,7 +5,7 @@ namespace Chrysalis.Codec.CodeGen;
 
 public sealed partial class CborSerializerCodeGen
 {
-    private sealed class UnionEmitter : ICborSerializerEmitter
+    private sealed class UnionEmitter(IReadOnlyDictionary<string, SerializableTypeMetadata>? typeRegistry) : ICborSerializerEmitter
     {
         public StringBuilder EmitReader(StringBuilder sb, SerializableTypeMetadata metadata)
         {
@@ -78,7 +78,7 @@ public sealed partial class CborSerializerCodeGen
             return sb;
         }
 
-        private static bool TryEmitStructuralProbeReader(StringBuilder sb, SerializableTypeMetadata metadata)
+        private bool TryEmitStructuralProbeReader(StringBuilder sb, SerializableTypeMetadata metadata)
         {
             List<SerializableTypeMetadata> children = FlattenUnionChildren(metadata.ChildTypes);
             if (children.Count < 2)
@@ -230,7 +230,7 @@ public sealed partial class CborSerializerCodeGen
         /// leading index) is routed to a generated local function that resolves the variant by a
         /// secondary structural probe. Non-colliding indices read their single member directly.
         /// </summary>
-        private static void EmitIdxBranchWithNesting(StringBuilder sb, SerializableTypeMetadata metadata, Dictionary<string, List<SerializableTypeMetadata>> probeGroups)
+        private void EmitIdxBranchWithNesting(StringBuilder sb, SerializableTypeMetadata metadata, Dictionary<string, List<SerializableTypeMetadata>> probeGroups)
         {
             // Emit one resolver local function per colliding index group.
             Dictionary<string, string> resolvers = [];
@@ -265,7 +265,7 @@ public sealed partial class CborSerializerCodeGen
         /// the CBOR data-item type of the first field that distinguishes them (skipping any
         /// semantic tag), then dispatching to the matching member's reader.
         /// </summary>
-        private static void EmitSecondaryProbeLocalFunction(StringBuilder sb, SerializableTypeMetadata metadata, string resolverName, List<SerializableTypeMetadata> members)
+        private void EmitSecondaryProbeLocalFunction(StringBuilder sb, SerializableTypeMetadata metadata, string resolverName, List<SerializableTypeMetadata> members)
         {
             int depth = FindSeparatingDepth(members);
 
@@ -296,7 +296,7 @@ public sealed partial class CborSerializerCodeGen
         /// Returns the shallowest field depth (>= 1) at which the given members have pairwise
         /// distinct, known CBOR shapes, or -1 if no field separates them structurally.
         /// </summary>
-        private static int FindSeparatingDepth(List<SerializableTypeMetadata> members)
+        private int FindSeparatingDepth(List<SerializableTypeMetadata> members)
         {
             int maxDepth = members.Min(m => m.Properties.Count);
             for (int depth = 1; depth < maxDepth; depth++)
@@ -318,7 +318,7 @@ public sealed partial class CborSerializerCodeGen
         /// Classifies the CBOR data-item shape of the field at the given CBOR order within a
         /// member, as a probe key understood by <see cref="GetCborReaderStatePattern"/>.
         /// </summary>
-        private static string ClassifyProbeAtDepth(SerializableTypeMetadata member, int depth)
+        private string ClassifyProbeAtDepth(SerializableTypeMetadata member, int depth)
         {
             List<SerializablePropertyMetadata> ordered = [.. member.Properties.OrderBy(p => p.Order ?? int.MaxValue)];
             return depth < 0 || depth >= ordered.Count
@@ -331,7 +331,7 @@ public sealed partial class CborSerializerCodeGen
         /// (e.g. <c>CborEncodedValue</c>) resolve to their inner shape because
         /// <c>GetCurrentDataItemType</c> skips semantic tags.
         /// </summary>
-        private static string ClassifyPropertyShape(SerializablePropertyMetadata prop)
+        private string ClassifyPropertyShape(SerializablePropertyMetadata prop)
         {
             string cleanType = NormalizeTypeName(prop.PropertyTypeFullName);
 
@@ -367,7 +367,7 @@ public sealed partial class CborSerializerCodeGen
                     break;
             }
 
-            return TypeRegistry.TryGetValue(cleanType, out SerializableTypeMetadata? typeMeta) && typeMeta is not null
+            return typeRegistry is not null && typeRegistry.TryGetValue(cleanType, out SerializableTypeMetadata? typeMeta) && typeMeta is not null
                 ? ClassifyTypeShape(typeMeta)
                 : "unknown";
         }

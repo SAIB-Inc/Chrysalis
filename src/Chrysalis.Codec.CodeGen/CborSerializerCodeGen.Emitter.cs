@@ -17,7 +17,7 @@ public sealed partial class CborSerializerCodeGen
         public const string GenericSerializationUtilFullname = "global::Chrysalis.Codec.Serialization.GenericSerializationUtil";
         public const string CborEncodeValueFullName = "global::Chrysalis.Codec.Types.CborEncodedValue";
 
-        public static void EmitSerializerAndMetadata(SourceProductionContext context, SerializableTypeMetadata metadata)
+        public static void EmitSerializerAndMetadata(SourceProductionContext context, SerializableTypeMetadata metadata, IReadOnlyDictionary<string, SerializableTypeMetadata>? typeRegistry = null)
         {
             string hintName = metadata?.FullyQualifiedName.Replace("global::", "").Replace("<", "`").Replace(">", "`") ?? "Unknown";
             context.AddSource($"{hintName}.Metadata.g.cs", metadata?.ToString()!);
@@ -101,7 +101,7 @@ public sealed partial class CborSerializerCodeGen
 
             if (!skipSerialization)
             {
-                _ = EmitSerializableTypeReader(sb, metadata);
+                _ = EmitSerializableTypeReader(sb, metadata, typeRegistry);
 
                 _ = sb.AppendLine();
 
@@ -720,13 +720,13 @@ public sealed partial class CborSerializerCodeGen
             };
         }
 
-        private static ICborSerializerEmitter GetEmitter(SerializableTypeMetadata metadata) => metadata.SerializationType switch
+        private static ICborSerializerEmitter GetEmitter(SerializableTypeMetadata metadata, IReadOnlyDictionary<string, SerializableTypeMetadata>? typeRegistry = null) => metadata.SerializationType switch
         {
             SerializationType.Constr => new ConstructorEmitter(),
             SerializationType.Container => new ContainerEmitter(),
             SerializationType.List => new ListEmitter(),
             SerializationType.Map => new MapEmitter(),
-            SerializationType.Union => new UnionEmitter(),
+            SerializationType.Union => new UnionEmitter(typeRegistry),
             _ => throw new NotSupportedException($"Serialization type {metadata.SerializationType} is not supported.")
         };
 

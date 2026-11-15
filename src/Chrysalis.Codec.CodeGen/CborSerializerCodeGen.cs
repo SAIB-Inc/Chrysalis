@@ -28,16 +28,6 @@ public sealed partial class CborSerializerCodeGen : IIncrementalGenerator
     }
 
     /// <summary>
-    /// Registry of all serializable types in the current compilation, keyed by normalized
-    /// fully-qualified name. Populated before emission so the union emitter can classify the
-    /// CBOR shape of a member's property when that property is itself a generated record
-    /// (e.g. resolve a <c>[CborList]</c> record to an array) — needed for secondary structural
-    /// probing when union members share a leading index.
-    /// </summary>
-    internal static IReadOnlyDictionary<string, SerializableTypeMetadata> TypeRegistry { get; private set; }
-        = new Dictionary<string, SerializableTypeMetadata>();
-
-    /// <summary>
     /// Normalizes a fully-qualified type name for registry keys and lookups by stripping the
     /// <c>global::</c> prefix, nullable annotations, and surrounding whitespace.
     /// </summary>
@@ -65,12 +55,11 @@ public sealed partial class CborSerializerCodeGen : IIncrementalGenerator
             }
         }
 
-        TypeRegistry = registry;
-
-        // Second pass: emit serializers and metadata with the registry available.
+        // Keep the registry local: compiler-server invocations can generate concurrently.
+        // Second pass: emit serializers and metadata with this compilation's registry.
         foreach (SerializableTypeMetadata metadata in parsed)
         {
-            Emitter.EmitSerializerAndMetadata(context, metadata);
+            Emitter.EmitSerializerAndMetadata(context, metadata, registry);
         }
     }
 }
