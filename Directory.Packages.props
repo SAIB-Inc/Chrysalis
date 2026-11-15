@@ -16,7 +16,7 @@
     <PackageVersion Include="Microsoft.CodeAnalysis.CSharp" Version="5.12.0" />
 
     <!-- Hashing -->
-    <PackageVersion Include="System.IO.Hashing" Version="10.0.3" />
+    <PackageVersion Include="System.IO.Hashing" Version="11.0.0" />
 
     <!-- Testing -->
     <PackageVersion Include="BenchmarkDotNet" Version="0.15.8" />
