@@ -123,16 +123,12 @@ public sealed class Blockfrost : ICardanoDataProvider, IDisposable
             ulong.Parse(parameters.MinPoolCost ?? "0", CultureInfo.InvariantCulture),
             ulong.Parse(parameters.CoinsPerUtxoSize, CultureInfo.InvariantCulture),
             new CostMdls(costMdls.GetValueOrDefault(0), costMdls.GetValueOrDefault(1), costMdls.GetValueOrDefault(2)),
-            // Conway's price_step is 721/10_000_000 (= 0.0000721). At a 1e6 scale,
-            // (ulong)(0.0000721 * 1_000_000) = (ulong)72.1 truncates to 72,
-            // storing 72/1_000_000 = 0.000072 — a 0.14% under-count that
-            // underpays script-execution fees on every redeemer. Use a 1e7 scale
-            // so the chain's denominator (10_000_000) is preserved exactly,
-            // and Math.Round defends against IEEE-754 representation noise
-            // (e.g. 0.0000721 * 1e7 may compute as 720.999… in double).
+            // Preserve the existing 1e7 scale: price_step 0.0000721 is 721/10_000_000.
+            // Deserialize prices directly as decimal so a binary floating-point approximation
+            // cannot move a halfway value across the intended round-to-even boundary.
             ExUnitPrices.Create(
-                CborRationalNumber.Create((ulong)Math.Round((decimal)parameters.PriceMem * 10_000_000m), 10_000_000),
-                CborRationalNumber.Create((ulong)Math.Round((decimal)parameters.PriceStep * 10_000_000m), 10_000_000)),
+                CborRationalNumber.Create((ulong)Math.Round(parameters.PriceMem * 10_000_000m, MidpointRounding.ToEven), 10_000_000),
+                CborRationalNumber.Create((ulong)Math.Round(parameters.PriceStep * 10_000_000m, MidpointRounding.ToEven), 10_000_000)),
             ExUnits.Create(ulong.Parse(parameters.MaxTxExMem, CultureInfo.InvariantCulture), ulong.Parse(parameters.MaxTxExSteps, CultureInfo.InvariantCulture)),
             ExUnits.Create(ulong.Parse(parameters.MaxBlockExMem, CultureInfo.InvariantCulture), ulong.Parse(parameters.MaxBlockExSteps, CultureInfo.InvariantCulture)),
             ulong.Parse(parameters.MaxValSize, CultureInfo.InvariantCulture),
@@ -202,7 +198,7 @@ public sealed class Blockfrost : ICardanoDataProvider, IDisposable
 
         // Build mutable dictionaries first, then create immutable TokenBundleOutput at the end.
         // TokenBundleOutput is a readonly record struct with lazy-decoded Value — mutating .Value is a no-op.
-        Dictionary<ReadOnlyMemory<byte>, Dictionary<ReadOnlyMemory<byte>, ulong>> assetsByPolicy = new(ReadOnlyMemoryComparer.Instance);
+        Dictionary<ReadOnlyMemory<byte>, Dictionary<ReadOnlyMemory<byte>, ulong>> assetsByPolicy = [with(ReadOnlyMemoryComparer.Instance)];
 
         foreach (Amount amount in utxo.Amount!)
         {
@@ -217,14 +213,14 @@ public sealed class Blockfrost : ICardanoDataProvider, IDisposable
 
                 if (!assetsByPolicy.TryGetValue(policy, out Dictionary<ReadOnlyMemory<byte>, ulong>? tokenBundle))
                 {
-                    tokenBundle = new Dictionary<ReadOnlyMemory<byte>, ulong>(ReadOnlyMemoryComparer.Instance);
+                    tokenBundle = [with(ReadOnlyMemoryComparer.Instance)];
                     assetsByPolicy[policy] = tokenBundle;
                 }
                 tokenBundle[assetName] = ulong.Parse(amount.Quantity!, CultureInfo.InvariantCulture);
             }
         }
 
-        Dictionary<ReadOnlyMemory<byte>, TokenBundleOutput> assets = new(ReadOnlyMemoryComparer.Instance);
+        Dictionary<ReadOnlyMemory<byte>, TokenBundleOutput> assets = [with(ReadOnlyMemoryComparer.Instance)];
         foreach ((ReadOnlyMemory<byte> policy, Dictionary<ReadOnlyMemory<byte>, ulong> tokenBundle) in assetsByPolicy)
         {
             assets[policy] = TokenBundleOutput.Create(tokenBundle);

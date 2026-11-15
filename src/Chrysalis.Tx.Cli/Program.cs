@@ -674,7 +674,7 @@ static IValue CalculateNewValue(
     ulong amountToBuy, long priceNum, long priceDen)
 {
     BigInteger sellAmount = ((new BigInteger(amountToBuy) * priceNum) + priceDen - 1) / priceDen;
-    Dictionary<string, ulong> newAssets = new(originalAssets);
+    Dictionary<string, ulong> newAssets = [with(originalAssets)];
 
     ulong currentBuy = newAssets.GetValueOrDefault(assetToBuy, 0UL);
     if (amountToBuy >= currentBuy) { _ = newAssets.Remove(assetToBuy); }
@@ -703,10 +703,10 @@ static IValue CreateValueFromAssets(Dictionary<string, ulong> assets)
 
     if (byPolicy.Count == 0) { return Lovelace.Create(lovelace); }
 
-    Dictionary<ReadOnlyMemory<byte>, TokenBundleOutput> multiAsset = new(ReadOnlyMemoryComparer.Instance);
+    Dictionary<ReadOnlyMemory<byte>, TokenBundleOutput> multiAsset = [with(ReadOnlyMemoryComparer.Instance)];
     foreach ((string policyHex, Dictionary<string, ulong> tokens) in byPolicy)
     {
-        Dictionary<ReadOnlyMemory<byte>, ulong> bundle = new(ReadOnlyMemoryComparer.Instance);
+        Dictionary<ReadOnlyMemory<byte>, ulong> bundle = [with(ReadOnlyMemoryComparer.Instance)];
         foreach ((string nameHex, ulong qty) in tokens) { bundle[Convert.FromHexString(nameHex)] = qty; }
         multiAsset[Convert.FromHexString(policyHex)] = TokenBundleOutput.Create(bundle);
     }

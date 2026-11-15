@@ -439,7 +439,7 @@ internal static class Program
         while (totalFetched < options.BlockCount && !atTip && !ct.IsCancellationRequested)
         {
             int target = Math.Min(BlockFetchBatch, options.BlockCount - totalFetched);
-            List<Point> batch = new(target);
+            List<Point> batch = [with(target)];
 
             while (batch.Count < target && !ct.IsCancellationRequested)
             {
@@ -614,9 +614,9 @@ internal static class Program
             return false;
         }
 
-        HashSet<string> flags = new(StringComparer.OrdinalIgnoreCase);
-        Dictionary<string, string> map = new(StringComparer.OrdinalIgnoreCase);
-        HashSet<string> booleanFlags = new(StringComparer.OrdinalIgnoreCase) { "headers-only", "single" };
+        HashSet<string> flags = [with(StringComparer.OrdinalIgnoreCase)];
+        Dictionary<string, string> map = [with(StringComparer.OrdinalIgnoreCase)];
+        HashSet<string> booleanFlags = [with(StringComparer.OrdinalIgnoreCase), "headers-only", "single"];
 
         for (int i = startIdx; i < args.Length; i++)
         {

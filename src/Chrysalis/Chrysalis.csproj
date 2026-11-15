@@ -1,7 +1,7 @@
 ﻿<Project>
 
   <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
+    <TargetFramework>net11.0</TargetFramework>
     <PackageId>Chrysalis</PackageId>
     <Authors>Clark Alesna, Rico Quiblat, Wendell Mor Tamayo</Authors>
     <Company>SAIB Inc</Company>

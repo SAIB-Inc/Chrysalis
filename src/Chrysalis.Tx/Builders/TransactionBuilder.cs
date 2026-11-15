@@ -831,7 +831,7 @@ public class TransactionBuilder
 
     private static MultiAssetMint MergeMints(MultiAssetMint existingMint, MultiAssetMint newMint)
     {
-        Dictionary<ReadOnlyMemory<byte>, TokenBundleMint> result = new(ReadOnlyMemoryComparer.Instance);
+        Dictionary<ReadOnlyMemory<byte>, TokenBundleMint> result = [with(ReadOnlyMemoryComparer.Instance)];
 
         foreach (KeyValuePair<ReadOnlyMemory<byte>, TokenBundleMint> entry in existingMint.Value)
         {
@@ -842,7 +842,7 @@ public class TransactionBuilder
         {
             if (result.TryGetValue(entry.Key, out TokenBundleMint existing))
             {
-                Dictionary<ReadOnlyMemory<byte>, long> merged = new(ReadOnlyMemoryComparer.Instance);
+                Dictionary<ReadOnlyMemory<byte>, long> merged = [with(ReadOnlyMemoryComparer.Instance)];
                 foreach (KeyValuePair<ReadOnlyMemory<byte>, long> t in existing.Value)
                 {
                     merged[t.Key] = t.Value;

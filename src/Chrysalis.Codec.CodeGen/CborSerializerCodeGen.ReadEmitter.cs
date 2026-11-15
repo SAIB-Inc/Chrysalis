@@ -6,7 +6,7 @@ public sealed partial class CborSerializerCodeGen
 {
     internal static partial class Emitter
     {
-        public static StringBuilder EmitSerializableTypeReader(StringBuilder sb, SerializableTypeMetadata metadata)
+        public static StringBuilder EmitSerializableTypeReader(StringBuilder sb, SerializableTypeMetadata metadata, IReadOnlyDictionary<string, SerializableTypeMetadata>? typeRegistry)
         {
             string xmlSafeId = metadata.Indentifier.Replace("<", "{").Replace(">", "}");
 
@@ -15,7 +15,7 @@ public sealed partial class CborSerializerCodeGen
             _ = sb.AppendLine($"/// </summary>");
             _ = sb.AppendLine($"public static new {metadata.FullyQualifiedName} Read(ReadOnlyMemory<byte> data, out int bytesConsumed)");
             _ = sb.AppendLine("{");
-            ICborSerializerEmitter emitter = GetEmitter(metadata);
+            ICborSerializerEmitter emitter = GetEmitter(metadata, typeRegistry);
             _ = emitter.EmitReader(sb, metadata);
             _ = sb.AppendLine("}");
 

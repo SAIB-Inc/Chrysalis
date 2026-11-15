@@ -9,7 +9,7 @@ namespace Chrysalis.Tx.Builders;
 /// </summary>
 public class MintBuilder
 {
-    private readonly Dictionary<ReadOnlyMemory<byte>, Dictionary<ReadOnlyMemory<byte>, long>> _byPolicy = new(ReadOnlyMemoryComparer.Instance);
+    private readonly Dictionary<ReadOnlyMemory<byte>, Dictionary<ReadOnlyMemory<byte>, long>> _byPolicy = [with(ReadOnlyMemoryComparer.Instance)];
 
     private MintBuilder() { }
 
@@ -42,7 +42,7 @@ public class MintBuilder
 
         if (!_byPolicy.TryGetValue(policyKey, out Dictionary<ReadOnlyMemory<byte>, long>? bundle))
         {
-            bundle = new(ReadOnlyMemoryComparer.Instance);
+            bundle = [with(ReadOnlyMemoryComparer.Instance)];
             _byPolicy[policyKey] = bundle;
         }
 
@@ -59,7 +59,7 @@ public class MintBuilder
     /// <returns>The constructed MultiAssetMint.</returns>
     public MultiAssetMint Build()
     {
-        Dictionary<ReadOnlyMemory<byte>, TokenBundleMint> multiAsset = new(ReadOnlyMemoryComparer.Instance);
+        Dictionary<ReadOnlyMemory<byte>, TokenBundleMint> multiAsset = [with(ReadOnlyMemoryComparer.Instance)];
         foreach (KeyValuePair<ReadOnlyMemory<byte>, Dictionary<ReadOnlyMemory<byte>, long>> entry in _byPolicy)
         {
             multiAsset[entry.Key] = TokenBundleMint.Create(entry.Value);

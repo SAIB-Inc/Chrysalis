@@ -1123,7 +1123,7 @@ public class TxBuilder
 
     private int CountRequiredWitnesses()
     {
-        HashSet<string> uniquePkhs = new(StringComparer.OrdinalIgnoreCase);
+        HashSet<string> uniquePkhs = [with(StringComparer.OrdinalIgnoreCase)];
 
         // Change address (wallet always signs)
         // Change address (wallet always signs). Script-locked change addresses
@@ -1198,7 +1198,7 @@ public class TxBuilder
         MultiAssetMint? mint)
     {
         // Aggregate all native assets from inputs
-        Dictionary<ReadOnlyMemory<byte>, Dictionary<ReadOnlyMemory<byte>, long>> assetBalance = new(ReadOnlyMemoryComparer.Instance);
+        Dictionary<ReadOnlyMemory<byte>, Dictionary<ReadOnlyMemory<byte>, long>> assetBalance = [with(ReadOnlyMemoryComparer.Instance)];
 
         foreach (InputDirective input in explicitInputs)
         {
@@ -1223,7 +1223,7 @@ public class TxBuilder
             {
                 if (!assetBalance.TryGetValue(policy.Key, out Dictionary<ReadOnlyMemory<byte>, long>? bundle))
                 {
-                    bundle = new(ReadOnlyMemoryComparer.Instance);
+                    bundle = [with(ReadOnlyMemoryComparer.Instance)];
                     assetBalance[policy.Key] = bundle;
                 }
 
@@ -1235,10 +1235,10 @@ public class TxBuilder
         }
 
         // Build change value from remaining positive balances
-        Dictionary<ReadOnlyMemory<byte>, TokenBundleOutput> changeAssets = new(ReadOnlyMemoryComparer.Instance);
+        Dictionary<ReadOnlyMemory<byte>, TokenBundleOutput> changeAssets = [with(ReadOnlyMemoryComparer.Instance)];
         foreach (KeyValuePair<ReadOnlyMemory<byte>, Dictionary<ReadOnlyMemory<byte>, long>> policy in assetBalance)
         {
-            Dictionary<ReadOnlyMemory<byte>, ulong> positiveTokens = new(ReadOnlyMemoryComparer.Instance);
+            Dictionary<ReadOnlyMemory<byte>, ulong> positiveTokens = [with(ReadOnlyMemoryComparer.Instance)];
             foreach (KeyValuePair<ReadOnlyMemory<byte>, long> token in policy.Value)
             {
                 if (token.Value > 0)
@@ -1275,7 +1275,7 @@ public class TxBuilder
         {
             if (!balance.TryGetValue(policy.Key, out Dictionary<ReadOnlyMemory<byte>, long>? bundle))
             {
-                bundle = new(ReadOnlyMemoryComparer.Instance);
+                bundle = [with(ReadOnlyMemoryComparer.Instance)];
                 balance[policy.Key] = bundle;
             }
 

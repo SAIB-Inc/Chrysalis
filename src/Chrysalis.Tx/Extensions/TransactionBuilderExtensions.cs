@@ -431,8 +431,8 @@ public static class TransactionBuilderExtensions
         IValue mintValue = Lovelace.Create(0);
         if (builder.Mint is not null)
         {
-            Dictionary<ReadOnlyMemory<byte>, Dictionary<ReadOnlyMemory<byte>, ulong>> positiveAssets = new(ReadOnlyMemoryComparer.Instance);
-            Dictionary<ReadOnlyMemory<byte>, Dictionary<ReadOnlyMemory<byte>, ulong>> negativeAssets = new(ReadOnlyMemoryComparer.Instance);
+            Dictionary<ReadOnlyMemory<byte>, Dictionary<ReadOnlyMemory<byte>, ulong>> positiveAssets = [with(ReadOnlyMemoryComparer.Instance)];
+            Dictionary<ReadOnlyMemory<byte>, Dictionary<ReadOnlyMemory<byte>, ulong>> negativeAssets = [with(ReadOnlyMemoryComparer.Instance)];
 
             foreach (KeyValuePair<ReadOnlyMemory<byte>, TokenBundleMint> policy in builder.Mint.Value.Value)
             {
@@ -442,7 +442,7 @@ public static class TransactionBuilderExtensions
                     {
                         if (!positiveAssets.TryGetValue(policy.Key, out Dictionary<ReadOnlyMemory<byte>, ulong>? bundle))
                         {
-                            bundle = new(ReadOnlyMemoryComparer.Instance);
+                            bundle = [with(ReadOnlyMemoryComparer.Instance)];
                             positiveAssets[policy.Key] = bundle;
                         }
                         bundle[asset.Key] = (ulong)asset.Value;
@@ -451,7 +451,7 @@ public static class TransactionBuilderExtensions
                     {
                         if (!negativeAssets.TryGetValue(policy.Key, out Dictionary<ReadOnlyMemory<byte>, ulong>? bundle))
                         {
-                            bundle = new(ReadOnlyMemoryComparer.Instance);
+                            bundle = [with(ReadOnlyMemoryComparer.Instance)];
                             negativeAssets[policy.Key] = bundle;
                         }
                         bundle[asset.Key] = (ulong)-asset.Value;
@@ -461,7 +461,7 @@ public static class TransactionBuilderExtensions
 
             if (positiveAssets.Count > 0)
             {
-                Dictionary<ReadOnlyMemory<byte>, TokenBundleOutput> posMulti = new(ReadOnlyMemoryComparer.Instance);
+                Dictionary<ReadOnlyMemory<byte>, TokenBundleOutput> posMulti = [with(ReadOnlyMemoryComparer.Instance)];
                 foreach (KeyValuePair<ReadOnlyMemory<byte>, Dictionary<ReadOnlyMemory<byte>, ulong>> kv in positiveAssets)
                 {
                     posMulti[kv.Key] = TokenBundleOutput.Create(kv.Value);
@@ -471,7 +471,7 @@ public static class TransactionBuilderExtensions
 
             if (negativeAssets.Count > 0)
             {
-                Dictionary<ReadOnlyMemory<byte>, TokenBundleOutput> negMulti = new(ReadOnlyMemoryComparer.Instance);
+                Dictionary<ReadOnlyMemory<byte>, TokenBundleOutput> negMulti = [with(ReadOnlyMemoryComparer.Instance)];
                 foreach (KeyValuePair<ReadOnlyMemory<byte>, Dictionary<ReadOnlyMemory<byte>, ulong>> kv in negativeAssets)
                 {
                     negMulti[kv.Key] = TokenBundleOutput.Create(kv.Value);
@@ -624,7 +624,7 @@ public static class TransactionBuilderExtensions
     private static Dictionary<ReadOnlyMemory<byte>, TokenBundleOutput> AggregateAssets(
         List<ResolvedInput> inputs)
     {
-        Dictionary<ReadOnlyMemory<byte>, TokenBundleOutput> result = new(ReadOnlyMemoryComparer.Instance);
+        Dictionary<ReadOnlyMemory<byte>, TokenBundleOutput> result = [with(ReadOnlyMemoryComparer.Instance)];
 
         foreach (ResolvedInput input in inputs)
         {
@@ -641,7 +641,7 @@ public static class TransactionBuilderExtensions
                     continue;
                 }
 
-                Dictionary<ReadOnlyMemory<byte>, ulong> merged = new(ReadOnlyMemoryComparer.Instance);
+                Dictionary<ReadOnlyMemory<byte>, ulong> merged = [with(ReadOnlyMemoryComparer.Instance)];
                 foreach ((ReadOnlyMemory<byte> name, ulong amount) in existingBundle.Value)
                 {
                     merged[name] = amount;

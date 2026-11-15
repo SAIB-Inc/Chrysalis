@@ -10,8 +10,6 @@ public sealed partial class CborSerializerCodeGen
 {
     private static class Parser
     {
-        public static readonly Dictionary<string, SerializableTypeMetadata> _cache = [];
-
         public const string CborSerializable = "CborSerializable";
         public const string CborMap = "CborMap";
         public const string CborNullable = "CborNullable";
@@ -121,8 +119,6 @@ public sealed partial class CborSerializerCodeGen
 
             typeMetadata.Properties.AddRange(properties);
             typeMetadata.ChildTypes.AddRange(childTypes);
-
-            _cache[typeMetadata.FullyQualifiedName.Replace("global::", "")] = typeMetadata;
 
             return typeMetadata;
         }

@@ -97,11 +97,11 @@ public class BlockfrostProtocolParametersResponse
 
     /// <summary>Gets or sets the memory unit price.</summary>
     [JsonPropertyName("price_mem")]
-    public double PriceMem { get; set; }
+    public decimal PriceMem { get; set; }
 
     /// <summary>Gets or sets the step unit price.</summary>
     [JsonPropertyName("price_step")]
-    public double PriceStep { get; set; }
+    public decimal PriceStep { get; set; }
 
     /// <summary>Gets or sets the maximum transaction execution memory units.</summary>
     [JsonPropertyName("max_tx_ex_mem")]

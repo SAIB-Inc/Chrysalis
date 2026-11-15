@@ -168,7 +168,7 @@ public static class ValueExtensions
         ArgumentNullException.ThrowIfNull(assetName);
 
         ulong lovelace = self.Lovelace();
-        Dictionary<ReadOnlyMemory<byte>, Dictionary<ReadOnlyMemory<byte>, ulong>> byPolicy = new(ReadOnlyMemoryComparer.Instance);
+        Dictionary<ReadOnlyMemory<byte>, Dictionary<ReadOnlyMemory<byte>, ulong>> byPolicy = [with(ReadOnlyMemoryComparer.Instance)];
         CollectTokens(self, byPolicy);
 
         ReadOnlyMemory<byte> policyKey = policyId;
@@ -176,7 +176,7 @@ public static class ValueExtensions
 
         if (!byPolicy.TryGetValue(policyKey, out Dictionary<ReadOnlyMemory<byte>, ulong>? bundle))
         {
-            bundle = new(ReadOnlyMemoryComparer.Instance);
+            bundle = [with(ReadOnlyMemoryComparer.Instance)];
             byPolicy[policyKey] = bundle;
         }
 
@@ -266,7 +266,7 @@ public static class ValueExtensions
         ArgumentNullException.ThrowIfNull(other);
 
         ulong lovelace = self.Lovelace() + other.Lovelace();
-        Dictionary<ReadOnlyMemory<byte>, Dictionary<ReadOnlyMemory<byte>, ulong>> byPolicy = new(ReadOnlyMemoryComparer.Instance);
+        Dictionary<ReadOnlyMemory<byte>, Dictionary<ReadOnlyMemory<byte>, ulong>> byPolicy = [with(ReadOnlyMemoryComparer.Instance)];
 
         CollectTokens(self, byPolicy);
         MergeTokens(other, byPolicy);
@@ -295,7 +295,7 @@ public static class ValueExtensions
         ulong otherLovelace = other.Lovelace();
         ulong lovelace = selfLovelace > otherLovelace ? selfLovelace - otherLovelace : 0;
 
-        Dictionary<ReadOnlyMemory<byte>, Dictionary<ReadOnlyMemory<byte>, ulong>> byPolicy = new(ReadOnlyMemoryComparer.Instance);
+        Dictionary<ReadOnlyMemory<byte>, Dictionary<ReadOnlyMemory<byte>, ulong>> byPolicy = [with(ReadOnlyMemoryComparer.Instance)];
         CollectTokens(self, byPolicy);
 
         if (other is LovelaceWithMultiAsset otherMulti)
@@ -342,7 +342,7 @@ public static class ValueExtensions
         {
             foreach (KeyValuePair<ReadOnlyMemory<byte>, TokenBundleOutput> policyEntry in existing.MultiAsset.Value)
             {
-                Dictionary<ReadOnlyMemory<byte>, ulong> tokens = new(ReadOnlyMemoryComparer.Instance);
+                Dictionary<ReadOnlyMemory<byte>, ulong> tokens = [with(ReadOnlyMemoryComparer.Instance)];
                 foreach (KeyValuePair<ReadOnlyMemory<byte>, ulong> token in policyEntry.Value.Value)
                 {
                     tokens[token.Key] = token.Value;
@@ -360,7 +360,7 @@ public static class ValueExtensions
             {
                 if (!byPolicy.TryGetValue(policyEntry.Key, out Dictionary<ReadOnlyMemory<byte>, ulong>? bundle))
                 {
-                    bundle = new(ReadOnlyMemoryComparer.Instance);
+                    bundle = [with(ReadOnlyMemoryComparer.Instance)];
                     byPolicy[policyEntry.Key] = bundle;
                 }
 
@@ -376,7 +376,7 @@ public static class ValueExtensions
 
     private static MultiAssetOutput BuildMultiAsset(Dictionary<ReadOnlyMemory<byte>, Dictionary<ReadOnlyMemory<byte>, ulong>> byPolicy)
     {
-        Dictionary<ReadOnlyMemory<byte>, TokenBundleOutput> multiAsset = new(ReadOnlyMemoryComparer.Instance);
+        Dictionary<ReadOnlyMemory<byte>, TokenBundleOutput> multiAsset = [with(ReadOnlyMemoryComparer.Instance)];
         foreach (KeyValuePair<ReadOnlyMemory<byte>, Dictionary<ReadOnlyMemory<byte>, ulong>> entry in byPolicy)
         {
             multiAsset[entry.Key] = TokenBundleOutput.Create(entry.Value);
