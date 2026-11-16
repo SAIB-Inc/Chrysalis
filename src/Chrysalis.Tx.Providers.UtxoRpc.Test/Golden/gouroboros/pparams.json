@@ -1,0 +1,131 @@
+[
+  {
+    "source": "TestUtxorpc, ledger/conway/pparams_test.go:730,737-861",
+    "pparams": {
+      "coinsPerUtxoByte": {"int": "44"},
+      "maxTxSize": "16384",
+      "minFeeCoefficient": {"int": "500"},
+      "minFeeConstant": {"int": "2"},
+      "maxBlockBodySize": "65536",
+      "maxBlockHeaderSize": "1024",
+      "stakeKeyDeposit": {"int": "2000"},
+      "poolDeposit": {"int": "500000"},
+      "poolRetirementEpochBound": "2160",
+      "desiredNumberOfPools": "100",
+      "poolInfluence": {"numerator": 1, "denominator": 2},
+      "monetaryExpansion": {"numerator": 3, "denominator": 4},
+      "treasuryExpansion": {"numerator": 5, "denominator": 6},
+      "prices": {
+        "memory": {"numerator": 1, "denominator": 2},
+        "steps": {"numerator": 2, "denominator": 3}
+      },
+      "minPoolCost": {"int": "340000000"},
+      "protocolVersion": {"major": 8, "minor": 0},
+      "maxValueSize": "1024",
+      "collateralPercentage": "150",
+      "maxCollateralInputs": "5",
+      "costModels": {
+        "plutusV1": {
+          "values": ["100", "200", "300"]
+        },
+        "plutusV2": {
+          "values": ["400", "500", "600"]
+        },
+        "plutusV3": {
+          "values": ["700", "800", "900"]
+        }
+      },
+      "maxExecutionUnitsPerTransaction": {"memory": "1000000", "steps": "200000"},
+      "maxExecutionUnitsPerBlock": {"memory": "5000000", "steps": "1000000"},
+      "governanceActionDeposit": {"int": "0"},
+      "drepDeposit": {"int": "0"}
+    },
+    "expected": {
+      "utxoCostPerByte": 44,
+      "maxTxSize": 16384,
+      "txFeePerByte": 500,
+      "txFeeFixed": 2,
+      "maxBlockBodySize": 65536,
+      "maxBlockHeaderSize": 1024,
+      "stakeAddressDeposit": 2000,
+      "stakePoolDeposit": 500000,
+      "poolRetireMaxEpoch": 2160,
+      "stakePoolTargetNum": 100,
+      "poolPledgeInfluence": "1/2",
+      "monetaryExpansion": "3/4",
+      "treasuryCut": "5/6",
+      "minPoolCost": 340000000,
+      "protocolVersion": {"major": 8, "minor": 0},
+      "maxValueSize": 1024,
+      "collateralPercentage": 150,
+      "maxCollateralInputs": 5,
+      "costModels": {
+        "PlutusV1": [100, 200, 300],
+        "PlutusV2": [400, 500, 600],
+        "PlutusV3": [700, 800, 900]
+      },
+      "executionUnitPrices": {"priceMemory": "1/2", "priceSteps": "2/3"},
+      "maxTxExecutionUnits": {"memory": 1000000, "steps": 200000},
+      "maxBlockExecutionUnits": {"memory": 5000000, "steps": 1000000},
+      "govActionDeposit": 0,
+      "dRepDeposit": 0
+    }
+  },
+  {
+    "source": "TestConwayUtxorpc_GovernanceFields, ledger/conway/pparams_test.go:892,896-934,941-1005; required-input UTxO RPC forms: TestUtxorpc:800-811,833-842",
+    "pparams": {
+      "poolInfluence": {"numerator": 1, "denominator": 2},
+      "monetaryExpansion": {"numerator": 3, "denominator": 4},
+      "treasuryExpansion": {"numerator": 5, "denominator": 6},
+      "prices": {
+        "memory": {"numerator": 1, "denominator": 2},
+        "steps": {"numerator": 2, "denominator": 3}
+      },
+      "minFeeScriptRefCostPerByte": {"numerator": 15, "denominator": 2},
+      "poolVotingThresholds": {
+        "thresholds": [
+          {"numerator": 1, "denominator": 11},
+          {"numerator": 2, "denominator": 11},
+          {"numerator": 3, "denominator": 11},
+          {"numerator": 4, "denominator": 11},
+          {"numerator": 5, "denominator": 11}
+        ]
+      },
+      "drepVotingThresholds": {
+        "thresholds": [
+          {"numerator": 1, "denominator": 13},
+          {"numerator": 2, "denominator": 13},
+          {"numerator": 3, "denominator": 13},
+          {"numerator": 4, "denominator": 13},
+          {"numerator": 5, "denominator": 13},
+          {"numerator": 6, "denominator": 13},
+          {"numerator": 7, "denominator": 13},
+          {"numerator": 8, "denominator": 13},
+          {"numerator": 9, "denominator": 13},
+          {"numerator": 10, "denominator": 13}
+        ]
+      },
+      "minCommitteeSize": 7,
+      "committeeTermLimit": "365",
+      "governanceActionValidityPeriod": "30000",
+      "governanceActionDeposit": {"int": "100000000001"},
+      "drepDeposit": {"int": "500000000"},
+      "drepInactivityPeriod": "20"
+    },
+    "expected": {
+      "poolPledgeInfluence": "1/2",
+      "monetaryExpansion": "3/4",
+      "treasuryCut": "5/6",
+      "executionUnitPrices": {"priceMemory": "1/2", "priceSteps": "2/3"},
+      "minFeeRefScriptCostPerByte": "15/2",
+      "poolVotingThresholds": {"motionNoConfidence": "1/11", "committeeNormal": "2/11", "committeeNoConfidence": "3/11", "hardForkInitiation": "4/11", "ppSecurityGroup": "5/11"},
+      "dRepVotingThresholds": {"motionNoConfidence": "1/13", "committeeNormal": "2/13", "committeeNoConfidence": "3/13", "updateToConstitution": "4/13", "hardForkInitiation": "5/13", "ppNetworkGroup": "6/13", "ppEconomicGroup": "7/13", "ppTechnicalGroup": "8/13", "ppGovGroup": "9/13", "treasuryWithdrawal": "10/13"},
+      "committeeMinSize": 7,
+      "committeeMaxTermLength": 365,
+      "govActionLifetime": 30000,
+      "govActionDeposit": 100000000001,
+      "dRepDeposit": 500000000,
+      "dRepActivity": 20
+    }
+  }
+]

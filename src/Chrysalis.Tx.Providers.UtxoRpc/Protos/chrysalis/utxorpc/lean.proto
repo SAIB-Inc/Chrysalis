@@ -1,0 +1,19 @@
+syntax = "proto3";
+package chrysalis.utxorpc;
+option csharp_namespace = "Chrysalis.Tx.Providers.Lean";
+import "utxorpc/v1beta/query/query.proto";
+
+message LeanUtxo {
+  bytes native_bytes = 1;
+  .utxorpc.v1beta.query.TxoRef txo_ref = 2;
+}
+message LeanUtxosResponse {
+  repeated LeanUtxo items = 1;
+  optional string next_token = 3;
+}
+message LeanTx {
+  bytes native_bytes = 1;
+}
+message LeanReadTxResponse {
+  LeanTx tx = 1;
+}

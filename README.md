@@ -37,6 +37,7 @@ dotnet add package Chrysalis.Network --prerelease   # Ouroboros mini-protocols (
 dotnet add package Chrysalis.Tx      --prerelease   # Transaction building + fee calculation
 dotnet add package Chrysalis.Wallet  --prerelease   # Key management + address handling
 dotnet add package Chrysalis.Plutus  --prerelease   # Pure managed UPLC/CEK machine
+dotnet add package Chrysalis.Tx.Providers.UtxoRpc --prerelease # Optional UTxO RPC provider
 ```
 
 ## Packages
@@ -47,9 +48,59 @@ dotnet add package Chrysalis.Plutus  --prerelease   # Pure managed UPLC/CEK mach
 | **Chrysalis.Codec.CodeGen** | Source generator for compile-time CBOR dispatch + CIP-0057 blueprint codegen |
 | **Chrysalis.Network** | Ouroboros N2C/N2N mini-protocols with pipelined ChainSync + BlockFetch |
 | **Chrysalis.Tx** | `TransactionBuilder`, `MintBuilder`, `OutputBuilder`, fee/collateral calculation |
+| **Chrysalis.Tx.Providers.UtxoRpc** | Optional UTxO RPC data provider for `Chrysalis.Tx` (.NET 11) |
 | **Chrysalis.Plutus** | Pure C# UPLC interpreter — 999/999 conformance tests, no native dependencies |
 | **Chrysalis.Wallet** | BIP-39 mnemonic, BIP-32 HD key derivation, Bech32 addresses |
 | **Chrysalis.Crypto** | Ed25519 signatures, Blake2b hashing |
+
+## UTxO RPC
+
+### Usage
+
+Install the optional package; the existing providers gain no gRPC dependency.
+
+```csharp
+using Chrysalis.Tx.Models;
+using Chrysalis.Tx.Providers;
+using Chrysalis.Wallet.Models.Enums;
+
+using UtxoRpc provider = new(new Uri("http://localhost:50051"), NetworkType.Preprod);
+ICardanoDataProvider data = provider; // Pass data to the transaction builder.
+// Or register one shared instance through dependency injection:
+services.AddUtxoRpcProvider(configuration);
+```
+
+Wait with `await provider.WaitForConfirmationAsync(txHash, cancellationToken)`.
+Give the token a time limit: this reports only the server's view; on Dolos it tracks
+transactions submitted through that server, and a dropped transaction is never reported.
+
+Set the endpoint and network explicitly. Headers are optional, for example in `appsettings.json`:
+
+```json
+{
+  "UtxoRpcEndpoint": "http://localhost:50051",
+  "NetworkType": "Preprod",
+  "UtxoRpcHeaders": { "dmtr-api-key": "YOUR_API_KEY" }
+}
+```
+
+For environment-based configuration, use `env 'UtxoRpcHeaders__dmtr-api-key=YOUR_API_KEY' dotnet run`;
+`export` cannot set a variable whose name contains `-`. The application must load environment variables into its configuration.
+
+### Limits
+
+Calls and pages do not share a snapshot. An accepted submission is in the server's mempool, not yet on chain.
+A server can return only the transaction history it retains, and may refuse a script transaction the node accepts.
+The provider does not check the server's network: choose the matching `NetworkType` yourself.
+`MaximumEpoch` is unknown on Dolos 1.6.3. That version also sends stale `MinPoolCost` and memory limits in
+`MaxTxExUnits` and `MaxBlockExUnits` ([Dolos #1378](https://github.com/txpipe/dolos/issues/1378), fixed upstream for 1.6.4).
+The provider passes on what the server sends and corrects nothing.
+
+### Live validation
+
+Reads, submission and confirmation have run against Dolos 1.6.3 on preprod over plaintext HTTP/2,
+including a confirmed self-transfer. TLS, header-authenticated endpoints, other servers and mainnet
+have not been verified for this package.
 
 ## Blueprint Codegen
 

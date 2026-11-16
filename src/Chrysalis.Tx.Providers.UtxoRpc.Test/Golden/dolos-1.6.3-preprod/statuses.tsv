@@ -1,0 +1,4 @@
+operation	case	status	text
+ReadTx	zero hash	5	tx hash not found
+ReadUtxos	zero reference	0	OK, no items
+SubmitTx	one byte	3	could not process tx: chain error: decoding error

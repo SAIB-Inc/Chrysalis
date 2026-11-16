@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net11.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/Chrysalis.Tx.Providers.UtxoRpc/Chrysalis.Tx.Providers.UtxoRpc.csproj" />
+    <PackageReference Include="BenchmarkDotNet" />
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="../../src/Chrysalis.Tx.Providers.UtxoRpc.Test/Golden/dolos-1.6.3-preprod/search-utxos.pb" LogicalName="search-utxos.pb" />
+    <EmbeddedResource Include="../../src/Chrysalis.Tx.Providers.UtxoRpc.Test/Golden/dolos-1.6.3-preprod/read-params.pb" LogicalName="read-params.pb" />
+  </ItemGroup>
+</Project>
