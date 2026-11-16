@@ -97,7 +97,7 @@ public class BlockFetchCompletenessTests(ITestOutputHelper output)
             Assert.Equal(previousHash, block.Block.Header().HeaderBody.PrevHash()!.Value.ToArray());
             previousHash = hash;
             lastBlockSlot = block.Block.Slot();
-            if (forward.Tip.Slot is Chrysalis.Network.Cbor.Common.SpecificPoint point) { lastTipSlot = point.Slot; }
+            if (forward.Tip.Slot is Cbor.Common.SpecificPoint point) { lastTipSlot = point.Slot; }
         }
         output.WriteLine($"Validated {recording.Digests.Length} body SHA256s and node-supplied raw headers; {recording.Digests.Length - 1} node-supplied predecessor hashes plus the anchor. Header/body hashes are Chrysalis-computed; the last digest has no following-header oracle. Last block slot={lastBlockSlot}; last Haskell Tip slot={lastTipSlot}.");
     }
