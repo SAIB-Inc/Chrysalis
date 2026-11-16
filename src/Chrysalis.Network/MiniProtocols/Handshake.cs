@@ -36,8 +36,10 @@ public class Handshake(AgentChannel channel) : IMiniProtocol
     public async Task<HandshakeMessage> SendAsync(ProposeVersions propose, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(propose);
+        propose = new ProposeVersions(propose.Idx, HandshakeVersionTables.Normalize(propose.VersionTable));
         await _buffer.SendFullMessageAsync<HandshakeMessage>(propose, cancellationToken).ConfigureAwait(false);
         HandshakeMessage response = await _buffer.ReceiveFullMessageAsync<HandshakeMessage>(cancellationToken).ConfigureAwait(false);
+        HandshakeWireValidation.Validate(response);
         IsDone = true;
         return response;
     }
@@ -54,8 +56,10 @@ public class Handshake(AgentChannel channel) : IMiniProtocol
     public async Task<T> SendAsync<T>(ProposeVersions propose, CancellationToken cancellationToken) where T : HandshakeMessage
     {
         ArgumentNullException.ThrowIfNull(propose);
+        propose = new ProposeVersions(propose.Idx, HandshakeVersionTables.Normalize(propose.VersionTable));
         await _buffer.SendFullMessageAsync<HandshakeMessage>(propose, cancellationToken).ConfigureAwait(false);
         HandshakeMessage response = await _buffer.ReceiveFullMessageAsync<HandshakeMessage>(cancellationToken).ConfigureAwait(false);
+        HandshakeWireValidation.Validate(response);
         IsDone = true;
         if (response is Refuse refused)
         {

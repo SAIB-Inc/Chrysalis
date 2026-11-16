@@ -15,14 +15,14 @@ public abstract partial record VersionTable : CborRecord;
 /// </summary>
 /// <param name="Value">The dictionary mapping each node-to-client version to its negotiation parameters.</param>
 [CborSerializable]
-public partial record N2CVersionTable(Dictionary<N2CVersion, N2CVersionData> Value) : VersionTable;
+public partial record N2CVersionTable([CborDefinite] Dictionary<N2CVersion, N2CVersionData> Value) : VersionTable;
 
 /// <summary>
 /// A version table mapping node-to-node protocol versions to their corresponding parameters.
 /// </summary>
 /// <param name="Value">The dictionary mapping each node-to-node version to its negotiation parameters.</param>
 [CborSerializable]
-public partial record N2NVersionTable(Dictionary<N2NVersion, N2NVersionData> Value) : VersionTable;
+public partial record N2NVersionTable([CborDefinite] Dictionary<N2NVersion, N2NVersionData> Value) : VersionTable;
 
 /// <summary>
 /// Factory methods for constructing commonly used Ouroboros Handshake version tables.

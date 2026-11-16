@@ -48,6 +48,27 @@ public sealed class B1CarbonNodeClientTests
         replay.AssertNothingSent();
     }
 
+    /// <summary>Malformed duplicate-key/extra-element frames fail startup as malformed CBOR, never as a typed refusal.</summary>
+    /// <param name="reply">A malformed handshake reply, including the reviewer's duplicate-key vector.</param>
+    [Theory]
+    [InlineData("8203a21980178201f41980178202f4")]
+    [InlineData("840119801482182af4656578747261")]
+    [InlineData("8202840219801463626164656578747261")]
+    public async Task MalformedReplyCannotPublishVersionOrBecomeTypedRefusal(string reply)
+    {
+        await using NodeReplay replay = new();
+        using CancellationTokenSource deadline = new(TimeSpan.FromSeconds(5));
+        Task startup = replay.Client.StartAsync(SingleOffer(), deadline.Token);
+        _ = await replay.ReadProposalAsync(deadline.Token);
+        await replay.ReplyAsync(reply, deadline.Token);
+        Exception failure = await Assert.ThrowsAnyAsync<Exception>(() => startup);
+        Assert.IsNotType<HandshakeRefusedException>(failure);
+        Assert.False(failure is OperationCanceledException);
+        Assert.Null(replay.Client.NegotiatedVersion);
+        Assert.False(replay.Client.Handshake.IsDone);
+        replay.AssertNothingSent();
+    }
+
     /// <summary>Startup runs once; a second attempt leaves the established version intact and sends nothing.</summary>
     [Fact]
     public async Task SecondStartIsRejectedWithoutAnotherProposal()
