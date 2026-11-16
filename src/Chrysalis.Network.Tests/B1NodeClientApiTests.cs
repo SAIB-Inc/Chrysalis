@@ -48,6 +48,39 @@ public sealed class B1NodeClientApiTests
         Assert.Null(property.GetSetMethod());
     }
 
+    /// <summary>An explicit one-entry offer reaches the wire and exposes the actual accepted version.</summary>
+    [Fact]
+    public async Task ExplicitOfferStartupCanForceOneVersion()
+    {
+        // Reflection makes the pre-implementation API absence an executable red assertion.
+        MethodInfo? start = typeof(NodeClient).GetMethod("StartAsync", [typeof(N2CVersionTable), typeof(CancellationToken)]);
+        Assert.NotNull(start);
+        TaskCompletionSource<int> port = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        using CancellationTokenSource deadline = new(TimeSpan.FromSeconds(15));
+        TaskCompletionSource<byte[]> proposed = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        TaskCompletionSource release = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        Task peer = ReplyAsync(port, Convert.FromHexString("830119801482182af4"), proposed, release.Task, deadline.Token);
+        try
+        {
+            using NodeClient client = await NodeClient.ConnectAsync("127.0.0.1", await port.Task.WaitAsync(deadline.Token), deadline.Token);
+            N2CVersionTable offer = new(new Dictionary<N2CVersion, N2CVersionData> { [new N2CVersion(32788)] = new(42, false) });
+            Task startup = Assert.IsAssignableFrom<Task>(start.Invoke(client, [offer, deadline.Token]));
+            await startup.WaitAsync(deadline.Token);
+            ProposeVersions proposal = CborSerializer.Deserialize<ProposeVersions>(await proposed.Task.WaitAsync(deadline.Token));
+            KeyValuePair<N2CVersion, N2CVersionData> entry = Assert.Single(Assert.IsType<N2CVersionTable>(proposal.VersionTable).Value);
+            Assert.Equal(32788, entry.Key.Value);
+            Assert.Equal(42UL, entry.Value.NetworkMagic);
+            PropertyInfo? property = typeof(NodeClient).GetProperty("NegotiatedVersion");
+            Assert.NotNull(property);
+            Assert.Equal(32788, Assert.IsType<N2CVersion>(property.GetValue(client)).Value);
+        }
+        finally
+        {
+            _ = release.TrySetResult();
+            await peer;
+        }
+    }
+
     private static async Task ReplyAsync(TaskCompletionSource<int> port, byte[] reply, TaskCompletionSource<byte[]> proposed, Task release, CancellationToken cancellationToken)
     {
         using TcpListener listener = new(IPAddress.Loopback, 0);
