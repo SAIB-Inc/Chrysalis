@@ -9,6 +9,9 @@
     <PackageLicenseFile>LICENSE.md</PackageLicenseFile>
   </PropertyGroup>
   <ItemGroup>
+    <InternalsVisibleTo Include="UtxoRpcBench" />
+  </ItemGroup>
+  <ItemGroup>
     <ProjectReference Include="../Chrysalis.Tx/Chrysalis.Tx.csproj" />
   </ItemGroup>
   <ItemGroup>
