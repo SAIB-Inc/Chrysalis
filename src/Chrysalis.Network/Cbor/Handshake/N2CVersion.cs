@@ -18,6 +18,12 @@ public static class N2CVersions
     public static N2CVersion V19 => new(32787);
     /// <summary>Node-to-client protocol version 20 (wire value 32788).</summary>
     public static N2CVersion V20 => new(32788);
+    /// <summary>Node-to-client protocol version 21 (wire value 32789).</summary>
+    public static N2CVersion V21 => new(32789);
+    /// <summary>Node-to-client protocol version 22 (wire value 32790).</summary>
+    public static N2CVersion V22 => new(32790);
+    /// <summary>Node-to-client protocol version 23 (wire value 32791).</summary>
+    public static N2CVersion V23 => new(32791);
 }
 
 /// <summary>

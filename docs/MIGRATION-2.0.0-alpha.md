@@ -12,4 +12,10 @@ The first four groups are approved by D5 and belong to B2–B4; listing them her
 4. **RejectTx.RejectReason**: the reason becomes inline raw CBOR instead of the incorrect byte-string representation. Decode the structured node rejection without assuming that the node supplied a CBOR byte string (B3).
 5. **HandshakeDecodeError.ErrorData and Refused.ErrorData**: both members change from `ReadOnlyMemory<byte>` to **`string`** (D26, B1). The node sends CBOR text, so read `ErrorData` directly; explicitly UTF-8 encode only when bytes are required by a caller. The member names are retained. There is no `ErrorText` accessor, converter bridge or generator change. A fresh record writes CBOR text, and CBOR byte-string/null payloads are rejected. This fifth group has its own described commit boundary because retaining the byte declaration could never decode a node's actual text and would require unnecessary generator support.
 
+## Other B1 public deltas (one described commit boundary each)
+
+| Public delta | Migration and reason |
+|---|---|
+| V21–V23 constants and extended default table | `N2CVersions` adds V21/V22/V23. The historical `VersionTables.N2cV10AndAbove` name is retained for compatibility; its provisional default offer is V16–V23, subject to the documented B1 controls and the mandatory full-suite rerun after B2–B4 before H2. A failing version leaves the default at that gate. |
+
 The two text members form the single fifth type-change group and a single D26 boundary. The other boundaries above match the individually described public deltas; implementation/test/provenance and documentation changes do not authorize unrelated API changes.
