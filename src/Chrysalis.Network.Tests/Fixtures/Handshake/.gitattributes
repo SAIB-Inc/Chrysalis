@@ -1,0 +1,5 @@
+*.cbor binary
+*LICENSE -text
+*NOTICE -text
+*.cddl -text
+*.json -text

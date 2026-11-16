@@ -1,0 +1,116 @@
+[
+  {
+    "file": "upstream/ouroboros-network-11.1.3/LICENSE",
+    "source_repository": "https://github.com/IntersectMBO/ouroboros-network",
+    "source_commit": "c45735a56c567fa977969173d18943bac6bb3821",
+    "source_path": "LICENSE",
+    "license": "Apache-2.0",
+    "sha256": "0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594"
+  },
+  {
+    "file": "upstream/ouroboros-network-11.1.3/NOTICE",
+    "source_repository": "https://github.com/IntersectMBO/ouroboros-network",
+    "source_commit": "c45735a56c567fa977969173d18943bac6bb3821",
+    "source_path": "NOTICE",
+    "license": "Apache-2.0",
+    "sha256": "671fc969e0e6a4059bf756154e4dad04e91b7972068998c7e6336e5513df8699"
+  },
+  {
+    "file": "upstream/ouroboros-network-11.1.3/handshake-node-to-client.cddl",
+    "source_repository": "https://github.com/IntersectMBO/ouroboros-network",
+    "source_commit": "c45735a56c567fa977969173d18943bac6bb3821",
+    "source_path": "cardano-diffusion/protocols/cddl/specs/handshake-node-to-client.cddl",
+    "license": "Apache-2.0",
+    "sha256": "93b1394359af36f63e65b348a761180c7fa8f0f69041d0fed34cb280819d340f"
+  },
+  {
+    "file": "upstream/ouroboros-network-11.2.1/LICENSE",
+    "source_repository": "https://github.com/IntersectMBO/ouroboros-network",
+    "source_commit": "4646039f05eb809bd5252af17121644ec1dc0c2c",
+    "source_path": "LICENSE",
+    "license": "Apache-2.0",
+    "sha256": "0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594"
+  },
+  {
+    "file": "upstream/ouroboros-network-11.2.1/NOTICE",
+    "source_repository": "https://github.com/IntersectMBO/ouroboros-network",
+    "source_commit": "4646039f05eb809bd5252af17121644ec1dc0c2c",
+    "source_path": "NOTICE",
+    "license": "Apache-2.0",
+    "sha256": "671fc969e0e6a4059bf756154e4dad04e91b7972068998c7e6336e5513df8699"
+  },
+  {
+    "file": "upstream/ouroboros-network-11.2.1/handshake-node-to-client.cddl",
+    "source_repository": "https://github.com/IntersectMBO/ouroboros-network",
+    "source_commit": "4646039f05eb809bd5252af17121644ec1dc0c2c",
+    "source_path": "cardano-diffusion/protocols/cddl/specs/handshake-node-to-client.cddl",
+    "license": "Apache-2.0",
+    "sha256": "a058cd7149d4635d70182faff0b5a8abb3e3ddf214505370fd87e2473fdecf41"
+  },
+  {
+    "file": "upstream/cardano-node-11.1.3/LICENSE",
+    "source_repository": "https://github.com/IntersectMBO/cardano-node",
+    "source_commit": "938cba990357ae7c4b7f95c8f75dd9d31174bbeb",
+    "source_path": "LICENSE",
+    "license": "Apache-2.0",
+    "sha256": "0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594"
+  },
+  {
+    "file": "upstream/cardano-node-11.1.3/NOTICE",
+    "source_repository": "https://github.com/IntersectMBO/cardano-node",
+    "source_commit": "938cba990357ae7c4b7f95c8f75dd9d31174bbeb",
+    "source_path": "NOTICE",
+    "license": "Apache-2.0",
+    "sha256": "2a61a15b10e1b920797d2d30d9ef13253b8f44f0bc785fd7320dfe0389286cfd"
+  },
+  {
+    "file": "upstream/cardano-node/LICENSE",
+    "source_repository": "https://github.com/IntersectMBO/cardano-node",
+    "source_commit": "90bc1cd9380a78a63091ff673f8c5693152c8f60",
+    "source_path": "LICENSE",
+    "license": "Apache-2.0",
+    "sha256": "0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594"
+  },
+  {
+    "file": "upstream/cardano-node/NOTICE",
+    "source_repository": "https://github.com/IntersectMBO/cardano-node",
+    "source_commit": "90bc1cd9380a78a63091ff673f8c5693152c8f60",
+    "source_path": "NOTICE",
+    "license": "Apache-2.0",
+    "sha256": "2a61a15b10e1b920797d2d30d9ef13253b8f44f0bc785fd7320dfe0389286cfd"
+  },
+  {
+    "file": "upstream/cardano-cli-11.7.0.0/LICENSE",
+    "source_repository": "https://github.com/IntersectMBO/cardano-cli",
+    "source_commit": "24c05829e854f9b2f56dcb9422bff5ff3ff60f77",
+    "source_path": "LICENSE",
+    "license": "Apache-2.0",
+    "sha256": "0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594"
+  },
+  {
+    "file": "upstream/cardano-cli-11.7.0.0/NOTICE",
+    "source_repository": "https://github.com/IntersectMBO/cardano-cli",
+    "source_commit": "24c05829e854f9b2f56dcb9422bff5ff3ff60f77",
+    "source_path": "NOTICE",
+    "license": "Apache-2.0",
+    "sha256": "2a61a15b10e1b920797d2d30d9ef13253b8f44f0bc785fd7320dfe0389286cfd"
+  },
+  {
+    "file": "upstream/cardano-cli-10.13.1.0/LICENSE",
+    "source_repository": "https://github.com/IntersectMBO/cardano-cli",
+    "source_commit": "8ed7a14919096012d7b4c83291036b16953fc53f",
+    "source_path": "LICENSE",
+    "retrieved_from": "pinned raw.githubusercontent.com primary source; LICENSE equals the G2 retained copy",
+    "license": "Apache-2.0",
+    "sha256": "0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594"
+  },
+  {
+    "file": "upstream/cardano-cli-10.13.1.0/NOTICE",
+    "source_repository": "https://github.com/IntersectMBO/cardano-cli",
+    "source_commit": "8ed7a14919096012d7b4c83291036b16953fc53f",
+    "source_path": "NOTICE",
+    "retrieved_from": "pinned raw.githubusercontent.com primary source; LICENSE equals the G2 retained copy",
+    "license": "Apache-2.0",
+    "sha256": "2a61a15b10e1b920797d2d30d9ef13253b8f44f0bc785fd7320dfe0389286cfd"
+  }
+]

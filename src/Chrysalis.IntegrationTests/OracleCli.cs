@@ -29,6 +29,7 @@ internal static class OracleCli
 {
     private static string? _version;
     private static string? _executableSha256;
+    private static string? _driverSha256;
     private static JsonElement _source;
     internal static async Task<string> QueryAsync(string label, CancellationToken cancellationToken, params string[] query)
     {
@@ -83,19 +84,13 @@ internal static class OracleCli
         if (arguments.Count == 1 && arguments[0] == "--version")
         {
             _version = output.Trim();
-            using Stream sourceStream = typeof(OracleCli).Assembly.GetManifestResourceStream("Golden/SOURCES.json")
-                ?? throw new InvalidOperationException("Missing independent oracle producer manifest.");
-            using JsonDocument sources = await JsonDocument.ParseAsync(sourceStream, cancellationToken: cancellationToken);
-            _source = sources.RootElement.GetProperty("cardano_cli").Clone();
+            _source = SourceForNode(IntegrationEnvironment.Required(IntegrationEnvironment.NodeVersion));
             string expectedVersion = "cardano-cli " + _source.GetProperty("version").GetString() + " ";
             Assert.StartsWith(expectedVersion, _version, StringComparison.Ordinal);
-            string? executableFile = File.Exists(executable) ? executable : (Environment.GetEnvironmentVariable("PATH") ?? string.Empty)
-                .Split(Path.PathSeparator).Select(directory => Path.Combine(directory, executable)).FirstOrDefault(File.Exists);
-            if (executableFile is not null)
-            {
-                using FileStream binary = File.OpenRead(executableFile);
-                _executableSha256 = Convert.ToHexStringLower(await SHA256.HashDataAsync(binary, cancellationToken));
-            }
+            string executableFile = File.Exists(executable) ? executable : (Environment.GetEnvironmentVariable("PATH") ?? string.Empty)
+                .Split(Path.PathSeparator).Select(directory => Path.Combine(directory, executable)).FirstOrDefault(File.Exists)
+                ?? throw new InvalidOperationException("Could not locate the executed cardano-cli driver for hashing.");
+            (_driverSha256, _executableSha256) = FileIdentities(executableFile, Environment.GetEnvironmentVariable(IntegrationEnvironment.CliBinary));
         }
         string recorded = expectFailure || process.ExitCode != 0 ? output + error : output;
         Record(label, arguments, recorded);
@@ -120,6 +115,7 @@ internal static class OracleCli
             cli_version = _version ?? throw new InvalidOperationException("Record the CLI identity before an oracle operation."),
             source_path = "generated cardano-cli output: " + string.Join(' ', arguments),
             cli_binary_sha256 = _executableSha256,
+            cli_driver_sha256 = _driverSha256,
             node_source_repository = "https://github.com/IntersectMBO/cardano-node",
             node_tag = IntegrationEnvironment.Required(IntegrationEnvironment.NodeVersion),
             network_magic = IntegrationEnvironment.NetworkMagic,
@@ -127,6 +123,24 @@ internal static class OracleCli
             sha256 = Convert.ToHexStringLower(SHA256.HashData(bytes))
         });
         File.AppendAllText(Path.Combine(directory, "golden-oracles.jsonl"), entry + Environment.NewLine);
+    }
+
+    internal static JsonElement SourceForNode(string nodeVersion)
+    {
+        using Stream stream = typeof(OracleCli).Assembly.GetManifestResourceStream("Golden/SOURCES.json")
+            ?? throw new InvalidOperationException("Missing independent oracle producer manifest.");
+        using JsonDocument sources = JsonDocument.Parse(stream);
+        return sources.RootElement.GetProperty("cardano_cli_by_node").TryGetProperty(nodeVersion, out JsonElement source)
+            ? source.Clone() : throw new InvalidOperationException($"No reviewed cardano-cli producer pin exists for node {nodeVersion}.");
+    }
+
+    internal static (string Driver, string Binary) FileIdentities(string driverPath, string? actualBinaryPath)
+    {
+        using FileStream driver = File.OpenRead(driverPath);
+        string driverHash = Convert.ToHexStringLower(SHA256.HashData(driver));
+        using FileStream binary = File.OpenRead(actualBinaryPath ?? driverPath);
+        string binaryHash = Convert.ToHexStringLower(SHA256.HashData(binary));
+        return (driverHash, binaryHash);
     }
 
     internal static async Task RecordVersionAsync(CancellationToken cancellationToken) =>

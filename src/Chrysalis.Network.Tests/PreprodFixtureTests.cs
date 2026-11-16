@@ -163,7 +163,8 @@ public class PreprodFixtureTests
         Assert.Equal(10, manifest.GetProperty("blocks").GetArrayLength());
         Assert.Equal(64, manifest.GetProperty("blocks").EnumerateArray().Sum(block => block.GetProperty("transactions").GetInt32()));
         Assert.Equal(4, manifest.GetProperty("transactions").GetArrayLength());
-        string[] resources = typeof(PreprodFixtureTests).Assembly.GetManifestResourceNames();
+        string[] resources = [.. typeof(PreprodFixtureTests).Assembly.GetManifestResourceNames()
+            .Where(name => name.StartsWith("Chrysalis.Network.Tests.Fixtures.Preprod.", StringComparison.Ordinal))];
         Assert.Equal(118, resources.Count(name => name.EndsWith(".cbor", StringComparison.Ordinal)));
         _ = Assert.Single(resources, name => name.EndsWith(".current-protocol-parameters.json", StringComparison.Ordinal));
     }

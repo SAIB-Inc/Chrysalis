@@ -1,0 +1,102 @@
+{
+  "schema_version": 1,
+  "notice": "Real Haskell node replies, captured transparently; expected fields were decoded independently with cbor2, not Chrysalis. No wallet, funded opt-in or Blockfrost configuration. The private node mounted only one isolated scratch directory, never a shared node database.",
+  "independent_decoder": {
+    "repository": "https://github.com/agronholm/cbor2",
+    "version": "5.8.0",
+    "license": "MIT"
+  },
+  "captures": {
+    "wrong-magic-node-11.1.3.cbor": {
+      "source_repository": "https://github.com/IntersectMBO/cardano-node",
+      "source_tag": "11.1.3",
+      "source_commit": "938cba990357ae7c4b7f95c8f75dd9d31174bbeb",
+      "producer_path": "cardano-node; Ouroboros node-to-client handshake encoder",
+      "node_version": "11.1.3",
+      "network": "Preprod",
+      "node_network_magic": 1,
+      "command": "<cardano-cli-10.13.1.0> latest query tip --testnet-magic 2 --socket-path <node-socket>",
+      "captured_utc": "2026-11-16T04:27:40.560146+00:00",
+      "mux_header_hex": "3ec2700a800000b0",
+      "protocol": 0,
+      "bytes": 176,
+      "sha256": "44433f10d36ff6a75d224d9ad23c848e3d7b70d6b6a871eceda70de2fd16d4fd",
+      "license": "Public captured protocol facts; producer Apache-2.0, LICENSE/NOTICE retained under upstream/",
+      "expected": {
+        "reply": "Refuse",
+        "reason": "Refused",
+        "version": 32790,
+        "message": "version data mismatch: NodeToClientVersionData {networkMagic = NetworkMagic 1, query = False} /= NodeToClientVersionData {networkMagic = NetworkMagic 2, query = False}"
+      }
+    },
+    "legacy-mismatch-node-11.2.1.cbor": {
+      "source_repository": "https://github.com/IntersectMBO/cardano-node",
+      "source_tag": "11.2.1",
+      "source_commit": "90bc1cd9380a78a63091ff673f8c5693152c8f60",
+      "producer_path": "cardano-node; Ouroboros node-to-client handshake encoder",
+      "node_version": "11.2.1",
+      "network": "isolated private devnet",
+      "node_network_magic": 42,
+      "command": "dotnet <legacy-capture-client-7c45d47.dll> <node-socket> (references original Chrysalis 7c45d47 assemblies; magic 42)",
+      "captured_utc": "2026-11-16T04:46:07.850397+00:00",
+      "mux_header_hex": "80c2591d80000008",
+      "protocol": 0,
+      "bytes": 8,
+      "sha256": "b578354983fd1d529a5223135fb845319d45cdab18872132271b908b60ed706d",
+      "license": "Public captured protocol facts; producer Apache-2.0, LICENSE/NOTICE retained under upstream/",
+      "expected": {
+        "reply": "Refuse",
+        "reason": "VersionMismatch",
+        "versions": [
+          32791
+        ]
+      }
+    },
+    "v23-accept-node-11.2.1.cbor": {
+      "source_repository": "https://github.com/IntersectMBO/cardano-node",
+      "source_tag": "11.2.1",
+      "source_commit": "90bc1cd9380a78a63091ff673f8c5693152c8f60",
+      "producer_path": "cardano-node; Ouroboros node-to-client handshake encoder",
+      "node_version": "11.2.1",
+      "network": "isolated private devnet",
+      "node_network_magic": 42,
+      "command": "docker exec <private-node-11.2.1> <cardano-cli-11.7.0.0> latest query tip --testnet-magic 42 --socket-path <node-socket>",
+      "captured_utc": "2026-11-16T04:46:08.203099+00:00",
+      "mux_header_hex": "80c7bb1680000009",
+      "protocol": 0,
+      "bytes": 9,
+      "sha256": "0dd6829f155bc221730af33e1f2e6f51c2b4441e5884005b16ac8ef6a982797e",
+      "license": "Public captured protocol facts; producer Apache-2.0, LICENSE/NOTICE retained under upstream/",
+      "expected": {
+        "reply": "N2CAcceptVersion",
+        "version": 32791,
+        "networkMagic": 42
+      }
+    }
+  },
+  "upstream_manifest": "upstream-sources.json",
+  "legacy_client": {
+    "source_repository": "https://github.com/SAIB-Inc/Chrysalis",
+    "commit": "7c45d47c87c63520cea84212dbd01ecc8d372ac3",
+    "baseline_worktree_clean": true,
+    "assembly_sha256": {
+      "Chrysalis.Network.dll": "ab37d19aca77501dd9240816f939c8518d8f9f4e8f10e902d7c54ff589eebf89",
+      "Chrysalis.Codec.dll": "ef59c9c1d1784c060404595e6342afb9697f0ed847145ca5f2b5618c7a79958c"
+    },
+    "offered_wire_versions": [
+      32784,
+      32785,
+      32786,
+      32787,
+      32788
+    ],
+    "notice": "Existing baseline binaries were referenced without modifying or rebuilding their source snapshot; no reproducible-binary claim. Captured proposal verifies V16-V20 and magic 42."
+  },
+  "private_image": {
+    "tag": "ghcr.io/intersectmbo/cardano-node:11.2.1",
+    "digest": "sha256:2e20a5932f5f25a98fd871c0caeab663ce104c7d36f8c6a51ea7c588fd2f08dc",
+    "cli_version": "11.7.0.0",
+    "cli_source_tag": "cardano-cli-11.7.0.0",
+    "cli_source_commit": "24c05829e854f9b2f56dcb9422bff5ff3ff60f77"
+  }
+}

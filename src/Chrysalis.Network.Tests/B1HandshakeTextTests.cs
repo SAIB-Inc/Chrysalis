@@ -1,6 +1,8 @@
 using System.Reflection;
 using Chrysalis.Codec.Serialization;
 using Chrysalis.Network.Cbor.Handshake;
+using Chrysalis.Network.Core;
+using Chrysalis.Network.MiniProtocols;
 using Xunit;
 
 namespace Chrysalis.Network.Tests;
@@ -73,6 +75,29 @@ public sealed class B1HandshakeTextTests
     {
         RefuseReason reason = FreshReason(refused, null);
         _ = Assert.ThrowsAny<Exception>(() => CborSerializer.Serialize(new Refuse(2, reason)));
+    }
+
+    /// <summary>The actual wrong-magic frame survives typed throwing and a wholly fresh encode.</summary>
+    [Fact]
+    public async Task RealWrongMagicTextSurvivesTypedRefusalAndFreshEncoding()
+    {
+        using Stream? stream = typeof(B1HandshakeTextTests).Assembly.GetManifestResourceStream(
+            "Chrysalis.Network.Tests.Fixtures.Handshake.wrong-magic-node-11.1.3.cbor");
+        Assert.NotNull(stream);
+        using MemoryStream bytes = new();
+        await stream.CopyToAsync(bytes);
+        byte[] frame = bytes.ToArray();
+        using ProtocolReplay replay = new(ProtocolType.Handshake, frame);
+        Handshake handshake = new(replay.Channel);
+        HandshakeRefusedException failure = await Assert.ThrowsAsync<HandshakeRefusedException>(() =>
+            handshake.SendAsync<N2CAcceptVersion>(HandshakeMessages.ProposeVersions(VersionTables.N2cV10AndAbove(2)), CancellationToken.None));
+        Refused reason = Assert.IsType<Refused>(failure.Reason);
+        string text = Text(reason);
+        Assert.Contains("networkMagic", text, StringComparison.Ordinal);
+        Assert.Contains(text, failure.Message, StringComparison.Ordinal);
+        RefuseReason fresh = FreshReason(true, text, reason.VersionNumber);
+        Assert.True(fresh.Raw.IsEmpty);
+        Assert.Equal(frame, CborSerializer.Serialize(new Refuse(2, fresh)));
     }
 
     private static string Text(RefuseReason reason) => Assert.IsType<string>(reason.GetType().GetProperty("ErrorData")?.GetValue(reason));

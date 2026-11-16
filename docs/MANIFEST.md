@@ -6,19 +6,62 @@ Last recorded: **2026-11-16**. Upstream audit and live-capture snapshot: **2026-
 
 | SDK release / source | Node reference set | Evidence status |
 |---|---|---|
-| Historical `1.7.14-alpha`, commit `7c45d47c87c63520cea84212dbd01ecc8d372ac3` | A: node 11.1.3 | **Observed baseline**, one Preprod run on 2026-11-15, .NET SDK 10.0.301 / runtime 10.0.9. Live matrix facts below come from this run. |
-| `2.0.0-alpha` candidate, not published | A: node 11.1.3 | Required release target. The captured corpus passes offline after the .NET 11/platform work; **candidate live and installed-package integration verification are pending**. |
-| `2.0.0-alpha` candidate, not published | B: node 11.2.1 | Required prerelease/experimental target; **untested live**. No test success is inferred from source support or tag existence. |
+| Historical `1.7.14-alpha`, commit `7c45d47c87c63520cea84212dbd01ecc8d372ac3` | A: node 11.1.3 | **Observed baseline**, one Preprod run on 2026-11-15, .NET SDK 10.0.301 / runtime 10.0.9. The historical baseline tables below come from this run. |
+| `2.0.0-alpha` candidate, not published | A: node 11.1.3 | B1 provisional live controls completed on 2026-11-16 with V16–V23 forced individually; Known B2/B3/B4 and provider limits remain below. **The full repaired-suite rerun and installed-package integration verification are pending**. |
+| `2.0.0-alpha` candidate, not published | B: node 11.2.1 | B1 private-devnet V23 controls completed on 2026-11-16. Prerelease/experimental target; full repaired-suite and installed-package verification remain pending. |
 
-The historical report tested the source checkout and, in **REPORT step 9**, the published **1.7.14-alpha NuGet packages**: the covered N2N14/N2C20 successes and failures matched the source run, including the five failing query helpers and three failing monitor operations. Funded transactions were not duplicated in that package comparison. This is not verification of the new locally packed 2.0.0-alpha integration consumer. The four confirmed transactions and node parameters/blocks/frames are public offline inputs; see the [capture provenance, identifiers and byte-integrity manifest](../src/Chrysalis.Network.Tests/Fixtures/Preprod/README.md). The **1,544 passing offline/unit cases at commit `ee09e2e2f8d1bdaf305852015847653a69ac600b` (`ee09e2e`)**, including 232 new capture/replay cases, do **not** promote any live capability from untested/failing to tested. Candidate package-installed integration, forced-version runs, and the release performance gate are still release work.
+The historical report tested the source checkout and, in **REPORT step 9**, the published **1.7.14-alpha NuGet packages**: the covered N2N14/N2C20 successes and failures matched the source run, including the five failing query helpers and three failing monitor operations. Funded transactions were not duplicated in that package comparison. This is not verification of the new locally packed 2.0.0-alpha integration consumer. The four confirmed transactions and node parameters/blocks/frames are public offline inputs; see the [capture provenance, identifiers and byte-integrity manifest](../src/Chrysalis.Network.Tests/Fixtures/Preprod/README.md). The **1,544 passing offline/unit cases at commit `ee09e2e2f8d1bdaf305852015847653a69ac600b` (`ee09e2e`)**, including 232 new capture/replay cases, do **not** promote any live capability from untested/failing to tested. Candidate package-installed integration, the full repaired-suite forced-version rerun after B2–B4, and the release performance gate are still release work.
 
 Release version: **pending** (all packages must share one version; `0.0.0-dev` remains the development placeholder). Release results attachment: **pending**. Previous `2.x` alpha: **none yet**; the first alpha must say so rather than invent a comparison release. Node 11.2.1 is an experimental/prerelease target, not a recommendation for mainnet. Node software version, N2C/N2N handshake version, wire era tag, and ledger protocol version are distinct numbers.
 
 ## 2. Node-to-client capability matrix
 
-**T = tested successfully**, **F = failing in the observed run**, **U = untested**. Every cell is a specific SDK operation × forced/negotiated N2C version × node pin. T/F cells below describe the historical baseline, not a fresh candidate sign-off. No forced-version sweep occurred: V16–V20 were offered, and only **V20 (wire 32788)** was negotiated by Chrysalis. V16–V19 stay U even though offered; V21–V23 stay U because the SDK did not offer them. Wire version = `32768 + N2C version`.
+**T = tested successfully**, **F = failing in the observed run**, **U = untested**. Every cell is a specific SDK operation × forced/negotiated N2C version × node pin. The historical tables below are retained unchanged as baseline evidence; the separate B1 candidate table is not a full release sign-off. In the historical run no forced-version sweep occurred: V16–V20 were offered, and only **V20 (wire 32788)** was negotiated by Chrysalis. V16–V19 stay U even though offered; V21–V23 stay U because the SDK did not offer them. Wire version = `32768 + N2C version`.
 
 Cardano-cli controls negotiated V22 on node 11.1.3 and corroborated era/has-tx replies; they are independent controls, **not SDK V22 coverage**. Offline tests of an inner query model do not establish that the complete live helper works. Negative-test success means a refusal/rejection is decoded and surfaced as the intended typed outcome, not that the node accepts bad input.
+
+### 2.0.0-alpha B1 — provisional candidate controls, 2026-11-16
+
+This is B1's approved **non-Known N2C compatibility scope**, not a claim that the complete broken helper suite passes. Each row used a **single-entry offer**, and every observed accepted wire version matched that offer. The four controls are handshake acceptance; LSQ acquire/release/reacquire; client-chain FindIntersect/RollBackward at an independent CLI point; and monitor acquire/GetSizes against stable CLI snapshots. There is no genesis-to-tip or full-block/era conformance claim.
+
+| Node / network | Forced logical version | Offered = negotiated wire version | Handshake | State acquire/release | Client-chain point | Monitor acquire/sizes | Separate direct Known observations |
+|---|---:|---:|---|---|---|---|---|
+| 11.1.3 / Preprod magic 1 | 16 | 32784 | T | T | T | T | 9 failures; 0 skips |
+| 11.1.3 / Preprod magic 1 | 17 | 32785 | T | T | T | T | 9 failures; 0 skips |
+| 11.1.3 / Preprod magic 1 | 18 | 32786 | T | T | T | T | 9 failures; 0 skips |
+| 11.1.3 / Preprod magic 1 | 19 | 32787 | T | T | T | T | 9 failures; 0 skips |
+| 11.1.3 / Preprod magic 1 | 20 | 32788 | T | T | T | T | 9 failures; 0 skips |
+| 11.1.3 / Preprod magic 1 | 21 | 32789 | T | T | T | T | 9 failures; 0 skips |
+| 11.1.3 / Preprod magic 1 | 22 | 32790 | T | T | T | T | 9 failures; 0 skips |
+| 11.1.3 / Preprod magic 1 | 23 | 32791 | T | T | T | T | 9 failures; 0 skips |
+| 11.2.1 / isolated devnet magic 42 | 23 | 32791 | T | T | T | T | 7 failures; 2 reference-address skips |
+
+**Result: 36/36 non-Known control cases passed.** The default `N2cV10AndAbove` offer is provisionally V16–V23; no version was removed because all four controls passed at each requested version. **After B2–B4 land, rerun the complete V16–V23 suite on 11.1.3 and V23 on 11.2.1 before H2; any failing version must leave the default.** This rerun, not the provisional B1 controls, supplies the final I5 release claim. Node 11.2.1 V16–V22 have no individual forced-run qualification here; the preserved legacy V16–V20 proposal received a real V23-only mismatch refusal.
+
+Known observations are not counted as B1 compatibility successes or silently waived:
+
+- On each 11.1.3 version, all five B2 query helpers failed on the incorrect outer byte-string envelope; B3's invalid, unfunded transaction rejection failed decoding the node reason; B4 Release awaited a nonexistent response, HasTx closed the channel, and GetMeasures failed. At V16–V19 GetMeasures was correctly rejected **before writing** with `N2CVersionNotSupportedException` (V20 minimum); at V20–V23 the existing 32-bit measure decoder failed. All 72 direct Known failures are retained separately.
+- On private 11.2.1/V23, ledger-tip/current-era and rejection reached the existing B2/B3 envelope failures; Release/HasTx/GetMeasures retained their B4 failures. Address/input cases were real skips: no Preprod nonempty-reference address is configured on this isolated chain. The parameter case failed in the independent oracle's missing `PlutusV2` cost-model precondition **before the SDK query**; it is not evidence of a parameter decoder attempt. These are seven failed observations and two skips, not nine repaired helpers. The full rerun must supply appropriate nonempty-reference and cost-model preconditions rather than counting these limits as coverage.
+- **Provider path: default offer, unforced; accepted version not exposed, unverified.** On Preprod the Ouroboros parameter test reached the Known B2 failure, using its own default-offer client, not the forced harness connection. On the private chain its independent `PlutusV2` precondition failed before provider execution, so there is no private provider-wire coverage. Do not infer its accepted version from a neighboring connection. If B2 adds connection injection, the mandatory pre-H2 rerun can force this route then.
+- F2 Blockfrost and funded execution remained skipped on both nodes because no keys, wallet, funded opt-in or spending were authorized. N2N/block-fetch/block decoding were not changed or requalified by B1. The B3 negative submission is an invalid, unfunded transaction that both CLI and node reject; no funds were spent.
+
+Separate handshake/version proofs:
+
+- Real wrong-magic `NodeClient.StartAsync` throws `HandshakeRefusedException` with the complete node string and null `NegotiatedVersion` (Preprod V20 and private V23). The original raw wrong-magic, legacy mismatch and V23 accept captures are independently hashed in `src/Chrysalis.Network.Tests/Fixtures/Handshake/manifest.json`; all decode offline.
+- Real raw query mode decoded/asserted the eight-version N2C reply on Preprod and the V23-only reply on the private node. The first Preprod test was red only when its cleanup awaited Plexer's terminal-peer-EOF error **after** saving the decoded reply. A narrow test-only cleanup fix catches exactly that post-assertion plexer exception; the private proofs then passed 2/2. No Plexer change or extra Preprod start was made. Retain that red-to-green chronology; the full pre-H2 rerun repeats the test on Preprod.
+- Empty query-reply tables (`[3,{}]`) are CDDL-valid but contain no family-bearing keys. The generic handshake interprets them using its **proposal family**, for both N2C and N2N, never by guessing from the requested type. Nonempty replies retain wire-family validation. The raw non-generic API returns its context-free decoded union unchanged; an empty query table is **family-ambiguous** there and its selected alternative is not evidence of the peer's family. Offline review regressions cover both families, generic-base/wrong-type calls, raw ambiguity and nonempty/mixed-family controls.
+- Offline insufficient-version tests check queued **and unflushed** outgoing data, typed required/negotiated metadata, custom minima, no-context behavior and unchanged legacy standalone constructors. The D26 tests reject byte strings/null, preserve non-ASCII text and reproduce the real refusal with a fresh record (not Raw reuse). These are independent no-write/wire proofs, not fabricated per-version live helpers.
+
+Per-node independent producer identities (the driver is recorded separately from the actual CLI binary):
+
+| Node | CLI version / source revision | Actual binary SHA-256 | Driver SHA-256 |
+|---|---|---|---|
+| 11.1.3 | 10.13.1.0 / `8ed7a14919096012d7b4c83291036b16953fc53f` | `4edcc84d3a789979dc05115c52bc0fe85b1d847d0e18abbe9a9e5419e245e760` | same native binary |
+| 11.2.1 | 11.7.0.0 / `24c05829e854f9b2f56dcb9422bff5ff3ff60f77` | `37ff80a8fde77d9e21374c48fbd1534336888bfa9d3ee96346786d091cc1f880` | `1bebb234882a6b7cac5dd6a63cec769066c123d5295e5dbf1055846cb45ea93d` |
+
+The per-node pins/licenses are in `src/Chrysalis.IntegrationTests/Golden/SOURCES.json`; `golden-oracles.jsonl` retains each CLI output hash, arguments, source and binary/driver identity. Actual offers/accepts are separately labeled **SDK observations**, never CLI-generated goldens. Separate local development records retain TRX, CLI observations, setup hashes and stop logs for the Preprod matrix, the bounded genesis-only private attempt and the completed block-bearing private chain. These are historical observations, not paths required to build or test this repository. The private node has exactly one isolated scratch-directory bind, network none, four CPUs/8 GiB, and never opens a shared node database. To recover its epoch-0 forecasting window only the public Byron/Shelley genesis start fields were refreshed; the old empty DB was renamed/preserved and existing generated key paths were untouched. Independent CLI observed block 2/slot 11 before the V23 matrix; shutdown closed at tip slot 83.
+
+Both nodes were gracefully stopped with `docker stop -t 180`, exit 0: Preprod **2026-11-16T06:49:47.351534554Z**, final private session **2026-11-16T06:59:31.120937799Z**. DBClosed/ClosedDB are retained. No B1 node or proxy remains running.
 
 ### Node A — 11.1.3, baseline observation on Preprod
 
@@ -49,9 +92,9 @@ Cardano-cli controls negotiated V22 on node 11.1.3 and corroborated era/has-tx r
 
 Observed public protocol/chain facts: Preprod magic 1, Conway ledger protocol 11.0, 10 fully decoded N2N blocks / 64 transaction bodies, three captured N2C Conway RollForwards, four confirmed signed transactions. These are one-run samples, not full-era replay or conformance claims. The monitor measures reply's second array item is **txCount**, not a slot; the capture has txCount 0 and step capacity 40,000,000,000.
 
-### Node B — 11.2.1, required target with no live SDK run yet
+### Node B — 11.2.1, historical baseline snapshot without a live SDK run
 
-Source-pinned node/network support requires **N2C V23**; older-version rejection is expected from the released source, but **has not been executed by this SDK test matrix**. Therefore V16–V22 cells are U, not fabricated failed test runs. The current SDK's V16–V20-only default offer is a known compatibility gap, not a successful V23 negotiation.
+At the historical snapshot, source-pinned node/network support required **N2C V23**; older-version rejection was expected from the released source but **had not been executed by the historical SDK test matrix**. Therefore V16–V22 cells are U, not fabricated failed test runs. The historical SDK's V16–V20-only default offer was a compatibility gap, not a successful V23 negotiation; the B1 candidate results are separately recorded above.
 
 | SDK query / operation | V16 | V17 | V18 | V19 | V20 | V21 | V22 | V23 | Scope / observed limitation |
 |---|---|---|---|---|---|---|---|---|---|
@@ -94,7 +137,7 @@ Use the dependency set of the **node being tested**, not the highest ledger/Plut
 
 ### Set A — node 11.1.3
 
-Node tag [`11.1.3`](https://github.com/IntersectMBO/cardano-node/releases/tag/11.1.3), commit `938cba990357ae7c4b7f95c8f75dd9d31174bbeb`. Stable-node baseline reference; candidate live verification pending.
+Node tag [`11.1.3`](https://github.com/IntersectMBO/cardano-node/releases/tag/11.1.3), commit `938cba990357ae7c4b7f95c8f75dd9d31174bbeb`. Stable-node baseline reference; B1 provisional candidate controls are recorded above, with the full repaired-suite gate still pending.
 
 | Upstream component | Node-pinned package version / tag | Tag commit |
 |---|---|---|
@@ -109,7 +152,7 @@ Node tag [`11.1.3`](https://github.com/IntersectMBO/cardano-node/releases/tag/11
 
 ### Set B — node 11.2.1
 
-Node tag [`11.2.1`](https://github.com/IntersectMBO/cardano-node/releases/tag/11.2.1), commit `90bc1cd9380a78a63091ff673f8c5693152c8f60`. Prerelease/experimental reference; candidate live verification pending.
+Node tag [`11.2.1`](https://github.com/IntersectMBO/cardano-node/releases/tag/11.2.1), commit `90bc1cd9380a78a63091ff673f8c5693152c8f60`. Prerelease/experimental reference; B1 private V23 controls are recorded above, with the full repaired-suite gate still pending.
 
 | Upstream component | Node-pinned package version / tag | Tag commit |
 |---|---|---|
