@@ -3,7 +3,6 @@ using Chrysalis.Codec.Serialization;
 using Chrysalis.Codec.Types;
 using Chrysalis.Network.Core;
 using SAIB.Cbor;
-using SAIB.Cbor.Serialization;
 
 namespace Chrysalis.Network.Multiplexer;
 
@@ -12,7 +11,7 @@ namespace Chrysalis.Network.Multiplexer;
 /// </summary>
 /// <remarks>
 /// Uses a Pallas-style accumulation buffer: segment payloads are appended to a temp buffer,
-/// CBOR decode is attempted after each append, and consumed bytes are drained on success.
+/// CBOR boundaries are checked after each append, and each complete item is decoded once.
 /// Single-segment messages are deserialized directly from the received array (zero extra copy).
 /// <para>
 /// INVARIANT: a returned message may be a zero-copy view into the internal buffer (e.g. a
@@ -107,6 +106,14 @@ public sealed class ChannelBuffer(AgentChannel channel)
         // Slow path: accumulate chunks until we can decode
         Append(firstChunk.Span);
 
+        // The empty-buffer direct probe already checked these exact bytes. Wait for new data
+        // before probing again, rather than repeating the same incomplete item after the copy.
+        if (usedLength == 0)
+        {
+            ReadOnlyMemory<byte> nextChunk = await channel.ReadSegmentAsync(cancellationToken).ConfigureAwait(false);
+            Append(nextChunk.Span);
+        }
+
         while (true)
         {
             if (TryDeserialize(out T? result, out int consumed))
@@ -134,45 +141,27 @@ public sealed class ChannelBuffer(AgentChannel channel)
             return false;
         }
 
-        try
+        if (!IsCompleteFrame(data.Span))
         {
-            result = CborSerializer.Deserialize<T>(data, out consumed);
-            return true;
-        }
-        catch (Exception) when (!IsCompleteFrame(data.Span))
-        {
-            // A whole CBOR frame is not yet buffered — the decode failed only because bytes are
-            // still in flight. Swallow and keep reading. A decode failure on a frame that IS fully
-            // present (e.g. an unsupported shape) is NOT swallowed: it propagates so a structural gap
-            // surfaces loudly instead of stalling the receive loop forever waiting for more bytes.
             return false;
         }
+
+        result = CborSerializer.Deserialize<T>(data, out consumed);
+        return true;
     }
 
     /// <summary>
-    /// Reports whether <paramref name="data"/> begins with at least one complete CBOR data item.
-    /// Used to tell a genuinely incomplete frame (buffer underrun — keep reading) apart from a
-    /// complete-but-undecodable frame (surface the error). <see cref="CborReader.SkipDataItem"/>
-    /// throws only when it runs off the end of the buffer mid-item, so a clean skip means the frame
-    /// is fully present.
+    /// Checks readiness without using exceptions as a partial-input signal. Malformed/oversized
+    /// frames fail immediately; semantic errors on a complete frame still come from SAIB.Cbor.
     /// </summary>
     private static bool IsCompleteFrame(ReadOnlySpan<byte> data)
     {
-        if (data.IsEmpty)
+        int length = CborFrameScanner.GetFrameLength(data);
+        if (length < 0)
         {
-            return false;
+            throw new CborException("Invalid or oversized CBOR frame.");
         }
-
-        try
-        {
-            CborReader reader = new(data);
-            reader.SkipDataItem();
-            return true;
-        }
-        catch (CborException)
-        {
-            return false;
-        }
+        return length > 0;
     }
 
     /// <summary>
@@ -262,16 +251,12 @@ public sealed class ChannelBuffer(AgentChannel channel)
         }
 
         ReadOnlyMemory<byte> data = new(_temp, _tempOffset, usedLength);
-        try
+        if (!IsCompleteFrame(data.Span))
         {
-            result = CborSerializer.Deserialize<T>(data, out consumed);
-            return true;
-        }
-        catch (Exception) when (!IsCompleteFrame(data.Span))
-        {
-            // See TryDeserializeDirect: only swallow when the frame is still partial. A failure on a
-            // fully-buffered frame propagates rather than looping forever on more reads.
             return false;
         }
+
+        result = CborSerializer.Deserialize<T>(data, out consumed);
+        return true;
     }
 }

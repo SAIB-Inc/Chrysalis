@@ -26,6 +26,8 @@ internal sealed class ProtocolReplay : IDisposable
 
     internal AgentChannel Channel { get; }
 
+    internal void CompleteIncoming() => Assert.True(_incoming.Writer.TryComplete());
+
     internal async Task<byte[]> ReadSentPayloadAsync(CancellationToken cancellationToken)
     {
         ReadResult result = await _outgoing.Reader.ReadAsync(cancellationToken);

@@ -1,0 +1,185 @@
+{
+  "network": "public Cardano preprod",
+  "networkMagic": 1,
+  "nodeVersion": "11.1.3",
+  "capturedDate": "2026-11-16",
+  "source": "work/Chrysalis-perf/benchmarks/out/p1-n2n-recording-a",
+  "sourceRepository": "https://github.com/IntersectMBO/cardano-node",
+  "sourceTag": "11.1.3",
+  "sourceLicence": "Apache-2.0 (node software); these are public on-chain / wire data, not copied source code",
+  "provenance": "Opaque server-to-client mux payload slices from the approved public N2N recording. Original segment boundaries are preserved. ChainSync headers and previous-hash fields are Haskell-node-supplied golden bytes, not Chrysalis re-encodings. Only the first six bodies are consumed; the last captured payload can contain further partial messages.",
+  "sourceSha256": {
+    "capture.json": "61a90548b0da176ee062a1d59125f348cb2336dd3599882ca8116f2683073f17",
+    "frames.json": "2305d0edd474456bc599f8b51b5aae9ab77e8a59f8512042b9ccf4258bcd667c",
+    "server-to-client.bin": "25825d614d8536a366777df653268026bd543e5737f8ef774dffd57d53957772",
+    "sha256.json": "6cbc4feb973ba47e6e92ea813064c578d51d32cb757349086718ba3e2c051f97"
+  },
+  "anchor": {
+    "Slot": 139055739,
+    "Hash": "e5c46f069110d4f8d00a126fd06a783c0eb0a72fe4b9b60be3b3701b1d0b538b",
+    "Sha256": ""
+  },
+  "bodyCount": 6,
+  "blocks": [
+    {
+      "file": "blocks/block-0000.cbor",
+      "bytes": 8816,
+      "sha256": "8776caa8c809b492426180eeceaf41233c12cfdfa55689cb99b42dc47776daf8"
+    },
+    {
+      "file": "blocks/block-0001.cbor",
+      "bytes": 12813,
+      "sha256": "29d284e96db81604405fb4ffd22a492137c9cd1bc04354be76226918bee427dd"
+    },
+    {
+      "file": "blocks/block-0002.cbor",
+      "bytes": 9505,
+      "sha256": "d889da8505406de6944e3f51c8f82049a6b90f17d8511e5ee914accf3b3d0020"
+    },
+    {
+      "file": "blocks/block-0003.cbor",
+      "bytes": 14081,
+      "sha256": "51949742fdfeb139ccdf2224f30a456b3b1e260b228d5123d461710279721df1"
+    },
+    {
+      "file": "blocks/block-0004.cbor",
+      "bytes": 1436,
+      "sha256": "cb34da35304d059d1124d7a6219d2383c1852b655607c158f837767b9da66af1"
+    },
+    {
+      "file": "blocks/block-0005.cbor",
+      "bytes": 2315,
+      "sha256": "eecfdee297865e1550db6140f25a305dd6cfcae839a4d7f2d2d1b6de7f033660"
+    }
+  ],
+  "segments": [
+    {
+      "file": "p2-frame-0001.payload",
+      "protocol": 2,
+      "sourceFrameIndex": 1,
+      "sourceWireOffset": 24,
+      "bytes": 88,
+      "sha256": "a22f03785ae7991d7d2696ecf2309399b0170ac8a3c37a060df477337c4b56f7"
+    },
+    {
+      "file": "p2-frame-0002.payload",
+      "protocol": 2,
+      "sourceFrameIndex": 2,
+      "sourceWireOffset": 120,
+      "bytes": 88,
+      "sha256": "cc750e8391888e66fb1cd502309f3ea85bbddf94dd91b1bc8e4dd8d6f0eca242"
+    },
+    {
+      "file": "p2-frame-0003.payload",
+      "protocol": 2,
+      "sourceFrameIndex": 3,
+      "sourceWireOffset": 216,
+      "bytes": 914,
+      "sha256": "53312a24456879a9cefda4dba94e2e5e4796381fc15c20519e703f666f1c60ec"
+    },
+    {
+      "file": "p2-frame-0004.payload",
+      "protocol": 2,
+      "sourceFrameIndex": 4,
+      "sourceWireOffset": 1138,
+      "bytes": 918,
+      "sha256": "558c8ea7bda0a118a24cd8ce6b042d5e873777e09c315183cbedb62cfc87e900"
+    },
+    {
+      "file": "p2-frame-0005.payload",
+      "protocol": 2,
+      "sourceFrameIndex": 5,
+      "sourceWireOffset": 2064,
+      "bytes": 914,
+      "sha256": "babc9c25864207f98f17cbf2b8a5de3f3c0821644e12adf51735277d68800811"
+    },
+    {
+      "file": "p2-frame-0006.payload",
+      "protocol": 2,
+      "sourceFrameIndex": 6,
+      "sourceWireOffset": 2986,
+      "bytes": 914,
+      "sha256": "49326b6fb121b9591f6e4baaba9a08c6bb01ef5842dab2660ac533196cb3fd9d"
+    },
+    {
+      "file": "p2-frame-0007.payload",
+      "protocol": 2,
+      "sourceFrameIndex": 7,
+      "sourceWireOffset": 3908,
+      "bytes": 918,
+      "sha256": "84daf144c6bc6aa087f720f3a1ce1c64ec91db532bc5d9368bdd53742416ea4d"
+    },
+    {
+      "file": "p2-frame-0008.payload",
+      "protocol": 2,
+      "sourceFrameIndex": 8,
+      "sourceWireOffset": 4834,
+      "bytes": 914,
+      "sha256": "0f0cc522dd4fd029a41001307cb32172d5293e2946076f281cb7f09744f97d9e"
+    },
+    {
+      "file": "p2-frame-0009.payload",
+      "protocol": 2,
+      "sourceFrameIndex": 9,
+      "sourceWireOffset": 5756,
+      "bytes": 914,
+      "sha256": "7d2b9083f5283c3f3c05034a16abcd9db42e992772b7dc91b80d2ac7611bec40"
+    },
+    {
+      "file": "p2-frame-0010.payload",
+      "protocol": 2,
+      "sourceFrameIndex": 10,
+      "sourceWireOffset": 6678,
+      "bytes": 914,
+      "sha256": "3e6a07cd4e36d5b4b67155a803a39ffa34acc67a039ed4241f0f654063c23e1a"
+    },
+    {
+      "file": "p3-frame-1003.payload",
+      "protocol": 3,
+      "sourceFrameIndex": 1003,
+      "sourceWireOffset": 921669,
+      "bytes": 2,
+      "sha256": "e30f7e51e257e9f7da46b7cfb9174bf9ae2d238491fa07e9f85e2915bfa4d829"
+    },
+    {
+      "file": "p3-frame-1004.payload",
+      "protocol": 3,
+      "sourceFrameIndex": 1004,
+      "sourceWireOffset": 921679,
+      "bytes": 8823,
+      "sha256": "af094297273fc3e57f1e42afad8ebd6d7b37bdcef50212c46d86ddc791463eb4"
+    },
+    {
+      "file": "p3-frame-1005.payload",
+      "protocol": 3,
+      "sourceFrameIndex": 1005,
+      "sourceWireOffset": 930510,
+      "bytes": 12288,
+      "sha256": "7d9605d9aae264c478560ff9defa5f456cd6e60257c65e825ffa59e9e6e1c499"
+    },
+    {
+      "file": "p3-frame-1006.payload",
+      "protocol": 3,
+      "sourceFrameIndex": 1006,
+      "sourceWireOffset": 942806,
+      "bytes": 12288,
+      "sha256": "9d41fe3f51f2c685c2c337385e194107c4d99611433ddc3576db72a743d0e11c"
+    },
+    {
+      "file": "p3-frame-1007.payload",
+      "protocol": 3,
+      "sourceFrameIndex": 1007,
+      "sourceWireOffset": 955102,
+      "bytes": 12288,
+      "sha256": "2b753cb9fcc419f200257a98e15ce0996ee9c6016b1dfe881d2719d3200d61dc"
+    },
+    {
+      "file": "p3-frame-1008.payload",
+      "protocol": 3,
+      "sourceFrameIndex": 1008,
+      "sourceWireOffset": 967398,
+      "bytes": 12288,
+      "sha256": "e02910be72873a1d678a4a85bdb4163842656eb7fc88465f7fb6f5671e181484"
+    }
+  ]
+}
