@@ -21,6 +21,7 @@ internal sealed class UtxoRpcMethods
         ReadTx = Create<ReadTxRequest, LeanReadTxResponse>(query, "ReadTx", LeanReadTxResponse.Parser.WithDiscardUnknownFields(true));
         SubmitTx = Create<SubmitTxRequest, SubmitTxResponse>(submit, "SubmitTx", SubmitTxResponse.Parser);
         ReadParams = Create<ReadParamsRequest, ReadParamsResponse>(query, "ReadParams", ReadParamsResponse.Parser);
+        WaitForTx = Create<WaitForTxRequest, WaitForTxResponse>(submit, "WaitForTx", WaitForTxResponse.Parser);
     }
 
     internal Method<ReadParamsRequest, ReadParamsResponse> ReadParams { get; }
@@ -29,6 +30,7 @@ internal sealed class UtxoRpcMethods
     internal Method<SearchUtxosRequest, LeanUtxosResponse> SearchUtxos { get; }
     internal Method<ReadTxRequest, LeanReadTxResponse> ReadTx { get; }
     internal Method<SubmitTxRequest, SubmitTxResponse> SubmitTx { get; }
+    internal Method<WaitForTxRequest, WaitForTxResponse> WaitForTx { get; }
 
     private static Method<TRequest, TResponse> Create<TRequest, TResponse>(ServiceDescriptor service, string name, MessageParser<TResponse> parser)
         where TRequest : class, IMessage<TRequest>

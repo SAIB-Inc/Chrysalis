@@ -316,6 +316,53 @@ public sealed class UtxoRpc : ICardanoDataProvider, IDisposable
         }
     }
 
+    /// <summary>Waits for the server to report confirmation, bounded only by the caller's token.</summary>
+    /// <param name="txHash">The transaction's 32-byte hash in hex.</param>
+    /// <param name="cancellationToken">Bounds the wait, including for dropped transactions.</param>
+    /// <returns>A task that completes when the server reports the transaction on chain.</returns>
+    public async Task WaitForConfirmationAsync(string txHash, CancellationToken cancellationToken)
+    {
+        ByteString hash = ParseHash(txHash);
+        try
+        {
+            using AsyncServerStreamingCall<WaitForTxResponse> call = _invoker.AsyncServerStreamingCall(
+                _methods.WaitForTx, null, new CallOptions(_headers, cancellationToken: cancellationToken),
+                new WaitForTxRequest { Ref = { hash } });
+            bool first = true;
+            while (await call.ResponseStream.MoveNext(cancellationToken))
+            {
+                WaitForTxResponse message = call.ResponseStream.Current;
+                if (!message.Ref.Equals(hash)) { continue; }
+                if (message.Stage == Stage.Confirmed) { return; }
+                if (first && message.Stage == Stage.Unspecified && await IsOnChainAsync(hash, cancellationToken)) { return; }
+                first = false;
+            }
+
+            throw Unusable(_methods.WaitForTx, new InvalidDataException("The stream ended before confirmation."));
+        }
+        catch (RpcException exception)
+        {
+            throw Failure(_methods.WaitForTx, exception, cancellationToken);
+        }
+    }
+
+    private async Task<bool> IsOnChainAsync(ByteString hash, CancellationToken cancellationToken)
+    {
+        try
+        {
+            LeanReadTxResponse response = await UnaryAsync(_methods.ReadTx, new ReadTxRequest { Hash = hash }, cancellationToken);
+            if (response.Tx is null || response.Tx.NativeBytes.IsEmpty)
+            {
+                throw Unusable(_methods.ReadTx, new InvalidDataException("tx.native_bytes is missing."));
+            }
+            return true;
+        }
+        catch (UtxoRpcException exception) when (exception.StatusCode == StatusCode.NotFound)
+        {
+            return false;
+        }
+    }
+
     private static ByteString ParseHash(string hash)
     {
         ArgumentNullException.ThrowIfNull(hash);
@@ -362,15 +409,16 @@ public sealed class UtxoRpc : ICardanoDataProvider, IDisposable
                 new CallOptions(_headers, DateTime.UtcNow + _timeout, cancellationToken), request);
             return await call.ResponseAsync;
         }
-        catch (RpcException exception) when (cancellationToken.IsCancellationRequested)
-        {
-            throw new OperationCanceledException($"{method.Name} was cancelled.", exception, cancellationToken);
-        }
         catch (RpcException exception)
         {
-            throw new UtxoRpcException($"{method.Name} failed: {exception.StatusCode}: {exception.Status.Detail}", exception.StatusCode, exception);
+            throw Failure(method, exception, cancellationToken);
         }
     }
+
+    private static Exception Failure(IMethod method, RpcException exception, CancellationToken cancellationToken) =>
+        cancellationToken.IsCancellationRequested
+            ? new OperationCanceledException($"{method.Name} was cancelled.", exception, cancellationToken)
+            : new UtxoRpcException($"{method.Name} failed: {exception.StatusCode}: {exception.Status.Detail}", exception.StatusCode, exception);
 
     /// <summary>Disposes the channel; repeated calls have no effect.</summary>
     public void Dispose() => _channel.Dispose();

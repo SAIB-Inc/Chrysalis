@@ -1,4 +1,9 @@
 using Chrysalis.Tx.Models.Cbor;
+using Chrysalis.Codec.Serialization;
+using Chrysalis.Codec.Types;
+using Chrysalis.Codec.Types.Cardano.Core.Common;
+using Chrysalis.Codec.Types.Cardano.Core.Scripts;
+using Xunit.Sdk;
 using Chrysalis.Codec.Types.Cardano.Core.Transaction;
 using Chrysalis.Wallet.Models.Enums;
 using Chrysalis.Wallet.Utils;
@@ -12,6 +17,45 @@ namespace Chrysalis.Tx.Providers.UtxoRpcTests;
 /// <summary>Exercises paging, address batching, references and unusable responses.</summary>
 public sealed class UtxoTests
 {
+    /// <summary>Only a script omitted by Blockfrost may be absent from the comparison.</summary>
+    [Fact]
+    public void ReferenceScriptParityRejectsAProviderDrop()
+    {
+        TransactionInput reference = TransactionInput.Create(new byte[32], 0);
+        Address address = Address.Create(TestData.AddressBytes());
+        Lovelace amount = Lovelace.Create(10);
+        CborEncodedValue script = new(CborSerializer.Serialize<IScript>(PlutusV1Script.Create(1, new byte[] { 0 })));
+        ResolvedInput present = new(reference, PostAlonzoTransactionOutput.Create(address, amount, null, script));
+        ResolvedInput absent = new(reference, PostAlonzoTransactionOutput.Create(address, amount, null, null));
+        _ = Assert.Throws<NotNullException>(() => ParityTests.EqualOutputs([present], [absent]));
+        ParityTests.EqualOutputs([absent], [present]);
+        ParityTests.EqualOutputs([present], [present]);
+    }
+
+    /// <summary>A moving read refreshes only a disappearing reference and is bounded to three snapshots.</summary>
+    /// <param name="vanishingSnapshots">How many searches lose their output before lookup.</param>
+    /// <returns>A task for the same helper used by the live test.</returns>
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(3)]
+    public async Task LiveReferenceChecksRefreshOnlyBoundedSnapshots(int vanishingSnapshots)
+    {
+        await using FakeUtxoRpc fake = await FakeUtxoRpc.StartAsync();
+        uint snapshots = 0;
+        fake.SearchHandler = (_, _) => Task.FromResult(new SearchUtxosResponse { Items = { TestData.Output(++snapshots) } });
+        fake.UtxosHandler = (request, _) => Task.FromResult(request.Keys[0].Index <= vanishingSnapshots
+            ? new ReadUtxosResponse() : new ReadUtxosResponse { Items = { TestData.Output(request.Keys[0].Index) } });
+        using UtxoRpc provider = new(fake.Endpoint, NetworkType.Preprod);
+        if (vanishingSnapshots == 3)
+        {
+            _ = await Assert.ThrowsAsync<FailException>(() => LiveReadTests.RequireSnapshotReferencesAsync(provider, [TestData.Address()]));
+        }
+        else { await LiveReadTests.RequireSnapshotReferencesAsync(provider, [TestData.Address()]); }
+        Assert.Equal((uint)Math.Min(vanishingSnapshots + 1, 3), snapshots);
+        Assert.Equal((int)snapshots * 2, fake.RequestCount);
+    }
+
     /// <summary>Three pages preserve order and carry each token to the next request.</summary>
     /// <returns>A task for paging.</returns>
     [Fact]

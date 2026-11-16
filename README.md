@@ -70,6 +70,10 @@ ICardanoDataProvider data = provider; // Pass data to the transaction builder.
 services.AddUtxoRpcProvider(configuration);
 ```
 
+Wait with `await provider.WaitForConfirmationAsync(txHash, cancellationToken)`.
+Give the token a time limit: this reports only the server's view; on Dolos it tracks
+transactions submitted through that server, and a dropped transaction is never reported.
+
 Set the endpoint and network explicitly. Headers are optional, for example in `appsettings.json`:
 
 ```json
@@ -92,10 +96,11 @@ The provider does not check the server's network: choose the matching `NetworkTy
 `MaxTxExUnits` and `MaxBlockExUnits` ([Dolos #1378](https://github.com/txpipe/dolos/issues/1378), fixed upstream for 1.6.4).
 The provider passes on what the server sends and corrects nothing.
 
-### Not yet run against a live server
+### Live validation
 
-All operations have run only against a loopback server and upstream vectors. Live reads, submission,
-TLS and authenticated endpoints have not been verified for this package.
+Reads, submission and confirmation have run against Dolos 1.6.3 on preprod over plaintext HTTP/2,
+including a confirmed self-transfer. TLS, header-authenticated endpoints, other servers and mainnet
+have not been verified for this package.
 
 ## Blueprint Codegen
 

@@ -27,7 +27,7 @@ public sealed class GoldenManifestTests
             .SelectMany(folder => Directory.EnumerateFiles(Path.Combine(root, folder), "*", SearchOption.AllDirectories))
             .Select(file => Path.GetRelativePath(root, file).Replace(Path.DirectorySeparatorChar, '/'))
             .Where(file => Path.GetFileName(file) is not ("manifest.tsv" or ".gitattributes"))
-            .Where(file => file != "Golden/gouroboros/README.md")];
+            .Where(file => file is not ("Golden/gouroboros/README.md" or "Golden/dolos-1.6.3-preprod/README.md"))];
         Assert.Equal(files.Order(StringComparer.Ordinal), rows.Select(row => row[0]).Order(StringComparer.Ordinal));
     }
 }

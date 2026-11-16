@@ -11,7 +11,9 @@ namespace Chrysalis.Tx.Providers.UtxoRpcTests;
 /// <summary>Compares cardano-cli parameter JSON with the provider's ledger record.</summary>
 internal static class LedgerParameters
 {
-    internal static void Equal(JsonElement expected, ProtocolParams p) => Equal(expected, new Dictionary<string, object?>
+    internal static void Equal(JsonElement expected, ProtocolParams p) => Equal(expected, Fields(p));
+
+    internal static Dictionary<string, object?> Fields(ProtocolParams p) => new()
     {
         ["txFeePerByte"] = p.MinFeeA,
         ["txFeeFixed"] = p.MinFeeB,
@@ -68,7 +70,7 @@ internal static class LedgerParameters
         ["dRepDeposit"] = p.DRepDeposit,
         ["dRepActivity"] = p.DRepInactivityPeriod,
         ["minFeeRefScriptCostPerByte"] = p.MinFeeRefScriptCostPerByte
-    });
+    };
 
     private static void Equal(JsonElement expected, object? actual)
     {

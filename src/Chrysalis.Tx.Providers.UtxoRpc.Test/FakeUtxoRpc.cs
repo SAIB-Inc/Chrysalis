@@ -108,6 +108,14 @@ internal sealed class FakeUtxoRpc : QueryService.QueryServiceBase, IAsyncDisposa
 /// <summary>The submit service shares the fake's request log.</summary>
 internal sealed class FakeSubmitUtxoRpc(FakeUtxoRpc owner) : SubmitService.SubmitServiceBase
 {
+    internal Func<WaitForTxRequest, IServerStreamWriter<WaitForTxResponse>, ServerCallContext, Task> WaitHandler { get; set; } = static (_, _, _) => Task.CompletedTask;
+    /// <inheritdoc />
+    public override Task WaitForTx(WaitForTxRequest request, IServerStreamWriter<WaitForTxResponse> responseStream, ServerCallContext context)
+    {
+        owner.Record(request);
+        return WaitHandler(request, responseStream, context);
+    }
+
     internal Func<SubmitTxRequest, ServerCallContext, Task<SubmitTxResponse>> Handler { get; set; } = static (_, _) => Task.FromResult(new SubmitTxResponse());
     /// <inheritdoc />
     public override Task<SubmitTxResponse> SubmitTx(SubmitTxRequest request, ServerCallContext context)
