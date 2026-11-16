@@ -46,6 +46,9 @@ public sealed class B1HandshakeTextTests
         RefuseReason reason = FreshReason(refused, "héllo");
         Assert.True(reason.Raw.IsEmpty);
         Assert.Equal(Convert.FromHexString(hex), CborSerializer.Serialize(new Refuse(2, reason)));
+        HandshakeRefusedException failure = new(reason);
+        Assert.Same(reason, failure.Reason);
+        Assert.Contains("héllo", failure.Message, StringComparison.Ordinal);
     }
 
     /// <summary>Byte strings and null are not text, even when a decoder can otherwise consume them.</summary>

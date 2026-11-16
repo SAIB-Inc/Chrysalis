@@ -1,5 +1,7 @@
 using Chrysalis.Codec.Serialization;
 using Chrysalis.Network.Cbor.Handshake;
+using Chrysalis.Network.Core;
+using Chrysalis.Network.MiniProtocols;
 using Xunit;
 
 namespace Chrysalis.Network.Tests;
@@ -79,4 +81,19 @@ public sealed class B1VersionDomainTests
         Assert.Equal(PreprodFixtures.Read("wire/" + file), actual);
     }
 
+    /// <summary>The generic convenience path must expose a refusal, not try to decode it as acceptance.</summary>
+    [Fact]
+    public async Task GenericHandshakeSurfacesTypedVersionMismatch()
+    {
+        using ProtocolReplay replay = new(ProtocolType.Handshake, Convert.FromHexString("8202820081198017"));
+        Handshake handshake = new(replay.Channel);
+        ProposeVersions proposal = HandshakeMessages.ProposeVersions(VersionTables.N2cV10AndAbove(42));
+        Exception failure = await Assert.ThrowsAnyAsync<Exception>(() => handshake.SendAsync<N2CAcceptVersion>(proposal, CancellationToken.None));
+        // Reflection keeps this pre-implementation red executable rather than failing to compile on a missing API.
+        Assert.Equal("HandshakeRefusedException", failure.GetType().Name);
+        System.Reflection.PropertyInfo? property = failure.GetType().GetProperty("Reason");
+        Assert.NotNull(property);
+        VersionMismatch mismatch = Assert.IsType<VersionMismatch>(property.GetValue(failure));
+        Assert.Equal([32791], mismatch.VersionNumbers.Value);
+    }
 }
