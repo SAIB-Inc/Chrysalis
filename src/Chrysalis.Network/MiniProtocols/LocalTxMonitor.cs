@@ -1,4 +1,5 @@
 using Chrysalis.Network.Cbor.LocalTxMonitor;
+using Chrysalis.Network.Cbor.Handshake;
 using Chrysalis.Network.Multiplexer;
 
 namespace Chrysalis.Network.MiniProtocols;
@@ -7,9 +8,27 @@ namespace Chrysalis.Network.MiniProtocols;
 /// Implementation of the Ouroboros LocalTxMonitor mini-protocol for monitoring the local mempool.
 /// Allows querying transactions, sizes, and measures from the Cardano node's mempool.
 /// </summary>
-public class LocalTxMonitor(AgentChannel channel) : IMiniProtocol
+public class LocalTxMonitor : IMiniProtocol
 {
-    private readonly ChannelBuffer _channelBuffer = new(channel);
+    private readonly ChannelBuffer _channelBuffer;
+    private readonly N2CVersionContext? _versions;
+
+    /// <summary>Initializes a standalone handler whose negotiated version remains the caller's responsibility.</summary>
+    /// <param name="channel">The local-tx-monitor channel.</param>
+    /// <remarks>For compatibility, operations behave as before when this legacy constructor has no negotiated context.</remarks>
+    public LocalTxMonitor(AgentChannel channel) : this(channel, (N2CVersionContext?)null) { }
+
+    /// <summary>Initializes a standalone handler bound to its caller's negotiated N2C version.</summary>
+    /// <param name="channel">The local-tx-monitor channel.</param>
+    /// <param name="negotiatedVersion">The real negotiated N2C wire version.</param>
+    public LocalTxMonitor(AgentChannel channel, N2CVersion negotiatedVersion) : this(channel, new N2CVersionContext(negotiatedVersion)) { }
+
+    internal LocalTxMonitor(AgentChannel channel, N2CVersionContext? versions)
+    {
+        ArgumentNullException.ThrowIfNull(channel);
+        _channelBuffer = new ChannelBuffer(channel);
+        _versions = versions;
+    }
 
     /// <summary>
     /// Gets whether the protocol is done.
@@ -78,13 +97,14 @@ public class LocalTxMonitor(AgentChannel channel) : IMiniProtocol
     }
 
     /// <summary>
-    /// Retrieves mempool capacity measures from the Cardano node.
+    /// Retrieves mempool capacity measures from the Cardano node (requires N2C V20 when context is available).
     /// </summary>
     /// <param name="cancellationToken">Token to cancel the operation.</param>
     /// <returns>The response message containing mempool measures.</returns>
     // @TODO
     public async Task<LocalTxMonitorMessage> GetMeasuresAsync(CancellationToken cancellationToken)
     {
+        _versions?.EnsureMinimum(32788, nameof(GetMeasuresAsync));
         GetMeasures getMeasures = LocalTxMonitorMessages.DefaultGetMeasures;
         await _channelBuffer.SendFullMessageAsync(getMeasures, cancellationToken).ConfigureAwait(false);
         return await _channelBuffer.ReceiveFullMessageAsync<LocalTxMonitorMessage>(cancellationToken).ConfigureAwait(false);

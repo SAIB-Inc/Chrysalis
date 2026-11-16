@@ -55,8 +55,8 @@ public sealed class NodeClient : IDisposable
         Handshake = new(_plexer.SubscribeClient(ProtocolType.Handshake));
         ChainSync = new(_plexer.SubscribeClient(ProtocolType.ClientChainSync));
         LocalTxSubmit = new(_plexer.SubscribeClient(ProtocolType.LocalTxSubmission));
-        LocalStateQuery = new(_plexer.SubscribeClient(ProtocolType.LocalStateQuery));
-        LocalTxMonitor = new(_plexer.SubscribeClient(ProtocolType.LocalTxMonitor));
+        LocalStateQuery = new(_plexer.SubscribeClient(ProtocolType.LocalStateQuery), _versions);
+        LocalTxMonitor = new(_plexer.SubscribeClient(ProtocolType.LocalTxMonitor), _versions);
     }
 
     /// <summary>

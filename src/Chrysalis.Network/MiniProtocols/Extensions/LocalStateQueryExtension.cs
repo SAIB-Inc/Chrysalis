@@ -23,6 +23,8 @@ public static class LocalStateQueryExtension
         Func<Task<Result>> queryFunc,
         CancellationToken cancellationToken) where T : CborRecord
     {
+        // Reject before any lifecycle message, including release of an existing snapshot.
+        localStateQuery.EnsureBuiltInQueryVersion();
         // Release if already acquired, then acquire fresh state
         if (localStateQuery.IsAcquired)
         {
