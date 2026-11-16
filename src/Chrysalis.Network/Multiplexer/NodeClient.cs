@@ -14,6 +14,10 @@ public sealed class NodeClient : IDisposable
 
     private readonly Plexer _plexer;
     private Task? _plexerTask;
+    private readonly N2CVersionContext _versions = new();
+
+    /// <summary>Gets the accepted node-to-client version, or null before successful negotiation.</summary>
+    public N2CVersion? NegotiatedVersion => _versions.NegotiatedVersion;
 
     /// <summary>
     /// Gets the Handshake protocol handler.
@@ -122,13 +126,24 @@ public sealed class NodeClient : IDisposable
     /// <exception cref="InvalidOperationException">Thrown if the client is already started.</exception>
     public async Task StartAsync(ulong networkMagic = 2)
     {
-        // Store plexer task so we can observe failures
-        _plexerTask = _plexer.RunAsync(CancellationToken.None);
-
         NetworkMagic = networkMagic;
-
-        ProposeVersions proposeVersion = HandshakeMessages.ProposeVersions(VersionTables.N2cV10AndAbove(networkMagic));
-        _ = await Handshake.SendAsync<N2CAcceptVersion>(proposeVersion, CancellationToken.None).ConfigureAwait(false);
+        N2CVersionTable offer = VersionTables.N2cV10AndAbove(networkMagic);
+        _plexerTask = _plexer.RunAsync(CancellationToken.None);
+        try
+        {
+            N2CAcceptVersion accepted = await Handshake.SendAsync<N2CAcceptVersion>(HandshakeMessages.ProposeVersions(offer), CancellationToken.None).ConfigureAwait(false);
+            if (!offer.Value.Keys.Any(version => version.Value == accepted.Version.Value)
+                || accepted.VersionData.NetworkMagic != NetworkMagic || accepted.VersionData.Query is not false)
+            {
+                throw new InvalidOperationException("The node accepted a version or network datum outside the explicit handshake offer.");
+            }
+            _versions.SetNegotiatedVersion(accepted.Version);
+        }
+        catch
+        {
+            _plexer.Dispose();
+            throw;
+        }
     }
 
     /// <summary>
