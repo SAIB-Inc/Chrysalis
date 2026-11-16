@@ -8,6 +8,7 @@
     <Project Path="src/Chrysalis.Crypto.Test/Chrysalis.Crypto.Test.csproj" />
     <Project Path="src/Chrysalis.Network.Cli/Chrysalis.Network.Cli.csproj" />
     <Project Path="src/Chrysalis.Network.Tests/Chrysalis.Network.Tests.csproj" />
+    <Project Path="src/Chrysalis.IntegrationTests/Chrysalis.IntegrationTests.csproj" />
     <Project Path="src/Chrysalis.Network/Chrysalis.Network.csproj" />
     <Project Path="src/Chrysalis.Plutus.Cli/Chrysalis.Plutus.Cli.csproj" />
     <Project Path="src/Chrysalis.Plutus/Chrysalis.Plutus.csproj" />

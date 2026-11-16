@@ -1,0 +1,27 @@
+{
+  "provenance": {
+    "source_repository": "https://github.com/IntersectMBO/cardano-node",
+    "node_tag": "11.1.3",
+    "source_path": "src/Chrysalis.Network.Tests/Fixtures/Preprod/wire/c1-in-p7-009.cbor",
+    "source_sha256": "59e54b77e4b32a1be510999389100d96e63558e6b785cb294201a480122988ef",
+    "license": "public captured chain facts; producer Apache-2.0",
+    "decoder_repository": "https://github.com/agronholm/cbor2",
+    "decoder_version": "5.8.0",
+    "decoder_license": "MIT",
+    "notice": "Expected address hex, amount, absent datum/script derive independently from the unchanged public node capture via cbor2, not Chrysalis. The public address string is also corroborated by prior same-node CLI output."
+  },
+  "utxos": {
+    "61ca9620c4203111cf895efd1814ef7618777e19ff88f8cca4cfcadb66d46a1f#0": {
+      "address": "addr_test1qzlzf3r9e3hc2drlgtywenw9d96wncr8f4vpscrwta3yss2c4m8t75al4ghp6fwk660u7he20tcy0nfz7swcfcwfs0fsfhnhgn",
+      "addressHex": "00be24c465cc6f85347f42c8eccdc56974e9e0674d5818606e5f62484158aecebf53bfaa2e1d25d6d69fcf5f2a7af047cd22f41d84e1c983d3",
+      "value": {
+        "lovelace": 10000000000
+      },
+      "datum": null,
+      "datumhash": null,
+      "inlineDatum": null,
+      "inlineDatumRaw": null,
+      "referenceScript": null
+    }
+  }
+}

@@ -24,3 +24,9 @@ build
 
 # Benchmark artifacts
 **/BenchmarkDotNet.Artifacts/
+
+# Opt-in integration outputs contain public chain data; credentials are never written here.
+.integration-artifacts/
+
+# Offline integration script test bytecode.
+scripts/integration/__pycache__/
