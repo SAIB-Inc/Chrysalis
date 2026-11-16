@@ -1,7 +1,9 @@
+using Chrysalis.Tx.Providers.Lean;
 using Google.Protobuf;
 using Google.Protobuf.Reflection;
 using Grpc.Core;
 using Utxorpc.V1Beta.Query;
+using Utxorpc.V1Beta.Submit;
 
 namespace Chrysalis.Tx.Providers;
 
@@ -13,10 +15,20 @@ internal sealed class UtxoRpcMethods
     private UtxoRpcMethods()
     {
         ServiceDescriptor query = QueryReflection.Descriptor.FindTypeByName<ServiceDescriptor>("QueryService");
+        ServiceDescriptor submit = SubmitReflection.Descriptor.FindTypeByName<ServiceDescriptor>("SubmitService");
+        ReadUtxos = Create<ReadUtxosRequest, LeanUtxosResponse>(query, "ReadUtxos", LeanUtxosResponse.Parser.WithDiscardUnknownFields(true));
+        SearchUtxos = Create<SearchUtxosRequest, LeanUtxosResponse>(query, "SearchUtxos", LeanUtxosResponse.Parser.WithDiscardUnknownFields(true));
+        ReadTx = Create<ReadTxRequest, LeanReadTxResponse>(query, "ReadTx", LeanReadTxResponse.Parser.WithDiscardUnknownFields(true));
+        SubmitTx = Create<SubmitTxRequest, SubmitTxResponse>(submit, "SubmitTx", SubmitTxResponse.Parser);
         ReadParams = Create<ReadParamsRequest, ReadParamsResponse>(query, "ReadParams", ReadParamsResponse.Parser);
     }
 
     internal Method<ReadParamsRequest, ReadParamsResponse> ReadParams { get; }
+
+    internal Method<ReadUtxosRequest, LeanUtxosResponse> ReadUtxos { get; }
+    internal Method<SearchUtxosRequest, LeanUtxosResponse> SearchUtxos { get; }
+    internal Method<ReadTxRequest, LeanReadTxResponse> ReadTx { get; }
+    internal Method<SubmitTxRequest, SubmitTxResponse> SubmitTx { get; }
 
     private static Method<TRequest, TResponse> Create<TRequest, TResponse>(ServiceDescriptor service, string name, MessageParser<TResponse> parser)
         where TRequest : class, IMessage<TRequest>

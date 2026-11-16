@@ -19,7 +19,7 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../Chrysalis.Tx.Providers.UtxoRpc/Chrysalis.Tx.Providers.UtxoRpc.csproj" />
-    <Protobuf Include="../Chrysalis.Tx.Providers.UtxoRpc/Protos/**/*.proto"
+    <Protobuf Include="../Chrysalis.Tx.Providers.UtxoRpc/Protos/utxorpc/**/*.proto"
               ProtoRoot="../Chrysalis.Tx.Providers.UtxoRpc/Protos" GrpcServices="Server" Access="Internal" />
     <None Update="Golden/**" CopyToOutputDirectory="PreserveNewest" />
     <None Include="../Chrysalis.Tx.Providers.UtxoRpc/Protos/utxorpc/**"
