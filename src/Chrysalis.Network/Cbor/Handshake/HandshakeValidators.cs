@@ -4,6 +4,11 @@ namespace Chrysalis.Network.Cbor.Handshake;
 
 // The existing declarative validator hook is required because these wire records
 // overlap structurally. Index and family checks prevent first-match union mistakes.
+internal sealed class N2CVersionValidator : ICborValidator<N2CVersion>
+{
+    public bool Validate(N2CVersion input) => input.Value is >= 32768 and <= 65535;
+}
+
 internal sealed class ProposeVersionsValidator : ICborValidator<ProposeVersions>
 {
     public bool Validate(ProposeVersions input) => input.Idx == 0;

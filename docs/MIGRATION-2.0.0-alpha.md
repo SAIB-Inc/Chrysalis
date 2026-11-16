@@ -16,6 +16,7 @@ The first four groups are approved by D5 and belong to B2–B4; listing them her
 
 | Public delta | Migration and reason |
 |---|---|
+| N2C wire-family validation | Serialized/deserialized `N2CVersion.Value` must be a Word16 with bit 15 set (32768–65535). Values are **wire** numbers, not logical version numbers: V23 is 32791. Wrong-family/out-of-range values are rejected by the declarative codec; constructors remain unchanged. Future values within the family remain representable for explicit, untested offers. This disambiguates N2C from N2N accept/query-reply shapes. |
 | V21–V23 constants and extended default table | `N2CVersions` adds V21/V22/V23. The historical `VersionTables.N2cV10AndAbove` name is retained for compatibility; its provisional default offer is V16–V23, subject to the documented B1 controls and the mandatory full-suite rerun after B2–B4 before H2. A failing version leaves the default at that gate. |
 
 The two text members form the single fifth type-change group and a single D26 boundary. The other boundaries above match the individually described public deltas; implementation/test/provenance and documentation changes do not authorize unrelated API changes.
