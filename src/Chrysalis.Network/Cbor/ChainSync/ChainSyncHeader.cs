@@ -90,9 +90,10 @@ public record ChainSyncHeader(
         }
 
         BlockHeader header = CborSerializer.Deserialize<BlockHeader>(HeaderCbor);
-        ulong headerSlot = header.HeaderBody.Slot();
-        ulong blockNumber = header.HeaderBody.BlockNumber();
-        byte[] headerHash = Convert.FromHexString(header.Hash());
+        IBlockHeaderBody body = header.HeaderBody;
+        ulong headerSlot = body.Slot();
+        ulong blockNumber = body.BlockNumber();
+        byte[] headerHash = Blake2Fast.Blake2b.HashData(32, header.Raw.Span);
         return new ChainPoint(headerSlot, headerHash, blockNumber);
     }
 
