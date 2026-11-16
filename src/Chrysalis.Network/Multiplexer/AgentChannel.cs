@@ -22,25 +22,52 @@ public sealed class AgentChannel(
     SemaphoreSlim bearerWriteLock
 )
 {
+    private readonly Muxer.WriterState _muxerState = Muxer.WriterStates.GetValue(muxerWriter, static _ => new Muxer.WriterState());
+
     /// <summary>
     /// Enqueues a chunk of data through the muxer pipeline.
     /// </summary>
+    /// <remarks>
+    /// Caller cancellation is honored while waiting for the write permit and
+    /// immediately before writing. Once writing begins, the record is always
+    /// flushed without the caller's token: cancellation no longer aborts its
+    /// commit or releases a backpressure wait. Only consumer progress or muxer
+    /// shutdown releases that wait. A normal flush returns success even if the
+    /// caller's token was subsequently canceled. A muxer failure still propagates
+    /// its stop exception; that failure does not guarantee non-delivery of an
+    /// already committed record.
+    /// </remarks>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public async Task EnqueueChunkAsync(ReadOnlySequence<byte> chunk, CancellationToken cancellationToken = default)
     {
-        int payloadLength = (int)chunk.Length;
+        await _muxerState.WriteLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            _muxerState.ThrowIfStopped();
+            int payloadLength = (int)chunk.Length;
 
-        // Protocol message: 1 byte protocol ID + 2 bytes length + payload
-        Span<byte> protocolMessage = stackalloc byte[3 + payloadLength];
+            // Protocol message: 1 byte protocol ID + 2 bytes length + payload
+            Span<byte> protocolMessage = stackalloc byte[3 + payloadLength];
 
-        protocolMessage[0] = (byte)protocolId;
-        BinaryPrimitives.WriteUInt16BigEndian(protocolMessage[1..], (ushort)payloadLength);
+            protocolMessage[0] = (byte)protocolId;
+            BinaryPrimitives.WriteUInt16BigEndian(protocolMessage[1..], (ushort)payloadLength);
 
-        Span<byte> payloadSlice = protocolMessage.Slice(3, payloadLength);
-        chunk.CopyTo(payloadSlice);
+            Span<byte> payloadSlice = protocolMessage.Slice(3, payloadLength);
+            chunk.CopyTo(payloadSlice);
 
-        muxerWriter.Write(protocolMessage);
-        _ = await muxerWriter.FlushAsync(cancellationToken).ConfigureAwait(false);
+            cancellationToken.ThrowIfCancellationRequested();
+            muxerWriter.Write(protocolMessage);
+            FlushResult result = await muxerWriter.FlushAsync(CancellationToken.None).ConfigureAwait(false);
+            if (result.IsCompleted)
+            {
+                _muxerState.ThrowIfStopped();
+                throw new InvalidOperationException("The muxer input pipe has completed.");
+            }
+        }
+        finally
+        {
+            _ = _muxerState.WriteLock.Release();
+        }
     }
 
     /// <summary>
