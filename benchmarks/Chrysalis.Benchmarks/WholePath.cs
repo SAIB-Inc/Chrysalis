@@ -26,7 +26,7 @@ internal static class WholePath
         if (args.Length != 3) { throw new ArgumentException("capture-range requires SOCKET COUNT OUTPUT.", nameof(args)); }
         int count = int.Parse(args[1], CultureInfo.InvariantCulture);
         ArgumentOutOfRangeException.ThrowIfLessThan(count, 1000);
-        using JsonDocument manifest = JsonDocument.Parse(File.ReadAllText(Path.Combine(Fixtures.Root, "fixtures/manifest.json")));
+        using JsonDocument manifest = JsonDocument.Parse(await File.ReadAllTextAsync(Path.Combine(Fixtures.Root, "fixtures/manifest.json")).ConfigureAwait(false));
         JsonElement first = manifest.RootElement[0];
         RangePoint anchor = new(first.GetProperty("slot").GetUInt64(), first.GetProperty("hash").GetString()!, "");
         using CancellationTokenSource cancellation = new(TimeSpan.FromMinutes(10));
@@ -48,14 +48,14 @@ internal static class WholePath
             else if (message is MessageRollBackward && index == 0 && !rolledBack) { rolledBack = true; }
             else { throw new InvalidDataException("Unexpected capture response: " + message?.GetType().Name); }
         }
-        File.WriteAllText(args[2], JsonSerializer.Serialize(new FixedRange(anchor, points), Program.IndentedJson));
+        await File.WriteAllTextAsync(args[2], JsonSerializer.Serialize(new FixedRange(anchor, points), Program.IndentedJson)).ConfigureAwait(false);
         await client.ChainSync.DoneAsync(cancellation.Token).ConfigureAwait(false);
     }
 
     internal static async Task RunAsync(string[] args)
     {
         if (args.Length != 3) { throw new ArgumentException("network requires n2c|n2n ENDPOINT RANGE_JSON.", nameof(args)); }
-        FixedRange range = JsonSerializer.Deserialize<FixedRange>(File.ReadAllText(args[2])) ?? throw new InvalidDataException("Missing fixed range.");
+        FixedRange range = JsonSerializer.Deserialize<FixedRange>(await File.ReadAllTextAsync(args[2]).ConfigureAwait(false)) ?? throw new InvalidDataException("Missing fixed range.");
         if (range.Blocks.Length < 1000) { throw new InvalidDataException("Whole-path range must contain at least 1,000 blocks."); }
         byte[][] digests = [.. range.Blocks.Select(point => Convert.FromHexString(point.Sha256))];
         using CancellationTokenSource cancellation = new(TimeSpan.FromMinutes(10));
