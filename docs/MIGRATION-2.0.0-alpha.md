@@ -27,4 +27,4 @@ The first four groups are approved by D5 and belong to B2–B4; listing them her
 
 The two text members form the single fifth type-change group and a single D26 boundary. The other boundaries above match the individually described public deltas; implementation/test/provenance and documentation changes do not authorize unrelated API changes.
 
-N2CVersion now compares and hashes by numeric Value only, ignoring Raw and decoder metadata. A decoded version equals its well-known constant and can look up a version-table dictionary key; callers needing encoding identity must compare Raw explicitly. CborRecord equality for all other types is unchanged.
+N2CVersion and N2NVersion now compare and hash by numeric Value only, ignoring Raw and decoder metadata. A decoded version equals its well-known constant and can look up a version-table dictionary key; callers needing encoding identity must compare Raw explicitly. CborRecord equality for all other types is unchanged.

@@ -23,4 +23,19 @@ public sealed class B1CarbonVersionEqualityTests
         Assert.NotEqual(N2CVersions.V22, accept.Version);
     }
 
+    /// <summary>The corresponding N2N accept/table contracts have the same numeric identity.</summary>
+    [Fact]
+    public void DecodedN2NVersionEqualsConstantAndFindsDictionaryKey()
+    {
+        N2NAcceptVersion accept = CborSerializer.Deserialize<N2NAcceptVersion>(Convert.FromHexString("83010e84182af500f4"));
+        Assert.True(accept.Version == N2NVersions.V14);
+        Assert.True(N2NVersions.V14 == accept.Version);
+        Assert.Equal(N2NVersions.V14.GetHashCode(), accept.Version.GetHashCode());
+        N2NQueryReply reply = CborSerializer.Deserialize<N2NQueryReply>(Convert.FromHexString("8203a10e84182af500f4"));
+        Assert.True(reply.VersionTable.Value.ContainsKey(N2NVersions.V14));
+        Assert.True(reply.VersionTable.Value.TryGetValue(N2NVersions.V14, out N2NVersionData? data));
+        Assert.Equal(42UL, Assert.IsType<N2NVersionData>(data).NetworkMagic);
+        Assert.True(accept.Version == Assert.Single(reply.VersionTable.Value).Key);
+        Assert.NotEqual(N2NVersions.V13, accept.Version);
+    }
 }
