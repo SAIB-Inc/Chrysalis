@@ -24,8 +24,76 @@ public sealed class Muxer(PipeWriter bearerWriter, ProtocolMode muxerMode, Semap
     private readonly PipeWriter _bearerWriter = bearerWriter ?? throw new ArgumentNullException(nameof(bearerWriter));
     private readonly ProtocolMode _muxerMode = muxerMode;
     private readonly DateTimeOffset _startTime = DateTimeOffset.UtcNow;
-    private readonly Pipe _pipe = new();
+    // AvailableWaitHandle is never used, so these semaphores own no wait handles
+    // to dispose. Each entry (and its semaphore) dies with its PipeWriter.
+    internal static readonly ConditionalWeakTable<PipeWriter, WriterState> WriterStates = [];
+
+    private readonly Pipe _pipe = CreatePipe();
+    // Once started, RunAsync owns consumer completion; Dispose only requests
+    // cancellation. Before start, Dispose owns completion of both pipe ends.
+    // Publish stop, complete Reader to release pending flushes, then take the
+    // writer permit and complete Writer. Never dispose a permit with waiters.
+    // The lifecycle lock also keeps cancellation-source disposal out of a race
+    // with Dispose starting its asynchronous cancellation callbacks.
+    private readonly Lock _lifecycleLock = new();
+    private readonly CancellationTokenSource _shutdownCancellation = new();
+    private Task _shutdownTask = Task.CompletedTask;
+    private bool _runStarted;
+    private bool _shutdownCompleted;
     private bool _isDisposed;
+
+    internal sealed class WriterState
+    {
+        private bool _stopped;
+        private Exception? _error;
+        internal SemaphoreSlim WriteLock { get; } = new(1, 1);
+
+        // Muxer calls this under its lifecycle lock. Publish the cause before
+        // the stopped flag so senders always observe the first shutdown cause.
+        internal Exception? Stop(Exception? error)
+        {
+            if (!_stopped)
+            {
+                _error = error;
+                Volatile.Write(ref _stopped, true);
+            }
+            return _error;
+        }
+
+        internal void ThrowIfStopped()
+        {
+            if (Volatile.Read(ref _stopped))
+            {
+                throw new InvalidOperationException("The muxer has stopped accepting protocol messages.", _error);
+            }
+        }
+    }
+
+    private WriterState State => WriterStates.GetValue(_pipe.Writer, static _ => new WriterState());
+
+    private CancellationTokenSource CreateRunCancellation(CancellationToken cancellationToken)
+    {
+        lock (_lifecycleLock)
+        {
+            ObjectDisposedException.ThrowIf(_isDisposed, this);
+            if (_runStarted)
+            {
+                throw new InvalidOperationException("The muxer can only be run once.");
+            }
+            CancellationTokenSource linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _shutdownCancellation.Token);
+            _runStarted = true;
+            return linked;
+        }
+    }
+
+    private static Pipe CreatePipe()
+    {
+        Pipe pipe = new();
+        // Register before Writer can be handed to any AgentChannel, including
+        // callers using its public constructor rather than Plexer.SubscribeClient.
+        _ = WriterStates.GetValue(pipe.Writer, static _ => new WriterState());
+        return pipe;
+    }
 
     /// <summary>
     /// Gets the channel writer for sending messages through the muxer.
@@ -71,13 +139,17 @@ public sealed class Muxer(PipeWriter bearerWriter, ProtocolMode muxerMode, Semap
     /// <param name="cancellationToken">A token to cancel the operation.</param>
     public async Task RunAsync(CancellationToken cancellationToken)
     {
+        using CancellationTokenSource runCancellation = CreateRunCancellation(cancellationToken);
+        CancellationToken runToken = runCancellation.Token;
+        WriterState state = State;
         Exception? muxerException = null;
 
         try
         {
-            while (!cancellationToken.IsCancellationRequested)
+            runToken.ThrowIfCancellationRequested();
+            while (!runToken.IsCancellationRequested)
             {
-                ReadResult protocolMessageResult = await _pipe.Reader.ReadAsync(cancellationToken).ConfigureAwait(false);
+                ReadResult protocolMessageResult = await _pipe.Reader.ReadAsync(runToken).ConfigureAwait(false);
                 ReadOnlySequence<byte> protocolMessageBuffer = protocolMessageResult.Buffer;
 
                 // protocol id
@@ -99,13 +171,14 @@ public sealed class Muxer(PipeWriter bearerWriter, ProtocolMode muxerMode, Semap
                 );
 
                 MuxSegment segment = new(segmentHeader, payloadSlice);
-                await WriteSegmentAsync(segment, cancellationToken).ConfigureAwait(false);
+                await WriteSegmentAsync(segment, runToken).ConfigureAwait(false);
                 _pipe.Reader.AdvanceTo(payloadSlice.End);
             }
+            runToken.ThrowIfCancellationRequested();
         }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        catch (OperationCanceledException ex) when (runToken.IsCancellationRequested)
         {
-            // Normal cancellation - don't treat as error
+            muxerException = ex;
             throw;
         }
         catch (Exception ex)
@@ -116,8 +189,44 @@ public sealed class Muxer(PipeWriter bearerWriter, ProtocolMode muxerMode, Semap
         }
         finally
         {
-            // Complete pipe so waiting writers are notified
-            await _pipe.Writer.CompleteAsync(muxerException).ConfigureAwait(false);
+            Exception? completionError;
+            lock (_lifecycleLock)
+            {
+                completionError = state.Stop(muxerException);
+            }
+
+            try
+            {
+                // The consumer must end first: writer completion alone cannot
+                // settle a backpressured flush holding the serialization permit.
+                await _pipe.Reader.CompleteAsync(completionError).ConfigureAwait(false);
+                await state.WriteLock.WaitAsync(CancellationToken.None).ConfigureAwait(false);
+                try
+                {
+                    await _pipe.Writer.CompleteAsync(completionError).ConfigureAwait(false);
+                }
+                finally
+                {
+                    _ = state.WriteLock.Release();
+                }
+            }
+            finally
+            {
+                Task cancellationFinished;
+                lock (_lifecycleLock)
+                {
+                    _shutdownCompleted = true;
+                    cancellationFinished = _shutdownTask;
+                }
+                try
+                {
+                    await cancellationFinished.ConfigureAwait(false);
+                }
+                finally
+                {
+                    _shutdownCancellation.Dispose();
+                }
+            }
         }
     }
 
@@ -126,14 +235,60 @@ public sealed class Muxer(PipeWriter bearerWriter, ProtocolMode muxerMode, Semap
     /// </summary>
     public void Dispose()
     {
-        if (_isDisposed)
+        WriterState state = State;
+        Exception? completionError;
+        Task cancellationFinished;
+        bool completeHere;
+        lock (_lifecycleLock)
         {
-            return;
+            if (_isDisposed)
+            {
+                return;
+            }
+            _isDisposed = true;
+            if (_shutdownCompleted)
+            {
+                return;
+            }
+
+            completionError = state.Stop(new ObjectDisposedException(nameof(Muxer)));
+            // Cancellation callbacks run outside this lock. A running consumer
+            // owns completion, so Dispose cannot reclaim its borrowed buffer.
+            _shutdownTask = _shutdownCancellation.CancelAsync();
+            cancellationFinished = _shutdownTask;
+            completeHere = !_runStarted;
+            if (completeHere)
+            {
+                _shutdownCompleted = true;
+            }
         }
 
-        // Complete the channel
-        _pipe.Writer.Complete();
-
-        _isDisposed = true;
+        if (completeHere)
+        {
+            try
+            {
+                _pipe.Reader.Complete(completionError);
+                state.WriteLock.Wait();
+                try
+                {
+                    _pipe.Writer.Complete(completionError);
+                }
+                finally
+                {
+                    _ = state.WriteLock.Release();
+                }
+            }
+            finally
+            {
+                try
+                {
+                    cancellationFinished.GetAwaiter().GetResult();
+                }
+                finally
+                {
+                    _shutdownCancellation.Dispose();
+                }
+            }
+        }
     }
 }
