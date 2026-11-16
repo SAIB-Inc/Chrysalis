@@ -78,7 +78,7 @@ internal static class OfflineReplay
             }
             finally
             {
-                cancellation.Cancel();
+                await cancellation.CancelAsync().ConfigureAwait(false);
                 try { await worker.ConfigureAwait(false); }
                 catch (OperationCanceledException) { }
                 catch (InvalidOperationException) { }
@@ -86,7 +86,7 @@ internal static class OfflineReplay
         }
         _ = Directory.CreateDirectory(Program.ResultsRoot);
         string json = JsonSerializer.Serialize(new { environment = Program.EnvironmentSnapshot(), rows }, Program.IndentedJson);
-        File.WriteAllText(Path.Combine(Program.ResultsRoot, "offline-replay.json"), json);
+        await File.WriteAllTextAsync(Path.Combine(Program.ResultsRoot, "offline-replay.json"), json).ConfigureAwait(false);
         Console.WriteLine(json);
     }
 

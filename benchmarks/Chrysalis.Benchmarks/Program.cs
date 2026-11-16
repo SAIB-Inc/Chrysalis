@@ -36,7 +36,7 @@ internal static class Program
         }
         catch (Exception exception) when (exception is not OutOfMemoryException)
         {
-            Console.Error.WriteLine(exception);
+            await Console.Error.WriteLineAsync(exception.ToString()).ConfigureAwait(false);
             return 1;
         }
     }
