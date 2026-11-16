@@ -1,5 +1,4 @@
 using System.Buffers;
-using System.Buffers.Binary;
 using System.IO.Pipelines;
 using System.Runtime.CompilerServices;
 using Chrysalis.Network.Core;
@@ -152,27 +151,48 @@ public sealed class Muxer(PipeWriter bearerWriter, ProtocolMode muxerMode, Semap
                 ReadResult protocolMessageResult = await _pipe.Reader.ReadAsync(runToken).ConfigureAwait(false);
                 ReadOnlySequence<byte> protocolMessageBuffer = protocolMessageResult.Buffer;
 
-                // protocol id
-                ReadOnlySequence<byte> protocolIdSlice = protocolMessageBuffer.Slice(0, 1);
-                ProtocolType protocolId = (ProtocolType)protocolIdSlice.FirstSpan[0];
+                SequencePosition consumed = protocolMessageBuffer.Start;
+                while (protocolMessageBuffer.Length >= 3)
+                {
+                    // SequenceReader handles a header split across pipe segments
+                    // without allocating or stackalloc inside this long-lived loop.
+                    SequenceReader<byte> reader = new(protocolMessageBuffer);
+                    if (!reader.TryRead(out byte protocolIdByte) || !reader.TryReadBigEndian(out short signedPayloadLength))
+                    {
+                        break;
+                    }
 
-                // payload length
-                ReadOnlySequence<byte> payloadLengthSlice = protocolMessageBuffer.Slice(1, 2);
-                ushort payloadLength = BinaryPrimitives.ReadUInt16BigEndian(payloadLengthSlice.FirstSpan);
+                    ushort payloadLength = unchecked((ushort)signedPayloadLength);
+                    if (reader.Remaining < payloadLength)
+                    {
+                        break;
+                    }
 
-                // payload
-                ReadOnlySequence<byte> payloadSlice = protocolMessageBuffer.Slice(3, payloadLength);
+                    ReadOnlySequence<byte> payloadSlice = protocolMessageBuffer.Slice(3, payloadLength);
+                    MuxSegmentHeader segmentHeader = new(
+                        TransmissionTime: CalculateTransmissionTime(),
+                        ProtocolId: (ProtocolType)protocolIdByte,
+                        PayloadLength: payloadLength,
+                        Mode: _muxerMode == ProtocolMode.Responder
+                    );
 
-                MuxSegmentHeader segmentHeader = new(
-                    TransmissionTime: CalculateTransmissionTime(),
-                    ProtocolId: protocolId,
-                    PayloadLength: (ushort)Math.Min(payloadSlice.Length, ProtocolConstants.MaxSegmentPayloadLength),
-                    Mode: _muxerMode == ProtocolMode.Responder
-                );
+                    MuxSegment segment = new(segmentHeader, payloadSlice);
+                    await WriteSegmentAsync(segment, runToken).ConfigureAwait(false);
+                    protocolMessageBuffer = protocolMessageBuffer.Slice(payloadSlice.End);
+                    consumed = protocolMessageBuffer.Start;
+                }
 
-                MuxSegment segment = new(segmentHeader, payloadSlice);
-                await WriteSegmentAsync(segment, runToken).ConfigureAwait(false);
-                _pipe.Reader.AdvanceTo(payloadSlice.End);
+                // Retain an incomplete header/payload, and wait for more bytes
+                // rather than repeatedly reading the same already-examined tail.
+                _pipe.Reader.AdvanceTo(consumed, protocolMessageBuffer.End);
+                if (protocolMessageResult.IsCompleted)
+                {
+                    if (!protocolMessageBuffer.IsEmpty)
+                    {
+                        throw new EndOfStreamException("Muxer input ended with an incomplete protocol message.");
+                    }
+                    break;
+                }
             }
             runToken.ThrowIfCancellationRequested();
         }
