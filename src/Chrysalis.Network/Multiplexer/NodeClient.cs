@@ -14,6 +14,11 @@ public sealed class NodeClient : IDisposable
 
     private readonly Plexer _plexer;
     private Task? _plexerTask;
+    private readonly N2CVersionContext _versions = new();
+    private int _started;
+
+    /// <summary>Gets the accepted node-to-client version, or null before successful negotiation.</summary>
+    public N2CVersion? NegotiatedVersion => _versions.NegotiatedVersion;
 
     /// <summary>
     /// Gets the Handshake protocol handler.
@@ -50,8 +55,8 @@ public sealed class NodeClient : IDisposable
         Handshake = new(_plexer.SubscribeClient(ProtocolType.Handshake));
         ChainSync = new(_plexer.SubscribeClient(ProtocolType.ClientChainSync));
         LocalTxSubmit = new(_plexer.SubscribeClient(ProtocolType.LocalTxSubmission));
-        LocalStateQuery = new(_plexer.SubscribeClient(ProtocolType.LocalStateQuery));
-        LocalTxMonitor = new(_plexer.SubscribeClient(ProtocolType.LocalTxMonitor));
+        LocalStateQuery = new(_plexer.SubscribeClient(ProtocolType.LocalStateQuery), _versions);
+        LocalTxMonitor = new(_plexer.SubscribeClient(ProtocolType.LocalTxMonitor), _versions);
     }
 
     /// <summary>
@@ -120,15 +125,64 @@ public sealed class NodeClient : IDisposable
     /// </summary>
     /// <param name="networkMagic">The network magic number for the handshake.</param>
     /// <exception cref="InvalidOperationException">Thrown if the client is already started.</exception>
-    public async Task StartAsync(ulong networkMagic = 2)
+    public Task StartAsync(ulong networkMagic = 2) => StartAsync(VersionTables.N2cV10AndAbove(networkMagic), CancellationToken.None);
+
+    /// <summary>Starts this connection with an explicit version offer; one entry forces one version.</summary>
+    /// <param name="versions">A nonempty, same-network N2C offer with query=false. Explicit untested versions do not change the default support claim.</param>
+    /// <param name="cancellationToken">Cancels startup; it does not change the lifetime of an accepted connection.</param>
+    /// <exception cref="ArgumentException">The offer is empty, duplicates a wire version, mixes networks or requests query mode.</exception>
+    /// <exception cref="InvalidOperationException">The client was already started or the accept does not match its offer.</exception>
+    /// <exception cref="HandshakeRefusedException">The node supplied a typed refusal.</exception>
+    public async Task StartAsync(N2CVersionTable versions, CancellationToken cancellationToken = default)
     {
-        // Store plexer task so we can observe failures
+        N2CVersionTable offer = NormalizeOffer(versions);
+        cancellationToken.ThrowIfCancellationRequested();
+        if (Interlocked.Exchange(ref _started, 1) != 0)
+        {
+            throw new InvalidOperationException("The client has already started its handshake.");
+        }
+        NetworkMagic = offer.Value.First().Value.NetworkMagic;
         _plexerTask = _plexer.RunAsync(CancellationToken.None);
+        try
+        {
+            N2CAcceptVersion accepted = await Handshake.SendAsync<N2CAcceptVersion>(HandshakeMessages.ProposeVersions(offer), cancellationToken).ConfigureAwait(false);
+            if (!offer.Value.Keys.Any(version => version.Value == accepted.Version.Value)
+                || accepted.VersionData.NetworkMagic != NetworkMagic || accepted.VersionData.Query is not false)
+            {
+                throw new InvalidOperationException("The node accepted a version or network datum outside the explicit handshake offer.");
+            }
+            _versions.SetNegotiatedVersion(accepted.Version);
+        }
+        catch
+        {
+            _plexer.Dispose();
+            throw;
+        }
+    }
 
-        NetworkMagic = networkMagic;
-
-        ProposeVersions proposeVersion = HandshakeMessages.ProposeVersions(VersionTables.N2cV10AndAbove(networkMagic));
-        _ = await Handshake.SendAsync<N2CAcceptVersion>(proposeVersion, CancellationToken.None).ConfigureAwait(false);
+    private static N2CVersionTable NormalizeOffer(N2CVersionTable versions)
+    {
+        ArgumentNullException.ThrowIfNull(versions);
+        ArgumentNullException.ThrowIfNull(versions.Value);
+        if (versions.Value.Count == 0)
+        {
+            throw new ArgumentException("A handshake must offer at least one version.", nameof(versions));
+        }
+        N2CVersionData first = versions.Value.First().Value
+            ?? throw new ArgumentException("Handshake version data cannot be null.", nameof(versions));
+        ulong magic = first.NetworkMagic;
+        Dictionary<N2CVersion, N2CVersionData> sorted = [];
+        HashSet<int> seen = [];
+        foreach (KeyValuePair<N2CVersion, N2CVersionData> entry in versions.Value.OrderBy(entry => entry.Key.Value))
+        {
+            N2CVersionContext.ValidateWireVersion(entry.Key, nameof(versions));
+            if (entry.Value is null || !seen.Add(entry.Key.Value) || entry.Value.NetworkMagic != magic || entry.Value.Query is not false)
+            {
+                throw new ArgumentException("Handshake versions must be distinct, use one network magic and have query=false.", nameof(versions));
+            }
+            sorted.Add(new N2CVersion(entry.Key.Value), new N2CVersionData(magic, false));
+        }
+        return new N2CVersionTable(sorted);
     }
 
     /// <summary>

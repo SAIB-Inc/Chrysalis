@@ -38,6 +38,16 @@ Additional route configuration:
 
 Never place a key value in a command, environment variable, log or artifact. Never copy the wallet file, echo a credential file, enable `set -x`, or pass credential-file configuration to CLI children. `OracleCli` clears the child environment except a minimal OS allowlist. Wallet secret errors are replaced with a non-sensitive stage failure; private key arrays are cleared. The original wallet file is never modified.
 
+## Forced N2C compatibility runs (B1)
+
+`CHRYSALIS_N2C_VERSION` is an optional logical version **16–23**, not a wire value (for example, set `23`, not `32791`). Each configured NodeConnections client and the standalone handshake control sends a single-entry offer. Missing force preserves the provisional default; invalid force fails before opening a socket. `negotiated-n2c-observations.jsonl` records the actual offer and negotiated version as **SDK observations**, never CLI-generated golden values.
+
+The four B1 compatibility controls are handshake, state acquire/release, same-point client chain intersection/rollback, and monitor acquire/sizes. Direct NodeIntegrationTests Known B2/B3/B4 cases also run per forced version, but are recorded separately; they do not become B1 compatibility vetoes. The provisional default requires a full-suite rerun after B2–B4 and before H2, removing failing versions then. `B1HandshakeIntegrationTests` separately checks a typed wrong-magic refusal and a raw query-mode reply.
+
+The Ouroboros provider constructs its own NodeClient and cannot accept the forced offer. Its parameter test is **default offer, unforced; accepted version not exposed, unverified**. Do not infer its version from a neighboring connection. Blockfrost and funded cases are not needed for B1 and remain skipped with missing configuration; do not supply keys or a funding opt-in for the matrix.
+
+CLI identity is pinned per node: node 11.1.3 uses CLI 10.13.1.0; private node 11.2.1 uses its image's CLI 11.7.0.0. A container wrapper goes in `CHRYSALIS_CARDANO_CLI`; set `CHRYSALIS_CARDANO_CLI_BINARY` to a local copy of the actual image binary for hashing. The wrapper must translate host socket/output paths to that private container's single isolated scratch-directory bind. Each oracle record retains the driver SHA-256 separately from the actual binary SHA-256; an SDK result is never recorded through OracleCli.Record.
+
 ## Independent expectations and provenance
 
 The oracle is the real `cardano-cli` executable on the same node, not SDK roundtrips. CLI source tag/commit/path/license are in `Golden/SOURCES.json`; its Apache-2.0 license is retained. The installed binary reports zero git revision, so the official source tag is identified separately from the recorded executable SHA-256; this is not a reproducible-binary assertion. `golden-oracles.jsonl` records each generated output's SHA-256, CLI arguments, source identity, binary identity, node tag and network magic. Current chain state and a newly constructed transaction cannot be pre-existing upstream vectors. SDK observations are kept separate and are not called CLI goldens.

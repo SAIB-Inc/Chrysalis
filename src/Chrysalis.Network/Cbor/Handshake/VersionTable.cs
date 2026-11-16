@@ -15,14 +15,14 @@ public abstract partial record VersionTable : CborRecord;
 /// </summary>
 /// <param name="Value">The dictionary mapping each node-to-client version to its negotiation parameters.</param>
 [CborSerializable]
-public partial record N2CVersionTable(Dictionary<N2CVersion, N2CVersionData> Value) : VersionTable;
+public partial record N2CVersionTable([CborDefinite] Dictionary<N2CVersion, N2CVersionData> Value) : VersionTable;
 
 /// <summary>
 /// A version table mapping node-to-node protocol versions to their corresponding parameters.
 /// </summary>
 /// <param name="Value">The dictionary mapping each node-to-node version to its negotiation parameters.</param>
 [CborSerializable]
-public partial record N2NVersionTable(Dictionary<N2NVersion, N2NVersionData> Value) : VersionTable;
+public partial record N2NVersionTable([CborDefinite] Dictionary<N2NVersion, N2NVersionData> Value) : VersionTable;
 
 /// <summary>
 /// Factory methods for constructing commonly used Ouroboros Handshake version tables.
@@ -30,17 +30,20 @@ public partial record N2NVersionTable(Dictionary<N2NVersion, N2NVersionData> Val
 public static class VersionTables
 {
     /// <summary>
-    /// Creates a node-to-client version table proposing versions 16 through 20.
+    /// Creates the provisional node-to-client default offer, targeting versions 16 through 23.
     /// </summary>
     /// <param name="networkMagic">The network magic number (default is 2 for preview testnet).</param>
-    /// <returns>A new <see cref="N2CVersionTable"/> with versions V16 through V20.</returns>
+    /// <returns>A new <see cref="N2CVersionTable"/> with the matrix-qualified provisional versions V16 through V23.</returns>
     public static N2CVersionTable N2cV10AndAbove(ulong networkMagic = 2) => new(new()
         {
             {N2CVersions.V16, new N2CVersionData(networkMagic, false)},
             {N2CVersions.V17, new N2CVersionData(networkMagic, false)},
             {N2CVersions.V18, new N2CVersionData(networkMagic, false)},
             {N2CVersions.V19, new N2CVersionData(networkMagic, false)},
-            {N2CVersions.V20, new N2CVersionData(networkMagic, false)}
+            {N2CVersions.V20, new N2CVersionData(networkMagic, false)},
+            {N2CVersions.V21, new N2CVersionData(networkMagic, false)},
+            {N2CVersions.V22, new N2CVersionData(networkMagic, false)},
+            {N2CVersions.V23, new N2CVersionData(networkMagic, false)}
         });
 
     /// <summary>

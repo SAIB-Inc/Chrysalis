@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Net;
+using Chrysalis.Network.Cbor.Handshake;
 using Xunit;
 
 [assembly: CollectionBehavior(DisableTestParallelization = true)]
@@ -20,6 +21,8 @@ internal static class IntegrationEnvironment
     internal const string CollateralTxIn = "CHRYSALIS_IT_COLLATERAL_TXIN";
     internal const string WalletFile = "CHRYSALIS_WALLET_KEY_FILE";
     internal const string WalletAddress = "CHRYSALIS_WALLET_ADDRESS";
+    internal const string ForcedN2CVersion = "CHRYSALIS_N2C_VERSION";
+    internal const string CliBinary = "CHRYSALIS_CARDANO_CLI_BINARY";
     internal const string BlockfrostFile = "CHRYSALIS_BLOCKFROST_KEY_FILE";
 
     internal static string Required(string variable) =>
@@ -66,6 +69,22 @@ internal static class IntegrationEnvironment
         }
         // Never let DNS redirect a configured localhost to an external peer.
         return string.Equals(host, "localhost", StringComparison.OrdinalIgnoreCase) ? IPAddress.Loopback.ToString() : host;
+    }
+
+    internal static N2CVersionTable CreateN2COffer(ulong networkMagic, string? forcedLogicalVersion)
+    {
+        if (forcedLogicalVersion is null)
+        {
+            return VersionTables.N2cV10AndAbove(networkMagic);
+        }
+        if (!int.TryParse(forcedLogicalVersion, NumberStyles.None, CultureInfo.InvariantCulture, out int version) || version is < 16 or > 23)
+        {
+            throw new InvalidOperationException($"{ForcedN2CVersion} must be a logical N2C version from 16 through 23, not a wire number.");
+        }
+        return new N2CVersionTable(new Dictionary<N2CVersion, N2CVersionData>
+        {
+            [new N2CVersion(32768 + version)] = new N2CVersionData(networkMagic, false)
+        });
     }
 
     internal static bool IsFundedOptIn(string? value) => string.Equals(value, "1", StringComparison.Ordinal);

@@ -4,6 +4,7 @@ using System.Text.Json;
 using Chrysalis.Codec.Extensions.Cardano.Core;
 using Chrysalis.Codec.Extensions.Cardano.Core.Transaction;
 using Chrysalis.Codec.Serialization;
+using Chrysalis.Codec.Types;
 using Chrysalis.Codec.Types.Cardano.Core;
 using Chrysalis.Codec.Types.Cardano.Core.Transaction;
 using Chrysalis.Network.Cbor.BlockFetch;
@@ -32,6 +33,7 @@ public sealed class NodeIntegrationTests
     public async Task HandshakeAcceptsAnOfferedVersionForTheConfiguredNetwork()
     {
         using CancellationTokenSource deadline = new(TimeSpan.FromSeconds(30));
+        N2CVersionTable offer = Env.CreateN2COffer(Env.NetworkMagic, Environment.GetEnvironmentVariable(Env.ForcedN2CVersion));
         await OracleCli.RecordVersionAsync(deadline.Token);
         _ = await OracleCli.QueryJsonAsync("handshake-node-tip", deadline.Token, "tip");
         using UnixBearer bearer = await UnixBearer.CreateAsync(Env.Required(Env.Socket), deadline.Token);
@@ -40,12 +42,11 @@ public sealed class NodeIntegrationTests
         try
         {
             Handshake handshake = new(plexer.SubscribeClient(ProtocolType.Handshake));
-            N2CVersionTable offer = VersionTables.N2cV10AndAbove(Env.NetworkMagic);
             N2CAcceptVersion accepted = await handshake.SendAsync<N2CAcceptVersion>(HandshakeMessages.ProposeVersions(offer), deadline.Token);
             Assert.Contains(accepted.Version.Value, offer.Value.Keys.Select(version => version.Value));
             Assert.Equal(Env.NetworkMagic, accepted.VersionData.NetworkMagic);
             Assert.False(accepted.VersionData.Query);
-            await File.WriteAllTextAsync(Path.Combine(Env.OutputDirectory, "negotiated-n2c-observation.json"), JsonSerializer.Serialize(new { source = "SDK observation, not an independent oracle", wireVersion = accepted.Version.Value, networkMagic = accepted.VersionData.NetworkMagic }), deadline.Token);
+            await NodeConnections.RecordNegotiationAsync(nameof(HandshakeAcceptsAnOfferedVersionForTheConfiguredNetwork), offer, accepted.Version, accepted.VersionData.NetworkMagic, deadline.Token);
         }
         finally
         {
@@ -261,7 +262,7 @@ public sealed class NodeIntegrationTests
         string cli = await OracleCli.ExecuteAsync("rejection-oracle", ["latest", "transaction", "submit", "--tx-file", path, "--socket-path", Env.Required(Env.Socket), "--testnet-magic", Env.NetworkMagic.ToString(CultureInfo.InvariantCulture)], deadline.Token, expectFailure: true);
         const string capturedReason = "All inputs are spent. Transaction has probably already been included";
         Assert.Contains(capturedReason, cli, StringComparison.Ordinal);
-        RejectTx response = Assert.IsType<RejectTx>(await node.LocalTxSubmit.SubmitTxAsync(new SubmitTx(0, new EraTx(checked((int)ProtocolOracles.Era(await OracleCli.QueryJsonAsync("rejection-era", deadline.Token, "tip"))), new Chrysalis.Codec.Types.CborEncodedValue(transaction))), deadline.Token));
+        RejectTx response = Assert.IsType<RejectTx>(await node.LocalTxSubmit.SubmitTxAsync(new SubmitTx(0, new EraTx(checked((int)ProtocolOracles.Era(await OracleCli.QueryJsonAsync("rejection-era", deadline.Token, "tip"))), new CborEncodedValue(transaction))), deadline.Token));
         string reason = Encoding.UTF8.GetString(response.RejectReason.Raw.Span);
         Assert.Contains(capturedReason, reason, StringComparison.Ordinal);
         Assert.Contains(capturedReason, cli, StringComparison.Ordinal);

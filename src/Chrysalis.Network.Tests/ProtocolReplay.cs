@@ -37,6 +37,17 @@ internal sealed class ProtocolReplay : IDisposable
         return bytes.AsSpan(3).ToArray();
     }
 
+    internal void AssertNothingSent()
+    {
+        Assert.Equal(0, _outgoing.Writer.UnflushedBytes);
+        if (_outgoing.Reader.TryRead(out ReadResult result))
+        {
+            bool empty = result.Buffer.IsEmpty;
+            _outgoing.Reader.AdvanceTo(result.Buffer.End);
+            Assert.True(empty, "A version-rejected operation wrote an outgoing frame.");
+        }
+    }
+
     public void Dispose()
     {
         _ = _incoming.Writer.TryComplete();
