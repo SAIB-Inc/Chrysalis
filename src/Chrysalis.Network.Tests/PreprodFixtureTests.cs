@@ -89,6 +89,15 @@ public class PreprodFixtureTests
         _ = Assert.IsType<ConwayBlock>(envelope.Block);
         Assert.Equal(expected.GetProperty("slot").GetUInt64(), envelope.Block.Slot());
         Assert.Equal(expected.GetProperty("headerHash").GetString(), envelope.Block.Hash());
+        Chain.ChainPoint point = new Chain.ChainSyncHeader(6, null, envelope.Block.Header().Raw).ExtractPoint();
+        Assert.Equal(expected.GetProperty("slot").GetUInt64(), point.Slot);
+        CborReader headerReader = new(envelope.Block.Header().Raw.Span);
+        headerReader.ReadBeginArray();
+        _ = headerReader.ReadSize();
+        headerReader.ReadBeginArray();
+        _ = headerReader.ReadSize();
+        Assert.Equal(headerReader.ReadUInt64(), point.BlockNumber);
+        Assert.Equal(expected.GetProperty("headerHash").GetString(), Convert.ToHexStringLower(point.Hash));
         Assert.Equal(expected.GetProperty("transactions").GetInt32(), envelope.Block.TransactionBodies().Count());
     }
 

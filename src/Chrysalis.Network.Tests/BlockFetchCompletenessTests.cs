@@ -13,6 +13,7 @@ using Chrysalis.Network.Cbor.ChainSync;
 using Chrysalis.Network.Core;
 using Chrysalis.Network.Multiplexer;
 using SAIB.Cbor;
+using SAIB.Cbor.Serialization;
 using Xunit;
 using Xunit.Abstractions;
 
@@ -78,6 +79,13 @@ public class BlockFetchCompletenessTests(ITestOutputHelper output)
             while (forward is null)
             {
                 MessageNextResponse next = await headers.ReceiveFullMessageAsync<MessageNextResponse>(deadline.Token);
+                if (next is MessageRollBackward backward)
+                {
+                    Cbor.Common.SpecificPoint anchor = Assert.IsType<Cbor.Common.SpecificPoint>(backward.Point);
+                    Assert.Equal(139055739UL, anchor.Slot);
+                    Assert.Equal(previousHash, anchor.Hash.ToArray());
+                    AssertNodeTip(backward.Tip);
+                }
                 forward = next as N2NMessageRollForward;
             }
             ChainSyncHeader header = ChainSyncHeader.Decode(forward.Payload.Raw);
@@ -89,6 +97,11 @@ public class BlockFetchCompletenessTests(ITestOutputHelper output)
             // an internal consistency check, not an independent node-supplied hash oracle.
             ChainPoint computedHeaderPoint = header.ExtractPoint();
             Assert.Equal(computedHeaderPoint.Slot, block.Block.Slot());
+            // Read the two node-supplied integers directly, without the lazy HeaderBody accessor.
+            (ulong height, ulong slot) = ReadHeaderNumbers(header.HeaderCbor);
+            Assert.Equal(slot, computedHeaderPoint.Slot);
+            Assert.Equal(height, computedHeaderPoint.BlockNumber);
+            AssertNodeTip(forward.Tip);
             byte[] hash = Convert.FromHexString(block.Block.Hash());
             Assert.Equal(computedHeaderPoint.Hash, hash);
             // The NODE-SUPPLIED predecessor field independently checks the preceding computed
@@ -99,7 +112,13 @@ public class BlockFetchCompletenessTests(ITestOutputHelper output)
             lastBlockSlot = block.Block.Slot();
             if (forward.Tip.Slot is Cbor.Common.SpecificPoint point) { lastTipSlot = point.Slot; }
         }
-        output.WriteLine($"Validated {recording.Digests.Length} body SHA256s and node-supplied raw headers; {recording.Digests.Length - 1} node-supplied predecessor hashes plus the anchor. Header/body hashes are Chrysalis-computed; the last digest has no following-header oracle. Last block slot={lastBlockSlot}; last Haskell Tip slot={lastTipSlot}.");
+        // The range's last digest has no following-header oracle. Pin it separately with
+        // Python 3.12 hashlib.blake2b(header_bytes, digest_size=32), not Chrysalis.
+        string finalHash = recording.Digests.Length == 1000
+            ? "e63ff6eea80642d5be9ed6f9c6da6fc5532afd91b34035a786eaafc165775872"
+            : "e69599a62fe464a45aac102fe9d7181da2d4d9bae7b03102c3262c2be7036f8c";
+        Assert.Equal(finalHash, Convert.ToHexStringLower(previousHash));
+        output.WriteLine($"Validated {recording.Digests.Length} ExtractPoint slot/height/hash values, body SHA256s and node-supplied raw headers; {recording.Digests.Length - 1} node-supplied predecessor hashes plus the anchor; final digest independently pinned with Python hashlib. All node Tips/rollback points pinned. Last block slot={lastBlockSlot}; last Haskell Tip slot={lastTipSlot} (outside the range, not an oracle for its final block).");
     }
 
     // Regression guard: passes on baseline 7521d26 by design; preserves opaque-body decoding and borrowed bytes.
@@ -210,6 +229,78 @@ public class BlockFetchCompletenessTests(ITestOutputHelper output)
         Assert.Equal(0, allocated);
     }
 
+    [Fact]
+    public async Task RecordedExtractPointsAllocateAtMost256BytesPerHeader()
+    {
+        Recording recording = Recording.Load();
+        using ProtocolReplay replay = new(ProtocolType.NodeChainSync, recording.ChainSegments);
+        ChannelBuffer buffer = new(replay.Channel);
+        using CancellationTokenSource deadline = new(TimeSpan.FromSeconds(30));
+        ChainSyncHeader[] headers = new ChainSyncHeader[recording.Digests.Length];
+        int count = 0;
+        while (count < headers.Length)
+        {
+            MessageNextResponse next = await buffer.ReceiveFullMessageAsync<MessageNextResponse>(deadline.Token);
+            if (next is N2NMessageRollForward forward)
+            {
+                headers[count++] = ChainSyncHeader.Decode(forward.Payload.Raw);
+            }
+        }
+        ChainPoint[] sink = new ChainPoint[headers.Length];
+        for (int warmup = 0; warmup < 10; warmup++) { ExtractPoints(headers, sink); }
+        long before = GC.GetAllocatedBytesForCurrentThread();
+        ExtractPoints(headers, sink);
+        long bytes = GC.GetAllocatedBytesForCurrentThread() - before;
+        GC.KeepAlive(sink);
+        output.WriteLine($"Warm ExtractPoint allocated {bytes} B for {headers.Length} headers ({(double)bytes / headers.Length} B/header).");
+        Assert.True(bytes <= 256L * headers.Length, $"Expected <=256 B/header; got {(double)bytes / headers.Length}.");
+    }
+
+    private static void ExtractPoints(ChainSyncHeader[] headers, ChainPoint[] sink)
+    {
+        for (int index = 0; index < headers.Length; index++) { sink[index] = headers[index].ExtractPoint(); }
+    }
+
+    private static (ulong Height, ulong Slot) ReadHeaderNumbers(ReadOnlyMemory<byte> bytes)
+    {
+        CborReader reader = new(bytes.Span);
+        reader.ReadBeginArray();
+        _ = reader.ReadSize();
+        reader.ReadBeginArray();
+        _ = reader.ReadSize();
+        return (reader.ReadUInt64(), reader.ReadUInt64());
+    }
+
+    // Facts decoded independently with Python cbor2 from the SHA-pinned Haskell-node
+    // recording (not computed header hashes). These live Tips are beyond this range.
+    private static void AssertNodeTip(Cbor.Common.Tip tip)
+    {
+        Cbor.Common.SpecificPoint point = Assert.IsType<Cbor.Common.SpecificPoint>(tip.Slot);
+        (string hash, int height) = point.Slot switch
+        {
+            139100417 => ("4473e46f5de089cb04c304ac80846c2af79270dbc19993b1266fe337e60ccd99", 5417032),
+            139100422 => ("0d2718d18af42719f633b2018eda2e0b0182d51481aeda5f49e95c130a61fd17", 5417034),
+            139100438 => ("d18e35c3e2e7288311c168dca88a3db23d86d76408c3f5eeb15496fe7f737d05", 5417036),
+            139100496 => ("202b67ee2168329267bd45a81c541b77aae8121f2bb7d6332a4762ee71d62ee2", 5417038),
+            139100556 => ("8a03c7e8047f499e081a74e58d8bb55b14e0ffc9f79cbfc90c8be8a2a2876e5f", 5417039),
+            139100566 => ("9199b45b7485f1153afcfa6435345f88ce8d563d6eec5a3081427c1e4044a8ee", 5417040),
+            139100599 => ("8390e36f9995023b9dce2d5653fc6bf6a040fc0042c5a61b7fc5b0f769d11582", 5417041),
+            139100617 => ("84bf739610c04baf23398e1f964cc9bd5909282622412d9a5f000fda961d3e67", 5417042),
+            _ => throw new InvalidOperationException("Unexpected Tip in the recorded range.")
+        };
+        Assert.Equal(hash, Convert.ToHexStringLower(point.Hash.Span));
+        Assert.Equal(height, tip.BlockNumber);
+    }
+
+    private static void AssertRecordedIntersection(byte[] bytes)
+    {
+        MessageIntersectFound intersection = CborSerializer.Deserialize<MessageIntersectFound>(bytes);
+        Cbor.Common.SpecificPoint anchor = Assert.IsType<Cbor.Common.SpecificPoint>(intersection.Point);
+        Assert.Equal(139055739UL, anchor.Slot);
+        Assert.Equal("e5c46f069110d4f8d00a126fd06a783c0eb0a72fe4b9b60be3b3701b1d0b538b", Convert.ToHexStringLower(anchor.Hash.Span));
+        AssertNodeTip(intersection.Tip);
+    }
+
     private sealed record Recording(byte[][] FetchSegments, byte[][] ChainSegments, string[] Digests)
     {
         internal static Recording Load()
@@ -231,7 +322,9 @@ public class BlockFetchCompletenessTests(ITestOutputHelper output)
                     .Select(frame => wire.AsSpan(frame.GetProperty("offset").GetInt32() + 8, frame.GetProperty("payloadLength").GetInt32()).ToArray())];
                 string[] digests = [.. manifest.RootElement.GetProperty("blocks").EnumerateArray().Select(block => block.GetProperty("sha256").GetString()!)];
                 Assert.Equal(1000, digests.Length);
-                return new(Segments(3), [.. Segments(2).Skip(1)], digests);
+                byte[][] chain = Segments(2);
+                AssertRecordedIntersection(chain[0]);
+                return new(Segments(3), [.. chain.Skip(1)], digests);
             }
             using JsonDocument fixture = JsonDocument.Parse(PreprodFixtures.Read("BlockFetchRx1/manifest.json"));
             byte[][] Read(int protocol) => [.. fixture.RootElement.GetProperty("segments").EnumerateArray()
@@ -241,7 +334,9 @@ public class BlockFetchCompletenessTests(ITestOutputHelper output)
                     Assert.Equal(segment.GetProperty("sha256").GetString(), Convert.ToHexStringLower(SHA256.HashData(bytes)));
                     return bytes;
                 })];
-            return new(Read(3), [.. Read(2).Skip(1)], [.. fixture.RootElement.GetProperty("blocks").EnumerateArray().Select(block => block.GetProperty("sha256").GetString()!)]);
+            byte[][] fixtureChain = Read(2);
+            AssertRecordedIntersection(fixtureChain[0]);
+            return new(Read(3), [.. fixtureChain.Skip(1)], [.. fixture.RootElement.GetProperty("blocks").EnumerateArray().Select(block => block.GetProperty("sha256").GetString()!)]);
         }
     }
 }
