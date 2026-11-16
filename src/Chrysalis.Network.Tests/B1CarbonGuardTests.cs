@@ -78,6 +78,30 @@ public sealed class B1CarbonGuardTests
         replay.AssertNothingSent();
     }
 
+    /// <summary>The explicit minimum overrides the built-in Conway baseline for custom raw requests.</summary>
+    [Fact]
+    public async Task CustomMinimumBelowV16ReachesQuery()
+    {
+        using ProtocolReplay replay = new(ProtocolType.LocalStateQuery, Convert.FromHexString("8101"), Convert.FromHexString("8204d8184106"));
+        await using LocalStateQuery query = new(replay.Channel, new N2CVersion(32780));
+        await query.AcquireAsync(null, CancellationToken.None);
+        _ = await replay.ReadSentPayloadAsync(CancellationToken.None);
+        _ = await query.QueryAsync(new GlobalQuery(0), new N2CVersion(32780), CancellationToken.None);
+        Assert.Equal(Convert.FromHexString("82038100"), await replay.ReadSentPayloadAsync(CancellationToken.None));
+    }
+
+    /// <summary>The explicit-minimum overload stays synchronous and fails before any outgoing message.</summary>
+    [Fact]
+    public async Task CustomMinimumAboveNegotiatedRejectsBeforeAnyWrite()
+    {
+        using ProtocolReplay replay = new(ProtocolType.LocalStateQuery);
+        await using LocalStateQuery query = new(replay.Channel, new N2CVersion(32780));
+        N2CVersionNotSupportedException failure = Assert.Throws<N2CVersionNotSupportedException>(() => { _ = query.QueryAsync(new GlobalQuery(0), new N2CVersion(32781), CancellationToken.None); });
+        Assert.Equal(32780, Assert.IsType<N2CVersion>(failure.NegotiatedVersion).Value);
+        Assert.Equal(32781, Assert.IsType<N2CVersion>(failure.RequiredVersion).Value);
+        replay.AssertNothingSent();
+    }
+
     /// <summary>The legacy overload retains its asynchronous exception boundary for argument, state and version checks.</summary>
     /// <param name="condition">The failure condition that must be returned in the task.</param>
     [Theory]

@@ -74,6 +74,31 @@ public sealed class B1VersionGuardTests
         Assert.Equal(PreprodFixtures.Read("wire/c4-out-p7-003.cbor"), await replay.ReadSentPayloadAsync(CancellationToken.None));
     }
 
+    /// <summary>An explicitly requested minimum cannot be checked without any negotiated context.</summary>
+    [Fact]
+    public async Task ExplicitMinimumWithoutContextFailsBeforeWriting()
+    {
+        using ProtocolReplay replay = new(ProtocolType.LocalStateQuery);
+        await using LocalStateQuery query = new(replay.Channel);
+        MethodInfo method = MinimumOverload();
+        TargetInvocationException failure = Assert.Throws<TargetInvocationException>(() => method.Invoke(query, [RawQueries.GetCurrentEra, new N2CVersion(32791), CancellationToken.None]));
+        _ = Assert.IsType<InvalidOperationException>(failure.InnerException);
+        replay.AssertNothingSent();
+    }
+
+    /// <summary>The synchronous explicit-minimum overload must reject a newer query before any send.</summary>
+    [Fact]
+    public async Task ExplicitMinimumRejectsHigherThanNegotiatedBeforeWriting()
+    {
+        using ProtocolReplay replay = new(ProtocolType.LocalStateQuery);
+        await using LocalStateQuery query = ExplicitQuery(replay.Channel, 32791);
+        MethodInfo method = MinimumOverload();
+        TargetInvocationException failure = Assert.Throws<TargetInvocationException>(() => method.Invoke(query, [RawQueries.GetCurrentEra, new N2CVersion(32792), CancellationToken.None]));
+        Assert.NotNull(failure.InnerException);
+        AssertVersionFailure(failure.InnerException, 32791, 32792);
+        replay.AssertNothingSent();
+    }
+
     private static LocalTxMonitor ExplicitMonitor(AgentChannel channel, int version)
     {
         ConstructorInfo? constructor = typeof(LocalTxMonitor).GetConstructor([typeof(AgentChannel), typeof(N2CVersion)]);
@@ -86,6 +111,13 @@ public sealed class B1VersionGuardTests
         ConstructorInfo? constructor = typeof(LocalStateQuery).GetConstructor([typeof(AgentChannel), typeof(N2CVersion)]);
         Assert.NotNull(constructor);
         return Assert.IsType<LocalStateQuery>(constructor.Invoke([channel, new N2CVersion(version)]));
+    }
+
+    private static MethodInfo MinimumOverload()
+    {
+        MethodInfo? method = typeof(LocalStateQuery).GetMethod("QueryAsync", [typeof(IQueryReq), typeof(N2CVersion), typeof(CancellationToken)]);
+        Assert.NotNull(method);
+        return method;
     }
 
     private static void AssertVersionFailure(Exception failure, int negotiated, int required)
