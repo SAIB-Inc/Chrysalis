@@ -1,21 +1,4 @@
 #!/usr/bin/env bash
+# The shared corpus replaces the removed ChrysalisOld/Dahomey comparison.
 set -euo pipefail
-
-REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-
-echo "========================================="
-echo " BenchmarkDotNet — Deserialization"
-echo "========================================="
-echo
-
-echo "=== Chrysalis New (codegen) ==="
-dotnet run --project "$REPO_ROOT/benchmarks/ChrysalisNew" -c Release
-echo
-
-echo "=== Chrysalis Old (Dahomey) ==="
-dotnet run --project "$REPO_ROOT/benchmarks/ChrysalisOld" -c Release
-echo
-
-echo "========================================="
-echo " BenchmarkDotNet complete."
-echo "========================================="
+exec "$(dirname "${BASH_SOURCE[0]}")/run-benchmarks.sh" "$@"
