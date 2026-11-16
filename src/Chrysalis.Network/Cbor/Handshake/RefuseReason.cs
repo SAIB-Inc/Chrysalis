@@ -29,14 +29,14 @@ public partial record VersionMismatch(
 /// </summary>
 /// <param name="Idx">The CBOR message index identifier (always 1 for this refuse reason type).</param>
 /// <param name="VersionNumber">The protocol version number that caused the decode error.</param>
-/// <param name="ErrorData">The raw CBOR error data describing the decode failure.</param>
+/// <param name="ErrorData">The node's text describing the decode failure.</param>
 [CborSerializable]
 [CborList]
 [CborIndex(1)]
 public partial record HandshakeDecodeError(
     [CborOrder(0)] int Idx,
     [CborOrder(1)] int VersionNumber,
-    [CborOrder(2)] ReadOnlyMemory<byte> ErrorData
+    [CborOrder(2)] string ErrorData
 ) : RefuseReason;
 
 /// <summary>
@@ -44,12 +44,12 @@ public partial record HandshakeDecodeError(
 /// </summary>
 /// <param name="Idx">The CBOR message index identifier (always 2 for this refuse reason type).</param>
 /// <param name="VersionNumber">The protocol version number that was refused.</param>
-/// <param name="ErrorData">The raw CBOR error data describing the refusal reason.</param>
+/// <param name="ErrorData">The node's text describing the refusal reason.</param>
 [CborSerializable]
 [CborList]
 [CborIndex(2)]
 public partial record Refused(
     [CborOrder(0)] int Idx,
     [CborOrder(1)] int VersionNumber,
-    [CborOrder(2)] ReadOnlyMemory<byte> ErrorData
+    [CborOrder(2)] string ErrorData
 ) : RefuseReason;
