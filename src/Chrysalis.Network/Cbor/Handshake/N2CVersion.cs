@@ -31,4 +31,14 @@ public static class N2CVersions
 /// </summary>
 /// <param name="Value">The numeric protocol version identifier (high bit set to distinguish from N2N versions).</param>
 [CborSerializable]
-public partial record N2CVersion(int Value) : CborRecord;
+public partial record N2CVersion(int Value) : CborRecord
+{
+    /// <summary>Compares wire version numbers, ignoring preserved CBOR and decoder metadata.</summary>
+    /// <param name="other">The version to compare.</param>
+    /// <returns>Whether both instances identify the same numeric wire version.</returns>
+    public virtual bool Equals(N2CVersion? other) => other is not null && Value == other.Value;
+
+    /// <summary>Returns the numeric wire version's hash, independent of its CBOR memory slice.</summary>
+    /// <returns>A hash of the version number.</returns>
+    public override int GetHashCode() => Value.GetHashCode();
+}

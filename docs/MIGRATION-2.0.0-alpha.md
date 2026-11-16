@@ -26,3 +26,5 @@ The first four groups are approved by D5 and belong to B2–B4; listing them her
 | Synchronous `LocalStateQuery.QueryAsync(query, minimumVersion, cancellationToken)` overload | Custom raw queries with higher requirements must supply their true minimum. The overload validates synchronously before returning the existing send/receive task; it adds no async stage, channel or hand-off. Without negotiated context this explicit-check overload throws `InvalidOperationException`, rather than pretending that an unchecked send was checked. |
 
 The two text members form the single fifth type-change group and a single D26 boundary. The other boundaries above match the individually described public deltas; implementation/test/provenance and documentation changes do not authorize unrelated API changes.
+
+N2CVersion now compares and hashes by numeric Value only, ignoring Raw and decoder metadata. A decoded version equals its well-known constant and can look up a version-table dictionary key; callers needing encoding identity must compare Raw explicitly. CborRecord equality for all other types is unchanged.
