@@ -2,7 +2,6 @@ using Chrysalis.Codec.Types;
 using Chrysalis.Codec.Types.Cardano.Core.Governance;
 using Chrysalis.Codec.Types.Cardano.Core.Header;
 using Chrysalis.Codec.Types.Cardano.Core.Protocol;
-using Chrysalis.Network.Cbor.LocalStateQuery;
 using Google.Protobuf.Collections;
 using Spec = Utxorpc.V1Beta.Cardano;
 

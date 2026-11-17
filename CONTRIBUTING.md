@@ -185,6 +185,9 @@ The release will trigger the CI/CD pipeline which:
    - `Chrysalis.Network`
    - `Chrysalis.Plutus`
    - `Chrysalis.Tx`
+   - `Chrysalis.Tx.Providers.Blockfrost`
+   - `Chrysalis.Tx.Providers.Kupmios`
+   - `Chrysalis.Tx.Providers.Ouroboros`
    - `Chrysalis.Wallet`
 4. Pushes to NuGet.org (on release publish)
 

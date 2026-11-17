@@ -1,6 +1,6 @@
 using Chrysalis.Codec.Extensions;
 using Chrysalis.Codec.Serialization;
-using Chrysalis.Network.Cbor.LocalStateQuery;
+using Chrysalis.Codec.Types.Cardano.Core.Protocol;
 using Chrysalis.Tx.Models.Cbor;
 using Xunit;
 

@@ -7,7 +7,7 @@ using BenchmarkDotNet.Jobs;
 using BenchmarkDotNet.Reports;
 using BenchmarkDotNet.Running;
 using BenchmarkDotNet.Toolchains.InProcess.Emit;
-using Chrysalis.Network.Cbor.LocalStateQuery;
+using Chrysalis.Codec.Types.Cardano.Core.Protocol;
 using Chrysalis.Tx.Models.Cbor;
 using Chrysalis.Tx.Providers;
 using Chrysalis.Tx.Providers.Lean;

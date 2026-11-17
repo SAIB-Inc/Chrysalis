@@ -1,6 +1,6 @@
 using System.Globalization;
 using System.Text.Json;
-using Chrysalis.Network.Cbor.LocalStateQuery;
+using Chrysalis.Codec.Types.Cardano.Core.Protocol;
 using System.Text.Json.Nodes;
 using Chrysalis.Codec.Serialization;
 using Chrysalis.Codec.Extensions.Cardano.Core.Transaction;

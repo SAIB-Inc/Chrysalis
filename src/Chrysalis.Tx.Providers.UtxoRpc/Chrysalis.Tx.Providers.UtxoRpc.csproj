@@ -15,6 +15,7 @@
     <ProjectReference Include="../Chrysalis.Tx/Chrysalis.Tx.csproj" />
   </ItemGroup>
   <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Configuration.Binder" />
     <PackageReference Include="Google.Protobuf" />
     <PackageReference Include="Grpc.Net.Client" />
     <PackageReference Include="Grpc.Tools" PrivateAssets="all" />

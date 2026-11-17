@@ -11,6 +11,7 @@ using Chrysalis.Network.Cbor.BlockFetch;
 using Chrysalis.Network.Cbor.ChainSync;
 using Chrysalis.Network.Cbor.Common;
 using Chrysalis.Network.Cbor.Handshake;
+using Chrysalis.Codec.Types.Cardano.Core.Protocol;
 using Chrysalis.Network.Cbor.LocalStateQuery;
 using Chrysalis.Network.Cbor.LocalTxMonitor;
 using Chrysalis.Network.Cbor.LocalTxSubmit;

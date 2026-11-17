@@ -7,32 +7,25 @@
     <Company>SAIB Inc</Company>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageLicenseFile>LICENSE.md</PackageLicenseFile>
-    <TargetsForTfmSpecificBuildOutput>$(TargetsForTfmSpecificBuildOutput);CopyProjectReferencesToPackage</TargetsForTfmSpecificBuildOutput>
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Chrysalis.Codec\Chrysalis.Codec.csproj" PrivateAssets="All" />
+    <ProjectReference Include="..\Chrysalis.Codec\Chrysalis.Codec.csproj" />
     <ProjectReference Include="..\Chrysalis.Codec.CodeGen\Chrysalis.Codec.CodeGen.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
-    <ProjectReference Include="..\Chrysalis.Network\Chrysalis.Network.csproj" PrivateAssets="All" />
-    <ProjectReference Include="..\Chrysalis.Tx\Chrysalis.Tx.csproj" PrivateAssets="All" />
-    <ProjectReference Include="..\Chrysalis.Wallet\Chrysalis.Wallet.csproj" PrivateAssets="All" />
-    <ProjectReference Include="..\Chrysalis.Plutus\Chrysalis.Plutus.csproj" PrivateAssets="All" />
-    <ProjectReference Include="..\Chrysalis.Crypto\Chrysalis.Crypto.csproj" PrivateAssets="All" />
+    <ProjectReference Include="..\Chrysalis.Network\Chrysalis.Network.csproj" />
+    <ProjectReference Include="..\Chrysalis.Tx\Chrysalis.Tx.csproj" />
+    <ProjectReference Include="..\Chrysalis.Wallet\Chrysalis.Wallet.csproj" />
+    <ProjectReference Include="..\Chrysalis.Plutus\Chrysalis.Plutus.csproj" />
+    <ProjectReference Include="..\Chrysalis.Crypto\Chrysalis.Crypto.csproj" />
+    <ProjectReference Include="../Chrysalis.Tx.Providers.Blockfrost/Chrysalis.Tx.Providers.Blockfrost.csproj" />
+    <ProjectReference Include="../Chrysalis.Tx.Providers.Kupmios/Chrysalis.Tx.Providers.Kupmios.csproj" />
+    <ProjectReference Include="../Chrysalis.Tx.Providers.Ouroboros/Chrysalis.Tx.Providers.Ouroboros.csproj" />
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="SAIB.Blake2Fast" />
-    <PackageReference Include="SAIB.Cbor" />
-    <PackageReference Include="Microsoft.AspNetCore.Cryptography.KeyDerivation" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Binder" />
   </ItemGroup>
 
-  <Target Name="CopyProjectReferencesToPackage" DependsOnTargets="ResolveReferences">
-    <ItemGroup>
-      <BuildOutputInPackage Include="@(ReferenceCopyLocalPaths)" 
-                           Condition="'%(ReferenceCopyLocalPaths.ReferenceSourceTarget)' == 'ProjectReference'" />
-    </ItemGroup>
-  </Target>
-  
   <ItemGroup>
     <None Include="../../LICENSE.md" Pack="true" PackagePath="" />
     <None Include="../../README.md" Pack="true" PackagePath="" />

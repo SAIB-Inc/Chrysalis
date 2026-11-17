@@ -7,7 +7,7 @@ using Chrysalis.Codec.Serialization;
 using Chrysalis.Codec.Types.Cardano.Core;
 using Chrysalis.Codec.Types.Cardano.Core.Common;
 using Chrysalis.Codec.Types.Cardano.Core.Transaction;
-using Chrysalis.Network.Cbor.LocalStateQuery;
+using Chrysalis.Codec.Types.Cardano.Core.Protocol;
 using Chrysalis.Network.Cbor.LocalTxSubmit;
 using Chrysalis.Network.Multiplexer;
 using Chrysalis.Tx.Builders;

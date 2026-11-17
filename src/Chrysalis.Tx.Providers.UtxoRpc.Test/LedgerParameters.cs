@@ -3,7 +3,7 @@ using System.Numerics;
 using System.Text.Json;
 using Chrysalis.Codec.Extensions;
 using Chrysalis.Codec.Types;
-using Chrysalis.Network.Cbor.LocalStateQuery;
+using Chrysalis.Codec.Types.Cardano.Core.Protocol;
 using Xunit;
 
 namespace Chrysalis.Tx.Providers.UtxoRpcTests;

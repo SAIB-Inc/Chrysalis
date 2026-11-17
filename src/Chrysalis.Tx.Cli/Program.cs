@@ -20,7 +20,6 @@ using Chrysalis.Wallet.Models.Enums;
 using WalletAddress = Chrysalis.Wallet.Models.Addresses.Address;
 using Chrysalis.Wallet.Models.Keys;
 using Chrysalis.Codec.Extensions;
-using Chrysalis.Network.Cbor.LocalStateQuery;
 using Chrysalis.Wallet.Words;
 
 // ── Configuration ──────────────────────────────────────────────────────────

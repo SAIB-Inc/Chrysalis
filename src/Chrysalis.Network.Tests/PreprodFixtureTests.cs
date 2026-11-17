@@ -8,6 +8,7 @@ using Chrysalis.Codec.Types.Cardano.Core;
 using Chrysalis.Codec.Types.Cardano.Core.Transaction;
 using Chrysalis.Network.Cbor.Common;
 using Chrysalis.Network.Cbor.Handshake;
+using Chrysalis.Codec.Types.Cardano.Core.Protocol;
 using Chrysalis.Network.Cbor.LocalStateQuery;
 using SAIB.Cbor.Serialization;
 using Xunit;

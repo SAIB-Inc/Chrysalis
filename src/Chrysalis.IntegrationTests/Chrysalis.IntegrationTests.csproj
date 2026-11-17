@@ -19,6 +19,9 @@
   <ItemGroup>
     <ProjectReference Include="../Chrysalis.Network/Chrysalis.Network.csproj" />
     <ProjectReference Include="../Chrysalis.Tx/Chrysalis.Tx.csproj" />
+    <ProjectReference Include="../Chrysalis.Tx.Providers.Blockfrost/Chrysalis.Tx.Providers.Blockfrost.csproj" />
+    <ProjectReference Include="../Chrysalis.Tx.Providers.Kupmios/Chrysalis.Tx.Providers.Kupmios.csproj" />
+    <ProjectReference Include="../Chrysalis.Tx.Providers.Ouroboros/Chrysalis.Tx.Providers.Ouroboros.csproj" />
     <ProjectReference Include="../Chrysalis.Wallet/Chrysalis.Wallet.csproj" />
     <EmbeddedResource Include="Golden/**/*" LogicalName="Golden/%(RecursiveDir)%(Filename)%(Extension)" />
     <EmbeddedResource Include="../Chrysalis.Network.Tests/Fixtures/Preprod/**/*"
