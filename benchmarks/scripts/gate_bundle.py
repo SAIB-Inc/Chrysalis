@@ -126,7 +126,6 @@ def prepare(output, rows, staged, config, local):
         copy_files(corpus, base / 'corpora', files=['range.json', *[Path('capture') / name for name in payload]])
         # Derive a payload-only manifest; never upload incidental host/node logs.
         session.save(base / 'corpora/capture/sha256.json', {name: fingerprints[name] for name in payload})
-    paths = {}
     installed = set()
     for side in staged.values():
         relative = Path('clients') / schedules.build_id(side)
@@ -136,11 +135,10 @@ def prepare(output, rows, staged, config, local):
             copy_files(directory, base / relative, files=[path.name for path in directory.iterdir() if path.is_file() and path.suffix in ('.dll', '.json', '.so')])
             installed.add(relative)
         timing.require(gate.closure_hashes(base / relative) == side['dllSha256s'], 'Staged every-DLL identity differs')
-        paths[(side['commit'], side['treeId'], side['runtime'])] = relative
     for row in selected:
         row['corpusId'] = gate.corpus_identity(row, local)
         for side in row['sides'].values():
-            path = paths[(side['commit'], side['treeId'], side['runtime'])]
+            path = Path('clients') / schedules.build_id(side)
             side.update(client=(path / 'ReplayClient.dll').as_posix(), harness=(path / 'Chrysalis.Benchmarks.dll').as_posix())
         row['job'] = dict(kind='time', replay=row['replay'], dotnet='dotnet/dotnet',
                           server='scripts/n2n_replay_server.py', capture='corpora/capture',
