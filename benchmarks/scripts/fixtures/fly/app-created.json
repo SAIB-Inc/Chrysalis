@@ -1,0 +1,80 @@
+{
+  "ID": "fixture-id",
+  "InternalNumericID": 1,
+  "Name": "fixture-app",
+  "State": "",
+  "Status": "pending",
+  "Deployed": false,
+  "Hostname": "fixture-app",
+  "AppURL": "fixture-app",
+  "Version": 0,
+  "NetworkID": 1,
+  "Network": "",
+  "Release": null,
+  "Organization": {
+    "ID": "fixture-org",
+    "Name": "fixture-org",
+    "Slug": "fixture-org"
+  },
+  "Secrets": null,
+  "CurrentRelease": null,
+  "Releases": {
+    "Nodes": null
+  },
+  "IPAddresses": {
+    "Nodes": []
+  },
+  "EgressIpAddresses": {
+    "Nodes": null
+  },
+  "SharedIPAddress": "",
+  "CNAMETarget": "fixture-app",
+  "IPAddress": null,
+  "Certificates": {
+    "Nodes": null
+  },
+  "Certificate": {
+    "ID": "fixture-id",
+    "AcmeDNSConfigured": false,
+    "AcmeALPNConfigured": false,
+    "Configured": false,
+    "CertificateAuthority": "",
+    "CreatedAt": "0001-01-01T00:00:00Z",
+    "DNSProvider": "",
+    "DNSValidationInstructions": "",
+    "DNSValidationHostname": "",
+    "DNSValidationTarget": "",
+    "Hostname": "fixture-app",
+    "Source": "",
+    "ClientStatus": "",
+    "IsApex": false,
+    "IsWildcard": false,
+    "ValidationErrors": null,
+    "Issued": {
+      "Nodes": null
+    }
+  },
+  "PostgresAppRole": null,
+  "Image": null,
+  "ImageUpgradeAvailable": false,
+  "ImageVersionTrackingEnabled": false,
+  "ImageDetails": {
+    "Registry": "unknown",
+    "Repository": "unknown",
+    "Tag": "unknown",
+    "Version": "unknown",
+    "Digest": "unknown"
+  },
+  "LatestImageDetails": {
+    "Registry": "",
+    "Repository": "",
+    "Tag": "",
+    "Version": "",
+    "Digest": ""
+  },
+  "PlatformVersion": "machines",
+  "Machines": {
+    "Nodes": []
+  },
+  "CurrentLock": null
+}

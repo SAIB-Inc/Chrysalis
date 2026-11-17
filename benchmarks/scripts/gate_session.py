@@ -15,11 +15,13 @@ import subprocess
 import sys
 import time
 
-AMBIENT = ('HOME', 'PATH', 'LANG', 'LC_ALL', 'TZ', 'TMPDIR', 'DOTNET_ROOT')
+AMBIENT = ('HOME', 'PATH', 'LANG', 'LC_ALL', 'TZ', 'TMPDIR', 'DOTNET_ROOT',
+           'FLY_APP_NAME', 'FLY_REGION', 'FLY_MACHINE_ID')
 # These values are supplied by the gate, never copied from the caller.
 GENERATED = ('CHRYSALIS_CORPORA', 'CHRYSALIS_BENCHMARK_DATA',
              'CHRYSALIS_BENCHMARK_RESULTS', 'P1_RANGE', 'NUGET_PACKAGES',
-             'DOTNET_CLI_TELEMETRY_OPTOUT', 'DOTNET_NOLOGO', 'DOTNET_TieredPGO')
+             'DOTNET_CLI_TELEMETRY_OPTOUT', 'DOTNET_NOLOGO', 'DOTNET_TieredPGO',
+             'CHRYSALIS_DIRECT_WARMUP_MS')
 DESIGNS = {'short': (1, 25), 'long': (180, 60)}
 COUNTERS = ('compiledMethods', 'compiledILBytes', 'compilationTimeTicks')
 
@@ -27,7 +29,7 @@ COUNTERS = ('compiledMethods', 'compiledILBytes', 'compilationTimeTicks')
 def detect_platform():
     """Detect before the allowlist strips Fly's machine metadata; never trust a job."""
     app, region = os.environ.get('FLY_APP_NAME'), os.environ.get('FLY_REGION')
-    if app is not None or region is not None:
+    if any(key in os.environ for key in ('FLY_APP_NAME', 'FLY_REGION', 'FLY_MACHINE_ID')):
         if not app or region != 'iad' or os.cpu_count() != 8 or platform.machine() != 'x86_64':
             raise ValueError('Named 8-CPU x64 iad Fly machine required')
         return 'fly'
@@ -75,14 +77,17 @@ def proc_inventory(root=Path('/proc')):
     return result
 
 
-def snapshot():
+def cpu_snapshot():
     cpu = {}
     for line in Path('/proc/stat').read_text().splitlines():
         fields = line.split()
         if fields and (fields[0] == 'cpu' or fields[0][3:].isdigit()):
             cpu[fields[0]] = [int(value) for value in fields[1:9]]
-    return dict(monotonic=time.monotonic(), unix=time.time(), load1=os.getloadavg()[0],
-                cpuStat=cpu, processes=proc_inventory())
+    return dict(monotonic=time.monotonic(), unix=time.time(), cpuStat=cpu)
+
+
+def snapshot():
+    return dict(cpu_snapshot(), load1=os.getloadavg()[0], processes=proc_inventory())
 
 
 def descendants(pid, inventory):
@@ -227,14 +232,14 @@ def monitored_process(command, root, env, dest, timeout, server_pid=None, *, obs
 
 def validate_observations(data, case, runtime, counts):
     warmup, measured = counts
-    blocks = 1000 if case == 'tcp' else 1020
+    blocks = None if case == 'micro' else 1000 if case == 'tcp' else 1020
     if data.get('runtime') != runtime or (data.get('warmupPasses'), data.get('passes')) != (warmup, measured):
         raise ValueError('Runtime/design count mismatch')
     for key, count in [('warmupRows', warmup), ('rows', measured)]:
         rows = data.get(key, [])
         if len(rows) != count or [row['pass'] for row in rows] != list(range(1, count + 1)):
             raise ValueError('Incomplete fixed work: ' + key)
-        if any(row['blocks'] != blocks or row['nsPerBlock'] <= 0 or any(not math.isfinite(row[k]) or row[k] < 0 for k in ('nsPerBlock', 'bytesPerBlock')) for row in rows):
+        if any((row['blocks'] != blocks if blocks is not None else row['blocks'] <= 0) or row['nsPerBlock'] <= 0 or any(not math.isfinite(row[k]) or row[k] < 0 for k in ('nsPerBlock', 'bytesPerBlock')) for row in rows):
             raise ValueError('Invalid fixed work: ' + key)
     for stage, count in [('warmup', warmup), ('measured', measured)]:
         boundaries = [row for row in data.get('groupBoundaries', []) if row['stage'] == stage]
@@ -299,7 +304,10 @@ def member(spec, job, dest):
                     if server.poll() is not None or time.monotonic() > deadline:
                         raise RuntimeError('TCP server did not become ready')
                     time.sleep(.05)
-            command += [job['replay'], str(output), *map(str, job['counts']), '--observed']
+            command += [job['replay'], str(output), *map(str, job['counts'])]
+            if job['replay'] == 'micro':
+                command += [job['filter'], str(job['microInvocations'])]
+            command += ['--observed']
         result = monitored_process(command, job['root'], env, dest / 'execution', job.get('timeout', 480),
                                    server.pid if server else None, observed=job['kind'] != 'direct', platform=platform)
         if result['exitCode'] or result.get('error'):
@@ -316,7 +324,9 @@ def member(spec, job, dest):
                     platform=platform, timingRejectedReasons=result['timingRejectedReasons'],
                     measurement=dict(kind=job['kind'], counts=job['counts'], filter=job['filter']),
                     load=[result['before']['load1'], result['after']['load1']],
-                    seconds=result['seconds'])
+                    seconds=result['seconds'], marks=sorted(result['marks']),
+                    wholeProcess=dict(startMonotonic=result['before']['monotonic'], endMonotonic=result['after']['monotonic'],
+                                      aggregateSteal=steal_fraction(result['before']['cpuStat']['cpu'], result['after']['cpuStat']['cpu']) if platform == 'fly' else None))
     finally:
         if server:
             stop(server)

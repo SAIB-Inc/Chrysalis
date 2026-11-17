@@ -1,19 +1,27 @@
 {
   "defaults": {
-    "change": {"directPairs": 3, "replayPairs": 20, "design": "short"},
+    "change": {"directPairs": 3, "replayPairs": 20, "design": "short", "timePairs": {"time/preprod-tcp": 34, "time/preprod-offline": 40}},
     "release": {"directPairs": 5, "replayPairs": 10, "design": "long", "coldPairs": 20},
     "bandPairs": 10,
-    "timePairs": 16
+    "timePairs": 16,
+    "bandedDirectPairs": 16
   },
-  "direct": {"FieldReadBench.ReadEveryField": "range"},
+  "direct": {
+    "FieldReadBench.ReadEveryField": {"rule": "range", "window": "readeveryfield/warm10", "warmupMilliseconds": 10000},
+    "BlockBench.DecodeBlockReadInputs": {"rule": "range", "window": "direct/warm10", "warmupMilliseconds": 10000},
+    "VmBench.DecodeAndEvaluate": {"rule": "range", "window": "direct/warm10", "warmupMilliseconds": 10000},
+    "CoreBench.Sign": {"rule": "range", "window": "direct/warm10", "warmupMilliseconds": 10000},
+    "TxBench.SimpleBuildSign": {"rule": "range", "window": "direct/warm10", "warmupMilliseconds": 10000},
+    "TxBench.SimpleBuildFeeSign": {"rule": "range", "window": "direct/warm10", "warmupMilliseconds": 10000},
+    "TxBench.ScriptBuildFeeSign": {"rule": "range", "window": "direct/warm10", "warmupMilliseconds": 10000}
+  },
   "replays": ["tcp", "offline", "offline-n2c"],
   "time": {
-    "scope": "D51: sync-path replays and every other hot path; MR3 implements time",
+    "scope": "D51: sync-path replays and every other hot path",
     "required": ["time/preprod-tcp", "time/preprod-offline", "time/micro-hashing", "time/micro-signing", "time/micro-transactions", "time/micro-plutus", "time/micro-encoding", "time/micro-n2c"],
-    "noise": {
-      "offline": {"band": 0.0231, "design": "long", "machine": "performance-8x", "source": "P1-run3"},
-      "tcp": {"band": 0.0307, "design": "long", "machine": "performance-8x", "source": "P1-run3"}
-    }
+    "noise": {"offline": {"band": 0.0231, "design": "long", "machine": "performance-8x", "source": "P1-run3"}, "tcp": {"band": 0.0307, "design": "long", "machine": "performance-8x", "source": "P1-run3"}},
+    "option": 2,
+    "micro": {"hashing": "CoreBench.Blake256,FixtureHashBench.*", "signing": "CoreBench.Sign,CoreBench.Verify,CoreBench.Address*", "transactions": "TxBench.*", "plutus": "VmBench.*,CorpusVmBench.*", "encoding": "CoreBench.Serialize*,BlockBench.Reencode*,EncodingBench.*,FieldReadBench.ReadEveryField", "n2c": "NetworkHeaderBench.*"}
   },
   "areas": {
     "Network receive": {"bytes": ["replay/*", "CoreBench.MuxDecodeHeader", "NetworkHeaderBench.*"], "time": ["time/preprod-*", "time/micro-n2c"]},

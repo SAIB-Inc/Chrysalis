@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""One sealed PC allocation gate; Fly timing is implemented separately."""
+"""One sealed performance gate: PC bytes and explicitly approved Fly timings."""
 import argparse
 import datetime as dt
 import fnmatch
@@ -46,7 +46,18 @@ def local_config():
     missing = [key for key in LOCAL_KEYS if not isinstance(result.get(key), str) or not result[key]]
     if missing:
         raise ValueError('Missing local keys: ' + ', '.join(missing))
+    result['flyBudgetLeftUsd'] = remaining_budget(result)
     return result
+
+
+def remaining_budget(local):
+    try:
+        value = float(local['flyBudgetLeftUsd'])
+        if isinstance(local['flyBudgetLeftUsd'], bool) or not math.isfinite(value) or value < 0:
+            raise ValueError
+        return value
+    except (KeyError, TypeError, ValueError):
+        raise ValueError('Missing or invalid local key: flyBudgetLeftUsd') from None
 
 
 def git(*args, cwd=REPO):
@@ -244,15 +255,22 @@ def canonical(baseline, candidate):
 
 def catalogue(config, audit):
     direct = {name: ('D39' if row['kind'] == 'exact' else 'range') for name, row in audit['rows'].items()}
-    direct.update(config['direct'])
+    direct.update({name: declaration['rule'] if isinstance(declaration, dict) else declaration for name, declaration in config['direct'].items()})
     # These six rows were frozen together. A subset must still run that filter.
     ranges = ','.join(name for name, row in audit['rows'].items() if row['kind'] == 'range')
     rows = [dict(id=name, kind='direct', rule=rule,
                  **(dict(processFilter=ranges if name in audit['rows'] else name) if rule == 'range' else {}))
             for name, rule in direct.items()]
-    return (rows + [dict(id=f'replay/{case}/{window}', kind='replay', rule='replay', replay=case, window=window)
+    result = (rows + [dict(id=f'replay/{case}/{window}', kind='replay', rule='replay', replay=case, window=window)
                     for case in config['replays'] for window in ('steady', 'cold')] +
             [dict(id=name, kind='time', rule='time') for name in config['time']['required']])
+    for row in result:
+        declaration = config['direct'].get(row['id'])
+        if row['kind'] == 'direct' and isinstance(declaration, dict):
+            row.update(declaration)
+        if row['id'] in config.get('recorded', {}):
+            row.update(rowClass='recorded-only', explanation=config['recorded'][row['id']])
+    return result
 
 
 def corpus_identity(row, local):
@@ -288,6 +306,11 @@ def load_band(row, runtime, design):
         raise ValueError('Band lacks baseline-only ten-pair provenance')
     if band.get('processFilter') is not None and band['processFilter'] != row.get('processFilter', row['id']):
         raise ValueError('Band process composition differs from measurement')
+    if row['kind'] == 'direct':
+        # Immutable pre-field records used the protocol encoded in their window.
+        legacy = 10000 if band['window'] in ('direct/warm10', 'readeveryfield/warm10') else 1000
+        if band.get('warmupMilliseconds', legacy) != row.get('warmupMilliseconds', 1000):
+            raise ValueError('Band warm-up differs from declared row')
     return dict(sha256=digest(path), record=band)
 
 
@@ -303,6 +326,8 @@ def make_job(row, baseline, candidate, local, *, pairs, design, scripts=None):
     generated = dict(CHRYSALIS_CORPORA=local['corporaRoot'], NUGET_PACKAGES=str(REPO.parent / '.nuget/packages'),
                      CHRYSALIS_BENCHMARK_DATA=str(fixtures), P1_RANGE=str(Path(local['corporaRoot']) / 'range.json'),
                      DOTNET_TieredPGO='1')
+    if row.get('warmupMilliseconds') is not None:
+        generated['CHRYSALIS_DIRECT_WARMUP_MS'] = str(row['warmupMilliseconds'])
     return dict(id=row['id'], kind=row['kind'], replay=row.get('replay'), pairs=pairs,
                 counts=list(session.DESIGNS[design]), root=str(REPO), dotnet=str(runner.DOTNET),
                 server=str(scripts / 'n2n_replay_server.py'), sessionScript=str(scripts / 'gate_session.py'),
@@ -340,7 +365,7 @@ def freeze_band(row, pairs, baseline, *, design, seal_id, raw_hash):
                 baselineCommit=baseline['commit'], treeId=baseline['treeId'], runtime=baseline['runtime'],
                 dllClosureSha256=hashlib.sha256(encoded(baseline['dllSha256s'])).hexdigest(),
                 replay=row.get('replay'), row=row['id'], design=design, window=band_window(row),
-                **(dict(processFilter=row.get('processFilter', row['id'])) if row['kind'] == 'direct' else {}),
+                **(dict(processFilter=row.get('processFilter', row['id']), warmupMilliseconds=row.get('warmupMilliseconds', 1000)) if row['kind'] == 'direct' else {}),
                 corpusId=row.get('corpusId', 'audit-preprod'), sealId=seal_id, rawSha256=raw_hash,
                 createdUtc=dt.datetime.now(dt.timezone.utc).isoformat())
 
@@ -357,6 +382,8 @@ def pair_values(row, pairs, design):
                 found = [item for item in data if item['name'] == row['id']]
                 if len(found) != 1 or len(found[0]['samples']) != 5:
                     raise ValueError('Missing direct row or five batches')
+                if row.get('warmupMilliseconds') is not None and found[0].get('warmupMilliseconds') != row['warmupMilliseconds']:
+                    raise ValueError('Direct warm-up differs from sealed protocol')
                 values = [sample['bytes'] for sample in found[0]['samples']]
                 if any(not math.isfinite(value) or value < 0 for value in values):
                     raise ValueError('Invalid absolute byte measurement')
@@ -384,6 +411,10 @@ def read_seal(output):
         source = (output / relative).resolve()
         if not source.is_relative_to(output.resolve()) or not source.is_file() or digest(source) != expected:
             raise ValueError('Sealed input file changed or missing')
+    for plan in seal.get('timePlans', []):
+        if plan.get('scheduleVersion'):
+            import gate_schedule
+            gate_schedule.verify(plan)
     for key, band in seal.get('bands', {}).items():
         if band and (band['record']['key'] != key or hashlib.sha256(encoded(band['record'])).hexdigest() != band['contentSha256']):
             raise ValueError('Sealed band changed or provenance mismatch')
@@ -418,9 +449,9 @@ def band_jobs(rows, baseline):
         for row in rows:
             designs = ['direct'] if row['kind'] == 'direct' else (['long'] if row['window'] == 'steady' else []) + (['short'] if runtime == '11.0.0' else [])
             for design in designs:
-                key = (row.get('processFilter'), row.get('replay'), design)
+                key = (row.get('processFilter'), row.get('replay'), design, row.get('warmupMilliseconds'))
                 groups.setdefault(key, []).append(row)
-        for (_, _, design), targets in groups.items():
+        for (_, _, design, _), targets in groups.items():
             yield runtime, design, targets
 
 
@@ -443,7 +474,7 @@ def pc_command(args):
     output = new_output()
     payload = output / 'command.json'
     session.save(payload, dict(args={key: str(value) if isinstance(value, Path) else value for key, value in vars(args).items()},
-                               output=str(output), local={key: value for key, value in local.items() if key in ('corporaRoot', 'pinnedBaseline')}))
+                               output=str(output), local={key: value for key, value in local.items() if key in ('corporaRoot', 'pinnedBaseline', 'flyPythonRoot', 'flyBudgetLeftUsd')}))
     print('Run directory:', output, flush=True)
     heavy([sys.executable, Path(__file__).resolve(), '_held', payload], output / 'command.log', cwd=REPO, env=session.environment({}))
     print((output / 'report.txt').read_text() if args.command == 'run' else 'Bands frozen', end='\n')
@@ -502,13 +533,19 @@ def select_rows(args, config, audit):
             raise ValueError('Measurement entries must be an array')
         rows = []
         known = {row['id']: row for row in available}
-        allowed = {'id', 'kind', 'replay', 'manifest', 'pairs', 'candidate'}
+        allowed = {'id', 'kind', 'replay', 'manifest', 'pairs', 'aPairs', 'chargeSeconds', 'candidate', 'rowClass', 'explanation'}
         for entry in selected:
             if not isinstance(entry, dict) or set(entry) - allowed or not isinstance(entry.get('id'), str):
                 raise ValueError('Invalid measurement entry fields')
+            if entry.get('rowClass') == 'recorded-only' and (not entry.get('explanation') or not isinstance(entry['explanation'], str)):
+                raise ValueError('Recorded-only row needs an explanation link')
+            if entry.get('rowClass') not in (None, 'gated', 'recorded-only'):
+                raise ValueError('Unknown declared row class')
             original = known.get(entry['id'])
-            if original and any(key in entry and entry[key] != original.get(key) for key in ('kind', 'replay')):
+            if original and any(key in entry and original.get(key) is not None and entry[key] != original.get(key) for key in ('kind', 'replay')):
                 raise ValueError('A declared entry cannot change a catalogue row class or replay')
+            if original and entry.get('rowClass') == 'recorded-only' and original.get('rowClass') != 'recorded-only':
+                raise ValueError('Catalogue rows cannot be removed from gating by a plan')
             row = dict(original or {}, **entry)
             if row.get('kind') not in ('direct', 'replay', 'time'):
                 raise ValueError('Unknown row kind')
@@ -520,16 +557,28 @@ def select_rows(args, config, audit):
                     raise ValueError('Unknown replay')
                 row.setdefault('window', 'steady')
                 row['rule'] = 'replay'
+            if row['kind'] == 'time':
+                if 'pairs' in entry:
+                    row['bPairs'] = entry['pairs']
+                if 'aPairs' in row and (type(row['aPairs']) is not int or row['aPairs'] < 0):
+                    raise ValueError('A pairs must be a nonnegative integer')
+            elif 'aPairs' in entry or 'chargeSeconds' in entry:
+                raise ValueError('A pairs and process charges apply only to time rows')
             rows.append(row)
     else:
         patterns = args.only.split(',') if args.only else ['*']
         rows = [row for row in available if any(fnmatch.fnmatchcase(row['id'], pattern) for pattern in patterns)]
     if not rows or len({row['id'] for row in rows}) != len(rows):
         raise ValueError('No rows selected or duplicate row ids')
+    # Only the current frozen window determines the declared direct cohort.
+    banded = {(record['row'], record['window']) for path in (GATE / 'bands').glob('*.json')
+              for record in [json.loads(path.read_text())]
+              if record['design'] == 'direct' and record['absoluteNoiseBandBytes'] > 0}
     for row in rows:
-        row.setdefault('pairs', defaults['directPairs'] if row['kind'] == 'direct' else
+        row.setdefault('pairs', config['defaults'].get('bandedDirectPairs', defaults['directPairs']) if row['kind'] == 'direct' and (row['id'], band_window(row)) in banded else
+                       defaults['directPairs'] if row['kind'] == 'direct' else
                        defaults.get('coldPairs', defaults['replayPairs']) if row.get('window') == 'cold' else
-                       config['defaults']['timePairs'] if row['kind'] == 'time' else defaults['replayPairs'])
+                       defaults.get('timePairs', {}).get(row['id'], config['defaults']['timePairs']) if row['kind'] == 'time' else defaults['replayPairs'])
         if not isinstance(row['pairs'], int) or isinstance(row['pairs'], bool) or row['pairs'] <= 0:
             raise ValueError('Pairs must be a positive integer')
         row['design'] = 'direct' if row['kind'] == 'direct' else 'short' if row.get('window') == 'cold' else defaults['design']
@@ -549,7 +598,7 @@ def subset_reasons(seal, mode=None):
         reasons.append('re-derived under a different mode')
     if not seal['canonical']:
         reasons.append('non-canonical sides')
-    if {row['id'] for row in seal['rows']} != set(seal['releaseSet']):
+    if {row['id'] for row in seal['rows'] if row.get('rowClass') != 'recorded-only'} != set(seal['releaseSet']):
         reasons.append(f'{len(seal["rows"])} of {len(seal["releaseSet"])} release rows declared')
     if not seal.get('timeScopeDecided'):
         reasons.append('time scope undecided')
@@ -557,7 +606,7 @@ def subset_reasons(seal, mode=None):
 
 
 def outcome(seal, results, *, mode=None):
-    statuses = [results.get(row['id'], {}).get('status', 'INCONCLUSIVE') for row in seal['rows']]
+    statuses = [results.get(row['id'], {}).get('status', 'INCONCLUSIVE') for row in seal['rows'] if row.get('rowClass') != 'recorded-only']
     if 'FAIL' in statuses:
         return 'FAIL'
     if any(status not in ('PASS', 'CLEAR') for status in statuses):
@@ -600,6 +649,8 @@ def row_result(row, pairs, mode, sealed_band, design, control=None):
         result = stats.bytes_verdict(left, right, mode=mode, kind=row['rule'], band=band, batches=batches, control=noise,
                                      plateau=not plateaus or all(item['established'] for item in plateaus))
         result['plateau'] = plateaus
+        if row['kind'] == 'direct':
+            result['jitCounters'] = [dict(pair=pair['pair'], side=side, batches=[dict(batch=sample['batch'], start=sample['jitCompiledMethodsStart'], end=sample['jitCompiledMethodsEnd']) for item in pair[side]['data'] if item['name'] == row['id'] for sample in item['samples'] if 'jitCompiledMethodsStart' in sample and 'jitCompiledMethodsEnd' in sample]) for pair in pairs for side in ('baseline', 'candidate')]
         return result
     except (ValueError, KeyError, TypeError) as error:
         return dict(status='INCONCLUSIVE', reason='Invalid or incomplete pairs: ' + str(error))
@@ -643,6 +694,8 @@ def report(output, mode=None):
     index = json.loads((output / 'data/index.json').read_text()) if (output / 'data/index.json').exists() else []
     results, load = {}, []
     for row in seal['rows']:
+        if row['kind'] == 'time':
+            continue
         phases = [phase_pairs(output, index, row, phase, row['pairs']) for phase in ('first', 'repeat')]
         load += [value for pairs in phases for pair in pairs for side in ('baseline', 'candidate') for value in pair[side].get('load', [])]
         band = seal['bands'].get(row.get('bandKey'))
@@ -663,6 +716,9 @@ def report(output, mode=None):
             result.update(first=first, repeat=repeat)
         result['sides'] = row['sides']
         results[row['id']] = result
+    import gate_time
+    timed, time_lines = gate_time.read_results(output, seal)
+    results.update(timed)
     verdict = outcome(seal, results, mode=applied_mode)
     title = f'gate {applied_mode} · ' + ('canonical' if seal['canonical'] else 'non-canonical sides')
     if applied_mode != seal['mode']:
@@ -670,13 +726,22 @@ def report(output, mode=None):
     lines = [title, 'bytes · this PC · direct B/op, replay B/block · load ' + (f'{min(load):.2f}–{max(load):.2f}' if load else 'not measured'),
              f'{"benchmark":<45} {"rule":>8} {"baseline":>12} {"candidate":>12} {"difference [95%]":>30} {"limit":>10} verdict']
     for row in seal['rows']:
+        if row['kind'] == 'time':
+            continue
         result = results[row['id']]
+        if row.get('rowClass') == 'recorded-only':
+            lines.append(row['id'] + ' · harness artefact, explained, not gated · ' + row['explanation'])
         ci = result.get('confidence95DifferenceBytes')
         interval = f'{result["meanDifferenceBytes"]:.3f} [{ci[0]:.3f}, {ci[1]:.3f}]' if ci else '—'
         value = lambda key: f'{result[key]:.3f}' if key in result else '—'
         limit = f'{result["limit"]:.3f}' if result.get('limit') is not None else '—'
-        rule = row.get('window', row.get('rule', row['kind']))
+        rule = row.get('rule', row['kind']) if row['kind'] == 'direct' else row.get('window', row['kind'])
         lines.append(f'{row["id"]:<45} {rule:>8} {value("baselineMeanBytes"):>12} {value("comparisonMeanBytes"):>12} {interval:>30} {limit:>10} {result["status"]}')
+        if row.get('warmupMilliseconds') is not None:
+            lines.append(f'  protocol {band_window(row)}; fixed warm-up {row["warmupMilliseconds"]} ms; {row["pairs"]} pairs')
+        for entry in result.get('jitCounters', []):
+            if entry['batches']:
+                lines.append(f'  JIT {entry["side"]} pair {entry["pair"]:>3}: ' + ', '.join(f'{item["batch"]:>2}: {item["start"]:>7}->{item["end"]:>7}' for item in entry['batches']) + ' (diagnostic only)')
         for side, info in row['sides'].items():
             lines.append(f'  {side}: {info["commit"]} tree {info["treeId"]} runtime {info["runtime"]}')
         if result.get('plateau'):
@@ -699,6 +764,7 @@ def report(output, mode=None):
                 ci = previous.get('confidence95DifferenceBytes')
                 if ci:
                     lines.append(f'  {phase}: {previous["baselineMeanBytes"]:.3f} / {previous["comparisonMeanBytes"]:.3f}; difference {previous["meanDifferenceBytes"]:.3f} [{ci[0]:.3f}, {ci[1]:.3f}]')
+    lines += time_lines
     lines += ['coverage · area · declared bytes / declared time']
     for area, mapping in seal['gated']['areas'].items():
         counts = [sum(any(fnmatch.fnmatchcase(row['id'], pattern) for pattern in mapping[key]) for row in seal['rows']) for key in ('bytes', 'time')]
@@ -725,12 +791,17 @@ def previous_alpha(candidate):
 
 
 def measurement_groups(rows, counts=None):
-    groups = {}
+    groups, cohort_counts = {}, {}
     for row in rows:
         if row['kind'] == 'time':
             continue
         key = (row['sides']['candidate']['commit'], row['sides']['candidate']['treeId'], row['sides']['candidate']['runtime'], row['kind'], row.get('replay'), row['design'],
-               counts[row['id']] if counts else row['pairs'], row['sides']['baseline']['runtime'], row.get('processFilter'))
+               counts[row['id']] if counts else row['pairs'], row['sides']['baseline']['runtime'], row.get('processFilter'), row.get('warmupMilliseconds'))
+        if row.get('rule') == 'range' and row.get('processFilter'):
+            cohort = key[:6] + key[7:]
+            count = counts[row['id']] if counts else row['pairs']
+            if cohort_counts.setdefault(cohort, count) != count:
+                raise ValueError('Shared range cohort needs one declared count')
         groups.setdefault(key, []).append(row)
     for members in groups.values():
         if members[0]['kind'] == 'direct':
@@ -768,10 +839,16 @@ def run_command(args, output=None, local=None):
     bands = seal_bands(rows)
     seal = dict(schemaVersion=1, mode=args.mode, ruleVersion=stats.RULE_VERSION, rows=rows, bands=bands,
                 canonical=canonical(baseline, candidate) and all(row['sides']['candidate']['commit'] == candidate['commit'] for row in rows),
-                timeScopeDecided=True, gated=config, releaseSet=[row['id'] for row in catalogue(config, audit)],
+                timeScopeDecided=True, gated=config, releaseSet=[row['id'] for row in catalogue(config, audit) if row.get('rowClass') != 'recorded-only'],
                 files={file.relative_to(output).as_posix(): digest(file) for file in scripts.iterdir() if file.is_file()})
+    import gate_bundle
+    timing = gate_bundle.prepare(output, rows, staged, dict(config, _mode=args.mode), local)
+    seal['files'].update(timing.pop('files', {}))
+    seal.update(timing)
     seal_id = write_seal(output, seal)
-    print('Seal:', seal_id, '· PC bytes only; Fly time requires MR3', flush=True)
+    print('Seal:', seal_id, flush=True)
+    for number, plan in enumerate(seal['timePlans']):
+        print(f'Time session {number}: {plan["estimatedSeconds"] / 60:.1f} min, {plan["limitUsd"]:.4f} USD; with repeat {plan["limitWithRepeatUsd"]:.4f} USD', flush=True)
     index = []
 
     def measure(selected, phase, counts=None):
@@ -792,7 +869,7 @@ def run_command(args, output=None, local=None):
         measure(rows, 'first')
         first = report(output)
         if args.mode == 'release':
-            failed = [row for row in rows if first['rows'][row['id']]['status'] == 'FAIL']
+            failed = [row for row in rows if first['rows'][row['id']]['status'] == 'FAIL' and row.get('rowClass') != 'recorded-only']
             measure(failed, 'repeat')
         current = report(output)
         noisy = [row for row in rows if current['rows'][row['id']].get('needsNoiseControl')]
@@ -832,7 +909,8 @@ def main():
         elif args.command == 'report':
             print(report(args.directory, args.mode)['text'], end='')
         else:
-            raise ValueError('Fly timing is not implemented in this PC-only MR; no resources created')
+            import gate_bundle
+            raise SystemExit(gate_bundle.fly_command(args.go))
     except (ValueError, OSError, RuntimeError) as error:
         parser.exit(2, f'gate: {error}\n')
 
@@ -843,6 +921,9 @@ if __name__ == '__main__':
         args = argparse.Namespace(**payload['args'])
         command = band_command if args.command == 'band' else run_command
         command(args, output=Path(payload['output']), local=payload['local'])
+    elif len(sys.argv) == 3 and sys.argv[1] == '_fly-held':
+        import gate_bundle
+        raise SystemExit(gate_bundle.fly_held(Path(sys.argv[2])))
     elif len(sys.argv) == 3 and sys.argv[1] == '_stage':
         stage_worker(sys.argv[2])
     else:
