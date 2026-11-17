@@ -52,7 +52,7 @@ internal static class Program
                 await OfflineReplay.RunAsync().ConfigureAwait(false);
                 return 0;
             case "self-test":
-                HarnessChecks.Run();
+                await HarnessChecks.RunAsync().ConfigureAwait(false);
                 return 0;
             case "environment":
                 Console.WriteLine(JsonSerializer.Serialize(EnvironmentSnapshot()));
@@ -61,10 +61,13 @@ internal static class Program
                 DirectMeasurements.Run(remaining.FirstOrDefault() ?? "*", Path.Combine(ResultsRoot, "direct.json"));
                 return 0;
             case "validate":
-                Validation.Run();
+                await Validation.RunAsync().ConfigureAwait(false);
                 return 0;
             case "wire":
                 WirePlaceholder.Run(Path.Combine(ResultsRoot, "wire.json"));
+                return 0;
+            case "corpus":
+                await CorpusCapture.RunAsync(remaining).ConfigureAwait(false);
                 return 0;
             case "capture-range":
                 await WholePath.CaptureAsync(remaining).ConfigureAwait(false);

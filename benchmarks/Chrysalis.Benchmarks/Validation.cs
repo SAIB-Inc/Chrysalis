@@ -9,10 +9,10 @@ namespace Chrysalis.Benchmarks;
 
 internal static class Validation
 {
-    internal static void Run()
+    internal static async Task RunAsync()
     {
         Fixtures.Verify();
-        HarnessChecks.Run();
+        await HarnessChecks.RunAsync().ConfigureAwait(false);
         FieldReadBench reader = new();
         reader.Setup();
         long checksum = reader.ReadEveryField();
