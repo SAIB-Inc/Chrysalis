@@ -1,0 +1,48 @@
+{
+  "pairs": 10,
+  "meanDifferenceBytes": 0,
+  "confidence95DifferenceBytes": [
+    0.0,
+    0.0
+  ],
+  "pairedDifferencesBytes": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+  ],
+  "baselineMeanBytes": 17440,
+  "comparisonMeanBytes": 17440,
+  "baselineConfidence95Bytes": [
+    17440.0,
+    17440.0
+  ],
+  "comparisonConfidence95Bytes": [
+    17440.0,
+    17440.0
+  ],
+  "absoluteNoiseBandBytes": 0.0,
+  "observedDifferenceMinimumBytes": 0,
+  "observedDifferenceMaximumBytes": 0,
+  "purpose": "baseline-noise",
+  "key": "TxBench.SimpleBuildFeeSign|direct|direct/warm10|10.0.9|fc82f3d9193a8bd801b7168d75f7e94b49f9416e0550a3db3897177d4ea3ea2b",
+  "baselineCommit": "7c45d47c87c63520cea84212dbd01ecc8d372ac3",
+  "treeId": "af423f50cfbe825acf786ba0d63ca6c36e242fab",
+  "runtime": "10.0.9",
+  "dllClosureSha256": "7d87cd72302abcf217326c19c09c48deb4c14779dc8cca5f9eadf04c732831a9",
+  "replay": null,
+  "row": "TxBench.SimpleBuildFeeSign",
+  "design": "direct",
+  "window": "direct/warm10",
+  "processFilter": "CoreBench.Sign,BlockBench.DecodeBlockReadInputs,TxBench.SimpleBuildSign,TxBench.SimpleBuildFeeSign,TxBench.ScriptBuildFeeSign,VmBench.DecodeAndEvaluate",
+  "corpusId": "fc82f3d9193a8bd801b7168d75f7e94b49f9416e0550a3db3897177d4ea3ea2b",
+  "sealId": "74c9b17a29da771b4b13b3c93135181a5ca8b6e31da388c4470b5bc298c9463f",
+  "rawSha256": "08f50f833d0fa17bf2b72fef6601c61997c6686b85d3e9d248ecf05bd6cd3bd4",
+  "createdUtc": "2026-11-17T09:50:49.431415+00:00"
+}

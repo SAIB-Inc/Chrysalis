@@ -1,0 +1,78 @@
+{
+  "id": "fixture-id",
+  "name": "fixture-app",
+  "state": "started",
+  "region": "iad",
+  "image_ref": {
+    "registry": "mcr.microsoft.com",
+    "repository": "dotnet/sdk",
+    "digest": "sha256:7913685c883a29dd8ba79da96172f5c6b29ed9be706ebe95935e3ef45f19c9c1",
+    "labels": {
+      "org.opencontainers.image.created": "2026-11-06T10:28:50.132595+00:00",
+      "org.opencontainers.image.description": "The Ubuntu container image maintained by Canonical\n\nUbuntu is a Debian-based Linux operating system that runs from the desktop to the cloud, to all your internet connected things.\nIt is the world's most popular operating system across public clouds and OpenStack clouds.\nIt is the number one platform for containers; from Docker to Kubernetes to LXD, Ubuntu can run your containers at scale.\nFast, secure and simple, Ubuntu powers millions of PCs worldwide.\n",
+      "org.opencontainers.image.title": "ubuntu",
+      "org.opencontainers.image.version": "26.04"
+    }
+  },
+  "instance_id": "fixture-id",
+  "version": "fixture-version",
+  "private_ip": "fd00::1",
+  "created_at": "2026-11-17T05:18:50Z",
+  "updated_at": "2026-11-17T05:19:05Z",
+  "config": {
+    "env": {
+      "P1_MACHINE_CREATED_UNIX": "1794892724"
+    },
+    "init": {
+      "cmd": [
+        "/bin/bash",
+        "-c",
+        "remaining=$((P1_MACHINE_CREATED_UNIX + 6440 - $(date +%s))); ((remaining > 0)) || exit 0; exec /usr/bin/sleep \"$remaining\""
+      ]
+    },
+    "guest": {
+      "cpu_kind": "performance",
+      "cpus": 8,
+      "memory_mb": 16384
+    },
+    "image": "mcr.microsoft.com/dotnet/sdk@sha256:7913685c883a29dd8ba79da96172f5c6b29ed9be706ebe95935e3ef45f19c9c1",
+    "auto_destroy": true,
+    "restart": {
+      "policy": "no"
+    },
+    "dns": {},
+    "rootfs": {
+      "size_gb": 20
+    }
+  },
+  "events": [
+    {
+      "type": "start",
+      "status": "started",
+      "request": {},
+      "source": "flyd",
+      "timestamp": 1794892745157
+    },
+    {
+      "type": "launch",
+      "status": "created",
+      "source": "user",
+      "timestamp": 1794892730810
+    },
+    {
+      "type": "promote",
+      "status": "pending",
+      "request": {},
+      "source": "flyd",
+      "timestamp": 1794892730675
+    },
+    {
+      "type": "launch",
+      "status": "pending",
+      "source": "flyd",
+      "timestamp": 1794892730675
+    }
+  ],
+  "host_status": "ok",
+  "cordoned": false
+}

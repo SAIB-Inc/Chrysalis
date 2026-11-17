@@ -63,6 +63,110 @@ class GateTests(unittest.TestCase):
                 resolved = gate.resolve_side(directory, 'change')
                 self.assertEqual((resolved['commit'], resolved['treeId']), ('commit', 'tree'))
 
+    def test_field_warm10_protocol_is_sealed_and_old_band_window_does_not_match(self):
+        config = json.loads((gate.GATE / 'gated.json').read_text())
+        audit = json.loads((gate.REPO / 'benchmarks/Chrysalis.Benchmarks/audit-allocations.json').read_text())
+        row = next(item for item in gate.catalogue(config, audit) if item['id'] == 'FieldReadBench.ReadEveryField')
+        self.assertEqual(row.get('warmupMilliseconds'), 10000)
+        self.assertEqual(gate.band_window(row), 'readeveryfield/warm10')
+        job = gate.make_job(row, side(), side(), dict(corporaRoot='fixture'), pairs=10, design='short')
+        self.assertEqual(job['environment'].get('CHRYSALIS_DIRECT_WARMUP_MS'), '10000')
+        raw = pair(1)
+        for role in ('baseline', 'candidate'):
+            raw[role]['data'][0].update(name=row['id'], warmupMilliseconds=1000)
+        with self.assertRaisesRegex(ValueError, 'warm-up'):
+            gate.pair_values(row, [raw], 'direct')
+
+    def test_direct_warm10_keys_and_job_composition_are_versioned(self):
+        config = json.loads((gate.GATE / 'gated.json').read_text())
+        audit = json.loads((gate.REPO / 'benchmarks/Chrysalis.Benchmarks/audit-allocations.json').read_text())
+        for row in gate.catalogue(config, audit):
+            if row['kind'] == 'direct' and row['rule'] == 'range':
+                self.assertEqual(row['warmupMilliseconds'], 10000)
+                self.assertTrue(gate.band_window(row).endswith('/warm10'))
+                self.assertNotEqual(gate.band_key(row, '11.0.0', 'direct'), gate.band_key(dict(row, window='direct'), '11.0.0', 'direct'))
+                job = gate.make_job(row, side(), side(), dict(corporaRoot='fixture'), pairs=10, design='short')
+                self.assertEqual(job['environment']['CHRYSALIS_DIRECT_WARMUP_MS'], '10000')
+                self.assertEqual(job['filter'], row.get('processFilter', row['id']))
+
+    def test_declared_counts_keep_zero_band_and_replay_defaults(self):
+        config = json.loads((gate.GATE / 'gated.json').read_text())
+        audit = json.loads((gate.REPO / 'benchmarks/Chrysalis.Benchmarks/audit-allocations.json').read_text())
+        for mode in ('change', 'release'):
+            args = SimpleNamespace(mode=mode, plan=None, only='*')
+            rows = {r['id']: r for r in gate.select_rows(args, config, audit)}
+            self.assertEqual(rows['FieldReadBench.ReadEveryField']['pairs'], 16)
+            for name in ('TxBench.SimpleBuildSign', 'TxBench.ScriptBuildFeeSign', 'BlockBench.DecodeBlockReadInputs'):
+                self.assertEqual(rows[name]['pairs'], config['defaults'][mode]['directPairs'])
+            cohort=[dict(r,sides=dict(baseline=side(),candidate=side())) for r in rows.values() if r['kind']=='direct' and r.get('window')=='direct/warm10']
+            self.assertEqual(len(gate.measurement_groups(cohort)),1)
+            cohort[1]['pairs'] += 1
+            with self.assertRaisesRegex(ValueError,'cohort'):
+                gate.measurement_groups(cohort)
+            self.assertEqual(rows['CoreBench.Sign']['pairs'], config['defaults'][mode]['directPairs'])
+            self.assertEqual(rows['replay/tcp/steady']['pairs'], config['defaults'][mode]['replayPairs'])
+            self.assertEqual(rows['time/micro-hashing']['pairs'], 16)
+            self.assertEqual(rows['time/preprod-tcp']['pairs'], 34 if mode == 'change' else 16)
+            self.assertEqual(rows['time/preprod-offline']['pairs'], 40 if mode == 'change' else 16)
+
+    def test_public_worker_keeps_nonsecret_preparation_settings(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            local = dict(corporaRoot='corpus', pinnedBaseline='baseline', flyPythonRoot='python',
+                         flyBudgetLeftUsd=.001, flyOrg='fixture', flyTokenFile='DO NOT FORWARD', flyLock='lock')
+            def held(command, log, **kwargs):
+                payload = json.loads(Path(command[-1]).read_text())
+                self.assertEqual(payload['local'], {k:local[k] for k in ('corporaRoot','pinnedBaseline','flyPythonRoot','flyBudgetLeftUsd')})
+                import gate_time
+                from test_gate_time import row
+                with self.assertRaisesRegex(ValueError,'budget'):
+                    gate_time.size_sessions([row()], 'change', budget=payload['local']['flyBudgetLeftUsd'])
+                (root / 'report.txt').write_text('fixture')
+            with patch.object(gate,'local_config',return_value=local), patch.object(gate,'new_output',return_value=root), patch.object(gate,'heavy',side_effect=held):
+                gate.pc_command(SimpleNamespace(command='run'))
+
+    def test_remaining_budget_is_required_and_fails_closed(self):
+        with tempfile.TemporaryDirectory() as td:
+            path = Path(td) / 'local.json'
+            for value in (None, 'not a number', -1, float('nan')):
+                local = {k:'fixture' for k in gate.LOCAL_KEYS}
+                if value is None:local.pop('flyBudgetLeftUsd',None)
+                else:local['flyBudgetLeftUsd']=value
+                path.write_text(json.dumps(local))
+                with patch.dict(os.environ,CHRYSALIS_GATE_LOCAL=str(path)), self.assertRaisesRegex(ValueError,'flyBudgetLeftUsd'):
+                    gate.local_config()
+
+    def test_declared_time_counts_and_controls_budget_are_preserved(self):
+        import gate_time
+        config = json.loads((gate.GATE / 'gated.json').read_text())
+        audit = json.loads((gate.REPO / 'benchmarks/Chrysalis.Benchmarks/audit-allocations.json').read_text())
+        with tempfile.TemporaryDirectory() as td:
+            path = Path(td) / 'plan.json'
+            controls=[dict(id='time/control-'+name,kind='time',replay=case,aPairs=a,pairs=b,chargeSeconds=charge)
+                      for name,case,a,b,charge in [('c2','offline',16,6,16),('c3','offline',16,16,13),('c5','offline',16,24,13),('c4','tcp',5,2,22)]]
+            path.write_text(json.dumps(controls))
+            for mode in ('change','release'):
+                selected=gate.select_rows(SimpleNamespace(mode=mode,plan=path,only=None),config,audit)
+                for r in selected:r['corpusBytes']=10_000_000
+                plans=gate_time.size_sessions(selected,mode,budget=.95)
+                self.assertEqual([(r['aPairs'],r['bPairs']) for p in plans for r in p['rows']],[(16,6),(16,16),(16,24),(5,2)])
+                self.assertEqual(plans[0]['rows'][0]['chargeSeconds'],16)
+                c4=plans[0]['rows'][-1]
+                self.assertEqual(gate_time.verdict(c4,[],mode)['status'],'INCONCLUSIVE')
+            with self.assertRaisesRegex(ValueError,'budget'):
+                gate_time.size_sessions(selected,'release',budget=.65)
+            validation=[dict(id='time/preprod-'+case,kind='time',replay=case,aPairs=a,pairs=b) for case,a,b in [('tcp',32,32),('offline',24,36)]]
+            path.write_text(json.dumps(validation))
+            selected=gate.select_rows(SimpleNamespace(mode='release',plan=path,only=None),config,audit)
+            self.assertEqual([(r['aPairs'],r['bPairs']) for p in gate_time.size_sessions(selected,'release',budget=2) for r in p['rows']],[(32,32),(24,36)])
+
+    def test_band_warmup_provenance_cannot_drift_with_the_label(self):
+        source=next(p for p in (gate.GATE/'bands').glob('*.json') if json.loads(p.read_text()).get('window')=='readeveryfield/warm10')
+        band=json.loads(source.read_text())
+        row=dict(id=band['row'],kind='direct',window=band['window'],corpusId=band['corpusId'],warmupMilliseconds=2000)
+        with self.assertRaisesRegex(ValueError,'warm-up'):
+            gate.load_band(row,band['runtime'],'direct')
+
     def test_canonical_sides_and_cold_companion(self):
         baseline = side('10.0.9', gate.PIN)
         candidate = side()
@@ -77,9 +181,12 @@ class GateTests(unittest.TestCase):
     def test_band_refuses_candidate_and_short_counts(self):
         baseline = side()
         pairs = [pair(number) for number in range(1, 11)]
-        row = dict(id='Example', kind='direct', rule='range')
+        row = dict(id='Example', kind='direct', rule='range', warmupMilliseconds=10000)
+        for item in pairs:
+            for role in ('baseline','candidate'):item[role]['data'][0]['warmupMilliseconds']=10000
         record = gate.freeze_band(row, pairs, baseline, design='direct', seal_id='seal', raw_hash='raw')
         self.assertEqual(record['pairs'], 10)
+        self.assertEqual(record.get('warmupMilliseconds'),10000)
         for bad in (pairs[:5], copy.deepcopy(pairs)):
             if len(bad) == 10:
                 bad[-1]['candidate']['identity']['treeId'] = 'other'

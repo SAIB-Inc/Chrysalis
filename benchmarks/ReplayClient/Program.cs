@@ -67,19 +67,23 @@ internal static class Program
     private static async Task<int> Main(string[] args)
     {
         _ = ProcessSettings;
-        Observed = args.Length == 5 && args[4] == "--observed";
-        if ((args.Length != 4 && !Observed) || args[0] is not ("tcp" or "offline" or "offline-n2c") || string.IsNullOrWhiteSpace(args[1]) ||
+        Observed = args.LastOrDefault() == "--observed";
+        if (Observed) { args = args[..^1]; }
+        bool micro = args.Length == 6 && args[0] == "micro";
+        int invocations = 0;
+        if ((args.Length != 4 && !micro) || (micro && (!int.TryParse(args[5], NumberStyles.None, CultureInfo.InvariantCulture, out invocations) || invocations <= 0 || invocations > 10_000_000)) || args[0] is not ("tcp" or "offline" or "offline-n2c" or "micro") || (args[0] == "micro" && !micro) || string.IsNullOrWhiteSpace(args[1]) ||
             !int.TryParse(args[2], NumberStyles.None, CultureInfo.InvariantCulture, out int warmup) || warmup <= 0 ||
             !int.TryParse(args[3], NumberStyles.None, CultureInfo.InvariantCulture, out int measured) || measured <= 0 ||
             warmup >= int.MaxValue - measured)
         {
-            throw new ArgumentException("Expected tcp|offline|offline-n2c OUTPUT_JSON WARMUP MEASURED [--observed], with positive integer counts and total below Int32.MaxValue.", nameof(args));
+            throw new ArgumentException("Expected tcp|offline|offline-n2c OUTPUT_JSON WARMUP MEASURED [--observed], or micro OUTPUT_JSON WARMUP MEASURED FILTER INVOCATIONS [--observed], with positive integer counts and total below Int32.MaxValue.", nameof(args));
         }
         WarmupPasses = warmup;
         Passes = measured;
         try
         {
-            if (args[0] == "tcp") { await TcpClient.RunAsync(args[1]).ConfigureAwait(false); }
+            if (micro) { await MicroClient.RunAsync(args[1], args[4], invocations).ConfigureAwait(false); }
+            else if (args[0] == "tcp") { await TcpClient.RunAsync(args[1]).ConfigureAwait(false); }
             else { await OfflineClient.RunAsync(args[1], args[0] != "offline-n2c").ConfigureAwait(false); }
             return 0;
         }

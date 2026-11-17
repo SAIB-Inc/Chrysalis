@@ -1,0 +1,165 @@
+#!/usr/bin/env python3
+"""Strict fake Fly: sentinel only, real lock fd, no credential or real API."""
+import fcntl
+import copy
+import io
+import json
+import os
+from pathlib import Path
+import sys
+import tarfile
+import time
+
+if sys.argv[1:] == ['version']:
+    print('fly fixture-v1')
+    raise SystemExit(0)
+root = Path(__file__).resolve().parents[1]
+for key, value in dict(STATE='state.json', LOG='argv.jsonl', LOCK='test.lock', PAIRS='fixture-pairs.json').items():
+    os.environ.setdefault('GATE_STUB_' + key, str(root / value))
+if os.environ.get('FLY_API_TOKEN') != 'preflight-not-a-token': raise RuntimeError('Stub credential guard')
+if any(k in os.environ for k in ['FLY_ACCESS_TOKEN', 'FLY_METRICS_TOKEN', 'FLY_REFRESH_TOKEN']): raise RuntimeError('Inherited Fly credentials survived')
+if 'FLY_CONFIG_DIR' in os.environ: raise RuntimeError('Fly configuration override survived')
+try:
+    os.fstat(9)
+except OSError:
+    pass
+else:
+    raise RuntimeError('Fly/agent must not inherit the lock descriptor')
+lock_path = Path(os.environ['GATE_STUB_LOCK'])
+if lock_path.with_suffix('.retired').exists(): lock_path = lock_path.with_suffix('.retired')
+with lock_path.open('a') as parent_lock:
+    try:
+        fcntl.flock(parent_lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        pass
+    else:
+        raise RuntimeError('Fly was called without the parent-held lock')
+a = sys.argv[1:]
+state = Path(os.environ['GATE_STUB_STATE'])
+recorded = Path(__file__).parent
+
+def write(s):
+    tmp = state.with_suffix('.tmp'); tmp.write_text(json.dumps(s)); tmp.replace(state)
+
+def value(flag): return a[a.index(flag) + 1]
+
+def neutral_records():
+    sys.path.insert(0, str(root / 'input/fly'))
+    import gate_schedule
+    import re
+    name = os.environ.get('GATE_BUNDLE', 'input/session-0.tar.gz')
+    number = int(re.search(r'(?:session|repeat)-([0-9]+)', name)[1])
+    host = json.loads((root / 'seal.json').read_text())['timePlans'][number]
+    source = {(p['id'], p['phase'], p['pair']): p for p in json.loads(Path(os.environ['GATE_STUB_PAIRS']).read_text())}
+    result, predecessor = [], None
+    for block in host['repeatSchedule' if 'repeat-' in name else 'schedule']:
+        found = {}
+        for pair in block['pairs']:
+            logical = source.get((block['row'], block['phase'], pair['pair']))
+            if logical is None: continue
+            for role, identifier in pair['members'].items():
+                found[identifier] = copy.deepcopy(logical[role])
+        for identifier in block['members']:
+            if identifier not in found: continue
+            record = found[identifier]
+            build = gate_schedule.build_id(record['identity'])
+            record.update(id=identifier, build=build, predecessorBuild=predecessor,
+                          startedUtc='OBVIOUS STUB TIMESTAMP', endedUtc='OBVIOUS STUB TIMESTAMP',
+                          wholeProcess=dict(startMonotonic=len(result) * 15, endMonotonic=(len(result) + 1) * 15, aggregateSteal=.002))
+            result.append(record); predecessor = build
+    return json.dumps(result).encode()
+
+with state.with_suffix('.lock').open('w') as lock:
+    fcntl.flock(lock, fcntl.LOCK_EX)
+    s = json.loads(state.read_text()) if state.exists() else dict(calls=0, app=False, machine=False, failed=False)
+    s['calls'] += 1
+    fail = s['calls'] == int(os.environ.get('GATE_STUB_FAIL', '0')) and not s['failed']
+    if a[:2] == ['apps', 'destroy']: s['destroyAttempts'] = s.get('destroyAttempts', 0) + 1
+    no_effect = a[:2] == ['apps', 'destroy'] and (os.environ.get('GATE_STUB_DESTROY_FAIL') == '1' or s['destroyAttempts'] <= int(os.environ.get('GATE_STUB_DESTROY_FAIL_COUNT', '0')))
+    fail = fail or no_effect
+    with Path(os.environ['GATE_STUB_LOG']).open('a') as log:
+        log.write(json.dumps(dict(call=s['calls'], argv=a, injectedFailure=fail, at=time.time())) + '\n')
+    protected = [dict(Name=n) for n in ['fixture-door', 'fixture-neighbour']]
+    existing = os.environ.get('GATE_STUB_EXISTING')
+    if existing: protected += [dict(Name=existing)]
+    if s.get('neighbourChanged'): protected += [dict(Name='new-neighbour')]
+    if a[:2] == ['apps', 'create']:
+        s.update(app=True, name=a[2]); out = json.loads((recorded/'app-created.json').read_text()); out['Name']=a[2]
+    elif a[:2] == ['apps', 'destroy']:
+        if not a[2].startswith('chrysalis-gate-'): raise RuntimeError('Attempt to mutate a neighbour')
+        if not no_effect: s.update(app=False, machine=False)
+        out = 'Destroyed STUB app' if not no_effect else 'No-effect destroy failure'
+    elif a[:2] == ['apps', 'list']:
+        out = protected + ([dict(Name=s['name'])] if s['app'] else [])
+    elif a[:2] == ['machine', 'run']:
+        command = a[a.index('--') + 1:]
+        if command[:2] != ['/bin/bash', '-c'] or ('P2_MACHINE_CREATED_UNIX + ' + str(json.loads((root / 'seal.json').read_text())['timePlans'][0]['destroyGuardSeconds'] - 10)) not in command[-1]: raise RuntimeError('Missing absolute VM stop')
+        if value('--region') != 'iad' or value('--vm-size') != 'performance-8x' or '--rm' not in a or value('--restart') != 'no': raise RuntimeError('Machine creation safety flags differ')
+        resolved=json.loads((recorded/'machine.json').read_text())['config']['image']
+        s.update(machine=True, ready=False, command=command, image=resolved, created=value('--env').split('=', 1)[1]); out = 'Started STUB machine'
+    elif a[:2] == ['machine', 'list']:
+        out = [json.loads((recorded/('machines-ready.json' if s.get('ready') else 'machines-created.json')).read_text())[0]] if s['machine'] else []
+        if out:
+            out[0]['config'].update(image=s.get('image'), env=dict(P2_MACHINE_CREATED_UNIX=s['created']), init=dict(cmd=s['command']))
+        if value('--app') != s.get('name'):
+            out = [dict(state='started', config=dict(guest=dict(cpu_kind='performance' if value('--app') == 'fixture-door' else 'shared')))]
+        elif s.get('sessionStarted'):
+            bad = os.environ.get('GATE_STUB_BAD')
+            if bad == 'second': out += [out[0]]
+            if bad == 'restart': out[0]['events'] += [dict(type='start')]
+            if bad == 'replacement': out[0]['id'] = 'different'
+            if bad == 'inode':
+                lock = Path(os.environ['GATE_STUB_LOCK'])
+                if not lock.with_suffix('.retired').exists(): lock.rename(lock.with_suffix('.retired')); lock.touch()
+    elif a[:2] == ['machine', 'wait']:
+        s['ready']=True; out = 'Started'
+    elif a[:2] in [['ips', 'list'], ['volumes', 'list'], ['secrets', 'list']]:
+        out = []
+    elif a[:3] == ['ssh', 'sftp', 'put']:
+        out = 'Uploaded STUB'
+    elif a[:2] == ['machine', 'exec']:
+        if 'sha256sum -c - &&' in a[3]: out = '/tmp/chrysalis-input.tar.gz: OK'
+        elif a[3] == 'bash /opt/chrysalis/archive-results.sh diagnostic-only': s['partialArchiveAttempted'] = True; out = 'Archived whatever exists STUB'
+        else: raise RuntimeError('Unknown remote exec')
+    elif a[:2] == ['ssh', 'console']:
+        if a[-1] != 'bash /opt/chrysalis/remote-session.sh': raise RuntimeError('Unexpected session command')
+        s['sessionStarted'] = True; s['sessionCompleted'] = False
+        if os.environ.get('GATE_STUB_NEIGHBOUR_CHANGE') == '1': s['neighbourChanged'] = True
+        out = 'Session STUB'
+    elif a[:3] == ['ssh', 'sftp', 'get']:
+        if not s['machine']: fail = True
+        if a[-2].endswith('.sha256'):
+            import hashlib
+            archive = Path(a[-1]).with_name('results.tar.gz')
+            value_hash = hashlib.sha256(archive.read_bytes()).hexdigest()
+            if os.environ.get('GATE_STUB_BAD') == 'hash': value_hash = '0' * 64
+            Path(a[-1]).write_text(value_hash + '  /tmp/chrysalis-results.tar.gz\n')
+            write(s)
+            print('Fixture hash')
+            raise SystemExit(17 if fail else 0)
+        complete = s.get('sessionCompleted', False)
+        status = dict(completedAllDeclaredRounds=complete, exitCode=0 if complete else 2)
+        members = neutral_records()
+        import gate_schedule
+        startup = gate_schedule.encoded(gate_schedule.startup_information(json.loads(members)))
+        with tarfile.open(Path(a[-1]), 'w:gz') as tar:
+            for name, blob in [('session.log', b'STUB ONLY; no benchmark ran\n'), ('results/session-status.json', json.dumps(status).encode()), ('results/members.json', members), ('results/session-start.json', startup)] + ([('results/recovery-diagnostic.json', b'{"diagnosticOnly":true}')] if s.get('partialArchiveAttempted') else []):
+                info = tarfile.TarInfo(name); info.size = len(blob); tar.addfile(info, io.BytesIO(blob))
+        s['downloaded'] = True; out = 'Downloaded STUB'
+    else:
+        raise RuntimeError('Unknown stub command')
+    if fail: s['failed'] = True
+    write(s)
+if a[:2] == ['ssh', 'console']:
+    time.sleep(float(os.environ.get('GATE_STUB_SESSION_DELAY', '0')))
+    with state.with_suffix('.lock').open('w') as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        s = json.loads(state.read_text())
+        incomplete = os.environ.get('GATE_STUB_INCOMPLETE') == '1'
+        s['sessionCompleted'] = s['machine'] and not fail and not incomplete
+        write(s)
+        fail = fail or incomplete or not s['machine']
+if fail:
+    print('Injected STUB CLI failure', file=sys.stderr)
+    sys.exit(17)
+print(json.dumps(out,indent=2) if isinstance(out, (dict, list)) else out)
