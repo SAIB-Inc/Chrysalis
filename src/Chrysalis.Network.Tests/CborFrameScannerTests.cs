@@ -9,14 +9,6 @@ public class CborFrameScannerTests
 {
     private delegate int Scan(ReadOnlySpan<byte> bytes);
 
-    // A positive length is Complete(length), zero NeedMore, and -1 Invalid.
-    private static Scan Bind()
-    {
-        Type? scanner = typeof(ChannelBuffer).Assembly.GetType("Chrysalis.Network.Multiplexer.CborFrameScanner");
-        Assert.NotNull(scanner);
-        return scanner.GetMethod("GetFrameLength", BindingFlags.Static | BindingFlags.NonPublic)!.CreateDelegate<Scan>();
-    }
-
     [Theory]
     [InlineData("00", 1)]
     [InlineData("40", 1)]
@@ -45,9 +37,10 @@ public class CborFrameScannerTests
     [InlineData("FB3FF0000000000000", 9)]
     public void ReturnsExactlyTheFirstItemLength(string hex, int length)
     {
-        Scan scan = Bind();
+        Scan scan = CborFrameScanner.GetFrameLength;
         byte[] bytes = Convert.FromHexString(hex);
         Assert.Equal(length, scan(bytes));
+        AssertResumable(bytes, length);
         for (int prefix = 0; prefix < length; prefix++) { Assert.Equal(0, scan(bytes.AsSpan(0, prefix))); }
     }
 
@@ -69,10 +62,15 @@ public class CborFrameScannerTests
     [InlineData("5F6161FF")]
     [InlineData("7F4100FF")]
     [InlineData("5F5FFFFF")]
-    public void RejectsMalformedAndOverlongDeclarationsWithoutThrowing(string hex) => Assert.Equal(-1, Bind()(Convert.FromHexString(hex)));
+    public void RejectsMalformedAndOverlongDeclarationsWithoutThrowing(string hex)
+    {
+        byte[] bytes = Convert.FromHexString(hex);
+        Assert.Equal(-1, CborFrameScanner.GetFrameLength(bytes));
+        AssertResumable(bytes, -1);
+    }
 
     [Fact]
-    public void RejectsTheReviewersImpossibleTwoItemFrame() => Assert.Equal(-1, Bind()(Convert.FromHexString("825A7FFFFFF9")));
+    public void RejectsTheReviewersImpossibleTwoItemFrame() => Assert.Equal(-1, CborFrameScanner.GetFrameLength(Convert.FromHexString("825A7FFFFFF9")));
 
     [Theory]
     [InlineData("", 0x5a, 5, 1)]
@@ -90,12 +88,14 @@ public class CborFrameScannerTests
     [InlineData("82", 0xba, 7, 2)]
     public void MinimumFrameSizeIncludesAllPendingSiblingsAndParentBreaks(string prefix, byte initial, int fixedBytes, int bytesPerChild)
     {
-        Scan scan = Bind();
+        Scan scan = CborFrameScanner.GetFrameLength;
         uint largestRepresentable = (uint)((Array.MaxLength - fixedBytes) / bytesPerChild);
         // Headers alone are enough to distinguish a possible partial frame from one which can
         // never fit; the test never allocates the advertised multi-gigabyte bodies or children.
         Assert.Equal(0, scan(LengthPrefix(prefix, initial, largestRepresentable)));
         Assert.Equal(-1, scan(LengthPrefix(prefix, initial, largestRepresentable + 1)));
+        AssertResumable(LengthPrefix(prefix, initial, largestRepresentable), 0);
+        AssertResumable(LengthPrefix(prefix, initial, largestRepresentable + 1), -1);
     }
 
     [Theory]
@@ -104,12 +104,14 @@ public class CborFrameScannerTests
     [InlineData(0x9f)]
     public void MinimumFrameSizeIncludesPartialHeadersAndNewChildOrBreakBytes(byte initial)
     {
-        Scan scan = Bind();
+        Scan scan = CborFrameScanner.GetFrameLength;
         byte[] arrayAtLimit = LengthPrefix("", 0x9a, (uint)(Array.MaxLength - 5));
         Assert.Equal(0, scan(arrayAtLimit));
         // Every sibling already reserves its minimum one byte. A first item that needs more
         // header bytes, a tagged child, or an indefinite break makes that minimum impossible.
         Assert.Equal(-1, scan([.. arrayAtLimit, initial]));
+        AssertResumable(arrayAtLimit, 0);
+        AssertResumable([.. arrayAtLimit, initial], -1);
     }
 
     private static byte[] LengthPrefix(string prefix, byte initial, uint value)
@@ -122,7 +124,7 @@ public class CborFrameScannerTests
     [Fact]
     public void DeepIndefiniteItemsUseBoundedTraversalRatherThanTheCallStack()
     {
-        Scan scan = Bind();
+        Scan scan = CborFrameScanner.GetFrameLength;
         // Ten thousand levels did not distinguish recursion; the isolated baseline probe uses
         // this same million-level shape and records stack overflow or timeout outside the suite.
         const int depth = 1_000_000;
@@ -135,11 +137,79 @@ public class CborFrameScannerTests
         Assert.Equal(-1, scan(valid));
     }
 
+    [Fact]
+    public void ResumableSpillSurvivesHeadStringAndContainerSplits()
+    {
+        byte[] bytes = [.. Enumerable.Repeat((byte)0x9f, 100), 0x5f, 0x59, 0x00, 0x03, 1, 2, 3, 0xff, .. Enumerable.Repeat((byte)0xff, 100)];
+        CborFrameScanner.State boundary = new();
+        FieldInfo spill = typeof(CborFrameScanner.State).GetField("_spill", BindingFlags.NonPublic | BindingFlags.Instance)!;
+        try
+        {
+            Assert.Equal(0, boundary.Scan(bytes.AsSpan(0, 63), out int consumed));
+            Assert.Equal(63, consumed);
+            Assert.Null(spill.GetValue(boundary));
+            Assert.Equal(0, boundary.Scan(bytes.AsSpan(63, 1), out consumed));
+            Assert.Equal(1, consumed);
+            Assert.NotNull(spill.GetValue(boundary));
+        }
+        finally { boundary.Dispose(); }
+        AssertResumable(bytes, bytes.Length);
+        AssertResumable(Convert.FromHexString("825A7FFFFFF9"), -1);
+    }
+
+    private static void AssertResumable(byte[] bytes, int expected)
+    {
+        for (int split = 0; split <= bytes.Length; split++)
+        {
+            CborFrameScanner.State state = new();
+            try
+            {
+                int first = state.Scan(bytes.AsSpan(0, split), out int consumed);
+                Assert.InRange(consumed, 0, split);
+                if (first >= 0) { Assert.Equal(first > 0 ? first : split, consumed); }
+                int total = consumed;
+                int result = first;
+                if (first == 0)
+                {
+                    result = state.Scan(bytes.AsSpan(split), out consumed);
+                    Assert.InRange(consumed, 0, bytes.Length - split);
+                    if (result >= 0) { Assert.Equal(result > 0 ? result - split : bytes.Length - split, consumed); }
+                    total += consumed;
+                }
+                Assert.Equal(expected, result);
+                Assert.Equal(total, state.BytesScanned);
+                if (result != 0)
+                {
+                    Assert.Equal(result, state.Scan(bytes, out consumed));
+                    Assert.Equal(0, consumed);
+                    Assert.Equal(total, state.BytesScanned);
+                }
+            }
+            finally { state.Dispose(); }
+        }
+        CborFrameScanner.State singles = new();
+        _ = singles.Scan(bytes, out _);
+        singles.Dispose();
+        Assert.Equal(0, singles.BytesScanned);
+        try
+        {
+            int result = 0;
+            for (int i = 0; i < bytes.Length && result == 0; i++)
+            {
+                result = singles.Scan(bytes.AsSpan(i, 1), out int consumed);
+                Assert.Equal(1, consumed);
+                Assert.Equal(i + 1, singles.BytesScanned);
+            }
+            Assert.Equal(expected, result);
+        }
+        finally { singles.Dispose(); }
+    }
+
     // Allocation/pool-return guard only; the recursion-discriminating depth is the million-level test above.
     [Fact]
     public void DeepPooledTraversalAllocatesNothingOnceWarmAndReturnsItsStackOnEveryExit()
     {
-        Scan scan = Bind();
+        Scan scan = CborFrameScanner.GetFrameLength;
         byte[] valid = [.. Enumerable.Repeat((byte)0x81, 10000), 0x00];
         byte[] invalid = [.. Enumerable.Repeat((byte)0x9f, 10000), 0x1c];
         for (int i = 0; i < 100; i++)
@@ -164,7 +234,7 @@ public class CborFrameScannerTests
     [Fact]
     public void CompleteAndPartialFixturesAllocateZeroBytes()
     {
-        Scan scan = Bind();
+        Scan scan = CborFrameScanner.GetFrameLength;
         byte[][] fixtures = [Convert.FromHexString("8204D81843010203"), Convert.FromHexString("9F5F4101FFFF"), Convert.FromHexString("9F5F4101")];
         for (int i = 0; i < 100; i++) { foreach (byte[] fixture in fixtures) { _ = scan(fixture); } }
         long before = GC.GetAllocatedBytesForCurrentThread();
