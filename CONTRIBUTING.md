@@ -58,14 +58,31 @@ chmod +x build-rs.sh
    git checkout -b feature/your-feature-name
    ```
 
-2. Make your changes and ensure tests pass:
-   ```bash
-   dotnet test
-   ```
+2. Make your changes and [run the offline tests](#tests).
 
 3. Commit your changes following the [commit conventions](#commit-conventions)
 
 4. Push to your fork and create a Pull Request
+
+### Tests
+
+During the staged xUnit v3 migration, both test generations use VSTest. Keep
+`Category!=Integration` to exclude opt-in integration tests; do not enable the
+native Microsoft.Testing.Platform runner until all projects have converted.
+
+```bash
+dotnet build -c Release -warnaserror -m:8
+mkdir -p out
+results=$(mktemp -d out/test-results.XXXXXX)
+dotnet test -c Release --no-build --no-restore --filter "Category!=Integration" --logger trx --results-directory "$results" -m:8
+python3 scripts/test-manifest.py "$results" > "$results/manifest.txt"
+```
+
+Compare manifests from the same operating system with `diff -u before.txt after.txt`.
+The manifest keeps duplicate cases and records a JSON `[name, outcome]` pair per line,
+so newly skipped or failed cases change the comparison.
+For a project referencing `coverlet.collector`, append `--collect:"XPlat Code Coverage"`
+to collect coverage.
 
 ## Commit Conventions
 

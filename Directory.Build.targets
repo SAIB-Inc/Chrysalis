@@ -1,3 +1,13 @@
 <Project>
-  <!-- Test project rules are managed in .editorconfig [src/*.{Test,Tests}/**/*.cs] -->
+  <!-- Test styling is configured in .editorconfig. -->
+  <PropertyGroup Condition="'$(XunitTestProject)' == 'true'">
+    <!-- X25 removes this staging property with the native-MTP/global.json/CI/commands switch. -->
+    <IsTestingPlatformApplication>false</IsTestingPlatformApplication>
+  </PropertyGroup>
+  <ItemGroup Condition="'@(PackageReference-&gt;WithMetadataValue('Identity', 'xunit.v3'))' != ''">
+    <PackageReference Include="Microsoft.Testing.Platform" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.Testing.Platform.MSBuild" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.Testing.Extensions.Telemetry" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.Testing.Extensions.TrxReport.Abstractions" PrivateAssets="all" />
+  </ItemGroup>
 </Project>
