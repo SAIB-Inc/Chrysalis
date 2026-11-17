@@ -1,3 +1,4 @@
+using Chrysalis.Codec.Types.Cardano.Core.Protocol;
 using Chrysalis.Network.Cbor.LocalStateQuery;
 using Chrysalis.Network.MiniProtocols.Extensions;
 using Chrysalis.Network.Multiplexer;

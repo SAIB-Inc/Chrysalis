@@ -13,7 +13,7 @@ using Spec = Utxorpc.V1Beta.Cardano;
 using LedgerMetadata = Chrysalis.Codec.Types.Cardano.Core.Metadata;
 using Auxiliary = Chrysalis.Codec.Types.Cardano.Core.IAuxiliaryData;
 using SubmitChainTx = Utxorpc.V1Beta.Submit.AnyChainTx;
-using Chrysalis.Network.Cbor.LocalStateQuery;
+using Chrysalis.Codec.Types.Cardano.Core.Protocol;
 using Chrysalis.Wallet.Models.Enums;
 using Grpc.Core;
 using Grpc.Net.Client;

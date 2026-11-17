@@ -11,7 +11,6 @@ using Chrysalis.Codec.Types.Cardano.Core.Governance;
 using Chrysalis.Codec.Types.Cardano.Core.Scripts;
 using Chrysalis.Codec.Types.Cardano.Core.TransactionWitness;
 using Chrysalis.Codec.Types.Cardano.Core.Transaction;
-using Chrysalis.Network.Cbor.LocalStateQuery;
 using Chrysalis.Tx.Extensions;
 using Chrysalis.Tx.Models;
 using Chrysalis.Tx.Models.Cbor;

@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net11.0</TargetFramework>
+    <PackageId>Chrysalis.Tx.Providers.Kupmios</PackageId>
+    <RootNamespace>Chrysalis.Tx.Providers</RootNamespace>
+    <Authors>SAIB Inc</Authors>
+    <Company>SAIB Inc</Company>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageLicenseFile>LICENSE.md</PackageLicenseFile>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Chrysalis.Tx/Chrysalis.Tx.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="../../LICENSE.md" Pack="true" PackagePath="" />
+    <None Include="../../README.md" Pack="true" PackagePath="" />
+  </ItemGroup>
+</Project>

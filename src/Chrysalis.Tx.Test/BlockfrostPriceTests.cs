@@ -3,7 +3,6 @@ using System.Net;
 using System.Net.Sockets;
 using System.Text;
 using Chrysalis.Codec.Types.Cardano.Core.Protocol;
-using Chrysalis.Network.Cbor.LocalStateQuery;
 using Chrysalis.Tx.Providers;
 using Xunit;
 

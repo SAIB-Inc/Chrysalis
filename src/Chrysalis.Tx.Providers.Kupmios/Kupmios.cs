@@ -3,7 +3,6 @@ using System.Text;
 using System.Text.Json;
 using Chrysalis.Codec.Serialization.Utils;
 using Chrysalis.Codec.Types.Cardano.Core.Transaction;
-using Chrysalis.Network.Cbor.LocalStateQuery;
 using Chrysalis.Tx.Models.Cbor;
 using Chrysalis.Codec.Types.Cardano.Core;
 using Chrysalis.Wallet.Models.Enums;

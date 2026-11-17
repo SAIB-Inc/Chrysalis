@@ -10,7 +10,7 @@ using Chrysalis.Codec.Extensions.Cardano.Core.Common;
 using Chrysalis.Codec.Extensions.Cardano.Core.Transaction;
 using Chrysalis.Codec.Serialization;
 using Chrysalis.Codec.Serialization.Utils;
-using Chrysalis.Network.Cbor.LocalStateQuery;
+using Chrysalis.Codec.Types.Cardano.Core.Protocol;
 using Chrysalis.Tx.Extensions;
 using Chrysalis.Tx.Utils;
 

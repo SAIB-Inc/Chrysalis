@@ -1,5 +1,5 @@
 using System.Text.Json;
-using Chrysalis.Network.Cbor.LocalStateQuery;
+using Chrysalis.Codec.Types.Cardano.Core.Protocol;
 using Chrysalis.Tx.Providers;
 using Chrysalis.Wallet.Models.Enums;
 using Xunit;

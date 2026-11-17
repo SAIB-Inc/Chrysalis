@@ -37,6 +37,9 @@ dotnet add package Chrysalis.Network --prerelease   # Ouroboros mini-protocols (
 dotnet add package Chrysalis.Tx      --prerelease   # Transaction building + fee calculation
 dotnet add package Chrysalis.Wallet  --prerelease   # Key management + address handling
 dotnet add package Chrysalis.Plutus  --prerelease   # Pure managed UPLC/CEK machine
+dotnet add package Chrysalis.Tx.Providers.Blockfrost --prerelease # Blockfrost provider
+dotnet add package Chrysalis.Tx.Providers.Kupmios --prerelease # Kupo/Ogmios provider
+dotnet add package Chrysalis.Tx.Providers.Ouroboros --prerelease # Local-node provider
 dotnet add package Chrysalis.Tx.Providers.UtxoRpc --prerelease # Optional UTxO RPC provider
 ```
 
@@ -48,10 +51,15 @@ dotnet add package Chrysalis.Tx.Providers.UtxoRpc --prerelease # Optional UTxO R
 | **Chrysalis.Codec.CodeGen** | Source generator for compile-time CBOR dispatch + CIP-0057 blueprint codegen |
 | **Chrysalis.Network** | Ouroboros N2C/N2N mini-protocols with pipelined ChainSync + BlockFetch |
 | **Chrysalis.Tx** | `TransactionBuilder`, `MintBuilder`, `OutputBuilder`, fee/collateral calculation |
+| **Chrysalis.Tx.Providers.Blockfrost** | Blockfrost data provider for `Chrysalis.Tx` |
+| **Chrysalis.Tx.Providers.Kupmios** | Kupo/Ogmios data provider for `Chrysalis.Tx` |
+| **Chrysalis.Tx.Providers.Ouroboros** | Local-node data provider for `Chrysalis.Tx` |
 | **Chrysalis.Tx.Providers.UtxoRpc** | Optional UTxO RPC data provider for `Chrysalis.Tx` (.NET 11) |
 | **Chrysalis.Plutus** | Pure C# UPLC interpreter — 999/999 conformance tests, no native dependencies |
 | **Chrysalis.Wallet** | BIP-39 mnemonic, BIP-32 HD key derivation, Bech32 addresses |
 | **Chrysalis.Crypto** | Ed25519 signatures, Blake2b hashing |
+
+See [Packages](docs/migration/X23.md) for the package and namespace changes.
 
 ## UTxO RPC
 
