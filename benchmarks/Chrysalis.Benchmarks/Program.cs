@@ -21,12 +21,14 @@ internal static class Program
 
     private static readonly string[] RecordedSettings = ["DOTNET_TieredCompilation", "DOTNET_TieredPGO", "DOTNET_GCHeapHardLimit", "DOTNET_GCServer", "DOTNET_gcServer", "DOTNET_ROLL_FORWARD", "DOTNET_JitObjectStackAllocation", "DOTNET_JitObjectStackAllocationRefClass", "DOTNET_JitDisasm", "CHRYSALIS_DIRECT_WARMUP_MS"];
 
-    private static readonly Type[] BenchmarkTypes =
+    internal static readonly Type[] DirectTypes =
     [
         typeof(CoreBench), typeof(BlockBench), typeof(TxBench), typeof(VmBench),
-        typeof(MuxBench), typeof(NetworkHeaderBench), typeof(CorpusVmBench),
-        typeof(FieldReadBench), typeof(EncodingBench), typeof(FixtureHashBench), typeof(ScriptBench)
+        typeof(NetworkHeaderBench), typeof(CorpusVmBench), typeof(FieldReadBench),
+        typeof(EncodingBench), typeof(FixtureHashBench)
     ];
+
+    private static readonly Type[] BenchmarkTypes = [.. DirectTypes, typeof(MuxBench), typeof(ScriptBench)];
 
     private static async Task<int> Main(string[] args)
     {
@@ -130,8 +132,7 @@ internal static class DirectMeasurements
     {
         int warmupMilliseconds = int.Parse(Environment.GetEnvironmentVariable("CHRYSALIS_DIRECT_WARMUP_MS") ?? "1000", CultureInfo.InvariantCulture);
         List<object> results = [];
-        foreach (Type type in new[] { typeof(CoreBench), typeof(BlockBench), typeof(TxBench), typeof(VmBench),
-            typeof(NetworkHeaderBench), typeof(CorpusVmBench), typeof(FieldReadBench), typeof(EncodingBench), typeof(FixtureHashBench) })
+        foreach (Type type in Program.DirectTypes)
         {
             object instance = Activator.CreateInstance(type) ?? throw new InvalidOperationException(type.FullName);
             _ = type.GetMethod("Setup")!.Invoke(instance, null);
@@ -167,14 +168,18 @@ internal static class DirectMeasurements
                         } while (timer.Elapsed.TotalMilliseconds < 100 && count < 1 << 20);
                         count = Math.Max(1, count / 2);
                         GC.Collect();
+                        long jitCompiledMethodsStart = JitInfo.GetCompiledMethodCount();
                         long before = GC.GetAllocatedBytesForCurrentThread();
                         timer.Restart();
                         for (int i = 0; i < count; i++) { action(); }
                         timer.Stop();
                         long bytes = GC.GetAllocatedBytesForCurrentThread() - before;
+                        long jitCompiledMethodsEnd = JitInfo.GetCompiledMethodCount();
                         samples.Add(new
                         {
                             batch,
+                            jitCompiledMethodsStart,
+                            jitCompiledMethodsEnd,
                             temperature,
                             operations = count * scale,
                             ns = timer.Elapsed.TotalNanoseconds / count / scale,

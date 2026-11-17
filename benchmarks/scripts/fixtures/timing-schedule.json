@@ -1,0 +1,12 @@
+{
+  "coreSha256": "655cf8262a7621dd74e80f106ae055c4e4a81252da89ed22111d6bfaca217b81",
+  "schedule": [
+    {"id":"1eea7ca929f0d30a","members":["43ab2038b5f697c7","0339d1975465279c","6123ab7650dabf9d","aa25355603d9899e"],"pairs":[{"members":{"baseline":"0339d1975465279c","candidate":"43ab2038b5f697c7"},"pair":1},{"members":{"baseline":"6123ab7650dabf9d","candidate":"aa25355603d9899e"},"pair":2}],"phase":"A","round":1,"row":"x"},
+    {"id":"035efe00ef10231f","members":["977b48ef143ebc57","a6455fccf0f4e42c","0e3f0c016ea0ecb1","927a4f62b1636ab7"],"pairs":[{"members":{"baseline":"977b48ef143ebc57","candidate":"a6455fccf0f4e42c"},"pair":3},{"members":{"baseline":"927a4f62b1636ab7","candidate":"0e3f0c016ea0ecb1"},"pair":4}],"phase":"A","round":2,"row":"x"},
+    {"id":"f99998ba0801ed67","members":["b61f9af4b77d33e6","6f6327d11161d36d"],"pairs":[{"members":{"baseline":"6f6327d11161d36d","candidate":"b61f9af4b77d33e6"},"pair":5}],"phase":"A","round":3,"row":"x"},
+    {"id":"04aab800492b70bc","members":["11be6fefaf44b222","fe468412da5b9215","4e6b1818d2572c70","b88ee4234f975552"],"pairs":[{"members":{"baseline":"fe468412da5b9215","candidate":"11be6fefaf44b222"},"pair":1},{"members":{"baseline":"4e6b1818d2572c70","candidate":"b88ee4234f975552"},"pair":2}],"phase":"B","round":1,"row":"y"},
+    {"id":"79a6f647ed99327a","members":["6729bfbb52228183","0ef46ff896a51498","1362e0c188a57ff6","770bf9e317e999e8"],"pairs":[{"members":{"baseline":"6729bfbb52228183","candidate":"0ef46ff896a51498"},"pair":3},{"members":{"baseline":"770bf9e317e999e8","candidate":"1362e0c188a57ff6"},"pair":4}],"phase":"B","round":2,"row":"y"},
+    {"id":"27236e188528bd12","members":["089f20e868752aa4","af3b9ce4ec0a252f","8c8d85039e4c8fd2","29bffac916754df6"],"pairs":[{"members":{"baseline":"089f20e868752aa4","candidate":"af3b9ce4ec0a252f"},"pair":1},{"members":{"baseline":"29bffac916754df6","candidate":"8c8d85039e4c8fd2"},"pair":2}],"phase":"B","round":2,"row":"x"},
+    {"id":"f0f00140f971f081","members":["b696b50de50204b6","0c3ac4c986e6cc3c","6090ce4ec2b6b5cf","9de4fe0947edeb74"],"pairs":[{"members":{"baseline":"b696b50de50204b6","candidate":"0c3ac4c986e6cc3c"},"pair":5},{"members":{"baseline":"9de4fe0947edeb74","candidate":"6090ce4ec2b6b5cf"},"pair":6}],"phase":"B","round":3,"row":"y"}
+  ]
+}

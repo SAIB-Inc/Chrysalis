@@ -25,6 +25,13 @@ def data(short=False):
 
 
 class SessionTests(unittest.TestCase):
+    def test_fly_metadata_survives_allowlist_and_detects_machine_only(self):
+        metadata = dict(FLY_APP_NAME='fixture-app', FLY_REGION='iad', FLY_MACHINE_ID='fixture-machine')
+        self.assertEqual({key: session.environment({}, metadata).get(key) for key in metadata}, metadata)
+        with patch.dict(os.environ, {'FLY_MACHINE_ID': 'fixture-machine'}, clear=True):
+            with self.assertRaises(ValueError):
+                session.detect_platform()
+
     def test_admission_limits(self):
         self.assertEqual(session.admission(.002, [.003] * 8, 0, [], duration=10), [])
         for steal, cores, total, each, duration in [(None, [0] * 8, 0, [], 10), (.005, [.03] + [0] * 7, 0, [], 10),
