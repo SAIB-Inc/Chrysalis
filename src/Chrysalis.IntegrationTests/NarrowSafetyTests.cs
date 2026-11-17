@@ -238,6 +238,22 @@ public sealed class NarrowSafetyTests
         Assert.Same(spend, Assert.Single(plan.ProviderInputs));
     }
 
+    /// <summary>The Dijkstra cap measures input minus all returned outputs, not only a bounded fee.</summary>
+    /// <param name="returned">Lovelace returned to the wallet.</param>
+    /// <param name="allowed">Whether net spending stays within the cap.</param>
+    [Theory]
+    [Trait("Category", "Integration")]
+    [InlineData(10_000_000UL, true)]
+    [InlineData(59_800_000UL, true)]
+    [InlineData(9_999_999UL, false)]
+    [InlineData(0UL, false)]
+    public void DijkstraNetSpendCountsAllUnreturnedValue(ulong returned, bool allowed)
+    {
+        void Check() => DijkstraProbes.AssertNetSpend(60_000_000, [Input(2, returned).Output]);
+        if (allowed) { Check(); }
+        else { _ = Assert.ThrowsAny<XunitException>(Check); }
+    }
+
     private static JsonElement WalletUtxos(params ResolvedInput[] inputs) => JsonSerializer.SerializeToElement(
         inputs.ToDictionary(input => Reference(input.Outref), input => new { value = new { lovelace = input.Output.Amount().Lovelace() } }, StringComparer.Ordinal));
 

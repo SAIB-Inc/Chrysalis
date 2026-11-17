@@ -53,5 +53,24 @@
       "notice_path": "cardano-cli-11.7.0.0/NOTICE",
       "retained_notice_sha256": "2a61a15b10e1b920797d2d30d9ef13253b8f44f0bc785fd7320dfe0389286cfd"
     }
+  },
+  "dijkstranet": {
+    "manifest": "Dijkstra/manifest.json",
+    "manifest_sha256": "8afe054af26deafbea9f660fd40dc3e5d4b55202481c1df7d9e7bd678984d692",
+    "golden_class": "DJ",
+    "notice": "Pinned independent DijkstraNet fork window, CLI queries and acceptance of one Chrysalis-built Conway transaction; replayed without a node.",
+    "repository": "https://github.com/input-output-hk/cardano-playground",
+    "source_path": "static/book.play.dev.cardano.org/environments-pre/dijkstra/",
+    "tag": null,
+    "commit": null,
+    "fetch_date": "2026-11-17",
+    "pin_status": "No matching public source commit found for the served configuration set; pin by fetch date and retained per-file SHA-256. The latest public-main path revision checked, 8e2b863f3ba5cac9dd20bb553c5fd799c477679b, differs.",
+    "license": "Apache-2.0",
+    "license_scope": "Copied configuration/genesis files; node blocks, answers and CLI queries are recorded public chain facts, not copied implementation code.",
+    "license_path": "Dijkstra/LICENSE",
+    "notice_path": "Dijkstra/NOTICE",
+    "license_revision": "219434e5926731a4d41ee1a5939842e496ad82ad",
+    "retained_license_sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4",
+    "retained_notice_sha256": "a25cbee9b4ce25df93ac03c98623e533780bb98238bffd3fcb62ea9d8ca9f8a6"
   }
 }

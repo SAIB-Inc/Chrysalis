@@ -17,6 +17,38 @@ public sealed class FundingSafetyTests
         Assert.True(IntegrationEnvironment.IsFundedOptIn("1"));
     }
 
+    /// <summary>The committed accepted record refuses spending without consulting a receipt, wallet or node.</summary>
+    [Fact]
+    [Trait("Category", "Integration")]
+    public void AcceptedGoldenRefusesSubmissionWithoutMutableState()
+    {
+        InvalidOperationException failure = Assert.Throws<InvalidOperationException>(DijkstraProbes.RequireNoAcceptedSubmission);
+        Assert.Contains("already accepted", failure.Message, StringComparison.Ordinal);
+        Assert.Contains("reviewed Golden change", failure.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>Changing capture output cannot re-arm DijkstraNet's one-shot guard.</summary>
+    [Fact]
+    [Trait("Category", "Integration")]
+    public void DijkstraReceiptIsIndependentOfCaptureOutput()
+    {
+        string? original = Environment.GetEnvironmentVariable(IntegrationEnvironment.Output);
+        string scratch = Path.Combine(Path.GetTempPath(), "chrysalis-receipt-path-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            Environment.SetEnvironmentVariable(IntegrationEnvironment.Output, Path.Combine(scratch, "first"));
+            string first = FundedReservation.DijkstraDirectory;
+            Environment.SetEnvironmentVariable(IntegrationEnvironment.Output, Path.Combine(scratch, "second"));
+            Assert.Equal(first, FundedReservation.DijkstraDirectory);
+            Assert.EndsWith(Path.Combine(".integration-artifacts", "dijkstra"), first, StringComparison.Ordinal);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(IntegrationEnvironment.Output, original);
+            if (Directory.Exists(scratch)) { Directory.Delete(scratch, recursive: true); }
+        }
+    }
+
     /// <summary>Holds two simultaneous attempts before any transaction work; exactly one may reserve.</summary>
     [Fact]
     [Trait("Category", "Integration")]

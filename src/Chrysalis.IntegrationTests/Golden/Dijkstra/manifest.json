@@ -1,0 +1,177 @@
+{
+  "golden_class": "DJ",
+  "network_magic": 6,
+  "source": "cardano-node 11.2.1 on public DijkstraNet; N2N ChainSync and BlockFetch",
+  "image": "sha256:2e20a5932f5f25a98fd871c0caeab663ce104c7d36f8c6a51ea7c588fd2f08dc",
+  "captured_utc": "2026-11-17T12:43:44.5689322+00:00",
+  "files": [
+    {
+      "era": 7,
+      "height": 64737,
+      "slot": 1295939,
+      "hash": "71f17fd978ffc88d6e8fccbe3dcfd95d0a9171a3e9563a0b3c396331fda1b2b3",
+      "previous_hash": "28adbcddc82663e5f96abc79d08137c72848f41cf52e5fd32748d0aaeb77600e",
+      "block": {
+        "path": "block-0.cbor",
+        "sha256": "37cba2fb861c1a74eed20759a473c3966d7a10958d83fa24f86ce52331f05e63"
+      },
+      "header": {
+        "path": "64737.header.cbor",
+        "sha256": "c3a8293e881f8412dee0a4fbe7616858ec25ef737708a66193ee9536d65415d0"
+      },
+      "chain_sync": {
+        "path": "64737.chain-sync.cbor",
+        "sha256": "f4ca78c71edc32ce825c75628dd98ce773f0ad7ce51a66d2f4e18bc696e8fc9f"
+      }
+    },
+    {
+      "era": 7,
+      "height": 64738,
+      "slot": 1295959,
+      "hash": "f14caba43c84e11a6c79b1063ea4d00bcc02fb766e3212c06ab466e84fd20541",
+      "previous_hash": "71f17fd978ffc88d6e8fccbe3dcfd95d0a9171a3e9563a0b3c396331fda1b2b3",
+      "block": {
+        "path": "block-1.cbor",
+        "sha256": "ff0b3ae3f5cb86234970b7b28365df882e9a015c29297316a88f240818fbdc59"
+      },
+      "header": {
+        "path": "64738.header.cbor",
+        "sha256": "8e3d91de3e56a26ddd164b693338ec94763027eb331d022dc27e8a47c408311a"
+      },
+      "chain_sync": {
+        "path": "64738.chain-sync.cbor",
+        "sha256": "3a8157fc6d69aace4bc287f91c56b470cea01144a8b94b2ea6cf599078786253"
+      }
+    },
+    {
+      "era": 8,
+      "height": 64739,
+      "slot": 1296023,
+      "hash": "060b416fd53c32e94b6e45a2b03dd01dcdc914702cefe8993d4a205f471a476a",
+      "previous_hash": "f14caba43c84e11a6c79b1063ea4d00bcc02fb766e3212c06ab466e84fd20541",
+      "block": {
+        "path": "block-2.cbor",
+        "sha256": "6ba8d94f7fcd9339acfeab16e08fbffc0f9a2249b8a87885f3c74115482b303f"
+      },
+      "header": {
+        "path": "64739.header.cbor",
+        "sha256": "f141b922250ffbf1946f03d6944fd021732901b0e42333ef76d98ff18f7d8504"
+      },
+      "chain_sync": {
+        "path": "64739.chain-sync.cbor",
+        "sha256": "ca39c9e8bef9a2923c9f684ddb6134915a974561b669d239bd9790bad073627b"
+      }
+    },
+    {
+      "era": 8,
+      "height": 64740,
+      "slot": 1296115,
+      "hash": "d2bee64317cd514bfbaa2e9b0322d6ce73c62c4a80c17f952c06b667f67e63d2",
+      "previous_hash": "060b416fd53c32e94b6e45a2b03dd01dcdc914702cefe8993d4a205f471a476a",
+      "block": {
+        "path": "block-3.cbor",
+        "sha256": "d74e9a18a1eb01d7503b3efb6b8a7cbad42d081fd7df85d68505ebf815cb9826"
+      },
+      "header": {
+        "path": "64740.header.cbor",
+        "sha256": "a370d1e6b2b4caa3e77410d7ede386fcd4f21283ee782638600696260c451f3f"
+      },
+      "chain_sync": {
+        "path": "64740.chain-sync.cbor",
+        "sha256": "b8964a59eec7a0d4934e4c9e26d1d7fb8bf5e974d963e3bc35c542bc98fcf451"
+      }
+    }
+  ],
+  "consensus_revision": "808e400545729b1246ba4393c69326ec4a04a730",
+  "genesis_hashes": {
+    "AlonzoGenesisHash": "387a7c4880477ce7b128566fa7f9f9ed99ee04476084e9f6332b6d42d907faab",
+    "ByronGenesisHash": "245e5b28a31c6bc3e8b78f1223294ae09e57b6d2543b51aba7cf9dadff161238",
+    "ConwayGenesisHash": "e18ab8efc363ad170142706723568f1520a57f0dc05354e1d458041da18a3704",
+    "ShelleyGenesisHash": "b47eb627b52bf9cfe5ffd865658b47b5747a088d150a9c27216de374e836c385",
+    "DijkstraGenesisHash": "ad58e282eff1f48c241faf6319f88ed54843821627a6be69470f05d7904e4601"
+  },
+  "submission": {
+    "txid": "26b332c5f8783e569786c7b2a095af1c334464bd658316043f757252de70b837",
+    "address": "addr_test1qzlzf3r9e3hc2drlgtywenw9d96wncr8f4vpscrwta3yss2c4m8t75al4ghp6fwk660u7he20tcy0nfz7swcfcwfs0fsfhnhgn",
+    "transfer_lovelace": 2000000,
+    "fee_lovelace": 168493,
+    "status": "accepted"
+  },
+  "artifacts": [
+    {
+      "path": "LICENSE",
+      "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
+    },
+    {
+      "path": "NOTICE",
+      "sha256": "a25cbee9b4ce25df93ac03c98623e533780bb98238bffd3fcb62ea9d8ca9f8a6"
+    },
+    {
+      "path": "alonzo-genesis.json",
+      "sha256": "23bf365cae730137ad6868787f20ef4f58e446d22617d7b824f1c75695c760b5"
+    },
+    {
+      "path": "byron-genesis.json",
+      "sha256": "69f300b0641aadd5b8419dc135851ff970fdbc95be4b49a83bf9f7b0ddee0347"
+    },
+    {
+      "path": "config.json",
+      "sha256": "47f9d8b2343b3b98ec31ac024398b10c35e1cedc6126a08c14940b1dbf2d9998"
+    },
+    {
+      "path": "conway-genesis.json",
+      "sha256": "378b67cde1a6325fe36537048cba593ae8e39b0b5610d563623d9f1bff3ce104"
+    },
+    {
+      "path": "conway.node-answer.cbor",
+      "sha256": "ac38783f6a3b2fe3b579718d6ba8493a456d800665b4433a0e7c823cff90a603"
+    },
+    {
+      "path": "conway.transaction.cbor",
+      "sha256": "15e35eb8559b872f6f00bafc470679ca9f2a2a9b879d6d580565589bbd902d9f"
+    },
+    {
+      "path": "dijkstra-genesis.json",
+      "sha256": "c7f7760ba5491cb31bff548f880410e0bf288e016e2b1646bd978d9d490a9bb7"
+    },
+    {
+      "path": "parameters.json",
+      "sha256": "0fa3f47de768dd1e216ae98f76f9e682bff06610a7dd791bae81fe67609ded3a"
+    },
+    {
+      "path": "shelley-genesis.json",
+      "sha256": "f1b29cfa42145f242c47fa7ace438f3cea1b7045b0f2bff61521d7f4cead7e9b"
+    },
+    {
+      "path": "tip.json",
+      "sha256": "0039f21e701394d22ef4058ee4bc876b5c8be371238b2167e4fc866db62ae9a4"
+    },
+    {
+      "path": "utxos-after.json",
+      "sha256": "28564b14dc772e20477d20f86fb56933b11c30750ef2895ca14d402a4b4d2f7b"
+    },
+    {
+      "path": "utxos-before.json",
+      "sha256": "628d61367892cd625e3ea25138f08516afa26fb7648663311a776525ab456a1c"
+    }
+  ],
+  "sources": {
+    "configuration": "https://book.play.dev.cardano.org/environments-pre/dijkstra/",
+    "node_package": "https://github.com/orgs/IntersectMBO/packages/container/cardano-node/1531413927?tag=11.2.1",
+    "cli_reported_revision": "90bc1cd9380a78a63091ff673f8c5693152c8f60",
+    "notice": "Independent public node outputs. Chrysalis built the submitted transaction, not the golden acceptance or public UTxO results. No upstream implementation code copied.",
+    "repository": "https://github.com/input-output-hk/cardano-playground",
+    "source_path": "static/book.play.dev.cardano.org/environments-pre/dijkstra/",
+    "tag": null,
+    "commit": null,
+    "fetch_date": "2026-11-17",
+    "pin_status": "No matching public source commit found for the served configuration set; pin by fetch date and retained per-file SHA-256. The latest public-main path revision checked, 8e2b863f3ba5cac9dd20bb553c5fd799c477679b, differs.",
+    "license": "Apache-2.0",
+    "license_scope": "Copied configuration/genesis files; node blocks, answers and CLI queries are recorded public chain facts, not copied implementation code.",
+    "license_path": "Dijkstra/LICENSE",
+    "notice_path": "Dijkstra/NOTICE",
+    "license_revision": "219434e5926731a4d41ee1a5939842e496ad82ad",
+    "retained_license_sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4",
+    "retained_notice_sha256": "a25cbee9b4ce25df93ac03c98623e533780bb98238bffd3fcb62ea9d8ca9f8a6"
+  }
+}
