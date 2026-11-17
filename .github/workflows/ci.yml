@@ -25,6 +25,7 @@ jobs:
               - 'Directory.*.props'
               - 'Directory.Build.targets'
               - 'global.json'
+              - 'NuGet.Config'
               - 'scripts/test-manifest.py'
               - '.github/workflows/ci.yml'
 

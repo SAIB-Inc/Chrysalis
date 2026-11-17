@@ -1,0 +1,5 @@
+Icarus vectors derived from CIP-0003, Wallet Key Generation.
+Authors: Matthias Benkort and Sebastien Guillemot.
+Source commit: a4068a577790e7b17d2d6f00f6e54990cfcb7955.
+Examples from CIP-0003/Icarus.md were extracted and reshaped as JSON; input and key values are unchanged.
+Licensed under CC-BY-4.0; see LICENSE.txt. Author attribution is from CIP-0003/README.md.

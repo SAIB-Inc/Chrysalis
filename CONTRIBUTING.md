@@ -23,6 +23,15 @@ Please be respectful and constructive in all interactions. We're building softwa
 - Rust toolchain (for Plutus module)
 - Git
 
+### Local dependency staging
+
+Before restoring a fresh clone, obtain the approved local builds of
+`SAIB.Cbor.3.1.0.nupkg` and `SAIB.Blake2Fast.4.0.0.nupkg` and place them in
+`../local-packages/`, a sibling of the repository directory. These versions are
+not yet published. `NuGet.Config` deliberately prevents falling back to nuget.org
+for them; a missing local package makes restore fail. The release MR removes
+this staging mapping after publication. Do not repack a version with different content.
+
 ### Setup
 
 1. Fork the repository

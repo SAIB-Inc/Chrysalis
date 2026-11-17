@@ -5,8 +5,8 @@
 
   <ItemGroup>
     <!-- Serialization -->
-    <PackageVersion Include="SAIB.Cbor" Version="2.0.0" />
-    <PackageVersion Include="SAIB.Blake2Fast" Version="3.0.1" />
+    <PackageVersion Include="SAIB.Cbor" Version="3.1.0" />
+    <PackageVersion Include="SAIB.Blake2Fast" Version="4.0.0" />
 
     <!-- Encoding -->
     <PackageVersion Include="SimpleBase" Version="5.6.0" />
@@ -44,8 +44,6 @@
     <PackageVersion Include="Microsoft.Extensions.Configuration.Binder" Version="11.0.0" />
 
     <!-- Cryptography -->
-    <PackageVersion Include="Microsoft.AspNetCore.Cryptography.KeyDerivation" Version="10.0.2" />
-    <PackageVersion Include="SauceControl.Blake2Fast" Version="2.0.0" />
     <PackageVersion Include="BouncyCastle.Cryptography" Version="2.6.1" />
   </ItemGroup>
 </Project>
