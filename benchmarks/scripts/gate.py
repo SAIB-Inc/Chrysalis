@@ -185,11 +185,12 @@ def stage_side(info, label, output, local, inputs=None):
     project.write_text(project.read_text().replace('</Project>', '<ItemGroup><Compile Remove="client/**/*.cs" /></ItemGroup></Project>'))
     env = session.environment(dict(NUGET_PACKAGES=str(REPO.parent / '.nuget/packages')))
     cli = [runner.DOTNET, runner.DOTNET_ROOT / 'sdk' / sdk / 'dotnet.dll']
+    isolation = ['-nodeReuse:false', '--disable-build-servers', '-p:UseSharedCompilation=false']
     commands = []
     for name, project in [('harness', directory / 'Chrysalis.Benchmarks.csproj'), ('client', client_dir / 'ReplayClient.csproj')]:
-        commands.append(dict(command=list(map(str, [*cli, 'restore', project, '--source', env['NUGET_PACKAGES']])),
+        commands.append(dict(command=list(map(str, [*cli, 'restore', project, '--source', env['NUGET_PACKAGES'], *isolation])),
                              label=name + '-restore'))
-        commands.append(dict(command=list(map(str, [*cli, 'build', project, '-c', 'Release', '-m:8', '-warnaserror', '--no-restore',
+        commands.append(dict(command=list(map(str, [*cli, 'build', project, '-c', 'Release', '-m:8', '-warnaserror', '--no-restore', *isolation,
                                                     *(['--no-dependencies'] if pinned or name == 'client' else [])])),
                              label=name + '-build',
                              copyClosureTo=str((directory if name == 'harness' else client_dir) / 'bin/Release' / tfm) if pinned else None))

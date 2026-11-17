@@ -103,7 +103,10 @@ Fly time never supplies a bytes verdict.
 
 The runner is the single environment allowlist: ambient HOME/PATH/locale/time,
 TMPDIR, DOTNET_ROOT and the non-secret Fly identity metadata FLY_APP_NAME,
-FLY_REGION and FLY_MACHINE_ID only. Corpus, fixture/results paths, NuGet and .NET
+FLY_REGION and FLY_MACHINE_ID. It also keeps `DOTNET_CLI_USE_MSBUILD_SERVER`,
+`MSBUILDDISABLENODEREUSE` and `UseSharedCompilation` when set; staged restores
+and builds always pass `-nodeReuse:false --disable-build-servers
+-p:UseSharedCompilation=false`. Corpus, fixture/results paths, NuGet and .NET
 telemetry/logo/TieredPGO are generated, never inherited. `P1_RANGE` is a generated
 path for the current TCP client and goes away when P4 MR-B lands the manifest.
 The client records no environment. `--observed` adds acknowledged measured-window
