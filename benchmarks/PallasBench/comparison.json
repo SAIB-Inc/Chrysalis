@@ -1,0 +1,413 @@
+{
+  "startedUtc": "2026-11-17T16:28:09Z",
+  "platform": "Linux",
+  "machine": "x86_64",
+  "cpu": "AMD Ryzen 9 9900X3D 12-Core Processor",
+  "loadavgStart": [
+    12.2490234375,
+    15.63134765625,
+    18.36572265625
+  ],
+  "loadavgEnd": [
+    18.31884765625,
+    15.23388671875,
+    15.9140625
+  ],
+  "python": "3.12.3",
+  "dotnetSdk": "11.0.100",
+  "dotnetRuntime": ".NET 11.0.0",
+  "serverGC": false,
+  "rustc": "rustc 1.99.1 (58cf8f9c3 2026-10-13)",
+  "pallas": "1.4.0",
+  "minicbor": "2.3.1",
+  "saibCbor": "2.0.0",
+  "runtimeControls": {
+    "DOTNET_TieredCompilation": "default",
+    "DOTNET_TieredPGO": "default",
+    "DOTNET_gcServer": "default"
+  },
+  "compilationLimits": {
+    "timeFraction": 0.001,
+    "ilBytes": 1000
+  },
+  "cargoLockSha256": "b66e063c6562878101ab36b9872dfc41e115d5c27f23fd77e35ed39395ef4784",
+  "corpusManifestSha256": "9708b92baf64b479fe72bbcd00858794df973a80afe8c3816aa6a3dc58b02088",
+  "pair3": "replay peer, not live-node throughput",
+  "results": {
+    "typed": {
+      "blocksPerIteration": 30,
+      "iterationsPerProcess": 6000,
+      "itemsPerIteration": null,
+      "validatedChecksSha256": "7c93370a3e7cf4a86b1ec60127dcff1d10b1500abafed68a9066c6b841fb8742",
+      "chrysalisElapsedNs": [
+        40207076774,
+        41595133926,
+        36981911939,
+        37065058075,
+        42950857335
+      ],
+      "rustElapsedNs": [
+        4147084869,
+        3552504145,
+        3275245127,
+        3280102553,
+        3779511044
+      ],
+      "chrysalisJit": [
+        {
+          "start": {
+            "compiledMethods": 2772,
+            "ilBytes": 216955,
+            "compilationTicks": 17215806
+          },
+          "end": {
+            "compiledMethods": 2774,
+            "ilBytes": 217197,
+            "compilationTicks": 17224723
+          },
+          "minimumSeconds": 20,
+          "quietSeconds": 10,
+          "capSeconds": 120
+        },
+        {
+          "start": {
+            "compiledMethods": 2772,
+            "ilBytes": 216955,
+            "compilationTicks": 19180129
+          },
+          "end": {
+            "compiledMethods": 2774,
+            "ilBytes": 217197,
+            "compilationTicks": 19190739
+          },
+          "minimumSeconds": 20,
+          "quietSeconds": 10,
+          "capSeconds": 120
+        },
+        {
+          "start": {
+            "compiledMethods": 2772,
+            "ilBytes": 216955,
+            "compilationTicks": 25154762
+          },
+          "end": {
+            "compiledMethods": 2774,
+            "ilBytes": 217197,
+            "compilationTicks": 25162784
+          },
+          "minimumSeconds": 20,
+          "quietSeconds": 10,
+          "capSeconds": 120
+        },
+        {
+          "start": {
+            "compiledMethods": 2772,
+            "ilBytes": 216955,
+            "compilationTicks": 20817711
+          },
+          "end": {
+            "compiledMethods": 2774,
+            "ilBytes": 217197,
+            "compilationTicks": 20825627
+          },
+          "minimumSeconds": 20,
+          "quietSeconds": 10,
+          "capSeconds": 120
+        },
+        {
+          "start": {
+            "compiledMethods": 2771,
+            "ilBytes": 216946,
+            "compilationTicks": 22745775
+          },
+          "end": {
+            "compiledMethods": 2773,
+            "ilBytes": 217188,
+            "compilationTicks": 22754572
+          },
+          "minimumSeconds": 20,
+          "quietSeconds": 10,
+          "capSeconds": 120
+        }
+      ],
+      "chrysalisWarmupIterations": [
+        3306,
+        3289,
+        2617,
+        2775,
+        2686
+      ],
+      "ratioChrysalisOverRust": {
+        "pairs": 5,
+        "mean": 11.07187683110742,
+        "confidence95": [
+          10.092970589244281,
+          12.05078307297056
+        ],
+        "pairedRatios": [
+          9.695262586631188,
+          11.708679913728854,
+          11.291341717947697,
+          11.299969277210584,
+          11.364130660018784
+        ],
+        "method": "arithmetic mean paired process ratios; two-sided Student-t95% CI"
+      }
+    },
+    "walk": {
+      "blocksPerIteration": 30,
+      "iterationsPerProcess": 20000,
+      "itemsPerIteration": 21051,
+      "validatedChecksSha256": "7c93370a3e7cf4a86b1ec60127dcff1d10b1500abafed68a9066c6b841fb8742",
+      "chrysalisElapsedNs": [
+        6679241867,
+        7133354835,
+        6912735199,
+        6924095470,
+        6975020674
+      ],
+      "rustElapsedNs": [
+        3894677246,
+        4002845176,
+        4242704821,
+        4206193105,
+        4303544987
+      ],
+      "chrysalisJit": [
+        {
+          "start": {
+            "compiledMethods": 336,
+            "ilBytes": 29698,
+            "compilationTicks": 2633824
+          },
+          "end": {
+            "compiledMethods": 336,
+            "ilBytes": 29698,
+            "compilationTicks": 2633824
+          },
+          "minimumSeconds": 20,
+          "quietSeconds": 10,
+          "capSeconds": 120
+        },
+        {
+          "start": {
+            "compiledMethods": 336,
+            "ilBytes": 29698,
+            "compilationTicks": 2045629
+          },
+          "end": {
+            "compiledMethods": 336,
+            "ilBytes": 29698,
+            "compilationTicks": 2045629
+          },
+          "minimumSeconds": 20,
+          "quietSeconds": 10,
+          "capSeconds": 120
+        },
+        {
+          "start": {
+            "compiledMethods": 336,
+            "ilBytes": 29698,
+            "compilationTicks": 1720497
+          },
+          "end": {
+            "compiledMethods": 336,
+            "ilBytes": 29698,
+            "compilationTicks": 1720497
+          },
+          "minimumSeconds": 20,
+          "quietSeconds": 10,
+          "capSeconds": 120
+        },
+        {
+          "start": {
+            "compiledMethods": 336,
+            "ilBytes": 29698,
+            "compilationTicks": 1628877
+          },
+          "end": {
+            "compiledMethods": 336,
+            "ilBytes": 29698,
+            "compilationTicks": 1628877
+          },
+          "minimumSeconds": 20,
+          "quietSeconds": 10,
+          "capSeconds": 120
+        },
+        {
+          "start": {
+            "compiledMethods": 336,
+            "ilBytes": 29698,
+            "compilationTicks": 1630167
+          },
+          "end": {
+            "compiledMethods": 336,
+            "ilBytes": 29698,
+            "compilationTicks": 1630167
+          },
+          "minimumSeconds": 20,
+          "quietSeconds": 10,
+          "capSeconds": 120
+        }
+      ],
+      "chrysalisWarmupIterations": [
+        52366,
+        55126,
+        59113,
+        57908,
+        58455
+      ],
+      "ratioChrysalisOverRust": {
+        "pairs": 5,
+        "mean": 1.678657798401723,
+        "confidence95": [
+          1.593410900728732,
+          1.763904696074714
+        ],
+        "pairedRatios": [
+          1.7149667212757789,
+          1.78207113224606,
+          1.6293226822625566,
+          1.646166806219421,
+          1.6207616500047988
+        ],
+        "method": "arithmetic mean paired process ratios; two-sided Student-t95% CI"
+      }
+    },
+    "replay": {
+      "blocksPerIteration": 29,
+      "iterationsPerProcess": 1000,
+      "itemsPerIteration": null,
+      "validatedChecksSha256": "74594ef59460af4f8561e328c91c57f68c1750c30e49bf6e493d937e893dc105",
+      "chrysalisElapsedNs": [
+        5271983952,
+        5381892823,
+        5282447963,
+        6496622433,
+        6505910673
+      ],
+      "rustElapsedNs": [
+        6305506066,
+        5801640082,
+        7054521694,
+        6960789170,
+        6839012796
+      ],
+      "chrysalisJit": [
+        {
+          "start": {
+            "compiledMethods": 2666,
+            "ilBytes": 211548,
+            "compilationTicks": 12177792
+          },
+          "end": {
+            "compiledMethods": 2670,
+            "ilBytes": 211857,
+            "compilationTicks": 12184042
+          },
+          "minimumSeconds": 20,
+          "quietSeconds": 10,
+          "capSeconds": 120
+        },
+        {
+          "start": {
+            "compiledMethods": 2686,
+            "ilBytes": 212386,
+            "compilationTicks": 14292023
+          },
+          "end": {
+            "compiledMethods": 2689,
+            "ilBytes": 212687,
+            "compilationTicks": 14297016
+          },
+          "minimumSeconds": 20,
+          "quietSeconds": 10,
+          "capSeconds": 120
+        },
+        {
+          "start": {
+            "compiledMethods": 2668,
+            "ilBytes": 211687,
+            "compilationTicks": 12698459
+          },
+          "end": {
+            "compiledMethods": 2671,
+            "ilBytes": 211988,
+            "compilationTicks": 12704005
+          },
+          "minimumSeconds": 20,
+          "quietSeconds": 10,
+          "capSeconds": 120
+        },
+        {
+          "start": {
+            "compiledMethods": 2728,
+            "ilBytes": 216387,
+            "compilationTicks": 13676729
+          },
+          "end": {
+            "compiledMethods": 2731,
+            "ilBytes": 216688,
+            "compilationTicks": 13685319
+          },
+          "minimumSeconds": 20,
+          "quietSeconds": 10,
+          "capSeconds": 120
+        },
+        {
+          "start": {
+            "compiledMethods": 2682,
+            "ilBytes": 212234,
+            "compilationTicks": 16643125
+          },
+          "end": {
+            "compiledMethods": 2692,
+            "ilBytes": 212738,
+            "compilationTicks": 16671757
+          },
+          "minimumSeconds": 20,
+          "quietSeconds": 10,
+          "capSeconds": 120
+        }
+      ],
+      "chrysalisWarmupIterations": [
+        8797,
+        9370,
+        8613,
+        12969,
+        7427
+      ],
+      "ratioChrysalisOverRust": {
+        "pairs": 5,
+        "mean": 0.8794312534005734,
+        "confidence95": [
+          0.7730985654205683,
+          0.9857639413805784
+        ],
+        "pairedRatios": [
+          0.836092122792036,
+          0.927650241471839,
+          0.7488031353695912,
+          0.933316937826462,
+          0.9512938295429386
+        ],
+        "method": "arithmetic mean paired process ratios; two-sided Student-t95% CI"
+      }
+    }
+  },
+  "peerConnections": 10,
+  "completedRangesPerConnection": [
+    9797,
+    1001,
+    1001,
+    10370,
+    9613,
+    1001,
+    1001,
+    13969,
+    8427,
+    1001
+  ],
+  "rustRuntime": "tokio default multi-thread",
+  "networkMagic": 1
+}
