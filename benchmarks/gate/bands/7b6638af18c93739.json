@@ -1,0 +1,47 @@
+{
+  "pairs": 10,
+  "meanDifferenceBytes": -33.12375000000011,
+  "confidence95DifferenceBytes": [
+    -87.02231188204696,
+    20.77481188204675
+  ],
+  "pairedDifferencesBytes": [
+    0,
+    -105.60000000000036,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    -225.63750000000073
+  ],
+  "baselineMeanBytes": 9321.12375,
+  "comparisonMeanBytes": 9288,
+  "baselineConfidence95Bytes": [
+    9267.225188117955,
+    9375.022311882047
+  ],
+  "comparisonConfidence95Bytes": [
+    9288.0,
+    9288.0
+  ],
+  "absoluteNoiseBandBytes": 87.02231188204696,
+  "observedDifferenceMinimumBytes": -225.63750000000073,
+  "observedDifferenceMaximumBytes": 0,
+  "purpose": "baseline-noise",
+  "key": "TxBench.SimpleBuildSign|direct|direct|10.0.9|fc82f3d9193a8bd801b7168d75f7e94b49f9416e0550a3db3897177d4ea3ea2b",
+  "baselineCommit": "7c45d47c87c63520cea84212dbd01ecc8d372ac3",
+  "treeId": "af423f50cfbe825acf786ba0d63ca6c36e242fab",
+  "runtime": "10.0.9",
+  "dllClosureSha256": "93376774805f9475c47b9e08949de0daebb03ee7b60149a5e9866d3ea0648623",
+  "replay": null,
+  "row": "TxBench.SimpleBuildSign",
+  "design": "direct",
+  "window": "direct",
+  "corpusId": "fc82f3d9193a8bd801b7168d75f7e94b49f9416e0550a3db3897177d4ea3ea2b",
+  "sealId": "642db3b7407d56a94f6cef34496f33199415e4df4aec57720e51acce49040e77",
+  "rawSha256": "a0e62d22fbbe8b79c114e399c2ccf07c5111c1540c38f68d8a8da3b40327b22a",
+  "createdUtc": "2026-11-17T00:14:06.420541+00:00"
+}

@@ -77,8 +77,8 @@ def log_json(text):
     return json.JSONDecoder().raw_decode(text[start:])[0]
 
 
-def git_environment(**overrides):
-    env = dict(os.environ, **overrides)
+def git_environment(base=None, **overrides):
+    env = dict(os.environ if base is None else base, **overrides)
     env["GIT_OPTIONAL_LOCKS"] = "0"
     return env
 
@@ -104,12 +104,12 @@ def run(command, output, label, env=None, cwd=None):
     return metadata
 
 
-def working_tree_id(source):
+def working_tree_id(source, *, env=None):
     """Git content tree of tracked + unignored working files; never use the real index."""
     temporary = REPO / "benchmarks/out"
     temporary.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="source-index-", dir=temporary) as directory:
-        env = git_environment(GIT_INDEX_FILE=str(Path(directory) / "index"))
+        env = git_environment(base=env, GIT_INDEX_FILE=str(Path(directory) / "index"))
         git = ["git", "-C", str(source)]
         subprocess.check_call([*git, "read-tree", "HEAD"], env=env)
         subprocess.check_call([*git, "add", "--all", "--", "."], env=env)
@@ -159,15 +159,13 @@ def n2n_container_command(image, binary, result, range_path):
             "dotnet", mounted(binary), "network", "n2n", "127.0.0.1", mounted(range_path)]
 
 
-def stage(side, source, output, snapshot=None):
-    sdk = "10.0.301" if side == "baseline" else "11.0.100"
-    tfm = "net10.0" if side == "baseline" else "net11.0"
+def stage(side, source, output, snapshot=None, *, sdk, tfm, project_snapshot=None):
     directory = output / "build" / side
     directory.mkdir(parents=True, exist_ok=True)
     files = snapshot if snapshot is not None else {file.name: file.read_bytes() for file in HARNESS.glob("*.cs")}
     for name, content in files.items():
         (directory / name).write_bytes(content)
-    project = (HARNESS / "Chrysalis.Benchmarks.csproj").read_text().replace("net11.0", tfm)
+    project = (project_snapshot if project_snapshot is not None else (HARNESS / "Chrysalis.Benchmarks.csproj").read_text()).replace("net11.0", tfm)
     project = project.replace("$(MSBuildThisFileDirectory)../..", str(source))
     (directory / "Chrysalis.Benchmarks.csproj").write_text(project)
     (directory / "global.json").write_text(json.dumps({"sdk": {"version": sdk, "rollForward": "disable"}}))
@@ -302,7 +300,9 @@ def perform(args, output, state, sources, sides):
             state["sides"][side] = info
             binaries[side] = binary
         else:
-            directory, binary, sdk = stage(side, sources[side], output, snapshot)
+            directory, binary, sdk = stage(side, sources[side], output, snapshot,
+                                           sdk="10.0.301" if side == "baseline" else "11.0.100",
+                                           tfm="net10.0" if side == "baseline" else "net11.0")
             binaries[side] = binary
             info = {"source": str(sources[side]), "commit": command_output("git", "-C", str(sources[side]), "rev-parse", "HEAD"),
                     "dirty": bool(command_output("git", "-C", str(sources[side]), "status", "--porcelain")), "sdk": sdk,

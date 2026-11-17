@@ -1,6 +1,8 @@
 """Narrow review-two regressions; execute only through heavy."""
 from contextlib import contextmanager
 import json
+import io
+import tarfile
 from pathlib import Path
 import sys
 import tempfile
@@ -165,8 +167,23 @@ class ReviewTwoTests(unittest.TestCase):
     def test_clean_baseline_content_id_is_its_head_tree(self):
         function = getattr(runner, "working_tree_id", None)
         self.assertTrue(callable(function), "Missing baseline working-tree content id")
-        repo = runner.REPO.parent / "Chrysalis-7c45d47"
-        self.assertEqual(function(repo), runner.command_output("git", "-C", str(repo), "rev-parse", "HEAD^{tree}"))
+        # A clean HEAD export is enough; no sibling checkout is required on the Mac.
+        with temporary_root() as repo:
+            data = runner.subprocess.check_output(["git", "-C", str(runner.REPO), "archive", "HEAD"])
+            with tarfile.open(fileobj=io.BytesIO(data)) as archive:
+                for member in archive:
+                    destination = repo / member.name
+                    self.assertTrue(destination.resolve().is_relative_to(repo.resolve()))
+                    if member.isdir():
+                        destination.mkdir(parents=True, exist_ok=True)
+                    else:
+                        self.assertTrue(member.isfile())
+                        destination.parent.mkdir(parents=True, exist_ok=True)
+                        destination.write_bytes(archive.extractfile(member).read())
+                        destination.chmod(member.mode)
+            git_dir = runner.command_output("git", "-C", str(runner.REPO), "rev-parse", "--absolute-git-dir")
+            (repo / ".git").write_text("gitdir: " + git_dir + "\n")
+            self.assertEqual(function(repo), runner.command_output("git", "-C", str(runner.REPO), "rev-parse", "HEAD^{tree}"))
 
     def test_resolved_bdn_package_is_read_from_assets(self):
         function = getattr(runner, "resolved_benchmarkdotnet_version", None)
@@ -183,7 +200,8 @@ class ReviewTwoTests(unittest.TestCase):
             labels = []
             args = SimpleNamespace(runtime11_version="11.0.0", measure="direct", mode="smoke", filter="*", pairs=None,
                                    skip_network=True, n2n_container=False, node_already_running=True)
-            def stage(side, source, destination, snapshot):
+            def stage(side, source, destination, snapshot, *, sdk, tfm):
+                self.assertEqual((sdk, tfm), ("10.0.301", "net10.0") if side == "baseline" else ("11.0.100", "net11.0"))
                 directory = destination / "build" / side
                 directory.mkdir(parents=True)
                 binary = directory / "bin/Chrysalis.Benchmarks.dll"

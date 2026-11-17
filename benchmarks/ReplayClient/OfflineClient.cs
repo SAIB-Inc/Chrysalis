@@ -23,7 +23,7 @@ internal static class OfflineClient
     private delegate Task<long> ReadPass(bool n2n, IBearer bearer, ChannelBuffer chain, ChannelBuffer fetch,
         byte[][] n2c, byte[][] headers, byte[][] bodies, byte[][] digests, CancellationToken token);
 
-    internal static async Task RunAsync(string output)
+    internal static async Task RunAsync(string output, bool nodeToNode)
     {
         Assembly harness = typeof(CoreBench).Assembly;
         Type fixtures = harness.GetType("Chrysalis.Benchmarks.Fixtures", true)!;
@@ -57,7 +57,7 @@ internal static class OfflineClient
         ReadPass read = Expression.Lambda<ReadPass>(Expression.Call(method, call), parameters).Compile();
         using IBearer bearer = (IBearer)Activator.CreateInstance(bearerType, true)!;
         using Plexer plexer = new(bearer);
-        ChannelBuffer chain = new(plexer.SubscribeClient(ProtocolType.NodeChainSync));
+        ChannelBuffer chain = new(plexer.SubscribeClient(nodeToNode ? ProtocolType.NodeChainSync : ProtocolType.ClientChainSync));
         ChannelBuffer fetch = new(plexer.SubscribeClient(ProtocolType.BlockFetch));
         using CancellationTokenSource cancellation = new(TimeSpan.FromMinutes(8));
         Task worker = plexer.RunAsync(cancellation.Token);
@@ -69,11 +69,12 @@ internal static class OfflineClient
             {
                 bool warmup = index <= Program.WarmupPasses;
                 int pass = warmup ? index : index - Program.WarmupPasses;
+                if (!warmup && pass == 1) { await Program.MarkAsync("MEASURED_START").ConfigureAwait(false); }
                 GC.Collect(); GC.WaitForPendingFinalizers(); GC.Collect();
                 int gen0 = GC.CollectionCount(0), gen1 = GC.CollectionCount(1), gen2 = GC.CollectionCount(2);
                 long before = GC.GetTotalAllocatedBytes(true);
                 long start = Stopwatch.GetTimestamp();
-                long wireBytes = await read(true, bearer, chain, fetch, n2c, headers, bodies, digests, cancellation.Token).ConfigureAwait(false);
+                long wireBytes = await read(nodeToNode, bearer, chain, fetch, n2c, headers, bodies, digests, cancellation.Token).ConfigureAwait(false);
                 long end = Stopwatch.GetTimestamp();
                 long allocated = GC.GetTotalAllocatedBytes(true) - before;
                 int delta0 = GC.CollectionCount(0) - gen0, delta1 = GC.CollectionCount(1) - gen1, delta2 = GC.CollectionCount(2) - gen2;
@@ -81,6 +82,7 @@ internal static class OfflineClient
                 if (wireBytes != expected) { throw new InvalidDataException("Offline fixed work changed."); }
                 series.Add(warmup, pass, n2c.Length, allocated, start, end, wireBytes, delta0, delta1, delta2);
             }
+            await Program.MarkAsync("MEASURED_END").ConfigureAwait(false);
         }
         finally
         {
@@ -92,6 +94,7 @@ internal static class OfflineClient
         await File.WriteAllTextAsync(output, JsonSerializer.Serialize(new
         {
             runtime = Environment.Version.ToString(),
+            replay = nodeToNode ? "offline" : "offline-n2c",
             operation = "Unmodified harness OfflineReplay.ReadPassAsync / ReplayBearer, original 30-block corpus repeated34 times/pass",
             limitation = "No fragmented messages: complete single-mux body allocation control, not the captured1000-block fragmentation workload",
             warmupPasses = Program.WarmupPasses,

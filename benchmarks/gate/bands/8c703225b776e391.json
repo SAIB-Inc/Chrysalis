@@ -1,0 +1,47 @@
+{
+  "pairs": 10,
+  "meanDifferenceBytes": -0.05278666666672507,
+  "confidence95DifferenceBytes": [
+    -2.407969187626621,
+    2.3023958542931706
+  ],
+  "pairedDifferencesBytes": [
+    0.20346666666682722,
+    -7.68080000000009,
+    4.255466666666507,
+    0.4453333333331102,
+    -0.8061333333334915,
+    1.3096000000005006,
+    0.5235999999995329,
+    2.2061333333331277,
+    -2.966933333333145,
+    1.9823999999998705
+  ],
+  "baselineMeanBytes": 7914.59616,
+  "comparisonMeanBytes": 7914.543373333333,
+  "baselineConfidence95Bytes": [
+    7911.257928130786,
+    7917.934391869214
+  ],
+  "comparisonConfidence95Bytes": [
+    7911.308471075456,
+    7917.77827559121
+  ],
+  "absoluteNoiseBandBytes": 2.407969187626621,
+  "observedDifferenceMinimumBytes": -7.68080000000009,
+  "observedDifferenceMaximumBytes": 4.255466666666507,
+  "purpose": "baseline-noise",
+  "key": "tcp|long|steady|10.0.9|04523c8ca1f3def183ed1c0c7e641dd4afbabfd6ed2363646be6d8c493549487",
+  "baselineCommit": "7c45d47c87c63520cea84212dbd01ecc8d372ac3",
+  "treeId": "af423f50cfbe825acf786ba0d63ca6c36e242fab",
+  "runtime": "10.0.9",
+  "dllClosureSha256": "93376774805f9475c47b9e08949de0daebb03ee7b60149a5e9866d3ea0648623",
+  "replay": "tcp",
+  "row": "replay/tcp/steady",
+  "design": "long",
+  "window": "steady",
+  "corpusId": "04523c8ca1f3def183ed1c0c7e641dd4afbabfd6ed2363646be6d8c493549487",
+  "sealId": "642db3b7407d56a94f6cef34496f33199415e4df4aec57720e51acce49040e77",
+  "rawSha256": "385592045146e7fba59c992be06d65a38137876fe7818bbe949cefbd185a3e11",
+  "createdUtc": "2026-11-17T00:53:23.315230+00:00"
+}

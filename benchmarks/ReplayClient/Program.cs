@@ -55,19 +55,38 @@ internal static class Program
             path = assembly.Location
         })];
 
-    private static async Task Main(string[] args)
+    private static bool Observed { get; set; }
+
+    internal static async Task MarkAsync(string mark)
+    {
+        if (!Observed) { return; }
+        Console.WriteLine(mark);
+        _ = await Task.Run(Console.ReadLine).WaitAsync(TimeSpan.FromSeconds(30)).ConfigureAwait(false) ?? throw new EndOfStreamException();
+    }
+
+    private static async Task<int> Main(string[] args)
     {
         _ = ProcessSettings;
-        if (args.Length != 4 || args[0] is not ("tcp" or "offline") || string.IsNullOrWhiteSpace(args[1]) ||
+        Observed = args.Length == 5 && args[4] == "--observed";
+        if ((args.Length != 4 && !Observed) || args[0] is not ("tcp" or "offline" or "offline-n2c") || string.IsNullOrWhiteSpace(args[1]) ||
             !int.TryParse(args[2], NumberStyles.None, CultureInfo.InvariantCulture, out int warmup) || warmup <= 0 ||
             !int.TryParse(args[3], NumberStyles.None, CultureInfo.InvariantCulture, out int measured) || measured <= 0 ||
             warmup >= int.MaxValue - measured)
         {
-            throw new ArgumentException("Expected tcp|offline OUTPUT_JSON WARMUP MEASURED, with positive integer counts and total below Int32.MaxValue.", nameof(args));
+            throw new ArgumentException("Expected tcp|offline|offline-n2c OUTPUT_JSON WARMUP MEASURED [--observed], with positive integer counts and total below Int32.MaxValue.", nameof(args));
         }
         WarmupPasses = warmup;
         Passes = measured;
-        if (args[0] == "tcp") { await TcpClient.RunAsync(args[1]).ConfigureAwait(false); }
-        else { await OfflineClient.RunAsync(args[1]).ConfigureAwait(false); }
+        try
+        {
+            if (args[0] == "tcp") { await TcpClient.RunAsync(args[1]).ConfigureAwait(false); }
+            else { await OfflineClient.RunAsync(args[1], args[0] != "offline-n2c").ConfigureAwait(false); }
+            return 0;
+        }
+        catch (Exception exception) when (Observed && exception is TimeoutException or EndOfStreamException)
+        {
+            await Console.Error.WriteLineAsync("Measured-window acknowledgement missing.").ConfigureAwait(false);
+            return 3;
+        }
     }
 }

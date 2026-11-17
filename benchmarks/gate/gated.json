@@ -1,0 +1,29 @@
+{
+  "defaults": {
+    "change": {"directPairs": 3, "replayPairs": 20, "design": "short"},
+    "release": {"directPairs": 5, "replayPairs": 10, "design": "long", "coldPairs": 20},
+    "bandPairs": 10,
+    "timePairs": 16
+  },
+  "direct": {"FieldReadBench.ReadEveryField": "range"},
+  "replays": ["tcp", "offline", "offline-n2c"],
+  "time": {
+    "scope": "D51: sync-path replays and every other hot path; MR3 implements time",
+    "required": ["time/preprod-tcp", "time/preprod-offline", "time/micro-hashing", "time/micro-signing", "time/micro-transactions", "time/micro-plutus", "time/micro-encoding", "time/micro-n2c"],
+    "noise": {
+      "offline": {"band": 0.0231, "design": "long", "machine": "performance-8x", "source": "P1-run3"},
+      "tcp": {"band": 0.0307, "design": "long", "machine": "performance-8x", "source": "P1-run3"}
+    }
+  },
+  "areas": {
+    "Network receive": {"bytes": ["replay/*", "CoreBench.MuxDecodeHeader", "NetworkHeaderBench.*"], "time": ["time/preprod-*", "time/micro-n2c"]},
+    "Network send": {"bytes": ["CoreBench.MuxEncode*", "replay/tcp/*"], "time": ["time/preprod-tcp"]},
+    "CBOR decode": {"bytes": ["*Decode*", "CoreBench.*Read", "FieldReadBench.ReadEveryField"], "time": ["time/preprod-*"]},
+    "CBOR encode and re-serialisation": {"bytes": ["*Reencode*", "*Serialize*"], "time": ["time/micro-encoding"]},
+    "Hashing": {"bytes": ["CoreBench.Blake256"], "time": ["time/micro-hashing"]},
+    "Signing and addresses": {"bytes": ["CoreBench.Sign", "CoreBench.Verify", "CoreBench.Address*"], "time": ["time/micro-signing"]},
+    "Transaction building and fees": {"bytes": ["TxBench.*"], "time": ["time/micro-transactions"]},
+    "Plutus": {"bytes": ["VmBench.*", "CorpusVmBench.*"], "time": ["time/micro-plutus"]},
+    "UTxO RPC": {"bytes": [], "time": [], "manual": "D20: attach the first measurement for alpha 1; no invented baseline"}
+  }
+}

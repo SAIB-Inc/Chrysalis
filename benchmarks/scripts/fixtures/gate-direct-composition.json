@@ -1,0 +1,1 @@
+{"processFilter":"CoreBench.Sign,BlockBench.DecodeBlockReadInputs,TxBench.SimpleBuildSign,TxBench.SimpleBuildFeeSign,TxBench.ScriptBuildFeeSign,VmBench.DecodeAndEvaluate","sourceJobSha256":"1dbf120ee31cd4a8cf8cefe906f7054ff135f9bf5c318a2b10c9ce0b4e8602ba","sourceSealId":"642db3b7407d56a94f6cef34496f33199415e4df4aec57720e51acce49040e77"}
