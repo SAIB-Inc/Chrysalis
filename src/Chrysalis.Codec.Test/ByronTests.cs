@@ -1,4 +1,5 @@
 using Chrysalis.Codec.Extensions;
+using SAIB.Cbor.Serialization;
 using Chrysalis.Codec.Serialization;
 using Chrysalis.Codec.Types.Cardano.Core;
 using Chrysalis.Codec.Types.Cardano.Core.Byron;
@@ -11,6 +12,65 @@ public class ByronTests
     {
         string hex = File.ReadAllText(Path.Combine("TestData", filename)).Trim();
         return Convert.FromHexString(hex);
+    }
+
+    [Fact]
+    public void ReadingAByronMainBlockDoesNotAllocateAValidator()
+    {
+        CborReader reader = new(LoadTestBlock("byron1.block"));
+        reader.ReadBeginArray();
+        _ = reader.ReadSize();
+        _ = reader.ReadUInt64();
+        byte[] body = reader.ReadDataItem().ToArray();
+        for (int i = 0; i < 1024; i++)
+        {
+            _ = ByronMainBlock.Read(body);
+        }
+        long before = GC.GetAllocatedBytesForCurrentThread();
+        int consumed = 0;
+        for (int i = 0; i < 4096; i++)
+        {
+            consumed = ByronMainBlock.Read(body).Raw.Length;
+        }
+        long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+        Assert.Equal(body.Length, consumed);
+        Assert.Equal(0, allocated);
+    }
+
+    [Fact]
+    public void TagOneByronBlockWithByteStringBodyProofIsRejected()
+    {
+        byte[] original = LoadTestBlock("byron1.block");
+        CborReader reader = new(original);
+        reader.ReadBeginArray();
+        _ = reader.ReadSize();
+        Assert.Equal(1UL, reader.ReadUInt64());
+        reader.ReadBeginArray();
+        _ = reader.ReadSize();
+        reader.ReadBeginArray();
+        _ = reader.ReadSize();
+        reader.SkipDataItem();
+        reader.SkipDataItem();
+        int proofStart = original.Length - reader.Buffer.Length;
+        reader.SkipDataItem();
+        int proofEnd = original.Length - reader.Buffer.Length;
+        byte[] malformed = [.. original.AsSpan(0, proofStart), 0x41, 0x00, .. original.AsSpan(proofEnd)];
+
+        BlockWithEra envelope = BlockWithEra.Read(malformed);
+        Assert.Equal(1, envelope.EraNumber);
+        Exception exception = Assert.Throws<Exception>(() => envelope.Block);
+        Assert.Equal("Validation failed", exception.Message);
+    }
+
+    [Theory]
+    [InlineData("82F6F6")]
+    [InlineData("84F6F6F6F6")]
+    [InlineData("9FF6F6FF")]
+    [InlineData("9FF6F6F6F6FF")]
+    public void ByronMainBlocksRejectWrongMemberCount(string hex)
+    {
+        byte[] malformed = Convert.FromHexString(hex);
+        _ = Assert.Throws<FormatException>(() => ByronMainBlock.Read(malformed));
     }
 
     [Theory]

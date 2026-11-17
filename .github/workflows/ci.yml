@@ -21,7 +21,11 @@ jobs:
             code:
               - 'src/**'
               - '*.slnx'
-              - 'Directory.Build.props'
+              - '.editorconfig'
+              - 'Directory.*.props'
+              - 'Directory.Build.targets'
+              - 'global.json'
+              - 'scripts/test-manifest.py'
               - '.github/workflows/ci.yml'
 
       - name: Setup .NET 10
@@ -48,7 +52,7 @@ jobs:
 
       - name: Test
         if: steps.changes.outputs.code == 'true'
-        run: dotnet test --no-build --filter "Category!=Integration"
+        run: dotnet test --no-build --no-restore --filter "Category!=Integration" --logger trx --results-directory out/test-results
 
       - name: Pack (dry run)
         if: steps.changes.outputs.code == 'true'

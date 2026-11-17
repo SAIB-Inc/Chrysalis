@@ -2,7 +2,9 @@ using System.Buffers;
 using System.Collections.Concurrent;
 using System.Reflection;
 using System.Runtime.CompilerServices;
+using System.Runtime.ExceptionServices;
 using Chrysalis.Codec.Types;
+using Chrysalis.Codec.Types.Cardano.Core;
 using SAIB.Cbor.Serialization;
 
 namespace Chrysalis.Codec.Serialization;
@@ -219,9 +221,17 @@ public static class GenericSerializationUtil
             ?? throw new NotSupportedException($"Type {type.FullName} does not have a valid static Read(ReadOnlyMemory<byte>, out int) method.");
 
         object?[] args = [data, 0];
-        object? result = readMethod.Invoke(null, args);
-        bytesConsumed = (int)args[1]!;
-        return result;
+        try
+        {
+            object? result = readMethod.Invoke(null, args);
+            bytesConsumed = (int)args[1]!;
+            return result;
+        }
+        catch (TargetInvocationException exception) when (exception.InnerException is UnknownEraException)
+        {
+            ExceptionDispatchInfo.Capture(exception.InnerException).Throw();
+            throw;
+        }
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -282,7 +292,7 @@ public static class GenericSerializationUtil
 
             return ((ReadHandler<T>)readDelegate)(data);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not UnknownEraException)
         {
             throw new InvalidOperationException($"Failed to read type {typeof(T).FullName}: {ex.Message}", ex);
         }
@@ -321,6 +331,11 @@ public static class GenericSerializationUtil
             }
 
             return readDelegateNonNullable.DynamicInvoke(data);
+        }
+        catch (TargetInvocationException exception) when (exception.InnerException is UnknownEraException)
+        {
+            ExceptionDispatchInfo.Capture(exception.InnerException).Throw();
+            throw;
         }
         catch (Exception ex) when (ex is not InvalidOperationException)
         {

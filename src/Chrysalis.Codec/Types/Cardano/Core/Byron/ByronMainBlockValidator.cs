@@ -1,4 +1,5 @@
 using Chrysalis.Codec.Serialization;
+using SAIB.Cbor.Serialization;
 
 namespace Chrysalis.Codec.Types.Cardano.Core.Byron;
 
@@ -7,19 +8,15 @@ namespace Chrysalis.Codec.Types.Cardano.Core.Byron;
 /// (not an EBB). The discriminator is the header's BodyProof field:
 /// main blocks have a CBOR array (ByronBlockProof), EBBs have a bytestring hash.
 /// </summary>
-public class ByronMainBlockValidator : ICborValidator<ByronMainBlock>
+public readonly record struct ByronMainBlockValidator : ICborValidator<ByronMainBlock>
 {
     public bool Validate(ByronMainBlock input)
     {
-        // BodyProof is field 2 of ByronBlockHead (a lazy struct).
-        // Check the first byte's CBOR major type: 4 = array, 2 = bytes.
-        ReadOnlyMemory<byte> bodyProofSlice = input.Header._field2;
-        if (bodyProofSlice.Length == 0)
-        {
-            return false;
-        }
-
-        int majorType = bodyProofSlice.Span[0] >> 5;
-        return majorType == 4; // CBOR array
+        CborReader reader = new(input._field0.Span);
+        reader.ReadBeginArray();
+        _ = reader.ReadSize();
+        reader.SkipDataItem();
+        reader.SkipDataItem();
+        return !reader.Buffer.IsEmpty && reader.Buffer[0] >> 5 == 4;
     }
 }
