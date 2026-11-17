@@ -1,0 +1,13 @@
+[
+  {
+    "path": "icarus.json",
+    "source": "https://github.com/cardano-foundation/CIPs/blob/a4068a577790e7b17d2d6f00f6e54990cfcb7955/CIP-0003/Icarus.md",
+    "version": "a4068a577790e7b17d2d6f00f6e54990cfcb7955",
+    "license": "CC-BY-4.0",
+    "derived": true,
+    "sourceSha256": "f83da5fbdc6865a0de83edb7219208908e109b2a50671c8a9682d7c3d1179a85",
+    "attributionSource": "https://github.com/cardano-foundation/CIPs/blob/a4068a577790e7b17d2d6f00f6e54990cfcb7955/CIP-0003/README.md",
+    "attributionSourceSha256": "84a4abe37702847073aac805452c570ac8bc80a8723d89875826f3d5f1f034e4",
+    "sha256": "e0c45b6f65115353b17a552239f18dbabe49a4e71b566ef8cea4e750e857c83b"
+  }
+]

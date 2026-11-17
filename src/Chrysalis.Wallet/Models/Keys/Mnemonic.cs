@@ -1,6 +1,5 @@
 using System.Security.Cryptography;
 using System.Text;
-using Microsoft.AspNetCore.Cryptography.KeyDerivation;
 
 namespace Chrysalis.Wallet.Models.Keys;
 
@@ -269,7 +268,7 @@ public record Mnemonic
     /// </remarks>
     public PrivateKey GetRootKey(string password = "")
     {
-        byte[] rootKey = KeyDerivation.Pbkdf2(password, Entropy, KeyDerivationPrf.HMACSHA512, 4096, 96);
+        byte[] rootKey = Rfc2898DeriveBytes.Pbkdf2(password, Entropy, 4096, HashAlgorithmName.SHA512, 96);
         rootKey[0] &= 0b1111_1000;
         rootKey[31] &= 0b0001_1111;
         rootKey[31] |= 0b0100_0000;
