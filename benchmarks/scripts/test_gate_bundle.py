@@ -23,7 +23,7 @@ class BundleTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 bundle.calibrate_micro(dict(nsPerBlock=value, blocks=16), 16)
 
-    def test_dry_run_and_seal_capture_exact_shared_closure(self):
+    def test_dry_run_and_seal_preserve_distinct_and_shared_closures(self):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
             repo = root / 'repo'
@@ -47,14 +47,21 @@ class BundleTests(unittest.TestCase):
             (client / 'ReplayClient.dll').write_text('OBVIOUS TEST PLACEHOLDER')
             (client / 'Chrysalis.Benchmarks.dll').write_text('OBVIOUS TEST PLACEHOLDER')
             staged = dict(side(), client=str(client / 'ReplayClient.dll'), harness=str(client / 'Chrysalis.Benchmarks.dll'), dllSha256s=gate.closure_hashes(client))
+            baseline_client = root / 'baseline-client'
+            shutil.copytree(client, baseline_client)
+            (baseline_client / 'ReplayClient.dll').write_text('OBVIOUS DIFFERENT BASELINE DLL')
+            baseline = dict(staged, client=str(baseline_client / 'ReplayClient.dll'),
+                            harness=str(baseline_client / 'Chrysalis.Benchmarks.dll'), dllSha256s=gate.closure_hashes(baseline_client))
+            builds = dict(baseline=baseline, candidate=staged)
             r = row()
-            r['sides'] = dict(baseline=gate.public_side(staged), candidate=gate.public_side(staged))
+            r['sides'] = {role: gate.public_side(spec) for role, spec in builds.items()}
             output = root / 'output'; output.mkdir()
             config = dict(_mode='change', time=dict(noise={'offline': r['noise']}, option=2))
             calls = []
             mutate = False
             def fake(spec, job, destination):
                 calls.append(copy.deepcopy(job))
+                self.assertEqual(gate.closure_hashes((Path(job['root']) / spec['client']).parent), spec['dllSha256s'])
                 fixture_root = Path(job['environment']['CHRYSALIS_BENCHMARK_DATA'])
                 hashes = json.loads((fixture_root / 'sha256.json').read_text())
                 self.assertTrue(all(gate.digest(fixture_root / name) == expected for name, expected in hashes.items()))
@@ -73,16 +80,22 @@ class BundleTests(unittest.TestCase):
             with patch.object(gate, 'REPO', repo), patch.object(gate.runner, 'DOTNET_ROOT', runtime), \
                     patch.object(bundle.subprocess, 'check_output', return_value='fly fixture-v1'), \
                     patch.object(timing.session, 'member', side_effect=fake):
-                result = bundle.prepare(output, [r], {'candidate': staged}, config,
+                result = bundle.prepare(output, [r], builds, config,
                                         dict(flyPythonRoot=str(python.parent), corporaRoot='unused', flyBudgetLeftUsd=40))
+            installed_sides = result['timePlans'][0]['rows'][0]['sides']
+            self.assertNotEqual(installed_sides['baseline']['client'], installed_sides['candidate']['client'])
             self.assertEqual(len(calls), 2)
             self.assertTrue(all(job['counts'] == [1, 1] for job in calls))
             micro=dict(r,id='time/micro-hashing')
+            shared_micro = dict(micro, sides={role: gate.public_side(staged) for role in builds})
             micro_output=root/'micro-output';micro_output.mkdir()
             micro_config=copy.deepcopy(config);micro_config['time']['micro']={'hashing':'CoreBench.Blake256'}
             calls.clear()
             with patch.object(gate,'REPO',repo),patch.object(gate.runner,'DOTNET_ROOT',runtime),patch.object(bundle.subprocess,'check_output',return_value='fly fixture-v1'),patch.object(timing.session,'member',side_effect=fake):
-                bundle.prepare(micro_output,[micro],{'candidate':staged},micro_config,dict(flyPythonRoot=str(python.parent),corporaRoot='unused',flyBudgetLeftUsd=40))
+                micro_result = bundle.prepare(micro_output, [shared_micro], dict(candidate=staged), micro_config,
+                                              dict(flyPythonRoot=str(python.parent), corporaRoot='unused', flyBudgetLeftUsd=40))
+            micro_sides = micro_result['timePlans'][0]['rows'][0]['sides']
+            self.assertEqual(micro_sides['baseline']['client'], micro_sides['candidate']['client'])
             self.assertEqual(len(calls),3)  # baseline probe, then final baseline/candidate
             self.assertEqual(calls[0]['microInvocations'],16)
             self.assertEqual(calls[1]['microInvocations'],calls[2]['microInvocations'])
@@ -90,7 +103,7 @@ class BundleTests(unittest.TestCase):
             changed_output=root/'changed-probe-output';changed_output.mkdir()
             with patch.object(gate,'REPO',repo),patch.object(gate.runner,'DOTNET_ROOT',runtime),patch.object(bundle.subprocess,'check_output',return_value='fly fixture-v1'),patch.object(timing.session,'member',side_effect=fake):
                 with self.assertRaisesRegex(ValueError,'Bundle input changed'):
-                    bundle.prepare(changed_output,[micro],{'candidate':staged},micro_config,dict(flyPythonRoot=str(python.parent),corporaRoot='unused',flyBudgetLeftUsd=40))
+                    bundle.prepare(changed_output,[micro],builds,micro_config,dict(flyPythonRoot=str(python.parent),corporaRoot='unused',flyBudgetLeftUsd=40))
             self.assertEqual(result['timePlans'][0]['rows'][0]['expectedWork'], dict(blocks=1020))
             self.assertIn('input/dry-pairs.json', result['files'])
             with tarfile.open(output / 'input/session-0.tar.gz') as archive:
