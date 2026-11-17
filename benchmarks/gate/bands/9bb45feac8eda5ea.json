@@ -1,0 +1,47 @@
+{
+  "pairs": 10,
+  "meanDifferenceBytes": 0,
+  "confidence95DifferenceBytes": [
+    0.0,
+    0.0
+  ],
+  "pairedDifferencesBytes": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+  ],
+  "baselineMeanBytes": 733360,
+  "comparisonMeanBytes": 733360,
+  "baselineConfidence95Bytes": [
+    733360.0,
+    733360.0
+  ],
+  "comparisonConfidence95Bytes": [
+    733360.0,
+    733360.0
+  ],
+  "absoluteNoiseBandBytes": 0.0,
+  "observedDifferenceMinimumBytes": 0,
+  "observedDifferenceMaximumBytes": 0,
+  "purpose": "baseline-noise",
+  "key": "VmBench.DecodeAndEvaluate|direct|direct|10.0.9|fc82f3d9193a8bd801b7168d75f7e94b49f9416e0550a3db3897177d4ea3ea2b",
+  "baselineCommit": "7c45d47c87c63520cea84212dbd01ecc8d372ac3",
+  "treeId": "af423f50cfbe825acf786ba0d63ca6c36e242fab",
+  "runtime": "10.0.9",
+  "dllClosureSha256": "93376774805f9475c47b9e08949de0daebb03ee7b60149a5e9866d3ea0648623",
+  "replay": null,
+  "row": "VmBench.DecodeAndEvaluate",
+  "design": "direct",
+  "window": "direct",
+  "corpusId": "fc82f3d9193a8bd801b7168d75f7e94b49f9416e0550a3db3897177d4ea3ea2b",
+  "sealId": "642db3b7407d56a94f6cef34496f33199415e4df4aec57720e51acce49040e77",
+  "rawSha256": "a0e62d22fbbe8b79c114e399c2ccf07c5111c1540c38f68d8a8da3b40327b22a",
+  "createdUtc": "2026-11-17T00:14:06.429297+00:00"
+}

@@ -1,0 +1,47 @@
+{
+  "pairs": 10,
+  "meanDifferenceBytes": 1.443437500001164,
+  "confidence95DifferenceBytes": [
+    -4.486773607103533,
+    7.373648607105862
+  ],
+  "pairedDifferencesBytes": [
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    23.57500000001164,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    -9.140625
+  ],
+  "baselineMeanBytes": 368866.2265625,
+  "comparisonMeanBytes": 368867.67,
+  "baselineConfidence95Bytes": [
+    368864.1588094684,
+    368868.2943155316
+  ],
+  "comparisonConfidence95Bytes": [
+    368862.33696448867,
+    368873.0030355113
+  ],
+  "absoluteNoiseBandBytes": 7.373648607105862,
+  "observedDifferenceMinimumBytes": -9.140625,
+  "observedDifferenceMaximumBytes": 23.57500000001164,
+  "purpose": "baseline-noise",
+  "key": "TxBench.ScriptBuildFeeSign|direct|direct|10.0.9|fc82f3d9193a8bd801b7168d75f7e94b49f9416e0550a3db3897177d4ea3ea2b",
+  "baselineCommit": "7c45d47c87c63520cea84212dbd01ecc8d372ac3",
+  "treeId": "af423f50cfbe825acf786ba0d63ca6c36e242fab",
+  "runtime": "10.0.9",
+  "dllClosureSha256": "93376774805f9475c47b9e08949de0daebb03ee7b60149a5e9866d3ea0648623",
+  "replay": null,
+  "row": "TxBench.ScriptBuildFeeSign",
+  "design": "direct",
+  "window": "direct",
+  "corpusId": "fc82f3d9193a8bd801b7168d75f7e94b49f9416e0550a3db3897177d4ea3ea2b",
+  "sealId": "642db3b7407d56a94f6cef34496f33199415e4df4aec57720e51acce49040e77",
+  "rawSha256": "a0e62d22fbbe8b79c114e399c2ccf07c5111c1540c38f68d8a8da3b40327b22a",
+  "createdUtc": "2026-11-17T00:14:06.426536+00:00"
+}

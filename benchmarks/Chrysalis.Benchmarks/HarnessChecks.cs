@@ -21,6 +21,8 @@ internal static class HarnessChecks
     internal static async Task RunAsync()
     {
         List<Exception> failures = [];
+        Check(nameof(DirectFilterPreservesSinglePatterns), DirectFilterPreservesSinglePatterns, failures);
+        Check(nameof(DirectFilterListsMatchUnion), DirectFilterListsMatchUnion, failures);
         Check(nameof(NoBlocksIsNotCounted), NoBlocksIsNotCounted, failures);
         Check(nameof(DuplicateBodiesAreRejectedAfterDraining), DuplicateBodiesAreRejectedAfterDraining, failures);
         Check(nameof(OneBodyIsCounted), OneBodyIsCounted, failures);
@@ -40,6 +42,32 @@ internal static class HarnessChecks
     {
         try { test(); Console.WriteLine("PASS " + name); }
         catch (InvalidDataException exception) { failures.Add(exception); Console.Error.WriteLine("FAIL " + name + ": " + exception.Message); }
+    }
+
+    private static void DirectFilterPreservesSinglePatterns()
+    {
+        foreach (string pattern in new[] { "*", "CoreBench.*", "?oreBench.Sign", "CoreBench.Sign", "absent" })
+        {
+            foreach (string name in new[] { "CoreBench.Sign", "CoreBench.Verify", "TxBench.SimpleBuildSign" })
+            {
+                if (DirectMeasurements.Matches(pattern, name) != System.IO.Enumeration.FileSystemName.MatchesSimpleExpression(pattern, name))
+                {
+                    throw new InvalidDataException("Single direct filter changed its match set.");
+                }
+            }
+        }
+    }
+
+    private static void DirectFilterListsMatchUnion()
+    {
+        foreach (string name in new[] { "CoreBench.Sign", "CoreBench.Verify", "TxBench.SimpleBuildSign" })
+        {
+            bool expected = DirectMeasurements.Matches("CoreBench.Sign", name) || DirectMeasurements.Matches("TxBench.*", name);
+            if (DirectMeasurements.Matches("CoreBench.Sign,TxBench.*", name) != expected)
+            {
+                throw new InvalidDataException("Direct filter list did not match the union.");
+            }
+        }
     }
 
     private static async Task CheckAsync(string name, Func<Task> test, List<Exception> failures)

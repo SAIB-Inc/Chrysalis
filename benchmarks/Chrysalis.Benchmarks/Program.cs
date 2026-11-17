@@ -123,6 +123,9 @@ internal static class ResultSink<T>
 
 internal static class DirectMeasurements
 {
+    internal static bool Matches(string filter, string name) => filter.Split(',')
+        .Any(pattern => System.IO.Enumeration.FileSystemName.MatchesSimpleExpression(pattern, name));
+
     internal static void Run(string filter, string path)
     {
         int warmupMilliseconds = int.Parse(Environment.GetEnvironmentVariable("CHRYSALIS_DIRECT_WARMUP_MS") ?? "1000", CultureInfo.InvariantCulture);
@@ -137,7 +140,7 @@ internal static class DirectMeasurements
                 foreach (MethodInfo method in type.GetMethods().Where(method => method.IsDefined(typeof(BenchmarkAttribute))))
                 {
                     string name = type.Name + "." + method.Name;
-                    if (!System.IO.Enumeration.FileSystemName.MatchesSimpleExpression(filter, name))
+                    if (!Matches(filter, name))
                     {
                         continue;
                     }

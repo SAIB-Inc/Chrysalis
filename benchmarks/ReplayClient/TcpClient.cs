@@ -46,6 +46,7 @@ internal static class TcpClient
         {
             bool warmup = index <= Program.WarmupPasses;
             int pass = warmup ? index : index - Program.WarmupPasses;
+            if (!warmup && pass == 1) { await Program.MarkAsync("MEASURED_START").ConfigureAwait(false); }
             Array.Clear(points);
             await intersect(client.ChainSync, cancellation.Token).ConfigureAwait(false);
             GC.Collect(); GC.WaitForPendingFinalizers(); GC.Collect();
@@ -60,6 +61,7 @@ internal static class TcpClient
             if (bytes != 4_040_750) { throw new InvalidDataException("TCP raw block bytes changed."); }
             series.Add(warmup, pass, points.Length, allocated, start, end, bytes, delta0, delta1, delta2);
         }
+        await Program.MarkAsync("MEASURED_END").ConfigureAwait(false);
         await client.ChainSync.DoneAsync(cancellation.Token).ConfigureAwait(false);
         await client.BlockFetch.DoneAsync(cancellation.Token).ConfigureAwait(false);
         await File.WriteAllTextAsync(output, JsonSerializer.Serialize(new
