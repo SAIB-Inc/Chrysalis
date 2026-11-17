@@ -9,6 +9,10 @@
 
   <ItemGroup>
     <EmbeddedResource Include="Fixtures/Preprod/**/*" />
+    <EmbeddedResource Include="Fixtures/Receive/*.cbor" />
+    <EmbeddedResource Include="Fixtures/Receive/manifest.json" />
+    <EmbeddedResource Include="Receive/Frozen/*.cs" />
+    <EmbeddedResource Include="Receive/Frozen/SOURCE.json" />
     <EmbeddedResource Include="Fixtures/Handshake/**/*">
       <LogicalName>$([System.String]::Copy('Chrysalis.Network.Tests.%(Identity)').Replace('\', '.').Replace('/', '.'))</LogicalName>
     </EmbeddedResource>

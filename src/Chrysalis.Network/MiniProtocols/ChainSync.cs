@@ -165,12 +165,12 @@ public class ChainSync : IMiniProtocol
     /// For use in pipelined sync where the caller manages in-flight count.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public async Task SendNextRequestAsync(CancellationToken cancellationToken) => await _buffer.SendPreEncodedSegmentAsync(_preEncodedNextRequest, cancellationToken).ConfigureAwait(false);
+    public Task SendNextRequestAsync(CancellationToken cancellationToken) => _buffer.SendPreEncodedSegmentAsync(_preEncodedNextRequest, cancellationToken);
 
     /// <summary>
     /// Sends N MsgRequestNext messages in a single batched write for pipelined sync.
     /// </summary>
-    public async Task SendNextRequestBatchAsync(int count, CancellationToken cancellationToken) => await _buffer.SendPreEncodedSegmentBatchAsync(_preEncodedNextRequest, count, cancellationToken).ConfigureAwait(false);
+    public Task SendNextRequestBatchAsync(int count, CancellationToken cancellationToken) => _buffer.SendPreEncodedSegmentBatchAsync(_preEncodedNextRequest, count, cancellationToken);
 
     /// <summary>
     /// Receives the next chain-sync response. A single <see cref="MessageNextResponse"/> union serves
@@ -179,7 +179,7 @@ public class ChainSync : IMiniProtocol
     /// payload shape. Deserialization reports the exact consumed length, keeping the buffer in sync.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public async Task<MessageNextResponse> ReceiveNextResponseAsync(CancellationToken cancellationToken) => await _buffer.ReceiveFullMessageAsync<MessageNextResponse>(cancellationToken).ConfigureAwait(false);
+    public Task<MessageNextResponse> ReceiveNextResponseAsync(CancellationToken cancellationToken) => _buffer.ReceiveFullMessageAsync<MessageNextResponse>(cancellationToken);
 
     /// <summary>
     /// Terminates the Chain-Sync protocol.

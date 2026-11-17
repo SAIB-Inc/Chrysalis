@@ -158,17 +158,16 @@ public static class MuxSegmentCodec
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static MuxSegmentHeader DecodeHeaderSpan(ReadOnlySpan<byte> span)
     {
-        uint transmissionTime = BinaryPrimitives.ReadUInt32BigEndian(span);
-        ushort protocolIdAndMode = BinaryPrimitives.ReadUInt16BigEndian(span.Slice(4, 2));
-        bool mode = (protocolIdAndMode & 0x8000) != 0;
-        ProtocolType protocolId = (ProtocolType)(protocolIdAndMode & 0x7FFF);
-        ushort payloadLength = BinaryPrimitives.ReadUInt16BigEndian(span.Slice(6, 2));
+        ReadHeader(span, out uint transmissionTime, out ProtocolType protocolId, out ushort payloadLength, out bool mode);
+        return new(transmissionTime, protocolId, payloadLength, mode);
+    }
 
-        return new(
-            transmissionTime,
-            protocolId,
-            payloadLength,
-            mode
-        );
+    internal static void ReadHeader(ReadOnlySpan<byte> span, out uint transmissionTime, out ProtocolType protocolId, out ushort payloadLength, out bool mode)
+    {
+        transmissionTime = BinaryPrimitives.ReadUInt32BigEndian(span);
+        ushort protocolIdAndMode = BinaryPrimitives.ReadUInt16BigEndian(span.Slice(4, 2));
+        mode = (protocolIdAndMode & 0x8000) != 0;
+        protocolId = (ProtocolType)(protocolIdAndMode & 0x7FFF);
+        payloadLength = BinaryPrimitives.ReadUInt16BigEndian(span.Slice(6, 2));
     }
 }

@@ -164,7 +164,7 @@ public class Plexer : IDisposable
 **Flow Control**:
 - Respects ingress buffer limits per protocol
 - Throws on buffer overflow (protocol violation)
-- Efficient routing via `ConcurrentDictionary`
+- Routing via a `Dictionary` protected by the shared reader's `Lock`
 
 ### Muxer Implementation
 

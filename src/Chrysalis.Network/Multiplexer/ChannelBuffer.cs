@@ -1,8 +1,8 @@
+using System.Threading.Channels;
 using System.Buffers;
 using Chrysalis.Codec.Serialization;
 using Chrysalis.Codec.Types;
 using Chrysalis.Network.Core;
-using SAIB.Cbor;
 
 namespace Chrysalis.Network.Multiplexer;
 
@@ -10,34 +10,25 @@ namespace Chrysalis.Network.Multiplexer;
 /// Provides buffer management for sending and receiving complete CBOR messages over an AgentChannel.
 /// </summary>
 /// <remarks>
-/// Uses a Pallas-style accumulation buffer: segment payloads are appended to a temp buffer,
-/// CBOR boundaries are checked after each append, and each complete item is decoded once.
-/// Single-segment messages are deserialized directly from the received array (zero extra copy).
-/// <para>
-/// INVARIANT: a returned message may be a zero-copy view into the internal buffer (e.g. a
-/// <c>CborEncodedValue</c> body the caller reads lazily). The buffer must therefore never be moved
-/// in place while a result is outstanding. Callers consume each message before the next receive,
-/// so any in-place reclamation (<see cref="Compact"/>) is only safe at the start of the next receive.
-/// </para>
+/// Every returned message owns its bytes, as part of an item this buffer never reuses.
+/// Caller-made channels must not modify items after queuing them; a message can be a slice of one.
 /// </remarks>
 public sealed class ChannelBuffer(AgentChannel channel)
 {
-    // Accumulation buffer for partial CBOR messages (like Pallas's temp: Vec<u8>)
-    private byte[] _temp = [];
-    private int _tempOffset;
-    private int _tempLength;
+    private ReadOnlyMemory<byte> _cursor;
+    private readonly MessageAssembler? _assembler = channel.WholeMessages ? null : new(ProtocolLimits.Get(channel.ProtocolId));
 
     /// <summary>
     /// Writes a pre-encoded mux segment directly to the bearer, bypassing serialization and muxer.
     /// </summary>
     [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
-    public async Task SendPreEncodedSegmentAsync(ReadOnlyMemory<byte> preEncodedSegment, CancellationToken cancellationToken) => await channel.WriteRawSegmentAsync(preEncodedSegment, cancellationToken).ConfigureAwait(false);
+    public Task SendPreEncodedSegmentAsync(ReadOnlyMemory<byte> preEncodedSegment, CancellationToken cancellationToken) => channel.WriteRawSegmentAsync(preEncodedSegment, cancellationToken);
 
     /// <summary>
     /// Writes N copies of a pre-encoded mux segment in a single batched write.
     /// </summary>
     [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
-    public async Task SendPreEncodedSegmentBatchAsync(ReadOnlyMemory<byte> preEncodedSegment, int count, CancellationToken cancellationToken) => await channel.WriteBatchRawSegmentsAsync(preEncodedSegment, count, cancellationToken).ConfigureAwait(false);
+    public Task SendPreEncodedSegmentBatchAsync(ReadOnlyMemory<byte> preEncodedSegment, int count, CancellationToken cancellationToken) => channel.WriteBatchRawSegmentsAsync(preEncodedSegment, count, cancellationToken);
 
     /// <summary>
     /// Sends a complete CBOR message, chunked into segments if necessary.
@@ -62,201 +53,24 @@ public sealed class ChannelBuffer(AgentChannel channel)
     }
 
     /// <summary>
-    /// Receives and deserializes a complete CBOR message, accumulating segment payloads as needed.
+    /// Receives and deserializes the next complete CBOR message.
     /// </summary>
+    /// <remarks>Demuxer/Plexer channels supply whole-message items. Caller-made channels assemble
+    /// their producer's items and preserve that reader's completion errors.</remarks>
     public async Task<T> ReceiveFullMessageAsync<T>(CancellationToken cancellationToken) where T : CborRecord
     {
-        // Try to decode from existing buffer first (may have leftover from previous message)
-        int usedLength = _tempLength - _tempOffset;
-        if (usedLength > 0)
+        while (_cursor.IsEmpty)
         {
-            if (TryDeserialize(out T? result, out int consumed))
-            {
-                _tempOffset += consumed;
-                ResetIfDrained();
-                return result!;
-            }
+            _assembler?.ThrowIfFailed();
+            ReadOnlyMemory<byte> item;
+            // A transient reader error preserves partial state. Closed readers are terminal:
+            // release scanner rentals while retaining the first failure for later receives.
+            try { item = await channel.ReadSegmentAsync(cancellationToken).ConfigureAwait(false); }
+            catch (ChannelClosedException error) { _ = _assembler?.Fail(error); throw; }
+            _cursor = _assembler is null ? item : _assembler.Append(item, callerOwned: true);
         }
-
-        // Read first chunk
-        ReadOnlyMemory<byte> firstChunk = await channel.ReadSegmentAsync(cancellationToken).ConfigureAwait(false);
-
-        // Fast path: if accumulation buffer is empty, try to deserialize directly from the chunk
-        // This avoids copying into _temp for the common single-segment case
-        if (usedLength == 0)
-        {
-            if (TryDeserializeDirect(firstChunk, out T? result, out int consumed))
-            {
-                // If we consumed the entire chunk, we're done — no copy at all
-                if (consumed >= firstChunk.Length)
-                {
-                    return result!;
-                }
-
-                // Leftover bytes — store them in _temp for the next message
-                int leftover = firstChunk.Length - consumed;
-                EnsureCapacity(leftover);
-                firstChunk.Span.Slice(consumed, leftover).CopyTo(_temp.AsSpan(0, leftover));
-                _tempOffset = 0;
-                _tempLength = leftover;
-                return result!;
-            }
-        }
-
-        // Slow path: accumulate chunks until we can decode
-        Append(firstChunk.Span);
-
-        // The empty-buffer direct probe already checked these exact bytes. Wait for new data
-        // before probing again, rather than repeating the same incomplete item after the copy.
-        if (usedLength == 0)
-        {
-            ReadOnlyMemory<byte> nextChunk = await channel.ReadSegmentAsync(cancellationToken).ConfigureAwait(false);
-            Append(nextChunk.Span);
-        }
-
-        while (true)
-        {
-            if (TryDeserialize(out T? result, out int consumed))
-            {
-                _tempOffset += consumed;
-                ResetIfDrained();
-                return result!;
-            }
-
-            ReadOnlyMemory<byte> chunk = await channel.ReadSegmentAsync(cancellationToken).ConfigureAwait(false);
-            Append(chunk.Span);
-        }
-    }
-
-    /// <summary>
-    /// Tries to deserialize directly from a ReadOnlyMemory without copying to _temp.
-    /// </summary>
-    private static bool TryDeserializeDirect<T>(ReadOnlyMemory<byte> data, out T? result, out int consumed) where T : CborRecord
-    {
-        consumed = 0;
-        result = default;
-
-        if (data.Length == 0)
-        {
-            return false;
-        }
-
-        if (!IsCompleteFrame(data.Span))
-        {
-            return false;
-        }
-
-        result = CborSerializer.Deserialize<T>(data, out consumed);
-        return true;
-    }
-
-    /// <summary>
-    /// Checks readiness without using exceptions as a partial-input signal. Malformed/oversized
-    /// frames fail immediately; semantic errors on a complete frame still come from SAIB.Cbor.
-    /// </summary>
-    private static bool IsCompleteFrame(ReadOnlySpan<byte> data)
-    {
-        int length = CborFrameScanner.GetFrameLength(data);
-        if (length < 0)
-        {
-            throw new CborException("Invalid or oversized CBOR frame.");
-        }
-        return length > 0;
-    }
-
-    /// <summary>
-    /// Appends bytes to the accumulation buffer.
-    /// </summary>
-    private void Append(ReadOnlySpan<byte> data)
-    {
-        int usedLength = _tempLength - _tempOffset;
-        int required = usedLength + data.Length;
-        EnsureCapacity(required);
-
-        // Compact if we need to make room
-        if (_tempOffset > 0 && _tempOffset + _tempLength - _tempOffset + data.Length > _temp.Length)
-        {
-            Compact();
-        }
-
-        data.CopyTo(_temp.AsSpan(_tempLength));
-        _tempLength += data.Length;
-    }
-
-    /// <summary>
-    /// Ensures the backing array is large enough for the given total data size.
-    /// </summary>
-    private void EnsureCapacity(int required)
-    {
-        if (required > _temp.Length)
-        {
-            int newSize = Math.Max(_temp.Length * 2, required);
-            byte[] newBuffer = new byte[newSize];
-            int usedLength = _tempLength - _tempOffset;
-            if (usedLength > 0)
-            {
-                _temp.AsSpan(_tempOffset, usedLength).CopyTo(newBuffer);
-            }
-            _temp = newBuffer;
-            _tempOffset = 0;
-            _tempLength = usedLength;
-        }
-    }
-
-    /// <summary>
-    /// Resets the read window to the front of the buffer once it is fully drained. Deliberately does
-    /// NOT move data in place — that would corrupt an outstanding zero-copy result (see the class
-    /// invariant). Reclamation of leftover bytes happens at the start of the next receive instead.
-    /// </summary>
-    private void ResetIfDrained()
-    {
-        // In-place compaction here was a bug: a just-returned message can still be a view into _temp
-        // (e.g. a CborEncodedValue body the caller reads lazily), so moving _temp would shift those
-        // bytes out from under it — flaky "Expected major type Array" when BlockFetch streamed many
-        // large blocks. Only the offset reset (no data move) is safe at this point.
-        int usedLength = _tempLength - _tempOffset;
-        if (usedLength == 0)
-        {
-            _tempOffset = 0;
-            _tempLength = 0;
-        }
-    }
-
-    /// <summary>
-    /// Moves used data to the front of the buffer.
-    /// </summary>
-    private void Compact()
-    {
-        int usedLength = _tempLength - _tempOffset;
-        if (usedLength > 0)
-        {
-            _temp.AsSpan(_tempOffset, usedLength).CopyTo(_temp.AsSpan(0, usedLength));
-        }
-        _tempOffset = 0;
-        _tempLength = usedLength;
-    }
-
-    /// <summary>
-    /// Tries to deserialize a complete CBOR message from the accumulation buffer.
-    /// </summary>
-    private bool TryDeserialize<T>(out T? result, out int consumed) where T : CborRecord
-    {
-        consumed = 0;
-        result = default;
-
-        int usedLength = _tempLength - _tempOffset;
-        if (usedLength == 0)
-        {
-            return false;
-        }
-
-        ReadOnlyMemory<byte> data = new(_temp, _tempOffset, usedLength);
-        if (!IsCompleteFrame(data.Span))
-        {
-            return false;
-        }
-
-        result = CborSerializer.Deserialize<T>(data, out consumed);
-        return true;
+        T result = CborSerializer.Deserialize<T>(_cursor, out int consumed);
+        _cursor = _cursor[consumed..];
+        return result;
     }
 }

@@ -1,0 +1,20 @@
+{
+  "commit": "fc21a49",
+  "sha256": {
+    "Demuxer.cs": "8a7ddd96f07c5a243611ab1e5972850a31a833fd9593320c027c336b05504c6c",
+    "ChannelBuffer.cs": "282a47d98275cbf0a58be056d618bf665a59052bc940da6ccd04f1de7420eeea",
+    "CborFrameScanner.cs": "267c50e4f6e00c145879c9955a1b74b6caf033025e68f59df4e8f5790bc0e039",
+    "MuxSegmentCodec.cs": "dc01a25a3b8ade703a7b38a3e86c5c127a5e0b13610db26faf5ae6521382f737"
+  },
+  "adaptations": [
+    "test-only namespace",
+    "import original public multiplexer types",
+    "DecodeHeader/DecodeHeaderSpan extracted with HeaderSize = 8; encoder omitted"
+  ],
+  "frozen_sha256": {
+    "CborFrameScanner.cs": "412801e06302c03c37add01b57a82dfcf31f58d54dbfbad60cc747ab7f6bfce6",
+    "ChannelBuffer.cs": "b9f52fb1160f706e2cc137b69c400f16d498147c341c80d7b92781626f52b1bf",
+    "Demuxer.cs": "a0fb301261684def96b359099e35323220daa2e4b712e72a5856773ecfee9c80",
+    "MuxSegmentCodec.cs": "e61eb46c5292e4bd26cb9a58141821c4e0d41cde6b0a502b69c8bc523eebd03d"
+  }
+}
