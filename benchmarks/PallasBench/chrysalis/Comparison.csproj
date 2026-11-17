@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>Chrysalis.Benchmarks</RootNamespace>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net11.0</TargetFramework>
+    <ServerGarbageCollection>false</ServerGarbageCollection>
+    <ConcurrentGarbageCollection>true</ConcurrentGarbageCollection>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../../src/Chrysalis.Network/Chrysalis.Network.csproj" />
+    <Compile Include="../../Chrysalis.Benchmarks/ModelGraph.cs" Link="ModelGraph.cs" />
+    <Compile Include="../../Chrysalis.Benchmarks/RawCbor.cs" Link="RawCbor.cs" />
+  </ItemGroup>
+</Project>
