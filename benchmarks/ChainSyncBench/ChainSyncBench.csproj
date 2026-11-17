@@ -9,6 +9,7 @@
 
   <ItemGroup>
     <ProjectReference Include="../../src/Chrysalis.Network/Chrysalis.Network.csproj" />
+    <Compile Include="../Chrysalis.Benchmarks/SingleBlockCounter.cs" Link="SingleBlockCounter.cs" />
   </ItemGroup>
 
 </Project>

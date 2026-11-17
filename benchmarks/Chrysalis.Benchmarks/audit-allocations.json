@@ -1,0 +1,270 @@
+{
+  "source": "Audit BASELINE.md, Runtime10 repeated direct verification, five warmed thread-local batches",
+  "sourceSha256": "151c52ca3802c3153e9b439f4312a00b42dbb4d0b56def3867a74e23594896ee",
+  "commit": "7c45d47c87c63520cea84212dbd01ecc8d372ac3",
+  "sdk": "10.0.301",
+  "runtime": "10.0.9",
+  "counter": "GC.GetAllocatedBytesForCurrentThread",
+  "rows": {
+    "CoreBench.PrimitiveIntRead": {
+      "minimum": 0.0,
+      "maximum": 0.0,
+      "kind": "exact"
+    },
+    "CoreBench.PrimitiveMemoryRead": {
+      "minimum": 1048.0,
+      "maximum": 1048.0,
+      "kind": "exact"
+    },
+    "CoreBench.PrimitiveMemoryConsumedRead": {
+      "minimum": 1048.0,
+      "maximum": 1048.0,
+      "kind": "exact"
+    },
+    "CoreBench.PrimitiveIndefMemoryRead": {
+      "minimum": 1048.0,
+      "maximum": 1048.0,
+      "kind": "exact"
+    },
+    "CoreBench.PrimitiveMemoryBorrowedAlternative": {
+      "minimum": 0.0,
+      "maximum": 0.0,
+      "kind": "exact"
+    },
+    "CoreBench.PrimitiveDirectRead": {
+      "minimum": 0.0,
+      "maximum": 0.0,
+      "kind": "exact"
+    },
+    "CoreBench.GeneratedInputRead": {
+      "minimum": 0.0,
+      "maximum": 0.0,
+      "kind": "exact"
+    },
+    "CoreBench.GeneratedInputAccess": {
+      "minimum": 0.0,
+      "maximum": 0.0,
+      "kind": "exact"
+    },
+    "CoreBench.GeneratedInputCreate": {
+      "minimum": 376.0,
+      "maximum": 376.0,
+      "kind": "exact"
+    },
+    "CoreBench.InputCreateNoFinalCopy": {
+      "minimum": 312.0,
+      "maximum": 312.0,
+      "kind": "exact"
+    },
+    "CoreBench.GeneratedUnionRead": {
+      "minimum": 88.0,
+      "maximum": 88.0,
+      "kind": "exact"
+    },
+    "CoreBench.GeneratedConcreteRead": {
+      "minimum": 0.0,
+      "maximum": 0.0,
+      "kind": "exact"
+    },
+    "CoreBench.SerializeRawInput": {
+      "minimum": 64.0,
+      "maximum": 64.0,
+      "kind": "exact"
+    },
+    "CoreBench.SerializeRawInputMemory": {
+      "minimum": 0.0,
+      "maximum": 0.0,
+      "kind": "exact"
+    },
+    "CoreBench.MuxEncode32": {
+      "minimum": 64.0,
+      "maximum": 64.0,
+      "kind": "exact"
+    },
+    "CoreBench.MuxEncode1024": {
+      "minimum": 2112.0,
+      "maximum": 2112.0,
+      "kind": "exact"
+    },
+    "CoreBench.MuxEncodeIntoReusableWriter": {
+      "minimum": 0.0,
+      "maximum": 0.0,
+      "kind": "exact"
+    },
+    "CoreBench.MuxDecodeHeader": {
+      "minimum": 32.0,
+      "maximum": 32.0,
+      "kind": "exact"
+    },
+    "CoreBench.AddressEncode": {
+      "minimum": 1432.0,
+      "maximum": 1432.0,
+      "kind": "exact"
+    },
+    "CoreBench.AddressDecode": {
+      "minimum": 1360.0,
+      "maximum": 1360.0,
+      "kind": "exact"
+    },
+    "CoreBench.Blake256": {
+      "minimum": 56.0,
+      "maximum": 56.0,
+      "kind": "exact"
+    },
+    "CoreBench.Sign": {
+      "minimum": 656.0,
+      "maximum": 660.81,
+      "kind": "range"
+    },
+    "CoreBench.Verify": {
+      "minimum": 2312.0,
+      "maximum": 2312.0,
+      "kind": "exact"
+    },
+    "BlockBench.DecodeBlockLazy": {
+      "minimum": 0.0,
+      "maximum": 0.0,
+      "kind": "exact"
+    },
+    "BlockBench.DecodeBlockSetLazy": {
+      "minimum": 0.0,
+      "maximum": 0.0,
+      "kind": "exact"
+    },
+    "BlockBench.DecodeBlockReadInputs": {
+      "minimum": 3368.0,
+      "maximum": 3400.0,
+      "kind": "range"
+    },
+    "BlockBench.ReencodeRawBlock": {
+      "minimum": 6704.0,
+      "maximum": 6704.0,
+      "kind": "exact"
+    },
+    "BlockBench.ReencodeRawBlockMemory": {
+      "minimum": 0.0,
+      "maximum": 0.0,
+      "kind": "exact"
+    },
+    "BlockBench.ReencodeConwayContainer": {
+      "minimum": 30112.0,
+      "maximum": 30112.0,
+      "kind": "exact"
+    },
+    "BlockBench.DecodeTxBodyLazy": {
+      "minimum": 0.0,
+      "maximum": 0.0,
+      "kind": "exact"
+    },
+    "BlockBench.DecodeTxSetLazy": {
+      "minimum": 0.0,
+      "maximum": 0.0,
+      "kind": "exact"
+    },
+    "BlockBench.ReencodeRawTxBody": {
+      "minimum": 496.0,
+      "maximum": 496.0,
+      "kind": "exact"
+    },
+    "BlockBench.DecodeTransactionLazy": {
+      "minimum": 0.0,
+      "maximum": 0.0,
+      "kind": "exact"
+    },
+    "BlockBench.ReencodeRawTransaction": {
+      "minimum": 600.0,
+      "maximum": 600.0,
+      "kind": "exact"
+    },
+    "BlockBench.DecodeTransactionInputs": {
+      "minimum": 576.0,
+      "maximum": 576.0,
+      "kind": "exact"
+    },
+    "TxBench.SimpleBuildSign": {
+      "minimum": 9288.0,
+      "maximum": 9816.0,
+      "kind": "range"
+    },
+    "TxBench.SimpleBuildFeeSign": {
+      "minimum": 16615.52,
+      "maximum": 17440.0,
+      "kind": "range"
+    },
+    "TxBench.ScriptBuildFeeSign": {
+      "minimum": 368865.31,
+      "maximum": 369177.31,
+      "kind": "range"
+    },
+    "TxBench.ScriptFee": {
+      "minimum": 824.0,
+      "maximum": 824.0,
+      "kind": "exact"
+    },
+    "TxBench.ScriptFeeLoop": {
+      "minimum": 408.0,
+      "maximum": 408.0,
+      "kind": "exact"
+    },
+    "TxBench.LinearFee": {
+      "minimum": 0.0,
+      "maximum": 0.0,
+      "kind": "exact"
+    },
+    "VmBench.DecodeAndEvaluate": {
+      "minimum": 733360.0,
+      "maximum": 740216.0,
+      "kind": "range"
+    },
+    "VmBench.EvaluateOnly": {
+      "minimum": 506008.0,
+      "maximum": 506008.0,
+      "kind": "exact"
+    },
+    "VmBench.CreateMachine": {
+      "minimum": 28664.0,
+      "maximum": 28664.0,
+      "kind": "exact"
+    },
+    "VmBench.CreateMachineSharedCosts": {
+      "minimum": 18592.0,
+      "maximum": 18592.0,
+      "kind": "exact"
+    },
+    "VmBench.EvaluateSharedCosts": {
+      "minimum": 495936.0,
+      "maximum": 495936.0,
+      "kind": "exact"
+    },
+    "VmBench.FlatDecode": {
+      "minimum": 227392.0,
+      "maximum": 227392.0,
+      "kind": "exact"
+    },
+    "NetworkHeaderBench.DecodeCurrent": {
+      "minimum": 928.0,
+      "maximum": 928.0,
+      "kind": "exact"
+    },
+    "NetworkHeaderBench.DecodeBorrowedAlternative": {
+      "minimum": 40.0,
+      "maximum": 40.0,
+      "kind": "exact"
+    },
+    "NetworkHeaderBench.ExtractPointCurrent": {
+      "minimum": 664.0,
+      "maximum": 664.0,
+      "kind": "exact"
+    },
+    "NetworkHeaderBench.ExtractPointDirectHashAlternative": {
+      "minimum": 256.0,
+      "maximum": 256.0,
+      "kind": "exact"
+    },
+    "CorpusVmBench.DecodeEvaluateAll78": {
+      "minimum": 877601.23,
+      "maximum": 877601.23,
+      "kind": "exact"
+    }
+  }
+}

@@ -1,0 +1,122 @@
+{
+  "name": "preprod-p1-n2n-recording-a",
+  "network": "preprod",
+  "networkMagic": 1,
+  "anchor": {
+    "Slot": 139055739,
+    "Hash": "e5c46f069110d4f8d00a126fd06a783c0eb0a72fe4b9b60be3b3701b1d0b538b",
+    "Sha256": ""
+  },
+  "last": {
+    "Slot": 139077121,
+    "Hash": "e63ff6eea80642d5be9ed6f9c6da6fc5532afd91b34035a786eaafc165775872",
+    "Sha256": "764d0ee37b95db08310d961df5e1562d8aa3a8cdf03f844ff84d34026a7e57db"
+  },
+  "blocks": 1000,
+  "rawBytes": 4040750,
+  "tcpSendMode": "captured-chunks",
+  "index": {
+    "file": "sha256.json",
+    "sha256": "c053355d2f762a575d3462db2a10fe755bbae7bd6d56b627ed45382b5344cb4e"
+  },
+  "summary": {
+    "blocks": 1000,
+    "rawBytes": 4040750,
+    "transactions": 1714,
+    "transactionsWithRedeemers": 1063,
+    "blocksWithRedeemers": 501,
+    "transactionsWithReferenceInputs": 422,
+    "messagesSpanningFrames": 178,
+    "blockMessagesSpanningFrames": 178,
+    "blocksOver12288Bytes": 64,
+    "blocksOver65535Bytes": 0,
+    "bodyBytes": 3179297,
+    "blockFetchFrames": 674,
+    "bodyGroups": 1002,
+    "emptyBodyGroups": 383,
+    "headerFrames": 1000,
+    "headerProtocolVersions": [
+      {
+        "major": 11,
+        "minor": 0,
+        "headers": 20
+      },
+      {
+        "major": 11,
+        "minor": 1,
+        "headers": 206
+      },
+      {
+        "major": 11,
+        "minor": 2,
+        "headers": 74
+      },
+      {
+        "major": 11,
+        "minor": 3,
+        "headers": 616
+      },
+      {
+        "major": 11,
+        "minor": 67,
+        "headers": 18
+      },
+      {
+        "major": 11,
+        "minor": 69,
+        "headers": 8
+      },
+      {
+        "major": 11,
+        "minor": 5046337,
+        "headers": 13
+      },
+      {
+        "major": 11,
+        "minor": 5161025,
+        "headers": 45
+      }
+    ],
+    "tips": [
+      {
+        "reply": 0,
+        "Slot": 139100417,
+        "Hash": "4473e46f5de089cb04c304ac80846c2af79270dbc19993b1266fe337e60ccd99",
+        "blockNumber": 5417032
+      },
+      {
+        "reply": 1001,
+        "Slot": 139100617,
+        "Hash": "84bf739610c04baf23398e1f964cc9bd5909282622412d9a5f000fda961d3e67",
+        "blockNumber": 5417042
+      }
+    ],
+    "depth": 1053,
+    "transactionRedeemerShare": 0.6201866977829639,
+    "referenceInputShare": 0.24620770128354727,
+    "blockRedeemerShare": 0.501
+  },
+  "source": {
+    "kind": "local node 11.1.3",
+    "verification": "No second operator; depth not checked"
+  },
+  "tools": {
+    "capture": {
+      "repositoryCommit": "d679f36",
+      "sdk": "11.0.100",
+      "note": "preprod capture predates corpus tooling; built with candidate, not 7c45d47"
+    },
+    "verifier": {
+      "repositoryCommit": "1a05c7693a5da844586cc48d2dee466c14fea6d0",
+      "sha256": "e5e8a06c7554d6624343dc077f597c0fcde8ada618dfe53618fb9603c5f1dab6",
+      "implementation": "Python standard library"
+    },
+    "verifiedUtc": "2026-11-17T00:03:04.099622+00:00"
+  },
+  "licence": [
+    "Cardano preprod blockchain data, public. No licence is granted or asserted by the capturer.",
+    "Blocks hold transactions and metadata written by third parties, which may include personal data or copyrighted text. The corpus is kept out of the repository, used only for local and Fly benchmarks, and never printed or redistributed.",
+    "Source: local preprod node 11.1.3; no second operator.",
+    "Redistribution needs the owner's decision."
+  ]
+}

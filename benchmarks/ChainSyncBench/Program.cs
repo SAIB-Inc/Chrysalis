@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Globalization;
 using Chrysalis.Codec.Extensions;
 using Chrysalis.Codec.Types.Cardano.Core;
+using Chrysalis.Network.Cbor.BlockFetch;
 using Chrysalis.Network.Cbor.ChainSync;
 using Chrysalis.Network.Cbor.Common;
 using Chrysalis.Network.MiniProtocols;
@@ -103,9 +104,10 @@ using (client)
     int deserErrors = 0;
     Dictionary<string, int> errorBuckets = [];
 
+    bool reachedTip = false;
     try
     {
-        while (totalBlocksSynced < targetBlocks && !cts.Token.IsCancellationRequested)
+        while (!reachedTip && totalBlocksSynced < targetBlocks && !cts.Token.IsCancellationRequested)
         {
             if (useUnixSocket)
             {
@@ -114,7 +116,7 @@ using (client)
 
                 switch (response)
                 {
-                    case MessageRollForward rollForward:
+                    case N2CMessageRollForward rollForward:
                         int payloadLen = rollForward.Payload.Value.Length;
 
                         if (!noDeser)
@@ -168,7 +170,8 @@ using (client)
 
                     case MessageAwaitReply:
                         Console.WriteLine("Reached chain tip.");
-                        goto done;
+                        reachedTip = true;
+                        break;
 
                     default:
                         break;
@@ -181,15 +184,15 @@ using (client)
             int remaining = targetBlocks - totalBlocksSynced;
             int thisBatch = Math.Min(batchSize, remaining);
 
-            List<(Point Point, string Era, ulong Slot, ulong BlockNum)> headerBatch = new(thisBatch);
+            List<(Point Point, string Era, ulong Slot, ulong BlockNum)> headerBatch = [with(thisBatch)];
 
-            while (headerBatch.Count < thisBatch && !cts.Token.IsCancellationRequested)
+            while (!reachedTip && headerBatch.Count < thisBatch && !cts.Token.IsCancellationRequested)
             {
                 MessageNextResponse? response = await chainSync.NextRequestAsync(cts.Token).ConfigureAwait(false);
 
                 switch (response)
                 {
-                    case MessageRollForward rollForward:
+                    case N2NMessageRollForward rollForward:
                         (Point point, string era, ulong slot, ulong blockNum) = ExtractPoint(rollForward);
                         headerBatch.Add((point, era, slot, blockNum));
                         break;
@@ -199,22 +202,44 @@ using (client)
 
                     case MessageAwaitReply:
                         Console.WriteLine("Reached chain tip.");
-                        goto done;
+                        reachedTip = true;
+                        break;
 
                     default:
                         break;
                 }
             }
 
+            if (reachedTip) { break; }
+
             for (int i = 0; i < headerBatch.Count; i++)
             {
                 try
                 {
-                    BlockWithEra block = await blockFetch!.FetchSingleAsync<BlockWithEra>(headerBatch[i].Point, cts.Token).ConfigureAwait(false);
+                    int blockLen = 0;
+                    if (noDeser)
+                    {
+                        // Clark's June 20 benchmark route: consume the tag-24-stripped
+                        // wire body without block CBOR decoding, and drain BatchDone.
+                        SingleBlockCounter counter = default;
+                        await blockFetch!.RequestRangeAsync(headerBatch[i].Point, headerBatch[i].Point, cts.Token).ConfigureAwait(false);
+                        await foreach (BlockFetchMessage message in blockFetch.ReceiveBlockMessagesAsync(cts.Token).ConfigureAwait(false))
+                        {
+                            if (message is BlockBody body)
+                            {
+                                counter.Record(body.Body.Value.Length);
+                            }
+                        }
+                        blockLen = counter.Complete(); // Validate only after ReceiveBlockMessagesAsync drains BatchDone.
+                    }
+                    else
+                    {
+                        BlockWithEra block = await blockFetch!.FetchSingleAsync<BlockWithEra>(headerBatch[i].Point, cts.Token).ConfigureAwait(false);
+                        blockLen = block.Raw.Length;
+                    }
 
                     totalBlocksSynced++;
                     windowBlocks++;
-                    int blockLen = block.Raw.Length;
                     totalBytesDownloaded += blockLen;
                     windowBytes += blockLen;
                 }
@@ -239,8 +264,6 @@ using (client)
                 }
             }
         }
-
-    done:
 
         totalTimer.Stop();
         double totalSeconds = totalTimer.Elapsed.TotalSeconds;
@@ -302,9 +325,9 @@ static void PrintProgress(Stopwatch totalTimer, Stopwatch windowTimer,
         $"{windowBlkPerSec,7:F1} blk/s | {FormatBytes(windowBytesPerSec)}/s | {FormatBytes(totalBytes)} total");
 }
 
-static (Point Point, string Era, ulong Slot, ulong BlockNum) ExtractPoint(MessageRollForward rollForward)
+static (Point Point, string Era, ulong Slot, ulong BlockNum) ExtractPoint(N2NMessageRollForward rollForward)
 {
-    ChainSyncHeader header = ChainSyncHeader.Decode(rollForward.Payload.Value);
+    ChainSyncHeader header = ChainSyncHeader.Decode(rollForward.Payload.Raw);
     ChainPoint chainPoint = header.ExtractPoint();
     Point point = Point.Specific(chainPoint.Slot, chainPoint.Hash);
     return (point, header.Era, chainPoint.Slot, chainPoint.BlockNumber);
@@ -323,7 +346,7 @@ static string FormatBytes(double bytes)
 
 static Dictionary<string, string> ParseArgs(string[] args)
 {
-    Dictionary<string, string> map = new(StringComparer.OrdinalIgnoreCase);
+    Dictionary<string, string> map = [with(StringComparer.OrdinalIgnoreCase)];
     for (int i = 0; i < args.Length; i++)
     {
         if (!args[i].StartsWith("--", StringComparison.Ordinal))

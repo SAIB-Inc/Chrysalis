@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net11.0</TargetFramework>
+    <BenchmarkSourceRoot Condition="'$(BenchmarkSourceRoot)' == ''">$(MSBuildThisFileDirectory)../..</BenchmarkSourceRoot>
+    <ServerGarbageCollection>false</ServerGarbageCollection>
+    <ConcurrentGarbageCollection>true</ConcurrentGarbageCollection>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="$(BenchmarkSourceRoot)/src/Chrysalis.Tx/Chrysalis.Tx.csproj" />
+    <ProjectReference Include="$(BenchmarkSourceRoot)/src/Chrysalis.Network/Chrysalis.Network.csproj" />
+    <PackageReference Include="BenchmarkDotNet" />
+  </ItemGroup>
+</Project>
