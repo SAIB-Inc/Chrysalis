@@ -8,7 +8,7 @@ using Microsoft.CodeAnalysis.CSharp;
 
 namespace Chrysalis.Codec.Test;
 
-public class GeneratorIsolationTests
+public partial class GeneratorIsolationTests
 {
     private const int Iterations = 64;
     private static readonly CSharpParseOptions ParseOptions = new(LanguageVersion.Latest);
@@ -67,11 +67,8 @@ public class GeneratorIsolationTests
                 public bool Validate(Checked value) => value.Value >= 0;
             }
             """;
-        CSharpCompilation compilation = CSharpCompilation.Create("ValidatorProbe",
-            [CSharpSyntaxTree.ParseText(source, ParseOptions)], References,
-            new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
-        GeneratorDriver driver = CSharpGeneratorDriver.Create(
-            [new CborSerializerCodeGen().AsSourceGenerator()], parseOptions: ParseOptions);
+        CSharpCompilation compilation = CreateCompilation("ValidatorProbe", source);
+        GeneratorDriver driver = CreateDriver();
         driver = driver.RunGeneratorsAndUpdateCompilation(compilation, out Compilation output, out _);
         GeneratorDriverRunResult result = driver.GetRunResult();
         Assert.Empty(result.Diagnostics);
@@ -108,8 +105,7 @@ public class GeneratorIsolationTests
 
     private static string GenerateUnionReader(CSharpCompilation compilation)
     {
-        GeneratorDriver driver = CSharpGeneratorDriver.Create(
-            [new CborSerializerCodeGen().AsSourceGenerator()], parseOptions: ParseOptions);
+        GeneratorDriver driver = CreateDriver();
         GeneratorDriverRunResult result = driver.RunGenerators(compilation).GetRunResult();
         if (!result.Diagnostics.IsEmpty)
         {
@@ -165,10 +161,16 @@ public class GeneratorIsolationTests
             public partial record ForwardArray(
                 [CborOrder(0)] int Idx, [CborOrder(1)] HeaderPayload Payload) : ProbeResponse;
             """;
-        return CSharpCompilation.Create(name,
+        return CreateCompilation(name, source);
+    }
+
+    private static CSharpCompilation CreateCompilation(string name, string source) =>
+        CSharpCompilation.Create(name,
             [CSharpSyntaxTree.ParseText(source, ParseOptions)], References,
             new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
-    }
+
+    private static CSharpGeneratorDriver CreateDriver() => CSharpGeneratorDriver.Create(
+        [new CborSerializerCodeGen().AsSourceGenerator()], parseOptions: ParseOptions);
 
     private static MetadataReference[] CreateReferences()
     {
