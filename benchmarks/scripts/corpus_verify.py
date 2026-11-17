@@ -6,10 +6,9 @@ import collections
 import datetime as dt
 import hashlib
 import json
-import os
 from pathlib import Path
 import struct
-import subprocess
+import re
 
 from n2n_replay_server import parse_frames
 
@@ -209,13 +208,19 @@ def chain(frames, fixed_range):
     return headers, tips
 
 
-def conversation(inbound, outbound, fixed_range, bodies=True):
+def conversation(inbound, outbound, fixed_range, bodies=True, network_magic=1):
     incoming, outgoing = parse_frames(inbound), parse_frames(outbound)
     require(all(frame['mode'] for frame in incoming) and all(not frame['mode'] for frame in outgoing),
             "Unexpected mux direction")
     require(all(frame['protocol'] in (0, 2, 3, 8) for frame in incoming + outgoing), "Unexpected recorded mini-protocol")
     by_protocol = lambda frames, protocol: [frame for frame in frames if frame['protocol'] == protocol]
     require(len(by_protocol(incoming, 0)) == len(by_protocol(outgoing, 0)) == 1, "Missing recorded handshake")
+    accepted = array(decode(by_protocol(incoming, 0)[0]['payload']), 3)
+    require(uint(accepted[0]) == 1 and uint(accepted[1]) == 14
+            and uint(array(accepted[2], 4)[0]) == network_magic, "Wrong accepted handshake version or network magic")
+    keepalive = by_protocol(outgoing, 8)
+    if network_magic != 1 or keepalive:
+        require(bool(keepalive) and keepalive[-1]['payload'] == b'\x81\x02', "Missing keep-alive MsgDone")
     headers, tips = chain(by_protocol(incoming, 2), fixed_range)
     requests = [decode(frame['payload']) for frame in by_protocol(outgoing, 2)]
     require(len(requests) == 1003, "Expected intersection, 1,001 NextRequest and MsgDone")
@@ -328,6 +333,9 @@ def read_source(root, range_path=None, pinned=False):
 
 
 def utc_time(value):
+    # .NET trims trailing zeros; Python 3.9/3.10 accept only 3 or 6 fractional digits.
+    value = re.sub(r'\.(\d+)(?=Z|[+-]|$)',
+                   lambda match: '.' + match.group(1)[:6].ljust(6, '0'), value)
     instant = dt.datetime.fromisoformat(value.replace('Z', '+00:00'))
     require(instant.utcoffset() == dt.timedelta(0), "Declaration and fetch timestamps must be UTC")
     return instant
@@ -343,13 +351,16 @@ def read_declaration(text):
     t0 = utc_time(value('- T0 = ').split(' ')[0])
     first_slot = int(value('- Mainnet slot at T0: ').split('.')[0])
     expected = (declared - dt.timedelta(hours=48)).replace(minute=0, second=0, microsecond=0)
-    require(t0 == expected and first_slot >= 0, "The declaration must fix the 48-hour, hour-rounded T0")
+    require(t0 == expected, "The declaration must fix the 48-hour, hour-rounded T0")
+    require(first_slot == 4492800 + int(t0.timestamp()) - 1596059091 and first_slot >= 0,
+            "Mainnet slot must match T0")
     return {'declaredUtc': declared.isoformat(), 't0Utc': t0.isoformat(), 'firstSlot': first_slot}
 
 def verify(input_dir, range_path=None, relay_b=None, local_node=False):
     require(bool(relay_b) != bool(local_node), "Choose a second relay or --local-node")
     payload, capture, fixed_range = read_source(input_dir, range_path, pinned=local_node)
-    headers, tips, chain_frames, fetch_frames = conversation(payload['server-to-client.bin'], payload['client-to-server.bin'], fixed_range)
+    headers, tips, chain_frames, fetch_frames = conversation(payload['server-to-client.bin'], payload['client-to-server.bin'], fixed_range,
+                                                           network_magic=1 if local_node else 764824073)
     groups, summary = verify_blocks(fetch_frames, headers, fixed_range, capture)
     summary.update({'blocksOver12288Bytes': sum(h['bodySize'] > 12288 for h in headers),
                     'blocksOver65535Bytes': sum(h['bodySize'] > 65535 for h in headers),
@@ -378,7 +389,7 @@ def verify(input_dir, range_path=None, relay_b=None, local_node=False):
         require(second_capture.get('status') == 'ok' and second_capture.get('networkMagic') == 764824073, "Second relay did not succeed")
         require(capture.get('relay') in OPERATORS and second_capture.get('relay') in OPERATORS
                 and OPERATORS[capture['relay']] != OPERATORS[second_capture['relay']], "Second source must be a different operator")
-        second_headers, second_tips, _, _ = conversation(second_payload['server-to-client.bin'], second_payload['client-to-server.bin'], second_range, bodies=False)
+        second_headers, second_tips, _, _ = conversation(second_payload['server-to-client.bin'], second_payload['client-to-server.bin'], second_range, bodies=False, network_magic=764824073)
         require([h['raw'] for h in headers] == [h['raw'] for h in second_headers], "Second relay headers differ")
         for name in ('server-to-client.bin', 'client-to-server.bin', 'capture.json'):
             payload['relay-b/' + name] = second_payload[name]
@@ -413,16 +424,13 @@ def write_verified(result, input_dir, relay_b, out, manifest_path, local_node):
     (out / 'corpus.json').write_bytes(json_bytes(result['corpus']))
     index = {str(path.relative_to(out)): digest(path.read_bytes()) for path in sorted(out.rglob('*')) if path.is_file()}
     (out / 'sha256.json').write_bytes(json_bytes(index))
-    commit = subprocess.check_output(['git', '-C', str(Path(__file__).resolve().parent), 'rev-parse', 'HEAD'], text=True,
-                                     env=dict(os.environ, GIT_OPTIONAL_LOCKS='0')).strip()
     manifest = {'name': name, 'network': 'preprod' if local_node else 'mainnet', 'networkMagic': 1 if local_node else 764824073,
                 'anchor': result['range']['Anchor'], 'last': result['range']['Blocks'][-1],
                 'blocks': result['summary']['blocks'], 'rawBytes': result['summary']['rawBytes'],
                 'tcpSendMode': 'captured-chunks' if local_node else 'mux-frames',
                 'index': {'file': 'sha256.json', 'sha256': digest((out / 'sha256.json').read_bytes())},
                 'summary': result['summary'], 'source': result['source'],
-                'tools': {'capture': result['captureTools'], 'verifier': {'repositoryCommit': commit,
-                          'sha256': digest(Path(__file__).read_bytes()), 'implementation': 'Python standard library'},
+                'tools': {'capture': result['captureTools'], 'verifier': {'sha256': digest(Path(__file__).read_bytes()), 'implementation': 'Python standard library'},
                           'verifiedUtc': dt.datetime.now(dt.timezone.utc).isoformat()},
                 'licence': [
                     'Cardano ' + ('preprod' if local_node else 'mainnet') + ' blockchain data, public. No licence is granted or asserted by the capturer.',

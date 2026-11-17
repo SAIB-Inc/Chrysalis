@@ -7,6 +7,7 @@ using Chrysalis.Codec.Serialization;
 using Chrysalis.Codec.Types;
 using Chrysalis.Codec.Types.Cardano.Core;
 using Chrysalis.Network.Cbor.BlockFetch;
+using Chrysalis.Network.Cbor.ChainSync;
 using Chrysalis.Network.Cbor.KeepAlive;
 using Chrysalis.Network.Core;
 using Chrysalis.Network.MiniProtocols;
@@ -28,6 +29,9 @@ internal static class HarnessChecks
         Check(nameof(CorpusTipKeepsThePoint), CorpusTipKeepsThePoint, failures);
         Check(nameof(CorpusTipRejectsIncompleteTips), CorpusTipRejectsIncompleteTips, failures);
         await CheckAsync(nameof(CaptureDrainsAFullQueue), CaptureDrainsAFullQueue, failures).ConfigureAwait(false);
+        Check(nameof(CaptureDeclarationMatchesClock), CaptureDeclarationMatchesClock, failures);
+        await CheckAsync(nameof(CaptureRejectsInvalidAnchorBeforeConnecting), CaptureRejectsInvalidAnchorBeforeConnecting, failures).ConfigureAwait(false);
+        await CheckAsync(nameof(CaptureRejectsFirstHeaderBeforeBoundary), CaptureRejectsFirstHeaderBeforeBoundary, failures).ConfigureAwait(false);
         await CheckAsync(nameof(CaptureRequiresPriorDeclarationBeforeConnecting), CaptureRequiresPriorDeclarationBeforeConnecting, failures).ConfigureAwait(false);
         if (failures.Count != 0) { throw new AggregateException(failures); }
     }
@@ -41,7 +45,7 @@ internal static class HarnessChecks
     private static async Task CheckAsync(string name, Func<Task> test, List<Exception> failures)
     {
         try { await test().ConfigureAwait(false); Console.WriteLine("PASS " + name); }
-        catch (Exception exception) when (exception is InvalidDataException or OperationCanceledException or TimeoutException)
+        catch (Exception exception) when (exception is not OutOfMemoryException)
         {
             failures.Add(exception); Console.Error.WriteLine("FAIL " + name + ": " + exception.GetType().Name);
         }
@@ -134,37 +138,106 @@ internal static class HarnessChecks
         }
     }
 
-    private static async Task CaptureRequiresPriorDeclarationBeforeConnecting()
+    private const string Declaration = "- Declaration time: 2026-11-16T23:04:42Z\n- T0 = 2026-11-14T23:00:00Z\n- Mainnet slot at T0: 203130909.\n";
+
+    private static void CaptureDeclarationMatchesClock()
+    {
+        DateTimeOffset after = DateTimeOffset.Parse("2026-11-17T01:06:44Z", System.Globalization.CultureInfo.InvariantCulture);
+        if (CorpusCapture.ReadDeclaration(Declaration, after).FirstSlot != 203130909)
+        {
+            throw new InvalidDataException("The declaration boundary was not preserved.");
+        }
+        foreach (string invalid in new[] {
+            Declaration.Replace("203130909", "203130910", StringComparison.Ordinal),
+            Declaration.Replace("23:00:00Z", "22:00:00Z", StringComparison.Ordinal),
+            Declaration.Replace("23:00:00Z", "22:00:00Z", StringComparison.Ordinal).Replace("203130909", "203127309", StringComparison.Ordinal) })
+        {
+            try { _ = CorpusCapture.ReadDeclaration(invalid, after); }
+            catch (InvalidDataException) { continue; }
+            throw new InvalidDataException("A declaration contradicting its clock or slot was accepted.");
+        }
+    }
+
+    private static Task CaptureRequiresPriorDeclarationBeforeConnecting() => CaptureRejectsBeforeConnecting(
+        203130896, DateTimeOffset.Parse("2026-11-16T23:04:42Z", System.Globalization.CultureInfo.InvariantCulture),
+        "The declaration must fix the 48-hour, hour-rounded T0 before the first fetch.");
+
+    private static async Task CaptureRejectsInvalidAnchorBeforeConnecting()
+    {
+        await CaptureRejectsBeforeConnecting(203130909,
+            DateTimeOffset.Parse("2026-11-17T01:06:44Z", System.Globalization.CultureInfo.InvariantCulture),
+            "The anchor lookup or anchor slot does not match the declaration.").ConfigureAwait(false);
+        await CaptureRejectsBeforeConnecting(203130896, DateTimeOffset.UtcNow.AddDays(1),
+            "The anchor lookup or anchor slot does not match the declaration.").ConfigureAwait(false);
+    }
+
+    private static async Task CaptureRejectsBeforeConnecting(ulong slot, DateTimeOffset observedUtc, string message)
     {
         string root = Path.Combine(Fixtures.Root, "..", "out", "capture-check-" + Guid.NewGuid().ToString("N"));
         _ = Directory.CreateDirectory(root);
         string anchorPath = Path.Combine(root, "anchor.json");
         string declarationPath = Path.Combine(root, "declaration.md");
         string output = Path.Combine(root, "output");
+        bool connected = false;
         try
         {
             await File.WriteAllTextAsync(anchorPath, JsonSerializer.Serialize(new
             {
-                anchor = new RangePoint(1, new string('0', 64), ""),
+                anchor = new RangePoint(slot, new string('0', 64), ""),
                 blockNumber = 1,
-                observedUtc = DateTimeOffset.Parse("2026-01-03T00:04:42Z", System.Globalization.CultureInfo.InvariantCulture)
+                observedUtc
             })).ConfigureAwait(false);
-            string declaration = "- Declaration time: 2026-01-03T00:04:42Z\n- T0 = 2026-01-01T00:00:00Z\n- Mainnet slot at T0: 2.\n";
-            DateTimeOffset after = DateTimeOffset.Parse("2026-01-03T00:04:43Z", System.Globalization.CultureInfo.InvariantCulture);
-            if (CorpusCapture.ReadDeclaration(declaration, after).FirstSlot != 2)
+            await File.WriteAllTextAsync(declarationPath, Declaration).ConfigureAwait(false);
+            try
             {
-                throw new InvalidDataException("The declaration boundary was not preserved.");
+                await CorpusCapture.RunAsync(["capture", "unused", "3001", output, anchorPath, declarationPath],
+                    (_, _, _, _) => { connected = true; throw new InvalidOperationException("Offline connection sentinel."); }).ConfigureAwait(false);
             }
-            await File.WriteAllTextAsync(declarationPath, declaration).ConfigureAwait(false);
-            try { await CorpusCapture.RunAsync(["capture", "unused", "3001", output, anchorPath, declarationPath]).ConfigureAwait(false); }
-            catch (InvalidDataException)
+            catch (InvalidDataException exception) when (exception.Message == message)
             {
-                if (Directory.Exists(output)) { throw new InvalidDataException("A capture without a prior declaration created an attempt."); }
+                if (connected || Directory.Exists(output)) { throw new InvalidDataException("Invalid capture inputs reached connection setup."); }
                 return;
             }
-            throw new InvalidDataException("A capture whose declaration did not precede lookup was accepted.");
+            throw new InvalidDataException("Invalid capture inputs were accepted.");
         }
         finally { Directory.Delete(root, true); }
+    }
+
+    private static async Task CaptureRejectsFirstHeaderBeforeBoundary()
+    {
+        BlockWithEra block = CborSerializer.Deserialize<BlockWithEra>(Fixtures.Load("block-*.cbor")[0]);
+        byte[] header = block.Block.Header().Raw.ToArray();
+        byte[] wrapped = [0x82, 0x06, 0xd8, 0x18, 0x59, (byte)(header.Length >> 8), (byte)header.Length, .. header];
+        N2NBlockHeader payload = CborSerializer.Deserialize<N2NBlockHeader>(wrapped);
+        RangePoint anchor = new(block.Block.Slot() - 1, new string('0', 64), "");
+        Tip tip = new(anchor.ToPoint(), 1);
+        using OfflineReplay.ReplayBearer bearer = new();
+        using Plexer plexer = new(bearer);
+        ChainSync chain = new(plexer.SubscribeClient(ProtocolType.NodeChainSync), ProtocolType.NodeChainSync);
+        CorpusCapture.Heartbeat heartbeat = new(new KeepAliveClient(plexer.SubscribeClient(ProtocolType.KeepAlive)), TimeSpan.FromHours(1));
+        foreach (MessageNextResponse reply in new MessageNextResponse[] {
+            new MessageRollBackward(3, anchor.ToPoint(), tip), new N2NMessageRollForward(2, payload, tip),
+            new MessageRollBackward(3, anchor.ToPoint(), tip) })
+        {
+            byte[] bytes = CborSerializer.Serialize(reply);
+            byte[] frame = MuxSegmentCodec.Encode(new MuxSegment(new MuxSegmentHeader(0, ProtocolType.NodeChainSync,
+                checked((ushort)bytes.Length), true), new ReadOnlySequence<byte>(bytes))).ToArray();
+            _ = await bearer.Input.WriteAsync(frame).ConfigureAwait(false);
+        }
+        using CancellationTokenSource cancellation = new(TimeSpan.FromSeconds(5));
+        Task worker = plexer.RunAsync(cancellation.Token);
+        try
+        {
+            try { _ = await CorpusCapture.ReadHeadersAsync(chain, heartbeat, anchor, null, block.Block.Slot() + 1, cancellation.Token).ConfigureAwait(false); }
+            catch (InvalidDataException exception) when (exception.Message == "The first block precedes the declaration boundary.") { return; }
+            throw new InvalidDataException("A first header below T0 was accepted.");
+        }
+        finally
+        {
+            await cancellation.CancelAsync().ConfigureAwait(false);
+            try { await worker.ConfigureAwait(false); }
+            catch (OperationCanceledException) { }
+        }
     }
 
     private static void CorpusTipKeepsThePoint()

@@ -242,12 +242,12 @@ call G8's `run_benchmarks.stage("baseline", source, output)` on a task-local cop
 of the frozen baseline inputs, then build the staged harness with SDK 10.0.301,
 net10.0 and `--no-dependencies`. Assert the eight product DLL hashes from the
 pinned preparation record before and after; only the harness is rebuilt. Run
-with `heavy dotnet exec --fx-version 10.0.9 <baseline-harness.dll>`.
+with `dotnet exec --fx-version 10.0.9 <baseline-harness.dll>`.
+Capture and header recording are network I/O; they need no heavy slot.
 
-The three argument forms (each output directory must be new) are:
+The two argument forms (each output directory must be new) are:
 
 ```
-corpus tip HOST PORT NEW_OUTPUT_DIRECTORY
 corpus capture HOST PORT NEW_OUTPUT_DIRECTORY ANCHOR_JSON DECLARATION_MD
 corpus headers HOST PORT NEW_OUTPUT_DIRECTORY RANGE_JSON
 ```
@@ -257,8 +257,7 @@ range declaration: T0 is exactly 48 hours before that declaration's timestamp,
 rounded down to a whole UTC hour. Record the UTC time, weekday and matching
 mainnet slot. The range is the first block whose slot is at or after that slot,
 plus the following 999 blocks; its anchor is the block immediately before it.
-There is no content selection, redraw, candidate 2 or 24-hour wait. `tip` is
-now diagnostic only; historical tip records are not capture inputs.
+There is no content selection, redraw, candidate 2 or 24-hour wait.
 
 The declaration Markdown contains these three fields (the timestamp is UTC):
 
@@ -268,8 +267,7 @@ The declaration Markdown contains these three fields (the timestamp is UTC):
 - Mainnet slot at T0: FIRST_SLOT.
 ```
 
-After code/tests are ready and the coordinator gives the live-run go, make
-**one** no-key Koios GET for the last block below the declared slot. Keep the
+After writing the declaration, make **one** no-key Koios GET for the last block below the declared slot. Keep the
 exact URL, UTC time and raw response in evidence. It supplies only the anchor,
 never block content or another draw. If Koios fails, stop; do not use another
 index. `ANCHOR_JSON` holds `anchor` in RangePoint form (`Slot`, `Hash`, `Sha256`
@@ -279,7 +277,6 @@ boundary or a first returned header before it. It preserves `declaration.md`
 for independent verification. The relay's tip must still be 3,160 blocks above
 the anchor. IntersectNotFound stops the run and is reported, never retried as
 an orphan candidate. Run `headers` on relay B with the same captured range.
-The capture may run while review runs, only on the coordinator's go.
 
 A is `backbone.cardano.iog.io:3001` (IOG); B is
 `backbone.mainnet.cardanofoundation.org:3001` (Cardano Foundation). Only
@@ -289,17 +286,18 @@ probe. After failure: at most one retry per relay, at least ten minutes later,
 then the fallback under the same limit, then stop. Do not automate retries.
 
 Capture and headers each have a fixed 30-minute total deadline and a separate
-30-second handshake bound; tip has a one-minute total bound. Every attempt
+30-second handshake bound. Every attempt
 keeps its duplex streams and JSON record, even on failure. Errors log their
 type, not local endpoints. Log UTC, load, duration and relay DNS names, never
 the PC's address or host name. Do not print block bytes or metadata. Keep-alive
 sends stay on the capture task; pending replies are awaited only after the
 headers or BatchDone, not while a full block-fetch queue needs draining.
 
-The independent verifier never writes its inputs. For mainnet:
+The independent verifier never writes its inputs. It is light Python and needs
+no heavy slot. It accepts Python 3.9–3.12. For mainnet:
 
 ```
-heavy python3 benchmarks/scripts/corpus_verify.py --input STAGING --relay-b SECOND_RELAY --out NEW_CORPUS --manifest benchmarks/corpora/mainnet-ANCHOR_SLOT.json
+python3 benchmarks/scripts/corpus_verify.py --input STAGING --relay-b SECOND_RELAY --out NEW_CORPUS --manifest benchmarks/corpora/mainnet-ANCHOR_SLOT.json
 ```
 
 `NEW_CORPUS` must end in `mainnet-ANCHOR_SLOT`. To import the pinned preprod
@@ -307,7 +305,12 @@ recording instead, use `--local-node --range benchmarks/Chrysalis.Benchmarks/ran
 in place of `--relay-b`; its output name is `preprod-p1-n2n-recording-a`.
 That mode reports the original local node 11.1.3, with no second operator and
 no depth check. Every other verification check runs. Mainnet additionally checks the preserved
-declaration and `anchor slot < declared first slot <= first block slot`. The output and manifest
+declaration, its mainnet time-to-slot conversion, and
+`anchor slot < declared first slot <= first block slot`. The recorded handshake
+must accept version 14 with the correct network magic. Every mainnet protocol
+ends with MsgDone; the older preprod recording has no keep-alive traffic.
+Source identity is the capture
+`harnessSha256` and verifier `sha256`, not the parent repository commit. The output and manifest
 must be new and outside both inputs; the manifest must be outside the corpus.
 
 Keep corpora outside repositories. Set `CHRYSALIS_CORPORA` to their absolute

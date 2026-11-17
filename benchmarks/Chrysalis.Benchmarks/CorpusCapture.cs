@@ -23,17 +23,17 @@ internal static class CorpusCapture
 {
     internal const ulong MainnetMagic = 764824073;
 
-    internal static async Task RunAsync(string[] args)
+    internal static async Task RunAsync(string[] args,
+        Func<string, int, string, CancellationToken, Task<RecordedBearer>>? connect = null)
     {
-        if (args.Length < 1 || args[0] is not ("tip" or "capture" or "headers")
-            || args.Length != (args[0] switch { "tip" => 4, "capture" => 6, _ => 5 }))
+        if (args.Length < 1 || args[0] is not ("capture" or "headers")
+            || args.Length != (args[0] == "capture" ? 6 : 5))
         {
-            throw new ArgumentException("corpus tip HOST PORT NEW_OUTPUT_DIRECTORY; capture adds ANCHOR_JSON DECLARATION_MD; headers adds RANGE_JSON.", nameof(args));
+            throw new ArgumentException("corpus capture HOST PORT NEW_OUTPUT_DIRECTORY ANCHOR_JSON DECLARATION_MD; headers takes RANGE_JSON instead.", nameof(args));
         }
         int port = int.Parse(args[2], CultureInfo.InvariantCulture);
         ArgumentOutOfRangeException.ThrowIfLessThan(port, 1);
         ArgumentOutOfRangeException.ThrowIfGreaterThan(port, 65535);
-        bool tipOnly = args[0] == "tip";
         bool capture = args[0] == "capture";
         RangePoint? anchor = null;
         FixedRange? range = null;
@@ -54,7 +54,7 @@ internal static class CorpusCapture
                 throw new InvalidDataException("The anchor lookup or anchor slot does not match the declaration.");
             }
         }
-        else if (!tipOnly)
+        else
         {
             range = JsonSerializer.Deserialize<FixedRange>(await File.ReadAllTextAsync(args[4]).ConfigureAwait(false))
                 ?? throw new InvalidDataException("Missing range.");
@@ -74,12 +74,12 @@ internal static class CorpusCapture
         object tools = ToolRecord();
         try
         {
-            using CancellationTokenSource cancellation = new(tipOnly ? TimeSpan.FromMinutes(1) : TimeSpan.FromMinutes(30));
+            using CancellationTokenSource cancellation = new(TimeSpan.FromMinutes(30));
             if (declarationBytes is not null)
             {
                 await File.WriteAllBytesAsync(Path.Combine(root, "declaration.md"), declarationBytes, cancellation.Token).ConfigureAwait(false);
             }
-            bearer = await RecordedBearer.ConnectAsync(args[1], port, root, cancellation.Token).ConfigureAwait(false);
+            bearer = await (connect ?? RecordedBearer.ConnectAsync)(args[1], port, root, cancellation.Token).ConfigureAwait(false);
             using Plexer plexer = new(bearer);
             ConstructorInfo constructor = typeof(PeerClient).GetConstructor(BindingFlags.NonPublic | BindingFlags.Instance,
                 null, [typeof(Plexer)], null) ?? throw new InvalidOperationException("PeerClient setup constructor missing.");
@@ -87,57 +87,37 @@ internal static class CorpusCapture
             await client.StartAsync(MainnetMagic, TimeSpan.FromHours(1))
                 .WaitAsync(TimeSpan.FromSeconds(30), cancellation.Token).ConfigureAwait(false);
             ChainSyncMessage? intersection = await client.ChainSync.FindIntersectionAsync(
-                [tipOnly ? Point.Origin : anchor!.ToPoint()], cancellation.Token).ConfigureAwait(false);
+                [anchor!.ToPoint()], cancellation.Token).ConfigureAwait(false);
             if (intersection is not MessageIntersectFound found)
             {
                 status = "intersection-not-found";
                 await DoneAsync(client, cancellation.Token).ConfigureAwait(false);
                 throw new InvalidDataException("The relay did not intersect at the requested point.");
             }
-            RangePoint tip = TipPoint(found.Tip);
+            _ = TipPoint(found.Tip);
             int blockNumber = found.Tip.BlockNumber!.Value;
-            if (tipOnly)
+            RequirePoint(found.Point, anchor!);
+            if (capture && blockNumber < (long)anchorNumber + 3160)
             {
-                if (found.Point is not OriginPoint) { throw new InvalidDataException("The relay did not intersect at origin."); }
+                status = "insufficient-depth";
                 await DoneAsync(client, cancellation.Token).ConfigureAwait(false);
-                await File.WriteAllTextAsync(Path.Combine(root, "tip.json"), JsonSerializer.Serialize(new
-                {
-                    relay = args[1],
-                    port,
-                    networkMagic = MainnetMagic,
-                    startedUtc,
-                    observedUtc = DateTimeOffset.UtcNow,
-                    anchor = tip,
-                    blockNumber,
-                    runtime = Environment.Version.ToString()
-                }, Program.IndentedJson), cancellation.Token).ConfigureAwait(false);
-                Console.WriteLine($"Tip recorded: slot {tip.Slot}, block {blockNumber}, hash {tip.Hash}.");
+                throw new InvalidDataException("The relay tip is fewer than 3,160 blocks above the anchor.");
             }
-            else
+            Heartbeat heartbeat = new(client.KeepAlive, TimeSpan.FromSeconds(20));
+            RangePoint[] points = await ReadHeadersAsync(client.ChainSync, heartbeat, anchor!, range?.Blocks, declaration?.FirstSlot, cancellation.Token).ConfigureAwait(false);
+            if (capture)
             {
-                RequirePoint(found.Point, anchor!);
-                if (capture && blockNumber < (long)anchorNumber + 3160)
-                {
-                    status = "insufficient-depth";
-                    await DoneAsync(client, cancellation.Token).ConfigureAwait(false);
-                    throw new InvalidDataException("The relay tip is fewer than 3,160 blocks above the anchor.");
-                }
-                Heartbeat heartbeat = new(client.KeepAlive, TimeSpan.FromSeconds(20));
-                RangePoint[] points = await ReadHeadersAsync(client.ChainSync, heartbeat, anchor!, range?.Blocks, declaration?.FirstSlot, cancellation.Token).ConfigureAwait(false);
-                if (capture)
-                {
-                    range = new(anchor!, points);
-                    await File.WriteAllTextAsync(Path.Combine(root, "range.json"), JsonSerializer.Serialize(range, Program.IndentedJson), cancellation.Token).ConfigureAwait(false);
-                    rangeSha256 = HashFile(Path.Combine(root, "range.json"));
-                    blocks = await FetchAsync(client.BlockFetch, heartbeat, range, cancellation.Token).ConfigureAwait(false);
-                    range = new(anchor!, [.. points.Select((point, index) => point with { Sha256 = blocks[index].Sha256 })]);
-                    await File.WriteAllTextAsync(Path.Combine(root, "range.json"), JsonSerializer.Serialize(range, Program.IndentedJson), cancellation.Token).ConfigureAwait(false);
-                    rangeSha256 = HashFile(Path.Combine(root, "range.json"));
-                }
-                else { rangeSha256 = HashFile(args[4]); }
-                await DoneAsync(client, cancellation.Token).ConfigureAwait(false);
-                Console.WriteLine($"Recorded {points.Length} headers and {blocks.Length} blocks.");
+                range = new(anchor!, points);
+                await File.WriteAllTextAsync(Path.Combine(root, "range.json"), JsonSerializer.Serialize(range, Program.IndentedJson), cancellation.Token).ConfigureAwait(false);
+                rangeSha256 = HashFile(Path.Combine(root, "range.json"));
+                blocks = await FetchAsync(client.BlockFetch, heartbeat, range, cancellation.Token).ConfigureAwait(false);
+                range = new(anchor!, [.. points.Select((point, index) => point with { Sha256 = blocks[index].Sha256 })]);
+                await File.WriteAllTextAsync(Path.Combine(root, "range.json"), JsonSerializer.Serialize(range, Program.IndentedJson), cancellation.Token).ConfigureAwait(false);
+                rangeSha256 = HashFile(Path.Combine(root, "range.json"));
             }
+            else { rangeSha256 = HashFile(args[4]); }
+            await DoneAsync(client, cancellation.Token).ConfigureAwait(false);
+            Console.WriteLine($"Recorded {points.Length} headers and {blocks.Length} blocks.");
             status = "ok";
         }
         catch (Exception exception) when (exception is not OutOfMemoryException)
@@ -167,7 +147,7 @@ internal static class CorpusCapture
                 rangeSha256,
                 events = bearer?.Events
             }, Program.IndentedJson);
-            await File.WriteAllTextAsync(Path.Combine(root, tipOnly ? "attempt.json" : "capture.json"), json).ConfigureAwait(false);
+            await File.WriteAllTextAsync(Path.Combine(root, "capture.json"), json).ConfigureAwait(false);
         }
     }
 
@@ -187,7 +167,7 @@ internal static class CorpusCapture
         }
     }
 
-    private static async Task<RangePoint[]> ReadHeadersAsync(ChainSync chain, Heartbeat heartbeat, RangePoint anchor,
+    internal static async Task<RangePoint[]> ReadHeadersAsync(ChainSync chain, Heartbeat heartbeat, RangePoint anchor,
         RangePoint[]? expected, ulong? minimumSlot, CancellationToken token)
     {
         if (await chain.NextRequestAsync(token).ConfigureAwait(false) is not MessageRollBackward rollback)
@@ -244,6 +224,11 @@ internal static class CorpusCapture
         {
             throw new InvalidDataException("The declaration must fix the 48-hour, hour-rounded T0 before the first fetch.");
         }
+        long expectedSlot = 4492800 + t0.ToUnixTimeSeconds() - 1596059091;
+        if (expectedSlot < 0 || slot != (ulong)expectedSlot)
+        {
+            throw new InvalidDataException("Mainnet slot must match T0.");
+        }
         return new(declared, t0, slot);
     }
 
@@ -251,13 +236,6 @@ internal static class CorpusCapture
 
     private static object ToolRecord()
     {
-        ProcessStartInfo info = new("git") { WorkingDirectory = Fixtures.Root, RedirectStandardOutput = true };
-        info.Environment["GIT_OPTIONAL_LOCKS"] = "0";
-        info.ArgumentList.Add("rev-parse"); info.ArgumentList.Add("HEAD");
-        using Process process = Process.Start(info) ?? throw new InvalidOperationException("Cannot read the capture commit.");
-        string commit = process.StandardOutput.ReadToEnd().Trim();
-        process.WaitForExit();
-        if (process.ExitCode != 0) { throw new InvalidOperationException("Cannot read the capture commit."); }
         using IncrementalHash sourceHash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
         foreach (string path in Directory.GetFiles(Fixtures.Root, "*.cs").Order(StringComparer.Ordinal))
         {
@@ -265,7 +243,6 @@ internal static class CorpusCapture
         }
         return new
         {
-            repositoryCommit = commit,
             harnessSha256 = Convert.ToHexStringLower(sourceHash.GetHashAndReset()),
             harnessAssemblySha256 = HashFile(typeof(CorpusCapture).Assembly.Location),
             clientAssemblySha256 = HashFile(typeof(PeerClient).Assembly.Location),
