@@ -1,6 +1,7 @@
 using Chrysalis.Codec.Serialization;
 using Chrysalis.Codec.Serialization.Attributes;
 using Chrysalis.Codec.Types;
+using Chrysalis.Codec.Types.Cardano.Core;
 using Chrysalis.Network.Cbor.Common;
 
 namespace Chrysalis.Network.Cbor.ChainSync;
@@ -10,8 +11,9 @@ namespace Chrysalis.Network.Cbor.ChainSync;
 /// shape is era-dependent — Byron (era 0) nests its tag-24 header one level deeper inside a bare array
 /// (<c>[[subTag, size], #6.24(header)]</c>), whereas Shelley-and-later (era ≥ 1) carry the tag-24 header
 /// directly (<c>#6.24(header)</c>). This is an era-discriminated union (mirroring
-/// <see cref="Codec.Types.Cardano.Core.BlockWithEra"/>) so RollForward of <em>any</em> era deserializes
-/// without throwing: the lazy reader only records field boundaries, leaving <see cref="ICborType.Raw"/>
+/// <see cref="BlockWithEra"/>) so RollForward of every supported era deserializes
+/// lazily. Unknown tags throw <see cref="UnknownEraException"/>; <see cref="ReadUnknownEra"/>
+/// explicitly receives an unprocessed envelope. The lazy reader leaves <see cref="ICborType.Raw"/>
 /// populated with the full <c>[era, header]</c> bytes. Consumers extract the chain point by routing
 /// <see cref="ICborType.Raw"/> through <see cref="ChainSyncHeader.Decode"/>.
 /// </summary>
@@ -19,6 +21,8 @@ namespace Chrysalis.Network.Cbor.ChainSync;
 [CborList]
 public readonly partial record struct N2NBlockHeader : ICborType
 {
+    internal const ulong MaxSupportedEraTag = 6;
+
     /// <summary>The era identifier (0 = Byron, 1 = Shelley, … 6 = Conway).</summary>
     [CborOrder(0)] public partial int EraTag { get; }
 
@@ -36,6 +40,22 @@ public readonly partial record struct N2NBlockHeader : ICborType
     [CborUnionHint(nameof(EraTag), 5, typeof(ShelleyN2NHeader))]
     [CborUnionHint(nameof(EraTag), 6, typeof(ShelleyN2NHeader))]
     public partial INetworkBlockHeader Header { get; }
+
+    /// <summary>Reads a header with caller-supplied context for an unknown-era error.</summary>
+    public static N2NBlockHeader Read(ReadOnlyMemory<byte> data, (ulong Slot, ReadOnlyMemory<byte> Hash) point) =>
+        UnknownEra.ReadAtPoint<N2NBlockHeader>(data, point);
+
+    /// <summary>Explicitly receives an unsupported header as unprocessed wire bytes.</summary>
+    public static UnknownEra ReadUnknownEra(ReadOnlyMemory<byte> data,
+        (ulong Slot, ReadOnlyMemory<byte> Hash)? point = null) =>
+        UnknownEra.Read(data, EraEnvelope.Header, MaxSupportedEraTag, point);
+}
+
+/// <summary>Validates the wire era before a lazy header can be reported as decoded.</summary>
+public readonly record struct N2NBlockHeaderValidator : ICborValidator<N2NBlockHeader>
+{
+    /// <inheritdoc />
+    public bool Validate(N2NBlockHeader input) => UnknownEra.Validate(input, EraEnvelope.Header, N2NBlockHeader.MaxSupportedEraTag);
 }
 
 /// <summary>

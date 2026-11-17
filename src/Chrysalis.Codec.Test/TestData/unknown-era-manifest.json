@@ -1,0 +1,24 @@
+[
+  {
+    "path": "shelley1.block",
+    "source": "Pallas test_data/shelley1.block (existing fixture)",
+    "version": "v1.5.0-rc.2",
+    "license": "Apache-2.0",
+    "sha256": "87bb16b8624f3ae0212b57231de58c6576b7b30f29eb482c540e1da78b0f4f21",
+    "binary": false,
+    "blockTag": 2,
+    "headerTag": 1
+  },
+  {
+    "path": "preprod-conway.block.cbor",
+    "source": "G1 Fixtures/Preprod/blocks/block-139039741.cbor (linked existing fixture)",
+    "version": "cardano-node 11.1.3",
+    "license": "Public chain data",
+    "networkMagic": 1,
+    "slot": 139039741,
+    "sha256": "c19b63dbc65508c74204682bbf89a304568f016ff96404d52ec68a1c08e60767",
+    "binary": true,
+    "blockTag": 7,
+    "headerTag": 6
+  }
+]
