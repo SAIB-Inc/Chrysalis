@@ -1,0 +1,74 @@
+{
+  "generator": "Python cbor2",
+  "version": "5.8.0",
+  "vectors": [
+    {
+      "payloadBytes": 0,
+      "bytes": 6,
+      "sha256": "f34dff233f479a7dc6efc3614dcf9c32dadbce51dad6992b0e159e21269f8747",
+      "file": "body-0.cbor"
+    },
+    {
+      "payloadBytes": 1,
+      "bytes": 7,
+      "sha256": "2c5bd2c0a2402c9c3931a87753bf185cbf6b2a9c30b0199c636c605448f41f43",
+      "file": "body-1.cbor"
+    },
+    {
+      "payloadBytes": 23,
+      "bytes": 30,
+      "sha256": "c71fb21030f0237bccf81065d8bc5aaf2b4e3b8a207efbe35ecabe17437708a4",
+      "file": "body-23.cbor"
+    },
+    {
+      "payloadBytes": 24,
+      "bytes": 32,
+      "sha256": "e919f2bc99fbf954fc3ee695576819ccdbfb13a913ce67638e2e232b15ef1064",
+      "file": "body-24.cbor"
+    },
+    {
+      "payloadBytes": 255,
+      "bytes": 264,
+      "sha256": "760b69f31a83cdf5503b40120f6747740eaf4ea1fba19aff50f390d24c2fe975",
+      "file": "body-255.cbor"
+    },
+    {
+      "payloadBytes": 256,
+      "bytes": 266,
+      "sha256": "d010052aa520535ea67d2b25796a73fe2f6cf945cdc7383877bd8d3c6c9cfb1d",
+      "file": "body-256.cbor"
+    },
+    {
+      "payloadBytes": 1000,
+      "bytes": 1010,
+      "sha256": "5659e5d9995076fe088af688e573efaa6ac8879dfe1826502956e42d94d1dd47",
+      "file": "body-1000.cbor"
+    },
+    {
+      "payloadBytes": 65500,
+      "bytes": 65510,
+      "sha256": "c231b73d72bbefffd09e202ae5aa7cc87a6b9f0941ab60520795d74683dec360",
+      "file": "body-65500.cbor"
+    },
+    {
+      "payloadBytes": 2500000,
+      "bytes": 2500014,
+      "sha256": "f6d3bbf4346d4284b93f10fe23d4c35b8d0540f6b868be011d125dcdc545f847",
+      "headerHex": "8204d8185a002625a55a002625a0",
+      "fill": {
+        "kind": "index-modulo",
+        "modulus": 251
+      }
+    },
+    {
+      "payloadBytes": 5000000,
+      "bytes": 5000014,
+      "sha256": "9239264c3ae54f4259f28e31ceb57d44edeaf552ac3e75c4a96b0846bb8d003b",
+      "headerHex": "8204d8185a004c4b455a004c4b40",
+      "fill": {
+        "kind": "index-modulo",
+        "modulus": 251
+      }
+    }
+  ]
+}

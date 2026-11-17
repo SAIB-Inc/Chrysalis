@@ -49,7 +49,7 @@ public class SynchronousContinuationRiskTests(ITestOutputHelper output)
             {
                 await run.WaitAsync(Deadline);
             }
-            _ = await Assert.ThrowsAsync<ChannelClosedException>(() => channel.ReadSegmentAsync().AsTask().WaitAsync(Deadline));
+            _ = await Assert.ThrowsAsync<ConnectionClosedException>(() => channel.ReadSegmentAsync().AsTask().WaitAsync(Deadline));
         }
         finally
         {
@@ -157,7 +157,7 @@ public class SynchronousContinuationRiskTests(ITestOutputHelper output)
         ChannelReader<ReadOnlyMemory<byte>> reader = demuxer.Subscribe(ProtocolType.BlockFetch);
         // More than the 64-entry bound; each AdvanceTo poisons the borrowed
         // bearer memory, so retained results must be independently owned.
-        byte[] frames = [.. Enumerable.Range(0, 160).SelectMany(index => Frame(ProtocolType.BlockFetch, [(byte)index]))];
+        byte[] frames = [.. Enumerable.Range(0, 160).SelectMany(index => Frame(ProtocolType.BlockFetch, [(byte)(index % 24)]))];
         Task run = Task.CompletedTask;
         List<ReadOnlyMemory<byte>> retained = [];
         try
@@ -174,7 +174,7 @@ public class SynchronousContinuationRiskTests(ITestOutputHelper output)
             Assert.True(bearer.ReaderAdvances >= 2);
             for (int index = 0; index < retained.Count; index++)
             {
-                Assert.Equal((byte)index, Assert.Single(retained[index].ToArray()));
+                Assert.Equal((byte)(index % 24), Assert.Single(retained[index].ToArray()));
             }
         }
         finally
@@ -315,8 +315,9 @@ public class SynchronousContinuationRiskTests(ITestOutputHelper output)
     }
 
     private static bool HasRunFrame<T>() => new StackTrace().GetFrames().Any(frame =>
-        frame.GetMethod()?.DeclaringType?.DeclaringType == typeof(T)
-        && frame.GetMethod()?.DeclaringType?.Name.StartsWith("<RunAsync>", StringComparison.Ordinal) == true);
+        (frame.GetMethod()?.DeclaringType == typeof(T) && frame.GetMethod()?.Name is "Turn" or "CallerTurn" or "Callback") ||
+        (frame.GetMethod()?.DeclaringType?.DeclaringType == typeof(T) &&
+         frame.GetMethod()?.DeclaringType?.Name.StartsWith("<RunAsync>", StringComparison.Ordinal) == true));
 
     private static async Task DrainAsync(PipeReader reader, int[] expectedPayloadLengths, CancellationToken token)
     {

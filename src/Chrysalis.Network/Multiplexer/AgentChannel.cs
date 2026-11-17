@@ -11,7 +11,8 @@ namespace Chrysalis.Network.Multiplexer;
 /// Represents a bidirectional communication channel for a specific protocol.
 /// </summary>
 /// <remarks>
-/// Read path uses System.Threading.Channels for segment dispatch from the demuxer.
+/// Read path consumes queue items: Demuxer/Plexer items hold complete messages; caller-made items follow their producer.
+/// Caller-made channels must not change an item after queuing it: received messages may keep slices of it.
 /// Write path supports both the muxer pipeline (normal) and direct bearer writes (fast-path).
 /// </remarks>
 public sealed class AgentChannel(
@@ -23,6 +24,17 @@ public sealed class AgentChannel(
 )
 {
     private readonly Muxer.WriterState _muxerState = Muxer.WriterStates.GetValue(muxerWriter, static _ => new Muxer.WriterState());
+
+    private readonly Connection? _connection;
+    internal bool WholeMessages { get; init; }
+
+    internal AgentChannel(ProtocolType protocolId, PipeWriter muxerWriter, PipeWriter bearerWriter,
+        ChannelReader<ReadOnlyMemory<byte>> demuxReader, Connection connection)
+        : this(protocolId, muxerWriter, bearerWriter, demuxReader, connection.WriteLock)
+    {
+        _connection = connection;
+        WholeMessages = true;
+    }
 
     /// <summary>
     /// Enqueues a chunk of data through the muxer pipeline.
@@ -81,8 +93,11 @@ public sealed class AgentChannel(
         await bearerWriteLock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            _ = await bearerWriter.WriteAsync(preEncodedSegment, cancellationToken).ConfigureAwait(false);
-            _ = await bearerWriter.FlushAsync(cancellationToken).ConfigureAwait(false);
+            _connection?.ThrowIfEnded();
+            FlushResult write = await bearerWriter.WriteAsync(preEncodedSegment, cancellationToken).ConfigureAwait(false);
+            _connection?.CheckFlush(write);
+            FlushResult flush = await bearerWriter.FlushAsync(cancellationToken).ConfigureAwait(false);
+            _connection?.CheckFlush(flush);
         }
         finally
         {
@@ -99,11 +114,15 @@ public sealed class AgentChannel(
         await bearerWriteLock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
+            _connection?.ThrowIfEnded();
             for (int i = 0; i < count; i++)
             {
-                _ = await bearerWriter.WriteAsync(preEncodedSegment, cancellationToken).ConfigureAwait(false);
+                _connection?.ThrowIfEnded();
+                FlushResult write = await bearerWriter.WriteAsync(preEncodedSegment, cancellationToken).ConfigureAwait(false);
+                _connection?.CheckFlush(write);
             }
-            _ = await bearerWriter.FlushAsync(cancellationToken).ConfigureAwait(false);
+            FlushResult flush = await bearerWriter.FlushAsync(cancellationToken).ConfigureAwait(false);
+            _connection?.CheckFlush(flush);
         }
         finally
         {
@@ -112,8 +131,10 @@ public sealed class AgentChannel(
     }
 
     /// <summary>
-    /// Reads the next available segment payload from this protocol channel.
+    /// Reads the next queue item from this protocol channel.
     /// </summary>
+    /// <remarks>Demuxer/Plexer items contain the whole messages one segment completed, or empty memory.
+    /// Caller-provided readers define their own items and completion exceptions; this method forwards them unchanged.</remarks>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public ValueTask<ReadOnlyMemory<byte>> ReadSegmentAsync(CancellationToken cancellationToken = default) => demuxReader.ReadAsync(cancellationToken);
 

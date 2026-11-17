@@ -155,6 +155,8 @@ docs: update README with new examples
 
 ### PR Requirements
 
+- Code under the demuxer's reader role is internal and bounded, never awaits, and completes other callers' waits only through the thread pool
+
 - All tests must pass
 - Code must build without errors
 - Follow existing code style and patterns

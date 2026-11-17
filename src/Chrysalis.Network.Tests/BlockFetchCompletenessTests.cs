@@ -1,4 +1,3 @@
-using System.Reflection;
 using System.Runtime.ExceptionServices;
 using System.Security.Cryptography;
 using System.Text.Json;
@@ -216,9 +215,13 @@ public class BlockFetchCompletenessTests(ITestOutputHelper output)
     [InlineData("9F5F4101")]
     public void CompletenessCheckAllocatesNothingOnPartialDefiniteAndIndefiniteItems(string hex)
     {
-        // Bind once, outside the allocation window, to the actual receive-path boundary check.
-        CompletenessProbe probe = typeof(ChannelBuffer).GetMethod("IsCompleteFrame", BindingFlags.NonPublic | BindingFlags.Static)!
-            .CreateDelegate<CompletenessProbe>();
+        static bool Probe(ReadOnlySpan<byte> bytes)
+        {
+            CborFrameScanner.State state = new();
+            try { return state.Scan(bytes, out _) > 0; }
+            finally { state.Dispose(); }
+        }
+        CompletenessProbe probe = Probe;
         byte[] bytes = Convert.FromHexString(hex);
         for (int i = 0; i < 100; i++) { Assert.False(probe(bytes)); }
         long before = GC.GetAllocatedBytesForCurrentThread();

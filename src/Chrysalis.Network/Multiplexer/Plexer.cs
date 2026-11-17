@@ -10,10 +10,9 @@ namespace Chrysalis.Network.Multiplexer;
 public sealed class Plexer : IDisposable
 {
     private readonly IBearer _bearer;
-    private readonly SemaphoreSlim _bearerWriteLock = new(1, 1);
+    private readonly Connection _connection;
     private readonly Demuxer _demuxer;
     private readonly Muxer _muxer;
-    private bool _isDisposed;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="Plexer"/> class.
@@ -22,27 +21,30 @@ public sealed class Plexer : IDisposable
     public Plexer(IBearer bearer)
     {
         _bearer = bearer ?? throw new ArgumentNullException(nameof(bearer));
-        _demuxer = new Demuxer(bearer);
-        _muxer = new Muxer(bearer.Writer, ProtocolMode.Initiator, _bearerWriteLock);
+        _connection = new Connection(bearer);
+        _demuxer = new Demuxer(bearer, _connection);
+        _muxer = new Muxer(bearer.Writer, ProtocolMode.Initiator, _connection.WriteLock);
     }
 
     /// <summary>
     /// Creates a channel for client-side protocol communication.
     /// </summary>
     /// <param name="protocol">The protocol type to subscribe to.</param>
+    /// <remarks>A full 64-item protocol queue stalls all protocols until an item is consumed.</remarks>
     /// <returns>A bidirectional agent channel for the specified protocol.</returns>
     public AgentChannel SubscribeClient(ProtocolType protocol)
     {
         PipeWriter muxerWriter = _muxer.Writer;
         PipeWriter bearerWriter = _bearer.Writer;
         ChannelReader<ReadOnlyMemory<byte>> reader = _demuxer.Subscribe(protocol);
-        return new AgentChannel(protocol, muxerWriter, bearerWriter, reader, _bearerWriteLock);
+        return new AgentChannel(protocol, muxerWriter, bearerWriter, reader, _connection);
     }
 
     /// <summary>
     /// Creates a channel for server-side protocol communication.
     /// </summary>
     /// <param name="protocol">The protocol type to subscribe to.</param>
+    /// <remarks>A full 64-item protocol queue stalls all protocols until an item is consumed.</remarks>
     /// <returns>A bidirectional agent channel for the specified protocol.</returns>
     public AgentChannel SubscribeServer(ProtocolType protocol) => SubscribeClient(protocol);
 
@@ -84,16 +86,8 @@ public sealed class Plexer : IDisposable
     /// </summary>
     public void Dispose()
     {
-        if (_isDisposed)
-        {
-            return;
-        }
-
         _muxer.Dispose();
         _demuxer.Dispose();
-        _bearer.Dispose();
-        _bearerWriteLock.Dispose();
-
-        _isDisposed = true;
+        _connection.DisposeBearer();
     }
 }

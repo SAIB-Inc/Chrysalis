@@ -16,6 +16,8 @@ public interface IBearer : IDisposable
     /// <summary>
     /// Gets a <see cref="PipeReader"/> for consuming data from the underlying transport.
     /// </summary>
+    /// <remarks>Reads must complete through the thread pool, not inline on a producer's thread
+    /// (no PipeScheduler.Inline): protocol code may run on the thread completing a read.</remarks>
     PipeReader Reader { get; }
 
     /// <summary>
