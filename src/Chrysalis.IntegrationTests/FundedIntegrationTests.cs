@@ -45,16 +45,21 @@ public sealed class FundedIntegrationTests
         }
         await using FundedReservation reservation = await FundedReservation.CreateAsync(Env.OutputDirectory, deadline.Token);
         await OracleCli.RecordVersionAsync(deadline.Token);
+        await WithWalletKeyAsync((key, ct) => ExecuteSelfTransferAsync(key, collateral, reservation, ct), deadline.Token);
+    }
+
+    internal static async Task WithWalletKeyAsync(Func<PrivateKey, CancellationToken, Task> operation, CancellationToken cancellationToken)
+    {
         byte[]? privateBytes = null;
         byte[]? chaincode = null;
         try
         {
             // Only this test process opens the configured original; no copy or key CLI argument.
-            using JsonDocument secret = JsonDocument.Parse(await File.ReadAllTextAsync(Env.Required(Env.WalletFile), deadline.Token));
+            using JsonDocument secret = JsonDocument.Parse(await File.ReadAllTextAsync(Env.Required(Env.WalletFile), cancellationToken));
             privateBytes = Convert.FromHexString(secret.RootElement.GetProperty("Key").GetString()!);
             chaincode = Convert.FromHexString(secret.RootElement.GetProperty("Chaincode").GetString()!);
             PrivateKey key = new(privateBytes, chaincode);
-            await ExecuteSelfTransferAsync(key, collateral, reservation, deadline.Token);
+            await operation(key, cancellationToken);
         }
         catch (Exception exception)
         {
@@ -137,7 +142,7 @@ public sealed class FundedIntegrationTests
         Assert.Fail("The accepted self-transfer was not observed in the same node's UTxO within the bounded wait.");
     }
 
-    private static List<ResolvedInput> ReadAdaInputs(JsonElement utxos)
+    internal static List<ResolvedInput> ReadAdaInputs(JsonElement utxos)
     {
         List<ResolvedInput> inputs = [];
         foreach (JsonProperty property in utxos.EnumerateObject())
@@ -152,7 +157,7 @@ public sealed class FundedIntegrationTests
         return inputs;
     }
 
-    private sealed class CliSnapshotProvider(ProtocolParams parameters, List<ResolvedInput> inputs) : ICardanoDataProvider
+    internal sealed class CliSnapshotProvider(ProtocolParams parameters, List<ResolvedInput> inputs) : ICardanoDataProvider
     {
         public NetworkType NetworkType => NetworkType.Preprod;
         public Task<ProtocolParams> GetParametersAsync() => Task.FromResult(parameters);

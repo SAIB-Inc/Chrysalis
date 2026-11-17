@@ -12,12 +12,12 @@ RUNNER = Path(__file__).with_name("run.sh")
 
 
 class RunnerOptInTests(unittest.TestCase):
-    def invoke(self, arguments, inherited_opt_in, *, with_heavy=True, packages=None):
+    def invoke(self, arguments, inherited_opt_in, *, with_heavy=True, packages=None, with_wallet=True):
         with tempfile.TemporaryDirectory(prefix="chrysalis-runner-safety-") as directory:
             heavy = Path(directory) / ("heavy" if with_heavy else "dotnet")
             heavy.write_text(
                 f"#!{sys.executable}\nimport json, os, sys\n"
-                "print(json.dumps({'opt_in': os.environ.get('CHRYSALIS_IT_FUNDED'), 'arguments': sys.argv[1:], 'packages': os.environ.get('NUGET_PACKAGES'), 'launcher': os.path.basename(sys.argv[0])}))\n"
+                "print(json.dumps({'opt_in': os.environ.get('CHRYSALIS_IT_FUNDED'), 'arguments': sys.argv[1:], 'packages': os.environ.get('NUGET_PACKAGES'), 'launcher': os.path.basename(sys.argv[0]), 'dijkstra': os.environ.get('CHRYSALIS_DIJKSTRA_PROBES')}))\n"
             )
             heavy.chmod(0o755)
             environment = {
@@ -26,10 +26,35 @@ class RunnerOptInTests(unittest.TestCase):
                 "CHRYSALIS_WALLET_KEY_FILE": "synthetic-wallet-path-never-opened",
                 "CHRYSALIS_IT_FUNDED": inherited_opt_in,
             }
+            if not with_wallet:
+                environment.pop("CHRYSALIS_WALLET_KEY_FILE")
             if packages is not None:
                 environment["NUGET_PACKAGES"] = packages
             output = subprocess.check_output([str(RUNNER), *arguments], env=environment, text=True)
             return json.loads(output)
+
+    def test_dijkstra_sync_clears_inherited_funding_without_wallet(self):
+        result = self.invoke(["--dijkstra"], "1", with_wallet=False)
+        self.assertIsNone(result["opt_in"])
+        self.assertEqual("1", result["dijkstra"])
+        self.assertIn("Category=Integration&FullyQualifiedName~NodeToNodeSyncKeepsEveryBlockAcrossTheFork", result["arguments"])
+
+    def test_dijkstra_funding_needs_its_explicit_flag(self):
+        result = self.invoke(["--dijkstra", "--funded"], "0")
+        self.assertEqual("1", result["opt_in"])
+        self.assertIn("Category=Integration&FullyQualifiedName~ConwaySelfTransferKeepsTheDijkstraNodesAnswer", result["arguments"])
+
+    def test_dijkstra_funded_flag_order_is_equivalent(self):
+        forward = self.invoke(["--dijkstra", "--funded", "--no-build"], "0")
+        reverse = self.invoke(["--funded", "--dijkstra", "--no-build"], "0")
+        self.assertEqual(forward["arguments"], reverse["arguments"])
+        self.assertEqual(forward["dijkstra"], reverse["dijkstra"])
+
+    def test_dijkstra_uses_the_portable_launcher_and_cache(self):
+        result = self.invoke(["--dijkstra"], "1", with_heavy=False, with_wallet=False)
+        self.assertEqual("dotnet", result["launcher"])
+        self.assertIsNone(result["opt_in"])
+        self.assertTrue(result["packages"].endswith("/.nuget/packages"))
 
     def test_empty_launcher_uses_legacy_nounset_safe_expansion(self):
         # Current CI Bash cannot reproduce the pre-4.4 nounset-array bug. Keep
