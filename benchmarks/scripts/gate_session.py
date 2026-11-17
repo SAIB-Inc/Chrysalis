@@ -16,7 +16,8 @@ import sys
 import time
 
 AMBIENT = ('HOME', 'PATH', 'LANG', 'LC_ALL', 'TZ', 'TMPDIR', 'DOTNET_ROOT',
-           'FLY_APP_NAME', 'FLY_REGION', 'FLY_MACHINE_ID')
+           'FLY_APP_NAME', 'FLY_REGION', 'FLY_MACHINE_ID',
+           'DOTNET_CLI_USE_MSBUILD_SERVER', 'MSBUILDDISABLENODEREUSE', 'UseSharedCompilation')
 # These values are supplied by the gate, never copied from the caller.
 GENERATED = ('CHRYSALIS_CORPORA', 'CHRYSALIS_BENCHMARK_DATA',
              'CHRYSALIS_BENCHMARK_RESULTS', 'P1_RANGE', 'NUGET_PACKAGES',

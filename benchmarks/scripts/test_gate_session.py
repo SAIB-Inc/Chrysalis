@@ -32,6 +32,11 @@ class SessionTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 session.detect_platform()
 
+    def test_build_isolation_environment_survives_allowlist(self):
+        isolated = dict(DOTNET_CLI_USE_MSBUILD_SERVER='0', MSBUILDDISABLENODEREUSE='1', UseSharedCompilation='false')
+        self.assertEqual(session.environment({}, isolated), dict(isolated, DOTNET_CLI_TELEMETRY_OPTOUT='1', DOTNET_NOLOGO='1'))
+        self.assertFalse(set(isolated) & session.environment({}, {}).keys())
+
     def test_admission_limits(self):
         self.assertEqual(session.admission(.002, [.003] * 8, 0, [], duration=10), [])
         for steal, cores, total, each, duration in [(None, [0] * 8, 0, [], 10), (.005, [.03] + [0] * 7, 0, [], 10),

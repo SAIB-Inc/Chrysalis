@@ -109,6 +109,26 @@ class GateTests(unittest.TestCase):
             self.assertEqual(rows['time/preprod-tcp']['pairs'], 34 if mode == 'change' else 16)
             self.assertEqual(rows['time/preprod-offline']['pairs'], 40 if mode == 'change' else 16)
 
+    def test_all_staged_dotnet_commands_disable_build_servers(self):
+        candidate_sdk = json.loads((gate.REPO / 'global.json').read_text())['sdk']['version']
+        for commit, sdk in ((gate.PIN, '10.0.301'), ('candidate', candidate_sdk)):
+            with self.subTest(sdk=sdk), tempfile.TemporaryDirectory() as directory:
+                def stage(command, *_args, **_kwargs):
+                    gate.stage_worker(command[-1])
+                with patch.object(gate, 'export_side', return_value=gate.REPO), \
+                        patch.object(gate, 'check_pinned', return_value=dict(assemblySha256s={})), \
+                        patch.object(gate, 'execute_logged', side_effect=stage), \
+                        patch.object(gate.subprocess, 'call', return_value=0) as run:
+                    gate.stage_side(side(commit=commit), 'fixture', Path(directory), dict(pinnedBaseline='fixture'))
+                self.assertEqual(run.call_count, 4)
+                self.assertEqual([call.args[0][2] for call in run.call_args_list], ['restore', 'build', 'restore', 'build'])
+                for call in run.call_args_list:
+                    command = call.args[0]
+                    self.assertIn('/sdk/' + sdk + '/dotnet.dll', command[1])
+                    with self.subTest(command=command):
+                        for flag in ('-nodeReuse:false', '--disable-build-servers', '-p:UseSharedCompilation=false'):
+                            self.assertIn(flag, command)
+
     def test_public_worker_keeps_nonsecret_preparation_settings(self):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
