@@ -4,9 +4,11 @@ using Chrysalis.Codec.Extensions.Cardano.Core.Transaction;
 using Chrysalis.Codec.Extensions.Cardano.Core.Common;
 using Chrysalis.Codec.Serialization;
 using Chrysalis.Codec.Types.Cardano.Core.Transaction;
+using Chrysalis.Codec.Types.Cardano.Core;
 using Chrysalis.Network.Cbor.ChainSync;
 using Chrysalis.Network.Cbor.LocalTxSubmit;
 using Chrysalis.Network.Cbor.LocalStateQuery;
+using SAIB.Cbor.Serialization;
 using Xunit;
 
 namespace Chrysalis.IntegrationTests;
@@ -66,10 +68,33 @@ public sealed class B1GoldenProvenanceTests
             (int era, byte[] header) = DijkstraProbes.BlockHeader(block);
             Assert.Equal(row.GetProperty("era").GetInt32(), era);
             byte[] wire = Artifact(row.GetProperty("chain_sync"));
-            N2NMessageRollForward forward = Assert.IsType<N2NMessageRollForward>(CborSerializer.Deserialize<MessageNextResponse>(wire));
-            ChainSyncHeader peerHeader = ChainSyncHeader.Decode(forward.Payload.Raw);
-            Assert.Equal(era - 1, peerHeader.Variant);
-            Assert.Equal(peerHeader.HeaderCbor.ToArray(), header);
+            CborReader reader = new(wire);
+            reader.ReadBeginArray(); Assert.Equal(3, reader.ReadSize());
+            Assert.Equal(2, reader.ReadInt32());
+            reader.ReadBeginArray(); Assert.Equal(2, reader.ReadSize());
+            int headerEra = reader.ReadInt32();
+            Assert.Equal(era - 1, headerEra);
+            Assert.True(reader.TryReadSemanticTag(out ulong tag));
+            Assert.Equal(24UL, tag);
+            Assert.Equal(header, reader.ReadByteString().ToArray());
+            if (headerEra == 6)
+            {
+                N2NMessageRollForward forward = Assert.IsType<N2NMessageRollForward>(CborSerializer.Deserialize<MessageNextResponse>(wire));
+                ChainSyncHeader peerHeader = ChainSyncHeader.Decode(forward.Payload.Raw);
+                Assert.Equal(headerEra, peerHeader.Variant);
+                Assert.Equal(peerHeader.HeaderCbor.ToArray(), header);
+                Assert.Equal(era, CborSerializer.Deserialize<BlockWithEra>(block).EraNumber);
+            }
+            else
+            {
+                // C5 replaces these typed refusals with real Dijkstra header/block decodes.
+                UnknownEraException headerRefusal = Assert.Throws<UnknownEraException>(() => CborSerializer.Deserialize<MessageNextResponse>(wire));
+                Assert.Equal(7UL, headerRefusal.WireTag);
+                Assert.Equal(EraEnvelope.Header, headerRefusal.Envelope);
+                UnknownEraException blockRefusal = Assert.Throws<UnknownEraException>(() => CborSerializer.Deserialize<BlockWithEra>(block));
+                Assert.Equal(8UL, blockRefusal.WireTag);
+                Assert.Equal(EraEnvelope.Block, blockRefusal.Envelope);
+            }
             Assert.Equal(Artifact(row.GetProperty("header")), header);
             ChainPoint point = DijkstraProbes.ReadPoint(header);
             Assert.Equal(row.GetProperty("hash").GetString(), Convert.ToHexStringLower(point.Hash));
