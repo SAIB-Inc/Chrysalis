@@ -30,3 +30,4 @@ build
 
 # Offline integration script test bytecode.
 scripts/integration/__pycache__/
+*.received.*
