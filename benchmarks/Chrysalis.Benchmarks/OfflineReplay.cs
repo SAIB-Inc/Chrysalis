@@ -128,12 +128,13 @@ internal static class OfflineReplay
         return wireBytes;
     }
 
-    private sealed class ReplayBearer : IBearer
+    internal sealed class ReplayBearer : IBearer
     {
         private readonly Pipe input = new();
         private readonly Pipe output = new();
         private bool disposed;
         internal PipeWriter Input => input.Writer;
+        internal PipeReader Output => output.Reader;
         public PipeReader Reader => input.Reader;
         public PipeWriter Writer => output.Writer;
         public void Dispose()
