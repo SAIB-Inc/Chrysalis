@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Reflection;
 using System.Text;
 using Chrysalis.Codec.CodeGen;
 using Chrysalis.Codec.Serialization.Attributes;
@@ -44,6 +45,51 @@ public class GeneratorIsolationTests
 
         Assert.All(actual[0], source => Assert.Equal(expectedLeft, source));
         Assert.All(actual[1], source => Assert.Equal(expectedRight, source));
+    }
+
+    [Theory]
+    [InlineData("CborList")]
+    [InlineData("CborConstr(0)")]
+    public void LazyListReaderValidatesCapturedValue(string encoding)
+    {
+        string source = $$"""
+            global using System;
+            using Chrysalis.Codec.Serialization;
+            using Chrysalis.Codec.Serialization.Attributes;
+            namespace ValidatorProbe;
+            [CborSerializable, {{encoding}}]
+            public readonly partial record struct Checked : ICborType
+            {
+                [CborOrder(0)] public partial int Value { get; }
+            }
+            public readonly struct Validator : ICborValidator<Checked>
+            {
+                public bool Validate(Checked value) => value.Value >= 0;
+            }
+            """;
+        CSharpCompilation compilation = CSharpCompilation.Create("ValidatorProbe",
+            [CSharpSyntaxTree.ParseText(source, ParseOptions)], References,
+            new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
+        GeneratorDriver driver = CSharpGeneratorDriver.Create(
+            [new CborSerializerCodeGen().AsSourceGenerator()], parseOptions: ParseOptions);
+        driver = driver.RunGeneratorsAndUpdateCompilation(compilation, out Compilation output, out _);
+        GeneratorDriverRunResult result = driver.GetRunResult();
+        Assert.Empty(result.Diagnostics);
+        string generated = result.Results.Single().GeneratedSources.Single(source =>
+            source.HintName == "ValidatorProbe.Checked.Serializer.g.cs").SourceText.ToString();
+        Assert.Contains("if (!validator.Validate(result))", generated, StringComparison.Ordinal);
+        Assert.Contains("return result;", generated, StringComparison.Ordinal);
+        using MemoryStream assemblyBytes = new();
+        Microsoft.CodeAnalysis.Emit.EmitResult emitted = output.Emit(assemblyBytes);
+        Assert.True(emitted.Success, string.Join(Environment.NewLine, emitted.Diagnostics));
+        Assembly assembly = Assembly.Load(assemblyBytes.ToArray());
+        Type type = assembly.GetType("ValidatorProbe.Checked", throwOnError: true)!;
+        MethodInfo read = type.GetMethod("Read", [typeof(ReadOnlyMemory<byte>)])!;
+        string prefix = encoding == "CborList" ? "" : "d879";
+        _ = read.Invoke(null, [new ReadOnlyMemory<byte>(Convert.FromHexString(prefix + "8100"))]);
+        TargetInvocationException exception = Assert.Throws<TargetInvocationException>(() =>
+            read.Invoke(null, [new ReadOnlyMemory<byte>(Convert.FromHexString(prefix + "8120"))]));
+        Assert.Equal("Validation failed", Assert.IsType<Exception>(exception.InnerException).Message);
     }
 
     private static string[] GenerateRepeatedly(CSharpCompilation compilation, Barrier rendezvous)

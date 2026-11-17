@@ -23,6 +23,8 @@
   </ItemGroup>
 
   <ItemGroup>
+    <None Include="../Chrysalis.Network.Tests/Fixtures/Preprod/blocks/block-139039741.cbor"
+          Link="TestData/preprod-conway.block.cbor" CopyToOutputDirectory="PreserveNewest" />
     <None Update="TestData\*.*">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
@@ -30,6 +32,7 @@
 
   <ItemGroup>
     <ProjectReference Include="../Chrysalis.Codec/Chrysalis.Codec.csproj" />
+    <ProjectReference Include="../Chrysalis.Network/Chrysalis.Network.csproj" />
     <ProjectReference Include="../Chrysalis.Codec.CodeGen/Chrysalis.Codec.CodeGen.csproj"
               OutputItemType="Analyzer"
               ReferenceOutputAssembly="true" />

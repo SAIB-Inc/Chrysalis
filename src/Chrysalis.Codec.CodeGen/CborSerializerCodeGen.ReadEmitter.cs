@@ -56,11 +56,17 @@ public sealed partial class CborSerializerCodeGen
 
             // Read array header
             bool needsArrayHeader = !(isConstr && (metadata.CborIndex is null || metadata.CborIndex < 0));
+            bool validateSize = metadata.Validator is not null && metadata.Properties.All(property => !property.IsTypeNullable);
+            string arityFailure = "throw new FormatException(\"Invalid fixed array length.\");";
             if (needsArrayHeader)
             {
                 _ = sb.AppendLine("reader.ReadBeginArray();");
                 _ = sb.AppendLine("int arraySize = reader.ReadSize();");
                 _ = sb.AppendLine("bool isIndefiniteArray = arraySize == -1;");
+                if (validateSize)
+                {
+                    _ = sb.AppendLine($"if (arraySize != -1 && arraySize != {metadata.Properties.Count}) {arityFailure}");
+                }
             }
 
             // Scan field boundaries with SkipDataItem()
@@ -97,6 +103,10 @@ public sealed partial class CborSerializerCodeGen
                 }
                 else
                 {
+                    if (validateSize && needsArrayHeader)
+                    {
+                        _ = sb.AppendLine($"if (isIndefiniteArray && (reader.Buffer.Length == 0 || reader.Buffer[0] == 0xFF)) {arityFailure}");
+                    }
                     _ = sb.AppendLine($"int _s{i} = data.Length - reader.Buffer.Length;");
                     _ = sb.AppendLine("reader.SkipDataItem();");
                 }
@@ -108,12 +118,18 @@ public sealed partial class CborSerializerCodeGen
             // Handle indefinite array break byte
             if (needsArrayHeader)
             {
+                if (validateSize)
+                {
+                    _ = sb.AppendLine($"if (isIndefiniteArray && (reader.Buffer.Length == 0 || reader.Buffer[0] != 0xFF)) {arityFailure}");
+                }
                 _ = sb.AppendLine("if (isIndefiniteArray && reader.Buffer.Length > 0 && reader.Buffer[0] == 0xFF) reader.ReadDataItem();");
             }
 
             // Calculate bytesConsumed and build result
             _ = sb.AppendLine("bytesConsumed = data.Length - reader.Buffer.Length;");
-            _ = sb.AppendLine($"return new {metadata.FullyQualifiedName}");
+            _ = sb.AppendLine(metadata.Validator is null
+                ? $"return new {metadata.FullyQualifiedName}"
+                : $"{metadata.FullyQualifiedName} result = new()");
             _ = sb.AppendLine("{");
             _ = sb.AppendLine("_raw = data[..bytesConsumed],");
 
@@ -138,6 +154,11 @@ public sealed partial class CborSerializerCodeGen
             }
 
             _ = sb.AppendLine("};");
+            if (metadata.Validator is not null)
+            {
+                _ = EmitSerializableTypeValidatorReader(sb, metadata, "result");
+                _ = sb.AppendLine("return result;");
+            }
 
             return sb;
         }
