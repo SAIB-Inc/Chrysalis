@@ -17,6 +17,10 @@ public readonly record struct ByronMainBlockValidator : ICborValidator<ByronMain
         _ = reader.ReadSize();
         reader.SkipDataItem();
         reader.SkipDataItem();
-        return !reader.Buffer.IsEmpty && reader.Buffer[0] >> 5 == 4;
+        if (!reader.Buffer.IsEmpty && (reader.Buffer[0] >> 5) == 6)
+        {
+            _ = reader.TryReadSemanticTag(out _);
+        }
+        return !reader.Buffer.IsEmpty && (reader.Buffer[0] >> 5) == 4;
     }
 }

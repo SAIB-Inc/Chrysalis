@@ -1,9 +1,11 @@
 using System.Buffers;
 using System.Collections;
 using System.Runtime.ExceptionServices;
+using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text.Json;
 using Chrysalis.Codec.Extensions;
+using Chrysalis.Codec.Extensions.Cardano.Core.Transaction;
 using Chrysalis.Codec.Serialization;
 using Chrysalis.Codec.Serialization.Attributes;
 using Chrysalis.Codec.Types;
@@ -11,7 +13,9 @@ using Chrysalis.Codec.Types.Cardano.Core;
 using Chrysalis.Codec.Types.Cardano.Core.Common;
 using Chrysalis.Codec.Types.Cardano.Core.Byron;
 using Chrysalis.Codec.Types.Cardano.Core.Protocol;
+using Chrysalis.Codec.Types.Cardano.Core.Scripts;
 using Chrysalis.Codec.Types.Cardano.Core.Transaction;
+using Chrysalis.Codec.Types.Cardano.Core.TransactionWitness;
 using Xunit.Abstractions;
 
 namespace Chrysalis.Codec.Test;
@@ -166,11 +170,51 @@ public readonly partial record struct X30LazyBytes : ICborType, IX30WireValue<Re
 
 [CborSerializable]
 public partial record X30EagerEncoded(CborEncodedValue Value) : CborRecord, IX30WireValue<CborEncodedValue>;
+[CborSerializable]
+public readonly partial record struct X30LazyEncoded : ICborType, IX30WireValue<CborEncodedValue>
+{
+    public partial CborEncodedValue Value { get; }
+}
 
 [CborSerializable]
 public readonly partial record struct X30LazyPrimitive<T> : ICborType, IX30WireValue<T>
 {
     public partial T Value { get; }
+}
+
+[CborSerializable]
+public partial record X32EagerAny(CborAny Value) : CborRecord;
+
+[CborSerializable]
+public partial record X32EagerBytesList(List<ReadOnlyMemory<byte>> Value) : CborRecord, IX30WireValue<List<ReadOnlyMemory<byte>>>;
+[CborSerializable]
+public readonly partial record struct X32LazyBytesList : ICborType, IX30WireValue<List<ReadOnlyMemory<byte>>>
+{
+    public partial List<ReadOnlyMemory<byte>> Value { get; }
+}
+
+[CborSerializable]
+public partial record X32EagerBytesMap(Dictionary<ReadOnlyMemory<byte>, ReadOnlyMemory<byte>> Value) : CborRecord, IX30WireValue<Dictionary<ReadOnlyMemory<byte>, ReadOnlyMemory<byte>>>;
+[CborSerializable]
+public readonly partial record struct X32LazyBytesMap : ICborType, IX30WireValue<Dictionary<ReadOnlyMemory<byte>, ReadOnlyMemory<byte>>>
+{
+    public partial Dictionary<ReadOnlyMemory<byte>, ReadOnlyMemory<byte>> Value { get; }
+}
+
+[CborSerializable]
+public partial record X32EagerIntList(List<int> Value) : CborRecord, IX30WireValue<List<int>>;
+[CborSerializable]
+public readonly partial record struct X32LazyIntList : ICborType, IX30WireValue<List<int>>
+{
+    public partial List<int> Value { get; }
+}
+
+[CborSerializable]
+public partial record X32EagerIntBoolMap(Dictionary<int, bool> Value) : CborRecord, IX30WireValue<Dictionary<int, bool>>;
+[CborSerializable]
+public readonly partial record struct X32LazyIntBoolMap : ICborType, IX30WireValue<Dictionary<int, bool>>
+{
+    public partial Dictionary<int, bool> Value { get; }
 }
 
 public class CborTests(ITestOutputHelper output)
@@ -575,7 +619,7 @@ public class CborTests(ITestOutputHelper output)
         "BytesMap" => X30Pair<X30EagerMap<int, X30EagerBytes>, X30LazyMap<int, X30LazyBytes>>(),
         "BytesTag" => X30Pair<X30EagerTag60000<X30EagerBytes>, X30LazyTag60000<X30LazyBytes>>(),
         "BytesRootPlutus" => [static (data, out consumed) => PlutusBoundedBytes.Read(data, out consumed).Value],
-        "BytesEncoded" => [X30ReadModel<X30EagerEncoded>],
+        "BytesEncoded" => X30Pair<X30EagerEncoded, X30LazyEncoded>(),
         _ => throw new ArgumentOutOfRangeException(nameof(id), id, "Missing reader pair for the fixture.")
     };
 
@@ -614,6 +658,198 @@ public class CborTests(ITestOutputHelper output)
         Type lazyType = typeof(X30LazyMap<int, X30EagerArray<byte[]>>);
         _ = AssertExactDecodeError(() => CborSerializer.Deserialize<X30LazyMap<int, X30EagerArray<byte[]>>>(data, out _), 4,
             lazyType.FullName!, lazyType.ToString(), "end of input");
+    }
+
+    public static TheoryData<string, string, string, string, int, string?, bool?> X32WireFixtures()
+    {
+        using JsonDocument manifest = JsonDocument.Parse(File.ReadAllBytes(Path.Combine(AppContext.BaseDirectory, "TestData", "X32WireForms.json")));
+        TheoryData<string, string, string, string, int, string?, bool?> fixtures = [];
+        foreach (JsonElement row in manifest.RootElement.GetProperty("fixtures").EnumerateArray())
+        {
+            fixtures.Add(row.GetProperty("id").GetString()!, row.GetProperty("hex").GetString()!,
+                row.GetProperty("sha256").GetString()!, row.GetProperty("expected").GetRawText(),
+                row.TryGetProperty("payloadOffset", out JsonElement offset) ? offset.GetInt32() : -1,
+                row.TryGetProperty("joined", out JsonElement joined) ? joined.GetString() : null,
+                row.TryGetProperty("indefinite", out JsonElement indefinite) ? indefinite.GetBoolean() : null);
+        }
+        return fixtures;
+    }
+
+    [Theory]
+    [MemberData(nameof(X32WireFixtures))]
+    public void X32ChunkedPayloadsAndRedeemerSplices(string id, string hex, string hash, string golden, int payloadOffset, string? joined, bool? indefinite)
+    {
+        byte[] wire = Convert.FromHexString(hex);
+        Assert.Equal(hash, Convert.ToHexStringLower(SHA256.HashData(wire)));
+        using JsonDocument expected = JsonDocument.Parse(golden);
+        if (joined is not null)
+        {
+            // A minimal Conway block shell for the public resolver: only the input and witness are accessed.
+            TransactionInput input = TransactionInput.Create(new byte[32], 0);
+            ConwayBlock block = ConwayBlock.Read(Convert.FromHexString($"858081A30081{Convert.ToHexString(input.Raw.Span)}0180020081A105{hex}A080"));
+            RedeemerEntry entry = Assert.IsType<RedeemerEntry>(input.Redeemer(block));
+            Assert.Equal(joined, Convert.ToHexString(entry.Raw.Span));
+            JsonElement values = expected.RootElement;
+            Assert.Equal(values[0].GetInt32(), entry.Tag);
+            Assert.Equal(values[1].GetUInt64(), entry.Index);
+            Assert.Equal(values[2].GetString(), Convert.ToHexString(Assert.IsType<PlutusBoundedBytes>(entry.Data).Value.Span));
+            Assert.Equal(values[3][0].GetUInt64(), entry.ExUnits.Mem);
+            Assert.Equal(values[3][1].GetUInt64(), entry.ExUnits.Steps);
+            return;
+        }
+
+        byte[] padded = [0x00, .. wire, 0x00];
+        ReadOnlyMemory<byte> data = padded.AsMemory(1);
+        if (indefinite is bool expectedIndefinite)
+        {
+            UnknownEra unknown = BlockWithEra.ReadUnknownEra(data);
+            Assert.Equal(expected.RootElement[0].GetUInt64(), unknown.WireTag);
+            Assert.True(wire.AsSpan().SequenceEqual(unknown.Raw.Span));
+            Assert.Equal(expectedIndefinite, unknown.IsIndefinite);
+            return;
+        }
+        if (id is "ByronTaggedArrayProof" or "ByronTaggedBytesProof")
+        {
+            BlockWithEra envelope = BlockWithEra.Read(data, out int consumed);
+            Assert.Equal(wire.Length, consumed);
+            if (expected.RootElement.GetBoolean())
+            {
+                ByronMainBlock block = Assert.IsType<ByronMainBlock>(envelope.Block);
+                Assert.True(wire.AsSpan(2).SequenceEqual(block.Raw.Span));
+            }
+            else
+            {
+                _ = Assert.Throws<CborValidationException>(() => envelope.Block);
+            }
+            return;
+        }
+        foreach (X30Read read in X32Readers(id))
+        {
+            object? result = read(data, out int consumed);
+            Assert.Equal(wire.Length, consumed);
+            if (payloadOffset >= 0 && result is ReadOnlyMemory<byte> memory)
+            {
+                Assert.True(MemoryMarshal.TryGetArray(memory, out ArraySegment<byte> view));
+                Assert.Same(padded, view.Array);
+                Assert.Equal(payloadOffset + 1, view.Offset);
+            }
+            JsonElement actual = JsonSerializer.SerializeToElement(X32Semantic(result));
+            Assert.True(JsonElement.DeepEquals(expected.RootElement, actual), $"{id}: expected {golden}; actual {actual}.");
+        }
+    }
+
+    private static object? X32Semantic(object? value) => value switch
+    {
+        CborEncodedValue encoded => X32Semantic(encoded.Value),
+        ReadOnlyMemory<byte> bytes => Convert.ToHexString(bytes.Span),
+        byte[] bytes => Convert.ToHexString(bytes),
+        IDictionary map => map.Keys.Cast<object>().SelectMany(key => new[] { X32Semantic(key), X32Semantic(map[key]) }).ToArray(),
+        IList list => list.Cast<object>().Select(X32Semantic).ToArray(),
+        _ => value
+    };
+
+    private static X30Read[] X32Readers(string id) => id switch
+    {
+        "BareMemory" or "TaggedEmptyMemory" or "TaggedDefiniteMemory" => X30Pair<X30EagerBytes, X30LazyBytes>(),
+        "TaggedMemory" => [X30ReadModel<X30EagerBytes>, X30ReadModel<X30LazyBytes>, CborSerializer.Deserialize<byte[]>,
+            static (data, out consumed) => CborBytes.Read(data, out consumed).Value,
+            static (data, out consumed) => PlutusBoundedBytes.Read(data, out consumed).Value],
+        "ListMemory" => X30Pair<X32EagerBytesList, X32LazyBytesList>(),
+        "MapMemory" => X30Pair<X32EagerBytesMap, X32LazyBytesMap>(),
+        "EagerEncodedBare" or "EagerEncodedNestedTags" => [X30ReadModel<X30EagerEncoded>],
+        "BigUintMagnitude" => [static (data, out consumed) => PlutusBigUint.Read(data, out consumed).Value],
+        "ScriptBytes" => [static (data, out consumed) => PlutusV1Script.Read(data, out consumed).ScriptBytes],
+        "DatumHash" => [static (data, out consumed) => DatumHashOption.Read(data, out consumed).DatumHash],
+        "InlineDatum" => [static (data, out consumed) => InlineDatumOption.Read(data, out consumed).Data],
+        "ScriptReference" => [static (data, out consumed) => PostAlonzoTransactionOutput.Read(data, out consumed).ScriptRef],
+        "ScriptWitnesses" => [static (data, out consumed) => PostAlonzoTransactionWitnessSet.Read(data, out consumed).PlutusV1Scripts!.GetValue().Single()],
+        "TaggedDefiniteText" => [CborSerializer.Deserialize<string>, static (data, out consumed) => CborString.Read(data, out consumed).Value],
+        _ => throw new ArgumentOutOfRangeException(nameof(id), id, "Missing X32 reader.")
+    };
+
+    [Theory]
+    [InlineData("D8")]
+    [InlineData("DC")]
+    public void X32MalformedTagsKeepTheirExistingTypedError(string hex)
+    {
+        byte[] data = Convert.FromHexString(hex);
+        _ = AssertDecodeError(() => CborBytes.Read(data), 0, "CborBytes.Value");
+        _ = AssertDecodeError(() => CborString.Read(data), 0, "CborString.Value");
+    }
+
+    [Theory]
+    [InlineData(false, "D81842FF")]
+    [InlineData(false, "D9EA605F4100")]
+    [InlineData(true, "D9EA606261")]
+    public void X32DirectScalarCallersCatchTypedErrorsOnTruncatedTaggedContent(bool text, string hex)
+    {
+        byte[] data = Convert.FromHexString(hex);
+        void Read()
+        {
+            if (text)
+            {
+                _ = CborString.Read(data);
+            }
+            else
+            {
+                _ = CborBytes.Read(data);
+            }
+        }
+
+        CborDecodeException typed = Assert.Throws<CborDecodeException>(Read);
+        Assert.Equal(text ? "Chrysalis.Codec.Types.CborString.Value" : "Chrysalis.Codec.Types.CborBytes.Value", typed.TypePath);
+        FormatException format = Assert.ThrowsAny<FormatException>(Read);
+        _ = Assert.IsType<CborDecodeException>(format);
+    }
+
+    [Theory]
+    [InlineData(false, "42FF")]
+    [InlineData(true, "6261")]
+    public void X32DirectUntaggedScalarTruncationKeepsTheExistingException(bool text, string hex)
+    {
+        byte[] data = Convert.FromHexString(hex);
+        _ = Assert.Throws<SAIB.Cbor.CborException>(() => text ? (ICborType)CborString.Read(data) : CborBytes.Read(data));
+    }
+
+    [Fact]
+    public void X32TaggedEncodedGenericReaderAndRawSlice()
+    {
+        byte[] data = Convert.FromHexString("D8185F4182420102FF00");
+        CborAny any = X32EagerAny.Read(data, out int consumed).Value;
+        Assert.Equal(data.Length - 1, consumed);
+        Assert.True(data.AsSpan(0, consumed).SequenceEqual(any.Raw.Span));
+        CborEncodedValue wrapped = GenericSerializationUtil.ReadAnyWithConsumed<CborEncodedValue>(data, out consumed)!;
+        Assert.Equal(data.Length - 1, consumed);
+        Assert.Equal("820102", Convert.ToHexString(wrapped.Value.Span));
+    }
+
+    [Theory]
+    [InlineData("820141FF", "item", 3, "integer", "byte string")]
+    [InlineData("A141FFF5", "entry", 2, "integer", "byte string")]
+    [InlineData("A119010041FF", "entry", 5, "boolean", "byte string")]
+    public void X32ClosedCollectionErrorsNameTheItem(string hex, string slot, int offset, string expected, string actual)
+    {
+        byte[] wire = Convert.FromHexString(hex);
+        if (slot == "item")
+        {
+            _ = AssertExactDecodeError(() => X32EagerIntList.Read(wire), offset, "Chrysalis.Codec.Test.X32EagerIntList.Value", expected, actual);
+            _ = AssertExactDecodeError(() => _ = X32LazyIntList.Read(wire).Value, offset, "Chrysalis.Codec.Test.X32LazyIntList.Value.item", expected, actual);
+        }
+        else
+        {
+            _ = AssertExactDecodeError(() => X32EagerIntBoolMap.Read(wire), offset, "Chrysalis.Codec.Test.X32EagerIntBoolMap.Value", expected, actual);
+            _ = AssertExactDecodeError(() => _ = X32LazyIntBoolMap.Read(wire).Value, offset, "Chrysalis.Codec.Test.X32LazyIntBoolMap.Value.entry", expected, actual);
+        }
+    }
+
+    [Fact]
+    public void X32ClosedCollectionErrorsStillNameTheHeaderType()
+    {
+        byte[] wire = [0x00];
+        _ = AssertExactDecodeError(() => X32EagerIntList.Read(wire), 1, "Chrysalis.Codec.Test.X32EagerIntList.Value", "array", "unsigned integer");
+        _ = AssertExactDecodeError(() => X32LazyIntList.Read(wire), 0, "Chrysalis.Codec.Test.X32LazyIntList.Value", "array", "unsigned integer");
+        _ = AssertExactDecodeError(() => X32EagerIntBoolMap.Read(wire), 1, "Chrysalis.Codec.Test.X32EagerIntBoolMap.Value", "map", "unsigned integer");
+        _ = AssertExactDecodeError(() => X32LazyIntBoolMap.Read(wire), 0, "Chrysalis.Codec.Test.X32LazyIntBoolMap.Value", "map", "unsigned integer");
     }
 
     private static CborDecodeException AssertExactDecodeError(Action decode, int offset, string path, string expected, string actual)

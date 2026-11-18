@@ -273,7 +273,8 @@ public sealed partial class CborSerializerCodeGen
             _ = sb.AppendLine("catch (Exception error) when (CborError.IsDecodeFailure(error))");
             _ = sb.AppendLine("{");
             string slicedItem = prop.IsListItemTypeOpenGeneric || !IsPrimitiveType(cleanItemType) ? "true" : "false";
-            _ = sb.AppendLine($"throw CborError.Reader(error, {fieldRef}, _r.Buffer.Length, _errorStart, {slicedItem}, \"item\", \"list item\");");
+            string expected = prop.IsListItemTypeOpenGeneric ? "\"list item\"" : $"CborError.Expected(typeof({cleanItemType}))";
+            _ = sb.AppendLine($"throw CborError.Reader(error, {fieldRef}, _r.Buffer.Length, _errorStart, {slicedItem}, \"item\", {expected});");
             _ = sb.AppendLine("}");
             _ = sb.AppendLine("if (_size > 0) _remaining--;");
             _ = sb.AppendLine("}");
@@ -389,6 +390,11 @@ public sealed partial class CborSerializerCodeGen
             string slicedKey = prop.IsMapKeyTypeOpenGeneric || !IsPrimitiveType(cleanKeyType) ? "true" : "false";
             string slicedValue = prop.IsMapValueTypeOpenGeneric || !IsPrimitiveType(cleanValueType) ? "true" : "false";
             _ = sb.AppendLine($"bool _errorSlice = {slicedKey};");
+            bool closedSlot = !prop.IsMapKeyTypeOpenGeneric || !prop.IsMapValueTypeOpenGeneric;
+            if (closedSlot)
+            {
+                _ = sb.AppendLine("bool _readingValue = false;");
+            }
             _ = sb.AppendLine("try");
             _ = sb.AppendLine("{");
 
@@ -413,6 +419,10 @@ public sealed partial class CborSerializerCodeGen
             // Read value
             _ = sb.AppendLine($"_errorStart = {fieldRef}.Length - _r.Buffer.Length;");
             _ = sb.AppendLine($"_errorSlice = {slicedValue};");
+            if (closedSlot)
+            {
+                _ = sb.AppendLine("_readingValue = true;");
+            }
             if (prop.IsMapValueTypeOpenGeneric)
             {
                 _ = sb.AppendLine($"int _vPos = {fieldRef}.Length - _r.Buffer.Length;");
@@ -437,7 +447,11 @@ public sealed partial class CborSerializerCodeGen
             _ = sb.AppendLine("}");
             _ = sb.AppendLine("catch (Exception error) when (CborError.IsDecodeFailure(error))");
             _ = sb.AppendLine("{");
-            _ = sb.AppendLine($"throw CborError.Reader(error, {fieldRef}, _r.Buffer.Length, _errorStart, _errorSlice, \"entry\", \"map entry\");");
+            const string mapEntry = "\"map entry\"";
+            string keyExpected = prop.IsMapKeyTypeOpenGeneric ? mapEntry : $"CborError.Expected(typeof({cleanKeyType}))";
+            string valueExpected = prop.IsMapValueTypeOpenGeneric ? mapEntry : $"CborError.Expected(typeof({cleanValueType}))";
+            string expected = closedSlot ? $"_readingValue ? {valueExpected} : {keyExpected}" : mapEntry;
+            _ = sb.AppendLine($"throw CborError.Reader(error, {fieldRef}, _r.Buffer.Length, _errorStart, _errorSlice, \"entry\", {expected});");
             _ = sb.AppendLine("}");
             _ = sb.AppendLine("if (_size > 0) _remaining--;");
             _ = sb.AppendLine("}");
@@ -638,11 +652,7 @@ public sealed partial class CborSerializerCodeGen
                         _ = sb.AppendLine($"if ({fieldRef}.Length == 0 || {fieldRef}.Span[0] is 0xF6 or 0xF7) return default;");
                     }
                     _ = sb.AppendLine($"var _r = new CborReader({fieldRef}.Span);");
-                    _ = sb.AppendLine("bool _isIndef = _r.Buffer.Length > 0 && _r.Buffer[0] == 0x5F;");
-                    _ = sb.AppendLine("if (_isIndef) return (ReadOnlyMemory<byte>)_r.ReadByteStringToArray();");
-                    _ = sb.AppendLine("ReadOnlySpan<byte> _bs = _r.ReadByteString();");
-                    _ = sb.AppendLine($"int _after = {fieldRef}.Length - _r.Buffer.Length;");
-                    _ = sb.AppendLine($"return {fieldRef}.Slice(_after - _bs.Length, _bs.Length);");
+                    _ = EmitByteMemoryRead(sb, "_r", fieldRef, "return");
                     break;
                 case "CborEncodedValue":
                 case "Chrysalis.Codec.Types.CborEncodedValue":

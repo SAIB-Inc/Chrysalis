@@ -1,0 +1,28 @@
+{
+  "oracle": {"repository": "agronholm/cbor2", "version": "5.8.0", "path": "cbor2/_decoder.py", "license": "MIT", "sha256": "cd13bfdd6cef5ce69d734738d608632241bb0b8e63a1e9ef56e7fb2b4bc40923"},
+  "fixtures": [
+    {"id": "BareMemory", "hex": "5F4182420102FF", "sha256": "1c6865072440992c61e59f62b6744b7ae26f52c35f69c65e80c2cc525ca83c27", "expected": "820102"},
+    {"id": "TaggedMemory", "hex": "D9EA605F4182420102FF", "sha256": "b8ee68c4b88d912c0d662bee068681332a2d19751386389cafd173e23e0a94d8", "expected": "820102"},
+    {"id": "TaggedEmptyMemory", "hex": "D9EA605F4040FF", "sha256": "4b01609240fccd1279a71504799b28e5b8ddabc9f746f25dd8ebac937ea1c275", "expected": ""},
+    {"id": "TaggedDefiniteMemory", "hex": "D9EA6043820102", "sha256": "af919784a177e5839d90d25d3571d8e060029e86d2db0886aedb4fc666bc863d", "expected": "820102", "payloadOffset": 4},
+    {"id": "ListMemory", "hex": "82D9EA605F4182420102FFD9EA605F410340FF", "sha256": "c2eccc4afa887c88c96a0d60136acf18107ebe26b1aae710073bbf61ceb554fe", "expected": ["820102", "03"]},
+    {"id": "MapMemory", "hex": "A1D9EA605F4182420102FFD9EA605F410340FF", "sha256": "99e9a6880f20443714804319b150e5bcf3c5990c8fb32e4b7bfc436ec7d401de", "expected": ["820102", "03"]},
+    {"id": "EagerEncodedBare", "hex": "5F4182420102FF", "sha256": "1c6865072440992c61e59f62b6744b7ae26f52c35f69c65e80c2cc525ca83c27", "expected": "820102"},
+    {"id": "EagerEncodedNestedTags", "hex": "D9EA60D8185F4182420102FF", "sha256": "23c5e2e028e0de3a6156d74bc84144a9adcbf86900f6d1838a71baa1c4a6cb9e", "expected": "820102"},
+    {"id": "BigUintMagnitude", "hex": "C25F4182420102FF", "sha256": "73b1e154b20c6e93cd9805bc051568fff3d31cada4a98091bb92198359c6fcbb", "expected": "820102"},
+    {"id": "ScriptBytes", "hex": "8201D9EA605F4182420102FF", "sha256": "3f89bdda3f10605b7198578d535e70f89f6581d38d3e4a8f97ca79c121073125", "expected": "820102"},
+    {"id": "DatumHash", "hex": "8200D9EA605F50010101010101010101010101010101015002020202020202020202020202020202FF", "sha256": "75142d6a045d68078c67ff928ec7a5a42ff9349870565234f66c4104b69f6915", "expected": "0101010101010101010101010101010102020202020202020202020202020202"},
+    {"id": "InlineDatum", "hex": "8201D8185F4182420102FF", "sha256": "5607093be28fd94c85521886c2df81a460e85e8d53ed090ba9d8719af80808a1", "expected": "820102"},
+    {"id": "ScriptReference", "hex": "A300581D6100000000000000000000000000000000000000000000000000000000010003D8185F4182420102FF", "sha256": "10706374e43fddab60233f6e2e80d26c14f03dc850cfb8650c69e047ccc7a8c2", "expected": "820102"},
+    {"id": "ScriptWitnesses", "hex": "A10381D9EA605F4182420102FF", "sha256": "6507ffbf39104b3ea63df5d73b2d2a9c115f3db5b9225e6521e2cb08e6fc0e7b", "expected": "820102"},
+    {"id": "TaggedDefiniteText", "hex": "D9EA606661C3A9E282AC", "sha256": "5206d45a9e6da5742fa50fb9ffa0f032a1f3ef9e368f814d90c4e021f5c6476e", "expected": "a\u00e9\u20ac"},
+    {"id": "UnknownEraTaggedIndefinite", "hex": "D9EA609F08F6FF", "sha256": "b84c261b2204274a677e8e64183f9d741c124e5f63f86adf0df1c4620f1a2fe9", "expected": [8, null], "indefinite": true},
+    {"id": "UnknownEraTaggedDefinite", "hex": "D9EA608208F6", "sha256": "08e87eed2a8a65ce86d51e182f3fd380466d4552dd8d409639435c49ca2be38b", "expected": [8, null], "indefinite": false},
+    {"id": "ByronTaggedArrayProof", "hex": "82018383F6F6D9EA6080F6F6", "sha256": "830a8bb604570bee17c5ee6abb0312be7a97b5ff186533723a9484e90b59b047", "expected": true},
+    {"id": "ByronTaggedBytesProof", "hex": "82018383F6F6D9EA6040F6F6", "sha256": "2b8b1f92d20be33b78c127e830fd79de817ebf507f70ecee5d42aaeea4d3ed96", "expected": false},
+    {"id": "Redeemer00", "hex": "A1820000825F4182420102FF9F186418C8FF", "sha256": "93e2eaeb234f793d24a3a808c4cd16760b79e9707e1c6ed39413f502f5da3cc5", "expected": [0, 0, "820102", [100, 200]], "joined": "8400005F4182420102FF9F186418C8FF"},
+    {"id": "Redeemer10", "hex": "A19F0000FF825F4182420102FF9F186418C8FF", "sha256": "83eadd91fe17016fe2681da45891825c437aec7373c97c0e1e010b7927e6eafb", "expected": [0, 0, "820102", [100, 200]], "joined": "8400005F4182420102FF9F186418C8FF"},
+    {"id": "Redeemer01", "hex": "A18200009F5F4182420102FF9F186418C8FFFF", "sha256": "f18d41a4e9d56d981564183fc5ad397e31f7051f4206b31fe2104696da927e6e", "expected": [0, 0, "820102", [100, 200]], "joined": "8400005F4182420102FF9F186418C8FF"},
+    {"id": "Redeemer11", "hex": "A19F0000FF9F5F4182420102FF9F186418C8FFFF", "sha256": "1c47b730a1e3646fdf73a61752f8eb988f330a1fabf28b225a749f80e93283e1", "expected": [0, 0, "820102", [100, 200]], "joined": "8400005F4182420102FF9F186418C8FF"}
+  ]
+}

@@ -48,9 +48,30 @@ if (!reader.TryReadSemanticTag(out ulong _tagIndexRaw))
     throw CborError.Decode(data, _tagIndexStart, "Snapshot.Value", "tag 24");
 var tagIndex = (int)_tagIndexRaw;
 if (_tagIndexRaw != 24) throw CborError.DecodeTag("Snapshot.Value", "tag 24", _tagIndexRaw);
-if (reader.Buffer.IsEmpty || (reader.Buffer[0] >> 5) != 2) throw CborError.Decode(data, data.Length - reader.Buffer.Length, "Snapshot.Value.Bytes", "byte string");
+var _shapeBuffer = reader.Buffer;
+if (!_shapeBuffer.IsEmpty && (_shapeBuffer[0] >> 5) == 6)
+{
+var _tagProbe = reader;
+try
+{
+_ = _tagProbe.TryReadSemanticTag(out _);
+_shapeBuffer = _tagProbe.Buffer;
+}
+catch (global::SAIB.Cbor.CborException)
+{
+// Leave malformed tag prefixes to the real reader or the original shape guard.
+}
+}
+if (_shapeBuffer.IsEmpty || (_shapeBuffer[0] >> 5) != 2) throw CborError.Decode(data, data.Length - reader.Buffer.Length, "Snapshot.Value.Bytes", "byte string");
 int _s0 = data.Length - reader.Buffer.Length;
+try
+{
 reader.SkipDataItem();
+}
+catch (global::SAIB.Cbor.CborException error) when ((data.Span[_s0] >> 5) == 6)
+{
+throw CborError.Reader(error, data, reader.Buffer.Length, _s0, false, "Snapshot.Value.Bytes", "byte string");
+}
 bytesConsumed = data.Length - reader.Buffer.Length;
 return new Snapshot.Value
 {
