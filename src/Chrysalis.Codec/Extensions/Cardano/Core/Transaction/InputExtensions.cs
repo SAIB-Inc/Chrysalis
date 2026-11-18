@@ -84,23 +84,21 @@ public static class InputExtensions
 
     private static Redeemer CombineRedeemerEntry(RedeemerKey key, RedeemerValue value)
     {
-        CborReader kr = new(key.Raw.Span);
-        kr.ReadBeginArray();
-        _ = kr.ReadSize();
-        int keyContentStart = key.Raw.Length - kr.Buffer.Length;
-
-        CborReader vr = new(value.Raw.Span);
-        vr.ReadBeginArray();
-        _ = vr.ReadSize();
-        int valueContentStart = value.Raw.Length - vr.Buffer.Length;
-
-        ReadOnlySpan<byte> keyContent = key.Raw.Span[keyContentStart..];
-        ReadOnlySpan<byte> valueContent = value.Raw.Span[valueContentStart..];
+        ReadOnlySpan<byte> keyContent = ArrayContent(key.Raw.Span);
+        ReadOnlySpan<byte> valueContent = ArrayContent(value.Raw.Span);
 
         byte[] result = new byte[1 + keyContent.Length + valueContent.Length];
         result[0] = 0x84;
         keyContent.CopyTo(result.AsSpan(1));
         valueContent.CopyTo(result.AsSpan(1 + keyContent.Length));
         return RedeemerEntry.Read(result);
+    }
+
+    private static ReadOnlySpan<byte> ArrayContent(ReadOnlySpan<byte> encoded)
+    {
+        CborReader reader = new(encoded);
+        reader.ReadBeginArray();
+        // Raw is one complete array; the last byte is the outer break only for the indefinite form.
+        return reader.ReadSize() < 0 ? reader.Buffer[..^1] : reader.Buffer;
     }
 }

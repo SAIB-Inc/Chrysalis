@@ -30,7 +30,29 @@ public readonly record struct UnknownEra(
     /// <inheritdoc />
     public int ConstrIndex => 0;
     /// <inheritdoc />
-    public bool IsIndefinite => !Raw.IsEmpty && Raw.Span[0] == 0x9f;
+    public bool IsIndefinite
+    {
+        get
+        {
+            ReadOnlySpan<byte> span = Raw.Span;
+            if (span.IsEmpty || (span[0] >> 5) != 6)
+            {
+                return !span.IsEmpty && span[0] == 0x9f;
+            }
+
+            try
+            {
+                CborReader reader = new(span);
+                reader.ReadBeginArray();
+                return reader.ReadSize() == -1;
+            }
+            catch (CborException)
+            {
+                // A directly constructed UnknownEra can carry unvalidated Raw.
+                return false;
+            }
+        }
+    }
 
     /// <summary>Validates an envelope against its supported wire-tag bound without materializing its body.</summary>
     public static bool Validate<T>(T value, EraEnvelope envelope, ulong maximumTag) where T : ICborType

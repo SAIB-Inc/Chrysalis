@@ -192,18 +192,49 @@ public sealed partial class CborSerializerCodeGen
             }
 
             // For single-primitive containers, validate CBOR major type so union try-catch can discriminate
+            string? taggedScalarKind = null;
+            string? taggedScalarPath = null;
             if (metadata.Properties.Count == 1)
             {
-                string? guard = GetCborMajorTypeGuard(metadata.Properties[0], metadata.FullyQualifiedName);
+                SerializablePropertyMetadata prop = metadata.Properties[0];
+                taggedScalarKind = prop.PropertyType.Replace("?", "") switch
+                {
+                    "string" => "text string",
+                    "byte[]" => "byte string",
+                    _ => null
+                };
+                string shapeBuffer = taggedScalarKind is not null ? "_shapeBuffer" : "reader.Buffer";
+                string? guard = GetCborMajorTypeGuard(prop, metadata.FullyQualifiedName, shapeBuffer);
                 if (guard is not null)
                 {
+                    if (taggedScalarKind is not null)
+                    {
+                        taggedScalarPath = $"{metadata.FullyQualifiedName}.{prop.PropertyName}";
+                        _ = EmitContentBuffer(sb, "reader", shapeBuffer);
+                    }
                     _ = sb.AppendLine(guard);
                 }
             }
 
             // For a container, the single field IS the entire CBOR data item (no array wrapper)
             _ = sb.AppendLine("int _s0 = data.Length - reader.Buffer.Length;");
-            _ = sb.AppendLine("reader.SkipDataItem();");
+            if (taggedScalarPath is not null)
+            {
+                // The shape guard used to reject tagged scalars with a typed error. Preserve that
+                // contract if the newly accepted header's content is invalid, without wrapping untagged scans.
+                _ = sb.AppendLine("try");
+                _ = sb.AppendLine("{");
+                _ = sb.AppendLine("reader.SkipDataItem();");
+                _ = sb.AppendLine("}");
+                _ = sb.AppendLine("catch (global::SAIB.Cbor.CborException error) when ((data.Span[_s0] >> 5) == 6)");
+                _ = sb.AppendLine("{");
+                _ = sb.AppendLine($"throw CborError.Reader(error, data, reader.Buffer.Length, _s0, false, \"{taggedScalarPath}\", \"{taggedScalarKind}\");");
+                _ = sb.AppendLine("}");
+            }
+            else
+            {
+                _ = sb.AppendLine("reader.SkipDataItem();");
+            }
 
             // Calculate bytesConsumed and build result
             _ = sb.AppendLine("bytesConsumed = data.Length - reader.Buffer.Length;");
@@ -347,16 +378,34 @@ public sealed partial class CborSerializerCodeGen
             string errorSlice = $"_errorSlice{propertyName}";
             string fieldPath = $"{typePath}.{metadata.PropertyName}";
             string fieldType = $"typeof({metadata.PropertyTypeFullName.Replace("?", "")})";
+            string? errorSlot = null;
+            string expectedType = fieldType;
+            if (metadata.IsList && !metadata.IsListItemTypeOpenGeneric)
+            {
+                errorSlot = $"_errorSlot{propertyName}";
+                expectedType = $"({errorSlot} == 1 ? typeof({metadata.ListItemTypeFullName!.Replace("?", "")}) : {fieldType})";
+            }
+            else if (metadata.IsMap && (!metadata.IsMapKeyTypeOpenGeneric || !metadata.IsMapValueTypeOpenGeneric))
+            {
+                errorSlot = $"_errorSlot{propertyName}";
+                string keyType = metadata.IsMapKeyTypeOpenGeneric ? fieldType : $"typeof({metadata.MapKeyTypeFullName!.Replace("?", "")})";
+                string valueType = metadata.IsMapValueTypeOpenGeneric ? fieldType : $"typeof({metadata.MapValueTypeFullName!.Replace("?", "")})";
+                expectedType = $"({errorSlot} switch {{ 1 => {keyType}, 2 => {valueType}, _ => {fieldType} }})";
+            }
             _ = sb.AppendLine($"int {errorStart} = data.Length - reader.Buffer.Length;");
             _ = sb.AppendLine($"bool {errorSlice} = false;");
+            if (errorSlot is not null)
+            {
+                _ = sb.AppendLine($"int {errorSlot} = 0;");
+            }
             _ = sb.AppendLine("try");
             _ = sb.AppendLine("{");
-            _ = EmitPrimitiveOrObjectReader(sb, metadata, propertyName, fieldPath, errorStart, errorSlice);
+            _ = EmitPrimitiveOrObjectReader(sb, metadata, propertyName, fieldPath, errorStart, errorSlice, errorSlot);
             _ = sb.AppendLine("}");
             string context = $"error, data, reader.Buffer.Length, {errorStart}, {errorSlice}, \"{fieldPath}\"";
-            _ = sb.AppendLine($"catch (Exception error) when (CborError.ShouldWrapReader({context}, {fieldType}))");
+            _ = sb.AppendLine($"catch (Exception error) when (CborError.ShouldWrapReader({context}, {expectedType}))");
             _ = sb.AppendLine("{");
-            _ = sb.AppendLine($"throw CborError.Reader({context}, CborError.Expected({fieldType}));");
+            _ = sb.AppendLine($"throw CborError.Reader({context}, CborError.Expected({expectedType}));");
             _ = sb.AppendLine("}");
 
             if (metadata.IsNullable || metadata.IsTypeNullable)
@@ -417,29 +466,12 @@ public sealed partial class CborSerializerCodeGen
                 case "System.ReadOnlyMemory<byte>":
                 case "global::System.ReadOnlyMemory<byte>?":
                 case "global::System.ReadOnlyMemory<byte>":
-                    _ = sb.AppendLine("{");
-                    _ = sb.AppendLine("bool _isIndef = reader.Buffer.Length > 0 && reader.Buffer[0] == 0x5F;");
-                    _ = sb.AppendLine("if (_isIndef)");
-                    _ = sb.AppendLine("{");
-                    _ = sb.AppendLine($"{propertyName} = (ReadOnlyMemory<byte>)reader.ReadByteStringToArray();");
-                    _ = sb.AppendLine("}");
-                    _ = sb.AppendLine("else");
-                    _ = sb.AppendLine("{");
-                    _ = sb.AppendLine("ReadOnlySpan<byte> _bs = reader.ReadByteString();");
-                    _ = sb.AppendLine("int _after = data.Length - reader.Buffer.Length;");
-                    _ = sb.AppendLine($"{propertyName} = data.Slice(_after - _bs.Length, _bs.Length);");
-                    _ = sb.AppendLine("}");
-                    _ = sb.AppendLine("}");
+                    _ = EmitByteMemoryRead(sb, "reader", "data", $"{propertyName} =");
                     break;
                 case "CborEncodedValue":
                 case "Chrysalis.Codec.Types.CborEncodedValue":
                 case "global::Chrysalis.Codec.Types.CborEncodedValue":
-                    _ = sb.AppendLine("{");
-                    _ = sb.AppendLine($"reader.TryReadSemanticTag(out ulong _);");
-                    _ = sb.AppendLine($"bool _isIndef = reader.Buffer.Length > 0 && reader.Buffer[0] == 0x5F;");
-                    _ = sb.AppendLine($"if (_isIndef) {{ {propertyName} = new {CborEncodeValueFullName}((ReadOnlyMemory<byte>)reader.ReadByteStringToArray()); }}");
-                    _ = sb.AppendLine($"else {{ var _bs = reader.ReadByteString(); int _after = data.Length - reader.Buffer.Length; {propertyName} = new {CborEncodeValueFullName}(data.Slice(_after - _bs.Length, _bs.Length)); }}");
-                    _ = sb.AppendLine("}");
+                    _ = EmitByteMemoryRead(sb, "reader", "data", $"{propertyName} =", encoded: true);
                     break;
                 case "CborAny":
                 case "Chrysalis.Codec.Types.CborAny":
@@ -468,7 +500,54 @@ public sealed partial class CborSerializerCodeGen
             return sb;
         }
 
-        public static StringBuilder EmitObjectPropertyReader(StringBuilder sb, SerializablePropertyMetadata metadata, string propertyName, string typePath, string errorStart, string errorSlice)
+        // A failed TryReadSemanticTag can cache the non-tag header and move Buffer past it.
+        private static string HasTag(string buffer) => $"!{buffer}.IsEmpty && ({buffer}[0] >> 5) == 6";
+
+        private static StringBuilder EmitContentBuffer(StringBuilder sb, string reader, string buffer)
+        {
+            _ = sb.AppendLine($"var {buffer} = {reader}.Buffer;");
+            _ = sb.AppendLine($"if ({HasTag(buffer)})");
+            _ = sb.AppendLine("{");
+            _ = sb.AppendLine($"var _tagProbe = {reader};");
+            _ = sb.AppendLine("try");
+            _ = sb.AppendLine("{");
+            _ = sb.AppendLine("_ = _tagProbe.TryReadSemanticTag(out _);");
+            _ = sb.AppendLine($"{buffer} = _tagProbe.Buffer;");
+            _ = sb.AppendLine("}");
+            _ = sb.AppendLine("catch (global::SAIB.Cbor.CborException)");
+            _ = sb.AppendLine("{");
+            _ = sb.AppendLine("// Leave malformed tag prefixes to the real reader or the original shape guard.");
+            _ = sb.AppendLine("}");
+            _ = sb.AppendLine("}");
+            return sb;
+        }
+
+        private static StringBuilder EmitByteMemoryRead(StringBuilder sb, string reader, string data, string assignment, bool encoded = false)
+        {
+            string Wrap(string memory) => encoded ? $"new {CborEncodeValueFullName}({memory})" : memory;
+            _ = sb.AppendLine("{");
+            if (encoded)
+            {
+                // A concrete eager encoded field accepts one optional tag in addition to the one SAIB skips.
+                _ = sb.AppendLine($"if ({HasTag($"{reader}.Buffer")}) _ = {reader}.TryReadSemanticTag(out _);");
+            }
+            // Probe on a copy: don't extend the set of tag prefixes the real reader accepts.
+            _ = EmitContentBuffer(sb, reader, "_content");
+            _ = sb.AppendLine("if (!_content.IsEmpty && _content[0] == 0x5F)");
+            _ = sb.AppendLine("{");
+            _ = sb.AppendLine($"{assignment} {Wrap($"(ReadOnlyMemory<byte>){reader}.ReadByteStringToArray()")};");
+            _ = sb.AppendLine("}");
+            _ = sb.AppendLine("else");
+            _ = sb.AppendLine("{");
+            _ = sb.AppendLine($"ReadOnlySpan<byte> _bs = {reader}.ReadByteString();");
+            _ = sb.AppendLine($"int _after = {data}.Length - {reader}.Buffer.Length;");
+            _ = sb.AppendLine($"{assignment} {Wrap($"{data}.Slice(_after - _bs.Length, _bs.Length)")};");
+            _ = sb.AppendLine("}");
+            _ = sb.AppendLine("}");
+            return sb;
+        }
+
+        public static StringBuilder EmitObjectPropertyReader(StringBuilder sb, SerializablePropertyMetadata metadata, string propertyName, string typePath, string errorStart, string errorSlice, string? errorSlot)
         {
             if (metadata.IsList)
             {
@@ -500,6 +579,10 @@ public sealed partial class CborSerializerCodeGen
                 _ = sb.AppendLine($"{errorStart} = data.Length - reader.Buffer.Length;");
                 bool slicedListItemTypeFullName = metadata.IsListItemTypeOpenGeneric || !IsPrimitiveType(metadata.ListItemTypeFullName);
                 _ = sb.AppendLine($"{errorSlice} = {(slicedListItemTypeFullName ? "true" : "false")};");
+                if (errorSlot is not null)
+                {
+                    _ = sb.AppendLine($"{errorSlot} = 1;");
+                }
                 if (metadata.IsListItemTypeOpenGeneric)
                 {
                     _ = EmitGenericWithTypeParamsReader(sb, metadata.ListItemType, $"{propertyName}TempItem");
@@ -575,6 +658,10 @@ public sealed partial class CborSerializerCodeGen
                 _ = sb.AppendLine($"{errorStart} = data.Length - reader.Buffer.Length;");
                 bool slicedMapKeyTypeFullName = metadata.IsMapKeyTypeOpenGeneric || !IsPrimitiveType(metadata.MapKeyTypeFullName);
                 _ = sb.AppendLine($"{errorSlice} = {(slicedMapKeyTypeFullName ? "true" : "false")};");
+                if (errorSlot is not null)
+                {
+                    _ = sb.AppendLine($"{errorSlot} = 1;");
+                }
                 if (metadata.IsMapKeyTypeOpenGeneric)
                 {
                     _ = EmitGenericWithTypeParamsReader(sb, metadata.MapKeyTypeFullName, $"{propertyName}TempKeyItem");
@@ -606,6 +693,10 @@ public sealed partial class CborSerializerCodeGen
                 _ = sb.AppendLine($"{errorStart} = data.Length - reader.Buffer.Length;");
                 bool slicedMapValueTypeFullName = metadata.IsMapValueTypeOpenGeneric || !IsPrimitiveType(metadata.MapValueTypeFullName);
                 _ = sb.AppendLine($"{errorSlice} = {(slicedMapValueTypeFullName ? "true" : "false")};");
+                if (errorSlot is not null)
+                {
+                    _ = sb.AppendLine($"{errorSlot} = 2;");
+                }
                 if (metadata.IsMapValueTypeOpenGeneric)
                 {
                     _ = EmitGenericWithTypeParamsReader(sb, metadata.MapValueTypeFullName, $"{propertyName}TempValueItem");
@@ -710,28 +801,28 @@ public sealed partial class CborSerializerCodeGen
         /// Returns a guard statement that validates the CBOR major type for a primitive property,
         /// or null if no guard is needed.
         /// </summary>
-        private static string? GetCborMajorTypeGuard(SerializablePropertyMetadata prop, string owningType)
+        private static string? GetCborMajorTypeGuard(SerializablePropertyMetadata prop, string owningType, string buffer)
         {
             string cleanType = prop.PropertyType.Replace("?", "");
             string fullType = prop.PropertyTypeFullName.Replace("?", "");
             (string? condition, string? kind) = cleanType switch
             {
-                "int" or "long" => ("(reader.Buffer[0] >> 5) is not (0 or 1)", "integer"),
-                "uint" or "ulong" => ("(reader.Buffer[0] >> 5) != 0", "unsigned integer"),
-                "string" => ("(reader.Buffer[0] >> 5) != 3", "text string"),
-                "bool" => ("reader.Buffer[0] is not (0xF4 or 0xF5)", "boolean"),
-                "float" => ("reader.Buffer[0] != 0xFA", "floating point"),
-                "double" => ("reader.Buffer[0] != 0xFB", "floating point"),
-                "byte[]" => ("(reader.Buffer[0] >> 5) != 2", "byte string"),
-                _ when cleanType.Contains("Dictionary<") => ("(reader.Buffer[0] >> 5) != 5", KnownCollectionKind(fullType, "Dictionary", "map")),
+                "int" or "long" => ($"({buffer}[0] >> 5) is not (0 or 1)", "integer"),
+                "uint" or "ulong" => ($"({buffer}[0] >> 5) != 0", "unsigned integer"),
+                "string" => ($"({buffer}[0] >> 5) != 3", "text string"),
+                "bool" => ($"{buffer}[0] is not (0xF4 or 0xF5)", "boolean"),
+                "float" => ($"{buffer}[0] != 0xFA", "floating point"),
+                "double" => ($"{buffer}[0] != 0xFB", "floating point"),
+                "byte[]" => ($"({buffer}[0] >> 5) != 2", "byte string"),
+                _ when cleanType.Contains("Dictionary<") => ($"({buffer}[0] >> 5) != 5", KnownCollectionKind(fullType, "Dictionary", "map")),
                 _ when cleanType.Contains("List<") || cleanType.Contains("ICborMaybeIndefList<") =>
-                    ("(reader.Buffer[0] >> 5) is not (4 or 6)", fullType.Contains("Chrysalis.Codec.Types.ICborMaybeIndefList<") ? "array" : KnownCollectionKind(fullType, "List", "array")),
+                    ($"({buffer}[0] >> 5) is not (4 or 6)", fullType.Contains("Chrysalis.Codec.Types.ICborMaybeIndefList<") ? "array" : KnownCollectionKind(fullType, "List", "array")),
                 _ => (null, null)
             };
             string expected = kind is null ? $"typeof({fullType})" : $"\"{kind}\"";
             return condition is null
                 ? null
-                : $"if (reader.Buffer.IsEmpty || {condition}) throw CborError.Decode(data, data.Length - reader.Buffer.Length, \"{owningType}.{prop.PropertyName}\", {expected});";
+                : $"if ({buffer}.IsEmpty || {condition}) throw CborError.Decode(data, data.Length - reader.Buffer.Length, \"{owningType}.{prop.PropertyName}\", {expected});";
 
             static string? KnownCollectionKind(string type, string definition, string kind) =>
                 (type.StartsWith($"global::System.Collections.Generic.{definition}<", StringComparison.Ordinal)
@@ -839,7 +930,7 @@ public sealed partial class CborSerializerCodeGen
             return sb;
         }
 
-        public static StringBuilder EmitPrimitiveOrObjectReader(StringBuilder sb, SerializablePropertyMetadata metadata, string propertyName, string typePath, string errorStart, string errorSlice)
+        public static StringBuilder EmitPrimitiveOrObjectReader(StringBuilder sb, SerializablePropertyMetadata metadata, string propertyName, string typePath, string errorStart, string errorSlice, string? errorSlot)
         {
             string cleanPropertyType = metadata.PropertyType.Replace("?", "");
             if (metadata.IsOpenGeneric)
@@ -849,7 +940,7 @@ public sealed partial class CborSerializerCodeGen
             }
             return IsPrimitiveType(cleanPropertyType)
                 ? EmitPrimitivePropertyReader(sb, metadata.PropertyType, propertyName, typePath)
-                : EmitObjectPropertyReader(sb, metadata, propertyName, typePath, errorStart, errorSlice);
+                : EmitObjectPropertyReader(sb, metadata, propertyName, typePath, errorStart, errorSlice, errorSlot);
         }
 
         public static StringBuilder EmitCustomListReader(StringBuilder sb, SerializableTypeMetadata metadata)
