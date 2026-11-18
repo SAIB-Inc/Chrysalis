@@ -194,8 +194,9 @@ result or turn an invalid prerequisite into a pass. Persistent side bias and
 asymmetric carryover can remain; ABBA is not a promise to cancel them.
 
 The first-five-minute steal report reuses existing whole-process before/after
-counters: select processes starting in [t0,t0+300), where t0 is the first long
-client start. Report n, median, p95, observation span and whole-session median;
+counters, excluding host probe processes: select scheduled processes starting in
+[t0,t0+300), where t0 is the first long scheduled comparison client start.
+Report n, median, p95, observation span and whole-comparison median;
 also show first-all-client context if a short prelude starts earlier. A selected
 process can end after 300 seconds. No new probe, wait, threshold, rejection,
 replacement or automatic retry is added. A valid interval straddling the change
@@ -226,6 +227,28 @@ P2 sizing never exceeds the 7,000 s guard / 6,600 s measurement cutoff. A shorte
 6,450 s session is supported too. The seal refuses an excessive lifetime, an
 underpriced session or a budget without the full possible repeat reserved.
 There are no admission-driven replacements or automatic inconclusive retries.
+
+## Host probe
+
+Before any timing block, 16 baseline-only offline preprod processes run 180 warm-up
+and 60 measured passes. Keep only if the unrounded mean of their sample CVs is
+at most 0.054 and every startup `GCGen0MaxBudget` matches the noise-record host's
+16,777,216 bytes. Both CV16 and lag-1 are recorded. An observed budget mismatch
+is `gen0-budget-mismatch`; a missing budget or invalid series stops the session.
+The comparison's per-build GC totals, rates per measured pass, and observed
+budgets are reported separately and never gate. A/A passes count toward baseline.
+
+In iad a session attempts up to six draws. Its launch reservation is the full
+machine-guard price plus five times the probe-only price ($0.69393833 in iad);
+a repeat has its own reservation. After every draw, verify its archive, probe,
+absence proof and booked cost. A rejected machine runs no timing blocks. Redraw
+only if booked cost so far plus the next full guard fits the reservation. With
+the fresh controls' 6,298 s guard, the reservation is $1.36545961 per session,
+$2.73091922 for two, or $4.09637883 including one retry. This is not authority to run.
+If cleanup or bookkeeping runs past the guard, booked cost can exceed the
+reservation even if compute stopped in time; stop the lineage and report it.
+If the VM ignores the stop and cannot be destroyed, compute is unbounded until
+cleanup succeeds; the watchdog retains the lock until absence is proved.
 
 ## Release rule
 
@@ -259,10 +282,7 @@ accepted drift more often in 58 of 294 simulated B-side cases, 31 beyond the
 limit. The largest increase was on RECV1-like offline replay, with +5.5% drift
 on the B baseline alone: 1.60% versus 0.01%. Of 3,451 extra passes, the old gate
 had flagged 2,979 for the counter window, 413 for checking the A sides separately,
-and 59 for both. None came from changing the B check. With MR5b's host probe in front,
-the model put that case at 0.20% per RECV1-like machine drawn (0.035% at the tighter probe
-limit). Across the four-host offline mix it was 0.70% (0.66%) per measured row,
-versus 0.34% (0.35%) for the old rule behind the same probe. These are model results.
+and 59 for both. None came from changing the B check. These are model results.
 
 Full mainnet+preprod timing fits one machine up to about 12.5 MB. Above that,
 D51's option 2 uses two sessions, preprod TCP+mainnet offline then mainnet TCP+

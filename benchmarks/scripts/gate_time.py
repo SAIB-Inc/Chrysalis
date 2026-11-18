@@ -23,6 +23,9 @@ PRICE = .3667
 REGIONS = dict(iad=1, ewr=1, ams=1.038461538, arn=1.038461538)
 RESERVE = .03
 RAW_CAP = min(CUTOFF / 1.15 - 420, GUARD / 1.15 - 720)
+PROBE_COUNTS = (180, 60)
+PROBE_PROCESS_SECONDS = 13
+GC_KEYS = ('gen0Collections', 'gen1Collections', 'gen2Collections')
 
 
 def require(ok, message):
@@ -67,12 +70,48 @@ def charges(row, ratios=None):
     return max(declared, 22 if case == 'tcp' else 13)
 
 
-def size_sessions(rows, mode, *, ratios=None, option=2, budget=None):
+def validate_probe_rule(rule):
+    require(isinstance(rule, dict) and rule.get('statistic') in ('cv', 'lag1') and
+            type(rule.get('limit')) in (int, float) and -1 <= rule['limit'] <= 1 and
+            (rule['statistic'] != 'cv' or rule['limit'] >= 0) and
+            type(rule.get('processes')) is int and rule['processes'] == 16 and
+            type(rule.get('maxDraws')) is int and 1 <= rule['maxDraws'] <= 6 and
+            type(rule.get('gen0BudgetBytes')) is int and rule['gen0BudgetBytes'] > 0, 'Missing or invalid probe rule')
+    return rule
+
+
+def probe_ids(rule):
+    return tuple(f'probe-{number:02}' for number in range(1, rule['processes'] + 1))
+
+
+def probe_seconds(rule):
+    return 0 if rule is None else rule['processes'] * PROBE_PROCESS_SECONDS
+
+
+def finalize_plan(plan, raw):
+    probe = plan.get('probe')
+    probe_raw = probe_seconds(probe)
+    raw += probe_raw
+    require(raw <= RAW_CAP, 'Declared timing work including probe does not fit')
+    guard = math.ceil(1.15 * (720 + raw))
+    region = region_for(plan)
+    cost = price(guard, region)
+    reservation = cost + ((probe['maxDraws'] - 1) * price(math.ceil(1.15 * (720 + probe_raw)), region) if probe else 0)
+    plan.update(rawSeconds=raw, estimatedSeconds=guard, destroyGuardSeconds=guard,
+                measurementCutoffSeconds=math.ceil(1.15 * (420 + raw)), estimatedUsd=cost,
+                limitUsd=reservation, limitWithRepeatUsd=reservation * (2 if plan['repeatAllowed'] else 1))
+    validate_limits(plan)
+    return plan
+
+
+def size_sessions(rows, mode, *, ratios=None, option=2, budget=None, probe=None):
     """Price each whole process once. Full first; D51 defaults to two sessions."""
     rows = [dict(row, chargeSeconds=charges(row, ratios)) for row in rows if row['kind'] == 'time']
     if not rows:
         return []
     require(type(budget) in (int, float) and math.isfinite(budget) and budget >= 0, 'Missing or invalid remaining budget')
+
+    row_cap = RAW_CAP - probe_seconds(probe)
 
     def sized(members, design, *, floor=16, fail_only=False):
         entries = [dict(row, aPairs=row.get('aPairs', 0 if mode == 'change' or fail_only and row.get('mainnet') else (floor if row.get('mainnet') else 16)),
@@ -80,31 +119,26 @@ def size_sessions(rows, mode, *, ratios=None, option=2, budget=None):
                         rowClass='fail-only' if fail_only and row.get('mainnet') else row.get('rowClass', 'gated')) for row in members]
         def raw():
             return sum(2 * row['chargeSeconds'] * (row['aPairs'] + row['bPairs']) for row in entries)
-        if raw() > RAW_CAP:
+        if raw() > row_cap:
             return None
         if mode == 'release' and design != 'option1':
             while True:
                 changed = False
                 for declared, row in zip(members, entries):
-                    if 'bPairs' not in declared and row['bPairs'] < (16 if fail_only and row.get('mainnet') else 24) and raw() + 4 * row['chargeSeconds'] <= RAW_CAP:
+                    if 'bPairs' not in declared and row['bPairs'] < (16 if fail_only and row.get('mainnet') else 24) and raw() + 4 * row['chargeSeconds'] <= row_cap:
                         row['bPairs'] += 2
                         changed = True
                 if not changed:
                     break
-        limit = math.ceil(1.15 * (720 + raw()))
         regions = {region_for(row) for row in entries}
         require(len(regions) == 1, 'Timing session rows disagree on region')
         region = regions.pop()
-        cost = price(limit, region)
-        repeat = mode == 'release'
-        result = dict(design=design, rows=entries, counts=[180, 60], rawSeconds=raw(),
-                      estimatedSeconds=limit, destroyGuardSeconds=limit, measurementCutoffSeconds=math.ceil(1.15 * (420 + raw())),
-                      limitUsd=cost, estimatedUsd=cost, repeatAllowed=repeat,
-                      limitWithRepeatUsd=cost * (2 if repeat else 1))
+        result = dict(design=design, rows=entries, counts=list(PROBE_COUNTS), repeatAllowed=mode == 'release')
         if any('region' in row for row in entries):
             result['region'] = region
-        validate_limits(result)
-        return result
+        if probe is not None:
+            result['probe'] = dict(probe, maxDraws=probe['maxDraws'] if region == 'iad' else min(4, probe['maxDraws']))
+        return finalize_plan(result, raw())
 
     replays = [row for row in rows if row.get('replay') != 'micro']
     micros = [row for row in rows if row.get('replay') == 'micro']
@@ -153,13 +187,72 @@ def schedule(plan):
     return iter(plan['schedule'])
 
 
+def gen0_budget(data):
+    try:
+        value = data['processSettings']['gcConfiguration']['GCGen0MaxBudget']
+    except (KeyError, TypeError):
+        return None
+    return value if type(value) is int and value > 0 else None
+
+
+def probe_statistic(records, statistic):
+    values = []
+    for record in records.values():
+        times = [item['nsPerBlock'] for item in record['data']['rows']]
+        if statistic == 'cv':
+            values.append(st.stdev(times) / st.mean(times))
+        else:
+            scale = max(times)
+            # Center before scaling so close, distinct pass times stay distinct.
+            mean = st.mean(times)
+            centered = [(value - mean) / scale for value in times]
+            values.append(math.fsum(a * b for a, b in zip(centered, centered[1:])) / math.fsum(a * a for a in centered))
+    return st.mean(values)
+
+
+def probe_result(records, rule):
+    require(set(records) == set(probe_ids(rule)), 'Invalid probe process set')
+    budgets = set()
+    try:
+        for record in records.values():
+            require(type(record['exitCode']) is int and record['exitCode'] == 0, 'Invalid probe process exit')
+            data = record['data']
+            times = [item['nsPerBlock'] for item in data['rows']]
+            require(len(times) == PROBE_COUNTS[1] and all(type(x) in (int, float) and math.isfinite(x) and x > 0 for x in times)
+                    and min(times) < max(times), 'Invalid probe measured pass series')
+            budget = gen0_budget(data)
+            require(budget is not None, 'Invalid probe GCGen0MaxBudget')
+            budgets.add(budget)
+        result = {key: probe_statistic(records, key) for key in ('cv', 'lag1')}
+        require(all(math.isfinite(value) for value in result.values()), 'Invalid probe statistic')
+    except (KeyError, TypeError, ArithmeticError) as error:
+        raise ValueError('Invalid probe record') from error
+    statistic, limit, expected = rule['statistic'], rule['limit'], rule['gen0BudgetBytes']
+    reasons = [f'{statistic}-over-limit'] if result[statistic] > limit else []
+    if budgets != {expected}:
+        reasons.append('gen0-budget-mismatch')
+    return dict(result, statistic=statistic, limit=limit, decision='rejected' if reasons else 'kept', reasons=reasons,
+                gen0BudgetBytes=dict(expected=expected, observed=sorted(budgets)))
+
+
 def run(root, plan, output, *, dry=False):
     root, output = Path(root), Path(output)
     output.mkdir(parents=True, exist_ok=False)
     started = time.monotonic()
     deadline = (time.time() if dry else int(os.environ['P2_MACHINE_CREATED_UNIX'])) + plan['measurementCutoffSeconds']
-    records, error, predecessor = [], None, None
+    records, error, predecessor, probe = [], None, None, None
     host_fallback = {}
+
+    def member(build, workload, dest, counts, **region):
+        spec = plan['builds'][build]
+        job = dict(plan['workloads'][workload], root=str(root), counts=counts, timeout=max(.01, deadline - time.time()))
+        for key in ('dotnet', 'server', 'capture'):
+            job[key] = str(root / job[key])
+        job['environment'] = {key: str(root / value) if key in ('CHRYSALIS_CORPORA', 'CHRYSALIS_BENCHMARK_DATA', 'P1_RANGE') else value
+                              for key, value in job['environment'].items()}
+        actual = dict(spec, client=str(root / spec['client']), harness=str(root / spec['harness']))
+        return session.member(actual, job, dest, **region)
+
     try:
         region = dict(region=region_for(plan)) if 'region' in plan else {}
         if not dry:
@@ -167,27 +260,33 @@ def run(root, plan, output, *, dry=False):
             try:
                 session.save(output / 'host.json', fingerprint)
             except OSError:
-                # Preserve the optional diagnostic in the mandatory status, without paths from the error.
+                # A missing fingerprint will fail the PC's verification for a probed session.
                 host_fallback['host'] = dict(dict.fromkeys(fingerprint), error='Fingerprint write failed')
         for spec in plan['builds'].values():
             actual = {path.name: hashlib.sha256(path.read_bytes()).hexdigest() for path in (root / spec['client']).parent.glob('*.dll')}
             require(actual == spec['dllSha256s'], 'Every-DLL closure differs before measurement')
-        for block in plan['blocks']:
+        if not dry and (rule := plan.get('probe')) is not None:
+            directory = output / 'probe'
+            directory.mkdir()
+            evidence = {}
+            for identifier in probe_ids(rule):
+                if time.time() + PROBE_PROCESS_SECONDS * 1.15 > deadline:
+                    raise TimeoutError('budget stop: next probe process cannot finish before cutoff')
+                # member raises on nonzero exit before returning an observation.
+                record = member(rule['build'], rule['workload'], directory / identifier, list(PROBE_COUNTS), **region)
+                evidence[identifier] = dict(record, exitCode=0)
+            probe = probe_result(evidence, rule)
+            for identifier, record in evidence.items():
+                session.save(directory / f'{identifier}.json', record)
+            session.save(output / 'probe.json', probe)
+        for block in (() if probe and probe['decision'] == 'rejected' else plan['blocks']):
             # A full local block is atomic. Odd legacy tails have two members.
             if not dry and time.time() + len(block['members']) * block['chargeSeconds'] * 1.15 > deadline:
                 raise TimeoutError('budget stop: next atomic block cannot finish before cutoff')
             for identifier in block['members']:
                 build = plan['members'][identifier]['build']
-                spec = plan['builds'][build]
-                job = dict(plan['workloads'][block['workload']], root=str(root), counts=plan['counts'],
-                           timeout=max(.01, deadline - time.time()))
-                for key in ('dotnet', 'server', 'capture'):
-                    job[key] = str(root / job[key])
-                job['environment'] = {key: str(root / value) if key in ('CHRYSALIS_CORPORA', 'CHRYSALIS_BENCHMARK_DATA', 'P1_RANGE') else value
-                                      for key, value in job['environment'].items()}
-                actual = dict(spec, client=str(root / spec['client']), harness=str(root / spec['harness']))
                 stamp = dt.datetime.now(dt.timezone.utc).isoformat()
-                record = session.member(actual, job, output / identifier, **region)
+                record = member(build, block['workload'], output / identifier, plan['counts'], **region)
                 record.update(id=identifier, build=build, predecessorBuild=predecessor, startedUtc=stamp,
                               endedUtc=dt.datetime.now(dt.timezone.utc).isoformat())
                 records.append(record)
@@ -197,8 +296,11 @@ def run(root, plan, output, *, dry=False):
         error = str(exception)
     finally:
         session.save(output / 'session-start.json', schedules.startup_information(records))
-    session.save(output / 'session-status.json', dict(completedAllDeclaredRounds=error is None, exitCode=0 if error is None else 2,
-                                                    reason=error, seconds=time.monotonic() - started, dry=dry, **host_fallback))
+    status = dict(completedAllDeclaredRounds=error is None and (probe is None or probe['decision'] == 'kept'),
+                  exitCode=0 if error is None else 2, reason=error, seconds=time.monotonic() - started, dry=dry, **host_fallback)
+    if probe is not None:
+        status['probe'] = probe['decision']
+    session.save(output / 'session-status.json', status)
     return error is None
 
 
@@ -312,7 +414,8 @@ def verdict(row, pairs, mode, *, noise=None, invalid=None):
                 result.update(measurement)
                 result['usPerOperation'] = [st.mean(st.mean(item['nsPerBlock'] for item in pair[side]['data']['rows']) for pair in admitted) / 1000 for side in ('baseline', 'candidate')]
                 result['warmupNs'] = [st.mean(pair[side]['data'].get('warmupElapsedNs', sum(item['nsPerBlock'] * item['blocks'] for item in pair[side]['data']['warmupRows'])) for pair in population) for side in ('baseline', 'candidate')]
-                result['gcCounts'] = {side: {key: sum(item[key] for pair in population for item in pair[side]['data']['rows']) for key in ('gen0Collections', 'gen1Collections', 'gen2Collections') if all(key in item for pair in population for item in pair[side]['data']['rows'])} for side in ('baseline', 'candidate')}
+                result['gcCounts'] = {side: gc_totals([item for pair in population for item in pair[side]['data']['rows']])
+                                      for side in ('baseline', 'candidate')}
         if 'aBand' in result:
             result['band'] = result['aBand']
         if mode == 'change':
@@ -415,6 +518,53 @@ def session_outcome(output, seal, number, *, first_only=False, results=None):
     return controls_outcome(plan, results)
 
 
+def gc_totals(rows):
+    return {key: sum(item[key] for item in rows) for key in GC_KEYS
+            if rows and all(type(item.get(key)) is int and item[key] >= 0 for item in rows)}
+
+
+def gc_per_build(pairs):
+    observed = {side: [] for side in ('baseline', 'candidate')}
+    for pair in pairs:
+        for side in observed:
+            data = pair[side].get('data')
+            if isinstance(data, dict):
+                observed['baseline' if pair['phase'] == 'A' else side].append(data)
+    result = {}
+    for side, data in observed.items():
+        rows = [item for process in data for item in process.get('rows', ())]
+        totals = gc_totals(rows)
+        budgets = {gen0_budget(process) for process in data}
+        result[side] = dict(passes=len(rows), collections=totals, collectionsPerPass={key: value / len(rows) for key, value in totals.items()},
+                            gen0BudgetBytes=sorted(value for value in budgets if value is not None), budgetMissing=not budgets or None in budgets)
+    return result
+
+
+def draw_lines(output, *, first_only):
+    path = output / 'time/draws.json'
+    if not path.exists():
+        return []
+    lines = []
+    try:
+        for draw in json.loads(path.read_text()):
+            if first_only and draw['phase'] != 'first':
+                continue
+            probe = draw.get('probe', {})
+            booked = draw['bookedUsd']
+            cost = 'unknown' if booked is None else f'${booked:.6f}'
+            lines.append(f'time session {draw["session"]} {draw["phase"]} draw {draw["draw"]} · {draw["app"]} · {draw["decision"]}'
+                         f' · booked {cost} · CV16 {probe.get("cv")} · P16 {probe.get("lag1")} · limit {probe.get("limit")}'
+                         f' · gen0 budget bytes {probe.get("gen0BudgetBytes")} · {", ".join(probe.get("reasons", ())) or "no probe rejection recorded"}'
+                         f' · archive {draw.get("archiveSha256", "unavailable")} · host {json.dumps(draw.get("host"), sort_keys=True)}')
+            warnings = draw.get('costWarnings', ['unknown booked cost'] if booked is None else [])
+            if draw.get('invalid') and draw['invalid'] != 'session invalid: ' + '; '.join(warnings):
+                lines.append('  DRAW WARNING: ' + draw['invalid'])
+            lines.extend('  DRAW WARNING: ' + warning for warning in warnings)
+    except (OSError, KeyError, TypeError, AttributeError, ValueError):
+        return ['DRAW WARNING: draw diagnostics could not be read']
+    return lines
+
+
 def read_results(output, seal, *, mode=None, first_only=False):
     """Pure re-reporting from sealed inputs plus hashed session archives."""
     import gate
@@ -427,6 +577,9 @@ def read_results(output, seal, *, mode=None, first_only=False):
         home = '' if show_regions else ' iad'
         lines += [f'time · Fly performance-8x{home} · arithmetic mean paired ratios',
                   f'{"benchmark":<38} {"A/B":>7} {"band N":>8} {"ratio [95%]":>31} verdict']
+        lines.extend(draw_lines(output, first_only=first_only))
+    else:
+        lines.append('GC timing observations: not recorded (no timing sessions)')
     index_file = output / 'time/index.json'
     index = json.loads(index_file.read_text()) if index_file.exists() else []
     band_failures = set()
@@ -456,6 +609,7 @@ def read_results(output, seal, *, mode=None, first_only=False):
                     current['blockDiagnostic'] = schedules.block_diagnostics(chosen)
                     if row['id'] in band_failures:
                         current = dict(status='INCONCLUSIVE', reason='One-time micro band invalid')
+                    current['gcPerBuild'] = gc_per_build(chosen)
                 if phase == 'first':
                     first = current
                     if matches and row['id'] not in band_failures:
@@ -493,7 +647,16 @@ def read_results(output, seal, *, mode=None, first_only=False):
                     lines.append(f'  {label}: {part["status"]} ratio {part.get("mean")} {part.get("confidence95")}; joint {first["status"]} · {part["reason"]}')
                 if part.get('blockDiagnostic'):
                     lines.append('  block contrast / orientation ' + label + ' (information only): ' + json.dumps(part['blockDiagnostic'], sort_keys=True))
-                lines.append(f'  {label} admitted pairs: ' + json.dumps(part.get('admittedPairs', {})) + '; GC collections: ' + json.dumps(part.get('gcCounts', {})))
+                lines.append(f'  {label} admitted pairs: ' + json.dumps(part.get('admittedPairs', {})))
+                for side in ('baseline', 'candidate'):
+                    gc = part.get('gcPerBuild', {}).get(side, {})
+                    totals, rates = gc.get('collections', {}), gc.get('collectionsPerPass', {})
+                    summary = ', '.join(f'gen{i} {totals[key]} ({rates[key]:.6g}/pass)' if key in rates else f'gen{i} not recorded'
+                                        for i, key in enumerate(GC_KEYS))
+                    budget = ', '.join(map(str, gc.get('gen0BudgetBytes', ()))) or 'not recorded'
+                    if gc.get('budgetMissing') and budget != 'not recorded':
+                        budget += ' (some processes not recorded)'
+                    lines.append(f'  {label} {side} GC ({gc.get("passes", 0)} measured passes): {summary}; GCGen0MaxBudget bytes: {budget} (information only)')
                 for check in part.get('checks', []):
                     classifications = [('detected drift beyond the declared band' if low > 1.05 or high < .95 else 'steady state unproved') for low, high in [item['confidence95'] for item in check['stability']] if not (.95 <= low and high <= 1.05)]
                     if classifications:
