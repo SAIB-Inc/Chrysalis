@@ -4,7 +4,7 @@ import statistics
 
 from summarize import confidence95
 
-RULE_VERSION = "p2-d49-d51-d41-v3"
+RULE_VERSION = "p2-d49-d51-d41-v4"
 
 
 def _paired(baseline, comparison):

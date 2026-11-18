@@ -292,7 +292,7 @@ def jit_quiet(data):
 
 
 def side_quiescence(rows):
-    """D49: compile-time share gates; methods count is reported, not a veto."""
+    """D49: compile-time share gates per population; method counts are descriptive."""
     if not rows:
         return dict(established=False, reason='Missing side processes')
     jit = [row['jit'] for row in rows]

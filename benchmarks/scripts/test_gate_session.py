@@ -80,6 +80,14 @@ class SessionTests(unittest.TestCase):
             altered[key].pop()
             with self.assertRaises(ValueError):
                 session.validate_observations(altered, 'offline', '10.0.9', (180, 60))
+        positive = data()
+        for boundary in positive['groupBoundaries']:
+            if boundary['stage'] == 'measured' and boundary['passIndex'] > 0:
+                for counter in session.COUNTERS:
+                    boundary['delta'][counter] = 1
+                    boundary['cumulative'][counter] = boundary['passIndex']
+        session.validate_observations(positive, 'offline', '10.0.9', (180, 60))
+        self.assertEqual(session.jit_quiet(positive)['jitMs'], .006)
         altered = data()
         altered['groupBoundaries'][-1]['delta']['compiledMethods'] = -1
         with self.assertRaises(ValueError):

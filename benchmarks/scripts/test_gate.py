@@ -180,6 +180,22 @@ class GateTests(unittest.TestCase):
             selected=gate.select_rows(SimpleNamespace(mode='release',plan=path,only=None),config,audit)
             self.assertEqual([(r['aPairs'],r['bPairs']) for p in gate_time.size_sessions(selected,'release',budget=2) for r in p['rows']],[(32,32),(24,36)])
 
+    def test_expected_statuses_are_only_for_gated_time_rows(self):
+        config = json.loads((gate.GATE / 'gated.json').read_text())
+        audit = json.loads((gate.REPO / 'benchmarks/Chrysalis.Benchmarks/audit-allocations.json').read_text())
+        with tempfile.TemporaryDirectory() as td:
+            path = Path(td) / 'plan.json'
+            args = SimpleNamespace(mode='release', plan=path, only=None)
+            entry = dict(id='time/control', kind='time', replay='offline')
+            for expected in ('smoke', dict(release='FAIL'), dict(change='PASS', release='INCONCLUSIVE')):
+                path.write_text(json.dumps([dict(entry, expected=expected)]))
+                self.assertEqual(gate.select_rows(args, config, audit)[0]['expected'], expected)
+            for bad in [dict(expected=e) for e in (None, [], {}, 'PASS', dict(other='PASS'), dict(release='CLEAR'))] + [
+                    dict(kind='direct', expected='smoke'), dict(rowClass='recorded-only', explanation='fixture', expected='smoke')]:
+                path.write_text(json.dumps([dict(entry, **bad)]))
+                with self.assertRaisesRegex(ValueError, 'expected'):
+                    gate.select_rows(args, config, audit)
+
     def test_band_warmup_provenance_cannot_drift_with_the_label(self):
         source=next(p for p in (gate.GATE/'bands').glob('*.json') if json.loads(p.read_text()).get('window')=='readeveryfield/warm10')
         band=json.loads(source.read_text())

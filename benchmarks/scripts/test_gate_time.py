@@ -96,27 +96,144 @@ class TimeTests(unittest.TestCase):
                 pair['candidate']['timingRejectedReasons'] = ['foreign CPU']
         self.assertIn('admission', timing.verdict(r, p, 'release')['reason'])
 
-    def test_each_side_stability_quiescence_uses_all_complete_even_rejected(self):
+    def test_phase_populations_and_named_failures(self):
         r = row()
-        for phase in ('A', 'B'):
-            for name in ('baseline', 'candidate'):
-                p = pairs(r)
-                for pair in p:
-                    if pair['phase'] == phase:
-                        for item in pair[name]['data']['rows'][40:]:
-                            item['nsPerBlock'] *= 1.1
-                result = timing.verdict(r, p, 'release')
-                self.assertEqual(result['status'], 'INCONCLUSIVE')
-                self.assertIn(phase + ' ' + name + ' stability', result['reason'])
-                self.assertIn('mean', result)  # D49 always prints the descriptive B estimate
+        p = pairs(r)
+        for pair in p[:16]:
+            for side in ('baseline', 'candidate'):
+                for item in pair[side]['data']['rows'][40:]:
+                    item['nsPerBlock'] *= .99 if pair['pair'] % 2 else 1.01
+        actual = timing.verdict(r, p, 'release')['checks'][0]
+        self.assertEqual(actual['quiescence']['processes'], 32)
+        folded = actual['stability'][-1]
+        flat = timing.stability([pair[side] for pair in p[:16] for side in ('baseline', 'candidate')])[-1]
+        self.assertEqual(folded['pairs'], 16)
+        self.assertAlmostEqual(folded['mean'], flat['mean'])
+        self.assertGreater(folded['confidence95'][1], flat['confidence95'][1])
+        for side, passes, factor in [('baseline', slice(40, 60), 1.1), ('candidate', slice(20, 40), 1.2)]:
+            p = pairs(r)
+            for pair in p[16:]:
+                for item in pair[side]['data']['rows'][passes]:
+                    item['nsPerBlock'] *= factor
+            result = timing.verdict(r, p, 'release')
+            self.assertEqual(result['status'], 'INCONCLUSIVE')
+            self.assertEqual(list(result['qualificationFailures']), ['B ' + side + ' stability'])
+            self.assertIn('mean', result)  # D49 always prints the descriptive B estimate
         p = pairs(r)
         p[-1]['candidate']['timingRejectedReasons'] = ['steal']
         p[-1]['candidate']['data']['groupBoundaries'][-1]['delta']['compilationTimeTicks'] = 1_000_000_000_000
-        self.assertIn('quiescence', timing.verdict(r, p, 'release')['reason'])
+        result = timing.verdict(r, p, 'release')
+        self.assertEqual(list(result['qualificationFailures']), ['B candidate quiescence'])
+        self.assertEqual(result['admittedPairs']['B'], 15)
         p = pairs(r)
         for pair in p:
             pair['candidate']['data']['groupBoundaries'][-1]['delta']['compiledMethods'] = 10
         self.assertEqual(timing.verdict(r, p, 'release')['status'], 'PASS')
+
+    def test_every_failed_check_is_named_and_unqualified_rows_have_no_ratios(self):
+        r = row()
+        p = pairs(r, a=[1.06] * 16)
+        for pair in p:
+            for side in (('baseline', 'candidate') if pair['phase'] == 'A' else ('candidate',)):
+                pair[side]['data']['groupBoundaries'][-1]['delta']['compilationTimeTicks'] = 4_000_000
+                for item in pair[side]['data']['rows'][20:40]:
+                    item['nsPerBlock'] *= 1.2
+        with patch.object(timing, 'apply_rule', side_effect=AssertionError('unqualified result must not call apply_rule')):
+            result = timing.verdict(r, p, 'release')
+        self.assertEqual(result['status'], 'INCONCLUSIVE')
+        self.assertEqual(set(result['qualificationFailures']), {'A band', 'A phase quiescence', 'A phase stability',
+                                                                'B candidate quiescence', 'B candidate stability'})
+        self.assertAlmostEqual(result['aBand'], .06)
+        self.assertTrue(all(name in result['reason'] and detail in result['reason']
+                            for name, detail in result['qualificationFailures'].items()))
+        self.assertFalse({'ratios', 'pairedRatios'} & result.keys())
+        self.assertIn('confidence95', result)
+
+    def test_qualified_verdict_unchanged(self):
+        r = row(pairs=8)
+        p, q = pairs(r, [1.06, 1.07] * 4), pairs(r, [.96, .99] * 4)
+        broken = q[:-1]
+        for mode in ('change', 'release'):
+            def read(dataset):
+                return timing.verdict(r, dataset, mode, noise=r['noise'])
+            first, repeat = read(p), read(q)
+            ratios = [timing.pair_times([x for x in ds if x['phase'] == 'B'])['pairedRatios'] for ds in (p, q)]
+            for actual, values in ((first, ratios[0]), (repeat, ratios[1]),
+                                   (timing.pooled(first, repeat, mode), ratios[0] + ratios[1])):
+                expected = timing.apply_rule(dict(rowClass='gated'), values, mode)
+                self.assertEqual([actual[k] for k in ('ratios', 'confidence95', 'status')],
+                                 [expected[k] for k in ('ratios', 'confidence95', 'status')])
+            invalid = timing.pooled(first, read(broken), mode)
+            self.assertEqual(invalid['status'], 'INCONCLUSIVE')
+            self.assertNotIn('ratios', invalid)
+
+    def test_controls_outcome(self):
+        c2 = dict(row(pairs=6), id='c2', aPairs=6, expected=dict(release='FAIL', change='FAIL'))
+        c3 = dict(c2, id='c3', expected=dict(release='PASS', change='PASS'))
+        c4 = dict(c2, id='c4', bPairs=2, expected='smoke')
+        c5 = dict(c2, id='c5-prime', expected=dict(release='FAIL'))
+        miss = [1.06] * 6
+        def both(r, ratio=1, *, a=None, invalid=None, edit=lambda p: None, repeat=None):
+            p = pairs(r, ratio, a=a)
+            edit(p)
+            results = {mode: timing.verdict(r, p, mode, noise=r['noise'], invalid=invalid) for mode in ('release', 'change')}
+            return results if repeat is None else {m: timing.pooled(first, repeat[m], m, sealed_first_status=results['release']['status'])
+                                                  for m, first in results.items()}
+        def classify(*entries, mode='release'):
+            plan = dict(mode=mode, repeatAllowed=True, rows=[r for r, _ in entries])
+            results = {m: {r['id']: result[m] for r, result in entries} for m in ('release', 'change')}
+            return timing.controls_outcome(plan, results)[0]
+        def bad_candidate(p):
+            for pair in p[6:]:
+                for item in pair['candidate']['data']['rows'][20:40]:
+                    item['nsPerBlock'] *= 1.2
+        isolated = both(c2, 1.08, a=miss)
+        smoke = both(c4)
+        bad = both(c2, 1.08, edit=bad_candidate)
+        contradiction = both(c2, 1.02)
+        with self.subTest(smoke='complete'):
+            self.assertEqual(classify((c4, smoke), (c2, isolated)), 'retry-eligible')
+        full_smoke = dict(c4, bPairs=6)
+        for ratio in (1, 1.08):
+            self.assertEqual(classify((full_smoke, both(full_smoke, ratio))), 'hard-stop')
+        for change in (dict(status='PASS'), dict(reason='no noise record')):
+            self.assertEqual(classify((c4, {m: dict(v, **change) for m, v in smoke.items()})), 'hard-stop')
+        joint_smoke = {m: timing.pooled(v, v, m, sealed_first_status='FAIL') for m, v in smoke.items()}
+        self.assertEqual(classify((c4, joint_smoke)), 'hard-stop')
+        for edit in (lambda p: p[-1]['candidate'].update(marks=[]), lambda p: p[-1]['baseline'].update(identity={})):
+            self.assertEqual(classify((c4, both(c4, edit=edit))), 'hard-stop')
+        self.assertEqual(classify((c3, both(c3, [.9, 1.1] * 3))), 'hard-stop')
+        self.assertEqual(classify((c3, both(c3, a=miss))), 'retry-eligible')
+        for result in (contradiction, bad, both(c2, invalid='No sealed Fly session')):
+            self.assertEqual(classify((c2, result)), 'hard-stop')
+        self.assertEqual(classify((c2, contradiction), (c5, both(c5, a=miss))), 'hard-stop')
+        for ratio, change in [(1.02, 'PASS'), ([1.03, 1.06] * 3, 'INCONCLUSIVE'), (1.08, 'FAIL')]:
+            valid = both(c5, ratio)
+            self.assertEqual(valid['change']['status'], change)
+            self.assertEqual(classify((c5, valid)), 'repeat')
+        no_band = dict(c5, noise=None)
+        for a, edit, check in ((miss, lambda p: None, 'A band'), (None, bad_candidate, 'B candidate stability')):
+            with self.subTest(check=check):
+                results = both(no_band, 1.02, a=a, edit=edit)
+                self.assertEqual(classify((no_band, results)), 'hard-stop')
+                failures = results['change'].get('qualificationFailures', {})
+                self.assertEqual(set(failures), {check, 'noise record'})
+                self.assertTrue(all(f'{name} {detail}' in results['change']['reason'] for name, detail in failures.items()))
+        for noise in ([], {}, dict(c5['noise'], band=[])):
+            with self.subTest(noise=noise):
+                malformed = dict(c5, noise=noise)
+                results = both(malformed, 1.02)
+                self.assertEqual(classify((malformed, results)), 'hard-stop')
+                self.assertIn('noise record', results['change'].get('qualificationFailures', {}))
+        rc = dict(no_band); del rc['expected']
+        self.assertEqual(classify((rc, both(rc, 1.02))), 'repeat')
+        self.assertEqual(classify((rc, both(rc, 1.02, a=miss))), 'retry-eligible')
+        for mode in ('release', 'change'):
+            for repeat, expected in ((isolated, 'retry-eligible'), (bad, 'hard-stop'), (both(c2, .88), 'hard-stop'),
+                                     (both(c2, 1.049), 'complete')):
+                self.assertEqual(classify((c2, both(c2, 1.08, repeat=repeat)), mode=mode), expected)
+            self.assertEqual(classify((c2, both(c2, 1.08, repeat=isolated)),
+                                      (c5, both(c5, 1.02, repeat=both(c5, .96))), mode=mode), 'hard-stop')
 
     def test_missing_marks_pc_fixed_work_and_side_identity_fail_closed(self):
         r = row()
@@ -204,6 +321,11 @@ class TimeTests(unittest.TestCase):
         r = row()
         r['bPairs'] = 0
         self.assertEqual(timing.baseline_band(r, pairs(r))['status'], 'PASS')
+        p = pairs(r)
+        for pair in p:
+            for item in pair['baseline']['data']['rows'][40:]:
+                item['nsPerBlock'] *= 1.1
+        self.assertEqual(list(timing.baseline_band(r, p)['qualificationFailures']), ['B baseline stability'])
         self.assertEqual(timing.baseline_band(r, pairs(r, a=[.8, 1.2] * 8))['status'], 'INCONCLUSIVE')
 
     def test_options_one_and_three_keep_preprod_floors(self):
@@ -277,7 +399,7 @@ class TimeTests(unittest.TestCase):
         # C5: one release seal permits its repeat; only the reporting rule changes.
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
-            r = row(pairs=24)
+            r = dict(row(pairs=24), expected=dict(release='FAIL'))
             plan = dict(design='full', rows=[r], repeatAllowed=True, destroyGuardSeconds=4145,
                         limitUsd=.45221430555555553, limitWithRepeatUsd=.9044286111111111)
             seal = dict(mode='release', ruleVersion=gate.stats.RULE_VERSION, rows=[r], timePlans=[plan],
@@ -291,7 +413,16 @@ class TimeTests(unittest.TestCase):
             gate.session.save(root / 'time/index.json', index)
             saved = {path: path.read_bytes() for path in root.rglob('*') if path.is_file()}
             for mode, expected in ((None, 'FAIL'), ('change', 'PASS')):
-                actual = gate.report(root, mode=mode)['rows'][r['id']]
+                report = gate.report(root, mode=mode)
+                actual = report['rows'][r['id']]
+                for phase in ('first', 'repeat'):
+                    self.assertIn(f'{phase} admitted pairs: {{"A": 16, "B": 24}}', report['text'])
+                    self.assertIn(f'{phase} check:', report['text'])
+                self.assertRegex(report['text'], r'16/ 24 +0\.000%')
+                self.assertIn('controls outcome: complete', report['text'])
+                self.assertEqual('noise record N:' in report['text'], mode == 'change')
+                if mode == 'change':
+                    self.assertIn('noise record N: 2.310%', report['text'])
                 self.assertEqual([actual[phase]['status'] for phase in ('first', 'repeat')] + [actual['status']],
                                  [expected] * 3, f'C5 first/repeat/joint in {mode or "sealed release"} mode')
             self.assertEqual({path: path.read_bytes() for path in root.rglob('*') if path.is_file()}, saved)
@@ -299,6 +430,16 @@ class TimeTests(unittest.TestCase):
             gate.write_seal(root, seal)
             with self.assertRaisesRegex(ValueError, 'Unsealed repeat'):
                 gate.report(root, mode='change')
+            raw = root / index[0]['path']
+            gate.session.save(raw, dict(pairs=pairs(r, 1.025, a=[1.06] * 16)))
+            gate.session.save(root / 'time/index.json', [dict(index[0], sha256=gate.digest(raw))])
+            for weak in ('A band', 'micro-band'):
+                with self.subTest(weak=weak):
+                    if weak == 'A band':
+                        self.assertIn('noise record N: 2.310%', '\n'.join(timing.read_results(root, seal, mode='change')[1]))
+                    else:
+                        plan['design'], r['bPairs'] = 'micro-band', 0
+                        self.assertRegex('\n'.join(timing.read_results(root, seal)[1]), r'16/  0 +—')
         seal = dict(mode='release', canonical=True, timeScopeDecided=True,
                     rows=[dict(id='real'), dict(id='artifact', rowClass='recorded-only')], releaseSet=['real'])
         self.assertEqual(gate.outcome(seal, dict(real=dict(status='PASS'), artifact=dict(status='FAIL'))), 'RELEASE PASS')

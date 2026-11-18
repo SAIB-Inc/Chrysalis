@@ -539,7 +539,7 @@ def select_rows(args, config, audit):
             raise ValueError('Measurement entries must be an array')
         rows = []
         known = {row['id']: row for row in available}
-        allowed = {'id', 'kind', 'replay', 'manifest', 'pairs', 'aPairs', 'chargeSeconds', 'candidate', 'rowClass', 'explanation', 'region'}
+        allowed = {'id', 'kind', 'replay', 'manifest', 'pairs', 'aPairs', 'chargeSeconds', 'candidate', 'rowClass', 'explanation', 'region', 'expected'}
         for entry in selected:
             if not isinstance(entry, dict) or set(entry) - allowed or not isinstance(entry.get('id'), str):
                 raise ValueError('Invalid measurement entry fields')
@@ -558,6 +558,13 @@ def select_rows(args, config, audit):
             row = dict(original or {}, **entry)
             if row.get('kind') not in ('direct', 'replay', 'time'):
                 raise ValueError('Unknown row kind')
+            if 'expected' in row:
+                expected = row['expected']
+                if row['kind'] != 'time' or row.get('rowClass') == 'recorded-only' or not (
+                        expected == 'smoke' or isinstance(expected, dict) and expected and
+                        expected.keys() <= {'release', 'change'} and
+                        all(status in ('PASS', 'FAIL', 'INCONCLUSIVE') for status in expected.values())):
+                    raise ValueError('Invalid expected statuses: only gated time rows may declare them')
             if row['kind'] == 'direct' and 'rule' not in row:
                 # New per-message rows are strict by definition, never assigned a band.
                 row['rule'] = 'D39'
@@ -777,6 +784,11 @@ def report(output, mode=None):
                 if ci:
                     lines.append(f'  {phase}: {previous["baselineMeanBytes"]:.3f} / {previous["comparisonMeanBytes"]:.3f}; difference {previous["meanDifferenceBytes"]:.3f} [{ci[0]:.3f}, {ci[1]:.3f}]')
     lines += time_lines
+    time_modes = {applied_mode: timed}
+    for number, plan in enumerate(seal.get('timePlans', [])):
+        if plan['design'] != 'micro-band':
+            classification, _ = gate_time.session_outcome(output, seal, number, results=time_modes)
+            lines.append(f'time session {number} · controls outcome: {classification}')
     lines += ['coverage · area · declared bytes / declared time']
     for area, mapping in seal['gated']['areas'].items():
         counts = [sum(any(fnmatch.fnmatchcase(row['id'], pattern) for pattern in mapping[key]) for row in seal['rows']) for key in ('bytes', 'time')]
