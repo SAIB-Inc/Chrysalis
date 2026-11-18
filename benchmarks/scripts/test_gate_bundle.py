@@ -5,6 +5,7 @@ from pathlib import Path
 import shutil
 import tempfile
 import tarfile
+from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
@@ -13,6 +14,10 @@ import gate_bundle as bundle
 import gate_time as timing
 from test_gate import side, fixture
 from test_gate_time import row, member
+
+
+SCOUT = [dict(id=f'time/preprod-scout{i}-offline', kind='time', pairs=8, chargeSeconds=13,
+              rowClass='recorded-only', explanation='CAUSE.md') for i in range(1, 7)]
 
 
 class BundleTests(unittest.TestCase):
@@ -87,6 +92,19 @@ class BundleTests(unittest.TestCase):
             self.assertNotEqual(installed_sides['baseline']['client'], installed_sides['candidate']['client'])
             self.assertEqual(len(calls), 2)
             self.assertTrue(all(job['counts'] == [1, 1] for job in calls))
+            scouts = [dict(entry, sides=r['sides']) for entry in SCOUT]
+            with patch.object(gate, 'REPO', repo), patch.object(gate.runner, 'DOTNET_ROOT', runtime), \
+                    patch.object(bundle.subprocess, 'check_output', return_value='fly fixture-v1'), \
+                    patch.object(timing.session, 'member', side_effect=fake):
+                scout_config = dict(config, _sessionPerRow=True)
+                plans = bundle.prepare(root / 'scout', scouts, builds, scout_config,
+                                       dict(flyPythonRoot=str(python.parent), corporaRoot='unused', flyBudgetLeftUsd=.83273))['timePlans']
+                self.assertEqual([[r['id'] for r in plan['rows']] for plan in plans], [[r['id']] for r in scouts])
+                self.assertTrue(all(not p['repeatAllowed'] and p['rawSeconds'] == 208 for p in plans))
+                self.assertAlmostEqual(sum(p['limitWithRepeatUsd'] for p in plans), .83273, places=5)
+                with self.assertRaisesRegex(ValueError, 'exceeds budget'):
+                    bundle.prepare(root / 'over-budget', scouts, builds, scout_config,
+                                   dict(flyPythonRoot=str(python.parent), corporaRoot='unused', flyBudgetLeftUsd=.83272))
             micro=dict(r,id='time/micro-hashing')
             shared_micro = dict(micro, sides={role: gate.public_side(staged) for role in builds})
             micro_output=root/'micro-output';micro_output.mkdir()
@@ -146,9 +164,22 @@ class BundleTests(unittest.TestCase):
             audit = json.loads((gate.REPO / 'benchmarks/Chrysalis.Benchmarks/audit-allocations.json').read_text())
             path = root / 'selection.json'
             gate.session.save(path, [dict(id='CoreBench.Blake256', kind='direct', rowClass='recorded-only', explanation='CAUSE.md')])
-            from types import SimpleNamespace
             with self.assertRaisesRegex(ValueError, 'cannot be removed'):
                 gate.select_rows(SimpleNamespace(mode='release', plan=path, only=None), config, audit)
+
+            for value, entries, mode in [(True, SCOUT + [dict(id='CoreBench.Blake256')], 'change'),
+                                         (True, SCOUT + [dict(id='scout-only-bytes', kind='direct', rowClass='recorded-only', explanation='CAUSE.md')], 'change'),
+                                         (True, SCOUT + [dict(id='time/preprod-offline')], 'change'),
+                                         (True, SCOUT, 'release'), (1, SCOUT, 'change'), (None, SCOUT, 'change')]:
+                with self.subTest(value=value, entries=len(entries), mode=mode):
+                    gate.session.save(path, dict(entries=entries, sessionPerRow=value))
+                    with self.assertRaisesRegex(ValueError, 'sessionPerRow'):
+                        gate.select_rows(SimpleNamespace(mode=mode, plan=path, only=None), config, audit)
+            for payload, enabled in [(dict(entries=SCOUT, sessionPerRow=True), True), (SCOUT, False),
+                                     (dict(entries=SCOUT, sessionPerRow=False), False)]:
+                gate.session.save(path, payload)
+                self.assertEqual(len(gate.select_rows(SimpleNamespace(mode='change', plan=path, only=None), config, audit)), 6)
+                self.assertIs(config.get('_sessionPerRow', False), enabled)
 
 
 if __name__ == '__main__':

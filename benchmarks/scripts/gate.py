@@ -527,8 +527,12 @@ def band_sets(args, baseline, output, local):
 def select_rows(args, config, audit):
     available = catalogue(config, audit)
     defaults = config['defaults'][args.mode]
+    session_per_row = False
     if args.plan:
         payload = json.loads(Path(args.plan).read_text())
+        session_per_row = payload.get('sessionPerRow', False) if isinstance(payload, dict) else False
+        if type(session_per_row) is not bool:
+            raise ValueError('sessionPerRow must be a boolean')
         selected = payload if isinstance(payload, list) else payload.get('entries') if isinstance(payload, dict) else None
         if not isinstance(selected, list):
             raise ValueError('Measurement entries must be an array')
@@ -571,6 +575,10 @@ def select_rows(args, config, audit):
         rows = [row for row in available if any(fnmatch.fnmatchcase(row['id'], pattern) for pattern in patterns)]
     if not rows or len({row['id'] for row in rows}) != len(rows):
         raise ValueError('No rows selected or duplicate row ids')
+    if session_per_row and (args.mode != 'change' or any(
+            row['kind'] != 'time' or row.get('rowClass') != 'recorded-only' for row in rows)):
+        raise ValueError('sessionPerRow requires only recorded-only time rows in change mode')
+    config['_sessionPerRow'] = session_per_row
     # Only the current frozen window determines the declared direct cohort.
     banded = {(record['row'], record['window']) for path in (GATE / 'bands').glob('*.json')
               for record in [json.loads(path.read_text())]
@@ -840,7 +848,8 @@ def run_command(args, output=None, local=None):
     bands = seal_bands(rows)
     seal = dict(schemaVersion=1, mode=args.mode, ruleVersion=stats.RULE_VERSION, rows=rows, bands=bands,
                 canonical=canonical(baseline, candidate) and all(row['sides']['candidate']['commit'] == candidate['commit'] for row in rows),
-                timeScopeDecided=True, gated=config, releaseSet=[row['id'] for row in catalogue(config, audit) if row.get('rowClass') != 'recorded-only'],
+                timeScopeDecided=True, gated={key: value for key, value in config.items() if not key.startswith('_')},
+                releaseSet=[row['id'] for row in catalogue(config, audit) if row.get('rowClass') != 'recorded-only'],
                 files={file.relative_to(output).as_posix(): digest(file) for file in scripts.iterdir() if file.is_file()})
     import gate_bundle
     timing = gate_bundle.prepare(output, rows, staged, dict(config, _mode=args.mode), local)

@@ -335,6 +335,7 @@ class LauncherTests(unittest.TestCase):
                     plan['repeatAllowed'] = False
                     for r in plan['rows']:
                         r['aPairs'] = 0
+                    gate.session.save(root / 'fixture-host.json', dict(model='33'))
                 bundle_input = root / 'bundle'
                 schedules.prepare(plan)
                 gate.session.save(bundle_input / 'plan.json', schedules.worker_plan(plan))
@@ -359,12 +360,45 @@ class LauncherTests(unittest.TestCase):
                 self.assertEqual(sum(c['argv'][:2] == ['machine', 'run'] for c in recorded), machines)
                 self.assertFalse(json.loads((root / 'state.json').read_text())['app'])
                 report = gate.report(root)
+                item = json.loads((root / 'time/index.json').read_text())[0]
+                payload_path = root / item['path']
+                self.assertEqual(gate.digest(payload_path), item['sha256'])
+                payload = json.loads(payload_path.read_text())
+                if mode == 'change':
+                    self.assertEqual(payload['host'], dict(model='33'))
+                    self.assertEqual(report['text'].count('host fingerprint (information only): {"model": "33"}'), 1)
+                else:
+                    self.assertNotIn('host', payload)
                 self.assertEqual(report['outcome'], 'SUBSET' if mode == 'change' else 'FAIL')
                 self.assertEqual('repeat' in report['rows'][plan['rows'][0]['id']], mode == 'release')
                 names = [call['argv'][2] for call in calls(root) if call['argv'][:2] == ['apps', 'create']]
                 self.assertEqual(len(names), 1 if mode == 'change' else 2)
                 for name in names:
                     self.assertRegex(name, r'^[a-z0-9-]+$')
+
+    def test_scout_stops_after_invalid_second_machine(self):
+        with tempfile.TemporaryDirectory() as td:
+            repo = Path(td); root = repo / 'benchmarks/out/gate-scout'
+            _, seal, env = fixture(root)
+            rows = [dict(row(pairs=8), id=f'time/preprod-scout{i}-offline', aPairs=0,
+                         rowClass='recorded-only', explanation='CAUSE.md') for i in range(1, 7)]
+            plans = [schedules.prepare(timing.size_sessions([r], 'change', budget=.95)[0]) for r in rows]
+            seal.update(mode='change', rows=rows, timePlans=plans)
+            for i, plan in enumerate(plans):
+                gate.session.save(root / 'bundle/plan.json', schedules.worker_plan(plan))
+                name = f'input/session-{i}.tar.gz'
+                seal['files'][name] = bundle.pack(root / 'bundle', root / name)
+            gate.session.save(root / 'fixture-pairs.json', pairs(rows[0]) + pairs(rows[1]))
+            (root / 'invalid-session-1.tar.gz').touch()
+            go = gate.write_seal(root, seal)
+            with patch.object(gate, 'REPO', repo), patch.dict(os.environ, env):
+                self.assertEqual(bundle.fly_command(go), 0)  # Recorded-only outcome is not a validity check.
+            self.assertEqual(sum(c['argv'][:2] == ['machine', 'run'] for c in calls(root)), 2)
+            index = json.loads((root / 'time/index.json').read_text())
+            self.assertEqual([i['session'] for i in index], [0, 1])
+            first, second = [json.loads((root / i['path']).read_text()) for i in index]
+            self.assertIsNone(first['invalid'])
+            self.assertIn('incomplete', second['invalid'])
 
     def test_success_neighbours_context_only_token_fd_and_no_private_fly_config(self):
         root, status = self.run_case(extra=dict(GATE_STUB_NEIGHBOUR_CHANGE='1'))

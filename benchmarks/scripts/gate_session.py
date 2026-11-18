@@ -4,6 +4,7 @@
 No resource creation, inherited credentials, process command lines, adaptive
 warm-ups or retries. The caller starts this script through heavy on the PC.
 """
+import hashlib
 import json
 import math
 import os
@@ -35,6 +36,33 @@ def detect_platform():
             raise ValueError('Named 8-CPU x64 iad Fly machine required')
         return 'fly'
     return 'pc'
+
+
+def host_fingerprint(root=Path('/')):
+    """Return only named kernel and hardware fields; never host identity or ambient data."""
+    def read(path):
+        try:
+            return (root / path).read_text(encoding='utf-8').strip() or None
+        except (OSError, UnicodeError):
+            return None
+
+    def fields(text, keys):
+        return {key.strip(): value.strip() for key, colon, value in
+                (line.partition(':') for line in text.splitlines()) if colon and key.strip() in keys}
+
+    cpu_keys = ('vendor_id', 'cpu family', 'model', 'model name', 'stepping', 'microcode',
+                'cpu MHz', 'cache size', 'bogomips', 'address sizes')
+    cpuinfo = read('proc/cpuinfo') or ''
+    first = fields(cpuinfo.split('\n\n', 1)[0], (*cpu_keys, 'flags'))
+    processors = sum(line.partition(':')[0].strip() == 'processor' for line in cpuinfo.splitlines()) or None
+    flags = sorted(set(first['flags'].split())) if 'flags' in first else None
+    clocksource = 'sys/devices/system/clocksource/clocksource0/'
+    return dict({key: first.get(key) for key in cpu_keys}, processorCount=processors,
+                flagsSha256=hashlib.sha256(' '.join(flags).encode('utf-8')).hexdigest() if flags is not None else None,
+                flagsCount=len(flags) if flags is not None else None,
+                MemTotal=fields(read('proc/meminfo') or '', ('MemTotal',)).get('MemTotal'),
+                clocksourceCurrent=read(clocksource + 'current_clocksource'),
+                clocksourceAvailable=read(clocksource + 'available_clocksource'), kernelRelease=read('proc/sys/kernel/osrelease'))
 
 
 def clock():

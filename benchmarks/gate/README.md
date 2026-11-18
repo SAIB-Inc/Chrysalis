@@ -25,7 +25,9 @@ candidate for an entry. A new direct per-message row is D39. Time entries may de
 charge. Explicit counts are sealed exactly, even below the validity minimum.
 Default-set sizing alone may increase counts to use remaining capacity. An optional corpus
 `manifest` is repository-relative; measurement awaits P4 MR-B's client support.
-No ad-hoc row can silently obtain a noise band.
+No ad-hoc row can silently obtain a noise band. An object with `entries` can set
+`"sessionPerRow": true` to seal one Fly session per row, only in change mode
+with exclusively recorded-only time rows.
 
 `band --side <commit> --set <comma-separated-patterns>` freezes baseline-only
 10-pair bytes bands. D39 rows have no band. The six audit range rows share their original six-row
@@ -290,6 +292,8 @@ numbers and the label **harness artefact, explained, not gated**. It never chang
 the outcome or triggers a repeat. A measurement plan cannot downgrade an
 existing gated catalogue row. This preserves the old in-process N2C evidence
 when its independently verified socket replacement becomes the gated row.
+Fly sessions archive and report an allowlisted hardware fingerprint for
+information only. It does not read environment variables.
 
 FieldReadBench.ReadEveryField may drift within a process. Alternating the side
 order balances between-process drift; run order is not evidence of stability.

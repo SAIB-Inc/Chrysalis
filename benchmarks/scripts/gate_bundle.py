@@ -187,8 +187,9 @@ def prepare(output, rows, staged, config, local):
         if row['replay'] == 'micro':
             body = max(item['nsPerBlock'] * item['blocks'] / 1e9 for stage in ('rows', 'warmupRows') for item in process['data'][stage])
             ratios[row['id']] = max(2, process['seconds']) + 240 * body
-    plans = timing.size_sessions(selected, config.get('_mode', 'change'), ratios=ratios,
-                                 option=config['time'].get('option', 2), budget=budget)
+    groups = [[row] for row in selected] if config.get('_sessionPerRow') else [selected]
+    plans = [plan for group in groups for plan in timing.size_sessions(group, config.get('_mode', 'change'), ratios=ratios,
+                                                                      option=config['time'].get('option', 2), budget=budget)]
     # A missing micro noise record schedules a one-time baseline-only session,
     # fully reserved before go, followed by the ordinary RC micro session.
     for plan in list(plans):
@@ -203,7 +204,7 @@ def prepare(output, rows, staged, config, local):
             band['measurementCutoffSeconds'] = band['destroyGuardSeconds'] - 345
             band['limitUsd'] = band['limitWithRepeatUsd'] = timing.price(band['destroyGuardSeconds'])
             plans.insert(plans.index(plan), band)
-    timing.require(sum(plan['limitWithRepeatUsd'] for plan in plans) <= budget, 'Micro band plus all repeats exceeds budget')
+    timing.require(sum(plan['limitWithRepeatUsd'] for plan in plans) <= budget, 'Aggregate timing reservation exceeds budget')
     host = output / 'input/fly'
     copy_files(gate.REPO / 'benchmarks/scripts', host, files=HOST_FILES)
     # Remote script always archives even when bootstrap or session fails.
@@ -259,12 +260,13 @@ def archive_payload(note, plan=None, *, repeat=False):
     proof = note / 'cleanup-proof.json'
     if not proof.exists() or not json.loads(proof.read_text()).get('ourAppAbsent'):
         invalid = 'session invalid: no own-app absence proof'
-    pairs, startup = [], dict(available=False, reason='No session-start observation')
+    pairs, startup, host = [], dict(available=False, reason='No session-start observation'), None
     archive = note / 'results.tar.gz'
     if archive.exists():
         with tarfile.open(archive) as stream:
             try:
                 status = json.load(stream.extractfile('results/session-status.json'))
+                host = status.get('host')
                 if status.get('completedAllDeclaredRounds') is not True or status.get('exitCode') != 0:
                     invalid = 'session invalid: incomplete/budget-stopped session'
                 if plan is not None and 'results/members.json' in stream.getnames():
@@ -274,13 +276,21 @@ def archive_payload(note, plan=None, *, repeat=False):
                 startup = json.load(stream.extractfile('results/session-start.json')) if 'results/session-start.json' in stream.getnames() else dict(available=False, reason='Legacy fixture')
             except (KeyError, TypeError, ValueError):
                 invalid = 'session invalid: missing completion or pairs'
+            try:
+                if host is None and stream.getmember('results/host.json').isfile():
+                    host = json.load(stream.extractfile('results/host.json'))
+            except (KeyError, OSError, ValueError, tarfile.TarError):
+                pass  # Optional context must not affect session validity.
     else:
         invalid = 'session invalid: no results'
     context = {name: json.loads((note / name).read_text()) for name in
                ('neighbours-start.json', 'neighbours-before-fetch.json', 'duration-cost.json') if (note / name).exists()}
     context['session'] = note.name
     context['members'] = [dict(id=pair[side].get('id'), role=side, phase=pair['phase'], row=pair['id'], predecessorBuild=pair[side].get('predecessorBuild'), startedUtc=pair[side].get('startedUtc'), endedUtc=pair[side].get('endedUtc')) for pair in pairs for side in ('baseline', 'candidate')]
-    return dict(pairs=pairs, invalid=invalid, context=context, startup=startup)
+    payload = dict(pairs=pairs, invalid=invalid, context=context, startup=startup)
+    if isinstance(host, dict):
+        payload['host'] = host
+    return payload
 
 
 def cleanup_notice(directory, seal):
