@@ -1,5 +1,8 @@
 using System.Buffers;
+using System.Collections;
 using System.Runtime.ExceptionServices;
+using System.Security.Cryptography;
+using System.Text.Json;
 using Chrysalis.Codec.Extensions;
 using Chrysalis.Codec.Serialization;
 using Chrysalis.Codec.Serialization.Attributes;
@@ -91,6 +94,84 @@ public partial record X6TrialLeaf([CborOrder(0)] int Value) : CborRecord;
 public partial record X6TrialMiddle([CborOrder(0)] X6TrialLeaf Value) : CborRecord;
 [CborSerializable, CborList]
 public partial record X6TrialText([CborOrder(0)] string Value) : CborRecord;
+
+// Paired source-generated models use the same field types for the eager and deferred paths.
+public interface IX30WireValue
+{
+    object? Unwrap();
+}
+
+public interface IX30WireValue<out T> : IX30WireValue
+{
+    T Value { get; }
+    object? IX30WireValue.Unwrap() => Value;
+}
+
+[CborSerializable]
+public partial record X30EagerArray<T>(List<T> Value) : CborRecord, IX30WireValue<List<T>>;
+[CborSerializable]
+public readonly partial record struct X30LazyArray<T> : ICborType, IX30WireValue<List<T>>
+{
+    public partial List<T> Value { get; }
+}
+
+[CborSerializable]
+public partial record X30EagerMap<TKey, TValue>(Dictionary<TKey, TValue> Value) : CborRecord, IX30WireValue<Dictionary<TKey, TValue>> where TKey : notnull;
+[CborSerializable]
+public readonly partial record struct X30LazyMap<TKey, TValue> : ICborType, IX30WireValue<Dictionary<TKey, TValue>> where TKey : notnull
+{
+    public partial Dictionary<TKey, TValue> Value { get; }
+}
+
+[CborSerializable, CborList]
+public partial record X30EagerListTail<T>([CborOrder(0)] uint Marker, [CborOrder(1)] T Value) : CborRecord, IX30WireValue<T>;
+[CborSerializable, CborList]
+public readonly partial record struct X30LazyListTail<T> : ICborType, IX30WireValue<T>
+{
+    [CborOrder(0)] public partial uint Marker { get; }
+    [CborOrder(1)] public partial T Value { get; }
+}
+
+[CborSerializable, CborTag(121)]
+public partial record X30EagerTag121<T>(T Value) : CborRecord, IX30WireValue<T>;
+[CborSerializable, CborTag(121)]
+public readonly partial record struct X30LazyTag121<T> : ICborType, IX30WireValue<T>
+{
+    public partial T Value { get; }
+}
+
+[CborSerializable, CborTag(259)]
+public partial record X30EagerTag259<T>(T Value) : CborRecord, IX30WireValue<T>;
+[CborSerializable, CborTag(259)]
+public readonly partial record struct X30LazyTag259<T> : ICborType, IX30WireValue<T>
+{
+    public partial T Value { get; }
+}
+
+[CborSerializable, CborTag(60000)]
+public partial record X30EagerTag60000<T>(T Value) : CborRecord, IX30WireValue<T>;
+[CborSerializable, CborTag(60000)]
+public readonly partial record struct X30LazyTag60000<T> : ICborType, IX30WireValue<T>
+{
+    public partial T Value { get; }
+}
+
+[CborSerializable]
+public partial record X30EagerBytes(ReadOnlyMemory<byte> Value) : CborRecord, IX30WireValue<ReadOnlyMemory<byte>>;
+[CborSerializable]
+public readonly partial record struct X30LazyBytes : ICborType, IX30WireValue<ReadOnlyMemory<byte>>
+{
+    public partial ReadOnlyMemory<byte> Value { get; }
+}
+
+[CborSerializable]
+public partial record X30EagerEncoded(CborEncodedValue Value) : CborRecord, IX30WireValue<CborEncodedValue>;
+
+[CborSerializable]
+public readonly partial record struct X30LazyPrimitive<T> : ICborType, IX30WireValue<T>
+{
+    public partial T Value { get; }
+}
 
 public class CborTests(ITestOutputHelper output)
 {
@@ -370,7 +451,7 @@ public class CborTests(ITestOutputHelper output)
         byte[] data = Convert.FromHexString(hex);
         string path = boolean ? "System.Boolean" : "System.Single";
         string expected = boolean ? "boolean" : "floating point";
-        CborDecodeException error = AssertDecodeError(() =>
+        CborDecodeException error = AssertExactDecodeError(() =>
         {
             if (boolean)
             {
@@ -380,11 +461,7 @@ public class CborTests(ITestOutputHelper output)
             {
                 _ = CborSerializer.Deserialize<float>(data);
             }
-        }, offset, path);
-        Assert.Equal(path, error.TypePath);
-        Assert.Equal(expected, error.Expected);
-        Assert.Equal(actual, error.Actual);
-        Assert.Equal($"CBOR {path} at byte {offset}: expected {expected}; actual {actual}.", error.Message);
+        }, offset, path, expected, actual);
         if (boolean)
         {
             Assert.Contains("Expected primitive", Assert.IsType<SAIB.Cbor.CborException>(error.InnerException).Message, StringComparison.Ordinal);
@@ -399,7 +476,7 @@ public class CborTests(ITestOutputHelper output)
         byte[] data = Convert.FromHexString(hex);
         string union = deep ? nameof(IX6DepthTwo) : nameof(IX6DepthOne);
         string path = $"Chrysalis.Codec.Test.{union}.Chrysalis.Codec.Test.{owningField}.Value";
-        CborDecodeException error = AssertDecodeError(() =>
+        _ = AssertExactDecodeError(() =>
         {
             if (deep)
             {
@@ -409,11 +486,144 @@ public class CborTests(ITestOutputHelper output)
             {
                 _ = IX6DepthOne.Read(data);
             }
-        }, offset, path);
+        }, offset, path, expected, actual);
+    }
+
+    public static TheoryData<string, string, string, string> X30WireFixtures()
+    {
+        using JsonDocument manifest = JsonDocument.Parse(File.ReadAllBytes(Path.Combine(AppContext.BaseDirectory, "TestData", "X30WireForms.json")));
+        TheoryData<string, string, string, string> fixtures = [];
+        foreach (JsonElement row in manifest.RootElement.GetProperty("fixtures").EnumerateArray())
+        {
+            string id = row.GetProperty("id").GetString()!;
+            string hex = row.GetProperty("hex").GetString()!;
+            string sha256 = row.GetProperty("sha256").GetString()!;
+            string golden = row.GetProperty("expected").GetRawText();
+            fixtures.Add(id, hex, sha256, golden);
+            if (id == "BytesRoot")
+            {
+                fixtures.Add("BytesRootPlutus", hex, sha256, golden);
+            }
+        }
+        Assert.Equal(22, fixtures.Count);
+        return fixtures;
+    }
+
+    [Theory]
+    [MemberData(nameof(X30WireFixtures))]
+    public void X30EagerAndLazyDecodeEveryWireForm(string id, string hex, string sha256, string golden)
+    {
+        byte[] wire = Convert.FromHexString(hex);
+        Assert.Equal(sha256, Convert.ToHexStringLower(SHA256.HashData(wire)));
+        // A second CBOR item verifies the exact boundary of the first, including its break(s).
+        byte[] withSuffix = [.. wire, 0x00];
+        using JsonDocument expected = JsonDocument.Parse(golden);
+        foreach (X30Read read in X30Readers(id))
+        {
+            object? value = read(withSuffix, out int consumed);
+            Assert.Equal(wire.Length, consumed);
+            object? target = id switch
+            {
+                "DefArrayList" or "IndefArrayList" or "BytesList" => ((IList)value!)[0],
+                "DefArrayMap" or "DefMapMap" or "BytesMap" => ((IDictionary)value!).Values.Cast<object>().Single(),
+                "IndefArrayMap" => ((IDictionary)value!).Keys.Cast<object>().Single(),
+                "IndefMapMap" => ((IDictionary)value!).Values.Cast<object>().Last(),
+                _ => value
+            };
+            JsonElement actual = JsonSerializer.SerializeToElement(X30Semantic(target));
+            Assert.True(JsonElement.DeepEquals(expected.RootElement, actual), $"{id}: expected {golden}; actual {actual}.");
+        }
+    }
+
+    private static object? X30Semantic(object? value) => value switch
+    {
+        IX30WireValue field => X30Semantic(field.Unwrap()),
+        CborEncodedValue encoded => X30Semantic(encoded.Value),
+        ReadOnlyMemory<byte> bytes => new { bytes = Convert.ToHexString(bytes.Span) },
+        byte[] bytes => new { bytes = Convert.ToHexString(bytes) },
+        IDictionary map => new { map = map.Keys.Cast<object>().Select(key => new[] { X30Semantic(key), X30Semantic(map[key]) }).ToArray() },
+        IList list => list.Cast<object>().Select(X30Semantic).ToArray(),
+        _ => value
+    };
+
+    private delegate object? X30Read(ReadOnlyMemory<byte> data, out int consumed);
+
+    private static X30Read[] X30Pair<TEager, TLazy>() where TEager : IX30WireValue where TLazy : IX30WireValue =>
+        [X30ReadModel<TEager>, X30ReadModel<TLazy>];
+
+    private static object? X30ReadModel<T>(ReadOnlyMemory<byte> data, out int consumed) where T : IX30WireValue =>
+        CborSerializer.Deserialize<T>(data, out consumed).Unwrap();
+
+    private static X30Read[] X30Readers(string id) => id switch
+    {
+        "DefArrayRoot" or "IndefArrayRoot" => X30Pair<X30EagerArray<int>, X30LazyArray<int>>(),
+        "DefArrayList" or "IndefArrayList" => X30Pair<X30EagerArray<X30EagerArray<int>>, X30LazyArray<X30LazyArray<int>>>(),
+        "DefArrayMap" => X30Pair<X30EagerMap<string, X30EagerArray<string>>, X30LazyMap<string, X30LazyArray<string>>>(),
+        "DefArrayTag" or "IndefArrayTag" => X30Pair<X30EagerTag121<X30EagerArray<int>>, X30LazyTag121<X30LazyArray<int>>>(),
+        "IndefArrayMap" => X30Pair<X30EagerMap<X30EagerArray<byte[]>, X30EagerListTail<X30EagerTag121<X30EagerArray<ulong>>>>,
+            X30LazyMap<X30LazyArray<byte[]>, X30EagerListTail<X30EagerTag121<X30EagerArray<ulong>>>>>(),
+        "DefMapRoot" => X30Pair<X30EagerMap<int, byte[]>, X30LazyMap<int, byte[]>>(),
+        "DefMapList" => X30Pair<X30EagerListTail<X30EagerMap<byte[], ulong>>, X30LazyListTail<X30LazyMap<byte[], ulong>>>(),
+        "DefMapMap" => X30Pair<X30EagerMap<int, X30EagerMap<int, byte[]>>, X30LazyMap<int, X30LazyMap<int, byte[]>>>(),
+        "DefMapTag" => X30Pair<X30EagerTag259<X30EagerMap<int, X30EagerMap<int, byte[]>>>, X30LazyTag259<X30LazyMap<int, X30LazyMap<int, byte[]>>>>(),
+        "IndefMapRoot" => X30Pair<X30EagerMap<byte[], X30EagerMap<byte[], ulong>>, X30LazyMap<byte[], X30LazyMap<byte[], ulong>>>(),
+        "IndefMapList" => X30Pair<X30EagerListTail<X30EagerMap<byte[], X30EagerMap<byte[], ulong>>>, X30LazyListTail<X30LazyMap<byte[], X30LazyMap<byte[], ulong>>>>(),
+        "IndefMapMap" => X30Pair<X30EagerMap<byte[], X30EagerMap<byte[], ulong>>, X30LazyMap<byte[], X30LazyMap<byte[], ulong>>>(),
+        "IndefMapTag" => X30Pair<X30EagerTag60000<X30EagerMap<byte[], X30EagerMap<byte[], ulong>>>, X30LazyTag60000<X30LazyMap<byte[], X30LazyMap<byte[], ulong>>>>(),
+        "BytesRoot" => [X30ReadModel<X30EagerBytes>, X30ReadModel<X30LazyBytes>, CborSerializer.Deserialize<byte[]>, X30ReadModel<X30LazyPrimitive<byte[]>>],
+        "BytesList" => X30Pair<X30EagerArray<X30EagerBytes>, X30LazyArray<X30LazyBytes>>(),
+        "BytesMap" => X30Pair<X30EagerMap<int, X30EagerBytes>, X30LazyMap<int, X30LazyBytes>>(),
+        "BytesTag" => X30Pair<X30EagerTag60000<X30EagerBytes>, X30LazyTag60000<X30LazyBytes>>(),
+        "BytesRootPlutus" => [static (data, out consumed) => PlutusBoundedBytes.Read(data, out consumed).Value],
+        "BytesEncoded" => [X30ReadModel<X30EagerEncoded>],
+        _ => throw new ArgumentOutOfRangeException(nameof(id), id, "Missing reader pair for the fixture.")
+    };
+
+    [Fact]
+    public void X30WrongTypeAfterValidListSibling()
+    {
+        byte[] data = Convert.FromHexString("A100820141FF"); // {0: [1, h'FF']}
+        string child = $"{typeof(X30EagerArray<int>).FullName}.Chrysalis.Codec.Test.X30EagerArray<T>.Value.System.Int32";
+        _ = AssertExactDecodeError(() => X30EagerMap<int, X30EagerArray<int>>.Read(data), 5,
+            $"Chrysalis.Codec.Test.X30EagerMap<TKey, TValue>.Value.{child}", "integer", "byte string");
+        X30LazyMap<int, X30EagerArray<int>> lazy = X30LazyMap<int, X30EagerArray<int>>.Read(data);
+        _ = AssertExactDecodeError(() => _ = lazy.Value, 5,
+            $"Chrysalis.Codec.Test.X30LazyMap<TKey, TValue>.Value.entry.{child}", "integer", "byte string");
+    }
+
+    [Fact]
+    public void X30WrongTypeAfterMultibyteMapKey()
+    {
+        byte[] data = Convert.FromHexString("81A20001190100F6"); // [{0: 1, 256: null}]
+        string child = $"{typeof(X30EagerMap<int, int>).FullName}.Chrysalis.Codec.Test.X30EagerMap<TKey, TValue>.Value.System.Int32";
+        _ = AssertExactDecodeError(() => X30EagerArray<X30EagerMap<int, int>>.Read(data), 8,
+            $"Chrysalis.Codec.Test.X30EagerArray<T>.Value.{child}", "integer", "simple value or floating point");
+        X30LazyArray<X30EagerMap<int, int>> lazy = X30LazyArray<X30EagerMap<int, int>>.Read(data);
+        _ = AssertExactDecodeError(() => _ = lazy.Value, 8,
+            $"Chrysalis.Codec.Test.X30LazyArray<T>.Value.item.{child}", "integer", "simple value or floating point");
+    }
+
+    [Fact]
+    public void X30TruncatedNestedByteString()
+    {
+        byte[] data = Convert.FromHexString("A1008142AA"); // {0: [bytes(2) with only AA]}
+        string child = $"{typeof(X30EagerArray<byte[]>).FullName}.Chrysalis.Codec.Test.X30EagerArray<T>.Value.System.Byte[]";
+        _ = AssertExactDecodeError(() => X30EagerMap<int, X30EagerArray<byte[]>>.Read(data), 4,
+            $"Chrysalis.Codec.Test.X30EagerMap<TKey, TValue>.Value.{child}", "byte string", "end of input");
+        // Lazy Read must first find the root's boundary. X6's facade wraps that scan failure.
+        Type lazyType = typeof(X30LazyMap<int, X30EagerArray<byte[]>>);
+        _ = AssertExactDecodeError(() => CborSerializer.Deserialize<X30LazyMap<int, X30EagerArray<byte[]>>>(data, out _), 4,
+            lazyType.FullName!, lazyType.ToString(), "end of input");
+    }
+
+    private static CborDecodeException AssertExactDecodeError(Action decode, int offset, string path, string expected, string actual)
+    {
+        CborDecodeException error = AssertDecodeError(decode, offset, path);
         Assert.Equal(path, error.TypePath);
         Assert.Equal(expected, error.Expected);
         Assert.Equal(actual, error.Actual);
         Assert.Equal($"CBOR {path} at byte {offset}: expected {expected}; actual {actual}.", error.Message);
+        return error;
     }
 
     private static void AssertRuntimeDecodeErrors(byte[] data, Type type, int offset, string path)
