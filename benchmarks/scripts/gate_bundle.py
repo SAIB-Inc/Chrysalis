@@ -1,5 +1,6 @@
 """Prepare content-bound offline bundles and launch only a previously sealed go."""
 import copy
+import contextlib
 import datetime as dt
 import fcntl
 import hashlib
@@ -10,10 +11,12 @@ from pathlib import Path
 import re
 import secrets
 import signal
+import stat
 import shutil
 import subprocess
 import sys
 import tarfile
+import tempfile
 
 import gate_session as session
 import gate_time as timing
@@ -433,6 +436,109 @@ def checked_go_directory(directory, out):
     return directory
 
 
+def retry_file(path):
+    timing.require(path.resolve() == path and path.is_file(), f'Missing or non-canonical retry file: {path.name}')
+    return path
+
+
+def draw_record(machine, number, phase, draw, app, decision):
+    return dict({key: value for key, value in machine.items() if key != 'probeRecords'},
+                session=number, phase=phase, draw=draw, app=app, decision=decision)
+
+
+def retry_phase(parent, item, plan, rows, phase, draws):
+    import gate
+    relative = f'time/0-{phase}.json'
+    payload = retry_file(parent / relative).read_bytes()
+    ids = [row['id'] for row in rows]
+    entry = dict(session=0, phase=phase, ids=ids, path=relative,
+                 sha256=hashlib.sha256(payload).hexdigest())
+    timing.require(gate.encoded(item) == gate.encoded(entry), 'Retry index or timing payload changed')
+    spent = 0
+    reserve = timing.price(plan['destroyGuardSeconds'], timing.region_for(plan))
+    timing.require(0 < len(draws) <= plan['probe']['maxDraws'], 'Missing or excessive retry draws')
+    for draw, recorded in enumerate(draws, 1):
+        timing.require(spent + reserve <= plan['limitUsd'], 'Retry draw exceeded session reservation')
+        app = recorded['app']
+        note = parent / 'time/runs' / app
+        machine = verified_machine(note, plan, spent, repeat=phase == 'repeat', selected=ids)
+        wanted = 'kept' if draw == len(draws) else 'rejected'
+        decision = 'rejected' if machine.get('probe', {}).get('decision') == 'rejected' else 'kept'
+        expected = draw_record(machine, 0, phase, draw, app, decision)
+        proof = note_json(note, 'cleanup-proof.json') or {}
+        timing.require(not machine['invalid'] and proof.get('ourApp') == app and
+                       decision == wanted and gate.encoded(recorded) == gate.encoded(expected),
+                       'Retry draw differs from verified machine evidence or lacks cleanup proof')
+        spent += machine['bookedUsd']
+    rebuilt = archive_payload(note, plan, repeat=phase == 'repeat', machine=machine)
+    timing.require(not rebuilt['invalid'] and gate.encoded(rebuilt) == gate.encoded(json.loads(payload)),
+                   'Retry payload differs from verified archive')
+    return payload
+
+
+def checked_retry_parent(parent, out, kind):
+    import gate
+    timing.require(kind in ('first', 'repeat') and not parent.is_symlink() and not out.is_symlink(),
+                   'Invalid retry kind or parent path')
+    parent = checked_go_directory(parent, out)
+    out = parent.parent
+    authority = retry_file(out / 'controls-authority.json')
+    with os.fdopen(os.open(authority, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK), 'rb') as stream:
+        timing.require(stat.S_ISREG(os.fstat(stream.fileno()).st_mode), 'Retry authority must be a regular file')
+        raw = stream.read()
+    original = sha(retry_file(parent / 'seal.json'))
+    retry_file(parent / 'seal.id')
+    seal = gate.read_seal(parent)
+    timing.require('retryOf' not in seal and json.loads(retry_file(parent / 'time/launch-started.json').read_bytes()) ==
+                   dict(sealId=original), 'Retry needs a consumed original seal, not a retry child')
+    claims = out / 'retry-claims'
+    timing.require(not claims.is_symlink() and (not claims.exists() or claims.is_dir()) and
+                   not os.path.lexists(claims / original), 'Retry lineage already claimed or invalid claims directory')
+    for relative in seal['files']:
+        path = parent / relative
+        timing.require(path.is_relative_to(parent / 'input') and not Path(relative).is_absolute(), 'Retry file is not a sealed input')
+        retry_file(path)
+    timing.require(all(seal['files'].get(f'input/fly/{name}') == sha(Path(__file__).with_name(name))
+                       for name in HOST_FILES), 'Original was not sealed with this retry-capable launcher')
+    plans = seal.get('timePlans', [])
+    rows = [row for row in seal['rows'] if row['kind'] == 'time' and row.get('rowClass') != 'recorded-only']
+    scope = dict(originalSealId=original, mode='release', rows=[dict(id=row['id'], expected=row.get('expected')) for row in rows])
+    timing.require(json.loads(raw) == scope and seal['mode'] == 'release' and len(plans) == 1 and
+                   plans[0]['repeatAllowed'] and plans[0]['design'] != 'micro-band' and
+                   rows and all(row['expected'] is not None for row in scope['rows']) and
+                   scope['rows'] == [dict(id=row['id'], expected=row.get('expected')) for row in plans[0]['rows']
+                                     if row.get('rowClass') != 'recorded-only'],
+                   'Retry authority differs from original release controls')
+    plan = plans[0]
+    timing.validate_probe_rule(plan['probe'])
+    phases = ['first'] if kind == 'first' else ['first', 'repeat']
+    index = json.loads(retry_file(parent / 'time/index.json').read_bytes())
+    draws = json.loads(retry_file(parent / 'time/draws.json').read_bytes())
+    timing.require(isinstance(index, list) and len(index) == len(phases) and isinstance(draws, list) and
+                   all(isinstance(draw, dict) and draw.get('phase') in phases and isinstance(draw.get('app'), str) for draw in draws),
+                   'Invalid retry phase index or draw ledger')
+    by_phase = {phase: [draw for draw in draws if draw['phase'] == phase] for phase in phases}
+    apps = [draw['app'] for draw in draws]
+    runs = parent / 'time/runs'
+    timing.require(runs.is_dir() and runs.resolve() == runs and draws == [draw for phase in phases for draw in by_phase[phase]] and
+                   len(apps) == len(set(apps)) and set(apps) == {note.name for note in runs.iterdir()} and
+                   all(re.fullmatch(r'chrysalis-gate-[0-9]{8}t[0-9]{6}-[a-f0-9]{8}', app) and
+                       (runs / app).is_dir() and not (runs / app).is_symlink() and
+                       all(path.is_file() and not path.is_symlink() for path in (runs / app).iterdir()) for app in apps),
+                   'Retry draw ledger must name every app in phase order')
+    first = retry_phase(parent, index[0], plan, plan['rows'], 'first', by_phase['first'])
+    classification, ids = timing.session_outcome(parent, seal, 0, first_only=True)
+    binding = dict(originalSealId=original, parent=parent.name, kind=kind, authoritySha256=hashlib.sha256(raw).hexdigest())
+    if kind == 'first':
+        timing.require(classification == 'retry-eligible', 'First phase is not retry-eligible')
+    else:
+        timing.require(classification == 'repeat' and ids, 'First phase did not authorize a repeat')
+        retry_phase(parent, index[1], plan, [row for row in plan['rows'] if row['id'] in ids], 'repeat', by_phase['repeat'])
+        timing.require(timing.session_outcome(parent, seal, 0)[0] == 'retry-eligible', 'Repeat phase is not retry-eligible')
+        binding.update(firstIndex=index[0], repeatIds=ids)
+    return parent, seal, binding, first
+
+
 def checked_fly_local(seal):
     import gate
     expected = seal['files'].get('input/fly-local.json')
@@ -443,7 +549,8 @@ def checked_fly_local(seal):
     timing.require(re.fullmatch(r'[a-z0-9-]+', local['flyOrg']), 'Invalid Fly organization slug')
     lock = Path(local['flyLock'])
     timing.require(lock.is_absolute() and str(lock.resolve()) == local['flyLock'], 'Fly lock path must be absolute and canonical')
-    reserved = sum(plan['limitWithRepeatUsd'] for plan in seal['timePlans'])
+    limit = 'limitUsd' if seal.get('retryOf', {}).get('kind') == 'repeat' else 'limitWithRepeatUsd'
+    reserved = sum(plan[limit] for plan in seal['timePlans'])
     timing.require(reserved <= min(gate.remaining_budget(seal), gate.remaining_budget(local)), 'Reserved sessions exceed remaining budget')
     return local
 
@@ -498,14 +605,47 @@ def held_fly_go(directory):
 def fly_held(directory):
     import gate
     directory, seal, go = held_fly_go(directory)
+    index = []
+    retry = seal.get('retryOf')
+    phases = ('first', 'repeat')
+    if retry is not None:
+        out = directory.parent
+        parent_name = retry.get('parent', '')
+        timing.require(re.fullmatch(r'gate-[^/]+', parent_name), 'Invalid retry parent directory')
+        _, original, binding, first = checked_retry_parent(out / parent_name, out, retry.get('kind'))
+        timing.require(gate.encoded(seal) == gate.encoded(dict(original, retryOf=dict(binding, child=directory.name))),
+                       'Retry authority, seal or first payload binding changed')
+        if retry['kind'] == 'repeat':
+            (directory / 'time').mkdir(exist_ok=True)
+            (directory / 'time/0-first.json').write_bytes(first)
+            index.append(binding['firstIndex'])
+            session.save(directory / 'time/index.json', index)
+            phases = ('repeat',)
+    (directory / 'time').mkdir(exist_ok=True)
+    if retry is None:
+        return fly_sessions(directory, seal, go, phases, index)
+    with retry_dispatch(directory, go) as dispatch:
+        return fly_sessions(directory, seal, go, phases, index, dispatch=dispatch)
+
+
+@contextlib.contextmanager
+def retry_dispatch(directory, go):
+    # The active dispatch, not a persistent GO marker, can authorize redraws.
+    with tempfile.TemporaryFile(dir=directory / 'time') as dispatch:
+        dispatch.write(go.encode('ascii') + secrets.token_bytes(32))
+        dispatch.flush()
+        yield dispatch
+
+
+def fly_sessions(directory, seal, go, phases, index, *, dispatch=None):
+    import gate
     host = directory / 'input/fly'
-    index, draws = [], []
+    draws = []
     first_launch = True
     refusal_status = 0
-    (directory / 'time').mkdir(exist_ok=True)
     for number, plan in enumerate(seal['timePlans']):
         band_invalid = False
-        for phase in ('first', 'repeat'):
+        for phase in phases:
             selected = plan['rows']
             if phase == 'repeat':
                 if not plan['repeatAllowed']:
@@ -530,9 +670,9 @@ def fly_held(directory):
                 if first_launch:
                     env['GATE_FIRST_GO'] = go
                 suffix = f'-draw-{draw}'
-                with (directory / 'time' / f'{number}-{phase}{suffix}-launcher.log').open('w') as log:
+                with (directory / 'time' / f'{number}-{phase}{suffix}-launcher.log').open('a') as log:
                     status = owned_call(['bash', str(host / 'gate_fly.sh'), '--approved', app, str(directory / 'seal.json')],
-                                        env=env, pass_fds=(9,), stdout=log, stderr=subprocess.STDOUT)
+                                        env=env, pass_fds=(9,), stdin=dispatch, stdout=log, stderr=subprocess.STDOUT)
                 if first_launch and not (directory / 'time/launch-started.json').is_file():
                     return status or 2  # Local preflight did not consume the GO.
                 first_launch = False
@@ -549,8 +689,7 @@ def fly_held(directory):
                 elif not machine['invalid'] and rejected != (status == 5):
                     machine['invalid'] = 'session invalid: launcher status contradicts probe'
                 decision = 'invalid' if machine['invalid'] else 'rejected' if rejected else 'kept'
-                draws.append(dict({key: value for key, value in machine.items() if key != 'probeRecords'},
-                                  session=number, phase=phase, draw=draw, app=app, decision=decision))
+                draws.append(draw_record(machine, number, phase, draw, app, decision))
                 session.save(directory / 'time/draws.json', draws)
                 if decision == 'rejected':
                     spent += machine['bookedUsd']
@@ -609,8 +748,9 @@ def make_repeat(directory, seal, number, selected, relative):
 
 def verified_bundle(directory, seal, relative):
     """Repeat authority is the sealed rule plus the hashed first-run FAILs."""
-    import gate
-    import re
+    retry = seal.get('retryOf', {})
+    repeat_only = retry.get('kind') == 'repeat'
+    timing.require(not repeat_only or relative == 'input/repeat-0.tar.gz', 'Repeat retry cannot launch a first bundle')
     path = (directory / relative).resolve()
     timing.require(path.is_relative_to(directory.resolve()), 'Archive path escapes seal')
     data = path.read_bytes()
@@ -624,6 +764,7 @@ def verified_bundle(directory, seal, relative):
     timing.require(original_plan['repeatAllowed'], 'Repeat not authorized')
     _, selected = timing.session_outcome(directory, seal, number, first_only=True)
     timing.require(selected, 'No failed rows to repeat')
+    timing.require(not repeat_only or selected == retry['repeatIds'], 'Failed rows differ from sealed retry selection')
     expected = schedules.worker_plan(original_plan, repeat=True, selected=selected)
     import io
     original_path = f'input/session-{number}.tar.gz'

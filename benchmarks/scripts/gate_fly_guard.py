@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 import re
+import stat
 import sys
 import tarfile
 
@@ -65,10 +66,63 @@ def machine_command(plan):
     return f'remaining=$((P2_MACHINE_CREATED_UNIX + {stop} - $(date +%s))); ((remaining > 0)) || exit 0; exec /usr/bin/sleep "$remaining"'
 
 
-def verified_launch_inputs(here, ready):
+def retry_claim(ready, retry, go, dispatch_fd, *, acquire=False):
+    original = retry.get('originalSealId', '')
+    require(re.fullmatch(r'[0-9a-f]{64}', original), 'Invalid original seal ID for retry claim')
+    message = 'Retry requires an active retry dispatch owning the claim and GO'
+    try:
+        info = os.fstat(dispatch_fd)
+        secret = os.pread(dispatch_fd, 96, 0)
+        require(stat.S_ISREG(info.st_mode) and info.st_nlink == 0 and len(secret) == 96 and
+                secret[:64] == go.encode('ascii'), message)
+    except OSError as error:
+        raise RuntimeError(message) from error
+    proof = dict(sealId=go, dispatchSha256=hashlib.sha256(secret).hexdigest())
+    if not acquire and os.environ.get('GATE_FIRST_GO'):
+        require(os.environ['GATE_FIRST_GO'] == go, 'Go differs from seal')
+        return  # Claim only after the remaining shell preflight succeeds.
+    claims = ready.resolve().parent.parent / 'retry-claims'
+    if acquire:
+        claims.mkdir(exist_ok=True)
+    try:
+        directory = os.open(claims, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        try:
+            if acquire:
+                fd = os.open(original, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600, dir_fd=directory)
+                with os.fdopen(fd, 'w') as stream:
+                    json.dump(proof, stream)
+            else:
+                fd = os.open(original, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=directory)
+                with os.fdopen(fd, 'rb') as stream:
+                    require(stat.S_ISREG(os.fstat(stream.fileno()).st_mode) and json.loads(stream.read(4096)) == proof, message)
+                require(json.loads((ready.parent / 'time/launch-started.json').read_bytes()) == dict(sealId=go), message)
+        finally:
+            os.close(directory)
+    except (OSError, ValueError) as error:
+        if acquire:
+            raise       # A partial claim still burns the lineage.
+        raise RuntimeError(message) from error
+
+
+def consume_go(ready, go, *, dispatch_fd=0):
+    raw = ready.read_bytes()
+    require(hashlib.sha256(raw).hexdigest() == go, 'Go differs from seal')
+    retry = json.loads(raw).get('retryOf')
+    if retry is not None:
+        retry_claim(ready, retry, go, dispatch_fd, acquire=True)
+    marker = ready.parent / 'time/launch-started.json'
+    with marker.open('x') as stream:
+        json.dump(dict(sealId=go), stream)
+        stream.write('\n')
+
+
+def verified_launch_inputs(here, ready, *, dispatch_fd=0):
     import gate
     seal = gate.read_seal(ready.parent)
-    require(sha(ready) == (ready.parent / 'seal.id').read_text().strip(), 'Seal identity changed')
+    go = sha(ready)
+    require(go == (ready.parent / 'seal.id').read_text().strip(), 'Seal identity changed')
+    if 'retryOf' in seal:
+        retry_claim(ready, seal['retryOf'], go, dispatch_fd)
     # Run plan is selected by a fixed archive path, never by an unsealed local copy.
     relative = os.environ['GATE_BUNDLE']
     bundle = (ready.parent / relative).resolve()
@@ -241,12 +295,7 @@ def main():
             (note / 'diagnostic-only.json').write_text(json.dumps(dict(diagnosticOnly=True, verdict='INCONCLUSIVE', session=status), indent=2) + '\n')
         require(complete, 'DIAGNOSTIC ONLY / INCONCLUSIVE: failed, budget-stopped or incomplete session; numerical go table not evaluated')
     elif mode == 'consume-go':
-        ready, go = Path(args[0]), args[1]
-        require(sha(ready) == go, 'Go differs from seal')
-        marker = ready.parent / 'time/launch-started.json'
-        with marker.open('x') as stream:
-            json.dump(dict(sealId=go), stream)
-            stream.write('\n')
+        consume_go(Path(args[0]), args[1])
     elif mode == 'lock-inode':
         require(os.stat(args[0]).st_ino == os.stat('/proc/self/fd/9').st_ino and
                 os.stat(args[0]).st_dev == os.stat('/proc/self/fd/9').st_dev, 'Fly lock path was replaced')

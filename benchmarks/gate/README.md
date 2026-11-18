@@ -103,6 +103,20 @@ ancestor of the candidate, never its own tag, an RC tag or an unrelated branch.
 A SUBSET outcome line lists its reasons.
 D51 requires both sync-path replay and other-hot-path times: PC bytes alone can
 never give RELEASE PASS. `fly --go <seal-id>` runs only the sealed timing session after a separate go.
+
+Only the designated release controls may prepare a retry. The coordinator's
+`benchmarks/out/controls-authority.json` names the original seal and its gated
+time rows with their sealed expectations. The original must have been sealed
+with the same retry-capable launcher. Run `gate.py retry PARENT_DIR --kind
+first|repeat` to print a new go without launching. A repeat-only retry reuses
+the verified first payload and reserves one session; a first-phase retry
+reserves first plus repeat. Under the Fly lock, the first launch rechecks the
+original evidence and authority, then claims the lineage before consuming go.
+A preflight refusal claims nothing; a claim left without a go marker still
+blocks every sibling. Check that `time/runs`, if present, is a directory before
+GO: a non-directory there can consume the retry without creating an app.
+Allocation evidence remains in the original; a retry report cannot give a new
+release pass.
 Fly time never supplies a bytes verdict.
 
 The runner is the single environment allowlist: ambient HOME/PATH/locale/time,
