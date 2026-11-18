@@ -1,6 +1,5 @@
 using ReceiveOracle = Chrysalis.Network.Tests.Receive.Frozen;
 using System.Collections.Concurrent;
-using System.IO.Pipelines;
 using System.Reflection;
 using System.Security.Cryptography;
 using System.Threading.Channels;
@@ -16,7 +15,6 @@ internal sealed class ReceiveDriver : IAsyncDisposable
     private readonly IDisposable _demuxer;
     private readonly CancellationTokenSource _runToken = new();
     private readonly SemaphoreSlim _sendLock = new(1, 1);
-    private readonly Pipe _unused = new();
     private readonly ReceiveSchedule _schedule;
     private bool _disposed;
     private bool _spin;
@@ -71,7 +69,7 @@ internal sealed class ReceiveDriver : IAsyncDisposable
                 [.. _schedule.Messages.Where(message => message.Protocol == protocol)], () => ((Demuxer)demuxer).Stopped);
         }
         Probes.Add(protocol, probe);
-        AgentChannel channel = new(protocol, _unused.Writer, Bearer.Writer, probe.Reader, _sendLock) { WholeMessages = !frozen };
+        AgentChannel channel = new(protocol, Bearer.Writer, probe.Reader, _sendLock) { WholeMessages = !frozen };
         Consumers.Add(protocol, new ReceiveCalls(mode, probe, channel, frozen, Bearer));
     }
 
@@ -163,8 +161,6 @@ internal sealed class ReceiveDriver : IAsyncDisposable
         foreach (ReceiveCalls calls in Consumers.Values) { await calls.DisposeAsync(); }
         _runToken.Dispose();
         _sendLock.Dispose();
-        await _unused.Reader.CompleteAsync();
-        await _unused.Writer.CompleteAsync();
     }
 }
 

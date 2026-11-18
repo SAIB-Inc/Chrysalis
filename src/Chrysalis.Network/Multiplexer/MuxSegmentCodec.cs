@@ -18,22 +18,6 @@ namespace Chrysalis.Network.Multiplexer;
 /// </remarks>
 public static class MuxSegmentCodec
 {
-    // Header size constants
-    /// <summary>Size in bytes of the transmission time field.</summary>
-    private const ushort TransmissionTimeSize = 4;
-
-    /// <summary>Size in bytes of the protocol ID field.</summary>
-    private const ushort ProtocolIdSize = 2;
-
-    /// <summary>Size in bytes of the payload length field.</summary>
-    private const ushort PayloadLengthSize = 2;
-
-    /// <summary>Total size in bytes of the segment header.</summary>
-    private const ushort HeaderSize = TransmissionTimeSize + ProtocolIdSize + PayloadLengthSize;
-
-    // Buffer pool for encoding to reduce allocations
-    private static readonly ArrayPool<byte> EncodeBufferPool = ArrayPool<byte>.Shared;
-
     /// <summary>
     /// Encodes a MuxSegment into a binary representation.
     /// </summary>
@@ -51,83 +35,24 @@ public static class MuxSegmentCodec
     {
         ArgumentNullException.ThrowIfNull(segment);
 
-        // Calculate total size needed
-        int totalSize = HeaderSize + segment.Header.PayloadLength;
-
-        // For small segments, avoid the pooling overhead
-        if (totalSize <= 256)
+        MuxSegmentHeader header = segment.Header;
+        byte[] result = new byte[ProtocolConstants.SegmentHeaderSize + header.PayloadLength];
+        WriteHeader(result, header.TransmissionTime, header.ProtocolId, header.PayloadLength, header.Mode);
+        if (header.PayloadLength > 0 && !segment.Payload.IsEmpty)
         {
-            // Create a result buffer directly - better for small segments
-            byte[] result = new byte[totalSize];
-            EncodeToBuffer(segment, result);
-            return new ReadOnlySequence<byte>(result);
+            segment.Payload.CopyTo(result.AsSpan(ProtocolConstants.SegmentHeaderSize));
         }
-
-        // For larger segments, use buffer pooling
-        byte[] pooledBuffer = EncodeBufferPool.Rent(totalSize);
-
-        try
-        {
-            EncodeToBuffer(segment, pooledBuffer);
-
-            // Create a managed memory to ensure buffer is returned to pool
-            EncodedMemory managedMemory = new(pooledBuffer, EncodeBufferPool, totalSize);
-            return new ReadOnlySequence<byte>(managedMemory.Memory);
-        }
-        catch
-        {
-            EncodeBufferPool.Return(pooledBuffer);
-            throw;
-        }
+        return new ReadOnlySequence<byte>(result);
     }
 
-    /// <summary>
-    /// Helper method to encode segment data to a buffer.
-    /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static void EncodeToBuffer(in MuxSegment segment, byte[] buffer)
+    internal static void WriteHeader(Span<byte> span, uint transmissionTime, ProtocolType protocolId, ushort payloadLength, bool responder)
     {
-        // Write header
-        Span<byte> headerSpan = buffer.AsSpan(0, HeaderSize);
-        BinaryPrimitives.WriteUInt32BigEndian(headerSpan[..4], segment.Header.TransmissionTime);
-
-        ushort protocolIdValue = (ushort)segment.Header.ProtocolId;
-        if (segment.Header.Mode)
-        {
-            protocolIdValue |= 0x8000;  // Set high bit for responder mode
-        }
-
-        BinaryPrimitives.WriteUInt16BigEndian(headerSpan.Slice(4, 2), protocolIdValue);
-        BinaryPrimitives.WriteUInt16BigEndian(headerSpan.Slice(6, 2), segment.Header.PayloadLength);
-
-        // Write payload after header
-        if (segment.Header.PayloadLength > 0 && !segment.Payload.IsEmpty)
-        {
-            Span<byte> payloadSpan = buffer.AsSpan(HeaderSize, segment.Header.PayloadLength);
-            segment.Payload.CopyTo(payloadSpan);
-        }
-    }
-
-    /// <summary>
-    /// Helper class to track and dispose pooled memory.
-    /// </summary>
-    private sealed class EncodedMemory(byte[] buffer, ArrayPool<byte> pool, int length) : IMemoryOwner<byte>
-    {
-        private readonly byte[] _buffer = buffer;
-        private readonly ArrayPool<byte> _pool = pool;
-        private readonly int _length = length;
-        private bool _disposed;
-
-        public Memory<byte> Memory => _buffer.AsMemory(0, _length);
-
-        public void Dispose()
-        {
-            if (!_disposed)
-            {
-                _pool.Return(_buffer);
-                _disposed = true;
-            }
-        }
+        BinaryPrimitives.WriteUInt32BigEndian(span, transmissionTime);
+        ushort protocolIdAndMode = (ushort)protocolId;
+        if (responder) { protocolIdAndMode |= 0x8000; }
+        BinaryPrimitives.WriteUInt16BigEndian(span.Slice(4, 2), protocolIdAndMode);
+        BinaryPrimitives.WriteUInt16BigEndian(span.Slice(6, 2), payloadLength);
     }
 
     /// <summary>
@@ -150,7 +75,7 @@ public static class MuxSegmentCodec
             return DecodeHeaderSpan(headerSequence.FirstSpan);
         }
 
-        Span<byte> buf = stackalloc byte[HeaderSize];
+        Span<byte> buf = stackalloc byte[ProtocolConstants.SegmentHeaderSize];
         headerSequence.CopyTo(buf);
         return DecodeHeaderSpan(buf);
     }

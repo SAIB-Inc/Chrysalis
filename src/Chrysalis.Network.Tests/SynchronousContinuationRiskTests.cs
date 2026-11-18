@@ -14,7 +14,6 @@ namespace Chrysalis.Network.Tests;
 public class SynchronousContinuationRiskTests(ITestOutputHelper output)
 {
     private static readonly TimeSpan Deadline = TimeSpan.FromSeconds(10);
-    private const string StoppedMessage = "The muxer has stopped accepting protocol messages.";
 
     [Theory]
     [InlineData("send and subscribe")]
@@ -24,11 +23,9 @@ public class SynchronousContinuationRiskTests(ITestOutputHelper output)
     {
         using CancellationTokenSource deadline = new(Deadline);
         using TestBearer bearer = new();
-        using Demuxer demuxer = new(bearer);
-        using SemaphoreSlim bearerLock = new(1, 1);
-        using Muxer muxer = new(bearer.Writer, ProtocolMode.Initiator, bearerLock);
-        AgentChannel channel = new(ProtocolType.BlockFetch, muxer.Writer, bearer.Writer,
-            demuxer.Subscribe(ProtocolType.BlockFetch), bearerLock);
+        Connection connection = new(bearer);
+        using Demuxer demuxer = new(bearer, connection);
+        AgentChannel channel = new(ProtocolType.BlockFetch, bearer.Writer, demuxer.Subscribe(ProtocolType.BlockFetch), connection, ProtocolMode.Initiator);
         Task outside = Task.CompletedTask;
         Task handler = Task.CompletedTask;
         Task run = Task.CompletedTask;
@@ -188,59 +185,50 @@ public class SynchronousContinuationRiskTests(ITestOutputHelper output)
     [InlineData("enqueue")]
     [InlineData("cancel")]
     [InlineData("dispose")]
-    public async Task MuxFlushContinuationCanReenterOrStopTransport(string action)
+    public async Task BearerFlushContinuationCanReenterOrStopTransport(string action)
     {
         using CancellationTokenSource deadline = new(Deadline);
         using TestBearer bearer = new();
-        using SemaphoreSlim bearerLock = new(1, 1);
-        using Muxer muxer = new(bearer.Writer, ProtocolMode.Initiator, bearerLock);
-        AgentChannel channel = ChannelFor(muxer, bearer, bearerLock);
-        byte[] payload = new byte[65_533];
+        using Plexer plexer = new(bearer);
+        AgentChannel channel = plexer.SubscribeClient(ProtocolType.BlockFetch);
+        byte[] payload = new byte[ushort.MaxValue];
         payload.AsSpan().Fill(0x9b);
-        Task send = Task.CompletedTask;
-        Task outside = Task.CompletedTask;
+        Task run = plexer.RunAsync(deadline.Token);
+        Task send = channel.EnqueueChunkAsync(new ReadOnlySequence<byte>(payload));
         Task continuation = Task.CompletedTask;
-        Task run = Task.CompletedTask;
         Task drain = Task.CompletedTask;
         try
         {
-            send = channel.EnqueueChunkAsync(new ReadOnlySequence<byte>(payload));
             Assert.False(send.IsCompleted);
             continuation = ContinueAsync();
-            run = Task.Run(() => muxer.RunAsync(deadline.Token), CancellationToken.None);
             drain = DrainAsync(bearer.Outgoing, action == "enqueue" ? [payload.Length, 1] : [payload.Length], deadline.Token);
             await Task.WhenAll(continuation, drain).WaitAsync(Deadline);
-            await outside.WaitAsync(Deadline);
-            if (action == "enqueue")
-            {
-                await deadline.CancelAsync();
-            }
-            _ = await Assert.ThrowsAnyAsync<OperationCanceledException>(() => run.WaitAsync(Deadline));
-            InvalidOperationException stopped = await Assert.ThrowsAsync<InvalidOperationException>(() =>
-                channel.EnqueueChunkAsync(new ReadOnlySequence<byte>([9])).WaitAsync(Deadline));
-            Assert.Equal(StoppedMessage, stopped.Message);
             if (action == "dispose")
             {
-                _ = Assert.IsType<ObjectDisposedException>(stopped.InnerException);
+                _ = await Assert.ThrowsAsync<InvalidOperationException>(() => run.WaitAsync(Deadline));
             }
             else
             {
-                _ = Assert.IsAssignableFrom<OperationCanceledException>(stopped.InnerException);
+                await deadline.CancelAsync();
+                _ = await Assert.ThrowsAnyAsync<OperationCanceledException>(() => run.WaitAsync(Deadline));
             }
+            ConnectionClosedException stopped = await Assert.ThrowsAsync<ConnectionClosedException>(() =>
+                channel.EnqueueChunkAsync(new ReadOnlySequence<byte>([9])).WaitAsync(Deadline));
+            if (action == "dispose") { _ = Assert.IsType<ObjectDisposedException>(stopped.InnerException); }
+            else { _ = Assert.IsAssignableFrom<OperationCanceledException>(stopped.InnerException); }
         }
         finally
         {
+            plexer.Dispose();
             await deadline.CancelAsync();
-            muxer.Dispose();
-            _ = await Record.ExceptionAsync(() => Task.WhenAll(send, run, continuation, drain, outside).WaitAsync(Deadline));
+            _ = await Record.ExceptionAsync(() => Task.WhenAll(send, run, continuation, drain).WaitAsync(Deadline));
         }
 
         async Task ContinueAsync()
         {
             await send.ConfigureAwait(false);
-            output.WriteLine("Mux sender continuation on RunAsync stack: {0}", HasRunFrame<Muxer>());
-            // Reuse the caller's source immediately after commit. Mux output
-            // must still contain the original bytes while it drains.
+            Assert.False(HasRunFrame<Demuxer>());
+            // Reuse the caller's source immediately after commit; the wire payload must not change.
             payload.AsSpan().Fill(0xff);
             switch (action)
             {
@@ -248,12 +236,10 @@ public class SynchronousContinuationRiskTests(ITestOutputHelper output)
                     await channel.EnqueueChunkAsync(new ReadOnlySequence<byte>([0x9b]));
                     break;
                 case "cancel":
-                    outside = Task.Run(deadline.Cancel, CancellationToken.None);
                     await deadline.CancelAsync();
                     break;
                 case "dispose":
-                    outside = Task.Run(muxer.Dispose, CancellationToken.None);
-                    muxer.Dispose();
+                    plexer.Dispose();
                     break;
                 default:
                     throw new ArgumentOutOfRangeException(nameof(action));
@@ -262,48 +248,36 @@ public class SynchronousContinuationRiskTests(ITestOutputHelper output)
     }
 
     [Fact]
-    public async Task BackpressuredMuxAndRawBatchWritesDoNotInvertBearerLock()
+    public async Task BackpressuredMuxedAndRawBatchWritesShareTheBearerLock()
     {
         using CancellationTokenSource deadline = new(Deadline);
         using TestBearer bearer = new(new PipeOptions(pauseWriterThreshold: 1, resumeWriterThreshold: 1));
-        using SemaphoreSlim bearerLock = new(0, 1);
-        using Muxer muxer = new(bearer.Writer, ProtocolMode.Initiator, bearerLock);
-        AgentChannel channel = ChannelFor(muxer, bearer, bearerLock);
-        byte[] payload = new byte[65_533];
+        using Plexer plexer = new(bearer);
+        AgentChannel channel = plexer.SubscribeClient(ProtocolType.BlockFetch);
+        byte[] payload = new byte[ushort.MaxValue];
         payload.AsSpan().Fill(0x9b);
-        Task first = Task.CompletedTask;
-        Task second = Task.CompletedTask;
-        Task run = Task.CompletedTask;
-        Task direct = Task.CompletedTask;
-        Task batch = Task.CompletedTask;
-        Task drain = Task.CompletedTask;
         byte[] raw = Frame(ProtocolType.BlockFetch, [0x9b]);
+        Task first = channel.EnqueueChunkAsync(new ReadOnlySequence<byte>(payload), deadline.Token);
+        Task second = channel.EnqueueChunkAsync(new ReadOnlySequence<byte>(payload), deadline.Token);
+        Task direct = channel.WriteRawSegmentAsync(raw, deadline.Token);
+        Task batch = channel.WriteBatchRawSegmentsAsync(raw, 3, deadline.Token);
+        Task drain = Task.CompletedTask;
         try
         {
-            first = channel.EnqueueChunkAsync(new ReadOnlySequence<byte>(payload));
-            second = channel.EnqueueChunkAsync(new ReadOnlySequence<byte>(payload));
-            run = muxer.RunAsync(deadline.Token);
-            direct = channel.WriteRawSegmentAsync(raw, deadline.Token);
-            batch = channel.WriteBatchRawSegmentsAsync(raw, 3, deadline.Token);
             Assert.False(first.IsCompleted);
             Assert.False(second.IsCompleted);
             Assert.False(direct.IsCompleted);
             Assert.False(batch.IsCompleted);
-            _ = bearerLock.Release();
             drain = DrainAsync(bearer.Outgoing, [payload.Length, payload.Length, 1, 1, 1, 1], deadline.Token);
             await Task.WhenAll(first, second, direct, batch, drain).WaitAsync(Deadline);
         }
         finally
         {
+            plexer.Dispose();
             await deadline.CancelAsync();
-            muxer.Dispose();
-            _ = await Record.ExceptionAsync(() => Task.WhenAll(first, second, direct, batch, drain, run).WaitAsync(Deadline));
+            _ = await Record.ExceptionAsync(() => Task.WhenAll(first, second, direct, batch, drain).WaitAsync(Deadline));
         }
     }
-
-    private static AgentChannel ChannelFor(Muxer muxer, TestBearer bearer, SemaphoreSlim bearerLock) => new(
-        ProtocolType.BlockFetch, muxer.Writer, bearer.Writer,
-        Channel.CreateUnbounded<ReadOnlyMemory<byte>>().Reader, bearerLock);
 
     private static byte[] Frame(ProtocolType protocol, byte[] payload)
     {

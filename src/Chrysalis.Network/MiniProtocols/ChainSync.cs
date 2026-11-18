@@ -1,4 +1,3 @@
-using System.Buffers.Binary;
 using System.Runtime.CompilerServices;
 using Chrysalis.Codec.Serialization;
 using Chrysalis.Network.Cbor.ChainSync;
@@ -59,34 +58,25 @@ public class ChainSync : IMiniProtocol
     /// </summary>
     public ChainSync(AgentChannel channel, ProtocolType protocol = ProtocolType.ClientChainSync)
     {
+        ArgumentNullException.ThrowIfNull(channel);
         _buffer = new ChannelBuffer(channel);
         Protocol = protocol;
 
         // Pre-encode the full mux segment for NextRequest at construction time.
-        // This bypasses CborSerializer + Muxer pipeline on every NextRequestAsync call.
+        // This bypasses CBOR serialization and segment framing on every NextRequestAsync call.
         ChainSyncMessage nextRequest = ChainSyncMessages.NextRequest();
         byte[] cborPayload = CborSerializer.Serialize(nextRequest);
-        _preEncodedNextRequest = BuildMuxSegment(protocol, cborPayload);
+        _preEncodedNextRequest = BuildMuxSegment(protocol, cborPayload, channel.IsResponder);
     }
 
     /// <summary>
     /// Builds a complete mux segment (8-byte header + payload) ready for direct bearer write.
     /// </summary>
-    private static byte[] BuildMuxSegment(ProtocolType protocolId, byte[] cborPayload)
+    private static byte[] BuildMuxSegment(ProtocolType protocolId, byte[] cborPayload, bool responder)
     {
-        // Header: 4 bytes timestamp + 2 bytes protocol ID + 2 bytes payload length
-        byte[] segment = new byte[8 + cborPayload.Length];
-        Span<byte> span = segment.AsSpan();
-
-        // Timestamp = 0 (Cardano nodes don't validate it)
-        BinaryPrimitives.WriteUInt32BigEndian(span[..4], 0);
-        // Protocol ID (initiator mode, no 0x8000 bit)
-        BinaryPrimitives.WriteUInt16BigEndian(span[4..6], (ushort)protocolId);
-        // Payload length
-        BinaryPrimitives.WriteUInt16BigEndian(span[6..8], (ushort)cborPayload.Length);
-        // Payload
-        cborPayload.CopyTo(span[8..]);
-
+        byte[] segment = new byte[ProtocolConstants.SegmentHeaderSize + cborPayload.Length];
+        MuxSegmentCodec.WriteHeader(segment, 0, protocolId, checked((ushort)cborPayload.Length), responder);
+        cborPayload.CopyTo(segment.AsSpan(ProtocolConstants.SegmentHeaderSize));
         return segment;
     }
 
@@ -170,6 +160,9 @@ public class ChainSync : IMiniProtocol
     /// <summary>
     /// Sends N MsgRequestNext messages in a single batched write for pipelined sync.
     /// </summary>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// <paramref name="count"/> exceeds 6,554 requests in one batch. No requests are written.
+    /// </exception>
     public Task SendNextRequestBatchAsync(int count, CancellationToken cancellationToken) => _buffer.SendPreEncodedSegmentBatchAsync(_preEncodedNextRequest, count, cancellationToken);
 
     /// <summary>

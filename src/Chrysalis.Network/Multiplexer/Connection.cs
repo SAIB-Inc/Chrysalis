@@ -4,10 +4,13 @@ using Chrysalis.Network.Core;
 namespace Chrysalis.Network.Multiplexer;
 
 /// <summary>The first end, reader release, and serialized bearer disposal. Never completes Reader.</summary>
-internal sealed class Connection(IBearer bearer)
+internal sealed class Connection(IBearer? bearer, SemaphoreSlim? writeLock = null)
 {
     internal Lock Gate { get; } = new();
-    internal SemaphoreSlim WriteLock { get; } = new(1, 1);
+    internal SemaphoreSlim WriteLock { get; } = writeLock ?? new(1, 1);
+    private readonly long _startTime = Environment.TickCount64;
+    internal uint TransmissionTime => (uint)Math.Min(Environment.TickCount64 - _startTime, uint.MaxValue);
+
     internal TaskCompletionSource ReaderReleased { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
     internal Action? EndRequested { get; set; }
     private int _ended;
@@ -30,7 +33,7 @@ internal sealed class Connection(IBearer bearer)
         // flush, covering a writer between its connection check and its first flush.
         try
         {
-            try { bearer.Writer.CancelPendingFlush(); }
+            try { bearer?.Writer.CancelPendingFlush(); }
             catch (ObjectDisposedException) { /* A completed stream writer has no flush left to cancel. */ }
             finally { EndRequested?.Invoke(); }
         }
@@ -39,13 +42,27 @@ internal sealed class Connection(IBearer bearer)
 
     internal void ThrowIfEnded()
     {
-        lock (Gate) { if (Ended) { throw new ConnectionClosedException(Cause); } }
+        if (Ended) { throw new ConnectionClosedException(Cause); }
     }
 
     internal void CheckFlush(FlushResult result)
     {
         ThrowIfEnded();
-        if (result.IsCanceled || result.IsCompleted) { throw new ConnectionClosedException(Cause); }
+        if (result.IsCanceled || result.IsCompleted)
+        {
+            throw FailSend(new IOException(result.IsCanceled ? "The bearer flush was canceled." : "The bearer writer completed."));
+        }
+    }
+
+    internal ConnectionClosedException FailSend(Exception cause)
+    {
+        try { End(cause); }
+        catch (Exception)
+        {
+            // End published the cause before cleanup and still notifies the reader and settles the end.
+            // A secondary cleanup error must not replace the published cause at the send boundary.
+        }
+        return new ConnectionClosedException(Cause);
     }
 
     internal void DisposeBearer()
@@ -62,7 +79,7 @@ internal sealed class Connection(IBearer bearer)
         await _endSettled.Task.ConfigureAwait(false);
         await ReaderReleased.Task.ConfigureAwait(false);
         await WriteLock.WaitAsync().ConfigureAwait(false);
-        try { bearer.Dispose(); }
+        try { bearer?.Dispose(); }
         finally { _ = WriteLock.Release(); }
     }
 }

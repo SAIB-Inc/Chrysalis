@@ -7,10 +7,40 @@ using Xunit;
 
 namespace Chrysalis.Network.Tests;
 
-public class MuxerEnqueueCancellationTests
+public class DirectSendCancellationTests
 {
     private static readonly byte[] VictimPayload = [0xde, 0xad, 0xbe, 0xef];
     private static readonly byte[] KeepAlivePayload = [1, 2];
+
+    [Fact]
+    public async Task CancellationDuringStalledFlushLeavesSendPendingUntilConnectionEnds()
+    {
+        using SendBearer bearer = new();
+        using Plexer plexer = new(bearer);
+        using CancellationTokenSource sender = new();
+        _ = DirectSendShutdownTests.ParkFlush(bearer.Output);
+        AgentChannel channel = plexer.SubscribeClient(ProtocolType.BlockFetch);
+        Task send = channel.EnqueueChunkAsync(new ReadOnlySequence<byte>(VictimPayload), sender.Token);
+        Task queued = plexer.SubscribeClient(ProtocolType.KeepAlive).EnqueueChunkAsync(new ReadOnlySequence<byte>(KeepAlivePayload));
+        try
+        {
+            Assert.Equal(1, bearer.Output.Flushes);
+            await sender.CancelAsync();
+            _ = await Assert.ThrowsAsync<TimeoutException>(() => Task.WhenAny(send, queued).WaitAsync(TimeSpan.FromMilliseconds(100)));
+            Assert.False(send.IsCompleted, "Caller cancellation completed the send during a stalled flush.");
+            Assert.False(queued.IsCompleted, "The next send escaped the write permit during a stalled flush.");
+            Assert.Equal(1, bearer.Output.Flushes);
+        }
+        finally
+        {
+            plexer.Dispose();
+            _ = await Record.ExceptionAsync(() => Task.WhenAll(send, queued).WaitAsync(TimeSpan.FromSeconds(5)));
+        }
+
+        _ = await Assert.ThrowsAsync<ConnectionClosedException>(() => send);
+        _ = await Assert.ThrowsAsync<ConnectionClosedException>(() => queued);
+        Assert.Equal(1, bearer.Output.Flushes);
+    }
 
     [Fact]
     public async Task CancellationAfterPermitBeforeWriteCannotLeakThroughAnotherChannelsFlush()
@@ -21,77 +51,63 @@ public class MuxerEnqueueCancellationTests
         await RunRaceAsync(chunk, victimCancellation, () => payload.Arm(victimCancellation.Cancel), false);
     }
 
-    [Fact]
-    public async Task CancellationInsideWriteCommitsAndCompletesRatherThanRejectingTheRecord()
+    [Theory]
+    [InlineData("muxed", 1)]
+    [InlineData("raw", 1)]
+    [InlineData("batch", 2)]
+    public async Task CancellationInsideCommitStillDeliversWholeFrames(string kind, int copies)
     {
         Pipe bearer = new(new PipeOptions(pauseWriterThreshold: 0));
-        using SemaphoreSlim bearerWriteLock = new(1, 1);
-        using Muxer muxer = new(bearer.Writer, ProtocolMode.Initiator, bearerWriteLock);
-        using CancellationTokenSource victimCancellation = new();
-        using CancellationTokenSource stop = new();
-        CancelOnAdvanceWriter writer = new(muxer.Writer, victimCancellation);
-        AgentChannel victim = ChannelFor(ProtocolType.BlockFetch, writer, bearer.Writer, bearerWriteLock);
-        AgentChannel keepAlive = ChannelFor(ProtocolType.KeepAlive, writer, bearer.Writer, bearerWriteLock);
-        Task run = muxer.RunAsync(stop.Token);
+        using SemaphoreSlim gate = new(1, 1);
+        using CancellationTokenSource cancel = new();
+        AgentChannel victim = ChannelFor(ProtocolType.BlockFetch, new CancelOnAdvanceWriter(bearer.Writer, cancel), gate);
+        AgentChannel keepAlive = ChannelFor(ProtocolType.KeepAlive, bearer.Writer, gate);
+        byte[] wire = MuxSegmentCodec.Encode(new MuxSegment(new MuxSegmentHeader(0, ProtocolType.BlockFetch,
+            (ushort)VictimPayload.Length, false), new ReadOnlySequence<byte>(VictimPayload))).ToArray();
         try
         {
-            Exception? error = await Record.ExceptionAsync(() => victim.EnqueueChunkAsync(new ReadOnlySequence<byte>(VictimPayload), victimCancellation.Token)
-                .WaitAsync(TimeSpan.FromSeconds(5)));
-            long unflushed = muxer.Writer.UnflushedBytes;
-            await keepAlive.EnqueueChunkAsync(new ReadOnlySequence<byte>(KeepAlivePayload)).WaitAsync(TimeSpan.FromSeconds(5));
+            await (kind switch
+            {
+                "muxed" => victim.EnqueueChunkAsync(new ReadOnlySequence<byte>(VictimPayload), cancel.Token),
+                "raw" => victim.WriteRawSegmentAsync(wire, cancel.Token),
+                _ => victim.WriteBatchRawSegmentsAsync(wire, copies, cancel.Token)
+            }).WaitAsync(TimeSpan.FromSeconds(5));
+            Assert.True(cancel.IsCancellationRequested);
+            await keepAlive.EnqueueChunkAsync(new ReadOnlySequence<byte>(KeepAlivePayload));
             List<Frame> frames = await ReadThroughKeepAliveAsync(bearer.Reader);
-            Assert.True(victimCancellation.IsCancellationRequested);
-            Assert.True(error is null, $"A record whose Write already advanced must commit, not be rejected: {error}");
-            Assert.Equal(0, unflushed);
-            Frame sent = Assert.Single(frames, frame => frame.Protocol == ProtocolType.BlockFetch);
-            Assert.Equal(VictimPayload, sent.Payload);
-            Assert.Equal(KeepAlivePayload, Assert.Single(frames, frame => frame.Protocol == ProtocolType.KeepAlive).Payload);
+            Assert.Equal(copies + 1, frames.Count);
+            Assert.All(frames.Take(copies), frame =>
+            {
+                Assert.Equal(ProtocolType.BlockFetch, frame.Protocol);
+                Assert.Equal(VictimPayload, frame.Payload);
+            });
         }
         finally
         {
-            await stop.CancelAsync();
-            Exception? error = await Record.ExceptionAsync(() => run.WaitAsync(TimeSpan.FromSeconds(5)));
-            Assert.True(error is null or OperationCanceledException, $"Unexpected consumer error: {error}");
             await bearer.Reader.CompleteAsync();
             await bearer.Writer.CompleteAsync();
         }
     }
 
-    [Fact]
-    public async Task CancellationAfterWriteDoesNotAbortBackpressureButMuxerStopDoes()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task RawOrBatchCancellationWhileQueuedDoesNotCommit(bool batch)
     {
-        Pipe bearer = new();
-        using SemaphoreSlim bearerWriteLock = new(1, 1);
-        using Muxer muxer = new(bearer.Writer, ProtocolMode.Initiator, bearerWriteLock);
-        using CancellationTokenSource caller = new();
-        AgentChannel channel = ChannelFor(ProtocolType.BlockFetch, muxer.Writer, bearer.Writer, bearerWriteLock);
-        Task send = channel.EnqueueChunkAsync(new ReadOnlySequence<byte>(new byte[65_533]), caller.Token);
-        Task queued = channel.EnqueueChunkAsync(new ReadOnlySequence<byte>(KeepAlivePayload));
+        using SemaphoreSlim gate = new(0, 1);
+        using CancellationTokenSource cancel = new();
+        SendWriter writer = new();
+        AgentChannel channel = ChannelFor(ProtocolType.BlockFetch, writer, gate);
+        Task send = batch ? channel.WriteBatchRawSegmentsAsync(VictimPayload, 2, cancel.Token) : channel.WriteRawSegmentAsync(VictimPayload, cancel.Token);
         try
         {
             Assert.False(send.IsCompleted);
-            await caller.CancelAsync();
-            _ = await Assert.ThrowsAsync<TimeoutException>(() => send.WaitAsync(TimeSpan.FromMilliseconds(100)));
-            Assert.False(send.IsCompleted);
-            Assert.False(queued.IsCompleted);
-            Assert.Equal(0, muxer.Writer.UnflushedBytes);
-            muxer.Dispose();
-            ObjectDisposedException stopped = await Assert.ThrowsAsync<ObjectDisposedException>(() => send.WaitAsync(TimeSpan.FromSeconds(5)));
-            InvalidOperationException waiting = await Assert.ThrowsAsync<InvalidOperationException>(() => queued.WaitAsync(TimeSpan.FromSeconds(5)));
-            Assert.Same(stopped, waiting.InnerException);
-            if (bearer.Reader.TryRead(out ReadResult result))
-            {
-                Assert.True(result.Buffer.IsEmpty, "No consumer ever sent a frame to the bearer");
-                bearer.Reader.AdvanceTo(result.Buffer.End);
-            }
+            await cancel.CancelAsync();
+            _ = await Assert.ThrowsAnyAsync<OperationCanceledException>(() => send.WaitAsync(TimeSpan.FromSeconds(5)));
+            Assert.Empty(writer.Bytes);
+            Assert.Equal(0, writer.Flushes);
         }
-        finally
-        {
-            muxer.Dispose();
-            _ = await Record.ExceptionAsync(() => Task.WhenAll(send, queued).WaitAsync(TimeSpan.FromSeconds(5)));
-            await bearer.Reader.CompleteAsync();
-            await bearer.Writer.CompleteAsync();
-        }
+        finally { _ = gate.Release(); }
     }
 
     public static TheoryData<int> RaceIterations => [.. Enumerable.Range(0, 50)];
@@ -114,13 +130,10 @@ public class MuxerEnqueueCancellationTests
     {
         Pipe bearer = new(new PipeOptions(pauseWriterThreshold: 0));
         using SemaphoreSlim bearerWriteLock = new(0, 1);
-        using Muxer muxer = new(bearer.Writer, ProtocolMode.Initiator, bearerWriteLock);
-        using CancellationTokenSource stop = new();
-        AgentChannel holder = ChannelFor(ProtocolType.NodeChainSync, muxer.Writer, bearer.Writer, bearerWriteLock);
-        AgentChannel victim = ChannelFor(ProtocolType.BlockFetch, muxer.Writer, bearer.Writer, bearerWriteLock);
-        AgentChannel keepAlive = ChannelFor(ProtocolType.KeepAlive, muxer.Writer, bearer.Writer, bearerWriteLock);
+        AgentChannel holder = ChannelFor(ProtocolType.NodeChainSync, bearer.Writer, bearerWriteLock);
+        AgentChannel victim = ChannelFor(ProtocolType.BlockFetch, bearer.Writer, bearerWriteLock);
+        AgentChannel keepAlive = ChannelFor(ProtocolType.KeepAlive, bearer.Writer, bearerWriteLock);
         Task first = holder.EnqueueChunkAsync(new ReadOnlySequence<byte>(new byte[65_533]));
-        Task run = muxer.RunAsync(stop.Token);
         arm?.Invoke();
         Task send = victim.EnqueueChunkAsync(payload, victimCancellation.Token);
         Task cancellation = cancelAfterHolder ? first.ContinueWith(_ => victimCancellation.Cancel(), CancellationToken.None,
@@ -131,12 +144,12 @@ public class MuxerEnqueueCancellationTests
             await first.WaitAsync(TimeSpan.FromSeconds(5));
             Exception? error = await Record.ExceptionAsync(() => send.WaitAsync(TimeSpan.FromSeconds(5)));
             await cancellation.WaitAsync(TimeSpan.FromSeconds(5));
-            long unflushed = muxer.Writer.UnflushedBytes;
+            long unflushed = bearer.Writer.UnflushedBytes;
             await keepAlive.EnqueueChunkAsync(new ReadOnlySequence<byte>(KeepAlivePayload)).WaitAsync(TimeSpan.FromSeconds(5));
             List<Frame> frames = await ReadThroughKeepAliveAsync(bearer.Reader);
             Assert.True(error is null or OperationCanceledException, $"Unexpected enqueue error: {error}");
             bool rejected = error is OperationCanceledException;
-            if (arm is not null) { Assert.True(rejected, "Cancellation during CopyTo must be observed before Write"); }
+            if (arm is not null) { Assert.True(rejected, "Cancellation during CopyTo must be observed before Advance"); }
             Assert.True(!rejected || !frames.Any(frame => frame.Protocol == ProtocolType.BlockFetch),
                 $"A canceled send leaked to bearer: unflushed={unflushed}, exception={error?.GetType().Name}");
             Assert.Equal(0, unflushed);
@@ -151,10 +164,7 @@ public class MuxerEnqueueCancellationTests
         finally
         {
             await victimCancellation.CancelAsync();
-            await stop.CancelAsync();
             _ = await Record.ExceptionAsync(() => Task.WhenAll(first, send, cancellation).WaitAsync(TimeSpan.FromSeconds(5)));
-            Exception? error = await Record.ExceptionAsync(() => run.WaitAsync(TimeSpan.FromSeconds(5)));
-            Assert.True(error is null or OperationCanceledException, $"Unexpected consumer error: {error}");
             await bearer.Reader.CompleteAsync();
             await bearer.Writer.CompleteAsync();
         }
@@ -188,8 +198,8 @@ public class MuxerEnqueueCancellationTests
         }
     }
 
-    private static AgentChannel ChannelFor(ProtocolType protocol, PipeWriter writer, PipeWriter bearer, SemaphoreSlim gate) => new(
-        protocol, writer, bearer, Channel.CreateUnbounded<ReadOnlyMemory<byte>>().Reader, gate);
+    private static AgentChannel ChannelFor(ProtocolType protocol, PipeWriter writer, SemaphoreSlim gate) => new(
+        protocol, writer, Channel.CreateUnbounded<ReadOnlyMemory<byte>>().Reader, gate);
 
     private sealed record Frame(ProtocolType Protocol, byte[] Payload);
 
