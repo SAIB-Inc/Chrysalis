@@ -4,6 +4,7 @@
 No resource creation, inherited credentials, process command lines, adaptive
 warm-ups or retries. The caller starts this script through heavy on the PC.
 """
+import hashlib
 import json
 import math
 import os
@@ -27,14 +28,41 @@ DESIGNS = {'short': (1, 25), 'long': (180, 60)}
 COUNTERS = ('compiledMethods', 'compiledILBytes', 'compilationTimeTicks')
 
 
-def detect_platform():
+def detect_platform(expected_region='iad'):
     """Detect before the allowlist strips Fly's machine metadata; never trust a job."""
     app, region = os.environ.get('FLY_APP_NAME'), os.environ.get('FLY_REGION')
     if any(key in os.environ for key in ('FLY_APP_NAME', 'FLY_REGION', 'FLY_MACHINE_ID')):
-        if not app or region != 'iad' or os.cpu_count() != 8 or platform.machine() != 'x86_64':
-            raise ValueError('Named 8-CPU x64 iad Fly machine required')
+        if not app or region != expected_region or os.cpu_count() != 8 or platform.machine() != 'x86_64':
+            raise ValueError(f'Named 8-CPU x64 {expected_region} Fly machine required')
         return 'fly'
     return 'pc'
+
+
+def host_fingerprint(root=Path('/')):
+    """Return only named kernel and hardware fields; never host identity or ambient data."""
+    def read(path):
+        try:
+            return (root / path).read_text(encoding='utf-8').strip() or None
+        except (OSError, UnicodeError):
+            return None
+
+    def fields(text, keys):
+        return {key.strip(): value.strip() for key, colon, value in
+                (line.partition(':') for line in text.splitlines()) if colon and key.strip() in keys}
+
+    cpu_keys = ('vendor_id', 'cpu family', 'model', 'model name', 'stepping', 'microcode',
+                'cpu MHz', 'cache size', 'bogomips', 'address sizes')
+    cpuinfo = read('proc/cpuinfo') or ''
+    first = fields(cpuinfo.split('\n\n', 1)[0], (*cpu_keys, 'flags'))
+    processors = sum(line.partition(':')[0].strip() == 'processor' for line in cpuinfo.splitlines()) or None
+    flags = sorted(set(first['flags'].split())) if 'flags' in first else None
+    clocksource = 'sys/devices/system/clocksource/clocksource0/'
+    return dict({key: first.get(key) for key in cpu_keys}, processorCount=processors,
+                flagsSha256=hashlib.sha256(' '.join(flags).encode('utf-8')).hexdigest() if flags is not None else None,
+                flagsCount=len(flags) if flags is not None else None,
+                MemTotal=fields(read('proc/meminfo') or '', ('MemTotal',)).get('MemTotal'),
+                clocksourceCurrent=read(clocksource + 'current_clocksource'),
+                clocksourceAvailable=read(clocksource + 'available_clocksource'), kernelRelease=read('proc/sys/kernel/osrelease'))
 
 
 def clock():
@@ -264,7 +292,7 @@ def jit_quiet(data):
 
 
 def side_quiescence(rows):
-    """D49: compile-time share gates; methods count is reported, not a veto."""
+    """D49: compile-time share gates per population; method counts are descriptive."""
     if not rows:
         return dict(established=False, reason='Missing side processes')
     jit = [row['jit'] for row in rows]
@@ -278,11 +306,11 @@ def side_quiescence(rows):
                 groupCompiledMethods=counts, group3NotAboveGroup1=counts[2] <= counts[0])
 
 
-def member(spec, job, dest):
+def member(spec, job, dest, *, region='iad'):
     """One client/direct process; called inside the PC's heavy invocation."""
     dest = Path(dest)
     dest.mkdir(parents=True, exist_ok=False)
-    platform = detect_platform()
+    platform = detect_platform(region)
     generated = dict(job['environment'], CHRYSALIS_BENCHMARK_RESULTS=str(dest))
     env = environment(generated)
     save(dest / 'environment.json', env)

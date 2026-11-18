@@ -45,7 +45,11 @@ internal static class MicroClient
             {
                 bool warmup = index <= Program.WarmupPasses;
                 int pass = warmup ? index : index - Program.WarmupPasses;
-                if (!warmup && pass == 1) { await Program.MarkAsync("MEASURED_START").ConfigureAwait(false); }
+                if (!warmup && pass == 1)
+                {
+                    await Program.MarkAsync("MEASURED_START").ConfigureAwait(false);
+                    series.BeginMeasured();
+                }
                 int gen0 = GC.CollectionCount(0), gen1 = GC.CollectionCount(1), gen2 = GC.CollectionCount(2);
                 long before = GC.GetTotalAllocatedBytes(true);
                 long start = Stopwatch.GetTimestamp();

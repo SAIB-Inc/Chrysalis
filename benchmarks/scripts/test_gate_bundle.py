@@ -5,6 +5,7 @@ from pathlib import Path
 import shutil
 import tempfile
 import tarfile
+from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
@@ -12,7 +13,11 @@ import gate
 import gate_bundle as bundle
 import gate_time as timing
 from test_gate import side, fixture
-from test_gate_time import row, member
+from test_gate_time import row, member, probe_rule
+
+
+SCOUT = [dict(id=f'time/preprod-scout{i}-offline', kind='time', pairs=8, chargeSeconds=13,
+              rowClass='recorded-only', explanation='CAUSE.md') for i in range(1, 7)]
 
 
 class BundleTests(unittest.TestCase):
@@ -22,6 +27,13 @@ class BundleTests(unittest.TestCase):
         for value in (0, -1, float('nan')):
             with self.assertRaises(ValueError):
                 bundle.calibrate_micro(dict(nsPerBlock=value, blocks=16), 16)
+
+    def test_probe_review_prepare_refuses_missing_or_null_before_preflight(self):
+        for config in ({}, {'probe': None}, {'probe': dict(probe_rule(), processes=0)}):
+            with self.subTest(config=config), patch.object(bundle.subprocess, 'check_output') as launch:
+                with self.assertRaisesRegex(ValueError, 'probe rule'):
+                    bundle.prepare(Path('unused'), [row()], {}, {'time': dict(config, noise={})}, {'flyBudgetLeftUsd': 40})
+                launch.assert_not_called()
 
     def test_dry_run_and_seal_preserve_distinct_and_shared_closures(self):
         with tempfile.TemporaryDirectory() as td:
@@ -56,7 +68,7 @@ class BundleTests(unittest.TestCase):
             r = row()
             r['sides'] = {role: gate.public_side(spec) for role, spec in builds.items()}
             output = root / 'output'; output.mkdir()
-            config = dict(_mode='change', time=dict(noise={'offline': r['noise']}, option=2))
+            config = dict(_mode='change', time=dict(noise={'offline': r['noise']}, option=2, probe=probe_rule()))
             calls = []
             mutate = False
             def fake(spec, job, destination):
@@ -87,6 +99,14 @@ class BundleTests(unittest.TestCase):
             self.assertNotEqual(installed_sides['baseline']['client'], installed_sides['candidate']['client'])
             self.assertEqual(len(calls), 2)
             self.assertTrue(all(job['counts'] == [1, 1] for job in calls))
+            scouts = [dict(entry, sides=r['sides']) for entry in SCOUT]
+            with patch.object(gate, 'REPO', repo), patch.object(gate.runner, 'DOTNET_ROOT', runtime), \
+                    patch.object(bundle.subprocess, 'check_output', return_value='fly fixture-v1'), \
+                    patch.object(timing.session, 'member', side_effect=fake):
+                scout_config = dict(config, _sessionPerRow=True)
+                with self.assertRaisesRegex(ValueError, 'gated.*probe|probe.*gated'):
+                    bundle.prepare(root / 'scout', scouts, builds, scout_config,
+                                   dict(flyPythonRoot=str(python.parent), corporaRoot='unused', flyBudgetLeftUsd=40))
             micro=dict(r,id='time/micro-hashing')
             shared_micro = dict(micro, sides={role: gate.public_side(staged) for role in builds})
             micro_output=root/'micro-output';micro_output.mkdir()
@@ -100,6 +120,36 @@ class BundleTests(unittest.TestCase):
             self.assertEqual(len(calls),3)  # baseline probe, then final baseline/candidate
             self.assertEqual(calls[0]['microInvocations'],16)
             self.assertEqual(calls[1]['microInvocations'],calls[2]['microInvocations'])
+            # The configured rule is sealed independently of the measured workload.
+            configured = dict(config, time=dict(config['time'], probe=json.loads((gate.GATE / 'gated.json').read_text())['time']['probe']))
+            capture = root / 'corpus/capture'; capture.mkdir(parents=True)
+            gate.session.save(capture.parent / 'range.json', {})
+            for name in ('capture.json', 'server-to-client.bin', 'client-to-server.bin'):
+                (capture / name).write_text('OBVIOUS TEST PLACEHOLDER')
+            gate.session.save(capture / 'sha256.json', {p.name: gate.digest(p) for p in capture.iterdir()})
+            local = dict(flyPythonRoot=str(python.parent), corporaRoot=str(capture.parent), flyBudgetLeftUsd=40)
+            with patch.object(gate, 'REPO', repo), patch.object(gate.runner, 'DOTNET_ROOT', runtime), \
+                    patch.object(bundle.subprocess, 'check_output', return_value='fly fixture-v1'), \
+                    patch.object(timing.session, 'member', side_effect=fake):
+                tcp = dict(r, id='time/preprod-tcp', replay='tcp')
+                tcp_output = root / 'tcp-only'
+                prepared, = bundle.prepare(tcp_output, [tcp], builds, configured, local)['timePlans']
+                self.assertEqual(prepared['probe'], probe_rule())
+                with tarfile.open(tcp_output / 'input/session-0.tar.gz') as archive:
+                    worker = json.load(archive.extractfile('plan.json'))
+                    self.assertEqual(worker['workloads'][worker['probe']['workload']]['replay'], 'offline')
+                    self.assertEqual(worker['counts'], [180, 60])
+                with self.assertRaisesRegex(ValueError, 'gated.*probe|probe.*gated'):
+                    bundle.prepare(root / 'no-reference', [dict(tcp, rowClass='recorded-only')], builds, configured, local)
+                release = dict(configured, _mode='release', time=dict(configured['time'], micro={'hashing': '*'}))
+                band, ordinary = bundle.prepare(root / 'micro-band', [micro], builds, release, local)['timePlans']
+                self.assertEqual((band['design'], band['repeatAllowed']), ('micro-band', False))
+                self.assertEqual(band['rawSeconds'], 208 + sum(2 * r['chargeSeconds'] * r['aPairs'] for r in band['rows']))
+                self.assertAlmostEqual(band['limitUsd'], timing.price(band['destroyGuardSeconds']) + 5 * timing.price(1068))
+                self.assertEqual(band['limitWithRepeatUsd'], band['limitUsd'])
+                local['flyBudgetLeftUsd'] = ordinary['limitWithRepeatUsd'] + band['limitUsd'] - .00001
+                with self.assertRaisesRegex(ValueError, 'Aggregate timing reservation exceeds budget'):
+                    bundle.prepare(root / 'aggregate-refusal', [micro], builds, release, local)
             mutate=True
             changed_output=root/'changed-probe-output';changed_output.mkdir()
             with patch.object(gate,'REPO',repo),patch.object(gate.runner,'DOTNET_ROOT',runtime),patch.object(bundle.subprocess,'check_output',return_value='fly fixture-v1'),patch.object(timing.session,'member',side_effect=fake):
@@ -146,9 +196,29 @@ class BundleTests(unittest.TestCase):
             audit = json.loads((gate.REPO / 'benchmarks/Chrysalis.Benchmarks/audit-allocations.json').read_text())
             path = root / 'selection.json'
             gate.session.save(path, [dict(id='CoreBench.Blake256', kind='direct', rowClass='recorded-only', explanation='CAUSE.md')])
-            from types import SimpleNamespace
             with self.assertRaisesRegex(ValueError, 'cannot be removed'):
                 gate.select_rows(SimpleNamespace(mode='release', plan=path, only=None), config, audit)
+
+            for value, entries, mode in [(True, SCOUT + [dict(id='CoreBench.Blake256')], 'change'),
+                                         (True, SCOUT + [dict(id='scout-only-bytes', kind='direct', rowClass='recorded-only', explanation='CAUSE.md')], 'change'),
+                                         (True, SCOUT + [dict(id='time/preprod-offline')], 'change'),
+                                         (True, SCOUT, 'release'), (1, SCOUT, 'change'), (None, SCOUT, 'change')]:
+                with self.subTest(value=value, entries=len(entries), mode=mode):
+                    gate.session.save(path, dict(entries=entries, sessionPerRow=value))
+                    with self.assertRaisesRegex(ValueError, 'sessionPerRow'):
+                        gate.select_rows(SimpleNamespace(mode=mode, plan=path, only=None), config, audit)
+            for region, enabled in [('ams', False), ('zzz', True), ('lhr', True), ('yyz', True), (None, True), ([], True)]:
+                with self.subTest(region=region, sessionPerRow=enabled):
+                    gate.session.save(path, dict(entries=[dict(SCOUT[0], region=region)], sessionPerRow=enabled))
+                    with self.assertRaisesRegex(ValueError, 'region'):
+                        gate.select_rows(SimpleNamespace(mode='change', plan=path, only=None), config, audit)
+            for payload, enabled in [(dict(entries=[dict(SCOUT[0], region='arn'), *SCOUT[1:]], sessionPerRow=True), True), (SCOUT, False),
+                                     (dict(entries=SCOUT, sessionPerRow=False), False)]:
+                gate.session.save(path, payload)
+                rows = gate.select_rows(SimpleNamespace(mode='change', plan=path, only=None), config, audit)
+                self.assertEqual(len(rows), 6)
+                self.assertEqual(rows[0].get('region'), 'arn' if enabled else None)
+                self.assertIs(config.get('_sessionPerRow', False), enabled)
 
 
 if __name__ == '__main__':

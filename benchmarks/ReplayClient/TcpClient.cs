@@ -46,7 +46,11 @@ internal static class TcpClient
         {
             bool warmup = index <= Program.WarmupPasses;
             int pass = warmup ? index : index - Program.WarmupPasses;
-            if (!warmup && pass == 1) { await Program.MarkAsync("MEASURED_START").ConfigureAwait(false); }
+            if (!warmup && pass == 1)
+            {
+                await Program.MarkAsync("MEASURED_START").ConfigureAwait(false);
+                series.BeginMeasured();
+            }
             Array.Clear(points);
             await intersect(client.ChainSync, cancellation.Token).ConfigureAwait(false);
             GC.Collect(); GC.WaitForPendingFinalizers(); GC.Collect();

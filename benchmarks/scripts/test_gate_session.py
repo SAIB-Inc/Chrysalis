@@ -1,5 +1,6 @@
 """P1 runner primitives plus measured-window and environment regressions."""
 import copy
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -25,6 +26,31 @@ def data(short=False):
 
 
 class SessionTests(unittest.TestCase):
+    def test_host_fingerprint_is_an_allowlist_of_independent_reads(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            empty = session.host_fingerprint(root)
+            (root / 'proc').mkdir()
+            (root / 'proc/cpuinfo').write_text('processor: 0\nvendor_id: FixtureCPU\nmodel: 33\nbogomips: 12.34\n'
+                                              'flags: z  tsc\tz a\nhostname: CANARY-host\n\nprocessor: 1\nstepping: 91\n')
+            (root / 'proc/meminfo').write_text('MemTotal: 100 kB\nMemFree: 99 kB\n')
+            (root / 'proc/sys/kernel').mkdir(parents=True)
+            (root / 'proc/sys/kernel/osrelease').write_text('fixture-kernel\n')
+            clock = root / 'sys/devices/system/clocksource/clocksource0'; clock.mkdir(parents=True)
+            (clock / 'current_clocksource').write_text('tsc\n')
+            (clock / 'available_clocksource').write_text('tsc kvm-clock\n')
+            expected = dict.fromkeys(('vendor_id', 'cpu family', 'model', 'model name', 'stepping', 'microcode',
+                                      'cpu MHz', 'cache size', 'bogomips', 'address sizes', 'processorCount', 'flagsSha256',
+                                      'flagsCount', 'MemTotal', 'clocksourceCurrent', 'clocksourceAvailable', 'kernelRelease'))
+            self.assertEqual(empty, expected)
+            expected.update(vendor_id='FixtureCPU', model='33', bogomips='12.34', processorCount=2, flagsCount=3,
+                            flagsSha256=hashlib.sha256(b'a tsc z').hexdigest(), MemTotal='100 kB',
+                            clocksourceCurrent='tsc', clocksourceAvailable='tsc kvm-clock', kernelRelease='fixture-kernel')
+            with patch.object(session.os, 'environ', None):
+                self.assertEqual(session.host_fingerprint(root), expected)
+                (clock / 'available_clocksource').write_bytes(b'\xff')
+                self.assertEqual(session.host_fingerprint(root), dict(expected, clocksourceAvailable=None))
+
     def test_fly_metadata_survives_allowlist_and_detects_machine_only(self):
         metadata = dict(FLY_APP_NAME='fixture-app', FLY_REGION='iad', FLY_MACHINE_ID='fixture-machine')
         self.assertEqual({key: session.environment({}, metadata).get(key) for key in metadata}, metadata)
@@ -54,6 +80,14 @@ class SessionTests(unittest.TestCase):
             altered[key].pop()
             with self.assertRaises(ValueError):
                 session.validate_observations(altered, 'offline', '10.0.9', (180, 60))
+        positive = data()
+        for boundary in positive['groupBoundaries']:
+            if boundary['stage'] == 'measured' and boundary['passIndex'] > 0:
+                for counter in session.COUNTERS:
+                    boundary['delta'][counter] = 1
+                    boundary['cumulative'][counter] = boundary['passIndex']
+        session.validate_observations(positive, 'offline', '10.0.9', (180, 60))
+        self.assertEqual(session.jit_quiet(positive)['jitMs'], .006)
         altered = data()
         altered['groupBoundaries'][-1]['delta']['compiledMethods'] = -1
         with self.assertRaises(ValueError):
@@ -171,8 +205,22 @@ class ReviewSessionTests(unittest.TestCase):
             self.assertEqual(session.detect_platform(), 'fly')
             with patch.object(session.os, 'cpu_count', return_value=24), self.assertRaisesRegex(ValueError, 'Fly'):
                 session.detect_platform()
+            with self.assertRaisesRegex(ValueError, 'Fly'):
+                session.detect_platform('ams')
+            with patch.dict(os.environ, FLY_REGION='ams'):
+                self.assertEqual(session.detect_platform('ams'), 'fly')
+                with self.assertRaisesRegex(ValueError, 'Fly'):
+                    session.detect_platform()
         with patch.dict(os.environ, dict(FLY_REGION='iad'), clear=True), self.assertRaisesRegex(ValueError, 'Fly'):
             session.detect_platform()
+
+    def test_member_passes_sealed_or_default_region_to_platform_check(self):
+        with tempfile.TemporaryDirectory() as directory:
+            for kwargs, expected in [({}, 'iad'), (dict(region='ams'), 'ams')]:
+                with self.subTest(expected=expected), patch.object(session, 'detect_platform', side_effect=ValueError('stop')) as detected:
+                    with self.assertRaisesRegex(ValueError, '^stop$'):
+                        session.member({}, {}, Path(directory) / expected, **kwargs)
+                    detected.assert_called_once_with(expected)
 
     def test_pc_acknowledges_marks_without_reading_proc(self):
         with tempfile.TemporaryDirectory() as directory:

@@ -19,6 +19,7 @@ import time
 
 import gate_session as session
 import gate_stats as stats
+import gate_time
 import run_benchmarks as runner
 
 REPO = Path(__file__).resolve().parents[2]
@@ -422,6 +423,19 @@ def read_seal(output):
     return seal
 
 
+def retry_command(parent, *, kind):
+    import gate_bundle
+    parent, seal, binding, _ = gate_bundle.checked_retry_parent(Path(parent), REPO / 'benchmarks/out', kind)
+    output = new_output()
+    for relative in seal['files']:
+        target = output / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(gate_bundle.retry_file(parent / relative), target)
+    go = write_seal(output, dict(seal, retryOf=dict(binding, child=output.name)))
+    read_seal(output)
+    return go
+
+
 def snapshot_scripts(output):
     directory = output / 'input/scripts'
     directory.mkdir(parents=True)
@@ -527,17 +541,24 @@ def band_sets(args, baseline, output, local):
 def select_rows(args, config, audit):
     available = catalogue(config, audit)
     defaults = config['defaults'][args.mode]
+    session_per_row = False
     if args.plan:
         payload = json.loads(Path(args.plan).read_text())
+        session_per_row = payload.get('sessionPerRow', False) if isinstance(payload, dict) else False
+        if type(session_per_row) is not bool:
+            raise ValueError('sessionPerRow must be a boolean')
         selected = payload if isinstance(payload, list) else payload.get('entries') if isinstance(payload, dict) else None
         if not isinstance(selected, list):
             raise ValueError('Measurement entries must be an array')
         rows = []
         known = {row['id']: row for row in available}
-        allowed = {'id', 'kind', 'replay', 'manifest', 'pairs', 'aPairs', 'chargeSeconds', 'candidate', 'rowClass', 'explanation'}
+        allowed = {'id', 'kind', 'replay', 'manifest', 'pairs', 'aPairs', 'chargeSeconds', 'candidate', 'rowClass', 'explanation', 'region', 'expected'}
         for entry in selected:
             if not isinstance(entry, dict) or set(entry) - allowed or not isinstance(entry.get('id'), str):
                 raise ValueError('Invalid measurement entry fields')
+            if 'region' in entry:
+                gate_time.require(session_per_row, 'An explicit region requires sessionPerRow')
+                gate_time.region_for(entry)
             if entry.get('rowClass') == 'recorded-only' and (not entry.get('explanation') or not isinstance(entry['explanation'], str)):
                 raise ValueError('Recorded-only row needs an explanation link')
             if entry.get('rowClass') not in (None, 'gated', 'recorded-only'):
@@ -550,6 +571,13 @@ def select_rows(args, config, audit):
             row = dict(original or {}, **entry)
             if row.get('kind') not in ('direct', 'replay', 'time'):
                 raise ValueError('Unknown row kind')
+            if 'expected' in row:
+                expected = row['expected']
+                if row['kind'] != 'time' or row.get('rowClass') == 'recorded-only' or not (
+                        expected == 'smoke' or isinstance(expected, dict) and expected and
+                        expected.keys() <= {'release', 'change'} and
+                        all(status in ('PASS', 'FAIL', 'INCONCLUSIVE') for status in expected.values())):
+                    raise ValueError('Invalid expected statuses: only gated time rows may declare them')
             if row['kind'] == 'direct' and 'rule' not in row:
                 # New per-message rows are strict by definition, never assigned a band.
                 row['rule'] = 'D39'
@@ -571,6 +599,10 @@ def select_rows(args, config, audit):
         rows = [row for row in available if any(fnmatch.fnmatchcase(row['id'], pattern) for pattern in patterns)]
     if not rows or len({row['id'] for row in rows}) != len(rows):
         raise ValueError('No rows selected or duplicate row ids')
+    if session_per_row and (args.mode != 'change' or any(
+            row['kind'] != 'time' or row.get('rowClass') != 'recorded-only' for row in rows)):
+        raise ValueError('sessionPerRow requires only recorded-only time rows in change mode')
+    config['_sessionPerRow'] = session_per_row
     # Only the current frozen window determines the declared direct cohort.
     banded = {(record['row'], record['window']) for path in (GATE / 'bands').glob('*.json')
               for record in [json.loads(path.read_text())]
@@ -603,6 +635,8 @@ def subset_reasons(seal, mode=None):
         reasons.append(f'{len(seal["rows"])} of {len(seal["releaseSet"])} release rows declared')
     if not seal.get('timeScopeDecided'):
         reasons.append('time scope undecided')
+    if 'retryOf' in seal:
+        reasons.append('timing-only controls retry')
     return reasons
 
 
@@ -717,15 +751,17 @@ def report(output, mode=None):
             result.update(first=first, repeat=repeat)
         result['sides'] = row['sides']
         results[row['id']] = result
-    import gate_time
     timed, time_lines = gate_time.read_results(output, seal, mode=applied_mode)
     results.update(timed)
     verdict = outcome(seal, results, mode=applied_mode)
+    retry = seal.get('retryOf')
     title = f'gate {applied_mode} · ' + ('canonical' if seal['canonical'] else 'non-canonical sides')
     if applied_mode != seal['mode']:
         title += f' · re-derived under {applied_mode}; not the sealed rule'
     lines = [title, 'bytes · this PC · direct B/op, replay B/block · load ' + (f'{min(load):.2f}–{max(load):.2f}' if load else 'not measured'),
              f'{"benchmark":<45} {"rule":>8} {"baseline":>12} {"candidate":>12} {"difference [95%]":>30} {"limit":>10} verdict']
+    if retry:
+        lines.insert(1, f'Controls retry ({retry["kind"]}); allocation evidence remains in the original seal {retry["originalSealId"]}')
     for row in seal['rows']:
         if row['kind'] == 'time':
             continue
@@ -766,6 +802,11 @@ def report(output, mode=None):
                 if ci:
                     lines.append(f'  {phase}: {previous["baselineMeanBytes"]:.3f} / {previous["comparisonMeanBytes"]:.3f}; difference {previous["meanDifferenceBytes"]:.3f} [{ci[0]:.3f}, {ci[1]:.3f}]')
     lines += time_lines
+    time_modes = {applied_mode: timed}
+    for number, plan in enumerate(seal.get('timePlans', [])):
+        if plan['design'] != 'micro-band':
+            classification, _ = gate_time.session_outcome(output, seal, number, results=time_modes)
+            lines.append(f'time session {number} · controls outcome: {classification}')
     lines += ['coverage · area · declared bytes / declared time']
     for area, mapping in seal['gated']['areas'].items():
         counts = [sum(any(fnmatch.fnmatchcase(row['id'], pattern) for pattern in mapping[key]) for row in seal['rows']) for key in ('bytes', 'time')]
@@ -774,7 +815,10 @@ def report(output, mode=None):
             lines.append('  ' + mapping['manual'])
     reasons = subset_reasons(seal, applied_mode) if verdict == 'SUBSET' else []
     lines.append(f'outcome {verdict}' + (' · ' + '; '.join(reasons) if reasons else ''))
-    return dict(outcome=verdict, rows=results, text='\n'.join(lines) + '\n')
+    result = dict(outcome=verdict, rows=results, text='\n'.join(lines) + '\n')
+    if retry:
+        result['allocationEvidenceSealId'] = retry['originalSealId']
+    return result
 
 
 def previous_alpha(candidate):
@@ -840,7 +884,8 @@ def run_command(args, output=None, local=None):
     bands = seal_bands(rows)
     seal = dict(schemaVersion=1, mode=args.mode, ruleVersion=stats.RULE_VERSION, rows=rows, bands=bands,
                 canonical=canonical(baseline, candidate) and all(row['sides']['candidate']['commit'] == candidate['commit'] for row in rows),
-                timeScopeDecided=True, gated=config, releaseSet=[row['id'] for row in catalogue(config, audit) if row.get('rowClass') != 'recorded-only'],
+                timeScopeDecided=True, gated={key: value for key, value in config.items() if not key.startswith('_')},
+                releaseSet=[row['id'] for row in catalogue(config, audit) if row.get('rowClass') != 'recorded-only'],
                 files={file.relative_to(output).as_posix(): digest(file) for file in scripts.iterdir() if file.is_file()})
     import gate_bundle
     timing = gate_bundle.prepare(output, rows, staged, dict(config, _mode=args.mode), local)
@@ -901,12 +946,17 @@ def main():
     report_parser = commands.add_parser('report')
     report_parser.add_argument('directory', type=Path)
     report_parser.add_argument('--mode', choices=('change', 'release'))
+    retry_parser = commands.add_parser('retry')
+    retry_parser.add_argument('parent', type=Path)
+    retry_parser.add_argument('--kind', required=True, choices=('first', 'repeat'))
     fly_parser = commands.add_parser('fly')
     fly_parser.add_argument('--go', required=True)
     args = parser.parse_args()
     try:
         if args.command in ('band', 'run'):
             pc_command(args)
+        elif args.command == 'retry':
+            print(retry_command(args.parent, kind=args.kind))
         elif args.command == 'report':
             print(report(args.directory, args.mode)['text'], end='')
         else:

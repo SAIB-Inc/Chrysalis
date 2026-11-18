@@ -25,7 +25,11 @@ candidate for an entry. A new direct per-message row is D39. Time entries may de
 charge. Explicit counts are sealed exactly, even below the validity minimum.
 Default-set sizing alone may increase counts to use remaining capacity. An optional corpus
 `manifest` is repository-relative; measurement awaits P4 MR-B's client support.
-No ad-hoc row can silently obtain a noise band.
+No ad-hoc row can silently obtain a noise band. An object with `entries` can set
+`"sessionPerRow": true` to seal one Fly session per row, only in change mode
+with exclusively recorded-only time rows. Only those entries may declare a Fly
+`region`: it is sealed in the session, priced using Fly’s regional markup, and
+checked on the launched machine. Omission keeps `iad` and its base price.
 
 `band --side <commit> --set <comma-separated-patterns>` freezes baseline-only
 10-pair bytes bands. D39 rows have no band. The six audit range rows share their original six-row
@@ -99,6 +103,20 @@ ancestor of the candidate, never its own tag, an RC tag or an unrelated branch.
 A SUBSET outcome line lists its reasons.
 D51 requires both sync-path replay and other-hot-path times: PC bytes alone can
 never give RELEASE PASS. `fly --go <seal-id>` runs only the sealed timing session after a separate go.
+
+Only the designated release controls may prepare a retry. The coordinator's
+`benchmarks/out/controls-authority.json` names the original seal and its gated
+time rows with their sealed expectations. The original must have been sealed
+with the same retry-capable launcher. Run `gate.py retry PARENT_DIR --kind
+first|repeat` to print a new go without launching. A repeat-only retry reuses
+the verified first payload and reserves one session; a first-phase retry
+reserves first plus repeat. Under the Fly lock, the first launch rechecks the
+original evidence and authority, then claims the lineage before consuming go.
+A preflight refusal claims nothing; a claim left without a go marker still
+blocks every sibling. Check that `time/runs`, if present, is a directory before
+GO: a non-directory there can consume the retry without creating an app.
+Allocation evidence remains in the original; a retry report cannot give a new
+release pass.
 Fly time never supplies a bytes verdict.
 
 The runner is the single environment allowlist: ambient HOME/PATH/locale/time,
@@ -190,8 +208,9 @@ result or turn an invalid prerequisite into a pass. Persistent side bias and
 asymmetric carryover can remain; ABBA is not a promise to cancel them.
 
 The first-five-minute steal report reuses existing whole-process before/after
-counters: select processes starting in [t0,t0+300), where t0 is the first long
-client start. Report n, median, p95, observation span and whole-session median;
+counters, excluding host probe processes: select scheduled processes starting in
+[t0,t0+300), where t0 is the first long scheduled comparison client start.
+Report n, median, p95, observation span and whole-comparison median;
 also show first-all-client context if a short prelude starts earlier. A selected
 process can end after 300 seconds. No new probe, wait, threshold, rejection,
 replacement or automatic retry is added. A valid interval straddling the change
@@ -223,6 +242,28 @@ P2 sizing never exceeds the 7,000 s guard / 6,600 s measurement cutoff. A shorte
 underpriced session or a budget without the full possible repeat reserved.
 There are no admission-driven replacements or automatic inconclusive retries.
 
+## Host probe
+
+Before any timing block, 16 baseline-only offline preprod processes run 180 warm-up
+and 60 measured passes. Keep only if the unrounded mean of their sample CVs is
+at most 0.054 and every startup `GCGen0MaxBudget` matches the noise-record host's
+16,777,216 bytes. Both CV16 and lag-1 are recorded. An observed budget mismatch
+is `gen0-budget-mismatch`; a missing budget or invalid series stops the session.
+The comparison's per-build GC totals, rates per measured pass, and observed
+budgets are reported separately and never gate. A/A passes count toward baseline.
+
+In iad a session attempts up to six draws. Its launch reservation is the full
+machine-guard price plus five times the probe-only price ($0.69393833 in iad);
+a repeat has its own reservation. After every draw, verify its archive, probe,
+absence proof and booked cost. A rejected machine runs no timing blocks. Redraw
+only if booked cost so far plus the next full guard fits the reservation. With
+the fresh controls' 6,298 s guard, the reservation is $1.36545961 per session,
+$2.73091922 for two, or $4.09637883 including one retry. This is not authority to run.
+If cleanup or bookkeeping runs past the guard, booked cost can exceed the
+reservation even if compute stopped in time; stop the lineage and report it.
+If the VM ignores the stop and cannot be destroyed, compute is unbounded until
+cleanup succeeds; the watchdog retains the lock until absence is proved.
+
 ## Release rule
 
 Name every path with no working 7c45d47 baseline and record its first working
@@ -234,11 +275,28 @@ PASS requires its 95% Student-t interval [L,U] to have L <=1.00 and U <=1.05.
 A valid L >1.00 FAILs. Otherwise it is INCONCLUSIVE. Each replay gets its own
 baseline A/A band below 5%, then fresh B pairs under the sealed local
 ABBA/BAAB schedule, with A first and rows spread over super-rounds. All declared pairs must finish, at least five per required phase
-must be admitted, both sides must be stable over the three 20-pass groups,
-and aggregate JIT compile-time share must be <=0.5% (including timing-rejected
-complete processes). Methods compiled are reported, not gated. Admission uses
+must be admitted. For A, average the two members' stability contrasts within
+each pair before taking the interval across pairs. For B, check each side
+separately. Each population must be stable over the three 20-pass groups, and
+its aggregate JIT compile-time share must be <=0.5%, including timing-rejected
+complete processes. The counter starts after `MEASURED_START` is acknowledged.
+Methods compiled are reported, not gated. After the data and admission checks,
+the report names every failed qualification check and its figure and limit.
+Admission uses
 only the acknowledged measured window: aggregate/per-core steal <=1%/2% and
 foreign CPU total/per-process <=5%/2% of one core.
+
+A release session does not repeat unless every gated row qualified (a declared
+smoke must be complete). A controls row may seal `expected` statuses for release
+and/or change mode, or `"smoke"`. Controls check both modes and skip the repeat
+if any declared result is contradicted. Other plans use only their sealed mode.
+
+Known limit: each B side's own check is unchanged, but the whole release gate
+accepted drift more often in 58 of 294 simulated B-side cases, 31 beyond the
+limit. The largest increase was on RECV1-like offline replay, with +5.5% drift
+on the B baseline alone: 1.60% versus 0.01%. Of 3,451 extra passes, the old gate
+had flagged 2,979 for the counter window, 413 for checking the A sides separately,
+and 59 for both. None came from changing the B check. These are model results.
 
 Full mainnet+preprod timing fits one machine up to about 12.5 MB. Above that,
 D51's option 2 uses two sessions, preprod TCP+mainnet offline then mainnet TCP+
@@ -290,10 +348,13 @@ numbers and the label **harness artefact, explained, not gated**. It never chang
 the outcome or triggers a repeat. A measurement plan cannot downgrade an
 existing gated catalogue row. This preserves the old in-process N2C evidence
 when its independently verified socket replacement becomes the gated row.
+Fly sessions archive and report an allowlisted hardware fingerprint for
+information only. It does not read environment variables.
 
 FieldReadBench.ReadEveryField may drift within a process. Alternating the side
 order balances between-process drift; run order is not evidence of stability.
-Release time checks each side's three group intervals independently and holds
+Release time checks the three group intervals for each B side and for the
+pair-averaged A phase, and holds
 the RC if they drift. Direct release bytes retain all five batches, compare
 process means against the frozen A/A band and reject a resolved increase; they
 do not claim a direct-row plateau or select the last/lowest batch. Whole-path

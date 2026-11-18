@@ -97,12 +97,13 @@ with state.with_suffix('.lock').open('w') as lock:
     elif a[:2] == ['machine', 'run']:
         command = a[a.index('--') + 1:]
         if command[:2] != ['/bin/bash', '-c'] or ('P2_MACHINE_CREATED_UNIX + ' + str(json.loads((root / 'seal.json').read_text())['timePlans'][0]['destroyGuardSeconds'] - 10)) not in command[-1]: raise RuntimeError('Missing absolute VM stop')
-        if value('--region') != 'iad' or value('--vm-size') != 'performance-8x' or '--rm' not in a or value('--restart') != 'no': raise RuntimeError('Machine creation safety flags differ')
+        if not value('--region') or value('--vm-size') != 'performance-8x' or '--rm' not in a or value('--restart') != 'no': raise RuntimeError('Machine creation safety flags differ')
         resolved=json.loads((recorded/'machine.json').read_text())['config']['image']
-        s.update(machine=True, ready=False, command=command, image=resolved, created=value('--env').split('=', 1)[1]); out = 'Started STUB machine'
+        s.update(machine=True, ready=False, command=command, image=resolved, region=value('--region'), created=value('--env').split('=', 1)[1]); out = 'Started STUB machine'
     elif a[:2] == ['machine', 'list']:
         out = [json.loads((recorded/('machines-ready.json' if s.get('ready') else 'machines-created.json')).read_text())[0]] if s['machine'] else []
         if out:
+            out[0]['region'] = 'iad' if os.environ.get('GATE_STUB_BAD') == 'region' else s['region']
             out[0]['config'].update(image=s.get('image'), env=dict(P2_MACHINE_CREATED_UNIX=s['created']), init=dict(cmd=s['command']))
         if value('--app') != s.get('name'):
             out = [dict(state='started', config=dict(guest=dict(cpu_kind='performance' if value('--app') == 'fixture-door' else 'shared')))]
@@ -140,7 +141,8 @@ with state.with_suffix('.lock').open('w') as lock:
             write(s)
             print('Fixture hash')
             raise SystemExit(17 if fail else 0)
-        complete = s.get('sessionCompleted', False)
+        bundle_name = Path(os.environ.get('GATE_BUNDLE', 'input/session-0.tar.gz')).name
+        complete = s.get('sessionCompleted', False) and not (root / ('invalid-' + bundle_name)).is_file()
         status = dict(completedAllDeclaredRounds=complete, exitCode=0 if complete else 2)
         members = neutral_records()
         import gate_schedule
@@ -148,6 +150,8 @@ with state.with_suffix('.lock').open('w') as lock:
         with tarfile.open(Path(a[-1]), 'w:gz') as tar:
             for name, blob in [('session.log', b'STUB ONLY; no benchmark ran\n'), ('results/session-status.json', json.dumps(status).encode()), ('results/members.json', members), ('results/session-start.json', startup)] + ([('results/recovery-diagnostic.json', b'{"diagnosticOnly":true}')] if s.get('partialArchiveAttempted') else []):
                 info = tarfile.TarInfo(name); info.size = len(blob); tar.addfile(info, io.BytesIO(blob))
+            if (root / 'fixture-host.json').is_file():
+                tar.add(root / 'fixture-host.json', arcname='results/host.json')
         s['downloaded'] = True; out = 'Downloaded STUB'
     else:
         raise RuntimeError('Unknown stub command')

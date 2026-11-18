@@ -141,6 +141,20 @@ def worker_plan(plan, *, repeat=False, selected=None):
     selected = set(rows) if selected is None else set(selected)
     require(selected <= set(rows), 'Unknown repeat row')
     blocks, members, builds, workloads = [], {}, {}, {}
+    def add_build(spec):
+        build = build_id(spec)
+        execution = {key: copy.deepcopy(spec[key]) for key in ('commit', 'treeId', 'runtime', 'dllSha256s', 'client', 'harness') if key in spec}
+        require(builds.setdefault(build, execution) == execution, 'One build has inconsistent installation metadata')
+        return build
+
+    probe = {}
+    if 'probe' in plan:
+        reference = next((row for row in plan['rows'] if row.get('rowClass', 'gated') == 'gated'), None)
+        require(reference is not None and plan.get('probeJob', {}).get('replay') == 'offline', 'Missing gated baseline or offline workload for probe')
+        workload = opaque(plan['scheduleSeed'], ['probe-workload'])
+        workloads[workload] = copy.deepcopy(plan['probeJob'])
+        rule = {key: plan['probe'][key] for key in ('statistic', 'limit', 'processes', 'maxDraws', 'gen0BudgetBytes')}
+        probe['probe'] = dict(rule, build=add_build(reference['sides']['baseline']), workload=workload)
     for block in plan['repeatSchedule' if repeat else 'schedule']:
         if block['row'] not in selected:
             continue
@@ -154,17 +168,12 @@ def worker_plan(plan, *, repeat=False, selected=None):
         for pair in block['pairs']:
             for role, identifier in pair['members'].items():
                 spec = row['sides']['baseline' if block['phase'] == 'A' else role]
-                build = build_id(spec)
-                execution = {key: copy.deepcopy(spec[key]) for key in ('commit', 'treeId', 'runtime', 'dllSha256s', 'client', 'harness') if key in spec}
-                if build in builds:
-                    require(builds[build] == execution, 'One build has inconsistent installation metadata')
-                builds[build] = execution
-                members[identifier] = dict(build=build)
+                members[identifier] = dict(build=add_build(spec))
         blocks.append(dict(id=block['id'], members=block['members'], workload=workload,
                            chargeSeconds=row.get('chargeSeconds', 0)))
     limits = {key: plan[key] for key in ('destroyGuardSeconds', 'measurementCutoffSeconds', 'limitUsd',
-                                       'limitWithRepeatUsd', 'repeatAllowed', 'counts') if key in plan}
-    return dict(limits, scheduleVersion=VERSION, blocks=blocks, members=members, builds=builds, workloads=workloads)
+                                       'limitWithRepeatUsd', 'repeatAllowed', 'counts', 'region') if key in plan}
+    return dict(limits, scheduleVersion=VERSION, blocks=blocks, members=members, builds=builds, workloads=workloads, **probe)
 
 
 def restore_pairs(plan, records, *, repeat=False):

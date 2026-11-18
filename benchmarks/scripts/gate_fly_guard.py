@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 import re
+import stat
 import sys
 import tarfile
 
@@ -31,6 +32,15 @@ def listing(p, keys):
     return x
 
 
+def probe_entries(stream, ids):
+    expected = {'results/probe.json', *(f'results/probe/{identifier}.json' for identifier in ids)}
+    entries = [item for item in stream.getmembers() if item.name == 'results/probe.json' or
+               re.fullmatch(r'results/probe/[^/]+[.]json', item.name)]
+    require(len(entries) == len(expected) and {item.name for item in entries} == expected and all(item.isfile() for item in entries),
+            'Invalid probe archive entries')
+    return {item.name: item for item in entries}
+
+
 def app_names(items):
     result = set()
     for item in items:
@@ -46,7 +56,7 @@ def names(p):
     return app_names(listing(p, ['apps', 'Apps']))
 
 
-from gate_time import MAX_APP_SECONDS, validate_limits
+from gate_time import MAX_APP_SECONDS, region_for, validate_limits, validate_probe_rule
 SHUTDOWN_MARGIN_SECONDS = 10
 
 
@@ -56,10 +66,63 @@ def machine_command(plan):
     return f'remaining=$((P2_MACHINE_CREATED_UNIX + {stop} - $(date +%s))); ((remaining > 0)) || exit 0; exec /usr/bin/sleep "$remaining"'
 
 
-def verified_launch_inputs(here, ready):
+def retry_claim(ready, retry, go, dispatch_fd, *, acquire=False):
+    original = retry.get('originalSealId', '')
+    require(re.fullmatch(r'[0-9a-f]{64}', original), 'Invalid original seal ID for retry claim')
+    message = 'Retry requires an active retry dispatch owning the claim and GO'
+    try:
+        info = os.fstat(dispatch_fd)
+        secret = os.pread(dispatch_fd, 96, 0)
+        require(stat.S_ISREG(info.st_mode) and info.st_nlink == 0 and len(secret) == 96 and
+                secret[:64] == go.encode('ascii'), message)
+    except OSError as error:
+        raise RuntimeError(message) from error
+    proof = dict(sealId=go, dispatchSha256=hashlib.sha256(secret).hexdigest())
+    if not acquire and os.environ.get('GATE_FIRST_GO'):
+        require(os.environ['GATE_FIRST_GO'] == go, 'Go differs from seal')
+        return  # Claim only after the remaining shell preflight succeeds.
+    claims = ready.resolve().parent.parent / 'retry-claims'
+    if acquire:
+        claims.mkdir(exist_ok=True)
+    try:
+        directory = os.open(claims, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        try:
+            if acquire:
+                fd = os.open(original, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600, dir_fd=directory)
+                with os.fdopen(fd, 'w') as stream:
+                    json.dump(proof, stream)
+            else:
+                fd = os.open(original, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=directory)
+                with os.fdopen(fd, 'rb') as stream:
+                    require(stat.S_ISREG(os.fstat(stream.fileno()).st_mode) and json.loads(stream.read(4096)) == proof, message)
+                require(json.loads((ready.parent / 'time/launch-started.json').read_bytes()) == dict(sealId=go), message)
+        finally:
+            os.close(directory)
+    except (OSError, ValueError) as error:
+        if acquire:
+            raise       # A partial claim still burns the lineage.
+        raise RuntimeError(message) from error
+
+
+def consume_go(ready, go, *, dispatch_fd=0):
+    raw = ready.read_bytes()
+    require(hashlib.sha256(raw).hexdigest() == go, 'Go differs from seal')
+    retry = json.loads(raw).get('retryOf')
+    if retry is not None:
+        retry_claim(ready, retry, go, dispatch_fd, acquire=True)
+    marker = ready.parent / 'time/launch-started.json'
+    with marker.open('x') as stream:
+        json.dump(dict(sealId=go), stream)
+        stream.write('\n')
+
+
+def verified_launch_inputs(here, ready, *, dispatch_fd=0):
     import gate
     seal = gate.read_seal(ready.parent)
-    require(sha(ready) == (ready.parent / 'seal.id').read_text().strip(), 'Seal identity changed')
+    go = sha(ready)
+    require(go == (ready.parent / 'seal.id').read_text().strip(), 'Seal identity changed')
+    if 'retryOf' in seal:
+        retry_claim(ready, seal['retryOf'], go, dispatch_fd)
     # Run plan is selected by a fixed archive path, never by an unsealed local copy.
     relative = os.environ['GATE_BUNDLE']
     bundle = (ready.parent / relative).resolve()
@@ -72,6 +135,7 @@ def verified_launch_inputs(here, ready):
         member = stream.getmember('plan.json')
         require(member.isfile(), 'Archive plan is not regular')
         plan = json.loads(stream.extractfile(member).read())
+    validate_probe_rule(plan.get('probe'))
     # Every launcher helper is snapshotted and content-bound, including its imports.
     for path in here.iterdir():
         if path.is_file():
@@ -81,7 +145,7 @@ def verified_launch_inputs(here, ready):
     version = seal['flyctlVersion']
     return dict(bundle=str(bundle), sha256=hashlib.sha256(data).hexdigest(), machineCommand=machine_command(plan),
                 guard=plan['destroyGuardSeconds'], cutoff=plan['measurementCutoffSeconds'], version=version,
-                image=seal['image'])
+                image=seal['image'], region=region_for(plan))
 
 
 def clean_run_folder(root):
@@ -184,9 +248,10 @@ def main():
         machines = listing(root / 'machines-ready.json', ['machines', 'Machines'])
         require(len(machines) == 1, 'Exactly one machine required')
         m = machines[0]
+        plan = json.loads((root / 'verified-plan.json').read_text())
         c = m.get('config', {})
         g = c.get('guest', {})
-        require(m.get('id', m.get('ID')) == machine_id and m.get('state') == 'started' and m.get('region') == 'iad', 'Wrong machine identity/state/region')
+        require(m.get('id', m.get('ID')) == machine_id and m.get('state') == 'started' and m.get('region') == plan.get('region', 'iad'), 'Wrong machine identity/state/region')
         require(c.get('image') == (root / 'image.txt').read_text().strip(), 'Machine image differs from seal')
         events = [event for event in m.get('events', []) if event.get('type') == 'start']
         require(len(events) == 1 and not any(event.get('type') in ('restart', 'replace') for event in m.get('events', [])), 'Machine restart/replacement detected')
@@ -199,7 +264,7 @@ def main():
         command = c.get('init', {}).get('cmd', c.get('init', {}).get('exec'))
         stop = re.search(r'P2_MACHINE_CREATED_UNIX \+ ([0-9]+) - ', verified_command)
         require(stop is not None, 'VM expected command is not a verified absolute stop')
-        require(machine_command(json.loads((root / 'verified-plan.json').read_text())) == verified_command,
+        require(machine_command(plan) == verified_command,
                 'VM expected command violates the independent code cap or canonical form')
         require(command == ['/bin/bash', '-c', verified_command], 'VM main process lacks the sealed absolute stop')
         for filename, keys in [('ips', ['ips', 'Ips', 'IPAddresses']), ('volumes', ['volumes', 'Volumes']), ('secrets', ['secrets', 'Secrets'])]:
@@ -212,18 +277,25 @@ def main():
                 status = json.load(stream.extractfile('results/session-status.json'))
             except (KeyError, TypeError, ValueError):
                 status = dict(completedAllDeclaredRounds=False, reason='Missing/invalid completion status')
-            recovered = 'results/recovery-diagnostic.json' in stream.getnames()
-        complete = status.get('completedAllDeclaredRounds') is True and status.get('exitCode') == 0 and not recovered
+            files = stream.getnames()
+            recovered = 'results/recovery-diagnostic.json' in files
+            clean = isinstance(status, dict) and type(status.get('exitCode')) is int and status['exitCode'] == 0 and not recovered
+            if clean and status.get('probe') == 'rejected' and status.get('completedAllDeclaredRounds') is False and 'results/members.json' not in files:
+                from gate_time import probe_ids
+                try:
+                    rule = json.loads((note / 'verified-plan.json').read_text())['probe']
+                    probe_entries(stream, probe_ids(rule))
+                except (OSError, KeyError, ValueError, TypeError, RuntimeError):
+                    pass  # Missing or incomplete probe evidence is diagnostic only.
+                else:
+                    (note / 'probe-rejected.json').write_text('{"probe":"rejected"}\n')
+                    return
+        complete = clean and status.get('completedAllDeclaredRounds') is True and status.get('probe') != 'rejected'
         if not complete:
             (note / 'diagnostic-only.json').write_text(json.dumps(dict(diagnosticOnly=True, verdict='INCONCLUSIVE', session=status), indent=2) + '\n')
         require(complete, 'DIAGNOSTIC ONLY / INCONCLUSIVE: failed, budget-stopped or incomplete session; numerical go table not evaluated')
     elif mode == 'consume-go':
-        ready, go = Path(args[0]), args[1]
-        require(sha(ready) == go, 'Go differs from seal')
-        marker = ready.parent / 'time/launch-started.json'
-        with marker.open('x') as stream:
-            json.dump(dict(sealId=go), stream)
-            stream.write('\n')
+        consume_go(Path(args[0]), args[1])
     elif mode == 'lock-inode':
         require(os.stat(args[0]).st_ino == os.stat('/proc/self/fd/9').st_ino and
                 os.stat(args[0]).st_dev == os.stat('/proc/self/fd/9').st_dev, 'Fly lock path was replaced')
