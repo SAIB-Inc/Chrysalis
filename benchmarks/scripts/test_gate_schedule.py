@@ -5,11 +5,13 @@ import math
 import hashlib
 import json
 import os
+import tarfile
 import tempfile
 from unittest.mock import patch
 from pathlib import Path
 import unittest
 
+import gate_bundle as bundle
 import gate_time as timing
 from test_gate_time import row, pairs, member
 
@@ -110,7 +112,7 @@ class ScheduleTests(unittest.TestCase):
             with self.assertRaises((ValueError, KeyError, TypeError)):
                 api.verify(changed)
 
-    def test_actual_runner_has_neutral_paths_and_atomic_block_and_tail_cutoffs(self):
+    def worker_schedule(self):
         api = self.api()
         p = plan()
         for r in p['rows']:
@@ -118,8 +120,12 @@ class ScheduleTests(unittest.TestCase):
             r['sides']['candidate'].update(commit='2' * 40, treeId='3' * 40)
             for spec in r['sides'].values():
                 spec.update(client='clients/' + api.build_id(spec) + '/ReplayClient.dll', harness='unused', dllSha256s={})
-        prepared = api.prepare(p)
-        worker = api.worker_plan(prepared)
+        return api.prepare(p)
+
+    def test_actual_runner_has_neutral_paths_and_atomic_block_and_tail_cutoffs(self):
+        api = self.api()
+        worker = api.worker_plan(self.worker_schedule())
+        fingerprint = dict(vendor_id='fixture CPU', flagsSha256='a' * 64)
         for count in (4, 2):
             block = next(b for b in worker['blocks'] if len(b['members']) == count)
             one = dict(worker, blocks=[block], measurementCutoffSeconds=100)
@@ -129,12 +135,22 @@ class ScheduleTests(unittest.TestCase):
                     calls = []
                     def fake(spec, job, dest):
                         calls.append((spec, job, dest))
+                        if dest.parent == root / 'output':
+                            host = dest.parent / 'host.json'
+                            self.assertTrue(host.is_file(), 'Host fingerprint must exist before measuring')
+                            self.assertEqual(json.loads(host.read_text()), fingerprint)
                         self.assertEqual(len(dest.name), 16)
                         self.assertEqual(Path(spec['client']).parent.name, api.build_id(spec))
                         return dict(member(), identity={key: spec[key] for key in ('commit', 'treeId', 'runtime', 'dllSha256s')})
-                    with patch.dict(os.environ, P2_MACHINE_CREATED_UNIX='1000'), patch.object(timing.time, 'time', return_value=1100 - remaining), patch.object(timing.session, 'member', side_effect=fake):
+                    with patch.dict(os.environ, P2_MACHINE_CREATED_UNIX='1000'), \
+                            patch.object(timing.time, 'time', return_value=1100 - remaining), \
+                            patch.object(timing.session, 'host_fingerprint', return_value=fingerprint), \
+                            patch.object(timing.session, 'member', side_effect=fake):
                         self.assertEqual(timing.run(root, one, root / 'output'), bool(expected))
-                    self.assertEqual(len(calls), expected)
+                        self.assertEqual(len(calls), expected)
+                        if count == 2 and expected:
+                            self.assertTrue(timing.run(root, one, root / 'dry-output', dry=True))
+                            self.assertFalse((root / 'dry-output/host.json').exists())
                     if calls:
                         raw = json.loads((root / 'output/members.json').read_text())
                         self.assertEqual([r['id'] for r in raw], block['members'])
@@ -142,6 +158,36 @@ class ScheduleTests(unittest.TestCase):
                         text = json.dumps(raw)
                         for semantic in ('baseline', 'candidate'):
                             self.assertNotIn(semantic, text)
+
+    def test_optional_fingerprint_write_failure_keeps_session_and_explains_null_host(self):
+        prepared = self.worker_schedule()
+        worker = self.api().worker_plan(prepared)
+        worker.update(blocks=worker['blocks'][:1], measurementCutoffSeconds=100)
+        fingerprint = dict(vendor_id='fixture CPU', flagsSha256='a' * 64)
+        save_json = timing.session.save
+
+        def save(path, value):
+            if Path(path).name == 'host.json':
+                raise OSError('fixture: cannot write optional host file')
+            save_json(path, value)
+
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            output = root / 'results'
+            with patch.dict(os.environ, P2_MACHINE_CREATED_UNIX='1000'), \
+                    patch.object(timing.time, 'time', return_value=1001), \
+                    patch.object(timing.session, 'host_fingerprint', return_value=fingerprint), \
+                    patch.object(timing.session, 'member', side_effect=lambda *args: member()) as measure, \
+                    patch.object(timing.session, 'save', side_effect=save):
+                self.assertTrue(timing.run(root, worker, output))
+            self.assertEqual(measure.call_count, len(worker['blocks'][0]['members']))
+            self.assertFalse((output / 'host.json').exists())
+            save_json(root / 'cleanup-proof.json', dict(ourAppAbsent=True))
+            with tarfile.open(root / 'results.tar.gz', 'w:gz') as archive:
+                archive.add(output, arcname='results')
+            payload = bundle.archive_payload(root, prepared)
+            self.assertIsNone(payload['invalid'])
+            self.assertEqual(payload['host'], dict(dict.fromkeys(fingerprint), error='Fingerprint write failed'))
 
     def test_fixed_raw_inference_is_identical_with_schedule_information(self):
         api = self.api()

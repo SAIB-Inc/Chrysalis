@@ -140,7 +140,8 @@ with state.with_suffix('.lock').open('w') as lock:
             write(s)
             print('Fixture hash')
             raise SystemExit(17 if fail else 0)
-        complete = s.get('sessionCompleted', False)
+        bundle_name = Path(os.environ.get('GATE_BUNDLE', 'input/session-0.tar.gz')).name
+        complete = s.get('sessionCompleted', False) and not (root / ('invalid-' + bundle_name)).is_file()
         status = dict(completedAllDeclaredRounds=complete, exitCode=0 if complete else 2)
         members = neutral_records()
         import gate_schedule
@@ -148,6 +149,8 @@ with state.with_suffix('.lock').open('w') as lock:
         with tarfile.open(Path(a[-1]), 'w:gz') as tar:
             for name, blob in [('session.log', b'STUB ONLY; no benchmark ran\n'), ('results/session-status.json', json.dumps(status).encode()), ('results/members.json', members), ('results/session-start.json', startup)] + ([('results/recovery-diagnostic.json', b'{"diagnosticOnly":true}')] if s.get('partialArchiveAttempted') else []):
                 info = tarfile.TarInfo(name); info.size = len(blob); tar.addfile(info, io.BytesIO(blob))
+            if (root / 'fixture-host.json').is_file():
+                tar.add(root / 'fixture-host.json', arcname='results/host.json')
         s['downloaded'] = True; out = 'Downloaded STUB'
     else:
         raise RuntimeError('Unknown stub command')

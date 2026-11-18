@@ -140,7 +140,15 @@ def run(root, plan, output, *, dry=False):
     started = time.monotonic()
     deadline = (time.time() if dry else int(os.environ['P2_MACHINE_CREATED_UNIX'])) + plan['measurementCutoffSeconds']
     records, error, predecessor = [], None, None
+    host_fallback = {}
     try:
+        if not dry:
+            fingerprint = session.host_fingerprint()
+            try:
+                session.save(output / 'host.json', fingerprint)
+            except OSError:
+                # Preserve the optional diagnostic in the mandatory status, without paths from the error.
+                host_fallback['host'] = dict(dict.fromkeys(fingerprint), error='Fingerprint write failed')
         for spec in plan['builds'].values():
             actual = {path.name: hashlib.sha256(path.read_bytes()).hexdigest() for path in (root / spec['client']).parent.glob('*.dll')}
             require(actual == spec['dllSha256s'], 'Every-DLL closure differs before measurement')
@@ -170,7 +178,7 @@ def run(root, plan, output, *, dry=False):
     finally:
         session.save(output / 'session-start.json', schedules.startup_information(records))
     session.save(output / 'session-status.json', dict(completedAllDeclaredRounds=error is None, exitCode=0 if error is None else 2,
-                                                    reason=error, seconds=time.monotonic() - started, dry=dry))
+                                                    reason=error, seconds=time.monotonic() - started, dry=dry, **host_fallback))
     return error is None
 
 
@@ -315,7 +323,7 @@ def read_results(output, seal, *, mode=None):
                     invalid = payload.get('invalid')
                     if row is plan['rows'][0]:
                         lines.append('session-start steal, first five minutes (information only): ' + json.dumps(payload.get('startup', dict(available=False, reason='Not recorded in this legacy fixture')), sort_keys=True))
-                    if row is plan['rows'][0]:
+                        lines.append('host fingerprint (information only): ' + json.dumps(payload.get('host'), sort_keys=True))
                         lines.append('neighbours / duration / cost (context only): ' + json.dumps(payload.get('context', {}), sort_keys=True))
                     chosen = [pair for pair in payload['pairs'] if pair['id'] == row['id']]
                     current = baseline_band(row, chosen) if plan['design'] == 'micro-band' and not invalid else verdict(row, chosen, applied_mode, noise=row.get('noise'), invalid=invalid)

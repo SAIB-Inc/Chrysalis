@@ -495,9 +495,11 @@ class ReviewGateTests(unittest.TestCase):
         scripts = root / 'input/scripts'
         scripts.mkdir(parents=True)
         staged = {value: dict(side(commit=value), dllSha256s={'BenchmarkDotNet.dll': 'bdn'}, harness='harness', client='client') for value in ('base', 'candidate')}
-        args = SimpleNamespace(mode='change', baseline='base', candidate='candidate', only=None, plan=None)
+        plan = root / 'entries.json'
+        gate.session.save(plan, [{key: row[key] for key in ('id', 'kind', 'pairs')} for row in rows])
+        args = SimpleNamespace(mode='change', baseline='base', candidate='candidate', only=None, plan=plan)
         with patch.object(gate, 'local_config', return_value=dict(corporaRoot=str(root))), \
-                patch.object(gate, 'select_rows', return_value=rows), patch.object(gate, 'corpus_identity', return_value='corpus'), \
+                patch.object(gate, 'corpus_identity', return_value='corpus'), \
                 patch.object(gate, 'new_output', return_value=root), patch.object(gate, 'snapshot_scripts', return_value=scripts), \
                 patch.object(gate, 'resolve_side', side_effect=lambda value, mode: staged[value]), \
                 patch.object(gate, 'measurement_inputs', return_value={}), patch.object(gate, 'stage_side', side_effect=lambda info, *args: info), \
@@ -512,6 +514,7 @@ class ReviewGateTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             calls, result = self.command_run(root, rows, noisy=True)
+            self.assertEqual(gate.read_seal(root)['gated'], json.loads((gate.GATE / 'gated.json').read_text()))
             self.assertEqual(len(calls), 2)
             first, aa = calls
             self.assertEqual(first['filter'], 'Example,Stable')
