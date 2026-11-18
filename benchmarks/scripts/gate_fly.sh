@@ -200,3 +200,5 @@ python3 "$HERE/gate_fly_guard.py" result "$NOTE/results.tar.gz" "$NOTE"
 
 # Context cannot delay or invalidate the paid result copy.
 neighbours before-fetch
+
+if [[ -f "$NOTE/probe-rejected.json" ]]; then exit 5; fi

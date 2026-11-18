@@ -2,6 +2,7 @@
 import copy
 import io
 import json
+import time
 from pathlib import Path
 import tempfile
 import unittest
@@ -31,6 +32,16 @@ def member(factor=1):
                 identity={key: side()[key] for key in ('commit', 'treeId', 'runtime', 'dllSha256s')})
 
 
+def probe_rule(**changes):
+    return dict(dict(statistic='cv', limit=.054, processes=16, maxDraws=6, gen0BudgetBytes=16777216), **changes)
+
+
+def probe_records(*, noisy=False, budget=16777216):
+    record = dict(exitCode=0, data=dict(rows=[dict(nsPerBlock=n) for n in ([1, 3] if noisy else [99, 101]) * 30],
+                                      processSettings=dict(gcConfiguration=dict(GCGen0MaxBudget=budget))))
+    return {f'probe-{number:02}': copy.deepcopy(record) for number in range(1, 17)}
+
+
 def pairs(r=None, ratio=1, *, a=None):
     r = r or row()
     result = []
@@ -47,6 +58,148 @@ def pairs(r=None, ratio=1, *, a=None):
 
 
 class TimeTests(unittest.TestCase):
+    def test_probe_statistic_and_validation(self):
+        records = probe_records(noisy=True)
+        cv = (60 / 59) ** .5 / 2
+        result = timing.probe_result(records, probe_rule(limit=cv))
+        self.assertAlmostEqual(result['cv'], cv)
+        self.assertAlmostEqual(result['lag1'], -59 / 60)
+        self.assertEqual(result['decision'], 'kept')
+        self.assertEqual(timing.probe_result(records, probe_rule(limit=cv - 1e-8))['reasons'], ['cv-over-limit'])
+        self.assertEqual(timing.probe_result(probe_records(budget=8388608), probe_rule())['reasons'], ['gen0-budget-mismatch'])
+        self.assertEqual(timing.probe_result(probe_records(noisy=True, budget=8388608), probe_rule())['reasons'],
+                         ['cv-over-limit', 'gen0-budget-mismatch'])
+        for what in ('missing process', 'exit', 'missing budget', 'bad budget', 'nan', 'short', 'constant'):
+            with self.subTest(what=what), self.assertRaisesRegex(ValueError, 'probe|Probe'):
+                bad = copy.deepcopy(records)
+                record = bad['probe-01']
+                if what == 'missing process': bad.pop('probe-16')
+                if what == 'exit': record['exitCode'] = 1
+                if what == 'missing budget': record['data'].pop('processSettings')
+                if what == 'bad budget': record['data']['processSettings']['gcConfiguration']['GCGen0MaxBudget'] = True
+                if what == 'nan': record['data']['rows'][0]['nsPerBlock'] = float('nan')
+                if what == 'short': record['data']['rows'].pop()
+                if what == 'constant': record['data']['rows'] = [dict(nsPerBlock=1)] * 60
+                timing.probe_result(bad, probe_rule())
+
+    def test_probe_worker_uses_baseline_before_blocks_and_errors_without_redraw(self):
+        job = dict(kind='time', replay='offline', dotnet='d', server='s', capture='c', environment={})
+        one = dict(client='baseline/client.dll', harness='baseline/bench.dll', dllSha256s={})
+        two = dict(one, client='candidate/client.dll')
+        plan = dict(builds={'a': one, 'b': two}, counts=[180, 60], measurementCutoffSeconds=6600,
+                    probe=dict(probe_rule(), build='a', workload='ref'), workloads={'ref': job, 'block': job},
+                    blocks=[dict(members=['measured'], workload='block', chargeSeconds=13)], members={'measured': dict(build='b')})
+        for kind, budget in [('keep', 16777216), ('reject', 8388608), ('error', None)]:
+            with self.subTest(kind=kind), tempfile.TemporaryDirectory() as name:
+                root = Path(name)
+                records = probe_records(budget=budget)
+                seen = []
+                def run(spec, job, destination, **_):
+                    seen.append(destination.name)
+                    if destination.name in records:
+                        self.assertEqual(spec['client'], str(root / one['client']))
+                        self.assertEqual(job['counts'], [180, 60])
+                        return records[destination.name]
+                    self.assertEqual(spec['client'], str(root / two['client']))
+                    return member()
+                out = root / 'out'
+                with patch.dict('os.environ', P2_MACHINE_CREATED_UNIX=str(int(time.time()))), patch.object(timing.session, 'member', side_effect=run):
+                    self.assertEqual(timing.run(root, plan, out), kind != 'error')
+                status = json.loads((out / 'session-status.json').read_text())
+                self.assertEqual(status['completedAllDeclaredRounds'], kind == 'keep')
+                self.assertEqual(status['exitCode'], 2 if kind == 'error' else 0)
+                if kind == 'error':
+                    self.assertNotIn('measured', seen)
+                else:
+                    ids = list(records)
+                    self.assertEqual(seen, ids + (['measured'] if kind == 'keep' else []))
+                    self.assertEqual({path.stem for path in (out / 'probe').glob('*.json')}, set(ids))
+                    self.assertEqual(status['probe'], 'kept' if kind == 'keep' else 'rejected')
+                if kind == 'keep':
+                    measured, = json.loads((out / 'members.json').read_text())
+                    self.assertEqual((measured['id'], measured['predecessorBuild']), ('measured', None))
+                else:
+                    self.assertFalse((out / 'members.json').exists())
+
+    def test_probe_review_gc_never_changes_verdict(self):
+        r = row()
+        ref = timing.verdict(r, pairs(r), 'release')
+        self.assertEqual(ref['status'], 'PASS')
+        for value in (0, None, 'invalid', True):
+            with self.subTest(value=value):
+                observed = pairs(r)
+                for pair in observed:
+                    for item in pair['candidate']['data']['rows']:
+                        item['gen0Collections'] = 0
+                    pair['candidate']['data']['rows'][0]['gen0Collections'] = value
+                got = timing.verdict(r, observed, 'release')
+                self.assertEqual((got['status'], got.get('confidence95')), (ref['status'], ref['confidence95']))
+
+    def test_probe_review_readme_describes_shipped_probe_and_steal_origin(self):
+        text = (Path(__file__).resolve().parents[1] / 'gate/README.md').read_text()
+        self.assertTrue('first long scheduled comparison client' in text)
+        self.assertIn('excluding host probe processes', text)
+        self.assertNotIn('tighter probe limit', text)
+        self.assertNotIn('old rule behind the same probe', text)
+
+    def test_probe_reserve_and_work_cap(self):
+        r = dict(row(pairs=1), aPairs=0, bPairs=1)
+        plan, = timing.size_sessions([r], 'change', budget=40, probe=probe_rule())
+        self.assertEqual(plan['rawSeconds'], 26 + 208)
+        guard = plan['destroyGuardSeconds']
+        self.assertAlmostEqual(plan['limitUsd'], timing.price(guard) + 5 * timing.price(1068))
+        self.assertEqual(plan['limitWithRepeatUsd'], plan['limitUsd'])
+        self.assertEqual(plan['measurementCutoffSeconds'], 753)
+        ams, = timing.size_sessions([dict(r, region='ams')], 'change', budget=40, probe=probe_rule())
+        self.assertEqual(ams['probe']['maxDraws'], 4)
+        self.assertAlmostEqual(ams['limitUsd'], timing.price(guard, 'ams') + 3 * timing.price(1068, 'ams'))
+        with self.assertRaisesRegex(ValueError, 'does not fit'):
+            timing.size_sessions([dict(r, chargeSeconds=int(timing.RAW_CAP // 2))], 'change', budget=40, probe=probe_rule())
+
+    def test_probe_report_gc_rates_are_attributed_and_informational(self):
+        r = row()
+        r['sides']['candidate'] = dict(r['sides']['candidate'], commit='c' * 40)
+        measured = pairs(r)
+        for pair in measured:
+            for name in ('baseline', 'candidate'):
+                d = pair[name]['data']
+                budget = 8388608 if pair['phase'] == 'B' and name == 'candidate' else 16777216
+                d['processSettings'] = dict(gcConfiguration=dict(GCGen0MaxBudget=budget))
+                for item in d['rows']:
+                    item.update(gen0Collections=(1 if budget == 16777216 else 3), gen1Collections=0, gen2Collections=2)
+        result = timing.verdict(r, measured, 'release')
+        self.assertEqual(result['status'], 'PASS')
+        gc = timing.gc_per_build(measured)
+        self.assertEqual(gc['baseline']['passes'], 3 * r['aPairs'] * 60)
+        self.assertEqual(gc['baseline']['collectionsPerPass'], dict(gen0Collections=1, gen1Collections=0, gen2Collections=2))
+        self.assertEqual(gc['candidate']['collectionsPerPass']['gen0Collections'], 3)
+        self.assertEqual(gc['candidate']['gen0BudgetBytes'], [8388608])
+        self.assertEqual(timing.gc_per_build(pairs(r))['candidate']['gen0BudgetBytes'], [])
+        with tempfile.TemporaryDirectory() as name:
+            root = Path(name)
+            plan = dict(design='full', rows=[r], destroyGuardSeconds=7000, limitUsd=.75, limitWithRepeatUsd=1.5)
+            seal = dict(mode='release', ruleVersion=gate.stats.RULE_VERSION, timePlans=[plan])
+            path = root / 'time/0-first.json'
+            gate.session.save(path, dict(pairs=measured, invalid=None))
+            gate.session.save(root / 'time/index.json', [dict(session=0, phase='first', path='time/0-first.json', sha256=gate.digest(path))])
+            values, lines = timing.read_results(root, seal)
+            self.assertEqual(values[r['id']]['status'], 'PASS')
+            self.assertTrue(any('first candidate GC' in line and 'gen0 2880 (3/pass)' in line and 'GCGen0MaxBudget bytes: 8388608' in line
+                                for line in lines))
+            measured[0]['baseline']['data'].pop('processSettings')
+            for observed, expected in [(pairs(r), 'GCGen0MaxBudget bytes: not recorded'),
+                                       (measured, '16777216 (some processes not recorded)')]:
+                gate.session.save(path, dict(pairs=observed, invalid=None))
+                index = json.loads((root / 'time/index.json').read_text()); index[0]['sha256'] = gate.digest(path)
+                gate.session.save(root / 'time/index.json', index)
+                line = next(line for line in timing.read_results(root, seal)[1] if 'first baseline GC' in line)
+                self.assertIn(expected, line)
+                if expected.endswith(': not recorded'):
+                    for i in range(3):
+                        self.assertIn(f'gen{i} not recorded', line)
+                        self.assertNotIn(f'gen{i} 0', line)
+
+
     def test_regional_reserve_and_limit(self):
         self.assertEqual(timing.price(3600, 'ams'), .3667 * 1.038461538 + .03)
         plan = timing.size_sessions([dict(row(), region='ams')], 'change', budget=1)[0]

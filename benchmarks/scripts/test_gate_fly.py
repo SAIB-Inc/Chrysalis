@@ -23,7 +23,8 @@ import gate_bundle as bundle
 import gate_fly_guard as guard
 import gate_time as timing
 import gate_schedule as schedules
-from test_gate_time import pairs, row
+from test_gate_time import pairs, row, probe_records, probe_rule
+from test_gate_session import data as replay_observations
 
 HERE = Path(__file__).resolve().parent
 APP = 'chrysalis-gate-20990405t000100-abcdef12'
@@ -49,12 +50,25 @@ def fixture(root, *, watchdog_delay=None, region=None):
     stub = root / 'stubbin'; stub.mkdir()
     shutil.copy2(HERE / 'fixtures/fly/fly', stub / 'fly')
     for path in (HERE/'fixtures/fly').glob('*.json'):shutil.copy2(path,stub/path.name)
-    (stub / 'fly').chmod(0o755)
+    fake = stub / 'fly'
+    source = fake.read_text()
+    marker = "        with tarfile.open(Path(a[-1]), 'w:gz') as tar:"
+    source = source.replace(marker, "        probes = json.loads((root / 'fixture-probe.json').read_text())\n"
+                            "        if complete: status['probe'] = 'kept'\n" + marker + "\n"
+                            "            for probe_name, value in probes.items():\n"
+                            "                if probe_name == 'results/host.json' and (root / 'fixture-host.json').exists():\n"
+                            "                    value.update(json.loads((root / 'fixture-host.json').read_text()))\n"
+                            "                blob = json.dumps(value).encode(); info = tarfile.TarInfo(probe_name)\n"
+                            "                info.size = len(blob); tar.addfile(info, io.BytesIO(blob))")
+    source = source.replace("            if (root / 'fixture-host.json').is_file():\n                tar.add(root / 'fixture-host.json', arcname='results/host.json')\n", '')
+    fake.write_text(source)
+    fake.chmod(0o755)
     (root / 'token.fixture').write_text('preflight-not-a-token')
     gate.session.save(root / 'local.json', dict(flyTokenFile=str(root / 'token.fixture'), flyLock=str(root / 'test.lock'), flyOrg='fixture-org', corporaRoot='fixture', pinnedBaseline='fixture', flyBudgetLeftUsd=40))
     mode = 'change' if region else 'release'
-    entry = dict(row(pairs=8), region=region, rowClass='recorded-only', aPairs=0, explanation='CAUSE.md') if region else row()
-    plan = schedules.prepare(timing.size_sessions([entry], mode, budget=40)[0])
+    entry = dict(row(pairs=8), region=region, aPairs=0) if region else row()
+    plan = probe_plan(entry, mode)
+    gate.session.save(root / 'fixture-probe.json', probe_parts(plan, 'keep'))
     gate.session.save(root / 'fixture-pairs.json', pairs(plan['rows'][0]))
     source = root / 'bundle'; source.mkdir()
     gate.session.save(source / 'plan.json', schedules.worker_plan(plan))
@@ -95,7 +109,213 @@ def calls(root):
     return [json.loads(line) for line in (root / 'argv.jsonl').read_text().splitlines()] if (root / 'argv.jsonl').exists() else []
 
 
+def loads_draws(root):
+    return json.loads((root / 'time/draws.json').read_text())
+
+
+def probe_plan(entry, mode):
+    plan, = timing.size_sessions([entry], mode, budget=40, probe=probe_rule())
+    return schedules.prepare(dict(plan, probeJob=dict(kind='time', replay='offline')))
+
+
+REJECTION_CASES = {'cv-over-limit', 'gen0-budget-mismatch', 'forged', 'late', 'rejected no proof', 'wrong probe identity', 'wrong probe workload'}
+
+
+def probe_parts(plan, kind):
+    rejected = kind in REJECTION_CASES
+    reasons = [kind if kind in ('cv-over-limit', 'gen0-budget-mismatch') else 'cv-over-limit'] if rejected else []
+    noisy = (kind in REJECTION_CASES and kind not in ('forged', 'gen0-budget-mismatch')) or kind == 'kept-over-limit'
+    budget = 8388608 if kind == 'gen0-budget-mismatch' else 16777216
+    rule = plan['probe']
+    report = dict(decision='rejected' if rejected else 'kept', reasons=reasons, statistic='cv', limit=rule['limit'],
+                  cv=(60 / 59) ** .5 / (2 if noisy else 100), lag1=-59 / 60,
+                  gen0BudgetBytes=dict(expected=rule['gen0BudgetBytes'], observed=[budget]))
+    worker = schedules.worker_plan(plan)
+    reference = worker['builds'][worker['probe']['build']]
+    identity = {key: reference[key] for key in ('commit', 'treeId', 'runtime', 'dllSha256s')}
+    records = probe_records(noisy=noisy, budget=budget)
+    for record in records.values():
+        observed = replay_observations()
+        observed.update(runtime=identity['runtime'], replay='offline', processSettings=record['data']['processSettings'])
+        for item, sample in zip(observed['rows'], record['data']['rows'], strict=True):
+            item.update(sample)
+        record.update(identity=identity, platform='fly', data=observed)
+        if kind == 'wrong probe identity':
+            record['identity'] = dict(commit='f' * 40, treeId='e' * 40, runtime='8.0.1', dllSha256s={})
+        if kind == 'wrong probe workload':
+            observed.update(replay='tcp', warmupPasses=1)
+    parts = {f'results/probe/{name}.json': record for name, record in records.items()}
+    parts['results/probe.json'] = report
+    parts['results/host.json'] = {'vendor_id': 'AuthenticAMD', 'cpu family': '25', 'model': '33', 'stepping': '0',
+                                 'processorCount': 8, 'microcode': None, 'flagsSha256': 'a' * 64}
+    return parts
+
+
+def probe_archive(note, plan, kind, *, selected=None):
+    note.mkdir(parents=True)
+    repeat = selected is not None
+    worker = schedules.worker_plan(plan, repeat=repeat, selected=selected)
+    gate.session.save(note / 'verified-plan.json', worker)
+    parts = probe_parts(plan, kind)
+    report = parts['results/probe.json']
+    rejected = report['decision'] == 'rejected'
+    status = dict(probe=report['decision'], completedAllDeclaredRounds=not rejected, exitCode=0)
+    if kind == 'worker failure':
+        status.update(exitCode=2, completedAllDeclaredRounds=False)
+        parts['results/recovery-diagnostic.json'] = {}
+    parts['results/session-status.json'] = status
+    if not rejected:
+        rows = {r['id']: r for r in plan['rows']}
+        observations = {(p['id'], p['phase'], p['pair']): p for r in rows.values() for p in pairs(r, 1.03)}
+        parts['results/members.json'] = [dict(observations[block['row'], block['phase'], pair['pair']][role], id=identifier,
+                                             build=worker['members'][identifier]['build'])
+                                         for block in plan['repeatSchedule' if repeat else 'schedule'] for pair in block['pairs']
+                                         for role, identifier in pair['members'].items() if identifier in worker['members']]
+    if kind == 'no probe': del parts['results/probe.json']
+    if kind == 'no host': del parts['results/host.json']
+    if kind == 'one cpu': parts['results/host.json']['processorCount'] = 1
+    if kind == 'empty fingerprint': parts['results/host.json'] = dict(processorCount=8)
+    if kind == 'empty kept': parts['results/members.json'] = []
+    if kind == 'corrupt probe': parts['results/probe.json'] = b'{'
+    archive = note / 'results.tar.gz'
+    with tarfile.open(archive, 'w:gz') as stream:
+        for name, value in parts.items():
+            contents = value if isinstance(value, bytes) else bundle.gate_encoded(value)
+            info = tarfile.TarInfo(name); info.size = len(contents)
+            stream.addfile(info, io.BytesIO(contents))
+    (note / 'results.sha256').write_text(('0' * 64 if kind in ('bad hash', 'bad hash and cost') else gate.digest(archive)) + '\n')
+    if kind not in ('no proof', 'rejected no proof'): gate.session.save(note / 'cleanup-proof.json', dict(ourAppAbsent=True))
+    booked = .07 if kind != 'late' else .18
+    if kind == 'bad hash and cost': booked = 4.25
+    within = kind not in ('past guard', 'bad hash and cost')
+    cost = dict(cleanupOutstanding=False, totalEstimateWithReserveUsd=booked, withinSealedGuard=within)
+    (note / 'duration-cost.json').write_text(json.dumps(dict(cost, totalEstimateWithReserveUsd=float('nan')) if kind == 'unknown cost' else cost))
+    with patch.object(sys, 'argv', ['gate_fly_guard.py', 'result', str(archive), str(note)]):
+        try:
+            guard.main()
+        except RuntimeError:
+            return 1
+    return 5 if (note / 'probe-rejected.json').exists() else 0
+
+
 class GuardTests(unittest.TestCase):
+    def probe_dispatch(self, root, kinds, *, launch_limit=None):
+        _, seal, env = fixture(root)
+        plan = seal['timePlans'][0]
+        repeat = kinds[-1] != 'keep'
+        plan.update(probe=probe_rule(), probeJob=dict(kind='time', replay='offline'), repeatAllowed=repeat)
+        plan['limitUsd'] = timing.price(plan['destroyGuardSeconds']) + 5 * timing.price(1068)
+        plan['limitWithRepeatUsd'] = (2 if repeat else 1) * plan['limitUsd']
+        schedules.prepare(plan)
+        gate.session.save(root / 'bundle/plan.json', schedules.worker_plan(plan))
+        seal['files']['input/session-0.tar.gz'] = bundle.pack(root / 'bundle', root / 'input/session-0.tar.gz')
+        go = gate.write_seal(root, seal)
+        launches = []
+        def launch(command, *, env, **kwargs):
+            position = len(launches)
+            self.assertLess(position, len(kinds) if launch_limit is None else launch_limit, 'Unexpected new launch')
+            launches.append(env.get('GATE_FIRST_GO'))
+            if env.get('GATE_FIRST_GO'):
+                with patch.object(sys, 'argv', ['gate_fly_guard.py', 'consume-go', str(root / 'seal.json'), go]):
+                    guard.main()
+            return probe_archive(root / 'time/runs' / command[3], plan, kinds[position])
+        # All provider calls are replaced. The real archive guard, schedule,
+        # sealed authorization, PC verifier, and reporter run against these archives.
+        with patch.dict(os.environ, env), patch.object(bundle, 'held_fly_go', return_value=(root, seal, go)), \
+                patch.object(bundle, 'owned_call', side_effect=launch), contextlib.redirect_stdout(io.StringIO()):
+            status = bundle.fly_held(root)
+        self.assertEqual(launches, [go] + [None] * (len(launches) - 1))
+        index = json.loads((root / 'time/index.json').read_text())
+        self.assertEqual(len(index), 1)
+        path = root / index[0]['path']
+        self.assertEqual(gate.digest(path), index[0]['sha256'])
+        return status, json.loads(path.read_text()), loads_draws(root), len(launches)
+
+    def test_probe_redraws_within_one_go(self):
+        with tempfile.TemporaryDirectory() as name:
+            root = Path(name)
+            status, payload, draws, launches = self.probe_dispatch(root, ['cv-over-limit', 'gen0-budget-mismatch', 'keep'], launch_limit=3)
+            self.assertEqual(launches, 3)
+            self.assertNotEqual(status, 0)  # known slow measured B; repeat disabled below
+            self.assertIsNone(payload['invalid'])
+            self.assertEqual(payload['probe']['decision'], 'kept')
+            self.assertEqual(len(payload['probeRecords']), 16)
+            self.assertEqual([draw['decision'] for draw in draws], ['rejected', 'rejected', 'kept'])
+            self.assertEqual(draws[1]['probe']['gen0BudgetBytes'], dict(expected=16777216, observed=[8388608]))
+            self.assertIn('gen0-budget-mismatch', (root / 'report.txt').read_text())
+
+    def test_probe_review_seal_must_probe_before_dispatch(self):
+        for rule in ('missing', None, dict(probe_rule(), processes=0), probe_rule()):
+            with self.subTest(rule=rule), tempfile.TemporaryDirectory() as name:
+                repo = Path(name); root = repo / 'benchmarks/out/gate-no-probe'
+                _, seal, env = fixture(root)
+                legacy = dict(seal['timePlans'][0])
+                legacy.pop('probe', None); legacy.pop('probeJob', None)
+                schedules.prepare(legacy)
+                gate.session.save(root / 'bundle/plan.json', schedules.worker_plan(legacy))
+                seal['files']['input/session-0.tar.gz'] = bundle.pack(root / 'bundle', root / 'input/session-0.tar.gz')
+                if rule == 'missing':
+                    seal['timePlans'][0].pop('probe', None)
+                else:
+                    seal['timePlans'][0].update(probe=rule, probeJob=dict(kind='time', replay='offline'))
+                schedules.prepare(seal['timePlans'][0])
+                go = gate.write_seal(root, seal)
+                with patch.object(gate, 'REPO', repo), patch.dict(os.environ, env), patch.object(bundle, 'owned_call') as launch:
+                    with self.assertRaisesRegex(ValueError, 'probe'):
+                        bundle.fly_command(go, directory=root)
+                    launch.assert_not_called()
+                self.assertFalse((root / 'time/launch-started.json').exists())
+                self.assertNotEqual(gate.report(root)['outcome'], 'RELEASE PASS')
+
+    def test_probe_review_filtered_repeat_validates_its_members_and_original_reference(self):
+        with tempfile.TemporaryDirectory() as name:
+            root = Path(name)
+            plan = probe_plan(row(), 'release')
+            alternate = row('tcp')
+            alternate['sides']['baseline']['commit'] = 'c' * 40
+            plan['rows'].append(alternate)
+            schedules.prepare(plan)
+            selected = [alternate['id']]
+            for kind in ('keep', 'empty kept'):
+                with self.subTest(kind=kind):
+                    note = root / kind
+                    self.assertEqual(probe_archive(note, plan, kind, selected=selected), 0)
+                    machine = bundle.verified_machine(note, plan, 0, repeat=True, selected=selected)
+                    if kind == 'keep':
+                        self.assertIsNone(machine['invalid'])
+                        self.assertEqual(len(machine['probeRecords']), 16)
+                    else:
+                        self.assertIn('members differ', machine['invalid'])
+
+    def test_probe_review_cost_warning_survives_bad_archive(self):
+        with tempfile.TemporaryDirectory() as name:
+            root = Path(name)
+            _, payload, draws, launches = self.probe_dispatch(root, ['bad hash and cost'])
+            self.assertEqual(launches, 1)
+            self.assertIn('hash', payload['invalid'])
+            self.assertEqual(draws[0]['bookedUsd'], 4.25)
+            text = (root / 'report.txt').read_text()
+            self.assertIn('booked $4.250000', text)
+            self.assertIn('DRAW WARNING: booked cost past machine guard', text)
+            self.assertIn('DRAW WARNING: booked cost exceeds session reservation', text)
+
+    def test_probe_and_machine_refusals(self):
+        for kinds, message in [
+            (['forged'], 'probe'), (['no probe'], 'probe'), (['corrupt probe'], 'probe'),
+            (['worker failure'], 'launcher'), (['no proof'], 'absence'), (['no host'], 'fingerprint'),
+            (['rejected no proof'], 'absence'), (['wrong probe identity'], 'probe'), (['wrong probe workload'], 'probe'),
+            (['empty kept'], 'members'), (['one cpu'], 'fingerprint'), (['empty fingerprint'], 'fingerprint'),
+            (['bad hash'], 'hash'), (['unknown cost'], 'cost'), (['late'] * 4, 'reservation exhausted'),
+            (['cv-over-limit'] * 6, 'no machine kept after 6 draws'),
+            (['cv-over-limit'] * 5 + ['past guard'], 'guard'), (['kept-over-limit'], 'probe'),
+        ]:
+            with self.subTest(kinds=kinds), tempfile.TemporaryDirectory() as name:
+                status, payload, draws, launches = self.probe_dispatch(Path(name), kinds)
+                self.assertNotEqual(status, 0)
+                self.assertEqual(launches, len(kinds))
+                self.assertIn(message, payload['invalid'])
+                self.assertEqual(len(draws), launches)
+
     def test_guard_accepts_indented_recorded_platform_shapes(self):
         recorded = HERE/'fixtures/fly'
         listing = (recorded/'machines-ready.json').read_text()
@@ -346,6 +566,7 @@ class LauncherTests(unittest.TestCase):
                         r['aPairs'] = 0
                     gate.session.save(root / 'fixture-host.json', dict(model='33'))
                 bundle_input = root / 'bundle'
+                timing.finalize_plan(plan, plan['rawSeconds'] - timing.probe_seconds(plan['probe']))
                 schedules.prepare(plan)
                 gate.session.save(bundle_input / 'plan.json', schedules.worker_plan(plan))
                 bundle.pack(bundle_input, root / 'input/session-0.tar.gz')
@@ -363,7 +584,7 @@ class LauncherTests(unittest.TestCase):
                 go = gate.write_seal(root, seal)
                 with patch.object(gate, 'REPO', repo), patch.dict(os.environ, env):
                     result = bundle.fly_command(go)
-                    self.assertEqual(result, expected, (root / 'report.txt').read_text() if (root / 'report.txt').exists() else (root / 'time/0-first-launcher.log').read_text())
+                    self.assertEqual(result, expected, (root / 'report.txt').read_text() if (root / 'report.txt').exists() else (root / 'time/0-first-draw-1-launcher.log').read_text())
                     before = calls(root)
                     with self.assertRaisesRegex(ValueError, 'consumed'):
                         bundle.fly_command(go)
@@ -377,10 +598,10 @@ class LauncherTests(unittest.TestCase):
                 self.assertEqual(gate.digest(payload_path), item['sha256'])
                 payload = json.loads(payload_path.read_text())
                 if mode == 'change':
-                    self.assertEqual(payload['host'], dict(model='33'))
-                    self.assertEqual(report['text'].count('host fingerprint (information only): {"model": "33"}'), 1)
+                    self.assertEqual(payload['host']['model'], '33')
+                    self.assertEqual(report['text'].count('host fingerprint (information only):'), 1)
                 else:
-                    self.assertNotIn('host', payload)
+                    self.assertEqual(payload['host']['processorCount'], 8)
                 self.assertEqual(report['outcome'], 'SUBSET' if mode == 'change' else 'FAIL')
                 self.assertEqual('repeat' in report['rows'][plan['rows'][0]['id']], mode == 'release' and not blocked)
                 if blocked:
@@ -400,8 +621,8 @@ class LauncherTests(unittest.TestCase):
             repo = Path(td); root = repo / 'benchmarks/out/gate-scout'
             _, seal, env = fixture(root)
             rows = [dict(row(pairs=8), id=f'time/preprod-scout{i}-offline', aPairs=0,
-                         region='ewr' if i == 1 else 'ams', rowClass='recorded-only', explanation='CAUSE.md') for i in range(1, 7)]
-            plans = [schedules.prepare(timing.size_sessions([r], 'change', budget=.95)[0]) for r in rows]
+                         region='ewr' if i == 1 else 'ams') for i in range(1, 7)]
+            plans = [probe_plan(r, 'change') for r in rows]
             seal.update(mode='change', rows=rows, timePlans=plans)
             for i, plan in enumerate(plans):
                 gate.session.save(root / 'bundle/plan.json', schedules.worker_plan(plan))
@@ -411,13 +632,13 @@ class LauncherTests(unittest.TestCase):
             (root / 'invalid-session-1.tar.gz').touch()
             go = gate.write_seal(root, seal)
             with patch.object(gate, 'REPO', repo), patch.dict(os.environ, env):
-                self.assertEqual(bundle.fly_command(go), 0)  # Recorded-only outcome is not a validity check.
+                self.assertEqual(bundle.fly_command(go), 2)
             self.assertEqual(sum(c['argv'][:2] == ['machine', 'run'] for c in calls(root)), 2)
             index = json.loads((root / 'time/index.json').read_text())
             self.assertEqual([i['session'] for i in index], [0, 1])
             first, second = [json.loads((root / i['path']).read_text()) for i in index]
             self.assertIsNone(first['invalid'])
-            self.assertIn('incomplete', second['invalid'])
+            self.assertIn('failed worker', second['invalid'])
             text = (root / 'report.txt').read_text()
             self.assertIn('time · Fly performance-8x · arithmetic mean paired ratios', text)
             self.assertIn('session 1 · ewr', text)
@@ -448,8 +669,31 @@ class LauncherTests(unittest.TestCase):
                 compute = cost['conservativeSeconds'] / 3600 * .3667 * 1.038461538
                 self.assertEqual(cost['computeEstimateUsd'], compute)
                 self.assertEqual(cost['totalEstimateWithReserveUsd'], compute + .03)
-                self.assertEqual(cost['sealedLimitUsd'], plan['limitUsd'])
+                self.assertEqual(cost['sealedLimitUsd'], timing.price(plan['destroyGuardSeconds'], plan['region']))
                 self.assert_absent_owned(root)
+
+    def test_probe_rejection_shell_exit_after_proven_cleanup(self):
+        with tempfile.TemporaryDirectory() as name:
+            root = Path(name)
+            _, seal, env = fixture(root)
+            plan = seal['timePlans'][0]
+            plan.update(probe=probe_rule(), probeJob=dict(kind='time', replay='offline'))
+            schedules.prepare(plan)
+            gate.session.save(root / 'bundle/plan.json', schedules.worker_plan(plan))
+            seal['files']['input/session-0.tar.gz'] = bundle.pack(root / 'bundle', root / 'input/session-0.tar.gz')
+            gate.write_seal(root, seal)
+            self.assertEqual(probe_archive(root / 'stub-probe', plan, 'gen0-budget-mismatch'), 5)
+            stub = root / 'stubbin/fly'
+            source = stub.read_text()
+            marker = "        s['downloaded'] = True; out = 'Downloaded STUB'"
+            self.assertEqual(source.count(marker), 1)
+            stub.write_text(source.replace(marker, "        Path(a[-1]).write_bytes((root / 'stub-probe/results.tar.gz').read_bytes())\n" + marker))
+            self.assertEqual(launch(root, env), 5)
+            self.assert_absent_owned(root)
+            note = root / 'time/runs' / APP
+            self.assertTrue((note / 'probe-rejected.json').exists())
+            self.assertTrue(json.loads((note / 'cleanup-proof.json').read_text())['ourAppAbsent'])
+            self.assertFalse((note / 'diagnostic-only.json').exists())
 
     def test_success_neighbours_context_only_token_fd_and_no_private_fly_config(self):
         root, status = self.run_case(extra=dict(GATE_STUB_NEIGHBOUR_CHANGE='1'))

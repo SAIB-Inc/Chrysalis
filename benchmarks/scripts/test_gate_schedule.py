@@ -13,7 +13,7 @@ import unittest
 
 import gate_bundle as bundle
 import gate_time as timing
-from test_gate_time import row, pairs, member
+from test_gate_time import row, pairs, member, probe_rule
 
 
 def plan():
@@ -111,6 +111,27 @@ class ScheduleTests(unittest.TestCase):
             changed[field] = {}
             with self.assertRaises((ValueError, KeyError, TypeError)):
                 api.verify(changed)
+
+    def test_probe_reference_survives_baab_and_filtered_repeat(self):
+        api = self.api()
+        core = plan()
+        tcp, offline = core['rows']
+        tcp['aPairs'] = offline['aPairs'] = 0
+        tcp['bPairs'] = offline['bPairs'] = 2
+        tcp['sides']['candidate']['commit'] = 'c' * 40
+        offline['sides']['baseline']['commit'] = 'd' * 40
+        core.update(probe=probe_rule(), probeJob=dict(kind='time', replay='offline'))
+        with patch.object(api.Shuffle, 'below', return_value=1), patch.object(api.Shuffle, 'shuffle', side_effect=list.reverse):
+            api.prepare(core)
+            worker = api.worker_plan(core)
+            repeat = api.worker_plan(core, repeat=True, selected=[offline['id']])
+        self.assertEqual(worker['members'][worker['blocks'][0]['members'][0]]['build'], api.build_id(tcp['sides']['candidate']))
+        self.assertEqual(worker['probe']['build'], api.build_id(tcp['sides']['baseline']))
+        self.assertEqual(worker['probe'], repeat['probe'])
+        self.assertEqual(repeat['workloads'][repeat['probe']['workload']]['replay'], 'offline')
+        self.assertIn(repeat['probe']['build'], repeat['builds'])
+        self.assertNotIn('baseline', worker['probe'])
+        self.assertNotIn('candidate', worker['probe'])
 
     def worker_schedule(self):
         api = self.api()

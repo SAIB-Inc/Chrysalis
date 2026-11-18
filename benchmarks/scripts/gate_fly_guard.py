@@ -31,6 +31,15 @@ def listing(p, keys):
     return x
 
 
+def probe_entries(stream, ids):
+    expected = {'results/probe.json', *(f'results/probe/{identifier}.json' for identifier in ids)}
+    entries = [item for item in stream.getmembers() if item.name == 'results/probe.json' or
+               re.fullmatch(r'results/probe/[^/]+[.]json', item.name)]
+    require(len(entries) == len(expected) and {item.name for item in entries} == expected and all(item.isfile() for item in entries),
+            'Invalid probe archive entries')
+    return {item.name: item for item in entries}
+
+
 def app_names(items):
     result = set()
     for item in items:
@@ -46,7 +55,7 @@ def names(p):
     return app_names(listing(p, ['apps', 'Apps']))
 
 
-from gate_time import MAX_APP_SECONDS, region_for, validate_limits
+from gate_time import MAX_APP_SECONDS, region_for, validate_limits, validate_probe_rule
 SHUTDOWN_MARGIN_SECONDS = 10
 
 
@@ -72,6 +81,7 @@ def verified_launch_inputs(here, ready):
         member = stream.getmember('plan.json')
         require(member.isfile(), 'Archive plan is not regular')
         plan = json.loads(stream.extractfile(member).read())
+    validate_probe_rule(plan.get('probe'))
     # Every launcher helper is snapshotted and content-bound, including its imports.
     for path in here.iterdir():
         if path.is_file():
@@ -213,8 +223,20 @@ def main():
                 status = json.load(stream.extractfile('results/session-status.json'))
             except (KeyError, TypeError, ValueError):
                 status = dict(completedAllDeclaredRounds=False, reason='Missing/invalid completion status')
-            recovered = 'results/recovery-diagnostic.json' in stream.getnames()
-        complete = status.get('completedAllDeclaredRounds') is True and status.get('exitCode') == 0 and not recovered
+            files = stream.getnames()
+            recovered = 'results/recovery-diagnostic.json' in files
+            clean = isinstance(status, dict) and type(status.get('exitCode')) is int and status['exitCode'] == 0 and not recovered
+            if clean and status.get('probe') == 'rejected' and status.get('completedAllDeclaredRounds') is False and 'results/members.json' not in files:
+                from gate_time import probe_ids
+                try:
+                    rule = json.loads((note / 'verified-plan.json').read_text())['probe']
+                    probe_entries(stream, probe_ids(rule))
+                except (OSError, KeyError, ValueError, TypeError, RuntimeError):
+                    pass  # Missing or incomplete probe evidence is diagnostic only.
+                else:
+                    (note / 'probe-rejected.json').write_text('{"probe":"rejected"}\n')
+                    return
+        complete = clean and status.get('completedAllDeclaredRounds') is True and status.get('probe') != 'rejected'
         if not complete:
             (note / 'diagnostic-only.json').write_text(json.dumps(dict(diagnosticOnly=True, verdict='INCONCLUSIVE', session=status), indent=2) + '\n')
         require(complete, 'DIAGNOSTIC ONLY / INCONCLUSIVE: failed, budget-stopped or incomplete session; numerical go table not evaluated')
