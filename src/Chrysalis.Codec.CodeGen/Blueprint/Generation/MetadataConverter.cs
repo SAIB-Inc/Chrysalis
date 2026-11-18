@@ -76,26 +76,24 @@ internal static class MetadataConverter
 
         // Emit union interface serializer
         SerializableTypeMetadata unionMeta = new(
-            baseIdentifier: interfaceName,
-            identifier: interfaceName,
-            @namespace: ns,
-            typeParams: null,
-            fullyQualifiedName: $"global::{ns}.{interfaceName}",
-            keyword: "interface",
-            cborTag: null,
-            cborIndex: null,
-            isIndefinite: false,
-            isDefinite: false,
-            definiteSize: null,
-            serializationType: SerializationType.Union,
-            validator: null,
-            shouldPreserveRaw: true
-        );
-
-        foreach (SerializableTypeMetadata child in childMetadatas)
+            BaseIdentifier: interfaceName,
+            Indentifier: interfaceName,
+            Namespace: ns,
+            TypeParams: null,
+            FullyQualifiedName: $"global::{ns}.{interfaceName}",
+            Keyword: "interface",
+            CborTag: null,
+            CborIndex: null,
+            IsIndefinite: false,
+            IsDefinite: false,
+            DefiniteSize: null,
+            SerializationType: SerializationType.Union,
+            Validator: null,
+            ShouldPreserveRaw: true
+        )
         {
-            unionMeta.ChildTypes.Add(child);
-        }
+            ChildTypes = new(childMetadatas)
+        };
 
         Emitter.EmitSerializerAndMetadata(context, unionMeta);
     }
@@ -108,58 +106,50 @@ internal static class MetadataConverter
         }
 
         SerializableTypeMetadata metadata = new(
-            baseIdentifier: type.TypeName,
-            identifier: type.TypeName,
-            @namespace: ns,
-            typeParams: null,
-            fullyQualifiedName: $"global::{ns}.{type.TypeName}",
-            keyword: "record",
-            cborTag: null,
-            cborIndex: null,
-            isIndefinite: type.TupleFields.Count > 0,
-            isDefinite: false,
-            definiteSize: null,
-            serializationType: SerializationType.List,
-            validator: null,
-            shouldPreserveRaw: true
-        );
-
-        foreach (ResolvedField field in type.TupleFields)
+            BaseIdentifier: type.TypeName,
+            Indentifier: type.TypeName,
+            Namespace: ns,
+            TypeParams: null,
+            FullyQualifiedName: $"global::{ns}.{type.TypeName}",
+            Keyword: "record",
+            CborTag: null,
+            CborIndex: null,
+            IsIndefinite: type.TupleFields.Count > 0,
+            IsDefinite: false,
+            DefiniteSize: null,
+            SerializationType: SerializationType.List,
+            Validator: null,
+            ShouldPreserveRaw: true
+        )
         {
-            metadata.Properties.Add(ConvertField(field));
-        }
+            Properties = new(type.TupleFields.Select(ConvertField))
+        };
 
         Emitter.EmitSerializerAndMetadata(context, metadata);
     }
 
     private static SerializableTypeMetadata CreateConstrMetadata(
         string ns, string typeName, int constrIndex,
-        List<ResolvedField> fields)
-    {
-        SerializableTypeMetadata metadata = new(
-            baseIdentifier: typeName,
-            identifier: typeName,
-            @namespace: ns,
-            typeParams: null,
-            fullyQualifiedName: $"global::{ns}.{typeName}",
-            keyword: "record",
-            cborTag: null,
-            cborIndex: constrIndex,
-            isIndefinite: fields.Count > 0,
-            isDefinite: false,
-            definiteSize: null,
-            serializationType: SerializationType.Constr,
-            validator: null,
-            shouldPreserveRaw: true
-        );
-
-        foreach (ResolvedField field in fields)
+        List<ResolvedField> fields) =>
+        new(
+            BaseIdentifier: typeName,
+            Indentifier: typeName,
+            Namespace: ns,
+            TypeParams: null,
+            FullyQualifiedName: $"global::{ns}.{typeName}",
+            Keyword: "record",
+            CborTag: null,
+            CborIndex: constrIndex,
+            IsIndefinite: fields.Count > 0,
+            IsDefinite: false,
+            DefiniteSize: null,
+            SerializationType: SerializationType.Constr,
+            Validator: null,
+            ShouldPreserveRaw: true
+        )
         {
-            metadata.Properties.Add(ConvertField(field));
-        }
-
-        return metadata;
-    }
+            Properties = new(fields.Select(ConvertField))
+        };
 
     private static SerializablePropertyMetadata ConvertField(ResolvedField field)
     {
@@ -174,33 +164,33 @@ internal static class MetadataConverter
         string propertyType = fqn + (isNullable ? "?" : "");
 
         return new SerializablePropertyMetadata(
-            propertyName: field.Name,
-            propertyType: propertyType,
-            propertyTypeFullName: fqn,
-            propertyTypeNamespace: typeNs,
-            isList: false,
-            isMap: false,
-            listItemType: null,
-            listItemTypeFullName: null,
-            listItemTypeNamespace: null,
-            isListItemTypeOpenGeneric: false,
-            isMapKeyTypeOpenGeneric: false,
-            isMapValueTypeOpenGeneric: false,
-            mapKeyType: null,
-            mapValueType: null,
-            mapKeyTypeFullName: null,
-            mapValueTypeFullName: null,
-            mapKeyTypeNamespace: null,
-            mapValueTypeNamespace: null,
-            isNullable: isNullable,
-            size: null,
-            isIndefinite: false,
-            isDefinite: false,
-            order: field.Order,
-            propertyKeyString: null,
-            propertyKeyInt: null,
-            isOpenGeneric: false,
-            isPropertyTypeUnion: IsUnionType(baseType)
+            PropertyName: field.Name,
+            PropertyType: propertyType,
+            PropertyTypeFullName: fqn,
+            PropertyTypeNamespace: typeNs,
+            IsList: false,
+            IsMap: false,
+            ListItemType: null,
+            ListItemTypeFullName: null,
+            ListItemTypeNamespace: null,
+            IsListItemTypeOpenGeneric: false,
+            IsMapKeyTypeOpenGeneric: false,
+            IsMapValueTypeOpenGeneric: false,
+            MapKeyType: null,
+            MapValueType: null,
+            MapKeyTypeFullName: null,
+            MapValueTypeFullName: null,
+            MapKeyTypeNamespace: null,
+            MapValueTypeNamespace: null,
+            IsNullable: isNullable,
+            Size: null,
+            IsIndefinite: false,
+            IsDefinite: false,
+            Order: field.Order,
+            PropertyKeyString: null,
+            PropertyKeyInt: null,
+            IsOpenGeneric: false,
+            IsPropertyTypeUnion: IsUnionType(baseType)
         );
     }
 

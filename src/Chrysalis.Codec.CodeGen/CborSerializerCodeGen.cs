@@ -17,14 +17,28 @@ public sealed partial class CborSerializerCodeGen : IIncrementalGenerator
     /// <param name="context">The generator initialization context.</param>
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
-        IncrementalValueProvider<ImmutableArray<TypeDeclarationSyntax>> typeProvider = context.SyntaxProvider.CreateSyntaxProvider(
-                predicate: static (node, _) => node is TypeDeclarationSyntax tds && tds.AttributeLists.Count > 0,
-                transform: static (ctx, _) => (TypeDeclarationSyntax)ctx.Node
-            ).Collect();
+        IncrementalValuesProvider<Candidate> serializable = FindCandidates(context, Parser.CborSerializable);
+        IncrementalValuesProvider<Candidate> plutus = FindCandidates(context, Parser.PlutusData);
+        IncrementalValuesProvider<Candidate> candidates = serializable.Collect().Combine(plutus.Collect())
+            .SelectMany(static (inputs, _) => inputs.Left.AddRange(inputs.Right));
 
-        IncrementalValueProvider<(Compilation, ImmutableArray<TypeDeclarationSyntax>)> combined = context.CompilationProvider.Combine(typeProvider);
+        IncrementalValuesProvider<Emitter.GeneratedType> sources = candidates
+            .Select(static (candidate, _) => candidate.Type)
+            .Collect()
+            .Select(static (types, _) => JoinCases(types))
+            .SelectMany(static (types, _) => CreateEmissionInputs(types))
+            .Select(static (input, _) => Emitter.Generate(input.Metadata, input.ShapeDependencies.Count == 0 ? null
+                : input.ShapeDependencies.ToImmutableDictionary(model => NormalizeTypeName(model.FullyQualifiedName), StringComparer.Ordinal)))
+            .WithTrackingName("CborSources");
+        context.RegisterSourceOutput(sources, static (output, source) => source.AddSources(output));
 
-        context.RegisterSourceOutput(combined, EmitSerializersAndMetadata);
+        // A diagnostic must use the current compilation's tree, even when its source text output is cached.
+        IncrementalValueProvider<ImmutableArray<(string FullyQualifiedName, Location? UnionLocation)>> locations = candidates.Where(static candidate => candidate.UnionLocation is not null)
+            .Select(static (candidate, _) => (candidate.Type.Metadata.FullyQualifiedName, candidate.UnionLocation))
+            .Collect();
+        context.RegisterSourceOutput(sources.Where(static source => source.Diagnostic is not null).Combine(locations),
+            static (output, input) => input.Left.ReportDiagnostic(output,
+                input.Right.FirstOrDefault(location => location.FullyQualifiedName == input.Left.TypeName).UnionLocation));
     }
 
     /// <summary>
@@ -41,36 +55,153 @@ public sealed partial class CborSerializerCodeGen : IIncrementalGenerator
             "Chrysalis.Network.Cbor.LocalStateQuery.IQueryReq" or
             "Chrysalis.Network.Cbor.ChainSync.INetworkBlockHeader";
 
-    private static void EmitSerializersAndMetadata(SourceProductionContext context, (Compilation compilation, ImmutableArray<TypeDeclarationSyntax> types) source)
+    private static IncrementalValuesProvider<Candidate> FindCandidates(IncrementalGeneratorInitializationContext context, string attribute) =>
+        context.SyntaxProvider.ForAttributeWithMetadataName(attribute,
+                static (node, _) => node is TypeDeclarationSyntax,
+                (syntax, token) => ParseCandidate(syntax, attribute, token))
+            .Where(static candidate => candidate is not null)
+            .Select(static (candidate, _) => candidate!);
+
+    private static Candidate? ParseCandidate(GeneratorAttributeSyntaxContext context, string marker, CancellationToken token)
     {
-        Compilation compilation = source.compilation;
-        ImmutableArray<TypeDeclarationSyntax> types = source.types;
-
-        // First pass: parse every serializable type and build the registry. We parse once here
-        // and emit from the parsed list below, so each type is parsed a single time.
-        List<SerializableTypeMetadata> parsed = [];
-        Dictionary<string, SerializableTypeMetadata> registry = [];
-        foreach (TypeDeclarationSyntax type in types)
+        TypeDeclarationSyntax declaration = (TypeDeclarationSyntax)context.TargetNode;
+        INamedTypeSymbol symbol = (INamedTypeSymbol)context.TargetSymbol;
+        // Each provider sees a declaration, but all markers and the payload belong to the symbol.
+        (string? Name, SyntaxReference Syntax)[] markers = [.. symbol.GetAttributes()
+            .Where(attribute => attribute.ApplicationSyntaxReference is not null)
+            .Select(attribute => (Name: attribute.AttributeClass?.ToDisplayString(), Syntax: attribute.ApplicationSyntaxReference!))
+            .Where(attribute => attribute.Name is Parser.CborSerializable or Parser.PlutusData)
+            .OrderBy(attribute => attribute.Syntax.SyntaxTree.FilePath, StringComparer.Ordinal)
+            .ThenBy(attribute => attribute.Syntax.Span.Start)
+            .ThenBy(attribute => attribute.Name, StringComparer.Ordinal)];
+        if (markers.Length == 0 || markers[0].Name != marker || markers[0].Syntax.SyntaxTree != declaration.SyntaxTree
+            || !declaration.Span.Contains(markers[0].Syntax.Span))
         {
-            SemanticModel semanticModel = compilation.GetSemanticModel(type.SyntaxTree);
-            SerializableTypeMetadata? metadata = Parser.ParseSerialazableType(type, semanticModel);
-
-            if (metadata is not null)
-            {
-                // X33 owns the network wire ambiguities. Assembly + exact metadata names
-                // make this exemption unavailable to codec models or consumer annotations.
-                metadata.KeepNetworkReadTrial = KeepsNetworkTrial(compilation.AssemblyName, metadata.FullyQualifiedName);
-                metadata.UnionDeclarationLocation = type.Identifier.GetLocation();
-                parsed.Add(metadata);
-                registry[NormalizeTypeName(metadata.FullyQualifiedName)] = metadata;
-            }
+            return null;
         }
 
-        // Keep the registry local: compiler-server invocations can generate concurrently.
-        // Second pass: emit serializers and metadata with this compilation's registry.
-        foreach (SerializableTypeMetadata metadata in parsed)
+        AttributeSyntax? plutus = markers.FirstOrDefault(attribute => attribute.Name == Parser.PlutusData).Syntax?.GetSyntax(token) as AttributeSyntax;
+        TypeDeclarationSyntax[] parts = symbol.DeclaringSyntaxReferences.Length == 1 ? [declaration] :
+            [.. symbol.DeclaringSyntaxReferences.OrderBy(reference => reference.SyntaxTree.FilePath, StringComparer.Ordinal)
+                .ThenBy(reference => reference.Span.Start).Select(reference => (TypeDeclarationSyntax)reference.GetSyntax(token))];
+        TypeDeclarationSyntax payload = parts.OfType<RecordDeclarationSyntax>().FirstOrDefault(part => part.ParameterList is not null) ?? declaration;
+        Compilation compilation = context.SemanticModel.Compilation;
+        SemanticModel model = payload.SyntaxTree == declaration.SyntaxTree ? context.SemanticModel : compilation.GetSemanticModel(payload.SyntaxTree);
+        SerializableTypeMetadata metadata = Parser.ParseSerializableType(payload, model, parts, plutus);
+        bool isUnion = metadata.SerializationType == SerializationType.Union;
+        bool keepTrial = isUnion && KeepsNetworkTrial(compilation.AssemblyName, metadata.FullyQualifiedName);
+        if (keepTrial)
         {
-            Emitter.EmitSerializerAndMetadata(context, metadata, registry);
+            metadata = metadata with { KeepNetworkReadTrial = true };
+        }
+
+        ParsedType parsed = new(metadata, SymbolKey(symbol), declaration.SyntaxTree.FilePath, declaration.SpanStart,
+            new(ContainerKeys(symbol)), new(AncestorDefinitions(symbol)
+                .Where(ancestor => SymbolEqualityComparer.Default.Equals(ancestor.ContainingAssembly, symbol.ContainingAssembly))
+                .Select(SymbolKey)),
+            keepTrial ? new(LegacyTrialCaseKeys(compilation, symbol, token)) : default);
+        return new(parsed, isUnion ? declaration.Identifier.GetLocation() : null);
+    }
+
+    // Only source-assembly ancestors can be union candidates. Use original metadata names
+    // within that assembly (including generic arity and file-local identity), not display names.
+    private static string SymbolKey(INamedTypeSymbol symbol)
+    {
+        INamedTypeSymbol definition = symbol.OriginalDefinition;
+        return definition.ContainingType is { } parent ? SymbolKey(parent) + "+" + definition.MetadataName
+            : definition.ContainingNamespace.IsGlobalNamespace ? definition.MetadataName
+            : definition.ContainingNamespace.ToDisplayString() + "." + definition.MetadataName;
+    }
+
+    private static IEnumerable<string> ContainerKeys(INamedTypeSymbol symbol)
+    {
+        for (INamedTypeSymbol? parent = symbol.ContainingType; parent is not null; parent = parent.ContainingType)
+        {
+            yield return SymbolKey(parent);
         }
     }
+
+    private static IEnumerable<INamedTypeSymbol> AncestorDefinitions(INamedTypeSymbol symbol)
+    {
+        if (symbol.BaseType is null)
+        {
+            yield break;
+        }
+
+        foreach (INamedTypeSymbol iface in symbol.AllInterfaces)
+        {
+            yield return iface.OriginalDefinition;
+        }
+        for (INamedTypeSymbol? current = symbol.BaseType; current is not null; current = current.BaseType)
+        {
+            yield return current.OriginalDefinition;
+        }
+    }
+
+    // Temporary until X33: preserve X7's first-success trial order for the four allowlisted unions.
+    // Only their order comes from Roslyn's legacy enumeration; the join supplies all case metadata.
+    private static IEnumerable<string> LegacyTrialCaseKeys(Compilation compilation, INamedTypeSymbol union, CancellationToken token) =>
+        compilation.GetSymbolsWithName(static _ => true, SymbolFilter.Type, token).OfType<INamedTypeSymbol>()
+            .Where(type => AncestorDefinitions(type).Contains(union.OriginalDefinition, SymbolEqualityComparer.Default)).Select(SymbolKey);
+
+    private static IOrderedEnumerable<ParsedType> OrderByDeclaration(IEnumerable<ParsedType> types) => types
+        .OrderBy(type => type.Path, StringComparer.Ordinal).ThenBy(type => type.Start).ThenBy(type => type.SymbolName, StringComparer.Ordinal);
+
+    private static EquatableArray<SerializableTypeMetadata> JoinCases(ImmutableArray<ParsedType> types)
+    {
+        // Distinct symbols can still share an emitted name, e.g. file-local types or incomplete edits.
+        ParsedType[] unique = [.. types.GroupBy(type => NormalizeTypeName(type.Metadata.FullyQualifiedName), StringComparer.Ordinal)
+            .Select(group => OrderByDeclaration(group).First())];
+        ILookup<string, ParsedType> nested = unique.SelectMany(type => type.Containers.Select(parent => (parent, type)))
+            .ToLookup(entry => entry.parent, entry => entry.type, StringComparer.Ordinal);
+        ILookup<string, ParsedType> derived = unique.SelectMany(type => type.Ancestors.Select(parent => (parent, type)))
+            .ToLookup(entry => entry.parent, entry => entry.type, StringComparer.Ordinal);
+        Dictionary<ParsedType, SerializableTypeMetadata> resolved = [];
+        HashSet<ParsedType> visiting = [];
+        return new(unique.Select(Resolve));
+
+        SerializableTypeMetadata Resolve(ParsedType type)
+        {
+            if (type.Metadata.SerializationType != SerializationType.Union || !visiting.Add(type))
+            {
+                return type.Metadata;
+            }
+            if (!resolved.TryGetValue(type, out SerializableTypeMetadata metadata))
+            {
+                IEnumerable<ParsedType> cases = derived[type.SymbolName];
+                if (type.Metadata.KeepNetworkReadTrial)
+                {
+                    ILookup<string, ParsedType> bySymbol = cases.ToLookup(candidate => candidate.SymbolName, StringComparer.Ordinal);
+                    cases = type.TrialOrder.SelectMany(key => bySymbol[key]);
+                }
+                else
+                {
+                    cases = OrderByDeclaration(cases);
+                }
+
+                HashSet<string> seen = [];
+                metadata = type.Metadata with
+                {
+                    ChildTypes = new(OrderByDeclaration(nested[type.SymbolName]).Concat(cases)
+                        .Where(candidate => seen.Add(candidate.Metadata.FullyQualifiedName)).Select(Resolve))
+                };
+                resolved.Add(type, metadata);
+            }
+            _ = visiting.Remove(type);
+            return metadata;
+        }
+    }
+
+    private static ImmutableArray<EmissionInput> CreateEmissionInputs(EquatableArray<SerializableTypeMetadata> models)
+    {
+        ImmutableDictionary<string, SerializableTypeMetadata> registry = models.ToImmutableDictionary(
+            model => NormalizeTypeName(model.FullyQualifiedName), StringComparer.Ordinal);
+        return [.. models.Select(model => new EmissionInput(model, model.SerializationType == SerializationType.Union
+            ? UnionEmitter.GetShapeDependencies(model, registry) : default))];
+    }
+
+    private sealed record Candidate(ParsedType Type, Location? UnionLocation);
+    private sealed record ParsedType(SerializableTypeMetadata Metadata, string SymbolName, string Path, int Start,
+        EquatableArray<string> Containers, EquatableArray<string> Ancestors, EquatableArray<string> TrialOrder);
+    private sealed record EmissionInput(SerializableTypeMetadata Metadata, EquatableArray<SerializableTypeMetadata> ShapeDependencies);
 }

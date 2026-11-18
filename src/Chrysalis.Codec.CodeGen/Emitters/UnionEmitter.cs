@@ -1,12 +1,54 @@
+using System.Collections.Immutable;
 using System.Globalization;
 using System.Text;
+using Microsoft.CodeAnalysis;
 
 namespace Chrysalis.Codec.CodeGen;
 
 public sealed partial class CborSerializerCodeGen
 {
-    private sealed class UnionEmitter(IReadOnlyDictionary<string, SerializableTypeMetadata>? typeRegistry) : ICborSerializerEmitter
+    private sealed class UnionEmitter(ImmutableDictionary<string, SerializableTypeMetadata>? typeRegistry) : ICborSerializerEmitter
     {
+        private const int MaxNestedTupleDepth = 4;
+
+        public DiagnosticDescriptor? ReadDiagnostic { get; private set; }
+
+        public static EquatableArray<SerializableTypeMetadata> GetShapeDependencies(SerializableTypeMetadata union,
+            ImmutableDictionary<string, SerializableTypeMetadata> registry)
+        {
+            List<SerializableTypeMetadata> leaves = FlattenUnionChildren(union.ChildTypes);
+            if (leaves.Count < 2)
+            {
+                return default;
+            }
+
+            // The structural probe looks up leaf fields. The fallback tuple probe can do the
+            // same inside untagged nested lists. Walk breadth-first so each tuple is expanded
+            // once, at the shallowest depth at which the reader could consult its fields.
+            bool probeNested = !union.KeepNetworkReadTrial && leaves.All(leaf => leaf.SerializationType == SerializationType.List);
+            Queue<(SerializableTypeMetadata Model, int Depth)> pending = new(leaves.Select(leaf => (leaf, 0)));
+            Dictionary<string, SerializableTypeMetadata> dependencies = [];
+            while (pending.Count != 0)
+            {
+                (SerializableTypeMetadata tuple, int depth) = pending.Dequeue();
+                foreach (SerializablePropertyMetadata property in tuple.Properties)
+                {
+                    string name = NormalizeTypeName(property.PropertyTypeFullName);
+                    if (!registry.TryGetValue(name, out SerializableTypeMetadata? model) || model is null || ClassifyTypeShape(model) == "unknown"
+                        || dependencies.ContainsKey(name))
+                    {
+                        continue;
+                    }
+                    dependencies.Add(name, model);
+                    if (probeNested && depth < MaxNestedTupleDepth && IsProbeableTuple(model))
+                    {
+                        pending.Enqueue((model, depth + 1));
+                    }
+                }
+            }
+            return new(dependencies.OrderBy(entry => entry.Key, StringComparer.Ordinal).Select(entry => entry.Value));
+        }
+
         public StringBuilder EmitReader(StringBuilder sb, SerializableTypeMetadata metadata)
         {
             if (IsCborMaybeIndefListUnion(metadata))
@@ -29,7 +71,7 @@ public sealed partial class CborSerializerCodeGen
                 return sb;
             }
 
-            metadata.UnionReadDiagnostic = UnknownUnionShape;
+            ReadDiagnostic = UnknownUnionShape;
             return sb.AppendLine(AmbiguityError(metadata, FlattenUnionChildren(metadata.ChildTypes)));
         }
 
@@ -61,7 +103,7 @@ public sealed partial class CborSerializerCodeGen
 
             if (leaves.Where((leaf, index) => leaves.Take(index).Any(other => TupleShapesOverlap(leaf, other, 0))).Any())
             {
-                metadata.UnionReadDiagnostic = OverlappingUnionShape;
+                ReadDiagnostic = OverlappingUnionShape;
             }
 
             _ = sb.AppendLine("int matched = -1;");
@@ -110,7 +152,7 @@ public sealed partial class CborSerializerCodeGen
             {
                 return false;
             }
-            foreach ((SerializablePropertyMetadata a, SerializablePropertyMetadata b) in first.Properties.OrderBy(p => p.Order).Zip(second.Properties.OrderBy(p => p.Order), (a, b) => (a, b)).Take(common))
+            foreach ((SerializablePropertyMetadata a, SerializablePropertyMetadata b) in first.Properties.Zip(second.Properties, (a, b) => (a, b)).Take(common))
             {
                 if (a.IsTypeNullable && b.IsTypeNullable)
                 {
@@ -134,10 +176,12 @@ public sealed partial class CborSerializerCodeGen
             ? "unknown" : ClassifyPropertyShape(property);
 
         private SerializableTypeMetadata? FindNestedTuple(SerializablePropertyMetadata prop, int depth) =>
-            depth < 4 && typeRegistry is not null
+            depth < MaxNestedTupleDepth && typeRegistry is not null
             && typeRegistry.TryGetValue(NormalizeTypeName(prop.PropertyTypeFullName), out SerializableTypeMetadata? nested)
-            && nested is { SerializationType: SerializationType.List, CborTag: null }
-            && nested.Properties.All(p => !p.IsTypeNullable) ? nested : null;
+            && IsProbeableTuple(nested) ? nested : null;
+
+        private static bool IsProbeableTuple(SerializableTypeMetadata metadata) =>
+            metadata is { SerializationType: SerializationType.List, CborTag: null } && metadata.Properties.All(p => !p.IsTypeNullable);
 
         private void EmitTupleShape(StringBuilder sb, string union, SerializableTypeMetadata tuple, ref int index, int depth)
         {
@@ -149,7 +193,7 @@ public sealed partial class CborSerializerCodeGen
             int minimum = tuple.Properties.Count(p => !p.IsTypeNullable);
             _ = sb.AppendLine($"if ({count} != -1 && ({count} < {minimum} || {count} > {tuple.Properties.Count})) return false;");
             int position = 0;
-            foreach (SerializablePropertyMetadata prop in tuple.Properties.OrderBy(p => p.Order ?? int.MaxValue))
+            foreach (SerializablePropertyMetadata prop in tuple.Properties)
             {
                 if (prop.IsTypeNullable)
                 {
@@ -541,13 +585,10 @@ public sealed partial class CborSerializerCodeGen
         /// Classifies the CBOR data-item shape of the field at the given CBOR order within a
         /// member, as a probe key understood by <see cref="GetCborReaderStatePattern"/>.
         /// </summary>
-        private string ClassifyProbeAtDepth(SerializableTypeMetadata member, int depth)
-        {
-            List<SerializablePropertyMetadata> ordered = [.. member.Properties.OrderBy(p => p.Order ?? int.MaxValue)];
-            return depth < 0 || depth >= ordered.Count
+        private string ClassifyProbeAtDepth(SerializableTypeMetadata member, int depth) =>
+            depth < 0 || depth >= member.Properties.Count
                 ? "unknown"
-                : ClassifyPropertyShape(ordered[depth]);
-        }
+                : ClassifyPropertyShape(member.Properties[depth]);
 
         /// <summary>
         /// Maps a property to the CBOR data-item shape it deserializes from. Tag-wrapped values
@@ -641,14 +682,14 @@ public sealed partial class CborSerializerCodeGen
             _ = sb.AppendLine($"return _stateResult;");
         }
 
-        private static List<SerializableTypeMetadata> FlattenUnionChildren(List<SerializableTypeMetadata> children)
+        private static List<SerializableTypeMetadata> FlattenUnionChildren(EquatableArray<SerializableTypeMetadata> children)
         {
             Dictionary<string, SerializableTypeMetadata> seen = [];
             FlattenUnionChildrenRec(children, seen);
             return [.. seen.Values];
         }
 
-        private static void FlattenUnionChildrenRec(List<SerializableTypeMetadata> children, Dictionary<string, SerializableTypeMetadata> seen)
+        private static void FlattenUnionChildrenRec(EquatableArray<SerializableTypeMetadata> children, Dictionary<string, SerializableTypeMetadata> seen)
         {
             foreach (SerializableTypeMetadata child in children)
             {

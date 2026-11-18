@@ -11,45 +11,29 @@ public sealed partial class CborSerializerCodeGen
         Union
     }
 
-    internal sealed class SerializableTypeMetadata(
-        string baseIdentifier,
-        string identifier,
-        string? @namespace,
-        string? typeParams,
-        string fullyQualifiedName,
-        string keyword,
-        int? cborTag,
-        int? cborIndex,
-        bool isIndefinite,
-        bool isDefinite,
-        int? definiteSize,
-        SerializationType serializationType,
-        string? validator,
-        bool shouldPreserveRaw
+    internal sealed record SerializableTypeMetadata(
+        string BaseIdentifier,
+        string Indentifier,
+        string? Namespace,
+        string? TypeParams,
+        string FullyQualifiedName,
+        string Keyword,
+        int? CborTag,
+        int? CborIndex,
+        bool IsIndefinite,
+        bool IsDefinite,
+        int? DefiniteSize,
+        SerializationType SerializationType,
+        string? Validator,
+        bool ShouldPreserveRaw
     )
     {
-        public string BaseIdentifier { get; } = baseIdentifier;
-        public string Indentifier { get; } = identifier;
-        public string? Namespace { get; } = @namespace;
-        public string? TypeParams { get; } = typeParams;
-        public string FullyQualifiedName { get; } = fullyQualifiedName;
-        public string Keyword { get; } = keyword;
         public bool IsRecordStruct => Keyword.Contains("struct");
-        public int? CborTag { get; } = cborTag;
-        public int? CborIndex { get; } = cborIndex;
-        public bool IsIndefinite { get; } = isIndefinite;
-        public bool IsDefinite { get; } = isDefinite;
-        public int? DefiniteSize { get; } = definiteSize;
-        public SerializationType SerializationType { get; } = serializationType;
-        public string? Validator { get; } = validator;
-        public bool ShouldPreserveRaw { get; } = shouldPreserveRaw;
         public bool IsTypeNullable => Indentifier.Contains("?");
 
-        public bool KeepNetworkReadTrial { get; set; }
-        public Microsoft.CodeAnalysis.Location? UnionDeclarationLocation { get; set; }
-        public Microsoft.CodeAnalysis.DiagnosticDescriptor? UnionReadDiagnostic { get; set; }
-        public List<SerializableTypeMetadata> ChildTypes { get; } = [];
-        public List<SerializablePropertyMetadata> Properties { get; } = [];
+        public bool KeepNetworkReadTrial { get; init; }
+        public EquatableArray<SerializableTypeMetadata> ChildTypes { get; init; }
+        public EquatableArray<SerializablePropertyMetadata> Properties { get; init; }
 
         public override string ToString() => $$"""
                 // Keyword: {{Keyword}}
@@ -70,82 +54,49 @@ public sealed partial class CborSerializerCodeGen
             """;
     }
 
-    internal sealed class SerializablePropertyMetadata(
-        string propertyName,
-        string propertyType,
-        string propertyTypeFullName,
-        string propertyTypeNamespace,
-        bool isList,
-        bool isMap,
-        string? listItemType,
-        string? listItemTypeFullName,
-        string? listItemTypeNamespace,
-        bool isListItemTypeOpenGeneric,
-        bool isMapKeyTypeOpenGeneric,
-        bool isMapValueTypeOpenGeneric,
-        string? mapKeyType,
-        string? mapValueType,
-        string? mapKeyTypeFullName,
-        string? mapValueTypeFullName,
-        string? mapKeyTypeNamespace,
-        string? mapValueTypeNamespace,
-        bool isNullable,
-        int? size,
-        bool isIndefinite,
-        bool isDefinite,
-        int? order,
-        string? propertyKeyString,
-        int? propertyKeyInt,
-        bool isOpenGeneric,
-        bool isPropertyTypeUnion = false,
-        bool isListItemTypeUnion = false,
-        bool isMapKeyTypeUnion = false,
-        bool isMapValueTypeUnion = false,
-        string? cborMaybeIndefListItemTypeFullName = null,
-        bool isPairList = false
+    internal sealed record SerializablePropertyMetadata(
+        string PropertyName,
+        string PropertyType,
+        string PropertyTypeFullName,
+        string PropertyTypeNamespace,
+        bool IsList,
+        bool IsMap,
+        string? ListItemType,
+        string? ListItemTypeFullName,
+        string? ListItemTypeNamespace,
+        bool IsListItemTypeOpenGeneric,
+        bool IsMapKeyTypeOpenGeneric,
+        bool IsMapValueTypeOpenGeneric,
+        string? MapKeyType,
+        string? MapValueType,
+        string? MapKeyTypeFullName,
+        string? MapValueTypeFullName,
+        string? MapKeyTypeNamespace,
+        string? MapValueTypeNamespace,
+        bool IsNullable,
+        int? Size,
+        bool IsIndefinite,
+        bool IsDefinite,
+        int? Order,
+        string? PropertyKeyString,
+        int? PropertyKeyInt,
+        bool IsOpenGeneric,
+        bool IsPropertyTypeUnion = false,
+        bool IsListItemTypeUnion = false,
+        bool IsMapKeyTypeUnion = false,
+        bool IsMapValueTypeUnion = false,
+        string? CborMaybeIndefListItemTypeFullName = null,
+        bool IsPairList = false
     )
     {
-        public string PropertyName { get; } = propertyName;
-        public string PropertyType { get; } = propertyType;
-        public string PropertyTypeFullName { get; } = propertyTypeFullName;
-        public string PropertyTypeNamespace { get; } = propertyTypeNamespace;
-        public bool IsList { get; } = isList;
-        public bool IsMap { get; } = isMap;
-        public bool IsPairList { get; } = isPairList;
-
-        public string? ListItemType { get; } = listItemType;
-        public bool IsListItemTypeOpenGeneric { get; } = isListItemTypeOpenGeneric;
-        public string? ListItemTypeFullName { get; } = listItemTypeFullName;
-        public string? ListItemTypeNamespace { get; } = listItemTypeNamespace;
-        public string? MapKeyType { get; } = mapKeyType;
-        public bool IsMapKeyTypeOpenGeneric { get; } = isMapKeyTypeOpenGeneric;
-        public string? MapValueType { get; } = mapValueType;
-        public bool IsMapValueTypeOpenGeneric { get; } = isMapValueTypeOpenGeneric;
-        public string? MapKeyTypeFullName { get; } = mapKeyTypeFullName;
-        public string? MapValueTypeFullName { get; } = mapValueTypeFullName;
-        public string? MapKeyTypeNamespace { get; } = mapKeyTypeNamespace;
-        public string? MapValueTypeNamespace { get; } = mapValueTypeNamespace;
-
-        public bool IsNullable { get; } = isNullable;
         public bool IsTypeNullable => PropertyType.Contains("?");
         public bool IsRequired => !IsTypeNullable && !IsNullable;
-        public int? Size { get; } = size;
-        public bool IsIndefinite { get; } = isIndefinite;
-        public bool IsDefinite { get; } = isDefinite;
-        public int? Order { get; set; } = order;
-        public string? PropertyKeyString { get; } = propertyKeyString;
-        public int? PropertyKeyInt { get; } = propertyKeyInt;
-        public bool IsOpenGeneric { get; } = isOpenGeneric;
 
-        public bool IsPropertyTypeUnion { get; } = isPropertyTypeUnion;
-        public bool IsListItemTypeUnion { get; } = isListItemTypeUnion;
-        public bool IsMapKeyTypeUnion { get; } = isMapKeyTypeUnion;
-        public bool IsMapValueTypeUnion { get; } = isMapValueTypeUnion;
 
-        public string? CborMaybeIndefListItemTypeFullName { get; } = cborMaybeIndefListItemTypeFullName;
-
-        public Dictionary<int, string> UnionHints { get; } = [];
-        public string? UnionHintDiscriminantProperty { get; set; }
+        // Default ties preserve wire-list order for X7 signatures. Split records may differ.
+        public int CreateParameterOrder { get; init; }
+        public EquatableArray<KeyValuePair<int, string>> UnionHints { get; init; }
+        public string? UnionHintDiscriminantProperty { get; init; }
 
         public override string ToString() => $$"""
                 // PropertyName: {{PropertyName}}
