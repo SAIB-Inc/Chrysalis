@@ -4,7 +4,7 @@ set +x
 set -euo pipefail
 [[ $# == 3 && "$1" == --approved ]] || { echo 'Usage: gate_fly.sh --approved OWN_APP seal.json'; exit 2; }
 APP="$2"; READY="$(realpath "$3")"; HERE="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-[[ "$APP" =~ ^chrysalis-gate-[0-9]{8}T[0-9]{6}-[a-f0-9]{8}$ ]] || { echo 'Refusing non-run app'; exit 2; }
+[[ "$APP" =~ ^chrysalis-gate-[0-9]{8}t[0-9]{6}-[a-f0-9]{8}$ ]] || { echo 'Refusing non-run app'; exit 2; }
 source "$HERE/gate_fly_common.sh"
 if [[ -e /proc/self/fd/9 ]]; then
   [[ "$(readlink /proc/self/fd/9)" == "$LOCK" ]] || { echo 'Wrong inherited lock descriptor'; exit 2; }
@@ -131,6 +131,11 @@ json.dump(dict(available=bool(available),performance=p,shared=s,unknown=u,inform
 PYCONTEXT
   return 0
 }
+if [[ -n "${GATE_FIRST_GO:-}" ]]; then
+  [[ -r "$TOKEN_FILE" && -s "$TOKEN_FILE" ]] || { echo 'Fly token file missing or empty; no stored-login fallback' >&2; exit 2; }
+  python3 "$HERE/gate_fly_guard.py" lock-inode "$LOCK"
+  python3 "$HERE/gate_fly_guard.py" consume-go "$READY" "$GATE_FIRST_GO"
+fi
 fly_call 420 apps list --org "$ORG" --json > "$NOTE/apps-before.json"
 python3 "$HERE/gate_fly_guard.py" apps "$NOTE/apps-before.json" "$APP"
 neighbours start

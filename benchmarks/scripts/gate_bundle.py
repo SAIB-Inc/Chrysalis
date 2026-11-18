@@ -1,11 +1,13 @@
 """Prepare content-bound offline bundles and launch only a previously sealed go."""
 import copy
 import datetime as dt
+import fcntl
 import hashlib
 import json
 import math
 import os
 from pathlib import Path
+import re
 import secrets
 import signal
 import shutil
@@ -243,7 +245,8 @@ exit "$status"
         name = f'input/session-{number}.tar.gz'
         files[name] = pack(base, output / name)
     files.update({path.relative_to(output).as_posix(): sha(path) for path in host.iterdir() if path.is_file()})
-    version = subprocess.check_output(['fly', 'version'], env=session.environment({}), text=True).strip()
+    version = subprocess.check_output(['fly', 'version'], env=dict(session.environment({}), FLY_NO_UPDATE_CHECK='1', FLY_NO_ANALYTICS='1'),
+                                      timeout=10, text=True).strip()
     return dict(timePlans=plans, flyBudgetLeftUsd=budget, flyctlVersion=version, image=IMAGE, imageIndex=IMAGE_INDEX, files=files,
                 dryRun=dict(path='input/dry-pairs.json', counts=[1, 1], sha256=sha(output / 'input/dry-pairs.json')))
 
@@ -319,35 +322,72 @@ def owned_call(command, *, interrupt_notice=None, **kwargs):
         for number, handler in previous.items():signal.signal(number,handler)
 
 
-def fly_command(go, directory=None):
-    """Public command takes one go, holds one lock across sessions and repeats."""
+def checked_go_directory(directory, out):
+    directory = Path(directory).resolve()
+    timing.require(directory.parent == Path(out).resolve() and re.fullmatch(r'gate-.+', directory.name),
+                   'GO directory must be under benchmarks/out/gate-*')
+    return directory
+
+
+def checked_fly_local(seal):
     import gate
+    expected = seal['files'].get('input/fly-local.json')
+    if expected is not None:
+        path = os.environ.get('CHRYSALIS_GATE_LOCAL')
+        timing.require(path and gate.digest(Path(path)) == expected, 'Fly local settings differ from seal')
     local = gate.local_config()
-    if directory is None:
-        matches = [path.parent for path in (gate.REPO / 'benchmarks/out').glob('gate-*/seal.id') if path.read_text().strip() == go]
-        timing.require(len(matches) == 1, 'Go must identify exactly one local seal')
-        directory = matches[0]
+    timing.require(re.fullmatch(r'[a-z0-9-]+', local['flyOrg']), 'Invalid Fly organization slug')
+    lock = Path(local['flyLock'])
+    timing.require(lock.is_absolute() and str(lock.resolve()) == local['flyLock'], 'Fly lock path must be absolute and canonical')
+    reserved = sum(plan['limitWithRepeatUsd'] for plan in seal['timePlans'])
+    timing.require(reserved <= min(gate.remaining_budget(seal), gate.remaining_budget(local)), 'Reserved sessions exceed remaining budget')
+    return local
+
+
+def checked_fly_go(directory, go):
+    import gate
     timing.require(gate.digest(directory / 'seal.json') == go, 'Go differs from seal')
     seal = gate.read_seal(directory)
     timing.require(seal.get('timePlans'), 'Seal has no timing plans')
-    reserved = sum(plan['limitWithRepeatUsd'] for plan in seal['timePlans'])
-    timing.require(reserved <= min(gate.remaining_budget(seal), gate.remaining_budget(local)), 'Reserved sessions exceed remaining budget')
+    return seal, checked_fly_local(seal)
+
+
+def fly_command(go, directory=None):
+    """Public command takes one go, holds one lock across sessions and repeats."""
+    import gate
+    out = gate.REPO / 'benchmarks/out'
+    if directory is None:
+        matches = [path.parent for path in out.glob('gate-*/seal.id') if path.read_text().strip() == go]
+        timing.require(len(matches) == 1, 'Go must identify exactly one local seal')
+        directory = matches[0]
+    directory = checked_go_directory(directory, out)
+    seal, local = checked_fly_go(directory, go)
+    # Old sealed host copies also relied on this fast refusal. The held check is authoritative.
     timing.require(not (directory / 'time/launch-started.json').exists(), 'Go already consumed; never a second repeat')
     env = session.environment({})
-    env['CHRYSALIS_GATE_LOCAL'] = os.environ['CHRYSALIS_GATE_LOCAL']
+    env.update(CHRYSALIS_GATE_LOCAL=os.environ['CHRYSALIS_GATE_LOCAL'], GATE_GO=go, GATE_GO_OUT=str(out))
     return owned_call(['bash', '-c', 'exec 9>"$1"; flock -n 9 || exit 75; exec "$2" "$3" _fly-held "$4"',
                             'gate-lock', local['flyLock'], sys.executable, str(directory / 'input/fly/gate.py'), str(directory)], env=env,
                             interrupt_notice=lambda: cleanup_notice(directory, seal))
 
 
+def held_fly_go(directory):
+    directory = checked_go_directory(directory, os.environ['GATE_GO_OUT'])
+    go = os.environ['GATE_GO']
+    seal, local = checked_fly_go(directory, go)
+    timing.require(os.path.samestat(os.fstat(9), os.stat(local['flyLock'])), 'Wrong inherited Fly lock')
+    fcntl.flock(9, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    timing.require(not (directory / 'time/launch-started.json').exists(), 'Go already consumed; never a second repeat')
+    return directory, seal, go
+
+
 def fly_held(directory):
     import gate
-    directory = Path(directory)
-    seal = gate.read_seal(directory)
+    directory, seal, go = held_fly_go(directory)
     host = directory / 'input/fly'
     index = []
     refusal_status = 0
-    session.save(directory / 'time/launch-started.json', dict(sealId=gate.digest(directory / 'seal.json')))
+    (directory / 'time').mkdir(exist_ok=True)
     for number, plan in enumerate(seal['timePlans']):
         band_invalid = False
         for phase in ('first', 'repeat'):
@@ -364,12 +404,17 @@ def fly_held(directory):
                 # Its hash is verified on the VM; no source or count can change.
                 relative = f'input/repeat-{number}.tar.gz'
                 make_repeat(directory, seal, number, selected, relative)
-            app = 'chrysalis-gate-' + dt.datetime.now(dt.timezone.utc).strftime('%Y%m%dT%H%M%S') + '-' + secrets.token_hex(4)
+            app = 'chrysalis-gate-' + dt.datetime.now(dt.timezone.utc).strftime('%Y%m%dt%H%M%S') + '-' + secrets.token_hex(4)
             env = session.environment({})
             env.update(CHRYSALIS_GATE_LOCAL=os.environ['CHRYSALIS_GATE_LOCAL'], GATE_BUNDLE=relative)
+            first_launch = number == 0 and phase == 'first'
+            if first_launch:
+                env['GATE_FIRST_GO'] = go
             with (directory / 'time' / f'{number}-{phase}-launcher.log').open('w') as log:
                 status = owned_call(['bash', str(host / 'gate_fly.sh'), '--approved', app, str(directory / 'seal.json')],
                                          env=env, pass_fds=(9,), stdout=log, stderr=subprocess.STDOUT)
+            if first_launch and not (directory / 'time/launch-started.json').is_file():
+                return status or 2  # Local preflight did not consume the GO.
             note = directory / 'time/runs' / app
             if (note / 'cleanup-failed.json').exists():
                 print('CLEANUP FAILED: ' + app + '; recovery retains the lock until absence proof; coordinator action required', file=sys.stderr)

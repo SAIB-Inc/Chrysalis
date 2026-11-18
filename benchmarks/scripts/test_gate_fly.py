@@ -26,7 +26,7 @@ import gate_schedule as schedules
 from test_gate_time import pairs, row
 
 HERE = Path(__file__).resolve().parent
-APP = 'chrysalis-gate-20990405T000100-abcdef12'
+APP = 'chrysalis-gate-20990405t000100-abcdef12'
 LINUX = sys.platform.startswith('linux')
 TEST_WATCHDOG_SECONDS = 30
 
@@ -113,15 +113,33 @@ class GuardTests(unittest.TestCase):
             self.assertEqual(call.returncode,0,call.stderr)
             self.assertNotEqual(bundle.IMAGE, bundle.IMAGE_INDEX)
 
+    def test_mr4d_cleanup_requires_valid_exact_names(self):
+        target = 'chrysalis-gate-20990405t000100-abcdef12'
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td); before = root / 'before.json'; after = root / 'after.json'
+            gate.session.save(before, [dict(Name=target)])
+            for payload, absent in [([], True), ([dict(Name=target+'-other')], True), ([dict(Name=target)], False),
+                                    ([{}], False), ([dict(Name='')], False), ([dict(Name=target.upper())], False),
+                                    ([dict(name='unrelated', Name=target)], False)]:
+                with self.subTest(payload=payload):
+                    gate.session.save(after, payload)
+                    result = subprocess.run([sys.executable, str(HERE/'gate_fly_guard.py'), 'cleanup', str(before), str(after), target],
+                                            capture_output=True, text=True)
+                    self.assertEqual(result.returncode == 0, absent, result.stdout + result.stderr)
+                    if absent:
+                        self.assertTrue(json.loads(result.stdout)['ourAppAbsent'])
+                    else:
+                        self.assertFalse(result.stdout)
+
     def test_go_refuses_insufficient_sealed_or_current_budget_without_a_call(self):
         with tempfile.TemporaryDirectory() as td:
-            root=Path(td);_,seal,env=fixture(root)
+            repo=Path(td);root=repo/'benchmarks/out/gate-budget';_,seal,env=fixture(root)
             for where in ('seal','local'):
                 local=json.loads((root/'local.json').read_text())
                 seal['flyBudgetLeftUsd']=.001 if where=='seal' else 40
                 local['flyBudgetLeftUsd']=.001 if where=='local' else 40
                 gate.session.save(root/'local.json',local);go=gate.write_seal(root,seal)
-                with patch.dict(os.environ,env),patch.object(bundle,'owned_call') as launch:
+                with patch.object(gate,'REPO',repo),patch.dict(os.environ,env),patch.object(bundle,'owned_call') as launch:
                     with self.assertRaisesRegex(ValueError,'budget'):bundle.fly_command(go,directory=root)
                     launch.assert_not_called()
 
@@ -134,7 +152,10 @@ class GuardTests(unittest.TestCase):
             result = subprocess.run([sys.executable, str(HERE / 'gate_fly_guard.py'), 'apps', str(listing), APP], capture_output=True, text=True)
             with self.subTest(stage='guard'):
                 self.assertEqual(result.returncode, 4, result.stderr)
-            with self.subTest(stage='dispatcher'), patch.dict(os.environ, env), patch.object(bundle, 'owned_call', return_value=4):
+            go = (root/'seal.id').read_text().strip()
+            with self.subTest(stage='dispatcher'), patch.dict(os.environ, env), \
+                    patch.object(bundle, 'held_fly_go', return_value=(root, seal, go)), \
+                    patch.object(bundle, 'owned_call', return_value=4):
                 self.assertEqual(bundle.fly_held(root), 4)
 
     def test_verified_archive_and_identity_refuse_changed_local_sources(self):
@@ -249,10 +270,64 @@ class LauncherTests(unittest.TestCase):
             if args[:2] == ['machine', 'run'] or args[:2] == ['machine', 'exec'] or args[:3] in (['ssh', 'sftp', 'put'], ['ssh', 'sftp', 'get']):
                 self.assertEqual(args[args.index('--app') + 1], APP)
 
-    def test_whole_sealed_change_go_and_release_repeat_are_one_command_each(self):
+    def test_mr4d_local_failures_do_not_consume_go(self):
+        for fail in ('version', 'org', 'lock', 'budget', 'sha', 'location', 'local-binding', 'token-file'):
+            with self.subTest(fail=fail), tempfile.TemporaryDirectory() as td:
+                repo = Path(td)
+                root = repo / ('elsewhere' if fail == 'location' else 'benchmarks/out/gate-local-failure')
+                _, seal, env = fixture(root)
+                local = json.loads((root/'local.json').read_text())
+                if fail == 'version': seal['flyctlVersion'] = 'fly other-fixture'
+                if fail == 'org': local['flyOrg'] = 'malformed org'
+                if fail == 'lock': local['flyLock'] = os.path.relpath(root/'test.lock')
+                if fail == 'budget': local.pop('flyBudgetLeftUsd')
+                if fail == 'local-binding':
+                    shutil.copy2(root/'local.json', root/'input/fly-local.json')
+                    seal['files']['input/fly-local.json'] = gate.digest(root/'input/fly-local.json')
+                    local['flyOrg'] = 'other-valid-fixture-org'
+                if fail == 'token-file': local['flyTokenFile'] = str(root/'nonexistent-fixture-token')
+                gate.session.save(root/'local.json', local)
+                go = gate.write_seal(root, seal) if fail != 'sha' else '0' * 64
+                with patch.object(gate, 'REPO', repo), patch.dict(os.environ, env):
+                    try:
+                        result = bundle.fly_command(go, directory=root)
+                    except (ValueError, OSError, RuntimeError):
+                        result = 2
+                self.assertNotEqual(result, 0)
+                self.assertFalse((root/'time/launch-started.json').exists(), fail)
+                self.assertEqual(calls(root), [])
+
+    def test_mr4d_stale_caller_cannot_consume_go_after_acquiring_lock(self):
+        with tempfile.TemporaryDirectory() as td:
+            repo = Path(td); root = repo/'benchmarks/out/gate-stale'
+            _, _, env = fixture(root)
+            go = (root/'seal.id').read_text().strip()
+            marker = root/'time/launch-started.json'
+            dispatch = bundle.owned_call
+            previous_marker = gate.encoded(dict(sealId=go))
+            def after_precheck(*args, **kwargs):
+                marker.parent.mkdir()
+                marker.write_bytes(previous_marker)
+                return dispatch(*args, **kwargs)
+            with patch.object(gate, 'REPO', repo), patch.dict(os.environ, env), patch.object(bundle, 'owned_call', after_precheck):
+                self.assertNotEqual(bundle.fly_command(go, directory=root), 0)
+            self.assertEqual(calls(root), [])
+            self.assertEqual(marker.read_bytes(), previous_marker)
+
+    def test_mr4d_launcher_rejects_uppercase_app_name(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td); host, _, env = fixture(root)
+            result = subprocess.run(['bash', str(host/'gate_fly.sh'), '--approved',
+                                     'chrysalis-gate-20990405T000100-abcdef12', str(root/'seal.json')],
+                                    env=env, capture_output=True, text=True)
+            self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
+            self.assertIn('Refusing non-run app', result.stdout)
+            self.assertEqual(calls(root), [])
+
+    def test_mr4d_whole_sealed_change_go_and_release_repeat_are_one_command_each(self):
         for mode, ratio, expected, machines in [('change', 1, 0, 1), ('release', 1.03, 2, 2)]:
             with self.subTest(mode=mode), tempfile.TemporaryDirectory() as td:
-                root = Path(td)
+                repo = Path(td); root = repo/'benchmarks/out/gate-whole'
                 _, seal, env = fixture(root)
                 plan = seal['timePlans'][0]
                 seal['mode'] = mode
@@ -266,18 +341,30 @@ class LauncherTests(unittest.TestCase):
                 bundle.pack(bundle_input, root / 'input/session-0.tar.gz')
                 seal['files']['input/session-0.tar.gz'] = gate.digest(root / 'input/session-0.tar.gz')
                 gate.session.save(root / 'fixture-pairs.json', pairs(plan['rows'][0], ratio))
+                if mode == 'release':
+                    shutil.copy2(root/'local.json', root/'input/fly-local.json')
+                    seal['files']['input/fly-local.json'] = gate.digest(root/'input/fly-local.json')
+                    env['CHRYSALIS_GATE_LOCAL'] = str(root/'input/fly-local.json')
+                else:
+                    self.assertNotIn('input/fly-local.json', seal['files'])
                 go = gate.write_seal(root, seal)
-                with patch.dict(os.environ, env):
-                    result = bundle.fly_command(go, directory=root)
+                with patch.object(gate, 'REPO', repo), patch.dict(os.environ, env):
+                    result = bundle.fly_command(go)
                     self.assertEqual(result, expected, (root / 'report.txt').read_text() if (root / 'report.txt').exists() else (root / 'time/0-first-launcher.log').read_text())
+                    before = calls(root)
                     with self.assertRaisesRegex(ValueError, 'consumed'):
-                        bundle.fly_command(go, directory=root)
+                        bundle.fly_command(go)
+                    self.assertEqual(calls(root), before)
                 recorded = calls(root)
                 self.assertEqual(sum(c['argv'][:2] == ['machine', 'run'] for c in recorded), machines)
                 self.assertFalse(json.loads((root / 'state.json').read_text())['app'])
                 report = gate.report(root)
                 self.assertEqual(report['outcome'], 'SUBSET' if mode == 'change' else 'FAIL')
                 self.assertEqual('repeat' in report['rows'][plan['rows'][0]['id']], mode == 'release')
+                names = [call['argv'][2] for call in calls(root) if call['argv'][:2] == ['apps', 'create']]
+                self.assertEqual(len(names), 1 if mode == 'change' else 2)
+                for name in names:
+                    self.assertRegex(name, r'^[a-z0-9-]+$')
 
     def test_success_neighbours_context_only_token_fd_and_no_private_fly_config(self):
         root, status = self.run_case(extra=dict(GATE_STUB_NEIGHBOUR_CHANGE='1'))
@@ -325,9 +412,9 @@ class LauncherTests(unittest.TestCase):
     def test_public_dispatcher_forwards_interrupt_and_waits_for_cleanup(self):
         for sig in (signal.SIGINT,signal.SIGTERM):
             with self.subTest(signal=sig), tempfile.TemporaryDirectory() as td:
-                root=Path(td);_,_,env=fixture(root,watchdog_delay=20)
+                root=Path(td)/'benchmarks/out/gate-interrupt';_,_,env=fixture(root,watchdog_delay=20)
                 stub=root/'stubbin/fly';stub.write_text(stub.read_text().replace("get('GATE_STUB_SESSION_DELAY', '0')","get('GATE_STUB_SESSION_DELAY', '10')"))
-                command=[sys.executable,'-c',"import sys;from pathlib import Path;sys.path.insert(0,sys.argv[1]);import gate_bundle;raise SystemExit(gate_bundle.fly_command(Path(sys.argv[2],'seal.id').read_text().strip(),directory=Path(sys.argv[2])))",str(HERE),str(root)]
+                command=[sys.executable,'-c',"import sys;from pathlib import Path;sys.path.insert(0,sys.argv[1]);import gate,gate_bundle;gate.REPO=Path(sys.argv[2]).parents[2];raise SystemExit(gate_bundle.fly_command(Path(sys.argv[2],'seal.id').read_text().strip()))",str(HERE),str(root)]
                 with (root/'public.log').open('w') as stream:
                     process=subprocess.Popen(command,env=env,stdout=stream,stderr=subprocess.STDOUT,start_new_session=True)
                     try:
