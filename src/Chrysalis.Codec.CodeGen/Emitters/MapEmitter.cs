@@ -30,10 +30,12 @@ public sealed partial class CborSerializerCodeGen
                 _ = sb.AppendLine("while (isIndefiniteMap ? (reader.Buffer.Length > 0 && reader.Buffer[0] != 0xFF) : mapRemaining > 0)");
                 _ = sb.AppendLine("{");
 
+                _ = sb.AppendLine("int keyOffset = data.Length - reader.Buffer.Length;");
                 _ = isIntKey
                     ? sb.AppendLine($"int key = reader.ReadInt32();")
                     : sb.AppendLine($"string key = reader.ReadString();");
 
+                _ = sb.AppendLine($"if (resultMap.ContainsKey(key)) throw CborError.Decode(data, keyOffset, \"{metadata.FullyQualifiedName}\", \"unique field key\", key);");
                 _ = sb.AppendLine($"object value = null;");
 
                 _ = sb.AppendLine("switch (key)");

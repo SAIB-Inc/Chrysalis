@@ -10,7 +10,7 @@ public partial interface ITransactionMetadatum : ICborType;
 [CborSerializable]
 public readonly partial record struct MetadatumMap : ITransactionMetadatum
 {
-    public partial Dictionary<ITransactionMetadatum, ITransactionMetadatum> Value { get; }
+    public partial List<KeyValuePair<ITransactionMetadatum, ITransactionMetadatum>> Value { get; }
 }
 
 [CborSerializable]

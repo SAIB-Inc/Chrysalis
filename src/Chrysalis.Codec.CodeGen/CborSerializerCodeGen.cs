@@ -34,6 +34,13 @@ public sealed partial class CborSerializerCodeGen : IIncrementalGenerator
     internal static string NormalizeTypeName(string fullyQualifiedName) =>
         fullyQualifiedName.Replace("global::", "").Replace("?", "").Trim();
 
+    private static bool KeepsNetworkTrial(string? assembly, string fullName) => assembly == "Chrysalis.Network"
+        && NormalizeTypeName(fullName) is
+            "Chrysalis.Network.Cbor.Handshake.HandshakeMessage" or
+            "Chrysalis.Network.Cbor.Handshake.VersionTable" or
+            "Chrysalis.Network.Cbor.LocalStateQuery.IQueryReq" or
+            "Chrysalis.Network.Cbor.ChainSync.INetworkBlockHeader";
+
     private static void EmitSerializersAndMetadata(SourceProductionContext context, (Compilation compilation, ImmutableArray<TypeDeclarationSyntax> types) source)
     {
         Compilation compilation = source.compilation;
@@ -50,6 +57,10 @@ public sealed partial class CborSerializerCodeGen : IIncrementalGenerator
 
             if (metadata is not null)
             {
+                // X33 owns the network wire ambiguities. Assembly + exact metadata names
+                // make this exemption unavailable to codec models or consumer annotations.
+                metadata.KeepNetworkReadTrial = KeepsNetworkTrial(compilation.AssemblyName, metadata.FullyQualifiedName);
+                metadata.UnionDeclarationLocation = type.Identifier.GetLocation();
                 parsed.Add(metadata);
                 registry[NormalizeTypeName(metadata.FullyQualifiedName)] = metadata;
             }

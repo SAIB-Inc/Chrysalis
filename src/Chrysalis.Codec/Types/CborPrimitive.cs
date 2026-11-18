@@ -76,5 +76,5 @@ public readonly partial record struct CborArray : ICborPrimitive
 [CborSerializable]
 public readonly partial record struct CborMap : ICborPrimitive
 {
-    public partial Dictionary<ICborPrimitive, ICborPrimitive> Value { get; }
+    public partial List<KeyValuePair<ICborPrimitive, ICborPrimitive>> Value { get; }
 }

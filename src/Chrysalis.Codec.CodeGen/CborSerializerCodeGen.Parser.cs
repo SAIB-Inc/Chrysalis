@@ -395,7 +395,8 @@ public sealed partial class CborSerializerCodeGen
                 isListItemTypeUnion,
                 isMapKeyTypeUnion,
                 isMapValueTypeUnion,
-                cborMaybeIndefListItemType
+                cborMaybeIndefListItemType,
+                IsPairList(typeSymbol as ITypeSymbol, out _)
             );
 
             ParseUnionHints(param, model, propMetadata);
@@ -571,7 +572,8 @@ public sealed partial class CborSerializerCodeGen
                 isListItemTypeUnion,
                 isMapKeyTypeUnion,
                 isMapValueTypeUnion,
-                cborMaybeIndefListItemType
+                cborMaybeIndefListItemType,
+                IsPairList(typeSymbol as ITypeSymbol, out _)
             );
 
             ParseUnionHints(prop, model, propMetadata);
@@ -757,6 +759,12 @@ public sealed partial class CborSerializerCodeGen
         }
 
         IEnumerable<INamedTypeSymbol> derivedTypes = FindDerivedTypes(typeSymbol, model.Compilation);
+        if (!KeepsNetworkTrial(model.Compilation.AssemblyName, typeSymbol.ToDisplayString()))
+        {
+            derivedTypes = derivedTypes.OrderBy(symbol => symbol.DeclaringSyntaxReferences.FirstOrDefault()?.SyntaxTree.FilePath, StringComparer.Ordinal)
+                .ThenBy(symbol => symbol.DeclaringSyntaxReferences.FirstOrDefault()?.Span.Start)
+                .ThenBy(symbol => symbol.ToDisplayString(), StringComparer.Ordinal);
+        }
         Dictionary<string, SerializableTypeMetadata> resultDict = [];
 
         foreach (TypeDeclarationSyntax nestedType in tds.DescendantNodes().OfType<TypeDeclarationSyntax>())
@@ -849,10 +857,31 @@ public sealed partial class CborSerializerCodeGen
         return false;
     }
 
+    private static bool IsPairList(ITypeSymbol? symbol, out INamedTypeSymbol? pair)
+    {
+        pair = null;
+        if (symbol is not INamedTypeSymbol list || list.OriginalDefinition.ToDisplayString() != "System.Collections.Generic.List<T>"
+            || list.TypeArguments[0] is not INamedTypeSymbol item
+            || item.OriginalDefinition.ToDisplayString() != "System.Collections.Generic.KeyValuePair<TKey, TValue>")
+        {
+            return false;
+        }
+
+        pair = item;
+        return true;
+    }
+
     private static bool IsMapType(ITypeSymbol typeSymbol, out ITypeSymbol? keyType, out ITypeSymbol? valueType)
     {
         keyType = null;
         valueType = null;
+
+        if (IsPairList(typeSymbol, out INamedTypeSymbol? pair))
+        {
+            keyType = pair!.TypeArguments[0];
+            valueType = pair.TypeArguments[1];
+            return true;
+        }
 
         if (typeSymbol is INamedTypeSymbol namedType)
         {

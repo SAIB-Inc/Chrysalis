@@ -15,8 +15,16 @@ public sealed partial class CborSerializerCodeGen
             _ = sb.AppendLine($"/// </summary>");
             _ = sb.AppendLine($"public static new {metadata.FullyQualifiedName} Read(ReadOnlyMemory<byte> data, out int bytesConsumed)");
             _ = sb.AppendLine("{");
-            ICborSerializerEmitter emitter = GetEmitter(metadata, typeRegistry);
-            _ = emitter.EmitReader(sb, metadata);
+            if (NormalizeTypeName(metadata.FullyQualifiedName) == "Chrysalis.Codec.Types.Cardano.Core.Common.PlutusConstr")
+            {
+                _ = sb.AppendLine("try { return PlutusWire.ReadConstructor(data, out bytesConsumed); }");
+                _ = sb.AppendLine("catch (global::SAIB.Cbor.CborException error) { throw CborError.Wrap(error, data, nameof(PlutusConstr), \"Plutus constructor\"); }");
+            }
+            else
+            {
+                ICborSerializerEmitter emitter = GetEmitter(metadata, typeRegistry);
+                _ = emitter.EmitReader(sb, metadata);
+            }
             _ = sb.AppendLine("}");
 
             _ = sb.AppendLine();
@@ -275,11 +283,15 @@ public sealed partial class CborSerializerCodeGen
                 _ = sb.AppendLine($"ReadOnlyMemory<byte> _sf{i} = default;");
             }
 
+            // Track only unrecognized keys separately; known fields already have distinct slice slots.
+            _ = sb.AppendLine($"HashSet<{(isIntKey ? "int" : "string")}>? unknownKeys = null;");
+
             // Loop through map entries
             _ = sb.AppendLine("while (isIndefiniteMap ? (reader.Buffer.Length > 0 && reader.Buffer[0] != 0xFF) : mapRemaining > 0)");
             _ = sb.AppendLine("{");
 
             // Read key
+            _ = sb.AppendLine("int keyOffset = data.Length - reader.Buffer.Length;");
             _ = isIntKey
                 ? sb.AppendLine("int key = reader.ReadInt32();")
                 : sb.AppendLine("string key = reader.ReadString();");
@@ -299,10 +311,12 @@ public sealed partial class CborSerializerCodeGen
                     ? prop.PropertyKeyInt?.ToString(System.Globalization.CultureInfo.InvariantCulture)!
                     : $"\"{prop.PropertyKeyString}\"";
                 _ = sb.AppendLine($"case {keyLiteral}:");
+                _ = sb.AppendLine($"if (!_sf{i}.IsEmpty) throw CborError.Decode(data, keyOffset, \"{metadata.FullyQualifiedName}\", \"unique field key\", key);");
                 _ = sb.AppendLine($"_sf{i} = data[_vs.._ve];");
                 _ = sb.AppendLine("break;");
             }
             _ = sb.AppendLine("default:");
+            _ = sb.AppendLine($"if (!(unknownKeys ??= new()).Add(key)) throw CborError.Decode(data, keyOffset, \"{metadata.FullyQualifiedName}\", \"unique field key\", key);");
             _ = sb.AppendLine("break;");
             _ = sb.AppendLine("}");
 
@@ -632,9 +646,7 @@ public sealed partial class CborSerializerCodeGen
                     throw new InvalidOperationException($"Map key or value type is null for property {metadata.PropertyName}");
                 }
 
-                _ = IsReadOnlyMemoryByteType(metadata.MapKeyTypeFullName)
-                    ? sb.AppendLine($"Dictionary<{metadata.MapKeyTypeFullName}, {metadata.MapValueTypeFullName}> {propertyName}TempMap = new(global::Chrysalis.Codec.Serialization.Utils.ReadOnlyMemoryComparer.Instance);")
-                    : sb.AppendLine($"Dictionary<{metadata.MapKeyTypeFullName}, {metadata.MapValueTypeFullName}> {propertyName}TempMap = new();");
+                _ = sb.AppendLine($"var {propertyName}TempMap = {MapInitializer(metadata, typePath)};");
                 _ = sb.AppendLine($"{metadata.MapKeyTypeFullName} {propertyName}TempKeyItem = default;");
                 _ = sb.AppendLine($"{metadata.MapValueTypeFullName} {propertyName}TempValueItem = default;");
                 _ = sb.AppendLine($"reader.ReadBeginMap();");
@@ -725,10 +737,18 @@ public sealed partial class CborSerializerCodeGen
                     }
                 }
 
-                _ = sb.AppendLine($"if (!{propertyName}TempMap.ContainsKey({propertyName}TempKeyItem))");
-                _ = sb.AppendLine("{");
-                _ = sb.AppendLine($"{propertyName}TempMap.Add({propertyName}TempKeyItem, {propertyName}TempValueItem);");
-                _ = sb.AppendLine("}");
+                if (metadata.IsPairList)
+                {
+                    _ = sb.AppendLine($"{propertyName}TempMap.Add(new({propertyName}TempKeyItem, {propertyName}TempValueItem));");
+                }
+                else if (IsLedgerMap(typePath))
+                {
+                    _ = sb.AppendLine($"{propertyName}TempMap[{propertyName}TempKeyItem] = {propertyName}TempValueItem;");
+                }
+                else
+                {
+                    _ = sb.AppendLine($"_ = {propertyName}TempMap.TryAdd({propertyName}TempKeyItem, {propertyName}TempValueItem);");
+                }
                 _ = sb.AppendLine($"if ({propertyName}MapSize > 0) {propertyName}MapRemaining--;");
 
                 _ = sb.AppendLine("}");
@@ -814,6 +834,7 @@ public sealed partial class CborSerializerCodeGen
                 "float" => ($"{buffer}[0] != 0xFA", "floating point"),
                 "double" => ($"{buffer}[0] != 0xFB", "floating point"),
                 "byte[]" => ($"({buffer}[0] >> 5) != 2", "byte string"),
+                _ when prop.IsPairList => ($"({buffer}[0] >> 5) != 5", "map"),
                 _ when cleanType.Contains("Dictionary<") => ($"({buffer}[0] >> 5) != 5", KnownCollectionKind(fullType, "Dictionary", "map")),
                 _ when cleanType.Contains("List<") || cleanType.Contains("ICborMaybeIndefList<") =>
                     ($"({buffer}[0] >> 5) is not (4 or 6)", fullType.Contains("Chrysalis.Codec.Types.ICborMaybeIndefList<") ? "array" : KnownCollectionKind(fullType, "List", "array")),

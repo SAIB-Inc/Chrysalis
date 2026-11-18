@@ -33,7 +33,9 @@ bool isIndefiniteMap = mapSize == -1;
 int mapRemaining = mapSize;
 while (isIndefiniteMap ? (reader.Buffer.Length > 0 && reader.Buffer[0] != 0xFF) : mapRemaining > 0)
 {
+int keyOffset = data.Length - reader.Buffer.Length;
 int key = reader.ReadInt32();
+if (resultMap.ContainsKey(key)) throw CborError.Decode(data, keyOffset, "Snapshot.ClassValue", "unique field key", key);
 object value = null;
 switch (key)
 {

@@ -45,6 +45,9 @@ public sealed partial class CborSerializerCodeGen
         public bool ShouldPreserveRaw { get; } = shouldPreserveRaw;
         public bool IsTypeNullable => Indentifier.Contains("?");
 
+        public bool KeepNetworkReadTrial { get; set; }
+        public Microsoft.CodeAnalysis.Location? UnionDeclarationLocation { get; set; }
+        public Microsoft.CodeAnalysis.DiagnosticDescriptor? UnionReadDiagnostic { get; set; }
         public List<SerializableTypeMetadata> ChildTypes { get; } = [];
         public List<SerializablePropertyMetadata> Properties { get; } = [];
 
@@ -98,7 +101,8 @@ public sealed partial class CborSerializerCodeGen
         bool isListItemTypeUnion = false,
         bool isMapKeyTypeUnion = false,
         bool isMapValueTypeUnion = false,
-        string? cborMaybeIndefListItemTypeFullName = null
+        string? cborMaybeIndefListItemTypeFullName = null,
+        bool isPairList = false
     )
     {
         public string PropertyName { get; } = propertyName;
@@ -107,6 +111,7 @@ public sealed partial class CborSerializerCodeGen
         public string PropertyTypeNamespace { get; } = propertyTypeNamespace;
         public bool IsList { get; } = isList;
         public bool IsMap { get; } = isMap;
+        public bool IsPairList { get; } = isPairList;
 
         public string? ListItemType { get; } = listItemType;
         public bool IsListItemTypeOpenGeneric { get; } = isListItemTypeOpenGeneric;

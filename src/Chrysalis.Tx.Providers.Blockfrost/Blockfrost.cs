@@ -557,10 +557,9 @@ public sealed class Blockfrost : ICardanoDataProvider, IDisposable
         int i => MetadatumIntLong.Create(i),
         JsonElement element => ConvertJsonElementToMetadatum(element),
         Dictionary<string, object> dict => MetadatumMap.Create(
-            dict.ToDictionary(
-                kv => ConvertToTransactionMetadatum(kv.Key) ?? MetadataText.Create(kv.Key),
-                kv => ConvertToTransactionMetadatum(kv.Value) ?? MetadataText.Create(kv.Value?.ToString() ?? "")
-            )
+            [.. dict.Select(kv => new KeyValuePair<ITransactionMetadatum, ITransactionMetadatum>(
+                ConvertToTransactionMetadatum(kv.Key) ?? MetadataText.Create(kv.Key),
+                ConvertToTransactionMetadatum(kv.Value) ?? MetadataText.Create(kv.Value?.ToString() ?? "")))]
         ),
         _ => value.ToString() is string s ? MetadataText.Create(s) : null
     };
@@ -572,10 +571,8 @@ public sealed class Blockfrost : ICardanoDataProvider, IDisposable
         JsonValueKind.Number when element.TryGetUInt64(out _) => MetadatumIntUlong.Create(element.GetUInt64()),
         JsonValueKind.Number => MetadataText.Create(element.ToString()),
         JsonValueKind.Object => MetadatumMap.Create(
-            element.EnumerateObject().ToDictionary(
-                prop => (ITransactionMetadatum)MetadataText.Create(prop.Name),
-                prop => ConvertJsonElementToMetadatum(prop.Value) ?? MetadataText.Create("")
-            )
+            [.. element.EnumerateObject().Select(prop => new KeyValuePair<ITransactionMetadatum, ITransactionMetadatum>(
+                MetadataText.Create(prop.Name), ConvertJsonElementToMetadatum(prop.Value) ?? MetadataText.Create("")))]
         ),
         JsonValueKind.Array => MetadatumList.Create(
             [.. element.EnumerateArray()

@@ -14,12 +14,221 @@ public sealed partial class CborSerializerCodeGen
                 return EmitMaybeIndefListProbeReader(sb, metadata);
             }
 
-            if (TryEmitStructuralProbeReader(sb, metadata))
+            if (EmitBuiltInReader(sb, metadata) || TryEmitStructuralProbeReader(sb, metadata))
             {
                 return sb;
             }
 
-            return EmitTryCatchReader(sb, metadata);
+            if (metadata.KeepNetworkReadTrial)
+            {
+                return EmitTryCatchReader(sb, metadata);
+            }
+
+            if (TryEmitCandidateShapes(sb, metadata))
+            {
+                return sb;
+            }
+
+            metadata.UnionReadDiagnostic = UnknownUnionShape;
+            return sb.AppendLine(AmbiguityError(metadata, FlattenUnionChildren(metadata.ChildTypes)));
+        }
+
+        private static string AmbiguityError(SerializableTypeMetadata union, List<SerializableTypeMetadata> leaves)
+        {
+            string alternatives = string.Join(", ", leaves.Select(leaf => leaf.BaseIdentifier));
+            string help = union.FullyQualifiedName switch
+            {
+                "Chrysalis.Codec.Types.Cardano.Core.IBlock" => "; use BlockWithEra.Read or a concrete block reader",
+                "Chrysalis.Codec.Types.Cardano.Core.Common.IMultiAsset" => "; use MultiAssetOutput.Read or MultiAssetMint.Read",
+                "Chrysalis.Codec.Types.Cardano.Core.Common.ITokenBundle" => "; use TokenBundleOutput.Read or TokenBundleMint.Read",
+                _ => ""
+            };
+            return $"throw CborError.Decode(data, 0, \"{union.FullyQualifiedName}\", \"unambiguous union case among {alternatives}{help}\");";
+        }
+
+        private bool TryEmitCandidateShapes(StringBuilder sb, SerializableTypeMetadata metadata)
+        {
+            List<SerializableTypeMetadata> leaves = FlattenUnionChildren(metadata.ChildTypes);
+            if (leaves.Count == 1)
+            {
+                _ = sb.AppendLine($"return {leaves[0].FullyQualifiedName}.Read(data, out bytesConsumed);");
+                return true;
+            }
+            if (leaves.Count == 0 || leaves.Any(leaf => leaf.SerializationType != SerializationType.List))
+            {
+                return false;
+            }
+
+            if (leaves.Where((leaf, index) => leaves.Take(index).Any(other => TupleShapesOverlap(leaf, other, 0))).Any())
+            {
+                metadata.UnionReadDiagnostic = OverlappingUnionShape;
+            }
+
+            _ = sb.AppendLine("int matched = -1;");
+            _ = sb.AppendLine($"(int Remaining, string Path, string Expected) failure = (data.Length, \"{metadata.FullyQualifiedName}\", \"registered union shape\");");
+            _ = sb.AppendLine("try {");
+            for (int i = 0; i < leaves.Count; i++)
+            {
+                _ = sb.AppendLine($"if (_Matches{i}(new CborReader(data.Span), ref failure))");
+                _ = sb.AppendLine("{");
+                _ = sb.AppendLine($"    if (matched >= 0) {AmbiguityError(metadata, leaves)}");
+                _ = sb.AppendLine($"    matched = {i};");
+                _ = sb.AppendLine("}");
+            }
+            _ = sb.AppendLine("} catch (global::SAIB.Cbor.CborException error) {");
+            _ = sb.AppendLine("throw CborError.Wrap(error, data, failure.Path, failure.Expected);");
+            _ = sb.AppendLine("}");
+            _ = sb.AppendLine("return matched switch");
+            _ = sb.AppendLine("{");
+            for (int i = 0; i < leaves.Count; i++)
+            {
+                _ = sb.AppendLine($"    {i} => {leaves[i].FullyQualifiedName}.Read(data, out bytesConsumed),");
+            }
+            _ = sb.AppendLine($"    _ => throw CborError.Decode(data, data.Length - failure.Remaining, failure.Path, failure.Expected)");
+            _ = sb.AppendLine("};");
+
+            for (int i = 0; i < leaves.Count; i++)
+            {
+                _ = sb.AppendLine($"static bool _Matches{i}(CborReader reader, ref (int Remaining, string Path, string Expected) failure)");
+                _ = sb.AppendLine("{");
+                int index = 0;
+                EmitTupleShape(sb, metadata.FullyQualifiedName, leaves[i], ref index, 0);
+                _ = sb.AppendLine("return true;");
+                _ = sb.AppendLine("}");
+            }
+            return true;
+        }
+
+        private bool TupleShapesOverlap(SerializableTypeMetadata first, SerializableTypeMetadata second, int depth)
+        {
+            if (first.CborIndex is >= 0 && second.CborIndex is >= 0 && first.CborIndex != second.CborIndex)
+            {
+                return false;
+            }
+            int common = Math.Max(first.Properties.Count(p => !p.IsTypeNullable), second.Properties.Count(p => !p.IsTypeNullable));
+            if (common > Math.Min(first.Properties.Count, second.Properties.Count))
+            {
+                return false;
+            }
+            foreach ((SerializablePropertyMetadata a, SerializablePropertyMetadata b) in first.Properties.OrderBy(p => p.Order).Zip(second.Properties.OrderBy(p => p.Order), (a, b) => (a, b)).Take(common))
+            {
+                if (a.IsTypeNullable && b.IsTypeNullable)
+                {
+                    continue;
+                }
+                string left = TupleFieldShape(a);
+                string right = TupleFieldShape(b);
+                if (left != "unknown" && right != "unknown" && left != right)
+                {
+                    return false;
+                }
+                if (FindNestedTuple(a, depth) is { } x && FindNestedTuple(b, depth) is { } y && !TupleShapesOverlap(x, y, depth + 1))
+                {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        private string TupleFieldShape(SerializablePropertyMetadata property) => NormalizeTypeName(property.PropertyTypeFullName) == "Chrysalis.Codec.Types.CborEncodedValue"
+            ? "unknown" : ClassifyPropertyShape(property);
+
+        private SerializableTypeMetadata? FindNestedTuple(SerializablePropertyMetadata prop, int depth) =>
+            depth < 4 && typeRegistry is not null
+            && typeRegistry.TryGetValue(NormalizeTypeName(prop.PropertyTypeFullName), out SerializableTypeMetadata? nested)
+            && nested is { SerializationType: SerializationType.List, CborTag: null }
+            && nested.Properties.All(p => !p.IsTypeNullable) ? nested : null;
+
+        private void EmitTupleShape(StringBuilder sb, string union, SerializableTypeMetadata tuple, ref int index, int depth)
+        {
+            string count = $"_size{index++}";
+            string path = $"{union}.{tuple.FullyQualifiedName}";
+            _ = sb.AppendLine("if (reader.Buffer.IsEmpty || (reader.Buffer[0] >> 5) != 4) return false;");
+            _ = sb.AppendLine("reader.ReadBeginArray();");
+            _ = sb.AppendLine($"int {count} = reader.ReadSize();");
+            int minimum = tuple.Properties.Count(p => !p.IsTypeNullable);
+            _ = sb.AppendLine($"if ({count} != -1 && ({count} < {minimum} || {count} > {tuple.Properties.Count})) return false;");
+            int position = 0;
+            foreach (SerializablePropertyMetadata prop in tuple.Properties.OrderBy(p => p.Order ?? int.MaxValue))
+            {
+                if (prop.IsTypeNullable)
+                {
+                    _ = sb.AppendLine($"if ({count} >= 0 && {count} <= {position}) return true;");
+                    _ = sb.AppendLine("if (!reader.Buffer.IsEmpty && reader.Buffer[0] == 0xFF) { reader.SkipDataItem(); return true; }");
+                }
+                bool leadingIndex = position++ == 0 && tuple.CborIndex is >= 0;
+                if (leadingIndex)
+                {
+                    _ = sb.AppendLine($"if (reader.Buffer.IsEmpty || (reader.Buffer[0] >> 5) != 0) return false;");
+                    _ = sb.AppendLine($"var _idx{index} = reader;");
+                    _ = sb.AppendLine($"if (_idx{index++}.ReadUInt64() != {tuple.CborIndex}) return false;");
+                }
+                if (!prop.IsTypeNullable && FindNestedTuple(prop, depth) is { } nested)
+                {
+                    EmitTupleShape(sb, union, nested, ref index, depth + 1);
+                    continue;
+                }
+                string shape = TupleFieldShape(prop);
+                string expected = prop.IsIndefinite && prop.IsList ? "indefinite array" : shape switch
+                {
+                    "text" => "text string",
+                    "bytes" => "byte string",
+                    "unknown" => "CBOR item",
+                    _ => shape
+                };
+                _ = sb.AppendLine($"if (reader.Buffer.Length <= failure.Remaining) failure = (reader.Buffer.Length, \"{path}.{prop.PropertyName}\", \"{expected}\");");
+                _ = sb.AppendLine("if (reader.Buffer.IsEmpty || reader.Buffer[0] == 0xFF) return false;");
+                if (shape != "unknown")
+                {
+                    string pattern = GetCborReaderStatePattern(shape);
+                    string nullable = prop.IsTypeNullable ? "reader.Buffer[0] is not (0xF6 or 0xF7) && " : "";
+                    _ = sb.AppendLine($"if ({nullable}reader.GetCurrentDataItemType() is not ({pattern})) return false;");
+                }
+                if (prop.IsList && prop.IsIndefinite)
+                {
+                    _ = sb.AppendLine("if (reader.Buffer[0] != 0x9F) return false;");
+                }
+                _ = sb.AppendLine("reader.SkipDataItem();");
+            }
+            _ = sb.AppendLine($"if ({count} == -1)");
+            _ = sb.AppendLine("{");
+            _ = sb.AppendLine("if (reader.Buffer.IsEmpty || reader.Buffer[0] != 0xFF) return false;");
+            _ = sb.AppendLine("reader.SkipDataItem();");
+            _ = sb.AppendLine("}");
+        }
+
+        private static bool EmitBuiltInReader(StringBuilder sb, SerializableTypeMetadata metadata)
+        {
+            string? method = NormalizeTypeName(metadata.FullyQualifiedName) switch
+            {
+                "Chrysalis.Codec.Types.Cardano.Core.Common.IPlutusData" => "PlutusWire.ReadData",
+                "Chrysalis.Codec.Types.Cardano.Core.Common.IPlutusBigInt" => "PlutusWire.ReadInteger",
+                "Chrysalis.Codec.Types.Cardano.Core.Transaction.ITransactionBody" => "TransactionEraReader.ReadBody",
+                "Chrysalis.Codec.Types.Cardano.Core.TransactionWitness.ITransactionWitnessSet" => "global::Chrysalis.Codec.Types.Cardano.Core.Transaction.TransactionEraReader.ReadWitnesses",
+                "Chrysalis.Codec.Types.Cardano.Core.Protocol.IProtocolParamUpdate" => "ProtocolUpdateWire.Read",
+                "Chrysalis.Codec.Types.ICborPrimitive" => "PrimitiveWire.Read",
+                _ => null
+            };
+            if (method is not null)
+            {
+                _ = sb.AppendLine("try");
+                _ = sb.AppendLine("{");
+                _ = sb.AppendLine($"return {method}(data, out bytesConsumed);");
+                _ = sb.AppendLine("}");
+                _ = sb.AppendLine("catch (Exception error) when (error is not CborDecodeException && CborError.IsDecodeFailure(error))");
+                _ = sb.AppendLine("{");
+                _ = sb.AppendLine($"throw CborError.Wrap(error, data, \"{metadata.FullyQualifiedName}\", \"registered union shape\");");
+                _ = sb.AppendLine("}");
+                return true;
+            }
+
+            if (NormalizeTypeName(metadata.FullyQualifiedName) == "Chrysalis.Codec.Types.Cardano.Core.Transaction.ITransaction")
+            {
+                _ = sb.AppendLine($"throw CborError.Decode(data, 0, \"{metadata.FullyQualifiedName}\", \"explicit transaction era\");");
+                return true;
+            }
+
+            return false;
         }
 
         public StringBuilder EmitWriter(StringBuilder sb, SerializableTypeMetadata metadata)
@@ -137,8 +346,20 @@ public sealed partial class CborSerializerCodeGen
             bool hasArraySizeChildren = probeGroups.Keys.Any(k => k.StartsWith("array:", StringComparison.Ordinal));
             bool hasStateChildren = probeGroups.Keys.Any(k => !k.StartsWith("tag:", StringComparison.Ordinal) && !k.StartsWith("idx:", StringComparison.Ordinal) && !k.StartsWith("array:", StringComparison.Ordinal) && k != "constr");
 
+            // Index patterns cannot be emitted by a data-item-state switch.
+            if (hasIdxChildren && (hasTagChildren || hasConstrChildren || hasArraySizeChildren || hasStateChildren))
+            {
+                return false;
+            }
+
             if (hasArraySizeChildren && !hasTagChildren && !hasConstrChildren && !hasIdxChildren && !hasStateChildren)
             {
+                // The size switch can select only exact lengths. A trailing nullable field
+                // lets its reader accept a shorter tuple, possibly shared by another case.
+                if (children.Any(child => child.Properties.Any(prop => prop.IsTypeNullable)))
+                {
+                    return false;
+                }
                 EmitArraySizeBranch(sb, metadata, probeGroups);
             }
             else if (hasIdxChildren && !hasTagChildren && !hasConstrChildren && !hasStateChildren && !hasArraySizeChildren)
@@ -498,7 +719,7 @@ public sealed partial class CborSerializerCodeGen
                 {
                     return "boolean";
                 }
-                if (propType.Contains("Dictionary<"))
+                if (child.Properties[0].IsMap)
                 {
                     return "map";
                 }

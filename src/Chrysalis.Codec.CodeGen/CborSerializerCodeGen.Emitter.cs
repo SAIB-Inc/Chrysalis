@@ -116,10 +116,19 @@ public sealed partial class CborSerializerCodeGen
             _ = sb.AppendLine("#pragma warning restore CS0109, CS8669");
 
             context.AddSource($"{hintName}.Serializer.g.cs", sb.ToString());
+            if (metadata.UnionReadDiagnostic is { } descriptor)
+            {
+                context.ReportDiagnostic(Diagnostic.Create(descriptor, metadata.UnionDeclarationLocation, metadata.FullyQualifiedName));
+            }
         }
 
         private static StringBuilder EmitRecordStructFields(StringBuilder sb, SerializableTypeMetadata metadata)
         {
+            if (IsTransactionEnvelope(metadata.FullyQualifiedName))
+            {
+                _ = sb.AppendLine("internal global::Chrysalis.Codec.Types.Cardano.Core.Era? SelectedEra { get; init; }");
+            }
+
             // Internal field slices
             _ = sb.AppendLine("internal ReadOnlyMemory<byte> _raw { get; init; }");
             for (int i = 0; i < metadata.Properties.Count; i++)
@@ -150,6 +159,11 @@ public sealed partial class CborSerializerCodeGen
             return sb;
         }
 
+        private static bool IsTransactionEnvelope(string typePath) => NormalizeTypeName(typePath) is
+            "Chrysalis.Codec.Types.Cardano.Core.Transaction.PostMaryTransaction" or
+            "Chrysalis.Codec.Types.Cardano.Core.Transaction.AllegraTransaction" or
+            "Chrysalis.Codec.Types.Cardano.Core.Transaction.ShelleyTransaction";
+
         private static StringBuilder EmitPartialPropertyAccessor(StringBuilder sb, SerializablePropertyMetadata prop, int fieldIndex, string typePath)
         {
             string cleanType = prop.PropertyType.Replace("?", "");
@@ -173,7 +187,12 @@ public sealed partial class CborSerializerCodeGen
             }
             else if (prop.IsMap)
             {
-                _ = EmitMapPartialProperty(sb, prop, fieldRef);
+                _ = EmitMapPartialProperty(sb, prop, fieldRef, typePath);
+            }
+            else if (IsTransactionEnvelope(typePath) && (prop.PropertyName is "Body" or "Witnesses"))
+            {
+                string method = prop.PropertyName == "Body" ? "ReadBody" : "ReadWitnesses";
+                _ = sb.AppendLine($"return TransactionEraReader.{method}({fieldRef}, SelectedEra, out _);");
             }
             else if (prop.UnionHints.Count > 0 && prop.UnionHintDiscriminantProperty is not null)
             {
@@ -358,7 +377,7 @@ public sealed partial class CborSerializerCodeGen
             return sb;
         }
 
-        private static StringBuilder EmitMapPartialProperty(StringBuilder sb, SerializablePropertyMetadata prop, string fieldRef)
+        private static StringBuilder EmitMapPartialProperty(StringBuilder sb, SerializablePropertyMetadata prop, string fieldRef, string typePath)
         {
             string keyType = prop.MapKeyTypeFullName!;
             string valueType = prop.MapValueTypeFullName!;
@@ -374,15 +393,7 @@ public sealed partial class CborSerializerCodeGen
             _ = sb.AppendLine("_r.ReadBeginMap();");
             _ = sb.AppendLine("int _size = _r.ReadSize();");
 
-            if (IsReadOnlyMemoryByteType(keyType))
-            {
-                _ = sb.AppendLine($"var _map = new global::System.Collections.Generic.Dictionary<{keyType}, {valueType}>(global::Chrysalis.Codec.Serialization.Utils.ReadOnlyMemoryComparer.Instance);");
-            }
-            else
-            {
-                _ = sb.AppendLine($"var _map = new global::System.Collections.Generic.Dictionary<{keyType}, {valueType}>();");
-            }
-
+            _ = sb.AppendLine($"var _map = {MapInitializer(prop, typePath)};");
             _ = sb.AppendLine("int _remaining = _size;");
             _ = sb.AppendLine("while (_size == -1 ? (_r.Buffer.Length > 0 && _r.Buffer[0] != 0xFF) : _remaining > 0)");
             _ = sb.AppendLine("{");
@@ -440,10 +451,8 @@ public sealed partial class CborSerializerCodeGen
                 _ = sb.AppendLine($"_r = new CborReader({fieldRef}.Span.Slice(_vPos + _vConsumed));");
             }
 
-            _ = sb.AppendLine("if (!_map.ContainsKey(_key))");
-            _ = sb.AppendLine("{");
-            _ = sb.AppendLine("_map.Add(_key, _val);");
-            _ = sb.AppendLine("}");
+            _ = sb.AppendLine(prop.IsPairList ? "_map.Add(new(_key, _val));"
+                : IsLedgerMap(typePath) ? "_map[_key] = _val;" : "_ = _map.TryAdd(_key, _val);");
             _ = sb.AppendLine("}");
             _ = sb.AppendLine("catch (Exception error) when (CborError.IsDecodeFailure(error))");
             _ = sb.AppendLine("{");
@@ -456,9 +465,45 @@ public sealed partial class CborSerializerCodeGen
             _ = sb.AppendLine("if (_size > 0) _remaining--;");
             _ = sb.AppendLine("}");
             _ = sb.AppendLine("if (_size == -1 && _r.Buffer.Length > 0 && _r.Buffer[0] == 0xFF) _r.ReadDataItem();");
+            if (prop.IsPairList)
+            {
+                _ = sb.AppendLine("if (_size == -1) Chrysalis.Codec.Serialization.IndefiniteStateTracker.SetIndefinite(_map);");
+            }
             _ = sb.AppendLine("return _map;");
 
             return sb;
+        }
+
+        // Only ledger dictionaries change policy. Network protocol maps and consumer
+        // dictionaries retain their pre-X7 first-wins behavior.
+        private static bool IsLedgerMap(string typePath) =>
+            NormalizeTypeName(typePath).StartsWith("Chrysalis.Codec.Types.Cardano.Core.", StringComparison.Ordinal);
+
+        private static string MapInitializer(SerializablePropertyMetadata prop, string typePath)
+        {
+            string key = prop.MapKeyTypeFullName!;
+            string value = prop.MapValueTypeFullName!;
+            if (prop.IsPairList)
+            {
+                return $"new global::System.Collections.Generic.List<global::System.Collections.Generic.KeyValuePair<{key}, {value}>>()";
+            }
+
+            const string utils = "global::Chrysalis.Codec.Serialization.Utils";
+            string? comparer = IsReadOnlyMemoryByteType(key) ? $"{utils}.ReadOnlyMemoryComparer.Instance" : null;
+            if (comparer is null && IsLedgerMap(typePath))
+            {
+                comparer = NormalizeTypeName(key) switch
+                {
+                    "Chrysalis.Codec.Types.Cardano.Core.Certificates.RewardAccount" => $"{utils}.LedgerKeyComparers.RewardAccount",
+                    "Chrysalis.Codec.Types.Cardano.Core.Transaction.Credential" => $"{utils}.LedgerKeyComparers.Credential",
+                    "Chrysalis.Codec.Types.Cardano.Core.Governance.Voter" => $"{utils}.LedgerKeyComparers.Voter",
+                    "Chrysalis.Codec.Types.Cardano.Core.Governance.GovActionId" => $"{utils}.LedgerKeyComparers.GovActionId",
+                    "Chrysalis.Codec.Types.Cardano.Core.TransactionWitness.RedeemerKey" => $"{utils}.LedgerKeyComparers.RedeemerKey",
+                    _ => null
+                };
+            }
+
+            return $"new global::System.Collections.Generic.Dictionary<{key}, {value}>({comparer})";
         }
 
         private static StringBuilder EmitPrimitiveMapKeyRead(StringBuilder sb, string cleanKeyType, string fieldRef)

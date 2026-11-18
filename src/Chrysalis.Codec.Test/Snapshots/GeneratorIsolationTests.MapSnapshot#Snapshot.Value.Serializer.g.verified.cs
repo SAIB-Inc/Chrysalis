@@ -76,8 +76,10 @@ bool isIndefiniteMap = mapSize == -1;
 int mapRemaining = mapSize;
 ReadOnlyMemory<byte> _sf0 = default;
 ReadOnlyMemory<byte> _sf1 = default;
+HashSet<int>? unknownKeys = null;
 while (isIndefiniteMap ? (reader.Buffer.Length > 0 && reader.Buffer[0] != 0xFF) : mapRemaining > 0)
 {
+int keyOffset = data.Length - reader.Buffer.Length;
 int key = reader.ReadInt32();
 int _vs = data.Length - reader.Buffer.Length;
 reader.SkipDataItem();
@@ -85,12 +87,15 @@ int _ve = data.Length - reader.Buffer.Length;
 switch (key)
 {
 case 0:
+if (!_sf0.IsEmpty) throw CborError.Decode(data, keyOffset, "Snapshot.Value", "unique field key", key);
 _sf0 = data[_vs.._ve];
 break;
 case 1:
+if (!_sf1.IsEmpty) throw CborError.Decode(data, keyOffset, "Snapshot.Value", "unique field key", key);
 _sf1 = data[_vs.._ve];
 break;
 default:
+if (!(unknownKeys ??= new()).Add(key)) throw CborError.Decode(data, keyOffset, "Snapshot.Value", "unique field key", key);
 break;
 }
 if (mapSize > 0) mapRemaining--;

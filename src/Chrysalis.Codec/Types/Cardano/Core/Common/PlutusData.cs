@@ -17,7 +17,7 @@ public readonly partial record struct PlutusConstr : IPlutusData
 [CborSerializable]
 public readonly partial record struct PlutusMap : IPlutusData
 {
-    public partial Dictionary<IPlutusData, IPlutusData> Value { get; }
+    public partial List<KeyValuePair<IPlutusData, IPlutusData>> Value { get; }
 }
 
 [CborSerializable]
