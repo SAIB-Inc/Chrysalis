@@ -5,11 +5,13 @@ import copy
 import io
 import json
 import os
+import re
 from pathlib import Path
 import sys
 import tarfile
 import time
 
+if os.environ.get('FLY_NO_UPDATE_CHECK') != '1': raise RuntimeError('Fly auto-update not disabled')
 if sys.argv[1:] == ['version']:
     print('fly fixture-v1')
     raise SystemExit(0)
@@ -84,6 +86,7 @@ with state.with_suffix('.lock').open('w') as lock:
     if existing: protected += [dict(Name=existing)]
     if s.get('neighbourChanged'): protected += [dict(Name='new-neighbour')]
     if a[:2] == ['apps', 'create']:
+        if not re.fullmatch(r'[a-z0-9-]+', a[2]): raise RuntimeError('Noncanonical stub app name')
         s.update(app=True, name=a[2]); out = json.loads((recorded/'app-created.json').read_text()); out['Name']=a[2]
     elif a[:2] == ['apps', 'destroy']:
         if not a[2].startswith('chrysalis-gate-'): raise RuntimeError('Attempt to mutate a neighbour')
