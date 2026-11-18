@@ -718,7 +718,7 @@ def report(output, mode=None):
         result['sides'] = row['sides']
         results[row['id']] = result
     import gate_time
-    timed, time_lines = gate_time.read_results(output, seal)
+    timed, time_lines = gate_time.read_results(output, seal, mode=applied_mode)
     results.update(timed)
     verdict = outcome(seal, results, mode=applied_mode)
     title = f'gate {applied_mode} · ' + ('canonical' if seal['canonical'] else 'non-canonical sides')

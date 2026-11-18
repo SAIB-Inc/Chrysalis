@@ -275,19 +275,22 @@ def apply_rule(result, ratios, mode):
                 mean=st.mean(ratios), confidence95=[low, high], ratios=ratios)
 
 
-def pooled(first, repeat, mode):
-    if first['status'] != 'FAIL':
+def pooled(first, repeat, mode, *, sealed_first_status=None):
+    if (first['status'] if sealed_first_status is None else sealed_first_status) != 'FAIL':
         raise ValueError('Only a failing row may repeat')
-    if 'ratios' not in repeat:
-        return dict(status='INCONCLUSIVE', reason='Repeat invalid: ' + repeat['reason'], first=first, repeat=repeat)
+    for label, phase in (('First', first), ('Repeat', repeat)):
+        if 'ratios' not in phase:
+            return dict(status='INCONCLUSIVE', reason=f'{label} invalid: ' + phase['reason'], first=first, repeat=repeat)
     result = apply_rule(dict(rowClass=first['rowClass'], band=max(first.get('band', 0), repeat.get('band', 0))),
                         first['ratios'] + repeat['ratios'], mode)
     return dict(result, first=first, repeat=repeat)
 
 
-def read_results(output, seal):
+def read_results(output, seal, *, mode=None):
     """Pure re-reporting from sealed inputs plus hashed session archives."""
     import gate
+    sealed_mode = seal['mode']
+    applied_mode = mode or sealed_mode
     values, lines = {}, []
     if seal.get('timePlans'):
         lines += ['time · Fly performance-8x iad · arithmetic mean paired ratios',
@@ -298,6 +301,7 @@ def read_results(output, seal):
     for number, plan in enumerate(seal.get('timePlans', [])):
         for row in plan['rows']:
             first = None
+            first_evidence = None
             for phase in ('first', 'repeat'):
                 matches = [item for item in index if item['session'] == number and item['phase'] == phase]
                 require(len(matches) <= 1, 'Ambiguous time artifact')
@@ -314,15 +318,22 @@ def read_results(output, seal):
                     if row is plan['rows'][0]:
                         lines.append('neighbours / duration / cost (context only): ' + json.dumps(payload.get('context', {}), sort_keys=True))
                     chosen = [pair for pair in payload['pairs'] if pair['id'] == row['id']]
-                    current = baseline_band(row, chosen) if plan['design'] == 'micro-band' and not invalid else verdict(row, chosen, seal['mode'], noise=row.get('noise'), invalid=invalid)
+                    current = baseline_band(row, chosen) if plan['design'] == 'micro-band' and not invalid else verdict(row, chosen, applied_mode, noise=row.get('noise'), invalid=invalid)
                     current['blockDiagnostic'] = schedules.block_diagnostics(chosen)
                     if row['id'] in band_failures:
                         current = dict(status='INCONCLUSIVE', reason='One-time micro band invalid')
                 if phase == 'first':
                     first = current
+                    if matches and row['id'] not in band_failures:
+                        first_evidence = chosen, invalid
                 elif matches and row['id'] in item['ids']:
-                    require(seal['mode'] == 'release' and plan['repeatAllowed'], 'Unsealed repeat')
-                    first = pooled(first, current, seal['mode'])
+                    require(sealed_mode == 'release' and plan['repeatAllowed'], 'Unsealed repeat')
+                    sealed_status = first['status']
+                    if applied_mode != sealed_mode and first_evidence is not None:
+                        # Alternate reporting never grants or removes a sealed release repeat.
+                        first_pairs, first_invalid = first_evidence
+                        sealed_status = verdict(row, first_pairs, sealed_mode, noise=row.get('noise'), invalid=first_invalid)['status']
+                    first = pooled(first, current, applied_mode, sealed_first_status=sealed_status)
             if plan['design'] == 'micro-band':
                 if first['status'] != 'PASS':
                     band_failures.add(row['id'])
