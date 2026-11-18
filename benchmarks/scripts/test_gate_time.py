@@ -138,6 +138,7 @@ class TimeTests(unittest.TestCase):
         self.assertEqual(timing.pooled(first, repeat, 'release')['status'], 'FAIL')
         invalid = timing.verdict(r, [], 'release')
         self.assertEqual(timing.pooled(first, invalid, 'release')['status'], 'INCONCLUSIVE')
+        self.assertIn('First invalid:', timing.pooled(invalid, repeat, 'change', sealed_first_status='FAIL')['reason'])
         with self.assertRaises(ValueError):
             timing.pooled(repeat, repeat, 'release')
 
@@ -265,6 +266,31 @@ class TimeTests(unittest.TestCase):
                 index = json.loads((root / 'time/index.json').read_text()); index[0]['sha256'] = gate.digest(raw)
                 gate.session.save(root / 'time/index.json', index)
                 self.assertEqual(gate.report(root)['outcome'], 'SUBSET')
+        # C5: one release seal permits its repeat; only the reporting rule changes.
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            r = row(pairs=24)
+            plan = dict(design='full', rows=[r], repeatAllowed=True, destroyGuardSeconds=4145,
+                        limitUsd=.45221430555555553, limitWithRepeatUsd=.9044286111111111)
+            seal = dict(mode='release', ruleVersion=gate.stats.RULE_VERSION, rows=[r], timePlans=[plan],
+                        canonical=False, timeScopeDecided=True, bands={}, releaseSet=[r['id']], gated=dict(areas={}))
+            gate.write_seal(root, seal)
+            index = []
+            for phase in ('first', 'repeat'):
+                path = f'time/{phase}.json'
+                gate.session.save(root / path, dict(pairs=pairs(r, 1.025), invalid=None))
+                index.append(dict(session=0, phase=phase, ids=[r['id']], path=path, sha256=gate.digest(root / path)))
+            gate.session.save(root / 'time/index.json', index)
+            saved = {path: path.read_bytes() for path in root.rglob('*') if path.is_file()}
+            for mode, expected in ((None, 'FAIL'), ('change', 'PASS')):
+                actual = gate.report(root, mode=mode)['rows'][r['id']]
+                self.assertEqual([actual[phase]['status'] for phase in ('first', 'repeat')] + [actual['status']],
+                                 [expected] * 3, f'C5 first/repeat/joint in {mode or "sealed release"} mode')
+            self.assertEqual({path: path.read_bytes() for path in root.rglob('*') if path.is_file()}, saved)
+            plan['repeatAllowed'] = False
+            gate.write_seal(root, seal)
+            with self.assertRaisesRegex(ValueError, 'Unsealed repeat'):
+                gate.report(root, mode='change')
         seal = dict(mode='release', canonical=True, timeScopeDecided=True,
                     rows=[dict(id='real'), dict(id='artifact', rowClass='recorded-only')], releaseSet=['real'])
         self.assertEqual(gate.outcome(seal, dict(real=dict(status='PASS'), artifact=dict(status='FAIL'))), 'RELEASE PASS')
