@@ -79,9 +79,8 @@ def time_rows(rows, config):
             row.setdefault('replay', inferred)
             timing.require(row['replay'] in ('tcp', 'offline'), 'Unknown timing replay')
         row['noise'] = copy.deepcopy(config['time']['noise'].get(row['id'], config['time']['noise'].get(row['replay'])))
-        if row['noise']:
-            noise = row['noise']
-            timing.require(noise.get('design') == 'long' and noise.get('machine') == 'performance-8x' and 0 <= noise['band'] < .05, 'Noise record provenance or band mismatch')
+        if row['noise'] is not None:
+            timing.require(timing.noise_band(row['noise']) is not None, 'Noise record provenance or band mismatch')
         result.append(row)
     return result
 
@@ -403,9 +402,11 @@ def fly_held(directory):
         for phase in ('first', 'repeat'):
             selected = plan['rows']
             if phase == 'repeat':
-                current, _ = timing.read_results(directory, seal)
-                selected = [row for row in selected if current[row['id']]['status'] == 'FAIL' and row.get('rowClass') != 'recorded-only']
-                if not selected or not plan['repeatAllowed'] or any(item.get('invalid') for item in [payload]):
+                if not plan['repeatAllowed']:
+                    break
+                _, ids = timing.session_outcome(directory, seal, number)
+                selected = [row for row in selected if row['id'] in ids]
+                if not selected:
                     break
             # A repeat is a deterministic subset of the sealed archive, not a new go.
             relative = f'input/session-{number}.tar.gz'
@@ -493,8 +494,7 @@ def verified_bundle(directory, seal, relative):
     number = int(match[1])
     original_plan = seal['timePlans'][number]
     timing.require(original_plan['repeatAllowed'], 'Repeat not authorized')
-    current, _ = timing.read_results(directory, seal)
-    selected = [row['id'] for row in original_plan['rows'] if current[row['id']]['status'] == 'FAIL' and row.get('rowClass') != 'recorded-only']
+    _, selected = timing.session_outcome(directory, seal, number, first_only=True)
     timing.require(selected, 'No failed rows to repeat')
     expected = schedules.worker_plan(original_plan, repeat=True, selected=selected)
     import io

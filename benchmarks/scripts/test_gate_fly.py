@@ -327,12 +327,19 @@ class LauncherTests(unittest.TestCase):
             self.assertEqual(calls(root), [])
 
     def test_mr4d_whole_sealed_change_go_and_release_repeat_are_one_command_each(self):
-        for mode, ratio, expected, machines in [('change', 1, 0, 1), ('release', 1.03, 2, 2)]:
-            with self.subTest(mode=mode), tempfile.TemporaryDirectory() as td:
+        for mode, ratio, expected, machines, blocked in [('change', 1, 0, 1, None), ('release', 1.03, 2, 2, None),
+                                                         ('release', 1.03, 2, 1, 'A band'), ('release', 1.03, 2, 1, 'noise')]:
+            with self.subTest(mode=mode, blocked=blocked), tempfile.TemporaryDirectory() as td:
                 repo = Path(td); root = repo/'benchmarks/out/gate-whole'
                 _, seal, env = fixture(root)
                 plan = seal['timePlans'][0]
                 seal['mode'] = mode
+                plan['rows'][0]['noise'] = None if mode == 'release' else plan['rows'][0]['noise']
+                if blocked == 'noise':
+                    plan['rows'][0]['expected'] = {'release': 'FAIL'}
+                if blocked == 'A band':
+                    plan['rows'].append(dict(plan['rows'][0], id='time/control-miss'))
+                    seal['releaseSet'].append('time/control-miss')
                 if mode == 'change':
                     plan['repeatAllowed'] = False
                     for r in plan['rows']:
@@ -343,7 +350,10 @@ class LauncherTests(unittest.TestCase):
                 gate.session.save(bundle_input / 'plan.json', schedules.worker_plan(plan))
                 bundle.pack(bundle_input, root / 'input/session-0.tar.gz')
                 seal['files']['input/session-0.tar.gz'] = gate.digest(root / 'input/session-0.tar.gz')
-                gate.session.save(root / 'fixture-pairs.json', pairs(plan['rows'][0], ratio))
+                observed = pairs(plan['rows'][0], ratio)
+                if blocked == 'A band':
+                    observed += pairs(plan['rows'][1], a=[1.06] * plan['rows'][1]['aPairs'])
+                gate.session.save(root / 'fixture-pairs.json', observed)
                 if mode == 'release':
                     shutil.copy2(root/'local.json', root/'input/fly-local.json')
                     seal['files']['input/fly-local.json'] = gate.digest(root/'input/fly-local.json')
@@ -372,9 +382,16 @@ class LauncherTests(unittest.TestCase):
                 else:
                     self.assertNotIn('host', payload)
                 self.assertEqual(report['outcome'], 'SUBSET' if mode == 'change' else 'FAIL')
-                self.assertEqual('repeat' in report['rows'][plan['rows'][0]['id']], mode == 'release')
+                self.assertEqual('repeat' in report['rows'][plan['rows'][0]['id']], mode == 'release' and not blocked)
+                if blocked:
+                    relative = 'input/repeat-0.tar.gz'
+                    bundle.make_repeat(root, seal, 0, plan['rows'][:1], relative)
+                    with self.assertRaisesRegex(ValueError, 'No failed rows to repeat'):
+                        bundle.verified_bundle(root, seal, relative)
+                elif mode == 'release':
+                    self.assertTrue(bundle.verified_bundle(root, seal, 'input/repeat-0.tar.gz'))
                 names = [call['argv'][2] for call in calls(root) if call['argv'][:2] == ['apps', 'create']]
-                self.assertEqual(len(names), 1 if mode == 'change' else 2)
+                self.assertEqual(len(names), machines)
                 for name in names:
                     self.assertRegex(name, r'^[a-z0-9-]+$')
 
@@ -405,6 +422,10 @@ class LauncherTests(unittest.TestCase):
             self.assertIn('time · Fly performance-8x · arithmetic mean paired ratios', text)
             self.assertIn('session 1 · ewr', text)
             self.assertIn('session 2 · ams', text)
+            with patch.object(gate, 'digest', wraps=gate.digest) as digest:
+                gate.report(root)
+            self.assertEqual([c.args[0] for c in digest.call_args_list if c.args[0].parent == root / 'time'],
+                             [root / i['path'] for i in index])
 
     def test_sealed_region(self):
         for wrong in (False, True):

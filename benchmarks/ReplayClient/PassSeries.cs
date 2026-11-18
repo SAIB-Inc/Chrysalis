@@ -19,6 +19,7 @@ internal sealed class PassSeries
         long stamp = Stopwatch.GetTimestamp();
         Add(false, 0, 1, 0, stamp, stamp, 0, 0, 0, 0);
         Add(true, 0, 1, 0, stamp, stamp, 0, 0, 0, 0);
+        BeginMeasured();
         Rows.Clear();
         WarmupRows.Clear();
         GroupBoundaries.Clear();
@@ -57,9 +58,11 @@ internal sealed class PassSeries
         if (warmup && pass == Program.WarmupPasses)
         {
             _warmupElapsedTicks = Stopwatch.GetTimestamp() - _started;
-            Boundary("measured", 0);
         }
     }
+
+    /// <summary>Take the measured counter baseline after the start acknowledgement.</summary>
+    internal void BeginMeasured() => Boundary("measured", 0);
 
     private void Boundary(string stage, int passIndex)
     {

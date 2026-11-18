@@ -21,3 +21,5 @@ TOKEN, SECRET, PASSWORD or API_KEY, or ending in _KEY. No values are printed.
 The client runs on its own. Opt-in `--observed` emits acknowledged measured-window
 marks outside timed passes; a missing answer exits 3 within a 30-second wait,
 without writing a result.
+The measured counter baseline is taken after the `MEASURED_START`
+acknowledgement, before the first measured pass.

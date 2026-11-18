@@ -238,11 +238,31 @@ PASS requires its 95% Student-t interval [L,U] to have L <=1.00 and U <=1.05.
 A valid L >1.00 FAILs. Otherwise it is INCONCLUSIVE. Each replay gets its own
 baseline A/A band below 5%, then fresh B pairs under the sealed local
 ABBA/BAAB schedule, with A first and rows spread over super-rounds. All declared pairs must finish, at least five per required phase
-must be admitted, both sides must be stable over the three 20-pass groups,
-and aggregate JIT compile-time share must be <=0.5% (including timing-rejected
-complete processes). Methods compiled are reported, not gated. Admission uses
+must be admitted. For A, average the two members' stability contrasts within
+each pair before taking the interval across pairs. For B, check each side
+separately. Each population must be stable over the three 20-pass groups, and
+its aggregate JIT compile-time share must be <=0.5%, including timing-rejected
+complete processes. The counter starts after `MEASURED_START` is acknowledged.
+Methods compiled are reported, not gated. After the data and admission checks,
+the report names every failed qualification check and its figure and limit.
+Admission uses
 only the acknowledged measured window: aggregate/per-core steal <=1%/2% and
 foreign CPU total/per-process <=5%/2% of one core.
+
+A release session does not repeat unless every gated row qualified (a declared
+smoke must be complete). A controls row may seal `expected` statuses for release
+and/or change mode, or `"smoke"`. Controls check both modes and skip the repeat
+if any declared result is contradicted. Other plans use only their sealed mode.
+
+Known limit: each B side's own check is unchanged, but the whole release gate
+accepted drift more often in 58 of 294 simulated B-side cases, 31 beyond the
+limit. The largest increase was on RECV1-like offline replay, with +5.5% drift
+on the B baseline alone: 1.60% versus 0.01%. Of 3,451 extra passes, the old gate
+had flagged 2,979 for the counter window, 413 for checking the A sides separately,
+and 59 for both. None came from changing the B check. With MR5b's host probe in front,
+the model put that case at 0.20% per RECV1-like machine drawn (0.035% at the tighter probe
+limit). Across the four-host offline mix it was 0.70% (0.66%) per measured row,
+versus 0.34% (0.35%) for the old rule behind the same probe. These are model results.
 
 Full mainnet+preprod timing fits one machine up to about 12.5 MB. Above that,
 D51's option 2 uses two sessions, preprod TCP+mainnet offline then mainnet TCP+
@@ -299,7 +319,8 @@ information only. It does not read environment variables.
 
 FieldReadBench.ReadEveryField may drift within a process. Alternating the side
 order balances between-process drift; run order is not evidence of stability.
-Release time checks each side's three group intervals independently and holds
+Release time checks the three group intervals for each B side and for the
+pair-averaged A phase, and holds
 the RC if they drift. Direct release bytes retain all five batches, compare
 process means against the frozen A/A band and reject a resolved increase; they
 do not claim a direct-row plateau or select the last/lowest batch. Whole-path
