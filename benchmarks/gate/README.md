@@ -27,7 +27,9 @@ Default-set sizing alone may increase counts to use remaining capacity. An optio
 `manifest` is repository-relative; measurement awaits P4 MR-B's client support.
 No ad-hoc row can silently obtain a noise band. An object with `entries` can set
 `"sessionPerRow": true` to seal one Fly session per row, only in change mode
-with exclusively recorded-only time rows.
+with exclusively recorded-only time rows. Only those entries may declare a Fly
+`region`: it is sealed in the session, priced using Fly’s regional markup, and
+checked on the launched machine. Omission keeps `iad` and its base price.
 
 `band --side <commit> --set <comma-separated-patterns>` freezes baseline-only
 10-pair bytes bands. D39 rows have no band. The six audit range rows share their original six-row

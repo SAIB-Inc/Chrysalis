@@ -128,12 +128,13 @@ class ScheduleTests(unittest.TestCase):
         fingerprint = dict(vendor_id='fixture CPU', flagsSha256='a' * 64)
         for count in (4, 2):
             block = next(b for b in worker['blocks'] if len(b['members']) == count)
-            one = dict(worker, blocks=[block], measurementCutoffSeconds=100)
+            one = dict(worker, blocks=[block], measurementCutoffSeconds=100, region='ams')
             for remaining, expected in ((count * 11.5 - .01, 0), (count * 11.5, count)):
                 with self.subTest(count=count, remaining=remaining), tempfile.TemporaryDirectory() as td:
                     root = Path(td)
                     calls = []
-                    def fake(spec, job, dest):
+                    def fake(spec, job, dest, *, region=None):
+                        self.assertEqual(region, 'ams')
                         calls.append((spec, job, dest))
                         if dest.parent == root / 'output':
                             host = dest.parent / 'host.json'

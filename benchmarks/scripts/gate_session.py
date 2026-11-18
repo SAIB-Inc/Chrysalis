@@ -28,12 +28,12 @@ DESIGNS = {'short': (1, 25), 'long': (180, 60)}
 COUNTERS = ('compiledMethods', 'compiledILBytes', 'compilationTimeTicks')
 
 
-def detect_platform():
+def detect_platform(expected_region='iad'):
     """Detect before the allowlist strips Fly's machine metadata; never trust a job."""
     app, region = os.environ.get('FLY_APP_NAME'), os.environ.get('FLY_REGION')
     if any(key in os.environ for key in ('FLY_APP_NAME', 'FLY_REGION', 'FLY_MACHINE_ID')):
-        if not app or region != 'iad' or os.cpu_count() != 8 or platform.machine() != 'x86_64':
-            raise ValueError('Named 8-CPU x64 iad Fly machine required')
+        if not app or region != expected_region or os.cpu_count() != 8 or platform.machine() != 'x86_64':
+            raise ValueError(f'Named 8-CPU x64 {expected_region} Fly machine required')
         return 'fly'
     return 'pc'
 
@@ -306,11 +306,11 @@ def side_quiescence(rows):
                 groupCompiledMethods=counts, group3NotAboveGroup1=counts[2] <= counts[0])
 
 
-def member(spec, job, dest):
+def member(spec, job, dest, *, region='iad'):
     """One client/direct process; called inside the PC's heavy invocation."""
     dest = Path(dest)
     dest.mkdir(parents=True, exist_ok=False)
-    platform = detect_platform()
+    platform = detect_platform(region)
     generated = dict(job['environment'], CHRYSALIS_BENCHMARK_RESULTS=str(dest))
     env = environment(generated)
     save(dest / 'environment.json', env)

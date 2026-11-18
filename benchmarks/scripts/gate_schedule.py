@@ -163,7 +163,7 @@ def worker_plan(plan, *, repeat=False, selected=None):
         blocks.append(dict(id=block['id'], members=block['members'], workload=workload,
                            chargeSeconds=row.get('chargeSeconds', 0)))
     limits = {key: plan[key] for key in ('destroyGuardSeconds', 'measurementCutoffSeconds', 'limitUsd',
-                                       'limitWithRepeatUsd', 'repeatAllowed', 'counts') if key in plan}
+                                       'limitWithRepeatUsd', 'repeatAllowed', 'counts', 'region') if key in plan}
     return dict(limits, scheduleVersion=VERSION, blocks=blocks, members=members, builds=builds, workloads=workloads)
 
 

@@ -18,6 +18,9 @@ MAX_APP_SECONDS = 7200
 GUARD = 7000
 CUTOFF = 6600
 PRICE = .3667
+# Fly Started Fly Machines regional price selector, captured 2026-11-19.
+# https://fly.io/docs/about/pricing/
+REGIONS = dict(iad=1, ewr=1, ams=1.038461538, arn=1.038461538)
 RESERVE = .03
 RAW_CAP = min(CUTOFF / 1.15 - 420, GUARD / 1.15 - 720)
 
@@ -27,15 +30,25 @@ def require(ok, message):
         raise ValueError(message)
 
 
-def price(seconds):
-    return seconds / 3600 * PRICE + RESERVE
+def region_for(plan):
+    region = plan.get('region', 'iad')
+    require(isinstance(region, str) and region in REGIONS, 'Unknown Fly region')
+    return region
+
+
+def compute_price(seconds, region='iad'):
+    return seconds / 3600 * PRICE * REGIONS[region]
+
+
+def price(seconds, region='iad'):
+    return compute_price(seconds, region) + RESERVE
 
 
 def validate_limits(plan):
     guard, cutoff = plan['destroyGuardSeconds'], plan['measurementCutoffSeconds']
     require(type(guard) is int and 120 < guard <= MAX_APP_SECONDS, 'Lifetime exceeds independent7200s code cap')
     require(type(cutoff) is int and 0 < cutoff <= guard - 300, 'Invalid measurement/copy/cleanup deadlines')
-    require(plan['limitUsd'] >= price(guard), 'Priced lifetime exceeds approved session price')
+    require(plan['limitUsd'] >= price(guard, region_for(plan)), 'Priced lifetime exceeds approved session price')
     require(plan['limitWithRepeatUsd'] >= plan['limitUsd'] * (2 if plan['repeatAllowed'] else 1), 'Full repeat not reserved')
     return guard, cutoff
 
@@ -79,11 +92,17 @@ def size_sessions(rows, mode, *, ratios=None, option=2, budget=None):
                 if not changed:
                     break
         limit = math.ceil(1.15 * (720 + raw()))
+        regions = {region_for(row) for row in entries}
+        require(len(regions) == 1, 'Timing session rows disagree on region')
+        region = regions.pop()
+        cost = price(limit, region)
         repeat = mode == 'release'
         result = dict(design=design, rows=entries, counts=[180, 60], rawSeconds=raw(),
                       estimatedSeconds=limit, destroyGuardSeconds=limit, measurementCutoffSeconds=math.ceil(1.15 * (420 + raw())),
-                      limitUsd=price(limit), estimatedUsd=price(limit), repeatAllowed=repeat,
-                      limitWithRepeatUsd=price(limit) * (2 if repeat else 1))
+                      limitUsd=cost, estimatedUsd=cost, repeatAllowed=repeat,
+                      limitWithRepeatUsd=cost * (2 if repeat else 1))
+        if any('region' in row for row in entries):
+            result['region'] = region
         validate_limits(result)
         return result
 
@@ -142,6 +161,7 @@ def run(root, plan, output, *, dry=False):
     records, error, predecessor = [], None, None
     host_fallback = {}
     try:
+        region = dict(region=region_for(plan)) if 'region' in plan else {}
         if not dry:
             fingerprint = session.host_fingerprint()
             try:
@@ -167,7 +187,7 @@ def run(root, plan, output, *, dry=False):
                                       for key, value in job['environment'].items()}
                 actual = dict(spec, client=str(root / spec['client']), harness=str(root / spec['harness']))
                 stamp = dt.datetime.now(dt.timezone.utc).isoformat()
-                record = session.member(actual, job, output / identifier)
+                record = session.member(actual, job, output / identifier, **region)
                 record.update(id=identifier, build=build, predecessorBuild=predecessor, startedUtc=stamp,
                               endedUtc=dt.datetime.now(dt.timezone.utc).isoformat())
                 records.append(record)
@@ -300,13 +320,18 @@ def read_results(output, seal, *, mode=None):
     sealed_mode = seal['mode']
     applied_mode = mode or sealed_mode
     values, lines = {}, []
-    if seal.get('timePlans'):
-        lines += ['time · Fly performance-8x iad · arithmetic mean paired ratios',
+    plans = seal.get('timePlans', [])
+    show_regions = any('region' in plan for plan in plans)
+    if plans:
+        home = '' if show_regions else ' iad'
+        lines += [f'time · Fly performance-8x{home} · arithmetic mean paired ratios',
                   f'{"benchmark":<38} {"A/B":>7} {"band N":>8} {"ratio [95%]":>31} verdict']
     index_file = output / 'time/index.json'
     index = json.loads(index_file.read_text()) if index_file.exists() else []
     band_failures = set()
-    for number, plan in enumerate(seal.get('timePlans', [])):
+    for number, plan in enumerate(plans):
+        if show_regions:
+            lines.append(f'session {number + 1} · {region_for(plan)}')
         for row in plan['rows']:
             first = None
             first_evidence = None

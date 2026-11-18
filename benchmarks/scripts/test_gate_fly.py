@@ -31,7 +31,7 @@ LINUX = sys.platform.startswith('linux')
 TEST_WATCHDOG_SECONDS = 30
 
 
-def fixture(root, *, watchdog_delay=None):
+def fixture(root, *, watchdog_delay=None, region=None):
     root = Path(root)
     host = root / 'input/fly'
     host.mkdir(parents=True)
@@ -52,13 +52,15 @@ def fixture(root, *, watchdog_delay=None):
     (stub / 'fly').chmod(0o755)
     (root / 'token.fixture').write_text('preflight-not-a-token')
     gate.session.save(root / 'local.json', dict(flyTokenFile=str(root / 'token.fixture'), flyLock=str(root / 'test.lock'), flyOrg='fixture-org', corporaRoot='fixture', pinnedBaseline='fixture', flyBudgetLeftUsd=40))
-    plan = schedules.prepare(timing.size_sessions([row()], 'release', budget=40)[0])
+    mode = 'change' if region else 'release'
+    entry = dict(row(pairs=8), region=region, rowClass='recorded-only', aPairs=0, explanation='CAUSE.md') if region else row()
+    plan = schedules.prepare(timing.size_sessions([entry], mode, budget=40)[0])
     gate.session.save(root / 'fixture-pairs.json', pairs(plan['rows'][0]))
     source = root / 'bundle'; source.mkdir()
     gate.session.save(source / 'plan.json', schedules.worker_plan(plan))
     (source / 'placeholder.txt').write_text('OBVIOUS TEST PLACEHOLDER; never a product binary')
     bundle.pack(source, root / 'input/session-0.tar.gz')
-    seal = dict(flyBudgetLeftUsd=40, mode='release', ruleVersion=gate.stats.RULE_VERSION, rows=plan['rows'], timePlans=[plan], bands={},
+    seal = dict(flyBudgetLeftUsd=40, mode=mode, ruleVersion=gate.stats.RULE_VERSION, rows=plan['rows'], timePlans=[plan], bands={},
                 canonical=True, timeScopeDecided=True, gated=dict(areas={}), releaseSet=[r['id'] for r in plan['rows']],
                 image=bundle.IMAGE, imageIndex=bundle.IMAGE_INDEX, flyctlVersion='fly fixture-v1', files={
                     path.relative_to(root).as_posix(): gate.digest(path) for path in host.iterdir() if path.is_file()})
@@ -381,7 +383,7 @@ class LauncherTests(unittest.TestCase):
             repo = Path(td); root = repo / 'benchmarks/out/gate-scout'
             _, seal, env = fixture(root)
             rows = [dict(row(pairs=8), id=f'time/preprod-scout{i}-offline', aPairs=0,
-                         rowClass='recorded-only', explanation='CAUSE.md') for i in range(1, 7)]
+                         region='ewr' if i == 1 else 'ams', rowClass='recorded-only', explanation='CAUSE.md') for i in range(1, 7)]
             plans = [schedules.prepare(timing.size_sessions([r], 'change', budget=.95)[0]) for r in rows]
             seal.update(mode='change', rows=rows, timePlans=plans)
             for i, plan in enumerate(plans):
@@ -399,6 +401,34 @@ class LauncherTests(unittest.TestCase):
             first, second = [json.loads((root / i['path']).read_text()) for i in index]
             self.assertIsNone(first['invalid'])
             self.assertIn('incomplete', second['invalid'])
+            text = (root / 'report.txt').read_text()
+            self.assertIn('time · Fly performance-8x · arithmetic mean paired ratios', text)
+            self.assertIn('session 1 · ewr', text)
+            self.assertIn('session 2 · ams', text)
+
+    def test_sealed_region(self):
+        for wrong in (False, True):
+            with self.subTest(wrong=wrong), tempfile.TemporaryDirectory() as td:
+                root = Path(td)
+                _, _, env = fixture(root, region='ams')
+                if wrong:
+                    env['GATE_STUB_BAD'] = 'region'
+                status = launch(root, env)
+                argv = next(c['argv'] for c in calls(root) if c['argv'][:2] == ['machine', 'run'])
+                self.assertEqual(argv[argv.index('--region') + 1], 'ams')
+                self.assertEqual(status, 1 if wrong else 0, (root / 'console.log').read_text())
+                self.assertEqual(any(c['argv'][:3] == ['ssh', 'sftp', 'put'] for c in calls(root)), not wrong)
+                if wrong:
+                    self.assertIn('Wrong machine identity/state/region', (root / 'console.log').read_text())
+                note = root / 'time/runs' / APP
+                plan = json.loads((note / 'verified-plan.json').read_text())
+                self.assertEqual(plan['region'], 'ams')
+                cost = json.loads((note / 'duration-cost.json').read_text())
+                compute = cost['conservativeSeconds'] / 3600 * .3667 * 1.038461538
+                self.assertEqual(cost['computeEstimateUsd'], compute)
+                self.assertEqual(cost['totalEstimateWithReserveUsd'], compute + .03)
+                self.assertEqual(cost['sealedLimitUsd'], plan['limitUsd'])
+                self.assert_absent_owned(root)
 
     def test_success_neighbours_context_only_token_fd_and_no_private_fly_config(self):
         root, status = self.run_case(extra=dict(GATE_STUB_NEIGHBOUR_CHANGE='1'))
@@ -406,6 +436,8 @@ class LauncherTests(unittest.TestCase):
         self.assert_absent_owned(root)
         note = root / 'time/runs' / APP
         plan = gate.read_seal(root)['timePlans'][0]
+        self.assertNotIn('region', json.loads((note / 'verified-plan.json').read_text()))
+        self.assertEqual(json.loads((note / 'machine.json').read_text())['region'], 'iad')
         payload = bundle.archive_payload(note, plan)
         self.assertIsNone(payload['invalid'])
         startup = payload['startup']

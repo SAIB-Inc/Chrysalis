@@ -47,6 +47,14 @@ def pairs(r=None, ratio=1, *, a=None):
 
 
 class TimeTests(unittest.TestCase):
+    def test_regional_reserve_and_limit(self):
+        self.assertEqual(timing.price(3600, 'ams'), .3667 * 1.038461538 + .03)
+        plan = timing.size_sessions([dict(row(), region='ams')], 'change', budget=1)[0]
+        iad = timing.price(plan['destroyGuardSeconds'])
+        self.assertGreater(plan['limitUsd'], iad)
+        with self.assertRaisesRegex(ValueError, 'Priced lifetime'):
+            timing.validate_limits(dict(plan, limitUsd=iad))
+
     def test_d41_rule_exact_edges_point_estimate_and_change(self):
         r = row()
         for ratio, release, change in [(1, 'PASS', 'PASS'), (1.02, 'FAIL', 'PASS'), (1.06, 'FAIL', 'FAIL')]:
