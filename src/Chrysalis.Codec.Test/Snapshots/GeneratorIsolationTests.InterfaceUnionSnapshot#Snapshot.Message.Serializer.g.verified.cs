@@ -26,7 +26,7 @@ Snapshot.Message _r = _shape switch
 {
     CborDataItemType.Unsigned or CborDataItemType.Signed => (Snapshot.Message)Snapshot.Count.Read(_d, out _bc),
     CborDataItemType.String => (Snapshot.Message)Snapshot.TextMessage.Read(_d, out _bc),
-    _ => throw new Exception("Union deserialization failed. Snapshot.Message: ambiguous variant at shared index")
+    _ => throw CborError.Decode(data, 0, "Snapshot.Message", "unambiguous union case")
 };
 return _r;
 }
@@ -38,7 +38,7 @@ Snapshot.Message _idxResult = _idx switch
 {
     0 => _ResolveIdx0(data, out bytesConsumed),
     1 => (Snapshot.Message)Snapshot.Flag.Read(data, out bytesConsumed),
-    _ => throw new Exception("Union deserialization failed. Snapshot.Message: unexpected idx " + _idx)
+    _ => throw CborError.Decode(data, 0, "Snapshot.Message", "registered union index", _idx)
 };
 return _idxResult;
 }
@@ -59,6 +59,7 @@ return Read(data, out _);
 public static new void Write(IBufferWriter<byte> output, Snapshot.Message data)
 {
 var writer = new CborWriter(output);
+ArgumentNullException.ThrowIfNull(data);
 switch (data)
 {
 case Snapshot.Count _typedCount:
@@ -71,7 +72,7 @@ case Snapshot.Flag _typedFlag:
 Snapshot.Flag.Write(output, _typedFlag);
 break;
 default:
-throw new Exception("Union serialization failed. Snapshot.Message ");
+throw CborError.Validation(-1, "Snapshot.Message", "registered union case", data.GetType().FullName ?? "unknown");
 }
 }
 

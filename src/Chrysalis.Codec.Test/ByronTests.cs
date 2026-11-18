@@ -58,8 +58,9 @@ public class ByronTests
 
         BlockWithEra envelope = BlockWithEra.Read(malformed);
         Assert.Equal(1, envelope.EraNumber);
-        Exception exception = Assert.Throws<Exception>(() => envelope.Block);
-        Assert.Equal("Validation failed", exception.Message);
+        CborValidationException exception = Assert.Throws<CborValidationException>(() => envelope.Block);
+        Assert.Equal("validation failed", exception.Actual);
+        Assert.Contains("ByronMainBlock", exception.TypePath, StringComparison.Ordinal);
     }
 
     [Theory]
@@ -70,7 +71,7 @@ public class ByronTests
     public void ByronMainBlocksRejectWrongMemberCount(string hex)
     {
         byte[] malformed = Convert.FromHexString(hex);
-        _ = Assert.Throws<FormatException>(() => ByronMainBlock.Read(malformed));
+        _ = Assert.Throws<CborDecodeException>(() => ByronMainBlock.Read(malformed));
     }
 
     [Theory]

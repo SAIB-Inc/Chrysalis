@@ -4,6 +4,13 @@ using SAIB.Cbor.Util;
 
 namespace Chrysalis.Codec.Serialization;
 
+/// <summary>Serializes and deserializes CBOR values with typed codec errors.</summary>
+/// <remarks>
+/// Codec failures through this facade are <see cref="CborDecodeException"/> or
+/// <see cref="CborValidationException"/>. A generated Read method called directly can
+/// still throw <see cref="SAIB.Cbor.CborException"/>, whose Offset is available since SAIB.Cbor 3.1.0.
+/// Cancellation and resource exhaustion are not converted into codec errors.
+/// </remarks>
 public static class CborSerializer
 {
     [ThreadStatic]
@@ -23,62 +30,97 @@ public static class CborSerializer
     /// </remarks>
     public static long GetEncodedLength<T>(T value) where T : ICborType
     {
-        if (value.Raw.Length > 0)
-        {
-            return value.Raw.Length;
-        }
-
-        CountingBufferWriter output = _lengthOutput ?? new();
-        _lengthOutput = null;
         try
         {
-            output.Reset();
-            GenericSerializationUtil.Write(output, value);
-            return output.WrittenCount;
+            if (value.Raw.Length > 0)
+            {
+                return value.Raw.Length;
+            }
+
+            CountingBufferWriter output = _lengthOutput ?? new();
+            _lengthOutput = null;
+            try
+            {
+                output.Reset();
+                GenericSerializationUtil.Write(output, value);
+                return output.WrittenCount;
+            }
+            finally
+            {
+                _lengthOutput = output;
+            }
         }
-        finally
+        catch (Exception error) when (error is not CborDecodeException && CborError.IsDecodeFailure(error))
         {
-            _lengthOutput = output;
+            throw CborError.Validation(-1, typeof(T).FullName!, "serializable value", error.Message, error);
         }
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static byte[] Serialize<T>(T value) where T : ICborType
     {
-        if (value.Raw.Length > 0)
+        try
         {
-            return value.Raw.ToArray();
-        }
+            if (value.Raw.Length > 0)
+            {
+                return value.Raw.ToArray();
+            }
 
-        ArrayBufferWriter<byte> output = new();
-        GenericSerializationUtil.Write(output, value);
-        return output.WrittenSpan.ToArray();
+            ArrayBufferWriter<byte> output = new();
+            GenericSerializationUtil.Write(output, value);
+            return output.WrittenSpan.ToArray();
+        }
+        catch (Exception error) when (error is not CborDecodeException && CborError.IsDecodeFailure(error))
+        {
+            throw CborError.Validation(-1, typeof(T).FullName!, "serializable value", error.Message, error);
+        }
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static ReadOnlyMemory<byte> SerializeToMemory<T>(T value) where T : ICborType
     {
-        if (value.Raw.Length > 0)
+        try
         {
-            return value.Raw;
-        }
+            if (value.Raw.Length > 0)
+            {
+                return value.Raw;
+            }
 
-        ArrayBufferWriter<byte> output = new();
-        GenericSerializationUtil.Write(output, value);
-        return output.WrittenMemory;
+            ArrayBufferWriter<byte> output = new();
+            GenericSerializationUtil.Write(output, value);
+            return output.WrittenMemory;
+        }
+        catch (Exception error) when (error is not CborDecodeException && CborError.IsDecodeFailure(error))
+        {
+            throw CborError.Validation(-1, typeof(T).FullName!, "serializable value", error.Message, error);
+        }
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static T Deserialize<T>(ReadOnlyMemory<byte> data)
     {
-        T? result = GenericSerializationUtil.Read<T>(data);
-        return result ?? throw new InvalidOperationException("Deserialization failed: result is null.");
+        try
+        {
+            T? result = GenericSerializationUtil.Read<T>(data);
+            return result ?? throw CborError.Decode(data, 0, typeof(T).FullName!, "non-null decoded value", "null");
+        }
+        catch (Exception error) when (error is not CborDecodeException && CborError.IsDecodeFailure(error))
+        {
+            throw CborError.Wrap(error, data, typeof(T).FullName!, CborError.Expected(typeof(T)));
+        }
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static T Deserialize<T>(ReadOnlyMemory<byte> data, out int bytesConsumed)
     {
-        T? result = GenericSerializationUtil.ReadAnyWithConsumed<T>(data, out bytesConsumed);
-        return result ?? throw new InvalidOperationException("Deserialization failed: result is null.");
+        try
+        {
+            T? result = GenericSerializationUtil.ReadAnyWithConsumed<T>(data, out bytesConsumed);
+            return result ?? throw CborError.Decode(data, 0, typeof(T).FullName!, "non-null decoded value", "null");
+        }
+        catch (Exception error) when (error is not CborDecodeException && CborError.IsDecodeFailure(error))
+        {
+            throw CborError.Wrap(error, data, typeof(T).FullName!, CborError.Expected(typeof(T)));
+        }
     }
 }

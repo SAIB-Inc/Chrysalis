@@ -22,7 +22,20 @@ public int ConstrIndex => _constrIndex;
 /// <inheritdoc/>
 public bool IsIndefinite => _isIndefinite;
 
-public partial int Number { get => new CborReader(_field0.Span).ReadInt32(); }
+public partial int Number
+{
+get
+{
+try
+{
+return new CborReader(_field0.Span).ReadInt32();
+}
+catch (Exception error) when (CborError.IsDecodeFailure(error))
+{
+throw CborError.Field(error, _raw, _field0, "Snapshot.Value.Number", CborError.Expected(typeof(int)));
+}
+}
+}
 
 /// <summary>
 /// Deserializes a <see cref="Value"/> instance from CBOR-encoded bytes and reports bytes consumed.
@@ -30,9 +43,11 @@ public partial int Number { get => new CborReader(_field0.Span).ReadInt32(); }
 public static new Snapshot.Value Read(ReadOnlyMemory<byte> data, out int bytesConsumed)
 {
 var reader = new CborReader(data.Span);
-reader.TryReadSemanticTag(out ulong _constrIndexRaw);
+int _constrIndexStart = data.Length - reader.Buffer.Length;
+if (!reader.TryReadSemanticTag(out ulong _constrIndexRaw))
+    throw CborError.Decode(data, _constrIndexStart, "Snapshot.Value", "tag 123");
 var constrIndex = (int)_constrIndexRaw;
-if (constrIndex != 123) throw new Exception("Invalid tag");
+if (_constrIndexRaw != 123) throw CborError.DecodeTag("Snapshot.Value", "tag 123", _constrIndexRaw);
 reader.ReadBeginArray();
 int arraySize = reader.ReadSize();
 bool isIndefiniteArray = arraySize == -1;

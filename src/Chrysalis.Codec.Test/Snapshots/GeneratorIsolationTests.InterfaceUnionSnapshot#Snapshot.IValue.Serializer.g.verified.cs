@@ -21,7 +21,7 @@ Snapshot.IValue _stateResult = state switch
 {
     CborDataItemType.Signed => (Snapshot.IValue)Snapshot.Number.Read(data, out bytesConsumed),
     CborDataItemType.String => (Snapshot.IValue)Snapshot.Text.Read(data, out bytesConsumed),
-    _ => throw new Exception("Union deserialization failed. Snapshot.IValue: unexpected state " + state)
+    _ => throw CborError.Decode(data, 0, "Snapshot.IValue", "registered union kind", state)
 };
 return _stateResult;
 }
@@ -42,6 +42,7 @@ return Read(data, out _);
 public static new void Write(IBufferWriter<byte> output, Snapshot.IValue data)
 {
 var writer = new CborWriter(output);
+ArgumentNullException.ThrowIfNull(data);
 switch (data)
 {
 case Snapshot.Number _typedNumber:
@@ -51,7 +52,7 @@ case Snapshot.Text _typedText:
 Snapshot.Text.Write(output, _typedText);
 break;
 default:
-throw new Exception("Union serialization failed. Snapshot.IValue ");
+throw CborError.Validation(-1, "Snapshot.IValue", "registered union case", data.GetType().FullName ?? "unknown");
 }
 }
 

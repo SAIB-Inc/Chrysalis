@@ -17,7 +17,16 @@ public static new Snapshot.ClassValue Read(ReadOnlyMemory<byte> data, out int by
 {
 var reader = new CborReader(data.Span);
 int ClassValueItem = default!;
+int _errorStartClassValueItem = data.Length - reader.Buffer.Length;
+bool _errorSliceClassValueItem = false;
+try
+{
 ClassValueItem = reader.ReadInt32();
+}
+catch (Exception error) when (CborError.ShouldWrapReader(error, data, reader.Buffer.Length, _errorStartClassValueItem, _errorSliceClassValueItem, "Snapshot.ClassValue.Item", typeof(int)))
+{
+throw CborError.Reader(error, data, reader.Buffer.Length, _errorStartClassValueItem, _errorSliceClassValueItem, "Snapshot.ClassValue.Item", CborError.Expected(typeof(int)));
+}
 
 var result = new Snapshot.ClassValue(ClassValueItem);
 bytesConsumed = data.Length - reader.Buffer.Length;

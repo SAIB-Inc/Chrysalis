@@ -143,19 +143,25 @@ public sealed partial class CborSerializerCodeGen
             for (int i = 0; i < metadata.Properties.Count; i++)
             {
                 SerializablePropertyMetadata prop = metadata.Properties[i];
-                _ = EmitPartialPropertyAccessor(sb, prop, i);
+                _ = EmitPartialPropertyAccessor(sb, prop, i, metadata.FullyQualifiedName);
             }
             _ = sb.AppendLine();
 
             return sb;
         }
 
-        private static StringBuilder EmitPartialPropertyAccessor(StringBuilder sb, SerializablePropertyMetadata prop, int fieldIndex)
+        private static StringBuilder EmitPartialPropertyAccessor(StringBuilder sb, SerializablePropertyMetadata prop, int fieldIndex, string typePath)
         {
             string cleanType = prop.PropertyType.Replace("?", "");
             string fieldRef = $"_field{fieldIndex}";
             // Use fully qualified name for generated partial property to avoid missing using directives
             string fqType = prop.PropertyTypeFullName;
+            _ = sb.AppendLine($"public partial {fqType} {prop.PropertyName}");
+            _ = sb.AppendLine("{");
+            _ = sb.AppendLine("get");
+            _ = sb.AppendLine("{");
+            _ = sb.AppendLine("try");
+            _ = sb.AppendLine("{");
 
             if (IsPrimitiveType(cleanType))
             {
@@ -163,20 +169,17 @@ public sealed partial class CborSerializerCodeGen
             }
             else if (prop.IsList)
             {
-                _ = EmitListPartialProperty(sb, prop, fieldRef, fqType);
+                _ = EmitListPartialProperty(sb, prop, fieldRef);
             }
             else if (prop.IsMap)
             {
-                _ = EmitMapPartialProperty(sb, prop, fieldRef, fqType);
+                _ = EmitMapPartialProperty(sb, prop, fieldRef);
             }
             else if (prop.UnionHints.Count > 0 && prop.UnionHintDiscriminantProperty is not null)
             {
                 // Union hint dispatch — read discriminant property, switch to concrete type
                 string nonNullType = fqType.Replace("?", "");
-                _ = sb.AppendLine($"public partial {fqType} {prop.PropertyName}");
-                _ = sb.AppendLine("{");
-                _ = sb.AppendLine("get");
-                _ = sb.AppendLine("{");
+
                 _ = sb.AppendLine($"return {prop.UnionHintDiscriminantProperty} switch");
                 _ = sb.AppendLine("{");
                 foreach (KeyValuePair<int, string> hint in prop.UnionHints)
@@ -185,8 +188,6 @@ public sealed partial class CborSerializerCodeGen
                 }
                 _ = sb.AppendLine($"    _ => ({fqType}){nonNullType}.Read({fieldRef})");
                 _ = sb.AppendLine("};");
-                _ = sb.AppendLine("}");
-                _ = sb.AppendLine("}");
             }
             else if (prop.CborMaybeIndefListItemTypeFullName is not null)
             {
@@ -196,11 +197,11 @@ public sealed partial class CborSerializerCodeGen
             {
                 if (prop.IsTypeNullable)
                 {
-                    _ = sb.AppendLine($"public partial {fqType} {prop.PropertyName} {{ get => {fieldRef}.Length == 0 || {fieldRef}.Span[0] is 0xF6 or 0xF7 ? default({fqType}) : {GenericSerializationUtilFullname}.ReadAnyWithConsumed<{fqType.Replace("?", "")}>({fieldRef}, out _); }}");
+                    _ = sb.AppendLine($"return {fieldRef}.Length == 0 || {fieldRef}.Span[0] is 0xF6 or 0xF7 ? default({fqType}) : {GenericSerializationUtilFullname}.ReadAnyWithConsumed<{fqType.Replace("?", "")}>({fieldRef}, out _);");
                 }
                 else
                 {
-                    _ = sb.AppendLine($"public partial {fqType} {prop.PropertyName} {{ get => {GenericSerializationUtilFullname}.ReadAnyWithConsumed<{fqType}>({fieldRef}, out _); }}");
+                    _ = sb.AppendLine($"return {GenericSerializationUtilFullname}.ReadAnyWithConsumed<{fqType}>({fieldRef}, out _);");
                 }
             }
             else
@@ -209,26 +210,29 @@ public sealed partial class CborSerializerCodeGen
                 string nonNullType = fqType.Replace("?", "");
                 if (prop.IsTypeNullable)
                 {
-                    _ = sb.AppendLine($"public partial {fqType} {prop.PropertyName} {{ get => {fieldRef}.Length == 0 || {fieldRef}.Span[0] is 0xF6 or 0xF7 ? default({fqType}) : {nonNullType}.Read({fieldRef}); }}");
+                    _ = sb.AppendLine($"return {fieldRef}.Length == 0 || {fieldRef}.Span[0] is 0xF6 or 0xF7 ? default({fqType}) : {nonNullType}.Read({fieldRef});");
                 }
                 else
                 {
-                    _ = sb.AppendLine($"public partial {fqType} {prop.PropertyName} {{ get => {nonNullType}.Read({fieldRef}); }}");
+                    _ = sb.AppendLine($"return {nonNullType}.Read({fieldRef});");
                 }
             }
+
+            _ = sb.AppendLine("}");
+            _ = sb.AppendLine("catch (Exception error) when (CborError.IsDecodeFailure(error))");
+            _ = sb.AppendLine("{");
+            _ = sb.AppendLine($"throw CborError.Field(error, _raw, {fieldRef}, \"{typePath}.{prop.PropertyName}\", CborError.Expected(typeof({fqType.Replace("?", "")})));");
+            _ = sb.AppendLine("}");
+            _ = sb.AppendLine("}");
+            _ = sb.AppendLine("}");
 
             return sb;
         }
 
-        private static StringBuilder EmitListPartialProperty(StringBuilder sb, SerializablePropertyMetadata prop, string fieldRef, string fqType)
+        private static StringBuilder EmitListPartialProperty(StringBuilder sb, SerializablePropertyMetadata prop, string fieldRef)
         {
             string itemType = prop.ListItemTypeFullName!;
             string cleanItemType = itemType.Replace("?", "");
-
-            _ = sb.AppendLine($"public partial {fqType} {prop.PropertyName}");
-            _ = sb.AppendLine("{");
-            _ = sb.AppendLine("get");
-            _ = sb.AppendLine("{");
 
             if (prop.IsTypeNullable)
             {
@@ -241,6 +245,9 @@ public sealed partial class CborSerializerCodeGen
             _ = sb.AppendLine($"var _list = new global::System.Collections.Generic.List<{itemType}>();");
             _ = sb.AppendLine("int _remaining = _size;");
             _ = sb.AppendLine("while (_size == -1 ? (_r.Buffer.Length > 0 && _r.Buffer[0] != 0xFF) : _remaining > 0)");
+            _ = sb.AppendLine("{");
+            _ = sb.AppendLine($"int _errorStart = {fieldRef}.Length - _r.Buffer.Length;");
+            _ = sb.AppendLine("try");
             _ = sb.AppendLine("{");
 
             if (prop.IsListItemTypeOpenGeneric)
@@ -262,12 +269,16 @@ public sealed partial class CborSerializerCodeGen
                 _ = sb.AppendLine("_list.Add(_item);");
             }
 
+            _ = sb.AppendLine("}");
+            _ = sb.AppendLine("catch (Exception error) when (CborError.IsDecodeFailure(error))");
+            _ = sb.AppendLine("{");
+            string slicedItem = prop.IsListItemTypeOpenGeneric || !IsPrimitiveType(cleanItemType) ? "true" : "false";
+            _ = sb.AppendLine($"throw CborError.Reader(error, {fieldRef}, _r.Buffer.Length, _errorStart, {slicedItem}, \"item\", \"list item\");");
+            _ = sb.AppendLine("}");
             _ = sb.AppendLine("if (_size > 0) _remaining--;");
             _ = sb.AppendLine("}");
             _ = sb.AppendLine("if (_size == -1 && _r.Buffer.Length > 0 && _r.Buffer[0] == 0xFF) _r.ReadDataItem();");
             _ = sb.AppendLine("return _list;");
-            _ = sb.AppendLine("}");
-            _ = sb.AppendLine("}");
 
             return sb;
         }
@@ -336,7 +347,7 @@ public sealed partial class CborSerializerCodeGen
                     _ = sb.AppendLine("{");
                     _ = sb.AppendLine("    CborDataItemType.Unsigned or CborDataItemType.Signed => new Chrysalis.Codec.Types.CborLabel(_r.ReadInt64()),");
                     _ = sb.AppendLine("    CborDataItemType.String => new Chrysalis.Codec.Types.CborLabel(_r.ReadString()),");
-                    _ = sb.AppendLine("    _ => throw new InvalidOperationException($\"Invalid CBOR type for Label: {_r.GetCurrentDataItemType()}\")");
+                    _ = sb.AppendLine($"    _ => throw CborError.Decode({fieldRef}, 0, \"CborLabel\", \"integer or text string\")");
                     _ = sb.AppendLine("});");
                     break;
                 default:
@@ -346,17 +357,12 @@ public sealed partial class CborSerializerCodeGen
             return sb;
         }
 
-        private static StringBuilder EmitMapPartialProperty(StringBuilder sb, SerializablePropertyMetadata prop, string fieldRef, string fqType)
+        private static StringBuilder EmitMapPartialProperty(StringBuilder sb, SerializablePropertyMetadata prop, string fieldRef)
         {
             string keyType = prop.MapKeyTypeFullName!;
             string valueType = prop.MapValueTypeFullName!;
             string cleanKeyType = keyType.Replace("?", "");
             string cleanValueType = valueType.Replace("?", "");
-
-            _ = sb.AppendLine($"public partial {fqType} {prop.PropertyName}");
-            _ = sb.AppendLine("{");
-            _ = sb.AppendLine("get");
-            _ = sb.AppendLine("{");
 
             if (prop.IsTypeNullable)
             {
@@ -379,6 +385,12 @@ public sealed partial class CborSerializerCodeGen
             _ = sb.AppendLine("int _remaining = _size;");
             _ = sb.AppendLine("while (_size == -1 ? (_r.Buffer.Length > 0 && _r.Buffer[0] != 0xFF) : _remaining > 0)");
             _ = sb.AppendLine("{");
+            _ = sb.AppendLine($"int _errorStart = {fieldRef}.Length - _r.Buffer.Length;");
+            string slicedKey = prop.IsMapKeyTypeOpenGeneric || !IsPrimitiveType(cleanKeyType) ? "true" : "false";
+            string slicedValue = prop.IsMapValueTypeOpenGeneric || !IsPrimitiveType(cleanValueType) ? "true" : "false";
+            _ = sb.AppendLine($"bool _errorSlice = {slicedKey};");
+            _ = sb.AppendLine("try");
+            _ = sb.AppendLine("{");
 
             // Read key
             if (prop.IsMapKeyTypeOpenGeneric)
@@ -399,6 +411,8 @@ public sealed partial class CborSerializerCodeGen
             }
 
             // Read value
+            _ = sb.AppendLine($"_errorStart = {fieldRef}.Length - _r.Buffer.Length;");
+            _ = sb.AppendLine($"_errorSlice = {slicedValue};");
             if (prop.IsMapValueTypeOpenGeneric)
             {
                 _ = sb.AppendLine($"int _vPos = {fieldRef}.Length - _r.Buffer.Length;");
@@ -420,12 +434,15 @@ public sealed partial class CborSerializerCodeGen
             _ = sb.AppendLine("{");
             _ = sb.AppendLine("_map.Add(_key, _val);");
             _ = sb.AppendLine("}");
+            _ = sb.AppendLine("}");
+            _ = sb.AppendLine("catch (Exception error) when (CborError.IsDecodeFailure(error))");
+            _ = sb.AppendLine("{");
+            _ = sb.AppendLine($"throw CborError.Reader(error, {fieldRef}, _r.Buffer.Length, _errorStart, _errorSlice, \"entry\", \"map entry\");");
+            _ = sb.AppendLine("}");
             _ = sb.AppendLine("if (_size > 0) _remaining--;");
             _ = sb.AppendLine("}");
             _ = sb.AppendLine("if (_size == -1 && _r.Buffer.Length > 0 && _r.Buffer[0] == 0xFF) _r.ReadDataItem();");
             _ = sb.AppendLine("return _map;");
-            _ = sb.AppendLine("}");
-            _ = sb.AppendLine("}");
 
             return sb;
         }
@@ -492,7 +509,7 @@ public sealed partial class CborSerializerCodeGen
                     _ = sb.AppendLine("{");
                     _ = sb.AppendLine("    CborDataItemType.Unsigned or CborDataItemType.Signed => new Chrysalis.Codec.Types.CborLabel(_r.ReadInt64()),");
                     _ = sb.AppendLine("    CborDataItemType.String => new Chrysalis.Codec.Types.CborLabel(_r.ReadString()),");
-                    _ = sb.AppendLine("    _ => throw new InvalidOperationException($\"Invalid CBOR type for Label: {_r.GetCurrentDataItemType()}\")");
+                    _ = sb.AppendLine($"    _ => throw CborError.Decode({fieldRef}, 0, \"CborLabel\", \"integer or text string\")");
                     _ = sb.AppendLine("};");
                     break;
                 default:
@@ -564,7 +581,7 @@ public sealed partial class CborSerializerCodeGen
                     _ = sb.AppendLine("{");
                     _ = sb.AppendLine("    CborDataItemType.Unsigned or CborDataItemType.Signed => new Chrysalis.Codec.Types.CborLabel(_r.ReadInt64()),");
                     _ = sb.AppendLine("    CborDataItemType.String => new Chrysalis.Codec.Types.CborLabel(_r.ReadString()),");
-                    _ = sb.AppendLine("    _ => throw new InvalidOperationException($\"Invalid CBOR type for Label: {_r.GetCurrentDataItemType()}\")");
+                    _ = sb.AppendLine($"    _ => throw CborError.Decode({fieldRef}, 0, \"CborLabel\", \"integer or text string\")");
                     _ = sb.AppendLine("};");
                     break;
                 default:
@@ -582,43 +599,40 @@ public sealed partial class CborSerializerCodeGen
             switch (cleanType)
             {
                 case "bool":
-                    _ = sb.AppendLine($"public partial {fqType} {prop.PropertyName} {{ get => {nullGuard}new CborReader({fieldRef}.Span).ReadBoolean(); }}");
+                    _ = sb.AppendLine($"return {nullGuard}new CborReader({fieldRef}.Span).ReadBoolean();");
                     break;
                 case "int":
-                    _ = sb.AppendLine($"public partial {fqType} {prop.PropertyName} {{ get => {nullGuard}new CborReader({fieldRef}.Span).ReadInt32(); }}");
+                    _ = sb.AppendLine($"return {nullGuard}new CborReader({fieldRef}.Span).ReadInt32();");
                     break;
                 case "uint":
-                    _ = sb.AppendLine($"public partial {fqType} {prop.PropertyName} {{ get => {nullGuard}new CborReader({fieldRef}.Span).ReadUInt32(); }}");
+                    _ = sb.AppendLine($"return {nullGuard}new CborReader({fieldRef}.Span).ReadUInt32();");
                     break;
                 case "long":
-                    _ = sb.AppendLine($"public partial {fqType} {prop.PropertyName} {{ get => {nullGuard}new CborReader({fieldRef}.Span).ReadInt64(); }}");
+                    _ = sb.AppendLine($"return {nullGuard}new CborReader({fieldRef}.Span).ReadInt64();");
                     break;
                 case "ulong":
-                    _ = sb.AppendLine($"public partial {fqType} {prop.PropertyName} {{ get => {nullGuard}new CborReader({fieldRef}.Span).ReadUInt64(); }}");
+                    _ = sb.AppendLine($"return {nullGuard}new CborReader({fieldRef}.Span).ReadUInt64();");
                     break;
                 case "float":
-                    _ = sb.AppendLine($"public partial {fqType} {prop.PropertyName} {{ get => {nullGuard}new CborReader({fieldRef}.Span).ReadSingle(); }}");
+                    _ = sb.AppendLine($"return {nullGuard}new CborReader({fieldRef}.Span).ReadSingle();");
                     break;
                 case "double":
-                    _ = sb.AppendLine($"public partial {fqType} {prop.PropertyName} {{ get => {nullGuard}new CborReader({fieldRef}.Span).ReadDouble(); }}");
+                    _ = sb.AppendLine($"return {nullGuard}new CborReader({fieldRef}.Span).ReadDouble();");
                     break;
                 case "decimal":
-                    _ = sb.AppendLine($"public partial {fqType} {prop.PropertyName} {{ get => {nullGuard}new CborReader({fieldRef}.Span).ReadDecimal(); }}");
+                    _ = sb.AppendLine($"return {nullGuard}new CborReader({fieldRef}.Span).ReadDecimal();");
                     break;
                 case "string":
-                    _ = sb.AppendLine($"public partial {fqType} {prop.PropertyName} {{ get => {nullGuard}new CborReader({fieldRef}.Span).ReadString(); }}");
+                    _ = sb.AppendLine($"return {nullGuard}new CborReader({fieldRef}.Span).ReadString();");
                     break;
                 case "byte[]":
-                    _ = sb.AppendLine($"public partial {fqType} {prop.PropertyName} {{ get => {nullGuard}new CborReader({fieldRef}.Span).ReadByteStringToArray(); }}");
+                    _ = sb.AppendLine($"return {nullGuard}new CborReader({fieldRef}.Span).ReadByteStringToArray();");
                     break;
                 case "ReadOnlyMemory<byte>":
                 case "System.ReadOnlyMemory<byte>":
                 case "global::System.ReadOnlyMemory<byte>":
                     // Zero-copy: read the byte string header to find content offset, then slice
-                    _ = sb.AppendLine($"public partial {fqType} {prop.PropertyName}");
-                    _ = sb.AppendLine("{");
-                    _ = sb.AppendLine("get");
-                    _ = sb.AppendLine("{");
+
                     if (prop.IsTypeNullable)
                     {
                         _ = sb.AppendLine($"if ({fieldRef}.Length == 0 || {fieldRef}.Span[0] is 0xF6 or 0xF7) return default;");
@@ -629,35 +643,28 @@ public sealed partial class CborSerializerCodeGen
                     _ = sb.AppendLine("ReadOnlySpan<byte> _bs = _r.ReadByteString();");
                     _ = sb.AppendLine($"int _after = {fieldRef}.Length - _r.Buffer.Length;");
                     _ = sb.AppendLine($"return {fieldRef}.Slice(_after - _bs.Length, _bs.Length);");
-                    _ = sb.AppendLine("}");
-                    _ = sb.AppendLine("}");
                     break;
                 case "CborEncodedValue":
                 case "Chrysalis.Codec.Types.CborEncodedValue":
                 case "global::Chrysalis.Codec.Types.CborEncodedValue":
-                    _ = sb.AppendLine($"public partial {fqType} {prop.PropertyName} {{ get => {nullGuard}{CborEncodeValueFullName}.Read({fieldRef}); }}");
+                    _ = sb.AppendLine($"return {nullGuard}{CborEncodeValueFullName}.Read({fieldRef});");
                     break;
                 case "CborAny":
                 case "Chrysalis.Codec.Types.CborAny":
                 case "global::Chrysalis.Codec.Types.CborAny":
-                    _ = sb.AppendLine($"public partial {fqType} {prop.PropertyName} {{ get => {nullGuard}new global::Chrysalis.Codec.Types.CborAny({fieldRef}); }}");
+                    _ = sb.AppendLine($"return {nullGuard}new global::Chrysalis.Codec.Types.CborAny({fieldRef});");
                     break;
                 case "CborLabel":
                 case "Chrysalis.Codec.Types.CborLabel":
                 case "global::Chrysalis.Codec.Types.CborLabel":
-                    _ = sb.AppendLine($"public partial {fqType} {prop.PropertyName}");
-                    _ = sb.AppendLine("{");
-                    _ = sb.AppendLine("get");
-                    _ = sb.AppendLine("{");
+
                     _ = sb.AppendLine($"var _r = new CborReader({fieldRef}.Span);");
                     _ = sb.AppendLine("return _r.GetCurrentDataItemType() switch");
                     _ = sb.AppendLine("{");
                     _ = sb.AppendLine("    CborDataItemType.Unsigned or CborDataItemType.Signed => new Chrysalis.Codec.Types.CborLabel(_r.ReadInt64()),");
                     _ = sb.AppendLine("    CborDataItemType.String => new Chrysalis.Codec.Types.CborLabel(_r.ReadString()),");
-                    _ = sb.AppendLine("    _ => throw new InvalidOperationException($\"Invalid CBOR type for Label: {_r.GetCurrentDataItemType()}\")");
+                    _ = sb.AppendLine($"    _ => throw CborError.Decode({fieldRef}, 0, \"CborLabel\", \"integer or text string\")");
                     _ = sb.AppendLine("};");
-                    _ = sb.AppendLine("}");
-                    _ = sb.AppendLine("}");
                     break;
                 default:
                     break;
@@ -671,11 +678,6 @@ public sealed partial class CborSerializerCodeGen
             string itemFqn = prop.CborMaybeIndefListItemTypeFullName!;
             string cleanItemFqn = itemFqn.Replace("?", "");
             string nonNullType = fqType.Replace("?", "");
-
-            _ = sb.AppendLine($"public partial {fqType} {prop.PropertyName}");
-            _ = sb.AppendLine("{");
-            _ = sb.AppendLine("get");
-            _ = sb.AppendLine("{");
 
             if (prop.IsTypeNullable)
             {
@@ -694,8 +696,6 @@ public sealed partial class CborSerializerCodeGen
             }
 
             _ = sb.AppendLine($"return {nonNullType}.Read({fieldRef});");
-            _ = sb.AppendLine("}");
-            _ = sb.AppendLine("}");
 
             return sb;
         }

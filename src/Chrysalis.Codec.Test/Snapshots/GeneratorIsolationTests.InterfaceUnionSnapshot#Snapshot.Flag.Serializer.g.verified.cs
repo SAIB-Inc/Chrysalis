@@ -25,7 +25,16 @@ int FlagKind = default!;
 if (FlagArrayRemaining != 0)
 {
 fieldsRead[0] = true;
+int _errorStartFlagKind = data.Length - reader.Buffer.Length;
+bool _errorSliceFlagKind = false;
+try
+{
 FlagKind = reader.ReadInt32();
+}
+catch (Exception error) when (CborError.ShouldWrapReader(error, data, reader.Buffer.Length, _errorStartFlagKind, _errorSliceFlagKind, "Snapshot.Flag.Kind", typeof(int)))
+{
+throw CborError.Reader(error, data, reader.Buffer.Length, _errorStartFlagKind, _errorSliceFlagKind, "Snapshot.Flag.Kind", CborError.Expected(typeof(int)));
+}
 if (FlagArrayRemaining > 0) FlagArrayRemaining--;
 }
 
@@ -33,17 +42,26 @@ bool FlagValue = default!;
 if (FlagArrayRemaining != 0)
 {
 fieldsRead[1] = true;
+int _errorStartFlagValue = data.Length - reader.Buffer.Length;
+bool _errorSliceFlagValue = false;
+try
+{
 FlagValue = reader.ReadBoolean();
+}
+catch (Exception error) when (CborError.ShouldWrapReader(error, data, reader.Buffer.Length, _errorStartFlagValue, _errorSliceFlagValue, "Snapshot.Flag.Value", typeof(bool)))
+{
+throw CborError.Reader(error, data, reader.Buffer.Length, _errorStartFlagValue, _errorSliceFlagValue, "Snapshot.Flag.Value", CborError.Expected(typeof(bool)));
+}
 if (FlagArrayRemaining > 0) FlagArrayRemaining--;
 }
 
 if (!fieldsRead[0])
 {
-    throw new System.Exception("Required field 'Kind' is missing from CBOR data");
+    throw CborError.Decode(data, data.Length - reader.Buffer.Length, "Snapshot.Flag.Kind", "required field", "missing");
 }
 if (!fieldsRead[1])
 {
-    throw new System.Exception("Required field 'Value' is missing from CBOR data");
+    throw CborError.Decode(data, data.Length - reader.Buffer.Length, "Snapshot.Flag.Value", "required field", "missing");
 }
 if (isIndefiniteArray && reader.Buffer.Length > 0 && reader.Buffer[0] == 0xFF) reader.ReadDataItem();
 Snapshot.Flag result;

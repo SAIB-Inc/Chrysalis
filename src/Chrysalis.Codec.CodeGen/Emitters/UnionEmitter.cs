@@ -24,6 +24,8 @@ public sealed partial class CborSerializerCodeGen
 
         public StringBuilder EmitWriter(StringBuilder sb, SerializableTypeMetadata metadata)
         {
+            _ = sb.AppendLine("ArgumentNullException.ThrowIfNull(data);");
+
             // V2: Flatten union hierarchy to concrete leaf types and use type pattern matching.
             // Derived types must appear before base types to avoid unreachable switch cases.
             List<SerializableTypeMetadata> leafTypes = FlattenUnionChildren(metadata.ChildTypes);
@@ -38,7 +40,7 @@ public sealed partial class CborSerializerCodeGen
                 _ = sb.AppendLine($"break;");
             }
             _ = sb.AppendLine($"default:");
-            _ = sb.AppendLine($"throw new Exception(\"Union serialization failed. {metadata.FullyQualifiedName} \");");
+            _ = sb.AppendLine($"throw CborError.Validation(-1, \"{metadata.FullyQualifiedName}\", \"registered union case\", data.GetType().FullName ?? \"unknown\");");
             _ = sb.AppendLine("}");
             return sb;
         }
@@ -153,7 +155,7 @@ public sealed partial class CborSerializerCodeGen
             else if (hasTagChildren || hasConstrChildren)
             {
                 EmitTagBranchWithConstr(sb, metadata, probeGroups, hasConstrChildren);
-                _ = sb.AppendLine($"throw new Exception(\"Union deserialization failed. {metadata.FullyQualifiedName}: expected tag\");");
+                _ = sb.AppendLine($"throw CborError.Decode(data, 0, \"{metadata.FullyQualifiedName}\", \"semantic tag\");");
             }
             else
             {
@@ -186,7 +188,7 @@ public sealed partial class CborSerializerCodeGen
             }
             else
             {
-                _ = sb.AppendLine($"        _ => throw new Exception(\"Union deserialization failed. {metadata.FullyQualifiedName}: unexpected tag\")");
+                _ = sb.AppendLine($"        _ => throw CborError.Decode(data, 0, \"{metadata.FullyQualifiedName}\", \"registered union tag\", tag)");
             }
             _ = sb.AppendLine("    };");
             _ = sb.AppendLine($"    return _tagResult;");
@@ -202,7 +204,7 @@ public sealed partial class CborSerializerCodeGen
                 string statePattern = GetCborReaderStatePattern(group.Key);
                 _ = sb.AppendLine($"    {statePattern} => ({metadata.FullyQualifiedName}){group.Value[0].FullyQualifiedName}.Read(data, out bytesConsumed),");
             }
-            _ = sb.AppendLine($"    _ => throw new Exception(\"Union deserialization failed. {metadata.FullyQualifiedName}: unexpected state \" + state)");
+            _ = sb.AppendLine($"    _ => throw CborError.Decode(data, 0, \"{metadata.FullyQualifiedName}\", \"registered union kind\", state)");
             _ = sb.AppendLine("};");
             _ = sb.AppendLine($"return _stateResult;");
         }
@@ -220,7 +222,7 @@ public sealed partial class CborSerializerCodeGen
                 int idxValue = int.Parse(group.Key.Substring(4), CultureInfo.InvariantCulture);
                 _ = sb.AppendLine($"    {idxValue} => ({metadata.FullyQualifiedName}){group.Value[0].FullyQualifiedName}.Read(data, out bytesConsumed),");
             }
-            _ = sb.AppendLine($"    _ => throw new Exception(\"Union deserialization failed. {metadata.FullyQualifiedName}: unexpected idx \" + _idx)");
+            _ = sb.AppendLine($"    _ => throw CborError.Decode(data, 0, \"{metadata.FullyQualifiedName}\", \"registered union index\", _idx)");
             _ = sb.AppendLine("};");
             _ = sb.AppendLine($"return _idxResult;");
         }
@@ -255,7 +257,7 @@ public sealed partial class CborSerializerCodeGen
                     ? sb.AppendLine($"    {idxValue} => ({metadata.FullyQualifiedName}){group.Value[0].FullyQualifiedName}.Read(data, out bytesConsumed),")
                     : sb.AppendLine($"    {idxValue} => {resolvers[group.Key]}(data, out bytesConsumed),");
             }
-            _ = sb.AppendLine($"    _ => throw new Exception(\"Union deserialization failed. {metadata.FullyQualifiedName}: unexpected idx \" + _idx)");
+            _ = sb.AppendLine($"    _ => throw CborError.Decode(data, 0, \"{metadata.FullyQualifiedName}\", \"registered union index\", _idx)");
             _ = sb.AppendLine("};");
             _ = sb.AppendLine($"return _idxResult;");
         }
@@ -286,7 +288,7 @@ public sealed partial class CborSerializerCodeGen
                 string statePattern = GetCborReaderStatePattern(ClassifyProbeAtDepth(member, depth));
                 _ = sb.AppendLine($"    {statePattern} => ({metadata.FullyQualifiedName}){member.FullyQualifiedName}.Read(_d, out _bc),");
             }
-            _ = sb.AppendLine($"    _ => throw new Exception(\"Union deserialization failed. {metadata.FullyQualifiedName}: ambiguous variant at shared index\")");
+            _ = sb.AppendLine($"    _ => throw CborError.Decode(data, 0, \"{metadata.FullyQualifiedName}\", \"unambiguous union case\")");
             _ = sb.AppendLine("};");
             _ = sb.AppendLine($"return _r;");
             _ = sb.AppendLine("}");
@@ -399,7 +401,7 @@ public sealed partial class CborSerializerCodeGen
                 int sizeValue = int.Parse(group.Key.Substring(6), CultureInfo.InvariantCulture);
                 _ = sb.AppendLine($"    {sizeValue} => ({metadata.FullyQualifiedName}){group.Value[0].FullyQualifiedName}.Read(data, out bytesConsumed),");
             }
-            _ = sb.AppendLine($"    _ => throw new Exception(\"Union deserialization failed. {metadata.FullyQualifiedName}: unexpected array size \" + _size)");
+            _ = sb.AppendLine($"    _ => throw CborError.Decode(data, 0, \"{metadata.FullyQualifiedName}\", \"registered array size\", _size)");
             _ = sb.AppendLine("};");
             _ = sb.AppendLine($"return _sizeResult;");
         }
@@ -413,7 +415,7 @@ public sealed partial class CborSerializerCodeGen
                 string statePattern = GetCborReaderStatePattern(group.Key);
                 _ = sb.AppendLine($"    {statePattern} => ({metadata.FullyQualifiedName}){group.Value[0].FullyQualifiedName}.Read(data, out bytesConsumed),");
             }
-            _ = sb.AppendLine($"    _ => throw new Exception(\"Union deserialization failed. {metadata.FullyQualifiedName}: unexpected state \" + state)");
+            _ = sb.AppendLine($"    _ => throw CborError.Decode(data, 0, \"{metadata.FullyQualifiedName}\", \"registered union kind\", state)");
             _ = sb.AppendLine("};");
             _ = sb.AppendLine($"return _stateResult;");
         }
@@ -526,20 +528,30 @@ public sealed partial class CborSerializerCodeGen
 
         private static StringBuilder EmitTryCatchReader(StringBuilder sb, SerializableTypeMetadata metadata)
         {
-            _ = sb.AppendLine($"List<string> errors = [];");
+            _ = sb.AppendLine("Exception error = null;");
+            _ = sb.AppendLine("CborReadTrial failure = default;");
+            _ = sb.AppendLine("CborReadTrial previous = CborError.BeginReadTrial();");
+            _ = sb.AppendLine("try");
+            _ = sb.AppendLine("{");
             foreach (SerializableTypeMetadata childType in metadata.ChildTypes)
             {
                 _ = sb.AppendLine($"try");
                 _ = sb.AppendLine("{");
                 _ = sb.AppendLine($"return ({metadata.FullyQualifiedName}){childType.FullyQualifiedName}.Read(data, out bytesConsumed);");
                 _ = sb.AppendLine("}");
-                _ = sb.AppendLine($"catch (Exception ex)");
+                _ = sb.AppendLine("catch (Exception ex) when (CborError.IsDecodeFailure(ex))");
                 _ = sb.AppendLine("{");
-                _ = sb.AppendLine($"errors.Add(ex.Message);");
+                _ = sb.AppendLine("error = ex;");
+                _ = sb.AppendLine("failure = CborError.TakeReadTrial(ex);");
                 _ = sb.AppendLine("}");
             }
 
-            _ = sb.AppendLine($"throw new Exception(\"Union deserialization failed. {metadata.FullyQualifiedName} \" + string.Join(\"\\n\", errors));");
+            _ = sb.AppendLine("}");
+            _ = sb.AppendLine("finally");
+            _ = sb.AppendLine("{");
+            _ = sb.AppendLine("CborError.EndReadTrial(previous);");
+            _ = sb.AppendLine("}");
+            _ = sb.AppendLine($"throw CborError.FinishReadTrial(error, failure, data, \"{metadata.FullyQualifiedName}\");");
 
             return sb;
         }

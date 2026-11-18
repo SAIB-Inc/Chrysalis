@@ -177,7 +177,8 @@ public class BlockFetchCompletenessTests(ITestOutputHelper output)
         ChannelBuffer buffer = new(replay.Channel);
         using CancellationTokenSource deadline = new(TimeSpan.FromSeconds(1));
         Exception? error = await Record.ExceptionAsync(() => buffer.ReceiveFullMessageAsync<BlockFetchMessage>(deadline.Token));
-        _ = Assert.IsType<CborException>(error);
+        if (hex == "FF") { _ = Assert.IsType<CborException>(error); }
+        else { _ = Assert.IsType<CborDecodeException>(error); }
     }
 
     // Regression guard: passes on baseline 7521d26 by design; preserves the existing complete-frame semantic error.

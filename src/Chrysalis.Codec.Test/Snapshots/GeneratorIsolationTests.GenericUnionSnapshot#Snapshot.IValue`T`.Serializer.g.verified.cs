@@ -23,7 +23,7 @@ if (data.Length > 0 && (data.Span[0] >> 5) == 6)
     Snapshot.IValue<T> _tagResult = tag switch
     {
         258 => (Snapshot.IValue<T>)Snapshot.TaggedValues<T>.Read(data, out bytesConsumed),
-        _ => throw new Exception("Union deserialization failed. Snapshot.IValue<T>: unexpected tag")
+        _ => throw CborError.Decode(data, 0, "Snapshot.IValue<T>", "registered union tag", tag)
     };
     return _tagResult;
 }
@@ -32,7 +32,7 @@ var state = reader.GetCurrentDataItemType();
 Snapshot.IValue<T> _stateResult = state switch
 {
     CborDataItemType.Array => (Snapshot.IValue<T>)Snapshot.Values<T>.Read(data, out bytesConsumed),
-    _ => throw new Exception("Union deserialization failed. Snapshot.IValue<T>: unexpected state " + state)
+    _ => throw CborError.Decode(data, 0, "Snapshot.IValue<T>", "registered union kind", state)
 };
 return _stateResult;
 }
@@ -53,6 +53,7 @@ return Read(data, out _);
 public static new void Write(IBufferWriter<byte> output, Snapshot.IValue<T> data)
 {
 var writer = new CborWriter(output);
+ArgumentNullException.ThrowIfNull(data);
 switch (data)
 {
 case Snapshot.Values<T> _typedValues:
@@ -62,7 +63,7 @@ case Snapshot.TaggedValues<T> _typedTaggedValues:
 Snapshot.TaggedValues<T>.Write(output, _typedTaggedValues);
 break;
 default:
-throw new Exception("Union serialization failed. Snapshot.IValue<T> ");
+throw CborError.Validation(-1, "Snapshot.IValue<T>", "registered union case", data.GetType().FullName ?? "unknown");
 }
 }
 

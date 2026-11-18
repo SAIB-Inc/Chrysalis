@@ -26,6 +26,8 @@ public partial global::System.Collections.Generic.List<T> Value
 {
 get
 {
+try
+{
 var _r = new CborReader(_field0.Span);
 _r.ReadBeginArray();
 int _size = _r.ReadSize();
@@ -33,14 +35,27 @@ var _list = new global::System.Collections.Generic.List<T>();
 int _remaining = _size;
 while (_size == -1 ? (_r.Buffer.Length > 0 && _r.Buffer[0] != 0xFF) : _remaining > 0)
 {
+int _errorStart = _field0.Length - _r.Buffer.Length;
+try
+{
 int _pos = _field0.Length - _r.Buffer.Length;
 var _item = global::Chrysalis.Codec.Serialization.GenericSerializationUtil.ReadAnyWithConsumed<T>(_field0.Slice(_pos), out int _consumed);
 _r = new CborReader(_field0.Span.Slice(_pos + _consumed));
 _list.Add(_item);
+}
+catch (Exception error) when (CborError.IsDecodeFailure(error))
+{
+throw CborError.Reader(error, _field0, _r.Buffer.Length, _errorStart, true, "item", "list item");
+}
 if (_size > 0) _remaining--;
 }
 if (_size == -1 && _r.Buffer.Length > 0 && _r.Buffer[0] == 0xFF) _r.ReadDataItem();
 return _list;
+}
+catch (Exception error) when (CborError.IsDecodeFailure(error))
+{
+throw CborError.Field(error, _raw, _field0, "Snapshot.Values<T>.Value", CborError.Expected(typeof(global::System.Collections.Generic.List<T>)));
+}
 }
 }
 
@@ -50,7 +65,7 @@ return _list;
 public static new Snapshot.Values<T> Read(ReadOnlyMemory<byte> data, out int bytesConsumed)
 {
 var reader = new CborReader(data.Span);
-{ byte _mt = (byte)(reader.Buffer[0] >> 5); if (_mt != 4 && _mt != 6) throw new Exception("Expected CBOR array"); }
+if (reader.Buffer.IsEmpty || (reader.Buffer[0] >> 5) is not (4 or 6)) throw CborError.Decode(data, data.Length - reader.Buffer.Length, "Snapshot.Values<T>.Value", "array");
 int _s0 = data.Length - reader.Buffer.Length;
 reader.SkipDataItem();
 bytesConsumed = data.Length - reader.Buffer.Length;

@@ -107,7 +107,8 @@ public class EncodedLengthTests
     public void HandWrittenException_ReleasesSink()
     {
         NestedLengthValue failed = new(new LengthFields("inner fields"), ThrowAfterNestedLength: true);
-        _ = Assert.Throws<InvalidOperationException>(() => CborSerializer.GetEncodedLength(failed));
+        CborValidationException error = Assert.Throws<CborValidationException>(() => CborSerializer.GetEncodedLength(failed));
+        _ = Assert.IsType<InvalidOperationException>(error.InnerException);
         NestedLengthValue next = new(new LengthFields("next fields"));
         Assert.Equal(CborSerializer.Serialize(next).Length, CborSerializer.GetEncodedLength(next));
         Assert.NotNull(failed.Output);
@@ -118,7 +119,8 @@ public class EncodedLengthTests
     public void CallbackException_ReleasesSink()
     {
         CallbackValue failed = new(new CallbackPayload { QueryNestedLength = true, ThrowAfterNestedLength = true });
-        _ = Assert.Throws<InvalidOperationException>(() => CborSerializer.GetEncodedLength(failed));
+        CborValidationException error = Assert.Throws<CborValidationException>(() => CborSerializer.GetEncodedLength(failed));
+        _ = Assert.IsType<InvalidOperationException>(error.InnerException);
         CallbackValue next = new(new CallbackPayload());
         Assert.Equal(CborSerializer.Serialize(next).Length, CborSerializer.GetEncodedLength(next));
         Assert.NotNull(failed.Output);

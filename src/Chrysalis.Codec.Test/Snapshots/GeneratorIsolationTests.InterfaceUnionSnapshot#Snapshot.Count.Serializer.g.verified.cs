@@ -25,7 +25,16 @@ int CountKind = default!;
 if (CountArrayRemaining != 0)
 {
 fieldsRead[0] = true;
+int _errorStartCountKind = data.Length - reader.Buffer.Length;
+bool _errorSliceCountKind = false;
+try
+{
 CountKind = reader.ReadInt32();
+}
+catch (Exception error) when (CborError.ShouldWrapReader(error, data, reader.Buffer.Length, _errorStartCountKind, _errorSliceCountKind, "Snapshot.Count.Kind", typeof(int)))
+{
+throw CborError.Reader(error, data, reader.Buffer.Length, _errorStartCountKind, _errorSliceCountKind, "Snapshot.Count.Kind", CborError.Expected(typeof(int)));
+}
 if (CountArrayRemaining > 0) CountArrayRemaining--;
 }
 
@@ -33,17 +42,26 @@ int CountValue = default!;
 if (CountArrayRemaining != 0)
 {
 fieldsRead[1] = true;
+int _errorStartCountValue = data.Length - reader.Buffer.Length;
+bool _errorSliceCountValue = false;
+try
+{
 CountValue = reader.ReadInt32();
+}
+catch (Exception error) when (CborError.ShouldWrapReader(error, data, reader.Buffer.Length, _errorStartCountValue, _errorSliceCountValue, "Snapshot.Count.Value", typeof(int)))
+{
+throw CborError.Reader(error, data, reader.Buffer.Length, _errorStartCountValue, _errorSliceCountValue, "Snapshot.Count.Value", CborError.Expected(typeof(int)));
+}
 if (CountArrayRemaining > 0) CountArrayRemaining--;
 }
 
 if (!fieldsRead[0])
 {
-    throw new System.Exception("Required field 'Kind' is missing from CBOR data");
+    throw CborError.Decode(data, data.Length - reader.Buffer.Length, "Snapshot.Count.Kind", "required field", "missing");
 }
 if (!fieldsRead[1])
 {
-    throw new System.Exception("Required field 'Value' is missing from CBOR data");
+    throw CborError.Decode(data, data.Length - reader.Buffer.Length, "Snapshot.Count.Value", "required field", "missing");
 }
 if (isIndefiniteArray && reader.Buffer.Length > 0 && reader.Buffer[0] == 0xFF) reader.ReadDataItem();
 Snapshot.Count result;
@@ -56,7 +74,7 @@ if (isIndefiniteArray)
     result.IsIndefinite = true;
 }
 global::Snapshot.CountValidator validator = new();
-if (!validator.Validate(result)) throw new Exception("Validation failed");
+if (!validator.Validate(result)) throw __CborValidationError(data.Length - reader.Buffer.Length);
 bytesConsumed = data.Length - reader.Buffer.Length;
 result.Raw = data[..bytesConsumed];
 return result;
@@ -69,6 +87,9 @@ public static new Snapshot.Count Read(ReadOnlyMemory<byte> data)
 {
 return Read(data, out _);
 }
+[global::System.Runtime.CompilerServices.MethodImpl(global::System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+private static Exception __CborValidationError(int offset)
+    => CborError.Validation(offset, "Snapshot.Count", "validator global::Snapshot.CountValidator succeeds", "validation failed");
 
 /// <summary>
 /// Serializes a <see cref="Count"/> instance to CBOR format.
@@ -84,7 +105,7 @@ output.Write(data.Raw.Span);
 return;
 }
 global::Snapshot.CountValidator validator = new();
-if (!validator.Validate(data)) throw new Exception("Validation failed");
+if (!validator.Validate(data)) throw __CborValidationError(-1);
 int propCount = 0;
 propCount++;
 propCount++;

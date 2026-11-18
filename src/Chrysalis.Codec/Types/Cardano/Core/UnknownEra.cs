@@ -1,5 +1,6 @@
 using System.Globalization;
 using Chrysalis.Codec.Serialization;
+using SAIB.Cbor;
 using SAIB.Cbor.Serialization;
 
 namespace Chrysalis.Codec.Types.Cardano.Core;
@@ -104,7 +105,7 @@ public readonly record struct UnknownEra(
 }
 
 /// <summary>An unsupported wire era, with the original envelope and any caller-supplied point.</summary>
-public sealed class UnknownEraException : FormatException
+public sealed class UnknownEraException : CborDecodeException
 {
     /// <summary>Creates an unsupported-era error without wire context.</summary>
     public UnknownEraException() { }
@@ -114,8 +115,24 @@ public sealed class UnknownEraException : FormatException
     public UnknownEraException(string message, Exception innerException) : base(message, innerException) { }
     /// <summary>Creates an unsupported-era error retaining the original envelope.</summary>
     public UnknownEraException(UnknownEra value, Exception? innerException = null)
-        : base(string.Create(CultureInfo.InvariantCulture,
-            $"Unsupported {value.Envelope} wire era tag {value.WireTag}."), innerException) => Value = value;
+        : base(GetTagOffset(value.Raw), value.Envelope.ToString(), "supported wire era tag",
+            value.WireTag.ToString(CultureInfo.InvariantCulture), innerException) => Value = value;
+    private static int GetTagOffset(ReadOnlyMemory<byte> raw)
+    {
+        if (raw.IsEmpty) { return -1; }
+        CborReader reader = new(raw.Span);
+        try
+        {
+            reader.ReadBeginArray();
+            _ = reader.ReadSize();
+            return raw.Length - reader.Buffer.Length;
+        }
+        catch (CborException)
+        {
+            return -1;
+        }
+    }
+
     /// <summary>The unprocessed wire value; default only for manually constructed errors without wire context.</summary>
     public UnknownEra Value { get; }
     /// <summary>The tag exactly as numbered on the wire, without ledger-era conversion.</summary>

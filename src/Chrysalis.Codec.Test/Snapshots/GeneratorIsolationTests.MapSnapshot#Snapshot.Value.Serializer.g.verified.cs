@@ -23,8 +23,34 @@ public int ConstrIndex => _constrIndex;
 /// <inheritdoc/>
 public bool IsIndefinite => _isIndefinite;
 
-public partial int Number { get => new CborReader(_field0.Span).ReadInt32(); }
-public partial string Text { get => new CborReader(_field1.Span).ReadString(); }
+public partial int Number
+{
+get
+{
+try
+{
+return new CborReader(_field0.Span).ReadInt32();
+}
+catch (Exception error) when (CborError.IsDecodeFailure(error))
+{
+throw CborError.Field(error, _raw, _field0, "Snapshot.Value.Number", CborError.Expected(typeof(int)));
+}
+}
+}
+public partial string Text
+{
+get
+{
+try
+{
+return new CborReader(_field1.Span).ReadString();
+}
+catch (Exception error) when (CborError.IsDecodeFailure(error))
+{
+throw CborError.Field(error, _raw, _field1, "Snapshot.Value.Text", CborError.Expected(typeof(string)));
+}
+}
+}
 
 static Dictionary<int, Type> TypeMapping = new()
 {

@@ -22,7 +22,20 @@ public int ConstrIndex => _constrIndex;
 /// <inheritdoc/>
 public bool IsIndefinite => _isIndefinite;
 
-public partial int Value { get => new CborReader(_field0.Span).ReadInt32(); }
+public partial int Value
+{
+get
+{
+try
+{
+return new CborReader(_field0.Span).ReadInt32();
+}
+catch (Exception error) when (CborError.IsDecodeFailure(error))
+{
+throw CborError.Field(error, _raw, _field0, "Snapshot.Number.Value", CborError.Expected(typeof(int)));
+}
+}
+}
 
 /// <summary>
 /// Deserializes a <see cref="Number"/> instance from CBOR-encoded bytes and reports bytes consumed.
@@ -30,7 +43,7 @@ public partial int Value { get => new CborReader(_field0.Span).ReadInt32(); }
 public static new Snapshot.Number Read(ReadOnlyMemory<byte> data, out int bytesConsumed)
 {
 var reader = new CborReader(data.Span);
-{ byte _mt = (byte)(reader.Buffer[0] >> 5); if (_mt != 0 && _mt != 1) throw new Exception("Expected CBOR integer"); }
+if (reader.Buffer.IsEmpty || (reader.Buffer[0] >> 5) is not (0 or 1)) throw CborError.Decode(data, data.Length - reader.Buffer.Length, "Snapshot.Number.Value", "integer");
 int _s0 = data.Length - reader.Buffer.Length;
 reader.SkipDataItem();
 bytesConsumed = data.Length - reader.Buffer.Length;

@@ -16,7 +16,7 @@ public sealed partial class CborSerializerCodeGen
             }
             else
             {
-                _ = Emitter.EmitTagReader(sb, metadata.CborTag, "tagIndex");
+                _ = Emitter.EmitTagReader(sb, metadata.CborTag, "tagIndex", metadata.FullyQualifiedName);
                 _ = Emitter.EmitCustomListReader(sb, metadata);
             }
 

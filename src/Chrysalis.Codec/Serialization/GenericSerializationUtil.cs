@@ -2,9 +2,7 @@ using System.Buffers;
 using System.Collections.Concurrent;
 using System.Reflection;
 using System.Runtime.CompilerServices;
-using System.Runtime.ExceptionServices;
 using Chrysalis.Codec.Types;
-using Chrysalis.Codec.Types.Cardano.Core;
 using SAIB.Cbor.Serialization;
 
 namespace Chrysalis.Codec.Serialization;
@@ -25,70 +23,98 @@ public static class GenericSerializationUtil
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static T? ReadAnyWithConsumed<T>(ReadOnlyMemory<byte> data, out int bytesConsumed)
     {
-        if (IsPrimitiveType(typeof(T)))
+        try
         {
-            return ReadPrimitiveWithConsumed<T>(data, out bytesConsumed);
-        }
+            if (IsPrimitiveType(typeof(T)))
+            {
+                return ReadPrimitiveWithConsumed<T>(data, out bytesConsumed);
+            }
 
-        if (!ReadWithConsumedMethodCache.TryGetValue(typeof(T), out Delegate? readDelegate))
+            if (!ReadWithConsumedMethodCache.TryGetValue(typeof(T), out Delegate? readDelegate))
+            {
+                MethodInfo readMethod = typeof(T).GetMethod("Read", BindingFlags.Public | BindingFlags.Static | BindingFlags.FlattenHierarchy, null, [typeof(ReadOnlyMemory<byte>), typeof(int).MakeByRefType()], null)
+                    ?? throw new NotSupportedException($"Type {typeof(T).FullName} does not have a valid static Read(ReadOnlyMemory<byte>, out int) method.");
+
+                readDelegate = Delegate.CreateDelegate(typeof(ReadWithConsumedHandler<T>), readMethod);
+                ReadWithConsumedMethodCache[typeof(T)] = readDelegate;
+            }
+
+            return ((ReadWithConsumedHandler<T>)readDelegate)(data, out bytesConsumed);
+        }
+        catch (Exception error) when (CborError.IsDecodeFailure(error))
         {
-            MethodInfo readMethod = typeof(T).GetMethod("Read", BindingFlags.Public | BindingFlags.Static | BindingFlags.FlattenHierarchy, null, [typeof(ReadOnlyMemory<byte>), typeof(int).MakeByRefType()], null)
-                ?? throw new NotSupportedException($"Type {typeof(T).FullName} does not have a valid static Read(ReadOnlyMemory<byte>, out int) method.");
-
-            readDelegate = Delegate.CreateDelegate(typeof(ReadWithConsumedHandler<T>), readMethod);
-            ReadWithConsumedMethodCache[typeof(T)] = readDelegate;
+            throw CborError.Wrap(error, data, typeof(T).FullName!, CborError.Expected(typeof(T)));
         }
-
-        return ((ReadWithConsumedHandler<T>)readDelegate)(data, out bytesConsumed);
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static T? ReadPrimitiveWithConsumed<T>(ReadOnlyMemory<byte> data, out int bytesConsumed)
     {
-        CborReader reader = new(data.Span);
-        Type type = typeof(T);
-
-        if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(Nullable<>))
+        try
         {
-            type = Nullable.GetUnderlyingType(type)!;
+            CborReader reader = new(data.Span);
+            Type type = typeof(T);
+
+            if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(Nullable<>))
+            {
+                type = Nullable.GetUnderlyingType(type)!;
+            }
+
+            T? result = true switch
+            {
+                _ when type == typeof(bool) => (T)(object)reader.ReadBoolean(),
+                _ when type == typeof(int) => (T)(object)reader.ReadInt32(),
+                _ when type == typeof(uint) => (T)(object)reader.ReadUInt32(),
+                _ when type == typeof(long) => (T)(object)reader.ReadInt64(),
+                _ when type == typeof(ulong) => (T)(object)reader.ReadUInt64(),
+                _ when type == typeof(float) => (T)(object)reader.ReadSingle(),
+                _ when type == typeof(double) => (T)(object)reader.ReadDouble(),
+                _ when type == typeof(decimal) => (T)(object)reader.ReadDecimal(),
+                _ when type == typeof(string) => (T)(object)reader.ReadString()!,
+                _ when type == typeof(byte[]) => (T)(object)ReadByteArray(ref reader),
+                _ when type == typeof(ReadOnlyMemory<byte>) => (T)(object)(ReadOnlyMemory<byte>)ReadByteArray(ref reader),
+                _ when type == typeof(CborEncodedValue) => ReadCborEncodedValueAsT<T>(ref reader, data),
+                _ when type == typeof(CborLabel) => (T)(object)ReadCborLabel(ref reader),
+                _ => throw new NotSupportedException($"Type {type} is not supported as a primitive type.")
+            };
+
+            bytesConsumed = data.Length - reader.Buffer.Length;
+            return result;
         }
-
-        T? result = true switch
+        catch (Exception error) when (CborError.IsDecodeFailure(error))
         {
-            _ when type == typeof(bool) => (T)(object)reader.ReadBoolean(),
-            _ when type == typeof(int) => (T)(object)reader.ReadInt32(),
-            _ when type == typeof(uint) => (T)(object)reader.ReadUInt32(),
-            _ when type == typeof(long) => (T)(object)reader.ReadInt64(),
-            _ when type == typeof(ulong) => (T)(object)reader.ReadUInt64(),
-            _ when type == typeof(float) => (T)(object)reader.ReadSingle(),
-            _ when type == typeof(double) => (T)(object)reader.ReadDouble(),
-            _ when type == typeof(decimal) => (T)(object)reader.ReadDecimal(),
-            _ when type == typeof(string) => (T)(object)reader.ReadString()!,
-            _ when type == typeof(byte[]) => (T)(object)ReadByteArray(ref reader),
-            _ when type == typeof(ReadOnlyMemory<byte>) => (T)(object)(ReadOnlyMemory<byte>)ReadByteArray(ref reader),
-            _ when type == typeof(CborEncodedValue) => ReadCborEncodedValueAsT<T>(ref reader, data),
-            _ when type == typeof(CborLabel) => (T)(object)ReadCborLabel(ref reader),
-            _ => throw new NotSupportedException($"Type {type} is not supported as a primitive type.")
-        };
-
-        bytesConsumed = data.Length - reader.Buffer.Length;
-        return result;
+            throw CborError.Wrap(error, data, typeof(T).FullName!, CborError.Expected(typeof(T)));
+        }
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static object? Read(ReadOnlyMemory<byte> data, Type type)
     {
         ArgumentNullException.ThrowIfNull(type);
-        return IsPrimitiveType(type) ? ReadPrimitive(type, data) : ReadNonPrimitive(type, data);
+        try
+        {
+            return IsPrimitiveType(type) ? ReadPrimitive(type, data) : ReadNonPrimitive(type, data);
+        }
+        catch (Exception error) when (CborError.IsDecodeFailure(error))
+        {
+            throw CborError.Wrap(error, data, type.FullName!, CborError.Expected(type));
+        }
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static object? ReadAnyWithConsumed(ReadOnlyMemory<byte> data, Type type, out int bytesConsumed)
     {
         ArgumentNullException.ThrowIfNull(type);
-        return IsPrimitiveType(type)
-            ? ReadPrimitiveWithConsumed(type, data, out bytesConsumed)
-            : ReadNonPrimitiveWithConsumed(type, data, out bytesConsumed);
+        try
+        {
+            return IsPrimitiveType(type)
+                ? ReadPrimitiveWithConsumed(type, data, out bytesConsumed)
+                : ReadNonPrimitiveWithConsumed(type, data, out bytesConsumed);
+        }
+        catch (Exception error) when (CborError.IsDecodeFailure(error))
+        {
+            throw CborError.Wrap(error, data, type.FullName!, CborError.Expected(type));
+        }
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -111,100 +137,121 @@ public static class GenericSerializationUtil
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static T? ReadPrimitive<T>(ReadOnlyMemory<byte> data)
     {
-        CborReader reader = new(data.Span);
-        Type type = typeof(T);
-
-        if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(Nullable<>))
+        try
         {
-            type = Nullable.GetUnderlyingType(type)!;
+            CborReader reader = new(data.Span);
+            Type type = typeof(T);
+
+            if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(Nullable<>))
+            {
+                type = Nullable.GetUnderlyingType(type)!;
+            }
+
+            return true switch
+            {
+                _ when type == typeof(bool) => (T)(object)reader.ReadBoolean(),
+                _ when type == typeof(int) => (T)(object)reader.ReadInt32(),
+                _ when type == typeof(uint) => (T)(object)reader.ReadUInt32(),
+                _ when type == typeof(long) => (T)(object)reader.ReadInt64(),
+                _ when type == typeof(ulong) => (T)(object)reader.ReadUInt64(),
+                _ when type == typeof(float) => (T)(object)reader.ReadSingle(),
+                _ when type == typeof(double) => (T)(object)reader.ReadDouble(),
+                _ when type == typeof(decimal) => (T)(object)reader.ReadDecimal(),
+                _ when type == typeof(string) => (T)(object)reader.ReadString()!,
+                _ when type == typeof(byte[]) => (T)(object)ReadByteArray(ref reader),
+                _ when type == typeof(ReadOnlyMemory<byte>) => (T)(object)(ReadOnlyMemory<byte>)ReadByteArray(ref reader),
+                _ when type == typeof(CborEncodedValue) => (T)(object)CborEncodedValue.Read(data),
+                _ when type == typeof(CborLabel) => (T)(object)ReadCborLabel(ref reader),
+                _ => throw new NotSupportedException($"Type {type} is not supported as a primitive type.")
+            };
         }
-
-        return true switch
+        catch (Exception error) when (CborError.IsDecodeFailure(error))
         {
-            _ when type == typeof(bool) => (T)(object)reader.ReadBoolean(),
-            _ when type == typeof(int) => (T)(object)reader.ReadInt32(),
-            _ when type == typeof(uint) => (T)(object)reader.ReadUInt32(),
-            _ when type == typeof(long) => (T)(object)reader.ReadInt64(),
-            _ when type == typeof(ulong) => (T)(object)reader.ReadUInt64(),
-            _ when type == typeof(float) => (T)(object)reader.ReadSingle(),
-            _ when type == typeof(double) => (T)(object)reader.ReadDouble(),
-            _ when type == typeof(decimal) => (T)(object)reader.ReadDecimal(),
-            _ when type == typeof(string) => (T)(object)reader.ReadString()!,
-            _ when type == typeof(byte[]) => (T)(object)ReadByteArray(ref reader),
-            _ when type == typeof(ReadOnlyMemory<byte>) => (T)(object)(ReadOnlyMemory<byte>)ReadByteArray(ref reader),
-            _ when type == typeof(CborEncodedValue) => (T)(object)CborEncodedValue.Read(data),
-            _ when type == typeof(CborLabel) => (T)(object)ReadCborLabel(ref reader),
-            _ => throw new NotSupportedException($"Type {type} is not supported as a primitive type.")
-        };
+            throw CborError.Wrap(error, data, typeof(T).FullName!, CborError.Expected(typeof(T)));
+        }
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static object? ReadPrimitive(Type type, ReadOnlyMemory<byte> data)
     {
         ArgumentNullException.ThrowIfNull(type);
-
-        if (Nullable.GetUnderlyingType(type) != null)
+        try
         {
-            return ReadPrimitive(Nullable.GetUnderlyingType(type)!, data);
+
+            if (Nullable.GetUnderlyingType(type) != null)
+            {
+                return ReadPrimitive(Nullable.GetUnderlyingType(type)!, data);
+            }
+
+            CborReader reader = new(data.Span);
+
+            return true switch
+            {
+                _ when type == typeof(bool) => reader.ReadBoolean(),
+                _ when type == typeof(int) => reader.ReadInt32(),
+                _ when type == typeof(uint) => reader.ReadUInt32(),
+                _ when type == typeof(long) => reader.ReadInt64(),
+                _ when type == typeof(ulong) => reader.ReadUInt64(),
+                _ when type == typeof(float) => reader.ReadSingle(),
+                _ when type == typeof(double) => reader.ReadDouble(),
+                _ when type == typeof(decimal) => reader.ReadDecimal(),
+                _ when type == typeof(string) => reader.ReadString()!,
+                _ when type == typeof(byte[]) => ReadByteArray(ref reader),
+                _ when type == typeof(ReadOnlyMemory<byte>) => (ReadOnlyMemory<byte>)ReadByteArray(ref reader),
+                _ when type == typeof(CborEncodedValue) => CborEncodedValue.Read(data),
+                _ when type == typeof(CborLabel) => ReadCborLabel(ref reader),
+                _ => throw new NotSupportedException($"Type {type} is not supported as a primitive type.")
+            };
         }
-
-        CborReader reader = new(data.Span);
-
-        return true switch
+        catch (Exception error) when (CborError.IsDecodeFailure(error))
         {
-            _ when type == typeof(bool) => reader.ReadBoolean(),
-            _ when type == typeof(int) => reader.ReadInt32(),
-            _ when type == typeof(uint) => reader.ReadUInt32(),
-            _ when type == typeof(long) => reader.ReadInt64(),
-            _ when type == typeof(ulong) => reader.ReadUInt64(),
-            _ when type == typeof(float) => reader.ReadSingle(),
-            _ when type == typeof(double) => reader.ReadDouble(),
-            _ when type == typeof(decimal) => reader.ReadDecimal(),
-            _ when type == typeof(string) => reader.ReadString()!,
-            _ when type == typeof(byte[]) => ReadByteArray(ref reader),
-            _ when type == typeof(ReadOnlyMemory<byte>) => (ReadOnlyMemory<byte>)ReadByteArray(ref reader),
-            _ when type == typeof(CborEncodedValue) => CborEncodedValue.Read(data),
-            _ when type == typeof(CborLabel) => ReadCborLabel(ref reader),
-            _ => throw new NotSupportedException($"Type {type} is not supported as a primitive type.")
-        };
+            throw CborError.Wrap(error, data, type.FullName!, CborError.Expected(type));
+        }
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static object? ReadPrimitiveWithConsumed(Type type, ReadOnlyMemory<byte> data, out int bytesConsumed)
     {
-        CborReader reader = new(data.Span);
-
-        if (Nullable.GetUnderlyingType(type) != null)
+        try
         {
-            type = Nullable.GetUnderlyingType(type)!;
+            CborReader reader = new(data.Span);
+
+            if (Nullable.GetUnderlyingType(type) != null)
+            {
+                type = Nullable.GetUnderlyingType(type)!;
+            }
+
+            if (type == typeof(CborEncodedValue))
+            {
+                int pos = data.Length - reader.Buffer.Length;
+                CborEncodedValue cev = CborEncodedValue.Read(data[pos..], out int consumed);
+                bytesConsumed = pos + consumed;
+                return cev;
+            }
+
+            object? result = true switch
+            {
+                _ when type == typeof(bool) => reader.ReadBoolean(),
+                _ when type == typeof(int) => reader.ReadInt32(),
+                _ when type == typeof(uint) => reader.ReadUInt32(),
+                _ when type == typeof(long) => reader.ReadInt64(),
+                _ when type == typeof(ulong) => reader.ReadUInt64(),
+                _ when type == typeof(float) => reader.ReadSingle(),
+                _ when type == typeof(double) => reader.ReadDouble(),
+                _ when type == typeof(decimal) => reader.ReadDecimal(),
+                _ when type == typeof(string) => reader.ReadString()!,
+                _ when type == typeof(byte[]) => ReadByteArray(ref reader),
+                _ when type == typeof(ReadOnlyMemory<byte>) => (ReadOnlyMemory<byte>)ReadByteArray(ref reader),
+                _ when type == typeof(CborLabel) => ReadCborLabel(ref reader),
+                _ => throw new NotSupportedException($"Type {type} is not supported as a primitive type.")
+            };
+            bytesConsumed = data.Length - reader.Buffer.Length;
+            return result;
         }
-
-        if (type == typeof(CborEncodedValue))
+        catch (Exception error) when (CborError.IsDecodeFailure(error))
         {
-            int pos = data.Length - reader.Buffer.Length;
-            CborEncodedValue cev = CborEncodedValue.Read(data[pos..], out int consumed);
-            bytesConsumed = pos + consumed;
-            return cev;
+            throw CborError.Wrap(error, data, type.FullName!, CborError.Expected(type));
         }
-
-        object? result = true switch
-        {
-            _ when type == typeof(bool) => reader.ReadBoolean(),
-            _ when type == typeof(int) => reader.ReadInt32(),
-            _ when type == typeof(uint) => reader.ReadUInt32(),
-            _ when type == typeof(long) => reader.ReadInt64(),
-            _ when type == typeof(ulong) => reader.ReadUInt64(),
-            _ when type == typeof(float) => reader.ReadSingle(),
-            _ when type == typeof(double) => reader.ReadDouble(),
-            _ when type == typeof(decimal) => reader.ReadDecimal(),
-            _ when type == typeof(string) => reader.ReadString()!,
-            _ when type == typeof(byte[]) => ReadByteArray(ref reader),
-            _ when type == typeof(ReadOnlyMemory<byte>) => (ReadOnlyMemory<byte>)ReadByteArray(ref reader),
-            _ when type == typeof(CborLabel) => ReadCborLabel(ref reader),
-            _ => throw new NotSupportedException($"Type {type} is not supported as a primitive type.")
-        };
-        bytesConsumed = data.Length - reader.Buffer.Length;
-        return result;
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -227,10 +274,9 @@ public static class GenericSerializationUtil
             bytesConsumed = (int)args[1]!;
             return result;
         }
-        catch (TargetInvocationException exception) when (exception.InnerException is UnknownEraException)
+        catch (Exception exception) when (CborError.IsDecodeFailure(exception))
         {
-            ExceptionDispatchInfo.Capture(exception.InnerException).Throw();
-            throw;
+            throw CborError.Wrap(exception, data, type.FullName!, CborError.Expected(type));
         }
     }
 
@@ -243,7 +289,7 @@ public static class GenericSerializationUtil
         {
             CborDataItemType.Unsigned or CborDataItemType.Signed => new CborLabel(reader.ReadInt64()),
             CborDataItemType.String => new CborLabel(reader.ReadString()!),
-            _ => throw new InvalidOperationException($"Invalid CBOR type for Label: {itemType}")
+            _ => throw new CborDecodeException(0, "CborLabel", "integer or text string", itemType.ToString())
         };
 #pragma warning restore IDE0072
     }
@@ -258,23 +304,7 @@ public static class GenericSerializationUtil
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static byte[] ReadByteArray(ref CborReader reader)
-    {
-        if (reader.Buffer.Length > 0 && reader.Buffer[0] == 0x5F)
-        {
-            _ = reader.ReadDataItem();
-            using MemoryStream stream = new();
-            while (reader.Buffer.Length > 0 && reader.Buffer[0] != 0xFF)
-            {
-                ReadOnlySpan<byte> chunk = reader.ReadByteString();
-                stream.Write(chunk);
-            }
-            _ = reader.ReadDataItem();
-            return stream.ToArray();
-        }
-
-        return reader.ReadByteString().ToArray();
-    }
+    private static byte[] ReadByteArray(ref CborReader reader) => reader.ReadByteStringToArray();
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static T ReadNonPrimitive<T>(ReadOnlyMemory<byte> data)
@@ -292,9 +322,9 @@ public static class GenericSerializationUtil
 
             return ((ReadHandler<T>)readDelegate)(data);
         }
-        catch (Exception ex) when (ex is not UnknownEraException)
+        catch (Exception ex) when (CborError.IsDecodeFailure(ex))
         {
-            throw new InvalidOperationException($"Failed to read type {typeof(T).FullName}: {ex.Message}", ex);
+            throw CborError.Wrap(ex, data, typeof(T).FullName!, CborError.Expected(typeof(T)));
         }
     }
 
@@ -332,14 +362,9 @@ public static class GenericSerializationUtil
 
             return readDelegateNonNullable.DynamicInvoke(data);
         }
-        catch (TargetInvocationException exception) when (exception.InnerException is UnknownEraException)
+        catch (Exception exception) when (CborError.IsDecodeFailure(exception))
         {
-            ExceptionDispatchInfo.Capture(exception.InnerException).Throw();
-            throw;
-        }
-        catch (Exception ex) when (ex is not InvalidOperationException)
-        {
-            throw new InvalidOperationException($"Failed to read type {type.FullName}: {ex.Message}", ex);
+            throw CborError.Wrap(exception, data, type.FullName!, CborError.Expected(type));
         }
     }
 
@@ -395,10 +420,10 @@ public static class GenericSerializationUtil
                     case int i: writer.WriteInt32(i); break;
                     case long l: writer.WriteInt64(l); break;
                     case string s: writer.WriteString(s); break;
-                    default: throw new InvalidOperationException($"CborLabel value must be int, long, or string.");
+                    default: throw new CborValidationException(-1, "CborLabel", "integer or text string", label.Value?.GetType().FullName ?? "null");
                 }
                 break;
-            default: throw new NotSupportedException($"Type {type} is not supported as a primitive type.");
+            default: throw new CborValidationException(-1, type.FullName!, "supported primitive type", type.FullName!);
         }
     }
 
@@ -420,9 +445,13 @@ public static class GenericSerializationUtil
 
             ((WriteHandler<T>)writeDelegate)(output, value);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (CborError.IsDecodeFailure(ex))
         {
-            throw new InvalidOperationException($"Failed to write type {typeof(T).FullName}: {ex.Message}", ex);
+            if (ex is CborValidationException)
+            {
+                throw;
+            }
+            throw new CborValidationException(-1, typeof(T).FullName!, "serializable value", ex.Message, ex);
         }
     }
 

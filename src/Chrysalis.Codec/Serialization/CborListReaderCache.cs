@@ -1,5 +1,3 @@
-using SAIB.Cbor.Serialization;
-
 namespace Chrysalis.Codec.Serialization;
 
 /// <summary>
@@ -20,83 +18,33 @@ public static class CborListReaderCache<T>
 /// </summary>
 public static class CborPrimitiveReaders
 {
-    public static int ReadInt32(ReadOnlyMemory<byte> data, out int bytesConsumed)
-    {
-        CborReader reader = new(data.Span);
-        int value = reader.ReadInt32();
-        bytesConsumed = data.Length - reader.Buffer.Length;
-        return value;
-    }
+    public static int ReadInt32(ReadOnlyMemory<byte> data, out int bytesConsumed) =>
+        GenericSerializationUtil.ReadPrimitiveWithConsumed<int>(data, out bytesConsumed)!;
 
-    public static uint ReadUInt32(ReadOnlyMemory<byte> data, out int bytesConsumed)
-    {
-        CborReader reader = new(data.Span);
-        uint value = reader.ReadUInt32();
-        bytesConsumed = data.Length - reader.Buffer.Length;
-        return value;
-    }
+    public static uint ReadUInt32(ReadOnlyMemory<byte> data, out int bytesConsumed) =>
+        GenericSerializationUtil.ReadPrimitiveWithConsumed<uint>(data, out bytesConsumed)!;
 
-    public static long ReadInt64(ReadOnlyMemory<byte> data, out int bytesConsumed)
-    {
-        CborReader reader = new(data.Span);
-        long value = reader.ReadInt64();
-        bytesConsumed = data.Length - reader.Buffer.Length;
-        return value;
-    }
+    public static long ReadInt64(ReadOnlyMemory<byte> data, out int bytesConsumed) =>
+        GenericSerializationUtil.ReadPrimitiveWithConsumed<long>(data, out bytesConsumed)!;
 
-    public static ulong ReadUInt64(ReadOnlyMemory<byte> data, out int bytesConsumed)
-    {
-        CborReader reader = new(data.Span);
-        ulong value = reader.ReadUInt64();
-        bytesConsumed = data.Length - reader.Buffer.Length;
-        return value;
-    }
+    public static ulong ReadUInt64(ReadOnlyMemory<byte> data, out int bytesConsumed) =>
+        GenericSerializationUtil.ReadPrimitiveWithConsumed<ulong>(data, out bytesConsumed)!;
 
-    public static bool ReadBoolean(ReadOnlyMemory<byte> data, out int bytesConsumed)
-    {
-        CborReader reader = new(data.Span);
-        bool value = reader.ReadBoolean();
-        bytesConsumed = data.Length - reader.Buffer.Length;
-        return value;
-    }
+    public static bool ReadBoolean(ReadOnlyMemory<byte> data, out int bytesConsumed) =>
+        GenericSerializationUtil.ReadPrimitiveWithConsumed<bool>(data, out bytesConsumed)!;
 
-    public static string ReadString(ReadOnlyMemory<byte> data, out int bytesConsumed)
-    {
-        CborReader reader = new(data.Span);
-        string value = reader.ReadString()!;
-        bytesConsumed = data.Length - reader.Buffer.Length;
-        return value;
-    }
+    public static string ReadString(ReadOnlyMemory<byte> data, out int bytesConsumed) =>
+        GenericSerializationUtil.ReadPrimitiveWithConsumed<string>(data, out bytesConsumed)!;
 
-    public static float ReadSingle(ReadOnlyMemory<byte> data, out int bytesConsumed)
-    {
-        CborReader reader = new(data.Span);
-        float value = reader.ReadSingle();
-        bytesConsumed = data.Length - reader.Buffer.Length;
-        return value;
-    }
+    public static float ReadSingle(ReadOnlyMemory<byte> data, out int bytesConsumed) =>
+        GenericSerializationUtil.ReadPrimitiveWithConsumed<float>(data, out bytesConsumed)!;
 
-    public static double ReadDouble(ReadOnlyMemory<byte> data, out int bytesConsumed)
-    {
-        CborReader reader = new(data.Span);
-        double value = reader.ReadDouble();
-        bytesConsumed = data.Length - reader.Buffer.Length;
-        return value;
-    }
+    public static double ReadDouble(ReadOnlyMemory<byte> data, out int bytesConsumed) =>
+        GenericSerializationUtil.ReadPrimitiveWithConsumed<double>(data, out bytesConsumed)!;
 
-    public static byte[] ReadByteArray(ReadOnlyMemory<byte> data, out int bytesConsumed)
-    {
-        CborReader reader = new(data.Span);
-        byte[] value = reader.ReadByteString().ToArray();
-        bytesConsumed = data.Length - reader.Buffer.Length;
-        return value;
-    }
+    public static byte[] ReadByteArray(ReadOnlyMemory<byte> data, out int bytesConsumed) =>
+        GenericSerializationUtil.ReadPrimitiveWithConsumed<byte[]>(data, out bytesConsumed)!;
 
-    public static ReadOnlyMemory<byte> ReadByteMemory(ReadOnlyMemory<byte> data, out int bytesConsumed)
-    {
-        CborReader reader = new(data.Span);
-        byte[] value = reader.ReadByteString().ToArray();
-        bytesConsumed = data.Length - reader.Buffer.Length;
-        return value;
-    }
+    public static ReadOnlyMemory<byte> ReadByteMemory(ReadOnlyMemory<byte> data, out int bytesConsumed) =>
+        GenericSerializationUtil.ReadPrimitiveWithConsumed<ReadOnlyMemory<byte>>(data, out bytesConsumed)!;
 }
