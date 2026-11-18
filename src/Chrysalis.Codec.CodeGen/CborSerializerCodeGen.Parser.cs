@@ -10,7 +10,7 @@ public sealed partial class CborSerializerCodeGen
 {
     private static class Parser
     {
-        public const string CborSerializable = "CborSerializable";
+        public const string CborSerializable = "Chrysalis.Codec.Serialization.Attributes.CborSerializableAttribute";
         public const string CborMap = "CborMap";
         public const string CborNullable = "CborNullable";
         public const string CborList = "CborList";
@@ -26,31 +26,24 @@ public sealed partial class CborSerializerCodeGen
         public const string CborDefinite = "CborDefinite";
         public const string CborUnionHint = "CborUnionHint";
         public const string CborUnionHintAttribute = "CborUnionHintAttribute";
-        public const string PlutusData = "PlutusData";
+        public const string PlutusData = "Chrysalis.Codec.Serialization.Attributes.PlutusDataAttribute";
 
         // Interfaces
         public const string ICborValidatorFullName = "Chrysalis.Codec.Serialization.ICborValidator`1";
 
-        public static SerializableTypeMetadata? ParseSerialazableType(TypeDeclarationSyntax tds, SemanticModel model)
+        public static SerializableTypeMetadata ParseSerializableType(TypeDeclarationSyntax tds, SemanticModel model,
+            TypeDeclarationSyntax[] parts, AttributeSyntax? plutusDataAttribute)
         {
-            List<AttributeSyntax> attributes = [.. tds.AttributeLists.SelectMany(a => a.Attributes)];
-            AttributeSyntax? cborSerializableAttribute = attributes.FirstOrDefault(a => a.Name.ToString() == CborSerializable);
-            AttributeSyntax? plutusDataAttribute = attributes.FirstOrDefault(a => a.Name.ToString() == PlutusData);
-
-            if (cborSerializableAttribute == null && plutusDataAttribute == null)
-            {
-                return null;
-            }
-
+            List<AttributeSyntax> attributes = [.. parts.SelectMany(part => part.AttributeLists).SelectMany(list => list.Attributes)];
             string baseNamespace = GetBaseNamespace(tds, model);
             (string path, string parentTypeParams) = GetFullNamespaceWithParentsAndTypeParams(tds, model);
             string? keyword = tds.Keyword.ToFullString().Trim();
-            // Detect record struct via modifiers — readonly on a record indicates record struct
-            if (tds is RecordDeclarationSyntax && tds.Modifiers.Any(SyntaxKind.ReadOnlyKeyword))
+            // A partial record struct need not repeat readonly on every declaration.
+            if (tds.IsKind(SyntaxKind.RecordStructDeclaration))
             {
                 keyword = "readonly record struct";
             }
-            string? @namespace = baseNamespace;
+            string? @namespace = baseNamespace.Length == 0 ? null : baseNamespace;
 
             string? typeParams = null;
             if (tds is TypeDeclarationSyntax typeDecl && typeDecl.TypeParameterList != null)
@@ -92,10 +85,9 @@ public sealed partial class CborSerializerCodeGen
             SerializationType serializationType = GetSerializationType(cborMapAttribute, cborListAttribute, cborUnionAttribute, cborConstrAttribute);
             string? validatorFullyQualifiedName = FindValidatorForType(tds, model, model.Compilation);
 
-            IEnumerable<SerializablePropertyMetadata> properties = GetPropertyMetadata(tds, model);
-            IEnumerable<SerializableTypeMetadata> childTypes = [];
+            IEnumerable<SerializablePropertyMetadata> properties = GetPropertyMetadata(tds, model, parts);
 
-            SerializableTypeMetadata typeMetadata = new(
+            return new SerializableTypeMetadata(
                 baseIdentifier,
                 identifier,
                 @namespace,
@@ -110,17 +102,10 @@ public sealed partial class CborSerializerCodeGen
                 serializationType,
                 validatorFullyQualifiedName,
                 shouldPreserveRaw
-            );
-
-            if (serializationType == SerializationType.Union)
+            )
             {
-                childTypes = GetChildTypes(tds, model);
-            }
-
-            typeMetadata.Properties.AddRange(properties);
-            typeMetadata.ChildTypes.AddRange(childTypes);
-
-            return typeMetadata;
+                Properties = new(properties)
+            };
         }
     }
 
@@ -154,24 +139,51 @@ public sealed partial class CborSerializerCodeGen
         return validator?.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
     }
 
-    private static IEnumerable<SerializablePropertyMetadata> GetPropertyMetadata(TypeDeclarationSyntax tds, SemanticModel model)
+    private static IEnumerable<SerializablePropertyMetadata> GetPropertyMetadata(TypeDeclarationSyntax tds, SemanticModel model,
+        TypeDeclarationSyntax[] parts)
     {
-        if (tds is ClassDeclarationSyntax classDecl)
+        SemanticModel ModelFor(TypeDeclarationSyntax part) => part.SyntaxTree == model.SyntaxTree ? model : model.Compilation.GetSemanticModel(part.SyntaxTree);
+
+        if (tds is ClassDeclarationSyntax)
         {
-            return GetClassPropertyMetadata(classDecl, model);
+            return parts.OfType<ClassDeclarationSyntax>().SelectMany(part => GetClassPropertyMetadata(part, ModelFor(part)));
         }
-        else if (tds is RecordDeclarationSyntax recordDecl)
+        if (tds is not RecordDeclarationSyntax record)
         {
-            return GetRecordPropertyMetadata(recordDecl, model);
+            return [];
         }
 
-        return [];
+        // Positional metadata wins if a record also declares the corresponding property explicitly.
+        List<SerializablePropertyMetadata> properties = [.. GetRecordParameterMetadata(record, model)];
+        int positionalCount = properties.Count;
+        int contributingParts = positionalCount == 0 ? 0 : 1;
+        HashSet<string> names = new(properties.Select(property => property.PropertyName), StringComparer.Ordinal);
+        foreach (RecordDeclarationSyntax part in parts.OfType<RecordDeclarationSyntax>())
+        {
+            int previousCount = properties.Count;
+            properties.AddRange(GetRecordBodyPropertyMetadata(part, ModelFor(part)).Where(property => names.Add(property.PropertyName)));
+            if (properties.Count != previousCount && (positionalCount == 0 || part.SyntaxTree != record.SyntaxTree || part.Span != record.Span))
+            {
+                contributingParts++;
+            }
+        }
+
+        // Empty and duplicate-only declarations do not change an existing signature or wire order.
+        if (contributingParts < 2)
+        {
+            return properties;
+        }
+
+        // Remember the public argument order, then publish the one wire sequence all emitters read.
+        return properties.Take(positionalCount).Concat(properties.Skip(positionalCount).OrderBy(property => property.Order ?? int.MaxValue))
+            .Select((property, index) => property with { CreateParameterOrder = index })
+            .OrderBy(property => property.Order ?? int.MaxValue);
     }
 
     private static IEnumerable<SerializablePropertyMetadata> GetClassPropertyMetadata(ClassDeclarationSyntax classDecl, SemanticModel model)
     {
         List<AttributeSyntax> attributes = [.. classDecl.AttributeLists.SelectMany(a => a.Attributes)];
-        IEnumerable<PropertyDeclarationSyntax> properties = classDecl.DescendantNodes().OfType<PropertyDeclarationSyntax>();
+        IEnumerable<PropertyDeclarationSyntax> properties = classDecl.Members.OfType<PropertyDeclarationSyntax>();
 
         foreach (PropertyDeclarationSyntax property in properties)
         {
@@ -218,19 +230,8 @@ public sealed partial class CborSerializerCodeGen
         }
     }
 
-    private static IEnumerable<SerializablePropertyMetadata> GetRecordPropertyMetadata(RecordDeclarationSyntax recordDecl, SemanticModel model)
+    private static IEnumerable<SerializablePropertyMetadata> GetRecordParameterMetadata(RecordDeclarationSyntax recordDecl, SemanticModel model)
     {
-        // For record structs with no constructor params, read partial properties from body
-        bool isRecordStruct = recordDecl.ClassOrStructKeyword.ValueText == "struct";
-        if (isRecordStruct && (recordDecl.ParameterList is null || recordDecl.ParameterList.Parameters.Count == 0))
-        {
-            foreach (SerializablePropertyMetadata bodyProp in GetRecordStructBodyPropertyMetadata(recordDecl, model))
-            {
-                yield return bodyProp;
-            }
-            yield break;
-        }
-
         foreach (ParameterSyntax param in recordDecl.ParameterList?.Parameters ?? [])
         {
             List<AttributeSyntax> paramAttributes = [.. param.AttributeLists.SelectMany(a => a.Attributes)];
@@ -399,20 +400,24 @@ public sealed partial class CborSerializerCodeGen
                 IsPairList(typeSymbol as ITypeSymbol, out _)
             );
 
-            ParseUnionHints(param, model, propMetadata);
 
-            yield return propMetadata;
+            yield return WithUnionHints(model.GetDeclaredSymbol(param), propMetadata);
         }
     }
 
-    private static IEnumerable<SerializablePropertyMetadata> GetRecordStructBodyPropertyMetadata(RecordDeclarationSyntax recordDecl, SemanticModel model)
+    private static IEnumerable<SerializablePropertyMetadata> GetRecordBodyPropertyMetadata(RecordDeclarationSyntax recordDecl, SemanticModel model)
     {
-        IEnumerable<PropertyDeclarationSyntax> properties = recordDecl.Members.OfType<PropertyDeclarationSyntax>()
-            .Where(p => p.Modifiers.Any(m => m.ValueText == "partial"));
-
-        foreach (PropertyDeclarationSyntax prop in properties)
+        bool isRecordStruct = recordDecl.ClassOrStructKeyword.IsKind(SyntaxKind.StructKeyword);
+        foreach (PropertyDeclarationSyntax prop in recordDecl.Members.OfType<PropertyDeclarationSyntax>())
         {
             List<AttributeSyntax> propAttributes = [.. prop.AttributeLists.SelectMany(a => a.Attributes)];
+            // Structs expose lazy fields as partial properties. Classes opt in body members
+            // explicitly so helper properties are not added to the wire format.
+            if (isRecordStruct ? (!prop.Modifiers.Any(SyntaxKind.PartialKeyword) || model.GetDeclaredSymbol(prop) is not IPropertySymbol { IsPartialDefinition: true })
+                : !propAttributes.Any(attribute => attribute.Name.ToString() is Parser.CborOrder or Parser.CborProperty or Parser.CborPropertyAttribute))
+            {
+                continue;
+            }
 
             string propertyName = prop.Identifier.Text;
             string propertyType = prop.Type.ToString();
@@ -576,9 +581,8 @@ public sealed partial class CborSerializerCodeGen
                 IsPairList(typeSymbol as ITypeSymbol, out _)
             );
 
-            ParseUnionHints(prop, model, propMetadata);
 
-            yield return propMetadata;
+            yield return WithUnionHints(model.GetDeclaredSymbol(prop), propMetadata);
         }
     }
 
@@ -675,161 +679,37 @@ public sealed partial class CborSerializerCodeGen
         }
     }
 
-    private static void ParseUnionHints(PropertyDeclarationSyntax prop, SemanticModel model, SerializablePropertyMetadata propMetadata)
+    private static SerializablePropertyMetadata WithUnionHints(ISymbol? symbol, SerializablePropertyMetadata property)
     {
-        ISymbol? symbol = model.GetDeclaredSymbol(prop);
         if (symbol is null)
         {
-            return;
+            return property;
         }
 
-        AttributeData[] hintAttrs = [.. symbol.GetAttributes()
-            .Where(a => a.AttributeClass?.Name is Parser.CborUnionHint or Parser.CborUnionHintAttribute)];
-
-        if (hintAttrs.Length == 0)
+        Dictionary<int, string> hints = [];
+        string? discriminant = null;
+        foreach (AttributeData attr in symbol.GetAttributes())
         {
-            return;
-        }
-
-        foreach (AttributeData attr in hintAttrs)
-        {
-            if (attr.ConstructorArguments.Length < 3)
+            if (attr.AttributeClass?.Name is not (Parser.CborUnionHint or Parser.CborUnionHintAttribute)
+                || attr.ConstructorArguments.Length < 3)
             {
                 continue;
             }
 
-            TypedConstant discriminantPropArg = attr.ConstructorArguments[0];
-            TypedConstant discriminantValueArg = attr.ConstructorArguments[1];
-            TypedConstant typeArg = attr.ConstructorArguments[2];
-
-            if (discriminantPropArg.Kind == TypedConstantKind.Primitive && discriminantPropArg.Value is string discriminantProp
-                && discriminantValueArg.Kind == TypedConstantKind.Primitive && discriminantValueArg.Value is int discriminantValue
-                && typeArg.Kind == TypedConstantKind.Type && typeArg.Value is INamedTypeSymbol concreteType)
+            if (attr.ConstructorArguments[0].Value is string name
+                && attr.ConstructorArguments[1].Value is int value
+                && attr.ConstructorArguments[2].Value is INamedTypeSymbol concreteType)
             {
-                string concreteTypeFqn = concreteType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
-                propMetadata.UnionHints[discriminantValue] = concreteTypeFqn;
-                propMetadata.UnionHintDiscriminantProperty ??= discriminantProp;
-            }
-        }
-    }
-
-    private static void ParseUnionHints(ParameterSyntax param, SemanticModel model, SerializablePropertyMetadata propMetadata)
-    {
-        ISymbol? symbol = model.GetDeclaredSymbol(param);
-        if (symbol is null)
-        {
-            return;
-        }
-
-        AttributeData[] hintAttrs = [.. symbol.GetAttributes()
-            .Where(a => a.AttributeClass?.Name is Parser.CborUnionHint or Parser.CborUnionHintAttribute)];
-
-        if (hintAttrs.Length == 0)
-        {
-            return;
-        }
-
-        foreach (AttributeData attr in hintAttrs)
-        {
-            if (attr.ConstructorArguments.Length < 3)
-            {
-                continue;
-            }
-
-            TypedConstant discriminantPropArg = attr.ConstructorArguments[0];
-            TypedConstant discriminantValueArg = attr.ConstructorArguments[1];
-            TypedConstant typeArg = attr.ConstructorArguments[2];
-
-            if (discriminantPropArg.Kind == TypedConstantKind.Primitive && discriminantPropArg.Value is string discriminantProp
-                && discriminantValueArg.Kind == TypedConstantKind.Primitive && discriminantValueArg.Value is int discriminantValue
-                && typeArg.Kind == TypedConstantKind.Type && typeArg.Value is INamedTypeSymbol concreteType)
-            {
-                string concreteTypeFqn = concreteType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
-                propMetadata.UnionHints[discriminantValue] = concreteTypeFqn;
-                propMetadata.UnionHintDiscriminantProperty ??= discriminantProp;
-            }
-        }
-    }
-
-    private static Dictionary<string, SerializableTypeMetadata>.ValueCollection GetChildTypes(TypeDeclarationSyntax tds, SemanticModel model)
-    {
-        if (model.GetDeclaredSymbol(tds) is not INamedTypeSymbol typeSymbol)
-        {
-            return new Dictionary<string, SerializableTypeMetadata>().Values;
-        }
-
-        IEnumerable<INamedTypeSymbol> derivedTypes = FindDerivedTypes(typeSymbol, model.Compilation);
-        if (!KeepsNetworkTrial(model.Compilation.AssemblyName, typeSymbol.ToDisplayString()))
-        {
-            derivedTypes = derivedTypes.OrderBy(symbol => symbol.DeclaringSyntaxReferences.FirstOrDefault()?.SyntaxTree.FilePath, StringComparer.Ordinal)
-                .ThenBy(symbol => symbol.DeclaringSyntaxReferences.FirstOrDefault()?.Span.Start)
-                .ThenBy(symbol => symbol.ToDisplayString(), StringComparer.Ordinal);
-        }
-        Dictionary<string, SerializableTypeMetadata> resultDict = [];
-
-        foreach (TypeDeclarationSyntax nestedType in tds.DescendantNodes().OfType<TypeDeclarationSyntax>())
-        {
-            if (Parser.ParseSerialazableType(nestedType, model) is SerializableTypeMetadata metadata)
-            {
-                if (!resultDict.ContainsKey(metadata.FullyQualifiedName))
-                {
-                    resultDict[metadata.FullyQualifiedName] = metadata;
-                }
+                hints[value] = concreteType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+                discriminant ??= name;
             }
         }
 
-        foreach (INamedTypeSymbol derivedType in derivedTypes)
+        return hints.Count == 0 ? property : property with
         {
-            SyntaxReference? syntaxRef = derivedType.DeclaringSyntaxReferences.FirstOrDefault();
-            if (syntaxRef?.GetSyntax() is TypeDeclarationSyntax derivedTypeSyntax)
-            {
-                SemanticModel derivedTypeModel = model;
-                if (syntaxRef.SyntaxTree != model.SyntaxTree)
-                {
-                    derivedTypeModel = model.Compilation.GetSemanticModel(syntaxRef.SyntaxTree);
-                }
-
-                if (Parser.ParseSerialazableType(derivedTypeSyntax, derivedTypeModel) is SerializableTypeMetadata metadata)
-                {
-                    if (!resultDict.ContainsKey(metadata.FullyQualifiedName))
-                    {
-                        resultDict[metadata.FullyQualifiedName] = metadata;
-                    }
-                }
-            }
-        }
-
-        return resultDict.Values;
-    }
-
-    private static IEnumerable<INamedTypeSymbol> FindDerivedTypes(INamedTypeSymbol baseType, Compilation compilation) => compilation
-            .GetSymbolsWithName(name => true, SymbolFilter.Type)
-            .OfType<INamedTypeSymbol>()
-            .Where(type => !SymbolEqualityComparer.Default.Equals(type, baseType) && type.BaseType != null && ImplementsOrInheritsFrom(type, baseType)
-        );
-
-    private static bool ImplementsOrInheritsFrom(INamedTypeSymbol type, INamedTypeSymbol baseType)
-    {
-        if (baseType.TypeKind == TypeKind.Interface)
-        {
-            return type.AllInterfaces.Any(i =>
-                SymbolEqualityComparer.Default.Equals(i.OriginalDefinition, baseType.OriginalDefinition));
-        }
-        else
-        {
-            INamedTypeSymbol? currentType = type;
-            while (currentType != null)
-            {
-                if (SymbolEqualityComparer.Default.Equals(currentType.OriginalDefinition, baseType.OriginalDefinition))
-                {
-                    return true;
-                }
-
-                currentType = currentType.BaseType;
-            }
-        }
-
-        return false;
+            UnionHints = new(hints),
+            UnionHintDiscriminantProperty = discriminant
+        };
     }
 
     private static bool IsListType(ITypeSymbol? typeSymbol, out ITypeSymbol? itemType)
@@ -916,15 +796,17 @@ public sealed partial class CborSerializerCodeGen
                 return (containerName, parentTypeParams);
             }
 
-            return (symbol.ContainingNamespace.ToDisplayString(), "");
+            return (DisplayNamespace(symbol.ContainingNamespace), "");
         }
 
         return (typeDecl.GetNamespace() ?? string.Empty, "");
     }
 
     private static string GetBaseNamespace(TypeDeclarationSyntax typeDecl, SemanticModel model) => model.GetDeclaredSymbol(typeDecl) is INamedTypeSymbol symbol
-            ? symbol.ContainingNamespace.ToDisplayString()
+            ? DisplayNamespace(symbol.ContainingNamespace)
             : typeDecl.GetNamespace() ?? string.Empty;
+
+    private static string DisplayNamespace(INamespaceSymbol symbol) => symbol.IsGlobalNamespace ? "" : symbol.ToDisplayString();
 
     private static string RemoveGenericPart(string identifier)
     {

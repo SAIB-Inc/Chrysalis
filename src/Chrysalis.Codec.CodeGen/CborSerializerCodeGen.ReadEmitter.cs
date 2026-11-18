@@ -1,4 +1,6 @@
+using System.Collections.Immutable;
 using System.Text;
+using Microsoft.CodeAnalysis;
 
 namespace Chrysalis.Codec.CodeGen;
 
@@ -6,8 +8,9 @@ public sealed partial class CborSerializerCodeGen
 {
     internal static partial class Emitter
     {
-        public static StringBuilder EmitSerializableTypeReader(StringBuilder sb, SerializableTypeMetadata metadata, IReadOnlyDictionary<string, SerializableTypeMetadata>? typeRegistry)
+        public static DiagnosticDescriptor? EmitSerializableTypeReader(StringBuilder sb, SerializableTypeMetadata metadata, ImmutableDictionary<string, SerializableTypeMetadata>? typeRegistry)
         {
+            DiagnosticDescriptor? diagnostic = null;
             string xmlSafeId = metadata.Indentifier.Replace("<", "{").Replace(">", "}");
 
             _ = sb.AppendLine($"/// <summary>");
@@ -24,6 +27,7 @@ public sealed partial class CborSerializerCodeGen
             {
                 ICborSerializerEmitter emitter = GetEmitter(metadata, typeRegistry);
                 _ = emitter.EmitReader(sb, metadata);
+                diagnostic = (emitter as UnionEmitter)?.ReadDiagnostic;
             }
             _ = sb.AppendLine("}");
 
@@ -51,7 +55,7 @@ public sealed partial class CborSerializerCodeGen
                 }
             }
 
-            return sb;
+            return diagnostic;
         }
 
         /// <summary>

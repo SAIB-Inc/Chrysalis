@@ -18,7 +18,7 @@ public sealed partial class CborSerializerCodeGen
             List<string> requiredParams = [];
             List<string> optionalParams = [];
 
-            foreach (SerializablePropertyMetadata prop in metadata.Properties)
+            foreach (SerializablePropertyMetadata prop in metadata.Properties.OrderBy(property => property.CreateParameterOrder))
             {
                 string paramName = ToCamelCase(prop.PropertyName);
                 string paramType = prop.PropertyTypeFullName;
