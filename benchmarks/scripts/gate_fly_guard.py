@@ -31,8 +31,19 @@ def listing(p, keys):
     return x
 
 
+def app_names(items):
+    result = set()
+    for item in items:
+        require(isinstance(item, dict), 'Invalid app object in listing')
+        name = item.get('name', item.get('Name'))
+        require(isinstance(name, str) and re.fullmatch(r'[a-z0-9-]+', name)
+                and item.get('Name', name) == name, 'Invalid app name in listing')
+        result.add(name)
+    return result
+
+
 def names(p):
-    return {a.get('name', a.get('Name')) for a in listing(p, ['apps', 'Apps'])}
+    return app_names(listing(p, ['apps', 'Apps']))
 
 
 from gate_time import MAX_APP_SECONDS, validate_limits
@@ -53,7 +64,9 @@ def verified_launch_inputs(here, ready):
     relative = os.environ['GATE_BUNDLE']
     bundle = (ready.parent / relative).resolve()
     require(bundle.is_relative_to(ready.parent.resolve()), 'Archive path escapes seal')
-    from gate_bundle import verified_bundle
+    from gate_bundle import checked_fly_local, verified_bundle
+    if os.environ.get('GATE_FIRST_GO'):
+        checked_fly_local(seal)
     data = verified_bundle(ready.parent, seal, relative)
     with tarfile.open(fileobj=io.BytesIO(data), mode='r:gz') as stream:
         member = stream.getmember('plan.json')
@@ -150,7 +163,6 @@ def main():
         require(not unexpected, 'Unexpected process retains the Fly lock file; coordinator action required')
     elif mode == 'apps':
         current = names(Path(args[0]))
-        require(all(isinstance(name, str) for name in current), 'Invalid app name in listing')
         leftovers = sorted(name for name in current if name == args[1] or name.startswith(RUN_PREFIXES))
         if leftovers:
             print('Existing benchmark/gate app: ' + ', '.join(leftovers) + '; stop and recover only a proven-owned leftover. Never touch neighbours.', file=sys.stderr)
@@ -205,6 +217,13 @@ def main():
         if not complete:
             (note / 'diagnostic-only.json').write_text(json.dumps(dict(diagnosticOnly=True, verdict='INCONCLUSIVE', session=status), indent=2) + '\n')
         require(complete, 'DIAGNOSTIC ONLY / INCONCLUSIVE: failed, budget-stopped or incomplete session; numerical go table not evaluated')
+    elif mode == 'consume-go':
+        ready, go = Path(args[0]), args[1]
+        require(sha(ready) == go, 'Go differs from seal')
+        marker = ready.parent / 'time/launch-started.json'
+        with marker.open('x') as stream:
+            json.dump(dict(sealId=go), stream)
+            stream.write('\n')
     elif mode == 'lock-inode':
         require(os.stat(args[0]).st_ino == os.stat('/proc/self/fd/9').st_ino and
                 os.stat(args[0]).st_dev == os.stat('/proc/self/fd/9').st_dev, 'Fly lock path was replaced')
@@ -213,8 +232,7 @@ def main():
         if isinstance(payload, dict):
             payload = payload.get('apps', payload.get('Apps'))
         require(isinstance(payload, list), 'Unknown neighbour apps shape')
-        for name in sorted({item.get('name', item.get('Name')) for item in payload} - {args[1]}):
-            require(isinstance(name, str) and re.fullmatch(r'[a-z0-9-]+', name), 'Invalid neighbour app name')
+        for name in sorted(app_names(payload) - {args[1]}):
             print(name)
     elif mode == 'neighbours':
         counts = dict(performance=0, shared=0)

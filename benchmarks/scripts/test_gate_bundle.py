@@ -78,10 +78,11 @@ class BundleTests(unittest.TestCase):
                         (fixture_root/'fixtures/one.cbor').write_text('OBVIOUS CHANGED FIXTURE')
                 return result
             with patch.object(gate, 'REPO', repo), patch.object(gate.runner, 'DOTNET_ROOT', runtime), \
-                    patch.object(bundle.subprocess, 'check_output', return_value='fly fixture-v1'), \
+                    patch.object(bundle.subprocess, 'check_output', return_value='fly fixture-v1') as version, \
                     patch.object(timing.session, 'member', side_effect=fake):
                 result = bundle.prepare(output, [r], builds, config,
                                         dict(flyPythonRoot=str(python.parent), corporaRoot='unused', flyBudgetLeftUsd=40))
+            self.assertEqual(version.call_args.kwargs['env'].get('FLY_NO_UPDATE_CHECK'), '1')
             installed_sides = result['timePlans'][0]['rows'][0]['sides']
             self.assertNotEqual(installed_sides['baseline']['client'], installed_sides['candidate']['client'])
             self.assertEqual(len(calls), 2)
