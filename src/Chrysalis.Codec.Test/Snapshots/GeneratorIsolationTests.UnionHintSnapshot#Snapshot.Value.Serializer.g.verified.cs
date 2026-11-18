@@ -23,16 +23,36 @@ public int ConstrIndex => _constrIndex;
 /// <inheritdoc/>
 public bool IsIndefinite => _isIndefinite;
 
-public partial int Kind { get => new CborReader(_field0.Span).ReadInt32(); }
+public partial int Kind
+{
+get
+{
+try
+{
+return new CborReader(_field0.Span).ReadInt32();
+}
+catch (Exception error) when (CborError.IsDecodeFailure(error))
+{
+throw CborError.Field(error, _raw, _field0, "Snapshot.Value.Kind", CborError.Expected(typeof(int)));
+}
+}
+}
 public partial global::Snapshot.IValue Item
 {
 get
+{
+try
 {
 return Kind switch
 {
     0 => (global::Snapshot.IValue)global::Snapshot.Number.Read(_field1),
     _ => (global::Snapshot.IValue)global::Snapshot.IValue.Read(_field1)
 };
+}
+catch (Exception error) when (CborError.IsDecodeFailure(error))
+{
+throw CborError.Field(error, _raw, _field1, "Snapshot.Value.Item", CborError.Expected(typeof(global::Snapshot.IValue)));
+}
 }
 }
 

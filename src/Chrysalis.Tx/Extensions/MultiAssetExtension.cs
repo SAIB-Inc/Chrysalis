@@ -1,3 +1,4 @@
+using Chrysalis.Codec.Serialization;
 using Chrysalis.Codec.Types.Cardano.Core.Common;
 
 namespace Chrysalis.Tx.Extensions;
@@ -64,7 +65,7 @@ public static class MultiAssetExtension
                 _ => null
             };
         }
-        catch (FormatException)
+        catch (FormatException error) when (error is not CborDecodeException)
         {
             return null;
         }

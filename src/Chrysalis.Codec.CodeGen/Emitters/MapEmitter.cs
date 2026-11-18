@@ -17,7 +17,7 @@ public sealed partial class CborSerializerCodeGen
             }
             else
             {
-                _ = Emitter.EmitTagReader(sb, metadata.CborTag, "tagIndex");
+                _ = Emitter.EmitTagReader(sb, metadata.CborTag, "tagIndex", metadata.FullyQualifiedName);
                 bool isIntKey = metadata.Properties[0].PropertyKeyInt is not null;
 
                 _ = sb.AppendLine($"Dictionary<{(isIntKey ? "int" : "string")}, object> resultMap = [];");
@@ -45,7 +45,7 @@ public sealed partial class CborSerializerCodeGen
                         : $"\"{prop.PropertyKeyString}\"";
                     _ = sb.AppendLine($"case {keyLiteral}:");
                     _ = sb.AppendLine("{");
-                    _ = Emitter.EmitMapValueReader(sb, prop);
+                    _ = Emitter.EmitMapValueReader(sb, prop, metadata.FullyQualifiedName);
                     _ = sb.AppendLine("break;");
                     _ = sb.AppendLine("}");
                 }

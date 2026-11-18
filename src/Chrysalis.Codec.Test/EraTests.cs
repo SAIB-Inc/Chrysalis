@@ -175,7 +175,7 @@ public class EraTests
         foreach (bool header in new[] { false, true })
         {
             byte[] bytes = Convert.FromHexString(shape.Replace("TT", header ? "06" : "07", StringComparison.Ordinal));
-            _ = Assert.Throws<FormatException>(() => ReadEraEnvelope(bytes, header, false));
+            _ = Assert.Throws<CborDecodeException>(() => ReadEraEnvelope(bytes, header, false));
         }
     }
 
@@ -265,9 +265,10 @@ public class EraTests
     public void NonEraErrorsKeepExistingWrapping(Type type)
     {
         byte[] malformed = [0xff];
-        _ = Assert.Throws<InvalidOperationException>(() => CborSerializer.Deserialize<ConwayBlock>(malformed));
-        _ = Assert.Throws<InvalidOperationException>(() => GenericSerializationUtil.Read(malformed, type));
-        _ = Assert.Throws<TargetInvocationException>(() => GenericSerializationUtil.ReadAnyWithConsumed(malformed, type, out _));
+        CborDecodeException error = Assert.Throws<CborDecodeException>(() => CborSerializer.Deserialize<ConwayBlock>(malformed));
+        _ = Assert.IsType<SAIB.Cbor.CborException>(error.InnerException);
+        _ = Assert.Throws<CborDecodeException>(() => GenericSerializationUtil.Read(malformed, type));
+        _ = Assert.Throws<CborDecodeException>(() => GenericSerializationUtil.ReadAnyWithConsumed(malformed, type, out _));
     }
 
     private static void AssertRuntimeReadersReject(byte[] raw, Type type)

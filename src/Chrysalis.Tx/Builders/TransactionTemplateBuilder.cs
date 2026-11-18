@@ -1052,7 +1052,7 @@ public sealed class TransactionTemplateBuilder<T>
 
                 buildContext.Redeemers[key] = value;
             }
-            catch (InvalidOperationException)
+            catch (Exception error) when (error is InvalidOperationException or CborDecodeException)
             {
                 // Property extraction failed - skip this redeemer
             }

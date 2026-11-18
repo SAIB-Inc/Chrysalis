@@ -16,9 +16,11 @@ public partial record ClassValue
 public static new Snapshot.ClassValue Read(ReadOnlyMemory<byte> data, out int bytesConsumed)
 {
 var reader = new CborReader(data.Span);
-reader.TryReadSemanticTag(out ulong _constrIndexRaw);
+int _constrIndexStart = data.Length - reader.Buffer.Length;
+if (!reader.TryReadSemanticTag(out ulong _constrIndexRaw))
+    throw CborError.Decode(data, _constrIndexStart, "Snapshot.ClassValue", "tag 123");
 var constrIndex = (int)_constrIndexRaw;
-if (constrIndex != 123) throw new Exception("Invalid tag");
+if (_constrIndexRaw != 123) throw CborError.DecodeTag("Snapshot.ClassValue", "tag 123", _constrIndexRaw);
 reader.ReadBeginArray();
 int arraySize = reader.ReadSize();
 bool isIndefiniteArray = arraySize == -1;
@@ -26,7 +28,16 @@ int ClassValueArrayRemaining = arraySize;
 int ClassValueNumber = default!;
 if (ClassValueArrayRemaining != 0)
 {
+int _errorStartClassValueNumber = data.Length - reader.Buffer.Length;
+bool _errorSliceClassValueNumber = false;
+try
+{
 ClassValueNumber = reader.ReadInt32();
+}
+catch (Exception error) when (CborError.ShouldWrapReader(error, data, reader.Buffer.Length, _errorStartClassValueNumber, _errorSliceClassValueNumber, "Snapshot.ClassValue.Number", typeof(int)))
+{
+throw CborError.Reader(error, data, reader.Buffer.Length, _errorStartClassValueNumber, _errorSliceClassValueNumber, "Snapshot.ClassValue.Number", CborError.Expected(typeof(int)));
+}
 if (ClassValueArrayRemaining > 0) ClassValueArrayRemaining--;
 }
 

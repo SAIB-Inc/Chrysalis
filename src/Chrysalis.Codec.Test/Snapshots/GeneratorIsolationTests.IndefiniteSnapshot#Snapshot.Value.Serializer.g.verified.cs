@@ -22,7 +22,20 @@ public int ConstrIndex => _constrIndex;
 /// <inheritdoc/>
 public bool IsIndefinite => _isIndefinite;
 
-public partial int Number { get => new CborReader(_field0.Span).ReadInt32(); }
+public partial int Number
+{
+get
+{
+try
+{
+return new CborReader(_field0.Span).ReadInt32();
+}
+catch (Exception error) when (CborError.IsDecodeFailure(error))
+{
+throw CborError.Field(error, _raw, _field0, "Snapshot.Value.Number", CborError.Expected(typeof(int)));
+}
+}
+}
 
 /// <summary>
 /// Deserializes a <see cref="Value"/> instance from CBOR-encoded bytes and reports bytes consumed.

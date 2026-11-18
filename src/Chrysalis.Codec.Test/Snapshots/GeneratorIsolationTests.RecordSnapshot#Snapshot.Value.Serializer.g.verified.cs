@@ -22,7 +22,20 @@ public int ConstrIndex => _constrIndex;
 /// <inheritdoc/>
 public bool IsIndefinite => _isIndefinite;
 
-public partial int Item { get => new CborReader(_field0.Span).ReadInt32(); }
+public partial int Item
+{
+get
+{
+try
+{
+return new CborReader(_field0.Span).ReadInt32();
+}
+catch (Exception error) when (CborError.IsDecodeFailure(error))
+{
+throw CborError.Field(error, _raw, _field0, "Snapshot.Value.Item", CborError.Expected(typeof(int)));
+}
+}
+}
 
 /// <summary>
 /// Deserializes a <see cref="Value"/> instance from CBOR-encoded bytes and reports bytes consumed.
@@ -30,7 +43,7 @@ public partial int Item { get => new CborReader(_field0.Span).ReadInt32(); }
 public static new Snapshot.Value Read(ReadOnlyMemory<byte> data, out int bytesConsumed)
 {
 var reader = new CborReader(data.Span);
-{ byte _mt = (byte)(reader.Buffer[0] >> 5); if (_mt != 0 && _mt != 1) throw new Exception("Expected CBOR integer"); }
+if (reader.Buffer.IsEmpty || (reader.Buffer[0] >> 5) is not (0 or 1)) throw CborError.Decode(data, data.Length - reader.Buffer.Length, "Snapshot.Value.Item", "integer");
 int _s0 = data.Length - reader.Buffer.Length;
 reader.SkipDataItem();
 bytesConsumed = data.Length - reader.Buffer.Length;
@@ -48,6 +61,9 @@ public static new Snapshot.Value Read(ReadOnlyMemory<byte> data)
 {
 return Read(data, out _);
 }
+[global::System.Runtime.CompilerServices.MethodImpl(global::System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+private static Exception __CborValidationError(int offset)
+    => CborError.Validation(offset, "Snapshot.Value", "validator global::Snapshot.ValueValidator succeeds", "validation failed");
 
 /// <summary>
 /// Serializes a <see cref="Value"/> instance to CBOR format.
@@ -63,7 +79,7 @@ output.Write(data.Raw.Span);
 return;
 }
 global::Snapshot.ValueValidator validator = new();
-if (!validator.Validate(data)) throw new Exception("Validation failed");
+if (!validator.Validate(data)) throw __CborValidationError(-1);
 writer.WriteInt32(data.Item);
 
 }

@@ -15,16 +15,26 @@ public partial interface IValue
 /// </summary>
 public static new Snapshot.IValue Read(ReadOnlyMemory<byte> data, out int bytesConsumed)
 {
-List<string> errors = [];
+Exception error = null;
+CborReadTrial failure = default;
+CborReadTrial previous = CborError.BeginReadTrial();
+try
+{
 try
 {
 return (Snapshot.IValue)Snapshot.Number.Read(data, out bytesConsumed);
 }
-catch (Exception ex)
+catch (Exception ex) when (CborError.IsDecodeFailure(ex))
 {
-errors.Add(ex.Message);
+error = ex;
+failure = CborError.TakeReadTrial(ex);
 }
-throw new Exception("Union deserialization failed. Snapshot.IValue " + string.Join("\n", errors));
+}
+finally
+{
+CborError.EndReadTrial(previous);
+}
+throw CborError.FinishReadTrial(error, failure, data, "Snapshot.IValue");
 }
 
 /// <summary>
@@ -43,13 +53,14 @@ return Read(data, out _);
 public static new void Write(IBufferWriter<byte> output, Snapshot.IValue data)
 {
 var writer = new CborWriter(output);
+ArgumentNullException.ThrowIfNull(data);
 switch (data)
 {
 case Snapshot.Number _typedNumber:
 Snapshot.Number.Write(output, _typedNumber);
 break;
 default:
-throw new Exception("Union serialization failed. Snapshot.IValue ");
+throw CborError.Validation(-1, "Snapshot.IValue", "registered union case", data.GetType().FullName ?? "unknown");
 }
 }
 

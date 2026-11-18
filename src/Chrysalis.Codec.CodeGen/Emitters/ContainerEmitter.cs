@@ -27,9 +27,9 @@ public sealed partial class CborSerializerCodeGen
             else
             {
                 SerializablePropertyMetadata prop = metadata.Properties[0];
-                _ = Emitter.EmitTagReader(sb, metadata.CborTag, "tagIndex");
+                _ = Emitter.EmitTagReader(sb, metadata.CborTag, "tagIndex", metadata.FullyQualifiedName);
                 string propName = $"{metadata.BaseIdentifier}{prop.PropertyName}";
-                _ = Emitter.EmitSerializablePropertyReader(sb, prop, propName);
+                _ = Emitter.EmitSerializablePropertyReader(sb, prop, propName, metadata.FullyQualifiedName);
                 _ = sb.AppendLine($"var result = new {metadata.FullyQualifiedName}({propName});");
                 _ = Emitter.EmitReaderValidationAndResult(sb, metadata, "result");
             }

@@ -1,3 +1,4 @@
+using Chrysalis.Codec.Serialization;
 using System.Globalization;
 using System.Reflection;
 using System.Text;
@@ -86,7 +87,7 @@ public partial class GeneratorIsolationTests
         _ = read.Invoke(null, [new ReadOnlyMemory<byte>(Convert.FromHexString(prefix + "8100"))]);
         TargetInvocationException exception = Assert.Throws<TargetInvocationException>(() =>
             read.Invoke(null, [new ReadOnlyMemory<byte>(Convert.FromHexString(prefix + "8120"))]));
-        Assert.Equal("Validation failed", Assert.IsType<Exception>(exception.InnerException).Message);
+        Assert.Equal("validation failed", Assert.IsType<CborValidationException>(exception.InnerException).Actual);
     }
 
     private static string[] GenerateRepeatedly(CSharpCompilation compilation, Barrier rendezvous)

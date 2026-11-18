@@ -25,7 +25,16 @@ int TextMessageKind = default!;
 if (TextMessageArrayRemaining != 0)
 {
 fieldsRead[0] = true;
+int _errorStartTextMessageKind = data.Length - reader.Buffer.Length;
+bool _errorSliceTextMessageKind = false;
+try
+{
 TextMessageKind = reader.ReadInt32();
+}
+catch (Exception error) when (CborError.ShouldWrapReader(error, data, reader.Buffer.Length, _errorStartTextMessageKind, _errorSliceTextMessageKind, "Snapshot.TextMessage.Kind", typeof(int)))
+{
+throw CborError.Reader(error, data, reader.Buffer.Length, _errorStartTextMessageKind, _errorSliceTextMessageKind, "Snapshot.TextMessage.Kind", CborError.Expected(typeof(int)));
+}
 if (TextMessageArrayRemaining > 0) TextMessageArrayRemaining--;
 }
 
@@ -33,17 +42,26 @@ string TextMessageValue = default!;
 if (TextMessageArrayRemaining != 0)
 {
 fieldsRead[1] = true;
+int _errorStartTextMessageValue = data.Length - reader.Buffer.Length;
+bool _errorSliceTextMessageValue = false;
+try
+{
 TextMessageValue = reader.ReadString();
+}
+catch (Exception error) when (CborError.ShouldWrapReader(error, data, reader.Buffer.Length, _errorStartTextMessageValue, _errorSliceTextMessageValue, "Snapshot.TextMessage.Value", typeof(string)))
+{
+throw CborError.Reader(error, data, reader.Buffer.Length, _errorStartTextMessageValue, _errorSliceTextMessageValue, "Snapshot.TextMessage.Value", CborError.Expected(typeof(string)));
+}
 if (TextMessageArrayRemaining > 0) TextMessageArrayRemaining--;
 }
 
 if (!fieldsRead[0])
 {
-    throw new System.Exception("Required field 'Kind' is missing from CBOR data");
+    throw CborError.Decode(data, data.Length - reader.Buffer.Length, "Snapshot.TextMessage.Kind", "required field", "missing");
 }
 if (!fieldsRead[1])
 {
-    throw new System.Exception("Required field 'Value' is missing from CBOR data");
+    throw CborError.Decode(data, data.Length - reader.Buffer.Length, "Snapshot.TextMessage.Value", "required field", "missing");
 }
 if (isIndefiniteArray && reader.Buffer.Length > 0 && reader.Buffer[0] == 0xFF) reader.ReadDataItem();
 Snapshot.TextMessage result;

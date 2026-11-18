@@ -1,6 +1,7 @@
 using SAIB.Cbor.Serialization;
 using System.Text;
 using System.Text.Json;
+using Chrysalis.Codec.Serialization;
 using Chrysalis.Wallet.CIPs.CIP8.Builders;
 using Chrysalis.Wallet.CIPs.CIP8.Extensions;
 using Chrysalis.Wallet.CIPs.CIP8.Models;
@@ -34,7 +35,7 @@ try
             return 1;
     }
 }
-catch (InvalidOperationException ex)
+catch (Exception ex) when (ex is InvalidOperationException or CborDecodeException)
 {
     Console.WriteLine($"Error: {ex.Message}");
     return 1;

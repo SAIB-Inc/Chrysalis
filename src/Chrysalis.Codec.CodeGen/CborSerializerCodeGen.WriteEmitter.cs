@@ -45,7 +45,7 @@ public sealed partial class CborSerializerCodeGen
                 _ = sb.AppendLine("        writer.WriteString(s);");
                 _ = sb.AppendLine("        break;");
                 _ = sb.AppendLine("    default:");
-                _ = sb.AppendLine($"        throw new InvalidOperationException($\"CborLabel value must be int, long, or string. Got: {{{propertyName}?.GetType()}}\");");
+                _ = sb.AppendLine($"        throw CborError.Validation(-1, \"{metadata.PropertyName}\", \"integer or text string\", {propertyName}?.GetType().FullName ?? \"null\");");
                 _ = sb.AppendLine("}");
                 return sb;
             }
@@ -220,7 +220,7 @@ public sealed partial class CborSerializerCodeGen
                     _ = sb.AppendLine("        writer.WriteString(s);");
                     _ = sb.AppendLine("        break;");
                     _ = sb.AppendLine("    default:");
-                    _ = sb.AppendLine($"        throw new InvalidOperationException($\"CborLabel value must be int, long, or string. Got: {{{propertyName}.Value?.GetType()}}\");");
+                    _ = sb.AppendLine($"        throw CborError.Validation(-1, \"CborLabel\", \"integer or text string\", {propertyName}.Value?.GetType().FullName ?? \"null\");");
                     _ = sb.AppendLine("}");
                     break;
                 default:
@@ -334,7 +334,7 @@ public sealed partial class CborSerializerCodeGen
             if (metadata.Validator is not null)
             {
                 _ = sb.AppendLine($"{metadata.Validator} validator = new();");
-                _ = sb.AppendLine($"if (!validator.Validate({propertyName})) throw new Exception(\"Validation failed\");");
+                _ = sb.AppendLine($"if (!validator.Validate({propertyName})) throw __CborValidationError(-1);");
             }
 
             return sb;
@@ -431,7 +431,7 @@ public sealed partial class CborSerializerCodeGen
             if (metadata.Validator is not null)
             {
                 _ = sb.AppendLine($"{metadata.Validator} validator = new();");
-                _ = sb.AppendLine($"if (!validator.Validate(data)) throw new Exception(\"Validation failed\");");
+                _ = sb.AppendLine("if (!validator.Validate(data)) throw __CborValidationError(-1);");
             }
 
             return sb;

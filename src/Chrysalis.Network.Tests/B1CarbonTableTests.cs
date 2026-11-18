@@ -64,14 +64,14 @@ public sealed class B1CarbonTableTests
         if (table is N2CVersionTable clientTable)
         {
             _ = Assert.Throws<ArgumentException>(() => N2CVersionTable.Write(output, clientTable));
-            InvalidOperationException wrapped = Assert.Throws<InvalidOperationException>(() => CborSerializer.Serialize(clientTable));
+            CborValidationException wrapped = Assert.Throws<CborValidationException>(() => CborSerializer.Serialize(clientTable));
             _ = Assert.IsType<ArgumentException>(wrapped.InnerException);
         }
         else
         {
             N2NVersionTable nodeTable = Assert.IsType<N2NVersionTable>(table);
             _ = Assert.Throws<ArgumentException>(() => N2NVersionTable.Write(output, nodeTable));
-            InvalidOperationException wrapped = Assert.Throws<InvalidOperationException>(() => CborSerializer.Serialize(nodeTable));
+            CborValidationException wrapped = Assert.Throws<CborValidationException>(() => CborSerializer.Serialize(nodeTable));
             _ = Assert.IsType<ArgumentException>(wrapped.InnerException);
         }
         Assert.Equal(0, output.WrittenCount);
