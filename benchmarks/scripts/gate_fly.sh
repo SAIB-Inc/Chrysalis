@@ -19,9 +19,16 @@ BUNDLE="${SEALED_VALUES[0]}"; BUNDLE_SHA="${SEALED_VALUES[1]}"; VM_COMMAND="${SE
 GUARD="${SEALED_VALUES[3]}"; CUTOFF="${SEALED_VALUES[4]}"; VERSION="${SEALED_VALUES[5]}"; BASE="${SEALED_VALUES[6]}"
 REGION="${SEALED_VALUES[7]}"
 CREATED_UNIX=0
-[[ "$(env -i HOME="$HOME" PATH="$PATH" FLY_NO_UPDATE_CHECK=1 FLY_NO_ANALYTICS=1 timeout 10 fly version 9>&-)" == "$VERSION" ]] || { echo 'flyctl version changed since seal'; exit 2; }
+[[ "$(env -i HOME="$HOME" PATH="$PATH" FLY_NO_UPDATE_CHECK=1 FLY_NO_ANALYTICS=1 timeout 10 fly version </dev/null 9>&-)" == "$VERSION" ]] || { echo 'flyctl version changed since seal'; exit 2; }
 NOTE="$(dirname "$READY")/time/runs/$APP"
 [[ ! -e "$NOTE" ]] || { echo 'Run folder already exists'; exit 2; }
+if [[ -n "${GATE_FIRST_GO:-}" ]]; then
+  [[ -r "$TOKEN_FILE" && -s "$TOKEN_FILE" ]] || { echo 'Fly token file missing or empty; no stored-login fallback' >&2; exit 2; }
+  python3 "$HERE/gate_fly_guard.py" lock-inode "$LOCK"
+  mkdir -p "$(dirname "$READY")/time"
+  python3 "$HERE/gate_fly_guard.py" consume-go "$READY" "$GATE_FIRST_GO"
+fi
+exec </dev/null # Do not pass the local retry dispatch descriptor to provider children.
 mkdir -p "$NOTE"
 CREATED_UNIX=0; CAN_CLEAN=0; APP_CREATE_ATTEMPTED=0; WATCHDOG=''; MACHINE=''; RESULTS_MAY_EXIST=0; COPIED=0
 
@@ -132,11 +139,6 @@ json.dump(dict(available=bool(available),performance=p,shared=s,unknown=u,inform
 PYCONTEXT
   return 0
 }
-if [[ -n "${GATE_FIRST_GO:-}" ]]; then
-  [[ -r "$TOKEN_FILE" && -s "$TOKEN_FILE" ]] || { echo 'Fly token file missing or empty; no stored-login fallback' >&2; exit 2; }
-  python3 "$HERE/gate_fly_guard.py" lock-inode "$LOCK"
-  python3 "$HERE/gate_fly_guard.py" consume-go "$READY" "$GATE_FIRST_GO"
-fi
 fly_call 420 apps list --org "$ORG" --json > "$NOTE/apps-before.json"
 python3 "$HERE/gate_fly_guard.py" apps "$NOTE/apps-before.json" "$APP"
 neighbours start

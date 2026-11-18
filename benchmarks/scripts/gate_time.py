@@ -581,7 +581,14 @@ def read_results(output, seal, *, mode=None, first_only=False):
     else:
         lines.append('GC timing observations: not recorded (no timing sessions)')
     index_file = output / 'time/index.json'
-    index = json.loads(index_file.read_text()) if index_file.exists() else []
+    has_index = index_file.exists()
+    index = json.loads(index_file.read_bytes()) if has_index else []
+    retry = seal.get('retryOf', {})
+    if retry.get('kind') == 'repeat' and (has_index or (output / 'time/launch-started.json').exists()):
+        first = [item for item in index if item['phase'] == 'first']
+        require(gate.encoded(first) == gate.encoded([retry['firstIndex']]), 'Timing index differs from sealed retry first entry')
+        require(all(item['ids'] == retry['repeatIds'] for item in index if item['phase'] == 'repeat'),
+                'Timing index differs from sealed retry selection')
     band_failures = set()
     for number, plan in enumerate(plans):
         if show_regions:
@@ -597,8 +604,10 @@ def read_results(output, seal, *, mode=None, first_only=False):
                 else:
                     item = matches[0]
                     path = (output / item['path']).resolve()
-                    require(path.is_relative_to(output.resolve()) and gate.digest(path) == item['sha256'], 'Timing raw data changed')
-                    payload = json.loads(path.read_text())
+                    require(path.is_relative_to(output.resolve()), 'Timing artifact is outside the run directory')
+                    raw = path.read_bytes()
+                    require(hashlib.sha256(raw).hexdigest() == item['sha256'], 'Timing raw data changed')
+                    payload = json.loads(raw)
                     invalid = payload.get('invalid')
                     if row is plan['rows'][0]:
                         lines.append('session-start steal, first five minutes (information only): ' + json.dumps(payload.get('startup', dict(available=False, reason='Not recorded in this legacy fixture')), sort_keys=True))

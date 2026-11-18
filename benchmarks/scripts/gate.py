@@ -423,6 +423,19 @@ def read_seal(output):
     return seal
 
 
+def retry_command(parent, *, kind):
+    import gate_bundle
+    parent, seal, binding, _ = gate_bundle.checked_retry_parent(Path(parent), REPO / 'benchmarks/out', kind)
+    output = new_output()
+    for relative in seal['files']:
+        target = output / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(gate_bundle.retry_file(parent / relative), target)
+    go = write_seal(output, dict(seal, retryOf=dict(binding, child=output.name)))
+    read_seal(output)
+    return go
+
+
 def snapshot_scripts(output):
     directory = output / 'input/scripts'
     directory.mkdir(parents=True)
@@ -622,6 +635,8 @@ def subset_reasons(seal, mode=None):
         reasons.append(f'{len(seal["rows"])} of {len(seal["releaseSet"])} release rows declared')
     if not seal.get('timeScopeDecided'):
         reasons.append('time scope undecided')
+    if 'retryOf' in seal:
+        reasons.append('timing-only controls retry')
     return reasons
 
 
@@ -739,11 +754,14 @@ def report(output, mode=None):
     timed, time_lines = gate_time.read_results(output, seal, mode=applied_mode)
     results.update(timed)
     verdict = outcome(seal, results, mode=applied_mode)
+    retry = seal.get('retryOf')
     title = f'gate {applied_mode} · ' + ('canonical' if seal['canonical'] else 'non-canonical sides')
     if applied_mode != seal['mode']:
         title += f' · re-derived under {applied_mode}; not the sealed rule'
     lines = [title, 'bytes · this PC · direct B/op, replay B/block · load ' + (f'{min(load):.2f}–{max(load):.2f}' if load else 'not measured'),
              f'{"benchmark":<45} {"rule":>8} {"baseline":>12} {"candidate":>12} {"difference [95%]":>30} {"limit":>10} verdict']
+    if retry:
+        lines.insert(1, f'Controls retry ({retry["kind"]}); allocation evidence remains in the original seal {retry["originalSealId"]}')
     for row in seal['rows']:
         if row['kind'] == 'time':
             continue
@@ -797,7 +815,10 @@ def report(output, mode=None):
             lines.append('  ' + mapping['manual'])
     reasons = subset_reasons(seal, applied_mode) if verdict == 'SUBSET' else []
     lines.append(f'outcome {verdict}' + (' · ' + '; '.join(reasons) if reasons else ''))
-    return dict(outcome=verdict, rows=results, text='\n'.join(lines) + '\n')
+    result = dict(outcome=verdict, rows=results, text='\n'.join(lines) + '\n')
+    if retry:
+        result['allocationEvidenceSealId'] = retry['originalSealId']
+    return result
 
 
 def previous_alpha(candidate):
@@ -925,12 +946,17 @@ def main():
     report_parser = commands.add_parser('report')
     report_parser.add_argument('directory', type=Path)
     report_parser.add_argument('--mode', choices=('change', 'release'))
+    retry_parser = commands.add_parser('retry')
+    retry_parser.add_argument('parent', type=Path)
+    retry_parser.add_argument('--kind', required=True, choices=('first', 'repeat'))
     fly_parser = commands.add_parser('fly')
     fly_parser.add_argument('--go', required=True)
     args = parser.parse_args()
     try:
         if args.command in ('band', 'run'):
             pc_command(args)
+        elif args.command == 'retry':
+            print(retry_command(args.parent, kind=args.kind))
         elif args.command == 'report':
             print(report(args.directory, args.mode)['text'], end='')
         else:
