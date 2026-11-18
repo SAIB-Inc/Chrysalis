@@ -6,7 +6,24 @@ namespace Chrysalis.Codec.Types.Cardano.Core.Transaction;
 
 [CborSerializable]
 [CborUnion]
-public partial interface ITransaction : ICborType;
+public partial interface ITransaction : ICborType
+{
+    /// <summary>Decodes a stand-alone transaction from the specified era.</summary>
+    static ITransaction Read(ReadOnlyMemory<byte> data, Era era) => Read(data, era, out _);
+
+    /// <summary>Decodes a stand-alone transaction and reports the number of bytes consumed.</summary>
+    static ITransaction Read(ReadOnlyMemory<byte> data, Era era, out int bytesConsumed)
+    {
+        try
+        {
+            return TransactionEraReader.Read(data, era, out bytesConsumed);
+        }
+        catch (Exception error) when (error is not CborDecodeException && CborError.IsDecodeFailure(error))
+        {
+            throw CborError.Wrap(error, data, nameof(ITransaction), "transaction envelope");
+        }
+    }
+}
 
 [CborSerializable]
 [CborList]

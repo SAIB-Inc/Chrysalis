@@ -15,26 +15,7 @@ public partial interface IValue
 /// </summary>
 public static new Snapshot.IValue Read(ReadOnlyMemory<byte> data, out int bytesConsumed)
 {
-Exception error = null;
-CborReadTrial failure = default;
-CborReadTrial previous = CborError.BeginReadTrial();
-try
-{
-try
-{
-return (Snapshot.IValue)Snapshot.Number.Read(data, out bytesConsumed);
-}
-catch (Exception ex) when (CborError.IsDecodeFailure(ex))
-{
-error = ex;
-failure = CborError.TakeReadTrial(ex);
-}
-}
-finally
-{
-CborError.EndReadTrial(previous);
-}
-throw CborError.FinishReadTrial(error, failure, data, "Snapshot.IValue");
+return Snapshot.Number.Read(data, out bytesConsumed);
 }
 
 /// <summary>

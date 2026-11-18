@@ -110,10 +110,7 @@ public class CoseSign1Builder
             protectedHeaderBytes = [];
         }
 
-        CborMap unprotectedHeaders = CborMap.Create(new Dictionary<ICborPrimitive, ICborPrimitive>
-        {
-            { CborString.Create("hashed"), CborBool.Create(_hashPayload) }
-        });
+        CborMap unprotectedHeaders = CborMap.Create([new(CborString.Create("hashed"), CborBool.Create(_hashPayload))]);
 
         SigStructure sigStructure = new(
             Context: SigContext.Signature1,

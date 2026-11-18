@@ -104,6 +104,69 @@ public partial class GeneratorIsolationTests
         return result;
     }
 
+    [Theory]
+    [InlineData("Chrysalis.Network", true)]
+    [InlineData("Chrysalis.Codec", false)]
+    public void X7TrialExemptionIsBoundToNetworkAssemblyAndExactTypes(string assemblyName, bool network)
+    {
+        const string source = """
+            using Chrysalis.Codec.Serialization;
+            using Chrysalis.Codec.Serialization.Attributes;
+            namespace Chrysalis.Network.Cbor.Handshake
+            {
+                [CborSerializable, CborUnion] public partial interface HandshakeMessage : ICborType;
+                [CborSerializable, CborUnion] public partial interface VersionTable : ICborType;
+                [CborSerializable, CborUnion] public partial interface Fake : ICborType;
+            }
+            namespace Chrysalis.Network.Cbor.ChainSync
+            {
+                [CborSerializable, CborUnion] public partial interface INetworkBlockHeader : ICborType;
+            }
+            namespace Chrysalis.Network.Cbor.LocalStateQuery
+            {
+                [CborSerializable, CborUnion] public partial interface IQueryReq : ICborType;
+            }
+            """;
+        GeneratorDriverRunResult result = CreateDriver().RunGenerators(CreateCompilation(assemblyName, source)).GetRunResult();
+        Assert.Contains(result.Diagnostics, diagnostic => diagnostic.Id == "CHCB001" && diagnostic.Location.IsInSource);
+        string[] fallbacks = [.. result.Results.Single().GeneratedSources
+            .Where(file => file.SourceText.ToString().Contains("BeginReadTrial()", StringComparison.Ordinal))
+            .Select(file => file.HintName).Order(StringComparer.Ordinal)];
+        Assert.Equal(network ?
+            ["Chrysalis.Network.Cbor.ChainSync.INetworkBlockHeader.Serializer.g.cs",
+             "Chrysalis.Network.Cbor.Handshake.HandshakeMessage.Serializer.g.cs",
+             "Chrysalis.Network.Cbor.Handshake.VersionTable.Serializer.g.cs",
+             "Chrysalis.Network.Cbor.LocalStateQuery.IQueryReq.Serializer.g.cs"] : [], fallbacks);
+    }
+
+    [Theory]
+    [InlineData("CborList", "int", false)]
+    [InlineData("CborList", "int?", false)]
+    [InlineData("CborList, CborIndex(0)", "int", false)]
+    [InlineData("CborList", "int", true)]
+    public void X7ReportsAmbiguityAndKeepsGeneratedOrderAcrossSyntaxTreeOrders(string shape, string type, bool trailingOptional)
+    {
+        const string imports = "using Chrysalis.Codec.Serialization; using Chrysalis.Codec.Serialization.Attributes; namespace Snapshot; ";
+        SyntaxTree root = CSharpSyntaxTree.ParseText("global using System; global using System.Collections.Generic; global using System.Linq; " + imports + "[CborSerializable, CborUnion] public partial interface IAmbiguous : ICborType;", ParseOptions, "Root.cs");
+        SyntaxTree first = CSharpSyntaxTree.ParseText(imports + "[CborSerializable, CborList] public readonly partial record struct A : IAmbiguous { [CborOrder(0)] public partial int Value { get; } }", ParseOptions, "A.cs");
+        string tail = trailingOptional ? "[CborOrder(1)] public partial int? Tail { get; }" : "";
+        SyntaxTree second = CSharpSyntaxTree.ParseText(imports + $$"""[CborSerializable, {{shape}}] public readonly partial record struct B : IAmbiguous { [CborOrder(0)] public partial {{type}} Value { get; } {{tail}} }""", ParseOptions, "B.cs");
+        static string Generate(SyntaxTree[] trees)
+        {
+            CSharpCompilation compilation = CSharpCompilation.Create("Ambiguous", trees, References,
+                new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
+            GeneratorDriverRunResult result = CreateDriver().RunGeneratorsAndUpdateCompilation(compilation, out Compilation generatedCompilation, out _).GetRunResult();
+            Assert.DoesNotContain(generatedCompilation.GetDiagnostics(), diagnostic => diagnostic.Severity == DiagnosticSeverity.Error);
+            Diagnostic report = Assert.Single(result.Diagnostics, diagnostic => diagnostic.Id == "CHCB002");
+            Assert.Equal("Root.cs", report.Location.SourceTree?.FilePath);
+            return result.Results.Single().GeneratedSources.Single(x => x.HintName == "Snapshot.IAmbiguous.Serializer.g.cs").SourceText.ToString();
+        }
+
+        string generated = Generate([root, first, second]);
+        Assert.Equal(generated, Generate([second, root, first]));
+        Assert.DoesNotContain("BeginReadTrial", generated, StringComparison.Ordinal);
+    }
+
     private static string GenerateUnionReader(CSharpCompilation compilation)
     {
         GeneratorDriver driver = CreateDriver();

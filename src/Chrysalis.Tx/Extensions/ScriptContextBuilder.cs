@@ -12,6 +12,7 @@ using Chrysalis.Codec.Types.Cardano.Core.TransactionWitness;
 using Chrysalis.Tx.Models;
 using Chrysalis.Tx.Models.Cbor;
 using Chrysalis.Wallet.Utils;
+using SAIB.Cbor.Serialization;
 using VmPlutusData = Chrysalis.Plutus.Types.PlutusData;
 using VmConstr = Chrysalis.Plutus.Types.PlutusDataConstr;
 using VmMap = Chrysalis.Plutus.Types.PlutusDataMap;
@@ -301,7 +302,7 @@ public static class ScriptContextBuilder
         if (language is >= 1 and <= 3)
         {
             // Plutus script: [language, script_bytestring]
-            SAIB.Cbor.Serialization.CborReader reader = new(rawInner.AsSpan(2));
+            CborReader reader = new(rawInner.AsSpan(2));
             byte[] scriptBytes = reader.ReadByteStringToArray();
             return OptionSome(Bytes(ComputeScriptHash(language, scriptBytes)));
         }
@@ -375,7 +376,7 @@ public static class ScriptContextBuilder
     public static VmPlutusData CodecPlutusDataToVm(CodecPlutusData codecData) => codecData switch
     {
         PlutusConstr constr => Constr(
-            CborTagToConstrIndex(constr.ConstrIndex),
+            CborTagToConstrIndex(constr),
             constr.Fields.GetValue().Select(CodecPlutusDataToVm).ToImmutableArray()),
 
         PlutusMap map => Map(
@@ -399,12 +400,21 @@ public static class ScriptContextBuilder
     /// Converts a raw CBOR alternative tag to a logical Plutus constructor index.
     /// CBOR tags 121-127 → indices 0-6, tags 1280-1400 → indices 7-127.
     /// </summary>
-    private static long CborTagToConstrIndex(int cborTag) => cborTag switch
+    private static long CborTagToConstrIndex(PlutusConstr constr)
     {
-        >= 121 and <= 127 => cborTag - 121,
-        >= 1280 and <= 1400 => cborTag - 1280 + 7,
-        _ => cborTag // Already a logical index or unknown
-    };
+        // In the extended form ConstrIndex is already logical (including values 121–127).
+        CborReader reader = new(constr.Raw.Span);
+        if (!constr.Raw.IsEmpty && reader.TryReadSemanticTag(out ulong tag) && tag == 102)
+        {
+            return constr.ConstrIndex;
+        }
+        return constr.ConstrIndex switch
+        {
+            >= 121 and <= 127 => constr.ConstrIndex - 121,
+            >= 1280 and <= 1400 => constr.ConstrIndex - 1280 + 7,
+            _ => constr.ConstrIndex
+        };
+    }
 
     // ────────────────────── Time Range ──────────────────────
 
@@ -1358,7 +1368,7 @@ public static class ScriptContextBuilder
     /// </summary>
     private static byte[] UnwrapCborByteString(byte[] data)
     {
-        SAIB.Cbor.Serialization.CborReader reader = new(data);
+        CborReader reader = new(data);
         return reader.ReadByteStringToArray();
     }
 }
@@ -1434,7 +1444,7 @@ public sealed class DataLookupTable
                 {
                     int language = rawInner[1]; // single-byte CBOR unsigned int 0-23
                     // Parse the script bytestring after the language byte
-                    SAIB.Cbor.Serialization.CborReader reader = new(rawInner.AsSpan(2));
+                    CborReader reader = new(rawInner.AsSpan(2));
                     byte[] scriptBytes = reader.ReadByteStringToArray();
 
                     // Plutus script version: 1=V1, 2=V2, 3=V3 (language 0 = NativeScript, skip)

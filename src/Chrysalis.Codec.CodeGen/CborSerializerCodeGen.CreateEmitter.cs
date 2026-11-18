@@ -184,6 +184,11 @@ public sealed partial class CborSerializerCodeGen
         {
             _ = EmitTagWriter(sb, metadata.CborTag);
 
+            bool plutus = NormalizeTypeName(metadata.FullyQualifiedName) == "Chrysalis.Codec.Types.Cardano.Core.Common.PlutusConstr";
+            if (plutus)
+            {
+                _ = sb.AppendLine("if (constrIndex >= 128) { writer.WriteSemanticTag(102); writer.WriteBeginArray(2); writer.WriteUInt64((ulong)constrIndex); } else");
+            }
             // Write constr tag
             if (metadata.CborIndex is null or < 0)
             {
@@ -230,6 +235,11 @@ public sealed partial class CborSerializerCodeGen
                 {
                     _ = EmitSerializablePropertyWriter(sb, prop, paramName);
                 }
+            }
+
+            if (plutus)
+            {
+                _ = sb.AppendLine("if (constrIndex >= 128) writer.WriteEndArray(2);");
             }
 
             if (!isDynamicConstr)

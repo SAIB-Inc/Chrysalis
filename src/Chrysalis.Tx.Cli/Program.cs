@@ -713,10 +713,7 @@ static IValue CreateValueFromAssets(Dictionary<string, ulong> assets)
 }
 
 static ITransactionMetadatum CreateMsgMetadatum(string message) =>
-    MetadatumMap.Create(new Dictionary<ITransactionMetadatum, ITransactionMetadatum>
-    {
-        { MetadataText.Create("msg"), MetadatumList.Create([MetadataText.Create(message)]) }
-    });
+    MetadatumMap.Create([new(MetadataText.Create("msg"), MetadatumList.Create([MetadataText.Create(message)]))]);
 
 static Metadata CreateMetadata(string message) =>
     Metadata.Create(new Dictionary<ulong, ITransactionMetadatum>

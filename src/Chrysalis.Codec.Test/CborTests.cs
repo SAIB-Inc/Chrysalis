@@ -431,9 +431,9 @@ public class CborTests(ITestOutputHelper output)
         Assert.Throws<ArgumentNullException>("data", () => IPlutusData.Write(new ArrayBufferWriter<byte>(), null!));
 
     [Theory]
-    [InlineData(false, 1_192)]
-    [InlineData(true, 1_304)]
-    public void NestedUnionTrialMissesDoNotAddAllocationsOrThrows(bool deep, int baselineBytesPerRead)
+    [InlineData(false, 192)]
+    [InlineData(true, 256)]
+    public void X7NestedUnionDispatchDoesNotAllocateOrThrowForRejectedCandidates(bool deep, int baselineBytesPerRead)
     {
         byte[] data = Convert.FromHexString(deep ? "8201816178" : "82016178");
         Func<bool> read = deep
@@ -478,10 +478,10 @@ public class CborTests(ITestOutputHelper output)
         {
             AppDomain.CurrentDomain.FirstChanceException -= CountThrow;
         }
-        output.WriteLine($"X6 nested trial depth {(deep ? 2 : 1)}: {bytes} bytes and {throws} throws across {iterations} reads.");
+        output.WriteLine($"X7 nested dispatch depth {(deep ? 2 : 1)}: {bytes} bytes and {throws} throws across {iterations} reads.");
         Assert.True(bytes <= (long)baselineBytesPerRead * iterations,
-            $"Expected at most {baselineBytesPerRead} bytes and one throw per read; observed {bytes} bytes and {throws} throws across {iterations} reads.");
-        Assert.Equal(iterations, throws);
+            $"Expected at most {baselineBytesPerRead} bytes and no throws; observed {bytes} bytes and {throws} throws across {iterations} reads.");
+        Assert.Equal(0, throws);
     }
 
     [Theory]
@@ -513,13 +513,13 @@ public class CborTests(ITestOutputHelper output)
     }
 
     [Theory]
-    [InlineData(false, "820181F6", 2, "X6DepthOneC", "indefinite array", "definite array")]
-    [InlineData(true, "820181A0", 4, "X6TrialText", "text string", "map")]
-    public void TypedDecodeWhenEveryUnionCandidateFailsInAField(bool deep, string hex, int offset, string owningField, string expected, string actual)
+    [InlineData(false, "820181F6", "simple value or floating point")]
+    [InlineData(true, "820181A0", "map")]
+    public void X7TypedErrorNamesTheDeepestFieldWhenNoCandidateMatches(bool deep, string hex, string actual)
     {
         byte[] data = Convert.FromHexString(hex);
         string union = deep ? nameof(IX6DepthTwo) : nameof(IX6DepthOne);
-        string path = $"Chrysalis.Codec.Test.{union}.Chrysalis.Codec.Test.{owningField}.Value";
+        string path = $"Chrysalis.Codec.Test.{union}.Chrysalis.Codec.Test.{(deep ? "X6TrialText" : "X6TrialLeaf")}.Value";
         _ = AssertExactDecodeError(() =>
         {
             if (deep)
@@ -530,7 +530,7 @@ public class CborTests(ITestOutputHelper output)
             {
                 _ = IX6DepthOne.Read(data);
             }
-        }, offset, path, expected, actual);
+        }, 3, path, deep ? "text string" : "integer", actual);
     }
 
     public static TheoryData<string, string, string, string> X30WireFixtures()
@@ -1008,28 +1008,29 @@ public class CborTests(ITestOutputHelper output)
         Assert.Equal(6, block.EraNumber);
     }
 
-    [Theory]
-    // Alonzo with duplicate key
-    [InlineData("alonzo-duplicate-key.block")]
-    public async Task DeserializeAlonzoWithDuplicateKey(string cbor)
+    [Fact]
+    public void DeserializeAlonzoWithDuplicateKey()
     {
-        byte[] cborRaw = LoadTestBlock(cbor);
-
-        const int concurrencyLevel = 1;   // Number of parallel tasks
-        const int iterationsPerTask = 1; // Number of deserializations per task
-
-        IEnumerable<Task> tasks = [.. Enumerable.Range(0, concurrencyLevel).Select(__ => Task.Run(() =>
+        JsonElement golden = X7Tests.ReadPallasGolden("metadata");
+        byte[] raw = LoadTestBlock(golden.GetProperty("source").GetString()!);
+        X7Tests.AssertPallasInput(golden, raw);
+        AlonzoCompatibleBlock block = AlonzoCompatibleBlock.Read(raw);
+        Metadata labels = block.AuxiliaryDataSet.Value[golden.GetProperty("transactionIndex").GetInt32()] switch
         {
-            for (int i = 0; i < iterationsPerTask; i++)
-            {
-                AlonzoCompatibleBlock block = CborSerializer.Deserialize<AlonzoCompatibleBlock>(cborRaw);
-                byte[] serialized = CborSerializer.Serialize(block);
-                _ = Convert.ToHexString(serialized);
-            }
-        }))];
-
-        // Await all tasks to complete; if any fail, the test will fail
-        await Task.WhenAll(tasks).ConfigureAwait(true);
+            Metadata metadata => metadata,
+            ShellyMaAuxiliaryData metadata => metadata.TransactionMetadata,
+            PostAlonzoAuxiliaryDataMap metadata => metadata.TransactionMetadata!.Value,
+            _ => throw new InvalidOperationException("Expected transaction metadata")
+        };
+        MetadatumMap label = Assert.IsType<MetadatumMap>(labels.Value[golden.GetProperty("label").GetUInt64()]);
+        MetadatumMap policy = Assert.Single(label.Value.Select(pair => pair.Value).OfType<MetadatumMap>());
+        KeyValuePair<ITransactionMetadatum, ITransactionMetadatum>[] repetitions = [.. policy.Value.Where(pair =>
+            pair.Key is MetadataText key && key.Value == "LoveForCrypto1of25")];
+        Assert.Equal(X7Tests.PallasPairs(golden), repetitions.Select(pair =>
+            (Convert.ToHexStringLower(pair.Key.Raw.Span), Convert.ToHexStringLower(pair.Value.Raw.Span))));
+        Assert.Equal(policy.Raw.ToArray(), MetadatumMap.Create(policy.Value).Raw.ToArray());
+        Assert.Equal(raw, AlonzoCompatibleBlock.Create(block.Header, block.TransactionBodies, block.TransactionWitnessSets,
+            block.AuxiliaryDataSet, block.InvalidTransactions).Raw.ToArray());
     }
 
     [Fact]
