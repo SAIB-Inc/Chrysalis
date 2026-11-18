@@ -46,7 +46,7 @@ def names(p):
     return app_names(listing(p, ['apps', 'Apps']))
 
 
-from gate_time import MAX_APP_SECONDS, validate_limits
+from gate_time import MAX_APP_SECONDS, region_for, validate_limits
 SHUTDOWN_MARGIN_SECONDS = 10
 
 
@@ -81,7 +81,7 @@ def verified_launch_inputs(here, ready):
     version = seal['flyctlVersion']
     return dict(bundle=str(bundle), sha256=hashlib.sha256(data).hexdigest(), machineCommand=machine_command(plan),
                 guard=plan['destroyGuardSeconds'], cutoff=plan['measurementCutoffSeconds'], version=version,
-                image=seal['image'])
+                image=seal['image'], region=region_for(plan))
 
 
 def clean_run_folder(root):
@@ -184,9 +184,10 @@ def main():
         machines = listing(root / 'machines-ready.json', ['machines', 'Machines'])
         require(len(machines) == 1, 'Exactly one machine required')
         m = machines[0]
+        plan = json.loads((root / 'verified-plan.json').read_text())
         c = m.get('config', {})
         g = c.get('guest', {})
-        require(m.get('id', m.get('ID')) == machine_id and m.get('state') == 'started' and m.get('region') == 'iad', 'Wrong machine identity/state/region')
+        require(m.get('id', m.get('ID')) == machine_id and m.get('state') == 'started' and m.get('region') == plan.get('region', 'iad'), 'Wrong machine identity/state/region')
         require(c.get('image') == (root / 'image.txt').read_text().strip(), 'Machine image differs from seal')
         events = [event for event in m.get('events', []) if event.get('type') == 'start']
         require(len(events) == 1 and not any(event.get('type') in ('restart', 'replace') for event in m.get('events', [])), 'Machine restart/replacement detected')
@@ -199,7 +200,7 @@ def main():
         command = c.get('init', {}).get('cmd', c.get('init', {}).get('exec'))
         stop = re.search(r'P2_MACHINE_CREATED_UNIX \+ ([0-9]+) - ', verified_command)
         require(stop is not None, 'VM expected command is not a verified absolute stop')
-        require(machine_command(json.loads((root / 'verified-plan.json').read_text())) == verified_command,
+        require(machine_command(plan) == verified_command,
                 'VM expected command violates the independent code cap or canonical form')
         require(command == ['/bin/bash', '-c', verified_command], 'VM main process lacks the sealed absolute stop')
         for filename, keys in [('ips', ['ips', 'Ips', 'IPAddresses']), ('volumes', ['volumes', 'Volumes']), ('secrets', ['secrets', 'Secrets'])]:

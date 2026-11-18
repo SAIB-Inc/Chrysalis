@@ -13,10 +13,11 @@ else
 fi
 flock --nonblock 9 || { echo 'Another Fly session holds the lock'; exit 75; }
 VERIFIED_INPUTS="$(python3 "$HERE/gate_fly_guard.py" sealed "$HERE" "$READY")"
-mapfile -t SEALED_VALUES < <(python3 -c 'import json,sys; d=json.loads(sys.argv[1]); [print(d[k]) for k in ("bundle","sha256","machineCommand","guard","cutoff","version","image")]' "$VERIFIED_INPUTS")
-[[ ${#SEALED_VALUES[@]} == 7 ]] || { echo 'Invalid verified launch inputs'; exit 2; }
+mapfile -t SEALED_VALUES < <(python3 -c 'import json,sys; d=json.loads(sys.argv[1]); [print(d[k]) for k in ("bundle","sha256","machineCommand","guard","cutoff","version","image","region")]' "$VERIFIED_INPUTS")
+[[ ${#SEALED_VALUES[@]} == 8 ]] || { echo 'Invalid verified launch inputs'; exit 2; }
 BUNDLE="${SEALED_VALUES[0]}"; BUNDLE_SHA="${SEALED_VALUES[1]}"; VM_COMMAND="${SEALED_VALUES[2]}"
 GUARD="${SEALED_VALUES[3]}"; CUTOFF="${SEALED_VALUES[4]}"; VERSION="${SEALED_VALUES[5]}"; BASE="${SEALED_VALUES[6]}"
+REGION="${SEALED_VALUES[7]}"
 CREATED_UNIX=0
 [[ "$(env -i HOME="$HOME" PATH="$PATH" FLY_NO_UPDATE_CHECK=1 FLY_NO_ANALYTICS=1 timeout 10 fly version 9>&-)" == "$VERSION" ]] || { echo 'flyctl version changed since seal'; exit 2; }
 NOTE="$(dirname "$READY")/time/runs/$APP"
@@ -81,13 +82,13 @@ cleanup() {
   if [[ "$cleaned" == 1 ]]; then stop_watchdog; fi
   python3 "$HERE/gate_fly_guard.py" lock-holders "$LOCK" "$$" "$PPID" "${WATCHDOG:-0}" > "$NOTE/lock-holders.json" || result=1
   python3 "$HERE/gate_fly_guard.py" clean-run-folder "$NOTE" || result=1
-  python3 - "$CREATED_UNIX" "$(date +%s)" "$GUARD" "$HERE" "$cleaned" > "$NOTE/duration-cost.json" <<'PY'
+  python3 - "$CREATED_UNIX" "$(date +%s)" "$GUARD" "$HERE" "$cleaned" "$REGION" > "$NOTE/duration-cost.json" <<'PY'
 import json,sys
 sys.path.insert(0,sys.argv[4])
-from gate_time import price, PRICE
+from gate_time import price, compute_price
 start,end,guard=map(int,sys.argv[1:4]);s=max(0,end-start) if start else 0
-cleaned=sys.argv[5]=='1'
-json.dump(dict(appGuardStartUnix=start,endedUnix=end if cleaned else None,cleanupOutstanding=not cleaned,conservativeSeconds=s if cleaned else None,computeEstimateUsd=s/3600*PRICE if cleaned else None,totalEstimateWithReserveUsd=price(s) if cleaned else None,sealedLimitUsd=price(guard),withinSealedGuard=s<=guard if cleaned else None),sys.stdout,indent=2)
+cleaned=sys.argv[5]=='1';region=sys.argv[6]
+json.dump(dict(appGuardStartUnix=start,endedUnix=end if cleaned else None,cleanupOutstanding=not cleaned,conservativeSeconds=s if cleaned else None,computeEstimateUsd=compute_price(s,region) if cleaned else None,totalEstimateWithReserveUsd=price(s,region) if cleaned else None,sealedLimitUsd=price(guard,region),withinSealedGuard=s<=guard if cleaned else None),sys.stdout,indent=2)
 PY
   exit "$result"
 }
@@ -153,7 +154,7 @@ WATCHDOG="$(cat "$NOTE/watchdog.pid")"
 APP_CREATE_ATTEMPTED=1
 fly_call 420 apps create "$APP" --org "$ORG" --json > "$NOTE/app-created.json"
 
-fly_call 420 machine run "$BASE" --app "$APP" --org "$ORG" --region iad --vm-size performance-8x --rootfs-size 20 --restart no --rm --detach --env "P2_MACHINE_CREATED_UNIX=$CREATED_UNIX" -- /bin/bash -c "$VM_COMMAND" > "$NOTE/machine-run.log" 2>&1
+fly_call 420 machine run "$BASE" --app "$APP" --org "$ORG" --region "$REGION" --vm-size performance-8x --rootfs-size 20 --restart no --rm --detach --env "P2_MACHINE_CREATED_UNIX=$CREATED_UNIX" -- /bin/bash -c "$VM_COMMAND" > "$NOTE/machine-run.log" 2>&1
 fly_call 420 machine list --app "$APP" --json > "$NOTE/machines-created.json"
 MACHINE="$(python3 "$HERE/gate_fly_guard.py" machine-id "$NOTE/machines-created.json")"
 fly_call 420 machine wait "$MACHINE" --app "$APP" --state started --wait-timeout 5m > "$NOTE/machine-ready.log" 2>&1

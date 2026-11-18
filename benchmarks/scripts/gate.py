@@ -19,6 +19,7 @@ import time
 
 import gate_session as session
 import gate_stats as stats
+import gate_time
 import run_benchmarks as runner
 
 REPO = Path(__file__).resolve().parents[2]
@@ -538,10 +539,13 @@ def select_rows(args, config, audit):
             raise ValueError('Measurement entries must be an array')
         rows = []
         known = {row['id']: row for row in available}
-        allowed = {'id', 'kind', 'replay', 'manifest', 'pairs', 'aPairs', 'chargeSeconds', 'candidate', 'rowClass', 'explanation'}
+        allowed = {'id', 'kind', 'replay', 'manifest', 'pairs', 'aPairs', 'chargeSeconds', 'candidate', 'rowClass', 'explanation', 'region'}
         for entry in selected:
             if not isinstance(entry, dict) or set(entry) - allowed or not isinstance(entry.get('id'), str):
                 raise ValueError('Invalid measurement entry fields')
+            if 'region' in entry:
+                gate_time.require(session_per_row, 'An explicit region requires sessionPerRow')
+                gate_time.region_for(entry)
             if entry.get('rowClass') == 'recorded-only' and (not entry.get('explanation') or not isinstance(entry['explanation'], str)):
                 raise ValueError('Recorded-only row needs an explanation link')
             if entry.get('rowClass') not in (None, 'gated', 'recorded-only'):
@@ -725,7 +729,6 @@ def report(output, mode=None):
             result.update(first=first, repeat=repeat)
         result['sides'] = row['sides']
         results[row['id']] = result
-    import gate_time
     timed, time_lines = gate_time.read_results(output, seal, mode=applied_mode)
     results.update(timed)
     verdict = outcome(seal, results, mode=applied_mode)

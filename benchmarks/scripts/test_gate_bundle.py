@@ -175,10 +175,17 @@ class BundleTests(unittest.TestCase):
                     gate.session.save(path, dict(entries=entries, sessionPerRow=value))
                     with self.assertRaisesRegex(ValueError, 'sessionPerRow'):
                         gate.select_rows(SimpleNamespace(mode=mode, plan=path, only=None), config, audit)
-            for payload, enabled in [(dict(entries=SCOUT, sessionPerRow=True), True), (SCOUT, False),
+            for region, enabled in [('ams', False), ('zzz', True), ('lhr', True), ('yyz', True), (None, True), ([], True)]:
+                with self.subTest(region=region, sessionPerRow=enabled):
+                    gate.session.save(path, dict(entries=[dict(SCOUT[0], region=region)], sessionPerRow=enabled))
+                    with self.assertRaisesRegex(ValueError, 'region'):
+                        gate.select_rows(SimpleNamespace(mode='change', plan=path, only=None), config, audit)
+            for payload, enabled in [(dict(entries=[dict(SCOUT[0], region='arn'), *SCOUT[1:]], sessionPerRow=True), True), (SCOUT, False),
                                      (dict(entries=SCOUT, sessionPerRow=False), False)]:
                 gate.session.save(path, payload)
-                self.assertEqual(len(gate.select_rows(SimpleNamespace(mode='change', plan=path, only=None), config, audit)), 6)
+                rows = gate.select_rows(SimpleNamespace(mode='change', plan=path, only=None), config, audit)
+                self.assertEqual(len(rows), 6)
+                self.assertEqual(rows[0].get('region'), 'arn' if enabled else None)
                 self.assertIs(config.get('_sessionPerRow', False), enabled)
 
 

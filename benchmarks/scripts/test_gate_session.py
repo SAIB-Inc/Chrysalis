@@ -197,8 +197,22 @@ class ReviewSessionTests(unittest.TestCase):
             self.assertEqual(session.detect_platform(), 'fly')
             with patch.object(session.os, 'cpu_count', return_value=24), self.assertRaisesRegex(ValueError, 'Fly'):
                 session.detect_platform()
+            with self.assertRaisesRegex(ValueError, 'Fly'):
+                session.detect_platform('ams')
+            with patch.dict(os.environ, FLY_REGION='ams'):
+                self.assertEqual(session.detect_platform('ams'), 'fly')
+                with self.assertRaisesRegex(ValueError, 'Fly'):
+                    session.detect_platform()
         with patch.dict(os.environ, dict(FLY_REGION='iad'), clear=True), self.assertRaisesRegex(ValueError, 'Fly'):
             session.detect_platform()
+
+    def test_member_passes_sealed_or_default_region_to_platform_check(self):
+        with tempfile.TemporaryDirectory() as directory:
+            for kwargs, expected in [({}, 'iad'), (dict(region='ams'), 'ams')]:
+                with self.subTest(expected=expected), patch.object(session, 'detect_platform', side_effect=ValueError('stop')) as detected:
+                    with self.assertRaisesRegex(ValueError, '^stop$'):
+                        session.member({}, {}, Path(directory) / expected, **kwargs)
+                    detected.assert_called_once_with(expected)
 
     def test_pc_acknowledges_marks_without_reading_proc(self):
         with tempfile.TemporaryDirectory() as directory:
