@@ -8,12 +8,10 @@ using Xunit;
 
 namespace Chrysalis.Network.Tests;
 
-public class MuxerWriteSerialisationTests
+public class DirectWriteSerialisationTests
 {
     private const int WriterCount = 8;
     private const int MessagesPerWriter = 2_000;
-    // Include the three-byte internal header in a power-of-two record size so
-    // this test targets concurrent writing, not the muxer's split-header parser.
     private const int PayloadLength = 125;
 
     public static TheoryData<int> StressIterations => [.. Enumerable.Range(0, 50)];
@@ -27,7 +25,7 @@ public class MuxerWriteSerialisationTests
         using Plexer plexer = new(bearer);
         AgentChannel[] channels = [.. Enumerable.Range(0, WriterCount)
             .Select(index => plexer.SubscribeClient((ProtocolType)(index + 2)))];
-        await AssertTrafficAsync(channels, bearer.Outgoing, plexer.RunAsync(deadline.Token), iteration, deadline);
+        await AssertTrafficAsync(channels, bearer.Outgoing, iteration, deadline);
     }
 
     [Fact]
@@ -36,11 +34,10 @@ public class MuxerWriteSerialisationTests
         using CancellationTokenSource deadline = new(TimeSpan.FromSeconds(20));
         using LoopbackBearer bearer = new();
         using SemaphoreSlim bearerWriteLock = new(1, 1);
-        using Muxer muxer = new(bearer.Writer, ProtocolMode.Initiator, bearerWriteLock);
         AgentChannel[] channels = [.. Enumerable.Range(0, WriterCount).Select(index =>
-            new AgentChannel((ProtocolType)(index + 2), muxer.Writer, bearer.Writer,
+            new AgentChannel((ProtocolType)(index + 2), bearer.Writer,
                 Channel.CreateUnbounded<ReadOnlyMemory<byte>>().Reader, bearerWriteLock))];
-        await AssertTrafficAsync(channels, bearer.Outgoing, muxer.RunAsync(deadline.Token), 50, deadline);
+        await AssertTrafficAsync(channels, bearer.Outgoing, 50, deadline);
     }
 
     [Fact]
@@ -51,8 +48,9 @@ public class MuxerWriteSerialisationTests
         Pipe independent = new();
         using SemaphoreSlim bearerWriteLock = new(1, 1);
         ChannelReader<ReadOnlyMemory<byte>> reader = Channel.CreateUnbounded<ReadOnlyMemory<byte>>().Reader;
-        AgentChannel first = new(ProtocolType.BlockFetch, blocked.Writer, independent.Writer, reader, bearerWriteLock);
-        AgentChannel second = new(ProtocolType.KeepAlive, independent.Writer, independent.Writer, reader, bearerWriteLock);
+        using SemaphoreSlim independentLock = new(1, 1);
+        AgentChannel first = new(ProtocolType.BlockFetch, blocked.Writer, reader, bearerWriteLock);
+        AgentChannel second = new(ProtocolType.KeepAlive, independent.Writer, reader, independentLock);
         ReadOnlySequence<byte> payload = new(new byte[PayloadLength]);
         Task pending = first.EnqueueChunkAsync(payload, deadline.Token);
         try
@@ -77,16 +75,15 @@ public class MuxerWriteSerialisationTests
     }
 
     [Fact]
-    public async Task MuxerBackpressureAndRawBearerWritesDoNotInvertLocks()
+    public async Task MuxedAndRawFramesRemainWholeAcrossBackpressure()
     {
         using CancellationTokenSource deadline = new(TimeSpan.FromSeconds(10));
         using LoopbackBearer bearer = new();
         using SemaphoreSlim bearerWriteLock = new(1, 1);
-        using Muxer muxer = new(bearer.Writer, ProtocolMode.Initiator, bearerWriteLock);
-        AgentChannel channel = new(ProtocolType.BlockFetch, muxer.Writer, bearer.Writer,
+        AgentChannel channel = new(ProtocolType.BlockFetch, bearer.Writer,
             Channel.CreateUnbounded<ReadOnlyMemory<byte>>().Reader, bearerWriteLock);
-        // One internal record fills the muxer's default 64 KiB backpressure threshold.
-        ReadOnlySequence<byte> payload = new(new byte[65_533]);
+        // A maximum-sized payload plus its wire header exceeds the default 64 KiB threshold.
+        ReadOnlySequence<byte> payload = new(new byte[ushort.MaxValue]);
         Task first = channel.EnqueueChunkAsync(payload, deadline.Token);
         Assert.False(first.IsCompleted);
         Task second = channel.EnqueueChunkAsync(payload, deadline.Token);
@@ -94,13 +91,8 @@ public class MuxerWriteSerialisationTests
         byte[] raw = MuxSegmentCodec.Encode(new MuxSegment(
             new MuxSegmentHeader(0, ProtocolType.KeepAlive, PayloadLength, false),
             new ReadOnlySequence<byte>(new byte[PayloadLength]))).ToArray();
-        await bearerWriteLock.WaitAsync(deadline.Token);
-        Task run = muxer.RunAsync(deadline.Token);
         Task fastPath = channel.WriteRawSegmentAsync(raw, deadline.Token);
         Assert.False(fastPath.IsCompleted);
-        // The muxer can never acquire the writer lock while owning the bearer
-        // lock; draining the bearer must therefore let all three sends finish.
-        _ = bearerWriteLock.Release();
         Task drain = DrainBackpressureFramesAsync(bearer.Outgoing, deadline.Token);
         try
         {
@@ -109,8 +101,8 @@ public class MuxerWriteSerialisationTests
         finally
         {
             await deadline.CancelAsync();
-            try { await Task.WhenAll(first, second, fastPath, drain, run).WaitAsync(TimeSpan.FromSeconds(5)); }
-            catch (OperationCanceledException) { }
+            bearer.Writer.CancelPendingFlush();
+            _ = await Record.ExceptionAsync(() => Task.WhenAll(first, second, fastPath, drain).WaitAsync(TimeSpan.FromSeconds(5)));
         }
     }
 
@@ -129,7 +121,7 @@ public class MuxerWriteSerialisationTests
                 if (remaining.Length < size) { break; }
                 if (header.ProtocolId == ProtocolType.BlockFetch)
                 {
-                    Assert.Equal(65_533, header.PayloadLength);
+                    Assert.Equal(ushort.MaxValue, header.PayloadLength);
                     muxed++;
                 }
                 else
@@ -147,7 +139,7 @@ public class MuxerWriteSerialisationTests
         Assert.Equal(1, raw);
     }
 
-    private static async Task AssertTrafficAsync(AgentChannel[] channels, PipeReader outgoing, Task run,
+    private static async Task AssertTrafficAsync(AgentChannel[] channels, PipeReader outgoing,
         int iteration, CancellationTokenSource deadline)
     {
         TaskCompletionSource start = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -167,23 +159,13 @@ public class MuxerWriteSerialisationTests
 
         try
         {
-            // Surface a muxer failure immediately instead of waiting for the deadline.
-            Task completed = await Task.WhenAny(traffic, run).WaitAsync(deadline.Token);
-            await completed;
-            Assert.Same(traffic, completed);
             await traffic;
         }
         finally
         {
             await deadline.CancelAsync();
-            try
-            {
-                await Task.WhenAll(writers.Append(read).Append(run)).WaitAsync(TimeSpan.FromSeconds(5));
-            }
-            catch (Exception)
-            {
-                // Observe all workers during cleanup; the original failure is reported above.
-            }
+            outgoing.CancelPendingRead();
+            _ = await Record.ExceptionAsync(() => traffic.WaitAsync(TimeSpan.FromSeconds(5)));
         }
     }
 

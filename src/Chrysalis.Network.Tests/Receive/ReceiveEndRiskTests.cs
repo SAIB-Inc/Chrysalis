@@ -33,7 +33,7 @@ public sealed class ReceiveEndRiskTests
         try
         {
             await bearer.Stall.Entered.Task.WaitAsync(TimeSpan.FromSeconds(10));
-            if (route != "mux") { Assert.False(send.IsCompleted); }
+            Assert.False(send.IsCompleted);
             if (end == "dispose") { plexer.Dispose(); }
             else { bearer.Input.End(end == "fault"); }
             await bearer.Stall.Canceled.Task.WaitAsync(TimeSpan.FromSeconds(10));
@@ -45,14 +45,14 @@ public sealed class ReceiveEndRiskTests
             plexer.Dispose();
             Assert.Equal(0, bearer.Input.Disposals);
             _ = bearer.Stall.Release.TrySetResult();
-            Exception? sendError = await Record.ExceptionAsync(() => send.WaitAsync(TimeSpan.FromSeconds(10)));
-            if (route != "mux") { _ = Assert.IsType<ConnectionClosedException>(sendError); }
+            ConnectionClosedException sendError = await Assert.ThrowsAsync<ConnectionClosedException>(() => send.WaitAsync(TimeSpan.FromSeconds(10)));
             _ = await Record.ExceptionAsync(() => run.WaitAsync(TimeSpan.FromSeconds(10)));
             await bearer.Closed.Task.WaitAsync(TimeSpan.FromSeconds(10));
             Assert.Equal(1, bearer.Disposals);
             Assert.Equal(1, bearer.Input.Disposals);
             Assert.False(bearer.Stall.InFlush);
-            _ = await Assert.ThrowsAsync<ConnectionClosedException>(() => channel.WriteRawSegmentAsync(new byte[] { 1 }));
+            ConnectionClosedException later = await Assert.ThrowsAsync<ConnectionClosedException>(() => channel.WriteRawSegmentAsync(new byte[] { 1 }));
+            Assert.Same(sendError.InnerException, later.InnerException);
             plexer.Dispose();
             Assert.Equal(1, bearer.Disposals);
         }

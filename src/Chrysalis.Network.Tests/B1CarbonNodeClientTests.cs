@@ -166,7 +166,6 @@ public sealed class B1CarbonNodeClientTests
     {
         private readonly Pipe _incoming = new();
         private readonly Pipe _outgoing = new();
-        private readonly Pipe _muxPipe;
         private readonly Plexer _plexer;
         private bool _disposed;
 
@@ -174,8 +173,6 @@ public sealed class B1CarbonNodeClientTests
         {
             _plexer = new Plexer(this);
             Client = (NodeClient)Activator.CreateInstance(typeof(NodeClient), BindingFlags.Instance | BindingFlags.NonPublic, null, [_plexer], null)!;
-            Muxer muxer = (Muxer)typeof(Plexer).GetField("_muxer", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(_plexer)!;
-            _muxPipe = (Pipe)typeof(Muxer).GetField("_pipe", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(muxer)!;
         }
 
         internal NodeClient Client { get; }
@@ -219,12 +216,6 @@ public sealed class B1CarbonNodeClientTests
         {
             Assert.Equal(0, _outgoing.Writer.UnflushedBytes);
             AssertEmpty(_outgoing.Reader);
-            Assert.Equal(0, _muxPipe.Writer.UnflushedBytes);
-            // Only inspect the internal queue when the muxer is not its active reader.
-            if (typeof(NodeClient).GetField("_plexerTask", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(Client) is null)
-            {
-                AssertEmpty(_muxPipe.Reader);
-            }
         }
 
         private static void AssertEmpty(PipeReader reader)
@@ -261,7 +252,6 @@ public sealed class B1CarbonNodeClientTests
             }
             await _incoming.Writer.CompleteAsync();
             await _outgoing.Reader.CompleteAsync();
-            await _muxPipe.Reader.CompleteAsync();
         }
     }
 }

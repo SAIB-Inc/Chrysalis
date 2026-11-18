@@ -36,7 +36,7 @@ public sealed class B1CarbonGuardTests
         if (acquired)
         {
             await query.AcquireAsync(null, CancellationToken.None);
-            _ = await replay.ReadSentPayloadAsync(CancellationToken.None);
+            _ = replay.ReadSentPayload();
         }
         using CancellationTokenSource deadline = new(TimeSpan.FromSeconds(1));
         N2CVersionNotSupportedException failure = await Assert.ThrowsAsync<N2CVersionNotSupportedException>(() => InvokeHelper(query, helper, deadline.Token));
@@ -70,7 +70,7 @@ public sealed class B1CarbonGuardTests
         if (acquired)
         {
             await query.AcquireAsync(null, CancellationToken.None);
-            _ = await replay.ReadSentPayloadAsync(CancellationToken.None);
+            _ = replay.ReadSentPayload();
         }
         using CancellationTokenSource deadline = new(TimeSpan.FromSeconds(1));
         _ = await Assert.ThrowsAsync<InvalidOperationException>(() => InvokeHelper(query, helper, deadline.Token));
@@ -85,9 +85,9 @@ public sealed class B1CarbonGuardTests
         using ProtocolReplay replay = new(ProtocolType.LocalStateQuery, Convert.FromHexString("8101"), Convert.FromHexString("8204d8184106"));
         await using LocalStateQuery query = new(replay.Channel, new N2CVersion(32780));
         await query.AcquireAsync(null, CancellationToken.None);
-        _ = await replay.ReadSentPayloadAsync(CancellationToken.None);
+        _ = replay.ReadSentPayload();
         _ = await query.QueryAsync(new GlobalQuery(0), new N2CVersion(32780), CancellationToken.None);
-        Assert.Equal(Convert.FromHexString("82038100"), await replay.ReadSentPayloadAsync(CancellationToken.None));
+        Assert.Equal(Convert.FromHexString("82038100"), replay.ReadSentPayload());
     }
 
     /// <summary>The explicit-minimum overload stays synchronous and fails before any outgoing message.</summary>

@@ -58,7 +58,7 @@ public sealed class OwnedReceiveTests
         Channel<ReadOnlyMemory<byte>> input = Channel.CreateUnbounded<ReadOnlyMemory<byte>>();
         System.IO.Pipelines.Pipe unused = new();
         using SemaphoreSlim gate = new(1);
-        AgentChannel channel = new(ProtocolType.BlockFetch, unused.Writer, unused.Writer, input.Reader, gate);
+        AgentChannel channel = new(ProtocolType.BlockFetch, unused.Writer, input.Reader, gate);
         ChannelBuffer buffer = new(channel);
         byte[] a = ReceiveVectors.Body();
         byte[] b = ReceiveVectors.Body(256);
@@ -93,7 +93,7 @@ public sealed class OwnedReceiveTests
         Channel<ReadOnlyMemory<byte>> input = Channel.CreateUnbounded<ReadOnlyMemory<byte>>();
         System.IO.Pipelines.Pipe unused = new();
         using SemaphoreSlim gate = new(1);
-        ChannelBuffer buffer = new(new AgentChannel(ProtocolType.BlockFetch, unused.Writer, unused.Writer, input.Reader, gate));
+        ChannelBuffer buffer = new(new AgentChannel(ProtocolType.BlockFetch, unused.Writer, input.Reader, gate));
         _ = input.Writer.TryWrite(new byte[] { 0x82, 0x04 });
         _ = input.Writer.TryWrite(new byte[] { 0xff });
         if (!closeAfterError) { _ = input.Writer.TryWrite(Convert.FromHexString("D8184100")); }
@@ -110,7 +110,7 @@ public sealed class OwnedReceiveTests
         Channel<ReadOnlyMemory<byte>> input = Channel.CreateUnbounded<ReadOnlyMemory<byte>>();
         System.IO.Pipelines.Pipe unused = new();
         using SemaphoreSlim gate = new(1);
-        ChannelBuffer buffer = new(new AgentChannel(ProtocolType.BlockFetch, unused.Writer, unused.Writer, input.Reader, gate));
+        ChannelBuffer buffer = new(new AgentChannel(ProtocolType.BlockFetch, unused.Writer, input.Reader, gate));
         _ = input.Writer.TryWrite(Enumerable.Repeat((byte)0x81, 65).ToArray());
         input.Writer.Complete();
         _ = await Assert.ThrowsAsync<ChannelClosedException>(() => buffer.ReceiveFullMessageAsync<BlockFetchMessage>(CancellationToken.None));
@@ -127,7 +127,7 @@ public sealed class OwnedReceiveTests
         Channel<ReadOnlyMemory<byte>> input = Channel.CreateUnbounded<ReadOnlyMemory<byte>>();
         System.IO.Pipelines.Pipe unused = new();
         using SemaphoreSlim gate = new(1);
-        ChannelBuffer buffer = new(new AgentChannel(ProtocolType.BlockFetch, unused.Writer, unused.Writer, new FailSecondRead(input.Reader), gate));
+        ChannelBuffer buffer = new(new AgentChannel(ProtocolType.BlockFetch, unused.Writer, new FailSecondRead(input.Reader), gate));
         byte[] message = ReceiveVectors.Body(256);
         _ = input.Writer.TryWrite(message.AsMemory(0, 13));
         _ = input.Writer.TryWrite(message.AsMemory(13));

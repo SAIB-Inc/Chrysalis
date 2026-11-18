@@ -36,7 +36,7 @@ public sealed class B1VersionGuardTests
         using ProtocolReplay replay = new(ProtocolType.LocalTxMonitor, Convert.FromHexString("830c00a0"));
         LocalTxMonitor monitor = ExplicitMonitor(replay.Channel, 32788);
         _ = Assert.IsType<ReplyGetMeasures>(await monitor.GetMeasuresAsync(CancellationToken.None));
-        Assert.Equal(Convert.FromHexString("810b"), await replay.ReadSentPayloadAsync(CancellationToken.None));
+        Assert.Equal(Convert.FromHexString("810b"), replay.ReadSentPayload());
     }
 
     /// <summary>The old standalone monitor constructor does not invent a negotiated version or fail closed.</summary>
@@ -46,7 +46,7 @@ public sealed class B1VersionGuardTests
         using ProtocolReplay replay = new(ProtocolType.LocalTxMonitor, Convert.FromHexString("830c00a0"));
         LocalTxMonitor monitor = new(replay.Channel);
         _ = Assert.IsType<ReplyGetMeasures>(await monitor.GetMeasuresAsync(CancellationToken.None));
-        Assert.Equal(Convert.FromHexString("810b"), await replay.ReadSentPayloadAsync(CancellationToken.None));
+        Assert.Equal(Convert.FromHexString("810b"), replay.ReadSentPayload());
     }
 
     /// <summary>The current built-in Conway query family needs at least V16 when a real context is present.</summary>
@@ -69,9 +69,9 @@ public sealed class B1VersionGuardTests
         using ProtocolReplay replay = new(ProtocolType.LocalStateQuery, Convert.FromHexString("8101"), Convert.FromHexString("8204d8184106"));
         await using LocalStateQuery query = new(replay.Channel);
         await query.AcquireAsync(null, CancellationToken.None);
-        _ = await replay.ReadSentPayloadAsync(CancellationToken.None);
+        _ = replay.ReadSentPayload();
         _ = await query.QueryAsync(RawQueries.GetCurrentEra, CancellationToken.None);
-        Assert.Equal(PreprodFixtures.Read("wire/c4-out-p7-003.cbor"), await replay.ReadSentPayloadAsync(CancellationToken.None));
+        Assert.Equal(PreprodFixtures.Read("wire/c4-out-p7-003.cbor"), replay.ReadSentPayload());
     }
 
     /// <summary>An explicitly requested minimum cannot be checked without any negotiated context.</summary>

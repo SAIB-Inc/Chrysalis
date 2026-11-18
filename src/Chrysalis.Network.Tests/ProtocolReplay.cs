@@ -11,13 +11,12 @@ namespace Chrysalis.Network.Tests;
 internal sealed class ProtocolReplay : IDisposable
 {
     private readonly Pipe _outgoing = new();
-    private readonly Pipe _bearer = new();
     private readonly Channel<ReadOnlyMemory<byte>> _incoming = System.Threading.Channels.Channel.CreateUnbounded<ReadOnlyMemory<byte>>();
     private readonly SemaphoreSlim _writeLock = new(1, 1);
 
     internal ProtocolReplay(ProtocolType protocol, params byte[][] segments)
     {
-        Channel = new AgentChannel(protocol, _outgoing.Writer, _bearer.Writer, _incoming.Reader, _writeLock);
+        Channel = new AgentChannel(protocol, _outgoing.Writer, _incoming.Reader, _writeLock);
         foreach (byte[] segment in segments)
         {
             Assert.True(_incoming.Writer.TryWrite(segment));
@@ -28,15 +27,23 @@ internal sealed class ProtocolReplay : IDisposable
 
     internal void CompleteIncoming() => Assert.True(_incoming.Writer.TryComplete());
 
-    internal async Task<byte[]> ReadSentPayloadAsync(CancellationToken cancellationToken)
+    // Replay callers await the operation that sent the frame before inspecting this pipe.
+    internal byte[] ReadSentPayload()
     {
-        ReadResult result = await _outgoing.Reader.ReadAsync(cancellationToken);
-        byte[] bytes = result.Buffer.ToArray();
-        _outgoing.Reader.AdvanceTo(result.Buffer.End);
-        Assert.True(bytes.Length >= 3);
-        Assert.Equal((byte)Channel.ProtocolId, bytes[0]);
-        Assert.Equal(bytes.Length - 3, BinaryPrimitives.ReadUInt16BigEndian(bytes.AsSpan(1, 2)));
-        return bytes.AsSpan(3).ToArray();
+        Assert.True(_outgoing.Reader.TryRead(out ReadResult result), "The operation sent no bearer frame.");
+        ReadOnlySequence<byte> bytes = result.Buffer;
+        try
+        {
+            const int headerSize = ProtocolConstants.SegmentHeaderSize;
+            Assert.True(bytes.Length >= headerSize, "The operation sent an incomplete bearer header.");
+            Span<byte> header = stackalloc byte[headerSize];
+            bytes.Slice(0, headerSize).CopyTo(header);
+            int size = BinaryPrimitives.ReadUInt16BigEndian(header[6..]);
+            Assert.Equal(headerSize + (long)size, bytes.Length);
+            Assert.Equal((ushort)Channel.ProtocolId, BinaryPrimitives.ReadUInt16BigEndian(header[4..]));
+            return bytes.Slice(headerSize, size).ToArray();
+        }
+        finally { _outgoing.Reader.AdvanceTo(bytes.End); }
     }
 
     internal void AssertNothingSent()
@@ -55,8 +62,6 @@ internal sealed class ProtocolReplay : IDisposable
         _ = _incoming.Writer.TryComplete();
         _outgoing.Writer.Complete();
         _outgoing.Reader.Complete();
-        _bearer.Writer.Complete();
-        _bearer.Reader.Complete();
         _writeLock.Dispose();
     }
 }

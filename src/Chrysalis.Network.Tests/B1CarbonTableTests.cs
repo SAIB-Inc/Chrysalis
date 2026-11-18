@@ -41,7 +41,7 @@ public sealed class B1CarbonTableTests
             _ = await handshake.SendAsync(proposal, CancellationToken.None);
         }
         string expected = n2c ? "8200a219801082182af519801782182af5" : "8200a20b84182af500f40e84182af500f4";
-        Assert.Equal(Convert.FromHexString(expected), await replay.ReadSentPayloadAsync(CancellationToken.None));
+        Assert.Equal(Convert.FromHexString(expected), replay.ReadSentPayload());
     }
 
     /// <summary>The symmetric codec hook rejects a hand-built unsorted table instead of emitting invalid wire bytes.</summary>
