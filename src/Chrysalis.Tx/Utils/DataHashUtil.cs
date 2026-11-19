@@ -1,4 +1,3 @@
-using Chrysalis.Codec.Extensions;
 using Chrysalis.Codec.Serialization;
 using Chrysalis.Codec.Types;
 using Chrysalis.Codec.Types.Cardano.Core.Common;
@@ -21,7 +20,7 @@ public static class DataHashUtil
     /// <returns>The Blake2b-256 hash of the script data.</returns>
     public static byte[] CalculateScriptDataHash(
         Redeemers redeemers,
-        ICborMaybeIndefList<IPlutusData>? datums,
+        CborList<IPlutusData>? datums,
         byte[] languageViews
     )
     {
@@ -37,9 +36,9 @@ public static class DataHashUtil
         // field is an empty string.
 
         byte[] plutusDataBytes = [];
-        if (datums != null && datums.GetValue().Any())
+        if (datums is { } datumList && datumList.GetEnumerator().MoveNext())
         {
-            plutusDataBytes = CborSerializer.Serialize(datums);
+            plutusDataBytes = CborSerializer.Serialize(datumList);
         }
 
         byte[] redeemerBytes = CborSerializer.Serialize(redeemers) ?? [];

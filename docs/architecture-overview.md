@@ -123,8 +123,8 @@ The source generator (`CborSerializerCodeGen`) processes types at compile time:
 The codebase uses extension methods extensively to provide clean access to nested data structures:
 
 ```csharp
-// Without extensions, deep property access is verbose and differs by era
-var hash = transaction.TransactionBody.Inputs.GetValue()[0].TransactionId;
+// On a concrete ConwayTransactionBody
+var conwayHash = conwayBody.Inputs.First().TransactionId;
 
 // With extension methods, access is simplified and era-agnostic
 var hash = transaction.TransactionBody.Inputs().First().TransactionId();

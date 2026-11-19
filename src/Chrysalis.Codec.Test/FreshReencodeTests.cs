@@ -4,7 +4,6 @@ using System.Reflection;
 using System.Runtime.ExceptionServices;
 using System.Security.Cryptography;
 using System.Text.Json;
-using Chrysalis.Codec.Extensions;
 using Chrysalis.Codec.Serialization;
 using Chrysalis.Codec.Types;
 using Chrysalis.Codec.Types.Cardano.Core;
@@ -26,7 +25,7 @@ public class FreshReencodeTests
     private const string PallasManifest = "pallas-x8.tsv";
     private const string MainnetDeferredManifest = "x8-mainnet-deferred.tsv";
     private static readonly string[] PreprodFixtureFolders = ["blocks", "transactions"];
-    private const string LocalInventory = "113fb10cf0f4b981076de4ec35c9fd09f45988dfedc7565ca85826500beda2c4";
+    private const string LocalInventory = "adcfbed2579482de0e4851ba1b9e534d99e623a7b640a197fdaf8f016077c0c0";
     private const string PallasInventory = "d30f7cf1d9ddceca33f4731396d34e9f6108880faf301d9c76697c6b057b6250";
     private static readonly JsonSerializerOptions ProjectionOptions = new() { MaxDepth = 256 };
 
@@ -37,7 +36,7 @@ public class FreshReencodeTests
         .Where(line => line.StartsWith("# owner\t", StringComparison.Ordinal))
         .Select(line => line[8..]).ToHashSet(StringComparer.Ordinal));
 
-    public static IEnumerable<object[]> LocalRows() => ReplayRows(LocalManifest, LocalInventory, 57, 41);
+    public static IEnumerable<object[]> LocalRows() => ReplayRows(LocalManifest, LocalInventory, 58, 42);
 
     public static IEnumerable<object[]> PallasRows() => ReplayRows(PallasManifest, PallasInventory, 94, 60);
 
@@ -81,7 +80,12 @@ public class FreshReencodeTests
     {
         ArgumentNullException.ThrowIfNull(file);
         byte[] bytes = Verified(LocalPath(file), digest);
-        if (!file.EndsWith(".cbor", StringComparison.Ordinal))
+        if (codec == "cli-conway")
+        {
+            bytes = X10CborListTests.ReadCliWire(bytes);
+            codec = nameof(Era.Conway);
+        }
+        else if (!file.EndsWith(".cbor", StringComparison.Ordinal))
         {
             bytes = Hex(bytes);
         }
@@ -267,7 +271,7 @@ public class FreshReencodeTests
         byte[] witness = [0x82, 0x58, 0x20, .. new byte[32], 0x58, 0x40, .. new byte[64]];
         byte[] bytes = [0xA1, 0x00, 0xD9, 0x01, 0x02, 0x82, .. witness, .. witness];
         PostAlonzoTransactionWitnessSet witnesses = PostAlonzoTransactionWitnessSet.Read(bytes);
-        Assert.Collection(witnesses.VKeyWitnesses!.GetValue(),
+        Assert.Collection(witnesses.VKeyWitnesses!.Value,
             entry => Assert.Equal(witness, entry.Raw.ToArray()),
             entry => Assert.Equal(witness, entry.Raw.ToArray()));
         _ = Reencode("Conway repeated witnesses", bytes, Read<PostAlonzoTransactionWitnessSet>);
@@ -445,6 +449,13 @@ public class FreshReencodeTests
     {
         CborEncodedValue encoded => Convert.ToHexString(encoded.Value.Span),
         CborAny opaque => Convert.ToHexString(opaque.Raw.Span),
+        ICborType list when IsCborList(list.GetType()) => new
+        {
+            cbor = list.GetType().FullName,
+            list.IsIndefinite,
+            HasSetTag = (bool)list.GetType().GetProperty(nameof(CborList<>.HasSetTag))!.GetValue(list)!,
+            items = ((IEnumerable)list).Cast<object?>().Select(Value).ToArray()
+        },
         ICborType cbor => new { cbor = cbor.GetType().FullName, fields = Factory(cbor.GetType()).GetParameters().ToDictionary(parameter => parameter.Name!, parameter => Value(Field(cbor, parameter)), StringComparer.Ordinal) },
         ReadOnlyMemory<byte> memory => Convert.ToHexString(memory.Span),
         byte[] bytes => Convert.ToHexString(bytes),
@@ -454,6 +465,19 @@ public class FreshReencodeTests
         not null when IsPair(value.GetType()) => new { key = Value(value.GetType().GetProperty("Key")!.GetValue(value)), value = Value(value.GetType().GetProperty("Value")!.GetValue(value)) },
         _ => value
     };
+
+    private static bool IsCborList(Type type) => type.IsGenericType && type.GetGenericTypeDefinition() == typeof(CborList<>);
+
+    private static CborList<T> RebuildCborList<T>(CborList<T> list)
+    {
+        T[] items = new T[list.Count];
+        int index = 0;
+        foreach (T item in list)
+        {
+            items[index++] = (T)Rebuild(item)!;
+        }
+        return CborList.Create(items, list.IsIndefinite, list.HasSetTag);
+    }
 
     private static bool IsPair(Type type) => type.IsGenericType && type.GetGenericTypeDefinition() == typeof(KeyValuePair<,>);
 
@@ -481,9 +505,14 @@ public class FreshReencodeTests
         Type type = value.GetType();
         if (value is ICborType cbor)
         {
-            MethodInfo create = Factory(type);
             try
             {
+                if (IsCborList(type))
+                {
+                    return typeof(FreshReencodeTests).GetMethod(nameof(RebuildCborList), BindingFlags.Static | BindingFlags.NonPublic)!
+                        .MakeGenericMethod(type.GetGenericArguments()[0]).Invoke(null, [value]);
+                }
+                MethodInfo create = Factory(type);
                 object?[] arguments = [.. create.GetParameters().Select(parameter => Rebuild(Field(cbor, parameter)))];
                 return create.Invoke(null, arguments);
             }

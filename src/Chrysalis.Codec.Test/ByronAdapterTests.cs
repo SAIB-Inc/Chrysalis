@@ -227,7 +227,7 @@ public class ByronAdapterTests
         BlockWithEra blockWithEra = CborSerializer.Deserialize<BlockWithEra>(cborRaw);
         ByronMainBlock byron = (ByronMainBlock)blockWithEra.Block;
 
-        ByronTxIn firstInput = byron.Body.TxPayload.GetValue().First().Transaction.Inputs.GetValue().First();
+        ByronTxIn firstInput = byron.Body.TxPayload.First().Transaction.Inputs.First();
         TransactionInput input = firstInput.ToTransactionInput();
 
         Assert.Equal(32, input.TransactionId.Length);

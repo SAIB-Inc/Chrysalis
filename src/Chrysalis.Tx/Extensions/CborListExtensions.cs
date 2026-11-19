@@ -8,8 +8,8 @@ namespace Chrysalis.Tx.Extensions;
 public static class CborListExtensions
 {
     /// <summary>
-    /// Wraps a list as a <see cref="CborDefListWithTag{T}"/> (CBOR tagged definite-length set).
+    /// Wraps a list as a <see cref="CborList{T}"/> (CBOR tagged definite-length set).
     /// </summary>
-    public static CborDefListWithTag<T> ToCborSet<T>(this List<T> list)
-        => CborDefListWithTag<T>.Create(list);
+    public static CborList<T> ToCborSet<T>(this List<T> list)
+        => CborList.Create(list, hasSetTag: true);
 }

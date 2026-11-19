@@ -94,6 +94,6 @@ public sealed class B1VersionDomainTests
         System.Reflection.PropertyInfo? property = failure.GetType().GetProperty("Reason");
         Assert.NotNull(property);
         VersionMismatch mismatch = Assert.IsType<VersionMismatch>(property.GetValue(failure));
-        Assert.Equal([32791], mismatch.VersionNumbers.Value);
+        Assert.Equal([32791], mismatch.VersionNumbers);
     }
 }

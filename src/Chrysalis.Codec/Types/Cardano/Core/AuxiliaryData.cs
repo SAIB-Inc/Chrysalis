@@ -15,10 +15,10 @@ public partial interface IAuxiliaryData : ICborType;
 public readonly partial record struct PostAlonzoAuxiliaryDataMap : IAuxiliaryData
 {
     [CborProperty(0)] public partial Metadata? TransactionMetadata { get; }
-    [CborProperty(1)] public partial ICborMaybeIndefList<INativeScript>? NativeScripts { get; }
-    [CborProperty(2)] public partial ICborMaybeIndefList<ReadOnlyMemory<byte>>? PlutusV1Scripts { get; }
-    [CborProperty(3)] public partial ICborMaybeIndefList<ReadOnlyMemory<byte>>? PlutusV2Scripts { get; }
-    [CborProperty(4)] public partial ICborMaybeIndefList<ReadOnlyMemory<byte>>? PlutusV3Scripts { get; }
+    [CborProperty(1)] public partial CborList<INativeScript>? NativeScripts { get; }
+    [CborProperty(2)] public partial CborList<ReadOnlyMemory<byte>>? PlutusV1Scripts { get; }
+    [CborProperty(3)] public partial CborList<ReadOnlyMemory<byte>>? PlutusV2Scripts { get; }
+    [CborProperty(4)] public partial CborList<ReadOnlyMemory<byte>>? PlutusV3Scripts { get; }
 }
 
 [CborSerializable]
@@ -32,7 +32,7 @@ public readonly partial record struct Metadata : IAuxiliaryData
 public readonly partial record struct ShellyMaAuxiliaryData : IAuxiliaryData
 {
     [CborOrder(0)] public partial Metadata TransactionMetadata { get; }
-    [CborOrder(1)] public partial ICborMaybeIndefList<INativeScript> AuxiliaryScripts { get; }
+    [CborOrder(1)] public partial CborList<INativeScript> AuxiliaryScripts { get; }
 }
 
 [CborSerializable]

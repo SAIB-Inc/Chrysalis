@@ -57,6 +57,20 @@ internal static class ModelGraph
         return sum;
     }
 
+    private static long ReadCborList<T>(CborList<T> values)
+    {
+        long sum = 0;
+        foreach (T value in values) { sum = unchecked(sum + Read(value)); }
+        return sum;
+    }
+
+    private static CborList<T> FreshCborList<T>(CborList<T> values)
+    {
+        List<T> result = [];
+        foreach (T value in values) { result.Add(Fresh(value)); }
+        return CborList.Create(result, values.IsIndefinite, values.HasSetTag);
+    }
+
     private static List<T> FreshList<T>(IEnumerable<T> values)
     {
         List<T> result = [];
@@ -108,6 +122,10 @@ internal static class ModelGraph
             {
                 body = Expression.Convert(Expression.Call(item, type.GetMethod(nameof(GetHashCode), Type.EmptyTypes)!), typeof(long));
             }
+            else if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(CborList<>))
+            {
+                body = Expression.Call(Method(nameof(ReadCborList)).MakeGenericMethod(type.GenericTypeArguments), item);
+            }
             else if (sequence is not null)
             {
                 body = Expression.Call(Method(nameof(ReadItems)).MakeGenericMethod(sequence.GenericTypeArguments), item);
@@ -149,6 +167,10 @@ internal static class ModelGraph
             else if (nullable is not null) { body = Expression.Call(Method(nameof(FreshNullable)).MakeGenericMethod(nullable), item); }
             else if (type == typeof(CborAny)) { body = Expression.Call(Method(nameof(FreshOpaque)), item); }
             else if (type == typeof(CborEncodedValue)) { body = Expression.Call(Method(nameof(FreshEmbedded)), item); }
+            else if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(CborList<>))
+            {
+                body = Expression.Call(Method(nameof(FreshCborList)).MakeGenericMethod(type.GenericTypeArguments), item);
+            }
             else if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(List<>))
             {
                 body = Expression.Call(Method(nameof(FreshList)).MakeGenericMethod(type.GenericTypeArguments), item);

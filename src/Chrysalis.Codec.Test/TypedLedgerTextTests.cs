@@ -1,5 +1,4 @@
 using System.Reflection;
-using Chrysalis.Codec.Extensions;
 using Chrysalis.Codec.Serialization;
 using Chrysalis.Codec.Types.Cardano.Core;
 using Chrysalis.Codec.Types.Cardano.Core.Certificates;
@@ -64,7 +63,7 @@ public class TypedLedgerTextTests
         {
             byte[] data = Convert.FromHexString($"84{Body(field, text)}A0F5F6");
             PostMaryTransaction tx = (PostMaryTransaction)ITransaction.Read(data, Era.Conway);
-            return ((ConwayTransactionBody)tx.Body).Certificates!.GetValue().Single();
+            return ((ConwayTransactionBody)tx.Body).Certificates!.Value.Single();
         }
 
         Assert.Equal("abc", GetText(ReadCertificateLeaf(ReadCertificate(Definite), field)));
@@ -85,7 +84,7 @@ public class TypedLedgerTextTests
             // The block header is an unused lazy slice; only the body is under test.
             byte[] data = Convert.FromHexString($"8207858081{Body(field, text)}81A0A080");
             ConwayBlock block = (ConwayBlock)BlockWithEra.Read(data).Block;
-            return block.TransactionBodies.GetValue().Single().Certificates!.GetValue().Single();
+            return block.TransactionBodies.Single().Certificates!.Value.Single();
         }
 
         Assert.Equal("abc", GetText(ReadCertificateLeaf(ReadCertificate(Definite), field)));
@@ -167,7 +166,7 @@ public class TypedLedgerTextTests
     private static ICborType ReadCertificateLeaf(ICertificate certificate, Field field) => field switch
     {
         Field.AnchorUrl => ((ResignCommitteeColdCert)certificate).Anchor!.Value,
-        Field.SingleHostDns or Field.MultiHostDns => ((PoolRegistration)certificate).Relays.GetValue().Single(),
+        Field.SingleHostDns or Field.MultiHostDns => ((PoolRegistration)certificate).Relays.Single(),
         Field.PoolMetadataUrl => ((PoolRegistration)certificate).PoolMetadata!.Value,
         _ => throw new ArgumentOutOfRangeException(nameof(field))
     };

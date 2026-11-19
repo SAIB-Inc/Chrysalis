@@ -1,4 +1,3 @@
-using Chrysalis.Codec.Extensions;
 using SAIB.Cbor.Serialization;
 using Chrysalis.Codec.Serialization;
 using Chrysalis.Codec.Types.Cardano.Core;
@@ -164,16 +163,13 @@ public class ByronTests
         BlockWithEra blockWithEra = CborSerializer.Deserialize<BlockWithEra>(cborRaw);
         ByronMainBlock byron = (ByronMainBlock)blockWithEra.Block;
 
-        Assert.NotNull(byron.Body.TxPayload);
-        Assert.True(byron.Body.TxPayload.GetValue().Any());
+        Assert.True(byron.Body.TxPayload.Count > 0);
 
-        ByronTxPayload firstTx = byron.Body.TxPayload.GetValue().First();
-        Assert.NotNull(firstTx.Transaction.Inputs);
-        Assert.NotNull(firstTx.Transaction.Outputs);
-        Assert.True(firstTx.Transaction.Inputs.GetValue().Any());
-        Assert.True(firstTx.Transaction.Outputs.GetValue().Any());
+        ByronTxPayload firstTx = byron.Body.TxPayload.First();
+        Assert.True(firstTx.Transaction.Inputs.Count > 0);
+        Assert.True(firstTx.Transaction.Outputs.Count > 0);
 
-        ByronTxOut firstOutput = firstTx.Transaction.Outputs.GetValue().First();
+        ByronTxOut firstOutput = firstTx.Transaction.Outputs.First();
         Assert.True(firstOutput.Amount > 0);
     }
 }

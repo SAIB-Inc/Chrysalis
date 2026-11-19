@@ -172,7 +172,7 @@ public class TxBench
     [GlobalSetup]
     public void Setup()
     {
-        core.Setup(); pp = new(44, 155381, null, 16384, null, null, null, null, null, null, null, null, null, null, 4310, new CostMdls(null, null, CborDefList<long>.Create([0, 1, 2])), ExUnitPrices.Create(new CborRationalNumber(577, 10000), new CborRationalNumber(721, 10000000)), null, null, null, 150, 3, null, null, null, null, null, null, null, null, new CborRationalNumber(15, 1));
+        core.Setup(); pp = new(44, 155381, null, 16384, null, null, null, null, null, null, null, null, null, null, 4310, new CostMdls(null, null, CborList.Create<long>([0, 1, 2])), ExUnitPrices.Create(new CborRationalNumber(577, 10000), new CborRationalNumber(721, 10000000)), null, null, null, 150, 3, null, null, null, null, null, null, null, null, new CborRationalNumber(15, 1));
         if (File.Exists(Path.Combine(Fixtures.Root, "fixtures/protocol-parameters.cbor")))
         {
             pp = CborSerializer.Deserialize<CurrentProtocolParamsResponse>(File.ReadAllBytes(Path.Combine(Fixtures.Root, "fixtures/protocol-parameters.cbor"))).ProtocolParams;

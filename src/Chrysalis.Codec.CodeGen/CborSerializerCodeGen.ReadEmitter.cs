@@ -407,7 +407,7 @@ public sealed partial class CborSerializerCodeGen
             string errorStart = $"_errorStart{propertyName}";
             string errorSlice = $"_errorSlice{propertyName}";
             string fieldPath = $"{typePath}.{metadata.PropertyName}";
-            string fieldType = $"typeof({metadata.PropertyTypeFullName.Replace("?", "")})";
+            string fieldType = $"typeof({metadata.NonNullableTypeFullName})";
             string? errorSlot = null;
             string expectedType = fieldType;
             if (metadata.IsList && !metadata.IsListItemTypeOpenGeneric)
@@ -789,7 +789,7 @@ public sealed partial class CborSerializerCodeGen
             }
             else if (metadata.IsPropertyTypeUnion)
             {
-                string callType = metadata.PropertyTypeFullName.Replace("?", "");
+                string callType = metadata.NonNullableTypeFullName;
                 _ = sb.AppendLine("{");
                 _ = sb.AppendLine($"int _pos = data.Length - reader.Buffer.Length;");
                 _ = sb.AppendLine($"{propertyName} = ({metadata.PropertyTypeFullName}){callType}.Read(data.Slice(_pos), out int _consumed);");
@@ -798,7 +798,7 @@ public sealed partial class CborSerializerCodeGen
             }
             else
             {
-                string callType = metadata.PropertyTypeFullName.Replace("?", "");
+                string callType = metadata.NonNullableTypeFullName;
                 _ = sb.AppendLine("{");
                 _ = sb.AppendLine($"int _pos = data.Length - reader.Buffer.Length;");
                 _ = sb.AppendLine($"{propertyName} = ({metadata.PropertyTypeFullName}){callType}.Read(data.Slice(_pos), out int _consumed);");
@@ -826,7 +826,7 @@ public sealed partial class CborSerializerCodeGen
             {
                 _ = sb.AppendLine($"    {hint.Key} => ({metadata.PropertyTypeFullName}){hint.Value}.Read(data.Slice(_pos), out _consumed),");
             }
-            _ = sb.AppendLine($"    _ => ({metadata.PropertyTypeFullName}){metadata.PropertyTypeFullName.Replace("?", "")}.Read(data.Slice(_pos), out _consumed)");
+            _ = sb.AppendLine($"    _ => ({metadata.PropertyTypeFullName}){metadata.NonNullableTypeFullName}.Read(data.Slice(_pos), out _consumed)");
             _ = sb.AppendLine("};");
             _ = sb.AppendLine($"reader = new CborReader(data.Span.Slice(_pos + _consumed));");
             _ = sb.AppendLine("}");
@@ -840,7 +840,7 @@ public sealed partial class CborSerializerCodeGen
         private static string? GetCborMajorTypeGuard(SerializablePropertyMetadata prop, string owningType, string buffer)
         {
             string cleanType = prop.PropertyType.Replace("?", "");
-            string fullType = prop.PropertyTypeFullName.Replace("?", "");
+            string fullType = prop.NonNullableTypeFullName;
             (string? condition, string? kind) = cleanType switch
             {
                 "int" or "long" => ($"({buffer}[0] >> 5) is not (0 or 1)", "integer"),
@@ -852,8 +852,8 @@ public sealed partial class CborSerializerCodeGen
                 "byte[]" => ($"({buffer}[0] >> 5) != 2", "byte string"),
                 _ when prop.IsPairList => ($"({buffer}[0] >> 5) != 5", "map"),
                 _ when cleanType.Contains("Dictionary<") => ($"({buffer}[0] >> 5) != 5", KnownCollectionKind(fullType, "Dictionary", "map")),
-                _ when cleanType.Contains("List<") || cleanType.Contains("ICborMaybeIndefList<") =>
-                    ($"({buffer}[0] >> 5) is not (4 or 6)", fullType.Contains("Chrysalis.Codec.Types.ICborMaybeIndefList<") ? "array" : KnownCollectionKind(fullType, "List", "array")),
+                _ when cleanType.Contains("List<") =>
+                    ($"({buffer}[0] >> 5) is not (4 or 6)", fullType.Contains("Chrysalis.Codec.Types.CborList<") ? "array" : KnownCollectionKind(fullType, "List", "array")),
                 _ => (null, null)
             };
             string expected = kind is null ? $"typeof({fullType})" : $"\"{kind}\"";
@@ -947,7 +947,7 @@ public sealed partial class CborSerializerCodeGen
             }
             else if (prop.IsPropertyTypeUnion)
             {
-                string nonNullType = prop.PropertyTypeFullName.Replace("?", "");
+                string nonNullType = prop.NonNullableTypeFullName;
                 _ = sb.AppendLine("{");
                 _ = sb.AppendLine($"int _pos = data.Length - reader.Buffer.Length;");
                 _ = sb.AppendLine($"value = {nonNullType}.Read(data.Slice(_pos), out int _consumed);");
@@ -956,7 +956,7 @@ public sealed partial class CborSerializerCodeGen
             }
             else
             {
-                string nonNullType = prop.PropertyTypeFullName.Replace("?", "");
+                string nonNullType = prop.NonNullableTypeFullName;
                 _ = sb.AppendLine("{");
                 _ = sb.AppendLine($"int _pos = data.Length - reader.Buffer.Length;");
                 _ = sb.AppendLine($"value = {nonNullType}.Read(data.Slice(_pos), out int _consumed);");

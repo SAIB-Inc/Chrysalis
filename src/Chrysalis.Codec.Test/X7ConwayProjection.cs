@@ -1,7 +1,6 @@
 using System.Globalization;
 using System.Reflection;
 using System.Text.Json;
-using Chrysalis.Codec.Extensions;
 using Chrysalis.Codec.Extensions.Cardano.Core.Transaction;
 using Chrysalis.Codec.Serialization;
 using Chrysalis.Codec.Serialization.Attributes;
@@ -36,24 +35,24 @@ internal static class X7ConwayProjection
         void InputRefs(string key, IEnumerable<TransactionInput> actual) => Assert.Equal(cli.GetProperty(key).EnumerateArray().Select(item => item.GetString()),
             actual.Select(input => $"{Hex(input.TransactionId)}#{input.Index}"));
         Assert.Equal(ulong.Parse(cli.GetProperty("fee").GetString()!.Split(' ')[0], CultureInfo.InvariantCulture), body.Fee);
-        InputRefs("inputs", body.Inputs.GetValue());
-        InputRefs("collateral inputs", body.Collateral!.GetValue());
-        InputRefs("reference inputs", body.ReferenceInputs?.GetValue().ToArray() ?? []);
-        Assert.Equal(Count("outputs"), body.Outputs.GetValue().ToArray().Length);
-        foreach ((ITransactionOutput output, JsonElement projection) in body.Outputs.GetValue().Zip(cli.GetProperty("outputs").EnumerateArray()))
+        InputRefs("inputs", body.Inputs);
+        InputRefs("collateral inputs", body.Collateral!.Value);
+        InputRefs("reference inputs", body.ReferenceInputs?.ToArray() ?? []);
+        Assert.Equal(Count("outputs"), body.Outputs.ToArray().Length);
+        foreach ((ITransactionOutput output, JsonElement projection) in body.Outputs.Zip(cli.GetProperty("outputs").EnumerateArray()))
         {
             CheckOutput(output, projection);
         }
         CheckOutput(Assert.IsAssignableFrom<ITransactionOutput>(body.CollateralReturn), cli.GetProperty("return collateral"));
-        Assert.Equal(Count("certificates"), body.Certificates?.GetValue().ToArray().Length ?? 0);
+        Assert.Equal(Count("certificates"), body.Certificates?.ToArray().Length ?? 0);
         Assert.Equal(Count("withdrawals"), body.Withdrawals?.Value.Count ?? 0);
         if (body.Withdrawals is { } withdrawals)
         {
             Assert.Equal(cli.GetProperty("withdrawals").EnumerateArray().Select(row => row.GetProperty("amount").GetString()).Order(),
                 withdrawals.Value.Values.Select(amount => $"{amount} Lovelace").Order());
         }
-        Assert.Equal(Count("required signers (payment key hashes needed for scripts)"), body.RequiredSigners?.GetValue().ToArray().Length ?? 0);
-        Assert.Equal(Count("governance actions"), body.ProposalProcedures?.GetValue().ToArray().Length ?? 0);
+        Assert.Equal(Count("required signers (payment key hashes needed for scripts)"), body.RequiredSigners?.ToArray().Length ?? 0);
+        Assert.Equal(Count("governance actions"), body.ProposalProcedures?.ToArray().Length ?? 0);
         Assert.Equal(cli.GetProperty("voters").EnumerateObject().Count(), body.VotingProcedures?.Value.Count ?? 0);
         Assert.Equal(Number(cli.GetProperty("currentTreasuryValue")), body.TreasuryValue);
         Assert.Equal(Number(cli.GetProperty("treasuryDonation")) ?? 0, body.Donation ?? 0);
@@ -64,7 +63,7 @@ internal static class X7ConwayProjection
         JsonElement metadata = cli.GetProperty("metadata");
         PostAlonzoAuxiliaryDataMap? auxiliary = tx.AuxiliaryData is PostAlonzoAuxiliaryDataMap map ? map : null;
         Assert.Equal(metadata.ValueKind == JsonValueKind.Object ? metadata.EnumerateObject().Count() : 0, auxiliary?.TransactionMetadata?.Value.Count ?? 0);
-        Assert.Equal(cli.GetProperty("auxiliary scripts").ValueKind != JsonValueKind.Null, auxiliary?.NativeScripts?.GetValue().ToArray().Length > 0);
+        Assert.Equal(cli.GetProperty("auxiliary scripts").ValueKind != JsonValueKind.Null, auxiliary?.NativeScripts?.ToArray().Length > 0);
         JsonElement mint = cli.GetProperty("mint");
         Assert.Equal(mint.ValueKind == JsonValueKind.Object ? mint.EnumerateObject().Count() : 0, body.Mint?.Value.Count ?? 0);
         if (body.Mint is { } assets)
@@ -78,14 +77,14 @@ internal static class X7ConwayProjection
                 }
             }
         }
-        Assert.Equal(Count("datums"), witnesses.PlutusDataSet?.GetValue().ToArray().Length ?? 0);
+        Assert.Equal(Count("datums"), witnesses.PlutusDataSet?.ToArray().Length ?? 0);
         RedeemerMap redeemers = Assert.IsType<RedeemerMap>(witnesses.Redeemers);
         Assert.Equal(cli.GetProperty("redeemers").EnumerateArray().Select(row => row.GetProperty("redeemer").GetProperty("execution units"))
             .Select(units => (units.GetProperty("memory").GetUInt64(), units.GetProperty("steps").GetUInt64())).Order(),
             redeemers.Value.Values.Select(row => (row.ExUnits.Mem, row.ExUnits.Steps)).Order());
-        Assert.Equal(Count("witnesses"), (witnesses.VKeyWitnesses?.GetValue().ToArray().Length ?? 0) + (witnesses.BootstrapWitnesses?.GetValue().ToArray().Length ?? 0));
-        Assert.Equal(Count("scripts"), (witnesses.NativeScripts?.GetValue().ToArray().Length ?? 0) + (witnesses.PlutusV1Scripts?.GetValue().ToArray().Length ?? 0)
-            + (witnesses.PlutusV2Scripts?.GetValue().ToArray().Length ?? 0) + (witnesses.PlutusV3Scripts?.GetValue().ToArray().Length ?? 0));
+        Assert.Equal(Count("witnesses"), (witnesses.VKeyWitnesses?.ToArray().Length ?? 0) + (witnesses.BootstrapWitnesses?.ToArray().Length ?? 0));
+        Assert.Equal(Count("scripts"), (witnesses.NativeScripts?.ToArray().Length ?? 0) + (witnesses.PlutusV1Scripts?.ToArray().Length ?? 0)
+            + (witnesses.PlutusV2Scripts?.ToArray().Length ?? 0) + (witnesses.PlutusV3Scripts?.ToArray().Length ?? 0));
     }
 
     private static void CheckOutput(ITransactionOutput output, JsonElement cli)

@@ -153,7 +153,7 @@ public class ShapesBlueprintTests
     public void PolicyRecursiveUnionIsGenerated()
     {
         Shape.IFixturesPolicyPolicy key = new Shape.FixturesPolicyPolicyKey(Hash: Bytes(0xAB));
-        Shape.IFixturesPolicyPolicy policy = new Shape.All(Policies: CborDefList<Shape.IFixturesPolicyPolicy>.Create([key]));
+        Shape.IFixturesPolicyPolicy policy = new Shape.All(Policies: CborList.Create([key]));
 
         // Constructor 1, indefinite fields, a definite one-element list containing constructor 0 and a one-byte hash.
         Assert.Equal("D87A9F81D8799F41ABFFFF", Convert.ToHexString(CborSerializer.Serialize(policy)));
@@ -166,14 +166,14 @@ public class ShapesBlueprintTests
         Shape.Address treasury = new(Payment: payment,
             Stake: Some<Shape.IReferenced>.Create(new Shape.Inline(Field0: payment)));
         Shape.Address payout = new(Payment: new Shape.Script(Field0: Bytes(0x02)), Stake: None<Shape.IReferenced>.Create());
-        Some<CborDefList<PlutusBoundedBytes>> operators = Some<CborDefList<PlutusBoundedBytes>>.Create(CborDefList<PlutusBoundedBytes>.Create([Bytes(0x03)]));
+        Some<CborList<PlutusBoundedBytes>> operators = Some<CborList<PlutusBoundedBytes>>.Create(CborList.Create([Bytes(0x03)]));
         Shape.Config config = new(
             Owner: new Shape.After(Time: PlutusInt.Create(100)),
             Operators: operators,
             Treasury: treasury,
             Payout: payout,
             PayoutShare: new Shape.TupleIntInt(Field0: PlutusInt.Create(1), Field1: PlutusInt.Create(10)),
-            StakeKeys: CborDefList<Shape.IFixturesAddressCredential>.Create([payment]),
+            StakeKeys: CborList.Create([payment]),
             Guardian: new Shape.Before(Time: PlutusInt.Create(200)),
             FeeFloor: PlutusInt.Create(1),
             FeeStep: PlutusInt.Create(2),

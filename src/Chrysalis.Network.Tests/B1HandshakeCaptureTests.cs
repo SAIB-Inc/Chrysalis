@@ -27,7 +27,7 @@ public sealed class B1HandshakeCaptureTests
         (HandshakeMessage message, JsonElement expected) = Capture("legacy-mismatch-node-11.2.1.cbor");
         Refuse reply = Assert.IsType<Refuse>(message);
         VersionMismatch reason = Assert.IsType<VersionMismatch>(reply.Reason);
-        Assert.Equal(expected.GetProperty("versions").EnumerateArray().Select(version => version.GetInt32()), reason.VersionNumbers.Value);
+        Assert.Equal(expected.GetProperty("versions").EnumerateArray().Select(version => version.GetInt32()), reason.VersionNumbers);
     }
 
     /// <summary>The private Haskell node's V23 accept is decoded independently of the default offer.</summary>

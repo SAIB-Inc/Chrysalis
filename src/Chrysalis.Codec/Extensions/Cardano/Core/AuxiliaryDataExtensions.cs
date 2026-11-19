@@ -37,8 +37,8 @@ public static class AuxiliaryDataExtensions
         ArgumentNullException.ThrowIfNull(self);
         return self switch
         {
-            PostAlonzoAuxiliaryDataMap postAlonzoAuxiliaryDataMap => postAlonzoAuxiliaryDataMap.NativeScripts?.GetValue(),
-            ShellyMaAuxiliaryData shellyMaAuxiliaryData => shellyMaAuxiliaryData.AuxiliaryScripts.GetValue(),
+            PostAlonzoAuxiliaryDataMap postAlonzoAuxiliaryDataMap => postAlonzoAuxiliaryDataMap.NativeScripts,
+            ShellyMaAuxiliaryData shellyMaAuxiliaryData => shellyMaAuxiliaryData.AuxiliaryScripts,
             _ => null
         };
     }
@@ -53,7 +53,7 @@ public static class AuxiliaryDataExtensions
         ArgumentNullException.ThrowIfNull(self);
         return self switch
         {
-            PostAlonzoAuxiliaryDataMap postAlonzoAuxiliaryDataMap => postAlonzoAuxiliaryDataMap.PlutusV1Scripts?.GetValue(),
+            PostAlonzoAuxiliaryDataMap postAlonzoAuxiliaryDataMap => postAlonzoAuxiliaryDataMap.PlutusV1Scripts,
             _ => null
         };
     }
@@ -68,7 +68,7 @@ public static class AuxiliaryDataExtensions
         ArgumentNullException.ThrowIfNull(self);
         return self switch
         {
-            PostAlonzoAuxiliaryDataMap postAlonzoAuxiliaryDataMap => postAlonzoAuxiliaryDataMap.PlutusV2Scripts?.GetValue(),
+            PostAlonzoAuxiliaryDataMap postAlonzoAuxiliaryDataMap => postAlonzoAuxiliaryDataMap.PlutusV2Scripts,
             _ => null
         };
     }
@@ -83,7 +83,7 @@ public static class AuxiliaryDataExtensions
         ArgumentNullException.ThrowIfNull(self);
         return self switch
         {
-            PostAlonzoAuxiliaryDataMap postAlonzoAuxiliaryDataMap => postAlonzoAuxiliaryDataMap.PlutusV3Scripts?.GetValue(),
+            PostAlonzoAuxiliaryDataMap postAlonzoAuxiliaryDataMap => postAlonzoAuxiliaryDataMap.PlutusV3Scripts,
             _ => null
         };
     }

@@ -142,7 +142,7 @@ public static class TransactionBuilderExtensions
         ArgumentNullException.ThrowIfNull(scripts);
         int langVersion = scripts[0].Version() - 1;
         CostMdls costMdls = builder.Pparams!.CostModelsForScriptLanguage!;
-        ICborMaybeIndefList<long>? usedLanguage = langVersion switch
+        CborList<long>? usedLanguage = langVersion switch
         {
             0 => costMdls.PlutusV1,
             1 => costMdls.PlutusV2,

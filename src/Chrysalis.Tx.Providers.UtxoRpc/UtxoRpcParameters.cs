@@ -80,8 +80,8 @@ internal static class UtxoRpcParameters
             ? throw new InvalidDataException($"{field} requires a nonnegative numerator and a positive denominator.")
             : CborRationalNumber.Create((ulong)value.Numerator, value.Denominator);
 
-    private static CborDefList<long>? CostModel(Spec.CostModel? value) =>
-        value is { Values.Count: > 0 } ? CborDefList<long>.Create([.. value.Values]) : null;
+    private static CborList<long>? CostModel(Spec.CostModel? value) =>
+        value is { Values.Count: > 0 } ? CborList.Create<long>([.. value.Values]) : null;
 
     private static RepeatedField<Spec.RationalNumber>? Thresholds(Spec.VotingThresholds? value, int count, string field) =>
         value is null || value.Thresholds.Count == 0 ? null

@@ -377,13 +377,13 @@ public static class ScriptContextBuilder
     {
         PlutusConstr constr => Constr(
             CborTagToConstrIndex(constr),
-            constr.Fields.GetValue().Select(CodecPlutusDataToVm).ToImmutableArray()),
+            constr.Fields.Select(CodecPlutusDataToVm).ToImmutableArray()),
 
         PlutusMap map => Map(
             map.Value.Select(kv => (CodecPlutusDataToVm(kv.Key), CodecPlutusDataToVm(kv.Value)))),
 
         PlutusList list => List(
-            list.Value.GetValue().Select(CodecPlutusDataToVm)),
+            list.Value.Select(CodecPlutusDataToVm)),
 
         PlutusInt i32 => Int(i32.Value),
         PlutusInt64 i64 => Int(i64.Value),
@@ -847,14 +847,14 @@ public static class ScriptContextBuilder
 
     private static VmMap DataInfoToPlutusData(PostAlonzoTransactionWitnessSet witnessSet)
     {
-        if (witnessSet.PlutusDataSet is null)
+        if (witnessSet.PlutusDataSet is not { } datums)
         {
             return EmptyMap();
         }
 
         List<(VmPlutusData Key, VmPlutusData Value)> entries = [];
 
-        foreach (CodecPlutusData datum in witnessSet.PlutusDataSet.GetValue())
+        foreach (CodecPlutusData datum in datums)
         {
             byte[] datumBytes = CborSerializer.Serialize(datum);
             byte[] hash = HashUtil.Blake2b256(datumBytes);
@@ -937,12 +937,12 @@ public static class ScriptContextBuilder
 
         // Sort and resolve inputs
         List<(TransactionInput Input, ITransactionOutput Output)> sortedInputs =
-            SortAndResolveInputs(body.Inputs.GetValue(), utxos);
+            SortAndResolveInputs(body.Inputs, utxos);
 
         // Reference inputs
         List<(TransactionInput Input, ITransactionOutput Output)> referenceInputs =
-            body.ReferenceInputs is not null
-                ? SortAndResolveInputs(body.ReferenceInputs.GetValue(), utxos)
+            body.ReferenceInputs is { } presentReferenceInputs
+                ? SortAndResolveInputs(presentReferenceInputs, utxos)
                 : [];
 
         // Sorted mint
@@ -953,7 +953,7 @@ public static class ScriptContextBuilder
                 .ToList();
 
         // Certificates
-        List<ICertificate> certificates = body.Certificates?.GetValue().ToList() ?? [];
+        List<ICertificate> certificates = body.Certificates?.ToList() ?? [];
 
         // Withdrawals — sorted by parsed address (network, credential type, hash) like Aiken
         List<(RewardAccount Account, ulong Coin)> sortedWithdrawals =
@@ -963,7 +963,7 @@ public static class ScriptContextBuilder
                 .ToList() ?? [];
 
         // Proposals
-        List<ProposalProcedure> proposals = body.ProposalProcedures?.GetValue().ToList() ?? [];
+        List<ProposalProcedure> proposals = body.ProposalProcedures?.ToList() ?? [];
 
         // Voters — sorted by (sort_index, hash) like Aiken sort_voters
         List<Voter> sortedVoters = body.VotingProcedures?.Value?.Keys
@@ -987,7 +987,7 @@ public static class ScriptContextBuilder
             // reference_inputs
             List(referenceInputs.Select(i => TxInInfoToPlutusData(i.Input, i.Output))),
             // outputs
-            List(body.Outputs.GetValue().Select(OutputToPlutusData)),
+            List(body.Outputs.Select(OutputToPlutusData)),
             // fee
             Int(body.Fee),
             // mint
@@ -999,7 +999,7 @@ public static class ScriptContextBuilder
             // valid_range
             TimeRangeToPlutusData(body.ValidityIntervalStart, body.TimeToLive, slotConfig),
             // signatories
-            List(body.RequiredSigners?.GetValue()
+            List(body.RequiredSigners?
                 .OrderBy(s => s, ByteMemoryComparer.Instance)
                 .Select(s => (VmPlutusData)Bytes(s)) ?? []),
             // redeemers (map of purpose → redeemer data)
@@ -1074,7 +1074,7 @@ public static class ScriptContextBuilder
         ArgumentNullException.ThrowIfNull(lookupTable);
 
         List<(TransactionInput Input, ITransactionOutput Output)> sortedInputs =
-            SortAndResolveInputs(body.Inputs.GetValue(), utxos);
+            SortAndResolveInputs(body.Inputs, utxos);
 
         List<(ReadOnlyMemory<byte> PolicyId, TokenBundleMint Bundle)>? sortedMint =
             body.Mint?.Value?
@@ -1169,7 +1169,7 @@ public static class ScriptContextBuilder
 
             case 2: // Cert
                 {
-                    List<ICertificate> certificates = body.Certificates?.GetValue().ToList() ?? [];
+                    List<ICertificate> certificates = body.Certificates?.ToList() ?? [];
                     int idx = (int)redeemer.Index;
                     if (idx >= certificates.Count)
                     {
@@ -1253,14 +1253,20 @@ public static class ScriptContextBuilder
         ArgumentNullException.ThrowIfNull(slotConfig);
 
         // Per-language flat cost array from the provider's protocol params (null → evaluator default).
-        static IReadOnlyList<long>? FlatCosts(ICborMaybeIndefList<long>? c) => c switch
+        static IReadOnlyList<long>? FlatCosts(CborList<long>? costs)
         {
-            CborDefList<long> d => d.Value,
-            CborIndefList<long> d => d.Value,
-            CborDefListWithTag<long> d => d.Value,
-            CborIndefListWithTag<long> d => d.Value,
-            _ => null,
-        };
+            if (costs is not { } list)
+            {
+                return null;
+            }
+            long[] result = new long[list.Count];
+            int index = 0;
+            foreach (long cost in list)
+            {
+                result[index++] = cost;
+            }
+            return result;
+        }
 
         List<RedeemerInfo> redeemers = ExtractRedeemers(witnessSet.Redeemers);
         if (redeemers.Count == 0)
@@ -1272,7 +1278,7 @@ public static class ScriptContextBuilder
 
         // Pre-compute sorted collections (shared across all redeemers)
         List<(TransactionInput Input, ITransactionOutput Output)> sortedInputs =
-            SortAndResolveInputs(body.Inputs.GetValue(), utxos);
+            SortAndResolveInputs(body.Inputs, utxos);
 
         List<(ReadOnlyMemory<byte> PolicyId, TokenBundleMint Bundle)>? sortedMint =
             body.Mint?.Value?
@@ -1280,7 +1286,7 @@ public static class ScriptContextBuilder
                 .Select(kv => (kv.Key, kv.Value))
                 .ToList();
 
-        List<ICertificate> certificates = body.Certificates?.GetValue().ToList() ?? [];
+        List<ICertificate> certificates = body.Certificates?.ToList() ?? [];
 
         List<(RewardAccount Account, ulong Coin)> sortedWithdrawals =
             body.Withdrawals?.Value?
@@ -1288,7 +1294,7 @@ public static class ScriptContextBuilder
                 .Select(kv => (kv.Key, kv.Value))
                 .ToList() ?? [];
 
-        List<ProposalProcedure> proposals = body.ProposalProcedures?.GetValue().ToList() ?? [];
+        List<ProposalProcedure> proposals = body.ProposalProcedures?.ToList() ?? [];
         List<Voter> sortedVoters = body.VotingProcedures?.Value?.Keys
             .OrderBy(VoterSortIndex)
             .ThenBy(v => v.Hash, ByteMemoryComparer.Instance)
@@ -1394,27 +1400,27 @@ public sealed class DataLookupTable
         DataLookupTable table = new();
 
         // Witness set scripts — hash is blake2b-224(version_byte || script_cbor)
-        if (witnessSet.PlutusV1Scripts is not null)
+        if (witnessSet.PlutusV1Scripts is { } plutusV1Scripts)
         {
-            foreach (ReadOnlyMemory<byte> script in witnessSet.PlutusV1Scripts.GetValue())
+            foreach (ReadOnlyMemory<byte> script in plutusV1Scripts)
             {
                 byte[] hash = ScriptHash(1, script.Span);
                 table._scripts[Convert.ToHexString(hash)] = (script.ToArray(), 1);
             }
         }
 
-        if (witnessSet.PlutusV2Scripts is not null)
+        if (witnessSet.PlutusV2Scripts is { } plutusV2Scripts)
         {
-            foreach (ReadOnlyMemory<byte> script in witnessSet.PlutusV2Scripts.GetValue())
+            foreach (ReadOnlyMemory<byte> script in plutusV2Scripts)
             {
                 byte[] hash = ScriptHash(2, script.Span);
                 table._scripts[Convert.ToHexString(hash)] = (script.ToArray(), 2);
             }
         }
 
-        if (witnessSet.PlutusV3Scripts is not null)
+        if (witnessSet.PlutusV3Scripts is { } plutusV3Scripts)
         {
-            foreach (ReadOnlyMemory<byte> script in witnessSet.PlutusV3Scripts.GetValue())
+            foreach (ReadOnlyMemory<byte> script in plutusV3Scripts)
             {
                 byte[] hash = ScriptHash(3, script.Span);
                 table._scripts[Convert.ToHexString(hash)] = (script.ToArray(), 3);
@@ -1422,9 +1428,9 @@ public sealed class DataLookupTable
         }
 
         // Witness set datums
-        if (witnessSet.PlutusDataSet is not null)
+        if (witnessSet.PlutusDataSet is { } datums)
         {
-            foreach (CodecPlutusData datum in witnessSet.PlutusDataSet.GetValue())
+            foreach (CodecPlutusData datum in datums)
             {
                 byte[] datumBytes = CborSerializer.Serialize(datum);
                 byte[] hash = HashUtil.Blake2b256(datumBytes);

@@ -4,7 +4,6 @@ using System.Runtime.ExceptionServices;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text.Json;
-using Chrysalis.Codec.Extensions;
 using Chrysalis.Codec.Extensions.Cardano.Core.Transaction;
 using Chrysalis.Codec.Serialization;
 using Chrysalis.Codec.Serialization.Attributes;
@@ -72,7 +71,7 @@ public partial record TypedMapShape([CborOrder(0), CborDefinite] Dictionary<int,
 [CborSerializable, CborList]
 public readonly partial record struct ChunkedByteList : ICborType
 {
-    [CborOrder(0)] public partial ICborMaybeIndefList<ReadOnlyMemory<byte>> Items { get; }
+    [CborOrder(0)] public partial CborList<ReadOnlyMemory<byte>> Items { get; }
 }
 
 [CborSerializable, CborUnion]
@@ -360,7 +359,7 @@ public class CborTests(ITestOutputHelper output)
         Assert.Equal(consumed, memorySize);
 
         ChunkedByteList list = ChunkedByteList.Read(Convert.FromHexString("8182" + hex));
-        CborListEnumerator<ReadOnlyMemory<byte>> values = list.Items.GetValue().GetEnumerator();
+        CborListEnumerator<ReadOnlyMemory<byte>> values = list.Items.GetEnumerator();
         Assert.True(values.MoveNext());
         Assert.Equal(first, Convert.ToHexString(values.Current.Span));
         Assert.True(values.MoveNext());
@@ -779,7 +778,7 @@ public class CborTests(ITestOutputHelper output)
         "DatumHash" => [static (data, out consumed) => DatumHashOption.Read(data, out consumed).DatumHash],
         "InlineDatum" => [static (data, out consumed) => InlineDatumOption.Read(data, out consumed).Data],
         "ScriptReference" => [static (data, out consumed) => PostAlonzoTransactionOutput.Read(data, out consumed).ScriptRef],
-        "ScriptWitnesses" => [static (data, out consumed) => PostAlonzoTransactionWitnessSet.Read(data, out consumed).PlutusV1Scripts!.GetValue().Single()],
+        "ScriptWitnesses" => [static (data, out consumed) => PostAlonzoTransactionWitnessSet.Read(data, out consumed).PlutusV1Scripts!.Value.Single()],
         "TaggedDefiniteText" => [CborSerializer.Deserialize<string>, static (data, out consumed) => CborString.Read(data, out consumed).Value],
         _ => throw new ArgumentOutOfRangeException(nameof(id), id, "Missing X32 reader.")
     };

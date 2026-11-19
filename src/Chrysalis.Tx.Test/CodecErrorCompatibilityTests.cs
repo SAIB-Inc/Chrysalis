@@ -3,9 +3,11 @@ using System.Reflection;
 using Chrysalis.Codec.Serialization;
 using Chrysalis.Codec.Types.Cardano.Core.Common;
 using Chrysalis.Codec.Types.Cardano.Core.Protocol;
+using Chrysalis.Codec.Types.Cardano.Core.TransactionWitness;
 using Chrysalis.Tx.Builders;
 using Chrysalis.Tx.Extensions;
 using Chrysalis.Tx.Models;
+using Chrysalis.Tx.Utils;
 using Xunit;
 
 namespace Chrysalis.Tx.Test;
@@ -20,6 +22,16 @@ public class CodecErrorCompatibilityTests
         MultiAssetOutput assets = MultiAssetOutput.Read(Convert.FromHexString("A141AA01"));
         Assert.Null(assets.TokenBundleByPolicyId("not hex"));
         _ = Assert.ThrowsAny<CborDecodeException>(() => assets.TokenBundleByPolicyId("AA"));
+    }
+
+    /// <summary>Hashing a datum set still rejects a non-Plutus first item.</summary>
+    [Fact]
+    public void ScriptDataHashRejectsInvalidFirstDatum()
+    {
+        PostAlonzoTransactionWitnessSet witnesses = PostAlonzoTransactionWitnessSet.Read(Convert.FromHexString("A104D9010281F6"));
+        Assert.NotNull(witnesses.PlutusDataSet);
+        RedeemerMap redeemers = RedeemerMap.Read(Convert.FromHexString("A0"));
+        _ = Assert.ThrowsAny<CborDecodeException>(() => DataHashUtil.CalculateScriptDataHash(redeemers, witnesses.PlutusDataSet, [0xA0]));
     }
 
     /// <summary>A payload the CBOR codec can write but Plutus cannot read is still skipped.</summary>

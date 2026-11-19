@@ -1,4 +1,3 @@
-using Chrysalis.Codec.Extensions;
 using Chrysalis.Codec.Extensions.Cardano.Core;
 using Chrysalis.Codec.Extensions.Cardano.Core.Header;
 using Chrysalis.Codec.Serialization;
@@ -84,7 +83,7 @@ public record ChainSyncHeader(
                 ByronBlockHead blockHead = CborSerializer.Deserialize<ByronBlockHead>(HeaderCbor);
                 ulong slot = blockHead.ConsensusData.ToAbsoluteSlot();
                 byte[] hash = BlockExtensions.HashByronHeader(1, HeaderCbor.Span);
-                ulong height = blockHead.ConsensusData.Difficulty.GetValue().FirstOrDefault();
+                ulong height = blockHead.ConsensusData.Difficulty.FirstOrDefault();
                 return new ChainPoint(slot, hash, height);
             }
         }

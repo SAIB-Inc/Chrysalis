@@ -25,8 +25,8 @@ public sealed class CborSerializableAttribute : Attribute;
 /// [CborSerializable]
 /// [CborMap]
 /// public partial record TransactionBody(
-///     [CborProperty(0)] ICborMaybeIndefList&lt;TransactionInput&gt; Inputs,
-///     [CborProperty(1)] ICborMaybeIndefList&lt;ITransactionOutput&gt; Outputs,
+///     [CborProperty(0)] CborList&lt;TransactionInput&gt; Inputs,
+///     [CborProperty(1)] CborList&lt;ITransactionOutput&gt; Outputs,
 ///     [CborProperty(2)] ulong Fee
 /// ) : CborRecord;
 /// </code>

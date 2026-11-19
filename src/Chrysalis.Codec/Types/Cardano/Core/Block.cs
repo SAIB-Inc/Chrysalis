@@ -15,10 +15,10 @@ public partial interface IBlock : ICborType;
 public readonly partial record struct AlonzoCompatibleBlock : IBlock
 {
     [CborOrder(0)] public partial BlockHeader Header { get; }
-    [CborOrder(1)] public partial ICborMaybeIndefList<AlonzoTransactionBody> TransactionBodies { get; }
-    [CborOrder(2)] public partial ICborMaybeIndefList<PostAlonzoTransactionWitnessSet> TransactionWitnessSets { get; }
+    [CborOrder(1)] public partial CborList<AlonzoTransactionBody> TransactionBodies { get; }
+    [CborOrder(2)] public partial CborList<PostAlonzoTransactionWitnessSet> TransactionWitnessSets { get; }
     [CborOrder(3)] public partial AuxiliaryDataSet AuxiliaryDataSet { get; }
-    [CborOrder(4)] public partial ICborMaybeIndefList<int>? InvalidTransactions { get; }
+    [CborOrder(4)] public partial CborList<int>? InvalidTransactions { get; }
 }
 
 [CborSerializable]
@@ -26,10 +26,10 @@ public readonly partial record struct AlonzoCompatibleBlock : IBlock
 public readonly partial record struct BabbageBlock : IBlock
 {
     [CborOrder(0)] public partial BlockHeader Header { get; }
-    [CborOrder(1)] public partial ICborMaybeIndefList<BabbageTransactionBody> TransactionBodies { get; }
-    [CborOrder(2)] public partial ICborMaybeIndefList<PostAlonzoTransactionWitnessSet> TransactionWitnessSets { get; }
+    [CborOrder(1)] public partial CborList<BabbageTransactionBody> TransactionBodies { get; }
+    [CborOrder(2)] public partial CborList<PostAlonzoTransactionWitnessSet> TransactionWitnessSets { get; }
     [CborOrder(3)] public partial AuxiliaryDataSet AuxiliaryDataSet { get; }
-    [CborOrder(4)] public partial ICborMaybeIndefList<int>? InvalidTransactions { get; }
+    [CborOrder(4)] public partial CborList<int>? InvalidTransactions { get; }
 }
 
 [CborSerializable]
@@ -37,8 +37,8 @@ public readonly partial record struct BabbageBlock : IBlock
 public readonly partial record struct ConwayBlock : IBlock
 {
     [CborOrder(0)] public partial BlockHeader Header { get; }
-    [CborOrder(1)] public partial ICborMaybeIndefList<ConwayTransactionBody> TransactionBodies { get; }
-    [CborOrder(2)] public partial ICborMaybeIndefList<PostAlonzoTransactionWitnessSet> TransactionWitnessSets { get; }
+    [CborOrder(1)] public partial CborList<ConwayTransactionBody> TransactionBodies { get; }
+    [CborOrder(2)] public partial CborList<PostAlonzoTransactionWitnessSet> TransactionWitnessSets { get; }
     [CborOrder(3)] public partial AuxiliaryDataSet AuxiliaryDataSet { get; }
-    [CborOrder(4)] public partial ICborMaybeIndefList<int>? InvalidTransactions { get; }
+    [CborOrder(4)] public partial CborList<int>? InvalidTransactions { get; }
 }

@@ -11,7 +11,7 @@ public partial interface IPlutusData : ICborType;
 [CborConstr]
 public readonly partial record struct PlutusConstr : IPlutusData
 {
-    [CborOrder(0)] public partial ICborMaybeIndefList<IPlutusData> Fields { get; }
+    [CborOrder(0)] public partial CborList<IPlutusData> Fields { get; }
 }
 
 [CborSerializable]
@@ -23,7 +23,7 @@ public readonly partial record struct PlutusMap : IPlutusData
 [CborSerializable]
 public readonly partial record struct PlutusList : IPlutusData
 {
-    public partial ICborMaybeIndefList<IPlutusData> Value { get; }
+    public partial CborList<IPlutusData> Value { get; }
 }
 
 [CborSerializable]

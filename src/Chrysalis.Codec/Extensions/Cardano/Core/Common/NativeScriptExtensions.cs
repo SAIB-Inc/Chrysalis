@@ -1,4 +1,3 @@
-using Chrysalis.Codec.Types;
 using Chrysalis.Codec.Types.Cardano.Core.Scripts;
 using CNativeScript = Chrysalis.Codec.Types.Cardano.Core.Scripts.INativeScript;
 
@@ -54,21 +53,9 @@ public static class NativeScriptExtensions
         ArgumentNullException.ThrowIfNull(self);
         return self switch
         {
-            ScriptAll scriptAll => scriptAll.Scripts switch
-            {
-                CborIndefList<CNativeScript> defList => defList.Value,
-                _ => []
-            },
-            ScriptAny scriptAny => scriptAny.Scripts switch
-            {
-                CborDefList<CNativeScript> defList => defList.Value,
-                _ => []
-            },
-            ScriptNOfK scriptNOfK => scriptNOfK.Scripts switch
-            {
-                CborDefList<CNativeScript> defList => defList.Value,
-                _ => []
-            },
+            ScriptAll { Scripts: { IsIndefinite: true, HasSetTag: false } scripts } => scripts,
+            ScriptAny { Scripts: { IsIndefinite: false, HasSetTag: false } scripts } => scripts,
+            ScriptNOfK { Scripts: { IsIndefinite: false, HasSetTag: false } scripts } => scripts,
             _ => []
         };
     }

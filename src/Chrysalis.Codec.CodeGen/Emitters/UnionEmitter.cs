@@ -51,11 +51,6 @@ public sealed partial class CborSerializerCodeGen
 
         public StringBuilder EmitReader(StringBuilder sb, SerializableTypeMetadata metadata)
         {
-            if (IsCborMaybeIndefListUnion(metadata))
-            {
-                return EmitMaybeIndefListProbeReader(sb, metadata);
-            }
-
             if (EmitBuiltInReader(sb, metadata) || TryEmitStructuralProbeReader(sb, metadata))
             {
                 return sb;
@@ -290,41 +285,6 @@ public sealed partial class CborSerializerCodeGen
             _ = sb.AppendLine($"default:");
             _ = sb.AppendLine($"throw CborError.Validation(-1, \"{metadata.FullyQualifiedName}\", \"registered union case\", data.GetType().FullName ?? \"unknown\");");
             _ = sb.AppendLine("}");
-            return sb;
-        }
-
-        private static bool IsCborMaybeIndefListUnion(SerializableTypeMetadata metadata) => metadata.FullyQualifiedName.Contains("ICborMaybeIndefList");
-
-        private static StringBuilder EmitMaybeIndefListProbeReader(StringBuilder sb, SerializableTypeMetadata metadata)
-        {
-            string typeParams = metadata.TypeParams ?? "<T>";
-
-            string defListType = $"Chrysalis.Codec.Types.CborDefList{typeParams}";
-            string indefListType = $"Chrysalis.Codec.Types.CborIndefList{typeParams}";
-            string defListWithTagType = $"Chrysalis.Codec.Types.CborDefListWithTag{typeParams}";
-            string indefListWithTagType = $"Chrysalis.Codec.Types.CborIndefListWithTag{typeParams}";
-
-            _ = sb.AppendLine("var reader = new CborReader(data.Span);");
-            _ = sb.AppendLine("bool hasTag258 = reader.TryReadSemanticTag(out _);");
-            _ = sb.AppendLine("reader.ReadBeginArray();");
-            _ = sb.AppendLine("int _arraySize = reader.ReadSize();");
-            _ = sb.AppendLine("bool isIndefinite = _arraySize == -1;");
-
-            _ = sb.AppendLine($"{metadata.FullyQualifiedName} result;");
-            _ = sb.AppendLine("if (hasTag258)");
-            _ = sb.AppendLine("{");
-            _ = sb.AppendLine($"    result = isIndefinite");
-            _ = sb.AppendLine($"        ? ({metadata.FullyQualifiedName}){indefListWithTagType}.Read(data, out bytesConsumed)");
-            _ = sb.AppendLine($"        : ({metadata.FullyQualifiedName}){defListWithTagType}.Read(data, out bytesConsumed);");
-            _ = sb.AppendLine("}");
-            _ = sb.AppendLine("else");
-            _ = sb.AppendLine("{");
-            _ = sb.AppendLine($"    result = isIndefinite");
-            _ = sb.AppendLine($"        ? ({metadata.FullyQualifiedName}){indefListType}.Read(data, out bytesConsumed)");
-            _ = sb.AppendLine($"        : ({metadata.FullyQualifiedName}){defListType}.Read(data, out bytesConsumed);");
-            _ = sb.AppendLine("}");
-            _ = sb.AppendLine("return result;");
-
             return sb;
         }
 
@@ -759,8 +719,7 @@ public sealed partial class CborSerializerCodeGen
                 {
                     return "map";
                 }
-                if (propType.Contains("List<") || propType.Contains("ICborMaybeIndefList<")
-                    || propType.Contains("CborDefList<") || propType.Contains("CborIndefList<"))
+                if (propType.Contains("List<"))
                 {
                     return "array";
                 }

@@ -71,3 +71,5 @@ b736240c07d01d409ac392c7b244b6d127806426cf2083986cd10261369843c1	X8Sources/conse
 43f296c6212fbdd35fcdd9d66201a6c109316ab600ba409e7a14677b8d4a10e8	X8Sources/consensus/disk-Conway.cbor	block	replay
 2124d132d12e46ca0954f03fb5b648263535fb7a063d45c0b37f06245e3813ad	X8Sources/consensus/disk-Mary.cbor	block	replay
 328fd94e17d559e0d222ed4e22bc7670c83192a4d1034d2c59c6a79f4614ed4c	X8Sources/consensus/disk-Shelley.cbor	block	replay
+# X10: cardano-cli 11.7.0.0, offline conway transaction build-raw; command and retained mac-capture-4.log in X10Tag258Indef.provenance.md.
+e319ba89f6ce078248e3b8aea3f68d1f15ae3ea6f916f64814618489418f618f	X10Tag258Indef.tx	cli-conway	replay

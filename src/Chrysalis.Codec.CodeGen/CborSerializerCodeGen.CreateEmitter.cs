@@ -201,7 +201,7 @@ public sealed partial class CborSerializerCodeGen
                 _ = sb.AppendLine($"writer.WriteSemanticTag((ulong){ResolveTag(metadata.CborIndex)});");
             }
 
-            // Dynamic CborConstr (e.g. PlutusConstr) has a single ICborMaybeIndefList
+            // Dynamic CborConstr (e.g. PlutusConstr) has a single CborList
             // property that writes its own array — skip the outer array wrapper to
             // match the Write and Read paths (WriteEmitter.cs:369, ReadEmitter.cs:58).
             bool isDynamicConstr = metadata.CborIndex is null or < 0;

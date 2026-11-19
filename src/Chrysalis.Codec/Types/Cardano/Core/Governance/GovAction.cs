@@ -58,7 +58,7 @@ public readonly partial record struct UpdateCommittee : IGovAction
 {
     [CborOrder(0)] public partial int Tag { get; }
     [CborOrder(1)] public partial GovActionId? ActionId { get; }
-    [CborOrder(2)] public partial ICborMaybeIndefList<Credential> MembersToRemove { get; }
+    [CborOrder(2)] public partial CborList<Credential> MembersToRemove { get; }
     [CborOrder(3)] public partial MemberTermLimits MembersToAdd { get; }
     [CborOrder(4)] public partial CborRationalNumber Threshold { get; }
 }

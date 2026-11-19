@@ -1,4 +1,3 @@
-using Chrysalis.Codec.Extensions;
 using Chrysalis.Codec.Serialization;
 using Chrysalis.Codec.Types;
 using Chrysalis.Codec.Types.Cardano.Core.Transaction;
@@ -23,8 +22,8 @@ PostAlonzoTransactionWitnessSet witnessSet = (PostAlonzoTransactionWitnessSet)tx
 
 // Parse UTxOs from CBOR array
 byte[] utxoBytes = Convert.FromHexString(utxoHex);
-CborDefList<ResolvedInput> utxoList = CborSerializer.Deserialize<CborDefList<ResolvedInput>>(utxoBytes);
-List<ResolvedInput> utxos = [.. utxoList.GetValue()];
+CborList<ResolvedInput> utxoList = CborSerializer.Deserialize<CborList<ResolvedInput>>(utxoBytes);
+List<ResolvedInput> utxos = [.. utxoList];
 
 IReadOnlyList<EvaluationResult> results = ScriptContextBuilder.EvaluateTx(
     body, witnessSet, utxos, SlotNetworkConfig.Mainnet);

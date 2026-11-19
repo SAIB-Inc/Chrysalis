@@ -48,12 +48,12 @@ internal sealed class VersionMismatchValidator : ICborValidator<VersionMismatch>
 {
     public bool Validate(VersionMismatch input)
     {
-        // CborDefList is a value type: default/missing has no encoded list.
-        if (input.Idx != 0 || input.VersionNumbers.Raw.IsEmpty || input.VersionNumbers.Value is not { } versions)
+        // The default value is absent; a freshly built list has no Raw but is present.
+        if (input.Idx != 0 || input.VersionNumbers == default)
         {
             return false;
         }
-        foreach (int version in versions)
+        foreach (int version in input.VersionNumbers)
         {
             if (version is < 0 or > 65535)
             {

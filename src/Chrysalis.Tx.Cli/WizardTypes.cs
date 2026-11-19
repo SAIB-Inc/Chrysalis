@@ -84,15 +84,15 @@ public partial record Signature(byte[] KeyHash) : MultisigScript;
 
 [CborSerializable]
 [CborConstr(1)]
-public partial record AllOf(CborIndefList<MultisigScript> Scripts) : MultisigScript;
+public partial record AllOf(CborList<MultisigScript> Scripts) : MultisigScript;
 
 [CborSerializable]
 [CborConstr(2)]
-public partial record AnyOf(CborIndefList<MultisigScript> Scripts) : MultisigScript;
+public partial record AnyOf(CborList<MultisigScript> Scripts) : MultisigScript;
 
 [CborSerializable]
 [CborConstr(3)]
-public partial record AtLeast(ulong Required, CborIndefList<MultisigScript> Scripts) : MultisigScript;
+public partial record AtLeast(ulong Required, CborList<MultisigScript> Scripts) : MultisigScript;
 
 [CborSerializable]
 [CborConstr(4)]

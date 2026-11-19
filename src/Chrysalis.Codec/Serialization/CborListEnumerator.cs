@@ -12,6 +12,7 @@ public ref struct CborListEnumerator<T>
 {
     private readonly ReadOnlyMemory<byte> _data;
     private ReadOnlySpan<byte> _remaining;
+    private ReadOnlySpan<T> _items;
 
     public T Current { get; private set; }
 
@@ -32,8 +33,21 @@ public ref struct CborListEnumerator<T>
         Current = default!;
     }
 
+    internal CborListEnumerator(ReadOnlySpan<T> items)
+    {
+        _items = items;
+        Current = default!;
+    }
+
     public bool MoveNext()
     {
+        if (!_items.IsEmpty)
+        {
+            Current = _items[0];
+            _items = _items[1..];
+            return true;
+        }
+
         if (_remaining.Length == 0 || _remaining[0] == 0xFF)
         {
             return false;
@@ -72,7 +86,9 @@ public readonly record struct CborListEnumerable<T>(ReadOnlyMemory<byte> Data) :
     /// <summary>
     /// IEnumerable{T} implementation for LINQ/interface consumers.
     /// </summary>
-    IEnumerator<T> IEnumerable<T>.GetEnumerator() => new BoxedEnumerator(Data);
+    IEnumerator<T> IEnumerable<T>.GetEnumerator() => EnumerateRaw(Data);
+
+    internal static IEnumerator<T> EnumerateRaw(ReadOnlyMemory<byte> data) => new BoxedEnumerator(data);
 
     IEnumerator IEnumerable.GetEnumerator() => ((IEnumerable<T>)this).GetEnumerator();
 

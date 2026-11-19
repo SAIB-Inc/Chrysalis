@@ -14,7 +14,7 @@ public static class CborListReaderCache<T>
 
 /// <summary>
 /// Pre-built reader methods for primitive CBOR types.
-/// Used by source-generated cache registrations for ICborMaybeIndefList{T} where T is primitive.
+/// Used by source-generated cache registrations for CborList{T} where T is primitive.
 /// </summary>
 public static class CborPrimitiveReaders
 {

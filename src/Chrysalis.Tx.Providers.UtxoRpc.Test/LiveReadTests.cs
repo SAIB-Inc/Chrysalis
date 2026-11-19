@@ -1,4 +1,3 @@
-using Chrysalis.Codec.Extensions;
 using Chrysalis.Codec.Serialization;
 using Chrysalis.Codec.Types.Cardano.Core.Protocol;
 using Chrysalis.Tx.Models.Cbor;
@@ -19,9 +18,9 @@ public sealed class LiveReadTests
         using UtxoRpc provider = LiveSettings.CreateProvider();
         ProtocolParams parameters = await provider.GetParametersAsync();
         Assert.True(parameters.ProtocolVersion?.Major >= 10);
-        Assert.NotEmpty(parameters.CostModelsForScriptLanguage!.PlutusV1!.GetValue());
-        Assert.NotEmpty(parameters.CostModelsForScriptLanguage.PlutusV2!.GetValue());
-        Assert.NotEmpty(parameters.CostModelsForScriptLanguage.PlutusV3!.GetValue());
+        Assert.NotEmpty(parameters.CostModelsForScriptLanguage!.PlutusV1!.Value);
+        Assert.NotEmpty(parameters.CostModelsForScriptLanguage.PlutusV2!.Value);
+        Assert.NotEmpty(parameters.CostModelsForScriptLanguage.PlutusV3!.Value);
     }
 
     /// <summary>The first three wallet outputs can be looked up byte for byte.</summary>

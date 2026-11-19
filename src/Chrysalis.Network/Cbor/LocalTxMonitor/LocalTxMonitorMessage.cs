@@ -195,7 +195,7 @@ public partial record GetMeasures(
 public partial record ReplyGetMeasures(
     [CborOrder(0)] int Idx,
     [CborOrder(1)] ulong Slot,
-    [CborOrder(2)] Dictionary<string, CborDefList<int>> Measures
+    [CborOrder(2)] Dictionary<string, CborList<int>> Measures
 ) : LocalTxMonitorMessage;
 
 /// <summary>

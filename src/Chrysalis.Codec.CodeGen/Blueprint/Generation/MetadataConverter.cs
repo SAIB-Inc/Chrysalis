@@ -198,8 +198,7 @@ internal static class MetadataConverter
         typeName.StartsWith("I", StringComparison.Ordinal) &&
         typeName.Length > 1 &&
         char.IsUpper(typeName[1]) &&
-        !typeName.StartsWith("ICborOption<", StringComparison.Ordinal) &&
-        !typeName.StartsWith("ICborMaybeIndefList<", StringComparison.Ordinal);
+        !typeName.StartsWith("ICborOption<", StringComparison.Ordinal);
 
     private static string ResolveFullyQualifiedName(string csharpType)
     {
@@ -226,9 +225,7 @@ internal static class MetadataConverter
         "IPlutusData" => "global::Chrysalis.Codec.Types.Cardano.Core.Common.IPlutusData",
         "PlutusBoundedBytes" => "global::Chrysalis.Codec.Types.Cardano.Core.Common.PlutusBoundedBytes",
         "ICborOption" => "global::Chrysalis.Codec.Types.ICborOption",
-        "CborDefList" => "global::Chrysalis.Codec.Types.CborDefList",
-        "CborIndefList" => "global::Chrysalis.Codec.Types.CborIndefList",
-        "ICborMaybeIndefList" => "global::Chrysalis.Codec.Types.ICborMaybeIndefList",
+        "CborList" => "global::Chrysalis.Codec.Types.CborList",
         _ => typeName,
     };
 

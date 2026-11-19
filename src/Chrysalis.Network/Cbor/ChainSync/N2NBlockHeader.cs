@@ -102,7 +102,7 @@ public partial interface INetworkBlockHeader : ICborType
 [CborSerializable]
 [CborList]
 public partial record ByronN2NHeader(
-    [CborOrder(0)] CborDefList<ulong> Prefix,
+    [CborOrder(0)] CborList<ulong> Prefix,
     [CborOrder(1)] CborEncodedValue Header
 ) : INetworkBlockHeader
 {

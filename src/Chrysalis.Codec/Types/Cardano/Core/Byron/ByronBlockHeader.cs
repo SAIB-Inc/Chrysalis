@@ -31,7 +31,7 @@ public readonly partial record struct ByronBlockCons : ICborType
 {
     [CborOrder(0)] public partial ByronSlotId SlotId { get; }
     [CborOrder(1)] public partial ReadOnlyMemory<byte> PublicKey { get; }
-    [CborOrder(2)] public partial ICborMaybeIndefList<ulong> Difficulty { get; }
+    [CborOrder(2)] public partial CborList<ulong> Difficulty { get; }
     [CborOrder(3)] public partial ByronBlockSig Signature { get; }
 }
 
@@ -40,7 +40,7 @@ public readonly partial record struct ByronBlockCons : ICborType
 public readonly partial record struct ByronEbbCons : ICborType
 {
     [CborOrder(0)] public partial ulong Epoch { get; }
-    [CborOrder(1)] public partial ICborMaybeIndefList<ulong> Difficulty { get; }
+    [CborOrder(1)] public partial CborList<ulong> Difficulty { get; }
 }
 
 [CborSerializable]
