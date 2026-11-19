@@ -10,6 +10,7 @@ namespace Chrysalis.Plutus.Types;
 public readonly record struct ExBudget(long Cpu, long Mem)
 {
     public static readonly ExBudget Zero = new(0, 0);
+    /// <summary>The largest budget, enforced like any other; a charge that makes either part negative stops the run.</summary>
     public static readonly ExBudget Unlimited = new(long.MaxValue, long.MaxValue);
 
     public static ExBudget operator +(ExBudget a, ExBudget b) => new(SatMath.Add(a.Cpu, b.Cpu), SatMath.Add(a.Mem, b.Mem));

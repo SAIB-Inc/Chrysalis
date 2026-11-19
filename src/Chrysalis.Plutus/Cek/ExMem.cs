@@ -115,8 +115,6 @@ internal static class ExMem
         return total;
     }
 
-    internal static int SizeExMemFromInt(int value) => value <= 0 ? 0 : ((value - 1) / 8) + 1;
-
     internal static long IntegerCostedLiterally(BigInteger n)
     {
         BigInteger abs = BigInteger.Abs(n);
@@ -165,12 +163,22 @@ internal static class ExMem
 
     private static long ListSizeFromArg(CekValue val) => val is VConstant { Value: ListConstant l } ? l.Count : 0;
 
-    private static long SizeExMemFromArg(CekValue val) => val is VConstant { Value: IntegerConstant i }
-        && i.Value is var n
-        && n <= long.MaxValue
-        && n >= -long.MaxValue
-            ? SizeExMemFromInt((int)n)
-            : 0;
+    private static long SizeExMemFromArg(CekValue val)
+    {
+        if (val is not VConstant { Value: IntegerConstant { Value: var n } })
+        {
+            return 0;
+        }
+        // NumBytesCostedAsNumWords: ceil(abs(n) / 8), then saturate to Int64.
+        if (n.GetBitLength() <= 63)
+        {
+            long signed = (long)n;
+            ulong magnitude = signed < 0 ? (ulong)~signed + 1 : (ulong)signed;
+            return (long)((magnitude + 7) / 8);
+        }
+        BigInteger words = (BigInteger.Abs(n) + 7) / 8;
+        return words > long.MaxValue ? long.MaxValue : (long)words;
+    }
 
     private static long IntLiteralValue(CekValue val) => val is VConstant { Value: IntegerConstant i } ? IntegerCostedLiterally(i.Value) : 0;
 

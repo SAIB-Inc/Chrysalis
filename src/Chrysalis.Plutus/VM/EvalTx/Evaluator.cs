@@ -20,7 +20,8 @@ public static class Evaluator
     /// <param name="argumentsCbor">CBOR-encoded PlutusData arguments (e.g. datum, redeemer, script context).</param>
     /// <param name="costModel">Optional flat cost-model array of the script's language (from protocol parameters). Defaults to the latest baked-in model.</param>
     /// <param name="plutusVersion">Plutus language version of the script. Defaults to 3.</param>
-    /// <param name="budget">Optional execution budget. Defaults to unlimited.</param>
+    /// <param name="budget">Enforced: the script fails with BudgetExceededException when either part falls below zero. Leave it out to measure.</param>
+    /// <exception cref="BudgetExceededException">A charge took CPU or memory below zero.</exception>
     /// <returns>The evaluation result with consumed execution units.</returns>
     /// <exception cref="InvalidReturnValueException">
     /// The script returned a value other than built-in unit.
@@ -48,7 +49,7 @@ public static class Evaluator
             term = new ApplyTerm<DeBruijn>(term, new ConstTerm<DeBruijn>(new DataConstant(data)));
         }
 
-        return Run(term, costModel is null ? CostModel.LatestV3 : CostModelLoader.FromFlat(costModel, plutusVersion), plutusVersion, budget ?? ExBudget.Unlimited);
+        return Run(term, costModel is null ? CostModel.LatestV3 : CostModelLoader.FromFlat(costModel, plutusVersion), plutusVersion, budget);
     }
 
     /// <summary>
@@ -59,7 +60,8 @@ public static class Evaluator
     /// <param name="arguments">VM PlutusData arguments (datum, redeemer, script context).</param>
     /// <param name="costModel">Optional flat cost-model array of the script's language (from protocol parameters). Defaults to the latest baked-in model.</param>
     /// <param name="plutusVersion">Plutus language version of the script. Defaults to 3.</param>
-    /// <param name="budget">Optional execution budget. Defaults to unlimited.</param>
+    /// <param name="budget">Enforced: the script fails with BudgetExceededException when either part falls below zero. Leave it out to measure.</param>
+    /// <exception cref="BudgetExceededException">A charge took CPU or memory below zero.</exception>
     /// <returns>The evaluation result with consumed execution units.</returns>
     /// <exception cref="InvalidReturnValueException">
     /// The script returned a value other than built-in unit.
@@ -85,14 +87,14 @@ public static class Evaluator
             term = new ApplyTerm<DeBruijn>(term, new ConstTerm<DeBruijn>(new DataConstant(arg)));
         }
 
-        return Run(term, costModel is null ? CostModel.LatestV3 : CostModelLoader.FromFlat(costModel, plutusVersion), plutusVersion, budget ?? ExBudget.Unlimited);
+        return Run(term, costModel is null ? CostModel.LatestV3 : CostModelLoader.FromFlat(costModel, plutusVersion), plutusVersion, budget);
     }
 
-    internal static EvaluationResult Run(Term<DeBruijn> applied, CostModel model, int plutusVersion, ExBudget initial)
+    internal static EvaluationResult Run(Term<DeBruijn> applied, CostModel model, int plutusVersion, ExBudget? budget)
     {
-        CekMachine machine = new(initial, model);
+        CekMachine machine = new(budget, model);
         ValidateReturnValue(machine.RunValue(applied), plutusVersion);
-        return new EvaluationResult(RedeemerTag: 0, Index: 0, ExUnits: UsedUnits(initial, machine.RemainingBudget));
+        return new EvaluationResult(RedeemerTag: 0, Index: 0, ExUnits: UsedUnits(budget ?? ExBudget.Unlimited, machine.RemainingBudget));
     }
 
     internal static ExUnitsResult UsedUnits(ExBudget initial, ExBudget remaining) => new(
@@ -120,7 +122,8 @@ public static class Evaluator
     /// Lowest-level API — no Flat decoding or argument application.
     /// </summary>
     /// <param name="term">The UPLC term to evaluate.</param>
-    /// <param name="budget">Optional execution budget. Defaults to unlimited.</param>
+    /// <param name="budget">Enforced: the script fails with BudgetExceededException when either part falls below zero. Leave it out to measure.</param>
+    /// <exception cref="BudgetExceededException">A charge took CPU or memory below zero.</exception>
     /// <returns>The resulting term and consumed execution units.</returns>
     public static (Term<DeBruijn> Result, ExUnitsResult ExUnits) EvaluateTerm(
         Term<DeBruijn> term,
@@ -128,10 +131,9 @@ public static class Evaluator
     {
         ArgumentNullException.ThrowIfNull(term);
 
-        ExBudget initial = budget ?? ExBudget.Unlimited;
-        CekMachine machine = new(initial);
+        CekMachine machine = new(budget);
         Term<DeBruijn> result = machine.Run(term);
 
-        return (result, UsedUnits(initial, machine.RemainingBudget));
+        return (result, UsedUnits(budget ?? ExBudget.Unlimited, machine.RemainingBudget));
     }
 }

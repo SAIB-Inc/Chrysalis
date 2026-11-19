@@ -156,6 +156,7 @@ public sealed class CostModelTests
         Assert.Equal(max, new SubtractedSizesCost(0, 1, 0).Eval(max, -1, 0));
         Assert.Equal(1, new LiteralInYOrLinearInZCost(4, 2).Eval(1, 1, 1));
         Assert.Equal(6, new LiteralInYOrLinearInZCost(4, 2).Eval(1, 0, 1));
+        Assert.Equal(7, new QuadraticInXAndYCost(7, -100, 0, 0, 0, 0, 0).Eval(1, 1, 0));
         Assert.Equal(max - 1, new QuadraticInXAndYCost(0, max, 0, 1, -1, 0, 0).Eval(1, 1, 0));
         Assert.Equal(max - 1, new ExpModCost(max, 1, -1).Eval(1, 1, 1));
         Assert.Equal(-5, new ExpModCost(-3, 0, 0).Eval(2, 1, 1));
@@ -245,10 +246,21 @@ public sealed class CostModelTests
         {
             CostModel model = CostModelLoader.FromFlat([.. Enumerable.Repeat(hostile, 350)], 3);
             ulong expected = hostile > 0 ? (ulong)long.MaxValue : 0;
-            Assert.Equal(new ExUnitsResult(expected, expected), Evaluator.Run(Unit, model, 3, ExBudget.Unlimited).ExUnits);
+            Assert.Equal(new ExUnitsResult(expected, expected), Evaluator.Run(Unit, model, 3, null).ExUnits);
+            ApplyTerm<DeBruijn> applied = new(new LambdaTerm<DeBruijn>(new(0), Unit), Unit);
+            Assert.Equal(new ExUnitsResult(expected, expected), Evaluator.Run(applied, model, 3, null).ExUnits);
         }
         Assert.Equal(new ExBudget(long.MaxValue, long.MinValue), new ExBudget(long.MaxValue, long.MinValue) + new ExBudget(1, -1));
         Assert.Equal(new ExBudget(long.MaxValue, long.MinValue), ExBudget.Zero - new ExBudget(long.MinValue, long.MaxValue) - new ExBudget(0, 2));
+    }
+
+    [Fact]
+    public void PlutusV4UsesTheV3ChainModel()
+    {
+        CostModel v3 = CostModelLoader.FromFlat(DefaultCosts.LatestV3, 3);
+        CostModel v4 = CostModelLoader.FromFlat(DefaultCosts.LatestV3, 4);
+        Assert.Equal(Variant.E, v4.Variant);
+        Assert.Equal(Project(v3), Project(v4));
     }
 
     [Fact]
@@ -273,14 +285,14 @@ public sealed class CostModelTests
         ExBudget startup = new(11, 17);
         CostModel varied = CostModel.Default with { Machine = new(startup, steps) };
         ExBudget initial = ExBudget.Unlimited;
-        CekMachine machine = new CekMachine(initial, varied).EnableDebugCounters();
+        CekMachine machine = new CekMachine(null, varied).EnableDebugCounters();
         _ = machine.Run(script);
         Assert.Equal(counts, machine.DebugCounters.Steps);
         ExBudget expected = steps.Zip(counts).Aggregate(startup, (spent, pair) => spent + new ExBudget(pair.First.Cpu * pair.Second, pair.First.Mem * pair.Second));
         Assert.Equal(new ExBudget(initial.Cpu - expected.Cpu, initial.Mem - expected.Mem), machine.RemainingBudget);
 
         CostModel order = varied with { Machine = new(ExBudget.Zero, [new(-10, 0), default, new(10, 0), default, default, default, default, default, default]) };
-        CekMachine ordered = new(initial, order);
+        CekMachine ordered = new(null, order);
         _ = ordered.Run(applied);
         Assert.Equal(10UL, Evaluator.UsedUnits(initial, ordered.RemainingBudget).Steps);
     }

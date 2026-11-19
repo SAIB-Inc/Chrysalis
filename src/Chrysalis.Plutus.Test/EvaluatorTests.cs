@@ -1,5 +1,6 @@
 using Chrysalis.Plutus.Cek;
 using Chrysalis.Plutus.Flat;
+using Chrysalis.Plutus.Text;
 using Chrysalis.Plutus.Types;
 using Chrysalis.Plutus.VM.EvalTx;
 using Chrysalis.Plutus.VM.Models;
@@ -47,11 +48,13 @@ public class EvaluatorTests
             _ = Assert.Throws<NotSupportedException>(() => Evaluator.EvaluateScript(script, cborArguments, array, version));
             _ = Assert.Throws<NotSupportedException>(() => Evaluator.EvaluateScript(script, vmArguments, array, version));
         }
-        Assert.True(Evaluator.Run(IntegerOne, CostModelLoader.FromFlat(costs, version), version, ExBudget.Unlimited).ExUnits.Steps > 0);
+        Assert.True(Evaluator.Run(IntegerOne, CostModelLoader.FromFlat(costs, version), version, null).ExUnits.Steps > 0);
     }
 
-    [Fact]
-    public void EvaluateScript_UsesTheSuppliedArray()
+    [Theory]
+    [InlineData(3)]
+    [InlineData(4)]
+    public void EvaluateScript_UsesTheSuppliedArray(int version)
     {
         byte[] script = NodeBudgetTests.Fixture.Scripts.Single(s => s.Id == "P-B01-i2b-size-8192").Flat;
         byte[][] cborArguments = [[0xD8, 0x79, 0x80]]; // Constr 0 []
@@ -70,9 +73,23 @@ public class EvaluatorTests
 
         void Check(ExUnitsResult expected)
         {
-            Assert.Equal(expected, Evaluator.EvaluateScript(script, cborArguments, costs).ExUnits);
-            Assert.Equal(expected, Evaluator.EvaluateScript(script, vmArguments, costs).ExUnits);
+            Assert.Equal(expected, Evaluator.EvaluateScript(script, cborArguments, costs, version).ExUnits);
+            Assert.Equal(expected, Evaluator.EvaluateScript(script, vmArguments, costs, version).ExUnits);
         }
+    }
+
+    [Fact]
+    public void EvaluateScript_UsesTheV3ChainModelWhenTheArrayIsNull()
+    {
+        const string source = "(program 1.0.0 [(force (builtin ifThenElse)) [(builtin equalsByteString) (con bytestring #00) (con bytestring #00)] (con unit ()) (con unit ())])";
+        Term<DeBruijn> term = UplcParser.NameToDeBruijn(UplcParser.Parse(source)).Term;
+        byte[] script = Encode(term);
+        byte[][] cbor = [];
+        PlutusData[] vm = [];
+        ExUnitsResult expected = Evaluator.EvaluateScript(script, vm, DefaultCosts.LatestV3).ExUnits;
+        Assert.NotEqual(expected, Evaluator.Run(term, CostModel.Default, 3, null).ExUnits);
+        Assert.Equal(expected, Evaluator.EvaluateScript(script, cbor, costModel: null).ExUnits);
+        Assert.Equal(expected, Evaluator.EvaluateScript(script, vm, costModel: null).ExUnits);
     }
 
     [Fact]
