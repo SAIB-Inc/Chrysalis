@@ -162,6 +162,8 @@ public partial record Spend([CborOrder(0)] long OutputIndex) : MyRedeemer;
 public partial record Cancel() : MyRedeemer;
 ```
 
+If a `[CborUnion]` needs a wire discriminator the generator cannot infer, declare `public static MyRedeemer Read(ReadOnlyMemory<byte> data, out int bytesConsumed)` on that partial union type. Return the union type by value and select the concrete reader from the wire bytes. The generator still supplies `Read(data)` and `Write`; a declared reader with the wrong signature reports `CHCB003`. A generated parent union selects among the flattened concrete cases without calling a child union’s declared reader; declare the parent reader too if it must use the child’s discriminator.
+
 </details>
 
 ## Transaction Building

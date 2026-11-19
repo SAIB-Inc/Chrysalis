@@ -363,29 +363,34 @@ public partial class GeneratorIsolationTests
         Assert.DoesNotContain(output.GetDiagnostics(), diagnostic => diagnostic.Severity == DiagnosticSeverity.Error);
     }
 
-    [Theory]
-    [InlineData("Handshake", "HandshakeMessage")]
-    [InlineData("Handshake", "VersionTable")]
-    [InlineData("LocalStateQuery", "IQueryReq")]
-    [InlineData("ChainSync", "INetworkBlockHeader")]
-    public void NetworkTrialRetainsX7DeclarationOrder(string protocol, string union)
+    [Fact]
+    public void AddingAndRemovingDeclaredReaderUpdatesOnlyTheUnion()
     {
-        string ns = $"Chrysalis.Network.Cbor.{protocol}";
-        SyntaxTree root = ParseIncremental("Root.cs", $$"""
-            namespace {{ns}};
-            [CborSerializable, CborUnion] public partial interface {{union}} : ICborType;
+        SyntaxTree root = ParseIncremental("Root.cs", """
+            namespace Snapshot;
+            [CborSerializable, CborUnion] public partial interface IChoice : ICborType;
+            [CborSerializable, CborList] public partial record Case([CborOrder(0)] int Item) : CborRecord, IChoice;
             """);
-        SyntaxTree Case(string name) => ParseIncremental(name + ".cs", $$"""
-            namespace {{ns}};
-            [CborSerializable, CborList] public partial record {{name}}([CborOrder(0)] int Item) : CborRecord, {{union}};
+        SyntaxTree reader = ParseIncremental("Reader.cs", """
+            namespace Snapshot;
+            public partial interface IChoice
+            {
+                static IChoice Read(ReadOnlyMemory<byte> data, out int count) => Case.Read(data, out count);
+            }
             """, includeGlobals: false);
-        CSharpCompilation input = IncrementalCompilation("Chrysalis.Network", root, Case("Z"), Case("A"));
-        string serializer = GeneratedText(CreateDriver().RunGenerators(input), ns + "." + union);
+        CSharpCompilation input = IncrementalCompilation("DeclaredReaderProbe", root);
+        GeneratorDriver first = TrackingDriver().RunGenerators(input);
+        GeneratorDriver added = first.RunGenerators(input.AddSyntaxTrees(reader));
+        GeneratorDriver removed = added.RunGenerators(input);
 
-        Assert.Contains("BeginReadTrial()", serializer, StringComparison.Ordinal);
-        int first = serializer.IndexOf(ns + ".Z.Read", StringComparison.Ordinal);
-        int second = serializer.IndexOf(ns + ".A.Read", StringComparison.Ordinal);
-        Assert.True(first >= 0 && second > first, serializer);
+        string before = GeneratedText(first, "Snapshot.IChoice");
+        string declared = GeneratedText(added, "Snapshot.IChoice");
+        Assert.Contains("out int bytesConsumed", before, StringComparison.Ordinal);
+        Assert.DoesNotContain("out int bytesConsumed", declared, StringComparison.Ordinal);
+        Assert.Contains("return Read(data, out _);", declared, StringComparison.Ordinal);
+        Assert.Equal(before, GeneratedText(removed, "Snapshot.IChoice"));
+        Assert.Equal(IncrementalStepRunReason.Cached, SourceReason(added, "Snapshot.Case"));
+        Assert.Equal(IncrementalStepRunReason.Cached, SourceReason(removed, "Snapshot.Case"));
     }
 
     private static CSharpGeneratorDriver TrackingDriver() => CSharpGeneratorDriver.Create(

@@ -1,5 +1,8 @@
+using Chrysalis.Codec.Serialization;
 using Chrysalis.Codec.Serialization.Attributes;
 using Chrysalis.Codec.Types;
+using SAIB.Cbor;
+using SAIB.Cbor.Serialization;
 
 namespace Chrysalis.Network.Cbor.Handshake;
 
@@ -8,7 +11,50 @@ namespace Chrysalis.Network.Cbor.Handshake;
 /// </summary>
 [CborSerializable]
 [CborUnion]
-public abstract partial record VersionTable : CborRecord;
+public abstract partial record VersionTable : CborRecord
+{
+    /// <summary>Reads a <see cref="VersionTable"/> and reports the number of bytes consumed.</summary>
+    public static VersionTable Read(ReadOnlyMemory<byte> data, out int bytesConsumed)
+    {
+        bool nodeToClient;
+        try
+        {
+            nodeToClient = IsNodeToClientMap(new CborReader(data.Span), data, emptyIsNodeToClient: true);
+        }
+        catch (CborException error)
+        {
+            throw CborError.Wrap(error, data, nameof(VersionTable), "handshake version table");
+        }
+        return nodeToClient ? N2CVersionTable.Read(data, out bytesConsumed) : N2NVersionTable.Read(data, out bytesConsumed);
+    }
+
+    internal static bool IsNodeToClientMap(CborReader reader, ReadOnlyMemory<byte> data, bool emptyIsNodeToClient)
+    {
+        int offset = data.Length - reader.Buffer.Length;
+        reader.ReadBeginMap();
+        int count = reader.ReadSize();
+        if (count < 0)
+        {
+            throw CborError.Decode(data, offset, nameof(VersionTable), "definite handshake version table");
+        }
+        return count == 0 ? emptyIsNodeToClient : ReadVersionFamily(reader, data);
+    }
+
+    internal static bool ReadVersionFamily(CborReader reader, ReadOnlyMemory<byte> data)
+    {
+        int offset = data.Length - reader.Buffer.Length;
+        int version = reader.ReadInt32();
+        return version switch
+        {
+            >= FirstNodeToClientVersion and <= LastNodeToClientVersion => true,
+            >= 0 and < FirstNodeToClientVersion => false,
+            _ => throw CborError.Decode(data, offset, nameof(VersionTable), "handshake version in 0–65535", version)
+        };
+    }
+
+    internal const int FirstNodeToClientVersion = 32768;
+    internal const int LastNodeToClientVersion = 65535;
+}
 
 /// <summary>
 /// A version table mapping node-to-client protocol versions to their corresponding parameters.

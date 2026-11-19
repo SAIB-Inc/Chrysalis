@@ -25,7 +25,7 @@ public sealed partial class CborSerializerCodeGen
             // The structural probe looks up leaf fields. The fallback tuple probe can do the
             // same inside untagged nested lists. Walk breadth-first so each tuple is expanded
             // once, at the shallowest depth at which the reader could consult its fields.
-            bool probeNested = !union.KeepNetworkReadTrial && leaves.All(leaf => leaf.SerializationType == SerializationType.List);
+            bool probeNested = leaves.All(leaf => leaf.SerializationType == SerializationType.List);
             Queue<(SerializableTypeMetadata Model, int Depth)> pending = new(leaves.Select(leaf => (leaf, 0)));
             Dictionary<string, SerializableTypeMetadata> dependencies = [];
             while (pending.Count != 0)
@@ -59,11 +59,6 @@ public sealed partial class CborSerializerCodeGen
             if (EmitBuiltInReader(sb, metadata) || TryEmitStructuralProbeReader(sb, metadata))
             {
                 return sb;
-            }
-
-            if (metadata.KeepNetworkReadTrial)
-            {
-                return EmitTryCatchReader(sb, metadata);
             }
 
             if (TryEmitCandidateShapes(sb, metadata))
@@ -787,35 +782,5 @@ public sealed partial class CborSerializerCodeGen
                     "boolean" => "CborDataItemType.Boolean",
                     _ => throw new InvalidOperationException($"Unexpected probe key: {probeKey}")
                 };
-
-        private static StringBuilder EmitTryCatchReader(StringBuilder sb, SerializableTypeMetadata metadata)
-        {
-            _ = sb.AppendLine("Exception error = null;");
-            _ = sb.AppendLine("CborReadTrial failure = default;");
-            _ = sb.AppendLine("CborReadTrial previous = CborError.BeginReadTrial();");
-            _ = sb.AppendLine("try");
-            _ = sb.AppendLine("{");
-            foreach (SerializableTypeMetadata childType in metadata.ChildTypes)
-            {
-                _ = sb.AppendLine($"try");
-                _ = sb.AppendLine("{");
-                _ = sb.AppendLine($"return ({metadata.FullyQualifiedName}){childType.FullyQualifiedName}.Read(data, out bytesConsumed);");
-                _ = sb.AppendLine("}");
-                _ = sb.AppendLine("catch (Exception ex) when (CborError.IsDecodeFailure(ex))");
-                _ = sb.AppendLine("{");
-                _ = sb.AppendLine("error = ex;");
-                _ = sb.AppendLine("failure = CborError.TakeReadTrial(ex);");
-                _ = sb.AppendLine("}");
-            }
-
-            _ = sb.AppendLine("}");
-            _ = sb.AppendLine("finally");
-            _ = sb.AppendLine("{");
-            _ = sb.AppendLine("CborError.EndReadTrial(previous);");
-            _ = sb.AppendLine("}");
-            _ = sb.AppendLine($"throw CborError.FinishReadTrial(error, failure, data, \"{metadata.FullyQualifiedName}\");");
-
-            return sb;
-        }
     }
 }

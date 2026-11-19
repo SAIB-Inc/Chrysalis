@@ -48,13 +48,6 @@ public sealed partial class CborSerializerCodeGen : IIncrementalGenerator
     internal static string NormalizeTypeName(string fullyQualifiedName) =>
         fullyQualifiedName.Replace("global::", "").Replace("?", "").Trim();
 
-    private static bool KeepsNetworkTrial(string? assembly, string fullName) => assembly == "Chrysalis.Network"
-        && NormalizeTypeName(fullName) is
-            "Chrysalis.Network.Cbor.Handshake.HandshakeMessage" or
-            "Chrysalis.Network.Cbor.Handshake.VersionTable" or
-            "Chrysalis.Network.Cbor.LocalStateQuery.IQueryReq" or
-            "Chrysalis.Network.Cbor.ChainSync.INetworkBlockHeader";
-
     private static IncrementalValuesProvider<Candidate> FindCandidates(IncrementalGeneratorInitializationContext context, string attribute) =>
         context.SyntaxProvider.ForAttributeWithMetadataName(attribute,
                 static (node, _) => node is TypeDeclarationSyntax,
@@ -89,19 +82,79 @@ public sealed partial class CborSerializerCodeGen : IIncrementalGenerator
         SemanticModel model = payload.SyntaxTree == declaration.SyntaxTree ? context.SemanticModel : compilation.GetSemanticModel(payload.SyntaxTree);
         SerializableTypeMetadata metadata = Parser.ParseSerializableType(payload, model, parts, plutus);
         bool isUnion = metadata.SerializationType == SerializationType.Union;
-        bool keepTrial = isUnion && KeepsNetworkTrial(compilation.AssemblyName, metadata.FullyQualifiedName);
-        if (keepTrial)
+        if (isUnion)
         {
-            metadata = metadata with { KeepNetworkReadTrial = true };
+            metadata = metadata with { UnionReader = GetUnionReaderKind(symbol, compilation) };
         }
 
         ParsedType parsed = new(metadata, SymbolKey(symbol), declaration.SyntaxTree.FilePath, declaration.SpanStart,
             new(ContainerKeys(symbol)), new(AncestorDefinitions(symbol)
                 .Where(ancestor => SymbolEqualityComparer.Default.Equals(ancestor.ContainingAssembly, symbol.ContainingAssembly))
-                .Select(SymbolKey)),
-            keepTrial ? new(LegacyTrialCaseKeys(compilation, symbol, token)) : default);
+                .Select(SymbolKey)));
         return new(parsed, isUnion ? declaration.Identifier.GetLocation() : null);
     }
+
+    private static UnionReaderKind GetUnionReaderKind(INamedTypeSymbol symbol, Compilation compilation)
+    {
+        ImmutableArray<ISymbol> members = symbol.GetMembers("Read");
+        if (members.IsEmpty)
+        {
+            return UnionReaderKind.Generated;
+        }
+
+        ITypeSymbol byteType = compilation.GetSpecialType(SpecialType.System_Byte);
+        INamedTypeSymbol? memory = compilation.GetTypeByMetadataName("System.ReadOnlyMemory`1")?.Construct(byteType);
+        INamedTypeSymbol? span = compilation.GetTypeByMetadataName("System.ReadOnlySpan`1")?.Construct(byteType);
+        UnionReaderKind kind = UnionReaderKind.Generated;
+        foreach (ISymbol member in members)
+        {
+            if (member is not IMethodSymbol method || method.Parameters.Length is not (1 or 2))
+            {
+                continue;
+            }
+            IParameterSymbol input = method.Parameters[0];
+            bool inputIsMemory = SymbolEqualityComparer.Default.Equals(input.Type, memory);
+            bool byValueMemory = inputIsMemory && input.RefKind == RefKind.None;
+            if (method.Parameters.Length == 1)
+            {
+                // The generator owns the convenience reader, even when the length overload is declared.
+                if (byValueMemory && method.Arity == 0)
+                {
+                    return UnionReaderKind.Invalid;
+                }
+                continue;
+            }
+
+            IParameterSymbol count = method.Parameters[1];
+            bool swapped = SymbolEqualityComparer.Default.Equals(count.Type, memory)
+                && (input.RefKind != RefKind.None || IsCountType(input.Type.SpecialType));
+            bool spanWithCount = count.RefKind != RefKind.None && SymbolEqualityComparer.Default.Equals(input.Type, span);
+            if (!inputIsMemory && !swapped && !spanWithCount)
+            {
+                continue;
+            }
+            // By-value context, including an int era, does not occupy the consumed-length slot.
+            if (byValueMemory && count.RefKind == RefKind.None
+                && (!IsCountType(count.Type.SpecialType) || count.Type.SpecialType == SpecialType.System_Int32))
+            {
+                continue;
+            }
+            if (!byValueMemory || count.RefKind != RefKind.Out || count.Type.SpecialType != SpecialType.System_Int32
+                || !method.IsStatic || method.IsAbstract || method.IsVirtual || method.Arity != 0
+                || method.DeclaredAccessibility != Accessibility.Public || method.RefKind != RefKind.None
+                || method.ReturnNullableAnnotation == NullableAnnotation.Annotated
+                || !SymbolEqualityComparer.Default.Equals(method.ReturnType, symbol))
+            {
+                return UnionReaderKind.Invalid;
+            }
+            kind = UnionReaderKind.Declared;
+        }
+        return kind;
+    }
+
+    private static bool IsCountType(SpecialType type) => type is SpecialType.System_SByte or SpecialType.System_Byte
+        or SpecialType.System_Int16 or SpecialType.System_UInt16 or SpecialType.System_Int32 or SpecialType.System_UInt32
+        or SpecialType.System_Int64 or SpecialType.System_UInt64 or SpecialType.System_IntPtr or SpecialType.System_UIntPtr;
 
     // Only source-assembly ancestors can be union candidates. Use original metadata names
     // within that assembly (including generic arity and file-local identity), not display names.
@@ -138,12 +191,6 @@ public sealed partial class CborSerializerCodeGen : IIncrementalGenerator
         }
     }
 
-    // Temporary until X33: preserve X7's first-success trial order for the four allowlisted unions.
-    // Only their order comes from Roslyn's legacy enumeration; the join supplies all case metadata.
-    private static IEnumerable<string> LegacyTrialCaseKeys(Compilation compilation, INamedTypeSymbol union, CancellationToken token) =>
-        compilation.GetSymbolsWithName(static _ => true, SymbolFilter.Type, token).OfType<INamedTypeSymbol>()
-            .Where(type => AncestorDefinitions(type).Contains(union.OriginalDefinition, SymbolEqualityComparer.Default)).Select(SymbolKey);
-
     private static IOrderedEnumerable<ParsedType> OrderByDeclaration(IEnumerable<ParsedType> types) => types
         .OrderBy(type => type.Path, StringComparer.Ordinal).ThenBy(type => type.Start).ThenBy(type => type.SymbolName, StringComparer.Ordinal);
 
@@ -168,21 +215,10 @@ public sealed partial class CborSerializerCodeGen : IIncrementalGenerator
             }
             if (!resolved.TryGetValue(type, out SerializableTypeMetadata metadata))
             {
-                IEnumerable<ParsedType> cases = derived[type.SymbolName];
-                if (type.Metadata.KeepNetworkReadTrial)
-                {
-                    ILookup<string, ParsedType> bySymbol = cases.ToLookup(candidate => candidate.SymbolName, StringComparer.Ordinal);
-                    cases = type.TrialOrder.SelectMany(key => bySymbol[key]);
-                }
-                else
-                {
-                    cases = OrderByDeclaration(cases);
-                }
-
                 HashSet<string> seen = [];
                 metadata = type.Metadata with
                 {
-                    ChildTypes = new(OrderByDeclaration(nested[type.SymbolName]).Concat(cases)
+                    ChildTypes = new(OrderByDeclaration(nested[type.SymbolName]).Concat(OrderByDeclaration(derived[type.SymbolName]))
                         .Where(candidate => seen.Add(candidate.Metadata.FullyQualifiedName)).Select(Resolve))
                 };
                 resolved.Add(type, metadata);
@@ -196,12 +232,12 @@ public sealed partial class CborSerializerCodeGen : IIncrementalGenerator
     {
         ImmutableDictionary<string, SerializableTypeMetadata> registry = models.ToImmutableDictionary(
             model => NormalizeTypeName(model.FullyQualifiedName), StringComparer.Ordinal);
-        return [.. models.Select(model => new EmissionInput(model, model.SerializationType == SerializationType.Union
+        return [.. models.Select(model => new EmissionInput(model, model.SerializationType == SerializationType.Union && model.UnionReader == UnionReaderKind.Generated
             ? UnionEmitter.GetShapeDependencies(model, registry) : default))];
     }
 
     private sealed record Candidate(ParsedType Type, Location? UnionLocation);
     private sealed record ParsedType(SerializableTypeMetadata Metadata, string SymbolName, string Path, int Start,
-        EquatableArray<string> Containers, EquatableArray<string> Ancestors, EquatableArray<string> TrialOrder);
+        EquatableArray<string> Containers, EquatableArray<string> Ancestors);
     private sealed record EmissionInput(SerializableTypeMetadata Metadata, EquatableArray<SerializableTypeMetadata> ShapeDependencies);
 }
