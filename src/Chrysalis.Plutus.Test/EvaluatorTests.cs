@@ -1,3 +1,4 @@
+using Chrysalis.Plutus.Cek;
 using Chrysalis.Plutus.Flat;
 using Chrysalis.Plutus.Types;
 using Chrysalis.Plutus.VM.EvalTx;
@@ -32,18 +33,45 @@ public class EvaluatorTests
         }, result => Assert.IsType<InvalidReturnValueException>(result.Error));
     }
 
-    [Fact]
-    public void EvaluateScript_AcceptsTheSameIntegerResult_ForPlutusV1AndV2()
+    [Theory]
+    [InlineData(1)]
+    [InlineData(2)]
+    public void EvaluateScript_RefusesPlutusV1AndV2(int version)
     {
         byte[] script = Encode(IntegerOne);
         byte[][] cborArguments = [];
         PlutusData[] vmArguments = [];
-        foreach (int version in new[] { 1, 2 })
+        long[] costs = NodeBudgetTests.Fixture.Models[version - 1];
+        foreach (IReadOnlyList<long>? array in new IReadOnlyList<long>?[] { null, costs })
         {
-            EvaluationResult fromCbor = Evaluator.EvaluateScript(script, cborArguments, plutusVersion: version);
-            EvaluationResult fromVm = Evaluator.EvaluateScript(script, vmArguments, plutusVersion: version);
+            _ = Assert.Throws<NotSupportedException>(() => Evaluator.EvaluateScript(script, cborArguments, array, version));
+            _ = Assert.Throws<NotSupportedException>(() => Evaluator.EvaluateScript(script, vmArguments, array, version));
+        }
+        Assert.True(Evaluator.Run(IntegerOne, CostModelLoader.FromFlat(costs, version), version, ExBudget.Unlimited).ExUnits.Steps > 0);
+    }
 
-            Assert.Equal(fromCbor.ExUnits, fromVm.ExUnits);
+    [Fact]
+    public void EvaluateScript_UsesTheSuppliedArray()
+    {
+        byte[] script = NodeBudgetTests.Fixture.Scripts.Single(s => s.Id == "P-B01-i2b-size-8192").Flat;
+        byte[][] cborArguments = [[0xD8, 0x79, 0x80]]; // Constr 0 []
+        PlutusData[] vmArguments = [new PlutusDataConstr(0, [])];
+        long[] costs = (long[])NodeBudgetTests.Fixture.Models[2].Clone();
+        string[] names = CostModelTests.DeployedNames(3);
+        int cpu = Array.IndexOf(names, "cekStartupCost-exBudgetCPU");
+        int mem = Array.IndexOf(names, "cekStartupCost-exBudgetMemory");
+
+        Check(new(2424, 1530707));
+        costs[cpu]++;
+        costs[mem]++;
+        Check(new(2425, 1530708));
+        costs[cpu] = long.MaxValue;
+        Check(new(2425, long.MaxValue));
+
+        void Check(ExUnitsResult expected)
+        {
+            Assert.Equal(expected, Evaluator.EvaluateScript(script, cborArguments, costs).ExUnits);
+            Assert.Equal(expected, Evaluator.EvaluateScript(script, vmArguments, costs).ExUnits);
         }
     }
 
@@ -60,6 +88,15 @@ public class EvaluatorTests
 
         Assert.Equal(fromCbor.ExUnits, fromVm.ExUnits);
         Assert.True(fromVm.ExUnits.Steps > 0);
+    }
+
+    [Fact]
+    public void EvaluateScript_RefusesAClosureResult_ForPlutusV3()
+    {
+        // Applying the outer lambda leaves a closure holding its argument.
+        LambdaTerm<DeBruijn> script = new(new(0), new LambdaTerm<DeBruijn>(new(0), new VarTerm<DeBruijn>(new(2))));
+        PlutusData[] arguments = [new PlutusDataConstr(0, [])];
+        _ = Assert.Throws<InvalidReturnValueException>(() => Evaluator.EvaluateScript(Encode(script), arguments));
     }
 
     private static byte[] Encode(Term<DeBruijn> body) => FlatEncoder.EncodeProgram(new(new(1, 0, 0), body));

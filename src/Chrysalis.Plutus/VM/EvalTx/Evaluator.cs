@@ -18,13 +18,14 @@ public static class Evaluator
     /// </summary>
     /// <param name="scriptBytes">Flat-encoded script bytes (inner script, not the CBOR-wrapped outer layer).</param>
     /// <param name="argumentsCbor">CBOR-encoded PlutusData arguments (e.g. datum, redeemer, script context).</param>
-    /// <param name="costModel">Optional flat PlutusV3 cost-model array (from protocol params). Defaults to the latest baked-in model.</param>
-    /// <param name="plutusVersion">Plutus language version of the script (currently 3). Defaults to 3.</param>
+    /// <param name="costModel">Optional flat cost-model array of the script's language (from protocol parameters). Defaults to the latest baked-in model.</param>
+    /// <param name="plutusVersion">Plutus language version of the script. Defaults to 3.</param>
     /// <param name="budget">Optional execution budget. Defaults to unlimited.</param>
     /// <returns>The evaluation result with consumed execution units.</returns>
     /// <exception cref="InvalidReturnValueException">
-    /// The script returned a value other than built-in unit, and is not Plutus V1 or V2.
+    /// The script returned a value other than built-in unit.
     /// </exception>
+    /// <exception cref="NotSupportedException">The script is Plutus V1 or V2.</exception>
     public static EvaluationResult EvaluateScript(
         byte[] scriptBytes,
         IReadOnlyList<byte[]> argumentsCbor,
@@ -34,6 +35,8 @@ public static class Evaluator
     {
         ArgumentNullException.ThrowIfNull(scriptBytes);
         ArgumentNullException.ThrowIfNull(argumentsCbor);
+
+        RequireSupportedVersion(plutusVersion);
 
         Program<DeBruijn> program = FlatDecoder.DecodeProgram(scriptBytes);
         Term<DeBruijn> term = program.Term;
@@ -45,21 +48,7 @@ public static class Evaluator
             term = new ApplyTerm<DeBruijn>(term, new ConstTerm<DeBruijn>(new DataConstant(data)));
         }
 
-        ExBudget initial = budget ?? ExBudget.Unlimited;
-        // V3: provider model (costModel) or the latest baked-in default; V1/V2: reference default.
-        CekMachine machine = new(initial, CostModelLoader.FromFlat(costModel, plutusVersion));
-        ValidateReturnValue(machine.Run(term), plutusVersion);
-
-        ExBudget remaining = machine.RemainingBudget;
-        long cpuUsed = initial.Cpu - remaining.Cpu;
-        long memUsed = initial.Mem - remaining.Mem;
-
-        return new EvaluationResult(
-            RedeemerTag: 0,
-            Index: 0,
-            ExUnits: new ExUnitsResult(
-                Mem: (ulong)Math.Max(0, memUsed),
-                Steps: (ulong)Math.Max(0, cpuUsed)));
+        return Run(term, costModel is null ? CostModel.LatestV3 : CostModelLoader.FromFlat(costModel, plutusVersion), plutusVersion, budget ?? ExBudget.Unlimited);
     }
 
     /// <summary>
@@ -68,13 +57,14 @@ public static class Evaluator
     /// </summary>
     /// <param name="scriptBytes">Flat-encoded script bytes.</param>
     /// <param name="arguments">VM PlutusData arguments (datum, redeemer, script context).</param>
-    /// <param name="costModel">Optional flat PlutusV3 cost-model array (from protocol params). Defaults to the latest baked-in model.</param>
-    /// <param name="plutusVersion">Plutus language version of the script (currently 3). Defaults to 3.</param>
+    /// <param name="costModel">Optional flat cost-model array of the script's language (from protocol parameters). Defaults to the latest baked-in model.</param>
+    /// <param name="plutusVersion">Plutus language version of the script. Defaults to 3.</param>
     /// <param name="budget">Optional execution budget. Defaults to unlimited.</param>
     /// <returns>The evaluation result with consumed execution units.</returns>
     /// <exception cref="InvalidReturnValueException">
-    /// The script returned a value other than built-in unit, and is not Plutus V1 or V2.
+    /// The script returned a value other than built-in unit.
     /// </exception>
+    /// <exception cref="NotSupportedException">The script is Plutus V1 or V2.</exception>
     public static EvaluationResult EvaluateScript(
         byte[] scriptBytes,
         IReadOnlyList<PlutusData> arguments,
@@ -85,6 +75,8 @@ public static class Evaluator
         ArgumentNullException.ThrowIfNull(scriptBytes);
         ArgumentNullException.ThrowIfNull(arguments);
 
+        RequireSupportedVersion(plutusVersion);
+
         Program<DeBruijn> program = FlatDecoder.DecodeProgram(scriptBytes);
         Term<DeBruijn> term = program.Term;
 
@@ -93,26 +85,31 @@ public static class Evaluator
             term = new ApplyTerm<DeBruijn>(term, new ConstTerm<DeBruijn>(new DataConstant(arg)));
         }
 
-        ExBudget initial = budget ?? ExBudget.Unlimited;
-        // V3: provider model (costModel) or the latest baked-in default; V1/V2: reference default.
-        CekMachine machine = new(initial, CostModelLoader.FromFlat(costModel, plutusVersion));
-        ValidateReturnValue(machine.Run(term), plutusVersion);
-
-        ExBudget remaining = machine.RemainingBudget;
-        long cpuUsed = initial.Cpu - remaining.Cpu;
-        long memUsed = initial.Mem - remaining.Mem;
-
-        return new EvaluationResult(
-            RedeemerTag: 0,
-            Index: 0,
-            ExUnits: new ExUnitsResult(
-                Mem: (ulong)Math.Max(0, memUsed),
-                Steps: (ulong)Math.Max(0, cpuUsed)));
+        return Run(term, costModel is null ? CostModel.LatestV3 : CostModelLoader.FromFlat(costModel, plutusVersion), plutusVersion, budget ?? ExBudget.Unlimited);
     }
 
-    private static void ValidateReturnValue(Term<DeBruijn> result, int plutusVersion)
+    internal static EvaluationResult Run(Term<DeBruijn> applied, CostModel model, int plutusVersion, ExBudget initial)
     {
-        if (plutusVersion is not (1 or 2) && result is not ConstTerm<DeBruijn> { Value: UnitConstant })
+        CekMachine machine = new(initial, model);
+        ValidateReturnValue(machine.RunValue(applied), plutusVersion);
+        return new EvaluationResult(RedeemerTag: 0, Index: 0, ExUnits: UsedUnits(initial, machine.RemainingBudget));
+    }
+
+    internal static ExUnitsResult UsedUnits(ExBudget initial, ExBudget remaining) => new(
+        Mem: (ulong)Math.Max(0, SatMath.Sub(initial.Mem, remaining.Mem)),
+        Steps: (ulong)Math.Max(0, SatMath.Sub(initial.Cpu, remaining.Cpu)));
+
+    private static void RequireSupportedVersion(int plutusVersion)
+    {
+        if (plutusVersion is 1 or 2)
+        {
+            throw new NotSupportedException("EvaluateScript does not yet support Plutus V1 or V2.");
+        }
+    }
+
+    private static void ValidateReturnValue(CekValue result, int plutusVersion)
+    {
+        if (plutusVersion is not (1 or 2) && result is not VConstant { Value: UnitConstant })
         {
             throw new InvalidReturnValueException();
         }
@@ -135,12 +132,6 @@ public static class Evaluator
         CekMachine machine = new(initial);
         Term<DeBruijn> result = machine.Run(term);
 
-        ExBudget remaining = machine.RemainingBudget;
-        long cpuUsed = initial.Cpu - remaining.Cpu;
-        long memUsed = initial.Mem - remaining.Mem;
-
-        return (result, new ExUnitsResult(
-            Mem: (ulong)Math.Max(0, memUsed),
-            Steps: (ulong)Math.Max(0, cpuUsed)));
+        return (result, UsedUnits(initial, machine.RemainingBudget));
     }
 }
