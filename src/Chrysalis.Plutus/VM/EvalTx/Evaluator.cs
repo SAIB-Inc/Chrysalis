@@ -22,6 +22,9 @@ public static class Evaluator
     /// <param name="plutusVersion">Plutus language version of the script (currently 3). Defaults to 3.</param>
     /// <param name="budget">Optional execution budget. Defaults to unlimited.</param>
     /// <returns>The evaluation result with consumed execution units.</returns>
+    /// <exception cref="InvalidReturnValueException">
+    /// The script returned a value other than built-in unit, and is not Plutus V1 or V2.
+    /// </exception>
     public static EvaluationResult EvaluateScript(
         byte[] scriptBytes,
         IReadOnlyList<byte[]> argumentsCbor,
@@ -45,7 +48,7 @@ public static class Evaluator
         ExBudget initial = budget ?? ExBudget.Unlimited;
         // V3: provider model (costModel) or the latest baked-in default; V1/V2: reference default.
         CekMachine machine = new(initial, CostModelLoader.FromFlat(costModel, plutusVersion));
-        _ = machine.Run(term);
+        ValidateReturnValue(machine.Run(term), plutusVersion);
 
         ExBudget remaining = machine.RemainingBudget;
         long cpuUsed = initial.Cpu - remaining.Cpu;
@@ -69,6 +72,9 @@ public static class Evaluator
     /// <param name="plutusVersion">Plutus language version of the script (currently 3). Defaults to 3.</param>
     /// <param name="budget">Optional execution budget. Defaults to unlimited.</param>
     /// <returns>The evaluation result with consumed execution units.</returns>
+    /// <exception cref="InvalidReturnValueException">
+    /// The script returned a value other than built-in unit, and is not Plutus V1 or V2.
+    /// </exception>
     public static EvaluationResult EvaluateScript(
         byte[] scriptBytes,
         IReadOnlyList<PlutusData> arguments,
@@ -90,7 +96,7 @@ public static class Evaluator
         ExBudget initial = budget ?? ExBudget.Unlimited;
         // V3: provider model (costModel) or the latest baked-in default; V1/V2: reference default.
         CekMachine machine = new(initial, CostModelLoader.FromFlat(costModel, plutusVersion));
-        _ = machine.Run(term);
+        ValidateReturnValue(machine.Run(term), plutusVersion);
 
         ExBudget remaining = machine.RemainingBudget;
         long cpuUsed = initial.Cpu - remaining.Cpu;
@@ -102,6 +108,14 @@ public static class Evaluator
             ExUnits: new ExUnitsResult(
                 Mem: (ulong)Math.Max(0, memUsed),
                 Steps: (ulong)Math.Max(0, cpuUsed)));
+    }
+
+    private static void ValidateReturnValue(Term<DeBruijn> result, int plutusVersion)
+    {
+        if (plutusVersion is not (1 or 2) && result is not ConstTerm<DeBruijn> { Value: UnitConstant })
+        {
+            throw new InvalidReturnValueException();
+        }
     }
 
     /// <summary>
