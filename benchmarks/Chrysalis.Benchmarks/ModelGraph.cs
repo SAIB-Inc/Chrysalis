@@ -57,6 +57,7 @@ internal static class ModelGraph
         return sum;
     }
 
+#if !CHRYSALIS_PINNED_HARNESS
     private static long ReadCborList<T>(CborList<T> values)
     {
         long sum = 0;
@@ -70,6 +71,7 @@ internal static class ModelGraph
         foreach (T value in values) { result.Add(Fresh(value)); }
         return CborList.Create(result, values.IsIndefinite, values.HasSetTag);
     }
+#endif
 
     private static List<T> FreshList<T>(IEnumerable<T> values)
     {
@@ -122,10 +124,12 @@ internal static class ModelGraph
             {
                 body = Expression.Convert(Expression.Call(item, type.GetMethod(nameof(GetHashCode), Type.EmptyTypes)!), typeof(long));
             }
+#if !CHRYSALIS_PINNED_HARNESS
             else if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(CborList<>))
             {
                 body = Expression.Call(Method(nameof(ReadCborList)).MakeGenericMethod(type.GenericTypeArguments), item);
             }
+#endif
             else if (sequence is not null)
             {
                 body = Expression.Call(Method(nameof(ReadItems)).MakeGenericMethod(sequence.GenericTypeArguments), item);
@@ -167,10 +171,12 @@ internal static class ModelGraph
             else if (nullable is not null) { body = Expression.Call(Method(nameof(FreshNullable)).MakeGenericMethod(nullable), item); }
             else if (type == typeof(CborAny)) { body = Expression.Call(Method(nameof(FreshOpaque)), item); }
             else if (type == typeof(CborEncodedValue)) { body = Expression.Call(Method(nameof(FreshEmbedded)), item); }
+#if !CHRYSALIS_PINNED_HARNESS
             else if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(CborList<>))
             {
                 body = Expression.Call(Method(nameof(FreshCborList)).MakeGenericMethod(type.GenericTypeArguments), item);
             }
+#endif
             else if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(List<>))
             {
                 body = Expression.Call(Method(nameof(FreshList)).MakeGenericMethod(type.GenericTypeArguments), item);

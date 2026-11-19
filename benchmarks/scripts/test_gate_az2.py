@@ -434,14 +434,15 @@ def fake_inputs(root):
                 linuxDotnetRoot=str(root / 'runtime'), flyPythonRoot=str(root / 'python'))
 
 
-def fake_container(root, monkeypatch, *, mode='release', kind='controls', noise=False, only_bytes=False, commit='a', missing_native=False):
+def fake_container(root, monkeypatch, *, mode='release', kind='controls', noise=False, only_bytes=False, commit='a', missing_native=False,
+                   baseline_commit='b' * 40, micro_filter='demo-filter'):
     local = fake_inputs(root)
     monkeypatch.setattr(gate, 'REPO', root / 'repo')
     monkeypatch.setattr(gate, 'GATE', root / 'repo/benchmarks/gate')
     config = dict(defaults={'change': dict(design='long', timePairs={}), 'release': dict(design='long'), 'timePairs': 16},
                   direct={}, replays=['offline'], areas={'fixture': {'time': ['time/micro-*']}},
                   time=dict(noise={}, probe=probe_rule(), option=2, required=['time/micro-demo', 'time/preprod-offline'],
-                            micro={'demo': 'demo-filter'}, platform={'provider': 'fly'}))
+                            micro={'demo': micro_filter}, platform={'provider': 'fly'}))
     if only_bytes:
         config['defaults'][mode]['replayPairs'] = 16
     session.save(gate.GATE / 'gated.json', config)
@@ -454,10 +455,10 @@ def fake_container(root, monkeypatch, *, mode='release', kind='controls', noise=
             return
         assert set(local) == {'corporaRoot', 'pinnedBaseline', 'linuxDotnetRoot', 'flyPythonRoot'}
         arms = []
-        for i, prefix in enumerate(('b', commit)):
+        for i, sha in enumerate((baseline_commit, commit * 40)):
             dest = output / f'arm-{i}'; dest.mkdir()
             for dll in ('ReplayClient.dll', 'Chrysalis.Benchmarks.dll', 'BenchmarkDotNet.dll'):
-                (dest / dll).write_text('harness' if dll != 'ReplayClient.dll' else prefix)
+                (dest / dll).write_text('harness' if dll != 'ReplayClient.dll' else sha[0])
             (dest / 'ReplayClient.runtimeconfig.json').write_text('{}')
             for name in ('ReplayClient', 'Chrysalis.Benchmarks'):
                 graph = deps()
@@ -473,16 +474,17 @@ def fake_container(root, monkeypatch, *, mode='release', kind='controls', noise=
                     path.parent.mkdir(parents=True, exist_ok=True)
                     path.write_bytes(name.encode())
             (dest / CAPSTONE).with_name('libnot_selected.so').write_bytes(b'exclude me')
-            arms.append(dict(commit=prefix * 40, treeId=prefix * 40, sdk='11.0.100', runtime='11.0.0', tfm='net11.0',
+            arms.append(dict(commit=sha, treeId=sha, sdk='11.0.100', runtime='11.0.0', tfm='net11.0',
                              client=str(dest / 'ReplayClient.dll'), harness=str(dest / 'Chrysalis.Benchmarks.dll'),
                              dllSha256s=gate.closure_hashes(dest)))
         left, right = arms
         left['previousAlpha'] = False
         for item in rows:
             item['sides'] = dict(baseline=gate.public_side(left), candidate=gate.public_side(right))
-        return dict(baseline=left, candidate=right), left, right
+        return {args.baseline: left, args.candidate: right}, left, right
 
     monkeypatch.setattr(gate, 'stage_rows', stages)
+    monkeypatch.setattr(prepare, 'micro_probes', lambda side, selector: ['DemoBench.Method'])
     if only_bytes:
         replay = dict(id='replay/offline/steady', replay='offline', window='steady')
         corpus = gate.corpus_identity(replay, local)
@@ -490,7 +492,7 @@ def fake_container(root, monkeypatch, *, mode='release', kind='controls', noise=
         session.save(gate.GATE / 'bands/frozen.json', dict(key=key, row=replay['id'], replay='offline',
                      design='long', window='steady', runtime='11.0.0', corpusId=corpus, purpose='baseline-noise',
                      pairs=10, absoluteNoiseBandBytes=16))
-    args = SimpleNamespace(mode=mode, plan=plan, seal_kind=kind, ordering_proof=False, baseline='b' * 40, candidate=commit * 40, only=None)
+    args = SimpleNamespace(mode=mode, plan=plan, seal_kind=kind, ordering_proof=False, baseline=baseline_commit, candidate=commit * 40, only=None)
     def build(output):
         stage = prepare.build(args, output, local, marker=MARKER, phase='restore')
         assert not output.exists() and (stage / 'restore.json').exists()
@@ -504,6 +506,52 @@ def fake_container(root, monkeypatch, *, mode='release', kind='controls', noise=
                          sealKind=kind, plan='selection.json', planSha256=bundle.sha(plan), **TOOLING)
     fake_tooling(monkeypatch, gate.REPO)
     return local, build
+
+
+def test_transaction_micro_cohort_is_exact():
+    config = json.loads((gate.GATE / 'gated.json').read_text())
+    assert config['time']['micro']['transactions'].split(',') == [
+        'TxBench.SimpleBuildSign', 'TxBench.SimpleBuildFeeSign', 'TxBench.ScriptBuildFeeSign',
+        'TxBench.ScriptFee', 'TxBench.ScriptFeeLoop', 'TxBench.LinearFee',
+    ]
+
+
+@pytest.mark.parametrize('pinned', [False, True])
+def test_micro_probe_launch(tmp_path, monkeypatch, pinned):
+    sdk10, sdk11 = tmp_path / 'sdk10', tmp_path / 'sdk11'
+    sdk, runtime = (sdk10, '10.0.9') if pinned else (sdk11, '11.0.0')
+    monkeypatch.setenv('CHRYSALIS_DOTNET10_ROOT', str(sdk10))
+    monkeypatch.setenv('AZ2_TEST_SECRET_CANARY', 'fixture')
+    monkeypatch.setattr(gate.runner, 'DOTNET_ROOT', sdk11)
+    client = tmp_path / 'ReplayClient.dll'
+    side = dict(commit=gate.PIN if pinned else 'candidate', runtime=runtime, client=str(client))
+    reply = '["A.b"]'
+    def launch(argv, *, cwd, env, stderr, text, timeout):
+        assert argv == [sdk / 'dotnet', '--fx-version', runtime, client, 'micro-probes', 'A.b']
+        assert cwd == client.parent and env == dict(session.environment({}), DOTNET_ROOT=str(sdk))
+        assert 'AZ2_TEST_SECRET_CANARY' not in env
+        if isinstance(reply, subprocess.CalledProcessError):
+            raise reply
+        return reply
+    monkeypatch.setattr(prepare.subprocess, 'check_output', launch)
+    assert prepare.micro_probes(side, 'A.b') == ['A.b']
+    for reply in ('{}', '[]', '["b"]', '["A.b","A.b"]', 'not JSON'):
+        with pytest.raises(ValueError):
+            prepare.micro_probes(side, 'A.b')
+    reply = subprocess.CalledProcessError(1, 'fixture', stderr='missing method')
+    with pytest.raises(ValueError, match='missing method'):
+        prepare.micro_probes(side, 'A.b')
+
+
+@pytest.mark.parametrize('pinned', [[], ['TxBench.SimpleBuildSign'], ['TxBench.FeeTransfer', 'TxBench.SimpleBuildSign']])
+def test_container_refuses_paired_micro_method_mismatch(tmp_path, azure, monkeypatch, pinned):
+    _, build = fake_container(tmp_path, monkeypatch, baseline_commit=gate.PIN, micro_filter='TxBench.*')
+    candidate = ['TxBench.SimpleBuildSign', 'TxBench.FeeTransfer']
+    monkeypatch.setattr(prepare, 'micro_probes', lambda side, selector: pinned if side['commit'] == gate.PIN else candidate)
+    output = tmp_path / 'prepared'
+    with pytest.raises(ValueError, match='time/micro-demo.*pinned baseline'):
+        build(output)
+    assert not output.exists()
 
 
 def replace_session(directory, seal, mutate, *, prelude_override=None, number=0):

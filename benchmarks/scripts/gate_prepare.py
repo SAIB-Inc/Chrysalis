@@ -1,4 +1,4 @@
-"""Linux container build export and PC seal import. Neither executes a measurement client."""
+"""Linux build export and PC seal import. Only the build guest queries client metadata; neither measures."""
 import gzip
 import hashlib
 import json
@@ -313,6 +313,36 @@ def azure_config(config):
     return config
 
 
+def micro_probes(side, selector):
+    sdk = gate.staged_sdk_root(side['commit'])
+    client = Path(side['client'])
+    try:
+        names = json.loads(subprocess.check_output(
+            [sdk / 'dotnet', '--fx-version', side['runtime'], client, 'micro-probes', selector],
+            cwd=client.parent, env=dict(session.environment({}), DOTNET_ROOT=str(sdk)),
+            stderr=subprocess.PIPE, text=True, timeout=30))
+    except subprocess.CalledProcessError as error:
+        raise ValueError(error.stderr.strip()) from error
+    require(isinstance(names, list) and names and all(isinstance(name, str) and '.' in name for name in names)
+            and len(set(names)) == len(names), 'Invalid micro probe inventory')
+    return names
+
+
+def verify_micro_probes(args, rows, config, staged, baseline):
+    label = 'pinned baseline' if baseline['commit'] == gate.PIN else 'baseline'
+    for row in plan_rows(rows, config):
+        if 'microFilter' not in row:
+            continue
+        selector = row['microFilter']
+        right = staged[row.get('candidate', args.candidate)]
+        try:
+            left_names, right_names = (micro_probes(side, selector) for side in (baseline, right))
+        except ValueError as error:
+            raise ValueError(f'{row["id"]}: cannot pair {selector!r} against {label}: {error}') from error
+        require(left_names and left_names == right_names,
+                f'{row["id"]}: {label} has different micro methods for {selector!r}: {left_names} != {right_names}')
+
+
 def build(args, output, local, *, marker, phase):
     config = azure_config(json_file(gate.GATE / 'gated.json'))
     audit = json_file(gate.REPO / FIXTURES / 'audit-allocations.json')
@@ -338,6 +368,7 @@ def build(args, output, local, *, marker, phase):
             bundle.gate_encoded(json_file(state)) == bundle.gate_encoded(expected),
             'Restore phase missing or preparation request changed')
     staged, baseline, candidate = gate.stage_rows(args, root, rows, local, phase='build')
+    verify_micro_probes(args, rows, config, staged, baseline)
     output.mkdir(parents=True, exist_ok=False)
     # Infer replay before tying rows to their corpus. Stage aliases may be absolute guest paths.
     for row in rows:

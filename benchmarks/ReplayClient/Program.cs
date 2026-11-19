@@ -67,6 +67,20 @@ internal static class Program
     private static async Task<int> Main(string[] args)
     {
         _ = ProcessSettings;
+        if (args is ["micro-probes", string filter])
+        {
+            try
+            {
+                Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(MicroClient.ProbeNames(filter)));
+                return 0;
+            }
+            catch (ArgumentException error)
+            {
+                Console.Error.WriteLine(error.Message);
+                return 1;
+            }
+        }
+
         Observed = args.LastOrDefault() == "--observed";
         if (Observed) { args = args[..^1]; }
         bool micro = args.Length == 6 && args[0] == "micro";

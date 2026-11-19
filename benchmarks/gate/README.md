@@ -17,6 +17,10 @@ and `capture/`; `pinnedBaseline` contains the approved DLL closure and
 verify their hashes before and after measurement. Other sides use their own
 `global.json` SDK, targeting net11.0. All restores use the local NuGet feed.
 
+Wrap a benchmark that requires candidate-only APIs in `#if !CHRYSALIS_PINNED_HARNESS`.
+No Azure paired row may select it, including through a timing wildcard.
+Azure preparation checks both built arms' methods without running a measurement.
+
 ### Native MacBook Pro merge gate
 
 Use `work/bin/mbp-alloc`, not `gate.py run`, for native Mac allocation. The
@@ -456,8 +460,10 @@ The Mac's disposable Linux/amd64 guests restore from the local package feed,
 then build every arm with `--no-restore`. The Mac host verifies the result and
 publishes `prepared/`, `build-files.json`, and `completion.json` together only
 after the guests and their staging have been cleaned up.
-They do not run the client. The Mac's `data/gate-build.json` names the public
-inputs only. `linuxDotnetRoot` and `flyPythonRoot` each contain a `sha256.json`
+For selected micro rows, the build guest runs ReplayClient only to list the
+benchmark methods for each arm (`micro-probes`); it runs no measurements. The Mac
+host and PC importer do not run the client. The Mac's `data/gate-build.json`
+names the public inputs only. `linuxDotnetRoot` and `flyPythonRoot` each contain a `sha256.json`
 mapping relative paths to SHA-256 digests. `pinnedBaseline` and `corporaRoot`
 retain their existing manifests.
 
