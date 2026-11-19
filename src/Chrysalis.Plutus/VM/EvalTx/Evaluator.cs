@@ -34,6 +34,9 @@ public static class Evaluator
     /// <exception cref="NotSupportedException">The protocol version is newer than <see cref="LatestProtocolVersion"/>.</exception>
     /// <exception cref="ArgumentNullException">An argument is null, or the language and protocol version require a cost model.</exception>
     /// <exception cref="InvalidOperationException">The language or a decoded term is unavailable.</exception>
+    /// <exception cref="UnboundVariableException">
+    /// The script has a variable no enclosing lambda binds, outside <c>constr</c> and <c>case</c>; the node refuses it before running it.
+    /// </exception>
     /// <exception cref="EvaluationException">The Plutus Core version is unavailable or the script failed during evaluation.</exception>
     public static EvaluationResult EvaluateScript(
         byte[] scriptBytes,
@@ -77,6 +80,9 @@ public static class Evaluator
     /// <exception cref="NotSupportedException">The protocol version is newer than <see cref="LatestProtocolVersion"/>.</exception>
     /// <exception cref="ArgumentNullException">An argument is null, or the language and protocol version require a cost model.</exception>
     /// <exception cref="InvalidOperationException">The language or a decoded term is unavailable.</exception>
+    /// <exception cref="UnboundVariableException">
+    /// The script has a variable no enclosing lambda binds, outside <c>constr</c> and <c>case</c>; the node refuses it before running it.
+    /// </exception>
     /// <exception cref="EvaluationException">The Plutus Core version is unavailable or the script failed during evaluation.</exception>
     public static EvaluationResult EvaluateScript(
         byte[] scriptBytes,
@@ -123,7 +129,47 @@ public static class Evaluator
         {
             throw new EvaluationException($"Plutus Core {version} is not available for Plutus V{plutusVersion} at protocol version {protocolVersion}.");
         }
+
+        if (!IsClosed(term, 0))
+        {
+            throw new UnboundVariableException();
+        }
         return (term, model);
+    }
+
+    // Upstream's scope check (Check/Scope.hs:33-55; Common/Eval.hs:130): a variable must be bound by an
+    // enclosing lambda, index 1 to the depth. Constr and case are not looked into, so a variable there
+    // fails only if it is evaluated. Flat decodes every binder as 0 (FlatDecoder.cs:73).
+    internal static bool IsClosed(Term<DeBruijn> term, int depth)
+    {
+        while (true)
+        {
+            switch (term)
+            {
+                case VarTerm<DeBruijn> variable:
+                    return variable.Name.Index >= 1 && variable.Name.Index <= depth;
+                case LambdaTerm<DeBruijn> lambda:
+                    term = lambda.Body;
+                    depth++;
+                    break;
+                case DelayTerm<DeBruijn> delay:
+                    term = delay.Body;
+                    break;
+                case ForceTerm<DeBruijn> force:
+                    term = force.Body;
+                    break;
+                case ApplyTerm<DeBruijn> apply:
+                    if (!IsClosed(apply.Function, depth))
+                    {
+                        return false;
+                    }
+
+                    term = apply.Argument;
+                    break;
+                default:
+                    return true;
+            }
+        }
     }
 
     private static void ValidateReturnValue(CekValue result, int plutusVersion)
@@ -137,6 +183,7 @@ public static class Evaluator
     /// <summary>
     /// Evaluates a raw UPLC term directly (already parsed/decoded).
     /// Lowest-level API — no Flat decoding or argument application.
+    /// Does not check scope; an unbound variable fails with <see cref="EvaluationException"/> when evaluated.
     /// </summary>
     /// <param name="term">The UPLC term to evaluate.</param>
     /// <param name="budget">Enforced: the script fails with BudgetExceededException when either part falls below zero. Leave it out to measure.</param>

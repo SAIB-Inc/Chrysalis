@@ -137,9 +137,22 @@ public sealed partial class NodeBudgetTests
         string[] phase2 = ["F-ver-0.1.0-V3", "F-ver-1.0.1-V3", "F-ver-1.1.0-patch-2^70-V3", "F-ver-1.2.0-V3", "F-ver-1.2^32.0-V3",
             "F-ver-2.0.0-V3", "F-ver-2^64.0.0-V3", "F-ver-2^64.0.0-V2", "BI-consByteString-arg0--1-V3", "BI-consByteString-arg0-256-V3",
             "P-C6-case-bool-true-one-branch", "P-C8-case-list-nil-one-branch"];
+        string[] unboundScope = ["O-unforced-delay-outside-case-V1", "O-unforced-delay-outside-case-V2",
+            "O-unforced-delay-outside-case-V3", "P-A6-free-var-under-unused-lambda"];
+        string[] unboundReached = ["O-taken-branch-V1", "O-taken-branch-V2", "O-taken-branch-V3",
+            "P-A5-free-var-taken-case-branch", "O-evaluated-constr-field-V1", "O-evaluated-constr-field-V2",
+            "O-evaluated-constr-field-V3"];
         string[] errors = [.. mismatches.OfType<string>(), .. CheckVerdicts(phase1, "phase1-reject", typeof(InvalidOperationException)),
-            .. CheckVerdicts(phase2, "phase2-fail", typeof(EvaluationException))];
+            .. CheckVerdicts(phase2, "phase2-fail", typeof(EvaluationException)),
+            .. CheckVerdicts(unboundScope, "phase2-fail", typeof(UnboundVariableException)),
+            .. CheckVerdicts(unboundReached, "phase2-fail", typeof(EvaluationException))];
         Assert.True(errors.Length == 0, $"{errors.Length} node replay mismatches:\n{string.Join('\n', errors)}");
+
+        string[] openAccepted = [.. scripts.Where(s => s.Id.StartsWith("O-", StringComparison.Ordinal)
+            || s.Id is "P-A3-free-var-untaken-case-branch" or "P-A4-free-var-unevaluated-constr-field"
+                or "F-var-2^63+1-V3" or "F-var-2^63-10groups-V3" or "F-var-2^64-1-V2" or "F-var-2^64-1-V3").Select(s => s.Id)];
+        Assert.Equal(30, openAccepted.Length);
+        Assert.All(openAccepted, id => Assert.DoesNotContain(id, known.Keys));
 
         string[] stringCases = [.. scripts.Where(s => s.Id.StartsWith("W-builtin_semantics_", StringComparison.Ordinal))
             .Where(s => s.Id.Contains("appendString", StringComparison.Ordinal) || s.Id.Contains("encodeUtf8", StringComparison.Ordinal)
@@ -157,13 +170,15 @@ public sealed partial class NodeBudgetTests
 
         IEnumerable<string> CheckVerdicts(string[] ids, string outcome, Type expected)
         {
+            string? expectedMessage = expected == typeof(UnboundVariableException) ? new UnboundVariableException().Message : null;
             foreach (string id in ids)
             {
                 (Script script, string recorded) = fixture.Failures.Single(row => row.Script.Id == id);
                 Exception? observed = Record.Exception(() => EvaluateRecordedScript(script));
-                if (recorded != outcome || observed?.GetType() != expected)
+                if (recorded != outcome || observed?.GetType() != expected
+                    || (expectedMessage is not null && observed.Message != expectedMessage))
                 {
-                    yield return $"{id}: expected {outcome}/{expected.Name}; fixture {recorded}, got {observed?.GetType().Name ?? "success"}";
+                    yield return $"{id}: expected {outcome}/{expected.Name}; fixture {recorded}, got {observed?.GetType().Name ?? "success"}: {observed?.Message}";
                 }
             }
         }
