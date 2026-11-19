@@ -1,6 +1,7 @@
 """AZ2 build handoff, prelude and seal-review regressions."""
 import copy
 import hashlib
+import inspect
 import json
 import os
 from pathlib import Path
@@ -1063,6 +1064,11 @@ def test_carry_is_scope_specific_and_excludes_recorded_only():
                 rows=[dict(id='time/real', kind='time'), dict(id='replay/real', kind='replay'),
                       dict(id='observation', kind='time', rowClass='recorded-only')], bands={})
     assert {row['id'] for row in batch.carry_rows(seal, {})} == {'time/real', 'replay/real'}
+
+
+def test_verify_policy_accepts_pinned_runner_call():
+    # mbp-container:1177 (pin 2512c771, gate_azure_payload.py:17) passes seal, builds, receipt, local.
+    inspect.signature(prepare.verify_policy).bind(None, None, None, None)
 
 
 @pytest.mark.parametrize('defect,error', [

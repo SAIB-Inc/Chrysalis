@@ -622,7 +622,7 @@ def bind_builds(rows, builds):
     return baseline, candidate
 
 
-def verify_policy(seal, builds, receipt, local, *, fixtures_sha256):
+def verify_policy(seal, builds, receipt, local, *, fixtures_sha256=None):
     request = receipt['request']
     mode, kind = request['mode'], request['sealKind']
     require(seal.get('mode') == mode and seal.get('kind') == kind, 'Completion kind or mode differs from portable plan')
