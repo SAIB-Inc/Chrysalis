@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Sockets;
 using System.Text;
 using System.Text.Json;
+using SAIB.Cbor;
 
 namespace Chrysalis.Tx.Providers;
 
@@ -152,6 +153,31 @@ public sealed class ProviderHttp(HttpClient client, string provider, IReadOnlyLi
         return body ?? throw Unusable(provider, operation, "null JSON body");
     }
 
+    /// <summary>Submits a transaction, marking lost or unreadable answers as having an unknown outcome.</summary>
+    /// <typeparam name="T">The parsed submission result type.</typeparam>
+    /// <param name="request">The HTTP submission request.</param>
+    /// <param name="operation">A fixed operation name.</param>
+    /// <param name="read">Reads the successful response body.</param>
+    /// <param name="jsonRpc">Whether HTTP 400 errors may carry a JSON-RPC error object.</param>
+    /// <param name="cancellationToken">Cancels sending or reading.</param>
+    /// <returns>The parsed submission result.</returns>
+    public async Task<T> SubmitAsync<T>(HttpRequestMessage request, string operation,
+        Func<HttpResponseMessage, CancellationToken, Task<T>> read, bool jsonRpc, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(read);
+        bool receivedSuccess = false;
+        try
+        {
+            using HttpResponseMessage response = (await SendCoreAsync(request, operation, null, jsonRpc, cancellationToken).ConfigureAwait(false))!;
+            receivedSuccess = true;
+            return await read(response, cancellationToken).ConfigureAwait(false);
+        }
+        catch (ProviderException error) when (error is not ProviderStatusException && (receivedSuccess || error.IsTransient))
+        {
+            throw new ProviderException($"{error.Message}; the transaction may have been accepted", error.IsTransient, error.Detail);
+        }
+    }
+
     private CancellationTokenSource BodyDeadline(CancellationToken cancellationToken)
     {
         CancellationTokenSource deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
@@ -198,9 +224,9 @@ public sealed class ProviderHttp(HttpClient client, string provider, IReadOnlyLi
         return new ProviderException($"{provider} {operation}: {what}", transient);
     }
 
-    /// <summary>Reads one page at a time, validating its length before adding any item.</summary>
+    /// <summary>Reads one page at a time, validating its length before adding any item, until a short or empty page.</summary>
     public static async Task ReadAllPagesAsync<T>(Func<int, CancellationToken, Task<List<T>>> readPage, int firstPage,
-        int pageSize, Func<List<T>, CancellationToken, Task> addPage, string provider, string operation,
+        int pageSize, bool shortPageEnds, Func<List<T>, CancellationToken, Task> addPage, string provider, string operation,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(readPage);
@@ -214,7 +240,7 @@ public sealed class ProviderHttp(HttpClient client, string provider, IReadOnlyLi
             cancellationToken.ThrowIfCancellationRequested();
             await addPage(items, cancellationToken).ConfigureAwait(false);
             cancellationToken.ThrowIfCancellationRequested();
-            if (items.Count < pageSize) { return; }
+            if (shortPageEnds ? items.Count < pageSize : items.Count == 0) { return; }
             if (page == int.MaxValue) { throw Unusable(provider, operation, "page number exhausted"); }
         }
     }
@@ -228,7 +254,8 @@ public sealed class ProviderHttp(HttpClient client, string provider, IReadOnlyLi
             return map(input);
         }
         catch (Exception error) when (error is FormatException or OverflowException or ArgumentException or InvalidOperationException
-            or KeyNotFoundException or InvalidCastException or IndexOutOfRangeException or JsonException)
+            or KeyNotFoundException or InvalidCastException or IndexOutOfRangeException or JsonException or CborException
+            or InvalidDataException)
         {
             throw Unusable(provider, operation, error.GetType().Name);
         }

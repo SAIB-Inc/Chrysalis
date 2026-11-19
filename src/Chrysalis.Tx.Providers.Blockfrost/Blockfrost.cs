@@ -12,7 +12,6 @@ using Chrysalis.Codec.Types.Cardano.Core.Governance;
 using Chrysalis.Codec.Types.Cardano.Core.Header;
 using Chrysalis.Codec.Types.Cardano.Core.Protocol;
 using Chrysalis.Codec.Types.Cardano.Core.Transaction;
-using Chrysalis.Tx.Extensions;
 using Chrysalis.Tx.Models;
 using Chrysalis.Tx.Models.Cbor;
 using Chrysalis.Codec.Types.Cardano.Core;
@@ -167,7 +166,7 @@ public sealed class Blockfrost : ICardanoDataProvider, IDisposable
         const int pageSize = 100;
         const string operation = nameof(GetUtxosAsync);
         ResolvedInputSet found = new(Provider, operation);
-        await ProviderHttp.ReadAllPagesAsync(ReadPage, 1, pageSize, AddPage, Provider, operation, cancellationToken).ConfigureAwait(false);
+        await ProviderHttp.ReadAllPagesAsync(ReadPage, 1, pageSize, shortPageEnds: true, AddPage, Provider, operation, cancellationToken).ConfigureAwait(false);
         return found.ToList();
 
         async Task<List<BlockfrostUtxo>> ReadPage(int page, CancellationToken ct) =>
@@ -277,11 +276,7 @@ public sealed class Blockfrost : ICardanoDataProvider, IDisposable
                 _ => PlutusV3Script.Create(3, bytes)
             };
         }, Provider, operation);
-        if (!string.Equals(script.HashHex(), scriptHash, StringComparison.OrdinalIgnoreCase))
-        {
-            throw ProviderHttp.Unusable(Provider, operation, "script hash differs from the requested hash");
-        }
-        return script;
+        return ProviderValues.RequireScriptHash(script, scriptHash, Provider, operation);
     }
 
     /// <summary>
@@ -398,17 +393,8 @@ public sealed class Blockfrost : ICardanoDataProvider, IDisposable
         cancellationToken.ThrowIfCancellationRequested();
         const string operation = nameof(SubmitTransactionAsync);
         using HttpRequestMessage request = CreateTransactionRequest("tx/submit", tx);
-        bool receivedSuccess = false;
-        try
-        {
-            using HttpResponseMessage response = (await _http.SendAsync(request, operation, null, cancellationToken).ConfigureAwait(false))!;
-            receivedSuccess = true;
-            return await _http.ReadJsonAsync<string>(response, operation, cancellationToken).ConfigureAwait(false);
-        }
-        catch (ProviderException error) when (error is not ProviderStatusException && (receivedSuccess || error.IsTransient))
-        {
-            throw new ProviderException($"{error.Message}; the transaction may have been accepted", error.IsTransient, error.Detail);
-        }
+        return await _http.SubmitAsync(request, operation,
+            (response, ct) => _http.ReadJsonAsync<string>(response, operation, ct), jsonRpc: false, cancellationToken).ConfigureAwait(false);
     }
 
     private static HttpRequestMessage CreateTransactionRequest(string path, ITransaction tx) => new(HttpMethod.Post, path)

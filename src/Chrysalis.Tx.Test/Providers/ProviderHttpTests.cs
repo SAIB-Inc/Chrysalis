@@ -1,10 +1,13 @@
 using System.Collections;
 using System.Net;
+using System.Text.Json;
 using Chrysalis.Tx.Providers;
+using SAIB.Cbor;
 using Xunit;
 
 namespace Chrysalis.Tx.Test.Providers;
 
+#pragma warning disable JSON002 // Test fixtures include JSON fragments or malformed JSON.
 public class ProviderHttpTests
 {
     private const string Canary = "CANARY-diagnostic-fragment";
@@ -264,5 +267,30 @@ public class ProviderHttpTests
             Assert.Null(error.InnerException);
             Assert.Empty(error.Data);
         }
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(3)]
+    [InlineData(4)]
+    public async Task MapTurnsDecodeFailuresIntoUnusable(int kind)
+    {
+        using CancellationTokenSource timeout = new(TimeSpan.FromSeconds(10));
+        using StubHttpHandler stub = new(_ => StubHttpHandler.Json("""[{"label":"1","metadata":"bfff"}]"""));
+        using Blockfrost provider = new("CANARY-test-project", url: "https://blockfrost.test/", handler: stub);
+        ProviderException error = kind == 4
+            ? await Assert.ThrowsAsync<ProviderException>(() => provider.GetTransactionMetadataAsync(BlockfrostTests.Hash, timeout.Token))
+            : Assert.Throws<ProviderException>(() => ProviderHttp.Map<int, int>(0, _ => throw kind switch
+            {
+                0 => new FormatException("x"),
+                1 => new JsonException("x"),
+                2 => new CborException("x"),
+                _ => new InvalidDataException("x")
+            }, "P", "Op"));
+        Assert.False(error.IsTransient);
+        Assert.Contains("unusable response", error.Message, StringComparison.Ordinal);
+        Assert.Null(error.InnerException);
     }
 }

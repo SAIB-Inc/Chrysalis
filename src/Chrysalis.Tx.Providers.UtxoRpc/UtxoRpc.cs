@@ -1,5 +1,4 @@
 using System.Buffers;
-using Chrysalis.Codec.Extensions.Cardano.Core;
 using Chrysalis.Codec.Serialization;
 using Chrysalis.Codec.Types.Cardano.Core.Transaction;
 using Chrysalis.Tx.Models;
@@ -11,7 +10,6 @@ using SAIB.Cbor.Serialization;
 using Utxorpc.V1Beta.Submit;
 using Spec = Utxorpc.V1Beta.Cardano;
 using LedgerMetadata = Chrysalis.Codec.Types.Cardano.Core.Metadata;
-using Auxiliary = Chrysalis.Codec.Types.Cardano.Core.IAuxiliaryData;
 using SubmitChainTx = Utxorpc.V1Beta.Submit.AnyChainTx;
 using Chrysalis.Codec.Types.Cardano.Core.Protocol;
 using Chrysalis.Wallet.Models.Enums;
@@ -240,55 +238,12 @@ public sealed class UtxoRpc : ICardanoDataProvider, IDisposable
         try
         {
             ReadOnlyMemory<byte> tx = response.Tx?.NativeBytes.Memory ?? throw new InvalidDataException("tx.native_bytes is missing.");
-            ReadOnlyMemory<byte>? auxiliary = AuxiliaryData(tx);
-            return auxiliary is { } data ? CborSerializer.Deserialize<Auxiliary>(data).Metadata() : null;
+            return ProviderValues.TransactionMetadata(tx);
         }
         catch (Exception exception) when (exception is not OutOfMemoryException)
         {
             throw Unusable(_methods.ReadTx, exception);
         }
-    }
-
-    internal static ReadOnlyMemory<byte>? AuxiliaryData(ReadOnlyMemory<byte> tx)
-    {
-        CborReader reader = new(tx.Span);
-        reader.ReadBeginArray();
-        bool indefinite = tx.Span[0] == 0x9f;
-        int count = reader.ReadSize() switch
-        {
-            _ when indefinite => -1,
-            2 => 2,
-            3 => 3,
-            4 => 4,
-            _ => throw new InvalidDataException("Invalid transaction array length.")
-        };
-        _ = reader.ReadDataItem();
-        _ = reader.ReadDataItem();
-        ReadOnlyMemory<byte>? auxiliary = null;
-        bool ended = indefinite && !reader.Buffer.IsEmpty && reader.Buffer[0] == 0xff;
-        if (count != 2 && !ended)
-        {
-            if (reader.Buffer.IsEmpty) { throw new InvalidDataException("Truncated transaction array."); }
-            bool validityFlag = reader.Buffer[0] is 0xf4 or 0xf5;
-            if (validityFlag)
-            {
-                if (!indefinite && count != 4) { throw new InvalidDataException("A validity flag requires four transaction items."); }
-                _ = reader.ReadDataItem();
-            }
-            else if (count == 4) { throw new InvalidDataException("Missing transaction validity flag."); }
-
-            if (reader.Buffer.IsEmpty || reader.Buffer[0] == 0xff) { throw new InvalidDataException("Missing transaction auxiliary item."); }
-            bool absent = reader.Buffer[0] == 0xf6;
-            int start = tx.Length - reader.Buffer.Length;
-            _ = reader.ReadDataItem();
-            if (!absent) { auxiliary = tx[start..(tx.Length - reader.Buffer.Length)]; }
-        }
-
-        if (indefinite ? reader.Buffer.Length != 1 || reader.Buffer[0] != 0xff : !reader.Buffer.IsEmpty)
-        {
-            throw new InvalidDataException("Unterminated transaction array or trailing bytes.");
-        }
-        return auxiliary;
     }
 
     /// <summary>Submits a transaction once; acceptance does not mean it is on chain.</summary>
