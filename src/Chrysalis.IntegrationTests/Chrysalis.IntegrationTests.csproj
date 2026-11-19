@@ -27,4 +27,7 @@
     <EmbeddedResource Include="../Chrysalis.Network.Tests/Fixtures/Preprod/**/*"
                       LogicalName="Preprod/%(RecursiveDir)%(Filename)%(Extension)" />
   </ItemGroup>
+  <ItemGroup>
+    <Compile Include="../Chrysalis.Tx.Test/CliSnapshotProvider.cs" Link="CliSnapshotProvider.cs" />
+  </ItemGroup>
 </Project>

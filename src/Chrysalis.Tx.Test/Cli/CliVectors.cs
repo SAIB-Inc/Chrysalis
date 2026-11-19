@@ -18,6 +18,8 @@ internal sealed class CliVectors(string root, IReadOnlyDictionary<string, JsonEl
     private const string T1FileLines = "c2a0f260f5c652100b036d2c2f9d8c6871c6fdc49da0d17e11ac1b975a862eb3";
     private const string T1CaseLines = "2b102d5eaa09bd7322629eeeac3715879273a8584b9af2a00c3589f43149f3b2";
 
+    /// <summary>Root of the CLI fixtures copied to the test output.</summary>
+    internal static string Root { get; } = Path.Combine(AppContext.BaseDirectory, "TestData", "cli");
     internal IReadOnlyDictionary<string, JsonElement> Files { get; } = files;
     internal IReadOnlyList<JsonElement> Cases { get; } = cases;
 

@@ -135,7 +135,7 @@ public sealed class RedeemerBuilder
         return RedeemerMap.Create(map);
     }
 
-    private static ExUnits DefaultExUnits() => ExUnits.Create(0, 0);
+    internal static ExUnits DefaultExUnits() => ExUnits.Create(0, 0);
 
     /// <summary>
     /// Untagged redeemer — stores data and optional execution units (set after evaluation).
