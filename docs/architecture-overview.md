@@ -247,11 +247,11 @@ The `TransactionTemplateBuilder<T>` represents a modern approach:
 
 ### Fee Calculation and Coin Selection
 
-#### Fee Calculation (`FeeUtil`)
+#### Fee Calculation (`FeeEngine`, `Chrysalis.Tx.Fees`)
 - Linear fee calculation based on transaction size
 - Reference script fee calculation with tiered pricing
 - Script execution fee calculation based on ExUnits
-- Minimum ADA calculation for UTXOs
+- Minimum ADA calculation for UTXOs (see `docs/migration/T3.md` for `FeeUtil` replacements)
 
 #### Coin Selection (`CoinSelectionUtil`)
 - **Largest-First Algorithm**: Optimized selection preferring larger UTXOs

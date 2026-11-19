@@ -1,4 +1,3 @@
-using Chrysalis.Codec.Extensions;
 using Chrysalis.Codec.Extensions.Cardano.Core.Certificates;
 using Chrysalis.Codec.Extensions.Cardano.Core.Common;
 using Chrysalis.Codec.Extensions.Cardano.Core.Transaction;
@@ -839,22 +838,10 @@ public sealed class TransactionTemplateBuilder<T>
         }
 
         // Separate change UTxOs for specific processing
-        string changeAddr = parties["change"];
-        List<ResolvedInput> changeUtxos = [.. allUtxos.Where(utxo =>
-        {
-            string outputAddress = GetAddressFromOutput(utxo.Output);
-            return outputAddress == changeAddr;
-        })];
-
+        byte[] changeAddr = WalletAddress.FromBech32(parties["change"]).ToBytes();
+        List<ResolvedInput> changeUtxos = [.. allUtxos.Where(utxo => utxo.Output.Address().Span.SequenceEqual(changeAddr))];
         return (changeUtxos, allUtxos);
     }
-
-    private static string GetAddressFromOutput(ITransactionOutput output) => output switch
-    {
-        AlonzoTransactionOutput alonzo => WalletAddress.FromBytes(alonzo.Address.Value.ToArray()).ToBech32(),
-        PostAlonzoTransactionOutput postAlonzo => WalletAddress.FromBytes(postAlonzo.Address.Value.ToArray()).ToBech32(),
-        _ => throw new InvalidOperationException("Unknown output type")
-    };
 
     private void BuildRedeemers(
         BuildContext buildContext,
@@ -1012,16 +999,7 @@ public sealed class TransactionTemplateBuilder<T>
             {
                 redeemerTag = redeemer.Tag;
 
-                dynamic dataObj = redeemer.Data;
-                if (dataObj is IPlutusData pd)
-                {
-                    redeemerData = pd;
-                }
-                else
-                {
-                    byte[] dataBytes = CborSerializer.Serialize(dataObj);
-                    redeemerData = CborSerializer.Deserialize<IPlutusData>(dataBytes);
-                }
+                redeemerData = TxBuilder.ToPlutusData((ICborType)redeemer.Data);
 
                 redeemerExUnits = redeemer.ExUnits;
 
@@ -1199,41 +1177,6 @@ public sealed class TransactionTemplateBuilder<T>
         {
             _ = context.TxBuilder.SetWithdrawals(new Withdrawals(rewards));
         }
-    }
-
-    private static List<(IScript Script, int RawSize)> GetScripts(bool isSmartContractTx, List<TransactionInput> referenceInputs, List<ResolvedInput> allUtxos)
-    {
-        if (!isSmartContractTx || referenceInputs == null || referenceInputs.Count == 0)
-        {
-            return [];
-        }
-
-        List<(IScript Script, int RawSize)> scripts = [];
-
-        // Create lookup dictionary for faster matching
-        Dictionary<(ReadOnlyMemory<byte>, ulong), ResolvedInput> utxoLookup = [with(new TransactionInputEqualityComparer())];
-
-        foreach (ResolvedInput utxo in allUtxos)
-        {
-            utxoLookup[(utxo.Outref.TransactionId, utxo.Outref.Index)] = utxo;
-        }
-
-        foreach (TransactionInput referenceInput in referenceInputs)
-        {
-            (ReadOnlyMemory<byte> TransactionId, ulong Index) key = (referenceInput.TransactionId, referenceInput.Index);
-            if (utxoLookup.TryGetValue(key, out ResolvedInput? utxo))
-            {
-                if (utxo.Output is PostAlonzoTransactionOutput postAlonzoOutput &&
-                    postAlonzoOutput.ScriptRef is not null)
-                {
-                    IScript script = CborSerializer.Deserialize<IScript>(postAlonzoOutput.ScriptRef.GetValue());
-                    int rawSize = postAlonzoOutput.ScriptRef.Raw.Length;
-                    scripts.Add((script, rawSize));
-                }
-            }
-        }
-
-        return scripts;
     }
 
     private static List<ResolvedInput> GetSpecifiedInputsUtxos(List<TransactionInput> specifiedInputs, List<ResolvedInput> allUtxos)

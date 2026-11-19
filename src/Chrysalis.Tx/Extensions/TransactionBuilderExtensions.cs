@@ -1,3 +1,4 @@
+using System.Buffers.Binary;
 using Chrysalis.Codec.Extensions.Cardano.Core.Certificates;
 using Chrysalis.Codec.Extensions.Cardano.Core.Common;
 using Chrysalis.Codec.Extensions.Cardano.Core.Transaction;
@@ -11,6 +12,7 @@ using Chrysalis.Codec.Types.Cardano.Core.Protocol;
 using Chrysalis.Codec.Types.Cardano.Core.Transaction;
 using Chrysalis.Codec.Types.Cardano.Core.TransactionWitness;
 using Chrysalis.Tx.Builders;
+using Chrysalis.Tx.Fees;
 using Chrysalis.Tx.Models;
 using Chrysalis.Tx.Models.Cbor;
 using Chrysalis.Tx.Utils;
@@ -22,91 +24,189 @@ namespace Chrysalis.Tx.Extensions;
 /// </summary>
 public static class TransactionBuilderExtensions
 {
-    private const int MaxFeeIterations = 10;
-    private const long FeeConvergenceTolerance = 1000;
-    private const ulong InitialFeePlaceholder = 2_000_000;
-
     /// <summary>
-    /// Calculates and sets the transaction fee, including script fees and collateral handling.
+    /// Sets an exact fee. Without any resolved UTxOs, assumes no input carries a reference script and
+    /// that <paramref name="mockWitnessFee"/> VKey witnesses sign. With UTxOs, that count is a floor.
+    /// A nonzero <paramref name="defaultFee"/> is fixed and must cover its own minimum.
     /// </summary>
     public static TransactionBuilder CalculateFee(
-        this TransactionBuilder builder,
-        List<IScript> scripts,
-        ulong defaultFee = 0,
-        int mockWitnessFee = 1,
-        List<ResolvedInput>? availableInputs = null,
-        string? changeAddress = null,
-        List<ResolvedInput>? resolvedInputs = null)
-    {
-        // Convert to sized tuples using serialized length as size estimate
-        List<(IScript Script, int RawSize)> sized = [.. scripts
-            .Select(s => (s, CborSerializer.Serialize(s).Length))];
-        return builder.CalculateFee(sized, defaultFee, mockWitnessFee, availableInputs, changeAddress, resolvedInputs);
-    }
-
-    /// <summary>
-    /// Calculates and sets the transaction fee with exact reference script sizes.
-    /// </summary>
-    internal static TransactionBuilder CalculateFee(
-        this TransactionBuilder builder,
-        List<(IScript Script, int RawSize)> scripts,
-        ulong defaultFee = 0,
-        int mockWitnessFee = 1,
-        List<ResolvedInput>? availableInputs = null,
-        string? changeAddress = null,
-        List<ResolvedInput>? resolvedInputs = null)
+        this TransactionBuilder builder, List<IScript> scripts, ulong defaultFee = 0, int mockWitnessFee = 1,
+        List<ResolvedInput>? availableInputs = null, string? changeAddress = null,
+        List<ResolvedInput>? resolvedInputs = null, List<ResolvedInput>? referenceInputs = null)
     {
         ArgumentNullException.ThrowIfNull(builder);
         ArgumentNullException.ThrowIfNull(scripts);
-
+        ArgumentOutOfRangeException.ThrowIfNegative(mockWitnessFee);
+        builder.RejectSignatures();
+        builder.IntegrateWithdrawals();
         builder.IntegrateRedeemerSet();
         _ = builder.ComputeAndSetAuxDataHash();
-
-        ulong scriptFee = 0;
-        ulong scriptExecutionFee = 0;
-
-        if (builder.Redeemers is not null)
+        if (builder.Redeemers is not null && scripts.Count > 0)
         {
-            (scriptFee, scriptExecutionFee) = CalculateScriptFees(builder, scripts);
+            _ = builder.ComputeAndSetScriptDataHash(scripts);
         }
 
-        _ = builder.SetFee(defaultFee == 0 ? InitialFeePlaceholder : defaultFee);
-
-        // Build change output before convergence (so fee accounts for its CBOR size)
+        List<ResolvedInput>? resolutions = resolvedInputs is null && availableInputs is null && referenceInputs is null ? null
+            : [.. resolvedInputs ?? [], .. availableInputs ?? [], .. referenceInputs ?? []];
+        ulong? budget = builder.ChangeOutputIndex is { } i ? builder.Outputs[i].Amount().Lovelace() : null;
         if (changeAddress is not null && resolvedInputs is not null)
         {
-            BuildChangeOutput(builder, resolvedInputs, changeAddress);
+            List<ResolvedInput> spending = [.. builder.Inputs.Select(input => Resolve(input, resolutions!))];
+            (ulong surplus, ulong deficit) = BuildChangeOutput(builder, spending, changeAddress);
+            if (deficit != 0)
+            {
+                throw new InvalidOperationException("Insufficient spending funds.");
+            }
+            budget = surplus;
         }
-
-        ulong fee = ConvergeFee(builder, scriptFee, scriptExecutionFee, mockWitnessFee, availableInputs);
-
-        if (defaultFee > 0)
+        ulong? fixedFee = defaultFee == 0 ? null : defaultFee;
+        if (fixedFee.HasValue && budget == fixedFee)
         {
-            fee = defaultFee;
+            _ = TryDropChange(builder);
         }
-
-        ulong previousFee = builder.Fee;
-        _ = builder.SetFee(fee);
-
-        // Sync totalCollateral with the final fee — the convergence loop may have
-        // exited before SelectCollateral ran with the last fee value.
-        if (builder.Redeemers is not null && fee != previousFee)
+        if (builder.Redeemers is not null && builder.CollateralInputs is null && availableInputs is { Count: > 0 }
+            && !TrySelectCollateral(builder, 0, availableInputs))
         {
-            AdjustCollateralForFeeIncrease(builder, previousFee, fee);
+            throw new InvalidOperationException("Insufficient collateral funds.");
         }
 
-        // Rebuild change with final fee
-        if (changeAddress is not null && resolvedInputs is not null)
+        int limit = (availableInputs?.Count ?? 0) + 3;
+        for (int round = 0; round < limit; round++)
         {
-            BuildChangeOutput(builder, resolvedInputs, changeAddress);
+            FeeResult fee = PriceStructure(builder, resolutions, new FeeInputs(Budget: budget, FixedFee: fixedFee), mockWitnessFee, out _);
+            if (fee.Status == FeeStatus.Balanced)
+            {
+                return builder;
+            }
+            RejectFixedFee(fee);
+            bool changed = fee.Status.HasFlag(FeeStatus.SpendingShort) && TryDropChange(builder, fixedFee);
+            if (fee.Status.HasFlag(FeeStatus.CollateralShort) && availableInputs is { Count: > 0 })
+            {
+                changed |= TrySelectCollateral(builder, fixedFee ?? fee.FeeHint, availableInputs);
+            }
+            if (!changed)
+            {
+                throw InsufficientFunds(fee);
+            }
         }
-        else
-        {
-            AdjustChangeOutput(builder, fee);
-        }
-
-        return builder;
+        throw new InvalidOperationException("Fee structure did not settle.");
     }
+
+    internal static FeeResult PriceStructure(TransactionBuilder builder, IReadOnlyCollection<ResolvedInput>? resolutions,
+        FeeInputs inputs, int minimumKeys, out PostMaryTransaction result)
+    {
+        FeeResult solved = FeeSolver.Solve(PrepareStructure(builder, resolutions, inputs, minimumKeys));
+        result = default;
+        if (solved.Status != FeeStatus.Balanced)
+        {
+            return solved;
+        }
+        _ = builder.SetFee(solved.Fee);
+        if (builder.ChangeOutputIndex is { } index)
+        {
+            List<ITransactionOutput> outputs = [.. builder.Outputs];
+            outputs[index] = ChangeCoin(outputs[index], solved.Change);
+            builder.ChangeOutput = outputs[index];
+            _ = builder.SetOutputs(outputs);
+        }
+        if (builder.CollateralInputs is { Count: > 0 } && builder.CollateralReturn is { } returned
+            && (resolutions is not null || builder.TotalCollateral.HasValue))
+        {
+            _ = builder.SetTotalCollateral(solved.TotalCollateral).SetCollateralReturn(ChangeCoin(returned, solved.CollateralReturn));
+        }
+        result = builder.Build();
+        FeeSolver.Check(result, solved);
+        return solved;
+    }
+
+    internal static FeeDraft PrepareStructure(TransactionBuilder builder, IReadOnlyCollection<ResolvedInput>? resolutions,
+        FeeInputs inputs, int minimumKeys)
+    {
+        ProtocolParams pp = builder.Pparams ?? throw new InvalidOperationException("Pricing requires protocol parameters.");
+        WitnessRequirements requirements = resolutions is null ? new() : WitnessRequirements.FromBuilder(builder, resolutions);
+        ulong referenceSize = resolutions is null ? 0 : FeeEngine.ReferenceScriptSize(builder.Inputs, builder.ReferenceInputs ?? [], resolutions);
+        ulong? collateral = builder.CollateralInputs is { Count: > 0 } collateralInputs
+            ? resolutions is not null ? SumCoins(collateralInputs.Select(input => Resolve(input, resolutions)))
+                : builder.TotalCollateral is { } total ? checked(total + (builder.CollateralReturn?.Amount().Lovelace() ?? 0)) : null
+            : null;
+        if (builder.ChangeOutputIndex is null && inputs.Budget.HasValue && inputs.FixedFee.HasValue && inputs.Budget != inputs.FixedFee)
+        {
+            throw new InvalidOperationException("Without change the fixed fee must consume the spending budget.");
+        }
+        if (collateral is { } balance && builder.CollateralReturn is null && builder.TotalCollateral.HasValue)
+        {
+            _ = builder.SetTotalCollateral(balance);
+        }
+        (PostMaryTransaction draft, ulong signingDelta) = builder.BuildDraft(requirements, minimumKeys);
+        return FeeSolver.Prepare(draft, pp, inputs with
+        {
+            ChangeIndex = builder.ChangeOutputIndex,
+            CollateralBalance = collateral,
+            ReturnPresent = collateral.HasValue && builder.CollateralReturn is not null,
+            ReferenceScriptSize = referenceSize,
+            SigningDelta = signingDelta
+        });
+    }
+
+    internal static ResolvedInput Resolve(TransactionInput input, IReadOnlyCollection<ResolvedInput> resolutions) => resolutions.FirstOrDefault(
+        u => TxBuilder.InputComparer.Compare(u.Outref, input) == 0)
+        ?? throw new InvalidOperationException($"Unresolved input {Convert.ToHexStringLower(input.TransactionId.Span)}#{input.Index}.");
+
+    internal static bool TryDropChange(TransactionBuilder builder, ulong? fixedFee = null)
+    {
+        if (fixedFee.HasValue || builder.ChangeOutputIndex is not { } index || builder.Outputs[index].Amount() is not Lovelace)
+        {
+            return false;
+        }
+        RemoveChange(builder);
+        return true;
+    }
+
+    private static void RemoveChange(TransactionBuilder builder)
+    {
+        if (builder.ChangeOutputIndex is { } index)
+        {
+            List<ITransactionOutput> outputs = [.. builder.Outputs];
+            outputs.RemoveAt(index);
+            _ = builder.SetOutputs(outputs);
+            builder.ChangeOutputIndex = null;
+            builder.ChangeOutput = null;
+        }
+    }
+
+    internal static void RejectFixedFee(FeeResult fee)
+    {
+        if (fee.Status.HasFlag(FeeStatus.FixedFeeTooLow))
+        {
+            throw new InvalidOperationException($"Fixed fee is below its required fee of {fee.RequiredAtFixedFee} lovelace.");
+        }
+    }
+
+    internal static InvalidOperationException InsufficientFunds(FeeResult fee) => new(fee.Status.HasFlag(FeeStatus.SpendingShort)
+        ? "Insufficient spending funds." : "Insufficient collateral funds.");
+
+    internal static void AddPlaceholders(TransactionBuilder builder, WitnessRequirements requirements, int minimumKeys)
+    {
+        byte[] signature = new byte[64];
+        int keys = Math.Max(minimumKeys, requirements.VKeyHashes.Count);
+        for (int i = 0; i < keys; i++)
+        {
+            byte[] key = new byte[32];
+            BinaryPrimitives.WriteInt32LittleEndian(key, i);
+            _ = builder.AddVKeyWitness(VKeyWitness.Create(key, signature));
+        }
+        for (int i = 0; i < requirements.BootstrapAttributes.Count; i++)
+        {
+            byte[] key = new byte[32];
+            BinaryPrimitives.WriteInt32LittleEndian(key, i);
+            _ = builder.AddBootstrapWitness(BootstrapWitness.Create(key, signature, new byte[32], requirements.BootstrapAttributes[i]));
+        }
+    }
+
+    private static ITransactionOutput ChangeCoin(ITransactionOutput output, ulong coin) => WithAmount(output,
+        output.Amount() is LovelaceWithMultiAsset assets ? LovelaceWithMultiAsset.Create(coin, assets.MultiAsset) : Lovelace.FromAmount(coin));
+
+    private static ulong SumCoins(IEnumerable<ResolvedInput> inputs) => inputs.Aggregate(0UL, (sum, input) => checked(sum + input.Output.Amount().Lovelace()));
 
     /// <summary>
     /// Evaluates Plutus scripts in the transaction and updates execution unit budgets.
@@ -126,7 +226,7 @@ public static class TransactionBuilderExtensions
             ScriptContextBuilder.EvaluateTx(
                 body, witnessSet, utxos, slotConfig, builder.Pparams?.CostModelsForScriptLanguage);
 
-        UpdateRedeemersWithEvalResults(builder, evalResult);
+        _ = UpdateRedeemersWithEvalResults(builder, evalResult);
 
         return builder;
     }
@@ -165,108 +265,18 @@ public static class TransactionBuilderExtensions
     public static ulong ComputeScriptExecutionFee(this TransactionBuilder builder)
     {
         ArgumentNullException.ThrowIfNull(builder);
-        if (builder.Redeemers is null)
-        {
-            return 0;
-        }
-
-        RationalNumber memPrice = new(
-            builder.Pparams!.ExecutionCosts!.Value.MemPrice.Numerator,
-            builder.Pparams.ExecutionCosts.Value.MemPrice.Denominator);
-        RationalNumber stepPrice = new(
-            builder.Pparams.ExecutionCosts!.Value.StepPrice.Numerator,
-            builder.Pparams.ExecutionCosts.Value.StepPrice.Denominator);
-        return FeeUtil.CalculateScriptExecutionFee(builder.Redeemers, stepPrice, memPrice);
+        return FeeEngine.ScriptFee(builder.Redeemers, builder.Pparams!);
     }
 
-    /// <summary>
-    /// Computes and sets the auxiliary data hash from the builder's current metadata.
-    /// </summary>
+    /// <summary>Computes the auxiliary-data hash without building a transaction body.</summary>
     public static TransactionBuilder ComputeAndSetAuxDataHash(this TransactionBuilder builder)
     {
         ArgumentNullException.ThrowIfNull(builder);
-        PostMaryTransaction tx = builder.Build();
-        if (tx.AuxiliaryData is not null)
+        if (builder.BuildAuxiliaryData() is { } aux)
         {
-            byte[] auxBytes = CborSerializer.Serialize(tx.AuxiliaryData);
-            _ = builder.SetAuxiliaryDataHash(Wallet.Utils.HashUtil.Blake2b256(auxBytes));
+            _ = builder.SetAuxiliaryDataHash(Wallet.Utils.HashUtil.Blake2b256(CborSerializer.Serialize(aux)));
         }
         return builder;
-    }
-
-    // ──────────── Script Fee Calculation ────────────
-
-    private static (ulong ScriptFee, ulong ExecutionFee) CalculateScriptFees(
-        TransactionBuilder builder, List<(IScript Script, int RawSize)> scripts)
-    {
-        if (scripts.Count <= 0)
-        {
-            throw new ArgumentException("Missing script", nameof(scripts));
-        }
-
-        List<IScript> scriptList = [.. scripts.Select(s => s.Script)];
-        _ = builder.ComputeAndSetScriptDataHash(scriptList);
-
-        // Reference script fee (tiered pricing on full CBOR-encoded ScriptRef size)
-        ulong scriptCostPerByte = builder.Pparams!.MinFeeRefScriptCostPerByte!.Numerator
-            / builder.Pparams.MinFeeRefScriptCostPerByte!.Denominator;
-        int totalScriptSize = scripts.Sum(s => s.RawSize);
-        ulong scriptFee = FeeUtil.CalculateReferenceScriptFee(totalScriptSize, scriptCostPerByte);
-
-        ulong executionFee = builder.ComputeScriptExecutionFee();
-
-        return (scriptFee, executionFee);
-    }
-
-    // ──────────── Fee Convergence Loop ────────────
-
-    private static ulong ConvergeFee(
-        TransactionBuilder builder,
-        ulong scriptFee,
-        ulong scriptExecutionFee,
-        int mockWitnessFee,
-        List<ResolvedInput>? availableInputs)
-    {
-        ulong previousFee = 0;
-        ulong fee = 0;
-
-        // Set initial collateral placeholder if scripts are involved
-        if (builder.Redeemers is not null)
-        {
-            _ = builder.SetTotalCollateral(InitialFeePlaceholder);
-        }
-
-        for (int iteration = 0; iteration < MaxFeeIterations; iteration++)
-        {
-            ITransaction draftTx = builder.Build();
-            byte[] draftTxCborBytes = CborSerializer.Serialize(draftTx);
-
-            fee = FeeUtil.CalculateFeeWithWitness(
-                (ulong)draftTxCborBytes.Length,
-                builder.Pparams!.MinFeeA!.Value,
-                builder.Pparams.MinFeeB!.Value,
-                mockWitnessFee) + scriptFee + scriptExecutionFee;
-
-            if (Math.Abs((long)fee - (long)previousFee) < FeeConvergenceTolerance)
-            {
-                break;
-            }
-
-            previousFee = fee;
-            _ = builder.SetFee(fee);
-
-            if (builder.Redeemers is not null && availableInputs is { Count: > 0 })
-            {
-                SelectCollateral(builder, fee, availableInputs);
-            }
-
-            if (iteration == MaxFeeIterations - 1)
-            {
-                throw new InvalidOperationException("Fee calculation did not converge after maximum iterations.");
-            }
-        }
-
-        return fee;
     }
 
     // ──────────── Collateral Selection ────────────
@@ -274,8 +284,7 @@ public static class TransactionBuilderExtensions
     /// <summary>
     /// Selects collateral inputs and builds a collateral return output.
     /// </summary>
-    internal static void SelectCollateral(
-        TransactionBuilder builder, ulong fee, List<ResolvedInput> availableInputs)
+    internal static bool TrySelectCollateral(TransactionBuilder builder, ulong fee, List<ResolvedInput> availableInputs)
     {
         ArgumentNullException.ThrowIfNull(builder);
         ArgumentNullException.ThrowIfNull(availableInputs);
@@ -283,89 +292,74 @@ public static class TransactionBuilderExtensions
         {
             throw new ArgumentException("Available inputs for collateral selection cannot be empty.", nameof(availableInputs));
         }
-        ulong totalCollateral = FeeUtil.CalculateRequiredCollateral(fee, builder.Pparams!.CollateralPercentage!.Value);
-        _ = builder.SetTotalCollateral(totalCollateral);
-        _ = builder.ClearCollateral();
-        _ = builder.ClearCollateralReturn();
 
-        // Estimate min ADA for return output
-        ResolvedInput firstInput = availableInputs[0];
-        byte[] dummyReturnBytes = CborSerializer.Serialize(firstInput.Output);
-        ulong estimatedMinReturn = FeeUtil.CalculateMinimumLovelace(
-            (ulong)builder.Pparams!.AdaPerUTxOByte!, dummyReturnBytes);
-
-        ulong totalCollateralNeeded = totalCollateral + estimatedMinReturn + (estimatedMinReturn / 2);
-        int maxCollateralInputs = (int)(builder.Pparams!.MaxCollateralInputs ?? 3);
-
-        // Prefer ADA-only UTxOs for collateral (Cardano rejects collateral with native assets)
-        List<ResolvedInput> adaOnlyInputs = [.. availableInputs.Where(
-            u => u.Output.Amount() is Lovelace)];
-        List<ResolvedInput> collateralCandidates = adaOnlyInputs.Count > 0 ? adaOnlyInputs : availableInputs;
-
-        // Select collateral UTxOs
-        CoinSelectionResult collateralSelection;
-        try
+        // Prefer ADA-only UTxOs, falling back to the full pool (including token-bearing UTxOs) when needed.
+        List<ResolvedInput> adaOnlyInputs = [.. availableInputs.Where(u => u.Output.Amount() is Lovelace)];
+        if (adaOnlyInputs.Count > 0 && TryPickCollateral(builder, fee, adaOnlyInputs, out bool changed))
         {
-            collateralSelection = CoinSelectionUtil.Select(
-                collateralCandidates,
-                [Lovelace.Create(totalCollateralNeeded)],
-                CoinSelectionStrategy.LargestFirst,
-                maxCollateralInputs);
+            return changed;
         }
-        catch (InvalidOperationException)
+        return adaOnlyInputs.Count < availableInputs.Count
+            && TryPickCollateral(builder, fee, availableInputs, out bool fallbackChanged)
+            && fallbackChanged;
+    }
+
+    private static bool TryPickCollateral(
+        TransactionBuilder builder, ulong fee, List<ResolvedInput> collateralCandidates, out bool changed)
+    {
+        changed = false;
+        ulong totalCollateral = FeeEngine.RequiredCollateral(fee, builder.Pparams!.CollateralPercentage!.Value);
+        ulong cost = builder.Pparams.AdaPerUTxOByte!.Value;
+        int maxCollateralInputs = (int)(builder.Pparams.MaxCollateralInputs ?? 3);
+
+        List<ResolvedInput> selected = [];
+        foreach (ResolvedInput candidate in collateralCandidates
+            .OrderByDescending(u => u.Output.Amount().Lovelace())
+            .Take(maxCollateralInputs))
         {
-            collateralSelection = CoinSelectionUtil.Select(
-                collateralCandidates,
-                [Lovelace.Create(totalCollateral)],
-                CoinSelectionStrategy.LargestFirst,
-                maxCollateralInputs);
-        }
+            selected.Add(candidate);
+            ulong totalCollateralLovelace = SumCoins(selected);
+            if (totalCollateralLovelace < totalCollateral)
+            {
+                continue;
+            }
 
-        foreach (ResolvedInput input in collateralSelection.Inputs)
-        {
-            _ = builder.AddCollateral(input.Outref);
-        }
+            ulong returnLovelace = totalCollateralLovelace - totalCollateral;
+            Dictionary<ReadOnlyMemory<byte>, TokenBundleOutput> aggregatedAssets = AggregateAssets(selected);
 
-        // Build collateral return
-        ulong totalCollateralLovelace = 0;
-        foreach (ResolvedInput input in collateralSelection.Inputs)
-        {
-            totalCollateralLovelace += input.Output.Amount().Lovelace();
-        }
+            IValue returnValue = aggregatedAssets.Count > 0
+                ? LovelaceWithMultiAsset.Create(returnLovelace, MultiAssetOutput.Create(aggregatedAssets))
+                : Lovelace.Create(returnLovelace);
 
-        if (totalCollateralLovelace < totalCollateral)
-        {
-            throw new InvalidOperationException(
-                $"Selected collateral inputs insufficient. Need {totalCollateral} but have {totalCollateralLovelace}.");
-        }
+            Address returnAddress = selected[0].Output switch
+            {
+                AlonzoTransactionOutput alonzo => alonzo.Address,
+                PostAlonzoTransactionOutput postAlonzo => postAlonzo.Address,
+                _ => throw new InvalidOperationException("Invalid transaction output type")
+            };
 
-        ulong returnLovelace = totalCollateralLovelace - totalCollateral;
-        Dictionary<ReadOnlyMemory<byte>, TokenBundleOutput> aggregatedAssets = AggregateAssets(collateralSelection.Inputs);
+            ITransactionOutput returnOutput = PostAlonzoTransactionOutput.Create(returnAddress, returnValue, null, null);
+            if (returnLovelace < FeeEngine.MinLovelace(returnOutput, cost))
+            {
+                continue;
+            }
 
-        IValue returnValue = aggregatedAssets.Count > 0
-            ? LovelaceWithMultiAsset.Create(returnLovelace, MultiAssetOutput.Create(aggregatedAssets))
-            : Lovelace.Create(returnLovelace);
-
-        Address returnAddress = collateralSelection.Inputs[0].Output switch
-        {
-            AlonzoTransactionOutput alonzo => alonzo.Address,
-            PostAlonzoTransactionOutput postAlonzo => postAlonzo.Address,
-            _ => throw new InvalidOperationException("Invalid transaction output type")
-        };
-
-        ITransactionOutput returnOutput = PostAlonzoTransactionOutput.Create(returnAddress, returnValue, null, null);
-
-        byte[] returnOutputBytes = CborSerializer.Serialize(returnOutput);
-        ulong minReturn = FeeUtil.CalculateMinimumLovelace(
-            (ulong)builder.Pparams!.AdaPerUTxOByte!, returnOutputBytes);
-
-        if (returnLovelace < minReturn)
-        {
-            throw new InvalidOperationException(
-                $"Collateral return ({returnLovelace}) below minimum ADA ({minReturn}).");
+            if (builder.CollateralReturn is not null && builder.CollateralInputs is { } original
+                && original.Count == selected.Count
+                && original.Zip(selected).All(pair => TxBuilder.InputComparer.Compare(pair.First, pair.Second.Outref) == 0))
+            {
+                return true;
+            }
+            _ = builder.ClearCollateral().SetTotalCollateral(totalCollateral).SetCollateralReturn(returnOutput);
+            foreach (ResolvedInput input in selected)
+            {
+                _ = builder.AddCollateral(input.Outref);
+            }
+            changed = true;
+            return true;
         }
 
-        _ = builder.SetCollateralReturn(returnOutput);
+        return false;
     }
 
     // ──────────── Change Output Building ────────────
@@ -373,21 +367,13 @@ public static class TransactionBuilderExtensions
     /// <summary>
     /// Builds a multi-asset change output from the difference between resolved inputs and current outputs.
     /// </summary>
-    internal static void BuildChangeOutput(
-        TransactionBuilder builder, List<ResolvedInput> resolvedInputs, string changeAddress)
+    internal static (ulong Budget, ulong Deficit) BuildChangeOutput(
+        TransactionBuilder builder, List<ResolvedInput> resolvedInputs, string changeAddress, bool includeCertificateCoins = true)
     {
         ArgumentNullException.ThrowIfNull(builder);
         ArgumentNullException.ThrowIfNull(resolvedInputs);
         ArgumentNullException.ThrowIfNull(changeAddress);
-        // Remove existing change output
-        if (builder.ChangeOutputIndex is not null)
-        {
-            List<ITransactionOutput> outputs = [.. builder.Outputs];
-            outputs.RemoveAt(builder.ChangeOutputIndex.Value);
-            _ = builder.SetOutputs(outputs);
-            builder.ChangeOutputIndex = null;
-            builder.ChangeOutput = null;
-        }
+        RemoveChange(builder);
 
         // Compute total input value from resolved inputs
         IValue totalIn = Lovelace.Create(0);
@@ -406,7 +392,7 @@ public static class TransactionBuilderExtensions
         // Account for implicit inputs (withdrawals, refunds) and implicit outputs (deposits)
         ulong deposits = 0;
         ulong refunds = 0;
-        if (builder.CertificatesList is not null)
+        if (includeCertificateCoins && builder.CertificatesList is not null)
         {
             ulong keyDep = builder.Pparams?.KeyDeposit ?? 2_000_000;
             ulong poolDep = builder.Pparams?.PoolDeposit ?? 500_000_000;
@@ -480,143 +466,65 @@ public static class TransactionBuilderExtensions
             }
         }
 
-        IValue change = totalIn
-            .Merge(mintValue)
-            .Merge(Lovelace.Create(totalWithdrawals + refunds))
-            .Subtract(totalOut)
-            .Subtract(Lovelace.Create(builder.Fee + deposits));
-        if (change.Lovelace() > 0)
+        IValue available = totalIn.Merge(mintValue).Merge(Lovelace.Create(checked(totalWithdrawals + refunds)));
+        IValue required = totalOut.Merge(Lovelace.Create(deposits));
+        IValue change = available.Subtract(required);
+        if (change.Lovelace() != 0 || change is LovelaceWithMultiAsset)
         {
-            _ = builder.AddOutput(changeAddress, change, isChange: true);
+            ITransactionOutput output = new OutputBuilder(changeAddress, change).Build();
+            _ = builder.AddOutputInternal(output, isChange: true);
         }
-    }
-
-    // ──────────── Change Output Adjustment ────────────
-
-    private static void AdjustChangeOutput(TransactionBuilder builder, ulong fee)
-    {
-        if (builder.ChangeOutput is null || builder.ChangeOutputIndex is null)
-        {
-            return;
-        }
-
-        List<ITransactionOutput> outputs = [.. builder.Outputs];
-        int changeIndex = builder.ChangeOutputIndex.Value;
-        if (changeIndex < 0 || changeIndex >= outputs.Count)
-        {
-            return;
-        }
-
-        ulong currentChangeLovelace = builder.ChangeOutput.Amount().Lovelace();
-        ulong updatedChangeLovelace = currentChangeLovelace > fee ? currentChangeLovelace - fee : 0;
-
-        IValue changeOutputValue = builder.ChangeOutput.Amount();
-        IValue updatedValue = changeOutputValue is LovelaceWithMultiAsset lma
-            ? LovelaceWithMultiAsset.Create(updatedChangeLovelace, lma.MultiAsset)
-            : Lovelace.Create(updatedChangeLovelace);
-
-        outputs.RemoveAt(changeIndex);
-
-        if (updatedChangeLovelace > 0)
-        {
-            ITransactionOutput updatedChange = WithAmount(builder.ChangeOutput, updatedValue);
-
-            byte[] updatedBytes = CborSerializer.Serialize(updatedChange);
-            ulong minLovelace = FeeUtil.CalculateMinimumLovelace(
-                (ulong)builder.Pparams!.AdaPerUTxOByte!, updatedBytes);
-
-            if (updatedChangeLovelace < minLovelace)
-            {
-                // Change too small — absorb into fee
-                ulong adjustedFee = fee + updatedChangeLovelace;
-                _ = builder.SetFee(adjustedFee);
-                AdjustCollateralForFeeIncrease(builder, fee, adjustedFee);
-            }
-            else
-            {
-                outputs.Add(updatedChange);
-            }
-        }
-
-        _ = builder.SetOutputs(outputs);
-    }
-
-    // ──────────── Collateral Fee Adjustment ────────────
-
-    private static void AdjustCollateralForFeeIncrease(TransactionBuilder builder, ulong oldFee, ulong newFee)
-    {
-        if (builder.TotalCollateral is null || builder.Pparams?.CollateralPercentage is null)
-        {
-            return;
-        }
-
-        ulong newTotalCollateral = FeeUtil.CalculateRequiredCollateral(newFee, builder.Pparams.CollateralPercentage.Value);
-        ulong oldTotalCollateral = FeeUtil.CalculateRequiredCollateral(oldFee, builder.Pparams.CollateralPercentage.Value);
-        _ = builder.SetTotalCollateral(newTotalCollateral);
-
-        if (newTotalCollateral > oldTotalCollateral && builder.CollateralReturn is not null)
-        {
-            ulong increase = newTotalCollateral - oldTotalCollateral;
-            ulong currentReturn = builder.CollateralReturn.Amount().Lovelace();
-
-            if (currentReturn <= increase)
-            {
-                throw new InvalidOperationException(
-                    $"Insufficient collateral: return ({currentReturn}) cannot cover additional {increase} needed.");
-            }
-
-            IValue newReturnValue = builder.CollateralReturn.Amount().WithLovelace(currentReturn - increase);
-            _ = builder.SetCollateralReturn(WithAmount(builder.CollateralReturn, newReturnValue));
-        }
+        return (change.Lovelace(), required.Lovelace() > available.Lovelace() ? required.Lovelace() - available.Lovelace() : 0);
     }
 
     // ──────────── Redeemer Update ────────────
 
-    internal static void UpdateRedeemersWithEvalResults(
-        TransactionBuilder builder,
-        IReadOnlyList<Plutus.VM.Models.EvaluationResult> evalResult)
+    internal static IEnumerable<(int Tag, ulong Index, ulong Mem, ulong Steps)> RedeemerUnits(IRedeemers? redeemers) => redeemers switch
     {
-        switch (builder.Redeemers)
-        {
-            case RedeemerList redeemersList:
-                List<RedeemerEntry> updated = [];
-                foreach (RedeemerEntry redeemer in redeemersList.Value)
-                {
-                    ExUnits exUnits = FindExUnits(evalResult, redeemer.Tag, redeemer.Index) ?? redeemer.ExUnits;
-                    updated.Add(RedeemerEntry.Create(redeemer.Tag, redeemer.Index, redeemer.Data, exUnits));
-                }
+        RedeemerMap map => map.Value.Select(entry => (entry.Key.Tag, entry.Key.Index, entry.Value.ExUnits.Mem, entry.Value.ExUnits.Steps)),
+        RedeemerList list => list.Value.Select(entry => (entry.Tag, entry.Index, entry.ExUnits.Mem, entry.ExUnits.Steps)),
+        _ => []
+    };
 
-                _ = builder.SetRedeemers(RedeemerList.Create(updated));
-                break;
-
-            case RedeemerMap redeemersMap:
-                Dictionary<RedeemerKey, RedeemerValue> updatedMap = [];
-                foreach (KeyValuePair<RedeemerKey, RedeemerValue> kvp in redeemersMap.Value)
-                {
-                    ExUnits exUnits = FindExUnits(evalResult, kvp.Key.Tag, kvp.Key.Index) ?? kvp.Value.ExUnits;
-                    updatedMap.Add(RedeemerKey.Create(kvp.Key.Tag, kvp.Key.Index), RedeemerValue.Create(kvp.Value.Data, exUnits));
-                }
-
-                _ = builder.SetRedeemers(RedeemerMap.Create(updatedMap));
-                break;
-
-            default:
-                break;
-        }
-    }
-
-    private static ExUnits? FindExUnits(
-        IReadOnlyList<Plutus.VM.Models.EvaluationResult> results, int tag, ulong index)
+    internal static bool UpdateRedeemersWithEvalResults(
+        TransactionBuilder builder, IReadOnlyList<Plutus.VM.Models.EvaluationResult> evalResult)
     {
-        foreach (Plutus.VM.Models.EvaluationResult r in results)
+        Dictionary<(int, ulong), ExUnits> evaluated = [];
+        foreach (Plutus.VM.Models.EvaluationResult result in evalResult)
         {
-            if (r.RedeemerTag == tag && r.Index == index)
+            if (!evaluated.TryAdd((result.RedeemerTag, result.Index), ExUnits.Create(result.ExUnits.Mem, result.ExUnits.Steps)))
             {
-                return ExUnits.Create(r.ExUnits.Mem, r.ExUnits.Steps);
+                throw new InvalidOperationException($"Duplicate evaluated redeemer ({result.RedeemerTag}, {result.Index}).");
             }
         }
+        bool changed = false;
+        IRedeemers? updated = builder.Redeemers switch
+        {
+            RedeemerList list => RedeemerList.Create([.. list.Value.Select(entry => RedeemerEntry.Create(entry.Tag, entry.Index, entry.Data,
+                Take(entry.Tag, entry.Index, entry.ExUnits)))]),
+            RedeemerMap map => RedeemerMap.Create(map.Value.ToDictionary(entry => entry.Key, entry => RedeemerValue.Create(entry.Value.Data,
+                Take(entry.Key.Tag, entry.Key.Index, entry.Value.ExUnits)))),
+            _ => null
+        };
+        if (evaluated.Count != 0)
+        {
+            throw new InvalidOperationException($"Unknown evaluated redeemer {evaluated.Keys.First()}.");
+        }
+        if (changed && updated is not null)
+        {
+            _ = builder.SetRedeemers(updated);
+        }
+        return changed;
 
-        return null;
+        ExUnits Take(int tag, ulong index, ExUnits old)
+        {
+            if (!evaluated.Remove((tag, index), out ExUnits units))
+            {
+                throw new InvalidOperationException($"Missing evaluated redeemer ({tag}, {index}).");
+            }
+            changed |= units.Mem != old.Mem || units.Steps != old.Steps;
+            return units;
+        }
     }
 
     // ──────────── Helpers ────────────

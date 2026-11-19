@@ -149,8 +149,9 @@ public sealed class RedeemerPointerTests
             .PayLovelace(BlockfrostTests.Address, 2_000_000)
             .UseEvaluator((draft, _) =>
             {
-                drafts.Add(Pointers(draft));
-                return Task.FromResult<IReadOnlyList<EvaluationResult>>([]);
+                Dictionary<(int Tag, ulong Index), string> pointers = Pointers(draft);
+                drafts.Add(pointers);
+                return Task.FromResult<IReadOnlyList<EvaluationResult>>([.. pointers.Keys.Select(k => new EvaluationResult(k.Tag, k.Index, new(0, 0)))]);
             });
 
         return (await setup(builder).Complete(), drafts);

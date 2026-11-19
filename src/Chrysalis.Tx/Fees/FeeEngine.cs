@@ -66,8 +66,9 @@ public static class FeeEngine
     internal static UInt128 ReferenceScriptFeeWide(ulong size, ProtocolParams pp)
     {
         ArgumentOutOfRangeException.ThrowIfGreaterThan(size, ExactFee.MaxReferenceScriptSize);
-        // A pre-Conway parameter set has no reference-script price.
-        return size == 0 || pp.MinFeeRefScriptCostPerByte is not { } price ? 0 : ExactFee.Reference(size, price);
+        // Babbage ignores reference-script size; Conway requires an explicit price, even if zero.
+        return size == 0 || pp.ProtocolVersion is { Major: < 9 } ? 0
+            : ExactFee.Reference(size, pp.MinFeeRefScriptCostPerByte ?? throw new InvalidDataException("Missing protocol parameter MinFeeRefScriptCostPerByte."));
     }
 
     /// <summary>Counts scripts on the distinct spending and reference outrefs. Every outref must be resolved.</summary>

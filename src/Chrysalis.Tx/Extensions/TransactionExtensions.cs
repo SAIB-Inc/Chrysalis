@@ -101,7 +101,10 @@ public static class TransactionExtension
         PostAlonzoTransactionWitnessSet existingWitnesses = tx.Witnesses switch
         {
             PostAlonzoTransactionWitnessSet ws => ws,
-            _ => default
+            AlonzoTransactionWitnessSet ws => PostAlonzoTransactionWitnessSet.Create(
+                nativeScripts: ws.NativeScripts, bootstrapWitnesses: ws.BootstrapWitnesses,
+                plutusV1Scripts: ws.PlutusV1Scripts, plutusDataSet: ws.PlutusDataSet, redeemers: ws.Redeemers),
+            _ => throw new InvalidOperationException("Witness set type not supported")
         };
 
         PostAlonzoTransactionWitnessSet newWitnessSet = PostAlonzoTransactionWitnessSet.Create(

@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text.Json;
 using Chrysalis.Codec.Extensions.Cardano.Core.Common;
 using Chrysalis.Codec.Extensions.Cardano.Core.Transaction;
+using Chrysalis.Codec.Test;
 using Chrysalis.Codec.Types;
 using Chrysalis.Codec.Types.Cardano.Core;
 using Chrysalis.Codec.Types.Cardano.Core.Common;
@@ -208,10 +209,9 @@ public sealed class FeeEngineTests
     {
         JsonElement row = Row("B5");
         FeeDraft draft = VectorDraft(row);
-        _ = FeeSolver.Solve(draft);
-        long before = GC.GetAllocatedBytesForCurrentThread();
-        FeeResult result = FeeSolver.Solve(draft);
-        long bytes = GC.GetAllocatedBytesForCurrentThread() - before;
+        FeeResult result = default;
+        void Solve() => result = FeeSolver.Solve(draft);
+        long bytes = AllocationAssert.Measure(Solve, Solve);
         Assert.Equal(0, bytes);
         Assert.Equal(FeeStatus.Balanced, result.Status);
         Assert.Equal(Tx(row).Body.Fee(), result.Fee);
@@ -562,9 +562,9 @@ public sealed class FeeEngineTests
         ProtocolParams pp = Pp(row) with { MinFeeA = 1, MinFeeB = 1_000_000 };
         const int count = 65_536;
         ulong one = FeeEngine.MinFee(tx, pp, 1);
-        long before = GC.GetAllocatedBytesForCurrentThread();
-        ulong many = FeeEngine.MinFee(tx, pp, count);
-        long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+        ulong many = 0;
+        void Quote() => many = FeeEngine.MinFee(tx, pp, count);
+        long allocated = AllocationAssert.Measure(Quote, Quote);
         Assert.Equal(one + (101 * (count - 1)) + 4, many);
         Assert.InRange(allocated, 0L, 1_000_000L);
     }

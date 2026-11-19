@@ -12,7 +12,7 @@ using Chrysalis.Codec.Serialization;
 using Chrysalis.Codec.Serialization.Utils;
 using Chrysalis.Codec.Types.Cardano.Core.Protocol;
 using Chrysalis.Tx.Extensions;
-using Chrysalis.Tx.Utils;
+using Chrysalis.Tx.Fees;
 
 namespace Chrysalis.Tx.Builders;
 
@@ -33,7 +33,6 @@ public class TransactionBuilder
     private List<TransactionInput>? _collateral;
     private List<ReadOnlyMemory<byte>>? _requiredSigners;
     private List<TransactionInput>? _referenceInputs;
-    private VotingProcedures? _votingProcedures;
     private List<ProposalProcedure>? _proposals;
     private ulong? _treasuryValue;
     private ulong? _donation;
@@ -236,7 +235,7 @@ public class TransactionBuilder
         return AddOutputInternal(output.Build(), isChange || output.IsChange);
     }
 
-    private TransactionBuilder AddOutputInternal(ITransactionOutput output, bool isChange)
+    internal TransactionBuilder AddOutputInternal(ITransactionOutput output, bool isChange)
     {
         if (isChange)
         {
@@ -255,23 +254,12 @@ public class TransactionBuilder
             return;
         }
 
-        ulong adaPerByte = (ulong)Pparams.AdaPerUTxOByte;
         ITransactionOutput built = output.Build();
-        ulong minLovelace = FeeUtil.CalculateMinimumLovelace(adaPerByte, CborSerializer.Serialize(built));
-        ulong currentLovelace = built.Amount().Lovelace();
-
-        while (currentLovelace < minLovelace)
+        ulong coin = FeeEngine.LeastValidCoin(built, Pparams.AdaPerUTxOByte.Value);
+        if (coin != built.Amount().Lovelace())
         {
-            IValue newAmount = output.Amount switch
-            {
-                LovelaceWithMultiAsset lma => LovelaceWithMultiAsset.Create(minLovelace, lma.MultiAsset),
-                _ => Lovelace.Create(minLovelace)
-            };
-            output.Amount = newAmount;
-
-            built = output.Build();
-            minLovelace = FeeUtil.CalculateMinimumLovelace(adaPerByte, CborSerializer.Serialize(built));
-            currentLovelace = built.Amount().Lovelace();
+            output.Amount = built.Amount() is LovelaceWithMultiAsset assets
+                ? LovelaceWithMultiAsset.Create(coin, assets.MultiAsset) : Lovelace.FromAmount(coin);
         }
     }
 
@@ -505,7 +493,7 @@ public class TransactionBuilder
     /// <summary>Sets the voting procedures.</summary>
     public TransactionBuilder SetVotingProcedures(VotingProcedures votingProcedures)
     {
-        _votingProcedures = votingProcedures;
+        Votes = votingProcedures;
         return this;
     }
 
@@ -690,6 +678,7 @@ public class TransactionBuilder
     /// <summary>Builds the transaction body.</summary>
     public ConwayTransactionBody BuildBody()
     {
+        BuildCount.Increment();
         IntegrateWithdrawals();
 
         return ConwayTransactionBody.Create(
@@ -709,7 +698,7 @@ public class TransactionBuilder
             collateralReturn: CollateralReturn,
             totalCollateral: TotalCollateral,
             referenceInputs: WrapIfNotNull(_referenceInputs),
-            votingProcedures: _votingProcedures,
+            votingProcedures: Votes,
             proposalProcedures: WrapIfNotNull(_proposals),
             treasuryValue: _treasuryValue,
             donation: _donation);
@@ -744,10 +733,49 @@ public class TransactionBuilder
     }
 
     /// <summary>Builds and returns the complete transaction.</summary>
-    public PostMaryTransaction Build()
+    public PostMaryTransaction Build() => PostMaryTransaction.Create(BuildBody(), BuildWitnessSet(), true, BuildAuxiliaryData());
+
+    internal IReadOnlyList<TransactionInput>? CollateralInputs => _collateral;
+    internal IReadOnlyList<INativeScript>? NativeScripts => _nativeScripts;
+    internal IReadOnlyList<(ReadOnlyMemory<byte> Bytes, int Version)> PlutusScripts => _plutusScripts;
+    internal VotingProcedures? Votes { get; private set; }
+
+    internal void RejectSignatures()
+    {
+        if (_vkeyWitnesses is { Count: > 0 } || _bootstrapWitnesses is { Count: > 0 })
+        {
+            throw new InvalidOperationException("sign after the fee is set");
+        }
+    }
+
+    internal PostAlonzoAuxiliaryDataMap? BuildAuxiliaryData()
     {
         IntegrateMetadata();
-        return PostMaryTransaction.Create(BuildBody(), BuildWitnessSet(), true, _auxiliaryData);
+        return _auxiliaryData;
+    }
+
+    internal (PostMaryTransaction Draft, ulong SigningDelta) BuildDraft(WitnessRequirements requirements, int minimumKeys)
+    {
+        List<VKeyWitness>? keys = _vkeyWitnesses;
+        List<BootstrapWitness>? bootstraps = _bootstrapWitnesses;
+        int keyCount = keys?.Count ?? 0, bootstrapCount = bootstraps?.Count ?? 0;
+        PostAlonzoTransactionWitnessSet unsigned = BuildWitnessSet();
+        PostMaryTransaction signed;
+        try
+        {
+            TransactionBuilderExtensions.AddPlaceholders(this, requirements, minimumKeys);
+            signed = Build();
+        }
+        finally
+        {
+            keys?.RemoveRange(keyCount, keys.Count - keyCount);
+            bootstraps?.RemoveRange(bootstrapCount, bootstraps.Count - bootstrapCount);
+            _vkeyWitnesses = keys;
+            _bootstrapWitnesses = bootstraps;
+        }
+
+        ulong delta = checked(DraftSize.EncodedLength(signed.Witnesses) - DraftSize.EncodedLength(unsigned));
+        return (PostMaryTransaction.Create(signed.Body, unsigned, signed.IsValid, signed.AuxiliaryData), delta);
     }
 
     // ── Integration (called at Build time) ──
@@ -764,7 +792,7 @@ public class TransactionBuilder
         }
     }
 
-    private void IntegrateWithdrawals()
+    internal void IntegrateWithdrawals()
     {
         if (_withdrawalEntries is { Count: > 0 })
         {
