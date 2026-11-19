@@ -1,0 +1,5 @@
+{
+    "type": "Tx ConwayEra",
+    "description": "Ledger Cddl Format",
+    "cborHex": "84a300d9010281825820aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa00018282581d60fa1133e7433ac9248a6f81da998b3f7445e203054961eba292bdb27d1a001e848082581d60fa1133e7433ac9248a6f81da998b3f7445e203054961eba292bdb27d1a01a2d4f7021a00086a09a0f5f6"
+}
