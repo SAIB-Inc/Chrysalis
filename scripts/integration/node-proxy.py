@@ -65,7 +65,32 @@ cat <&0 >&3 & writer=$!
 cat <&3 >&1 & reader=$!
 wait -n "$writer" "$reader"
 '''
-CONTAINER_RELAY_CLEANUP = r'''
+PROC_CHILDREN = r'''
+# Enumerate direct children without depending on CONFIG_PROC_CHILDREN.
+proc_children() {
+    local root=$1 parent=$2 entry child status seen_parent=
+    local numbers='^[0-9]+( -?[0-9]+){17} [0-9]+$'
+    local -a fields=()
+    [[ -r $root && -x $root ]] || return 1
+    for entry in "$root"/[0-9]*; do
+        child=${entry##*/}
+        [[ $child =~ ^[0-9]+$ ]] || continue
+        if ! status=$(<"$entry/stat") 2>/dev/null; then
+            [[ ! -d $entry ]] && continue  # Exited since the glob.
+            return 1                       # A live unreadable entry is not evidence of emptiness.
+        fi
+        # comm may contain spaces, parentheses and newlines. Fields follow the last ') '.
+        [[ $status == "$child ("*") "* ]] || return 1
+        read -r -a fields <<< "${status##*) }"
+        # Require the state and numeric layout through starttime before trusting PPid.
+        [[ ${fields[0]} =~ ^[RSDZTtXxKWPI]$ && ${fields[*]:1:19} =~ $numbers ]] || return 1
+        if [[ $child == "$parent" ]]; then seen_parent=1; fi
+        if [[ ${fields[1]} == "$parent" ]]; then printf '%s\n' "$child"; fi
+    done
+    [[ -n $seen_parent ]]
+}
+'''
+CONTAINER_RELAY_CLEANUP = PROC_CHILDREN + r'''
 pid=$1 expected_start=$2 nonce=$3 action=$4
 refuse() { printf 'CHRYSALIS_PROXY_CLEANUP_REFUSED %s\n' "$1" >&2; exit "$2"; }
 [[ $pid =~ ^[0-9]+$ && $pid -gt 1 && $expected_start =~ ^[0-9]+$ && $nonce =~ ^[0-9a-f]{32}$ ]] || refuse invalid_identity_fields 64
@@ -96,7 +121,7 @@ case "$action" in
         fi
         printf 'CHRYSALIS_PROXY_CLEANUP_SIGNAL_SENT TERM %s\n' "$pid" ;;
     KILL_CHILDREN)
-        children=$(<"/proc/$pid/task/$pid/children") || refuse children_unreadable 65
+        children=$(proc_children /proc "$pid") || refuse children_unreadable 65
         for child in $children; do
             IFS= read -r status 2>/dev/null < "/proc/$child/stat" || continue
             read -r -a fields <<< "${status##*) }"
@@ -112,7 +137,7 @@ case "$action" in
             kill -KILL "$child" 2>/dev/null || :
         done ;;
     KILL_EMPTY_RELAY)
-        children=$(<"/proc/$pid/task/$pid/children") || refuse children_unreadable 65
+        children=$(proc_children /proc "$pid") || refuse children_unreadable 65
         test -z "$children" || refuse owned_children_remain 66
         require_relay
         kill -KILL "$pid" 2>/dev/null || : ;;

@@ -17,6 +17,8 @@ import unittest
 from unittest import mock
 import uuid
 
+from proxy_test_support import child_pids
+
 
 PROXY = Path(__file__).with_name("node-proxy.py")
 
@@ -100,6 +102,35 @@ raise SystemExit(code if code >= 0 else 128 - code)
 
 
 class ProxyBackpressureTests(unittest.TestCase):
+    def test_proc_child_scan_requires_complete_stat_and_exact_parent(self):
+        with tempfile.TemporaryDirectory() as directory:
+            proc = Path(directory)
+
+            def stat(pid, ppid, comm):
+                (proc / str(pid)).mkdir()
+                (proc / str(pid) / "stat").write_text(f"{pid} ({comm}) S {ppid}" + " 0" * 17 + " 123 0\n")
+
+            stat(42, 1, "relay")
+            stat(43, 42, "a ) ( with spaces\n)")
+            stat(44, 142, "not the exact parent")
+            stat(45, 43, "grandchild")
+            (proc / "46").symlink_to(proc / "gone")  # PID name seen, directory no longer resolves.
+            self.assertEqual([43], child_pids(42, proc))
+            with self.assertRaises(subprocess.CalledProcessError):
+                child_pids(99, proc)  # Readable stat files, but no parent record or children.
+            (proc / "47").mkdir()  # An entry still present but no readable stat is uncertain.
+            with self.assertRaises(subprocess.CalledProcessError):
+                child_pids(42, proc)
+            (proc / "47" / "stat").write_text("47 (short) S 42\n")
+            with self.assertRaises(subprocess.CalledProcessError):
+                child_pids(42, proc)
+            (proc / "47" / "stat").unlink()
+            (proc / "47").rmdir()
+            direct_child = proc / "43" / "stat"
+            direct_child.write_text(direct_child.read_text().replace(") S 42 ", ") 42 ", 1))
+            with self.assertRaises(subprocess.CalledProcessError):
+                child_pids(42, proc)  # Long numeric tail, but no process state.
+
     def test_zero_host_exit_independently_checks_live_identified_relay(self):
         spec = importlib.util.spec_from_file_location("proxy_zero_exit", PROXY)
         module = importlib.util.module_from_spec(spec)
@@ -197,7 +228,7 @@ class ProxyBackpressureTests(unittest.TestCase):
                 peer, _ = listener.accept()
                 deadline = time.monotonic() + 2
                 while True:
-                    cats = Path(f"/proc/{relay.pid}/task/{relay.pid}/children").read_text().split()
+                    cats = child_pids(relay.pid)
                     if len(cats) == 2 or time.monotonic() >= deadline:
                         break
                     time.sleep(0.01)
@@ -217,10 +248,13 @@ class ProxyBackpressureTests(unittest.TestCase):
                 other_start = Path(f"/proc/{unrelated.pid}/stat").read_text().rsplit(") ", 1)[1].split()[19]
                 self.assertEqual(65, cleanup(unrelated.pid, other_start, nonce, "TERM"))
                 self.assertIsNone(unrelated.poll())
+                self.assertEqual(66, cleanup(relay.pid, start, nonce, "KILL_EMPTY_RELAY"))
+                self.assertIsNone(relay.poll())
+                self.assertTrue(all(exists(pid) for pid in cats))
                 # Also exercise the guarded escalation: only this relay's cat children die.
                 self.assertEqual(0, cleanup(relay.pid, start, nonce, "KILL_CHILDREN"))
                 relay.wait(timeout=5)
-                self.assertTrue(all(not exists(int(pid)) for pid in cats))
+                self.assertTrue(all(not exists(pid) for pid in cats))
                 self.assertIsNone(unrelated.poll())
                 print("wrong_start_refused=True wrong_nonce_refused=True unrelated_exec_untouched=True owned_cats_reaped=True", flush=True)
             finally:
@@ -267,7 +301,7 @@ wait "$reader"
                     while time.monotonic() < deadline:
                         if relay.container_identity is not None:
                             shell = relay.container_identity[0]
-                            cats = Path(f"/proc/{shell}/task/{shell}/children").read_text().split()
+                            cats = child_pids(shell)
                             if len(cats) == 2 and any("write" in Path(f"/proc/{pid}/wchan").read_text() for pid in cats):
                                 break
                         time.sleep(0.01)
@@ -284,7 +318,7 @@ wait "$reader"
                     self.assertTrue(relay.used_out_of_band_cleanup)
                     self.assertGreater(relay.discarded_output_bytes, 0)
                     self.assertEqual("CHECK", relay.cleanup_actions[-1])
-                    self.assertFalse(any(exists(int(pid)) for pid in [str(shell), *cats, str(state["docker_pid"])]))
+                    self.assertFalse(any(exists(pid) for pid in [shell, *cats, state["docker_pid"]]))
                     print(f"container_reaped=True docker_joined=True discarded_output_bytes={relay.discarded_output_bytes} host_client_still_open=True", flush=True)
                 finally:
                     stopping.set()
@@ -348,7 +382,7 @@ wait "$reader"
                         except BlockingIOError:
                             continue
                     self.assertTrue(stalled, "The private non-reading peer did not establish writer backpressure")
-                    cats = [int(pid) for pid in Path(f"/proc/{shell}/task/{shell}/children").read_text().split()]
+                    cats = child_pids(shell)
                     self.assertEqual(2, len(cats))
                     print(f"blocked_writer=True sent_bytes={sent} shell={shell} cats={cats} peer_still_open=True", flush=True)
                     os.killpg(proxy.pid, signal.SIGTERM)

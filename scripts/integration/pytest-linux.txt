@@ -1,0 +1,5 @@
+# Linux-only pytest module, class or function selectors, relative to the repository root.
+benchmarks/scripts/test_gate_fly.py::GuardTests::test_lock_waiter_not_holder_inherited_holder_is_detected_no_cmdlines
+benchmarks/scripts/test_gate_fly.py::LauncherTests
+scripts/integration/test_node_proxy.py
+scripts/integration/test_proxy_backpressure.py
