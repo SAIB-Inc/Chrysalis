@@ -9,6 +9,7 @@ using Xunit;
 
 namespace Chrysalis.Tx.Test.Providers;
 
+#pragma warning disable JSON002 // Test fixtures include JSON fragments or malformed JSON.
 public class KupmiosTests
 {
     internal static Kupmios Create(StubHttpHandler stub) => new("https://kupo.test/", "https://ogmios.test/", handler: stub);

@@ -5,6 +5,7 @@ using Xunit;
 
 namespace Chrysalis.Tx.Test.Providers;
 
+#pragma warning disable JSON002 // Test fixtures include JSON fragments or malformed JSON.
 public class ProviderContractTests
 {
     // Operations 0 to 7 use HTTP on Blockfrost; 8 to 14 use it on Kupmios. 15 and 16 are local.
