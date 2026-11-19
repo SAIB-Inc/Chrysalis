@@ -24,7 +24,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <AdditionalFiles Include="data/plutus.json" />
     <AdditionalFiles Include="data/shapes.json" />
     <AdditionalFiles Include="data/crashr.json" />
     <AdditionalFiles Include="data/aiken-079.json" />

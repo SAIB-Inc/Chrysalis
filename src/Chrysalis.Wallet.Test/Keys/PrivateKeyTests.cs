@@ -9,7 +9,7 @@ public class PrivateKeyTests
     private static PrivateKey CreateTestRootKey()
     {
         Mnemonic mnemonic = Mnemonic.Restore(
-            "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
+            TestVectors.Bip39ZeroEntropy12,
             English.Words);
         return mnemonic.GetRootKey();
     }
@@ -37,7 +37,7 @@ public class PrivateKeyTests
     [Fact]
     public void GetRootKey_SameMnemonic_ProducesSameKey()
     {
-        string phrase = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
+        string phrase = TestVectors.Bip39ZeroEntropy12;
 
         Mnemonic mnemonic1 = Mnemonic.Restore(phrase, English.Words);
         Mnemonic mnemonic2 = Mnemonic.Restore(phrase, English.Words);

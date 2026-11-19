@@ -8,7 +8,7 @@ public class PublicKeyTests
     private static PublicKey CreateTestPublicKey()
     {
         Mnemonic mnemonic = Mnemonic.Restore(
-            "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
+            TestVectors.Bip39ZeroEntropy12,
             English.Words);
         PrivateKey rootKey = mnemonic.GetRootKey();
         return rootKey.GetPublicKey();
@@ -34,7 +34,7 @@ public class PublicKeyTests
     public void Verify_ValidSignature_ReturnsTrue()
     {
         Mnemonic mnemonic = Mnemonic.Restore(
-            "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
+            TestVectors.Bip39ZeroEntropy12,
             English.Words);
         PrivateKey privateKey = mnemonic.GetRootKey();
         PublicKey publicKey = privateKey.GetPublicKey();
@@ -59,7 +59,7 @@ public class PublicKeyTests
     public void Verify_WrongMessage_ReturnsFalse()
     {
         Mnemonic mnemonic = Mnemonic.Restore(
-            "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
+            TestVectors.Bip39ZeroEntropy12,
             English.Words);
         PrivateKey privateKey = mnemonic.GetRootKey();
         PublicKey publicKey = privateKey.GetPublicKey();

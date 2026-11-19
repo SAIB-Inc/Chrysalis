@@ -2,16 +2,17 @@
 
 import csv
 import hashlib
+from itertools import groupby
+import json
 import os
 from pathlib import Path
+import re
 import subprocess
 import tempfile
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 DATA = Path("src/Chrysalis.Codec.Blueprint.Test/data")
-# LC1w deletes the Wizard fixture and this exception together.
-UNMANIFESTED_BLUEPRINTS = {DATA / "plutus.json"}
 MAGIC = (
     ("ELF", 0, b"\x7fELF"),
     ("Mach-O", 0, b"\xfe\xed\xfa\xce"),
@@ -26,6 +27,30 @@ MAGIC = (
 )
 PE_OFFSET = 0x3C
 PREFIX_SIZE = max(PE_OFFSET + 4, *(offset + len(magic) for _, offset, magic in MAGIC))
+REMOVED_NAME = bytes.fromhex("77697a617264").decode()
+REMOVED_HASHES = {
+    "83305427f2ab1356bd47b12a8886aedb3a8cd7adf844804e7ca6bbcbaa9fe856",
+    "634de5f1b161d7e2092a7bac5c4378c160ac89e692075a73378487ec752fbd12",
+    "413dc03cc9587546d5631b4f5a19b237fd882f2031c216420c1957fa696a1330",
+}
+REMOVED_PROGRAMS = {
+    "df7dcb95733e08abaf5dc4b48e1edd6025dd530c60f83ae84bb771124c8ad73a",
+    "74654c8c1f5d283b9023c45408b8020b59cd86f4fcef257c30e1fb109b3ec494",
+    "accd1e0d6bade108f07db0f1e85fe7b9daafc879aba4774930c7c410b2ca40ab",
+    "e5bbcc83b826841f778156a46a5f165aac36c4d0d7c68c6e193271aa42f41853",
+}
+WORD_LIST = Path("src/Chrysalis.Wallet/Words/English.cs")
+WALLET_TEST = Path("src/Chrysalis.Wallet.Test")
+PHRASE_LENGTHS = (12, 15, 18, 21, 24)
+ALLOWED_PHRASES = {
+    # digest: (path, count, label, whether the label is in the adjacent manifest)
+    "c557eec878dfd852ba3f88087c4f350f09c55537ab5e549c3cd14320ec3cef38": (
+        WALLET_TEST / "TestVectors.cs", 1, "BIP-39 test vector", False),
+    "533f2e1742956eeed3591f2a1c89c8b5fe77f984919e4131313802db75e26983": (
+        WALLET_TEST / "CIPs/CIP8Tests.cs", 1, "CardanoSharp/cardanosharp-wallet `5089079d`", False),
+    "16b99389dd0544e520f7fa7ff558d6d5326ada33a01f8ea20a4b0f31fb7ddadc": (
+        WALLET_TEST / "TestData/CIPs/icarus.json", 2, "CIP-0003/Icarus.md", True),
+}
 
 
 def candidate_files(root):
@@ -62,6 +87,129 @@ def binaries(root):
 def sha256(path):
     with path.open("rb") as stream:
         return hashlib.file_digest(stream, "sha256").hexdigest()
+
+
+def read_text_or_bytes(path):
+    data = path.read_bytes()
+    if data.startswith((b"\xff\xfe", b"\xfe\xff")):
+        return data.decode("utf-16", errors="replace")
+    if b"\0" in data[:8192]:
+        return data
+    return data.decode("utf-8-sig", errors="replace")
+
+
+def unwrap_byte_strings(data):
+    # Strip only definite-length CBOR byte strings that span the entire input.
+    while data and data[0] >> 5 == 2:
+        size = data[0] & 31
+        header = 1
+        if size >= 24:
+            if size > 27:
+                break
+            header += 1 << (size - 24)
+            size = int.from_bytes(data[1:header], "big")
+        if header + size != len(data):
+            break
+        data = data[header:]
+    return data
+
+
+def removed_material(root, name, hashes, programs):
+    for path in sorted(candidate_files(root)):
+        if name in path.as_posix().lower():
+            yield f"{path}: name in path"
+        data = read_text_or_bytes(root / path)
+        if isinstance(data, bytes):
+            if hashlib.sha256(unwrap_byte_strings(data)).hexdigest() in programs:
+                yield f"{path}: script payload"
+            continue
+        for number, line in enumerate(data.splitlines(), 1):
+            line = line.lower()
+            if name in line:
+                yield f"{path}:{number}: name"
+            for token in re.findall(r"[0-9a-f]{56,}", line):
+                if len(token) == 56 and hashlib.sha256(token.encode()).hexdigest() in hashes:
+                    yield f"{path}:{number}: script hash"
+                if len(token) >= 112 and len(token) % 2 == 0:
+                    raw = unwrap_byte_strings(bytes.fromhex(token))
+                    if hashlib.sha256(raw).hexdigest() in programs:
+                        yield f"{path}:{number}: script payload"
+
+
+def valid_checksum(words, indices):
+    bits = 0
+    for word in words:
+        bits = (bits << 11) | indices[word]
+    size = len(words) // 3
+    entropy = (bits >> size).to_bytes(size * 4)
+    return bits & ((1 << size) - 1) == hashlib.sha256(entropy).digest()[0] >> (8 - size)
+
+
+def phrase_windows(words):
+    for i in range(len(words) - PHRASE_LENGTHS[0] + 1):
+        for size in PHRASE_LENGTHS:
+            if i + size > len(words):
+                break
+            yield i, words[i:i + size]
+
+
+def contains_phrase(words, indices):
+    return any(valid_checksum(window, indices) for _, window in phrase_windows(words))
+
+
+def manifest_has_label(path, label):
+    try:
+        entries = json.loads(path.with_name("manifest.json").read_text(encoding="utf-8-sig"))
+        return any(entry.get("path") == path.name and label in entry.get("source", "")
+                   for entry in entries)
+    except (OSError, ValueError, AttributeError, TypeError):
+        return False
+
+
+def recovery_phrases(root, indices, allowed):
+    counts = dict.fromkeys(allowed, 0)
+    minimum = PHRASE_LENGTHS[0]
+    for path in sorted(candidate_files(root)):
+        if path == WORD_LIST:
+            continue
+        data = read_text_or_bytes(root / path)
+        if isinstance(data, bytes):
+            continue
+        lines = data.splitlines()
+        tokens = ((word, number) for number, line in enumerate(lines, 1)
+                  for word in re.findall(r"[a-z]+", line.lower()))
+        rules = {digest: rule for digest, rule in allowed.items() if rule[0] == path}
+        for known, run in groupby(tokens, key=lambda token: token[0] in indices):
+            if not known:
+                continue
+            entries = list(run)
+            if len(entries) < minimum:
+                continue
+            words, numbers = zip(*entries)
+            start = 0
+            # Subtract allowed occurrences before checking the remaining parts for valid windows.
+            if rules:
+                for i, window in phrase_windows(words):
+                    if i < start:
+                        continue
+                    digest = hashlib.sha256(" ".join(window).encode()).hexdigest()
+                    if digest not in rules:
+                        continue
+                    if contains_phrase(words[start:i], indices):
+                        yield f"{path}:{numbers[start]}"
+                    counts[digest] += 1
+                    _, _, label, in_manifest = rules[digest]
+                    number = numbers[i]
+                    labelled = (manifest_has_label(root / path, label) if in_manifest else
+                                any(label in line for line in lines[max(0, number - 4):number - 1]))
+                    if not labelled:
+                        yield f"{path}:{number}: allowed phrase without its label"
+                    start = i + len(window)
+            if contains_phrase(words[start:], indices):
+                yield f"{path}:{numbers[start]}"
+    for digest, (path, count, _, _) in allowed.items():
+        if counts[digest] != count:
+            yield f"{path}: allowed phrase count {counts[digest]}, expected {count}"
 
 
 class RepositoryFilesTests(unittest.TestCase):
@@ -115,11 +263,73 @@ class RepositoryFilesTests(unittest.TestCase):
                 self.assertNotIn(path, listed, f"{path}: duplicate manifest row")
                 listed.add(path)
                 self.assertEqual(sha256(ROOT / path), row[6], f"{path}: SHA-256 mismatch")
-        self.assertLessEqual(UNMANIFESTED_BLUEPRINTS, fixtures, "stale Wizard exception")
-        missing = fixtures - listed - UNMANIFESTED_BLUEPRINTS
+        missing = fixtures - listed
         if missing:
             self.fail("\n".join(f"{path}: missing manifest row" for path in sorted(missing)))
         licence = DATA / "LICENSE-aiken"
         self.assertIn(licence, data_files)
         self.assertEqual(sha256(ROOT / licence),
                          "5dcae70ec2e7d4166d33f0546e8e6327e41e8dddf924de16db554085973e1a26")
+
+    def test_removed_material_stays_removed(self):
+        found = list(removed_material(ROOT, REMOVED_NAME, REMOVED_HASHES, REMOVED_PROGRAMS))
+        if found:
+            self.fail("\n".join(found))
+
+    def test_removed_material_check_sees_synthetic_material(self):
+        token = os.urandom(28).hex().upper()
+        raw = b"\0" + os.urandom(127)
+        inner = b"\x58" + bytes([len(raw)]) + raw
+        envelope = b"\x58" + bytes([len(inner)]) + inner
+        root = self.temp_repo({
+            "NeBuLa/raw": b"\0",
+            "text": b"\nThis says NEBULA.\n",
+            "utf16": "\nThis says Nebula.\n".encode("utf-16"),
+            "token": f"\n{token}\n".encode(),
+            "envelope": json.dumps({"cborHex": envelope.hex()}).encode(),
+            "binary": raw,
+            "clean": b"an unrelated file",
+        })
+        self.assertCountEqual(removed_material(root, "nebula", {
+            hashlib.sha256(token.lower().encode()).hexdigest(),
+        }, {hashlib.sha256(raw).hexdigest()}), [
+            "NeBuLa/raw: name in path", "text:2: name", "utf16:2: name", "token:2: script hash",
+            "envelope:1: script payload", "binary: script payload",
+        ])
+
+    def bip39_indices(self):
+        words = re.findall(r'"([a-z]+)"', (ROOT / WORD_LIST).read_text(encoding="utf-8-sig"))
+        indices = {word: index for index, word in enumerate(words)}
+        self.assertTrue(len(words) == len(indices) == 2048, f"{WORD_LIST}: invalid word list")
+        return indices
+
+    def test_no_unlisted_recovery_phrases(self):
+        found = list(recovery_phrases(ROOT, self.bip39_indices(), ALLOWED_PHRASES))
+        if found:
+            self.fail("\n".join(found))
+
+    def test_phrase_check_sees_generated_phrases(self):
+        indices = self.bip39_indices()
+        words = list(indices)
+
+        def phrase(size, damage=0):
+            entropy = os.urandom(size * 4)
+            checksum = hashlib.sha256(entropy).digest()[0] >> (8 - size)
+            bits = (int.from_bytes(entropy, "big") << size) | (checksum ^ damage)
+            return [words[(bits >> shift) & 2047] for shift in range(33 * size - 11, -1, -11)]
+
+        p1, p2, p3, p4 = (phrase(size) for size in (4, 8, 4, 4))
+        p1, p3, p4 = (" ".join(parts) for parts in (p1, p3, p4))
+        root = self.temp_repo({
+            "p1": f"\n{p1}\n".encode(), "utf16": p1.encode("utf-16"),
+            "p2": (" ".join(p2[:12]) + "\n" + " ".join(p2[12:])).encode(),
+            "invalid": " ".join(phrase(4, damage=1)).encode(),
+            "a": f"# VECTOR\n{p3}\n# VECTOR\n{p3}\n".encode(),
+            "b": p4.encode(), "c": p3.encode(),
+        })
+        allowed = {hashlib.sha256(value.encode()).hexdigest(): (Path(path), 1, "VECTOR", False)
+                   for value, path in ((p3, "a"), (p4, "b"))}
+        self.assertCountEqual(recovery_phrases(root, indices, allowed), [
+            "p1:2", "utf16:1", "p2:1", "a: allowed phrase count 2, expected 1",
+            "b:1: allowed phrase without its label", "c:1",
+        ])

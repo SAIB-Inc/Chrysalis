@@ -15,6 +15,9 @@ namespace Chrysalis.Wallet.Test.CIPs;
 
 public class CIP8Tests
 {
+    // From CardanoSharp.Wallet's CIP-8 tests (CardanoSharp/cardanosharp-wallet `5089079d`, `CardanoSharp.Wallet.Test/CIPs/CIP8Tests.cs:121`; MIT).
+    internal const string CardanoSharpSeed = "scout always message drill gorilla laptop electric decrease fly actor tuition merit clock flush end duck dance treat idle replace bulk total tool assist";
+
     /// <summary>
     /// Test vector from CardanoSharp - decode existing COSE_Sign1 message
     /// </summary>
@@ -315,6 +318,7 @@ public class CIP8Tests
     /// <summary>
     /// Test compatibility with known test vector (from CardanoSharp)
     /// This uses a known seed phrase to ensure compatibility
+    /// Recorded in CardanoSharp.Wallet's CIP-8 tests, with the same labels (same commit, lines 109–117).
     /// </summary>
     [Theory]
     [InlineData(
@@ -331,9 +335,7 @@ public class CIP8Tests
         _ = wallet; // Used to identify which wallet test case
         _ = expectedSignature; // Expected signature to verify compatibility
 
-        // Known test seed from CardanoSharp tests
-        string seed = "scout always message drill gorilla laptop electric decrease fly actor tuition merit clock flush end duck dance treat idle replace bulk total tool assist";
-        Mnemonic mnemonic = Mnemonic.Restore(seed, English.Words);
+        Mnemonic mnemonic = Mnemonic.Restore(CardanoSharpSeed, English.Words);
         PrivateKey rootKey = mnemonic.GetRootKey();
 
         // Standard Cardano wallet derivation

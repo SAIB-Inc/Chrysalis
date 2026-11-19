@@ -56,7 +56,7 @@ internal sealed class BlueprintCompiler
 /// </summary>
 internal sealed class BlueprintValidator
 {
-    /// <summary>Validator title (e.g., "wizard.script.spend").</summary>
+    /// <summary>Validator title (e.g., "order_book.order_book.spend").</summary>
     public string Title { get; set; } = "";
 
     /// <summary>Datum schema reference.</summary>
