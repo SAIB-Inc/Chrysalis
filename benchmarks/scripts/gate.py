@@ -151,7 +151,7 @@ def execute_logged(command, log, *, cwd, env):
         raise RuntimeError(f'Command failed ({code}); see {log.name}')
 
 
-def pinned_references(project, references):
+def pinned_references(project, references, *, pinned_harness=False):
     """Both executables use explicit pinned metadata, never transitive loose packages."""
     import xml.etree.ElementTree as xml
     root = xml.fromstring(project.read_text())
@@ -162,6 +162,9 @@ def pinned_references(project, references):
     for name, path in references.items():
         item = xml.SubElement(group, 'Reference', Include=Path(name).stem)
         xml.SubElement(item, 'HintPath').text = str(path)
+    if pinned_harness:
+        properties = xml.SubElement(root, 'PropertyGroup')
+        xml.SubElement(properties, 'DefineConstants').text = '$(DefineConstants);CHRYSALIS_PINNED_HARNESS'
     project.write_text(xml.tostring(root, encoding='unicode'))
 
 
@@ -192,6 +195,10 @@ def offline_restore_config(directory, source):
     return path
 
 
+def staged_sdk_root(commit):
+    return Path(os.environ['CHRYSALIS_DOTNET10_ROOT']) if commit == PIN else runner.DOTNET_ROOT
+
+
 def stage_side(info, label, output, local, inputs=None, *, allocation_platform='pc', prepare_phase=None):
     """Stage one arm; Azure restores and builds in separate guests."""
     job_file = output / 'build' / (label + '-staging.job.json')
@@ -216,7 +223,7 @@ def stage_side(info, label, output, local, inputs=None, *, allocation_platform='
         closure = check_pinned(local['pinnedBaseline'])
         pinned_references(directory / 'Chrysalis.Benchmarks.csproj',
                           {name: Path(local['pinnedBaseline']) / name for name in closure['assemblySha256s']
-                           if name != 'Chrysalis.Benchmarks.dll'})
+                           if name != 'Chrysalis.Benchmarks.dll'}, pinned_harness=True)
     client_dir = directory / 'client'
     client_dir.mkdir()
     for name, content in inputs['client'].items():
@@ -233,7 +240,7 @@ def stage_side(info, label, output, local, inputs=None, *, allocation_platform='
     project = directory / 'Chrysalis.Benchmarks.csproj'
     project.write_text(project.read_text().replace('</Project>', '<ItemGroup><Compile Remove="client/**/*.cs" /></ItemGroup></Project>'))
     if prepare_phase:
-        sdk_root = Path(os.environ['CHRYSALIS_DOTNET10_ROOT']) if pinned else runner.DOTNET_ROOT
+        sdk_root = staged_sdk_root(info['commit'])
         cli = [sdk_root / 'dotnet', sdk_root / 'sdk' / sdk / 'dotnet.dll']
         packages, restore_source = os.environ['NUGET_PACKAGES'], os.environ['CHRYSALIS_NUGET_SOURCE']
     else:

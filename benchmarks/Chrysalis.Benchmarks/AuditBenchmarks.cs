@@ -22,8 +22,12 @@ using Chrysalis.Network.Multiplexer;
 using Chrysalis.Network.Core;
 using Chrysalis.Tx.Builders;
 using Chrysalis.Tx.Extensions;
+#if CHRYSALIS_PINNED_HARNESS
+using Chrysalis.Tx.Utils;
+#else
 using Chrysalis.Tx.Fees;
 using Chrysalis.Tx.Models.Cbor;
+#endif
 using Chrysalis.Wallet.Utils;
 using Chrysalis.Crypto;
 using Chrysalis.Plutus.Cek;
@@ -165,20 +169,29 @@ public class TxBench
 {
     internal CoreBench core = new(); internal ProtocolParams pp = null!; internal PlutusV3Script script; internal IRedeemers redeemers = null!;
     internal Tx.Models.RationalNumber step = new(721, 10000000), memory = new(577, 10000);
+#if !CHRYSALIS_PINNED_HARNESS
     private PostMaryTransaction transferDraft, scriptDraft, referenceDraft;
     private FeeInputs transferInputs, scriptInputs, referenceInputs;
     private FeeDraft prepared;
+#endif
     /// <summary>Runs the named benchmark operation or its untimed setup/cleanup.</summary>
     [GlobalSetup]
     public void Setup()
     {
-        core.Setup(); pp = new(44, 155381, null, 16384, null, null, null, null, null, null, null, null, null, null, 4310, new CostMdls(null, null, CborList.Create<long>([0, 1, 2])), ExUnitPrices.Create(new CborRationalNumber(577, 10000), new CborRationalNumber(721, 10000000)), null, null, null, 150, 3, null, null, null, null, null, null, null, null, new CborRationalNumber(15, 1));
+        core.Setup(); pp = new(44, 155381, null, 16384, null, null, null, null, null, null, null, null, null, null, 4310, new CostMdls(null, null,
+#if CHRYSALIS_PINNED_HARNESS
+            CborDefList<long>.Create([0, 1, 2])
+#else
+            CborList.Create<long>([0, 1, 2])
+#endif
+        ), ExUnitPrices.Create(new CborRationalNumber(577, 10000), new CborRationalNumber(721, 10000000)), null, null, null, 150, 3, null, null, null, null, null, null, null, null, new CborRationalNumber(15, 1));
         if (File.Exists(Path.Combine(Fixtures.Root, "fixtures/protocol-parameters.cbor")))
         {
             pp = CborSerializer.Deserialize<CurrentProtocolParamsResponse>(File.ReadAllBytes(Path.Combine(Fixtures.Root, "fixtures/protocol-parameters.cbor"))).ProtocolParams;
         }
 
         script = PlutusV3Script.Create(3, File.ReadAllBytes(Path.Combine(Fixtures.Root, "../data/plutus_use_cases/escrow-redeem_1-1.flat"))); redeemers = RedeemerList.Create([RedeemerEntry.Create(0, 0, PlutusInt.Create(1), ExUnits.Create(1000, 2000))]);
+#if !CHRYSALIS_PINNED_HARNESS
         Address address = Address.Create(core.address);
         ITransactionOutput change = AlonzoTransactionOutput.Create(address, Lovelace.Create(4_800_000), null);
         transferDraft = NewBuilder(false).AddOutput(change).Build();
@@ -194,7 +207,9 @@ public class TxBench
         CheckBalanced(prepared, $"{nameof(FeeTransfer)}/{nameof(FeeSolve)}");
         CheckBalanced(FeeSolver.Prepare(scriptDraft, pp, scriptInputs), nameof(FeeScriptSpend));
         CheckBalanced(FeeSolver.Prepare(referenceDraft, pp, referenceInputs), nameof(FeeReferenceScript));
+#endif
     }
+#if !CHRYSALIS_PINNED_HARNESS
     private static void CheckBalanced(in FeeDraft draft, string benchmark)
     {
         FeeStatus status = FeeSolver.Solve(draft).Status;
@@ -208,6 +223,7 @@ public class TxBench
         PostMaryTransaction signed = (PostMaryTransaction)draft.Sign([VKeyWitness.Create(core.pub, new byte[64])]);
         return checked((ulong)(signed.Witnesses.Raw.Length - draft.Witnesses.Raw.Length));
     }
+#endif
     private TransactionBuilder NewBuilder(bool scripted, bool useReference = false)
     {
         TransactionBuilder b = TransactionBuilder.Create(pp); Address addr = Address.Create(core.address);
@@ -244,11 +260,20 @@ public class TxBench
     /// <summary>Runs the named benchmark operation or its untimed setup/cleanup.</summary>
     [Benchmark] public byte[] ScriptBuildFeeSign() => BuildSign(true, true);
     /// <summary>Runs the named benchmark operation or its untimed setup/cleanup.</summary>
+#if CHRYSALIS_PINNED_HARNESS
+    [Benchmark] public ulong ScriptFee() => FeeUtil.CalculateScriptExecutionFee(redeemers, step, memory);
+#else
     [Benchmark] public ulong ScriptFee() => FeeEngine.ScriptFee(redeemers, pp);
+#endif
     /// <summary>Runs the named benchmark operation or its untimed setup/cleanup.</summary>
     [Benchmark] public ulong ScriptFeeLoop() { ulong fee = 0; foreach (RedeemerEntry x in ((RedeemerList)redeemers).Value) { fee += (x.ExUnits.Mem * memory.Numerator / memory.Denominator) + (x.ExUnits.Steps * step.Numerator / step.Denominator); } return fee; }
     /// <summary>Runs the named benchmark operation or its untimed setup/cleanup.</summary>
+#if CHRYSALIS_PINNED_HARNESS
+    [Benchmark] public ulong LinearFee() => FeeUtil.CalculateFeeWithWitness(300, pp.MinFeeA!.Value, pp.MinFeeB!.Value, 1);
+#else
     [Benchmark] public ulong LinearFee() => FeeEngine.LinearFee(300, pp);
+#endif
+#if !CHRYSALIS_PINNED_HARNESS
     /// <summary>Prepares and solves a transfer with change.</summary>
     [Benchmark] public ulong FeeTransfer() => FeeSolver.Solve(FeeSolver.Prepare(transferDraft, pp, transferInputs)).Fee;
     /// <summary>Prepares and solves a Plutus spend with an attached script.</summary>
@@ -257,6 +282,7 @@ public class TxBench
     [Benchmark] public ulong FeeReferenceScript() => FeeSolver.Solve(FeeSolver.Prepare(referenceDraft, pp, referenceInputs)).Fee;
     /// <summary>Solves a prepared transfer without draft-building or preparation costs.</summary>
     [Benchmark] public ulong FeeSolve() => FeeSolver.Solve(prepared).Fee;
+#endif
 }
 
 /// <summary>Measures VmBench operations using fixed public fixtures.</summary>

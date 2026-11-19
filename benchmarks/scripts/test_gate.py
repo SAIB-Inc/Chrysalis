@@ -7,6 +7,7 @@ from types import SimpleNamespace
 import tempfile
 import unittest
 from unittest.mock import patch
+import xml.etree.ElementTree as ET
 
 import gate
 
@@ -172,6 +173,12 @@ class GateTests(unittest.TestCase):
                         patch.object(gate, 'execute_logged', side_effect=stage), \
                         patch.object(gate.subprocess, 'call', return_value=0) as run:
                     gate.stage_side(side(commit=commit), 'fixture', Path(directory), dict(pinnedBaseline='fixture'))
+                harness = Path(directory) / 'build/fixture'
+                constants = '$(DefineConstants);CHRYSALIS_PINNED_HARNESS' if commit == gate.PIN else None
+                self.assertEqual(ET.parse(harness / 'Chrysalis.Benchmarks.csproj').findtext('PropertyGroup/DefineConstants'), constants)
+                self.assertIsNone(ET.parse(harness / 'client/ReplayClient.csproj').find('PropertyGroup/DefineConstants'))
+                for name, body in gate.measurement_inputs()['harness'].items():
+                    self.assertEqual((harness / name).read_bytes(), body)
                 self.assertEqual(run.call_count, 4)
                 self.assertEqual([call.args[0][2] for call in run.call_args_list], ['restore', 'build', 'restore', 'build'])
                 for call in run.call_args_list:
