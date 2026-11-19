@@ -4,6 +4,8 @@ namespace Chrysalis.Codec.Test;
 
 internal static class AllocationAssert
 {
+    private const int MaxGen2Retries = 5;
+
     public static long Measure(Action warmUp, Action measure, Action? verify = null) =>
         MeasureMedian(warmUp, () =>
         {
@@ -23,12 +25,29 @@ internal static class AllocationAssert
         {
             try
             {
+                int gen2 = GC.CollectionCount(2);
+                GC.WaitForPendingFinalizers();
                 warmUp?.Invoke();
                 // Ignore one noisy attempt without letting one clean attempt hide recurring allocations.
                 Span<long> samples = stackalloc long[3];
                 for (int attempt = 0; attempt < samples.Length; attempt++)
                 {
-                    samples[attempt] = sample();
+                    long measured;
+                    for (int retry = 0; ; retry++)
+                    {
+                        measured = sample();
+                        int afterGen2 = GC.CollectionCount(2);
+                        if (afterGen2 == gen2 || retry == MaxGen2Retries)
+                        {
+                            gen2 = afterGen2;
+                            break;
+                        }
+                        // A gen-2 GC under memory pressure can trim shared pools on the finalizer thread.
+                        gen2 = afterGen2;
+                        GC.WaitForPendingFinalizers();
+                        warmUp?.Invoke();
+                    }
+                    samples[attempt] = measured;
                 }
                 samples.Sort();
                 median = samples[1];
