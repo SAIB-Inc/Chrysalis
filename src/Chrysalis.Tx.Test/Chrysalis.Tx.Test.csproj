@@ -23,11 +23,13 @@
     <None Include="../Chrysalis.Network.Tests/Fixtures/Preprod/wire/c1-in-p7-007.cbor"
           Link="TestData/cli/inputs/g1/c1-in-p7-007.cbor" CopyToOutputDirectory="PreserveNewest" />
     <None Update="TestData/**" CopyToOutputDirectory="PreserveNewest" />
+    <Compile Include="../Chrysalis.Tx.Providers.UtxoRpc.Test/LedgerParameters.cs" Link="Providers/LedgerParameters.cs" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="../Chrysalis.Tx/Chrysalis.Tx.csproj" />
     <ProjectReference Include="../Chrysalis/Chrysalis.csproj" />
+    <ProjectReference Include="../Chrysalis.Tx.Providers.Koios/Chrysalis.Tx.Providers.Koios.csproj" />
     <ProjectReference Include="../Chrysalis.Codec.CodeGen/Chrysalis.Codec.CodeGen.csproj"
                       OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
   </ItemGroup>

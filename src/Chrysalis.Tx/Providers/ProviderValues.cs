@@ -1,9 +1,14 @@
 using System.Numerics;
 using System.Text.Json;
+using Chrysalis.Codec.Extensions.Cardano.Core;
+using Chrysalis.Codec.Serialization;
 using Chrysalis.Codec.Serialization.Utils;
 using Chrysalis.Codec.Types;
+using Chrysalis.Codec.Types.Cardano.Core;
 using Chrysalis.Codec.Types.Cardano.Core.Common;
 using Chrysalis.Codec.Types.Cardano.Core.Scripts;
+using Chrysalis.Tx.Extensions;
+using SAIB.Cbor.Serialization;
 
 namespace Chrysalis.Tx.Providers;
 
@@ -72,4 +77,61 @@ public static class ProviderValues
 
     private static byte[] KeyHash(string? hash) => hash is { Length: 56 }
         ? Convert.FromHexString(hash) : throw new FormatException("Invalid native script key hash length.");
+
+    /// <summary>Verifies that a decoded script matches the expected hash.</summary>
+    public static IScript RequireScriptHash(IScript script, string expectedHash, string provider, string operation)
+    {
+        ArgumentNullException.ThrowIfNull(script);
+        if (!string.Equals(script.HashHex(), expectedHash, StringComparison.OrdinalIgnoreCase))
+        {
+            throw ProviderHttp.Unusable(provider, operation, "script hash differs from the requested hash");
+        }
+        return script;
+    }
+
+    /// <summary>Extracts transaction metadata from CBOR transaction bytes without decoding the body.</summary>
+    public static Metadata? TransactionMetadata(ReadOnlyMemory<byte> transaction) =>
+        AuxiliaryData(transaction) is { } data ? CborSerializer.Deserialize<IAuxiliaryData>(data).Metadata() : null;
+
+    private static ReadOnlyMemory<byte>? AuxiliaryData(ReadOnlyMemory<byte> tx)
+    {
+        CborReader reader = new(tx.Span);
+        reader.ReadBeginArray();
+        bool indefinite = tx.Span[0] == 0x9f;
+        int count = reader.ReadSize() switch
+        {
+            _ when indefinite => -1,
+            2 => 2,
+            3 => 3,
+            4 => 4,
+            _ => throw new InvalidDataException("Invalid transaction array length.")
+        };
+        _ = reader.ReadDataItem();
+        _ = reader.ReadDataItem();
+        ReadOnlyMemory<byte>? auxiliary = null;
+        bool ended = indefinite && !reader.Buffer.IsEmpty && reader.Buffer[0] == 0xff;
+        if (count != 2 && !ended)
+        {
+            if (reader.Buffer.IsEmpty) { throw new InvalidDataException("Truncated transaction array."); }
+            bool validityFlag = reader.Buffer[0] is 0xf4 or 0xf5;
+            if (validityFlag)
+            {
+                if (!indefinite && count != 4) { throw new InvalidDataException("A validity flag requires four transaction items."); }
+                _ = reader.ReadDataItem();
+            }
+            else if (count == 4) { throw new InvalidDataException("Missing transaction validity flag."); }
+
+            if (reader.Buffer.IsEmpty || reader.Buffer[0] == 0xff) { throw new InvalidDataException("Missing transaction auxiliary item."); }
+            bool absent = reader.Buffer[0] == 0xf6;
+            int start = tx.Length - reader.Buffer.Length;
+            _ = reader.ReadDataItem();
+            if (!absent) { auxiliary = tx[start..(tx.Length - reader.Buffer.Length)]; }
+        }
+
+        if (indefinite ? reader.Buffer.Length != 1 || reader.Buffer[0] != 0xff : !reader.Buffer.IsEmpty)
+        {
+            throw new InvalidDataException("Unterminated transaction array or trailing bytes.");
+        }
+        return auxiliary;
+    }
 }

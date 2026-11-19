@@ -24,6 +24,7 @@ public class PackageBoundaryTests
 
     [Theory]
     [InlineData(typeof(Blockfrost), "Chrysalis.Tx.Providers.Blockfrost")]
+    [InlineData(typeof(Koios), "Chrysalis.Tx.Providers.Koios")]
     [InlineData(typeof(Kupmios), "Chrysalis.Tx.Providers.Kupmios")]
     [InlineData(typeof(Ouroboros), "Chrysalis.Tx.Providers.Ouroboros")]
     public void Provider_BelongsToItsOwnAssembly(Type provider, string assemblyName)

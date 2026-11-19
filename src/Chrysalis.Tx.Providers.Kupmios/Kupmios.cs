@@ -301,21 +301,13 @@ public sealed class Kupmios : ICardanoDataProvider, IDisposable
         {
             Content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json")
         };
-        bool receivedSuccess = false;
-        (string Hash, ProviderException? Rejection) outcome;
-        try
+        (string hash, ProviderException? rejection) = await _ogmios.SubmitAsync(request, operation, async (response, ct) =>
         {
-            using HttpResponseMessage response = await _ogmios.SendJsonRpcAsync(request, operation, cancellationToken).ConfigureAwait(false);
-            receivedSuccess = true;
-            using JsonDocument body = await _ogmios.ReadJsonAsync<JsonDocument>(response, operation, cancellationToken).ConfigureAwait(false);
-            outcome = ProviderHttp.Map(body.RootElement, MapSubmission, Provider, operation);
-        }
-        catch (ProviderException error) when (error is not ProviderStatusException && (receivedSuccess || error.IsTransient))
-        {
-            throw new ProviderException($"{error.Message}; the transaction may have been accepted", error.IsTransient, error.Detail);
-        }
-        if (outcome.Rejection is { } rejection) { throw rejection; }
-        return outcome.Hash;
+            using JsonDocument body = await _ogmios.ReadJsonAsync<JsonDocument>(response, operation, ct).ConfigureAwait(false);
+            return ProviderHttp.Map(body.RootElement, MapSubmission, Provider, operation);
+        }, jsonRpc: true, cancellationToken).ConfigureAwait(false);
+        if (rejection is not null) { throw rejection; }
+        return hash;
     }
 
     private (string Hash, ProviderException? Rejection) MapSubmission(JsonElement root)
