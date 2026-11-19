@@ -11,5 +11,7 @@ public sealed record Program<TBinder>(Version Version, Term<TBinder> Term);
 /// </summary>
 public readonly record struct Version(int Major, int Minor, int Patch)
 {
+    internal bool SupportsConstrAndCase => Major > 1 || (Major == 1 && Minor >= 1);
+
     public override string ToString() => $"{Major}.{Minor}.{Patch}";
 }

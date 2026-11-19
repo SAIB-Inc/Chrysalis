@@ -1,4 +1,5 @@
 using System.Numerics;
+using System.Text;
 using Chrysalis.Plutus.Types;
 
 namespace Chrysalis.Plutus.Cek;
@@ -24,11 +25,19 @@ internal static class ExMem
 
     internal static int ByteStringExMem(ReadOnlyMemory<byte> bs) => bs.Length == 0 ? 1 : ((bs.Length - 1) / 8) + 1;
 
-    // D and E count four-byte words; C retains the reference model's byte count until V3.
+    // D and E count four-byte words; A, B and C count Unicode code points.
     internal static int StringExMem(string s, bool byBytes)
     {
-        int bytes = System.Text.Encoding.UTF8.GetByteCount(s);
-        return byBytes ? bytes / 4 : bytes;
+        if (byBytes)
+        {
+            return Encoding.UTF8.GetByteCount(s) / 4;
+        }
+        int count = 0;
+        foreach (Rune _ in s.EnumerateRunes())
+        {
+            count++;
+        }
+        return count;
     }
 
     internal static int DataExMem(PlutusData d)

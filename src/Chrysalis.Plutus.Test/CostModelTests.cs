@@ -1,3 +1,4 @@
+using Chrysalis.Plutus.Text;
 using System.Collections.Immutable;
 using System.Reflection;
 using System.Runtime.CompilerServices;
@@ -58,25 +59,30 @@ public sealed class CostModelTests
     }
 
     [Theory]
-    [InlineData(1)]
-    [InlineData(2)]
-    [InlineData(3)]
-    public void EachArrayPositionBindsItsNamedParameter(int language)
+    [InlineData(1, "A")]
+    [InlineData(1, "B")]
+    [InlineData(1, "D")]
+    [InlineData(2, "A")]
+    [InlineData(2, "B")]
+    [InlineData(2, "D")]
+    [InlineData(3, "E")]
+    public void EachArrayPositionBindsItsNamedParameter(int language, string variant)
     {
+        Variant kind = Enum.Parse<Variant>(variant);
         const long sentinel = 94137;
         string[] names = DeployedNames(language);
         long[] values = new long[names.Length];
-        Dictionary<string, long> baseline = Project(CostModelLoader.FromFlat(values, language));
+        Dictionary<string, long> baseline = Project(CostModelLoader.FromFlat(values, language, kind));
         HashSet<string> reached = [];
         List<string> failures = [];
         for (int i = 0; i < names.Length; i++)
         {
             values[i] = sentinel;
-            Dictionary<string, long> model = Project(CostModelLoader.FromFlat(values, language));
+            Dictionary<string, long> model = Project(CostModelLoader.FromFlat(values, language, kind));
             values[i] = 0;
             string[] changed = [.. model.Keys.Where(k => model[k] != baseline[k])];
             string name = names[i];
-            if (Ignored(name, language))
+            if (kind >= Variant.D && Ignored(name, language))
             {
                 if (changed.Length != 0)
                 {
@@ -170,6 +176,7 @@ public sealed class CostModelTests
     }
 
     [Theory]
+    [InlineData("B", true, 97, 15, 13)]
     [InlineData("C", false, 97, 17, 16)]
     [InlineData("D", true, 13, 15, 13)]
     [InlineData("E", false, 16, 17, 16)]
@@ -193,7 +200,7 @@ public sealed class CostModelTests
             values[Array.IndexOf(names, name + "-memory-arguments-intercept")] = 2;
             values[Array.IndexOf(names, name + "-memory-arguments-slope")] = 3;
             int min = Array.IndexOf(names, name + "-memory-arguments-minimum");
-            bool subtracted = f is DefaultFunction.DivideInteger or DefaultFunction.QuotientInteger;
+            bool subtracted = kind == Variant.B || f is DefaultFunction.DivideInteger or DefaultFunction.QuotientInteger;
             if (min >= 0)
             {
                 values[min] = subtracted ? 1 : 23;
@@ -204,12 +211,26 @@ public sealed class CostModelTests
         foreach (DefaultFunction f in new[] { DefaultFunction.DivideInteger, DefaultFunction.QuotientInteger, DefaultFunction.RemainderInteger, DefaultFunction.ModInteger })
         {
             BuiltinCostModel cost = model.Builtins[(int)f];
-            bool subtracted = f is DefaultFunction.DivideInteger or DefaultFunction.QuotientInteger;
+            bool subtracted = kind == Variant.B || f is DefaultFunction.DivideInteger or DefaultFunction.QuotientInteger;
             long lowerCpu = f is DefaultFunction.QuotientInteger or DefaultFunction.RemainderInteger ? 97 : below;
             Assert.Equal(new ExBudget(lowerCpu, subtracted ? 5 : 11), cost.Eval(1, 3, 0));
             Assert.Equal(new ExBudget(on, subtracted ? 5 : 8), cost.Eval(2, 2, 0));
             Assert.Equal(new ExBudget(above, subtracted ? 8 : 5), cost.Eval(3, 1, 0));
         }
+    }
+
+    [Fact]
+    public void VariantAUsesAddedIntegerSizesAndTheSignatureLength()
+    {
+        string[] names = DeployedNames(1);
+        long[] values = new long[names.Length];
+        values[Array.IndexOf(names, "multiplyInteger-cpu-arguments-intercept")] = 7;
+        values[Array.IndexOf(names, "multiplyInteger-cpu-arguments-slope")] = 11;
+        values[Array.IndexOf(names, "verifyEd25519Signature-cpu-arguments-intercept")] = 13;
+        values[Array.IndexOf(names, "verifyEd25519Signature-cpu-arguments-slope")] = 17;
+        CostModel model = CostModelLoader.FromFlat(values, 1, Variant.A);
+        Assert.Equal(62, model.Builtins[(int)DefaultFunction.MultiplyInteger].Eval(2, 3, 0).Cpu);
+        Assert.Equal(98, model.Builtins[(int)DefaultFunction.VerifyEd25519Signature].Eval(2, 3, 5).Cpu);
     }
 
     [Fact]
@@ -219,7 +240,7 @@ public sealed class CostModelTests
         {
             string[] names = DeployedNames(language);
             long[] costs = [.. Enumerable.Repeat(1L, length)];
-            CostModel shortModel = CostModelLoader.FromFlat(costs, language);
+            CostModel shortModel = CostModelLoader.FromFlat(costs, language, language == 3 ? Variant.E : Variant.D);
             Dictionary<string, long> leaves = Project(shortModel);
             for (int i = 0; i < names.Length; i++)
             {
@@ -232,33 +253,50 @@ public sealed class CostModelTests
         }
 
         int minimum = Array.IndexOf(DeployedNames(1), "remainderInteger-memory-arguments-minimum");
-        CostModel ignoredMinimum = CostModelLoader.FromFlat([.. Enumerable.Repeat(1L, minimum)], 1);
+        CostModel ignoredMinimum = CostModelLoader.FromFlat([.. Enumerable.Repeat(1L, minimum)], 1, Variant.D);
         Assert.Equal(1, ignoredMinimum.Builtins[(int)DefaultFunction.RemainderInteger].Eval(1, 0, 1).Mem);
 
         long[] oversized = [.. Enumerable.Range(1, 400).Select(i => (long)i)];
-        CostModel copied = CostModelLoader.FromFlat(oversized, 3);
+        CostModel copied = CostModelLoader.FromFlat(oversized, 3, Variant.E);
         oversized[350] = long.MinValue;
-        Assert.Equal(Project(copied), Project(CostModelLoader.FromFlat(oversized[..350], 3)));
+        Assert.Equal(Project(copied), Project(CostModelLoader.FromFlat(oversized[..350], 3, Variant.E)));
         oversized[0] = long.MaxValue;
         Assert.Equal(1, Project(copied)[Leaf(DeployedNames(3)[0])]);
 
         foreach (long hostile in new[] { long.MaxValue, long.MinValue })
         {
-            CostModel model = CostModelLoader.FromFlat([.. Enumerable.Repeat(hostile, 350)], 3);
+            CostModel model = CostModelLoader.FromFlat([.. Enumerable.Repeat(hostile, 350)], 3, Variant.E);
             ulong expected = hostile > 0 ? (ulong)long.MaxValue : 0;
             Assert.Equal(new ExUnitsResult(expected, expected), Evaluator.Run(Unit, model, 3, null).ExUnits);
             ApplyTerm<DeBruijn> applied = new(new LambdaTerm<DeBruijn>(new(0), Unit), Unit);
             Assert.Equal(new ExUnitsResult(expected, expected), Evaluator.Run(applied, model, 3, null).ExUnits);
         }
+        string[] v3Names = DeployedNames(3);
+        long[] twice = new long[v3Names.Length];
+        twice[Array.IndexOf(v3Names, "cekConstCost-exBudgetCPU")] = 1L << 62;
+        CostModel twoConst = CostModelLoader.FromFlat(twice, 3, Variant.E);
+        Assert.Equal((ulong)long.MaxValue, Evaluator.Run(new ApplyTerm<DeBruijn>(new LambdaTerm<DeBruijn>(new(0), Unit), Unit), twoConst, 3, null).ExUnits.Steps);
         Assert.Equal(new ExBudget(long.MaxValue, long.MinValue), new ExBudget(long.MaxValue, long.MinValue) + new ExBudget(1, -1));
         Assert.Equal(new ExBudget(long.MaxValue, long.MinValue), ExBudget.Zero - new ExBudget(long.MinValue, long.MaxValue) - new ExBudget(0, 2));
+    }
+
+    [Theory]
+    [InlineData("replicateByte", "(con integer 1180591620717411303424) (con integer 0)")]
+    [InlineData("integerToByteString", "(con bool True) (con integer 1180591620717411303424) (con integer 0)")]
+    public void WidthOfTwoToTheSeventySaturatesBuiltinMemory(string builtin, string args)
+    {
+        Term<DeBruijn> term = UplcParser.NameToDeBruijn(UplcParser.Parse($"(program 1.0.0 [(builtin {builtin}) {args}])")).Term;
+        CostModel model = CostModelLoader.FromFlat(NodeBudgetTests.Fixture.Models[2], 3, Variant.E);
+        CekMachine machine = new CekMachine(null, model).EnableDebugCounters();
+        _ = Assert.Throws<EvaluationException>(() => machine.RunValue(term)); // width exceeds the builtin's output limit
+        Assert.Equal(long.MaxValue, machine.DebugCounters.BuiltinMem![(int)Enum.Parse<DefaultFunction>(builtin, ignoreCase: true)]);
     }
 
     [Fact]
     public void PlutusV4UsesTheV3ChainModel()
     {
-        CostModel v3 = CostModelLoader.FromFlat(DefaultCosts.LatestV3, 3);
-        CostModel v4 = CostModelLoader.FromFlat(DefaultCosts.LatestV3, 4);
+        CostModel v3 = CostModelLoader.FromFlat(DefaultCosts.LatestV3, 3, Variant.E);
+        CostModel v4 = CostModelLoader.FromFlat(DefaultCosts.LatestV3, 4, Variant.E);
         Assert.Equal(Variant.E, v4.Variant);
         Assert.Equal(Project(v3), Project(v4));
     }

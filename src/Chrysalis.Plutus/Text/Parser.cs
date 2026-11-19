@@ -56,8 +56,6 @@ internal sealed class Parser
         return new Name(text, unique);
     }
 
-    private bool IsBeforeV1_1_0() => _version.Major < 2 && _version.Minor < 1;
-
     internal Program<Name> ParseProgram()
     {
         Expect(TokenType.LParen);
@@ -216,7 +214,7 @@ internal sealed class Parser
 
     private Term<Name> ParseConstr()
     {
-        if (IsBeforeV1_1_0())
+        if (!_version.SupportsConstrAndCase)
         {
             throw new ParseException("constr can't be used before 1.1.0");
         }
@@ -244,7 +242,7 @@ internal sealed class Parser
 
     private Term<Name> ParseCase()
     {
-        if (IsBeforeV1_1_0())
+        if (!_version.SupportsConstrAndCase)
         {
             throw new ParseException("case can't be used before 1.1.0");
         }

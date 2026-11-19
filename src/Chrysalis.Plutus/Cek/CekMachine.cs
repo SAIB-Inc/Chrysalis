@@ -27,6 +27,7 @@ public sealed class CekMachine
     private readonly MachineCosts _machineCosts;
     private readonly bool _measuring;
     private readonly Variant _variant;
+    private readonly bool _caseOnConstants;
 
     // Machine state (mutable for zero-allocation hot loop)
     private readonly ContextStack _ctxStack = new();
@@ -44,27 +45,28 @@ public sealed class CekMachine
     }
 
     public CekMachine(ExBudget? initialBudget = null)
-        : this(initialBudget, CostModel.Default)
+        : this(initialBudget, CostModel.Default, caseOnConstants: true)
     {
     }
 
     internal CekMachine(ExBudget initialBudget, BuiltinCostModel[] builtinCosts)
-        : this(initialBudget, ImmutableCollectionsMarshal.AsImmutableArray(builtinCosts), MachineCosts.Default, Variant.C)
+        : this(initialBudget, ImmutableCollectionsMarshal.AsImmutableArray(builtinCosts), MachineCosts.Default, Variant.C, true)
     {
     }
 
-    internal CekMachine(ExBudget? initialBudget, CostModel model)
-        : this(initialBudget, model.Builtins, model.Machine, model.Variant)
+    internal CekMachine(ExBudget? initialBudget, CostModel model, bool caseOnConstants = true)
+        : this(initialBudget, model.Builtins, model.Machine, model.Variant, caseOnConstants)
     {
     }
 
-    private CekMachine(ExBudget? initialBudget, ImmutableArray<BuiltinCostModel> builtinCosts, MachineCosts machineCosts, Variant variant)
+    private CekMachine(ExBudget? initialBudget, ImmutableArray<BuiltinCostModel> builtinCosts, MachineCosts machineCosts, Variant variant, bool caseOnConstants)
     {
         RemainingBudget = initialBudget ?? ExBudget.Unlimited;
         _measuring = initialBudget is null;
         _builtinCosts = builtinCosts;
         _machineCosts = machineCosts;
         _variant = variant;
+        _caseOnConstants = caseOnConstants;
     }
 
     /// <summary>Enables per-step-kind and per-builtin cost tracking for debugging.</summary>
@@ -193,6 +195,8 @@ public sealed class CekMachine
         _unbudgetedSteps = 0;
         _ctxStack.Reset();
         _computeTerm = null;
+        _returnValue = null;
+        _env = null;
         return false;
     }
 
@@ -477,6 +481,7 @@ public sealed class CekMachine
                     Environment? casesEnv = fcs.Env;
                     int branchCount = branches.Length;
                     fcs.Env = null;
+                    fcs.Branches = default;
 
                     ulong tag;
                     CekValue[]? fields;
@@ -490,6 +495,10 @@ public sealed class CekMachine
                     }
                     else if (value is VConstant vc)
                     {
+                        if (!_caseOnConstants)
+                        {
+                            throw new EvaluationException("case on a builtin constant is not available before protocol version 11");
+                        }
                         (tag, fields, fieldCount) = ConstantToConstr(vc.Value, branchCount);
                     }
                     else
@@ -630,7 +639,9 @@ public sealed class CekMachine
             _ = Halt(BudgetStop.Builtin);
             return null;
         }
-        return Builtins.BuiltinRuntime.Call(func, args);
+        return func == DefaultFunction.ConsByteString && _variant is Variant.A or Variant.B or Variant.D
+            ? Builtins.ByteStringBuiltins.ConsByteStringWrapping(args)
+            : Builtins.BuiltinRuntime.Call(func, args);
     }
 
     // --- Constant case decomposition (UPLC 1.1.0) ---

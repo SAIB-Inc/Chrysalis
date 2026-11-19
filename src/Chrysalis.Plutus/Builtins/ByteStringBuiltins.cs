@@ -26,8 +26,16 @@ internal static class ByteStringBuiltins
                 $"consByteString: byte value out of range [0, 255]: {n}");
         }
 
+        return ConsByte((byte)n, bs);
+    }
+
+    internal static CekValue ConsByteStringWrapping(CekValue[] args) =>
+        ConsByte((byte)(UnwrapInteger(args[0]) & 255), UnwrapByteString(args[1]));
+
+    private static CekValue ConsByte(byte value, ReadOnlyMemory<byte> bs)
+    {
         byte[] result = new byte[bs.Length + 1];
-        result[0] = (byte)n;
+        result[0] = value;
         bs.Span.CopyTo(result.AsSpan(1));
         return ByteStringResult(result);
     }

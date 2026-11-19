@@ -1312,13 +1312,16 @@ public static class ScriptContextBuilder
     /// <summary>
     /// Evaluates all redeemers in a transaction. Returns updated evaluation results.
     /// Port of Aiken eval_phase_two.
+    /// Scripts run at <paramref name="protocolVersion"/>, by default <see cref="Plutus.VM.EvalTx.Evaluator.LatestProtocolVersion"/>.
+    /// Evaluating a script at a newer unsupported protocol version fails with a wrapped <see cref="NotSupportedException"/>.
     /// </summary>
     public static IReadOnlyList<Plutus.VM.Models.EvaluationResult> EvaluateTx(
         ConwayTransactionBody body,
         PostAlonzoTransactionWitnessSet witnessSet,
         IReadOnlyList<ResolvedInput> utxos,
         SlotNetworkConfig slotConfig,
-        CostMdls? costModels = null)
+        CostMdls? costModels = null,
+        int protocolVersion = Plutus.VM.EvalTx.Evaluator.LatestProtocolVersion)
     {
         ArgumentNullException.ThrowIfNull(utxos);
         ArgumentNullException.ThrowIfNull(slotConfig);
@@ -1412,6 +1415,11 @@ public static class ScriptContextBuilder
             // Evaluate
             try
             {
+                // Plutus V1 and V2 need their own script contexts first (T6, PROPOSAL E1).
+                if (version is 1 or 2)
+                {
+                    throw new NotSupportedException($"Plutus V{version} scripts are not evaluated inside a transaction until their script contexts are built.");
+                }
                 IReadOnlyList<long>? langCosts = version switch
                 {
                     1 => FlatCosts(costModels?.PlutusV1),
@@ -1419,7 +1427,7 @@ public static class ScriptContextBuilder
                     _ => FlatCosts(costModels?.PlutusV3),
                 };
                 Plutus.VM.Models.EvaluationResult result =
-                    Plutus.VM.EvalTx.Evaluator.EvaluateScript(flatBytes, arguments, langCosts, version);
+                    Plutus.VM.EvalTx.Evaluator.EvaluateScript(flatBytes, arguments, version, protocolVersion, langCosts);
 
                 results.Add(new Plutus.VM.Models.EvaluationResult(
                     redeemer.Tag,

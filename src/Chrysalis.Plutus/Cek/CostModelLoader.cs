@@ -7,11 +7,11 @@ namespace Chrysalis.Plutus.Cek;
 // One shape table for the reference and chain models. Names and order come from ParamName.
 internal static class CostModelLoader
 {
-    internal static CostModel FromFlat(IReadOnlyList<long> costs, int plutusVersion) => plutusVersion switch
+    internal static CostModel FromFlat(IReadOnlyList<long> costs, int plutusVersion, Variant variant) => plutusVersion switch
     {
-        1 => Build(costs, ParamNames.V1, Variant.D),
-        2 => Build(costs, ParamNames.V2, Variant.D),
-        _ => Build(costs, ParamNames.V3, Variant.E)
+        1 => Build(costs, ParamNames.V1, variant),
+        2 => Build(costs, ParamNames.V2, variant),
+        _ => Build(costs, ParamNames.V3, variant)
     };
 
     internal static CostModel Build(IReadOnlyList<long> costs, ImmutableArray<string> names, Variant variant)
@@ -42,14 +42,16 @@ internal static class CostModelLoader
             new MaxSizeCost(G("subtractInteger-memory-arguments-intercept"), G("subtractInteger-memory-arguments-slope")));
 
         c[(int)DefaultFunction.MultiplyInteger] = new(
-            new MultipliedSizesCost(G("multiplyInteger-cpu-arguments-intercept"), G("multiplyInteger-cpu-arguments-slope")),
+            variant == Variant.A
+                ? new AddedSizesCost(G("multiplyInteger-cpu-arguments-intercept"), G("multiplyInteger-cpu-arguments-slope"))
+                : new MultipliedSizesCost(G("multiplyInteger-cpu-arguments-intercept"), G("multiplyInteger-cpu-arguments-slope")),
             new AddedSizesCost(G("multiplyInteger-memory-arguments-intercept"), G("multiplyInteger-memory-arguments-slope")));
 
         c[(int)DefaultFunction.DivideInteger] = new(DivisionCpu("divideInteger", true), DifferenceMemory("divideInteger"));
         c[(int)DefaultFunction.QuotientInteger] = new(DivisionCpu("quotientInteger", false), DifferenceMemory("quotientInteger"));
-        c[(int)DefaultFunction.RemainderInteger] = new(DivisionCpu("remainderInteger", false), LinearCost.InY(
+        c[(int)DefaultFunction.RemainderInteger] = new(DivisionCpu("remainderInteger", false), variant <= Variant.B ? DifferenceMemory("remainderInteger") : LinearCost.InY(
             G("remainderInteger-memory-arguments-intercept"), G("remainderInteger-memory-arguments-slope")));
-        c[(int)DefaultFunction.ModInteger] = new(DivisionCpu("modInteger", true), LinearCost.InY(
+        c[(int)DefaultFunction.ModInteger] = new(DivisionCpu("modInteger", true), variant <= Variant.B ? DifferenceMemory("modInteger") : LinearCost.InY(
             G("modInteger-memory-arguments-intercept"), G("modInteger-memory-arguments-slope")));
 
         c[(int)DefaultFunction.EqualsInteger] = new(
@@ -121,7 +123,9 @@ internal static class CostModelLoader
             new ConstantCost(G("keccak_256-memory-arguments")));
 
         c[(int)DefaultFunction.VerifyEd25519Signature] = new(
-            LinearCost.InY(G("verifyEd25519Signature-cpu-arguments-intercept"), G("verifyEd25519Signature-cpu-arguments-slope")),
+            variant == Variant.A
+                ? LinearCost.InZ(G("verifyEd25519Signature-cpu-arguments-intercept"), G("verifyEd25519Signature-cpu-arguments-slope"))
+                : LinearCost.InY(G("verifyEd25519Signature-cpu-arguments-intercept"), G("verifyEd25519Signature-cpu-arguments-slope")),
             new ConstantCost(G("verifyEd25519Signature-memory-arguments")));
 
         c[(int)DefaultFunction.VerifyEcdsaSecp256k1Signature] = new(
@@ -374,11 +378,11 @@ internal static class CostModelLoader
         {
             string key = builtin + "-cpu-arguments-";
             string inner = key + "model-arguments-";
-            CostFunction model = variant == Variant.D
+            CostFunction model = variant is Variant.A or Variant.B or Variant.D
                 ? new MultipliedSizesCost(G(inner + "intercept"), G(inner + "slope"))
                 : new QuadraticInXAndYCost(G(inner + "minimum"), G(inner + "c00"), G(inner + "c10"), G(inner + "c01"),
                     G(inner + "c20"), G(inner + "c11"), G(inner + "c02"));
-            return sortForChain && variant != Variant.C
+            return sortForChain && variant >= Variant.D
                 ? new AboveAndBelowDiagonalCost(model)
                 : new ConstAboveDiagonalCost(G(key + "constant"), model);
         }
@@ -388,4 +392,4 @@ internal static class CostModelLoader
     }
 }
 
-internal enum Variant : byte { C, D, E }
+internal enum Variant : byte { A, B, C, D, E }

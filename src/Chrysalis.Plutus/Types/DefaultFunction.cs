@@ -2,12 +2,12 @@ namespace Chrysalis.Plutus.Types;
 
 /// <summary>
 /// All built-in functions available in Plutus Core, ordered by their 7-bit Flat encoding tag.
-/// Tags are assigned in batches corresponding to ledger language versions.
+/// Ledger language and protocol availability is separate (see VM/EvalTx/Availability.cs).
 /// </summary>
 /// <remarks>Values are Flat tags defined by the Plutus Builtins.hs instance Flat DefaultFun.</remarks>
 public enum DefaultFunction
 {
-    // Batch 1 — PlutusV1 (Alonzo, protocol version 5.0)
+    // Batch 1 — the original builtin set
     AddInteger = 0,
     SubtractInteger = 1,
     MultiplyInteger = 2,
@@ -60,14 +60,14 @@ public enum DefaultFunction
     MkNilData = 49,
     MkNilPairData = 50,
 
-    // Batch 2 — PlutusV2 (Vasil, protocol version 7.0)
+    // Batch 2 — serialiseData
     SerialiseData = 51,
 
-    // Batch 3 — PlutusV3 (secp256k1, protocol version 9.0)
+    // Batch 3 — secp256k1
     VerifyEcdsaSecp256k1Signature = 52,
     VerifySchnorrSecp256k1Signature = 53,
 
-    // Batch 4 — PlutusV3 (BLS12-381, conversions)
+    // Batch 4 — BLS12-381, hashes and conversions
     Bls12_381_G1_Add = 54,
     Bls12_381_G1_Neg = 55,
     Bls12_381_G1_ScalarMul = 56,
@@ -113,7 +113,7 @@ public enum DefaultFunction
     Bls12_381_G1_MultiScalarMul = 92,
     Bls12_381_G2_MultiScalarMul = 93,
 
-    // Batch 6 — Value operations (PV11, all languages)
+    // Batch 6 — Value operations
     InsertCoin = 94,
     LookupCoin = 95,
     UnionValue = 96,

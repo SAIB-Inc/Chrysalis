@@ -1,4 +1,6 @@
 using System.IO.Compression;
+using System.Reflection;
+using System.Runtime.CompilerServices;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -17,7 +19,7 @@ public sealed partial class NodeBudgetTests
 {
     internal sealed record Script(string Id, int Language, string Purpose, byte[] Flat, ExUnitsResult? Units, ExUnitsResult? Budget);
 
-    internal sealed record NodeData(long[][] Models, Script[] Scripts);
+    internal sealed record NodeData(long[][] Models, Script[] Scripts, (Script Script, string Outcome)[] Failures);
 
     internal static NodeData Fixture => Data.Value;
 
@@ -51,11 +53,11 @@ public sealed partial class NodeBudgetTests
         using JsonDocument doc = JsonDocument.Parse(stream);
         Assert.Equal(11, doc.RootElement.GetProperty("protocolMajor").GetInt32());
         long[][] models = ReadModels(doc.RootElement);
-        Script[] scripts = [.. doc.RootElement.GetProperty("scripts").EnumerateArray()
-            .Where(e => e.GetProperty("outcome").ValueEquals("ok"))
-            .Select(e => new Script(e.GetProperty("id").GetString()!, ReadLanguage(e), e.GetProperty("purpose").GetString()!, Convert.FromHexString(e.GetProperty("flat").GetString()!),
-                Units(e, "exunits"), Units(e, "budget")))];
-        return new(models, scripts);
+        (Script Script, string Outcome)[] rows = [.. doc.RootElement.GetProperty("scripts").EnumerateArray()
+            .Select(e => (new Script(e.GetProperty("id").GetString()!, ReadLanguage(e), e.GetProperty("purpose").GetString()!,
+                Convert.FromHexString(e.GetProperty("flat").GetString()!), Units(e, "exunits"), Units(e, "budget")), e.GetProperty("outcome").GetString()!))];
+        return new(models, [.. rows.Where(row => row.Outcome == "ok").Select(row => row.Script)],
+            [.. rows.Where(row => row.Outcome is "phase1-reject" or "phase2-fail")]);
     }
 
     private static int ReadLanguage(JsonElement entry) => entry.GetProperty("lang").GetString() switch
@@ -99,21 +101,16 @@ public sealed partial class NodeBudgetTests
         Assert.Equal(twin.Units, exact.Budget);
 
         Dictionary<string, KnownFailure> known = ReadKnownFailures();
-        CostModel[] models = [.. fixture.Models.Select((a, i) => CostModelLoader.FromFlat(a, i + 1))];
+        CostModel[] models = [.. fixture.Models.Select((a, i) => CostModelLoader.FromFlat(a, i + 1, i == 2 ? Variant.E : Variant.D))];
         string?[] mismatches = new string?[scripts.Length];
         _ = Parallel.For(0, scripts.Length, i =>
         {
             Script script = scripts[i];
             ExUnitsResult expected = (script.Units ?? script.Budget)!;
             _ = known.TryGetValue(script.Id, out KnownFailure? failure);
-            string stage = "decode";
             try
             {
-                Term<DeBruijn> decoded = FlatDecoder.DecodeProgram(script.Flat).Term;
-                stage = "apply";
-                Term<DeBruijn> applied = ApplyLedgerArgs(script, decoded);
-                stage = "evaluate";
-                ExUnitsResult actual = Evaluator.Run(applied, models[script.Language - 1], script.Language, null).ExUnits;
+                ExUnitsResult actual = EvaluateRecordedScript(script).ExUnits;
                 if (failure is not null)
                 {
                     mismatches[i] = $"{script.Id}: stale {failure.Owner} entry; evaluated with {Show(actual)}";
@@ -126,14 +123,22 @@ public sealed partial class NodeBudgetTests
             catch (Exception ex)
             {
                 string? type = ex.GetType().FullName;
-                if (failure is null || !IsKnownFailure(failure, stage, ex))
+                bool matches = failure is not null && (failure.Stage == "decode"
+                    ? Record.Exception(() => FlatDecoder.DecodeProgram(script.Flat)) is { } decode && IsKnownFailure(failure, "decode", decode) && IsKnownFailure(failure, "decode", ex)
+                    : IsKnownFailure(failure, "evaluate", ex));
+                if (!matches)
                 {
-                    mismatches[i] = $"{script.Id} V{script.Language}: unexpected {stage} failure: {type}: {ex.Message}";
+                    mismatches[i] = $"{script.Id} V{script.Language}: unexpected replay failure: {type}: {ex.Message}";
                 }
             }
         });
         Assert.All(known.Keys, id => Assert.Contains(scripts, s => s.Id == id));
-        string[] errors = [.. mismatches.OfType<string>()];
+        string[] phase1 = ["AV-multiIndexArray-V1", "AV-multiIndexArray-V2", "AV-multiIndexArray-V3", "F-ver-1.0.0-case-V3"];
+        string[] phase2 = ["F-ver-0.1.0-V3", "F-ver-1.0.1-V3", "F-ver-1.1.0-patch-2^70-V3", "F-ver-1.2.0-V3", "F-ver-1.2^32.0-V3",
+            "F-ver-2.0.0-V3", "F-ver-2^64.0.0-V3", "F-ver-2^64.0.0-V2", "BI-consByteString-arg0--1-V3", "BI-consByteString-arg0-256-V3",
+            "P-C6-case-bool-true-one-branch", "P-C8-case-list-nil-one-branch"];
+        string[] errors = [.. mismatches.OfType<string>(), .. CheckVerdicts(phase1, "phase1-reject", typeof(InvalidOperationException)),
+            .. CheckVerdicts(phase2, "phase2-fail", typeof(EvaluationException))];
         Assert.True(errors.Length == 0, $"{errors.Length} node replay mismatches:\n{string.Join('\n', errors)}");
 
         string[] stringCases = [.. scripts.Where(s => s.Id.StartsWith("W-builtin_semantics_", StringComparison.Ordinal))
@@ -145,6 +150,23 @@ public sealed partial class NodeBudgetTests
         CheckWitness("EXP-e0-V1", new(1701, 1148094), "VS-valueData-1x1-V1", DefaultFunction.ValueData);
         CheckWitness("BI-expMod-mod-hugeexp-control-V2", new(1701, 1148094), "VAL-insertCoin-positive-empty-V2", DefaultFunction.InsertCoin);
         CheckWitness("EXP-e0-V3", new(1401, 1100094), "L-dropList-head-2000", DefaultFunction.DropList);
+
+        EvaluationResult EvaluateRecordedScript(Script script) => Evaluator.EvaluateScript(script.Flat,
+            Enumerable.Repeat<PlutusData>(new PlutusDataConstr(0, []), ArgumentCount(script.Language, script.Purpose)).ToArray(),
+            script.Language, 11, fixture.Models[script.Language - 1]);
+
+        IEnumerable<string> CheckVerdicts(string[] ids, string outcome, Type expected)
+        {
+            foreach (string id in ids)
+            {
+                (Script script, string recorded) = fixture.Failures.Single(row => row.Script.Id == id);
+                Exception? observed = Record.Exception(() => EvaluateRecordedScript(script));
+                if (recorded != outcome || observed?.GetType() != expected)
+                {
+                    yield return $"{id}: expected {outcome}/{expected.Name}; fixture {recorded}, got {observed?.GetType().Name ?? "success"}";
+                }
+            }
+        }
 
         void CheckWitness(string primary, ExUnitsResult budget, string alternate, DefaultFunction alternateFunction)
         {
@@ -167,7 +189,7 @@ public sealed partial class NodeBudgetTests
             string parameter = char.ToLowerInvariant(name[0]) + name[1..] + "-memory-arguments" +
                 (function == DefaultFunction.DropList ? "" : "-intercept");
             changed[Array.IndexOf(CostModelTests.DeployedNames(witness.Language), parameter)]++;
-            (ExUnitsResult raised, _, long raisedMem) = WithCounters(term, CostModelLoader.FromFlat(changed, witness.Language), function);
+            (ExUnitsResult raised, _, long raisedMem) = WithCounters(term, CostModelLoader.FromFlat(changed, witness.Language, witness.Language == 3 ? Variant.E : Variant.D), function);
             Assert.True(raisedMem > mem);
             Assert.Equal(used.Mem + (ulong)(raisedMem - mem), raised.Mem);
             Assert.Equal(used.Steps, raised.Steps);
@@ -178,13 +200,15 @@ public sealed partial class NodeBudgetTests
 
     private static string Show(ExUnitsResult units) => FormattableString.Invariant($"{units.Mem} / {units.Steps}");
 
+    private static int ArgumentCount(int language, string purpose) => language == 3 ? 1 : purpose == "spend" ? 3 : 2;
+
     private static Term<DeBruijn> ApplyLedgerArgs(Script script, Term<DeBruijn> term) =>
         ApplyLedgerArgs(script.Language, script.Purpose, term);
 
     private static Term<DeBruijn> ApplyLedgerArgs(int language, string purpose, Term<DeBruijn> term)
     {
         // plutigo node_ground_truth_test.go:97–110: recorded scripts ignore their arguments.
-        int nargs = language == 3 ? 1 : purpose == "spend" ? 3 : 2;
+        int nargs = ArgumentCount(language, purpose);
         ConstTerm<DeBruijn> arg = new(new DataConstant(new PlutusDataConstr(0, [])));
         for (int i = 0; i < nargs; i++)
         {
@@ -246,8 +270,8 @@ public sealed partial class NodeBudgetTests
 
     private static BudgetCase FindBudgetCase(string id) => Failures.Value.Cases.Single(c => c.Id == id);
 
-    // Startup, prior spends and the whole builtin charge, from Plutus 1.70.0.0's size/cost rules and
-    // the node's recorded arrays and sibling stop events (§7 of V2b). Never derived from CEK output.
+    // Startup, prior spends and whole builtin charges from the node arrays and sibling stops, using Plutus 1.70.0.0's
+    // ExMemoryUsage.hs:221–227, Core.hs:318–321 and CostStream.hs:94–106. Never derived from CEK output.
     private static readonly (string Family, long Mem, long Cpu)[] Aggregates =
     [
         ("B-eqdata-list", 101, 5099214),
@@ -308,7 +332,7 @@ public sealed partial class NodeBudgetTests
         ExBudget?[] aggregates = [.. fixture.Cases.Select(PartialBuiltinAggregate)];
         Assert.Equal(99, aggregates.Count(a => a.HasValue));
         Dictionary<string, KnownFailure> known = ReadKnownFailures();
-        CostModel[] models = [.. fixture.Models.Select((a, i) => CostModelLoader.FromFlat(a, i + 1))];
+        CostModel[] models = [.. fixture.Models.Select((a, i) => CostModelLoader.FromFlat(a, i + 1, i == 2 ? Variant.E : Variant.D))];
         string?[] mismatches = new string?[fixture.Cases.Length];
         _ = Parallel.For(0, fixture.Cases.Length, i =>
         {
@@ -325,11 +349,7 @@ public sealed partial class NodeBudgetTests
 
     private static void CheckReplay(BudgetCase entry, CostModel model, ExBudget? aggregate, KnownFailure? known)
     {
-        CekMachine machine = new(entry.Budget, model);
-        if (entry.Outcome == "error")
-        {
-            _ = machine.EnableDebugCounters();
-        }
+        CekMachine machine = new CekMachine(entry.Budget, model).EnableDebugCounters();
         bool ok = false;
         CekValue? result = null;
         string stage = "decode";
@@ -390,6 +410,59 @@ public sealed partial class NodeBudgetTests
         {
             Assert.Equal(expectedSite.Value, machine.StoppedAt);
         }
+        if (machine.StoppedAt == BudgetStop.Startup)
+        {
+            Assert.Equal(0, machine.DebugCounters.Steps!.Sum());
+        }
+        else if (machine.StoppedAt == BudgetStop.Steps && entry.Id.Contains("omega", StringComparison.Ordinal))
+        {
+            // Omega never reaches a final flush.
+            Assert.Equal(0, machine.DebugCounters.Steps!.Sum() % MachineCosts.Slippage);
+        }
+    }
+
+    [Fact]
+    public void PeriodicStepStopDoesNotExecuteTheRestOfTheFastPath()
+    {
+        ConstTerm<DeBruijn> unit = new(UnitConstant.Instance);
+        Term<DeBruijn> term = new ApplyTerm<DeBruijn>(new LambdaTerm<DeBruijn>(new(0), unit), unit);
+        // 198 Force/Delay steps, then Apply (199) and the fast-path Lambda (200).
+        for (int i = 0; i < (MachineCosts.Slippage - 2) / 2; i++)
+        {
+            term = new ForceTerm<DeBruijn>(new DelayTerm<DeBruijn>(term));
+        }
+        CekMachine machine = new CekMachine(new ExBudget(100, 100)).EnableDebugCounters();
+        Assert.False(machine.TryRun(term, out _));
+        Assert.Equal(BudgetStop.Steps, machine.StoppedAt);
+        Assert.Equal(MachineCosts.Slippage, machine.DebugCounters.Steps!.Sum());
+    }
+
+    [Fact]
+    public void StoppedMachineDoesNotRetainAbandonedCaseBranchesOrEnvironment()
+    {
+        CekMachine machine = new(new ExBudget(100, 100));
+        WeakReference branch = StopWithAWaitingCase(machine);
+        Assert.Equal(BudgetStop.Steps, machine.StoppedAt);
+        Assert.Null(typeof(CekMachine).GetField("_env", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(machine));
+        GC.Collect();
+        Assert.False(branch.IsAlive);
+        GC.KeepAlive(machine);
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static WeakReference StopWithAWaitingCase(CekMachine machine)
+    {
+        ConstTerm<DeBruijn> branch = new(UnitConstant.Instance);
+        WeakReference reference = new(branch);
+        ConstTerm<DeBruijn> unit = new(UnitConstant.Instance);
+        Term<DeBruijn> scrutinee = unit;
+        for (int i = 0; i < MachineCosts.Slippage / 2; i++)
+        {
+            scrutinee = new ForceTerm<DeBruijn>(new DelayTerm<DeBruijn>(scrutinee));
+        }
+        CaseTerm<DeBruijn> body = new(scrutinee, [branch]);
+        Assert.False(machine.TryRunValue(new ApplyTerm<DeBruijn>(new LambdaTerm<DeBruijn>(new(0), body), unit), out _));
+        return reference;
     }
 
     [Fact]
@@ -404,8 +477,8 @@ public sealed partial class NodeBudgetTests
         foreach (BudgetCase entry in exact)
         {
             ExUnitsResult expected = new((ulong)entry.Budget.Mem, (ulong)entry.Budget.Cpu);
-            Assert.Equal(expected, Evaluator.EvaluateScript(entry.Flat, cbor, costs, budget: entry.Budget).ExUnits);
-            Assert.Equal(expected, Evaluator.EvaluateScript(entry.Flat, arguments, costs, budget: entry.Budget).ExUnits);
+            Assert.Equal(expected, Evaluator.EvaluateScript(entry.Flat, cbor, 3, 11, costs, budget: entry.Budget).ExUnits);
+            Assert.Equal(expected, Evaluator.EvaluateScript(entry.Flat, arguments, 3, 11, costs, budget: entry.Budget).ExUnits);
         }
         foreach (BudgetCase entry in fixture.Cases.Where(c => c.Language == 3 && c.Outcome == "budget" &&
             (c.Id.EndsWith("-cpu-1", StringComparison.Ordinal) || c.Id.EndsWith("-mem-1", StringComparison.Ordinal) ||
@@ -415,8 +488,8 @@ public sealed partial class NodeBudgetTests
         }
 
         BudgetCase i2b = FindBudgetCase("X-i2b-exact");
-        Assert.Equal(new ExUnitsResult(2424, 1530707), Evaluator.EvaluateScript(i2b.Flat, cbor, costs).ExUnits);
-        Assert.Equal(new ExUnitsResult(2424, 1530707), Evaluator.EvaluateScript(i2b.Flat, arguments, costs).ExUnits);
+        Assert.Equal(new ExUnitsResult(2424, 1530707), Evaluator.EvaluateScript(i2b.Flat, cbor, 3, 11, costs).ExUnits);
+        Assert.Equal(new ExUnitsResult(2424, 1530707), Evaluator.EvaluateScript(i2b.Flat, arguments, 3, 11, costs).ExUnits);
         Reject(i2b.Flat, new(long.MaxValue, 2423));
         Reject(i2b.Flat, new(1530706, long.MaxValue));
 
@@ -439,14 +512,14 @@ public sealed partial class NodeBudgetTests
             Assert.Equal(budget - new ExBudget(100, 100), machine.RemainingBudget);
         }
         BudgetCase shortCpu = FindBudgetCase("X-i2b-steps-short-in-builtin");
-        CekMachine failing = new(shortCpu.Budget, CostModelLoader.FromFlat(costs, 3));
+        CekMachine failing = new(shortCpu.Budget, CostModelLoader.FromFlat(costs, 3, Variant.E));
         _ = Assert.Throws<BudgetExceededException>(() => failing.Run(shortCpu.Apply(shortCpu.Decode())));
         Assert.Equal(new ExBudget(-322707, 1300), failing.RemainingBudget);
 
         void Reject(byte[] flat, ExBudget budget)
         {
-            _ = Assert.IsType<BudgetExceededException>(Assert.ThrowsAny<EvaluationException>(() => Evaluator.EvaluateScript(flat, cbor, costs, budget: budget)));
-            _ = Assert.IsType<BudgetExceededException>(Assert.ThrowsAny<EvaluationException>(() => Evaluator.EvaluateScript(flat, arguments, costs, budget: budget)));
+            _ = Assert.IsType<BudgetExceededException>(Assert.ThrowsAny<EvaluationException>(() => Evaluator.EvaluateScript(flat, cbor, 3, 11, costs, budget: budget)));
+            _ = Assert.IsType<BudgetExceededException>(Assert.ThrowsAny<EvaluationException>(() => Evaluator.EvaluateScript(flat, arguments, 3, 11, costs, budget: budget)));
         }
     }
 
@@ -454,7 +527,7 @@ public sealed partial class NodeBudgetTests
     public void RestrictedRunsAllocateNothingExtra()
     {
         BudgetCase entry = FindBudgetCase("X-i2b-exact");
-        CostModel model = CostModelLoader.FromFlat(Failures.Value.Models[2], 3);
+        CostModel model = CostModelLoader.FromFlat(Failures.Value.Models[2], 3, Variant.E);
         Term<DeBruijn> script = entry.Apply(entry.Decode());
         ConstTerm<DeBruijn> unit = new(UnitConstant.Instance);
         _ = new CekMachine(null, model).TryRun(script, out _);
@@ -497,7 +570,7 @@ public sealed partial class NodeBudgetTests
             Assert.Equal(budget - new ExBudget(32200, 400), machine.RemainingBudget);
         }
         BudgetCase entry = FindBudgetCase("B2-err-after-overspend");
-        CekMachine afterError = new(entry.Budget, CostModelLoader.FromFlat(Failures.Value.Models[2], 3));
+        CekMachine afterError = new(entry.Budget, CostModelLoader.FromFlat(Failures.Value.Models[2], 3, Variant.E));
         _ = Assert.Throws<EvaluationException>(() => afterError.TryRun(entry.Apply(entry.Decode()), out _));
         Assert.Equal(BudgetStop.None, afterError.StoppedAt);
         Assert.Equal(new ExBudget(19900, 99900), afterError.RemainingBudget);
