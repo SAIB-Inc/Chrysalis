@@ -23,6 +23,9 @@
     <Protobuf Include="../Chrysalis.Tx.Providers.UtxoRpc/Protos/utxorpc/**/*.proto"
               ProtoRoot="../Chrysalis.Tx.Providers.UtxoRpc/Protos" GrpcServices="Both" Access="Internal" />
     <Compile Include="../Chrysalis.Tx.Test/Providers/StubHttpHandler.cs" Link="Providers/StubHttpHandler.cs" />
+    <Compile Include="../Chrysalis.Tx.Test/Providers/BlockfrostRecording.cs" Link="Providers/BlockfrostRecording.cs" />
+    <None Include="../Chrysalis.Tx.Test/TestData/providers/blockfrost/**"
+          Link="TestData/providers/blockfrost/%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
     <None Update="Golden/**" CopyToOutputDirectory="PreserveNewest" />
     <None Include="../Chrysalis.Tx.Providers.UtxoRpc/Protos/utxorpc/**"
           Link="Protos/utxorpc/%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />

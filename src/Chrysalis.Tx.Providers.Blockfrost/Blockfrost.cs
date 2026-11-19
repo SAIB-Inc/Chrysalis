@@ -12,11 +12,13 @@ using Chrysalis.Codec.Types.Cardano.Core.Governance;
 using Chrysalis.Codec.Types.Cardano.Core.Header;
 using Chrysalis.Codec.Types.Cardano.Core.Protocol;
 using Chrysalis.Codec.Types.Cardano.Core.Transaction;
+using Chrysalis.Tx.Extensions;
 using Chrysalis.Tx.Models;
 using Chrysalis.Tx.Models.Cbor;
 using Chrysalis.Codec.Types.Cardano.Core;
 using Chrysalis.Tx.Utils;
 using Chrysalis.Wallet.Models.Enums;
+using CborReader = SAIB.Cbor.Serialization.CborReader;
 using ChrysalisWallet = Chrysalis.Wallet.Models.Addresses;
 
 namespace Chrysalis.Tx.Providers;
@@ -25,14 +27,19 @@ namespace Chrysalis.Tx.Providers;
 /// Represents a metadata response item from the Blockfrost API.
 /// </summary>
 /// <param name="Label">The metadata label.</param>
-/// <param name="JsonMetadata">The metadata JSON value.</param>
+/// <param name="Metadata">The hexadecimal CBOR of the single-label map.</param>
 public record BlockfrostMetadataResponse(
-    [property: JsonPropertyName("label")] string Label,
-    [property: JsonPropertyName("json_metadata")] object JsonMetadata);
+    [property: JsonPropertyName("label")] ulong? Label,
+    [property: JsonPropertyName("metadata")] string? Metadata);
 
 /// <summary>
-/// Blockfrost data provider. Protocol version is fixed at 9.0 and governance thresholds
-/// are placeholders; by-output-reference reads do not check whether the output is spent.
+/// Blockfrost data provider. Ratios preserve the published decimals, not non-terminating ledger fractions.
+/// Metadata retains ledger value types but not the transaction's original encoding. Paged reads are not snapshots.
+/// An output is known to be spent only when its transaction response includes <c>consumed_by_tx</c>.
+/// A null script hash on address lookup can hide a reference script. Spending that output without the script
+/// reference on its resolved output omits its reference-script fee and the node rejects the transaction with
+/// <c>FeeTooSmallUTxO</c>. Populate the resolved input's script reference (not merely a script witness), or fetch
+/// the input by out-ref with <see cref="GetUtxoByOutRefAsync"/> so the reference script is known.
 /// </summary>
 public sealed class Blockfrost : ICardanoDataProvider, IDisposable
 {
@@ -93,59 +100,58 @@ public sealed class Blockfrost : ICardanoDataProvider, IDisposable
 
     private static ProtocolParams MapParameters(BlockfrostProtocolParametersResponse parameters)
     {
-        Dictionary<int, CborList<long>> costMdls = [];
-
-        foreach ((string key, int[] value) in parameters.CostModelsRaw ?? [])
+        if (parameters.MinFeeRefScriptCostPerByte is null && parameters.ProtocolMajorVer is null or >= 9)
         {
-            int version = key switch
-            {
-                "PlutusV1" => 0,
-                "PlutusV2" => 1,
-                "PlutusV3" => 2,
-                _ => throw new InvalidOperationException("Unknown cost model key.")
-            };
-
-            costMdls[version] = CborList.Create(value.Select(x => (long)x));
+            throw ProviderHttp.Unusable(Provider, nameof(GetParametersAsync), "missing reference-script price");
         }
 
+        CostMdls? costModels = null;
+        if (parameters.CostModelsRaw is { } raw)
+        {
+            CborList<long>?[] models = new CborList<long>?[3];
+            foreach ((string key, long[] value) in raw)
+            {
+                int version = key switch
+                {
+                    "PlutusV1" => 0,
+                    "PlutusV2" => 1,
+                    "PlutusV3" => 2,
+                    _ => throw new InvalidOperationException("Unknown cost model key.")
+                };
+                models[version] = CborList.Create(value);
+            }
+            costModels = new CostMdls(models[0], models[1], models[2]);
+        }
+
+        CborRationalNumber[]? pool = Rationals(parameters.PvtMotionNoConfidence, parameters.PvtCommitteeNormal,
+            parameters.PvtCommitteeNoConfidence, parameters.PvtHardForkInitiation, parameters.PvtPPSecurityGroup);
+        CborRationalNumber[]? drep = Rationals(parameters.DvtMotionNoConfidence, parameters.DvtCommitteeNormal,
+            parameters.DvtCommitteeNoConfidence, parameters.DvtUpdateToConstitution, parameters.DvtHardForkInitiation,
+            parameters.DvtPPNetworkGroup, parameters.DvtPPEconomicGroup, parameters.DvtPPTechnicalGroup,
+            parameters.DvtPPGovGroup, parameters.DvtTreasuryWithdrawal);
+        CborRationalNumber[]? prices = Rationals(parameters.PriceMem, parameters.PriceStep);
+
         return new ProtocolParams(
-            (ulong)(parameters.MinFeeA ?? 0),
-            (ulong)(parameters.MinFeeB ?? 0),
-            (ulong)(parameters.MaxBlockSize ?? 0),
-            (ulong)(parameters.MaxTxSize ?? 0),
-            (ulong)(parameters.MaxBlockHeaderSize ?? 0),
-            ulong.Parse(parameters.KeyDeposit ?? "0", CultureInfo.InvariantCulture),
-            ulong.Parse(parameters.PoolDeposit ?? "0", CultureInfo.InvariantCulture),
-            (ulong)(parameters.EMax ?? 0),
-            (ulong)(parameters.NOpt ?? 0),
-            CborRationalNumber.Create((ulong)((parameters.A0 ?? 0) * 100), 100),
-            CborRationalNumber.Create((ulong)((parameters.Rho ?? 0) * 100), 100),
-            CborRationalNumber.Create((ulong)((parameters.Tau ?? 0) * 100), 100),
-            ProtocolVersion.Create(9, 0),
-            ulong.Parse(parameters.MinPoolCost ?? "0", CultureInfo.InvariantCulture),
-            ulong.Parse(parameters.CoinsPerUtxoSize, CultureInfo.InvariantCulture),
-            new CostMdls(costMdls.GetValueOrDefault(0), costMdls.GetValueOrDefault(1), costMdls.GetValueOrDefault(2)),
-            // Preserve the existing 1e7 scale: price_step 0.0000721 is 721/10_000_000.
-            // Deserialize prices directly as decimal so a binary floating-point approximation
-            // cannot move a halfway value across the intended round-to-even boundary.
-            ExUnitPrices.Create(
-                CborRationalNumber.Create((ulong)Math.Round(parameters.PriceMem * 10_000_000m, MidpointRounding.ToEven), 10_000_000),
-                CborRationalNumber.Create((ulong)Math.Round(parameters.PriceStep * 10_000_000m, MidpointRounding.ToEven), 10_000_000)),
-            ExUnits.Create(ulong.Parse(parameters.MaxTxExMem, CultureInfo.InvariantCulture), ulong.Parse(parameters.MaxTxExSteps, CultureInfo.InvariantCulture)),
-            ExUnits.Create(ulong.Parse(parameters.MaxBlockExMem, CultureInfo.InvariantCulture), ulong.Parse(parameters.MaxBlockExSteps, CultureInfo.InvariantCulture)),
-            ulong.Parse(parameters.MaxValSize, CultureInfo.InvariantCulture),
-            (ulong)parameters.CollateralPercent,
-            (ulong)parameters.MaxCollateralInputs,
-            PoolVotingThresholds.Create(CborRationalNumber.Create(1, 1), CborRationalNumber.Create(1, 1), CborRationalNumber.Create(1, 1), CborRationalNumber.Create(1, 1), CborRationalNumber.Create(1, 1)),
-            DRepVotingThresholds.Create(CborRationalNumber.Create(1, 1), CborRationalNumber.Create(1, 1), CborRationalNumber.Create(1, 1), CborRationalNumber.Create(1, 1), CborRationalNumber.Create(1, 1), CborRationalNumber.Create(1, 1), CborRationalNumber.Create(1, 1), CborRationalNumber.Create(1, 1), CborRationalNumber.Create(1, 1), CborRationalNumber.Create(1, 1)),
-            1,
-            1,
-            1,
-            1,
-            1,
-            1,
-            CborRationalNumber.Create((ulong)parameters.MinFeeRefScriptCostPerByte!, 1)
-        );
+            parameters.MinFeeA, parameters.MinFeeB, parameters.MaxBlockSize, parameters.MaxTxSize,
+            parameters.MaxBlockHeaderSize, parameters.KeyDeposit, parameters.PoolDeposit, parameters.EMax, parameters.NOpt,
+            Ratio(parameters.A0), Ratio(parameters.Rho), Ratio(parameters.Tau),
+            parameters.ProtocolMajorVer is { } major && parameters.ProtocolMinorVer is { } minor
+                ? ProtocolVersion.Create(major, minor) : null,
+            parameters.MinPoolCost, parameters.CoinsPerUtxoSize, costModels,
+            prices is null ? null : ExUnitPrices.Create(prices[0], prices[1]),
+            parameters.MaxTxExMem is { } txMem && parameters.MaxTxExSteps is { } txSteps ? ExUnits.Create(txMem, txSteps) : null,
+            parameters.MaxBlockExMem is { } blockMem && parameters.MaxBlockExSteps is { } blockSteps ? ExUnits.Create(blockMem, blockSteps) : null,
+            parameters.MaxValSize, parameters.CollateralPercent, parameters.MaxCollateralInputs,
+            pool is null ? null : PoolVotingThresholds.Create(pool[0], pool[1], pool[2], pool[3], pool[4]),
+            drep is null ? null : DRepVotingThresholds.Create(drep[0], drep[1], drep[2], drep[3], drep[4],
+                drep[5], drep[6], drep[7], drep[8], drep[9]),
+            parameters.CommitteeMinSize, parameters.CommitteeMaxTermLength, parameters.GovActionLifetime,
+            parameters.GovActionDeposit, parameters.DRepDeposit, parameters.DRepActivity,
+            Ratio(parameters.MinFeeRefScriptCostPerByte));
+
+        static CborRationalNumber? Ratio(decimal? value) => value is { } present ? ProviderValues.ExactRational(present) : null;
+        static CborRationalNumber[]? Rationals(params decimal?[] values) => values.Any(value => value is null)
+            ? null : [.. values.Select(value => ProviderValues.ExactRational(value!.Value))];
     }
 
     /// <summary>
@@ -173,8 +179,8 @@ public sealed class Blockfrost : ICardanoDataProvider, IDisposable
         {
             foreach (BlockfrostUtxo? utxo in page)
             {
-                if (utxo?.TxIndex is not >= 0) { throw ProviderHttp.Unusable(Provider, operation, "missing or invalid output index"); }
-                found.Add(address, await ProcessUtxoAsync(utxo, (ulong)utxo.TxIndex.Value, operation, ct).ConfigureAwait(false));
+                if (utxo?.OutputIndex is not { } index) { throw ProviderHttp.Unusable(Provider, operation, "missing or invalid output index"); }
+                found.Add(address, await ProcessUtxoAsync(utxo, index, operation, ct).ConfigureAwait(false));
             }
         }
     }
@@ -197,7 +203,7 @@ public sealed class Blockfrost : ICardanoDataProvider, IDisposable
         List<(ReadOnlyMemory<byte> Policy, ReadOnlyMemory<byte> Name, ulong Quantity)> assets = [];
         foreach (Amount? amount in utxo.Amount)
         {
-            if (amount?.Unit is not { } unit || !ulong.TryParse(amount.Quantity, NumberStyles.None, CultureInfo.InvariantCulture, out ulong quantity))
+            if (amount?.Unit is not { } unit || amount.Quantity is not { } quantity)
             {
                 throw ProviderHttp.Unusable(Provider, operation, "missing unit or invalid quantity");
             }
@@ -214,8 +220,13 @@ public sealed class Blockfrost : ICardanoDataProvider, IDisposable
         }
         IValue value = ProviderValues.Create(lovelace ?? throw ProviderHttp.Unusable(Provider, operation, "missing lovelace"), assets, Provider, operation);
         TransactionInput outref = TransactionInput.Create(HexStringCache.FromHexString(hash), index);
-        IDatumOption? datum = utxo.InlineDatum is { } inline
-            ? InlineDatumOption.Create(1, new CborEncodedValue(HexStringCache.FromHexString(inline))) : null;
+        IDatumOption? datum = utxo switch
+        {
+            { InlineDatum: { } inline } => InlineDatumOption.Create(1, new CborEncodedValue(HexStringCache.FromHexString(inline))),
+            { DataHash: { Length: 64 } dataHash } => DatumHashOption.Create(0, HexStringCache.FromHexString(dataHash)),
+            { DataHash: not null } => throw ProviderHttp.Unusable(Provider, operation, "invalid datum hash"),
+            _ => null
+        };
         ITransactionOutput output = PostAlonzoTransactionOutput.Create(new Address(ChrysalisWallet.Address.FromBech32(utxo.Address).ToBytes()),
             value, datum, script is null ? null : new CborEncodedValue(CborSerializer.Serialize(script)));
         return new(outref, output);
@@ -243,14 +254,20 @@ public sealed class Blockfrost : ICardanoDataProvider, IDisposable
         string path = $"scripts/{Uri.EscapeDataString(scriptHash)}";
         using JsonDocument descriptor = (await _http.GetJsonAsync<JsonDocument>(path, operation, null, cancellationToken).ConfigureAwait(false))!;
         string? language = ProviderHttp.Map(descriptor.RootElement, element => element.GetProperty("type").GetString(), Provider, operation);
-        if (language == "timelock") { throw ProviderHttp.Unusable(Provider, operation, "native reference scripts are not mapped yet"); }
-        if (language is not ("plutusV1" or "plutusV2" or "plutusV3"))
+        if (language is not ("timelock" or "plutusV1" or "plutusV2" or "plutusV3"))
         {
             throw ProviderHttp.Unusable(Provider, operation, "unknown script language");
         }
-        using JsonDocument body = (await _http.GetJsonAsync<JsonDocument>($"{path}/cbor", operation, null, cancellationToken).ConfigureAwait(false))!;
-        return ProviderHttp.Map<JsonElement, IScript>(body.RootElement, element =>
+        string endpoint = language == "timelock" ? "json" : "cbor";
+        using JsonDocument body = (await _http.GetJsonAsync<JsonDocument>($"{path}/{endpoint}", operation, null, cancellationToken).ConfigureAwait(false))!;
+        IScript script = ProviderHttp.Map<JsonElement, IScript>(body.RootElement, element =>
         {
+            if (language == "timelock")
+            {
+                JsonElement native = element.GetProperty("json");
+                if (native.ValueKind != JsonValueKind.Object) { throw ProviderHttp.Unusable(Provider, operation, "missing native script object"); }
+                return MultiSigScript.Create(0, ProviderValues.NativeScript(native));
+            }
             byte[] bytes = HexStringCache.FromHexString(element.GetProperty("cbor").GetString()
                 ?? throw ProviderHttp.Unusable(Provider, operation, "missing script bytes"));
             return language switch
@@ -260,6 +277,11 @@ public sealed class Blockfrost : ICardanoDataProvider, IDisposable
                 _ => PlutusV3Script.Create(3, bytes)
             };
         }, Provider, operation);
+        if (!string.Equals(script.HashHex(), scriptHash, StringComparison.OrdinalIgnoreCase))
+        {
+            throw ProviderHttp.Unusable(Provider, operation, "script hash differs from the requested hash");
+        }
+        return script;
     }
 
     /// <summary>
@@ -316,24 +338,37 @@ public sealed class Blockfrost : ICardanoDataProvider, IDisposable
         ArgumentException.ThrowIfNullOrWhiteSpace(txHash);
         cancellationToken.ThrowIfCancellationRequested();
         const string operation = nameof(GetUtxoByOutRefAsync);
+        BlockfrostUtxo? utxo = await ReadTxOutputAsync(txHash, index, operation, cancellationToken).ConfigureAwait(false);
+        if (utxo is null) { return null; }
+        if (utxo.ConsumedByTx is { } consumed)
+        {
+            if (consumed.Length != 64 || !consumed.All(Uri.IsHexDigit))
+            {
+                throw ProviderHttp.Unusable(Provider, operation, "invalid consumed-by transaction hash");
+            }
+            return null;
+        }
+        return await ProcessUtxoAsync(utxo, index, operation, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task<BlockfrostUtxo?> ReadTxOutputAsync(string txHash, ulong index, string operation, CancellationToken cancellationToken)
+    {
         using JsonDocument? body = await _http.GetJsonAsync<JsonDocument>($"txs/{Uri.EscapeDataString(txHash)}/utxos",
             operation, IsNotFoundBody, cancellationToken).ConfigureAwait(false);
         if (body is null) { return null; }
-        BlockfrostUtxo? utxo = ProviderHttp.Map(body.RootElement, root => FindOutput(root, txHash, index), Provider, operation);
-        return utxo is null ? null : await ProcessUtxoAsync(utxo, index, operation, cancellationToken).ConfigureAwait(false);
-    }
-
-    private static BlockfrostUtxo? FindOutput(JsonElement root, string txHash, ulong index)
-    {
-        BlockfrostUtxo? match = null;
-        foreach (JsonElement item in root.GetProperty("outputs").EnumerateArray())
+        return ProviderHttp.Map(body.RootElement, root =>
         {
-            if (item.GetProperty("output_index").GetUInt64() != index) { continue; }
-            if (match is not null) { throw ProviderHttp.Unusable(Provider, nameof(GetUtxoByOutRefAsync), "repeated output"); }
-            match = item.Deserialize<BlockfrostUtxo>() ?? throw ProviderHttp.Unusable(Provider, nameof(GetUtxoByOutRefAsync), "null output");
-            match.TxHash = txHash;
-        }
-        return match;
+            BlockfrostUtxo? match = null;
+            foreach (JsonElement item in root.GetProperty("outputs").EnumerateArray())
+            {
+                if (item.TryGetProperty("collateral", out JsonElement collateral) && collateral.ValueKind == JsonValueKind.True) { continue; }
+                if (item.GetProperty("output_index").Deserialize<ulong>(JsonSerializerOptions.Web) != index) { continue; }
+                if (match is not null) { throw ProviderHttp.Unusable(Provider, operation, "repeated output"); }
+                match = item.Deserialize<BlockfrostUtxo>(JsonSerializerOptions.Web) ?? throw ProviderHttp.Unusable(Provider, operation, "null output");
+                match.TxHash = txHash;
+            }
+            return match;
+        }, Provider, operation);
     }
 
     private static bool IsNotFoundBody(string text)
@@ -480,7 +515,7 @@ public sealed class Blockfrost : ICardanoDataProvider, IDisposable
         cancellationToken.ThrowIfCancellationRequested();
         const string operation = nameof(GetTransactionMetadataAsync);
         List<BlockfrostMetadataResponse>? raw = await _http.GetJsonAsync<List<BlockfrostMetadataResponse>>(
-            $"txs/{Uri.EscapeDataString(txHash)}/metadata", operation, IsNotFoundBody, cancellationToken).ConfigureAwait(false);
+            $"txs/{Uri.EscapeDataString(txHash)}/metadata/cbor", operation, IsNotFoundBody, cancellationToken).ConfigureAwait(false);
         return raw is null or { Count: 0 } ? null : ProviderHttp.Map(raw, MapMetadata, Provider, operation);
     }
 
@@ -489,8 +524,14 @@ public sealed class Blockfrost : ICardanoDataProvider, IDisposable
         Dictionary<ulong, ITransactionMetadatum> metadata = [];
         foreach (BlockfrostMetadataResponse? item in raw)
         {
-            if (item?.JsonMetadata is null || !ulong.TryParse(item.Label, NumberStyles.None, CultureInfo.InvariantCulture, out ulong label) ||
-                ConvertToTransactionMetadatum(item.JsonMetadata) is not { } value || !metadata.TryAdd(label, value))
+            if (item is not { Label: { } label, Metadata: { } hex })
+            {
+                throw ProviderHttp.Unusable(Provider, nameof(GetTransactionMetadataAsync), "missing metadata label or value");
+            }
+            byte[] bytes = Convert.FromHexString(hex);
+            Metadata map = CborSerializer.Deserialize<Metadata>(bytes, out int consumed);
+            if (consumed != bytes.Length || !HasSingleMetadataEntry(bytes) || map.Value is not { Count: 1 } entries ||
+                !entries.TryGetValue(label, out ITransactionMetadatum? value) || !metadata.TryAdd(label, value))
             {
                 throw ProviderHttp.Unusable(Provider, nameof(GetTransactionMetadataAsync), "invalid or duplicate metadata label or value");
             }
@@ -498,42 +539,17 @@ public sealed class Blockfrost : ICardanoDataProvider, IDisposable
         return Metadata.Create(metadata);
     }
 
-    private static ITransactionMetadatum? ConvertToTransactionMetadatum(object value) => value switch
+    // The codec produces a dictionary, so its count alone cannot detect a repeated wire key.
+    private static bool HasSingleMetadataEntry(ReadOnlySpan<byte> bytes)
     {
-        string str => MetadataText.Create(str),
-        long lng => MetadatumIntLong.Create(lng),
-        int i => MetadatumIntLong.Create(i),
-        JsonElement element => ConvertJsonElementToMetadatum(element),
-        Dictionary<string, object> dict => MetadatumMap.Create(
-            [.. dict.Select(kv => new KeyValuePair<ITransactionMetadatum, ITransactionMetadatum>(
-                ConvertToTransactionMetadatum(kv.Key) ?? MetadataText.Create(kv.Key),
-                ConvertToTransactionMetadatum(kv.Value) ?? MetadataText.Create(kv.Value?.ToString() ?? "")))]
-        ),
-        _ => value.ToString() is string s ? MetadataText.Create(s) : null
-    };
-
-    private static ITransactionMetadatum? ConvertJsonElementToMetadatum(JsonElement element) => element.ValueKind switch
-    {
-        JsonValueKind.String => MetadataText.Create(element.GetString() ?? ""),
-        JsonValueKind.Number when element.TryGetInt64(out long lng) => MetadatumIntLong.Create(lng),
-        JsonValueKind.Number when element.TryGetUInt64(out _) => MetadatumIntUlong.Create(element.GetUInt64()),
-        JsonValueKind.Number => MetadataText.Create(element.ToString()),
-        JsonValueKind.Object => MetadatumMap.Create(
-            [.. element.EnumerateObject().Select(prop => new KeyValuePair<ITransactionMetadatum, ITransactionMetadatum>(
-                MetadataText.Create(prop.Name), ConvertJsonElementToMetadatum(prop.Value) ?? MetadataText.Create("")))]
-        ),
-        JsonValueKind.Array => MetadatumList.Create(
-            [.. element.EnumerateArray()
-                    .Select(ConvertJsonElementToMetadatum)
-                    .Where(m => m != null)
-                    .Cast<ITransactionMetadatum>()]
-        ),
-        JsonValueKind.Undefined => MetadataText.Create(element.ToString()),
-        JsonValueKind.Null => MetadataText.Create(element.ToString()),
-        JsonValueKind.True => MetadataText.Create(element.ToString()),
-        JsonValueKind.False => MetadataText.Create(element.ToString()),
-        _ => MetadataText.Create(element.ToString())
-    };
+        CborReader reader = new(bytes);
+        reader.ReadBeginMap();
+        int size = reader.ReadSize();
+        if (size >= 0) { return size == 1; }
+        reader.SkipDataItem();
+        reader.SkipDataItem();
+        return reader.Buffer is [0xff];
+    }
 
     private string GetBaseUrl() => NetworkType switch
     {

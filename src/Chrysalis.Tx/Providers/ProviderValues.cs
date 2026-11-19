@@ -1,5 +1,9 @@
+using System.Numerics;
+using System.Text.Json;
 using Chrysalis.Codec.Serialization.Utils;
+using Chrysalis.Codec.Types;
 using Chrysalis.Codec.Types.Cardano.Core.Common;
+using Chrysalis.Codec.Types.Cardano.Core.Scripts;
 
 namespace Chrysalis.Tx.Providers;
 
@@ -30,4 +34,42 @@ public static class ProviderValues
         }
         return LovelaceWithMultiAsset.Create(lovelace, MultiAssetOutput.Create(output));
     }
+
+    /// <summary>Converts a published decimal to an exact, reduced unsigned ledger ratio.</summary>
+    /// <exception cref="ArgumentOutOfRangeException">The value is negative.</exception>
+    /// <exception cref="OverflowException">The reduced numerator or denominator does not fit in 64 bits.</exception>
+    public static CborRationalNumber ExactRational(decimal value)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(value);
+        Span<int> bits = stackalloc int[4];
+        _ = decimal.GetBits(value, bits);
+        BigInteger numerator = (BigInteger)(uint)bits[0] + ((BigInteger)(uint)bits[1] << 32) + ((BigInteger)(uint)bits[2] << 64);
+        BigInteger denominator = BigInteger.Pow(10, (bits[3] >> 16) & 0xff);
+        BigInteger divisor = BigInteger.GreatestCommonDivisor(numerator, denominator);
+        return CborRationalNumber.Create((ulong)(numerator / divisor), (ulong)(denominator / divisor));
+    }
+
+    /// <summary>Maps db-sync native script JSON to a ledger script.</summary>
+    /// <param name="json">The native script JSON object.</param>
+    /// <returns>The decoded ledger native script.</returns>
+    /// <exception cref="FormatException">A key hash or numeric field has an invalid format.</exception>
+    /// <exception cref="InvalidOperationException">A JSON value has the wrong kind or an unknown script type.</exception>
+    /// <exception cref="KeyNotFoundException">A required JSON property is missing.</exception>
+    /// <exception cref="OverflowException">An <c>atLeast</c> threshold exceeds <see cref="int.MaxValue"/>.</exception>
+    public static INativeScript NativeScript(JsonElement json) => json.GetProperty("type").GetString() switch
+    {
+        "sig" => ScriptPubKey.Create(0, KeyHash(json.GetProperty("keyHash").GetString())),
+        "all" => ScriptAll.Create(1, Children(json)),
+        "any" => ScriptAny.Create(2, Children(json)),
+        "atLeast" => ScriptNOfK.Create(3, checked((int)json.GetProperty("required").GetUInt32()), Children(json)),
+        "after" => InvalidBefore.Create(4, json.GetProperty("slot").GetUInt64()),
+        "before" => InvalidHereafter.Create(5, json.GetProperty("slot").GetUInt64()),
+        _ => throw new InvalidOperationException("Unknown native script type.")
+    };
+
+    private static CborList<INativeScript> Children(JsonElement json) =>
+        CborList.Create(json.GetProperty("scripts").EnumerateArray().Select(NativeScript));
+
+    private static byte[] KeyHash(string? hash) => hash is { Length: 56 }
+        ? Convert.FromHexString(hash) : throw new FormatException("Invalid native script key hash length.");
 }
