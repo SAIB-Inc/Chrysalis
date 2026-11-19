@@ -22,7 +22,8 @@ using Chrysalis.Network.Multiplexer;
 using Chrysalis.Network.Core;
 using Chrysalis.Tx.Builders;
 using Chrysalis.Tx.Extensions;
-using Chrysalis.Tx.Utils;
+using Chrysalis.Tx.Fees;
+using Chrysalis.Tx.Models.Cbor;
 using Chrysalis.Wallet.Utils;
 using Chrysalis.Crypto;
 using Chrysalis.Plutus.Cek;
@@ -164,6 +165,9 @@ public class TxBench
 {
     internal CoreBench core = new(); internal ProtocolParams pp = null!; internal PlutusV3Script script; internal IRedeemers redeemers = null!;
     internal Tx.Models.RationalNumber step = new(721, 10000000), memory = new(577, 10000);
+    private PostMaryTransaction transferDraft, scriptDraft, referenceDraft;
+    private FeeInputs transferInputs, scriptInputs, referenceInputs;
+    private FeeDraft prepared;
     /// <summary>Runs the named benchmark operation or its untimed setup/cleanup.</summary>
     [GlobalSetup]
     public void Setup()
@@ -175,14 +179,44 @@ public class TxBench
         }
 
         script = PlutusV3Script.Create(3, File.ReadAllBytes(Path.Combine(Fixtures.Root, "../data/plutus_use_cases/escrow-redeem_1-1.flat"))); redeemers = RedeemerList.Create([RedeemerEntry.Create(0, 0, PlutusInt.Create(1), ExUnits.Create(1000, 2000))]);
+        Address address = Address.Create(core.address);
+        ITransactionOutput change = AlonzoTransactionOutput.Create(address, Lovelace.Create(4_800_000), null);
+        transferDraft = NewBuilder(false).AddOutput(change).Build();
+        scriptDraft = NewBuilder(true).AddOutput(change).Build();
+        TransactionInput scriptInput = TransactionInput.Create(core.payload.AsMemory(64, 32), 0);
+        ITransactionOutput scriptOutput = PostAlonzoTransactionOutput.Create(address, Lovelace.Create(2_000_000), scriptRef: new CborEncodedValue(script.Raw));
+        referenceDraft = NewBuilder(true, useReference: true).AddReferenceInput(scriptInput).AddOutput(change).Build();
+        ulong referenceSize = FeeEngine.ReferenceScriptSize([], [scriptInput], [new ResolvedInput(scriptInput, scriptOutput)]);
+        transferInputs = new FeeInputs(ChangeIndex: 1, Budget: 5_000_000, SigningDelta: SigningDelta(transferDraft));
+        scriptInputs = transferInputs with { CollateralBalance = 5_000_000, SigningDelta = SigningDelta(scriptDraft) };
+        referenceInputs = scriptInputs with { ReferenceScriptSize = referenceSize, SigningDelta = SigningDelta(referenceDraft) };
+        prepared = FeeSolver.Prepare(transferDraft, pp, transferInputs);
+        CheckBalanced(prepared, $"{nameof(FeeTransfer)}/{nameof(FeeSolve)}");
+        CheckBalanced(FeeSolver.Prepare(scriptDraft, pp, scriptInputs), nameof(FeeScriptSpend));
+        CheckBalanced(FeeSolver.Prepare(referenceDraft, pp, referenceInputs), nameof(FeeReferenceScript));
     }
-    private TransactionBuilder NewBuilder(bool scripted)
+    private static void CheckBalanced(in FeeDraft draft, string benchmark)
+    {
+        FeeStatus status = FeeSolver.Solve(draft).Status;
+        if (status != FeeStatus.Balanced)
+        {
+            throw new InvalidOperationException($"{benchmark} requires a balanced fee draft; got {status}.");
+        }
+    }
+    private ulong SigningDelta(PostMaryTransaction draft)
+    {
+        PostMaryTransaction signed = (PostMaryTransaction)draft.Sign([VKeyWitness.Create(core.pub, new byte[64])]);
+        return checked((ulong)(signed.Witnesses.Raw.Length - draft.Witnesses.Raw.Length));
+    }
+    private TransactionBuilder NewBuilder(bool scripted, bool useReference = false)
     {
         TransactionBuilder b = TransactionBuilder.Create(pp); Address addr = Address.Create(core.address);
         TransactionInput input = TransactionInput.Create(core.payload.AsMemory(0, 32), 0);
         if (scripted)
         {
-            _ = b.AddInput(new InputBuilder(input, AlonzoTransactionOutput.Create(addr, Lovelace.Create(10000000), null)).PlutusScript(script, PlutusInt.Create(0), PlutusInt.Create(1)));
+            InputBuilder spend = new(input, AlonzoTransactionOutput.Create(addr, Lovelace.Create(10000000), null));
+            _ = b.AddInput(useReference ? spend.PlutusScriptRef(script.HashHex(), PlutusInt.Create(0), PlutusInt.Create(1))
+                : spend.PlutusScript(script, PlutusInt.Create(0), PlutusInt.Create(1)));
         }
         else
         {
@@ -210,11 +244,19 @@ public class TxBench
     /// <summary>Runs the named benchmark operation or its untimed setup/cleanup.</summary>
     [Benchmark] public byte[] ScriptBuildFeeSign() => BuildSign(true, true);
     /// <summary>Runs the named benchmark operation or its untimed setup/cleanup.</summary>
-    [Benchmark] public ulong ScriptFee() => FeeUtil.CalculateScriptExecutionFee(redeemers, step, memory);
+    [Benchmark] public ulong ScriptFee() => FeeEngine.ScriptFee(redeemers, pp);
     /// <summary>Runs the named benchmark operation or its untimed setup/cleanup.</summary>
     [Benchmark] public ulong ScriptFeeLoop() { ulong fee = 0; foreach (RedeemerEntry x in ((RedeemerList)redeemers).Value) { fee += (x.ExUnits.Mem * memory.Numerator / memory.Denominator) + (x.ExUnits.Steps * step.Numerator / step.Denominator); } return fee; }
     /// <summary>Runs the named benchmark operation or its untimed setup/cleanup.</summary>
-    [Benchmark] public ulong LinearFee() => FeeUtil.CalculateFeeWithWitness(300, pp.MinFeeA!.Value, pp.MinFeeB!.Value, 1);
+    [Benchmark] public ulong LinearFee() => FeeEngine.LinearFee(300, pp);
+    /// <summary>Prepares and solves a transfer with change.</summary>
+    [Benchmark] public ulong FeeTransfer() => FeeSolver.Solve(FeeSolver.Prepare(transferDraft, pp, transferInputs)).Fee;
+    /// <summary>Prepares and solves a Plutus spend with an attached script.</summary>
+    [Benchmark] public ulong FeeScriptSpend() => FeeSolver.Solve(FeeSolver.Prepare(scriptDraft, pp, scriptInputs)).Fee;
+    /// <summary>Prepares and solves a Plutus spend with a resolved reference script.</summary>
+    [Benchmark] public ulong FeeReferenceScript() => FeeSolver.Solve(FeeSolver.Prepare(referenceDraft, pp, referenceInputs)).Fee;
+    /// <summary>Solves a prepared transfer without draft-building or preparation costs.</summary>
+    [Benchmark] public ulong FeeSolve() => FeeSolver.Solve(prepared).Fee;
 }
 
 /// <summary>Measures VmBench operations using fixed public fixtures.</summary>

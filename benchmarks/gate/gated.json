@@ -13,7 +13,11 @@
     "CoreBench.Sign": {"rule": "range", "window": "direct/warm10", "warmupMilliseconds": 10000},
     "TxBench.SimpleBuildSign": {"rule": "range", "window": "direct/warm10", "warmupMilliseconds": 10000},
     "TxBench.SimpleBuildFeeSign": {"rule": "range", "window": "direct/warm10", "warmupMilliseconds": 10000},
-    "TxBench.ScriptBuildFeeSign": {"rule": "range", "window": "direct/warm10", "warmupMilliseconds": 10000}
+    "TxBench.ScriptBuildFeeSign": {"rule": "range", "window": "direct/warm10", "warmupMilliseconds": 10000},
+    "TxBench.FeeTransfer": {"rule": "D39"},
+    "TxBench.FeeScriptSpend": {"rule": "D39"},
+    "TxBench.FeeReferenceScript": {"rule": "D39"},
+    "TxBench.FeeSolve": {"rule": "D39"}
   },
   "replays": ["tcp", "offline", "offline-n2c"],
   "time": {
