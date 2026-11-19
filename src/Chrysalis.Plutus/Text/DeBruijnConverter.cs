@@ -1,3 +1,4 @@
+// Contains code adapted from Blaze (Apache-2.0); changed for Chrysalis. See THIRD-PARTY-NOTICES.md.
 using Chrysalis.Plutus.Types;
 
 namespace Chrysalis.Plutus.Text;

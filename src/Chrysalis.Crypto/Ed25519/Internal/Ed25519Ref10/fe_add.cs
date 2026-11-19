@@ -1,4 +1,5 @@
-﻿namespace Chrysalis.Crypto.Internal.Ed25519Ref10;
+﻿// Contains code adapted from Chaos.NaCl (public domain); changed for Chrysalis. See THIRD-PARTY-NOTICES.md.
+namespace Chrysalis.Crypto.Internal.Ed25519Ref10;
 
 /// <summary>
 /// Field element operations for Ed25519.

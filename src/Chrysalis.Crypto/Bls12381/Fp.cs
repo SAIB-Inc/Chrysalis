@@ -1,3 +1,4 @@
+// Contains code adapted from noble-curves (MIT), Copyright (c) 2022 Paul Miller (https://paulmillr.com); changed for Chrysalis. See THIRD-PARTY-NOTICES.md.
 using System.Numerics;
 
 namespace Chrysalis.Crypto.Bls12381;
@@ -5,7 +6,7 @@ namespace Chrysalis.Crypto.Bls12381;
 /// <summary>
 /// BLS12-381 base field Fp arithmetic.
 /// p = 0x1a0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffaaab
-/// Ported from noble-curves (MIT License, Paul Miller).
+/// Ported from noble-curves.
 /// </summary>
 internal static class Fp
 {

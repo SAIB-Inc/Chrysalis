@@ -13,6 +13,30 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 DATA = Path("src/Chrysalis.Codec.Blueprint.Test/data")
+MANIFEST_HEADER = [
+    "file", "repository", "tag", "commit", "path at that commit",
+    "licence", "sha256", "derived from",
+]
+RECORDING_MANIFEST_HEADER = [
+    "file", "method", "path", "status", "content-type", "sha256", "origin",
+]
+UTF8_BOM = b"\xef\xbb\xbf"
+HEADER_PREFIX = "// Contains code adapted from "
+HEADER_SUFFIX = "; changed for Chrysalis. See THIRD-PARTY-NOTICES.md."
+GITHUB_REPO_RE = re.compile(r"https://github\.com/[^/\s]+/([A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*)")
+ORIGINS = (
+    ("blaze", "Blaze (Apache-2.0)"),
+    ("plutuz", "plutuz (MIT), Copyright (c) 2026 UTxO Company"),
+    ("aiken", "Aiken (Apache-2.0)"),
+    ("noble-curves", "noble-curves (MIT), Copyright (c) 2022 Paul Miller (https://paulmillr.com)"),
+    ("Chaos.NaCl", "Chaos.NaCl (public domain)"),
+    ("cardanosharp-wallet", "CardanoSharp.Wallet (MIT), Copyright (c) 2021 CardanoSharp"),
+    ("bips", "the BIP-39 English word list (MIT)"),
+    ("cardano-multiplatform-lib", "cardano-multiplatform-lib (MIT), Copyright (c) 2022 dcSpark"),
+    ("plutus", "Plutus (Apache-2.0)"),
+)
+ORIGIN_MAP = dict(ORIGINS)
+ORIGIN_ORDER = {key: index for index, (key, _) in enumerate(ORIGINS)}
 MAGIC = (
     ("ELF", 0, b"\x7fELF"),
     ("Mach-O", 0, b"\xfe\xed\xfa\xce"),
@@ -212,6 +236,92 @@ def recovery_phrases(root, indices, allowed):
             yield f"{path}: allowed phrase count {counts[digest]}, expected {count}"
 
 
+
+def origin_header(keys):
+    parts = [ORIGIN_MAP[key] for key in sorted(set(keys), key=ORIGIN_ORDER.__getitem__)]
+    if len(parts) == 1:
+        joined = parts[0]
+    elif len(parts) == 2:
+        joined = (", and " if "," in parts[0] else " and ").join(parts)
+    else:
+        joined = ", ".join(parts[:-1]) + ", and " + parts[-1]
+    return f"{HEADER_PREFIX}{joined}{HEADER_SUFFIX}"
+
+
+def first_two_lines(path):
+    with path.open("rb") as stream:
+        raw1 = stream.readline()
+        raw2 = stream.readline()
+    if raw1.startswith(UTF8_BOM):
+        raw1 = raw1[len(UTF8_BOM):]
+    if raw1.endswith(b"\r\n"):
+        line1_bytes, lf_ok = raw1[:-2], False
+    elif raw1.endswith(b"\n"):
+        line1_bytes, lf_ok = raw1[:-1], True
+    else:
+        line1_bytes, lf_ok = raw1, False
+    line1 = line1_bytes.decode("utf-8", errors="replace")
+    line2_bom = raw2.startswith(UTF8_BOM)
+    line2 = raw2.rstrip(b"\r\n").decode("utf-8", errors="replace")
+    return line1, lf_ok, line2_bom, line2
+
+
+def manifest_origins(root):
+    files = list(candidate_files(root))
+    cs_files = {path for path in files if path.suffix == ".cs"}
+    manifests = sorted(path for path in files if path.parts[:1] == ("src",) and path.match("*manifest.tsv"))
+    origins = {}
+    issues = set()
+    for manifest in manifests:
+        with (root / manifest).open(encoding="utf-8", newline="") as stream:
+            rows = list(csv.reader(stream, delimiter="\t"))
+        if rows and rows[0] and rows[0][0].startswith("#"):
+            table = [row for row in rows if row and not row[0].startswith("#")]
+            if (not table or table[0] != RECORDING_MANIFEST_HEADER or len(table) < 2
+                    or any(len(row) != len(RECORDING_MANIFEST_HEADER) or row[0].endswith(".cs")
+                           for row in table[1:])):
+                issues.add(manifest.as_posix())
+            continue
+        if not rows or rows[0] != MANIFEST_HEADER or len(rows) < 2:
+            issues.add(manifest.as_posix())
+            continue
+        for row in rows[1:]:
+            if len(row) != len(MANIFEST_HEADER):
+                issues.add(manifest.as_posix())
+                continue
+            cell = row[0]
+            if "#" in cell or not cell.strip().lower().endswith(".cs"):
+                continue
+            if cell != cell.strip() or not cell.endswith(".cs"):
+                issues.add(manifest.as_posix())
+                continue
+            rel_part = Path(row[0])
+            if rel_part.is_absolute() or ".." in rel_part.parts:
+                issues.add(manifest.as_posix())
+                continue
+            target = manifest.parent / rel_part
+            repo_match = GITHUB_REPO_RE.fullmatch(row[1].rstrip("/"))
+            keys = [repo_match.group(1)] if repo_match else [row[1]]
+            keys.extend(GITHUB_REPO_RE.findall(row[7]))
+            if target not in cs_files or any(key not in ORIGIN_MAP for key in keys):
+                issues.add(target.as_posix())
+                continue
+            origins.setdefault(target, set()).update(keys)
+    return origins, cs_files, issues
+
+
+def ported_header_issues(root):
+    origins, cs_files, issues = manifest_origins(root)
+    for path, keys in origins.items():
+        line1, lf_ok, line2_bom, line2 = first_two_lines(root / path)
+        if not lf_ok or line1 != origin_header(keys) or line2_bom or line2.startswith(HEADER_PREFIX):
+            issues.add(path.as_posix())
+    for path in cs_files - origins.keys():
+        line1, _, _, line2 = first_two_lines(root / path)
+        if line1.lstrip("\ufeff").startswith(HEADER_PREFIX) or line2.lstrip("\ufeff").startswith(HEADER_PREFIX):
+            issues.add(path.as_posix())
+    return sorted(issues)
+
 class RepositoryFilesTests(unittest.TestCase):
     def temp_repo(self, files):
         root = Path(self.enterContext(tempfile.TemporaryDirectory()))
@@ -251,10 +361,7 @@ class RepositoryFilesTests(unittest.TestCase):
         for manifest in manifests:
             with (ROOT / manifest).open(encoding="utf-8", newline="") as stream:
                 rows = csv.reader(stream, delimiter="\t")
-                self.assertEqual(next(rows, None), [
-                    "file", "repository", "tag", "commit", "path at that commit",
-                    "licence", "sha256", "derived from",
-                ], str(manifest))
+                self.assertEqual(next(rows, None), MANIFEST_HEADER, str(manifest))
                 self.assertTrue((entries := list(rows)), f"{manifest}: empty manifest")
             for row in entries:
                 self.assertEqual(len(row), 8, f"{manifest}: malformed row")
@@ -332,4 +439,51 @@ class RepositoryFilesTests(unittest.TestCase):
         self.assertCountEqual(recovery_phrases(root, indices, allowed), [
             "p1:2", "utf16:1", "p2:1", "a: allowed phrase count 2, expected 1",
             "b:1: allowed phrase without its label", "c:1",
+        ])
+
+    def test_ported_files_carry_their_header(self):
+        found = ported_header_issues(ROOT)
+        if found:
+            self.fail("\n".join(found))
+
+    def test_header_check_catches_missing_wrong_extra_and_bad_manifests(self):
+        hdr = "\t".join(MANIFEST_HEADER)
+        def row(name, repo, derived=""):
+            return f"{name}\t{repo}\t-\t0\tp\tMIT\t0\t{derived}"
+        blaze_hdr = origin_header(["blaze"])
+        root = self.temp_repo({
+            "src/P/a-manifest.tsv": (
+                f"{hdr}\n"
+                f"{row('Ok.cs', 'https://github.com/o/blaze')}\n"
+                f"{row('Multi.cs', 'https://github.com/o/blaze', 'https://github.com/o/plutuz/blob/0/a')}\n"
+                f"{row('Bom.cs', 'https://github.com/o/cardanosharp-wallet', 'https://github.com/o/bips/blob/0/w')}\n"
+                f"{row('BomAfter.cs', 'https://github.com/o/blaze')}\n"
+                f"{row('Crlf.cs', 'https://github.com/o/blaze')}\n"
+                f"{row('Dup.cs', 'https://github.com/o/blaze')}\n"
+                f"{row('Missing.cs', 'https://github.com/o/plutus')}\n"
+                f"{row('BadKey.cs', 'https://github.com/o/unknown')}\n"
+            ).encode(),
+            "src/P/b-manifest.tsv": f"{hdr}\n{row('Multi.cs', 'https://github.com/o/aiken')}\n".encode(),
+            "src/P/empty-manifest.tsv": f"{hdr}\n".encode(),
+            "src/P/ws-manifest.tsv": f"{hdr}\n{row('Ws.cs ', 'https://github.com/o/blaze')}\n".encode(),
+            "src/P/upper-manifest.tsv": f"{hdr}\n{row('Upper.CS', 'https://github.com/o/blaze')}\n".encode(),
+            "src/P/rec-manifest.tsv": (
+                "# utc: 0\n" + "\t".join(RECORDING_MANIFEST_HEADER) + "\n1.json\tGET\tp\t200\tj\t0\tr\n"
+            ).encode(),
+            "src/P/Ok.cs": f"{blaze_hdr}\nclass A {{}}\n".encode(),
+            "src/P/Multi.cs": f"{origin_header(['blaze', 'plutuz', 'aiken'])}\nclass B {{}}\n".encode(),
+            "src/P/Bom.cs": b"\xef\xbb\xbf" + f"{origin_header(['cardanosharp-wallet', 'bips'])}\nclass C {{}}\n".encode(),
+            "src/P/BomAfter.cs": f"{blaze_hdr}\n".encode() + b"\xef\xbb\xbfclass G {}\n",
+            "src/P/Crlf.cs": f"{blaze_hdr}\r\nclass H {{}}\n".encode(),
+            "src/P/Dup.cs": f"{blaze_hdr}\n{blaze_hdr}\nclass I {{}}\n".encode(),
+            "src/P/Ws.cs": b"class J {}\n",
+            "src/P/Upper.CS": b"class K {}\n",
+            "src/P/Missing.cs": b"class D {}\n",
+            "src/P/BadKey.cs": b"class E {}\n",
+            "src/P/Extra.cs": f"{HEADER_PREFIX}Blaze (Apache-2.0){HEADER_SUFFIX}\nclass F {{}}\n".encode(),
+        })
+        self.assertEqual(ported_header_issues(root), [
+            "src/P/BadKey.cs", "src/P/BomAfter.cs", "src/P/Crlf.cs", "src/P/Dup.cs",
+            "src/P/Extra.cs", "src/P/Missing.cs", "src/P/empty-manifest.tsv",
+            "src/P/upper-manifest.tsv", "src/P/ws-manifest.tsv",
         ])

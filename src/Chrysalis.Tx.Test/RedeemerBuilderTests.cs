@@ -1,3 +1,4 @@
+// Contains code adapted from cardano-multiplatform-lib (MIT), Copyright (c) 2022 dcSpark; changed for Chrysalis. See THIRD-PARTY-NOTICES.md.
 using Chrysalis.Codec.Types.Cardano.Core.Common;
 using Chrysalis.Codec.Types.Cardano.Core.Protocol;
 using Chrysalis.Codec.Types.Cardano.Core.Transaction;

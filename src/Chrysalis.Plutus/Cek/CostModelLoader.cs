@@ -1,3 +1,4 @@
+// Contains code adapted from Plutus (Apache-2.0); changed for Chrysalis. See THIRD-PARTY-NOTICES.md.
 using System.Collections.Immutable;
 using System.Runtime.InteropServices;
 using Chrysalis.Plutus.Types;
