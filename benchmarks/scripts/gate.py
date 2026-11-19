@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""One sealed performance gate: PC bytes and explicitly approved Fly timings."""
+"""One sealed performance gate: local allocation bytes and explicitly approved Fly timings."""
 import argparse
 import datetime as dt
 import fnmatch
@@ -25,6 +25,7 @@ import run_benchmarks as runner
 REPO = Path(__file__).resolve().parents[2]
 GATE = REPO / 'benchmarks/gate'
 PIN = '7c45d47c87c63520cea84212dbd01ecc8d372ac3'
+DIRECT_BATCH_COUNT = 5
 LOCAL_KEYS = ('corporaRoot', 'pinnedBaseline', 'flyOrg', 'flyTokenFile', 'flyLock')
 
 
@@ -147,19 +148,30 @@ def pinned_references(project, references):
     project.write_text(xml.tostring(root, encoding='unicode'))
 
 
-def measurement_inputs():
-    harness = REPO / 'benchmarks/Chrysalis.Benchmarks'
-    client = REPO / 'benchmarks/ReplayClient'
+def measurement_inputs(root=REPO):
+    harness = root / 'benchmarks/Chrysalis.Benchmarks'
+    client = root / 'benchmarks/ReplayClient'
     return dict(harness={file.name: file.read_bytes() for file in harness.glob('*.cs')},
                 harnessProject=(harness / 'Chrysalis.Benchmarks.csproj').read_text(),
                 client={file.name: file.read_bytes() for file in client.glob('*.cs')},
                 clientProject=(client / 'ReplayClient.csproj').read_text())
 
 
-def stage_side(info, label, output, local, inputs=None):
-    """Build one captured harness/client against either source or the pinned DLLs."""
+def nuget_packages():
+    # mbp-run supplies its isolated, warm package cache, which is also the offline feed.
+    return os.environ['NUGET_PACKAGES'] if sys.platform == 'darwin' else str(REPO.parent / '.nuget/packages')
+
+
+def stage_side(info, label, output, local, inputs=None, *, allocation_platform='pc'):
+    """Mac measures the side's probes with the target's Program.cs instrumentation."""
     inputs = inputs or measurement_inputs()
     source = export_side(info, output)
+    provenance = {}
+    if allocation_platform == 'mac':
+        instrumentation = inputs['harness']['Program.cs']
+        inputs = measurement_inputs(source)
+        provenance['sourceRunnerSha256'] = hashlib.sha256(inputs['harness']['Program.cs']).hexdigest()
+        inputs['harness']['Program.cs'] = instrumentation
     pinned = info['commit'] == PIN
     sdk = '10.0.301' if pinned else json.loads((source / 'global.json').read_text())['sdk']['version']
     tfm = 'net10.0' if pinned else 'net11.0'
@@ -184,14 +196,15 @@ def stage_side(info, label, output, local, inputs=None):
     # The nested client must not enter the harness SDK's default Compile glob.
     project = directory / 'Chrysalis.Benchmarks.csproj'
     project.write_text(project.read_text().replace('</Project>', '<ItemGroup><Compile Remove="client/**/*.cs" /></ItemGroup></Project>'))
-    env = session.environment(dict(NUGET_PACKAGES=str(REPO.parent / '.nuget/packages')))
+    env = session.environment(dict(NUGET_PACKAGES=nuget_packages()))
     cli = [runner.DOTNET, runner.DOTNET_ROOT / 'sdk' / sdk / 'dotnet.dll']
     isolation = ['-nodeReuse:false', '--disable-build-servers', '-p:UseSharedCompilation=false']
+    jobs = '-m:3' if sys.platform == 'darwin' else '-m:8'
     commands = []
     for name, project in [('harness', directory / 'Chrysalis.Benchmarks.csproj'), ('client', client_dir / 'ReplayClient.csproj')]:
         commands.append(dict(command=list(map(str, [*cli, 'restore', project, '--source', env['NUGET_PACKAGES'], *isolation])),
                              label=name + '-restore'))
-        commands.append(dict(command=list(map(str, [*cli, 'build', project, '-c', 'Release', '-m:8', '-warnaserror', '--no-restore', *isolation,
+        commands.append(dict(command=list(map(str, [*cli, 'build', project, '-c', 'Release', jobs, '-warnaserror', '--no-restore', *isolation,
                                                     *(['--no-dependencies'] if pinned or name == 'client' else [])])),
                              label=name + '-build',
                              copyClosureTo=str((directory if name == 'harness' else client_dir) / 'bin/Release' / tfm) if pinned else None))
@@ -208,7 +221,7 @@ def stage_side(info, label, output, local, inputs=None):
     return dict(commit=info['commit'], treeId=info['treeId'], sdk=sdk, tfm=tfm,
                 runtime='10.0.9' if pinned else '11.0.0',
                 harness=str(harness), client=str(client_dir / 'bin/Release' / tfm / 'ReplayClient.dll'),
-                dllSha256s=closure_hashes(client_dir / 'bin/Release' / tfm))
+                dllSha256s=closure_hashes(client_dir / 'bin/Release' / tfm), **provenance)
 
 
 def stage_worker(job_file):
@@ -325,7 +338,7 @@ def new_output():
 def make_job(row, baseline, candidate, local, *, pairs, design, scripts=None):
     scripts = scripts or REPO / 'benchmarks/scripts'
     fixtures = REPO / 'benchmarks/Chrysalis.Benchmarks'
-    generated = dict(CHRYSALIS_CORPORA=local['corporaRoot'], NUGET_PACKAGES=str(REPO.parent / '.nuget/packages'),
+    generated = dict(CHRYSALIS_CORPORA=local['corporaRoot'], NUGET_PACKAGES=nuget_packages(),
                      CHRYSALIS_BENCHMARK_DATA=str(fixtures), P1_RANGE=str(Path(local['corporaRoot']) / 'range.json'),
                      DOTNET_TieredPGO='1')
     if row.get('warmupMilliseconds') is not None:
@@ -372,6 +385,45 @@ def freeze_band(row, pairs, baseline, *, design, seal_id, raw_hash):
                 createdUtc=dt.datetime.now(dt.timezone.utc).isoformat())
 
 
+def direct_batch_bytes(row, data):
+    if row.get('processFilter') and {item['name'] for item in data} != set(row['processFilter'].split(',')):
+        raise ValueError('Direct process composition differs from frozen band/seal')
+    found = [item for item in data if item['name'] == row['id']]
+    if len(found) != 1 or len(found[0]['samples']) != DIRECT_BATCH_COUNT:
+        raise ValueError('Missing direct row or five batches')
+    if row.get('warmupMilliseconds') is not None and found[0].get('warmupMilliseconds') != row['warmupMilliseconds']:
+        raise ValueError('Direct warm-up differs from sealed protocol')
+    if 'macInvocations' in row and [sample.get('batch') if type(sample.get('batch')) is int else None
+                                    for sample in found[0]['samples']] != list(range(DIRECT_BATCH_COUNT)):
+        raise ValueError('Mac batch IDs must be exactly 0..N-1 in runner order')
+    if 'macInvocations' in row and any(sample.get('invocations') != row['macInvocations'] or 'ns' in sample
+                                       for sample in found[0]['samples']):
+        raise ValueError('Fixed Mac invocation count or bytes-only output differs from seal')
+    values = [sample['bytes'] for sample in found[0]['samples']]
+    if any(not math.isfinite(value) or value < 0 for value in values):
+        raise ValueError('Invalid absolute byte measurement')
+    return values
+
+
+def first_baseline_result(row, pairs):
+    try:
+        if len(pairs) != row['pairs'] or any(set(pair) != {'pair', 'candidate'} or pair['candidate']['platform'] != 'mac' for pair in pairs):
+            raise ValueError('Need all admitted candidate-only Mac processes')
+        batches = [direct_batch_bytes(row, pair['candidate']['data']) for pair in pairs]
+        maximum = max(max(values) for values in batches)
+        cap = row.get('maxBytes')
+        reason = 'Candidate-only absolute bytes; no target baseline'
+        if cap is not None:
+            reason += '; desk cap, not PC parity'
+        else:
+            reason += '; requires explicit desk acceptance'
+        return dict(status='FAIL' if cap is not None and maximum > cap else 'BASELINE', reason=reason,
+                    comparisonMeanBytes=st.mean(map(st.mean, batches)), candidateBatchBytes=batches,
+                    candidateMaxBatchBytes=maximum, candidateProcesses=len(batches), limit=cap)
+    except (KeyError, TypeError, ValueError) as error:
+        return dict(status='INCONCLUSIVE', reason=f'Invalid first baseline: {error}')
+
+
 def pair_values(row, pairs, design):
     sides = [[], []]
     batches = [[], []]
@@ -379,16 +431,7 @@ def pair_values(row, pairs, design):
         for index, side in enumerate(('baseline', 'candidate')):
             data = pair[side]['data']
             if row['kind'] == 'direct':
-                if row.get('processFilter') and {item['name'] for item in data} != set(row['processFilter'].split(',')):
-                    raise ValueError('Direct process composition differs from frozen band/seal')
-                found = [item for item in data if item['name'] == row['id']]
-                if len(found) != 1 or len(found[0]['samples']) != 5:
-                    raise ValueError('Missing direct row or five batches')
-                if row.get('warmupMilliseconds') is not None and found[0].get('warmupMilliseconds') != row['warmupMilliseconds']:
-                    raise ValueError('Direct warm-up differs from sealed protocol')
-                values = [sample['bytes'] for sample in found[0]['samples']]
-                if any(not math.isfinite(value) or value < 0 for value in values):
-                    raise ValueError('Invalid absolute byte measurement')
+                values = direct_batch_bytes(row, data)
                 batches[index].extend(values)
             else:
                 rows = data['warmupRows'][:1] if row['window'] == 'cold' else data['rows'][15:25] if design == 'short' else data['rows']
@@ -538,12 +581,12 @@ def band_sets(args, baseline, output, local):
     return output
 
 
-def select_rows(args, config, audit):
+def select_rows(args, config, audit, *, allocation_platform='pc', plan_entries=None):
     available = catalogue(config, audit)
     defaults = config['defaults'][args.mode]
     session_per_row = False
-    if args.plan:
-        payload = json.loads(Path(args.plan).read_text())
+    if args.plan or plan_entries is not None:
+        payload = plan_entries if plan_entries is not None else json.loads(Path(args.plan).read_text())
         session_per_row = payload.get('sessionPerRow', False) if isinstance(payload, dict) else False
         if type(session_per_row) is not bool:
             raise ValueError('sessionPerRow must be a boolean')
@@ -553,6 +596,8 @@ def select_rows(args, config, audit):
         rows = []
         known = {row['id']: row for row in available}
         allowed = {'id', 'kind', 'replay', 'manifest', 'pairs', 'aPairs', 'chargeSeconds', 'candidate', 'rowClass', 'explanation', 'region', 'expected'}
+        if allocation_platform == 'mac':
+            allowed |= {'firstBaseline', 'maxBytes'}
         for entry in selected:
             if not isinstance(entry, dict) or set(entry) - allowed or not isinstance(entry.get('id'), str):
                 raise ValueError('Invalid measurement entry fields')
@@ -581,6 +626,12 @@ def select_rows(args, config, audit):
             if row['kind'] == 'direct' and 'rule' not in row:
                 # New per-message rows are strict by definition, never assigned a band.
                 row['rule'] = 'D39'
+            if 'firstBaseline' in entry or 'maxBytes' in entry:
+                cap = entry.get('maxBytes', 0)
+                if (original or row['kind'] != 'direct' or entry.get('firstBaseline') is not True
+                        or type(cap) not in (int, float) or not math.isfinite(cap) or cap < 0):
+                    raise ValueError('Only a new direct row may declare a first baseline or desk cap')
+                row['rule'] = 'baseline'
             if row['kind'] == 'replay':
                 if row.get('replay') not in config['replays']:
                     raise ValueError('Unknown replay')
@@ -596,7 +647,15 @@ def select_rows(args, config, audit):
             rows.append(row)
     else:
         patterns = args.only.split(',') if args.only else ['*']
+        if allocation_platform == 'mac' and any(not any(fnmatch.fnmatchcase(row['id'], p) for row in available) for p in patterns):
+            raise ValueError('Unmatched Mac allocation selector')
         rows = [row for row in available if any(fnmatch.fnmatchcase(row['id'], pattern) for pattern in patterns)]
+        if allocation_platform == 'mac' and not args.only:
+            rows = [row for row in rows if row['kind'] == 'direct']
+    if allocation_platform == 'mac' and any(row['kind'] == 'time' for row in rows):
+        raise ValueError('Mac allocation jobs do not select timing rows')
+    if allocation_platform == 'mac' and len({row['kind'] for row in rows}) > 1:
+        raise ValueError('Mac jobs require separate direct and indicative selections')
     if not rows or len({row['id'] for row in rows}) != len(rows):
         raise ValueError('No rows selected or duplicate row ids')
     if session_per_row and (args.mode != 'change' or any(
@@ -641,18 +700,27 @@ def subset_reasons(seal, mode=None):
 
 
 def outcome(seal, results, *, mode=None):
-    statuses = [results.get(row['id'], {}).get('status', 'INCONCLUSIVE') for row in seal['rows'] if row.get('rowClass') != 'recorded-only']
+    statuses = [results.get(row['id'], {}).get('status', 'INCONCLUSIVE') for row in seal['rows'] if row.get('rowClass') != 'recorded-only'
+                and not (seal.get('allocationPlatform') == 'mac' and row['kind'] == 'replay')]
     if 'FAIL' in statuses:
         return 'FAIL'
+    if seal.get('allocationPlatform') == 'mac':
+        statuses = [
+            'CLEAR' if row.get('firstBaseline') and 'maxBytes' in row and value == 'BASELINE' else value
+            for row in seal['rows'] if row.get('rowClass') != 'recorded-only' and row['kind'] != 'replay'
+            for value in [results.get(row['id'], {}).get('status', 'INCONCLUSIVE')]
+        ]
+        if 'BASELINE' in statuses and all(status in ('PASS', 'CLEAR', 'BASELINE') for status in statuses):
+            return 'FIRST BASELINES REQUIRE DESK ACCEPTANCE'
     if any(status not in ('PASS', 'CLEAR') for status in statuses):
         return 'INCONCLUSIVE'
     return 'SUBSET' if subset_reasons(seal, mode) else 'RELEASE PASS'
 
 
-def seal_bands(rows):
+def seal_bands(rows, *, allocation_platform='pc'):
     result = {}
     for row in rows:
-        if row['kind'] == 'time' or row.get('rule') == 'D39':
+        if row['kind'] == 'time' or row.get('rule') in ('D39', 'baseline') or (allocation_platform == 'mac' and row['kind'] == 'replay'):
             continue
         runtime = row['sides']['baseline']['runtime']
         key = band_key(row, runtime, row['design'])
@@ -664,13 +732,18 @@ def seal_bands(rows):
     return result
 
 
-def row_result(row, pairs, mode, sealed_band, design, control=None):
+def row_result(row, pairs, mode, sealed_band, design, control=None, *, allocation_platform='pc'):
     if row['kind'] == 'time':
         return dict(status='INCONCLUSIVE', reason='No Fly time measurement; PC time never gates')
-    if any(pair[side].get('platform') != 'pc' for pair in pairs + (control or []) for side in ('baseline', 'candidate')):
-        raise ValueError('Bytes verdicts require PC data')
+    if any(pair[side].get('platform') != allocation_platform for pair in pairs + (control or []) for side in ('baseline', 'candidate')):
+        host = 'Mac' if allocation_platform == 'mac' else 'PC'
+        raise ValueError(f'Bytes verdicts require {host} data')
     try:
         left, right, batches = pair_values(row, pairs, design)
+        if allocation_platform == 'mac' and row['kind'] == 'replay':
+            if not pairs:
+                return dict(status='INDICATIVE', reason='No replay bytes recorded')
+            return dict(stats.paired_difference(left, right), status='INDICATIVE', reason='Mac replay never gates')
         band = sealed_band['record']['absoluteNoiseBandBytes'] if sealed_band else None
         plateaus = []
         if row['kind'] == 'replay' and row['window'] == 'steady':
@@ -705,7 +778,10 @@ def phase_pairs(output, index, row, phase, count):
     if len(pairs) != count or [pair['pair'] for pair in pairs] != list(range(1, count + 1)):
         raise ValueError('Pair count/order differs from seal')
     for pair in pairs:
-        for side in ('baseline', 'candidate'):
+        sides = ('candidate',) if row.get('firstBaseline') else ('baseline', 'candidate')
+        if row.get('firstBaseline') and (phase != 'first' or set(pair) != {'pair', 'candidate'}):
+            raise ValueError('First baseline data must contain only candidate processes')
+        for side in sides:
             spec = row['sides']['baseline' if phase == 'noise' else side]
             expected = {key: spec[key] for key in ('commit', 'treeId', 'runtime', 'dllSha256s')}
             if pair[side].get('identity') != expected:
@@ -726,26 +802,36 @@ def report(output, mode=None):
     if seal.get('ruleVersion') != stats.RULE_VERSION:
         raise ValueError('Unsupported sealed rule version')
     applied_mode = mode or seal['mode']
+    allocation_platform = seal.get('allocationPlatform', 'pc')
+    if allocation_platform not in ('pc', 'mac') or (allocation_platform == 'mac' and applied_mode != 'change'):
+        raise ValueError('Invalid allocation platform/mode')
+    scoring = dict(allocation_platform=allocation_platform)
     index = json.loads((output / 'data/index.json').read_text()) if (output / 'data/index.json').exists() else []
     results, load = {}, []
     for row in seal['rows']:
         if row['kind'] == 'time':
             continue
         phases = [phase_pairs(output, index, row, phase, row['pairs']) for phase in ('first', 'repeat')]
+        if row.get('firstBaseline'):
+            if allocation_platform != 'mac':
+                raise ValueError('First-baseline mode requires a Mac allocation seal')
+            first = first_baseline_result(row, phases[0])
+            results[row['id']] = dict(first, sides=row['sides'])
+            continue
         load += [value for pairs in phases for pair in pairs for side in ('baseline', 'candidate') for value in pair[side].get('load', [])]
         band = seal['bands'].get(row.get('bandKey'))
-        first = row_result(row, phases[0], applied_mode, band, row['design'])
+        first = row_result(row, phases[0], applied_mode, band, row['design'], **scoring)
         result = first
         if phases[1]:
-            if seal['mode'] != 'release' or row_result(row, phases[0], seal['mode'], band, row['design'])['status'] != 'FAIL':
+            if seal['mode'] != 'release' or row_result(row, phases[0], seal['mode'], band, row['design'], **scoring)['status'] != 'FAIL':
                 raise ValueError('Repeat was not allowed by sealed release rule')
-            repeat = row_result(row, phases[1], applied_mode, band, row['design'])
-            result = row_result(row, phases[0] + phases[1], applied_mode, band, row['design'])
+            repeat = row_result(row, phases[1], applied_mode, band, row['design'], **scoring)
+            result = row_result(row, phases[0] + phases[1], applied_mode, band, row['design'], **scoring)
         control = phase_pairs(output, index, row, 'noise', row['pairs'] * (2 if phases[1] else 1))
         if control:
             if row.get('rule') != 'D39' or not result.get('needsNoiseControl'):
                 raise ValueError('A/A control was not allowed by the D39 precondition')
-            result = row_result(row, phases[0] + phases[1], applied_mode, band, row['design'], control=control)
+            result = row_result(row, phases[0] + phases[1], applied_mode, band, row['design'], control=control, **scoring)
             load += [value for pair in control for side in ('baseline', 'candidate') for value in pair[side].get('load', [])]
         if phases[1]:
             result.update(first=first, repeat=repeat)
@@ -758,7 +844,8 @@ def report(output, mode=None):
     title = f'gate {applied_mode} · ' + ('canonical' if seal['canonical'] else 'non-canonical sides')
     if applied_mode != seal['mode']:
         title += f' · re-derived under {applied_mode}; not the sealed rule'
-    lines = [title, 'bytes · this PC · direct B/op, replay B/block · load ' + (f'{min(load):.2f}–{max(load):.2f}' if load else 'not measured'),
+    host = 'MacBook Pro · direct B/op, replay B/block (indicative)' if allocation_platform == 'mac' else 'this PC · direct B/op, replay B/block'
+    lines = [title, f'bytes · {host} · load ' + (f'{min(load):.2f}–{max(load):.2f}' if load else 'not measured'),
              f'{"benchmark":<45} {"rule":>8} {"baseline":>12} {"candidate":>12} {"difference [95%]":>30} {"limit":>10} verdict']
     if retry:
         lines.insert(1, f'Controls retry ({retry["kind"]}); allocation evidence remains in the original seal {retry["originalSealId"]}')
@@ -801,6 +888,15 @@ def report(output, mode=None):
                 ci = previous.get('confidence95DifferenceBytes')
                 if ci:
                     lines.append(f'  {phase}: {previous["baselineMeanBytes"]:.3f} / {previous["comparisonMeanBytes"]:.3f}; difference {previous["meanDifferenceBytes"]:.3f} [{ci[0]:.3f}, {ci[1]:.3f}]')
+    if allocation_platform == 'mac':
+        sources = seal.get('macSourceRunnerSha256s', {})
+        if sources.get('baseline') != sources.get('candidate'):
+            lines.append('Candidate changes Program.cs; both measured builds used the target-owned Program.cs instead.')
+        first_ids = [row['id'] for row in seal['rows'] if row.get('firstBaseline')]
+        if first_ids:
+            lines.append('First baselines (not paired PASS):')
+            for key in first_ids:
+                lines.append(f'  {key}: {results[key]["status"]} · {results[key]["reason"]}')
     lines += time_lines
     time_modes = {applied_mode: timed}
     for number, plan in enumerate(seal.get('timePlans', [])):
@@ -841,7 +937,8 @@ def measurement_groups(rows, counts=None):
         if row['kind'] == 'time':
             continue
         key = (row['sides']['candidate']['commit'], row['sides']['candidate']['treeId'], row['sides']['candidate']['runtime'], row['kind'], row.get('replay'), row['design'],
-               counts[row['id']] if counts else row['pairs'], row['sides']['baseline']['runtime'], row.get('processFilter'), row.get('warmupMilliseconds'))
+               counts[row['id']] if counts else row['pairs'], row['sides'].get('baseline', {}).get('runtime'),
+               row.get('processFilter'), row.get('warmupMilliseconds'))
         if row.get('rule') == 'range' and row.get('processFilter'):
             cohort = key[:6] + key[7:]
             count = counts[row['id']] if counts else row['pairs']
@@ -856,11 +953,38 @@ def measurement_groups(rows, counts=None):
     return list(groups.values())
 
 
-def run_command(args, output=None, local=None):
+def verify_mac_probe_inventory(rows, known, names):
+    """Catalogue absence alone never authorizes a candidate-only recording."""
+    unknown = {row['id']: row for row in rows if row['kind'] == 'direct' and row['id'] not in known}
+    if not unknown:
+        if names is not None:
+            raise ValueError('Unexpected target probe inventory')
+        return
+    if (not isinstance(names, list) or not names or any(type(name) is not str or '.' not in name for name in names)
+            or names != sorted(set(names))):
+        raise ValueError('Missing or malformed target probe inventory')
+    for key, row in unknown.items():
+        if key in names and row.get('firstBaseline'):
+            raise ValueError(f'{key} resolves on the target; remove firstBaseline and compare it paired under D39')
+        if key not in names and not row.get('firstBaseline'):
+            raise ValueError(f'{key} is not a target probe; only an explicit firstBaseline admission may record it')
+
+
+def discover_mac_probes(baseline, output):
+    env = session.environment(dict(CHRYSALIS_BENCHMARK_RESULTS=str(output / 'input')))
+    execute_logged([runner.DOTNET, '--fx-version', baseline['runtime'], baseline['harness'], 'mac-probes'],
+                   output / 'build' / 'target-probes.log', cwd=REPO, env=env)
+    return json.loads((output / 'input' / 'mac-probes.json').read_text())
+
+
+def run_command(args, output=None, local=None, *, allocation_platform='pc'):
+    if allocation_platform == 'mac' and (args.mode != 'change' or session.detect_platform() != 'mac'
+                                         or os.environ.get('CHRYSALIS_MBP_MEMORY_CAP') != '1'):
+        raise ValueError('Mac allocation requires native arm64 change mode and mbp-run --memory-log')
     local = local if local is not None else local_config()
     config = json.loads((GATE / 'gated.json').read_text())
     audit = json.loads((REPO / 'benchmarks/Chrysalis.Benchmarks/audit-allocations.json').read_text())
-    rows = select_rows(args, config, audit)
+    rows = select_rows(args, config, audit, allocation_platform=allocation_platform)
     for row in rows:
         if row['kind'] != 'time':
             row['corpusId'] = corpus_identity(row, local)
@@ -869,24 +993,55 @@ def run_command(args, output=None, local=None):
     scripts = snapshot_scripts(output)
     infos = {value: resolve_side(value, args.mode) for value in
              dict.fromkeys([args.baseline, args.candidate, *[row['candidate'] for row in rows if 'candidate' in row]])}
+    if allocation_platform == 'mac' and any(info['commit'] == PIN for info in infos.values()):
+        raise ValueError('The archived .NET 10 DLL closure is not a native Mac merge side')
     inputs = measurement_inputs()
-    staged = {value: stage_side(info, f'side-{number}', output, local, inputs) for number, (value, info) in enumerate(infos.items())}
+    staged = {value: stage_side(info, f'side-{number}', output, local, inputs,
+                                **(dict(allocation_platform='mac') if allocation_platform == 'mac' else {}))
+              for number, (value, info) in enumerate(infos.items())}
     bdn = {side['dllSha256s'].get('BenchmarkDotNet.dll') for side in staged.values()}
     if None in bdn or len(bdn) != 1:
         raise ValueError('BenchmarkDotNet DLL versions differ; refusing measurements')
     baseline, candidate = staged[args.baseline], staged[args.candidate]
     baseline['previousAlpha'] = previous_alpha(candidate['commit']) == baseline['commit']
+    target_inventory = None
+    if allocation_platform == 'mac':
+        known = {row['id'] for row in catalogue(config, audit)}
+        if any(row['kind'] == 'direct' and row['id'] not in known for row in rows):
+            target_inventory = discover_mac_probes(baseline, output)
+        verify_mac_probe_inventory(rows, known, target_inventory)
     for row in rows:
         right = staged[row.get('candidate', args.candidate)]
         left = cold_companion(baseline, right) if row.get('window') == 'cold' else baseline
-        row['sides'] = dict(baseline=public_side(left), candidate=public_side(right))
+        row['sides'] = dict(candidate=public_side(right))
+        if not row.get('firstBaseline'):
+            row['sides'] = dict(baseline=public_side(left), **row['sides'])
     measurement_groups(rows)  # fix every process filter before sealing, including lazy A/A
-    bands = seal_bands(rows)
+    fixed_counts = {}
+    if allocation_platform == 'mac':
+        fixed_counts = json.loads((GATE / 'mac-direct-counts.json').read_text())
+        for row in rows:
+            if row['kind'] == 'direct':
+                row['macInvocations'] = fixed_counts.setdefault(row['id'], 128)  # ad-hoc rows
+    bands = seal_bands(rows, allocation_platform=allocation_platform)
     seal = dict(schemaVersion=1, mode=args.mode, ruleVersion=stats.RULE_VERSION, rows=rows, bands=bands,
                 canonical=canonical(baseline, candidate) and all(row['sides']['candidate']['commit'] == candidate['commit'] for row in rows),
                 timeScopeDecided=True, gated={key: value for key, value in config.items() if not key.startswith('_')},
                 releaseSet=[row['id'] for row in catalogue(config, audit) if row.get('rowClass') != 'recorded-only'],
                 files={file.relative_to(output).as_posix(): digest(file) for file in scripts.iterdir() if file.is_file()})
+    if allocation_platform == 'mac':
+        seal['allocationPlatform'] = allocation_platform
+        seal['macSourceRunnerSha256s'] = {key: side['sourceRunnerSha256'] for key, side in
+                                         [('baseline', baseline), ('candidate', candidate)]}
+        if target_inventory is not None:
+            seal['files']['input/mac-probes.json'] = digest(output / 'input/mac-probes.json')
+            seal['macProbeInventorySide'] = public_side(baseline)
+        for name, content in {'Program.cs': inputs['harness']['Program.cs'],
+                              'mac-direct-counts.json': (GATE / 'mac-direct-counts.json').read_bytes()}.items():
+            artifact = output / 'input' / name
+            artifact.write_bytes(content)
+            seal['files'][artifact.relative_to(output).as_posix()] = digest(artifact)
+        seal['macRunnerSha256'] = seal['files']['input/Program.cs']
     import gate_bundle
     timing = gate_bundle.prepare(output, rows, staged, dict(config, _mode=args.mode), local)
     seal['files'].update(timing.pop('files', {}))
@@ -901,11 +1056,17 @@ def run_command(args, output=None, local=None):
         for number, members in enumerate(measurement_groups(selected, counts)):
             row = members[0]
             name = row.get('candidate', args.candidate)
-            runtime = row['sides']['baseline']['runtime']
+            runtime = row['sides'].get('baseline', baseline)['runtime']
             left = dict(baseline, runtime=runtime)
             right = left if phase == 'noise' else staged[name]
             pairs = counts[row['id']] if counts else row['pairs']
             job = make_job(row, left, right, local, pairs=pairs, design='short' if row['design'] == 'direct' else row['design'], scripts=scripts)
+            if allocation_platform == 'mac' and row['kind'] == 'direct':
+                job['macBatchCounts'] = {name: fixed_counts[name] for name in job['filter'].split(',')}
+                job['macBatchTotal'] = DIRECT_BATCH_COUNT
+                if row.get('firstBaseline'):
+                    job['candidateOnly'] = True
+                    job['sides'].pop('baseline')
             dest = output / 'data' / f'{phase}-{number:03}'
             execute_job(job, dest)
             index.append(dict(ids=[item['id'] for item in members], phase=phase,

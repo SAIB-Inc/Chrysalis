@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Sealed fresh-process pairs, on the PC for bytes and on Fly for time.
+"""Sealed fresh-process pairs, local for bytes and on Fly for time.
 
 No resource creation, inherited credentials, process command lines, adaptive
 warm-ups or retries. The caller starts this script through heavy on the PC.
@@ -35,6 +35,10 @@ def detect_platform(expected_region='iad'):
         if not app or region != expected_region or os.cpu_count() != 8 or platform.machine() != 'x86_64':
             raise ValueError(f'Named 8-CPU x64 {expected_region} Fly machine required')
         return 'fly'
+    if sys.platform == 'darwin':
+        if platform.machine() != 'arm64':
+            raise ValueError('Native arm64 Mac required for allocation jobs')
+        return 'mac'
     return 'pc'
 
 
@@ -156,13 +160,19 @@ def steal_fraction(before, after):
     return delta[7] / sum(delta)
 
 
-def stop(process):
+def stop(process, *, own_group=True):
     if process.poll() is None:
-        os.killpg(process.pid, signal.SIGTERM)
+        if own_group:
+            os.killpg(process.pid, signal.SIGTERM)
+        else:
+            process.terminate()
         try:
             process.wait(timeout=5)
         except subprocess.TimeoutExpired:
-            os.killpg(process.pid, signal.SIGKILL)
+            if own_group:
+                os.killpg(process.pid, signal.SIGKILL)
+            else:
+                process.kill()
             process.wait()
 
 
@@ -172,13 +182,15 @@ def monitored_process(command, root, env, dest, timeout, server_pid=None, *, obs
     dest.mkdir(parents=True, exist_ok=False)
     platform = platform or detect_platform()
     on_fly = platform == 'fly'
+    # On Mac keep the client in mbp-run's capped and cancellable group.
+    own_group = platform != 'mac'
     before = snapshot() if on_fly else clock()
     known = ancestors(os.getpid(), before['processes']) if on_fly else set()
     marks, samples, foreign = {}, [], {}
     previous = None
     process = subprocess.Popen(list(map(str, command)), cwd=root, env=env,
                                stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                               stderr=subprocess.STDOUT, start_new_session=True)
+                               stderr=subprocess.STDOUT, start_new_session=own_group)
     deadline, error, pending = time.monotonic() + timeout, None, b''
     hz = os.sysconf('SC_CLK_TCK') if on_fly else None
 
@@ -232,11 +244,11 @@ def monitored_process(command, root, env, dest, timeout, server_pid=None, *, obs
         except Exception as exception:
             error = f'{type(exception).__name__}: {exception}'
         finally:
-            stop(process)
+            stop(process, own_group=own_group)
             process.stdin.close()
             process.stdout.close()
     after = snapshot() if on_fly else clock()
-    reasons = [] if on_fly else ['PC time never gates']
+    reasons = [] if on_fly else ['Mac time never gates' if platform == 'mac' else 'PC time never gates']
     if set(marks) != {'MEASURED_START', 'MEASURED_END'}:
         reasons.append('Missing measured-start or measured-end mark')
     elif on_fly:
@@ -307,7 +319,7 @@ def side_quiescence(rows):
 
 
 def member(spec, job, dest, *, region='iad'):
-    """One client/direct process; called inside the PC's heavy invocation."""
+    """One client/direct process in the caller's admitted job."""
     dest = Path(dest)
     dest.mkdir(parents=True, exist_ok=False)
     platform = detect_platform(region)
@@ -318,7 +330,11 @@ def member(spec, job, dest, *, region='iad'):
     command = [job['dotnet'], '--fx-version', spec['runtime'], spec['harness' if job['kind'] == 'direct' else 'client']]
     server = log = None
     try:
-        if job['kind'] == 'direct':
+        if 'macBatchCounts' in job:
+            if platform != 'mac' or job['kind'] != 'direct':
+                raise ValueError('Fixed invocation counts require native Mac direct bytes')
+            command += ['mac-bytes', job['filter'], json.dumps(job['macBatchCounts']), str(job['macBatchTotal'])]
+        elif job['kind'] == 'direct':
             command += ['direct', job.get('filter', '*')]
         else:
             if job['replay'] == 'tcp':
@@ -327,7 +343,7 @@ def member(spec, job, dest, *, region='iad'):
                 server = subprocess.Popen([sys.executable, job['server'], '--capture', job['capture'],
                                            '--ready', str(ready), '--summary', str(dest / 'server-summary.json'),
                                            '--connections', '1', '--send-mode', 'captured-chunks'],
-                                          env=env, stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
+                                          env=env, stdout=log, stderr=subprocess.STDOUT, start_new_session=platform != 'mac')
                 deadline = time.monotonic() + 30
                 while not ready.exists():
                     if server.poll() is not None or time.monotonic() > deadline:
@@ -358,7 +374,7 @@ def member(spec, job, dest, *, region='iad'):
                                       aggregateSteal=steal_fraction(result['before']['cpuStat']['cpu'], result['after']['cpuStat']['cpu']) if platform == 'fly' else None))
     finally:
         if server:
-            stop(server)
+            stop(server, own_group=platform != 'mac')
         if log:
             log.close()
 
@@ -369,9 +385,11 @@ def run(job, output):
     output.mkdir(parents=True, exist_ok=False)
     save(output / 'job.json', job)
     pairs = []
+    if job.get('candidateOnly') and (job['kind'] != 'direct' or 'macBatchCounts' not in job or set(job['sides']) != {'candidate'}):
+        raise ValueError('Candidate-only processes require a direct Mac bytes job')
     for number in range(1, job['pairs'] + 1):
         pair = dict(pair=number)
-        order = ('baseline', 'candidate') if number % 2 else ('candidate', 'baseline')
+        order = ('candidate',) if job.get('candidateOnly') else (('baseline', 'candidate') if number % 2 else ('candidate', 'baseline'))
         for side in order:
             pair[side] = member(job['sides'][side], job, output / f'pair-{number:03}' / side)
             print(job.get('id', job['kind']), number, side, flush=True)

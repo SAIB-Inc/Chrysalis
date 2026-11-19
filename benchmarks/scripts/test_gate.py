@@ -36,6 +36,58 @@ def fixture(root, *, mode='release', rows=None):
 
 
 class GateTests(unittest.TestCase):
+    def test_mac_defaults_to_direct_and_refuses_explicit_timing(self):
+        def selections(only):
+            config = json.loads((gate.GATE / 'gated.json').read_text())
+            audit = json.loads((gate.REPO / 'benchmarks/Chrysalis.Benchmarks/audit-allocations.json').read_text())
+            args = SimpleNamespace(mode='change', plan=None, only=only)
+            return gate.select_rows(args, config, audit, allocation_platform='mac')
+
+        self.assertEqual({row['kind'] for row in selections(None)}, {'direct'})
+        self.assertEqual({row['kind'] for row in selections('replay/*')}, {'replay'})
+        with self.assertRaisesRegex(ValueError, 'timing'):
+            selections('*')
+
+    def test_mac_report_uses_sealed_platform_and_rejects_mixed_data(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            seal = fixture(root, mode='change')
+            seal['allocationPlatform'] = 'mac'
+            gate.write_seal(root, seal)
+            path = root / 'data/first.json'
+            pairs = json.loads(path.read_text())
+            index_path = root / 'data/index.json'
+            index = json.loads(index_path.read_text())
+
+            def update():
+                gate.session.save(path, pairs)
+                index[0]['sha256'] = gate.digest(path)
+                gate.session.save(index_path, index)
+
+            with self.assertRaisesRegex(ValueError, 'require Mac data'):
+                gate.report(root)
+            for raw in pairs:
+                for side in ('baseline', 'candidate'):
+                    raw[side]['platform'] = 'mac'
+            update()
+            report = gate.report(root)
+            self.assertEqual(report['rows']['Example']['status'], 'PASS')
+            self.assertIn('bytes · MacBook Pro', report['text'])
+            pairs[-1]['candidate']['platform'] = 'pc'
+            update()
+            with self.assertRaisesRegex(ValueError, 'require Mac data'):
+                gate.report(root)
+
+    def test_mac_replay_is_indicative_even_for_a_large_delta(self):
+        row = dict(id='replay/offline/cold', kind='replay', rule='replay', window='cold')
+        pairs = [dict(baseline=dict(platform='mac', data=dict(warmupRows=[dict(bytesPerBlock=10)])),
+                      candidate=dict(platform='mac', data=dict(warmupRows=[dict(bytesPerBlock=1000)]))) for _ in range(5)]
+        result = gate.row_result(row, pairs, 'change', None, 'short', allocation_platform='mac')
+        self.assertEqual((result['status'], result['meanDifferenceBytes']), ('INDICATIVE', 990))
+        seal = dict(mode='change', canonical=False, rows=[row], releaseSet=[row['id']], timeScopeDecided=True,
+                    allocationPlatform='mac')
+        self.assertEqual(gate.outcome(seal, {row['id']: result}), 'SUBSET')
+
     def test_local_file_lists_only_missing_names(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / 'local.json'
