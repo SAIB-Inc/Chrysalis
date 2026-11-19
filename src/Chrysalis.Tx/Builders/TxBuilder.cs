@@ -1439,28 +1439,17 @@ public class TxBuilder
             }
         }
 
-        // ── Tag 3: Withdrawal redeemers (sorted by reward address) ──
-        if (builder.CurrentWithdrawals?.Value is not null)
+        // ── Tag 3: Withdrawal redeemers (the account's place in the ledger's order) ──
+        // The body gets its withdrawals only when first built, so count the directives' accounts.
+        Dictionary<string, int> withdrawalIndices = RedeemerIndices(
+            _withdrawalDirectives.Select(w => (ReadOnlyMemory<byte>)Convert.FromHexString(w.RewardAddressHex)),
+            RewardAccountComparer.Instance);
+        foreach (WithdrawalDirective wd in _withdrawalDirectives)
         {
-            List<string> sortedWithdrawalAddresses = [.. builder.CurrentWithdrawals.Value.Keys
-                .Select(k => Convert.ToHexString(k.Value.Span))
-                .Order(StringComparer.OrdinalIgnoreCase)];
-
-            foreach (WithdrawalDirective wd in _withdrawalDirectives)
+            if (wd.Redeemer is not null && withdrawalIndices.TryGetValue(wd.RewardAddressHex, out int wdIndex))
             {
-                if (wd.Redeemer is null)
-                {
-                    continue;
-                }
-
-                string addrUpper = wd.RewardAddressHex.ToUpperInvariant();
-                int wdIndex = sortedWithdrawalAddresses.FindIndex(
-                    a => a.Equals(addrUpper, StringComparison.OrdinalIgnoreCase));
-                if (wdIndex >= 0)
-                {
-                    redeemerMap[RedeemerKey.Create(3, (ulong)wdIndex)] =
-                        RedeemerValue.Create(wd.Redeemer, placeholderExUnits);
-                }
+                redeemerMap[RedeemerKey.Create(3, (ulong)wdIndex)] =
+                    RedeemerValue.Create(wd.Redeemer, placeholderExUnits);
             }
         }
 

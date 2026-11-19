@@ -4,6 +4,7 @@ using Chrysalis.Codec.Types.Cardano.Core.Certificates;
 using Chrysalis.Codec.Types.Cardano.Core.Common;
 using Chrysalis.Codec.Types.Cardano.Core.Transaction;
 using Chrysalis.Codec.Types.Cardano.Core.TransactionWitness;
+using Chrysalis.Plutus.VM.Models;
 using Chrysalis.Tx.Builders;
 using Chrysalis.Tx.Models;
 using Chrysalis.Tx.Models.Cbor;
@@ -23,6 +24,8 @@ public sealed class RedeemerPointerTests
     private static readonly byte[] ScriptHash = [.. Enumerable.Repeat((byte)0x0C, 28)];
     private static readonly byte[] OtherScriptHash = [.. Enumerable.Repeat((byte)0x0D, 28)];
     private static readonly byte[] PoolHash = [.. Enumerable.Repeat((byte)0x0E, 28)];
+    private static readonly string ScriptAccount = "F0" + Convert.ToHexString(ScriptHash);
+    private static readonly string KeyAccount = "E0" + Convert.ToHexString([.. Enumerable.Repeat((byte)0x0F, 28)]);
 
     private static readonly ResolvedInput Funds = new(
         TransactionInput.Create(Convert.FromHexString(BlockfrostTests.Hash), 0),
@@ -76,6 +79,40 @@ public sealed class RedeemerPointerTests
         Assert.Equal(expected, Pointers(await Build(template)));
     }
 
+    /// <summary>TxBuilder indexes withdrawal redeemers in ledger order (script accounts first) on every draft and final tx.</summary>
+    [Fact]
+    public async Task TxBuilderWithdrawalRedeemerPointsAtTheScriptAccountFirst()
+    {
+        (PostMaryTransaction tx, List<Dictionary<(int Tag, ulong Index), string>> drafts) = await Complete(builder => builder
+            .AddWithdrawal(KeyAccount, 0)
+            .AddWithdrawal(ScriptAccount, 0, Convert.ToHexString(ScriptHash), PlutusInt.Create(5)));
+
+        Dictionary<(int Tag, ulong Index), string> expected = new() { [(3, 0)] = Data(5) };
+        Assert.Equal(expected, Pointers(tx));
+        Assert.NotEmpty(drafts);
+        Assert.All(drafts, draft => Assert.Equal(expected, draft));
+    }
+
+    /// <summary>Template withdrawal pointers follow the body's ledger order and skip empty-From configs even when an empty alias exists.</summary>
+    [Fact]
+    public async Task TemplateWithdrawalRedeemerPointsAtTheScriptAccountFirst()
+    {
+        TransactionTemplateBuilder<int> template = Template()
+            .AddStaticParty("", Bech32(ScriptAccount))
+            .AddStaticParty("key", Bech32(KeyAccount))
+            .AddStaticParty("script", Bech32(ScriptAccount))
+            .AddWithdrawal((options, _) => options.From = "key")
+            .AddWithdrawal((options, _) =>
+            {
+                options.From = "script";
+                options.SetRedeemerBuilder(_ => PlutusInt.Create(5));
+            })
+            .AddWithdrawal((options, _) => options.SetRedeemerBuilder(_ => PlutusInt.Create(99)));
+
+        Dictionary<(int Tag, ulong Index), string> expected = new() { [(3, 0)] = Data(5) };
+        Assert.Equal(expected, Pointers(await Build(template)));
+    }
+
     private static CliSnapshotProvider Provider() => new(CliVectors.Load(CliVectors.Root).Parameters(CliVectors.G1), [Funds]);
 
     private static TransactionTemplateBuilder<int> Template() => TransactionTemplateBuilder.Create<int>(Provider())
@@ -100,6 +137,24 @@ public sealed class RedeemerPointerTests
 
     private static async Task<PostMaryTransaction> Build(TransactionTemplateBuilder<int> template) =>
         (PostMaryTransaction)await template.Build(eval: false)(0);
+
+    private static string Bech32(string account) => WalletAddress.FromBytes(Convert.FromHexString(account)).ToBech32();
+
+    private static async Task<(PostMaryTransaction Tx, List<Dictionary<(int Tag, ulong Index), string>> Drafts)> Complete(Func<TxBuilder, TxBuilder> setup)
+    {
+        List<Dictionary<(int Tag, ulong Index), string>> drafts = [];
+        TxBuilder builder = new TxBuilder(Provider())
+            .AddUnspentOutputs([Funds])
+            .SetChangeAddress(BlockfrostTests.Address)
+            .PayLovelace(BlockfrostTests.Address, 2_000_000)
+            .UseEvaluator((draft, _) =>
+            {
+                drafts.Add(Pointers(draft));
+                return Task.FromResult<IReadOnlyList<EvaluationResult>>([]);
+            });
+
+        return (await setup(builder).Complete(), drafts);
+    }
 
     private static Dictionary<(int Tag, ulong Index), string> Pointers(PostMaryTransaction tx)
     {
