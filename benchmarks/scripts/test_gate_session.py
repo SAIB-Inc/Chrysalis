@@ -26,6 +26,21 @@ def data(short=False):
 
 
 class SessionTests(unittest.TestCase):
+    def test_native_mac_detected_without_fly_metadata(self):
+        with patch.dict(os.environ, {}, clear=True), patch.object(session.sys, 'platform', 'darwin'), \
+                patch.object(session.platform, 'machine', return_value='arm64'):
+            self.assertEqual(session.detect_platform(), 'mac')
+
+    def test_mac_member_keeps_wrapper_group_without_proc_sampling(self):
+        with tempfile.TemporaryDirectory() as directory, patch.object(session, 'snapshot', side_effect=AssertionError):
+            root = Path(directory)
+            command = [sys.executable, '-c', 'import os; print(os.getpgrp())']
+            result = session.monitored_process(command, root, session.environment({}), root / 'run', 5,
+                                               observed=False, platform='mac')
+            self.assertEqual(result['exitCode'], 0)
+            self.assertEqual(int((root / 'run/console.log').read_text()), os.getpgrp())
+            self.assertIn('Mac time never gates', result['timingRejectedReasons'])
+
     def test_host_fingerprint_is_an_allowlist_of_independent_reads(self):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
@@ -198,7 +213,7 @@ class ReviewSessionTests(unittest.TestCase):
         self.assertEqual(calls, [('left', 'baseline'), ('right', 'candidate'), ('right', 'candidate'), ('left', 'baseline'), ('left', 'baseline'), ('right', 'candidate')])
 
     def test_platform_detects_machine_not_job_default(self):
-        with patch.dict(os.environ, {}, clear=True):
+        with patch.dict(os.environ, {}, clear=True), patch.object(session.sys, 'platform', 'linux'):
             self.assertEqual(session.detect_platform(), 'pc')
         with patch.dict(os.environ, dict(FLY_APP_NAME='performance-test', FLY_REGION='iad'), clear=True), \
                 patch.object(session.os, 'cpu_count', return_value=8), patch.object(session.platform, 'machine', return_value='x86_64'):

@@ -1,6 +1,6 @@
 # Performance gate
 
-Run `python3 benchmarks/scripts/gate.py run --mode change --baseline <commit>
+On Linux, run `python3 benchmarks/scripts/gate.py run --mode change --baseline <commit>
 --candidate <commit-or-working-tree> [--only <comma-separated-patterns> | --plan
 <file>]`. `release` mode accepts commits only. The command builds immutable
 source exports with one captured harness/client, then measures allocations on
@@ -16,6 +16,58 @@ and `capture/`; `pinnedBaseline` contains the approved DLL closure and
 `closure.json`. Never rebuild 7c45d47: stage its original DLLs read-only and
 verify their hashes before and after measurement. Other sides use their own
 `global.json` SDK, targeting net11.0. All restores use the local NuGet feed.
+
+### Native MacBook Pro merge gate
+
+Use `work/bin/mbp-alloc`, not `gate.py run`, for native Mac allocation. The
+launcher always uses `mbp-run --memory-log`. The **admitted target commit**
+provides the scoring code, bands, `Program.cs` instrumentation and fixed counts.
+Each side provides its own benchmark bodies and project references. Put probes
+in their own benchmark source files, not the instrumentation file. The native
+`mac-bytes` mode is explicit and Darwin arm64 only. Default `direct` and timing
+runs still use wall-clock calibration; fresh timing seals hash their sources as usual.
+
+Materialize the approved merged source tree **unstaged** (the wrapper refuses
+a staged index). Prepare a desk-owned `admission.json` outside the source tree:
+`target`, `candidateCommit` and `candidateTree` are the full Git IDs in the
+merge admission, `kind` is `direct`, and `rows` lists every required literal
+`{"id":"CoreBench.Sign","kind":"direct"}` entry, in order. `pairs` defaults to
+that row's target catalogue count; an explicit larger count is allowed, a
+lower count is refused. Expand patterns against the target catalogue first.
+An uncatalogued direct probe that already exists on the target runs paired under
+strict D39. The built target's sealed probe inventory distinguishes it from an
+actually absent probe. Only an absent direct probe may set `"firstBaseline":true`.
+Its class needs a public parameterless `Setup()`, even if setup is empty.
+It runs only on the candidate and reports absolute bytes per batch as `BASELINE`, not
+a paired PASS. An uncapped first baseline exits nonzero and must be named as
+accepted in the desk's merge evidence. An optional `"maxBytes":0` (or another
+explicit value) is a desk cap, not PC parity; any batch above it gives FAIL.
+Missing processes or batches fail closed; Mac batch IDs must be exactly 0 through
+N−1 in order. An edit to the candidate's `Program.cs` is named in the report;
+the target's instrumentation still runs on both sides. Obtain a Mac slot and choose a fresh
+result ID, then run from the PC workspace:
+
+```bash
+work/bin/mbp-alloc run "$candidate_worktree" "$admission" "$id" "$mbp_root"
+work/bin/mbp-alloc verify "$candidate_worktree" "$admission" "$fetched_packet"
+```
+
+Check both exit codes before committing; do not infer approval of an uncapped
+first baseline. The wrapper prints the fetch path. `verify` checks the exact
+row list/counts, side pins, each row's target band assignment and
+runner assets, then independently re-derives the report from the fetched seal
+and raw pairs. The same packet location keeps memory logs even when a setup or
+measurement fails. Exit 1 means non-PASS direct evidence; 2 means a setup,
+execution or evidence problem; the cap kills separately (137 for overflow, 70
+if sampling fails). A sampled 9 GiB group RSS guard is softer than Linux
+`MemoryMax` and does not cover unrelated work or detached processes. The Mac
+runner removes staging/build scratch after producing the compact packet.
+
+Replay is not part of this gating command. An opted-in network change uses a
+separate `kind: replay` admission and a separate Mac job with its own evidence;
+missing or failed replay is indicative and cannot override the direct job.
+The fixed TCP endpoint is serialized across such jobs. No native timing
+claim, Mac replay band, or cross-architecture absolute threshold is implied.
 
 `--only` selects catalogue ids or simple wildcard patterns. `--plan` reads a JSON
 array (or an `entries` array) of rows with `id`, `kind` (`direct`, `replay`,
