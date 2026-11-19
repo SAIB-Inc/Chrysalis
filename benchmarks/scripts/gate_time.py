@@ -88,10 +88,12 @@ def validate_limits(plan):
     return guard, cutoff
 
 
-def charges(row, ratios=None):
+def charges(row, ratios=None, *, prelude=False):
     declared = row.get('chargeSeconds', 0)
     require(type(declared) is int and declared >= 0, 'Invalid declared process charge')
     if row.get('replay') == 'micro':
+        if prelude:
+            return max(declared, 6)
         # Measured 1+1 dry run extrapolated to240 passes; never charge below one sec.
         return max(declared, 1, math.ceil((ratios or {}).get(row['id'], 1)))
     case = row['replay']
@@ -120,10 +122,14 @@ def probe_seconds(rule):
     return 0 if rule is None else rule['processes'] * PROBE_PROCESS_SECONDS
 
 
+def prelude_seconds(rows):
+    return 120 + 60 * sum(row.get('replay') == 'micro' for row in rows)
+
+
 def finalize_plan(plan, raw):
     probe = plan.get('probe')
     probe_raw = probe_seconds(probe)
-    raw += probe_raw
+    raw += probe_raw + (prelude_seconds(plan['rows']) if plan.get('vmPrelude') else 0)
     require(raw <= RAW_CAP, 'Declared timing work including probe does not fit')
     guard = math.ceil(1.15 * (720 + raw))
     region = region_for(plan)
@@ -137,9 +143,9 @@ def finalize_plan(plan, raw):
     return plan
 
 
-def size_sessions(rows, mode, *, ratios=None, option=2, budget=None, probe=None):
+def size_sessions(rows, mode, *, ratios=None, option=2, budget=None, probe=None, prelude=False):
     """Price each whole process once. Full first; D51 defaults to two sessions."""
-    rows = [dict(row, chargeSeconds=charges(row, ratios)) for row in rows if row['kind'] == 'time']
+    rows = [dict(row, chargeSeconds=charges(row, ratios, prelude=prelude)) for row in rows if row['kind'] == 'time']
     if not rows:
         return []
     providers = {row.get('provider', 'fly') for row in rows}
@@ -147,9 +153,9 @@ def size_sessions(rows, mode, *, ratios=None, option=2, budget=None, probe=None)
     provider = providers.pop()
     require(provider == 'azure' or type(budget) in (int, float) and math.isfinite(budget) and budget >= 0, 'Missing or invalid remaining budget')
 
-    row_cap = RAW_CAP - probe_seconds(probe)
 
     def sized(members, design, *, floor=16, fail_only=False):
+        row_cap = RAW_CAP - probe_seconds(probe) - (prelude_seconds(members) if prelude else 0)
         entries = [dict(row, aPairs=row.get('aPairs', 0 if mode == 'change' or fail_only and row.get('mainnet') else (floor if row.get('mainnet') else 16)),
                         bPairs=row.get('bPairs', row['pairs'] if mode == 'change' else (6 if fail_only and row.get('mainnet') else floor if row.get('mainnet') else 24 if fail_only else 16)),
                         rowClass='fail-only' if fail_only and row.get('mainnet') else row.get('rowClass', 'gated')) for row in members]
@@ -172,6 +178,8 @@ def size_sessions(rows, mode, *, ratios=None, option=2, budget=None, probe=None)
         result = dict(design=design, rows=entries, counts=list(PROBE_COUNTS), repeatAllowed=mode == 'release')
         if provider != 'fly':
             result['provider'] = provider
+        if prelude:
+            result['vmPrelude'] = True
         if provider != 'fly' or any('region' in row for row in entries):
             result['region'] = region
         if probe is not None:
@@ -273,7 +281,7 @@ def probe_result(records, rule):
                 gen0BudgetBytes=dict(expected=expected, observed=sorted(budgets)))
 
 
-def run(root, plan, output, *, dry=False):
+def run(root, plan, output, *, dry=False, prelude=None):
     root, output = Path(root), Path(output)
     output.mkdir(parents=True, exist_ok=False)
     started = time.monotonic()
@@ -281,7 +289,7 @@ def run(root, plan, output, *, dry=False):
     records, error, predecessor, probe = [], None, None, None
     host_fallback = {}
 
-    def member(build, workload, dest, counts, **region):
+    def member(build, workload, dest, counts, *, invocations=None, ordering_proof=False, **region):
         spec = plan['builds'][build]
         job = dict(plan['workloads'][workload], root=str(root), counts=counts, timeout=max(.01, deadline - time.time()))
         for key in ('dotnet', 'server', 'capture'):
@@ -289,6 +297,10 @@ def run(root, plan, output, *, dry=False):
         job['environment'] = {key: str(root / value) if key in ('CHRYSALIS_CORPORA', 'CHRYSALIS_BENCHMARK_DATA', 'P1_RANGE') else value
                               for key, value in job['environment'].items()}
         actual = dict(spec, client=str(root / spec['client']), harness=str(root / spec['harness']))
+        if invocations is not None:
+            job['microInvocations'] = invocations
+        if ordering_proof:
+            job['orderingProof'] = True
         return session.member(actual, job, dest, **region)
 
     try:
@@ -322,6 +334,12 @@ def run(root, plan, output, *, dry=False):
             for identifier, record in evidence.items():
                 session.save(directory / f'{identifier}.json', record)
             session.save(output / 'probe.json', probe)
+        require(prelude is None or probe is not None, 'VM prelude requires the kept-host probe')
+        if prelude is not None and probe['decision'] == 'kept':
+            import gate_prelude
+            applied = gate_prelude.execute(prelude, plan, root / 'prelude',
+                                           lambda *args, **options: member(*args, **region, **options))
+            plan = gate_prelude.apply(plan, applied)
         for block in (() if probe and probe['decision'] == 'rejected' else plan['blocks']):
             # A full local block is atomic. Odd legacy tails have two members.
             if not dry and time.time() + len(block['members']) * block['chargeSeconds'] * 1.15 > deadline:
@@ -330,6 +348,8 @@ def run(root, plan, output, *, dry=False):
                 build = plan['members'][identifier]['build']
                 stamp = dt.datetime.now(dt.timezone.utc).isoformat()
                 record = member(build, block['workload'], output / identifier, plan['counts'], **region)
+                if (work := plan['workloads'][block['workload']].get('expectedWork')) is not None:
+                    check_fixed_work(record, work)
                 record.update(id=identifier, build=build, predecessorBuild=predecessor, startedUtc=stamp,
                               endedUtc=dt.datetime.now(dt.timezone.utc).isoformat())
                 records.append(record)
@@ -372,7 +392,18 @@ def pair_times(pairs):
                                for side in ('baseline', 'candidate')])
 
 
-def complete_population(row, pairs, phase, count):
+def check_fixed_work(record, work):
+    for key, value in work.items():
+        require(all(item.get(key) == value for stage in ('rows', 'warmupRows') for item in record['data'][stage]),
+                'Fixed work differs: ' + key)
+
+
+def applied_row(row, values):
+    return dict(row, expectedWork=values['expectedWork'],
+                job=dict(row['job'], **({'microInvocations': values['microInvocations']} if 'microInvocations' in values else {})))
+
+
+def complete_population(row, pairs, phase, count, *, applied=None):
     population = [pair for pair in pairs if pair['phase'] == phase]
     require(len(population) == count and sorted(pair['pair'] for pair in population) == list(range(1, count + 1)), f'{phase} budget stop or missing declared pairs: {len(population)}/{count}')
     for pair in population:
@@ -381,10 +412,9 @@ def complete_population(row, pairs, phase, count):
             expected = row['sides']['baseline' if phase == 'A' else side]
             require(record['identity'] == {key: expected[key] for key in ('commit', 'treeId', 'runtime', 'dllSha256s')}, phase + ' ' + side + ' DLL/runtime/side identity mismatch')
             session.validate_observations(record['data'], row['replay'], expected['runtime'], (180, 60))
-            for key, expected_value in row.get('expectedWork', {}).items():
-                require(all(item.get(key) == expected_value for stage in ('rows', 'warmupRows') for item in record['data'][stage]), phase + ' ' + side + ' fixed work differs: ' + key)
+            check_fixed_work(record, (applied or row).get('expectedWork', {}))
             if row.get('microFilter'):
-                require(record['data']['invocationsPerPass'] == row['job']['microInvocations'], 'Micro invocation count changed')
+                require(record['data']['invocationsPerPass'] == (applied or row['job'])['microInvocations'], 'Micro invocation count changed')
                 require(record['data']['filter'] == row['microFilter'], 'Micro process composition changed')
     return population
 
@@ -670,7 +700,11 @@ def read_results(output, seal, *, mode=None, first_only=False):
                         lines.append('host fingerprint (information only): ' + json.dumps(payload.get('host'), sort_keys=True))
                         lines.append('neighbours / duration / cost (context only): ' + json.dumps(payload.get('context', {}), sort_keys=True))
                     chosen = [pair for pair in payload['pairs'] if pair['id'] == row['id']]
-                    current = baseline_band(row, chosen) if plan['design'] == 'micro-band' and not invalid else verdict(row, chosen, applied_mode, noise=row.get('noise'), invalid=invalid)
+                    effective = row
+                    if plan.get('vmPrelude') and not invalid:
+                        workload = schedules.opaque(plan['scheduleSeed'], ['workload', row['id']])
+                        effective = applied_row(row, payload['applied'][workload])
+                    current = baseline_band(effective, chosen) if plan['design'] in ('micro-band', 'noise-band') and not invalid else verdict(effective, chosen, applied_mode, noise=row.get('noise'), invalid=invalid)
                     current['blockDiagnostic'] = schedules.block_diagnostics(chosen)
                     if row['id'] in band_failures:
                         current = dict(status='INCONCLUSIVE', reason='One-time micro band invalid')
@@ -678,16 +712,16 @@ def read_results(output, seal, *, mode=None, first_only=False):
                 if phase == 'first':
                     first = current
                     if matches and row['id'] not in band_failures:
-                        first_evidence = chosen, invalid
+                        first_evidence = chosen, invalid, effective
                 elif matches and row['id'] in item['ids']:
                     require(sealed_mode == 'release' and plan['repeatAllowed'], 'Unsealed repeat')
                     sealed_status = first['status']
                     if applied_mode != sealed_mode and first_evidence is not None:
                         # Alternate reporting never grants or removes a sealed release repeat.
-                        first_pairs, first_invalid = first_evidence
-                        sealed_status = verdict(row, first_pairs, sealed_mode, noise=row.get('noise'), invalid=first_invalid)['status']
+                        first_pairs, first_invalid, first_row = first_evidence
+                        sealed_status = verdict(first_row, first_pairs, sealed_mode, noise=row.get('noise'), invalid=first_invalid)['status']
                     first = pooled(first, current, applied_mode, sealed_first_status=sealed_status)
-            if plan['design'] == 'micro-band':
+            if plan['design'] in ('micro-band', 'noise-band'):
                 if first['status'] != 'PASS':
                     band_failures.add(row['id'])
             else:
@@ -705,7 +739,7 @@ def read_results(output, seal, *, mode=None, first_only=False):
             lines.append('  rule: ' + row.get('rowClass', 'gated') + ' · ' + first['reason'])
             if absolute:
                 lines.append(f'  {units} baseline/candidate {absolute[0]:.3f}/{absolute[1]:.3f}; warm-up ns {first.get("warmupNs", first.get("first", {}).get("warmupNs"))} (reported, not gated)')
-            if applied_mode == 'change' and plan['design'] != 'micro-band' and (noise := noise_band(row.get('noise'))) is not None:
+            if applied_mode == 'change' and plan['design'] not in ('micro-band', 'noise-band') and (noise := noise_band(row.get('noise'), row.get('provider', 'fly'))) is not None:
                 lines.append(f'  noise record N: {noise:.3%}')
             for label, part in parts:
                 if 'repeat' in first:

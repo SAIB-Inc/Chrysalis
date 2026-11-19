@@ -150,6 +150,14 @@ def verify_inputs(directory, seal, plan, info):
     # Hash the archive against the seal before trusting any deps metadata.
     body = json.dumps(worker, indent=2, allow_nan=False) + '\n'
     expected = dict(inputs, **{'plan.json': hashlib.sha256(body.encode()).hexdigest()})
+    if plan.get('vmPrelude'):
+        require('prelude.json' not in inputs, 'Prelude recipe must derive from the sealed plan')
+        # verified_launch_inputs has rechecked the parent and repeat derivation.
+        repeat = bundle.parent == directory / 'input' and re.fullmatch(r'repeat-[0-9]+\.tar\.gz', bundle.name)
+        if not repeat:
+            from gate_bundle import gate_encoded
+            from gate_prelude import recipe
+            expected['prelude.json'] = hashlib.sha256(gate_encoded(recipe(plan))).hexdigest()
     deps = verify(bundle, expected, manifest='bundle-manifest.json', marker=marker,
                   inspect={name for name in inputs if PurePosixPath(name).name in DEPS_FILES})
     allowed_members(plan, worker, seal, deps)
