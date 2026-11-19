@@ -1,5 +1,6 @@
 using System.Reflection;
 using System.Buffers.Binary;
+using Chrysalis.Codec.Test;
 using Chrysalis.Network.Multiplexer;
 using Xunit;
 
@@ -212,22 +213,28 @@ public class CborFrameScannerTests
         Scan scan = CborFrameScanner.GetFrameLength;
         byte[] valid = [.. Enumerable.Repeat((byte)0x81, 10000), 0x00];
         byte[] invalid = [.. Enumerable.Repeat((byte)0x9f, 10000), 0x1c];
-        for (int i = 0; i < 100; i++)
-        {
-            Assert.Equal(valid.Length, scan(valid));
-            Assert.Equal(0, scan(valid.AsSpan(0, 10000)));
-            Assert.Equal(-1, scan(invalid));
-        }
-        long before = GC.GetAllocatedBytesForCurrentThread();
         int sum = 0;
-        for (int i = 0; i < 100; i++)
-        {
-            sum += scan(valid);
-            sum += scan(valid.AsSpan(0, 10000));
-            sum += scan(invalid);
-        }
-        long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
-        Assert.Equal(1000000, sum);
+        long allocated = AllocationAssert.Measure(
+            () =>
+            {
+                for (int i = 0; i < 100; i++)
+                {
+                    Assert.Equal(valid.Length, scan(valid));
+                    Assert.Equal(0, scan(valid.AsSpan(0, 10000)));
+                    Assert.Equal(-1, scan(invalid));
+                }
+            },
+            () =>
+            {
+                sum = 0;
+                for (int i = 0; i < 100; i++)
+                {
+                    sum += scan(valid);
+                    sum += scan(valid.AsSpan(0, 10000));
+                    sum += scan(invalid);
+                }
+            },
+            () => Assert.Equal(1000000, sum));
         Assert.Equal(0, allocated);
     }
 
@@ -236,12 +243,18 @@ public class CborFrameScannerTests
     {
         Scan scan = CborFrameScanner.GetFrameLength;
         byte[][] fixtures = [Convert.FromHexString("8204D81843010203"), Convert.FromHexString("9F5F4101FFFF"), Convert.FromHexString("9F5F4101")];
-        for (int i = 0; i < 100; i++) { foreach (byte[] fixture in fixtures) { _ = scan(fixture); } }
-        long before = GC.GetAllocatedBytesForCurrentThread();
         int sum = 0;
-        for (int i = 0; i < 1000; i++) { foreach (byte[] fixture in fixtures) { sum += scan(fixture); } }
-        long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
-        Assert.Equal(14000, sum);
+        long allocated = AllocationAssert.Measure(
+            () =>
+            {
+                for (int i = 0; i < 100; i++) { foreach (byte[] fixture in fixtures) { _ = scan(fixture); } }
+            },
+            () =>
+            {
+                sum = 0;
+                for (int i = 0; i < 1000; i++) { foreach (byte[] fixture in fixtures) { sum += scan(fixture); } }
+            },
+            () => Assert.Equal(14000, sum));
         Assert.Equal(0, allocated);
     }
 }

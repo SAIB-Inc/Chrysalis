@@ -5,6 +5,7 @@ using System.Threading.Channels;
 using Chrysalis.Codec.Extensions.Cardano.Core;
 using Chrysalis.Codec.Extensions.Cardano.Core.Header;
 using Chrysalis.Codec.Serialization;
+using Chrysalis.Codec.Test;
 using Chrysalis.Codec.Types.Cardano.Core;
 using Chrysalis.Codec.Types;
 using Chrysalis.Network.Cbor.BlockFetch;
@@ -224,12 +225,18 @@ public class BlockFetchCompletenessTests(ITestOutputHelper output)
         }
         CompletenessProbe probe = Probe;
         byte[] bytes = Convert.FromHexString(hex);
-        for (int i = 0; i < 100; i++) { Assert.False(probe(bytes)); }
-        long before = GC.GetAllocatedBytesForCurrentThread();
         bool complete = false;
-        for (int i = 0; i < 1000; i++) { complete |= probe(bytes); }
-        long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
-        Assert.False(complete);
+        long allocated = AllocationAssert.Measure(
+            () =>
+            {
+                for (int i = 0; i < 100; i++) { Assert.False(probe(bytes)); }
+            },
+            () =>
+            {
+                complete = false;
+                for (int i = 0; i < 1000; i++) { complete |= probe(bytes); }
+            },
+            () => Assert.False(complete));
         Assert.Equal(0, allocated);
     }
 
@@ -251,10 +258,12 @@ public class BlockFetchCompletenessTests(ITestOutputHelper output)
             }
         }
         ChainPoint[] sink = new ChainPoint[headers.Length];
-        for (int warmup = 0; warmup < 10; warmup++) { ExtractPoints(headers, sink); }
-        long before = GC.GetAllocatedBytesForCurrentThread();
-        ExtractPoints(headers, sink);
-        long bytes = GC.GetAllocatedBytesForCurrentThread() - before;
+        long bytes = AllocationAssert.Measure(
+            () =>
+            {
+                for (int warmup = 0; warmup < 10; warmup++) { ExtractPoints(headers, sink); }
+            },
+            () => ExtractPoints(headers, sink));
         GC.KeepAlive(sink);
         output.WriteLine($"Warm ExtractPoint allocated {bytes} B for {headers.Length} headers ({(double)bytes / headers.Length} B/header).");
         Assert.True(bytes <= 256L * headers.Length, $"Expected <=256 B/header; got {(double)bytes / headers.Length}.");

@@ -296,18 +296,25 @@ public class CborTests(ITestOutputHelper output)
         Assert.Equal(2, unknown.Offset);
         Assert.Equal("CBOR Block at byte 2: expected supported wire era tag; actual 8.", unknown.Message);
         byte[] data = Convert.FromHexString("8301616102");
-        for (int i = 0; i < 100; i++)
-        {
-            _ = PersonRequired.Read(data).Id;
-        }
-        long before = GC.GetAllocatedBytesForCurrentThread();
         int sum = 0;
-        for (int i = 0; i < 1_000; i++)
-        {
-            sum += PersonRequired.Read(data).Id;
-        }
-        Assert.Equal(0, GC.GetAllocatedBytesForCurrentThread() - before);
-        Assert.Equal(1_000, sum);
+        long allocated = AllocationAssert.Measure(
+            () =>
+            {
+                for (int i = 0; i < 100; i++)
+                {
+                    _ = PersonRequired.Read(data).Id;
+                }
+            },
+            () =>
+            {
+                sum = 0;
+                for (int i = 0; i < 1_000; i++)
+                {
+                    sum += PersonRequired.Read(data).Id;
+                }
+            },
+            () => Assert.Equal(1_000, sum));
+        Assert.Equal(0, allocated);
     }
 
     [Fact]
@@ -317,22 +324,27 @@ public class CborTests(ITestOutputHelper output)
         // The exact base (10d89b1d) allocates 1,200 bytes for this warmed decode.
         const int baselineBytesPerRead = 1_200;
         byte[] data = [0x01];
-        for (int i = 0; i < 500; i++)
-        {
-            _ = IPlutusData.Read(data, out _);
-        }
-
-        long before = GC.GetAllocatedBytesForCurrentThread();
         int matches = 0;
-        for (int i = 0; i < iterations; i++)
-        {
-            if (IPlutusData.Read(data, out int consumed) is PlutusUint64 && consumed == 1)
+        long bytes = AllocationAssert.Measure(
+            () =>
             {
-                matches++;
-            }
-        }
-        long bytes = GC.GetAllocatedBytesForCurrentThread() - before;
-        Assert.Equal(iterations, matches);
+                for (int i = 0; i < 500; i++)
+                {
+                    _ = IPlutusData.Read(data, out _);
+                }
+            },
+            () =>
+            {
+                matches = 0;
+                for (int i = 0; i < iterations; i++)
+                {
+                    if (IPlutusData.Read(data, out int consumed) is PlutusUint64 && consumed == 1)
+                    {
+                        matches++;
+                    }
+                }
+            },
+            () => Assert.Equal(iterations, matches));
         Assert.InRange(bytes, 0, baselineBytesPerRead * iterations);
     }
 
@@ -440,22 +452,27 @@ public class CborTests(ITestOutputHelper output)
             ? () => IX6DepthTwo.Read(data, out _) is X6DepthTwoB
             : () => IX6DepthOne.Read(data, out _) is X6DepthOneB;
         const int iterations = 1_000;
-        for (int i = 0; i < 500; i++)
-        {
-            _ = read();
-        }
-
-        long before = GC.GetAllocatedBytesForCurrentThread();
         int matches = 0;
-        for (int i = 0; i < iterations; i++)
-        {
-            if (read())
+        long bytes = AllocationAssert.Measure(
+            () =>
             {
-                matches++;
-            }
-        }
-        long bytes = GC.GetAllocatedBytesForCurrentThread() - before;
-        Assert.Equal(iterations, matches);
+                for (int i = 0; i < 500; i++)
+                {
+                    _ = read();
+                }
+            },
+            () =>
+            {
+                matches = 0;
+                for (int i = 0; i < iterations; i++)
+                {
+                    if (read())
+                    {
+                        matches++;
+                    }
+                }
+            },
+            () => Assert.Equal(iterations, matches));
 
         int thread = Environment.CurrentManagedThreadId;
         int throws = 0;

@@ -1,6 +1,7 @@
 using System.Buffers;
 using System.Reflection;
 using System.Linq.Expressions;
+using System.Runtime.CompilerServices;
 using System.Runtime.Loader;
 using System.Security.Cryptography;
 using System.Text.Json;
@@ -131,7 +132,7 @@ public class EraTests
     {
         byte[] bytes = header ? EnvelopeBytes(1, HeaderBody()) : LoadEraFixture(EraFixture("shelley1.block"));
         Type type = header ? typeof(N2NBlockHeader) : typeof(BlockWithEra);
-        Assert.Equal(72, FirstReadAllocations(type, bytes));
+        Assert.Equal(72, AllocationAssert.MeasureCold(() => FirstReadAllocations(type, bytes)));
     }
 
     private static long FirstReadAllocations(Type type, ReadOnlyMemory<byte> bytes)
@@ -148,10 +149,10 @@ public class EraTests
             ParameterExpression data = Expression.Parameter(typeof(ReadOnlyMemory<byte>));
             Func<ReadOnlyMemory<byte>, object> invoke = Expression.Lambda<Func<ReadOnlyMemory<byte>, object>>(
                 Expression.Convert(Expression.Call(read, data), typeof(object)), data).Compile();
-            _ = GC.GetAllocatedBytesForCurrentThread();
-            long before = GC.GetAllocatedBytesForCurrentThread();
-            object result = invoke(bytes);
-            long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+            // Prepare the entry point without calling it; the measurement is still the first decode.
+            RuntimeHelpers.PrepareMethod(read.MethodHandle);
+            object? result = null;
+            long allocated = AllocationAssert.MeasureOnce(() => result = invoke(bytes));
             GC.KeepAlive(result);
             return allocated;
         }
