@@ -1,3 +1,5 @@
+using Acceptance = AikenLang.AcceptanceTest079.Blueprint;
+using Shape = Fixtures.Shapes.Blueprint;
 using Chrysalis.Codec.Serialization;
 using Chrysalis.Codec.Types;
 using Chrysalis.Codec.Types.Cardano.Core.Common;
@@ -98,156 +100,171 @@ public class BlueprintGenerationTests
 }
 
 /// <summary>
-/// Tests for SundaeSwap contracts blueprint (48 definitions, nested tuples, recursive MultisigScript).
+/// Tests for the owned blueprint covering the generator's type shapes.
 /// </summary>
-public class SundaeBlueprintTests
+public class ShapesBlueprintTests
 {
-    /// <summary>
-    /// Verifies PoolDatum has 8 fields with correct types including nested tuple.
-    /// </summary>
-    [Fact]
-    public void PoolDatumHasCorrectFields()
-    {
-        Sundae.Contracts.Blueprint.PoolDatum datum = new(
-            Identifier: default!,
-            Assets: default!,
-            CirculatingLp: default!,
-            BidFeesPer10Thousand: default!,
-            AskFeesPer10Thousand: default!,
-            FeeManager: null,
-            MarketOpen: default!,
-            ProtocolFees: default!
-        );
+    private static PlutusBoundedBytes Bytes(byte value) => PlutusBoundedBytes.Create(new byte[] { value });
 
-        Assert.NotNull(datum);
+    [Fact]
+    public void PoolStateHasEightFields()
+    {
+        Shape.TupleByteArrayByteArrayInt deposit = new(Field0: Bytes(0x01), Field1: Bytes(0x02), Field2: PlutusInt.Create(100));
+        Shape.TupleByteArrayByteArrayInt quote = new(Field0: Bytes(0x03), Field1: Bytes(0x04), Field2: PlutusInt.Create(200));
+        Shape.TupleTupleByteArrayByteArrayIntTupleByteArrayByteArrayInt reserves = new(Field0: deposit, Field1: quote);
+        Shape.PoolState state = new(
+            Id: Bytes(0x05),
+            Reserves: reserves,
+            Shares: PlutusInt.Create(300),
+            FeeIn: PlutusInt.Create(3),
+            FeeOut: PlutusInt.Create(4),
+            Admin: Some<Shape.IFixturesPolicyPolicy>.Create(new Shape.After(Time: PlutusInt.Create(500))),
+            OpensAt: PlutusInt.Create(100),
+            ProtocolCut: PlutusInt.Create(1));
+
+        Assert.Equal(reserves, state.Reserves);
+        Assert.IsType<Some<Shape.IFixturesPolicyPolicy>>(state.Admin);
     }
 
-    /// <summary>
-    /// Verifies Order union has 6 variants (Strategy, Swap, Deposit, Withdrawal, Donation, Record).
-    /// </summary>
     [Fact]
     public void OrderUnionHasSixVariants()
     {
-        Sundae.Contracts.Blueprint.IOrder strategy = new Sundae.Contracts.Blueprint.Strategy(Auth: default!);
-        Sundae.Contracts.Blueprint.IOrder swap = new Sundae.Contracts.Blueprint.Swap(Offer: default!, MinReceived: default!);
-        Sundae.Contracts.Blueprint.IOrder deposit = new Sundae.Contracts.Blueprint.Deposit(Assets: default!);
-        Sundae.Contracts.Blueprint.IOrder withdrawal = new Sundae.Contracts.Blueprint.Withdrawal(Amount: default!);
-        Sundae.Contracts.Blueprint.IOrder donation = new Sundae.Contracts.Blueprint.Donation(Assets: default!);
-        Sundae.Contracts.Blueprint.IOrder record = new Sundae.Contracts.Blueprint.Record(Policy: default!);
-
-        Assert.NotNull(strategy);
-        Assert.NotNull(swap);
-        Assert.NotNull(deposit);
-        Assert.NotNull(withdrawal);
-        Assert.NotNull(donation);
-        Assert.NotNull(record);
+        Shape.TupleByteArrayByteArrayInt amount = new(Field0: Bytes(0x01), Field1: Bytes(0x02), Field2: PlutusInt.Create(7));
+        Shape.TupleTupleByteArrayByteArrayIntTupleByteArrayByteArrayInt amounts = new(Field0: amount, Field1: amount);
+        Shape.IOrder[] orders =
+        [
+            new Shape.Delegate(Auth: new Shape.Signed(Policy: new Shape.Before(Time: PlutusInt.Create(100)))),
+            new Shape.Exchange(Offer: amount, MinOut: amount),
+            new Shape.Add(Amounts: amounts),
+            new Shape.Remove(Shares: amount),
+            new Shape.Gift(Amounts: amounts),
+            new Shape.Note(Tag: new Shape.TupleByteArrayByteArray(Field0: Bytes(0x03), Field1: Bytes(0x04))),
+        ];
+        Assert.Collection(orders.Select(order => CborSerializer.Deserialize<Shape.IOrder>(CborSerializer.Serialize(order))),
+            order => Assert.IsType<Shape.Delegate>(order),
+            order => Assert.IsType<Shape.Exchange>(order),
+            order => Assert.IsType<Shape.Add>(order),
+            order => Assert.IsType<Shape.Remove>(order),
+            order => Assert.IsType<Shape.Gift>(order),
+            order => Assert.IsType<Shape.Note>(order));
     }
 
-    /// <summary>
-    /// Verifies MultisigScript recursive union and list wrapper are generated correctly.
-    /// </summary>
     [Fact]
-    public void MultisigScriptRecursiveUnionIsGenerated()
+    public void PolicyRecursiveUnionIsGenerated()
     {
-        Sundae.Contracts.Blueprint.ISundaeMultisigMultisigScript sig = new Sundae.Contracts.Blueprint.SundaeMultisigMultisigScriptSignature(KeyHash: default!);
-        Sundae.Contracts.Blueprint.ISundaeMultisigMultisigScript allOf = new Sundae.Contracts.Blueprint.AllOf(Scripts: default!);
+        Shape.IFixturesPolicyPolicy key = new Shape.FixturesPolicyPolicyKey(Hash: Bytes(0xAB));
+        Shape.IFixturesPolicyPolicy policy = new Shape.All(Policies: CborDefList<Shape.IFixturesPolicyPolicy>.Create([key]));
 
-        Assert.NotNull(sig);
-        Assert.NotNull(allOf);
+        // Constructor 1, indefinite fields, a definite one-element list containing constructor 0 and a one-byte hash.
+        Assert.Equal("D87A9F81D8799F41ABFFFF", Convert.ToHexString(CborSerializer.Serialize(policy)));
     }
 
-    /// <summary>
-    /// Verifies SettingsDatum has 12 fields including nested option and list types.
-    /// </summary>
     [Fact]
-    public void SettingsDatumHasTwelveFields()
+    public void ConfigHasTwelveFields()
     {
-        Sundae.Contracts.Blueprint.SettingsDatum datum = new(
-            SettingsAdmin: default!,
-            MetadataAdmin: default!,
-            TreasuryAdmin: default!,
-            TreasuryAddress: default!,
-            TreasuryAllowance: default!,
-            AuthorizedScoopers: null,
-            AuthorizedStakingKeys: default!,
-            BaseFee: default!,
-            SimpleFee: default!,
-            StrategyFee: default!,
-            PoolCreationFee: default!,
-            Extensions: default!
-        );
+        Shape.IFixturesAddressCredential payment = new Shape.VerificationKey(Field0: Bytes(0x01));
+        Shape.Address treasury = new(Payment: payment,
+            Stake: Some<Shape.IReferenced>.Create(new Shape.Inline(Field0: payment)));
+        Shape.Address payout = new(Payment: new Shape.Script(Field0: Bytes(0x02)), Stake: None<Shape.IReferenced>.Create());
+        Some<CborDefList<PlutusBoundedBytes>> operators = Some<CborDefList<PlutusBoundedBytes>>.Create(CborDefList<PlutusBoundedBytes>.Create([Bytes(0x03)]));
+        Shape.Config config = new(
+            Owner: new Shape.After(Time: PlutusInt.Create(100)),
+            Operators: operators,
+            Treasury: treasury,
+            Payout: payout,
+            PayoutShare: new Shape.TupleIntInt(Field0: PlutusInt.Create(1), Field1: PlutusInt.Create(10)),
+            StakeKeys: CborDefList<Shape.IFixturesAddressCredential>.Create([payment]),
+            Guardian: new Shape.Before(Time: PlutusInt.Create(200)),
+            FeeFloor: PlutusInt.Create(1),
+            FeeStep: PlutusInt.Create(2),
+            FeeCap: PlutusInt.Create(5),
+            PoolFee: PlutusInt.Create(3),
+            Extra: PlutusTrue.Create());
 
-        Assert.NotNull(datum);
+        Assert.Equal(operators, config.Operators);
+        Assert.IsType<PlutusTrue>(config.Extra);
     }
 
-    /// <summary>
-    /// Verifies sundae validators are generated.
-    /// </summary>
     [Fact]
-    public void SundaeValidatorsAreGenerated()
+    public void ValidatorsAreGenerated()
     {
-        Assert.False(string.IsNullOrEmpty(Sundae.Contracts.Blueprint.PoolSpend.CompiledCode));
-        Assert.False(string.IsNullOrEmpty(Sundae.Contracts.Blueprint.OrderSpend.Hash));
+        Assert.NotEmpty(Shape.PoolPoolSpend.CompiledCode);
+        Assert.NotEmpty(Shape.PoolPoolMint.CompiledCode);
+        Assert.Equal(56, Shape.OrderBookOrderBookElse.Hash.Length);
+    }
+
+    [Fact]
+    public void MarketHasTenFields()
+    {
+        Shape.Market market = new(
+            Stake: new Shape.Pointer(Slot: PlutusInt.Create(100), Tx: PlutusInt.Create(0), Cert: PlutusInt.Create(1)),
+            Base: new Shape.FixturesAddressAsset(Policy: Bytes(0x01), Name: Bytes(0x02)),
+            Quote: new Shape.FixturesAddressAsset(Policy: Bytes(0x03), Name: Bytes(0x04)),
+            Supply: PlutusInt.Create(400),
+            BaseReserve: PlutusInt.Create(100),
+            QuoteReserve: PlutusInt.Create(300),
+            BaseFee: PlutusInt.Create(2),
+            QuoteFee: PlutusInt.Create(3),
+            ShareFee: Some<IPlutusBigInt>.Create(PlutusInt.Create(1)),
+            DynamicFee: PlutusTrue.Create());
+
+        Assert.IsType<Shape.Pointer>(market.Stake);
+        Assert.IsType<PlutusTrue>(market.DynamicFee);
+    }
+
+    [Fact]
+    public void UnderscoredValidatorNameIsGenerated() => Assert.Equal(56, Shape.OrderBookOrderBookSpend.Hash.Length);
+
+    [Fact]
+    public void HopUnionHasThreeVariants()
+    {
+        Shape.Sibling sibling = new(Nibble: PlutusInt.Create(2), Prefix: Bytes(0xAB), Root: Bytes(0xCD));
+        Shape.IFixturesProofPathHop[] hops =
+        [
+            new Shape.Wide(Depth: PlutusInt.Create(1), Siblings: Bytes(0x01)),
+            new Shape.Narrow(Depth: PlutusInt.Create(2), Sibling: sibling),
+            new Shape.Tip(Depth: PlutusInt.Create(3), Key: Bytes(0x02), Value: Bytes(0x03)),
+        ];
+        Assert.Collection(hops.Select(hop => CborSerializer.Deserialize<Shape.IFixturesProofPathHop>(CborSerializer.Serialize(hop))),
+            hop => Assert.IsType<Shape.Wide>(hop),
+            hop => Assert.IsType<Shape.Narrow>(hop),
+            hop => Assert.IsType<Shape.Tip>(hop));
+    }
+
+    [Fact]
+    public void CollidingConstructorsArePrefixed()
+    {
+        Shape.IFixturesPolicyPolicy policy = new Shape.FixturesPolicyPolicyKey(Hash: Bytes(0xAA));
+        Shape.IAuth auth = new Shape.AuthKey(Hash: Bytes(0xBB));
+
+        Assert.IsType<Shape.FixturesPolicyPolicyKey>(CborSerializer.Deserialize<Shape.IFixturesPolicyPolicy>(CborSerializer.Serialize(policy)));
+        Assert.IsType<Shape.AuthKey>(CborSerializer.Deserialize<Shape.IAuth>(CborSerializer.Serialize(auth)));
     }
 }
 
 /// <summary>
-/// Tests for Minswap DEX V2 blueprint (10 validators, nested generics).
+/// Tests for the Aiken acceptance test 079 blueprint's v1.0 schema.
 /// </summary>
-public class MinswapBlueprintTests
+public class Aiken079BlueprintTests
 {
-    /// <summary>
-    /// Verifies PoolDatum has 10 fields.
-    /// </summary>
     [Fact]
-    public void PoolDatumHasCorrectFields()
+    public void WrappedRedeemerIsConstructorOne()
     {
-        Aiken.AmmDexV2.Blueprint.PoolDatum datum = new(
-            PoolBatchingStakeCredential: default!,
-            AssetA: default!,
-            AssetB: default!,
-            TotalLiquidity: default!,
-            ReserveA: default!,
-            ReserveB: default!,
-            BaseFeeANumerator: default!,
-            BaseFeeBNumerator: default!,
-            FeeSharingNumeratorOpt: null,
-            AllowDynamicFee: default!
-        );
+        Acceptance.Redeemer wrapper = new(Field0: PlutusInt.Create(42));
 
-        Assert.NotNull(datum);
+        Assert.Equal("D87A9F182AFF", Convert.ToHexString(CborSerializer.Serialize(wrapper)));
     }
 
-    /// <summary>
-    /// Verifies Minswap validators are generated.
-    /// </summary>
     [Fact]
-    public void MinswapValidatorsAreGenerated() => Assert.False(string.IsNullOrEmpty(Aiken.AmmDexV2.Blueprint.PoolValidatorValidatePool.CompiledCode));
-}
-
-/// <summary>
-/// Tests for Merkle Patricia Forestry blueprint (Merkle proofs, Bool type).
-/// </summary>
-public class MerkleBlueprintTests
-{
-    /// <summary>
-    /// Verifies ProofStep union has 3 variants (Branch, Fork, Leaf).
-    /// </summary>
-    [Fact]
-    public void ProofStepUnionHasThreeVariants()
+    public void PlutusV2ValidatorsAreGenerated()
     {
-        Merkle.Merkle.Blueprint.IAikenMerklePatriciaForestryProofStep branch =
-            new Merkle.Merkle.Blueprint.Branch(Skip: default!, Neighbors: default!);
-        Merkle.Merkle.Blueprint.IAikenMerklePatriciaForestryProofStep fork =
-            new Merkle.Merkle.Blueprint.Fork(Skip: default!, Neighbor: default!);
-        Merkle.Merkle.Blueprint.IAikenMerklePatriciaForestryProofStep leaf =
-            new Merkle.Merkle.Blueprint.Leaf(Skip: default!, Key: default!, Value: default!);
-
-        Assert.NotNull(branch);
-        Assert.NotNull(fork);
-        Assert.NotNull(leaf);
+        Assert.Equal("v2", Acceptance.FooSpend.PlutusVersion);
+        Assert.Equal("v2", Acceptance.FooMint.PlutusVersion);
+        Assert.IsType<PlutusV2Script>(Acceptance.FooSpend.Script);
+        Assert.IsType<PlutusV2Script>(Acceptance.FooMint.Script);
     }
 }
+
 
 /// <summary>
 /// Tests for Crashr marketplace blueprint (Address type, Credential union).

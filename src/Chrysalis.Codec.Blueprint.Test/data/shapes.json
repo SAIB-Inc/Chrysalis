@@ -1,0 +1,1030 @@
+{
+  "preamble": {
+    "title": "fixtures/shapes",
+    "description": "Owned blueprint shapes for the Chrysalis generator tests",
+    "version": "0.0.0",
+    "plutusVersion": "v3",
+    "compiler": {
+      "name": "Aiken",
+      "version": "v1.1.24+bacbeb3"
+    },
+    "license": "MIT"
+  },
+  "validators": [
+    {
+      "title": "market.market.spend",
+      "datum": {
+        "title": "_datum",
+        "schema": {
+          "$ref": "#/definitions/fixtures~1market~1Market"
+        }
+      },
+      "redeemer": {
+        "title": "_path",
+        "schema": {
+          "$ref": "#/definitions/List<fixtures~1proof_path~1Hop>"
+        }
+      },
+      "compiledCode": "59015601010029800aba2aba1aab9faab9eaab9dab9a48888896600264646644b30013370e900118031baa0028994c004c028006601460160032232598008014528c4c8cc896600266e1d20000028991919912cc004c05400e00b16404c6eb8c048004dd69809001180900098071baa0038acc004cdc3a4004005132332259800980a000c4c96600266e1d200030113754003132323298009bae30170019bad30170039bae3017002488966002603600900b8b2032180b800980b00098091baa0018b202030130018b2024375a60220026024002601c6ea800e2b30013370e900200144c8c8ca60026eb8c04c0066eb4c04c00e6eb8c04c00922259800980b802401e2c80a860260026024002601c6ea800e2c806100c2018300b375400226004601e006601a0048060c008009222330010013758601a00e30073754005164014600e6010002600e004600e00260066ea801e29344d9590011",
+      "hash": "82c15eb70b0a6dc68ee1c500c4b45f4cf08e3dd030c4dc79d24c2310"
+    },
+    {
+      "title": "market.market.else",
+      "redeemer": {
+        "schema": {}
+      },
+      "compiledCode": "59015601010029800aba2aba1aab9faab9eaab9dab9a48888896600264646644b30013370e900118031baa0028994c004c028006601460160032232598008014528c4c8cc896600266e1d20000028991919912cc004c05400e00b16404c6eb8c048004dd69809001180900098071baa0038acc004cdc3a4004005132332259800980a000c4c96600266e1d200030113754003132323298009bae30170019bad30170039bae3017002488966002603600900b8b2032180b800980b00098091baa0018b202030130018b2024375a60220026024002601c6ea800e2b30013370e900200144c8c8ca60026eb8c04c0066eb4c04c00e6eb8c04c00922259800980b802401e2c80a860260026024002601c6ea800e2c806100c2018300b375400226004601e006601a0048060c008009222330010013758601a00e30073754005164014600e6010002600e004600e00260066ea801e29344d9590011",
+      "hash": "82c15eb70b0a6dc68ee1c500c4b45f4cf08e3dd030c4dc79d24c2310"
+    },
+    {
+      "title": "order_book.order_book.spend",
+      "datum": {
+        "title": "_datum",
+        "schema": {
+          "$ref": "#/definitions/fixtures~1order_book~1Ticket"
+        }
+      },
+      "redeemer": {
+        "title": "_order",
+        "schema": {
+          "$ref": "#/definitions/fixtures~1order_book~1Order"
+        }
+      },
+      "compiledCode": "59043601010029800aba2aba1aab9faab9eaab9dab9a48888896600264653001300700198039804000cdc3a400530070024888966002600460106ea800e3300130093754007223233001001003223300300130020029b8748002294660106ea8011222223298009800800cc044c04801a602200c9112cc004c01c016264b30013016001899192cc004c02800626464b3001301a002805c590181bae3018001301537540051598009807000c4c9660026032003133007301800100a8b202e3015375400516404c8098c04cdd5000980a800c5901418091baa00d8acc004c02c01626464b3001301700189919194c004dd6980c800cdd7180c801cdd7180c8012444b3001301d00489919194c004dd6980f800cdd7180f801cdd7180f8012444b3001302300480a4590210c07c004c078004dd6180e003c5901b0c064004c060004dd6180b001459015180b00098091baa00d8acc004cdc3a400800b13259800980b000c4c8c9660026030003132323298009bad301a0019bae301a0039bae301a002488966002603c009132323298009bad30200019bae30200039bae302000248896600260480090158b20441810000980f8009bac301d0078b2038180d000980c8009bac30170028b202c30170013758602a00316405060246ea80362b30013370e9003002c4c966002602c003132323298009bad30180019bae30180039bae3018002488966002603800900d8b2034180c000980b8009bac30150018b20283012375401b15980099b8748020016264b30013016001899192cc004c06000626464653001375a6034003375c6034007375c60340049112cc004c07801226464653001375a6040003375c6040007375c60400049112cc004c09001202b1640883020001301f0013758603a00f164070301a00130190013758602e005164058602e0026eb0c0540062c80a0c048dd5006c56600266e1d200a0058992cc004c058006264646644b3001301a003805c590181bae3017001375c602e004602e0026eb0c0540062c80a0c048dd5006c590102020404080810102020111192cc004c01c00626464b300130170028024590151bae3015001301237540071598009805800c4c966002602c0031330093758602a00244b3001002802c6600200f301700289800980c001200e405916405060246ea800e2b30013370e9002000c4c966002602c0031330093758602a00244b3001002802c6600200f301700289800980c001200e405916405060246ea800e2b30013370e9003000c4c8cc8966002603000313300b3758602e00244b3001002803c66002013301900289800980d001201240611640586eb4c054004c058004c048dd5001c56600266e1d2008001899192cc004c05c00a0091640546eb4c054004c048dd5001c56600266e1d200a001899192cc004c05c00a0091640546eb4c054004c048dd5001c590102020404080810102020301037540048b200e180380098019baa0078a4d1365640041",
+      "hash": "88ae52fb9f59d70cac82e73c0be647872e52d83f6d953191b204d3eb"
+    },
+    {
+      "title": "order_book.order_book.else",
+      "redeemer": {
+        "schema": {}
+      },
+      "compiledCode": "59043601010029800aba2aba1aab9faab9eaab9dab9a48888896600264653001300700198039804000cdc3a400530070024888966002600460106ea800e3300130093754007223233001001003223300300130020029b8748002294660106ea8011222223298009800800cc044c04801a602200c9112cc004c01c016264b30013016001899192cc004c02800626464b3001301a002805c590181bae3018001301537540051598009807000c4c9660026032003133007301800100a8b202e3015375400516404c8098c04cdd5000980a800c5901418091baa00d8acc004c02c01626464b3001301700189919194c004dd6980c800cdd7180c801cdd7180c8012444b3001301d00489919194c004dd6980f800cdd7180f801cdd7180f8012444b3001302300480a4590210c07c004c078004dd6180e003c5901b0c064004c060004dd6180b001459015180b00098091baa00d8acc004cdc3a400800b13259800980b000c4c8c9660026030003132323298009bad301a0019bae301a0039bae301a002488966002603c009132323298009bad30200019bae30200039bae302000248896600260480090158b20441810000980f8009bac301d0078b2038180d000980c8009bac30170028b202c30170013758602a00316405060246ea80362b30013370e9003002c4c966002602c003132323298009bad30180019bae30180039bae3018002488966002603800900d8b2034180c000980b8009bac30150018b20283012375401b15980099b8748020016264b30013016001899192cc004c06000626464653001375a6034003375c6034007375c60340049112cc004c07801226464653001375a6040003375c6040007375c60400049112cc004c09001202b1640883020001301f0013758603a00f164070301a00130190013758602e005164058602e0026eb0c0540062c80a0c048dd5006c56600266e1d200a0058992cc004c058006264646644b3001301a003805c590181bae3017001375c602e004602e0026eb0c0540062c80a0c048dd5006c590102020404080810102020111192cc004c01c00626464b300130170028024590151bae3015001301237540071598009805800c4c966002602c0031330093758602a00244b3001002802c6600200f301700289800980c001200e405916405060246ea800e2b30013370e9002000c4c966002602c0031330093758602a00244b3001002802c6600200f301700289800980c001200e405916405060246ea800e2b30013370e9003000c4c8cc8966002603000313300b3758602e00244b3001002803c66002013301900289800980d001201240611640586eb4c054004c058004c048dd5001c56600266e1d2008001899192cc004c05c00a0091640546eb4c054004c048dd5001c56600266e1d200a001899192cc004c05c00a0091640546eb4c054004c048dd5001c590102020404080810102020301037540048b200e180380098019baa0078a4d1365640041",
+      "hash": "88ae52fb9f59d70cac82e73c0be647872e52d83f6d953191b204d3eb"
+    },
+    {
+      "title": "pool.pool.spend",
+      "datum": {
+        "title": "_datum",
+        "schema": {
+          "$ref": "#/definitions/fixtures~1pool~1PoolState"
+        }
+      },
+      "redeemer": {
+        "title": "_action",
+        "schema": {
+          "$ref": "#/definitions/fixtures~1pool~1PoolAction"
+        }
+      },
+      "parameters": [
+        {
+          "title": "_config_policy",
+          "schema": {
+            "$ref": "#/definitions/ByteArray"
+          }
+        }
+      ],
+      "compiledCode": "590532010100229800aba2aba1aab9faab9eaab9dab9a9bae0024888888966002646465300130063754003370e90014dc3a400130090039804801244444b300130040058994c004c03c006601e6020003300c375400514a291112cc004c02000a2b30013011375400d0018b20248acc004c02400a2b30013011375400d0018b20248acc004cdc3a400800513259800980a800c4c8c8c8cc8966002603400713232598009808000c4c8c966002603c00500b8b2038375a603800260326ea800a2b300130110018acc004c064dd500140262c80d22c80b9017180b9baa00130190048b2030375a602e0026eb4c05c00cc05c004c058004dd6180a000c5901318089baa0068acc004cdc3a400c00513259800980a800c4c8c966002601600313259800980c000c4c8c8cc896600260380070098b2034375a60320026eb4c064008c064004dd6180b800c59016180a1baa0028acc004c0300062b3001301437540050048b202a8b2024404860246ea8004c0500062c8098c044dd500345900f201e403c807860186ea801a2b3001300300589991194c004c0040066eb8c044c03cdd5004c8966002601060206ea800a2646464b30013017002899804180b0018992cc004c030006264b30013019001899192cc004c03c006264b3001301c001899806980d800804c5901a180c1baa0028acc004c04000626464653001375a603a003375a603a007375a603a0049112cc004c08401201d16407c301d001301c0013018375400516405880b0c058dd5000980c000c59017180a9baa0028acc004c0340062b3001301537540050058b202c8b2026404c60266ea80062c80a8c054004c054004c044dd500145900f2444b300130093011375400f132323232323232323232323298009810000cc08002e604001530200099bac30200089bac302000798100034dd69810002cdd698100024dd69810001cdd69810001244444444444b3001302c00c89980d181580b899912cc004c088006264b3001302f00189980f9bac302e00122598008014016264600460640066eb8c0c000902f45902d18159baa00c8acc004c08c0062b3001302b37540190028b20588b205240a42660300122660300102646644b3001302f00389980f804912cc00400a26603e01429462660446060004260026062004817a2c8168dd698160009bad302c008302c007302837540151640a83020001301f001301e001301d001301c001301b001301a00130190013018001301700130160013012375400f16404022232598009804800c4c8c966002602e0050048b202a375c602a00260246ea800e2b3001300a0018992cc004c05800626600c6eb0c05400489660020050058cc00401e602e005130013018002401c80b22c80a0c048dd5001c56600266e1d20040018992cc004c05800626600c6eb0c05400489660020050058cc00401e602e005130013018002401c80b22c80a0c048dd5001c56600266e1d200600189919912cc004c0600062660106eb0c05c00489660020050078cc004026603200513001301a002402480c22c80b0dd6980a800980b00098091baa0038acc004cdc3a40100031323259800980b80140122c80a8dd6980a80098091baa0038acc004cdc3a40140031323259800980b80140122c80a8dd6980a80098091baa0038b2020404080810102020404060206ea800888c966002600c0031323259800980a00140122c8090dd7180900098079baa0038acc004c01c00626464b300130140028024590121bae3012001300f37540071640348068c034dd50011119198008008019119801800980100145900a201418041804800980400098021baa0088a4d1365640081",
+      "hash": "e5e754a077b4b728e664fed6b27d76046af1b1e5509c4c96e08b12f8"
+    },
+    {
+      "title": "pool.pool.mint",
+      "redeemer": {
+        "title": "_config",
+        "schema": {
+          "$ref": "#/definitions/fixtures~1config~1Config"
+        }
+      },
+      "parameters": [
+        {
+          "title": "_config_policy",
+          "schema": {
+            "$ref": "#/definitions/ByteArray"
+          }
+        }
+      ],
+      "compiledCode": "590532010100229800aba2aba1aab9faab9eaab9dab9a9bae0024888888966002646465300130063754003370e90014dc3a400130090039804801244444b300130040058994c004c03c006601e6020003300c375400514a291112cc004c02000a2b30013011375400d0018b20248acc004c02400a2b30013011375400d0018b20248acc004cdc3a400800513259800980a800c4c8c8c8cc8966002603400713232598009808000c4c8c966002603c00500b8b2038375a603800260326ea800a2b300130110018acc004c064dd500140262c80d22c80b9017180b9baa00130190048b2030375a602e0026eb4c05c00cc05c004c058004dd6180a000c5901318089baa0068acc004cdc3a400c00513259800980a800c4c8c966002601600313259800980c000c4c8c8cc896600260380070098b2034375a60320026eb4c064008c064004dd6180b800c59016180a1baa0028acc004c0300062b3001301437540050048b202a8b2024404860246ea8004c0500062c8098c044dd500345900f201e403c807860186ea801a2b3001300300589991194c004c0040066eb8c044c03cdd5004c8966002601060206ea800a2646464b30013017002899804180b0018992cc004c030006264b30013019001899192cc004c03c006264b3001301c001899806980d800804c5901a180c1baa0028acc004c04000626464653001375a603a003375a603a007375a603a0049112cc004c08401201d16407c301d001301c0013018375400516405880b0c058dd5000980c000c59017180a9baa0028acc004c0340062b3001301537540050058b202c8b2026404c60266ea80062c80a8c054004c054004c044dd500145900f2444b300130093011375400f132323232323232323232323298009810000cc08002e604001530200099bac30200089bac302000798100034dd69810002cdd698100024dd69810001cdd69810001244444444444b3001302c00c89980d181580b899912cc004c088006264b3001302f00189980f9bac302e00122598008014016264600460640066eb8c0c000902f45902d18159baa00c8acc004c08c0062b3001302b37540190028b20588b205240a42660300122660300102646644b3001302f00389980f804912cc00400a26603e01429462660446060004260026062004817a2c8168dd698160009bad302c008302c007302837540151640a83020001301f001301e001301d001301c001301b001301a00130190013018001301700130160013012375400f16404022232598009804800c4c8c966002602e0050048b202a375c602a00260246ea800e2b3001300a0018992cc004c05800626600c6eb0c05400489660020050058cc00401e602e005130013018002401c80b22c80a0c048dd5001c56600266e1d20040018992cc004c05800626600c6eb0c05400489660020050058cc00401e602e005130013018002401c80b22c80a0c048dd5001c56600266e1d200600189919912cc004c0600062660106eb0c05c00489660020050078cc004026603200513001301a002402480c22c80b0dd6980a800980b00098091baa0038acc004cdc3a40100031323259800980b80140122c80a8dd6980a80098091baa0038acc004cdc3a40140031323259800980b80140122c80a8dd6980a80098091baa0038b2020404080810102020404060206ea800888c966002600c0031323259800980a00140122c8090dd7180900098079baa0038acc004c01c00626464b300130140028024590121bae3012001300f37540071640348068c034dd50011119198008008019119801800980100145900a201418041804800980400098021baa0088a4d1365640081",
+      "hash": "e5e754a077b4b728e664fed6b27d76046af1b1e5509c4c96e08b12f8"
+    },
+    {
+      "title": "pool.pool.else",
+      "redeemer": {
+        "schema": {}
+      },
+      "parameters": [
+        {
+          "title": "_config_policy",
+          "schema": {
+            "$ref": "#/definitions/ByteArray"
+          }
+        }
+      ],
+      "compiledCode": "590532010100229800aba2aba1aab9faab9eaab9dab9a9bae0024888888966002646465300130063754003370e90014dc3a400130090039804801244444b300130040058994c004c03c006601e6020003300c375400514a291112cc004c02000a2b30013011375400d0018b20248acc004c02400a2b30013011375400d0018b20248acc004cdc3a400800513259800980a800c4c8c8c8cc8966002603400713232598009808000c4c8c966002603c00500b8b2038375a603800260326ea800a2b300130110018acc004c064dd500140262c80d22c80b9017180b9baa00130190048b2030375a602e0026eb4c05c00cc05c004c058004dd6180a000c5901318089baa0068acc004cdc3a400c00513259800980a800c4c8c966002601600313259800980c000c4c8c8cc896600260380070098b2034375a60320026eb4c064008c064004dd6180b800c59016180a1baa0028acc004c0300062b3001301437540050048b202a8b2024404860246ea8004c0500062c8098c044dd500345900f201e403c807860186ea801a2b3001300300589991194c004c0040066eb8c044c03cdd5004c8966002601060206ea800a2646464b30013017002899804180b0018992cc004c030006264b30013019001899192cc004c03c006264b3001301c001899806980d800804c5901a180c1baa0028acc004c04000626464653001375a603a003375a603a007375a603a0049112cc004c08401201d16407c301d001301c0013018375400516405880b0c058dd5000980c000c59017180a9baa0028acc004c0340062b3001301537540050058b202c8b2026404c60266ea80062c80a8c054004c054004c044dd500145900f2444b300130093011375400f132323232323232323232323298009810000cc08002e604001530200099bac30200089bac302000798100034dd69810002cdd698100024dd69810001cdd69810001244444444444b3001302c00c89980d181580b899912cc004c088006264b3001302f00189980f9bac302e00122598008014016264600460640066eb8c0c000902f45902d18159baa00c8acc004c08c0062b3001302b37540190028b20588b205240a42660300122660300102646644b3001302f00389980f804912cc00400a26603e01429462660446060004260026062004817a2c8168dd698160009bad302c008302c007302837540151640a83020001301f001301e001301d001301c001301b001301a00130190013018001301700130160013012375400f16404022232598009804800c4c8c966002602e0050048b202a375c602a00260246ea800e2b3001300a0018992cc004c05800626600c6eb0c05400489660020050058cc00401e602e005130013018002401c80b22c80a0c048dd5001c56600266e1d20040018992cc004c05800626600c6eb0c05400489660020050058cc00401e602e005130013018002401c80b22c80a0c048dd5001c56600266e1d200600189919912cc004c0600062660106eb0c05c00489660020050078cc004026603200513001301a002402480c22c80b0dd6980a800980b00098091baa0038acc004cdc3a40100031323259800980b80140122c80a8dd6980a80098091baa0038acc004cdc3a40140031323259800980b80140122c80a8dd6980a80098091baa0038b2020404080810102020404060206ea800888c966002600c0031323259800980a00140122c8090dd7180900098079baa0038acc004c01c00626464b300130140028024590121bae3012001300f37540071640348068c034dd50011119198008008019119801800980100145900a201418041804800980400098021baa0088a4d1365640081",
+      "hash": "e5e754a077b4b728e664fed6b27d76046af1b1e5509c4c96e08b12f8"
+    }
+  ],
+  "definitions": {
+    "Bool": {
+      "title": "Bool",
+      "anyOf": [
+        {
+          "title": "False",
+          "dataType": "constructor",
+          "index": 0,
+          "fields": []
+        },
+        {
+          "title": "True",
+          "dataType": "constructor",
+          "index": 1,
+          "fields": []
+        }
+      ]
+    },
+    "ByteArray": {
+      "dataType": "bytes"
+    },
+    "Data": {
+      "title": "Data",
+      "description": "Any Plutus data."
+    },
+    "Int": {
+      "dataType": "integer"
+    },
+    "List<ByteArray>": {
+      "dataType": "list",
+      "items": {
+        "$ref": "#/definitions/ByteArray"
+      }
+    },
+    "List<Int>": {
+      "dataType": "list",
+      "items": {
+        "$ref": "#/definitions/Int"
+      }
+    },
+    "List<Option<Int>>": {
+      "dataType": "list",
+      "items": {
+        "$ref": "#/definitions/Option<Int>"
+      }
+    },
+    "List<Tuple<<ByteArray,Int>>>": {
+      "dataType": "list",
+      "items": {
+        "$ref": "#/definitions/Tuple<<ByteArray,Int>>"
+      }
+    },
+    "List<fixtures/address/Asset>": {
+      "dataType": "list",
+      "items": {
+        "$ref": "#/definitions/fixtures~1address~1Asset"
+      }
+    },
+    "List<fixtures/address/Credential>": {
+      "dataType": "list",
+      "items": {
+        "$ref": "#/definitions/fixtures~1address~1Credential"
+      }
+    },
+    "List<fixtures/policy/Policy>": {
+      "dataType": "list",
+      "items": {
+        "$ref": "#/definitions/fixtures~1policy~1Policy"
+      }
+    },
+    "List<fixtures/proof_path/Hop>": {
+      "dataType": "list",
+      "items": {
+        "$ref": "#/definitions/fixtures~1proof_path~1Hop"
+      }
+    },
+    "Option<ByteArray>": {
+      "title": "Option",
+      "anyOf": [
+        {
+          "title": "Some",
+          "description": "An optional value.",
+          "dataType": "constructor",
+          "index": 0,
+          "fields": [
+            {
+              "$ref": "#/definitions/ByteArray"
+            }
+          ]
+        },
+        {
+          "title": "None",
+          "description": "Nothing.",
+          "dataType": "constructor",
+          "index": 1,
+          "fields": []
+        }
+      ]
+    },
+    "Option<Int>": {
+      "title": "Option",
+      "anyOf": [
+        {
+          "title": "Some",
+          "description": "An optional value.",
+          "dataType": "constructor",
+          "index": 0,
+          "fields": [
+            {
+              "$ref": "#/definitions/Int"
+            }
+          ]
+        },
+        {
+          "title": "None",
+          "description": "Nothing.",
+          "dataType": "constructor",
+          "index": 1,
+          "fields": []
+        }
+      ]
+    },
+    "Option<List<ByteArray>>": {
+      "title": "Option",
+      "anyOf": [
+        {
+          "title": "Some",
+          "description": "An optional value.",
+          "dataType": "constructor",
+          "index": 0,
+          "fields": [
+            {
+              "$ref": "#/definitions/List<ByteArray>"
+            }
+          ]
+        },
+        {
+          "title": "None",
+          "description": "Nothing.",
+          "dataType": "constructor",
+          "index": 1,
+          "fields": []
+        }
+      ]
+    },
+    "Option<Tuple<<Int,Int>>>": {
+      "title": "Option",
+      "anyOf": [
+        {
+          "title": "Some",
+          "description": "An optional value.",
+          "dataType": "constructor",
+          "index": 0,
+          "fields": [
+            {
+              "$ref": "#/definitions/Tuple<<Int,Int>>"
+            }
+          ]
+        },
+        {
+          "title": "None",
+          "description": "Nothing.",
+          "dataType": "constructor",
+          "index": 1,
+          "fields": []
+        }
+      ]
+    },
+    "Option<fixtures/address/Asset>": {
+      "title": "Option",
+      "anyOf": [
+        {
+          "title": "Some",
+          "description": "An optional value.",
+          "dataType": "constructor",
+          "index": 0,
+          "fields": [
+            {
+              "$ref": "#/definitions/fixtures~1address~1Asset"
+            }
+          ]
+        },
+        {
+          "title": "None",
+          "description": "Nothing.",
+          "dataType": "constructor",
+          "index": 1,
+          "fields": []
+        }
+      ]
+    },
+    "Option<fixtures/address/Referenced<fixtures/address/Credential>>": {
+      "title": "Option",
+      "anyOf": [
+        {
+          "title": "Some",
+          "description": "An optional value.",
+          "dataType": "constructor",
+          "index": 0,
+          "fields": [
+            {
+              "$ref": "#/definitions/fixtures~1address~1Referenced<fixtures~1address~1Credential>"
+            }
+          ]
+        },
+        {
+          "title": "None",
+          "description": "Nothing.",
+          "dataType": "constructor",
+          "index": 1,
+          "fields": []
+        }
+      ]
+    },
+    "Option<fixtures/policy/Policy>": {
+      "title": "Option",
+      "anyOf": [
+        {
+          "title": "Some",
+          "description": "An optional value.",
+          "dataType": "constructor",
+          "index": 0,
+          "fields": [
+            {
+              "$ref": "#/definitions/fixtures~1policy~1Policy"
+            }
+          ]
+        },
+        {
+          "title": "None",
+          "description": "Nothing.",
+          "dataType": "constructor",
+          "index": 1,
+          "fields": []
+        }
+      ]
+    },
+    "Tuple<<ByteArray,ByteArray,Int>>": {
+      "title": "Tuple",
+      "dataType": "list",
+      "items": [
+        {
+          "$ref": "#/definitions/ByteArray"
+        },
+        {
+          "$ref": "#/definitions/ByteArray"
+        },
+        {
+          "$ref": "#/definitions/Int"
+        }
+      ]
+    },
+    "Tuple<<ByteArray,ByteArray>>": {
+      "title": "Tuple",
+      "dataType": "list",
+      "items": [
+        {
+          "$ref": "#/definitions/ByteArray"
+        },
+        {
+          "$ref": "#/definitions/ByteArray"
+        }
+      ]
+    },
+    "Tuple<<ByteArray,Int>>": {
+      "title": "Tuple",
+      "dataType": "list",
+      "items": [
+        {
+          "$ref": "#/definitions/ByteArray"
+        },
+        {
+          "$ref": "#/definitions/Int"
+        }
+      ]
+    },
+    "Tuple<<Int,Int>>": {
+      "title": "Tuple",
+      "dataType": "list",
+      "items": [
+        {
+          "$ref": "#/definitions/Int"
+        },
+        {
+          "$ref": "#/definitions/Int"
+        }
+      ]
+    },
+    "Tuple<<Int,Option<Int>,Int>>": {
+      "title": "Tuple",
+      "dataType": "list",
+      "items": [
+        {
+          "$ref": "#/definitions/Int"
+        },
+        {
+          "$ref": "#/definitions/Option<Int>"
+        },
+        {
+          "$ref": "#/definitions/Int"
+        }
+      ]
+    },
+    "Tuple<<Tuple<<ByteArray,ByteArray,Int>>,Tuple<<ByteArray,ByteArray,Int>>>>": {
+      "title": "Tuple",
+      "dataType": "list",
+      "items": [
+        {
+          "$ref": "#/definitions/Tuple<<ByteArray,ByteArray,Int>>"
+        },
+        {
+          "$ref": "#/definitions/Tuple<<ByteArray,ByteArray,Int>>"
+        }
+      ]
+    },
+    "fixtures/address/Address": {
+      "title": "Address",
+      "anyOf": [
+        {
+          "title": "Address",
+          "dataType": "constructor",
+          "index": 0,
+          "fields": [
+            {
+              "title": "payment",
+              "$ref": "#/definitions/fixtures~1address~1Credential"
+            },
+            {
+              "title": "stake",
+              "$ref": "#/definitions/Option<fixtures~1address~1Referenced<fixtures~1address~1Credential>>"
+            }
+          ]
+        }
+      ]
+    },
+    "fixtures/address/Asset": {
+      "title": "Asset",
+      "anyOf": [
+        {
+          "title": "Asset",
+          "dataType": "constructor",
+          "index": 0,
+          "fields": [
+            {
+              "title": "policy",
+              "$ref": "#/definitions/ByteArray"
+            },
+            {
+              "title": "name",
+              "$ref": "#/definitions/ByteArray"
+            }
+          ]
+        }
+      ]
+    },
+    "fixtures/address/Credential": {
+      "title": "Credential",
+      "anyOf": [
+        {
+          "title": "VerificationKey",
+          "dataType": "constructor",
+          "index": 0,
+          "fields": [
+            {
+              "$ref": "#/definitions/ByteArray"
+            }
+          ]
+        },
+        {
+          "title": "Script",
+          "dataType": "constructor",
+          "index": 1,
+          "fields": [
+            {
+              "$ref": "#/definitions/ByteArray"
+            }
+          ]
+        }
+      ]
+    },
+    "fixtures/address/Referenced<fixtures/address/Credential>": {
+      "title": "Referenced",
+      "anyOf": [
+        {
+          "title": "Inline",
+          "dataType": "constructor",
+          "index": 0,
+          "fields": [
+            {
+              "$ref": "#/definitions/fixtures~1address~1Credential"
+            }
+          ]
+        },
+        {
+          "title": "Pointer",
+          "dataType": "constructor",
+          "index": 1,
+          "fields": [
+            {
+              "title": "slot",
+              "$ref": "#/definitions/Int"
+            },
+            {
+              "title": "tx",
+              "$ref": "#/definitions/Int"
+            },
+            {
+              "title": "cert",
+              "$ref": "#/definitions/Int"
+            }
+          ]
+        }
+      ]
+    },
+    "fixtures/config/Config": {
+      "title": "Config",
+      "anyOf": [
+        {
+          "title": "Config",
+          "dataType": "constructor",
+          "index": 0,
+          "fields": [
+            {
+              "title": "owner",
+              "$ref": "#/definitions/fixtures~1policy~1Policy"
+            },
+            {
+              "title": "operators",
+              "$ref": "#/definitions/Option<List<ByteArray>>"
+            },
+            {
+              "title": "treasury",
+              "$ref": "#/definitions/fixtures~1address~1Address"
+            },
+            {
+              "title": "payout",
+              "$ref": "#/definitions/fixtures~1address~1Address"
+            },
+            {
+              "title": "payout_share",
+              "$ref": "#/definitions/Tuple<<Int,Int>>"
+            },
+            {
+              "title": "stake_keys",
+              "$ref": "#/definitions/List<fixtures~1address~1Credential>"
+            },
+            {
+              "title": "guardian",
+              "$ref": "#/definitions/fixtures~1policy~1Policy"
+            },
+            {
+              "title": "fee_floor",
+              "$ref": "#/definitions/Int"
+            },
+            {
+              "title": "fee_step",
+              "$ref": "#/definitions/Int"
+            },
+            {
+              "title": "fee_cap",
+              "$ref": "#/definitions/Int"
+            },
+            {
+              "title": "pool_fee",
+              "$ref": "#/definitions/Int"
+            },
+            {
+              "title": "extra",
+              "$ref": "#/definitions/Data"
+            }
+          ]
+        }
+      ]
+    },
+    "fixtures/market/Market": {
+      "title": "Market",
+      "anyOf": [
+        {
+          "title": "Market",
+          "dataType": "constructor",
+          "index": 0,
+          "fields": [
+            {
+              "title": "stake",
+              "$ref": "#/definitions/fixtures~1address~1Referenced<fixtures~1address~1Credential>"
+            },
+            {
+              "title": "base",
+              "$ref": "#/definitions/fixtures~1address~1Asset"
+            },
+            {
+              "title": "quote",
+              "$ref": "#/definitions/fixtures~1address~1Asset"
+            },
+            {
+              "title": "supply",
+              "$ref": "#/definitions/Int"
+            },
+            {
+              "title": "base_reserve",
+              "$ref": "#/definitions/Int"
+            },
+            {
+              "title": "quote_reserve",
+              "$ref": "#/definitions/Int"
+            },
+            {
+              "title": "base_fee",
+              "$ref": "#/definitions/Int"
+            },
+            {
+              "title": "quote_fee",
+              "$ref": "#/definitions/Int"
+            },
+            {
+              "title": "share_fee",
+              "$ref": "#/definitions/Option<Int>"
+            },
+            {
+              "title": "dynamic_fee",
+              "$ref": "#/definitions/Bool"
+            }
+          ]
+        }
+      ]
+    },
+    "fixtures/order_book/Auth": {
+      "title": "Auth",
+      "anyOf": [
+        {
+          "title": "Key",
+          "dataType": "constructor",
+          "index": 0,
+          "fields": [
+            {
+              "title": "hash",
+              "$ref": "#/definitions/ByteArray"
+            }
+          ]
+        },
+        {
+          "title": "Signed",
+          "dataType": "constructor",
+          "index": 1,
+          "fields": [
+            {
+              "title": "policy",
+              "$ref": "#/definitions/fixtures~1policy~1Policy"
+            }
+          ]
+        }
+      ]
+    },
+    "fixtures/order_book/Order": {
+      "title": "Order",
+      "anyOf": [
+        {
+          "title": "Delegate",
+          "dataType": "constructor",
+          "index": 0,
+          "fields": [
+            {
+              "title": "auth",
+              "$ref": "#/definitions/fixtures~1order_book~1Auth"
+            }
+          ]
+        },
+        {
+          "title": "Exchange",
+          "dataType": "constructor",
+          "index": 1,
+          "fields": [
+            {
+              "title": "offer",
+              "$ref": "#/definitions/Tuple<<ByteArray,ByteArray,Int>>"
+            },
+            {
+              "title": "min_out",
+              "$ref": "#/definitions/Tuple<<ByteArray,ByteArray,Int>>"
+            }
+          ]
+        },
+        {
+          "title": "Add",
+          "dataType": "constructor",
+          "index": 2,
+          "fields": [
+            {
+              "title": "amounts",
+              "$ref": "#/definitions/Tuple<<Tuple<<ByteArray,ByteArray,Int>>,Tuple<<ByteArray,ByteArray,Int>>>>"
+            }
+          ]
+        },
+        {
+          "title": "Remove",
+          "dataType": "constructor",
+          "index": 3,
+          "fields": [
+            {
+              "title": "shares",
+              "$ref": "#/definitions/Tuple<<ByteArray,ByteArray,Int>>"
+            }
+          ]
+        },
+        {
+          "title": "Gift",
+          "dataType": "constructor",
+          "index": 4,
+          "fields": [
+            {
+              "title": "amounts",
+              "$ref": "#/definitions/Tuple<<Tuple<<ByteArray,ByteArray,Int>>,Tuple<<ByteArray,ByteArray,Int>>>>"
+            }
+          ]
+        },
+        {
+          "title": "Note",
+          "dataType": "constructor",
+          "index": 5,
+          "fields": [
+            {
+              "title": "tag",
+              "$ref": "#/definitions/Tuple<<ByteArray,ByteArray>>"
+            }
+          ]
+        }
+      ]
+    },
+    "fixtures/order_book/Ticket": {
+      "title": "Ticket",
+      "anyOf": [
+        {
+          "title": "Ticket",
+          "dataType": "constructor",
+          "index": 0,
+          "fields": [
+            {
+              "title": "owner",
+              "$ref": "#/definitions/fixtures~1address~1Address"
+            },
+            {
+              "title": "memo",
+              "$ref": "#/definitions/Option<ByteArray>"
+            },
+            {
+              "title": "fallback",
+              "$ref": "#/definitions/Option<fixtures~1address~1Asset>"
+            },
+            {
+              "title": "routes",
+              "$ref": "#/definitions/List<Tuple<<ByteArray,Int>>>"
+            },
+            {
+              "title": "limits",
+              "$ref": "#/definitions/List<Option<Int>>"
+            },
+            {
+              "title": "weights",
+              "$ref": "#/definitions/List<Int>"
+            },
+            {
+              "title": "assets",
+              "$ref": "#/definitions/List<fixtures~1address~1Asset>"
+            }
+          ]
+        }
+      ]
+    },
+    "fixtures/policy/Policy": {
+      "title": "Policy",
+      "anyOf": [
+        {
+          "title": "Key",
+          "dataType": "constructor",
+          "index": 0,
+          "fields": [
+            {
+              "title": "hash",
+              "$ref": "#/definitions/ByteArray"
+            }
+          ]
+        },
+        {
+          "title": "All",
+          "dataType": "constructor",
+          "index": 1,
+          "fields": [
+            {
+              "title": "policies",
+              "$ref": "#/definitions/List<fixtures~1policy~1Policy>"
+            }
+          ]
+        },
+        {
+          "title": "Any",
+          "dataType": "constructor",
+          "index": 2,
+          "fields": [
+            {
+              "title": "policies",
+              "$ref": "#/definitions/List<fixtures~1policy~1Policy>"
+            }
+          ]
+        },
+        {
+          "title": "Quorum",
+          "dataType": "constructor",
+          "index": 3,
+          "fields": [
+            {
+              "title": "required",
+              "$ref": "#/definitions/Int"
+            },
+            {
+              "title": "policies",
+              "$ref": "#/definitions/List<fixtures~1policy~1Policy>"
+            }
+          ]
+        },
+        {
+          "title": "After",
+          "dataType": "constructor",
+          "index": 4,
+          "fields": [
+            {
+              "title": "time",
+              "$ref": "#/definitions/Int"
+            }
+          ]
+        },
+        {
+          "title": "Before",
+          "dataType": "constructor",
+          "index": 5,
+          "fields": [
+            {
+              "title": "time",
+              "$ref": "#/definitions/Int"
+            }
+          ]
+        }
+      ]
+    },
+    "fixtures/pool/PoolAction": {
+      "title": "PoolAction",
+      "anyOf": [
+        {
+          "title": "Pause",
+          "dataType": "constructor",
+          "index": 0,
+          "fields": []
+        },
+        {
+          "title": "Resume",
+          "dataType": "constructor",
+          "index": 1,
+          "fields": []
+        },
+        {
+          "title": "Rebalance",
+          "dataType": "constructor",
+          "index": 2,
+          "fields": [
+            {
+              "title": "amounts",
+              "$ref": "#/definitions/Tuple<<Int,Option<Int>,Int>>"
+            }
+          ]
+        },
+        {
+          "title": "Settle",
+          "dataType": "constructor",
+          "index": 3,
+          "fields": [
+            {
+              "title": "window",
+              "$ref": "#/definitions/Option<Tuple<<Int,Int>>>"
+            }
+          ]
+        }
+      ]
+    },
+    "fixtures/pool/PoolState": {
+      "title": "PoolState",
+      "anyOf": [
+        {
+          "title": "PoolState",
+          "dataType": "constructor",
+          "index": 0,
+          "fields": [
+            {
+              "title": "id",
+              "$ref": "#/definitions/ByteArray"
+            },
+            {
+              "title": "reserves",
+              "$ref": "#/definitions/Tuple<<Tuple<<ByteArray,ByteArray,Int>>,Tuple<<ByteArray,ByteArray,Int>>>>"
+            },
+            {
+              "title": "shares",
+              "$ref": "#/definitions/Int"
+            },
+            {
+              "title": "fee_in",
+              "$ref": "#/definitions/Int"
+            },
+            {
+              "title": "fee_out",
+              "$ref": "#/definitions/Int"
+            },
+            {
+              "title": "admin",
+              "$ref": "#/definitions/Option<fixtures~1policy~1Policy>"
+            },
+            {
+              "title": "opens_at",
+              "$ref": "#/definitions/Int"
+            },
+            {
+              "title": "protocol_cut",
+              "$ref": "#/definitions/Int"
+            }
+          ]
+        }
+      ]
+    },
+    "fixtures/proof_path/Hop": {
+      "title": "Hop",
+      "anyOf": [
+        {
+          "title": "Wide",
+          "dataType": "constructor",
+          "index": 0,
+          "fields": [
+            {
+              "title": "depth",
+              "$ref": "#/definitions/Int"
+            },
+            {
+              "title": "siblings",
+              "$ref": "#/definitions/ByteArray"
+            }
+          ]
+        },
+        {
+          "title": "Narrow",
+          "dataType": "constructor",
+          "index": 1,
+          "fields": [
+            {
+              "title": "depth",
+              "$ref": "#/definitions/Int"
+            },
+            {
+              "title": "sibling",
+              "$ref": "#/definitions/fixtures~1proof_path~1Sibling"
+            }
+          ]
+        },
+        {
+          "title": "Tip",
+          "dataType": "constructor",
+          "index": 2,
+          "fields": [
+            {
+              "title": "depth",
+              "$ref": "#/definitions/Int"
+            },
+            {
+              "title": "key",
+              "$ref": "#/definitions/ByteArray"
+            },
+            {
+              "title": "value",
+              "$ref": "#/definitions/ByteArray"
+            }
+          ]
+        }
+      ]
+    },
+    "fixtures/proof_path/Sibling": {
+      "title": "Sibling",
+      "anyOf": [
+        {
+          "title": "Sibling",
+          "dataType": "constructor",
+          "index": 0,
+          "fields": [
+            {
+              "title": "nibble",
+              "$ref": "#/definitions/Int"
+            },
+            {
+              "title": "prefix",
+              "$ref": "#/definitions/ByteArray"
+            },
+            {
+              "title": "root",
+              "$ref": "#/definitions/ByteArray"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

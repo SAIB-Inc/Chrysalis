@@ -1,0 +1,61 @@
+{
+  "preamble": {
+    "title": "aiken-lang/acceptance_test_079",
+    "version": "0.0.0",
+    "plutusVersion": "v2",
+    "compiler": {
+      "name": "Aiken",
+      "version": "v1.0.26-alpha+c3ad52b"
+    }
+  },
+  "validators": [
+    {
+      "title": "foo.spend",
+      "datum": {
+        "title": "datum",
+        "schema": {
+          "$ref": "#/definitions/Int"
+        }
+      },
+      "redeemer": {
+        "title": "redeemer",
+        "schema": {
+          "$ref": "#/definitions/RedeemerWrapper$Int"
+        }
+      },
+      "compiledCode": "5853010000323232322253330033370e900018021baa00113253330043370e002902a0a4c26cac6eb40084c8c894ccc018cdc399b800030024815052613656375a600e600c6ea8008dd68012b9a5573aaae795d081",
+      "hash": "1cb810eff560f2aa83e3bf8bc1c8bb44b5d90b3c3fa9bb5b3008ec63"
+    },
+    {
+      "title": "foo.mint",
+      "redeemer": {
+        "title": "redeemer",
+        "schema": {
+          "$ref": "#/definitions/Int"
+        }
+      },
+      "compiledCode": "5853010000323232322253330033370e900018021baa00113253330043370e002902a0a4c26cac6eb40084c8c894ccc018cdc399b800030024815052613656375a600e600c6ea8008dd68012b9a5573aaae795d081",
+      "hash": "1cb810eff560f2aa83e3bf8bc1c8bb44b5d90b3c3fa9bb5b3008ec63"
+    }
+  ],
+  "definitions": {
+    "Int": {
+      "dataType": "integer"
+    },
+    "RedeemerWrapper$Int": {
+      "title": "Wrapped Redeemer",
+      "description": "A redeemer wrapped in an extra constructor to make multi-validator detection possible on-chain.",
+      "anyOf": [
+        {
+          "dataType": "constructor",
+          "index": 1,
+          "fields": [
+            {
+              "$ref": "#/definitions/Int"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,2 @@
+file	repository	tag	commit	path at that commit	licence	sha256	derived from
+aiken-079.json	https://github.com/aiken-lang/aiken	v1.0.28-alpha	c9a15194a0d073ea7aa4b353de89714461e8718a	examples/acceptance_tests/079/plutus.json	Apache-2.0	d16fe3c26103477880c4409e465cc1020f788f16ec79f4f0252c5870133e8085	-

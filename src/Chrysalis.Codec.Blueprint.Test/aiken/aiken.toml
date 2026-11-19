@@ -1,0 +1,6 @@
+name = "fixtures/shapes"
+version = "0.0.0"
+compiler = "v1.1.24"
+plutus = "v3"
+license = "MIT"
+description = "Owned blueprint shapes for the Chrysalis generator tests"
