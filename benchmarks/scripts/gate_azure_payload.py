@@ -14,7 +14,7 @@ DEPS_FILES = ('ReplayClient.deps.json', 'Chrysalis.Benchmarks.deps.json')
 CAPSTONE = 'runtimes/linux-x64/native/libcapstone.so'
 # MX's reviewed Linux/amd64 image and SDK archive checksums. The build runner
 # itself stays unapproved until both tooling seats review its frozen digest.
-BUILD_RUNNER_SHA256 = None
+BUILD_RUNNER_SHA256 = '2863a07ccbd55990674c0acc8d8dc51a0f8e214f93364d5e4ae5ca1367dea6b4'
 BUILD_IMAGE_DIGEST = 'sha256:36811ba1de0179e92a9537453e4ec8eb70b1af8dd926a9802c17a252f2c506ce'
 BUILD_SDK_SHA512 = {
     '11.0.100': '1bec9cca2ec689b1e80245b84f2b53c9441d1aa6daccf2ceb27490768bffa95954fa585bd275def31069d874d543d9ba9e6591fe9ade2dbd9f34ec5c0fd0050c',
