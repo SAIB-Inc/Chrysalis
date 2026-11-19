@@ -22,18 +22,23 @@ public class ByronTests
         _ = reader.ReadSize();
         _ = reader.ReadUInt64();
         byte[] body = reader.ReadDataItem().ToArray();
-        for (int i = 0; i < 1024; i++)
-        {
-            _ = ByronMainBlock.Read(body);
-        }
-        long before = GC.GetAllocatedBytesForCurrentThread();
         int consumed = 0;
-        for (int i = 0; i < 4096; i++)
-        {
-            consumed = ByronMainBlock.Read(body).Raw.Length;
-        }
-        long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
-        Assert.Equal(body.Length, consumed);
+        long allocated = AllocationAssert.Measure(
+            () =>
+            {
+                for (int i = 0; i < 1024; i++)
+                {
+                    _ = ByronMainBlock.Read(body);
+                }
+            },
+            () =>
+            {
+                for (int i = 0; i < 4096; i++)
+                {
+                    consumed = ByronMainBlock.Read(body).Raw.Length;
+                }
+            },
+            () => Assert.Equal(body.Length, consumed));
         Assert.Equal(0, allocated);
     }
 

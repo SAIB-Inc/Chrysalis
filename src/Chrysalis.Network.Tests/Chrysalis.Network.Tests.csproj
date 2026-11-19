@@ -8,6 +8,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Include="../Chrysalis.Codec.Test/AllocationAssert.cs" Link="AllocationAssert.cs" />
     <EmbeddedResource Include="Fixtures/Preprod/**/*" />
     <EmbeddedResource Include="Fixtures/Receive/*.cbor" />
     <EmbeddedResource Include="Fixtures/Receive/manifest.json" />

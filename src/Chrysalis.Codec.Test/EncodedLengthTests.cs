@@ -129,15 +129,19 @@ public class EncodedLengthTests
 
     private static void AssertAllocationFree<T>(T value) where T : ICborType
     {
-        long expected = CborSerializer.GetEncodedLength(value);
-        long before = GC.GetAllocatedBytesForCurrentThread();
+        long expected = 0;
         long total = 0;
-        for (int i = 0; i < 1000; i++)
-        {
-            total += CborSerializer.GetEncodedLength(value);
-        }
-        long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
-        Assert.Equal(expected * 1000, total);
+        long allocated = AllocationAssert.Measure(
+            () => expected = CborSerializer.GetEncodedLength(value),
+            () =>
+            {
+                total = 0;
+                for (int i = 0; i < 1000; i++)
+                {
+                    total += CborSerializer.GetEncodedLength(value);
+                }
+            },
+            () => Assert.Equal(expected * 1000, total));
         Assert.Equal(0, allocated);
     }
 
