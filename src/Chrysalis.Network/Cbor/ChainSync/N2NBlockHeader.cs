@@ -3,6 +3,7 @@ using Chrysalis.Codec.Serialization.Attributes;
 using Chrysalis.Codec.Types;
 using Chrysalis.Codec.Types.Cardano.Core;
 using Chrysalis.Network.Cbor.Common;
+using SAIB.Cbor;
 
 namespace Chrysalis.Network.Cbor.ChainSync;
 
@@ -64,7 +65,34 @@ public readonly record struct N2NBlockHeaderValidator : ICborValidator<N2NBlockH
 /// </summary>
 [CborSerializable]
 [CborUnion]
-public partial interface INetworkBlockHeader : ICborType;
+public partial interface INetworkBlockHeader : ICborType
+{
+    /// <summary>Reads a <see cref="INetworkBlockHeader"/> and reports the number of bytes consumed.</summary>
+    static INetworkBlockHeader Read(ReadOnlyMemory<byte> data, out int bytesConsumed)
+    {
+        try
+        {
+            ReadOnlySpan<byte> prefix = data.Span;
+            if (NetworkUnionPrefix.TrySkipTag(ref prefix) && !prefix.IsEmpty)
+            {
+                if (prefix[0] >> 5 == 4)
+                {
+                    return ByronN2NHeader.Read(data, out bytesConsumed);
+                }
+                // The concrete encoded-value reader accepts an optional tag in addition to SAIB's.
+                if (NetworkUnionPrefix.TrySkipTag(ref prefix) && !prefix.IsEmpty && prefix[0] >> 5 == 2)
+                {
+                    return ShelleyN2NHeader.Read(data, out bytesConsumed);
+                }
+            }
+            throw CborError.Decode(data, 0, nameof(INetworkBlockHeader), "Byron header array or encoded header byte string");
+        }
+        catch (CborException error)
+        {
+            throw CborError.Wrap(error, data, nameof(INetworkBlockHeader), "Byron header array or encoded header byte string");
+        }
+    }
+}
 
 /// <summary>
 /// The Byron (era 0) N2N header body: <c>[[subTag, size], #6.24(header)]</c> — a two-element prefix

@@ -105,9 +105,9 @@ public partial class GeneratorIsolationTests
     }
 
     [Theory]
-    [InlineData("Chrysalis.Network", true)]
-    [InlineData("Chrysalis.Codec", false)]
-    public void X7TrialExemptionIsBoundToNetworkAssemblyAndExactTypes(string assemblyName, bool network)
+    [InlineData("Chrysalis.Network")]
+    [InlineData("Chrysalis.Codec")]
+    public void NetworkAssemblyAndUnionNamesDoNotEnableTrials(string assemblyName)
     {
         const string source = """
             using Chrysalis.Codec.Serialization;
@@ -128,15 +128,106 @@ public partial class GeneratorIsolationTests
             }
             """;
         GeneratorDriverRunResult result = CreateDriver().RunGenerators(CreateCompilation(assemblyName, source)).GetRunResult();
-        Assert.Contains(result.Diagnostics, diagnostic => diagnostic.Id == "CHCB001" && diagnostic.Location.IsInSource);
-        string[] fallbacks = [.. result.Results.Single().GeneratedSources
-            .Where(file => file.SourceText.ToString().Contains("BeginReadTrial()", StringComparison.Ordinal))
-            .Select(file => file.HintName).Order(StringComparer.Ordinal)];
-        Assert.Equal(network ?
-            ["Chrysalis.Network.Cbor.ChainSync.INetworkBlockHeader.Serializer.g.cs",
-             "Chrysalis.Network.Cbor.Handshake.HandshakeMessage.Serializer.g.cs",
-             "Chrysalis.Network.Cbor.Handshake.VersionTable.Serializer.g.cs",
-             "Chrysalis.Network.Cbor.LocalStateQuery.IQueryReq.Serializer.g.cs"] : [], fallbacks);
+        Assert.Equal(5, result.Diagnostics.Count(diagnostic => diagnostic.Id == "CHCB001" && diagnostic.Location.IsInSource));
+        Assert.DoesNotContain(result.Results.Single().GeneratedSources, file =>
+            file.SourceText.ToString().Contains("BeginReadTrial", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void DeclaredUnionReaderInAnotherPartialKeepsConvenienceReadAndWriter()
+    {
+        const string source = """
+            global using System;
+            using Chrysalis.Codec.Serialization;
+            using Chrysalis.Codec.Serialization.Attributes;
+            namespace ReaderProbe;
+            [CborSerializable, CborUnion] public partial interface IValue : ICborType;
+            [CborSerializable, CborList] public partial record First([CborOrder(0)] int Value) : Chrysalis.Codec.Types.CborRecord, IValue;
+            [CborSerializable, CborList] public partial record Second([CborOrder(0)] int Value) : Chrysalis.Codec.Types.CborRecord, IValue;
+            """;
+        const string partial = """
+            namespace ReaderProbe;
+            using Bytes = global::System.ReadOnlyMemory<byte>;
+            public partial interface IValue
+            {
+                static IValue Read(Bytes input, out int count) => Second.Read(input, out count);
+            }
+            """;
+        CSharpCompilation compilation = CreateCompilation("ReaderProbe", source)
+            .AddSyntaxTrees(CSharpSyntaxTree.ParseText(partial, ParseOptions, "Read.cs"));
+        GeneratorDriverRunResult result = CreateDriver().RunGeneratorsAndUpdateCompilation(compilation, out Compilation output, out _).GetRunResult();
+        Assert.Empty(result.Diagnostics);
+        using MemoryStream assemblyBytes = new();
+        Microsoft.CodeAnalysis.Emit.EmitResult emitted = output.Emit(assemblyBytes);
+        Assert.True(emitted.Success, string.Join(Environment.NewLine, emitted.Diagnostics));
+        Type type = Assembly.Load(assemblyBytes.ToArray()).GetType("ReaderProbe.IValue", throwOnError: true)!;
+        MethodInfo read = type.GetMethod("Read", [typeof(ReadOnlyMemory<byte>)])!;
+        Assert.Equal("ReaderProbe.Second", read.Invoke(null, [new ReadOnlyMemory<byte>([0x81, 0x01])])?.GetType().FullName);
+        Assert.NotNull(type.GetMethod("Write", BindingFlags.Public | BindingFlags.Static));
+    }
+
+    [Theory]
+    [InlineData("public static IValue Read(ReadOnlyMemory<byte> data, Era era) => First.Read(data);")]
+    [InlineData("public static IValue Read(ReadOnlyMemory<byte> data, int era) => First.Read(data);")]
+    [InlineData("public static IValue Read(string hex) => First.Read(Convert.FromHexString(hex));")]
+    [InlineData("public void Read(int value) { }")]
+    public void UnrelatedReadOverloadDoesNotSuppressGeneratedReader(string method)
+    {
+        string source = $$"""
+            global using System;
+            using Chrysalis.Codec.Serialization;
+            using Chrysalis.Codec.Serialization.Attributes;
+            namespace ReaderProbe;
+            public enum Era { One }
+            [CborSerializable, CborUnion] public partial interface IValue : ICborType
+            {
+                {{method}}
+            }
+            [CborSerializable, CborList] public partial record First([CborOrder(0)] int Value) : Chrysalis.Codec.Types.CborRecord, IValue;
+            """;
+        GeneratorDriverRunResult result = CreateDriver()
+            .RunGeneratorsAndUpdateCompilation(CreateCompilation("ContextualReaderProbe", source), out Compilation output, out _).GetRunResult();
+        Assert.Empty(result.Diagnostics);
+        Assert.DoesNotContain(output.GetDiagnostics(), diagnostic => diagnostic.Severity == DiagnosticSeverity.Error);
+    }
+
+    [Theory]
+    [InlineData("public static object Read(ReadOnlyMemory<byte> data, out int count) => throw new NotImplementedException();")]
+    [InlineData("public static IValue Read(ReadOnlySpan<byte> data, out int count) => throw new NotImplementedException();")]
+    [InlineData("public static IValue Read(ReadOnlyMemory<byte> data, ref int count) => throw new NotImplementedException();")]
+    [InlineData("public static IValue Read(ReadOnlyMemory<byte> data, out long count) => throw new NotImplementedException();")]
+    [InlineData("public static IValue Read(ReadOnlyMemory<byte> data, long count) => throw new NotImplementedException();")]
+    [InlineData("public static IValue Read(ReadOnlyMemory<byte> data, uint count) => throw new NotImplementedException();")]
+    [InlineData("public static IValue Read(out int count, ReadOnlyMemory<byte> data) => throw new NotImplementedException();")]
+    [InlineData("public static IValue Read(in ReadOnlyMemory<byte> data, Era era) => throw new NotImplementedException();")]
+    [InlineData("public static IValue Read(ref ReadOnlyMemory<byte> data, out int count) => throw new NotImplementedException();")]
+    [InlineData("public static IValue? Read(ReadOnlyMemory<byte> data, out int count) => throw new NotImplementedException();")]
+    [InlineData("public static IValue Read(ReadOnlyMemory<byte> data) => throw new NotImplementedException(); public static IValue Read(ReadOnlyMemory<byte> data, out int count) => throw new NotImplementedException();")]
+    [InlineData("public static IValue Read(ReadOnlyMemory<byte> data, out int count) => throw new NotImplementedException(); public static IValue Read(ReadOnlyMemory<byte> data) => throw new NotImplementedException();")]
+    [InlineData("public IValue Read(ReadOnlyMemory<byte> data, out int count) => throw new NotImplementedException();")]
+    [InlineData("private static IValue Read(ReadOnlyMemory<byte> data, out int count) => throw new NotImplementedException();")]
+    [InlineData("public static IValue Read<T>(ReadOnlyMemory<byte> data, out int count) => throw new NotImplementedException();")]
+    [InlineData("public static ref IValue Read(ReadOnlyMemory<byte> data, out int count) => throw new NotImplementedException();")]
+    [InlineData("public static abstract IValue Read(ReadOnlyMemory<byte> data, out int count);")]
+    [InlineData("public static IValue Read(ReadOnlyMemory<byte> data) => throw new NotImplementedException();")]
+    public void UnionReaderNearMissHasASourceDiagnostic(string method)
+    {
+        string source = $$"""
+            #nullable enable
+            global using System;
+            using Chrysalis.Codec.Serialization;
+            using Chrysalis.Codec.Serialization.Attributes;
+            namespace ReaderProbe;
+            public enum Era { One }
+            [CborSerializable, CborUnion] public partial interface IValue : ICborType { {{method}} }
+            """;
+        GeneratorDriverRunResult result = CreateDriver()
+            .RunGeneratorsAndUpdateCompilation(CreateCompilation("ReaderProbe", source), out Compilation output, out _).GetRunResult();
+        Diagnostic diagnostic = Assert.Single(result.Diagnostics, diagnostic => diagnostic.Id == "CHCB003");
+        Assert.Equal(DiagnosticSeverity.Error, diagnostic.Severity);
+        Assert.True(diagnostic.Location.IsInSource);
+        Assert.DoesNotContain(output.GetDiagnostics(), reported => reported.Id == "CS0111");
+        Assert.Contains("Read(ReadOnlyMemory<byte>, out int)", diagnostic.GetMessage(CultureInfo.InvariantCulture), StringComparison.Ordinal);
     }
 
     [Theory]

@@ -6,12 +6,12 @@ namespace Chrysalis.Network.Cbor.Handshake;
 // overlap structurally. Index and family checks prevent first-match union mistakes.
 internal sealed class N2CVersionValidator : ICborValidator<N2CVersion>
 {
-    public bool Validate(N2CVersion input) => input.Value is >= 32768 and <= 65535;
+    public bool Validate(N2CVersion input) => input.Value is >= VersionTable.FirstNodeToClientVersion and <= VersionTable.LastNodeToClientVersion;
 }
 
 internal sealed class N2NVersionValidator : ICborValidator<N2NVersion>
 {
-    public bool Validate(N2NVersion input) => input.Value is >= 0 and < 32768;
+    public bool Validate(N2NVersion input) => input.Value is >= 0 and < VersionTable.FirstNodeToClientVersion;
 }
 
 internal sealed class ProposeVersionsValidator : ICborValidator<ProposeVersions>

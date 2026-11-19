@@ -74,7 +74,12 @@ public static class RawQueries
 /// </summary>
 [CborSerializable]
 [CborUnion]
-public partial interface IQueryReq : ICborType;
+public partial interface IQueryReq : ICborType
+{
+    /// <summary>Reads a <see cref="IQueryReq"/> and reports the number of bytes consumed.</summary>
+    static IQueryReq Read(ReadOnlyMemory<byte> data, out int bytesConsumed) =>
+        QueryUnionReader.Read(data, out bytesConsumed);
+}
 
 /// <summary>
 /// Represents a base query wrapper in the LocalStateQuery mini-protocol that nests an inner query with a numeric selector.

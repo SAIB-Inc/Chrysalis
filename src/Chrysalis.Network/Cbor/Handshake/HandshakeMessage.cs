@@ -1,5 +1,8 @@
+using Chrysalis.Codec.Serialization;
 using Chrysalis.Codec.Serialization.Attributes;
 using Chrysalis.Codec.Types;
+using SAIB.Cbor;
+using SAIB.Cbor.Serialization;
 
 namespace Chrysalis.Network.Cbor.Handshake;
 
@@ -8,7 +11,35 @@ namespace Chrysalis.Network.Cbor.Handshake;
 /// </summary>
 [CborSerializable]
 [CborUnion]
-public abstract partial record HandshakeMessage : CborRecord;
+public abstract partial record HandshakeMessage : CborRecord
+{
+    /// <summary>Reads a <see cref="HandshakeMessage"/> and reports the number of bytes consumed.</summary>
+    public static HandshakeMessage Read(ReadOnlyMemory<byte> data, out int bytesConsumed)
+    {
+        CborReader reader = new(data.Span);
+        try
+        {
+            reader.ReadBeginArray();
+            _ = reader.ReadSize();
+            int indexOffset = data.Length - reader.Buffer.Length;
+            int index = reader.ReadInt32();
+            return index switch
+            {
+                0 => ProposeVersions.Read(data, out bytesConsumed),
+                1 when VersionTable.ReadVersionFamily(reader, data) => N2CAcceptVersion.Read(data, out bytesConsumed),
+                1 => N2NAcceptVersion.Read(data, out bytesConsumed),
+                2 => Refuse.Read(data, out bytesConsumed),
+                3 when VersionTable.IsNodeToClientMap(reader, data, emptyIsNodeToClient: false) => N2CQueryReply.Read(data, out bytesConsumed),
+                3 => N2NQueryReply.Read(data, out bytesConsumed),
+                _ => throw CborError.Decode(data, indexOffset, nameof(HandshakeMessage), "handshake message index 0–3", index)
+            };
+        }
+        catch (CborException error)
+        {
+            throw CborError.Wrap(error, data, nameof(HandshakeMessage), "handshake message");
+        }
+    }
+}
 
 /// <summary>
 /// Factory methods for constructing Ouroboros Handshake mini-protocol messages with correct CBOR indices.

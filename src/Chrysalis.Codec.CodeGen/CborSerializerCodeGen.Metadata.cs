@@ -11,6 +11,13 @@ public sealed partial class CborSerializerCodeGen
         Union
     }
 
+    internal enum UnionReaderKind
+    {
+        Generated,
+        Declared,
+        Invalid
+    }
+
     internal sealed record SerializableTypeMetadata(
         string BaseIdentifier,
         string Indentifier,
@@ -31,7 +38,7 @@ public sealed partial class CborSerializerCodeGen
         public bool IsRecordStruct => Keyword.Contains("struct");
         public bool IsTypeNullable => Indentifier.Contains("?");
 
-        public bool KeepNetworkReadTrial { get; init; }
+        public UnionReaderKind UnionReader { get; init; }
         public EquatableArray<SerializableTypeMetadata> ChildTypes { get; init; }
         public EquatableArray<SerializablePropertyMetadata> Properties { get; init; }
 

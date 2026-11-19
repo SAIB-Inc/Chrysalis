@@ -10,28 +10,36 @@ public sealed partial class CborSerializerCodeGen
     {
         public static DiagnosticDescriptor? EmitSerializableTypeReader(StringBuilder sb, SerializableTypeMetadata metadata, ImmutableDictionary<string, SerializableTypeMetadata>? typeRegistry)
         {
+            if (metadata.UnionReader == UnionReaderKind.Invalid)
+            {
+                return InvalidDeclaredUnionReader;
+            }
+
             DiagnosticDescriptor? diagnostic = null;
             string xmlSafeId = metadata.Indentifier.Replace("<", "{").Replace(">", "}");
 
-            _ = sb.AppendLine($"/// <summary>");
-            _ = sb.AppendLine($"/// Deserializes a <see cref=\"{xmlSafeId}\"/> instance from CBOR-encoded bytes and reports bytes consumed.");
-            _ = sb.AppendLine($"/// </summary>");
-            _ = sb.AppendLine($"public static new {metadata.FullyQualifiedName} Read(ReadOnlyMemory<byte> data, out int bytesConsumed)");
-            _ = sb.AppendLine("{");
-            if (NormalizeTypeName(metadata.FullyQualifiedName) == "Chrysalis.Codec.Types.Cardano.Core.Common.PlutusConstr")
+            if (metadata.UnionReader == UnionReaderKind.Generated)
             {
-                _ = sb.AppendLine("try { return PlutusWire.ReadConstructor(data, out bytesConsumed); }");
-                _ = sb.AppendLine("catch (global::SAIB.Cbor.CborException error) { throw CborError.Wrap(error, data, nameof(PlutusConstr), \"Plutus constructor\"); }");
-            }
-            else
-            {
-                ICborSerializerEmitter emitter = GetEmitter(metadata, typeRegistry);
-                _ = emitter.EmitReader(sb, metadata);
-                diagnostic = (emitter as UnionEmitter)?.ReadDiagnostic;
-            }
-            _ = sb.AppendLine("}");
+                _ = sb.AppendLine($"/// <summary>");
+                _ = sb.AppendLine($"/// Deserializes a <see cref=\"{xmlSafeId}\"/> instance from CBOR-encoded bytes and reports bytes consumed.");
+                _ = sb.AppendLine($"/// </summary>");
+                _ = sb.AppendLine($"public static new {metadata.FullyQualifiedName} Read(ReadOnlyMemory<byte> data, out int bytesConsumed)");
+                _ = sb.AppendLine("{");
+                if (NormalizeTypeName(metadata.FullyQualifiedName) == "Chrysalis.Codec.Types.Cardano.Core.Common.PlutusConstr")
+                {
+                    _ = sb.AppendLine("try { return PlutusWire.ReadConstructor(data, out bytesConsumed); }");
+                    _ = sb.AppendLine("catch (global::SAIB.Cbor.CborException error) { throw CborError.Wrap(error, data, nameof(PlutusConstr), \"Plutus constructor\"); }");
+                }
+                else
+                {
+                    ICborSerializerEmitter emitter = GetEmitter(metadata, typeRegistry);
+                    _ = emitter.EmitReader(sb, metadata);
+                    diagnostic = (emitter as UnionEmitter)?.ReadDiagnostic;
+                }
+                _ = sb.AppendLine("}");
 
-            _ = sb.AppendLine();
+                _ = sb.AppendLine();
+            }
 
             _ = sb.AppendLine($"/// <summary>");
             _ = sb.AppendLine($"/// Deserializes a <see cref=\"{xmlSafeId}\"/> instance from CBOR-encoded bytes.");
