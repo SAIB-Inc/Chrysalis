@@ -61,5 +61,5 @@ public static class ByronBlockExtensions
     /// </summary>
     /// <param name="self">The Byron main block instance.</param>
     /// <returns>The Byron transaction payloads.</returns>
-    public static IEnumerable<ByronTxPayload> ByronTransactions(this ByronMainBlock self) => self.Body.TxPayload.GetValue();
+    public static IEnumerable<ByronTxPayload> ByronTransactions(this ByronMainBlock self) => self.Body.TxPayload;
 }

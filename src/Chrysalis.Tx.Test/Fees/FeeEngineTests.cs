@@ -515,7 +515,7 @@ public sealed class FeeEngineTests
         JsonElement row = Row("F01b");
         PostMaryTransaction seed = Tx(row);
         PostAlonzoTransactionWitnessSet witnesses = (PostAlonzoTransactionWitnessSet)seed.Witnesses;
-        byte[] map = [0xa1, 0x18, key, .. witnesses.BootstrapWitnesses!.Raw.Span];
+        byte[] map = [0xa1, 0x18, key, .. witnesses.BootstrapWitnesses!.Value.Raw.Span];
         PostMaryTransaction tx = PostMaryTransaction.Create(seed.Body, PostAlonzoTransactionWitnessSet.Read(map), seed.IsValid, seed.AuxiliaryData);
         ProtocolParams pp = Pp(row);
         PostMaryTransaction signed = (PostMaryTransaction)tx.Sign([Placeholder()]);
@@ -639,7 +639,7 @@ public sealed class FeeEngineTests
         Address address = new(seed.Body.Outputs().First().Address());
         PostAlonzoTransactionOutput output = PostAlonzoTransactionOutput.Create(address, Lovelace.FromAmount(1));
         ConwayTransactionBody body = ConwayTransactionBody.Create(
-            inputs: ((ConwayTransactionBody)seed.Body).Inputs, outputs: CborDefList<ITransactionOutput>.Create([output]), fee: 0,
+            inputs: ((ConwayTransactionBody)seed.Body).Inputs, outputs: CborList.Create<ITransactionOutput>([output]), fee: 0,
             collateralReturn: inputs.ReturnPresent ? output : null,
             totalCollateral: inputs.CollateralBalance is { } balance ? inputs.ReturnPresent ? 0 : balance : null);
         PostMaryTransaction tx = PostMaryTransaction.Create(body, seed.Witnesses, true, null);

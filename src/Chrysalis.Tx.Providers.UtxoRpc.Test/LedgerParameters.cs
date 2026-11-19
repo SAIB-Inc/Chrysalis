@@ -1,7 +1,6 @@
 using System.Globalization;
 using System.Numerics;
 using System.Text.Json;
-using Chrysalis.Codec.Extensions;
 using Chrysalis.Codec.Types;
 using Chrysalis.Codec.Types.Cardano.Core.Protocol;
 using Xunit;
@@ -32,9 +31,9 @@ internal static class LedgerParameters
         ["utxoCostPerByte"] = p.AdaPerUTxOByte,
         ["costModels"] = new Dictionary<string, object?>
         {
-            ["PlutusV1"] = p.CostModelsForScriptLanguage?.PlutusV1?.GetValue().ToArray(),
-            ["PlutusV2"] = p.CostModelsForScriptLanguage?.PlutusV2?.GetValue().ToArray(),
-            ["PlutusV3"] = p.CostModelsForScriptLanguage?.PlutusV3?.GetValue().ToArray()
+            ["PlutusV1"] = p.CostModelsForScriptLanguage?.PlutusV1?.ToArray(),
+            ["PlutusV2"] = p.CostModelsForScriptLanguage?.PlutusV2?.ToArray(),
+            ["PlutusV3"] = p.CostModelsForScriptLanguage?.PlutusV3?.ToArray()
         },
         ["executionUnitPrices"] = new Dictionary<string, object?> { ["priceMemory"] = p.ExecutionCosts?.MemPrice, ["priceSteps"] = p.ExecutionCosts?.StepPrice },
         ["maxTxExecutionUnits"] = new Dictionary<string, object?> { ["memory"] = p.MaxTxExUnits?.Mem, ["steps"] = p.MaxTxExUnits?.Steps },

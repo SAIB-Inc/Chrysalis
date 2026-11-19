@@ -8,15 +8,15 @@ namespace Chrysalis.Codec.Types.Cardano.Core.Byron;
 public readonly partial record struct ByronTxPayload : ICborType
 {
     [CborOrder(0)] public partial ByronTx Transaction { get; }
-    [CborOrder(1)] public partial ICborMaybeIndefList<ByronTxWitness> Witnesses { get; }
+    [CborOrder(1)] public partial CborList<ByronTxWitness> Witnesses { get; }
 }
 
 [CborSerializable]
 [CborList]
 public readonly partial record struct ByronTx : ICborType
 {
-    [CborOrder(0)] public partial ICborMaybeIndefList<ByronTxIn> Inputs { get; }
-    [CborOrder(1)] public partial ICborMaybeIndefList<ByronTxOut> Outputs { get; }
+    [CborOrder(0)] public partial CborList<ByronTxIn> Inputs { get; }
+    [CborOrder(1)] public partial CborList<ByronTxOut> Outputs { get; }
     [CborOrder(2)] public partial CborEncodedValue Attributes { get; }
 }
 

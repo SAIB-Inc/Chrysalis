@@ -45,20 +45,20 @@ public partial record Signature(
 [CborSerializable]
 [CborConstr(1)]
 public partial record AllOf(
-    [CborOrder(0)] CborIndefList<MultisigScript> Scripts
+    [CborOrder(0)] CborList<MultisigScript> Scripts
 ) : MultisigScript;
 
 [CborSerializable]
 [CborConstr(2)]
 public partial record AnyOf(
-    [CborOrder(0)] CborIndefList<MultisigScript> Scripts
+    [CborOrder(0)] CborList<MultisigScript> Scripts
 ) : MultisigScript;
 
 [CborSerializable]
 [CborConstr(3)]
 public partial record AtLeast(
     [CborOrder(0)] ulong Required,
-    [CborOrder(1)] CborIndefList<MultisigScript> Scripts
+    [CborOrder(1)] CborList<MultisigScript> Scripts
 ) : MultisigScript;
 
 [CborSerializable]
@@ -125,7 +125,7 @@ public class PlutusConstrTests
     {
         // Constr(0, []) should produce Tag(121) + empty array
         // D879 = Tag(121), 80 = 0-element definite array
-        PlutusConstr constr = PlutusConstr.Create(0, CborDefList<IPlutusData>.Create([]));
+        PlutusConstr constr = PlutusConstr.Create(0, CborList.Create<IPlutusData>([]));
         string hex = Convert.ToHexString(constr.Raw.ToArray());
         Assert.Equal("D87980", hex);
     }
@@ -135,7 +135,7 @@ public class PlutusConstrTests
     {
         // Constr(0, [42]) should produce Tag(121) + 1-element array + int 42
         // D879 = Tag(121), 81 = 1-element array, 182A = int 42
-        PlutusConstr constr = PlutusConstr.Create(0, CborDefList<IPlutusData>.Create([PlutusInt64.Create(42)]));
+        PlutusConstr constr = PlutusConstr.Create(0, CborList.Create<IPlutusData>([PlutusInt64.Create(42)]));
         string hex = Convert.ToHexString(constr.Raw.ToArray());
         Assert.Equal("D87981182A", hex);
     }
@@ -145,7 +145,7 @@ public class PlutusConstrTests
     {
         // Constr(7, [42]) should produce Tag(1280) + 1-element array + int 42
         // D90500 = Tag(1280), 81 = 1-element array, 182A = int 42
-        PlutusConstr constr = PlutusConstr.Create(7, CborDefList<IPlutusData>.Create([PlutusInt64.Create(42)]));
+        PlutusConstr constr = PlutusConstr.Create(7, CborList.Create<IPlutusData>([PlutusInt64.Create(42)]));
         string hex = Convert.ToHexString(constr.Raw.ToArray());
         Assert.Equal("D9050081182A", hex);
     }
@@ -154,7 +154,7 @@ public class PlutusConstrTests
     public void PlutusConstr_Create_RoundTrip()
     {
         // Create, then read back and verify fields
-        PlutusConstr constr = PlutusConstr.Create(0, CborDefList<IPlutusData>.Create([
+        PlutusConstr constr = PlutusConstr.Create(0, CborList.Create<IPlutusData>([
             PlutusInt64.Create(1),
             PlutusInt64.Create(2),
             PlutusBoundedBytes.Create(new byte[] { 0xCA, 0xFE })
@@ -162,8 +162,10 @@ public class PlutusConstrTests
 
         // Read back
         PlutusConstr readBack = PlutusConstr.Read(constr.Raw);
-        CborDefList<IPlutusData> fields = Assert.IsType<CborDefList<IPlutusData>>(readBack.Fields);
-        Assert.Equal(3, fields.Value.Count);
+        CborList<IPlutusData> fields = readBack.Fields;
+        Assert.False(fields.IsIndefinite);
+        Assert.False(fields.HasSetTag);
+        Assert.Equal(3, fields.Count);
     }
 }
 

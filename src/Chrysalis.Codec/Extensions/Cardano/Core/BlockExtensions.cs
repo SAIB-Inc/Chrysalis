@@ -40,7 +40,7 @@ public static class BlockExtensions
         ArgumentNullException.ThrowIfNull(self);
         return self switch
         {
-            ByronMainBlock byron => byron.Header.ConsensusData.Difficulty.GetValue().FirstOrDefault(),
+            ByronMainBlock byron => byron.Header.ConsensusData.Difficulty.FirstOrDefault(),
             ByronEbBlock => 0,
             _ => self.Header().HeaderBody.BlockNumber()
         };
@@ -168,12 +168,12 @@ public static class BlockExtensions
         ArgumentNullException.ThrowIfNull(self);
         return self switch
         {
-            ByronMainBlock byron => byron.Body.TxPayload.GetValue()
+            ByronMainBlock byron => byron.Body.TxPayload
                 .Select(payload => (ITransactionBody)new ByronTransactionBodyAdapter(payload)),
             ByronEbBlock => [],
-            AlonzoCompatibleBlock alonzoCompatibleBlock => alonzoCompatibleBlock.TransactionBodies.GetValue().Cast<ITransactionBody>(),
-            BabbageBlock babbageBlock => babbageBlock.TransactionBodies.GetValue().Cast<ITransactionBody>(),
-            ConwayBlock conwayBlock => conwayBlock.TransactionBodies.GetValue().Cast<ITransactionBody>(),
+            AlonzoCompatibleBlock alonzoCompatibleBlock => alonzoCompatibleBlock.TransactionBodies.Cast<ITransactionBody>(),
+            BabbageBlock babbageBlock => babbageBlock.TransactionBodies.Cast<ITransactionBody>(),
+            ConwayBlock conwayBlock => conwayBlock.TransactionBodies.Cast<ITransactionBody>(),
             _ => []
         };
     }
@@ -188,9 +188,9 @@ public static class BlockExtensions
         ArgumentNullException.ThrowIfNull(self);
         return self switch
         {
-            AlonzoCompatibleBlock alonzoCompatibleBlock => alonzoCompatibleBlock.TransactionWitnessSets.GetValue().Cast<ITransactionWitnessSet>(),
-            BabbageBlock babbageBlock => babbageBlock.TransactionWitnessSets.GetValue().Cast<ITransactionWitnessSet>(),
-            ConwayBlock conwayBlock => conwayBlock.TransactionWitnessSets.GetValue().Cast<ITransactionWitnessSet>(),
+            AlonzoCompatibleBlock alonzoCompatibleBlock => alonzoCompatibleBlock.TransactionWitnessSets.Cast<ITransactionWitnessSet>(),
+            BabbageBlock babbageBlock => babbageBlock.TransactionWitnessSets.Cast<ITransactionWitnessSet>(),
+            ConwayBlock conwayBlock => conwayBlock.TransactionWitnessSets.Cast<ITransactionWitnessSet>(),
             _ => []
         };
     }
@@ -222,9 +222,9 @@ public static class BlockExtensions
         ArgumentNullException.ThrowIfNull(self);
         return self switch
         {
-            AlonzoCompatibleBlock alonzoCompatibleBlock => alonzoCompatibleBlock.InvalidTransactions?.GetValue(),
-            BabbageBlock babbageBlock => babbageBlock.InvalidTransactions?.GetValue(),
-            ConwayBlock conwayBlock => conwayBlock.InvalidTransactions?.GetValue(),
+            AlonzoCompatibleBlock alonzoCompatibleBlock => alonzoCompatibleBlock.InvalidTransactions,
+            BabbageBlock babbageBlock => babbageBlock.InvalidTransactions,
+            ConwayBlock conwayBlock => conwayBlock.InvalidTransactions,
             _ => null
         };
     }

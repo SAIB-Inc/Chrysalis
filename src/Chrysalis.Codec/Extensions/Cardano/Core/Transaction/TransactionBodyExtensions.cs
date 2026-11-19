@@ -26,13 +26,13 @@ public static class TransactionBodyExtensions
         ArgumentNullException.ThrowIfNull(self);
         return self switch
         {
-            ByronTransactionBodyAdapter byron => byron.TxPayload.Transaction.Inputs.GetValue()
+            ByronTransactionBodyAdapter byron => byron.TxPayload.Transaction.Inputs
                 .Select(i => (ok: i.TryToTransactionInput(out TransactionInput input), input))
                 .Where(x => x.ok)
                 .Select(x => x.input),
-            AlonzoTransactionBody alonzoTxBody => alonzoTxBody.Inputs.GetValue(),
-            BabbageTransactionBody babbageTxBody => babbageTxBody.Inputs.GetValue(),
-            ConwayTransactionBody conwayTxBody => conwayTxBody.Inputs.GetValue(),
+            AlonzoTransactionBody alonzoTxBody => alonzoTxBody.Inputs,
+            BabbageTransactionBody babbageTxBody => babbageTxBody.Inputs,
+            ConwayTransactionBody conwayTxBody => conwayTxBody.Inputs,
             _ => []
         };
     }
@@ -47,10 +47,10 @@ public static class TransactionBodyExtensions
         ArgumentNullException.ThrowIfNull(self);
         return self switch
         {
-            ByronTransactionBodyAdapter byron => byron.TxPayload.Transaction.Outputs.GetValue().Select(o => (ITransactionOutput)new ByronTransactionOutputAdapter(o)),
-            AlonzoTransactionBody alonzoTxBody => alonzoTxBody.Outputs.GetValue().Cast<ITransactionOutput>(),
-            BabbageTransactionBody babbageTxBody => babbageTxBody.Outputs.GetValue().Cast<ITransactionOutput>(),
-            ConwayTransactionBody conwayTxBody => conwayTxBody.Outputs.GetValue().Cast<ITransactionOutput>(),
+            ByronTransactionBodyAdapter byron => byron.TxPayload.Transaction.Outputs.Select(o => (ITransactionOutput)new ByronTransactionOutputAdapter(o)),
+            AlonzoTransactionBody alonzoTxBody => alonzoTxBody.Outputs.Cast<ITransactionOutput>(),
+            BabbageTransactionBody babbageTxBody => babbageTxBody.Outputs.Cast<ITransactionOutput>(),
+            ConwayTransactionBody conwayTxBody => conwayTxBody.Outputs.Cast<ITransactionOutput>(),
             _ => []
         };
     }
@@ -116,9 +116,9 @@ public static class TransactionBodyExtensions
         ArgumentNullException.ThrowIfNull(self);
         return self switch
         {
-            AlonzoTransactionBody alonzoTxBody => alonzoTxBody.Certificates?.GetValue(),
-            BabbageTransactionBody babbageTxBody => babbageTxBody.Certificates?.GetValue(),
-            ConwayTransactionBody conwayTxBody => conwayTxBody.Certificates?.GetValue(),
+            AlonzoTransactionBody alonzoTxBody => alonzoTxBody.Certificates,
+            BabbageTransactionBody babbageTxBody => babbageTxBody.Certificates,
+            ConwayTransactionBody conwayTxBody => conwayTxBody.Certificates,
             _ => null
         };
     }
@@ -205,9 +205,9 @@ public static class TransactionBodyExtensions
         ArgumentNullException.ThrowIfNull(self);
         return self switch
         {
-            AlonzoTransactionBody alonzoTxBody => alonzoTxBody.Collateral?.GetValue(),
-            BabbageTransactionBody babbageTxBody => babbageTxBody.Collateral?.GetValue(),
-            ConwayTransactionBody conwayTxBody => conwayTxBody.Collateral?.GetValue(),
+            AlonzoTransactionBody alonzoTxBody => alonzoTxBody.Collateral,
+            BabbageTransactionBody babbageTxBody => babbageTxBody.Collateral,
+            ConwayTransactionBody conwayTxBody => conwayTxBody.Collateral,
             _ => null
         };
     }
@@ -222,9 +222,9 @@ public static class TransactionBodyExtensions
         ArgumentNullException.ThrowIfNull(self);
         return self switch
         {
-            AlonzoTransactionBody alonzoTxBody => alonzoTxBody.RequiredSigners?.GetValue(),
-            BabbageTransactionBody babbageTxBody => babbageTxBody.RequiredSigners?.GetValue(),
-            ConwayTransactionBody conwayTxBody => conwayTxBody.RequiredSigners?.GetValue(),
+            AlonzoTransactionBody alonzoTxBody => alonzoTxBody.RequiredSigners,
+            BabbageTransactionBody babbageTxBody => babbageTxBody.RequiredSigners,
+            ConwayTransactionBody conwayTxBody => conwayTxBody.RequiredSigners,
             _ => null
         };
     }
@@ -287,8 +287,8 @@ public static class TransactionBodyExtensions
         ArgumentNullException.ThrowIfNull(self);
         return self switch
         {
-            BabbageTransactionBody babbageTxBody => babbageTxBody.ReferenceInputs?.GetValue(),
-            ConwayTransactionBody conwayTxBody => conwayTxBody.ReferenceInputs?.GetValue(),
+            BabbageTransactionBody babbageTxBody => babbageTxBody.ReferenceInputs,
+            ConwayTransactionBody conwayTxBody => conwayTxBody.ReferenceInputs,
             _ => null
         };
     }
@@ -318,7 +318,7 @@ public static class TransactionBodyExtensions
         ArgumentNullException.ThrowIfNull(self);
         return self switch
         {
-            ConwayTransactionBody conwayTxBody => conwayTxBody.ProposalProcedures?.GetValue(),
+            ConwayTransactionBody conwayTxBody => conwayTxBody.ProposalProcedures,
             _ => null
         };
     }

@@ -49,8 +49,8 @@ public readonly partial record struct PoolRegistration : ICertificate
     [CborOrder(4)] public partial ulong Cost { get; }
     [CborOrder(5)] public partial CborRationalNumber Margin { get; }
     [CborOrder(6)] public partial RewardAccount RewardAccount { get; }
-    [CborOrder(7)] public partial ICborMaybeIndefList<ReadOnlyMemory<byte>> PoolOwners { get; }
-    [CborOrder(8)] public partial ICborMaybeIndefList<IRelay> Relays { get; }
+    [CborOrder(7)] public partial CborList<ReadOnlyMemory<byte>> PoolOwners { get; }
+    [CborOrder(8)] public partial CborList<IRelay> Relays { get; }
     [CborOrder(9)] public partial PoolMetadata? PoolMetadata { get; }
 }
 

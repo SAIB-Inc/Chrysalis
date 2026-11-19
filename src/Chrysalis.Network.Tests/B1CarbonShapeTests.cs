@@ -85,6 +85,22 @@ public sealed class B1CarbonShapeTests
     public void DecoderRejectsInvalidRefusalVersions(string hex) =>
         _ = Assert.ThrowsAny<Exception>(() => CborSerializer.Deserialize<HandshakeMessage>(Convert.FromHexString(hex)));
 
+    /// <summary>The reader preserves legacy acceptance and bytes of a set-tagged version list.</summary>
+    /// <param name="enclosed">Whether to decode the complete handshake refusal or just its reason.</param>
+    /// <param name="hex">Tagged list within the selected refusal shape.</param>
+    [Theory]
+    [InlineData(false, "8200D90102810E")]
+    [InlineData(true, "82028200D90102810E")]
+    public void DecoderPreservesSetTaggedVersionList(bool enclosed, string hex)
+    {
+        byte[] bytes = Convert.FromHexString(hex);
+        VersionMismatch mismatch = enclosed
+            ? Assert.IsType<VersionMismatch>(Assert.IsType<Refuse>(CborSerializer.Deserialize<HandshakeMessage>(bytes)).Reason)
+            : VersionMismatch.Read(bytes);
+        Assert.Equal(14, Assert.Single(mismatch.VersionNumbers));
+        Assert.Equal(Convert.FromHexString("D90102810E"), mismatch.VersionNumbers.Raw.ToArray());
+    }
+
     /// <summary>Fresh refusal records enforce the same unsigned Word16 version domain on write.</summary>
     /// <param name="version">The invalid wire version.</param>
     [Theory]
@@ -92,8 +108,23 @@ public sealed class B1CarbonShapeTests
     [InlineData(65536)]
     public void WriterRejectsInvalidRefusalVersions(int version)
     {
-        RefuseReason[] reasons = [new VersionMismatch(0, CborDefList<int>.Create([version])), new HandshakeDecodeError(1, version, "bad"), new Refused(2, version, "bad")];
+        RefuseReason[] reasons = [new VersionMismatch(0, CborList.Create([version])), new HandshakeDecodeError(1, version, "bad"), new Refused(2, version, "bad")];
         Assert.All(reasons, reason => _ = Assert.ThrowsAny<Exception>(() => CborSerializer.Serialize(reason)));
+    }
+
+    /// <summary>Present, valid version lists can be written without a prior decode.</summary>
+    /// <param name="empty">Whether to write a present but empty version list.</param>
+    /// <param name="hex">The expected wire bytes of the refusal reason.</param>
+    [Theory]
+    [InlineData(true, "820080")]
+    [InlineData(false, "8200820D0E")]
+    public void WriterAcceptsFreshVersionMismatchList(bool empty, string hex)
+    {
+        int[] versions = empty ? [] : [13, 14];
+        VersionMismatch fresh = new(0, CborList.Create(versions));
+        byte[] bytes = CborSerializer.Serialize(fresh);
+        Assert.Equal(Convert.FromHexString(hex), bytes);
+        Assert.Equal(versions, VersionMismatch.Read(bytes).VersionNumbers.ToArray());
     }
 
     /// <summary>Null mismatch lists fail validation rather than leaking an incidental null dereference from writing.</summary>

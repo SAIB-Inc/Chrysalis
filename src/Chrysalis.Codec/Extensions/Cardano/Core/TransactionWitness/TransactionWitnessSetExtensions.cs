@@ -21,8 +21,8 @@ public static class TransactionWitnessSetExtensions
         ArgumentNullException.ThrowIfNull(self);
         return self switch
         {
-            AlonzoTransactionWitnessSet alonzoTxWitnessSet => alonzoTxWitnessSet.VKeyWitnesses?.GetValue(),
-            PostAlonzoTransactionWitnessSet postAlonzoTxWitnessSet => postAlonzoTxWitnessSet.VKeyWitnesses?.GetValue(),
+            AlonzoTransactionWitnessSet alonzoTxWitnessSet => alonzoTxWitnessSet.VKeyWitnesses,
+            PostAlonzoTransactionWitnessSet postAlonzoTxWitnessSet => postAlonzoTxWitnessSet.VKeyWitnesses,
             _ => null
         };
     }
@@ -37,8 +37,8 @@ public static class TransactionWitnessSetExtensions
         ArgumentNullException.ThrowIfNull(self);
         return self switch
         {
-            AlonzoTransactionWitnessSet alonzoTxWitnessSet => alonzoTxWitnessSet.NativeScripts?.GetValue(),
-            PostAlonzoTransactionWitnessSet postAlonzoTxWitnessSet => postAlonzoTxWitnessSet.NativeScripts?.GetValue(),
+            AlonzoTransactionWitnessSet alonzoTxWitnessSet => alonzoTxWitnessSet.NativeScripts,
+            PostAlonzoTransactionWitnessSet postAlonzoTxWitnessSet => postAlonzoTxWitnessSet.NativeScripts,
             _ => null
         };
     }
@@ -53,8 +53,8 @@ public static class TransactionWitnessSetExtensions
         ArgumentNullException.ThrowIfNull(self);
         return self switch
         {
-            AlonzoTransactionWitnessSet alonzoTxWitnessSet => alonzoTxWitnessSet.BootstrapWitnesses?.GetValue(),
-            PostAlonzoTransactionWitnessSet postAlonzoTxWitnessSet => postAlonzoTxWitnessSet.BootstrapWitnesses?.GetValue(),
+            AlonzoTransactionWitnessSet alonzoTxWitnessSet => alonzoTxWitnessSet.BootstrapWitnesses,
+            PostAlonzoTransactionWitnessSet postAlonzoTxWitnessSet => postAlonzoTxWitnessSet.BootstrapWitnesses,
             _ => null
         };
     }
@@ -69,8 +69,8 @@ public static class TransactionWitnessSetExtensions
         ArgumentNullException.ThrowIfNull(self);
         return self switch
         {
-            AlonzoTransactionWitnessSet alonzoTxWitnessSet => alonzoTxWitnessSet.PlutusV1Scripts?.GetValue(),
-            PostAlonzoTransactionWitnessSet postAlonzoTxWitnessSet => postAlonzoTxWitnessSet.PlutusV1Scripts?.GetValue(),
+            AlonzoTransactionWitnessSet alonzoTxWitnessSet => alonzoTxWitnessSet.PlutusV1Scripts,
+            PostAlonzoTransactionWitnessSet postAlonzoTxWitnessSet => postAlonzoTxWitnessSet.PlutusV1Scripts,
             _ => null
         };
     }
@@ -85,8 +85,8 @@ public static class TransactionWitnessSetExtensions
         ArgumentNullException.ThrowIfNull(self);
         return self switch
         {
-            AlonzoTransactionWitnessSet alonzoTxWitnessSet => alonzoTxWitnessSet.PlutusDataSet?.GetValue(),
-            PostAlonzoTransactionWitnessSet postAlonzoTxWitnessSet => postAlonzoTxWitnessSet.PlutusDataSet?.GetValue(),
+            AlonzoTransactionWitnessSet alonzoTxWitnessSet => alonzoTxWitnessSet.PlutusDataSet,
+            PostAlonzoTransactionWitnessSet postAlonzoTxWitnessSet => postAlonzoTxWitnessSet.PlutusDataSet,
             _ => null
         };
     }
@@ -117,7 +117,7 @@ public static class TransactionWitnessSetExtensions
         ArgumentNullException.ThrowIfNull(self);
         return self switch
         {
-            PostAlonzoTransactionWitnessSet postAlonzoTxWitnessSet => postAlonzoTxWitnessSet.PlutusV2Scripts?.GetValue(),
+            PostAlonzoTransactionWitnessSet postAlonzoTxWitnessSet => postAlonzoTxWitnessSet.PlutusV2Scripts,
             _ => null
         };
     }
@@ -132,7 +132,7 @@ public static class TransactionWitnessSetExtensions
         ArgumentNullException.ThrowIfNull(self);
         return self switch
         {
-            PostAlonzoTransactionWitnessSet postAlonzoTxWitnessSet => postAlonzoTxWitnessSet.PlutusV3Scripts?.GetValue(),
+            PostAlonzoTransactionWitnessSet postAlonzoTxWitnessSet => postAlonzoTxWitnessSet.PlutusV3Scripts,
             _ => null
         };
     }

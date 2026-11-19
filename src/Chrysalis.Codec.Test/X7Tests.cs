@@ -1,7 +1,6 @@
 using System.Runtime.ExceptionServices;
 using System.Security.Cryptography;
 using System.Text.Json;
-using Chrysalis.Codec.Extensions;
 using Chrysalis.Codec.Serialization;
 using Chrysalis.Codec.Serialization.Attributes;
 using Chrysalis.Codec.Types;
@@ -52,14 +51,14 @@ public class X7Tests
             result = IPlutusData.Read(raw, out consumed);
             if (result is PlutusList list)
             {
-                foreach (IPlutusData item in list.Value.GetValue())
+                foreach (IPlutusData item in list.Value)
                 {
                     _ = item;
                 }
             }
             if (result is PlutusConstr constr)
             {
-                foreach (IPlutusData item in constr.Fields.GetValue())
+                foreach (IPlutusData item in constr.Fields)
                 {
                     _ = item;
                 }
@@ -182,7 +181,7 @@ public class X7Tests
         string input = "825820" + new string('0', 64) + "00";
         byte[] raw = Convert.FromHexString("A30082" + input + input + "01800201");
         BabbageTransactionBody body = BabbageTransactionBody.Read(raw);
-        TransactionInput[] restored = [.. body.Inputs.GetValue()];
+        TransactionInput[] restored = [.. body.Inputs];
         Assert.Equal(2, restored.Length);
         Assert.Equal(restored[0].Raw.ToArray(), restored[1].Raw.ToArray());
         Assert.Equal(raw, CborSerializer.Serialize(body));

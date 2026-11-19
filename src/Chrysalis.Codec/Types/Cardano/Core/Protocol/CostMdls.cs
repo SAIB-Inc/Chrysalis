@@ -6,9 +6,9 @@ namespace Chrysalis.Codec.Types.Cardano.Core.Protocol;
 [CborSerializable]
 [CborMap]
 public partial record CostMdls(
-    [CborProperty(0)] ICborMaybeIndefList<long>? PlutusV1,
-    [CborProperty(1)] ICborMaybeIndefList<long>? PlutusV2,
-    [CborProperty(2)] ICborMaybeIndefList<long>? PlutusV3
+    [CborProperty(0)] CborList<long>? PlutusV1,
+    [CborProperty(1)] CborList<long>? PlutusV2,
+    [CborProperty(2)] CborList<long>? PlutusV3
 ) : ICborType
 {
     public ReadOnlyMemory<byte> Raw { get; set; }

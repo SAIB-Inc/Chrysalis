@@ -311,7 +311,7 @@ public sealed partial class CborSerializerCodeGen
                 return sb;
             }
 
-            string nonNullWriteType = metadata.PropertyTypeFullName.Replace("?", "");
+            string nonNullWriteType = metadata.NonNullableTypeFullName;
             _ = metadata.IsOpenGeneric
                 ? EmitGenericWithTypeParamsWriter(sb, metadata.PropertyTypeFullName, propertyName)
                 : sb.AppendLine($"{nonNullWriteType}.Write(output, ({nonNullWriteType}){propertyName});");

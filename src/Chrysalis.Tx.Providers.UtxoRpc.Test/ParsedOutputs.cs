@@ -1,6 +1,5 @@
 using System.Numerics;
 using Google.Protobuf.Collections;
-using Chrysalis.Codec.Extensions;
 using Chrysalis.Codec.Extensions.Cardano.Core.Common;
 using Chrysalis.Codec.Extensions.Cardano.Core.Transaction;
 using Chrysalis.Codec.Serialization;
@@ -96,13 +95,13 @@ internal static class ParsedOutputs
             case Spec.NativeScript.NativeScriptOneofCase.InvalidHereafter:
                 Assert.Equal(expected.InvalidHereafter, Assert.IsType<InvalidHereafter>(actual).Slot); break;
             case Spec.NativeScript.NativeScriptOneofCase.ScriptAll:
-                NativeListEqual(expected.ScriptAll.Items, [.. Assert.IsType<ScriptAll>(actual).Scripts.GetValue()]); break;
+                NativeListEqual(expected.ScriptAll.Items, [.. Assert.IsType<ScriptAll>(actual).Scripts]); break;
             case Spec.NativeScript.NativeScriptOneofCase.ScriptAny:
-                NativeListEqual(expected.ScriptAny.Items, [.. Assert.IsType<ScriptAny>(actual).Scripts.GetValue()]); break;
+                NativeListEqual(expected.ScriptAny.Items, [.. Assert.IsType<ScriptAny>(actual).Scripts]); break;
             case Spec.NativeScript.NativeScriptOneofCase.ScriptNOfK:
                 ScriptNOfK k = Assert.IsType<ScriptNOfK>(actual);
                 Assert.Equal((int)expected.ScriptNOfK.K, k.N);
-                NativeListEqual(expected.ScriptNOfK.Scripts, [.. k.Scripts.GetValue()]); break;
+                NativeListEqual(expected.ScriptNOfK.Scripts, [.. k.Scripts]); break;
             case Spec.NativeScript.NativeScriptOneofCase.None:
             default: Assert.Fail("Unsupported native script."); break;
         }

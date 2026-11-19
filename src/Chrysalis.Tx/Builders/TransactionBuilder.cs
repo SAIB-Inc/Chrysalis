@@ -112,7 +112,7 @@ public class TransactionBuilder
     public IReadOnlyList<IPlutusData>? PlutusDataSet => _plutusData;
 
     /// <summary>Gets the current certificates.</summary>
-    public ICborMaybeIndefList<ICertificate>? Certificates => WrapIfNotNull(_certificates);
+    public CborList<ICertificate>? Certificates => WrapIfNotNull(_certificates);
 
     /// <summary>Gets the current certificates as a list.</summary>
     public IReadOnlyList<ICertificate>? CertificatesList => _certificates;
@@ -124,7 +124,7 @@ public class TransactionBuilder
     public ITransactionOutput? CollateralReturn { get; private set; }
 
     /// <summary>Gets the current proposal procedures.</summary>
-    public ICborMaybeIndefList<ProposalProcedure>? ProposalProcedures => WrapIfNotNull(_proposals);
+    public CborList<ProposalProcedure>? ProposalProcedures => WrapIfNotNull(_proposals);
 
     // ── Constructor ──
 
@@ -693,8 +693,8 @@ public class TransactionBuilder
         IntegrateWithdrawals();
 
         return ConwayTransactionBody.Create(
-            inputs: CborDefListWithTag<TransactionInput>.Create(_inputs),
-            outputs: CborDefList<ITransactionOutput>.Create(_outputs),
+            inputs: CborList.Create(_inputs, hasSetTag: true),
+            outputs: CborList.Create(_outputs),
             fee: Fee,
             timeToLive: TimeToLive,
             certificates: WrapIfNotNull(_certificates),
@@ -808,8 +808,8 @@ public class TransactionBuilder
         }
     }
 
-    private static CborDefListWithTag<T>? WrapIfNotNull<T>(List<T>? list) =>
-        list is not null ? CborDefListWithTag<T>.Create(list) : null;
+    private static CborList<T>? WrapIfNotNull<T>(List<T>? list) =>
+        list is not null ? CborList.Create(list, hasSetTag: true) : null;
 
     private static (string TxHash, ulong Index) ParseUtxoRef(string utxoRef)
     {

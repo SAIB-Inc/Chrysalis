@@ -55,7 +55,7 @@ internal static class ProtocolOracles
         ulong U(string name) => j.GetProperty(name).GetUInt64();
         ExUnits Units(string name) => ExUnits.Create(j.GetProperty(name).GetProperty("memory").GetUInt64(), j.GetProperty(name).GetProperty("steps").GetUInt64());
         JsonElement models = j.GetProperty("costModels");
-        ICborMaybeIndefList<long> Model(string name) => CborDefList<long>.Create([.. models.GetProperty(name).EnumerateArray().Select(value => value.GetInt64())]);
+        CborList<long> Model(string name) => CborList.Create(models.GetProperty(name).EnumerateArray().Select(value => value.GetInt64()));
         JsonElement pool = j.GetProperty("poolVotingThresholds");
         JsonElement drep = j.GetProperty("dRepVotingThresholds");
         JsonElement version = j.GetProperty("protocolVersion");
@@ -119,10 +119,10 @@ internal static class ProtocolOracles
         }
         Assert.NotNull(actual);
         // Ledger semantics do not depend on definite/indefinite cost-model list encoding.
-        if (expected is ICborMaybeIndefList<long>)
+        if (expected is CborList<long> samples)
         {
-            _ = Assert.IsAssignableFrom<ICborMaybeIndefList<long>>(actual);
-            AssertEquivalent(expected.GetType().GetProperty("Value")!.GetValue(expected), actual.GetType().GetProperty("Value")!.GetValue(actual), path);
+            CborList<long> actualSamples = Assert.IsType<CborList<long>>(actual);
+            Assert.Equal<long>(samples, actualSamples);
             return;
         }
         Assert.Equal(expected.GetType(), actual.GetType());

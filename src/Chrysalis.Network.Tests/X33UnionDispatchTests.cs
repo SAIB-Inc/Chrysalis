@@ -229,7 +229,7 @@ public sealed class X33UnionDispatchTests
     {
         ByronN2NHeader header = CheckRead<INetworkBlockHeader, ByronN2NHeader>(INetworkBlockHeader.Read,
             Convert.FromHexString("82820003D81843820102"));
-        Assert.Equal(new ulong[] { 0, 3 }, header.Prefix.Value);
+        Assert.Equal(new ulong[] { 0, 3 }, header.Prefix);
         Assert.Equal(Convert.FromHexString("820102"), header.Header.Value.ToArray());
     }
 

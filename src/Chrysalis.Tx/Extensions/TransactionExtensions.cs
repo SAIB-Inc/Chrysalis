@@ -105,7 +105,7 @@ public static class TransactionExtension
         };
 
         PostAlonzoTransactionWitnessSet newWitnessSet = PostAlonzoTransactionWitnessSet.Create(
-            vKeyWitnesses: CborDefListWithTag<VKeyWitness>.Create(vKeyWitnesses),
+            vKeyWitnesses: CborList.Create(vKeyWitnesses, hasSetTag: true),
             nativeScripts: existingWitnesses.NativeScripts,
             bootstrapWitnesses: existingWitnesses.BootstrapWitnesses,
             plutusV1Scripts: existingWitnesses.PlutusV1Scripts,

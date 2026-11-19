@@ -73,7 +73,7 @@ public partial record CoseSign(
     [CborOrder(0)] byte[] ProtectedHeaders,       // Serialized ProtectedHeaderMap
     [CborOrder(1)] HeaderMap UnprotectedHeaders,  // Direct HeaderMap
     [CborOrder(2)] byte[]? Payload,               // null for detached payload
-    [CborOrder(3)] CborMaybeIndefList<CoseSignature> Signatures
+    [CborOrder(3)] CborList<CoseSignature> Signatures
 ) : CborBase, ICoseMessage;
 ```
 

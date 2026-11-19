@@ -30,7 +30,7 @@ public sealed class HandshakeRefusedException : IOException
         return reason switch
         {
             VersionMismatch mismatch => "Handshake refused: no common version; peer supports "
-                + string.Join(", ", mismatch.VersionNumbers.Value.Select(value => value.ToString(CultureInfo.InvariantCulture))) + ".",
+                + string.Join(", ", mismatch.VersionNumbers.Select(value => value.ToString(CultureInfo.InvariantCulture))) + ".",
             HandshakeDecodeError error => "Handshake decode error for wire version " + error.VersionNumber.ToString(CultureInfo.InvariantCulture)
                 + ": " + error.ErrorData,
             Refused refused => "Handshake refused for wire version " + refused.VersionNumber.ToString(CultureInfo.InvariantCulture)

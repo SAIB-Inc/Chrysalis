@@ -1,7 +1,6 @@
 using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using Chrysalis.Codec.Extensions;
 using Chrysalis.Codec.Extensions.Cardano.Core.Common;
 using Chrysalis.Codec.Extensions.Cardano.Core.Transaction;
 using Chrysalis.Codec.Serialization;
@@ -128,7 +127,7 @@ public sealed class CliVectorTests
         }
         if (kind == "min-utxo")
         {
-            ITransactionOutput output = body.Outputs.GetValue().ElementAt(checked((int)CliVectors.Number(row, "output")));
+            ITransactionOutput output = body.Outputs.ElementAt(checked((int)CliVectors.Number(row, "output")));
             Assert.Equal(CliVectors.Number(row, "minimum"), output.Amount().Lovelace());
             if (row.TryGetProperty("label", out JsonElement label))
             {
@@ -145,8 +144,8 @@ public sealed class CliVectorTests
         ulong InputCoin(TransactionInput input) => available[$"{Convert.ToHexStringLower(input.TransactionId.Span)}#{input.Index}"];
         ulong withdrawals = body.Withdrawals is { } reward ? Sum(reward.Value.Values) : 0;
         ulong deposits = Sum(row.GetProperty("deposits").EnumerateObject().Select(item => item.Value.GetUInt64()));
-        ulong outgoing = Sum(body.Outputs.GetValue().Select(output => output.Amount().Lovelace()));
-        Assert.Equal(Sum(body.Inputs.GetValue().Select(InputCoin)) + withdrawals,
+        ulong outgoing = Sum(body.Outputs.Select(output => output.Amount().Lovelace()));
+        Assert.Equal(Sum(body.Inputs.Select(InputCoin)) + withdrawals,
             outgoing + body.Fee + deposits + (body.Donation ?? 0));
 
         ulong q = CliVectors.Number(row, "q");
@@ -164,7 +163,7 @@ public sealed class CliVectorTests
         {
             ulong total = Assert.IsType<ulong>(body.TotalCollateral);
             ulong returned = Assert.IsAssignableFrom<ITransactionOutput>(body.CollateralReturn).Amount().Lovelace();
-            Assert.Equal(Sum(collateral.GetValue().Select(InputCoin)), returned + total);
+            Assert.Equal(Sum(collateral.Select(InputCoin)), returned + total);
             ProtocolParams parameters = vectors.Parameters(CliVectors.Text(row, "parameters"));
             ulong percent = Assert.IsType<ulong>(parameters.CollateralPercentage);
             ulong minimum = checked(((body.Fee * percent) + 99) / 100);

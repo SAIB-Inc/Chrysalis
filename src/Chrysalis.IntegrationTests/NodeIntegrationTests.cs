@@ -241,7 +241,7 @@ public sealed class NodeIntegrationTests
                 using NodeClient node = await NodeConnections.OpenAsync(ct);
                 _ = await node.LocalTxMonitor.AcquireAsync(ct);
                 ReplyGetMeasures response = Assert.IsType<ReplyGetMeasures>(await node.LocalTxMonitor.GetMeasuresAsync(ct));
-                return (Count: response.Slot, Values: response.Measures.ToDictionary(pair => pair.Key, pair => pair.Value.Value.Select(value => checked((long)value)).ToArray(), StringComparer.Ordinal));
+                return (Count: response.Slot, Values: response.Measures.ToDictionary(pair => pair.Key, pair => pair.Value.Select(value => checked((long)value)).ToArray(), StringComparer.Ordinal));
             }, deadline.Token);
         // Current Slot is the protocol's txCount, not a slot. The B4 repair may rename it.
         Assert.Equal(expected.GetProperty("numberOfTxs").GetUInt64(), actual.Count);

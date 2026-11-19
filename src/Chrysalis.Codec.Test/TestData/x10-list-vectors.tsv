@@ -1,0 +1,5 @@
+fixture	offset	length	count	indefinite	tag-258	item
+byron5.block	1029	2	1	false	false	unsigned
+byron2.block	657	44	1	true	false	byron-input
+preprod-conway.block.cbor	6712	40	1	false	true	transaction-input
+X10Tag258Indef.tx	3	869	24	true	true	transaction-input

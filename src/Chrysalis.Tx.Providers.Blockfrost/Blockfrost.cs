@@ -93,7 +93,7 @@ public sealed class Blockfrost : ICardanoDataProvider, IDisposable
 
     private static ProtocolParams MapParameters(BlockfrostProtocolParametersResponse parameters)
     {
-        Dictionary<int, ICborMaybeIndefList<long>> costMdls = [];
+        Dictionary<int, CborList<long>> costMdls = [];
 
         foreach ((string key, int[] value) in parameters.CostModelsRaw ?? [])
         {
@@ -105,7 +105,7 @@ public sealed class Blockfrost : ICardanoDataProvider, IDisposable
                 _ => throw new InvalidOperationException("Unknown cost model key.")
             };
 
-            costMdls[version] = CborDefList<long>.Create([.. value.Select(x => (long)x)]);
+            costMdls[version] = CborList.Create(value.Select(x => (long)x));
         }
 
         return new ProtocolParams(

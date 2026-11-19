@@ -38,7 +38,7 @@ public class X7PlutusMapTests
     [InlineData(int.MaxValue, "D866821A7FFFFFFF80")]
     public void X7CreateChoosesCanonicalConstructorTag(int alternative, string hex)
     {
-        PlutusConstr data = PlutusConstr.Create(alternative, CborDefList<IPlutusData>.Create([]));
+        PlutusConstr data = PlutusConstr.Create(alternative, CborList.Create<IPlutusData>([]));
         Assert.Equal(Convert.FromHexString(hex), data.Raw.ToArray());
         PlutusDataConstr vm = Assert.IsType<PlutusDataConstr>(ScriptContextBuilder.CodecPlutusDataToVm(IPlutusData.Read(data.Raw)));
         Assert.Equal(new BigInteger(alternative), vm.Tag);

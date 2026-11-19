@@ -21,7 +21,7 @@ public partial record RefuseReason : CborRecord;
 [CborIndex(0)]
 public partial record VersionMismatch(
     [CborOrder(0)] int Idx,
-    [CborOrder(1)] CborDefList<int> VersionNumbers
+    [CborOrder(1)] CborList<int> VersionNumbers
 ) : RefuseReason;
 
 /// <summary>

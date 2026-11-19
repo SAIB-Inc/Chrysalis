@@ -228,7 +228,7 @@ internal sealed class SchemaResolver
                 string elem = type.ListElementType != null
                     ? GetCSharpTypeName(type.ListElementType)
                     : "IPlutusData";
-                return $"CborDefList<{elem}>";
+                return $"CborList<{elem}>";
             case TypeCategory.Union:
                 return "I" + type.TypeName;
             case TypeCategory.SingleConstructor:

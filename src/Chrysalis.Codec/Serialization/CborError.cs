@@ -230,7 +230,7 @@ public static class CborError
         if (type.IsGenericType)
         {
             Type definition = type.GetGenericTypeDefinition();
-            if (definition == typeof(List<>) || definition == typeof(ICborMaybeIndefList<>)) { return "array"; }
+            if (definition == typeof(List<>) || definition == typeof(CborList<>)) { return "array"; }
             if (definition == typeof(Dictionary<,>)) { return "map"; }
         }
         string Name() => type.IsGenericType ? type.ToString() : type.FullName ?? type.Name;

@@ -22,7 +22,7 @@ public readonly partial record struct ScriptPubKey : INativeScript
 public readonly partial record struct ScriptAll : INativeScript
 {
     [CborOrder(0)] public partial int Tag { get; }
-    [CborOrder(1)] public partial ICborMaybeIndefList<INativeScript> Scripts { get; }
+    [CborOrder(1)] public partial CborList<INativeScript> Scripts { get; }
 }
 
 [CborSerializable]
@@ -31,7 +31,7 @@ public readonly partial record struct ScriptAll : INativeScript
 public readonly partial record struct ScriptAny : INativeScript
 {
     [CborOrder(0)] public partial int Tag { get; }
-    [CborOrder(1)] public partial ICborMaybeIndefList<INativeScript> Scripts { get; }
+    [CborOrder(1)] public partial CborList<INativeScript> Scripts { get; }
 }
 
 [CborSerializable]
@@ -41,7 +41,7 @@ public readonly partial record struct ScriptNOfK : INativeScript
 {
     [CborOrder(0)] public partial int Tag { get; }
     [CborOrder(1)] public partial int N { get; }
-    [CborOrder(2)] public partial ICborMaybeIndefList<INativeScript> Scripts { get; }
+    [CborOrder(2)] public partial CborList<INativeScript> Scripts { get; }
 }
 
 [CborSerializable]

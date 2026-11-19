@@ -1,5 +1,4 @@
-﻿using Chrysalis.Codec.Extensions;
-using Chrysalis.Codec.Extensions.Cardano.Core.Common;
+﻿using Chrysalis.Codec.Extensions.Cardano.Core.Common;
 using Chrysalis.Codec.Extensions.Cardano.Core.Transaction;
 using Chrysalis.Codec.Serialization;
 using Chrysalis.Codec.Types;
@@ -138,7 +137,7 @@ while (!exitProgram)
                     if (costMdls.PlutusV1 is { } v1)
                     {
                         Console.WriteLine("PlutusV1: [");
-                        foreach (long item in v1.GetValue())
+                        foreach (long item in v1)
                         {
                             Console.WriteLine($"\t{item}, ");
                         }
@@ -147,7 +146,7 @@ while (!exitProgram)
                     if (costMdls.PlutusV2 is { } v2)
                     {
                         Console.WriteLine("PlutusV2: [");
-                        foreach (long item in v2.GetValue())
+                        foreach (long item in v2)
                         {
                             Console.WriteLine($"\t{item}, ");
                         }
@@ -156,7 +155,7 @@ while (!exitProgram)
                     if (costMdls.PlutusV3 is { } v3)
                     {
                         Console.WriteLine("PlutusV3: [");
-                        foreach (long item in v3.GetValue())
+                        foreach (long item in v3)
                         {
                             Console.WriteLine($"\t{item}, ");
                         }

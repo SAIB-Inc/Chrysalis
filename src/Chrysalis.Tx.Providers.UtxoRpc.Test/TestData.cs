@@ -27,7 +27,7 @@ internal static class TestData
         TxoRef = new TxoRef { Hash = ByteString.CopyFrom(new byte[32]), Index = index }
     };
     internal static ITransaction Transaction(bool metadata = true) => PostMaryTransaction.Create(
-        AlonzoTransactionBody.Create(CborDefList<TransactionInput>.Create([]), CborDefList<ITransactionOutput>.Create([]), 0,
+        AlonzoTransactionBody.Create(CborList.Create<TransactionInput>([]), CborList.Create<ITransactionOutput>([]), 0,
             null, null, null, null, null, null, null, null, null, null, null),
         PostAlonzoTransactionWitnessSet.Create(null, null, null, null, null, null, null, null), true,
         metadata ? Metadata.Create(new Dictionary<ulong, ITransactionMetadatum> { [674] = MetadataText.Create("placeholder") }) : null);
