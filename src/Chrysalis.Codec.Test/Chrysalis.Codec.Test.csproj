@@ -28,6 +28,10 @@
   <ItemGroup>
     <None Include="../Chrysalis.Network.Tests/Fixtures/Preprod/blocks/block-139039741.cbor"
           Link="TestData/preprod-conway.block.cbor" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../Chrysalis.Plutus.Test/TestData/CostModels/manifest.json"
+          Link="TestData/CostModels/manifest.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../Chrysalis.Plutus.Test/TestData/CostModels/plutigo-v0.12.3/node_ground_truth_pv11.json.gz"
+          Link="TestData/CostModels/plutigo-v0.12.3/node_ground_truth_pv11.json.gz" CopyToOutputDirectory="PreserveNewest" />
     <None Update="TestData\*.*">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>

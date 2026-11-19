@@ -52,20 +52,20 @@ public readonly partial record struct PlutusInt : IPlutusBigInt
 [CborTag(2)]
 public readonly partial record struct PlutusBigUint : IPlutusBigInt
 {
-    public partial ReadOnlyMemory<byte> Value { get; }
+    [CborSize(PlutusWire.BoundedBytesSize)] public partial ReadOnlyMemory<byte> Value { get; }
 }
 
 [CborSerializable]
 [CborTag(3)]
 public readonly partial record struct PlutusBigNint : IPlutusBigInt
 {
-    public partial ReadOnlyMemory<byte> Value { get; }
+    [CborSize(PlutusWire.BoundedBytesSize)] public partial ReadOnlyMemory<byte> Value { get; }
 }
 
 [CborSerializable]
 public readonly partial record struct PlutusBoundedBytes : IPlutusData
 {
-    [CborSize(64)] public partial ReadOnlyMemory<byte> Value { get; }
+    [CborSize(PlutusWire.BoundedBytesSize)] public partial ReadOnlyMemory<byte> Value { get; }
 }
 
 [CborSerializable]

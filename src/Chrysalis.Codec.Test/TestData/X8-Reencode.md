@@ -57,7 +57,7 @@ The same selector requires both inputs. Mainnet uses the existing read-only 1,00
   synthetic or explicitly unknown forms. G1 headers/handshake, mux and other network
   messages are not block/transaction payloads for this guard.
 - The `disposition` column must say `replay` for an active row. Other rows name their
-  fix owner, X38/X40 handoff or out-of-profile reason. `x8-mainnet-deferred.tsv` identifies
+  fix owner, X40 handoff or out-of-profile reason. `x8-mainnet-deferred.tsv` identifies
   the single deferred block by original wire SHA-256 as well as capture ordinal.
   Replay validates the closed local and Pallas source inventories (file, decoder and
   digest) and pins their active counts before filtering; non-active rows must name an

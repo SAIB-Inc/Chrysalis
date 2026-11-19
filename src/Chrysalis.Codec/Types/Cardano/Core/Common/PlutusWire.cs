@@ -5,6 +5,8 @@ namespace Chrysalis.Codec.Types.Cardano.Core.Common;
 
 internal static class PlutusWire
 {
+    /// <summary>The ledger's bounded_bytes limit: at most 64 bytes in each definite byte string or chunk.</summary>
+    internal const int BoundedBytesSize = 64;
     internal static IPlutusData ReadData(ReadOnlyMemory<byte> data, out int consumed) => Major(data) switch
     {
         0 or 1 => ReadInteger(data, out consumed),
