@@ -19,6 +19,7 @@ import gate_prelude as prelude
 import gate_schedule as schedules
 import gate_session as session
 import gate_time as timing
+from gate_azure_guest import results_limits
 from gate_azure_payload import CAPSTONE, DEPS_FILES, validate_deps
 from gate_time import require
 
@@ -258,6 +259,7 @@ def time_plans(seal):
         build = schedules.build_id(reference['sides']['baseline'])
         plan.update(mode=mode, ruleVersion=gate.stats.RULE_VERSION, probeJob=replay_job('offline', '*'),
                     orderingProof=ORDERING_WORK if seal['orderingProof'] and build not in proven else None)
+        results_limits(plan, strict=True)
         proven.add(build)
     return plans
 
@@ -542,6 +544,7 @@ def verify_timing(output, seal, payload, *, host_hashes):
                 objects['prelude.json'] == prelude.recipe(plan) and
                 objects['bundle-manifest.json'] == {name: sha for name, sha in expanded.items() if name != 'bundle-manifest.json'},
                 'Prepared timing plan differs from sealed inputs')
+        results_limits(objects['plan.json'], strict=True)
 
 
 def matches(pattern, value):

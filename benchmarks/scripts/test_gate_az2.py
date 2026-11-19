@@ -1505,3 +1505,37 @@ def test_import_refuses_unbound_runtime_mirror_manifest(tmp_path, azure, monkeyp
                                  check_cli=lambda *_: pytest.fail('Untrusted mirror reached CLI'),
                                  check_budget=lambda *_: pytest.fail('Untrusted mirror reached ledger'))
     assert not list((gate.REPO / 'benchmarks/out').glob('gate-*'))
+
+
+def test_az2f4_prepare_refuses_oversize_results_plan_at_seal_time(tmp_path, azure, monkeypatch):
+    fetched = tmp_path / 'mbp-results'
+    folder = fetched_prepared(fetched, '1')
+    build_local, build = fake_container(tmp_path, monkeypatch, noise=True, kind='noise')
+    build(folder)
+    seal = prepare.json_file(folder / 'plan.json')
+    assert prepare.time_plans(seal)
+    oversize = copy.deepcopy(seal)
+    oversize.update(noiseRecords=False, mode='release')
+    oversize['gated']['time']['noise'] = {}
+    oversize['gated']['time']['micro'].update({f'm{i}': 'demo-filter' for i in range(5)})
+    base_micro = next(r for r in oversize['rows'] if r['id'] == 'time/micro-demo')
+    oversize['rows'] = [next(r for r in oversize['rows'] if r['id'] == 'time/preprod-offline'),
+                        *[dict(base_micro, id=f'time/micro-m{i}', aPairs=16, bPairs=16, chargeSeconds=6) for i in range(5)]]
+    with pytest.raises(ValueError, match='results cap exceeds hard ceiling'):
+        prepare.time_plans(oversize)
+    # Oversize plan in a sealed directory is refused by checked_azure_go before Azure.
+    settings, local2 = completion_settings(tmp_path / 'imp', monkeypatch)
+    for rk, pin in (('linuxDotnetRoot', 'linuxDotnetManifestSha256'), ('flyPythonRoot', 'flyPythonManifestSha256')):
+        local2[pin] = bundle.sha(Path(build_local[rk]) / 'sha256.json')
+        local2.pop(rk, None)
+    local2['azureRemainingProjectionUsd'] = 12.50
+    session.save(settings, local2)
+    monkeypatch.setenv('CHRYSALIS_GATE_LOCAL', str(settings))
+    completion_receipt(folder, request=build.request)
+    directory = prepare.import_prepared(folder, fetched=fetched, settings=settings, local=local2,
+                                        check_cli=lambda *_: '2.3.4', check_budget=lambda *_: None)
+    sealed = gate.read_seal(directory)
+    sealed['timePlans'][0]['rows'][0]['aPairs'] = 105
+    schedule.prepare(sealed['timePlans'][0])
+    with pytest.raises(ValueError, match='results cap exceeds hard ceiling'):
+        bundle.checked_azure_go(directory, gate.write_seal(directory, sealed))

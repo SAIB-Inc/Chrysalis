@@ -328,3 +328,63 @@ def test_r2_imds_retries_transient_errors_caches_only_identity(monkeypatch):
     assert session.azure_metadata() == identity
     assert session.azure_metadata() == identity
     assert create.call_count == connection.close.call_count == 3
+
+
+def test_az2f4_azure_slims_process_json_only_leaving_fly_pc_mac_unchanged(tmp_path):
+    script = "print('MEASURED_START', flush=True)\ninput()\nprint('MEASURED_END', flush=True)\ninput()\n"
+    command = [sys.executable, '-c', script]
+    hz = os.sysconf('SC_CLK_TCK')
+
+    def run_for(plat):
+        seen = 0
+        def synthetic_snapshot():
+            nonlocal seen
+            seen += 1
+            stamp = 10.0 + seen * 0.25
+            return dict(monotonic=stamp, unix=1700000000.0 + stamp, load1=0.25,
+                        cpuStat={'cpu': [1000 * seen, 0, 0, 0, 0, 0, 0, 0],
+                                 **{f'cpu{i}': [1000 * seen, 0, 0, 0, 0, 0, 0, 0] for i in range(8)}},
+                        processes={999999: dict(name='bg-daemon', ppid=1, startTicks=1, cpuTicks=round(0.01 * hz) if seen > 2 else 0)})
+        def synthetic_clock():
+            nonlocal seen
+            seen += 1
+            stamp = 10.0 + seen
+            return dict(monotonic=stamp, unix=1700000000.0 + stamp, load1=0.25)
+        dest = tmp_path / plat
+        with (patch.object(session, 'snapshot', side_effect=synthetic_snapshot),
+              patch.object(session, 'clock', side_effect=synthetic_clock)):
+            result = session.monitored_process(command, tmp_path, session.environment({}), dest, 5, platform=plat)
+        return result, (dest / 'process.json').read_bytes()
+
+    az_res, az_bytes = run_for('azure')
+    fly_res, fly_bytes = run_for('fly')
+    pc_res, pc_bytes = run_for('pc')
+    mac_res, mac_bytes = run_for('mac')
+
+    # Azure drops BOTH cpuStat and processes from process.json while keeping foreignCpuSeconds & admission identical to Fly.
+    az_json = json.loads(az_bytes)
+    assert 'cpuStat' not in az_bytes.decode()
+    assert 'processes' not in az_bytes.decode()
+    for snap in (az_json['before'], *az_json['samples'], *az_json['marks'].values(), az_json['after']):
+        assert set(snap) == {'monotonic', 'unix', 'load1'}
+    assert az_json['foreignCpuSeconds'] == fly_res['foreignCpuSeconds'] > 0
+    assert az_res['timingRejectedReasons'] == fly_res['timingRejectedReasons'] == []
+
+    # Fly keeps full cpuStat and processes in before, samples, marks and after unchanged.
+    fly_json = json.loads(fly_bytes)
+    for snap in (fly_json['before'], *fly_json['samples'], *fly_json['marks'].values(), fly_json['after']):
+        assert 'cpuStat' in snap and 'processes' in snap and '999999' in snap['processes']
+
+    # PC and Mac process.json bytes match the exact pre-change format (no Azure fields, samples == []).
+    for plat, res, raw, expected_reason in (
+        ('pc', pc_res, pc_bytes, ['PC time never gates']),
+        ('mac', mac_res, mac_bytes, ['Mac time never gates']),
+    ):
+        expected = dict(pid=res['pid'], exitCode=0,
+                        before=dict(monotonic=11.0, unix=1700000011.0, load1=0.25),
+                        after=dict(monotonic=14.0, unix=1700000014.0, load1=0.25),
+                        seconds=3.0,
+                        marks=dict(MEASURED_START=dict(monotonic=12.0, unix=1700000012.0, load1=0.25),
+                                   MEASURED_END=dict(monotonic=13.0, unix=1700000013.0, load1=0.25)),
+                        samples=[], foreignCpuSeconds=0, timingRejectedReasons=expected_reason)
+        assert raw == (json.dumps(expected, indent=2, allow_nan=False) + '\n').encode(), plat
