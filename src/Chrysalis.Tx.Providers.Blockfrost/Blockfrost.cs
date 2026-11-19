@@ -1,10 +1,10 @@
 using System.Collections.Concurrent;
 using System.Globalization;
+using System.Net;
 using System.Net.Http.Headers;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Chrysalis.Codec.Serialization;
-using Chrysalis.Codec.Serialization.Utils;
 using Chrysalis.Codec.Types;
 using Chrysalis.Codec.Types.Cardano.Core.Common;
 using Chrysalis.Codec.Types.Cardano.Core.Scripts;
@@ -31,12 +31,15 @@ public record BlockfrostMetadataResponse(
     [property: JsonPropertyName("json_metadata")] object JsonMetadata);
 
 /// <summary>
-/// Blockfrost-based implementation of the Cardano data provider.
+/// Blockfrost data provider. Protocol version is fixed at 9.0 and governance thresholds
+/// are placeholders; by-output-reference reads do not check whether the output is spent.
 /// </summary>
 public sealed class Blockfrost : ICardanoDataProvider, IDisposable
 {
     private readonly HttpClient _httpClient;
-    private readonly HttpClientHandler _handler;
+    private readonly HttpClientHandler? _handler;
+    private readonly ProviderHttp _http;
+    private const string Provider = nameof(Blockfrost);
 
     /// <summary>
     /// Gets the network type for this provider.
@@ -51,17 +54,18 @@ public sealed class Blockfrost : ICardanoDataProvider, IDisposable
     /// <param name="apiKey">The Blockfrost project API key.</param>
     /// <param name="networkType">The Cardano network type.</param>
     /// <param name="url">Optional custom API base URL.</param>
-    public Blockfrost(string apiKey, NetworkType networkType = NetworkType.Preview, string url = "")
+    /// <param name="handler">Optional caller-owned HTTP handler.</param>
+    public Blockfrost(string apiKey, NetworkType networkType = NetworkType.Preview, string url = "", HttpMessageHandler? handler = null)
     {
         ArgumentNullException.ThrowIfNull(apiKey);
         NetworkType = networkType;
 
-        _handler = new HttpClientHandler
+        _handler = handler is null ? new HttpClientHandler
         {
             CheckCertificateRevocationList = true
-        };
+        } : null;
 
-        _httpClient = new HttpClient(_handler)
+        _httpClient = new HttpClient(handler ?? _handler!, disposeHandler: false)
         {
             BaseAddress = new Uri(string.IsNullOrEmpty(url) ? GetBaseUrl() : url),
             Timeout = TimeSpan.FromSeconds(30)
@@ -70,26 +74,25 @@ public sealed class Blockfrost : ICardanoDataProvider, IDisposable
         _httpClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
         _httpClient.DefaultRequestHeaders.Add("Project_id", apiKey);
         _httpClient.DefaultRequestHeaders.ConnectionClose = false;
+        _http = new(_httpClient, Provider, [apiKey, .. ProviderHttp.SecretsOf(_httpClient.BaseAddress!)]);
     }
 
     /// <summary>
     /// Retrieves the current protocol parameters from Blockfrost.
     /// </summary>
+    /// <param name="cancellationToken">Cancels the operation.</param>
     /// <returns>The current protocol parameters.</returns>
-    public async Task<ProtocolParams> GetParametersAsync()
+    public async Task<ProtocolParams> GetParametersAsync(CancellationToken cancellationToken = default)
     {
-        const string query = "epochs/latest/parameters";
-        using HttpResponseMessage response = await _httpClient.GetAsync(new Uri(query, UriKind.Relative)).ConfigureAwait(false);
+        cancellationToken.ThrowIfCancellationRequested();
+        const string operation = nameof(GetParametersAsync);
+        BlockfrostProtocolParametersResponse parameters = (await _http.GetJsonAsync<BlockfrostProtocolParametersResponse>(
+            "epochs/latest/parameters", operation, null, cancellationToken).ConfigureAwait(false))!;
+        return ProviderHttp.Map(parameters, MapParameters, Provider, operation);
+    }
 
-        if (!response.IsSuccessStatusCode)
-        {
-            throw new InvalidOperationException($"GetParameters: HTTP error {response.StatusCode}");
-        }
-
-        string content = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-        BlockfrostProtocolParametersResponse parameters = JsonSerializer.Deserialize<BlockfrostProtocolParametersResponse>(content) ??
-            throw new InvalidOperationException("GetParameters: Could not parse response json");
-
+    private static ProtocolParams MapParameters(BlockfrostProtocolParametersResponse parameters)
+    {
         Dictionary<int, ICborMaybeIndefList<long>> costMdls = [];
 
         foreach ((string key, int[] value) in parameters.CostModelsRaw ?? [])
@@ -99,7 +102,7 @@ public sealed class Blockfrost : ICardanoDataProvider, IDisposable
                 "PlutusV1" => 0,
                 "PlutusV2" => 1,
                 "PlutusV3" => 2,
-                _ => throw new ArgumentException($"Invalid cost model key: {key}", nameof(key))
+                _ => throw new InvalidOperationException("Unknown cost model key.")
             };
 
             costMdls[version] = CborDefList<long>.Create([.. value.Select(x => (long)x)]);
@@ -149,120 +152,79 @@ public sealed class Blockfrost : ICardanoDataProvider, IDisposable
     /// Retrieves UTxOs for a single address.
     /// </summary>
     /// <param name="address">The Bech32 address.</param>
+    /// <param name="cancellationToken">Cancels the operation.</param>
     /// <returns>A list of resolved inputs.</returns>
-    public async Task<List<ResolvedInput>> GetUtxosAsync(string address)
+    public async Task<List<ResolvedInput>> GetUtxosAsync(string address, CancellationToken cancellationToken = default)
     {
-        ArgumentNullException.ThrowIfNull(address);
+        ArgumentException.ThrowIfNullOrWhiteSpace(address);
+        cancellationToken.ThrowIfCancellationRequested();
+        const int pageSize = 100;
+        const string operation = nameof(GetUtxosAsync);
+        ResolvedInputSet found = new(Provider, operation);
+        await ProviderHttp.ReadAllPagesAsync(ReadPage, 1, pageSize, AddPage, Provider, operation, cancellationToken).ConfigureAwait(false);
+        return found.ToList();
 
-        const int maxPageCount = 100;
-        int page = 1;
-        List<ResolvedInput> results = [];
+        async Task<List<BlockfrostUtxo>> ReadPage(int page, CancellationToken ct) =>
+            await _http.GetJsonAsync<List<BlockfrostUtxo>>(
+                string.Create(CultureInfo.InvariantCulture, $"addresses/{Uri.EscapeDataString(address)}/utxos?count={pageSize}&page={page}"),
+                operation, page == 1 ? IsNotFoundBody : null, ct).ConfigureAwait(false) ?? [];
 
-        while (true)
+        async Task AddPage(List<BlockfrostUtxo> page, CancellationToken ct)
         {
-            string pagination = string.Create(CultureInfo.InvariantCulture, $"count={maxPageCount}&page={page}");
-            string query = $"addresses/{address}/utxos?{pagination}";
-            using HttpResponseMessage response = await _httpClient.GetAsync(new Uri(query, UriKind.Relative)).ConfigureAwait(false);
-
-            if (!response.IsSuccessStatusCode)
+            foreach (BlockfrostUtxo? utxo in page)
             {
-                break;
+                if (utxo?.TxIndex is not >= 0) { throw ProviderHttp.Unusable(Provider, operation, "missing or invalid output index"); }
+                found.Add(address, await ProcessUtxoAsync(utxo, (ulong)utxo.TxIndex.Value, operation, ct).ConfigureAwait(false));
             }
-
-            string content = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-            List<BlockfrostUtxo>? utxos = JsonSerializer.Deserialize<List<BlockfrostUtxo>>(content);
-
-            if (utxos == null || utxos.Count == 0)
-            {
-                break;
-            }
-
-            Task<ResolvedInput>[] batchTasks = [.. utxos.Select(ProcessUtxo)];
-            ResolvedInput[] batchResults = await Task.WhenAll(batchTasks).ConfigureAwait(false);
-            results.AddRange(batchResults);
-
-            if (utxos.Count < maxPageCount)
-            {
-                break;
-            }
-
-            page++;
         }
-        return results;
     }
 
-    private async Task<ResolvedInput> ProcessUtxo(BlockfrostUtxo utxo)
+    private async Task<ResolvedInput> ProcessUtxoAsync(BlockfrostUtxo utxo, ulong index, string operation, CancellationToken cancellationToken)
     {
-        ulong lovelace = 0;
+        cancellationToken.ThrowIfCancellationRequested();
+        IScript? script = utxo.ReferenceScriptHash is { } hash
+            ? await GetScriptCachedAsync(hash, cancellationToken).ConfigureAwait(false) : null;
+        return ProviderHttp.Map(utxo, item => MapOutput(item, index, script, operation), Provider, operation);
+    }
 
-        // Build mutable dictionaries first, then create immutable TokenBundleOutput at the end.
-        // TokenBundleOutput is a readonly record struct with lazy-decoded Value — mutating .Value is a no-op.
-        Dictionary<ReadOnlyMemory<byte>, Dictionary<ReadOnlyMemory<byte>, ulong>> assetsByPolicy = [with(ReadOnlyMemoryComparer.Instance)];
-
-        foreach (Amount amount in utxo.Amount!)
+    private static ResolvedInput MapOutput(BlockfrostUtxo utxo, ulong index, IScript? script, string operation)
+    {
+        if (utxo.TxHash is not { Length: 64 } hash || string.IsNullOrEmpty(utxo.Address) || utxo.Amount is null)
         {
-            if (string.Equals(amount.Unit, "lovelace", StringComparison.Ordinal))
+            throw ProviderHttp.Unusable(Provider, operation, "missing or invalid output fields");
+        }
+        ulong? lovelace = null;
+        List<(ReadOnlyMemory<byte> Policy, ReadOnlyMemory<byte> Name, ulong Quantity)> assets = [];
+        foreach (Amount? amount in utxo.Amount)
+        {
+            if (amount?.Unit is not { } unit || !ulong.TryParse(amount.Quantity, NumberStyles.None, CultureInfo.InvariantCulture, out ulong quantity))
             {
-                lovelace = ulong.Parse(amount.Quantity!, CultureInfo.InvariantCulture);
+                throw ProviderHttp.Unusable(Provider, operation, "missing unit or invalid quantity");
+            }
+            if (string.Equals(unit, "lovelace", StringComparison.Ordinal))
+            {
+                if (lovelace.HasValue) { throw ProviderHttp.Unusable(Provider, operation, "repeated lovelace entry"); }
+                lovelace = quantity;
             }
             else
             {
-                ReadOnlyMemory<byte> policy = HexStringCache.FromHexString(amount.Unit![..56]);
-                ReadOnlyMemory<byte> assetName = HexStringCache.FromHexString(amount.Unit![56..]);
-
-                if (!assetsByPolicy.TryGetValue(policy, out Dictionary<ReadOnlyMemory<byte>, ulong>? tokenBundle))
-                {
-                    tokenBundle = [with(ReadOnlyMemoryComparer.Instance)];
-                    assetsByPolicy[policy] = tokenBundle;
-                }
-                tokenBundle[assetName] = ulong.Parse(amount.Quantity!, CultureInfo.InvariantCulture);
+                if (unit.Length < 56) { throw ProviderHttp.Unusable(Provider, operation, "invalid asset unit"); }
+                assets.Add((HexStringCache.FromHexString(unit[..56]), HexStringCache.FromHexString(unit[56..]), quantity));
             }
         }
-
-        Dictionary<ReadOnlyMemory<byte>, TokenBundleOutput> assets = [with(ReadOnlyMemoryComparer.Instance)];
-        foreach ((ReadOnlyMemory<byte> policy, Dictionary<ReadOnlyMemory<byte>, ulong> tokenBundle) in assetsByPolicy)
-        {
-            assets[policy] = TokenBundleOutput.Create(tokenBundle);
-        }
-
-        TransactionInput outref = TransactionInput.Create(HexStringCache.FromHexString(utxo.TxHash!), (ulong)utxo.TxIndex!);
-        Lovelace cborLovelace = Lovelace.Create(lovelace);
-        IValue value = assets.Count > 0
-            ? LovelaceWithMultiAsset.Create(lovelace, MultiAssetOutput.Create(assets))
-            : cborLovelace;
-
-        ChrysalisWallet.Address outputAddress = ChrysalisWallet.Address.FromBech32(utxo.Address!);
-
-        CborEncodedValue? scriptRef = null;
-        if (utxo.ReferenceScriptHash is not null)
-        {
-            IScript scriptRefValue = await GetScriptCached(utxo.ReferenceScriptHash).ConfigureAwait(false);
-            scriptRef = new CborEncodedValue(CborSerializer.Serialize(scriptRefValue));
-        }
-
-        IDatumOption? datum = null;
-        if (utxo.InlineDatum is not null)
-        {
-            datum = InlineDatumOption.Create(1, new CborEncodedValue(HexStringCache.FromHexString(utxo.InlineDatum)));
-        }
-
-        ITransactionOutput output = PostAlonzoTransactionOutput.Create(
-            new Address(outputAddress.ToBytes()),
-            value,
-            datum,
-            scriptRef);
-
-        return new ResolvedInput(outref, output);
+        IValue value = ProviderValues.Create(lovelace ?? throw ProviderHttp.Unusable(Provider, operation, "missing lovelace"), assets, Provider, operation);
+        TransactionInput outref = TransactionInput.Create(HexStringCache.FromHexString(hash), index);
+        IDatumOption? datum = utxo.InlineDatum is { } inline
+            ? InlineDatumOption.Create(1, new CborEncodedValue(HexStringCache.FromHexString(inline))) : null;
+        ITransactionOutput output = PostAlonzoTransactionOutput.Create(new Address(ChrysalisWallet.Address.FromBech32(utxo.Address).ToBytes()),
+            value, datum, script is null ? null : new CborEncodedValue(CborSerializer.Serialize(script)));
+        return new(outref, output);
     }
 
-    private async Task<IScript> GetScriptCached(string scriptHash)
+    private async Task<IScript> GetScriptCachedAsync(string scriptHash, CancellationToken cancellationToken)
     {
-        if (_scriptCache.TryGetValue(scriptHash, out IScript? cachedScript))
-        {
-            return cachedScript;
-        }
-
-        IScript script = await GetScript(scriptHash).ConfigureAwait(false);
+        if (_scriptCache.TryGetValue(scriptHash, out IScript? script)) { return script; }
+        script = await GetScript(scriptHash, cancellationToken).ConfigureAwait(false);
         _ = _scriptCache.TryAdd(scriptHash, script);
         return script;
     }
@@ -271,177 +233,175 @@ public sealed class Blockfrost : ICardanoDataProvider, IDisposable
     /// Retrieves a script by its hash from Blockfrost.
     /// </summary>
     /// <param name="scriptHash">The script hash.</param>
+    /// <param name="cancellationToken">Cancels the operation.</param>
     /// <returns>The script object.</returns>
-    public async Task<IScript> GetScript(string scriptHash)
+    public async Task<IScript> GetScript(string scriptHash, CancellationToken cancellationToken = default)
     {
-        ArgumentNullException.ThrowIfNull(scriptHash);
-
-        string typeQuery = $"scripts/{scriptHash}";
-        using HttpResponseMessage typeResponse = await _httpClient.GetAsync(new Uri(typeQuery, UriKind.Relative)).ConfigureAwait(false);
-        string typeContent = await typeResponse.Content.ReadAsStringAsync().ConfigureAwait(false);
-
-        using JsonDocument typeDoc = JsonDocument.Parse(typeContent);
-        JsonElement root = typeDoc.RootElement;
-
-        if (!root.TryGetProperty("type", out JsonElement typeElement))
+        ArgumentException.ThrowIfNullOrWhiteSpace(scriptHash);
+        cancellationToken.ThrowIfCancellationRequested();
+        const string operation = nameof(GetScript);
+        string path = $"scripts/{Uri.EscapeDataString(scriptHash)}";
+        using JsonDocument descriptor = (await _http.GetJsonAsync<JsonDocument>(path, operation, null, cancellationToken).ConfigureAwait(false))!;
+        string? language = ProviderHttp.Map(descriptor.RootElement, element => element.GetProperty("type").GetString(), Provider, operation);
+        if (language == "timelock") { throw ProviderHttp.Unusable(Provider, operation, "native reference scripts are not mapped yet"); }
+        if (language is not ("plutusV1" or "plutusV2" or "plutusV3"))
         {
-            throw new InvalidOperationException("GetScriptRef: Could not parse response json");
+            throw ProviderHttp.Unusable(Provider, operation, "unknown script language");
         }
-
-        string type = typeElement.GetString() ?? throw new InvalidOperationException("GetScriptRef: Could not parse type from response");
-
-        if (string.Equals(type, "timelock", StringComparison.Ordinal))
+        using JsonDocument body = (await _http.GetJsonAsync<JsonDocument>($"{path}/cbor", operation, null, cancellationToken).ConfigureAwait(false))!;
+        return ProviderHttp.Map<JsonElement, IScript>(body.RootElement, element =>
         {
-            throw new InvalidOperationException("GetScriptRef: Native scripts are not yet supported.");
-        }
-
-        string cborQuery = $"scripts/{scriptHash}/cbor";
-        using HttpResponseMessage cborResponse = await _httpClient.GetAsync(new Uri(cborQuery, UriKind.Relative)).ConfigureAwait(false);
-        string cborContent = await cborResponse.Content.ReadAsStringAsync().ConfigureAwait(false);
-
-        using JsonDocument cborDoc = JsonDocument.Parse(cborContent);
-        JsonElement cborRoot = cborDoc.RootElement;
-
-        if (!cborRoot.TryGetProperty("cbor", out JsonElement cborElement))
-        {
-            throw new InvalidOperationException("GetScriptRef: Could not parse response json");
-        }
-
-        string cborHex = cborElement.GetString() ?? throw new InvalidOperationException("GetScriptRef: Could not parse CBOR from response");
-
-        byte[] cborBytes = HexStringCache.FromHexString(cborHex);
-        IScript script = type switch
-        {
-            "plutusV1" => PlutusV1Script.Create(1, cborBytes),
-            "plutusV2" => PlutusV2Script.Create(2, cborBytes),
-            "plutusV3" => PlutusV3Script.Create(3, cborBytes),
-            _ => throw new InvalidOperationException($"GetScriptRef: Unsupported script type: {type}")
-        };
-
-        return script;
+            byte[] bytes = HexStringCache.FromHexString(element.GetProperty("cbor").GetString()
+                ?? throw ProviderHttp.Unusable(Provider, operation, "missing script bytes"));
+            return language switch
+            {
+                "plutusV1" => PlutusV1Script.Create(1, bytes),
+                "plutusV2" => PlutusV2Script.Create(2, bytes),
+                _ => PlutusV3Script.Create(3, bytes)
+            };
+        }, Provider, operation);
     }
 
     /// <summary>
     /// Retrieves UTxOs for multiple addresses.
     /// </summary>
     /// <param name="address">The list of Bech32 addresses.</param>
+    /// <param name="cancellationToken">Cancels the operation.</param>
     /// <returns>A list of resolved inputs.</returns>
-    public async Task<List<ResolvedInput>> GetUtxosAsync(List<string> address)
+    public async Task<List<ResolvedInput>> GetUtxosAsync(List<string> address, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(address);
-
+        foreach (string item in address) { ArgumentException.ThrowIfNullOrWhiteSpace(item, nameof(address)); }
+        cancellationToken.ThrowIfCancellationRequested();
+        List<string> requests = [.. address.Distinct(StringComparer.Ordinal)];
+        ResolvedInputSet merged = new(Provider, nameof(GetUtxosAsync));
         const int batchSize = 5;
-        List<ResolvedInput> allResults = [];
-
-        for (int i = 0; i < address.Count; i += batchSize)
+        for (int i = 0; i < requests.Count; i += batchSize)
         {
-            IEnumerable<string> batch = address.Skip(i).Take(batchSize);
-            IEnumerable<Task<List<ResolvedInput>>> batchTasks = batch.Select(GetUtxosAsync);
-            List<ResolvedInput>[] batchResults = await Task.WhenAll(batchTasks).ConfigureAwait(false);
+            cancellationToken.ThrowIfCancellationRequested();
+            string[] batch = [.. requests.Skip(i).Take(batchSize)];
+            using CancellationTokenSource batchCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            List<ResolvedInput>[] answers = await ProviderHttp.AwaitBatchAsync(
+                Task.WhenAll(batch.Select(ReadAddressAsync)), cancellationToken).ConfigureAwait(false);
 
-            allResults.AddRange(batchResults.SelectMany(utxos => utxos));
-
-            if (i + batchSize < address.Count)
+            async Task<List<ResolvedInput>> ReadAddressAsync(string item)
             {
-                await Task.Delay(50).ConfigureAwait(false);
+                try { return await GetUtxosAsync(item, batchCancellation.Token).ConfigureAwait(false); }
+                catch (ProviderException)
+                {
+                    try { await batchCancellation.CancelAsync().ConfigureAwait(false); }
+                    catch (AggregateException) { /* A cancellation callback must not replace the provider failure. */ }
+                    throw;
+                }
             }
+            for (int j = 0; j < batch.Length; j++)
+            {
+                foreach (ResolvedInput input in answers[j]) { merged.Add(batch[j], input); }
+            }
+            if (i + batchSize < requests.Count) { await Task.Delay(50, cancellationToken).ConfigureAwait(false); }
         }
-
-        return allResults;
+        cancellationToken.ThrowIfCancellationRequested();
+        return merged.ToList();
     }
 
     /// <summary>
     /// Retrieves a specific UTxO by its output reference.
     /// </summary>
-    public async Task<ResolvedInput?> GetUtxoByOutRefAsync(string txHash, ulong index)
+    /// <param name="txHash">The transaction hash.</param>
+    /// <param name="index">The output index.</param>
+    /// <param name="cancellationToken">Cancels the operation.</param>
+    /// <returns>The matching output or null.</returns>
+    public async Task<ResolvedInput?> GetUtxoByOutRefAsync(string txHash, ulong index, CancellationToken cancellationToken = default)
     {
-        ArgumentNullException.ThrowIfNull(txHash);
+        ArgumentException.ThrowIfNullOrWhiteSpace(txHash);
+        cancellationToken.ThrowIfCancellationRequested();
+        const string operation = nameof(GetUtxoByOutRefAsync);
+        using JsonDocument? body = await _http.GetJsonAsync<JsonDocument>($"txs/{Uri.EscapeDataString(txHash)}/utxos",
+            operation, IsNotFoundBody, cancellationToken).ConfigureAwait(false);
+        if (body is null) { return null; }
+        BlockfrostUtxo? utxo = ProviderHttp.Map(body.RootElement, root => FindOutput(root, txHash, index), Provider, operation);
+        return utxo is null ? null : await ProcessUtxoAsync(utxo, index, operation, cancellationToken).ConfigureAwait(false);
+    }
 
-        string query = $"txs/{txHash}/utxos";
-        using HttpResponseMessage response = await _httpClient.GetAsync(new Uri(query, UriKind.Relative)).ConfigureAwait(false);
-
-        if (!response.IsSuccessStatusCode)
+    private static BlockfrostUtxo? FindOutput(JsonElement root, string txHash, ulong index)
+    {
+        BlockfrostUtxo? match = null;
+        foreach (JsonElement item in root.GetProperty("outputs").EnumerateArray())
         {
-            return null;
+            if (item.GetProperty("output_index").GetUInt64() != index) { continue; }
+            if (match is not null) { throw ProviderHttp.Unusable(Provider, nameof(GetUtxoByOutRefAsync), "repeated output"); }
+            match = item.Deserialize<BlockfrostUtxo>() ?? throw ProviderHttp.Unusable(Provider, nameof(GetUtxoByOutRefAsync), "null output");
+            match.TxHash = txHash;
         }
+        return match;
+    }
 
-        string content = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-        using JsonDocument doc = JsonDocument.Parse(content);
-        JsonElement root = doc.RootElement;
-
-        if (!root.TryGetProperty("outputs", out JsonElement outputs))
+    private static bool IsNotFoundBody(string text)
+    {
+        try
         {
-            return null;
+            using JsonDocument document = JsonDocument.Parse(text);
+            JsonElement root = document.RootElement;
+            return root.ValueKind == JsonValueKind.Object && root.TryGetProperty("status_code", out JsonElement status) &&
+                status.ValueKind == JsonValueKind.Number && status.TryGetInt32(out int code) && code == (int)HttpStatusCode.NotFound &&
+                root.TryGetProperty("error", out JsonElement error) && error.ValueKind == JsonValueKind.String &&
+                error.ValueEquals("Not Found") &&
+                root.TryGetProperty("message", out JsonElement message) && message.ValueKind == JsonValueKind.String;
         }
-
-        foreach (JsonElement output in outputs.EnumerateArray())
-        {
-            if (output.TryGetProperty("output_index", out JsonElement idxElem) &&
-                idxElem.GetUInt64() == index)
-            {
-                BlockfrostUtxo? utxo = output.Deserialize<BlockfrostUtxo>();
-                if (utxo is null)
-                {
-                    return null;
-                }
-
-                utxo.TxHash = txHash;
-                utxo.TxIndex = (int)index;
-                return await ProcessUtxo(utxo).ConfigureAwait(false);
-            }
-        }
-
-        return null;
+        catch (Exception error) when (error is JsonException or InvalidOperationException) { return false; }
     }
 
     /// <summary>
     /// Submits a signed transaction to the Blockfrost API.
     /// </summary>
     /// <param name="tx">The signed transaction.</param>
+    /// <param name="cancellationToken">Cancels the operation.</param>
     /// <returns>The transaction hash.</returns>
-    public async Task<string> SubmitTransactionAsync(ITransaction tx)
+    public async Task<string> SubmitTransactionAsync(ITransaction tx, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(tx);
-
-        using ByteArrayContent content = new(CborSerializer.Serialize(tx));
-        content.Headers.ContentType = new MediaTypeHeaderValue("application/cbor");
-
-        using HttpResponseMessage response = await _httpClient.PostAsync(new Uri("tx/submit", UriKind.Relative), content).ConfigureAwait(false);
-
-        if (!response.IsSuccessStatusCode)
+        cancellationToken.ThrowIfCancellationRequested();
+        const string operation = nameof(SubmitTransactionAsync);
+        using HttpRequestMessage request = CreateTransactionRequest("tx/submit", tx);
+        bool receivedSuccess = false;
+        try
         {
-            string error = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-            throw new InvalidOperationException($"SubmitTransactionAsync: failed to submit transaction to Blockfrost endpoint.\nError {error}");
+            using HttpResponseMessage response = (await _http.SendAsync(request, operation, null, cancellationToken).ConfigureAwait(false))!;
+            receivedSuccess = true;
+            return await _http.ReadJsonAsync<string>(response, operation, cancellationToken).ConfigureAwait(false);
         }
-
-        string txId = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-        txId = JsonSerializer.Deserialize<string>(txId) ??
-            throw new InvalidOperationException("SubmitTransactionAsync: Could not parse transaction ID from response");
-
-        return txId;
+        catch (ProviderException error) when (error is not ProviderStatusException && (receivedSuccess || error.IsTransient))
+        {
+            throw new ProviderException($"{error.Message}; the transaction may have been accepted", error.IsTransient, error.Detail);
+        }
     }
+
+    private static HttpRequestMessage CreateTransactionRequest(string path, ITransaction tx) => new(HttpMethod.Post, path)
+    {
+        Content = new ByteArrayContent(CborSerializer.Serialize(tx)) { Headers = { ContentType = new MediaTypeHeaderValue("application/cbor") } }
+    };
 
     /// <summary>
     /// Evaluates a transaction using the Blockfrost/Ogmios evaluate endpoint.
     /// Returns execution units for each redeemer as computed by the Cardano node.
     /// </summary>
     /// <param name="tx">The unsigned transaction to evaluate.</param>
+    /// <param name="cancellationToken">Cancels the operation.</param>
     /// <returns>A dictionary mapping (tag, index) to (mem, steps) execution units.</returns>
-    public async Task<Dictionary<(int Tag, ulong Index), (ulong Mem, ulong Steps)>> EvaluateTransactionAsync(ITransaction tx)
+    public async Task<Dictionary<(int Tag, ulong Index), (ulong Mem, ulong Steps)>> EvaluateTransactionAsync(ITransaction tx, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(tx);
+        cancellationToken.ThrowIfCancellationRequested();
+        const string operation = nameof(EvaluateTransactionAsync);
+        using HttpRequestMessage request = CreateTransactionRequest("utils/txs/evaluate", tx);
+        using HttpResponseMessage response = (await _http.SendAsync(request, operation, null, cancellationToken).ConfigureAwait(false))!;
+        using JsonDocument document = await _http.ReadJsonAsync<JsonDocument>(response, operation, cancellationToken).ConfigureAwait(false);
+        return ProviderHttp.Map(document.RootElement, MapEvaluation, Provider, operation);
+    }
 
-        using ByteArrayContent content = new(CborSerializer.Serialize(tx));
-        content.Headers.ContentType = new MediaTypeHeaderValue("application/cbor");
-
-        using HttpResponseMessage response = await _httpClient.PostAsync(
-            new Uri("utils/txs/evaluate", UriKind.Relative), content).ConfigureAwait(false);
-
-        string responseBody = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-
-        using JsonDocument doc = JsonDocument.Parse(responseBody);
-        JsonElement root = doc.RootElement;
-
+    private Dictionary<(int Tag, ulong Index), (ulong Mem, ulong Steps)> MapEvaluation(JsonElement root)
+    {
+        const string operation = nameof(EvaluateTransactionAsync);
         Dictionary<(int, ulong), (ulong, ulong)> results = [];
 
         // Parse Ogmios EvaluateTx response format
@@ -452,7 +412,8 @@ public sealed class Blockfrost : ICardanoDataProvider, IDisposable
                 foreach (JsonProperty prop in evalResult.EnumerateObject())
                 {
                     // Key format: "spend:0", "mint:0", etc.
-                    string[] parts = prop.Name.Split(':');
+                    string[] parts = prop.Name.Split(':', 2);
+                    if (parts.Length != 2) { throw ProviderHttp.Unusable(Provider, operation, "invalid evaluation key"); }
                     int tag = parts[0] switch
                     {
                         "spend" => 0,
@@ -464,26 +425,27 @@ public sealed class Blockfrost : ICardanoDataProvider, IDisposable
                         _ => -1
                     };
 
-                    if (tag >= 0 && ulong.TryParse(parts[1], CultureInfo.InvariantCulture, out ulong index))
+                    if (tag < 0 || !ulong.TryParse(parts[1], CultureInfo.InvariantCulture, out ulong index))
                     {
-                        // Ogmios returns {memory, steps} directly (no "budget" wrapper)
-                        ulong mem = prop.Value.GetProperty("memory").GetUInt64();
-                        ulong steps = prop.Value.GetProperty("steps").GetUInt64();
-                        results[(tag, index)] = (mem, steps);
+                        throw ProviderHttp.Unusable(Provider, operation, "invalid evaluation key");
                     }
+                    // Ogmios returns {memory, steps} directly (no "budget" wrapper).
+                    ulong mem = prop.Value.GetProperty("memory").GetUInt64();
+                    ulong steps = prop.Value.GetProperty("steps").GetUInt64();
+                    if (!results.TryAdd((tag, index), (mem, steps))) { throw ProviderHttp.Unusable(Provider, operation, "duplicate evaluation key"); }
                 }
             }
             else if (result.TryGetProperty("EvaluationFailure", out JsonElement failure))
             {
-                throw new InvalidOperationException(
-                    $"EvaluateTransactionAsync: evaluation failed: {failure}");
+                throw new ProviderException($"{Provider} {operation}: evaluation rejected", isTransient: false,
+                    _http.RedactDetail(failure.GetRawText()));
             }
         }
 
         if (results.Count == 0)
         {
-            throw new InvalidOperationException(
-                $"EvaluateTransactionAsync: no evaluation results. Response: {responseBody[..Math.Min(1000, responseBody.Length)]}");
+            throw new ProviderException($"{Provider} {operation}: unusable response: no evaluation results", isTransient: false,
+                _http.RedactDetail(root.GetRawText()));
         }
 
         return results;
@@ -510,44 +472,30 @@ public sealed class Blockfrost : ICardanoDataProvider, IDisposable
     /// Retrieves transaction metadata by transaction hash.
     /// </summary>
     /// <param name="txHash">The transaction hash.</param>
+    /// <param name="cancellationToken">Cancels the operation.</param>
     /// <returns>The metadata, or null if not found.</returns>
-    public async Task<Metadata?> GetTransactionMetadataAsync(string txHash)
+    public async Task<Metadata?> GetTransactionMetadataAsync(string txHash, CancellationToken cancellationToken = default)
     {
-        ArgumentNullException.ThrowIfNull(txHash);
+        ArgumentException.ThrowIfNullOrWhiteSpace(txHash);
+        cancellationToken.ThrowIfCancellationRequested();
+        const string operation = nameof(GetTransactionMetadataAsync);
+        List<BlockfrostMetadataResponse>? raw = await _http.GetJsonAsync<List<BlockfrostMetadataResponse>>(
+            $"txs/{Uri.EscapeDataString(txHash)}/metadata", operation, IsNotFoundBody, cancellationToken).ConfigureAwait(false);
+        return raw is null or { Count: 0 } ? null : ProviderHttp.Map(raw, MapMetadata, Provider, operation);
+    }
 
-        string query = $"txs/{txHash}/metadata";
-        using HttpResponseMessage response = await _httpClient.GetAsync(new Uri(query, UriKind.Relative)).ConfigureAwait(false);
-
-        string content = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-
-        if (!response.IsSuccessStatusCode)
+    private static Metadata MapMetadata(List<BlockfrostMetadataResponse> raw)
+    {
+        Dictionary<ulong, ITransactionMetadatum> metadata = [];
+        foreach (BlockfrostMetadataResponse? item in raw)
         {
-            return response.StatusCode == System.Net.HttpStatusCode.NotFound
-                ? null
-                : throw new InvalidOperationException($"GetTransactionMetadata: HTTP error {response.StatusCode} - Response: {content}");
-        }
-
-        List<BlockfrostMetadataResponse>? rawMetadata = JsonSerializer.Deserialize<List<BlockfrostMetadataResponse>>(content);
-
-        if (rawMetadata == null || rawMetadata.Count == 0)
-        {
-            return null;
-        }
-
-        Dictionary<ulong, ITransactionMetadatum> metadataDict = [];
-        foreach (BlockfrostMetadataResponse item in rawMetadata)
-        {
-            if (ulong.TryParse(item.Label, CultureInfo.InvariantCulture, out ulong label))
+            if (item?.JsonMetadata is null || !ulong.TryParse(item.Label, NumberStyles.None, CultureInfo.InvariantCulture, out ulong label) ||
+                ConvertToTransactionMetadatum(item.JsonMetadata) is not { } value || !metadata.TryAdd(label, value))
             {
-                ITransactionMetadatum? metadatum = ConvertToTransactionMetadatum(item.JsonMetadata);
-                if (metadatum != null)
-                {
-                    metadataDict[label] = metadatum;
-                }
+                throw ProviderHttp.Unusable(Provider, nameof(GetTransactionMetadataAsync), "invalid or duplicate metadata label or value");
             }
         }
-
-        return metadataDict.Count > 0 ? Metadata.Create(metadataDict) : null;
+        return Metadata.Create(metadata);
     }
 
     private static ITransactionMetadatum? ConvertToTransactionMetadatum(object value) => value switch
@@ -609,6 +557,6 @@ public sealed class Blockfrost : ICardanoDataProvider, IDisposable
     public void Dispose()
     {
         _httpClient.Dispose();
-        _handler.Dispose();
+        _handler?.Dispose();
     }
 }

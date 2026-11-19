@@ -1,9 +1,6 @@
-using System.Globalization;
-using System.Net;
-using System.Net.Sockets;
-using System.Text;
 using Chrysalis.Codec.Types.Cardano.Core.Protocol;
 using Chrysalis.Tx.Providers;
+using Chrysalis.Tx.Test.Providers;
 using Xunit;
 
 namespace Chrysalis.Tx.Test;
@@ -33,43 +30,14 @@ public class BlockfrostPriceTests
             }
             """;
 
-        using TcpListener listener = new(IPAddress.Loopback, 0);
-        listener.Start();
-        IPEndPoint address = (IPEndPoint)listener.LocalEndpoint;
-        string url = string.Create(CultureInfo.InvariantCulture, $"http://127.0.0.1:{address.Port}/");
-        using CancellationTokenSource timeout = new(TimeSpan.FromSeconds(30));
-        using Blockfrost provider = new("unused-test-project", url: url);
-        Task<ProtocolParams> parametersTask = provider.GetParametersAsync();
-        try
-        {
-            await ServeResponseAsync(listener, json, timeout.Token);
-        }
-        finally
-        {
-            // Complete the client request even if the server fails, before disposing its provider.
-            _ = await parametersTask;
-        }
-
-        ProtocolParams parameters = await parametersTask;
+        using StubHttpHandler handler = new(_ => StubHttpHandler.Json(json));
+        using CancellationTokenSource timeout = new(TimeSpan.FromSeconds(10));
+        using Blockfrost provider = new("CANARY-price-test-project", handler: handler);
+        ProtocolParams parameters = await provider.GetParametersAsync(timeout.Token);
         ExUnitPrices prices = Assert.IsType<ExUnitPrices>(parameters.ExecutionCosts);
         Assert.Equal(expectedNumerator, prices.MemPrice.Numerator);
         Assert.Equal(10_000_000UL, prices.MemPrice.Denominator);
         Assert.Equal(expectedNumerator, prices.StepPrice.Numerator);
         Assert.Equal(10_000_000UL, prices.StepPrice.Denominator);
-    }
-
-    private static async Task ServeResponseAsync(TcpListener listener, string json, CancellationToken cancellationToken)
-    {
-        using TcpClient connection = await listener.AcceptTcpClientAsync(cancellationToken);
-        await using NetworkStream stream = connection.GetStream();
-        using StreamReader reader = new(stream, Encoding.ASCII, false, 1024, leaveOpen: true);
-        while (await reader.ReadLineAsync(cancellationToken) is { Length: > 0 })
-        {
-            // Consume this single request's HTTP headers before returning its JSON response.
-        }
-
-        string response = string.Create(CultureInfo.InvariantCulture,
-            $"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {Encoding.UTF8.GetByteCount(json)}\r\nConnection: close\r\n\r\n{json}");
-        await stream.WriteAsync(Encoding.UTF8.GetBytes(response), cancellationToken);
     }
 }

@@ -206,7 +206,8 @@ public sealed class RecordedTests
                     fake.Submit.Handler = (_, _) => throw new RpcException(new Status(code, row[3]));
                     UtxoRpcException error = await Assert.ThrowsAsync<UtxoRpcException>(() => provider.SubmitTransactionAsync(TestData.Transaction()));
                     Assert.Equal(code, error.StatusCode);
-                    Assert.Equal($"SubmitTx failed: {code}: {row[3]}", error.Message);
+                    Assert.Equal($"SubmitTx failed: {code}", error.Message);
+                    Assert.Equal(row[3], error.Detail);
                     break;
                 default: Assert.Fail("Unknown recorded probe."); break;
             }

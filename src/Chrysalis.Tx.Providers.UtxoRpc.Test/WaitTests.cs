@@ -73,7 +73,7 @@ public sealed class WaitTests
         await cancellation.CancelAsync();
         OperationCanceledException error = await Assert.ThrowsAnyAsync<OperationCanceledException>(() => wait);
         Assert.Equal(cancellation.Token, error.CancellationToken);
-        _ = Assert.IsType<RpcException>(error.InnerException);
+        Assert.Null(error.InnerException);
     }
 
     /// <summary>An initially unknown pending stage performs exactly one historical lookup.</summary>
@@ -136,7 +136,8 @@ public sealed class WaitTests
         using UtxoRpc provider = new(fake.Endpoint, NetworkType.Preprod);
         UtxoRpcException error = await Assert.ThrowsAsync<UtxoRpcException>(() => provider.WaitForConfirmationAsync(Hash, CancellationToken.None));
         Assert.Equal(StatusCode.Unavailable, error.StatusCode);
-        Assert.Equal("WaitForTx failed: Unavailable: stream unavailable", error.Message);
+        Assert.Equal("WaitForTx failed: Unavailable", error.Message);
+        Assert.Equal("stream unavailable", error.Detail);
         Assert.Equal(1, fake.RequestCount);
     }
 

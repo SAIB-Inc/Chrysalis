@@ -39,7 +39,8 @@ public sealed class SubmitTests
         using UtxoRpc provider = new(fake.Endpoint, NetworkType.Preprod);
         UtxoRpcException error = await Assert.ThrowsAsync<UtxoRpcException>(() => provider.SubmitTransactionAsync(TestData.Transaction(), CancellationToken.None));
         Assert.Equal(StatusCode.InvalidArgument, error.StatusCode);
-        Assert.Equal("SubmitTx failed: InvalidArgument: submission rejected", error.Message);
+        Assert.Equal("SubmitTx failed: InvalidArgument", error.Message);
+        Assert.Equal("submission rejected", error.Detail);
         Assert.Equal(1, fake.RequestCount);
     }
 
@@ -53,6 +54,6 @@ public sealed class SubmitTests
         using UtxoRpc provider = new(fake.Endpoint, NetworkType.Preprod);
         UtxoRpcException error = await Assert.ThrowsAsync<UtxoRpcException>(() => provider.SubmitTransactionAsync(TestData.Transaction()));
         Assert.Null(error.StatusCode);
-        Assert.NotNull(error.InnerException);
+        Assert.Null(error.InnerException);
     }
 }

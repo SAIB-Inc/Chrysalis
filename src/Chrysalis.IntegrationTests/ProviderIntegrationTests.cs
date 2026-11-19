@@ -21,7 +21,7 @@ public sealed class ProviderIntegrationTests
         await OracleCli.RecordVersionAsync(deadline.Token);
         Ouroboros provider = new(Env.Required(Env.Socket), Env.NetworkMagic);
         (ProtocolParams expected, ProtocolParams actual) = await OracleCli.AtStableTipAsync("ouroboros-parameters", async (_, ct) =>
-            (ProtocolOracles.Parameters(await OracleCli.QueryJsonAsync("ouroboros-parameter-oracle", ct, "protocol-parameters")), await provider.GetParametersAsync().WaitAsync(ct)), deadline.Token);
+            (ProtocolOracles.Parameters(await OracleCli.QueryJsonAsync("ouroboros-parameter-oracle", ct, "protocol-parameters")), await provider.GetParametersAsync(ct).WaitAsync(ct)), deadline.Token);
         ProtocolOracles.AssertEquivalent(expected, actual);
     }
 
