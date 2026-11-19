@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Copy and verify pinned V2 and V2b fixtures, or emit the production tables from local upstream clones."""
+"""Copy and verify pinned Plutus and node fixtures, or emit the production tables from local upstream clones."""
 import argparse
 import hashlib
 import json

@@ -208,5 +208,5 @@ internal sealed record CostModel(ImmutableArray<BuiltinCostModel> Builtins, Mach
 {
     internal static CostModel Default { get; } = CostModelLoader.Build(DefaultCosts.VariantC, ParamNames.V3, Variant.C);
 
-    internal static CostModel LatestV3 { get; } = CostModelLoader.FromFlat(DefaultCosts.LatestV3, 3);
+    internal static CostModel LatestV3 { get; } = CostModelLoader.FromFlat(DefaultCosts.LatestV3, 3, Variant.E);
 }

@@ -1,13 +1,5 @@
 id	owner	stage	exception	messageSha256	reason
 AV-valueconst-V3	V6	decode	System.InvalidOperationException	9468ef01dc0cf383c29217a57c7d6669b5e6bf33825bb4f0c09ccb6c819bfece	Flat Value constant tag 13 is not implemented.
-BI-consByteString-arg0--1-V1	V3	evaluate	Chrysalis.Plutus.Cek.EvaluationException	86fdc35d674816546d5c59a005bf14fd8d2fdb2eb9ee3b04d21165014eb8a6b9	The current range check rejects a byte that variant D wraps.
-BI-consByteString-arg0--1-V2	V3	evaluate	Chrysalis.Plutus.Cek.EvaluationException	86fdc35d674816546d5c59a005bf14fd8d2fdb2eb9ee3b04d21165014eb8a6b9	The current range check rejects a byte that variant D wraps.
-BI-consByteString-arg0--2^262143-V1	V3	evaluate	Chrysalis.Plutus.Cek.EvaluationException	0fd18a6dc49888564a907ee4b95d351dd8bce9cff01549d3fbcac160706e14cc	The current range check rejects a byte that variant D wraps.
-BI-consByteString-arg0--2^262143-V2	V3	evaluate	Chrysalis.Plutus.Cek.EvaluationException	0fd18a6dc49888564a907ee4b95d351dd8bce9cff01549d3fbcac160706e14cc	The current range check rejects a byte that variant D wraps.
-BI-consByteString-arg0-256-V1	V3	evaluate	Chrysalis.Plutus.Cek.EvaluationException	694249f25ffd83cf6507f8938a89d6cbe4850907b7e1f00afef44d38cc0b684a	The current range check rejects a byte that variant D wraps.
-BI-consByteString-arg0-256-V2	V3	evaluate	Chrysalis.Plutus.Cek.EvaluationException	694249f25ffd83cf6507f8938a89d6cbe4850907b7e1f00afef44d38cc0b684a	The current range check rejects a byte that variant D wraps.
-BI-consByteString-arg0-2^262143-1-V1	V3	evaluate	Chrysalis.Plutus.Cek.EvaluationException	3d66db9ac88ce1a8c4f3a07d35115ddb5ccecb27c61b9d67f2994cddf5b4f67e	The current range check rejects a byte that variant D wraps.
-BI-consByteString-arg0-2^262143-1-V2	V3	evaluate	Chrysalis.Plutus.Cek.EvaluationException	3d66db9ac88ce1a8c4f3a07d35115ddb5ccecb27c61b9d67f2994cddf5b4f67e	The current range check rejects a byte that variant D wraps.
 D-accept-constr-102-indef-outer	V4	decode	System.InvalidOperationException	d50a3dd46120354ff43fe30542e9d325f71b4086550cd9d6b6cc74fd5a2cfc37	The Data decoder does not accept the indefinite constructor wrapper.
 VAL-insertCoin-multi-ccy-empty-V2	V6	decode	System.InvalidOperationException	9468ef01dc0cf383c29217a57c7d6669b5e6bf33825bb4f0c09ccb6c819bfece	Flat Value constant tag 13 is not implemented.
 VAL-insertCoin-multi-ccy-empty-V3	V6	decode	System.InvalidOperationException	9468ef01dc0cf383c29217a57c7d6669b5e6bf33825bb4f0c09ccb6c819bfece	Flat Value constant tag 13 is not implemented.

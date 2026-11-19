@@ -1,8 +1,11 @@
 using System.Collections.Immutable;
 using System.Numerics;
+using System.Runtime.CompilerServices;
 using Chrysalis.Plutus.Types;
 
 namespace Chrysalis.Plutus.Flat;
+
+internal readonly record struct FlatRules(UInt128 Builtins, bool Sop);
 
 /// <summary>
 /// Decodes Flat-encoded bytes into a <see cref="Program{TBinder}"/> with DeBruijn indices.
@@ -10,10 +13,20 @@ namespace Chrysalis.Plutus.Flat;
 /// </summary>
 public static class FlatDecoder
 {
+    private static readonly UInt128 KnownBuiltins = BuildKnownBuiltins();
+
+    // Keep the wrapper in the caller so the JIT can elide Program when only Term is used.
     /// <summary>
     /// Decode a Flat-encoded byte sequence into a UPLC program.
     /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static Program<DeBruijn> DecodeProgram(ReadOnlyMemory<byte> data)
+    {
+        Term<DeBruijn> term = DecodeProgramCore(data, KnownBuiltins, out Types.Version version);
+        return new(version, term);
+    }
+
+    internal static Term<DeBruijn> DecodeProgramCore(ReadOnlyMemory<byte> data, UInt128 builtins, out Types.Version version)
     {
         BitReader reader = new(data);
 
@@ -21,28 +34,30 @@ public static class FlatDecoder
         int minor = DecodeNatural(reader);
         int patch = DecodeNatural(reader);
 
-        Term<DeBruijn> term = DecodeTerm(reader);
+        version = new(major, minor, patch);
+        FlatRules rules = new(builtins, version.SupportsConstrAndCase);
+        Term<DeBruijn> term = DecodeTerm(reader, in rules);
         reader.SkipPadding();
 
-        return new Program<DeBruijn>(new Types.Version(major, minor, patch), term);
+        return term;
     }
 
-    private static Term<DeBruijn> DecodeTerm(BitReader reader)
+    private static Term<DeBruijn> DecodeTerm(BitReader reader, in FlatRules rules)
     {
         int tag = reader.PopBits(4);
 
         return tag switch
         {
             0 => DecodeVar(reader),
-            1 => DecodeDelay(reader),
-            2 => DecodeLambda(reader),
-            3 => DecodeApply(reader),
+            1 => DecodeDelay(reader, in rules),
+            2 => DecodeLambda(reader, in rules),
+            3 => DecodeApply(reader, in rules),
             4 => DecodeConst(reader),
-            5 => DecodeForce(reader),
+            5 => DecodeForce(reader, in rules),
             6 => new ErrorTerm<DeBruijn>(),
-            7 => DecodeBuiltin(reader),
-            8 => DecodeConstr(reader),
-            9 => DecodeCase(reader),
+            7 => DecodeBuiltin(reader, in rules),
+            8 => DecodeConstr(reader, in rules),
+            9 => DecodeCase(reader, in rules),
             _ => throw new InvalidOperationException($"Flat: unknown term tag {tag}.")
         };
     }
@@ -53,14 +68,14 @@ public static class FlatDecoder
         return new VarTerm<DeBruijn>(new DeBruijn(index));
     }
 
-    private static DelayTerm<DeBruijn> DecodeDelay(BitReader reader) => new(DecodeTerm(reader));
+    private static DelayTerm<DeBruijn> DecodeDelay(BitReader reader, in FlatRules rules) => new(DecodeTerm(reader, in rules));
 
-    private static LambdaTerm<DeBruijn> DecodeLambda(BitReader reader) => new(new DeBruijn(0), DecodeTerm(reader));
+    private static LambdaTerm<DeBruijn> DecodeLambda(BitReader reader, in FlatRules rules) => new(new DeBruijn(0), DecodeTerm(reader, in rules));
 
-    private static ApplyTerm<DeBruijn> DecodeApply(BitReader reader)
+    private static ApplyTerm<DeBruijn> DecodeApply(BitReader reader, in FlatRules rules)
     {
-        Term<DeBruijn> function = DecodeTerm(reader);
-        Term<DeBruijn> argument = DecodeTerm(reader);
+        Term<DeBruijn> function = DecodeTerm(reader, in rules);
+        Term<DeBruijn> argument = DecodeTerm(reader, in rules);
         return new ApplyTerm<DeBruijn>(function, argument);
     }
 
@@ -71,32 +86,63 @@ public static class FlatDecoder
         return new ConstTerm<DeBruijn>(value);
     }
 
-    private static ForceTerm<DeBruijn> DecodeForce(BitReader reader) => new(DecodeTerm(reader));
+    private static ForceTerm<DeBruijn> DecodeForce(BitReader reader, in FlatRules rules) => new(DecodeTerm(reader, in rules));
 
-    private static BuiltinTerm<DeBruijn> DecodeBuiltin(BitReader reader) => new((DefaultFunction)reader.PopBits(7));
-
-    private static ConstrTerm<DeBruijn> DecodeConstr(BitReader reader)
+    private static BuiltinTerm<DeBruijn> DecodeBuiltin(BitReader reader, in FlatRules rules)
     {
+        int tag = reader.PopBits(7);
+        UInt128 bit = UInt128.One << tag;
+        if ((rules.Builtins & bit) == 0)
+        {
+            throw new InvalidOperationException((KnownBuiltins & bit) == 0
+                ? $"Flat: unknown builtin tag {tag}."
+                : $"Flat: builtin {(DefaultFunction)tag} is not available for this language and protocol version.");
+        }
+        return new((DefaultFunction)tag);
+    }
+
+    private static ConstrTerm<DeBruijn> DecodeConstr(BitReader reader, in FlatRules rules)
+    {
+        RequireSop(in rules, "constr");
         ulong tag = DecodeWord(reader);
-        ImmutableArray<Term<DeBruijn>> fields = DecodeTermList(reader);
+        ImmutableArray<Term<DeBruijn>> fields = DecodeTermList(reader, in rules);
         return new ConstrTerm<DeBruijn>(tag, fields);
     }
 
-    private static CaseTerm<DeBruijn> DecodeCase(BitReader reader)
+    private static CaseTerm<DeBruijn> DecodeCase(BitReader reader, in FlatRules rules)
     {
-        Term<DeBruijn> scrutinee = DecodeTerm(reader);
-        ImmutableArray<Term<DeBruijn>> branches = DecodeTermList(reader);
+        RequireSop(in rules, "case");
+        Term<DeBruijn> scrutinee = DecodeTerm(reader, in rules);
+        ImmutableArray<Term<DeBruijn>> branches = DecodeTermList(reader, in rules);
         return new CaseTerm<DeBruijn>(scrutinee, branches);
     }
 
-    private static ImmutableArray<Term<DeBruijn>> DecodeTermList(BitReader reader)
+    private static void RequireSop(in FlatRules rules, string term)
+    {
+        if (!rules.Sop)
+        {
+            throw new InvalidOperationException($"'{term}' is not allowed before version 1.1.0.");
+        }
+    }
+
+    private static UInt128 BuildKnownBuiltins()
+    {
+        UInt128 mask = 0;
+        foreach (DefaultFunction function in Enum.GetValues<DefaultFunction>())
+        {
+            mask |= UInt128.One << (int)function;
+        }
+        return mask;
+    }
+
+    private static ImmutableArray<Term<DeBruijn>> DecodeTermList(BitReader reader, in FlatRules rules)
     {
         // Most term lists are small (1-5 items). Use a list and convert.
         List<Term<DeBruijn>>? list = null;
         while (reader.PopBit() == 1)
         {
             list ??= [];
-            list.Add(DecodeTerm(reader));
+            list.Add(DecodeTerm(reader, in rules));
         }
         return list is null ? [] : [.. list];
     }
@@ -232,8 +278,9 @@ public static class FlatDecoder
         do
         {
             byte8 = reader.PopBits(8);
-            result |= (byte8 & 0x7F) << shift;
-            shift += 7;
+            int payload = byte8 & 0x7F;
+            result |= payload > (int.MaxValue >> shift) ? int.MaxValue : payload << shift;
+            shift = Math.Min(shift + 7, 31);
         } while ((byte8 >> 7) != 0);
 
         return result;

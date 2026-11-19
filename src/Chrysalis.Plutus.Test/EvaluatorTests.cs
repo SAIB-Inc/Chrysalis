@@ -23,38 +23,65 @@ public class EvaluatorTests
 
         Assert.All(new (string Case, Exception? Error)[]
         {
-            ("V3 integer, CBOR", Record.Exception(() => Evaluator.EvaluateScript(integerScript, cborArguments))),
-            ("V3 integer, VM", Record.Exception(() => Evaluator.EvaluateScript(integerScript, vmArguments))),
-            ("V3 non-constant, CBOR", Record.Exception(() => Evaluator.EvaluateScript(delayScript, cborArguments))),
-            ("V3 non-constant, VM", Record.Exception(() => Evaluator.EvaluateScript(delayScript, vmArguments))),
-            ("V3 data constructor, CBOR", Record.Exception(() => Evaluator.EvaluateScript(dataScript, cborArguments))),
-            ("V3 data constructor, VM", Record.Exception(() => Evaluator.EvaluateScript(dataScript, vmArguments))),
-            ("Later language, CBOR", Record.Exception(() => Evaluator.EvaluateScript(integerScript, cborArguments, plutusVersion: 4))),
-            ("Later language, VM", Record.Exception(() => Evaluator.EvaluateScript(integerScript, vmArguments, plutusVersion: 4)))
-        }, result => Assert.IsType<InvalidReturnValueException>(result.Error));
+            ("V3 integer, CBOR", Record.Exception(() => Evaluator.EvaluateScript(integerScript, cborArguments, 3, 11))),
+            ("V3 integer, VM", Record.Exception(() => Evaluator.EvaluateScript(integerScript, vmArguments, 3, 11))),
+            ("V3 non-constant, CBOR", Record.Exception(() => Evaluator.EvaluateScript(delayScript, cborArguments, 3, 11))),
+            ("V3 non-constant, VM", Record.Exception(() => Evaluator.EvaluateScript(delayScript, vmArguments, 3, 11))),
+            ("V3 data constructor, CBOR", Record.Exception(() => Evaluator.EvaluateScript(dataScript, cborArguments, 3, 11))),
+            ("V3 data constructor, VM", Record.Exception(() => Evaluator.EvaluateScript(dataScript, vmArguments, 3, 11))),
+            ("Later language, CBOR", Record.Exception(() => Evaluator.EvaluateScript(integerScript, cborArguments, plutusVersion: 4, protocolVersion: 11))),
+            ("Later language, VM", Record.Exception(() => Evaluator.EvaluateScript(integerScript, vmArguments, plutusVersion: 4, protocolVersion: 11)))
+        }, result => Assert.IsType(result.Case.StartsWith("Later language", StringComparison.Ordinal)
+            ? typeof(ArgumentOutOfRangeException) : typeof(InvalidReturnValueException), result.Error));
     }
 
     [Theory]
     [InlineData(1)]
     [InlineData(2)]
-    public void EvaluateScript_RefusesPlutusV1AndV2(int version)
+    public void EvaluateScript_RunsPlutusV1AndV2WithTheirArray(int version)
     {
         byte[] script = Encode(IntegerOne);
-        byte[][] cborArguments = [];
-        PlutusData[] vmArguments = [];
+        byte[][] cbor = [];
+        PlutusData[] vm = [];
         long[] costs = NodeBudgetTests.Fixture.Models[version - 1];
-        foreach (IReadOnlyList<long>? array in new IReadOnlyList<long>?[] { null, costs })
-        {
-            _ = Assert.Throws<NotSupportedException>(() => Evaluator.EvaluateScript(script, cborArguments, array, version));
-            _ = Assert.Throws<NotSupportedException>(() => Evaluator.EvaluateScript(script, vmArguments, array, version));
-        }
-        Assert.True(Evaluator.Run(IntegerOne, CostModelLoader.FromFlat(costs, version), version, null).ExUnits.Steps > 0);
+        ExUnitsResult expected = Evaluator.EvaluateScript(script, cbor, version, 11, costs).ExUnits;
+        Assert.Equal(expected, Evaluator.EvaluateScript(script, vm, version, 11, costs).ExUnits);
+        Assert.True(expected.Steps > 0);
     }
 
     [Theory]
-    [InlineData(3)]
-    [InlineData(4)]
-    public void EvaluateScript_UsesTheSuppliedArray(int version)
+    [InlineData(1, 11)]
+    [InlineData(2, 11)]
+    [InlineData(3, 9)]
+    [InlineData(3, 10)]
+    public void EvaluateScript_RequiresAnArrayExceptForLatestV3(int language, int pv)
+    {
+        byte[] script = Encode(new ConstTerm<DeBruijn>(UnitConstant.Instance));
+        _ = Assert.Throws<ArgumentNullException>(() => Evaluator.EvaluateScript(script, Array.Empty<byte[]>(), language, pv));
+        _ = Assert.Throws<ArgumentNullException>(() => Evaluator.EvaluateScript(script, Array.Empty<PlutusData>(), language, pv));
+    }
+
+    [Theory]
+    [InlineData(0, 11, typeof(ArgumentOutOfRangeException))]
+    [InlineData(-1, 11, typeof(ArgumentOutOfRangeException))]
+    [InlineData(4, 11, typeof(ArgumentOutOfRangeException))]
+    [InlineData(int.MaxValue, 11, typeof(ArgumentOutOfRangeException))]
+    [InlineData(3, -1, typeof(ArgumentOutOfRangeException))]
+    [InlineData(3, 12, typeof(NotSupportedException))]
+    [InlineData(3, int.MaxValue, typeof(NotSupportedException))]
+    public void EvaluateScript_ValidatesLanguageAndProtocolVersion(int language, int pv, Type error)
+    {
+        byte[] script = Encode(new ConstTerm<DeBruijn>(UnitConstant.Instance));
+        _ = Assert.Throws(error, () => Evaluator.EvaluateScript(script, Array.Empty<byte[]>(), language, pv));
+        _ = Assert.Throws(error, () => Evaluator.EvaluateScript(script, Array.Empty<PlutusData>(), language, pv));
+    }
+
+    [Fact]
+    public void EvaluateScript_RejectsFormerDefaultCostModelCall() =>
+        Assert.Throws<ArgumentOutOfRangeException>(() => Evaluator.EvaluateScript(Encode(IntegerOne), Array.Empty<PlutusData>(), default, 3));
+
+    [Fact]
+    public void EvaluateScript_UsesTheSuppliedArray()
     {
         byte[] script = NodeBudgetTests.Fixture.Scripts.Single(s => s.Id == "P-B01-i2b-size-8192").Flat;
         byte[][] cborArguments = [[0xD8, 0x79, 0x80]]; // Constr 0 []
@@ -73,8 +100,8 @@ public class EvaluatorTests
 
         void Check(ExUnitsResult expected)
         {
-            Assert.Equal(expected, Evaluator.EvaluateScript(script, cborArguments, costs, version).ExUnits);
-            Assert.Equal(expected, Evaluator.EvaluateScript(script, vmArguments, costs, version).ExUnits);
+            Assert.Equal(expected, Evaluator.EvaluateScript(script, cborArguments, 3, 11, costs).ExUnits);
+            Assert.Equal(expected, Evaluator.EvaluateScript(script, vmArguments, 3, 11, costs).ExUnits);
         }
     }
 
@@ -86,10 +113,10 @@ public class EvaluatorTests
         byte[] script = Encode(term);
         byte[][] cbor = [];
         PlutusData[] vm = [];
-        ExUnitsResult expected = Evaluator.EvaluateScript(script, vm, DefaultCosts.LatestV3).ExUnits;
+        ExUnitsResult expected = Evaluator.EvaluateScript(script, vm, 3, 11, DefaultCosts.LatestV3).ExUnits;
         Assert.NotEqual(expected, Evaluator.Run(term, CostModel.Default, 3, null).ExUnits);
-        Assert.Equal(expected, Evaluator.EvaluateScript(script, cbor, costModel: null).ExUnits);
-        Assert.Equal(expected, Evaluator.EvaluateScript(script, vm, costModel: null).ExUnits);
+        Assert.Equal(expected, Evaluator.EvaluateScript(script, cbor, 3, 11, costModel: null).ExUnits);
+        Assert.Equal(expected, Evaluator.EvaluateScript(script, vm, 3, 11, costModel: null).ExUnits);
     }
 
     [Fact]
@@ -100,8 +127,8 @@ public class EvaluatorTests
         byte[][] cborArguments = [[0x00]];
         PlutusData[] vmArguments = [new PlutusDataInteger(0)];
 
-        EvaluationResult fromCbor = Evaluator.EvaluateScript(script, cborArguments);
-        EvaluationResult fromVm = Evaluator.EvaluateScript(script, vmArguments);
+        EvaluationResult fromCbor = Evaluator.EvaluateScript(script, cborArguments, 3, 11);
+        EvaluationResult fromVm = Evaluator.EvaluateScript(script, vmArguments, 3, 11);
 
         Assert.Equal(fromCbor.ExUnits, fromVm.ExUnits);
         Assert.True(fromVm.ExUnits.Steps > 0);
@@ -113,7 +140,7 @@ public class EvaluatorTests
         // Applying the outer lambda leaves a closure holding its argument.
         LambdaTerm<DeBruijn> script = new(new(0), new LambdaTerm<DeBruijn>(new(0), new VarTerm<DeBruijn>(new(2))));
         PlutusData[] arguments = [new PlutusDataConstr(0, [])];
-        _ = Assert.Throws<InvalidReturnValueException>(() => Evaluator.EvaluateScript(Encode(script), arguments));
+        _ = Assert.Throws<InvalidReturnValueException>(() => Evaluator.EvaluateScript(Encode(script), arguments, 3, 11));
     }
 
     private static byte[] Encode(Term<DeBruijn> body) => FlatEncoder.EncodeProgram(new(new(1, 0, 0), body));

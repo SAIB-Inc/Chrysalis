@@ -24,5 +24,13 @@
   {"path":"plutigo-v0.12.3/LICENSE","repository":"blinklabs-io/plutigo","tag":"v0.12.3","commit":"c4a50c15c86e7a3d57348a478d72f410e7ce75a9",
    "upstreamPath":"LICENSE","blob":"0192e0e3d73fb062de8c45da3e7934a118fef446","bytes":11349,"sha256":"a9cbe089c635430b641e62a9b5b8ade4d6abcb4b4477dedd903afb9bf6e8c895","license":"Apache-2.0"},
   {"path":"g1/current-protocol-parameters.json","repository":"G1","tag":null,"commit":null,
-   "upstreamPath":"src/Chrysalis.Network.Tests/Fixtures/Preprod/current-protocol-parameters.json","blob":null,"bytes":19560,"sha256":"66eb079185333cf62ef1efe26c29efce6f32ef6ef17ae44402f67c42fee1b6a7","license":null}
+   "upstreamPath":"src/Chrysalis.Network.Tests/Fixtures/Preprod/current-protocol-parameters.json","blob":null,"bytes":19560,"sha256":"66eb079185333cf62ef1efe26c29efce6f32ef6ef17ae44402f67c42fee1b6a7","license":null},
+  {"path":"plutus-1.70.0.0/Common/Versions.hs","repository":"IntersectMBO/plutus","tag":"1.70.0.0","commit":"507cab8cf6192e5143f12be5b2d3005a2928dc6d",
+   "upstreamPath":"plutus-ledger-api/src/PlutusLedgerApi/Common/Versions.hs","blob":"035b8cf72982fec315d27ce507c312ecdd538b3c","bytes":13095,"sha256":"1cc5900d10f6dbb8ea341a2334e547e1addc6d04d33009d45ab4b26a31f0da7c","license":"Apache-2.0"},
+  {"path":"plutus-1.70.0.0/Common/ProtocolVersions.hs","repository":"IntersectMBO/plutus","tag":"1.70.0.0","commit":"507cab8cf6192e5143f12be5b2d3005a2928dc6d",
+   "upstreamPath":"plutus-ledger-api/src/PlutusLedgerApi/Common/ProtocolVersions.hs","blob":"a5165b39e3401c7ff57383dece662569649852c9","bytes":5261,"sha256":"3de1a1533b7c8585587172e36367a3e28fd073b7e60f9e687bfd4d08925567bd","license":"Apache-2.0"},
+  {"path":"plutus-1.71.0.0/Common/Versions.hs","repository":"IntersectMBO/plutus","tag":"1.71.0.0","commit":"261766ad1d582bce8c86bad1af7a3b0e5355b21c",
+   "upstreamPath":"plutus-ledger-api/src/PlutusLedgerApi/Common/Versions.hs","blob":"c27597eac9c8dcf36f4b409773b22344d52184fc","bytes":13284,"sha256":"36a8c4665bc78de33eb8853af6da8031f34e31e9c2a4baa7e6b9c70ec4f0b59b","license":"Apache-2.0"},
+  {"path":"plutus-1.71.0.0/Common/ProtocolVersions.hs","repository":"IntersectMBO/plutus","tag":"1.71.0.0","commit":"261766ad1d582bce8c86bad1af7a3b0e5355b21c",
+   "upstreamPath":"plutus-ledger-api/src/PlutusLedgerApi/Common/ProtocolVersions.hs","blob":"1ad9b27a5d68dd2e15c762833654837933569e60","bytes":5476,"sha256":"b8969765d7f4b4c1cf970ea80d411a53c305b65e5b478e66c3b04638b11d0552","license":"Apache-2.0"}
 ]

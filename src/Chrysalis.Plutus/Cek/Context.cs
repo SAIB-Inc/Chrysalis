@@ -91,20 +91,13 @@ internal sealed class ContextStack
             f.Term = null;
             f.Env = null;
             f.Resolved = null;
+            f.ConstrFields = default;
         }
     }
 
     internal void Reset()
     {
-        // Clear reference fields to allow GC
-        for (int i = 0; i < _top; i++)
-        {
-            ref ContextFrame f = ref _frames[i];
-            f.Value = null;
-            f.Term = null;
-            f.Env = null;
-            f.Resolved = null;
-        }
+        Array.Clear(_frames, 0, _top);
         _top = 0;
     }
 
