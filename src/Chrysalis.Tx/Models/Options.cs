@@ -10,7 +10,7 @@ using Chrysalis.Codec.Types.Cardano.Core.TransactionWitness;
 using Chrysalis.Tx.Builders;
 using Chrysalis.Tx.Models.Cbor;
 using Chrysalis.Codec.Types.Cardano.Core.Protocol;
-using Chrysalis.Tx.Utils;
+using Chrysalis.Tx.Fees;
 using WalletAddress = Chrysalis.Wallet.Models.Addresses.Address;
 using Address = Chrysalis.Codec.Types.Cardano.Core.Common.Address;
 
@@ -153,23 +153,12 @@ public record OutputOptions
         CborEncodedValue? script = Script is not null ? new CborEncodedValue(CborSerializer.Serialize(Script)) : null;
         ITransactionOutput output = PostAlonzoTransactionOutput.Create(address, Amount ?? Lovelace.Create(1000000), Datum, script);
 
-        ulong minLovelace = FeeUtil.CalculateMinimumLovelace(adaPerUtxoByte, CborSerializer.Serialize(output));
-        ulong currentLovelace = output.Amount().Lovelace();
-
-        while (currentLovelace < minLovelace)
+        ulong coin = FeeEngine.LeastValidCoin(output, adaPerUtxoByte);
+        if (coin != output.Amount().Lovelace())
         {
-            IValue amount = output.Amount();
-            amount = amount switch
-            {
-                LovelaceWithMultiAsset multiAsset => LovelaceWithMultiAsset.Create(minLovelace, multiAsset.MultiAsset),
-                _ => Lovelace.Create(minLovelace)
-            };
-
-            PostAlonzoTransactionOutput postAlonzo = (PostAlonzoTransactionOutput)output;
-            output = PostAlonzoTransactionOutput.Create(postAlonzo.Address, amount, postAlonzo.Datum, postAlonzo.ScriptRef);
-
-            minLovelace = FeeUtil.CalculateMinimumLovelace(adaPerUtxoByte, CborSerializer.Serialize(output));
-            currentLovelace = output.Amount().Lovelace();
+            IValue amount = output.Amount() is LovelaceWithMultiAsset assets
+                ? LovelaceWithMultiAsset.Create(coin, assets.MultiAsset) : Lovelace.FromAmount(coin);
+            output = PostAlonzoTransactionOutput.Create(address, amount, Datum, script);
         }
 
         return output;

@@ -1,8 +1,7 @@
 using Chrysalis.Codec.Extensions.Cardano.Core.Common;
 using Chrysalis.Codec.Extensions.Cardano.Core.Transaction;
-using Chrysalis.Codec.Serialization;
 using Chrysalis.Codec.Types.Cardano.Core.Transaction;
-using Chrysalis.Tx.Utils;
+using Chrysalis.Tx.Fees;
 
 namespace Chrysalis.Tx.Builders;
 
@@ -52,8 +51,7 @@ public static class TransactionValidator
         ulong adaPerByte = (ulong)builder.Pparams.AdaPerUTxOByte;
         for (int i = 0; i < builder.Outputs.Count; i++)
         {
-            byte[] outputBytes = CborSerializer.Serialize(builder.Outputs[i]);
-            ulong minLovelace = FeeUtil.CalculateMinimumLovelace(adaPerByte, outputBytes);
+            ulong minLovelace = FeeEngine.MinLovelace(builder.Outputs[i], adaPerByte);
             ulong actualLovelace = builder.Outputs[i].Amount().Lovelace();
 
             if (actualLovelace < minLovelace)
