@@ -1,0 +1,2 @@
+file	repository	tag	commit	path at that commit	licence	sha256	derived from
+CIP8Tests.cs	https://github.com/Orion-Crypto/cardanosharp-wallet	-	1b8fde2000ef6303773b60f030d01760f3ff670e	CardanoSharp.Wallet.Test/CIPs/CIP-8Tests.cs	MIT	e6e460aeaeaa386c00998c41fa1c2a28e594e5e14ac3938046e0b2bf1eccca2a	CardanoSharp.Wallet.Test/CIPs/CIP-8Tests.cs; sha256 5e47a105934fb3fee2917a896b7bd17525b7f18a7e529f710f3ec50ed0ea6b73; the COSE_Sign1 decode fixture matches; remaining tests are not attributed by this row

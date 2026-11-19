@@ -1,0 +1,2 @@
+file	repository	tag	commit	path at that commit	licence	sha256	derived from
+Builders/TxBuilder.cs	https://github.com/butaneprotocol/blaze	-	9a9d47798350f5c858dce789a8de6bb4bd7c25e1	packages/blaze-tx/src/TxBuilder.ts	Apache-2.0	f2d2676c531b0c46e1727053f75774c6bd15211007293e74815ad8fb25c0d6cc	packages/blaze-tx/src/TxBuilder.ts; sha256 5725a221dca773778087f2ea967de00d4092f2791366701e6dad2fa4f189b6b7; reference-script fee accounting follows the cited source at lines 1450–1466; this reference does not attribute the whole builder
