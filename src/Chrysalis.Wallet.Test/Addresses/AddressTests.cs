@@ -8,10 +8,7 @@ namespace Chrysalis.Wallet.Test.Addresses;
 
 public class AddressTests
 {
-    // Well-known BIP39 test mnemonic
-    private const string TestMnemonic = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
-
-    // Expected key hashes derived from TestMnemonic via m/1852'/1815'/0'
+    // Expected key hashes derived from the test vector via m/1852'/1815'/0'
     private const string ExpectedPaymentHash = "0fdc780023d8be7c9ff3a6bdc0d8d3b263bd0cc12448c40948efbf42";
     private const string ExpectedStakeHash = "e557890352095f1cf6fd2b7d1a28e3c3cb029f48cf34ff890a28d176";
 
@@ -27,7 +24,7 @@ public class AddressTests
 
     private static (PublicKey payment, PublicKey stake) CreateTestKeyPair()
     {
-        Mnemonic mnemonic = Mnemonic.Restore(TestMnemonic, English.Words);
+        Mnemonic mnemonic = Mnemonic.Restore(TestVectors.Bip39ZeroEntropy12, English.Words);
         PrivateKey rootKey = mnemonic.GetRootKey();
         PrivateKey accountKey = rootKey
             .Derive(PurposeType.Shelley, DerivationType.HARD)

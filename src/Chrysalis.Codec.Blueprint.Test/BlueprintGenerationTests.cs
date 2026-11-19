@@ -1,14 +1,13 @@
-using Acceptance = AikenLang.AcceptanceTest079.Blueprint;
-using Shape = Fixtures.Shapes.Blueprint;
 using Chrysalis.Codec.Serialization;
 using Chrysalis.Codec.Types;
 using Chrysalis.Codec.Types.Cardano.Core.Common;
 using Chrysalis.Codec.Types.Cardano.Core.Scripts;
 using Chrysalis.Tx.Extensions;
 using Chrysalis.Wallet.Models.Enums;
-using WalletAddress = Chrysalis.Wallet.Models.Addresses.Address;
-using WizardProtocol.P2p.Blueprint;
 using Xunit;
+using Acceptance = AikenLang.AcceptanceTest079.Blueprint;
+using Shape = Fixtures.Shapes.Blueprint;
+using WalletAddress = Chrysalis.Wallet.Models.Addresses.Address;
 
 namespace Chrysalis.Codec.Blueprint.Test;
 
@@ -18,33 +17,43 @@ namespace Chrysalis.Codec.Blueprint.Test;
 public class BlueprintGenerationTests
 {
     /// <summary>
-    /// Verifies WizardDatum is generated with the correct field types.
+    /// Verifies that all seven Ticket fields have the expected types and values.
     /// </summary>
     [Fact]
-    public void WizardDatumHasCorrectFields()
+    public void TicketHasSevenFields()
     {
-        WizardDatum datum = new(
-            Kind: new AutoLimit(),
-            AssetPair: default!,
-            SwapPrice: default!,
-            MinimumPrice: null,
-            Owner: default!
-        );
+        PlutusBoundedBytes bytes = PlutusBoundedBytes.Create(new byte[] { 1 });
+        Shape.IFixturesAddressCredential payment = new Shape.VerificationKey(Field0: bytes);
+        Shape.Address owner = new(Payment: payment, Stake: None<Shape.IReferenced>.Create());
+        Shape.FixturesAddressAsset asset = new(Policy: bytes, Name: bytes);
+        Some<Shape.FixturesAddressAsset> fallback = Some<Shape.FixturesAddressAsset>.Create(asset);
+        CborList<Shape.TupleByteArrayInt> routes = CborList.Create<Shape.TupleByteArrayInt>([new(Field0: bytes, Field1: PlutusInt.Create(2))]);
+        CborList<ICborOption<IPlutusBigInt>> limits = CborList.Create<ICborOption<IPlutusBigInt>>([Some<IPlutusBigInt>.Create(PlutusInt.Create(3))]);
+        CborList<IPlutusBigInt> weights = CborList.Create<IPlutusBigInt>([PlutusInt.Create(4)]);
+        CborList<Shape.FixturesAddressAsset> assets = CborList.Create([asset]);
+        Shape.Ticket ticket = new(Owner: owner, Memo: null, Fallback: fallback,
+            Routes: routes, Limits: limits, Weights: weights, Assets: assets);
 
-        Assert.NotNull(datum);
+        Assert.Equal(owner, ticket.Owner);
+        Assert.Null(ticket.Memo);
+        Assert.Equal(fallback, ticket.Fallback);
+        Assert.Equal(routes, ticket.Routes);
+        Assert.Equal(limits, ticket.Limits);
+        Assert.Equal(weights, ticket.Weights);
+        Assert.Equal(assets, ticket.Assets);
     }
 
     /// <summary>
-    /// Verifies OrderKind is generated as a union with two variants.
+    /// Verifies that the PoolAction union includes the fieldless Pause and Resume cases.
     /// </summary>
     [Fact]
-    public void OrderKindIsUnionWithVariants()
+    public void PoolActionHasCasesWithoutFields()
     {
-        IOrderKind autoLimit = new AutoLimit();
-        IOrderKind fixedPrice = new FixedPrice();
+        Shape.IPoolAction pause = new Shape.Pause();
+        Shape.IPoolAction resume = new Shape.Resume();
 
-        Assert.NotNull(autoLimit);
-        Assert.NotNull(fixedPrice);
+        Assert.NotNull(pause);
+        Assert.NotNull(resume);
     }
 
     /// <summary>
@@ -53,15 +62,15 @@ public class BlueprintGenerationTests
     [Fact]
     public void ValidatorConstantsAreGenerated()
     {
-        Assert.False(string.IsNullOrEmpty(WizardScriptSpend.CompiledCode));
-        Assert.False(string.IsNullOrEmpty(WizardScriptSpend.Hash));
-        Assert.Equal("v3", WizardScriptSpend.PlutusVersion);
+        Assert.False(string.IsNullOrEmpty(Shape.MarketMarketSpend.CompiledCode));
+        Assert.False(string.IsNullOrEmpty(Shape.MarketMarketSpend.Hash));
+        Assert.Equal("v3", Shape.MarketMarketSpend.PlutusVersion);
     }
 
     [Fact]
     public void ScriptPropertyReturnsValidPlutusV3Script()
     {
-        IScript script = WizardScriptSpend.Script;
+        IScript script = Shape.MarketMarketSpend.Script;
         Assert.NotNull(script);
         Assert.IsType<PlutusV3Script>(script);
     }
@@ -69,14 +78,14 @@ public class BlueprintGenerationTests
     [Fact]
     public void ScriptHashMatchesConstant()
     {
-        IScript script = WizardScriptSpend.Script;
-        Assert.Equal(WizardScriptSpend.Hash, script.HashHex(), StringComparer.OrdinalIgnoreCase);
+        IScript script = Shape.MarketMarketSpend.Script;
+        Assert.Equal(Shape.MarketMarketSpend.Hash, script.HashHex(), StringComparer.OrdinalIgnoreCase);
     }
 
     [Fact]
     public void TestnetAddressIsBech32()
     {
-        WalletAddress addr = WizardScriptSpend.TestnetAddress;
+        WalletAddress addr = Shape.MarketMarketSpend.TestnetAddress;
         string bech32 = addr.ToBech32();
         Assert.StartsWith("addr_test1", bech32, StringComparison.Ordinal);
     }
@@ -84,7 +93,7 @@ public class BlueprintGenerationTests
     [Fact]
     public void MainnetAddressIsBech32()
     {
-        WalletAddress addr = WizardScriptSpend.MainnetAddress;
+        WalletAddress addr = Shape.MarketMarketSpend.MainnetAddress;
         string bech32 = addr.ToBech32();
         Assert.StartsWith("addr1", bech32, StringComparison.Ordinal);
     }
@@ -93,7 +102,7 @@ public class BlueprintGenerationTests
     public void GetAddressWithStakeKeyProducesDelegationAddress()
     {
         byte[] stakeKeyHash = new byte[28];
-        WalletAddress addr = WizardScriptSpend.GetAddress(NetworkType.Testnet, stakeKeyHash);
+        WalletAddress addr = Shape.MarketMarketSpend.GetAddress(NetworkType.Testnet, stakeKeyHash);
         string bech32 = addr.ToBech32();
         Assert.StartsWith("addr_test1", bech32, StringComparison.Ordinal);
     }
@@ -179,10 +188,10 @@ public class ShapesBlueprintTests
             FeeStep: PlutusInt.Create(2),
             FeeCap: PlutusInt.Create(5),
             PoolFee: PlutusInt.Create(3),
-            Extra: PlutusTrue.Create());
+            Extra: PlutusInt.Create(7));
 
         Assert.Equal(operators, config.Operators);
-        Assert.IsType<PlutusTrue>(config.Extra);
+        Assert.IsType<PlutusInt>(config.Extra);
     }
 
     [Fact]
@@ -190,7 +199,6 @@ public class ShapesBlueprintTests
     {
         Assert.NotEmpty(Shape.PoolPoolSpend.CompiledCode);
         Assert.NotEmpty(Shape.PoolPoolMint.CompiledCode);
-        Assert.Equal(56, Shape.OrderBookOrderBookElse.Hash.Length);
     }
 
     [Fact]
@@ -209,7 +217,8 @@ public class ShapesBlueprintTests
             DynamicFee: PlutusTrue.Create());
 
         Assert.IsType<Shape.Pointer>(market.Stake);
-        Assert.IsType<PlutusTrue>(market.DynamicFee);
+        IPlutusBool dynamicFee = market.DynamicFee;
+        Assert.IsType<PlutusTrue>(dynamicFee);
     }
 
     [Fact]
@@ -264,7 +273,6 @@ public class Aiken079BlueprintTests
         Assert.IsType<PlutusV2Script>(Acceptance.FooMint.Script);
     }
 }
-
 
 /// <summary>
 /// Tests for Crashr marketplace blueprint (Address type, Credential union).

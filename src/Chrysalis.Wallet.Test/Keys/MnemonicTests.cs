@@ -1,4 +1,5 @@
 using Chrysalis.Wallet.Models.Keys;
+using Chrysalis.Wallet.Test.CIPs;
 using Chrysalis.Wallet.Words;
 
 namespace Chrysalis.Wallet.Test.Keys;
@@ -34,7 +35,7 @@ public class MnemonicTests
     [Fact]
     public void Restore_ValidMnemonic_RestoresCorrectly()
     {
-        string phrase = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
+        string phrase = TestVectors.Bip39ZeroEntropy12;
 
         Mnemonic mnemonic = Mnemonic.Restore(phrase, English.Words);
 
@@ -45,7 +46,7 @@ public class MnemonicTests
     [Fact]
     public void Restore_24WordMnemonic_RestoresCorrectly()
     {
-        string phrase = "scout always message drill gorilla laptop electric decrease fly actor tuition merit clock flush end duck dance treat idle replace bulk total tool assist";
+        string phrase = CIP8Tests.CardanoSharpSeed;
 
         Mnemonic mnemonic = Mnemonic.Restore(phrase, English.Words);
 
@@ -64,7 +65,7 @@ public class MnemonicTests
     [Fact]
     public void Restore_InvalidChecksum_ThrowsFormatException()
     {
-        // Valid words but invalid checksum
+        // BIP-39 zero-entropy test vector with the final word replaced by the first, invalidating the checksum.
         string invalidChecksum = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon";
 
         _ = Assert.Throws<FormatException>(() => Mnemonic.Restore(invalidChecksum, English.Words));
@@ -73,7 +74,7 @@ public class MnemonicTests
     [Fact]
     public void GetWords_ReturnsCorrectWords()
     {
-        string phrase = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
+        string phrase = TestVectors.Bip39ZeroEntropy12;
         Mnemonic mnemonic = Mnemonic.Restore(phrase, English.Words);
 
         string[] words = mnemonic.Words;

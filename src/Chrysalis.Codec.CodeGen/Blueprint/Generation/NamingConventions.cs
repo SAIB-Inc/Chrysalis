@@ -88,7 +88,7 @@ internal static class NamingConventions
     }
 
     /// <summary>
-    /// Converts a validator title like "wizard.script.spend" to "WizardScriptSpend".
+    /// Converts a validator title like "order_book.order_book.spend" to "OrderBookOrderBookSpend".
     /// </summary>
     public static string ValidatorClassName(string title)
     {
