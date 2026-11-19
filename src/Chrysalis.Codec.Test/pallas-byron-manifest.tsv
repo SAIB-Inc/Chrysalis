@@ -1,0 +1,2 @@
+file	repository	tag	commit	path at that commit	licence	sha256	derived from
+ByronAdapterTests.cs#AddressTestVectors	https://github.com/txpipe/pallas	v0.34.0	2ab9eb45440d2ede38cf9e49026092a50c32c4e1	pallas-addresses/src/byron.rs	Apache-2.0	fe70c2998c7b86ccd29d81ad7eaf4680c9dc257b4d2f06cb4f9fc0f5305d4589	pallas-addresses/src/byron.rs; sha256 dcd19a6d22582278ba922d11213ed6d4998e416f7dd01ad9a136211248643675; three verbatim literals; local sha256 is their ordered UTF-8 values, one per line with final LF, not the enclosing C# file; licence in TestData/LICENSE-pallas

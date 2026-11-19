@@ -8,7 +8,7 @@ namespace Chrysalis.Plutus.Builtins;
 
 /// <summary>
 /// PlutusV4 value builtins.
-/// Ported from blaze-plutus src/cek/builtins/value.ts (MIT License).
+/// Ported from blaze-plutus src/cek/builtins/value.ts (Apache-2.0).
 /// </summary>
 internal static class ValueBuiltins
 {

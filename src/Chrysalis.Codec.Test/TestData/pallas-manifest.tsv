@@ -1,0 +1,16 @@
+file	repository	tag	commit	path at that commit	licence	sha256	derived from
+allegra1.block	https://github.com/txpipe/pallas	v0.34.0	2ab9eb45440d2ede38cf9e49026092a50c32c4e1	test_data/allegra1.block	Apache-2.0	ad58d2f26fc044ff8d05790449422a1394a885479fad84c027332b3319eb7455	-
+byron1.block	https://github.com/txpipe/pallas	v0.34.0	2ab9eb45440d2ede38cf9e49026092a50c32c4e1	test_data/byron1.block	Apache-2.0	77a34d9e007e64ac2cb024a3d47615e7a6474ba1ae114ae2a277dc2a8211a14b	-
+byron1.header	https://github.com/txpipe/pallas	v0.34.0	2ab9eb45440d2ede38cf9e49026092a50c32c4e1	test_data/byron1.header	Apache-2.0	b63f7a30730e1c33284de8b94473a92aa939071df01f451f18747aec57e7c5f6	-
+byron1.tx	https://github.com/txpipe/pallas	v0.34.0	2ab9eb45440d2ede38cf9e49026092a50c32c4e1	test_data/byron1.tx	Apache-2.0	b8f128624abee1706427a5c34f2cb09ca55f60819f104987f6c37db50d431c2a	-
+byron2.block	https://github.com/txpipe/pallas	v0.34.0	2ab9eb45440d2ede38cf9e49026092a50c32c4e1	test_data/byron2.block	Apache-2.0	be8d3ca8245dacd7544c0748b425f9869117263a245374ac6acc41d11ee99547	-
+byron2.tx	https://github.com/txpipe/pallas	v0.34.0	2ab9eb45440d2ede38cf9e49026092a50c32c4e1	test_data/byron2.tx	Apache-2.0	ec803ed61e64887504e66a97ad6b56be5238d7ab5fe7e2381153b8af8ce12c2b	-
+byron3.block	https://github.com/txpipe/pallas	v0.34.0	2ab9eb45440d2ede38cf9e49026092a50c32c4e1	test_data/byron3.block	Apache-2.0	2a03348561dd73fe8903d341f068161beaa49e36bac52287e00d39de2e689b4a	-
+byron4.block	https://github.com/txpipe/pallas	v0.34.0	2ab9eb45440d2ede38cf9e49026092a50c32c4e1	test_data/byron4.block	Apache-2.0	9997e1d78c0286764abf8f499bd5bc816f7054fc2bab152f43878b0c50f3e6fc	-
+byron5.block	https://github.com/txpipe/pallas	v0.34.0	2ab9eb45440d2ede38cf9e49026092a50c32c4e1	test_data/byron5.block	Apache-2.0	36fb6290f2fa77880f8d47b0fe14d260b26b955853becf51fa1744ea76c32b86	-
+byron6.block	https://github.com/txpipe/pallas	v0.34.0	2ab9eb45440d2ede38cf9e49026092a50c32c4e1	test_data/byron6.block	Apache-2.0	4bdb8afda26b442e1798d7b4fc32ce2fe8451a5b5e2b261e88b8008e8235c374	-
+byron7.block	https://github.com/txpipe/pallas	v0.34.0	2ab9eb45440d2ede38cf9e49026092a50c32c4e1	test_data/byron7.block	Apache-2.0	ac161f1440a874d966969875cea393eed8085f0b5a2c1a7acc438636a1bb4601	-
+byron8.block	https://github.com/txpipe/pallas	v0.34.0	2ab9eb45440d2ede38cf9e49026092a50c32c4e1	test_data/byron8.block	Apache-2.0	c3748dccbcd694eec80d301d4a17233a407eb688313e4d3ef6b95427ef08cd09	-
+genesis.block	https://github.com/txpipe/pallas	v0.34.0	2ab9eb45440d2ede38cf9e49026092a50c32c4e1	test_data/genesis.block	Apache-2.0	18976e16f654435df817a4918a3880e33b091a8e312ec4f6fb67fce162c114ce	-
+mary1.block	https://github.com/txpipe/pallas	v0.34.0	2ab9eb45440d2ede38cf9e49026092a50c32c4e1	test_data/mary1.block	Apache-2.0	64ca50616aa1b93d4254c41f5aa9fec89a7b436472c5df2402b7c3eab954a462	-
+shelley1.block	https://github.com/txpipe/pallas	v0.34.0	2ab9eb45440d2ede38cf9e49026092a50c32c4e1	test_data/shelley1.block	Apache-2.0	87bb16b8624f3ae0212b57231de58c6576b7b30f29eb482c540e1da78b0f4f21	-
