@@ -40,7 +40,7 @@ class BundleTests(unittest.TestCase):
             root = Path(td)
             repo = root / 'repo'
             scripts = repo / 'benchmarks/scripts'; scripts.mkdir(parents=True)
-            for name in bundle.HOST_FILES:
+            for name in bundle.HOST_FILES['fly']:
                 shutil.copy2(Path(bundle.__file__).parent / name, scripts / name)
             fixtures = repo / 'benchmarks/Chrysalis.Benchmarks'; fixtures.mkdir()
             (fixtures / 'fixtures').mkdir()

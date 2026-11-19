@@ -412,3 +412,34 @@ process means against the frozen A/A band and reject a resolved increase; they
 do not claim a direct-row plateau or select the last/lowest batch. Whole-path
 bytes separately apply the amended plateau rule: only an interval wholly
 outside +/-band says no plateau. Both rules keep the original data visible.
+
+### Azure launcher
+
+`gate.py go SEAL_ID` dispatches to the sealed provider; `fly --go` remains Fly-only.
+For an Azure seal, inspect `gate.py go SEAL_ID --dry-run` before the go. It prints each full reservation and the number of attempts the current ledger guarantees; it starts nothing. An Azure seal needs the Linux/amd64 `mbp-container build` and PC import path. The seal and payload must carry the same approved container build marker; without the reviewed runner pin, the launcher will not start. The launcher does not prepare or measure clients on the PC.
+
+The PC settings file named by `CHRYSALIS_GATE_LOCAL` binds four canonical paths: `azureCli`, `azureLock`, `azureBaseline`, `azureLedger`, plus the desk’s `azureRemainingProjectionUsd` estimate for the rest of the program. `flyPythonRoot` still names the relocatable Linux bundle Python for either provider. The ledger is mode 0600 and replaces per-phase spending counters. Its opening booking is $4.29 (Fly and Azure combined); before each go and each attempt the strict program ceiling is $40, and controls additionally stay below $6 in their original lineage. An unresolved attempt retains its full reservation; posted charges are a separate comparison, not budget credit. The batch and cap-stop reports distinguish program booked, unsettled, observed posted, computed headroom, and the desk estimate.
+
+Each attempt has its own tagged resource group, user-assigned identity with Contributor on its own run group only, private storage, and outbound-only VM. `Standard_F8als_v7` uses `eastus2` with one fresh `eastus` capacity fallback for that same draw. Quota is not capacity. The keeper is a bounded Windows process only. The VM's own group-delete timer and Azure's platform shutdown are independent; the platform schedule is confirmed before guest init, never moved in place, and removed with the group. A launcher never registers a provider.
+
+| Deadline | From the same epoch E |
+|---|---:|
+| Worker started / provisioning writes | 483 s / 720 s |
+| Worker cutoff / verified copy | C / C + 200 s |
+| WSL cleanup / guest timer | G − 70 s / G |
+| Platform shutdown schedule | G rounded up to the next UTC minute |
+| Escalation / reserve ends | G + 5 min / G + 15 min |
+
+Before the keeper callback there are no ARM writes. The PC is the only deleter until the guest timer and delete permission are verified at init. A crash before a platform schedule exists (or a schedule that does not deallocate) can leave compute billing until recovery: around $11.82/day fixed, plus disk transactions. Conditional on the schedule firing and deallocating, the maximum compute before it fires is about $0.97, then around $0.20/day fixed until deletion. The earlier no-VM gap can leave the IPv4 charge around $0.12/day. A successful schedule readback is not evidence of deallocation. Keep both cleanup paths and the ledger-first resume check.
+
+| Blob | PC capability | Guest capability | Expiry |
+|---|---|---|---:|
+| `payload` | create/write | read, sealed to the init payload key | 30 min |
+| `suite` (if sealed) | create/write | read, sealed to the init payload key | 30 min |
+| `results` | read | create/write, sealed to the init results key | 15 min |
+
+All six capabilities are separate HTTPS-only blob SAS. Plaintext stays in memory or an anonymous pipe only, never argv, files, logs or the environment. Run Command protected settings carry ciphertext. The guest uses ephemeral private keys under root-only `/run`, and transfers only verified bounded archives. Partial results are diagnostics, not data for a verdict. Azure CPU steal is **not observable on Azure**; foreign-CPU checks and the probe still gate.
+
+On a fresh installation only, the coordinator runs `gate_azure.py initialize-ledger` against the exact baseline. If a ledger is missing after use, restore the known ledger instead; a GO never creates one.
+
+A consumed GO cannot authorize another attempt after its dispatch exits. On resume, before any other work, check the ledger. If an entry is active or cleanup failed, `gate_azure.py recover` refuses a held lock and otherwise recovers the exact owned group before checking the baseline. If cleanup was not proved before the reserve expired, ordinary GOs refuse until explicit coordinator recovery. While group creation is unconfirmed, a qualifying watchdog absence proof is provisional: the full reservation stays booked and the next GO must delete and prove absence again after the reserve boundary. Failed re-proof stops ordinary GOs. Do not replace the baseline fingerprint. `gate_azure.py cost GO_DIR` is read-only against Azure, checks exact inventory, and reads whole-subscription ActualCost at +1 and +3 days. Keep daily checks at most 24 hours apart through three days after the last run. Reports retain only run bookings/posted figures and totals for other rows; a charge outside run groups and the exact baseline, posted exceeding booked, or posted exceeding expected by more than 20% stops the gate. Do not start another go while cleanup or a cost stop is unresolved.

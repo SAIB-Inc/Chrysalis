@@ -5,6 +5,7 @@ No resource creation, inherited credentials, process command lines, adaptive
 warm-ups or retries. The caller starts this script through heavy on the PC.
 """
 import hashlib
+import http.client
 import json
 import math
 import os
@@ -28,6 +29,45 @@ DESIGNS = {'short': (1, 25), 'long': (180, 60)}
 COUNTERS = ('compiledMethods', 'compiledILBytes', 'compilationTimeTicks')
 
 
+MEASURING_HOSTS = frozenset(('fly', 'azure'))
+
+
+def measuring_host(value):
+    return value in MEASURING_HOSTS
+
+
+_azure_identity = None
+
+
+def azure_metadata():
+    global _azure_identity
+    if _azure_identity is not None:
+        return dict(_azure_identity)
+    for attempt in range(3):
+        connection = http.client.HTTPConnection('169.254.169.254', timeout=2)
+        try:
+            connection.request('GET', '/metadata/instance/compute?api-version=2021-02-01', headers={'Metadata': 'true'})
+            response = connection.getresponse()
+            if response.status == 200:
+                data = json.loads(response.read(65_536))
+                identity = {key: data[key] for key in ('vmSize', 'location')}
+                if all(isinstance(value, str) and value for value in identity.values()):
+                    _azure_identity = identity
+                    return dict(identity)
+                return None
+            if response.status not in (410, 429) and not 500 <= response.status < 600:
+                return None
+        except (OSError, http.client.HTTPException):
+            pass
+        except (ValueError, KeyError, TypeError):
+            return None
+        finally:
+            connection.close()
+        if attempt < 2:
+            time.sleep(.2 * (attempt + 1))
+    return None
+
+
 def detect_platform(expected_region='iad'):
     """Detect before the allowlist strips Fly's machine metadata; never trust a job."""
     app, region = os.environ.get('FLY_APP_NAME'), os.environ.get('FLY_REGION')
@@ -35,6 +75,12 @@ def detect_platform(expected_region='iad'):
         if not app or region != expected_region or os.cpu_count() != 8 or platform.machine() != 'x86_64':
             raise ValueError(f'Named 8-CPU x64 {expected_region} Fly machine required')
         return 'fly'
+    if os.environ.get('P2_MEASURING_PLATFORM') == 'azure':
+        from gate_time import PROVIDERS
+        provider = PROVIDERS['azure']
+        if expected_region in provider['regions'] and os.cpu_count() == 8 and platform.machine() == 'x86_64' and \
+                azure_metadata() == {'vmSize': provider['machine'], 'location': expected_region}:
+            return 'azure'
     if sys.platform == 'darwin':
         if platform.machine() != 'arm64':
             raise ValueError('Native arm64 Mac required for allocation jobs')
@@ -181,22 +227,22 @@ def monitored_process(command, root, env, dest, timeout, server_pid=None, *, obs
     dest = Path(dest)
     dest.mkdir(parents=True, exist_ok=False)
     platform = platform or detect_platform()
-    on_fly = platform == 'fly'
+    measuring = measuring_host(platform)
     # On Mac keep the client in mbp-run's capped and cancellable group.
     own_group = platform != 'mac'
-    before = snapshot() if on_fly else clock()
-    known = ancestors(os.getpid(), before['processes']) if on_fly else set()
+    before = snapshot() if measuring else clock()
+    known = ancestors(os.getpid(), before['processes']) if measuring else set()
     marks, samples, foreign = {}, [], {}
     previous = None
     process = subprocess.Popen(list(map(str, command)), cwd=root, env=env,
                                stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                                stderr=subprocess.STDOUT, start_new_session=own_group)
     deadline, error, pending = time.monotonic() + timeout, None, b''
-    hz = os.sysconf('SC_CLK_TCK') if on_fly else None
+    hz = os.sysconf('SC_CLK_TCK') if measuring else None
 
     def sample():
         nonlocal previous
-        if not on_fly:
+        if not measuring:
             return clock()
         now = snapshot()
         if previous is not None:
@@ -238,7 +284,7 @@ def monitored_process(command, root, env, dest, timeout, server_pid=None, *, obs
                             marks[mark] = sample()
                             process.stdin.write(b'ACK\n')
                             process.stdin.flush()
-                if on_fly and 'MEASURED_START' in marks and 'MEASURED_END' not in marks:
+                if measuring and 'MEASURED_START' in marks and 'MEASURED_END' not in marks:
                     sample()
             process.wait(timeout=max(.01, deadline - time.monotonic()))
         except Exception as exception:
@@ -247,11 +293,11 @@ def monitored_process(command, root, env, dest, timeout, server_pid=None, *, obs
             stop(process, own_group=own_group)
             process.stdin.close()
             process.stdout.close()
-    after = snapshot() if on_fly else clock()
-    reasons = [] if on_fly else ['Mac time never gates' if platform == 'mac' else 'PC time never gates']
+    after = snapshot() if measuring else clock()
+    reasons = [] if measuring else ['Mac time never gates' if platform == 'mac' else 'PC time never gates']
     if set(marks) != {'MEASURED_START', 'MEASURED_END'}:
         reasons.append('Missing measured-start or measured-end mark')
-    elif on_fly:
+    elif measuring:
         start, end = marks['MEASURED_START'], marks['MEASURED_END']
         cores = [steal_fraction(value, end['cpuStat'].get(key, []))
                  for key, value in start['cpuStat'].items() if key != 'cpu']
@@ -265,6 +311,11 @@ def monitored_process(command, root, env, dest, timeout, server_pid=None, *, obs
     result = dict(pid=process.pid, exitCode=process.returncode, before=before, after=after,
                   seconds=after['monotonic'] - before['monotonic'], marks=marks, samples=samples,
                   foreignCpuSeconds=sum(foreign.values()), timingRejectedReasons=reasons)
+    if platform == 'azure':
+        raw = [snapshot['cpuStat']['cpu'][7] for snapshot in (before, *samples, after) if len(snapshot['cpuStat']['cpu']) > 7]
+        result.update(steal='not observable on Azure', stealFieldMoved=len(set(raw)) > 1)
+        for sample in (before, *samples, after):
+            sample.pop('cpuStat', None)
     if error:
         result['error'] = error
     save(dest / 'process.json', result)
@@ -371,7 +422,8 @@ def member(spec, job, dest, *, region='iad'):
                     load=[result['before']['load1'], result['after']['load1']],
                     seconds=result['seconds'], marks=sorted(result['marks']),
                     wholeProcess=dict(startMonotonic=result['before']['monotonic'], endMonotonic=result['after']['monotonic'],
-                                      aggregateSteal=steal_fraction(result['before']['cpuStat']['cpu'], result['after']['cpuStat']['cpu']) if platform == 'fly' else None))
+                                      aggregateSteal=steal_fraction(result['before']['cpuStat']['cpu'], result['after']['cpuStat']['cpu']) if platform == 'fly' else 'not observable on Azure' if platform == 'azure' else None,
+                                      **({'stealFieldMoved': result['stealFieldMoved']} if platform == 'azure' else {})))
     finally:
         if server:
             stop(server, own_group=platform != 'mac')

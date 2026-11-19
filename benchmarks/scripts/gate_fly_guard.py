@@ -127,20 +127,23 @@ def verified_launch_inputs(here, ready, *, dispatch_fd=0):
     relative = os.environ['GATE_BUNDLE']
     bundle = (ready.parent / relative).resolve()
     require(bundle.is_relative_to(ready.parent.resolve()), 'Archive path escapes seal')
-    from gate_bundle import checked_fly_local, verified_bundle
+    from gate_bundle import checked_azure_local, checked_fly_local, verified_bundle
     if os.environ.get('GATE_FIRST_GO'):
-        checked_fly_local(seal)
+        (checked_azure_local if seal.get('provider') == 'azure' else checked_fly_local)(seal)
     data = verified_bundle(ready.parent, seal, relative)
     with tarfile.open(fileobj=io.BytesIO(data), mode='r:gz') as stream:
         member = stream.getmember('plan.json')
         require(member.isfile(), 'Archive plan is not regular')
         plan = json.loads(stream.extractfile(member).read())
-    validate_probe_rule(plan.get('probe'))
+    if not plan.get('bytesOnly'):
+        validate_probe_rule(plan.get('probe'))
     # Every launcher helper is snapshotted and content-bound, including its imports.
     for path in here.iterdir():
         if path.is_file():
             name = path.relative_to(ready.parent).as_posix()
             require(seal['files'].get(name) == sha(path), 'Unsealed or stale launcher helper')
+    if seal.get('provider') == 'azure':
+        return dict(bundle=bundle, sha256=hashlib.sha256(data).hexdigest(), plan=plan, go=go)
     require(all(isinstance(seal.get(key), str) and re.fullmatch(r'mcr\.microsoft\.com/dotnet/sdk@sha256:[0-9a-f]{64}', seal[key]) for key in ('image', 'imageIndex')), 'Missing pinned platform/index image identity')
     version = seal['flyctlVersion']
     return dict(bundle=str(bundle), sha256=hashlib.sha256(data).hexdigest(), machineCommand=machine_command(plan),
@@ -203,6 +206,32 @@ def lock_holders(lock, roots):
                 except (FileNotFoundError, ProcessLookupError, PermissionError): pass
         except (FileNotFoundError, ProcessLookupError, PermissionError): pass
     return unexpected
+
+
+def result_status(archive, note, rule=None):
+    with tarfile.open(archive, 'r:gz') as stream:
+        try:
+            status = json.load(stream.extractfile('results/session-status.json'))
+        except (KeyError, TypeError, ValueError):
+            status = dict(completedAllDeclaredRounds=False, reason='Missing/invalid completion status')
+        files = stream.getnames()
+        recovered = 'results/recovery-diagnostic.json' in files
+        clean = isinstance(status, dict) and type(status.get('exitCode')) is int and status['exitCode'] == 0 and not recovered
+        if clean and status.get('probe') == 'rejected' and status.get('completedAllDeclaredRounds') is False and 'results/members.json' not in files:
+            from gate_time import probe_ids
+            try:
+                rule = rule if rule is not None else json.loads((note / 'verified-plan.json').read_text())['probe']
+                probe_entries(stream, probe_ids(rule))
+            except (OSError, KeyError, ValueError, TypeError, RuntimeError):
+                pass  # Missing or incomplete probe evidence is diagnostic only.
+            else:
+                (note / 'probe-rejected.json').write_text('{"probe":"rejected"}\n')
+                return 5
+    complete = clean and status.get('completedAllDeclaredRounds') is True and status.get('probe') != 'rejected'
+    if not complete:
+        (note / 'diagnostic-only.json').write_text(json.dumps(dict(diagnosticOnly=True, verdict='INCONCLUSIVE', session=status), indent=2) + '\n')
+    require(complete, 'DIAGNOSTIC ONLY / INCONCLUSIVE: failed, budget-stopped or incomplete session; numerical go table not evaluated')
+    return 0
 
 
 def main():
@@ -271,29 +300,7 @@ def main():
             require(not listing(root / (filename + '.json'), keys), 'Public IP or volume allocated')
         (root / 'machine.json').write_text(json.dumps(m, indent=2) + '\n')
     elif mode == 'result':
-        archive, note = Path(args[0]), Path(args[1])
-        with tarfile.open(archive, 'r:gz') as stream:
-            try:
-                status = json.load(stream.extractfile('results/session-status.json'))
-            except (KeyError, TypeError, ValueError):
-                status = dict(completedAllDeclaredRounds=False, reason='Missing/invalid completion status')
-            files = stream.getnames()
-            recovered = 'results/recovery-diagnostic.json' in files
-            clean = isinstance(status, dict) and type(status.get('exitCode')) is int and status['exitCode'] == 0 and not recovered
-            if clean and status.get('probe') == 'rejected' and status.get('completedAllDeclaredRounds') is False and 'results/members.json' not in files:
-                from gate_time import probe_ids
-                try:
-                    rule = json.loads((note / 'verified-plan.json').read_text())['probe']
-                    probe_entries(stream, probe_ids(rule))
-                except (OSError, KeyError, ValueError, TypeError, RuntimeError):
-                    pass  # Missing or incomplete probe evidence is diagnostic only.
-                else:
-                    (note / 'probe-rejected.json').write_text('{"probe":"rejected"}\n')
-                    return
-        complete = clean and status.get('completedAllDeclaredRounds') is True and status.get('probe') != 'rejected'
-        if not complete:
-            (note / 'diagnostic-only.json').write_text(json.dumps(dict(diagnosticOnly=True, verdict='INCONCLUSIVE', session=status), indent=2) + '\n')
-        require(complete, 'DIAGNOSTIC ONLY / INCONCLUSIVE: failed, budget-stopped or incomplete session; numerical go table not evaluated')
+        result_status(Path(args[0]), Path(args[1]))
     elif mode == 'consume-go':
         consume_go(Path(args[0]), args[1])
     elif mode == 'lock-inode':

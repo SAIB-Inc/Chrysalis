@@ -600,3 +600,49 @@ class TimeTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+def test_azure_region_price_and_draw_cap():
+    for region in ('eastus2', 'eastus'):
+        plan, = timing.size_sessions([dict(row(), provider='azure', region=region)], 'change', budget=30, probe={
+            'processes': 16, 'statistic': 'cv', 'limit': .054, 'gen0BudgetBytes': 16_777_216, 'maxDraws': 6})
+        assert plan['probe']['maxDraws'] == 6
+        seconds = plan['destroyGuardSeconds'] + 900
+        assert timing.price(plan['destroyGuardSeconds'], region, provider='azure') > seconds / 3600 * .495
+    assert {p['platform'] for p in timing.PROVIDERS.values()} == timing.session.MEASURING_HOSTS
+
+
+def test_azure_does_not_enter_legacy_measurement_prepare():
+    with patch.object(bundle, 'time_rows', side_effect=AssertionError('legacy prepare reached')):
+        try:
+            bundle.prepare(None, None, None, {'time': {'platform': {'provider': 'azure'}}}, None)
+        except ValueError as failure:
+            assert 'Mac' in str(failure)
+        else:
+            raise AssertionError('legacy Azure prepare accepted')
+
+
+def test_r1_azure_smoke_classifies_complete_and_rejects_provider_mismatch():
+    r = dict(row(pairs=2), aPairs=6, expected='smoke', provider='azure', region='eastus2',
+             noise=dict(band=.028, machine='Standard_F8als_v7', design='long'))
+    p = pairs(r)
+    for pair in p:
+        for side in ('baseline', 'candidate'):
+            pair[side]['platform'] = 'azure'
+    plan = dict(mode='release', repeatAllowed=True, rows=[r])
+    def status():
+        results = {mode: {r['id']: timing.verdict(r, p, mode, noise=r['noise'])} for mode in ('release', 'change')}
+        return timing.controls_outcome(plan, results)[0]
+    assert status() == 'complete'
+    p[0]['baseline']['platform'] = 'fly'
+    assert status() == 'hard-stop'
+
+
+def test_r1_report_prints_observed_fallback_region_and_steal(tmp_path):
+    time_out = tmp_path / 'time'
+    time_out.mkdir()
+    (time_out / 'draws.json').write_text(json.dumps([dict(session=0, phase='first', draw=1,
+        app='chrysalis-gate-20990405t000100-abcdef12', decision='kept', bookedUsd=.24,
+        region='eastus', provider='azure', steal='not observable on Azure', fallbackOf='fixture-primary')]))
+    text = '\n'.join(timing.draw_lines(tmp_path, first_only=False))
+    assert 'eastus' in text and 'eastus2' not in text and 'not observable on Azure' in text

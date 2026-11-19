@@ -1,0 +1,130 @@
+#!/usr/bin/env python3
+"""Offline az double. This process never opens a socket."""
+import base64
+import json
+from pathlib import Path
+import re
+import sys
+from urllib.parse import urlsplit
+import uuid
+
+ROOT = Path(__file__).resolve().parent
+STATE = ROOT / 'state.json'
+SUB = '/subscriptions/' + str(uuid.UUID(int=101))
+REGION = 'southeastasia'
+GROUP = SUB + '/resourceGroups/baseline-group'
+WATCHER = GROUP + '/providers/Microsoft.Network/networkWatchers/baseline'
+ARGS = sys.argv[1:]
+
+
+def fail(kind):
+    print(kind, file=sys.stderr)
+    sys.exit(1)
+
+
+def value(key, fallback=None):
+    return ARGS[ARGS.index(key) + 1] if key in ARGS else fallback
+
+
+def main():
+    if any(re.search(r'(^|/)(?:un)?register(?:$|\?)', arg, re.I) for arg in ARGS):
+        (ROOT / 'forbidden-register').touch()
+        fail('Registration Forbidden')
+    state = json.loads(STATE.read_text()) if STATE.exists() else {}
+    groups, stuff = state.setdefault('groups', {}), state.setdefault('resources', {})
+    if ARGS[:1] == ['version']:
+        return {'azure-cli': '2.99.1'}
+    if ARGS[:3] == ['account', 'show', '--query']:
+        return SUB.split('/')[-1]
+    if ARGS[:1] != ['rest']:
+        fail('Unexpected command')
+    u = urlsplit(value('--url'))
+    if u.netloc != 'management.azure.com' or not u.path.startswith(SUB + '/'):
+        fail('Unexpected ARM path')
+    method, path, query = value('--method'), u.path, value('--query', '')
+    # Keep only the shape of operations. Neither raw URLs, parameters nor bodies.
+    short = path[len(SUB):]
+    prefix = '/'.join(path.split('/')[:5])
+    event = short.split('/providers/')[-1].split('/')[:2] if '/providers/' in short else short.split('/')[:2]
+    if '/runCommands/' in short:
+        event = ['RunCommand', short.split('/')[-1]]
+    with (ROOT / 'events.jsonl').open('a') as log:
+        print(json.dumps([method, event]), file=log)
+    if method in ('put', 'delete'):
+        body = json.load(sys.stdin) if value('--body') == '@-' else None
+        if re.fullmatch(r'/resourceGroups/chrysalis-gate-[0-9]{8}t[0-9]{6}-[a-f0-9]{8}', short):
+            if method == 'put':
+                groups[path] = body
+            else:
+                group = groups.get(path)
+                if not group:
+                    fail('ResourceGroupNotFound')
+                count = group.setdefault('deleteCount', 0) + 1
+                group['deleteCount'] = count
+                if count >= state.get('deletesBeforeAbsent', 2):
+                    del groups[path]
+                    for item in [item for item in stuff if item.startswith(path + '/')]:
+                        del stuff[item]
+        elif prefix not in groups or method != 'put':
+            fail('Unexpected mutation')
+        else:
+            region = groups[prefix]['location']
+            ending = path.split('/')[-1]
+            if '/virtualMachines/' in path and '/runCommands/' not in path and state.get('vmErrors', {}).get(region):
+                fail(state['vmErrors'][region])
+            if '/schedules/' in path and state.get('scheduleRefused', 0):
+                state['scheduleRefused'] -= 1
+                STATE.write_text(json.dumps(state))
+                fail('Conflict')
+            if '/runCommands/' in path:
+                if (canary := state.get('expectedCipherCanary')) and canary in json.dumps(body):
+                    fail('Plaintext in ARM body')
+                body = {'status': ending}
+            stuff[path] = body
+        STATE.write_text(json.dumps(state))
+        return None
+    if 'registrationState' == query:
+        return 'NotRegistered' if path.endswith(state.get('unregistered', '/never')) else 'Registered'
+    if short.endswith('/permissions'):
+        return {'value': [{'actions': ['*'], 'notActions': []}]}
+    if short.endswith('/vmSizes'):
+        return ['Standard_F8als_v7']
+    if '/versions/' in short:
+        return short.split('/')[-1]
+    if short == '/resourceGroups':
+        return {'items': [{'id': GROUP, 'location': REGION}] + [dict(id=k, location=v['location']) for k, v in groups.items()], 'paginated': False}
+    if short == '/resources':
+        return {'items': [{'id': WATCHER + state.get('swapWatcher', ''), 'type': 'Microsoft.Network/networkWatchers', 'location': REGION}] +
+                [dict(id=k, type=k.split('/providers/')[-1].rsplit('/', 1)[0], location=v.get('location', 'eastus2')) for k, v in stuff.items()], 'paginated': False}
+    if short.endswith('/roleAssignments') and query.startswith('{scopes'):
+        scopes = [k.split('/providers/')[0] for k in stuff if '/roleAssignments/' in k]
+        return dict(scopes=scopes, expected=len(scopes), paginated=False)
+    if short.endswith('/networkWatchers') and query.startswith('{ids:'):
+        region, = re.findall(r"location=='([a-z0-9]+)'", query)
+        return {'ids': [k for k, v in stuff.items() if '/networkWatchers/' in k and v['location'] == region], 'paginated': False}
+    if query.startswith('{count:') or query.startswith('{items:'):
+        return dict(count=0, items=[], paginated=False)
+    if short.endswith('/query') and method == 'post':
+        json.load(sys.stdin)
+        return state.get('cost', dict(columns=['PreTaxCost', 'UsageDate', 'ResourceGroup', 'Currency'], rows=[], paginated=False))
+    if path in groups:
+        return groups[path].get('tags', {}).get('chrysalisGate')
+    if short.endswith('/listKeys') and method == 'post' and path.rsplit('/', 1)[0] in stuff:
+        return base64.b64encode(bytes(range(64))).decode()
+    if path in stuff:
+        resource = stuff[path]
+        if query == 'properties.provisioningState':
+            return 'Succeeded'
+        if query == 'properties.principalId':
+            return str(uuid.UUID(int=103))
+        if 'principalId:principalId' in query:
+            return resource['properties']
+        if '/runCommands/' in path:
+            summary = state.get('commandResults', {}).get(resource['status'], {})
+            return dict(state='Succeeded', code=0, output='CHRYSALIS:' + json.dumps(summary))
+        if '/schedules/' in path:
+            return dict(resource, properties=dict(resource['properties'], provisioningState='Succeeded') | state.get('scheduleReadback', {}))
+    fail('ResourceGroupNotFound' if path == prefix else 'ResourceNotFound')
+
+
+print(json.dumps(main()))
