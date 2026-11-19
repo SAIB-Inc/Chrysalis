@@ -1,5 +1,8 @@
 using System.Buffers;
 using System.Reflection;
+using System.Reflection.Metadata;
+using System.Reflection.Metadata.Ecma335;
+using System.Reflection.PortableExecutable;
 using System.Linq.Expressions;
 using System.Runtime.CompilerServices;
 using System.Runtime.Loader;
@@ -137,6 +140,7 @@ public class EraTests
 
     private static long FirstReadAllocations(Type type, ReadOnlyMemory<byte> bytes)
     {
+        InternUserStrings(type.Assembly.Location);
         AssemblyLoadContext isolated = new(name: null, isCollectible: true);
         isolated.Resolving += (context, name) => name.Name is "Chrysalis.Codec" or "Chrysalis.Network"
             ? context.LoadFromAssemblyPath(Path.Combine(Path.GetDirectoryName(type.Assembly.Location)!, name.Name + ".dll"))
@@ -159,6 +163,19 @@ public class EraTests
         finally
         {
             isolated.Unload();
+        }
+    }
+
+    private static void InternUserStrings(string assemblyPath)
+    {
+        using FileStream stream = File.OpenRead(assemblyPath);
+        using PEReader pe = new(stream, PEStreamOptions.LeaveOpen);
+        MetadataReader metadata = pe.GetMetadataReader();
+        for (UserStringHandle handle = metadata.GetNextHandle(default(UserStringHandle));
+            !handle.IsNil;
+            handle = metadata.GetNextHandle(handle))
+        {
+            _ = string.Intern(metadata.GetUserString(handle));
         }
     }
 
