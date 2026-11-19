@@ -1,15 +1,36 @@
+using System.Collections.Immutable;
 using Chrysalis.Plutus.Types;
 
 namespace Chrysalis.Plutus.Cek;
 
-/// <summary>
-/// Per-step machine costs and startup cost.
-/// All step kinds cost 16000 CPU + 100 MEM (matching Cardano mainnet protocol parameters).
-/// </summary>
-internal static class MachineCosts
+/// <summary>Startup and CEK step costs, in ascending StepKind order.</summary>
+internal sealed class MachineCosts
 {
-    internal static readonly ExBudget StepCost = new(16000, 100);
-    internal static readonly ExBudget StartupCost = new(100, 100);
+    internal ExBudget Startup { get; }
+
+    internal ImmutableArray<ExBudget> Steps { get; }
+
+    internal ExBudget? UniformStep { get; }
+
+    internal static MachineCosts Default => CostModel.Default.Machine;
+
+    internal MachineCosts(ExBudget startup, ImmutableArray<ExBudget> steps)
+    {
+        Startup = startup;
+        Steps = steps;
+        ExBudget first = steps[0];
+        if (first.Cpu is >= 0 and <= long.MaxValue / Slippage && first.Mem is >= 0 and <= long.MaxValue / Slippage)
+        {
+            foreach (ExBudget cost in steps)
+            {
+                if (cost != first)
+                {
+                    return;
+                }
+            }
+            UniformStep = first;
+        }
+    }
 
     internal const int StepConstant = 0;
     internal const int StepVar = 1;

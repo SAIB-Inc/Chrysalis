@@ -4,6 +4,7 @@ namespace Chrysalis.Plutus.Types;
 /// All built-in functions available in Plutus Core, ordered by their 7-bit Flat encoding tag.
 /// Tags are assigned in batches corresponding to ledger language versions.
 /// </summary>
+/// <remarks>Values are Flat tags defined by the Plutus Builtins.hs instance Flat DefaultFun.</remarks>
 public enum DefaultFunction
 {
     // Batch 1 — PlutusV1 (Alonzo, protocol version 5.0)
@@ -71,16 +72,16 @@ public enum DefaultFunction
     Bls12_381_G1_Neg = 55,
     Bls12_381_G1_ScalarMul = 56,
     Bls12_381_G1_Equal = 57,
-    Bls12_381_G1_HashToGroup = 58,
-    Bls12_381_G1_Compress = 59,
-    Bls12_381_G1_Uncompress = 60,
+    Bls12_381_G1_Compress = 58,
+    Bls12_381_G1_Uncompress = 59,
+    Bls12_381_G1_HashToGroup = 60,
     Bls12_381_G2_Add = 61,
     Bls12_381_G2_Neg = 62,
     Bls12_381_G2_ScalarMul = 63,
     Bls12_381_G2_Equal = 64,
-    Bls12_381_G2_HashToGroup = 65,
-    Bls12_381_G2_Compress = 66,
-    Bls12_381_G2_Uncompress = 67,
+    Bls12_381_G2_Compress = 65,
+    Bls12_381_G2_Uncompress = 66,
+    Bls12_381_G2_HashToGroup = 67,
     Bls12_381_MillerLoop = 68,
     Bls12_381_MulMlResult = 69,
     Bls12_381_FinalVerify = 70,
@@ -112,7 +113,7 @@ public enum DefaultFunction
     Bls12_381_G1_MultiScalarMul = 92,
     Bls12_381_G2_MultiScalarMul = 93,
 
-    // Batch 7 — Value operations (PlutusV4)
+    // Batch 6 — Value operations (PV11, all languages)
     InsertCoin = 94,
     LookupCoin = 95,
     UnionValue = 96,
@@ -138,8 +139,8 @@ public static class DefaultFunctionExtensions
         2, 2, 1, 1,                     // 47-50: equalsData, mkPairData, mkNilData, mkNilPairData
         1,                              // 51: serialiseData
         3, 3,                           // 52-53: secp256k1 ECDSA, Schnorr
-        2, 1, 2, 2, 2, 1, 1,          // 54-60: BLS G1 ops
-        2, 1, 2, 2, 2, 1, 1,          // 61-67: BLS G2 ops
+        2, 1, 2, 2, 1, 1, 2,          // 54-60: BLS G1 ops
+        2, 1, 2, 2, 1, 1, 2,          // 61-67: BLS G2 ops
         2, 2, 2,                        // 68-70: millerLoop, mulMlResult, finalVerify
         1, 1,                           // 71-72: keccak_256, blake2b_224
         3, 2,                           // 73-74: integerToByteString, byteStringToInteger

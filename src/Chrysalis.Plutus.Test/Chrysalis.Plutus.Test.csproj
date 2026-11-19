@@ -21,6 +21,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <None Update="TestData/NodeBudgetKnownFailures.tsv" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="TestData/CostModels/**/*" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../Chrysalis.Network.Tests/Fixtures/Preprod/current-protocol-parameters.json"
+          Link="TestData/CostModels/g1/current-protocol-parameters.json" CopyToOutputDirectory="PreserveNewest" />
     <None Update="conformance\**\*.*">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>

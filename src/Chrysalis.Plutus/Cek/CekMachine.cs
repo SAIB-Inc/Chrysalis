@@ -1,6 +1,7 @@
 using System.Collections.Immutable;
 using System.Numerics;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using Chrysalis.Plutus.Types;
 
 namespace Chrysalis.Plutus.Cek;
@@ -13,7 +14,10 @@ public sealed class CekMachine
 {
     private ExBudget _budget;
     private int _unbudgetedSteps;
-    private readonly BuiltinCostModel[] _builtinCosts;
+    private readonly ImmutableArray<BuiltinCostModel> _builtinCosts;
+    private readonly MachineCosts _machineCosts;
+    private readonly int[]? _kindCounts;
+    private readonly Variant _variant;
 
     // Machine state (mutable for zero-allocation hot loop)
     private readonly ContextStack _ctxStack = new();
@@ -21,37 +25,48 @@ public sealed class CekMachine
     private Term<DeBruijn>? _computeTerm;
     private CekValue? _returnValue;
 
-    // Debug counters (only allocated when debugging)
-    private int[]? _stepCounts;
-    private long[]? _builtinCpu;
-    private long[]? _builtinMem;
+    private DebugState? _debug;
+
+    private sealed class DebugState(int builtinCount)
+    {
+        internal readonly int[] Steps = new int[MachineCosts.StepKindCount];
+        internal readonly long[] BuiltinCpu = new long[builtinCount];
+        internal readonly long[] BuiltinMem = new long[builtinCount];
+    }
 
     public CekMachine(ExBudget? initialBudget = null)
+        : this(initialBudget ?? ExBudget.Unlimited, CostModel.Default)
     {
-        ExBudget initial = initialBudget ?? ExBudget.Unlimited;
-        _budget = initial - MachineCosts.StartupCost;
-        _unbudgetedSteps = 0;
-        _builtinCosts = DefaultCosts.Create();
     }
 
     internal CekMachine(ExBudget initialBudget, BuiltinCostModel[] builtinCosts)
+        : this(initialBudget, ImmutableCollectionsMarshal.AsImmutableArray(builtinCosts), MachineCosts.Default, Variant.C)
     {
-        _budget = initialBudget - MachineCosts.StartupCost;
-        _unbudgetedSteps = 0;
+    }
+
+    internal CekMachine(ExBudget initialBudget, CostModel model)
+        : this(initialBudget, model.Builtins, model.Machine, model.Variant)
+    {
+    }
+
+    private CekMachine(ExBudget initialBudget, ImmutableArray<BuiltinCostModel> builtinCosts, MachineCosts machineCosts, Variant variant)
+    {
+        _budget = initialBudget - machineCosts.Startup;
         _builtinCosts = builtinCosts;
+        _machineCosts = machineCosts;
+        _kindCounts = machineCosts.UniformStep.HasValue ? null : new int[MachineCosts.StepKindCount];
+        _variant = variant;
     }
 
     /// <summary>Enables per-step-kind and per-builtin cost tracking for debugging.</summary>
     public CekMachine EnableDebugCounters()
     {
-        _stepCounts = new int[MachineCosts.StepKindCount];
-        _builtinCpu = new long[_builtinCosts.Length];
-        _builtinMem = new long[_builtinCosts.Length];
+        _debug = new(_builtinCosts.Length);
         return this;
     }
 
     /// <summary>Returns (stepCounts[9], builtinCpu[N], builtinMem[N]) if debug enabled.</summary>
-    public (int[]? Steps, long[]? BuiltinCpu, long[]? BuiltinMem) DebugCounters => (_stepCounts, _builtinCpu, _builtinMem);
+    public (int[]? Steps, long[]? BuiltinCpu, long[]? BuiltinMem) DebugCounters => (_debug?.Steps, _debug?.BuiltinCpu, _debug?.BuiltinMem);
 
     public ExBudget RemainingBudget
     {
@@ -65,7 +80,9 @@ public sealed class CekMachine
     /// <summary>
     /// Evaluate a UPLC term and return the resulting term.
     /// </summary>
-    public Term<DeBruijn> Run(Term<DeBruijn> term)
+    public Term<DeBruijn> Run(Term<DeBruijn> term) => Discharge.DischargeValue(RunValue(term));
+
+    internal CekValue RunValue(Term<DeBruijn> term)
     {
         _ctxStack.Reset();
         _env = null;
@@ -83,7 +100,7 @@ public sealed class CekMachine
                 if (_ctxStack.IsEmpty)
                 {
                     SpendUnbudgetedSteps();
-                    return Discharge.DischargeValue(_returnValue!);
+                    return _returnValue!;
                 }
                 ReturnStep();
             }
@@ -93,13 +110,16 @@ public sealed class CekMachine
     // --- Budget tracking ---
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private void StepAndMaybeSpend(int stepKind = -1)
+    private void StepAndMaybeSpend(int stepKind)
     {
-        if (_stepCounts is not null && stepKind >= 0)
+        if (_debug is not null)
         {
-            _stepCounts[stepKind]++;
+            _debug.Steps[stepKind]++;
         }
-
+        if (_kindCounts is not null)
+        {
+            _kindCounts[stepKind]++;
+        }
         if (++_unbudgetedSteps >= MachineCosts.Slippage)
         {
             SpendUnbudgetedSteps();
@@ -108,10 +128,29 @@ public sealed class CekMachine
 
     private void SpendUnbudgetedSteps()
     {
-        int count = _unbudgetedSteps;
-        _budget = new ExBudget(
-            _budget.Cpu - (count * MachineCosts.StepCost.Cpu),
-            _budget.Mem - (count * MachineCosts.StepCost.Mem));
+        if (_unbudgetedSteps == 0)
+        {
+            return;
+        }
+        if (_machineCosts.UniformStep is ExBudget uniform)
+        {
+            // All costs are equal and nonnegative, so grouping kinds is equivalent.
+            _budget -= new ExBudget(_unbudgetedSteps * uniform.Cpu, _unbudgetedSteps * uniform.Mem);
+        }
+        else
+        {
+            int[] counts = _kindCounts!;
+            for (int kind = 0; kind < counts.Length; kind++)
+            {
+                int count = counts[kind];
+                if (count != 0)
+                {
+                    ExBudget step = _machineCosts.Steps[kind];
+                    _budget -= new ExBudget(SatMath.Mul(count, step.Cpu), SatMath.Mul(count, step.Mem));
+                    counts[kind] = 0;
+                }
+            }
+        }
         _unbudgetedSteps = 0;
     }
 
@@ -495,17 +534,17 @@ public sealed class CekMachine
         }
         else
         {
-            (long x, long y, long z) = ExMem.ComputeArgSizes(func, args);
+            (long x, long y, long z) = ExMem.ComputeArgSizes(func, args, _variant >= Variant.D);
             cost = model.Eval(x, y, z);
         }
 
         _budget -= cost;
 
-        if (_builtinCpu is not null)
+        if (_debug is not null)
         {
             int idx = (int)func;
-            _builtinCpu[idx] += cost.Cpu;
-            _builtinMem![idx] += cost.Mem;
+            _debug.BuiltinCpu[idx] = SatMath.Add(_debug.BuiltinCpu[idx], cost.Cpu);
+            _debug.BuiltinMem[idx] = SatMath.Add(_debug.BuiltinMem[idx], cost.Mem);
         }
 
         return Builtins.BuiltinRuntime.Call(func, args);

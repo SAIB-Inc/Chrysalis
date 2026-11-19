@@ -24,7 +24,12 @@ internal static class ExMem
 
     internal static int ByteStringExMem(ReadOnlyMemory<byte> bs) => bs.Length == 0 ? 1 : ((bs.Length - 1) / 8) + 1;
 
-    internal static int StringExMem(string s) => System.Text.Encoding.UTF8.GetByteCount(s);
+    // D and E count four-byte words; C retains the reference model's byte count until V3.
+    internal static int StringExMem(string s, bool byBytes)
+    {
+        int bytes = System.Text.Encoding.UTF8.GetByteCount(s);
+        return byBytes ? bytes / 4 : bytes;
+    }
 
     internal static int DataExMem(PlutusData d)
     {
@@ -154,7 +159,7 @@ internal static class ExMem
 
     private static long BsSize(CekValue val) => val is VConstant { Value: ByteStringConstant bs } ? ByteStringExMem(bs.Value) : 0;
 
-    private static long StrSize(CekValue val) => val is VConstant { Value: StringConstant s } ? StringExMem(s.Value) : 0;
+    private static long StrSize(CekValue val, bool byBytes) => val is VConstant { Value: StringConstant s } ? StringExMem(s.Value, byBytes) : 0;
 
     private static long DataSize(CekValue val) => val is VConstant { Value: DataConstant d } ? DataExMem(d.Value) : 4;
 
@@ -178,7 +183,7 @@ internal static class ExMem
     // --- Main dispatch: compute argument sizes for a builtin ---
 
     internal static (long X, long Y, long Z) ComputeArgSizes(
-        DefaultFunction func, CekValue[] args) => func switch
+        DefaultFunction func, CekValue[] args, bool byBytes) => func switch
         {
             // 2-arg integer operations: (int, int)
             DefaultFunction.AddInteger or
@@ -248,10 +253,10 @@ internal static class ExMem
             // 2-arg string operations: (str, str)
             DefaultFunction.AppendString or
             DefaultFunction.EqualsString =>
-                (StrSize(args[0]), StrSize(args[1]), 0),
+                (StrSize(args[0], byBytes), StrSize(args[1], byBytes), 0),
 
             // 1-arg string/bs
-            DefaultFunction.EncodeUtf8 => (StrSize(args[0]), 0, 0),
+            DefaultFunction.EncodeUtf8 => (StrSize(args[0], byBytes), 0, 0),
             DefaultFunction.DecodeUtf8 => (BsSize(args[0]), 0, 0),
 
             // Constant cost builtins (sizes don't matter)

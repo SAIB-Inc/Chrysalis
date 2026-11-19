@@ -1,3 +1,5 @@
+using Chrysalis.Plutus.Cek;
+
 namespace Chrysalis.Plutus.Types;
 
 /// <summary>
@@ -10,15 +12,9 @@ public readonly record struct ExBudget(long Cpu, long Mem)
     public static readonly ExBudget Zero = new(0, 0);
     public static readonly ExBudget Unlimited = new(long.MaxValue, long.MaxValue);
 
-    public static ExBudget operator +(ExBudget a, ExBudget b) => new(SatAdd(a.Cpu, b.Cpu), SatAdd(a.Mem, b.Mem));
+    public static ExBudget operator +(ExBudget a, ExBudget b) => new(SatMath.Add(a.Cpu, b.Cpu), SatMath.Add(a.Mem, b.Mem));
 
-    public static ExBudget operator -(ExBudget a, ExBudget b) => new(a.Cpu - b.Cpu, a.Mem - b.Mem);
+    public static ExBudget operator -(ExBudget a, ExBudget b) => new(SatMath.Sub(a.Cpu, b.Cpu), SatMath.Sub(a.Mem, b.Mem));
 
     public bool IsExhausted => Cpu < 0 || Mem < 0;
-
-    private static long SatAdd(long a, long b)
-    {
-        long r = a + b;
-        return r < a ? long.MaxValue : r;
-    }
 }
