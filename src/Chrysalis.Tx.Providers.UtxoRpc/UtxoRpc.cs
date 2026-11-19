@@ -29,7 +29,9 @@ public sealed class UtxoRpc : ICardanoDataProvider, IDisposable
     private readonly CallInvoker _invoker;
     private readonly GrpcMetadata _headers = [];
     private readonly TimeSpan _timeout;
+    private readonly string[] _secrets;
     private readonly UtxoRpcMethods _methods = UtxoRpcMethods.V1Beta;
+    private int _disposed;
 
     /// <summary>Creates a provider with one reusable gRPC channel.</summary>
     /// <param name="endpoint">An absolute HTTP or HTTPS server URI.</param>
@@ -58,6 +60,7 @@ public sealed class UtxoRpc : ICardanoDataProvider, IDisposable
             }
         }
 
+        _secrets = [.. ProviderHttp.SecretsOf(endpoint), .. _headers.SelectMany(header => ProviderHttp.SecretsOfHeader(header.Value))];
         NetworkType = networkType;
         _channel = GrpcChannel.ForAddress(endpoint, new GrpcChannelOptions { MaxReceiveMessageSize = null });
         _invoker = _channel.CreateCallInvoker();
@@ -69,15 +72,16 @@ public sealed class UtxoRpc : ICardanoDataProvider, IDisposable
     /// <summary>Reads the current protocol parameters.</summary>
     /// <param name="cancellationToken">Cancels the call.</param>
     /// <returns>The parameters reported by the server, with missing message fields left unknown.</returns>
-    public async Task<ProtocolParams> GetParametersAsync(CancellationToken cancellationToken)
+    public async Task<ProtocolParams> GetParametersAsync(CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         ReadParamsResponse response = await UnaryAsync(_methods.ReadParams, new ReadParamsRequest(), cancellationToken);
         try
         {
             return UtxoRpcParameters.Map(response.Values?.Cardano
                 ?? throw new InvalidDataException("values.cardano is missing."));
         }
-        catch (Exception exception)
+        catch (Exception exception) when (exception is not OutOfMemoryException)
         {
             throw Unusable(_methods.ReadParams, exception);
         }
@@ -87,10 +91,9 @@ public sealed class UtxoRpc : ICardanoDataProvider, IDisposable
     /// <param name="address">The addresses to query.</param>
     /// <param name="cancellationToken">Cancels every request.</param>
     /// <returns>All pages, or an exception without partial results.</returns>
-    public async Task<List<ResolvedInput>> GetUtxosAsync(List<string> address, CancellationToken cancellationToken)
+    public async Task<List<ResolvedInput>> GetUtxosAsync(List<string> address, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(address);
-        if (address.Count == 0) { return []; }
         HashSet<string> seen = new(address.Count, StringComparer.Ordinal);
         List<ByteString> addresses = [with(address.Count)];
         foreach (string item in address)
@@ -102,32 +105,32 @@ public sealed class UtxoRpc : ICardanoDataProvider, IDisposable
                 {
                     addresses.Add(UnsafeByteOperations.UnsafeWrap(Address.FromBech32(item).ToBytes()));
                 }
-                catch (Exception exception) when (exception is FormatException or IndexOutOfRangeException)
+                catch (Exception exception) when (exception is FormatException or IndexOutOfRangeException or ArgumentException)
                 {
-                    throw new ArgumentException("Invalid Bech32 address.", nameof(address), exception);
+                    throw new ArgumentException("Invalid Bech32 address.", nameof(address));
                 }
             }
         }
 
+        cancellationToken.ThrowIfCancellationRequested();
+        if (addresses.Count == 0) { return []; }
         if (addresses.Count == 1) { return await SearchAsync(addresses[0], cancellationToken); }
-        List<ResolvedInput> result = [];
+        ResolvedInputSet merged = new(nameof(UtxoRpc), _methods.SearchUtxos.Name);
         Task<List<ResolvedInput>>[] batch = new Task<List<ResolvedInput>>[Math.Min(5, addresses.Count)];
         for (int start = 0; start < addresses.Count; start += batch.Length)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             int size = Math.Min(batch.Length, addresses.Count - start);
-            for (int i = 0; i < size; i++)
+            for (int i = 0; i < size; i++) { batch[i] = SearchAsync(addresses[start + i], cancellationToken); }
+            List<ResolvedInput>[] answers = await ProviderHttp.AwaitBatchAsync(Task.WhenAll(batch.AsSpan(0, size)), cancellationToken);
+            for (int i = 0; i < answers.Length; i++)
             {
-                batch[i] = SearchAsync(addresses[start + i], cancellationToken);
+                string request = (start + i).ToString(System.Globalization.CultureInfo.InvariantCulture);
+                foreach (ResolvedInput output in answers[i]) { merged.Add(request, output); }
             }
-
-            List<ResolvedInput>[] outputs = await Task.WhenAll(batch.AsSpan(0, size));
-            int total = result.Count;
-            for (int i = 0; i < outputs.Length; i++) { total = checked(total + outputs[i].Count); }
-            _ = result.EnsureCapacity(total);
-            for (int i = 0; i < outputs.Length; i++) { result.AddRange(outputs[i]); }
         }
-
-        return result;
+        cancellationToken.ThrowIfCancellationRequested();
+        return merged.ToList();
     }
 
     private async Task<List<ResolvedInput>> SearchAsync(ByteString address, CancellationToken cancellationToken)
@@ -136,31 +139,23 @@ public sealed class UtxoRpc : ICardanoDataProvider, IDisposable
         {
             Predicate = new UtxoPredicate { Match = new AnyUtxoPattern { Cardano = new Spec.TxOutputPattern { Address = new Spec.AddressPattern { ExactAddress = address } } } }
         };
-        List<ResolvedInput> result = [];
+        ResolvedInputSet found = new(nameof(UtxoRpc), _methods.SearchUtxos.Name);
+        HashSet<string> cursors = [with(StringComparer.Ordinal)];
         while (true)
         {
             LeanUtxosResponse response = await UnaryAsync(_methods.SearchUtxos, request, cancellationToken);
             try
             {
-                _ = result.EnsureCapacity(checked(result.Count + response.Items.Count));
+                bool more = response.HasNextToken && response.NextToken.Length != 0;
+                if (more && !cursors.Add(response.NextToken)) { throw new InvalidDataException("The server repeated start_token."); }
                 for (int i = 0; i < response.Items.Count; i++)
                 {
-                    result.Add(ToResolvedInput(response.Items[i]));
+                    found.Add("search", ToResolvedInput(response.Items[i]));
                 }
-
-                if (!response.HasNextToken || response.NextToken.Length == 0)
-                {
-                    return result;
-                }
-
-                if (request.HasStartToken && response.NextToken == request.StartToken)
-                {
-                    throw new InvalidDataException("The server repeated start_token.");
-                }
-
+                if (!more) { return found.ToList(); }
                 request.StartToken = response.NextToken;
             }
-            catch (Exception exception)
+            catch (Exception exception) when (exception is not (ProviderException or OutOfMemoryException))
             {
                 throw Unusable(_methods.SearchUtxos, exception);
             }
@@ -189,10 +184,11 @@ public sealed class UtxoRpc : ICardanoDataProvider, IDisposable
     /// <param name="index">The output index.</param>
     /// <param name="cancellationToken">Cancels the call.</param>
     /// <returns>The matching output, or null if not found.</returns>
-    public async Task<ResolvedInput?> GetUtxoByOutRefAsync(string txHash, ulong index, CancellationToken cancellationToken)
+    public async Task<ResolvedInput?> GetUtxoByOutRefAsync(string txHash, ulong index, CancellationToken cancellationToken = default)
     {
         ByteString hash = ParseHash(txHash);
         ArgumentOutOfRangeException.ThrowIfGreaterThan(index, uint.MaxValue);
+        cancellationToken.ThrowIfCancellationRequested();
         LeanUtxosResponse response;
         try
         {
@@ -217,7 +213,7 @@ public sealed class UtxoRpc : ICardanoDataProvider, IDisposable
 
             return null;
         }
-        catch (Exception exception)
+        catch (Exception exception) when (exception is not OutOfMemoryException)
         {
             throw Unusable(_methods.ReadUtxos, exception);
         }
@@ -227,9 +223,10 @@ public sealed class UtxoRpc : ICardanoDataProvider, IDisposable
     /// <param name="txHash">A 32-byte hash in hex.</param>
     /// <param name="cancellationToken">Cancels the call.</param>
     /// <returns>The metadata, or null when absent or not found.</returns>
-    public async Task<LedgerMetadata?> GetTransactionMetadataAsync(string txHash, CancellationToken cancellationToken)
+    public async Task<LedgerMetadata?> GetTransactionMetadataAsync(string txHash, CancellationToken cancellationToken = default)
     {
         ByteString hash = ParseHash(txHash);
+        cancellationToken.ThrowIfCancellationRequested();
         LeanReadTxResponse response;
         try
         {
@@ -246,7 +243,7 @@ public sealed class UtxoRpc : ICardanoDataProvider, IDisposable
             ReadOnlyMemory<byte>? auxiliary = AuxiliaryData(tx);
             return auxiliary is { } data ? CborSerializer.Deserialize<Auxiliary>(data).Metadata() : null;
         }
-        catch (Exception exception)
+        catch (Exception exception) when (exception is not OutOfMemoryException)
         {
             throw Unusable(_methods.ReadTx, exception);
         }
@@ -298,9 +295,10 @@ public sealed class UtxoRpc : ICardanoDataProvider, IDisposable
     /// <param name="tx">The signed transaction.</param>
     /// <param name="cancellationToken">Cancels the call.</param>
     /// <returns>The server's 32-byte reference as lower-case hex.</returns>
-    public async Task<string> SubmitTransactionAsync(ITransaction tx, CancellationToken cancellationToken)
+    public async Task<string> SubmitTransactionAsync(ITransaction tx, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(tx);
+        cancellationToken.ThrowIfCancellationRequested();
         SubmitTxResponse response = await UnaryAsync(_methods.SubmitTx, new SubmitTxRequest
         {
             Tx = new SubmitChainTx { Raw = UnsafeByteOperations.UnsafeWrap(CborSerializer.SerializeToMemory(tx)) }
@@ -310,7 +308,7 @@ public sealed class UtxoRpc : ICardanoDataProvider, IDisposable
             if (response.Ref.Length != 32) { throw new InvalidDataException("The submitted transaction ref must be 32 bytes."); }
             return Convert.ToHexStringLower(response.Ref.Span);
         }
-        catch (Exception exception)
+        catch (Exception exception) when (exception is not OutOfMemoryException)
         {
             throw Unusable(_methods.SubmitTx, exception);
         }
@@ -320,9 +318,11 @@ public sealed class UtxoRpc : ICardanoDataProvider, IDisposable
     /// <param name="txHash">The transaction's 32-byte hash in hex.</param>
     /// <param name="cancellationToken">Bounds the wait, including for dropped transactions.</param>
     /// <returns>A task that completes when the server reports the transaction on chain.</returns>
-    public async Task WaitForConfirmationAsync(string txHash, CancellationToken cancellationToken)
+    public async Task WaitForConfirmationAsync(string txHash, CancellationToken cancellationToken = default)
     {
         ByteString hash = ParseHash(txHash);
+        cancellationToken.ThrowIfCancellationRequested();
+        ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
         try
         {
             using AsyncServerStreamingCall<WaitForTxResponse> call = _invoker.AsyncServerStreamingCall(
@@ -343,6 +343,10 @@ public sealed class UtxoRpc : ICardanoDataProvider, IDisposable
         catch (RpcException exception)
         {
             throw Failure(_methods.WaitForTx, exception, cancellationToken);
+        }
+        catch (Exception exception) when (exception is not (ProviderException or OutOfMemoryException))
+        {
+            throw ProviderHttp.TransportFailure(nameof(UtxoRpc), _methods.WaitForTx.Name, exception, cancellationToken);
         }
     }
 
@@ -376,50 +380,52 @@ public sealed class UtxoRpc : ICardanoDataProvider, IDisposable
         return UnsafeByteOperations.UnsafeWrap(bytes);
     }
 
-    private static UtxoRpcException Unusable(IMethod method, Exception cause) => new($"{method.Name}: {cause.Message}", cause);
+    private static UtxoRpcException Unusable(IMethod method, Exception cause) => new($"{method.Name}: {UnusableReason(cause)}");
 
-    /// <summary>Reads all outputs without a cancellation token.</summary>
-    /// <param name="address">The addresses to query.</param>
-    /// <returns>All outputs.</returns>
-    public Task<List<ResolvedInput>> GetUtxosAsync(List<string> address) => GetUtxosAsync(address, CancellationToken.None);
-    /// <summary>Reads parameters without a cancellation token.</summary>
-    /// <returns>The current parameters.</returns>
-    public Task<ProtocolParams> GetParametersAsync() => GetParametersAsync(CancellationToken.None);
-    /// <summary>Submits once without a cancellation token.</summary>
-    /// <param name="tx">The signed transaction.</param>
-    /// <returns>The server reference.</returns>
-    public Task<string> SubmitTransactionAsync(ITransaction tx) => SubmitTransactionAsync(tx, CancellationToken.None);
-    /// <summary>Reads one output without a cancellation token.</summary>
-    /// <param name="txHash">The transaction hash.</param>
-    /// <param name="index">The output index.</param>
-    /// <returns>The matching output or null.</returns>
-    public Task<ResolvedInput?> GetUtxoByOutRefAsync(string txHash, ulong index) => GetUtxoByOutRefAsync(txHash, index, CancellationToken.None);
-    /// <summary>Reads metadata without a cancellation token.</summary>
-    /// <param name="txHash">The transaction hash.</param>
-    /// <returns>The metadata or null.</returns>
-    public Task<LedgerMetadata?> GetTransactionMetadataAsync(string txHash) => GetTransactionMetadataAsync(txHash, CancellationToken.None);
+    private static string UnusableReason(Exception cause) => cause is InvalidDataException
+        ? cause.Message : $"unusable response ({cause.GetType().Name})";
 
     private async Task<TResponse> UnaryAsync<TRequest, TResponse>(Method<TRequest, TResponse> method, TRequest request, CancellationToken cancellationToken)
         where TRequest : class
         where TResponse : class
     {
+        cancellationToken.ThrowIfCancellationRequested();
+        ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
         try
         {
             using AsyncUnaryCall<TResponse> call = _invoker.AsyncUnaryCall(method, null,
                 new CallOptions(_headers, DateTime.UtcNow + _timeout, cancellationToken), request);
-            return await call.ResponseAsync;
+            TResponse response = await call.ResponseAsync;
+            cancellationToken.ThrowIfCancellationRequested();
+            return response;
         }
         catch (RpcException exception)
         {
             throw Failure(method, exception, cancellationToken);
         }
+        catch (Exception exception) when (exception is not OutOfMemoryException)
+        {
+            Exception translated = ProviderHttp.TransportFailure(nameof(UtxoRpc), method.Name, exception, cancellationToken);
+            throw ReferenceEquals(method, _methods.SubmitTx) && translated is ProviderException { IsTransient: true }
+                ? new ProviderException($"{translated.Message}; the transaction may have been accepted", isTransient: true)
+                : translated;
+        }
     }
 
-    private static Exception Failure(IMethod method, RpcException exception, CancellationToken cancellationToken) =>
-        cancellationToken.IsCancellationRequested
-            ? new OperationCanceledException($"{method.Name} was cancelled.", exception, cancellationToken)
-            : new UtxoRpcException($"{method.Name} failed: {exception.StatusCode}: {exception.Status.Detail}", exception.StatusCode, exception);
+    private Exception Failure(IMethod method, RpcException exception, CancellationToken cancellationToken)
+    {
+        if (cancellationToken.IsCancellationRequested) { return new OperationCanceledException($"{method.Name} was cancelled.", cancellationToken); }
+        string message = $"{method.Name} failed: {exception.StatusCode}";
+        if (ReferenceEquals(method, _methods.SubmitTx) && exception.StatusCode is StatusCode.Unavailable or StatusCode.DeadlineExceeded)
+        {
+            message += "; the transaction may have been accepted";
+        }
+        return new UtxoRpcException(message, exception.StatusCode, ProviderHttp.Redact(exception.Status.Detail, _secrets));
+    }
 
     /// <summary>Disposes the channel; repeated calls have no effect.</summary>
-    public void Dispose() => _channel.Dispose();
+    public void Dispose()
+    {
+        if (Interlocked.Exchange(ref _disposed, 1) == 0) { _channel.Dispose(); }
+    }
 }

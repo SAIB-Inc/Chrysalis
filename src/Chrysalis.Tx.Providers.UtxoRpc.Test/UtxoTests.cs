@@ -115,8 +115,46 @@ public sealed class UtxoTests
         };
         using UtxoRpc provider = new(fake.Endpoint, NetworkType.Preprod);
         UtxoRpcException error = await Assert.ThrowsAsync<UtxoRpcException>(() => provider.GetUtxosAsync([TestData.Address()], CancellationToken.None));
-        if (repeat) { Assert.Null(error.StatusCode); Assert.NotNull(error.InnerException); }
+        if (repeat) { Assert.Null(error.StatusCode); Assert.Null(error.InnerException); }
         else { Assert.Equal(StatusCode.Unavailable, error.StatusCode); }
+        Assert.Equal(2, fake.RequestCount);
+    }
+
+    /// <summary>Repeated output identity or a cursor cycle fails the entire read.</summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task RejectsRepeatedIdentityOrCursorCycle(bool cycle)
+    {
+        using CancellationTokenSource timeout = new(TimeSpan.FromSeconds(10));
+        await using FakeUtxoRpc fake = await FakeUtxoRpc.StartAsync();
+        int page = 0;
+        fake.SearchHandler = (_, _) =>
+        {
+            page++;
+            return Task.FromResult(new SearchUtxosResponse
+            {
+                Items = { TestData.Output(cycle ? (uint)page : 0) },
+                NextToken = page == 2 ? "B" : "A"
+            });
+        };
+        using UtxoRpc provider = new(fake.Endpoint, NetworkType.Preprod);
+        ProviderException error = await Assert.ThrowsAnyAsync<ProviderException>(() => provider.GetUtxosAsync([TestData.Address()], timeout.Token));
+        Assert.Contains(cycle ? "repeated start_token" : "repeated output", error.Message, StringComparison.Ordinal);
+        Assert.False(error.IsTransient);
+        Assert.Equal(cycle ? 3 : 2, fake.RequestCount);
+    }
+
+    /// <summary>Two outrefs in one transaction survive while repeated answers from different addresses merge.</summary>
+    [Fact]
+    public async Task DistinguishesIndicesAndMergesEqualAnswers()
+    {
+        using CancellationTokenSource timeout = new(TimeSpan.FromSeconds(10));
+        await using FakeUtxoRpc fake = await FakeUtxoRpc.StartAsync();
+        fake.SearchHandler = (_, _) => Task.FromResult(new SearchUtxosResponse { Items = { TestData.Output(0), TestData.Output(1) } });
+        using UtxoRpc provider = new(fake.Endpoint, NetworkType.Preprod);
+        List<ResolvedInput> results = await provider.GetUtxosAsync([TestData.Address(), TestData.Address(2)], timeout.Token);
+        Assert.Equal(new ulong[] { 0, 1 }, results.Select(input => input.Outref.Index));
         Assert.Equal(2, fake.RequestCount);
     }
 
@@ -185,7 +223,7 @@ public sealed class UtxoTests
         using UtxoRpc provider = new(fake.Endpoint, NetworkType.Preprod);
         UtxoRpcException error = await Assert.ThrowsAsync<UtxoRpcException>(() => provider.GetUtxosAsync([TestData.Address()], CancellationToken.None));
         Assert.Null(error.StatusCode);
-        Assert.NotNull(error.InnerException);
+        Assert.Null(error.InnerException);
         Assert.StartsWith("SearchUtxos: ", error.Message, StringComparison.Ordinal);
     }
 
@@ -260,7 +298,11 @@ public sealed class UtxoTests
         _ = await Assert.ThrowsAnyAsync<ArgumentException>(() => provider.GetUtxoByOutRefAsync(new string('z', 64), 0, CancellationToken.None));
         _ = await Assert.ThrowsAnyAsync<ArgumentException>(() => provider.GetUtxoByOutRefAsync(TestData.Hash, (ulong)uint.MaxValue + 1, CancellationToken.None));
         _ = await Assert.ThrowsAnyAsync<ArgumentException>(() => provider.GetUtxosAsync([badAddress == "empty-bech32" ? Bech32Util.Encode([], "addr_test") : badAddress], CancellationToken.None));
-        Assert.Empty(await provider.GetUtxosAsync([], CancellationToken.None));
+        using CancellationTokenSource timeout = new(TimeSpan.FromSeconds(10));
+        Assert.Empty(await provider.GetUtxosAsync([], timeout.Token));
+        await timeout.CancelAsync();
+        OperationCanceledException error = await Assert.ThrowsAnyAsync<OperationCanceledException>(() => provider.GetUtxosAsync([], timeout.Token));
+        Assert.Equal(timeout.Token, error.CancellationToken);
         Assert.Equal(0, fake.RequestCount);
     }
 }

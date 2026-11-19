@@ -3,7 +3,7 @@ using Grpc.Core;
 namespace Chrysalis.Tx.Providers;
 
 /// <summary>A failed UTxO RPC call or an unusable server response.</summary>
-public sealed class UtxoRpcException : Exception
+public sealed class UtxoRpcException : ProviderException
 {
     /// <summary>Initializes an exception without a message or status.</summary>
     public UtxoRpcException()
@@ -24,10 +24,12 @@ public sealed class UtxoRpcException : Exception
     }
 
     /// <summary>Initializes an exception for a failed gRPC call.</summary>
-    /// <param name="message">The operation, status and server detail.</param>
+    /// <param name="message">The operation and status.</param>
     /// <param name="statusCode">The gRPC status.</param>
-    /// <param name="innerException">The underlying call failure.</param>
-    public UtxoRpcException(string message, StatusCode statusCode, Exception innerException) : base(message, innerException) =>
+    /// <param name="detail">The redacted server detail.</param>
+    public UtxoRpcException(string message, StatusCode statusCode, string detail)
+        : base(message, statusCode is Grpc.Core.StatusCode.Unavailable or Grpc.Core.StatusCode.DeadlineExceeded
+            or Grpc.Core.StatusCode.ResourceExhausted or Grpc.Core.StatusCode.Aborted, detail) =>
         StatusCode = statusCode;
 
     /// <summary>Gets the gRPC status, or null when a successful call returned unusable data.</summary>

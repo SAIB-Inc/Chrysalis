@@ -197,6 +197,6 @@ public sealed class ParametersTests
         Assert.Null(error.StatusCode);
         Assert.StartsWith("ReadParams: ", error.Message, StringComparison.Ordinal);
         Assert.Contains(field, error.Message, StringComparison.Ordinal);
-        _ = Assert.IsType<InvalidDataException>(error.InnerException);
+        Assert.Null(error.InnerException);
     }
 }

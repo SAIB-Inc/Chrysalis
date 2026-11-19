@@ -29,26 +29,59 @@ public sealed class TransportTests(ITestOutputHelper output)
 
     /// <summary>Server status and detail are preserved without a retry or metadata disclosure.</summary>
     /// <param name="status">The server's gRPC status.</param>
+    /// <param name="transient">Whether a later read might succeed.</param>
     /// <returns>A task for the failed call.</returns>
     [Theory]
-    [InlineData(StatusCode.Unavailable)]
-    [InlineData(StatusCode.Unauthenticated)]
-    [InlineData(StatusCode.PermissionDenied)]
-    [InlineData(StatusCode.ResourceExhausted)]
-    public async Task PreservesStatusWithoutRetrying(StatusCode status)
+    [InlineData(StatusCode.Unavailable, true)]
+    [InlineData(StatusCode.Unauthenticated, false)]
+    [InlineData(StatusCode.PermissionDenied, false)]
+    [InlineData(StatusCode.ResourceExhausted, true)]
+    [InlineData(StatusCode.Aborted, true)]
+    public async Task PreservesStatusWithoutRetrying(StatusCode status, bool transient)
     {
+        using CancellationTokenSource timeout = new(TimeSpan.FromSeconds(10));
         await using FakeUtxoRpc fake = await FakeUtxoRpc.StartAsync();
         fake.Handler = (_, _) => throw new RpcException(new Status(status, "test server detail"));
-        using UtxoRpc provider = new(fake.Endpoint, NetworkType.Preprod, new Dictionary<string, string> { ["x-test-token"] = "CANARY-hidden" });
-        UtxoRpcException error = await Assert.ThrowsAsync<UtxoRpcException>(() => provider.GetParametersAsync(CancellationToken.None));
+        using UtxoRpc provider = new(fake.Endpoint, NetworkType.Preprod);
+        UtxoRpcException error = await Assert.ThrowsAsync<UtxoRpcException>(() => provider.GetParametersAsync(timeout.Token));
         Assert.Equal(status, error.StatusCode);
-        Assert.Equal($"ReadParams failed: {status}: test server detail", error.Message);
-        _ = Assert.IsType<RpcException>(error.InnerException);
-        Assert.DoesNotContain("CANARY-hidden", error.Message, StringComparison.Ordinal);
+        Assert.Equal(transient, error.IsTransient);
+        Assert.Equal($"ReadParams failed: {status}", error.Message);
+        Assert.Equal("test server detail", error.Detail);
+        Assert.Null(error.InnerException);
         Assert.Equal(1, fake.RequestCount);
     }
 
-    /// <summary>Cancellation during a call retains the caller's token and the gRPC cause.</summary>
+    /// <summary>The server can echo either a whole header or the token on its own.</summary>
+    [Theory]
+    [InlineData("x-test-token", "", "CANARY-plain-header")]
+    [InlineData("authorization", "Bearer ", "CANARY-bearer-header")]
+    [InlineData("authorization", "Basic ", "CANARY-basic-header")]
+    public async Task MasksHeaderTokensAlone(string name, string scheme, string token)
+    {
+        ArgumentNullException.ThrowIfNull(token);
+        using CancellationTokenSource timeout = new(TimeSpan.FromSeconds(10));
+        await using FakeUtxoRpc fake = await FakeUtxoRpc.StartAsync();
+        using UtxoRpc provider = new(fake.Endpoint, NetworkType.Preprod, new Dictionary<string, string> { [name] = scheme + token });
+        foreach (string text in new[] { token + "#", new string('z', 1018) + token, "#" + token })
+        {
+            fake.Handler = (_, _) => throw new RpcException(new Status(StatusCode.PermissionDenied, text));
+            UtxoRpcException error = await Assert.ThrowsAsync<UtxoRpcException>(() => provider.GetParametersAsync(timeout.Token));
+            Assert.Equal("ReadParams failed: PermissionDenied", error.Message);
+            Assert.Contains('*', error.Detail);
+            foreach (int i in Enumerable.Range(0, token.Length - 7))
+            {
+                string part = token.Substring(i, 8);
+                Assert.DoesNotContain(part, error.Detail, StringComparison.OrdinalIgnoreCase);
+                Assert.DoesNotContain(part, error.ToString(), StringComparison.OrdinalIgnoreCase);
+            }
+            Assert.Null(error.InnerException);
+            Assert.Empty(error.Data);
+        }
+        Assert.Equal(3, fake.RequestCount);
+    }
+
+    /// <summary>Cancellation during a call retains only the caller's token.</summary>
     /// <returns>A task for the cancelled call.</returns>
     [Fact]
     public async Task PreservesCallerCancellation()
@@ -61,14 +94,14 @@ public sealed class TransportTests(ITestOutputHelper output)
             await Task.Delay(Timeout.InfiniteTimeSpan, context.CancellationToken);
             return FakeUtxoRpc.Answer(new());
         };
-        using CancellationTokenSource cancellation = new();
+        using CancellationTokenSource cancellation = new(TimeSpan.FromSeconds(10));
         using UtxoRpc provider = new(fake.Endpoint, NetworkType.Preprod);
         Task call = provider.GetParametersAsync(cancellation.Token);
         await entered.Task.WaitAsync(TimeSpan.FromSeconds(10));
         await cancellation.CancelAsync();
         OperationCanceledException error = await Assert.ThrowsAnyAsync<OperationCanceledException>(() => call);
         Assert.Equal(cancellation.Token, error.CancellationToken);
-        _ = Assert.IsType<RpcException>(error.InnerException);
+        Assert.Null(error.InnerException);
         Assert.Equal(1, fake.RequestCount);
     }
 
@@ -83,12 +116,14 @@ public sealed class TransportTests(ITestOutputHelper output)
             await Task.Delay(TimeSpan.FromSeconds(5), context.CancellationToken);
             return FakeUtxoRpc.Answer(new());
         };
+        using CancellationTokenSource timeout = new(TimeSpan.FromSeconds(10));
         using UtxoRpc provider = new(fake.Endpoint, NetworkType.Preprod, timeout: TimeSpan.FromMilliseconds(200));
-        UtxoRpcException error = await Assert.ThrowsAsync<UtxoRpcException>(() => provider.GetParametersAsync(CancellationToken.None));
+        UtxoRpcException error = await Assert.ThrowsAsync<UtxoRpcException>(() => provider.GetParametersAsync(timeout.Token));
         Assert.Equal(StatusCode.DeadlineExceeded, error.StatusCode);
-        RpcException cause = Assert.IsType<RpcException>(error.InnerException);
-        output.WriteLine("Deadline detail: [{0}]", cause.Status.Detail);
-        Assert.Equal($"ReadParams failed: DeadlineExceeded: {cause.Status.Detail}", error.Message);
+        Assert.True(error.IsTransient);
+        Assert.Equal("ReadParams failed: DeadlineExceeded", error.Message);
+        Assert.Null(error.InnerException);
+        output.WriteLine("Deadline detail: [{0}]", error.Detail);
     }
 
     /// <summary>Invalid endpoints, header names and timeouts fail before any call.</summary>

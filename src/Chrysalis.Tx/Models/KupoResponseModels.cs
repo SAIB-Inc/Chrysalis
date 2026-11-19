@@ -8,7 +8,7 @@ namespace Chrysalis.Tx.Models;
 /// <param name="Coins">The lovelace amount.</param>
 /// <param name="Assets">Optional dictionary of asset identifiers to quantities.</param>
 public record KupoValue(
-    [property: JsonPropertyName("coins")] long Coins,
+    [property: JsonPropertyName("coins"), JsonRequired] long Coins,
     [property: JsonPropertyName("assets")] Dictionary<string, long>? Assets);
 
 /// <summary>
@@ -17,8 +17,8 @@ public record KupoValue(
 /// <param name="Language">The script language (native, plutus:v1, plutus:v2, plutus:v3).</param>
 /// <param name="IScript">The hex-encoded script bytes.</param>
 public record KupoScript(
-    [property: JsonPropertyName("language")] string Language,
-    [property: JsonPropertyName("script")] string IScript);
+    [property: JsonPropertyName("language"), JsonRequired] string Language,
+    [property: JsonPropertyName("script"), JsonRequired] string IScript);
 
 /// <summary>
 /// Represents the creation point of a Kupo UTxO match.
@@ -61,10 +61,10 @@ public record KupoSpentAt(
 /// <param name="SpentAt">When the UTxO was spent, if applicable.</param>
 public record KupoMatch(
     [property: JsonPropertyName("transaction_index")] int TransactionIndex,
-    [property: JsonPropertyName("transaction_id")] string TransactionId,
-    [property: JsonPropertyName("output_index")] int OutputIndex,
-    [property: JsonPropertyName("address")] string Address,
-    [property: JsonPropertyName("value")] KupoValue Value,
+    [property: JsonPropertyName("transaction_id"), JsonRequired] string TransactionId,
+    [property: JsonPropertyName("output_index"), JsonRequired] int OutputIndex,
+    [property: JsonPropertyName("address"), JsonRequired] string Address,
+    [property: JsonPropertyName("value"), JsonRequired] KupoValue Value,
     [property: JsonPropertyName("datum_hash")] string? DatumHash,
     [property: JsonPropertyName("datum")] string? Datum,
     [property: JsonPropertyName("datum_type")] string? DatumType,

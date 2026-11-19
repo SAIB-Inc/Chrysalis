@@ -22,6 +22,7 @@
     <ProjectReference Include="../Chrysalis/Chrysalis.csproj" />
     <Protobuf Include="../Chrysalis.Tx.Providers.UtxoRpc/Protos/utxorpc/**/*.proto"
               ProtoRoot="../Chrysalis.Tx.Providers.UtxoRpc/Protos" GrpcServices="Both" Access="Internal" />
+    <Compile Include="../Chrysalis.Tx.Test/Providers/StubHttpHandler.cs" Link="Providers/StubHttpHandler.cs" />
     <None Update="Golden/**" CopyToOutputDirectory="PreserveNewest" />
     <None Include="../Chrysalis.Tx.Providers.UtxoRpc/Protos/utxorpc/**"
           Link="Protos/utxorpc/%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />

@@ -93,7 +93,7 @@ public sealed class MetadataTests
         using UtxoRpc provider = new(fake.Endpoint, NetworkType.Preprod);
         UtxoRpcException error = await Assert.ThrowsAsync<UtxoRpcException>(() => provider.GetTransactionMetadataAsync(TestData.Hash));
         Assert.Null(error.StatusCode);
-        Assert.NotNull(error.InnerException);
+        Assert.Null(error.InnerException);
         Assert.StartsWith("ReadTx: ", error.Message, StringComparison.Ordinal);
     }
 }
