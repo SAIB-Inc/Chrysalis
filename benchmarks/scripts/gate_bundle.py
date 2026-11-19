@@ -2,6 +2,7 @@
 import copy
 import contextlib
 import datetime as dt
+from decimal import Decimal
 import fcntl
 import hashlib
 import json
@@ -26,9 +27,19 @@ from gate_fly_guard import clean_run_folder, probe_entries
 IMAGE_INDEX = 'mcr.microsoft.com/dotnet/sdk@sha256:65f3c7c6a25a239ab3e6719f2896147e7b68242ff2d8818dd70498bde6ef8bea'
 IMAGE = 'mcr.microsoft.com/dotnet/sdk@sha256:7913685c883a29dd8ba79da96172f5c6b29ed9be706ebe95935e3ef45f19c9c1'
 MICRO_PROBE_INVOCATIONS = 16
-HOST_FILES = ('gate.py', 'gate_time.py', 'gate_bundle.py', 'gate_fly.sh', 'gate_fly_common.sh',
+FLY_HOST_FILES = ('gate.py', 'gate_time.py', 'gate_bundle.py', 'gate_fly.sh', 'gate_fly_common.sh',
               'gate_fly_watchdog.sh', 'gate_fly_guard.py', 'gate_schedule.py', 'gate_session.py', 'gate_stats.py',
               'run_benchmarks.py', 'summarize.py', 'provenance.py', 'n2n_replay_server.py')
+
+AZURE_GUEST_FILES = tuple(name for name in FLY_HOST_FILES if name not in (
+    'gate_fly.sh', 'gate_fly_common.sh', 'gate_fly_watchdog.sh'))
+HOST_FILES = {'fly': FLY_HOST_FILES, 'azure': AZURE_GUEST_FILES + (
+    'gate_azure.py', 'gate_azure_channel.py', 'gate_azure_cleanup.py', 'gate_azure_guard.py',
+    'gate_azure_guest.py', 'gate_azure_payload.py', 'gate_azure_proof.py')}
+
+
+def provider_for_config(config):
+    return config.get('time', {}).get('platform', {}).get('provider', 'fly')
 
 
 def sha(path):
@@ -68,6 +79,7 @@ def pack(root, destination):
 
 def time_rows(rows, config):
     result = []
+    provider = provider_for_config(config)
     for original in rows:
         if original['kind'] != 'time':
             continue
@@ -81,9 +93,13 @@ def time_rows(rows, config):
                 timing.require(row.get('replay', inferred) == inferred, 'Catalogue timing replay changed')
             row.setdefault('replay', inferred)
             timing.require(row['replay'] in ('tcp', 'offline'), 'Unknown timing replay')
-        row['noise'] = copy.deepcopy(config['time']['noise'].get(row['id'], config['time']['noise'].get(row['replay'])))
+        if provider != 'fly':
+            row.update(provider=provider, region=config['time']['platform']['regions'][0])
+        noise = config['time']['noise']
+        records = noise.get(timing.provider_for(row)['machine'], noise)
+        row['noise'] = copy.deepcopy(records.get(row['id'], records.get(row['replay'])))
         if row['noise'] is not None:
-            timing.require(timing.noise_band(row['noise']) is not None, 'Noise record provenance or band mismatch')
+            timing.require(timing.noise_band(row['noise'], provider) is not None, 'Noise record provenance or band mismatch')
         result.append(row)
     return result
 
@@ -98,6 +114,7 @@ def calibrate_micro(observation, invocations):
 def prepare(output, rows, staged, config, local):
     """Called inside run's PC heavy slot. Dry-run every process before sealing."""
     import gate
+    timing.require(provider_for_config(config) == 'fly', 'Azure needs Mac build/import; legacy prepare cannot measure for Azure')
     selected = time_rows(rows, config)
     if not selected:
         return dict(timePlans=[])
@@ -115,7 +132,7 @@ def prepare(output, rows, staged, config, local):
         for runtime in sorted({side['runtime'] for side in staged.values()}):
             copy_files(dotnet / family / runtime, base / 'dotnet' / family / runtime)
     scripts = base / 'scripts'
-    copy_files(gate.REPO / 'benchmarks/scripts', scripts, files=HOST_FILES)
+    copy_files(gate.REPO / 'benchmarks/scripts', scripts, files=HOST_FILES['fly'])
     fixture_relative = Path('benchmarks/Chrysalis.Benchmarks')
     fixtures = gate.REPO / fixture_relative
     fixture_hashes = json.loads((fixtures / 'sha256.json').read_text())
@@ -210,7 +227,7 @@ def prepare(output, rows, staged, config, local):
             plans.insert(plans.index(plan), band)
     timing.require(sum(plan['limitWithRepeatUsd'] for plan in plans) <= budget, 'Aggregate timing reservation exceeds budget')
     host = output / 'input/fly'
-    copy_files(gate.REPO / 'benchmarks/scripts', host, files=HOST_FILES)
+    copy_files(gate.REPO / 'benchmarks/scripts', host, files=HOST_FILES['fly'])
     # Remote script always archives even when bootstrap or session fails.
     (base / 'bootstrap.sh').write_text('''#!/usr/bin/env bash
 set -euo pipefail
@@ -309,20 +326,34 @@ def archive_payload(note, plan=None, *, repeat=False, machine=None):
 
 def verified_machine(note, plan, spent, *, repeat=False, selected=None):
     """Check paid evidence before permitting any subsequent launch."""
+    azure = plan.get('provider') == 'azure'
     cost = note_json(note, 'duration-cost.json') or {}
     booked = cost.get('totalEstimateWithReserveUsd')
     booked = booked if type(booked) in (float, int) and booked >= 0 else None
     warnings = []
     if cost.get('cleanupOutstanding') is not False or booked is None:
         warnings.append('unknown booked cost or cleanup outstanding')
-    if cost.get('withinSealedGuard') is False or (booked is not None and booked > timing.price(plan['destroyGuardSeconds'], timing.region_for(plan))):
+    g = plan['destroyGuardSeconds']
+    start, elapsed = cost.get('cleanupStartedSeconds'), cost.get('lifetimeSeconds')
+    allowed_tail = (azure and booked is not None and booked <= timing.plan_price(plan) and
+                    type(start) in (int, float) and type(elapsed) in (int, float) and
+                    0 <= start <= g < elapsed <= g + timing.PROVIDERS['azure']['tail'])
+    if cost.get('withinSealedGuard') is False and allowed_tail:
+        warnings.append('over-guard cleanup tail within full reservation')
+    elif cost.get('withinSealedGuard') is False or (booked is not None and booked > timing.plan_price(plan)):
         warnings.append('booked cost past machine guard')
     elif cost.get('withinSealedGuard') is not True and not warnings:
         warnings.append('unknown machine guard cost status')
-    if booked is not None and spent + booked > plan['limitUsd']:
+    if not azure and booked is not None and spent + booked > plan['limitUsd']:
         warnings.append('booked cost exceeds session reservation')
     evidence = dict(bookedUsd=booked, costWarnings=warnings, invalid=None)
     try:
+        if azure:
+            meta = note_json(note, 'machine.json') or {}
+            timing.require(meta.get('provider') == 'azure' and meta.get('platform') == 'azure' and
+                           meta.get('machineClass') == timing.provider_for(plan)['machine'] and
+                           meta.get('region') in timing.provider_for(plan)['regions'], 'Unverified Azure machine')
+            evidence.update(provider='azure', region=meta['region'], steal='not observable on Azure')
         archive = note / 'results.tar.gz'
         timing.require(archive.is_file() and (note / 'results.sha256').is_file(), 'missing results archive or hash')
         evidence['archiveSha256'] = sha(archive)
@@ -347,7 +378,7 @@ def verified_machine(note, plan, spent, *, repeat=False, selected=None):
             reference = worker['builds'][worker['probe']['build']]
             identity = {key: reference[key] for key in ('commit', 'treeId', 'runtime', 'dllSha256s')}
             for record in records.values():
-                timing.require(record.get('identity') == identity and record.get('platform') == 'fly', 'probe reference identity or platform differs')
+                timing.require(record.get('identity') == identity and record.get('platform') == timing.provider_for(plan)['platform'], 'probe reference identity or platform differs')
                 try:
                     observed = record['data']
                     timing.require(observed.get('replay') == 'offline', 'replay differs')
@@ -384,7 +415,9 @@ def verified_machine(note, plan, spent, *, repeat=False, selected=None):
                        'launcher marked results invalid or diagnostic-only')
         proof = note_json(note, 'cleanup-proof.json') or {}
         timing.require(proof.get('ourAppAbsent') is True and not (note / 'cleanup-failed.json').exists(), 'no own-app absence proof')
-        timing.require(not warnings, '; '.join(warnings))
+        if not (azure and (warnings == ['over-guard cleanup tail within full reservation'] or
+                           not kept and warnings == ['booked cost past machine guard'])):
+            timing.require(not warnings, '; '.join(warnings))
     except (AttributeError, EOFError, OSError, KeyError, TypeError, ValueError, RuntimeError, tarfile.TarError) as error:
         evidence['invalid'] = 'session invalid: ' + str(error)
     return evidence
@@ -441,9 +474,12 @@ def retry_file(path):
     return path
 
 
-def draw_record(machine, number, phase, draw, app, decision):
-    return dict({key: value for key, value in machine.items() if key != 'probeRecords'},
+def draw_record(machine, number, phase, draw, app, decision, fallback=None):
+    result = dict({key: value for key, value in machine.items() if key != 'probeRecords'},
                 session=number, phase=phase, draw=draw, app=app, decision=decision)
+    if fallback is not None:
+        result['fallbackOf'] = fallback
+    return result
 
 
 def retry_phase(parent, item, plan, rows, phase, draws):
@@ -455,18 +491,19 @@ def retry_phase(parent, item, plan, rows, phase, draws):
                  sha256=hashlib.sha256(payload).hexdigest())
     timing.require(gate.encoded(item) == gate.encoded(entry), 'Retry index or timing payload changed')
     spent = 0
-    reserve = timing.price(plan['destroyGuardSeconds'], timing.region_for(plan))
+    azure = plan.get('provider') == 'azure'
+    reserve = timing.plan_price(plan)
     timing.require(0 < len(draws) <= plan['probe']['maxDraws'], 'Missing or excessive retry draws')
     for draw, recorded in enumerate(draws, 1):
-        timing.require(spent + reserve <= plan['limitUsd'], 'Retry draw exceeded session reservation')
+        timing.require(azure or spent + reserve <= plan['limitUsd'], 'Retry draw exceeded session reservation')
         app = recorded['app']
         note = parent / 'time/runs' / app
         machine = verified_machine(note, plan, spent, repeat=phase == 'repeat', selected=ids)
         wanted = 'kept' if draw == len(draws) else 'rejected'
         decision = 'rejected' if machine.get('probe', {}).get('decision') == 'rejected' else 'kept'
-        expected = draw_record(machine, 0, phase, draw, app, decision)
+        expected = draw_record(machine, 0, phase, draw, app, decision, recorded.get('fallbackOf'))
         proof = note_json(note, 'cleanup-proof.json') or {}
-        timing.require(not machine['invalid'] and proof.get('ourApp') == app and
+        timing.require(not machine['invalid'] and (proof.get('ourAppAbsent') is True if azure else proof.get('ourApp') == app) and
                        decision == wanted and gate.encoded(recorded) == gate.encoded(expected),
                        'Retry draw differs from verified machine evidence or lacks cleanup proof')
         spent += machine['bookedUsd']
@@ -494,16 +531,21 @@ def checked_retry_parent(parent, out, kind):
     claims = out / 'retry-claims'
     timing.require(not claims.is_symlink() and (not claims.exists() or claims.is_dir()) and
                    not os.path.lexists(claims / original), 'Retry lineage already claimed or invalid claims directory')
+    azure = seal.get('provider') == 'azure'
     for relative in seal['files']:
         path = parent / relative
-        timing.require(path.is_relative_to(parent / 'input') and not Path(relative).is_absolute(), 'Retry file is not a sealed input')
+        timing.require((path.is_relative_to(parent / 'input') or azure and relative in ('plan.json', 'build/sides.json'))
+                       and not Path(relative).is_absolute(), 'Retry file is not a sealed input')
         retry_file(path)
-    timing.require(all(seal['files'].get(f'input/fly/{name}') == sha(Path(__file__).with_name(name))
-                       for name in HOST_FILES), 'Original was not sealed with this retry-capable launcher')
+    provider = seal.get('provider', 'fly')
+    timing.require(all(seal['files'].get(f'input/{provider}/{name}') == sha(Path(__file__).with_name(name))
+                       for name in HOST_FILES[provider]), 'Original was not sealed with this retry-capable launcher')
     plans = seal.get('timePlans', [])
     rows = [row for row in seal['rows'] if row['kind'] == 'time' and row.get('rowClass') != 'recorded-only']
     scope = dict(originalSealId=original, mode='release', rows=[dict(id=row['id'], expected=row.get('expected')) for row in rows])
-    timing.require(json.loads(raw) == scope and seal['mode'] == 'release' and len(plans) == 1 and
+    timing.require(json.loads(raw) == scope and seal['mode'] == 'release' and (bool(plans) and not plans[0].get('bytesOnly') and
+                   all(p.get('bytesOnly') and p.get('bytesPhase', 'first') in (('first',) if i == 1 else ('repeat', 'noise'))
+                       for i, p in enumerate(plans[1:], 1)) if azure else len(plans) == 1) and
                    plans[0]['repeatAllowed'] and plans[0]['design'] != 'micro-band' and
                    rows and all(row['expected'] is not None for row in scope['rows']) and
                    scope['rows'] == [dict(id=row['id'], expected=row.get('expected')) for row in plans[0]['rows']
@@ -519,12 +561,17 @@ def checked_retry_parent(parent, out, kind):
                    'Invalid retry phase index or draw ledger')
     by_phase = {phase: [draw for draw in draws if draw['phase'] == phase] for phase in phases}
     apps = [draw['app'] for draw in draws]
+    if azure:
+        from gate_azure import Ledger
+        ledger = Ledger(checked_azure_local(seal), read_only=True)
+        acquired = json.loads(retry_file(parent / 'time/bytes-draws.json').read_text()) if plans[1:] else []
+        timing.require(isinstance(acquired, list), 'Invalid original bytes draw ledger')
+        apps = retry_azure_apps(parent, original, ledger.attempts, draws + acquired)
+        check_azure_retry_bytes(parent, plans, acquired)
     runs = parent / 'time/runs'
     timing.require(runs.is_dir() and runs.resolve() == runs and draws == [draw for phase in phases for draw in by_phase[phase]] and
                    len(apps) == len(set(apps)) and set(apps) == {note.name for note in runs.iterdir()} and
-                   all(re.fullmatch(r'chrysalis-gate-[0-9]{8}t[0-9]{6}-[a-f0-9]{8}', app) and
-                       (runs / app).is_dir() and not (runs / app).is_symlink() and
-                       all(path.is_file() and not path.is_symlink() for path in (runs / app).iterdir()) for app in apps),
+                   all(retry_run_ok(runs / app, app, azure) for app in apps),
                    'Retry draw ledger must name every app in phase order')
     first = retry_phase(parent, index[0], plan, plan['rows'], 'first', by_phase['first'])
     classification, ids = timing.session_outcome(parent, seal, 0, first_only=True)
@@ -537,6 +584,90 @@ def checked_retry_parent(parent, out, kind):
         timing.require(timing.session_outcome(parent, seal, 0)[0] == 'retry-eligible', 'Repeat phase is not retry-eligible')
         binding.update(firstIndex=index[0], repeatIds=ids)
     return parent, seal, binding, first
+
+
+def retry_run_ok(note, app, azure):
+    shape = re.fullmatch(r'chrysalis-gate-[0-9]{8}t[0-9]{6}-[a-f0-9]{8}', app)
+    if not (shape and note.is_dir() and not note.is_symlink()):
+        return False
+    def regular(path):
+        return path.is_file() and not path.is_symlink()
+    return (not azure or (note_json(note, 'cleanup-proof.json') or {}).get('ourAppAbsent') is True) and all(
+        regular(path) or (azure and path.name == '.guard' and path.is_dir() and not path.is_symlink() and
+                          all(regular(member) for member in path.iterdir())) for path in note.iterdir())
+
+
+def retry_azure_apps(parent, go, entries, draws):
+    entries = {app: entry for app, entry in entries.items() if entry.get('go') == go}
+    apps = set()
+    for draw in draws:
+        code = {'kept': 0, 'rejected': 5}.get(draw['decision'])
+        timing.require(code is not None, 'Invalid settled Azure retry outcome')
+        fallback = draw.get('fallbackOf')
+        for app, status, primary in ((draw['app'], code, fallback), (fallback, 6, None)):
+            if app is None and status == 6:
+                continue
+            attempt = entries.get(app, {})
+            wanted = dict(session=draw['session'], phase=draw['phase'], draw=draw['draw'],
+                          directory=parent.name, state='settled', exitCode=status, fallbackOf=primary)
+            timing.require(app not in apps and all(attempt.get(k) == v for k, v in wanted.items()),
+                           'Retry draw differs from Azure attempt ledger')
+            apps.add(app)
+    timing.require(apps == entries.keys(), 'Retry draw ledger must cover every original Azure attempt')
+    return apps
+
+
+def check_azure_retry_bytes(parent, plans, draws):
+    if not plans[1:]:
+        return
+    items = json.loads(retry_file(parent / 'time/bytes-index.json').read_text())
+    wanted, rejected, counts = {}, {}, {}
+    for draw in draws:
+        number, app, fallback = draw['session'], draw['app'], draw.get('fallbackOf')
+        timing.require(type(number) is int and 0 < number < len(plans) and draw['phase'] == 'first'
+                       and number not in wanted and draw['draw'] == counts.get(number, 0) + 1,
+                       'Invalid original bytes draw order or slot')
+        counts[number] = draw['draw']
+        if draw['decision'] == 'rejected':
+            rejected.setdefault(number, []).extend([fallback, app] if fallback else [app])
+            continue
+        record = dict(session=number, phase=plans[number].get('bytesPhase', 'first'), app=app,
+                      archiveSha256=draw['archiveSha256'])
+        if fallback:
+            record['fallbackOf'] = fallback
+        if rejected.get(number):
+            record['rejectedApps'] = rejected[number]
+        wanted[number] = record
+    timing.require(counts.keys() <= wanted.keys() and
+                   all(i in wanted for i, plan in enumerate(plans[1:], 1) if plan.get('bytesPhase', 'first') == 'first'),
+                   'Missing original bytes phase')
+    timing.require(items == list(wanted.values()), 'Invalid original bytes phase or role assignment')
+    for record in wanted.values():
+        app = record['app']
+        run = parent / 'time/runs' / app
+        timing.require(retry_run_ok(run, app, True) and sha(retry_file(run / 'results.tar.gz')) == record['archiveSha256'],
+                       'Original bytes phase changed')
+
+
+def checked_azure_local(seal):
+    import gate
+    path = os.environ.get('CHRYSALIS_GATE_LOCAL')
+    expected = seal['files'].get('input/azure-local.json')
+    timing.require(path and expected and sha(path) == expected, 'Azure local settings differ from seal')
+    return gate.local_config('azure')
+
+
+def go_command(go, *, dry=False, fly=False):
+    import gate
+    out = gate.REPO / 'benchmarks/out'
+    matches = [path.parent for path in out.glob('gate-*/seal.id') if path.read_text().strip() == go]
+    timing.require(len(matches) == 1, 'Go must identify exactly one local seal')
+    directory = checked_go_directory(matches[0], out)
+    provider = gate.read_seal(directory).get('provider', 'fly')
+    if provider == 'azure' and not fly:
+        return azure_command(go, directory, dry=dry)
+    timing.require(provider == 'fly' and not dry, 'Use gate.py go for an Azure seal; dry-run is Azure-only')
+    return fly_command(go, directory)
 
 
 def checked_fly_local(seal):
@@ -592,6 +723,135 @@ def fly_command(go, directory=None):
                             interrupt_notice=lambda: cleanup_notice(directory, seal))
 
 
+def checked_azure_go(directory, go):
+    import gate
+    from gate_azure import IMAGE, REGIONS, SIZE
+    timing.require(gate.digest(directory / 'seal.json') == go, 'Go differs from seal')
+    seal = gate.read_seal(directory)
+    from gate_azure_payload import validate_build_marker
+    validate_build_marker(seal.get('buildMarker'))
+    platform = seal['platform']
+    timing.require(seal['provider'] == 'azure' and platform['size'] == SIZE and platform['regions'] == list(REGIONS)
+                   and platform['image'] == IMAGE and re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+', platform['azCliVersion']),
+                   'Invalid sealed Azure platform')
+    timing.require(seal.get('programStopUsd') == 40 and seal.get('lineageCapUsd') in (None, 6) and seal.get('timePlans'),
+                   'Invalid Azure caps or empty session set')
+    for number, plan in enumerate(seal['timePlans']):
+        timing.require(plan.get('provider') == 'azure' and 'region' in plan and f'input/session-{number}.tar.gz' in seal['files'],
+                       'Unsealed Azure session')
+        timing.validate_limits(plan)
+        if not plan.get('bytesOnly'):
+            rule = timing.validate_probe_rule(plan.get('probe'))
+            timing.require(plan['destroyGuardSeconds'] - plan['measurementCutoffSeconds'] == 345 and
+                           828 <= plan['destroyGuardSeconds'] <= timing.GUARD and rule['maxDraws'] <= 6,
+                           'Invalid Azure session windows')
+    timing.require(set((directory / 'input/azure').iterdir()) == {directory / 'input/azure' / name for name in HOST_FILES['azure']}
+                   and all(seal['files'].get(f'input/azure/{name}') == sha(Path(__file__).with_name(name)) for name in HOST_FILES['azure']),
+                   'Azure host snapshots missing, stale or unsealed')
+    return seal, checked_azure_local(seal)
+
+
+def azure_notice(local, seal, go, plan, number, phase, *, prior=0.):
+    from gate_azure import Ledger
+    count = plan.get('probe', {}).get('maxDraws', 1)
+    count *= 2 if plan['region'] == 'eastus2' else 1
+    return Ledger(local, read_only=True).notice(seal, go, [timing.plan_price(plan)] * count, number, phase, prior=prior)
+
+
+def azure_command(go, directory, *, dry=False):
+    from gate_azure import Ledger, seals_reservations
+    from gate_azure_guard import wsl_context, check_context
+    seal, local = checked_azure_go(directory, go)
+    if dry:
+        Ledger(local, read_only=True).reserve(seal, go, seals_reservations(seal))
+        prior = Decimal(0)
+        for number, plan in enumerate(seal['timePlans']):
+            if seal.get('retryOf') and plan.get('bytesOnly'):
+                continue
+            phases = (seal['retryOf']['kind'],) if seal.get('retryOf') else ('first', 'repeat') if plan['repeatAllowed'] else ('first',)
+            for phase in phases:
+                notice = azure_notice(local, seal, go, plan, number, phase, prior=prior)
+                print(json.dumps(dict(notice, reservationUsd=timing.plan_price(plan)), sort_keys=True))
+                prior += Decimal(str(timing.plan_price(plan)))
+        return 0
+    context = wsl_context()
+    check_context(*context)
+    timing.require(not (directory / 'time/launch-started.json').exists(), 'Go already consumed')
+    env = session.environment({})
+    env.update(CHRYSALIS_GATE_LOCAL=os.environ['CHRYSALIS_GATE_LOCAL'], GATE_GO=go, GATE_GO_OUT=str(directory.parent))
+    # Python fcntl works on both gates' test hosts. The same open description
+    # crosses exec and both re-exec boundaries; every child rechecks the inode.
+    fd = os.open(local['azureLock'], os.O_CREAT | os.O_WRONLY | os.O_NOFOLLOW, 0o600)
+    try:
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            return 4
+        saved = None
+        if fd != 9:
+            try:
+                saved = (os.dup(9), os.get_inheritable(9))
+            except OSError:
+                pass  # No prior fd 9 in this command.
+            os.dup2(fd, 9, inheritable=True)
+        try:
+            return owned_call([sys.executable, '-B', str(directory / 'input/azure/gate.py'), '_azure-held', str(directory), *context],
+                              env=env, pass_fds=(9,), interrupt_notice=lambda: 'Interrupted; Azure keeper retains cleanup responsibility')
+        finally:
+            if saved is not None:
+                original, inheritable = saved
+                os.dup2(original, 9, inheritable=inheritable)
+                os.close(original)
+            elif fd != 9:
+                os.close(9)
+    finally:
+        os.close(fd)
+
+
+def held_azure_go(directory, context):
+    from gate_azure import held_lock
+    from gate_azure_guard import check_context
+    directory = checked_go_directory(directory, os.environ['GATE_GO_OUT'])
+    go = os.environ['GATE_GO']
+    seal, local = checked_azure_go(directory, go)
+    held_lock(Path(local['azureLock']))
+    check_context(*context)
+    timing.require(not (directory / 'time/launch-started.json').exists(), 'Go already consumed')
+    return directory, seal, go
+
+
+def launch_azure(host, directory, go, number, phase, draw, plan, relative, first, context, dispatch):
+    env = session.environment({})
+    env.update(CHRYSALIS_GATE_LOCAL=os.environ['CHRYSALIS_GATE_LOCAL'], GATE_BUNDLE=relative)
+    if first:
+        env['GATE_FIRST_GO'] = go
+    fds = (9,)
+    if dispatch is not None:
+        token, live = dispatch
+        env.update(GATE_RETRY_FD=str(token.fileno()), GATE_AZURE_LIVE_FD=str(live), GATE_AZURE_PARENT=str(os.getpid()))
+        fds += (token.fileno(), live)
+
+    def attempt(region, fallback=None):
+        stamp = dt.datetime.now(dt.timezone.utc).strftime('%Y%m%dt%H%M%S')
+        group = f'chrysalis-gate-{stamp}-{secrets.token_hex(4)}'
+        cmd = [sys.executable, '-B', str(host / 'gate_azure.py'), '--approved', group, str(directory / 'seal.json'),
+               '--context', *context, '--session', str(number), '--draw', str(draw), '--phase', phase, '--region', region]
+        if fallback:
+            cmd += ['--fallback-of', fallback]
+        with (directory / 'time' / f'{number}-{phase}-draw-{draw}-{region}-launcher.log').open('a') as log:
+            status = owned_call(cmd, env=env, pass_fds=fds, stdout=log, stderr=subprocess.STDOUT)
+        return status, group
+
+    status, group = attempt(plan['region'])
+    if status == 6 and plan['region'] == 'eastus2':
+        env.pop('GATE_FIRST_GO', None)
+        status, app = attempt('eastus', group)
+        if not (directory / 'time/runs' / app).exists():
+            return status, group, None  # Refused fallback never made a run folder.
+        return status, app, group
+    return status, group, None
+
+
 def held_fly_go(directory):
     directory = checked_go_directory(directory, os.environ['GATE_GO_OUT'])
     go = os.environ['GATE_GO']
@@ -602,9 +862,9 @@ def held_fly_go(directory):
     return directory, seal, go
 
 
-def fly_held(directory):
+def fly_held(directory, *, azure=False, context=None):
     import gate
-    directory, seal, go = held_fly_go(directory)
+    directory, seal, go = held_azure_go(directory, context) if azure else held_fly_go(directory)
     index = []
     retry = seal.get('retryOf')
     phases = ('first', 'repeat')
@@ -622,10 +882,26 @@ def fly_held(directory):
             session.save(directory / 'time/index.json', index)
             phases = ('repeat',)
     (directory / 'time').mkdir(exist_ok=True)
+    if azure:
+        with azure_dispatch(directory, go) as dispatch:
+            return fly_sessions(directory, seal, go, phases, index, dispatch=dispatch, context=context)
     if retry is None:
-        return fly_sessions(directory, seal, go, phases, index)
+        return fly_sessions(directory, seal, go, phases, index, context=context)
     with retry_dispatch(directory, go) as dispatch:
-        return fly_sessions(directory, seal, go, phases, index, dispatch=dispatch)
+        return fly_sessions(directory, seal, go, phases, index, dispatch=dispatch, context=context)
+
+
+@contextlib.contextmanager
+def azure_dispatch(directory, go):
+    # Only the dispatch keeps the writer. Even a retained copy of both leaf
+    # descriptors observes EOF after the dispatch exits.
+    read, write = os.pipe()
+    try:
+        with retry_dispatch(directory, go) as token:
+            yield token, read
+    finally:
+        os.close(read)
+        os.close(write)
 
 
 @contextlib.contextmanager
@@ -637,13 +913,26 @@ def retry_dispatch(directory, go):
         yield dispatch
 
 
-def fly_sessions(directory, seal, go, phases, index, *, dispatch=None):
+def fly_sessions(directory, seal, go, phases, index, *, dispatch=None, context=None):
     import gate
-    host = directory / 'input/fly'
+    provider = seal.get('provider', 'fly')
+    azure = provider == 'azure'
+    if azure:
+        from gate_azure import reconcile_and_pre_go
+        if not seal.get('retryOf') and any(plan.get('bytesOnly') for plan in seal['timePlans']):
+            raise ValueError('Azure bytes sessions require AZ3')
+        local = checked_azure_local(seal)
+        reconcile_and_pre_go(local, directory, seal, go)
+    host = directory / 'input' / provider
     draws = []
     first_launch = True
     refusal_status = 0
     for number, plan in enumerate(seal['timePlans']):
+        if azure and plan.get('bytesOnly'):
+            # Owned by AZ3. A controls retry never re-acquires the parent's bytes phases.
+            if seal.get('retryOf'):
+                continue
+            raise ValueError('Azure bytes sessions require AZ3')
         band_invalid = False
         for phase in phases:
             selected = plan['rows']
@@ -663,16 +952,24 @@ def fly_sessions(directory, seal, go, phases, index, *, dispatch=None):
                 make_repeat(directory, seal, number, selected, relative)
             rule = plan['probe']
             spent = 0
+            if azure:
+                notice = azure_notice(local, seal, go, plan, number, phase)
+                session.save(directory / 'time' / f'{number}-{phase}-reservation.json', notice)
             for draw in range(1, rule['maxDraws'] + 1):
-                app = 'chrysalis-gate-' + dt.datetime.now(dt.timezone.utc).strftime('%Y%m%dt%H%M%S') + '-' + secrets.token_hex(4)
-                env = session.environment({})
-                env.update(CHRYSALIS_GATE_LOCAL=os.environ['CHRYSALIS_GATE_LOCAL'], GATE_BUNDLE=relative)
-                if first_launch:
-                    env['GATE_FIRST_GO'] = go
-                suffix = f'-draw-{draw}'
-                with (directory / 'time' / f'{number}-{phase}{suffix}-launcher.log').open('a') as log:
-                    status = owned_call(['bash', str(host / 'gate_fly.sh'), '--approved', app, str(directory / 'seal.json')],
-                                        env=env, pass_fds=(9,), stdin=dispatch, stdout=log, stderr=subprocess.STDOUT)
+                fallback = None
+                if azure:
+                    status, app, fallback = launch_azure(host, directory, go, number, phase, draw, plan, relative,
+                                                          first_launch, context, dispatch)
+                else:
+                    app = 'chrysalis-gate-' + dt.datetime.now(dt.timezone.utc).strftime('%Y%m%dt%H%M%S') + '-' + secrets.token_hex(4)
+                    env = session.environment({})
+                    env.update(CHRYSALIS_GATE_LOCAL=os.environ['CHRYSALIS_GATE_LOCAL'], GATE_BUNDLE=relative)
+                    if first_launch:
+                        env['GATE_FIRST_GO'] = go
+                    suffix = f'-draw-{draw}'
+                    with (directory / 'time' / f'{number}-{phase}{suffix}-launcher.log').open('a') as log:
+                        status = owned_call(['bash', str(host / 'gate_fly.sh'), '--approved', app, str(directory / 'seal.json')],
+                                            env=env, pass_fds=(9,), stdin=dispatch, stdout=log, stderr=subprocess.STDOUT)
                 if first_launch and not (directory / 'time/launch-started.json').is_file():
                     return status or 2  # Local preflight did not consume the GO.
                 first_launch = False
@@ -684,18 +981,19 @@ def fly_sessions(directory, seal, go, phases, index, *, dispatch=None):
                 machine = verified_machine(note, plan, spent, repeat=phase == 'repeat', selected=[row['id'] for row in selected])
                 rejected = machine.get('probe', {}).get('decision') == 'rejected'
                 if status not in (0, 5):
-                    detail = machine['invalid'] or 'no verified result'
+                    detail = 'capacity' if status == 6 else machine['invalid'] or 'no verified result'
                     machine['invalid'] = 'session invalid: launcher failure; ' + detail
                 elif not machine['invalid'] and rejected != (status == 5):
                     machine['invalid'] = 'session invalid: launcher status contradicts probe'
                 decision = 'invalid' if machine['invalid'] else 'rejected' if rejected else 'kept'
-                draws.append(draw_record(machine, number, phase, draw, app, decision))
+                draws.append(draw_record(machine, number, phase, draw, app, decision, fallback))
                 session.save(directory / 'time/draws.json', draws)
                 if decision == 'rejected':
-                    spent += machine['bookedUsd']
+                    if not azure:
+                        spent += machine['bookedUsd']
                     if draw == rule['maxDraws']:
                         machine['invalid'] = f'session invalid: no machine kept after {draw} draws'
-                    elif spent + timing.price(plan['destroyGuardSeconds'], timing.region_for(plan)) > plan['limitUsd']:
+                    elif not azure and spent + timing.plan_price(plan) > plan['limitUsd']:
                         machine['invalid'] = 'session invalid: probe reservation exhausted'
                     else:
                         continue
@@ -713,13 +1011,16 @@ def fly_sessions(directory, seal, go, phases, index, *, dispatch=None):
                 for row in plan['rows']:
                     result = timing.baseline_band(row, [pair for pair in payload['pairs'] if pair['id'] == row['id']])
                     if result['status'] == 'PASS':
-                        records[row['id']] = dict(band=result['band'], design='long', machine='performance-8x',
+                        records[row['id']] = dict(band=result['band'], design='long', machine=timing.provider_for(plan)['machine'],
                             source=gate.digest(directory / 'seal.json'), baseline=row['sides']['baseline'], counts=plan['counts'], corpusId=row.get('corpusId'))
                 session.save(directory / 'time/noise-records.json', records)
                 band_invalid = len(records) != len(plan['rows'])
                 break
         if payload['invalid'] or band_invalid:
             break
+    if seal.get('provider') == 'azure':
+        from gate_azure import Ledger, atomic_json
+        atomic_json(directory / 'time/azure-money.json', Ledger(checked_azure_local(seal)).money(go, seal['programStopUsd']))
     report = gate.report(directory)
     session.save(directory / 'report.json', {key: value for key, value in report.items() if key != 'text'})
     (directory / 'report.txt').write_text(report['text'])

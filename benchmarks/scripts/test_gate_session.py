@@ -252,3 +252,79 @@ class ReviewSessionTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+def test_azure_host_attestation_requires_marker_and_imds_match():
+    from unittest.mock import patch
+    for metadata, marker, expected in (
+        ({'vmSize': 'Standard_F8als_v7', 'location': 'eastus'}, 'azure', 'azure'),
+        ({'vmSize': 'Standard_F8als_v7', 'location': 'eastus2'}, 'azure', 'pc'),
+        ({'vmSize': 'Standard_F8s_v2', 'location': 'eastus'}, 'azure', 'pc'),
+        ({'vmSize': 'Standard_F8als_v7', 'location': 'eastus'}, '', 'pc'),
+    ):
+        with (patch.dict(session.os.environ, {'P2_MEASURING_PLATFORM': marker}, clear=True),
+              patch.object(session.os, 'cpu_count', return_value=8),
+              patch.object(session.sys, 'platform', 'linux'),
+              patch.object(session.platform, 'machine', return_value='x86_64'),
+              patch.object(session, 'azure_metadata', return_value=metadata, create=True)):
+            assert session.detect_platform('eastus') == expected
+
+
+def test_real_monitor_admits_and_rejects_fly_and_azure_at_same_limits(tmp_path):
+    script = "print('MEASURED_START', flush=True)\ninput()\nprint('MEASURED_END', flush=True)\ninput()\n"
+    command = [sys.executable, '-c', script]
+    hz = os.sysconf('SC_CLK_TCK')
+    cases = [
+        ('zero', 0, 0, 8, [], 10, None),
+        ('boundary', 10, 20, 8, [.2, .2, .1], 10, None),
+        ('aggregate', 11, 0, 8, [], 10, 'aggregate steal'),
+        ('core', 0, 21, 8, [], 10, 'per-core steal'),
+        ('missing-core', 0, 0, 7, [], 10, 'per-core steal'),
+        ('total', 0, 0, 8, [.2, .2, .11], 10, 'outside process CPU'),
+        ('process', 0, 0, 8, [.21], 10, 'outside process CPU'),
+        ('duration', 0, 0, 8, [], 0, 'outside-process accounting'),
+    ]
+    for label, total, core, count, outside, duration, refusal in cases:
+        def run(platform):
+            seen = 0
+            def synthetic():
+                nonlocal seen
+                seen += 1
+                def ticks(steal):
+                    return [1000 - steal, 0, 0, 0, 0, 0, 0, steal] if seen > 2 else [0] * 8
+                stamp = 1 + (duration if seen > 2 else 0)
+                return dict(monotonic=stamp, unix=stamp, load1=0,
+                            cpuStat={'cpu': ticks(total), **{f'cpu{i}': ticks(core if i == 0 else 0)
+                                                           for i in range(count)}},
+                            processes={100000000 + i: dict(ppid=0, startTicks=1, name='outside',
+                                                          cpuTicks=round(seconds * hz) if seen > 2 else 0)
+                                       for i, seconds in enumerate(outside)})
+            path = tmp_path / f'{label}-{platform}'
+            with patch.object(session, 'snapshot', side_effect=synthetic):
+                result = session.monitored_process(command, tmp_path, session.environment({}), path, 5, platform=platform)
+            assert result['exitCode'] == 0 and not result.get('error')
+            if platform == 'azure':
+                assert result['steal'] == 'not observable on Azure'
+                assert result['stealFieldMoved'] == (total > 0)
+                assert 'cpuStat' not in (path / 'process.json').read_text()
+            return result['timingRejectedReasons']
+        reasons = run('azure')
+        assert run('fly') == reasons
+        assert (len(reasons) == 1 and reasons[0].startswith(refusal)) if refusal else not reasons, (label, reasons)
+    assert run('pc') == ['PC time never gates']
+
+
+def test_r2_imds_retries_transient_errors_caches_only_identity(monkeypatch):
+    from unittest.mock import Mock
+    identity = {'vmSize': 'Standard_D8as_v5', 'location': 'eastus2'}
+    bad = Mock(status=429)
+    good = Mock(status=200, **{'read.return_value': json.dumps(identity).encode()})
+    connection = Mock(**{'getresponse.side_effect': [TimeoutError(), bad, good]})
+    create = Mock(return_value=connection)
+    monkeypatch.setattr(session.http.client, 'HTTPConnection', create)
+    monkeypatch.setattr(session.time, 'sleep', lambda _: None)
+    if hasattr(session, '_azure_identity'):
+        monkeypatch.setattr(session, '_azure_identity', None)
+    assert session.azure_metadata() == identity
+    assert session.azure_metadata() == identity
+    assert create.call_count == connection.close.call_count == 3

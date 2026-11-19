@@ -1,6 +1,7 @@
 """Sealed timing designs, validity and reports. No Fly API or credential access."""
 import hashlib
 import datetime as dt
+from decimal import Decimal
 import json
 import math
 import os
@@ -22,6 +23,11 @@ PRICE = .3667
 # https://fly.io/docs/about/pricing/
 REGIONS = dict(iad=1, ewr=1, ams=1.038461538, arn=1.038461538)
 RESERVE = .03
+PROVIDERS = {
+    'fly': dict(platform='fly', machine='performance-8x', price=PRICE, regions=REGIONS, fullDraws=('iad',), tail=0),
+    'azure': dict(platform='azure', machine='Standard_F8als_v7', price=.495, regions=dict(eastus2=1, eastus=1),
+                  fullDraws=('eastus2', 'eastus'), tail=900, image='Canonical:ubuntu-24_04-lts:server:24.04.202611170'),
+}
 RAW_CAP = min(CUTOFF / 1.15 - 420, GUARD / 1.15 - 720)
 PROBE_COUNTS = (180, 60)
 PROBE_PROCESS_SECONDS = 13
@@ -33,25 +39,51 @@ def require(ok, message):
         raise ValueError(message)
 
 
+require({item['platform'] for item in PROVIDERS.values()} == session.MEASURING_HOSTS, 'Provider and measuring-host sets differ')
+
+
+def provider_for(plan):
+    key = plan.get('provider', 'fly')
+    require(isinstance(key, str) and key in PROVIDERS, 'Unknown timing provider')
+    return PROVIDERS[key]
+
+
 def region_for(plan):
-    region = plan.get('region', 'iad')
-    require(isinstance(region, str) and region in REGIONS, 'Unknown Fly region')
+    regions = provider_for(plan)['regions']
+    region = plan.get('region', next(iter(regions)))
+    require(isinstance(region, str) and region in regions, 'Unknown timing region')
     return region
 
 
-def compute_price(seconds, region='iad'):
-    return seconds / 3600 * PRICE * REGIONS[region]
+def compute_price(seconds, region='iad', *, provider='fly'):
+    spec = PROVIDERS[provider]
+    return seconds / 3600 * spec['price'] * spec['regions'][region]
 
 
-def price(seconds, region='iad'):
-    return compute_price(seconds, region) + RESERVE
+def azure_booking(seconds):
+    minutes = math.ceil(seconds / 60)
+    buckets = math.ceil(minutes / 60) + 1  # any possible hour overlap
+    cost = (Decimal(str(PROVIDERS['azure']['price'])) * (minutes + 1) / 60 + Decimal('.0244') * buckets
+            + Decimal('.075') * max(1, math.ceil(seconds / 4500)) + Decimal('.02'))
+    return float(cost.quantize(Decimal('.0001'), rounding='ROUND_UP'))
+
+
+def price(seconds, region='iad', *, provider='fly'):
+    if provider == 'azure':
+        require(region in PROVIDERS['azure']['regions'], 'Unknown Azure region')
+        return azure_booking(seconds + PROVIDERS['azure']['tail'])
+    return compute_price(seconds, region, provider=provider) + RESERVE
+
+
+def plan_price(plan):
+    return price(plan['destroyGuardSeconds'], region_for(plan), provider=plan.get('provider', 'fly'))
 
 
 def validate_limits(plan):
     guard, cutoff = plan['destroyGuardSeconds'], plan['measurementCutoffSeconds']
     require(type(guard) is int and 120 < guard <= MAX_APP_SECONDS, 'Lifetime exceeds independent7200s code cap')
     require(type(cutoff) is int and 0 < cutoff <= guard - 300, 'Invalid measurement/copy/cleanup deadlines')
-    require(plan['limitUsd'] >= price(guard, region_for(plan)), 'Priced lifetime exceeds approved session price')
+    require(plan['limitUsd'] >= plan_price(plan), 'Priced lifetime exceeds approved session price')
     require(plan['limitWithRepeatUsd'] >= plan['limitUsd'] * (2 if plan['repeatAllowed'] else 1), 'Full repeat not reserved')
     return guard, cutoff
 
@@ -95,8 +127,9 @@ def finalize_plan(plan, raw):
     require(raw <= RAW_CAP, 'Declared timing work including probe does not fit')
     guard = math.ceil(1.15 * (720 + raw))
     region = region_for(plan)
-    cost = price(guard, region)
-    reservation = cost + ((probe['maxDraws'] - 1) * price(math.ceil(1.15 * (720 + probe_raw)), region) if probe else 0)
+    provider = plan.get('provider', 'fly')
+    cost = price(guard, region, provider=provider)
+    reservation = cost + ((probe['maxDraws'] - 1) * price(math.ceil(1.15 * (720 + probe_raw)), region) if probe and provider == 'fly' else 0)
     plan.update(rawSeconds=raw, estimatedSeconds=guard, destroyGuardSeconds=guard,
                 measurementCutoffSeconds=math.ceil(1.15 * (420 + raw)), estimatedUsd=cost,
                 limitUsd=reservation, limitWithRepeatUsd=reservation * (2 if plan['repeatAllowed'] else 1))
@@ -109,7 +142,10 @@ def size_sessions(rows, mode, *, ratios=None, option=2, budget=None, probe=None)
     rows = [dict(row, chargeSeconds=charges(row, ratios)) for row in rows if row['kind'] == 'time']
     if not rows:
         return []
-    require(type(budget) in (int, float) and math.isfinite(budget) and budget >= 0, 'Missing or invalid remaining budget')
+    providers = {row.get('provider', 'fly') for row in rows}
+    require(len(providers) == 1, 'Timing rows disagree on provider')
+    provider = providers.pop()
+    require(provider == 'azure' or type(budget) in (int, float) and math.isfinite(budget) and budget >= 0, 'Missing or invalid remaining budget')
 
     row_cap = RAW_CAP - probe_seconds(probe)
 
@@ -134,10 +170,12 @@ def size_sessions(rows, mode, *, ratios=None, option=2, budget=None, probe=None)
         require(len(regions) == 1, 'Timing session rows disagree on region')
         region = regions.pop()
         result = dict(design=design, rows=entries, counts=list(PROBE_COUNTS), repeatAllowed=mode == 'release')
-        if any('region' in row for row in entries):
+        if provider != 'fly':
+            result['provider'] = provider
+        if provider != 'fly' or any('region' in row for row in entries):
             result['region'] = region
         if probe is not None:
-            result['probe'] = dict(probe, maxDraws=probe['maxDraws'] if region == 'iad' else min(4, probe['maxDraws']))
+            result['probe'] = dict(probe, maxDraws=probe['maxDraws'] if region in provider_for(result)['fullDraws'] else min(4, probe['maxDraws']))
         return finalize_plan(result, raw())
 
     replays = [row for row in rows if row.get('replay') != 'micro']
@@ -166,14 +204,14 @@ def size_sessions(rows, mode, *, ratios=None, option=2, budget=None, probe=None)
     if micros:
         plans.append(sized(micros, 'micro'))
         require(plans[-1] is not None, 'Micro set does not fit one session; main decision required')
-    require(sum(plan['limitWithRepeatUsd'] for plan in plans) <= budget, 'Full repeat reservation exceeds budget left')
+    require(provider == 'azure' or sum(plan['limitWithRepeatUsd'] for plan in plans) <= budget, 'Full repeat reservation exceeds budget left')
     return plans
 
 
 def baseline_band(row, pairs):
     transformed = [dict(pair, phase='B') for pair in pairs if pair['phase'] == 'A']
     spec = dict(row, aPairs=0, bPairs=row['aPairs'])
-    result = verdict(spec, transformed, 'change', noise=dict(band=0, design='long', machine='performance-8x'))
+    result = verdict(spec, transformed, 'change', noise=dict(band=0, design='long', machine=provider_for(row)['machine']))
     if result['status'] == 'PASS':
         result['aBand'] = result['band'] = max(abs(value - 1) for value in result['confidence95'])
         if result['band'] >= .05:
@@ -255,6 +293,11 @@ def run(root, plan, output, *, dry=False):
 
     try:
         region = dict(region=region_for(plan)) if 'region' in plan else {}
+        if plan.get('provider') == 'azure':
+            actual = os.environ.get('P2_AZURE_REGION')
+            require(actual in provider_for(plan)['regions'] and (actual == region['region'] or (region['region'], actual) == ('eastus2', 'eastus'))
+                    and session.detect_platform(actual) == 'azure', 'Sealed Azure host required')
+            region['region'] = actual
         if not dry:
             fingerprint = session.host_fingerprint()
             try:
@@ -351,13 +394,13 @@ def smoke_complete(row, pairs):
         return False
     for phase, count in (('A', row['aPairs']), ('B', row['bPairs'])):
         for pair in complete_population(row, pairs, phase, count):
-            if any(pair[side]['platform'] != 'fly' for side in ('baseline', 'candidate')):
+            if any(pair[side]['platform'] != provider_for(row)['platform'] for side in ('baseline', 'candidate')):
                 return False
     return True
 
 
-def noise_band(noise):
-    if isinstance(noise, dict) and noise.get('design') == 'long' and noise.get('machine') == 'performance-8x':
+def noise_band(noise, provider='fly'):
+    if isinstance(noise, dict) and noise.get('design') == 'long' and noise.get('machine') == PROVIDERS[provider]['machine']:
         band = noise.get('band')
         if type(band) in (int, float) and 0 <= band < .05:
             return band
@@ -380,7 +423,7 @@ def verdict(row, pairs, mode, *, noise=None, invalid=None):
             result['smokeComplete'] = False
             result['smokeComplete'] = smoke_complete(row, pairs)
         require(row['bPairs'] >= 5 and (mode != 'release' or row.get('rowClass') == 'fail-only' or row['aPairs'] >= 5), 'Missing required phase counts')
-        require(all(pair[side]['platform'] == 'fly' for pair in pairs for side in ('baseline', 'candidate')), 'PC time never gates')
+        require(all(pair[side]['platform'] == provider_for(row)['platform'] for pair in pairs for side in ('baseline', 'candidate')), 'PC time never gates')
         populations = {}
         result['admittedPairs'] = {}
         for phase, count in (('A', row['aPairs']), ('B', row['bPairs'])):
@@ -419,10 +462,10 @@ def verdict(row, pairs, mode, *, noise=None, invalid=None):
         if 'aBand' in result:
             result['band'] = result['aBand']
         if mode == 'change':
-            band = noise_band(noise)
+            band = noise_band(noise, row.get('provider', 'fly'))
             if band is None:
                 issue = 'missing' if noise is None else 'invalid'
-                failures['noise record'] = f'{issue}; requires a long performance-8x record with 0 <= N < 0.05'
+                failures['noise record'] = f"{issue}; requires a long {provider_for(row)['machine']} record with 0 <= N < 0.05"
             else:
                 result['band'] = band
         result['qualificationFailures'] = failures
@@ -552,7 +595,8 @@ def draw_lines(output, *, first_only):
             probe = draw.get('probe', {})
             booked = draw['bookedUsd']
             cost = 'unknown' if booked is None else f'${booked:.6f}'
-            lines.append(f'time session {draw["session"]} {draw["phase"]} draw {draw["draw"]} · {draw["app"]} · {draw["decision"]}'
+            observed = '' if draw.get('provider') != 'azure' else f' · observed {draw.get("region", "unknown")} · steal {draw.get("steal", "not observable on Azure")}'
+            lines.append(f'time session {draw["session"]} {draw["phase"]} draw {draw["draw"]} · {draw["app"]} · {draw["decision"]}{observed}'
                          f' · booked {cost} · CV16 {probe.get("cv")} · P16 {probe.get("lag1")} · limit {probe.get("limit")}'
                          f' · gen0 budget bytes {probe.get("gen0BudgetBytes")} · {", ".join(probe.get("reasons", ())) or "no probe rejection recorded"}'
                          f' · archive {draw.get("archiveSha256", "unavailable")} · host {json.dumps(draw.get("host"), sort_keys=True)}')
@@ -575,9 +619,17 @@ def read_results(output, seal, *, mode=None, first_only=False):
     show_regions = any('region' in plan for plan in plans)
     if plans:
         home = '' if show_regions else ' iad'
-        lines += [f'time · Fly performance-8x{home} · arithmetic mean paired ratios',
+        provider = seal.get('provider', 'fly')
+        host = 'Fly' if provider == 'fly' else 'Azure'
+        lines += [f"time · {host} {provider_for(seal)['machine']}{home} · arithmetic mean paired ratios",
                   f'{"benchmark":<38} {"A/B":>7} {"band N":>8} {"ratio [95%]":>31} verdict']
         lines.extend(draw_lines(output, first_only=first_only))
+        money = output / 'time/azure-money.json'
+        if provider == 'azure' and money.is_file():
+            from gate_azure import money_text
+            summary = json.loads(money.read_text())
+            lines += [f"Azure go booked ${summary['goBookedUsd']:.4f} across {summary['goAttempts']} attempts",
+                      'Azure program: ' + money_text(summary)]
     else:
         lines.append('GC timing observations: not recorded (no timing sessions)')
     index_file = output / 'time/index.json'
@@ -592,7 +644,8 @@ def read_results(output, seal, *, mode=None, first_only=False):
     band_failures = set()
     for number, plan in enumerate(plans):
         if show_regions:
-            lines.append(f'session {number + 1} · {region_for(plan)}')
+            region_label = 'planned ' if plan.get('provider') == 'azure' else ''
+            lines.append(f'session {number + 1} · {region_label}{region_for(plan)}')
         for row in plan['rows']:
             first = None
             first_evidence = None
@@ -600,7 +653,7 @@ def read_results(output, seal, *, mode=None, first_only=False):
                 matches = [item for item in index if item['session'] == number and item['phase'] == phase]
                 require(len(matches) <= 1, 'Ambiguous time artifact')
                 if not matches:
-                    current = dict(status='INCONCLUSIVE', reason='No sealed Fly session')
+                    current = dict(status='INCONCLUSIVE', reason='No sealed Azure session' if plan.get('provider') == 'azure' else 'No sealed Fly session')
                 else:
                     item = matches[0]
                     path = (output / item['path']).resolve()
@@ -610,7 +663,10 @@ def read_results(output, seal, *, mode=None, first_only=False):
                     payload = json.loads(raw)
                     invalid = payload.get('invalid')
                     if row is plan['rows'][0]:
-                        lines.append('session-start steal, first five minutes (information only): ' + json.dumps(payload.get('startup', dict(available=False, reason='Not recorded in this legacy fixture')), sort_keys=True))
+                        if plan.get('provider') == 'azure':
+                            lines.append('session-start steal: not observable on Azure')
+                        else:
+                            lines.append('session-start steal, first five minutes (information only): ' + json.dumps(payload.get('startup', dict(available=False, reason='Not recorded in this legacy fixture')), sort_keys=True))
                         lines.append('host fingerprint (information only): ' + json.dumps(payload.get('host'), sort_keys=True))
                         lines.append('neighbours / duration / cost (context only): ' + json.dumps(payload.get('context', {}), sort_keys=True))
                     chosen = [pair for pair in payload['pairs'] if pair['id'] == row['id']]

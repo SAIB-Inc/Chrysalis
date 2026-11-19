@@ -4,6 +4,7 @@ import argparse
 import datetime as dt
 import fnmatch
 import hashlib
+from http.client import HTTPException
 import io
 import json
 import math
@@ -27,6 +28,7 @@ GATE = REPO / 'benchmarks/gate'
 PIN = '7c45d47c87c63520cea84212dbd01ecc8d372ac3'
 DIRECT_BATCH_COUNT = 5
 LOCAL_KEYS = ('corporaRoot', 'pinnedBaseline', 'flyOrg', 'flyTokenFile', 'flyLock')
+AZURE_LOCAL_KEYS = ('azureCli', 'azureLock', 'azureBaseline', 'azureLedger')
 
 
 def digest(path):
@@ -37,18 +39,28 @@ def encoded(value):
     return json.dumps(value, sort_keys=True, separators=(',', ':'), allow_nan=False).encode()
 
 
-def local_config():
+def local_config(provider='fly'):
+    keys = AZURE_LOCAL_KEYS if provider == 'azure' else LOCAL_KEYS
     path = os.environ.get('CHRYSALIS_GATE_LOCAL')
     if not path or not Path(path).is_file():
-        raise ValueError('Missing local keys: ' + ', '.join(LOCAL_KEYS))
+        raise ValueError('Missing local keys: ' + ', '.join(keys))
     try:
         result = json.loads(Path(path).read_text())
     except (ValueError, OSError):
         raise ValueError('Invalid local configuration') from None
-    missing = [key for key in LOCAL_KEYS if not isinstance(result.get(key), str) or not result[key]]
+    missing = [key for key in keys if not isinstance(result.get(key), str) or not result[key]]
     if missing:
         raise ValueError('Missing local keys: ' + ', '.join(missing))
-    result['flyBudgetLeftUsd'] = remaining_budget(result)
+    if provider == 'azure':
+        for key in keys:
+            path = Path(result[key])
+            if not path.is_absolute() or str(path.resolve()) != result[key]:
+                raise ValueError('Azure setting must be an absolute canonical path: ' + key)
+        estimate = result.get('azureRemainingProjectionUsd')
+        if type(estimate) not in (int, float) or not math.isfinite(estimate) or estimate < 0:
+            raise ValueError('Missing or invalid Azure remaining-work estimate: azureRemainingProjectionUsd')
+    else:
+        result['flyBudgetLeftUsd'] = remaining_budget(result)
     return result
 
 
@@ -1110,6 +1122,9 @@ def main():
     retry_parser = commands.add_parser('retry')
     retry_parser.add_argument('parent', type=Path)
     retry_parser.add_argument('--kind', required=True, choices=('first', 'repeat'))
+    go_parser = commands.add_parser('go')
+    go_parser.add_argument('go')
+    go_parser.add_argument('--dry-run', action='store_true')
     fly_parser = commands.add_parser('fly')
     fly_parser.add_argument('--go', required=True)
     args = parser.parse_args()
@@ -1122,7 +1137,7 @@ def main():
             print(report(args.directory, args.mode)['text'], end='')
         else:
             import gate_bundle
-            raise SystemExit(gate_bundle.fly_command(args.go))
+            raise SystemExit(gate_bundle.go_command(args.go, dry=getattr(args, 'dry_run', False), fly=args.command == 'fly'))
     except (ValueError, OSError, RuntimeError) as error:
         parser.exit(2, f'gate: {error}\n')
 
@@ -1133,6 +1148,17 @@ if __name__ == '__main__':
         args = argparse.Namespace(**payload['args'])
         command = band_command if args.command == 'band' else run_command
         command(args, output=Path(payload['output']), local=payload['local'])
+    elif len(sys.argv) == 5 and sys.argv[1] == '_azure-held':
+        import gate_bundle
+        from gate_azure import Refusal
+        try:
+            raise SystemExit(gate_bundle.fly_held(Path(sys.argv[2]), azure=True, context=tuple(sys.argv[3:])))
+        except Refusal as error:
+            print(f'Azure go refused: {error}', file=sys.stderr)
+            raise SystemExit(4) from None
+        except (HTTPException, KeyError, TypeError, ValueError, RuntimeError, OSError, tarfile.TarError):
+            print('Azure go invalid; provider details suppressed', file=sys.stderr)
+            raise SystemExit(2) from None
     elif len(sys.argv) == 3 and sys.argv[1] == '_fly-held':
         import gate_bundle
         raise SystemExit(gate_bundle.fly_held(Path(sys.argv[2])))

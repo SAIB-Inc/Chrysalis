@@ -172,7 +172,7 @@ def worker_plan(plan, *, repeat=False, selected=None):
         blocks.append(dict(id=block['id'], members=block['members'], workload=workload,
                            chargeSeconds=row.get('chargeSeconds', 0)))
     limits = {key: plan[key] for key in ('destroyGuardSeconds', 'measurementCutoffSeconds', 'limitUsd',
-                                       'limitWithRepeatUsd', 'repeatAllowed', 'counts', 'region') if key in plan}
+                                       'limitWithRepeatUsd', 'repeatAllowed', 'counts', 'region', 'provider') if key in plan}
     return dict(limits, scheduleVersion=VERSION, blocks=blocks, members=members, builds=builds, workloads=workloads, **probe)
 
 
@@ -233,7 +233,7 @@ def startup_information(records):
     usable = []
     for record in records:
         value = record.get('wholeProcess', {})
-        if record.get('platform') == 'fly' and value.get('aggregateSteal') is not None:
+        if session.measuring_host(record.get('platform')) and isinstance(value.get('aggregateSteal'), (int, float)):
             fraction = value['aggregateSteal']
             if math.isfinite(fraction) and fraction >= 0:
                 counts = record.get('measurement', {}).get('counts', [record['data'].get('warmupPasses'), record['data'].get('passes')])

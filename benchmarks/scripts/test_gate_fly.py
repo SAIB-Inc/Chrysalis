@@ -36,7 +36,7 @@ def fixture(root, *, watchdog_delay=None, region=None, bounded=True):
     root = Path(root)
     host = root / 'input/fly'
     host.mkdir(parents=True)
-    for name in bundle.HOST_FILES:
+    for name in bundle.HOST_FILES['fly']:
         shutil.copy2(HERE / name, host / name)
     if watchdog_delay is not None:
         path = host / 'gate_fly_watchdog.sh'
@@ -668,7 +668,7 @@ class GuardTests(unittest.TestCase):
                     path.write_bytes(old)
 
     def test_python_optimization_cannot_disable_a_runtime_refusal(self):
-        for name in bundle.HOST_FILES:
+        for name in sorted({name for files in bundle.HOST_FILES.values() for name in files}):
             if name.endswith('.py'):
                 tree = ast.parse((HERE / name).read_text())
                 self.assertFalse(any(isinstance(node, ast.Assert) for node in ast.walk(tree)), name)
@@ -1156,3 +1156,18 @@ class LauncherTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+def test_legacy_fly_go_dispatch_and_local_keys(tmp_path):
+    root = tmp_path / 'benchmarks/out/gate-fly'
+    _, _, env = fixture(root)
+    go = (root / 'seal.id').read_text().strip()
+    with (patch.object(gate, 'REPO', tmp_path), patch.dict(os.environ, env),
+          patch.object(bundle, 'fly_command', return_value=0) as launch,
+          patch.object(sys, 'argv', ['gate.py', 'fly', '--go', go])):
+        with unittest.TestCase().assertRaises(SystemExit) as exit_:
+            gate.main()
+        assert exit_.exception.code == 0
+        launch.assert_called_once_with(go, root)
+        assert gate.LOCAL_KEYS == ('corporaRoot', 'pinnedBaseline', 'flyOrg', 'flyTokenFile', 'flyLock')
+        assert all(key in gate.local_config() for key in gate.LOCAL_KEYS)
