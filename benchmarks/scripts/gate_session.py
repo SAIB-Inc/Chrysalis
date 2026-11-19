@@ -222,7 +222,7 @@ def stop(process, *, own_group=True):
             process.wait()
 
 
-def monitored_process(command, root, env, dest, timeout, server_pid=None, *, observed=True, platform=None):
+def monitored_process(command, root, env, dest, timeout, server_pid=None, *, observed=True, platform=None, ordering_proof=False):
     """Ack each mark only after the measured-window snapshot, outside timed passes."""
     dest = Path(dest)
     dest.mkdir(parents=True, exist_ok=False)
@@ -232,7 +232,7 @@ def monitored_process(command, root, env, dest, timeout, server_pid=None, *, obs
     own_group = platform != 'mac'
     before = snapshot() if measuring else clock()
     known = ancestors(os.getpid(), before['processes']) if measuring else set()
-    marks, samples, foreign = {}, [], {}
+    marks, samples, foreign, ordering = {}, [], {}, {}
     previous = None
     process = subprocess.Popen(list(map(str, command)), cwd=root, env=env,
                                stdin=subprocess.PIPE, stdout=subprocess.PIPE,
@@ -282,6 +282,10 @@ def monitored_process(command, root, env, dest, timeout, server_pid=None, *, obs
                             if mark == 'MEASURED_START':
                                 previous = None
                             marks[mark] = sample()
+                            if ordering_proof and mark == 'MEASURED_START':
+                                ordering['markReceived'] = time.monotonic_ns()
+                                time.sleep(.2)
+                                ordering['ackSent'] = time.monotonic_ns()
                             process.stdin.write(b'ACK\n')
                             process.stdin.flush()
                 if measuring and 'MEASURED_START' in marks and 'MEASURED_END' not in marks:
@@ -318,6 +322,8 @@ def monitored_process(command, root, env, dest, timeout, server_pid=None, *, obs
             sample.pop('cpuStat', None)
     if error:
         result['error'] = error
+    if ordering_proof:
+        result['ordering'] = ordering
     save(dest / 'process.json', result)
     return result
 
@@ -404,8 +410,9 @@ def member(spec, job, dest, *, region='iad'):
             if job['replay'] == 'micro':
                 command += [job['filter'], str(job['microInvocations'])]
             command += ['--observed']
+        proof_options = dict(ordering_proof=True) if job.get('orderingProof') else {}
         result = monitored_process(command, job['root'], env, dest / 'execution', job.get('timeout', 480),
-                                   server.pid if server else None, observed=job['kind'] != 'direct', platform=platform)
+                                   server.pid if server else None, observed=job['kind'] != 'direct', platform=platform, **proof_options)
         if result['exitCode'] or result.get('error'):
             raise RuntimeError('Measurement process failed; raw output retained')
         data = json.loads(output.read_text())
@@ -419,6 +426,7 @@ def member(spec, job, dest, *, region='iad'):
         return dict(data=data, identity={key: spec[key] for key in ('commit', 'treeId', 'runtime', 'dllSha256s')},
                     platform=platform, timingRejectedReasons=result['timingRejectedReasons'],
                     measurement=dict(kind=job['kind'], counts=job['counts'], filter=job['filter']),
+                    **({'ordering': result['ordering']} if proof_options else {}),
                     load=[result['before']['load1'], result['after']['load1']],
                     seconds=result['seconds'], marks=sorted(result['marks']),
                     wholeProcess=dict(startMonotonic=result['before']['monotonic'], endMonotonic=result['after']['monotonic'],

@@ -32,10 +32,10 @@ FLY_HOST_FILES = ('gate.py', 'gate_time.py', 'gate_bundle.py', 'gate_fly.sh', 'g
               'run_benchmarks.py', 'summarize.py', 'provenance.py', 'n2n_replay_server.py')
 
 AZURE_GUEST_FILES = tuple(name for name in FLY_HOST_FILES if name not in (
-    'gate_fly.sh', 'gate_fly_common.sh', 'gate_fly_watchdog.sh'))
+    'gate_fly.sh', 'gate_fly_common.sh', 'gate_fly_watchdog.sh')) + ('gate_prelude.py',)
 HOST_FILES = {'fly': FLY_HOST_FILES, 'azure': AZURE_GUEST_FILES + (
     'gate_azure.py', 'gate_azure_channel.py', 'gate_azure_cleanup.py', 'gate_azure_guard.py',
-    'gate_azure_guest.py', 'gate_azure_payload.py', 'gate_azure_proof.py')}
+    'gate_azure_guest.py', 'gate_azure_payload.py', 'gate_azure_proof.py', 'gate_prepare.py', 'gate_batch.py')}
 
 
 def provider_for_config(config):
@@ -43,7 +43,8 @@ def provider_for_config(config):
 
 
 def sha(path):
-    return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+    from gate import digest
+    return digest(path)
 
 
 def copy_files(source, destination, *, files=None):
@@ -94,7 +95,8 @@ def time_rows(rows, config):
             row.setdefault('replay', inferred)
             timing.require(row['replay'] in ('tcp', 'offline'), 'Unknown timing replay')
         if provider != 'fly':
-            row.update(provider=provider, region=config['time']['platform']['regions'][0])
+            row.update(provider=provider)
+            row.setdefault('region', config['time']['platform']['regions'][0])
         noise = config['time']['noise']
         records = noise.get(timing.provider_for(row)['machine'], noise)
         row['noise'] = copy.deepcopy(records.get(row['id'], records.get(row['replay'])))
@@ -109,6 +111,10 @@ def calibrate_micro(observation, invocations):
     seconds = observation['nsPerBlock'] * observation['blocks'] / 1e9
     timing.require(math.isfinite(seconds) and seconds > 0, 'Invalid micro calibration')
     return max(1, math.ceil(invocations * .01 / seconds))
+
+
+def micro_process_seconds(seconds, observations):
+    return max(2, seconds) + 240 * max(item['nsPerBlock'] * item['blocks'] / 1e9 for item in observations)
 
 
 def prepare(output, rows, staged, config, local):
@@ -208,8 +214,7 @@ def prepare(output, rows, staged, config, local):
         process = next(pair['baseline'] for pair in dry_pairs if pair['id'] == row['id'])
         row['expectedWork'] = {key: process['data']['rows'][0][key] for key in ('blocks', 'wireBytes') if key in process['data']['rows'][0]}
         if row['replay'] == 'micro':
-            body = max(item['nsPerBlock'] * item['blocks'] / 1e9 for stage in ('rows', 'warmupRows') for item in process['data'][stage])
-            ratios[row['id']] = max(2, process['seconds']) + 240 * body
+            ratios[row['id']] = micro_process_seconds(process['seconds'], process['data']['rows'] + process['data']['warmupRows'])
     groups = [[row] for row in selected] if config.get('_sessionPerRow') else [selected]
     plans = [plan for group in groups for plan in timing.size_sessions(group, config.get('_mode', 'change'), ratios=ratios,
                                                                       option=config['time'].get('option', 2), budget=budget,
@@ -274,6 +279,57 @@ exit "$status"
                 dryRun=dict(path='input/dry-pairs.json', counts=[1, 1], sha256=sha(output / 'input/dry-pairs.json')))
 
 
+def prepared_path(name):
+    from gate_prepare import relative
+    return relative(name)
+
+
+def merge_noise_records(expected, batches):
+    records = {}
+    for batch in batches:
+        for row in batch:
+            timing.require(row['id'] not in records, 'Duplicate noise record')
+            records[row['id']] = row
+    timing.require(set(records) == expected, 'Missing or extra noise records')
+    return records
+
+
+def azure_noise_records(directory, seal, payload, number):
+    import gate
+    plan = seal['timePlans'][number]
+    timing.require(plan['design'] == 'noise-band' and not payload['invalid'], 'Invalid noise-record session')
+    records = []
+    for row in plan['rows']:
+        pairs = [pair for pair in payload['pairs'] if pair['id'] == row['id']]
+        workload = schedules.opaque(plan['scheduleSeed'], ['workload', row['id']])
+        result = timing.baseline_band(timing.applied_row(row, payload['applied'][workload]), pairs)
+        timing.require(result['status'] == 'PASS', 'Noise band did not pass: ' + row['id'])
+        records.append(dict(id=row['id'], band=result['band'], design='long', machine=seal['platform']['size'],
+                            sourceSeal=gate.digest(directory / 'seal.json'), baseline=row['sides']['baseline'],
+                            counts=plan['counts'], corpusId=row['corpusId'], pairs=row['aPairs']))
+    session.save(directory / f'time/{number}-noise-records.json', records)
+
+
+def finish_noise_records(directory, seal):
+    seal_id = sha(directory / 'seal.json')
+    batches, expected = [], set()
+    for number, plan in enumerate(seal['timePlans']):
+        rows = {row['id']: row for row in plan['rows']}
+        timing.require(not expected.intersection(rows), 'Noise plans must have disjoint rows')
+        expected.update(rows)
+        records = json.loads((directory / f'time/{number}-noise-records.json').read_text())
+        timing.require(all(record['id'] in rows and record['sourceSeal'] == seal_id and
+                           record['baseline'] == rows[record['id']]['sides']['baseline'] and
+                           record['pairs'] == rows[record['id']]['aPairs'] and record['counts'] == plan['counts'] and
+                           record['corpusId'] == rows[record['id']]['corpusId'] and
+                           timing.noise_band(record, 'azure') is not None for record in records),
+                       'Noise provenance differs from seal')
+        batches.append(records)
+    result = merge_noise_records(expected, batches)
+    session.save(directory / 'time/noise-records.json', result)
+    return result
+
+
 def note_json(note, name):
     try:
         data = json.loads((note / name).read_text())
@@ -320,11 +376,11 @@ def archive_payload(note, plan=None, *, repeat=False, machine=None):
     payload = dict(pairs=pairs, invalid=machine.get('invalid') or invalid, context=context, startup=startup)
     if isinstance(host, dict):
         payload['host'] = host
-    payload.update({key: machine[key] for key in ('probe', 'probeRecords') if key in machine})
+    payload.update({key: machine[key] for key in ('probe', 'probeRecords', 'applied') if key in machine})
     return payload
 
 
-def verified_machine(note, plan, spent, *, repeat=False, selected=None):
+def verified_machine(note, plan, spent, *, repeat=False, selected=None, applied=None):
     """Check paid evidence before permitting any subsequent launch."""
     azure = plan.get('provider') == 'azure'
     cost = note_json(note, 'duration-cost.json') or {}
@@ -400,6 +456,15 @@ def verified_machine(note, plan, spent, *, repeat=False, selected=None):
                 timing.require(isinstance(measured, list) and len(measured) == len(worker['members']) and
                                {record['id']: {'build': record['build']} for record in measured} == worker['members'],
                                'members differ from the full launched schedule')
+                if plan.get('vmPrelude'):
+                    import gate_prelude
+                    if not repeat:
+                        applied = gate_prelude.read(stream, plan)
+                    timing.require(applied is not None, 'Missing first-draw prelude for repeat')
+                    gate_prelude.verify_population(plan, measured, applied, repeat=repeat, selected=selected)
+                    evidence['applied'] = applied
+            if plan.get('vmPrelude') and (repeat or not kept):
+                timing.require(not any(name.startswith('prelude/') for name in names), 'Unexpected prelude for non-first kept draw')
             json.dumps(records, allow_nan=False)
             evidence.update(probe=probe, probeRecords=records)
             timing.require('results/host.json' in names, 'missing host fingerprint')
@@ -475,14 +540,14 @@ def retry_file(path):
 
 
 def draw_record(machine, number, phase, draw, app, decision, fallback=None):
-    result = dict({key: value for key, value in machine.items() if key != 'probeRecords'},
+    result = dict({key: value for key, value in machine.items() if key not in ('probeRecords', 'applied')},
                 session=number, phase=phase, draw=draw, app=app, decision=decision)
     if fallback is not None:
         result['fallbackOf'] = fallback
     return result
 
 
-def retry_phase(parent, item, plan, rows, phase, draws):
+def retry_phase(parent, item, plan, rows, phase, draws, *, applied=None):
     import gate
     relative = f'time/0-{phase}.json'
     payload = retry_file(parent / relative).read_bytes()
@@ -498,7 +563,8 @@ def retry_phase(parent, item, plan, rows, phase, draws):
         timing.require(azure or spent + reserve <= plan['limitUsd'], 'Retry draw exceeded session reservation')
         app = recorded['app']
         note = parent / 'time/runs' / app
-        machine = verified_machine(note, plan, spent, repeat=phase == 'repeat', selected=ids)
+        machine = verified_machine(note, plan, spent, repeat=phase == 'repeat', selected=ids,
+                                   **({'applied': applied} if applied is not None else {}))
         wanted = 'kept' if draw == len(draws) else 'rejected'
         decision = 'rejected' if machine.get('probe', {}).get('decision') == 'rejected' else 'kept'
         expected = draw_record(machine, 0, phase, draw, app, decision, recorded.get('fallbackOf'))
@@ -580,7 +646,11 @@ def checked_retry_parent(parent, out, kind):
         timing.require(classification == 'retry-eligible', 'First phase is not retry-eligible')
     else:
         timing.require(classification == 'repeat' and ids, 'First phase did not authorize a repeat')
-        retry_phase(parent, index[1], plan, [row for row in plan['rows'] if row['id'] in ids], 'repeat', by_phase['repeat'])
+        options = {}
+        if plan.get('vmPrelude'):
+            options['applied'] = repeat_prelude(parent, seal, 0)
+            binding['firstArchiveSha256'] = by_phase['first'][-1]['archiveSha256']
+        retry_phase(parent, index[1], plan, [row for row in plan['rows'] if row['id'] in ids], 'repeat', by_phase['repeat'], **options)
         timing.require(timing.session_outcome(parent, seal, 0)[0] == 'retry-eligible', 'Repeat phase is not retry-eligible')
         binding.update(firstIndex=index[0], repeatIds=ids)
     return parent, seal, binding, first
@@ -927,6 +997,7 @@ def fly_sessions(directory, seal, go, phases, index, *, dispatch=None, context=N
     draws = []
     first_launch = True
     refusal_status = 0
+    payload = {}
     for number, plan in enumerate(seal['timePlans']):
         if azure and plan.get('bytesOnly'):
             # Owned by AZ3. A controls retry never re-acquires the parent's bytes phases.
@@ -945,11 +1016,14 @@ def fly_sessions(directory, seal, go, phases, index, *, dispatch=None, context=N
                     break
             # A repeat is a deterministic subset of the sealed archive, not a new go.
             relative = f'input/session-{number}.tar.gz'
+            prelude_values = {}
             if phase == 'repeat':
                 # Same sealed original bundle; runner consumes an explicit fail list.
                 # Its hash is verified on the VM; no source or count can change.
                 relative = f'input/repeat-{number}.tar.gz'
                 make_repeat(directory, seal, number, selected, relative)
+                if plan.get('vmPrelude'):
+                    prelude_values['applied'] = repeat_prelude(directory, seal, number)
             rule = plan['probe']
             spent = 0
             if azure:
@@ -978,7 +1052,7 @@ def fly_sessions(directory, seal, go, phases, index, *, dispatch=None, context=N
                     print('CLEANUP FAILED: ' + app + '; recovery retains the lock until absence proof; coordinator action required', file=sys.stderr)
                 if status == 4:
                     refusal_status = status
-                machine = verified_machine(note, plan, spent, repeat=phase == 'repeat', selected=[row['id'] for row in selected])
+                machine = verified_machine(note, plan, spent, repeat=phase == 'repeat', selected=[row['id'] for row in selected], **prelude_values)
                 rejected = machine.get('probe', {}).get('decision') == 'rejected'
                 if status not in (0, 5):
                     detail = 'capacity' if status == 6 else machine['invalid'] or 'no verified result'
@@ -1006,6 +1080,9 @@ def fly_sessions(directory, seal, go, phases, index, *, dispatch=None, context=N
             session.save(directory / 'time/index.json', index)
             if payload['invalid']:
                 break
+            if plan['design'] == 'noise-band':
+                azure_noise_records(directory, seal, payload, number)
+                break
             if plan['design'] == 'micro-band':
                 records = {}
                 for row in plan['rows']:
@@ -1021,6 +1098,12 @@ def fly_sessions(directory, seal, go, phases, index, *, dispatch=None, context=N
     if seal.get('provider') == 'azure':
         from gate_azure import Ledger, atomic_json
         atomic_json(directory / 'time/azure-money.json', Ledger(checked_azure_local(seal)).money(go, seal['programStopUsd']))
+    if seal.get('noiseRecords'):
+        if refusal_status or not payload or payload.get('invalid'):
+            print(payload.get('invalid') or 'Missing valid Azure noise results', file=sys.stderr)
+            return refusal_status or 2
+        finish_noise_records(directory, seal)
+        return 0
     report = gate.report(directory)
     session.save(directory / 'report.json', {key: value for key, value in report.items() if key != 'text'})
     (directory / 'report.txt').write_text(report['text'])
@@ -1028,18 +1111,55 @@ def fly_sessions(directory, seal, go, phases, index, *, dispatch=None, context=N
     return refusal_status or (0 if report['outcome'] in ('RELEASE PASS', 'SUBSET') else 2)
 
 
+def repeat_prelude(directory, seal, number):
+    import gate_prelude
+    retry = seal.get('retryOf', {})
+    if retry.get('kind') == 'repeat':
+        parent = retry['parent']
+        timing.require(Path(parent).name == parent and parent.startswith('gate-'), 'Invalid repeat retry parent')
+        directory = retry_file(directory.parent / parent / 'seal.json').parent
+        timing.require(sha(directory / 'seal.json') == retry['originalSealId'], 'Repeat retry parent seal changed')
+    draws = json.loads(retry_file(directory / 'time/draws.json').read_bytes())
+    kept = [draw for draw in draws if draw['session'] == number and draw['phase'] == 'first' and draw['decision'] == 'kept']
+    timing.require(len(kept) == 1, 'Missing or ambiguous kept first draw for repeat')
+    draw, = kept
+    if retry.get('kind') == 'repeat':
+        timing.require(draw['archiveSha256'] == retry['firstArchiveSha256'], 'Repeat retry first archive binding changed')
+    timing.require(re.fullmatch(r'[a-z0-9-]+', draw['app']) is not None, 'Invalid kept draw name')
+    path = retry_file(directory / 'time/runs' / draw['app'] / 'results.tar.gz')
+    with path.open('rb') as stream:
+        timing.require(hashlib.file_digest(stream, 'sha256').hexdigest() == draw['archiveSha256'], 'Kept first results archive changed')
+        stream.seek(0)
+        with tarfile.open(fileobj=stream) as archive:
+            return gate_prelude.read(archive, seal['timePlans'][number])
+
+
+def repeat_worker(directory, seal, number, selected):
+    plan = seal['timePlans'][number]
+    worker = schedules.worker_plan(plan, repeat=True, selected=selected)
+    if plan.get('vmPrelude'):
+        import gate_prelude
+        worker = gate_prelude.apply(worker, repeat_prelude(directory, seal, number))
+    return worker
+
+
 def make_repeat(directory, seal, number, selected, relative):
     """Only the authorized failed subset changes; all other archive bytes persist."""
     import io
     source = directory / f'input/session-{number}.tar.gz'
     plan = seal['timePlans'][number]
-    data = gate_encoded(schedules.worker_plan(plan, repeat=True, selected=[row['id'] for row in selected]))
+    if plan.get('vmPrelude'):
+        timing.require(sha(source) == seal['files'][f'input/session-{number}.tar.gz'], 'Original archive changed')
+    data = gate_encoded(repeat_worker(directory, seal, number, [row['id'] for row in selected]))
+    replaced = {'plan.json', 'bundle-manifest.json'} | ({'prelude.json'} if plan.get('vmPrelude') else set())
     with tarfile.open(source) as original:
         manifest = json.load(original.extractfile('bundle-manifest.json'))
         manifest['plan.json'] = hashlib.sha256(data).hexdigest()
+        if plan.get('vmPrelude'):
+            manifest.pop('prelude.json')
         with tarfile.open(directory / relative, 'w:gz') as repeated:
             for member in original:
-                if member.name in ('plan.json', 'bundle-manifest.json'):
+                if member.name in replaced:
                     continue
                 repeated.addfile(member, original.extractfile(member))
             for name, body in [('plan.json', data), ('bundle-manifest.json', gate_encoded(manifest))]:
@@ -1056,6 +1176,7 @@ def verified_bundle(directory, seal, relative):
     timing.require(path.is_relative_to(directory.resolve()), 'Archive path escapes seal')
     data = path.read_bytes()
     if relative in seal['files']:
+        timing.require(seal.get('provider') != 'azure' or not relative.startswith('input/repeat-'), 'Repeat must derive from the first kept archive')
         timing.require(hashlib.sha256(data).hexdigest() == seal['files'][relative], 'Archive changed')
         return data
     match = re.fullmatch(r'input/repeat-([0-9]+)\.tar\.gz', relative)
@@ -1066,17 +1187,26 @@ def verified_bundle(directory, seal, relative):
     _, selected = timing.session_outcome(directory, seal, number, first_only=True)
     timing.require(selected, 'No failed rows to repeat')
     timing.require(not repeat_only or selected == retry['repeatIds'], 'Failed rows differ from sealed retry selection')
-    expected = schedules.worker_plan(original_plan, repeat=True, selected=selected)
+    expected = repeat_worker(directory, seal, number, selected)
     import io
     original_path = f'input/session-{number}.tar.gz'
     timing.require(sha(directory / original_path) == seal['files'][original_path], 'Original archive changed')
     with tarfile.open(directory / original_path) as original, tarfile.open(fileobj=io.BytesIO(data)) as archive:
         original_files = {member.name: original.extractfile(member).read() for member in original if member.isfile()}
+        old_modes = {member.name: bool(member.mode & 0o100) for member in original if member.isfile()}
         actual = {member.name: archive.extractfile(member).read() for member in archive if member.isfile()}
+        modes = {member.name: bool(member.mode & 0o100) for member in archive if member.isfile()}
+        timing.require(all(modes[name] == value for name, value in old_modes.items()
+                           if name not in ('plan.json', 'prelude.json', 'bundle-manifest.json') and name in modes),
+                       'Repeat executable modes changed')
+        if original_plan.get('vmPrelude'):
+            original_files.pop('prelude.json')
         timing.require(len(actual) == len(archive.getmembers()) and set(actual) == set(original_files), 'Repeat archive members changed')
         timing.require(json.loads(actual['plan.json']) == expected, 'Repeat plan differs from failed subset')
         original_manifest = json.loads(original_files['bundle-manifest.json'])
         original_manifest['plan.json'] = hashlib.sha256(actual['plan.json']).hexdigest()
+        if original_plan.get('vmPrelude'):
+            original_manifest.pop('prelude.json')
         timing.require(json.loads(actual['bundle-manifest.json']) == original_manifest, 'Repeat manifest changed')
         timing.require(all(value == original_files[name] for name, value in actual.items() if name not in ('plan.json', 'bundle-manifest.json')), 'Repeat input bytes changed')
     return data
@@ -1094,6 +1224,8 @@ if __name__ == '__main__':
         verify(root)
         plan = json.loads((root / 'plan.json').read_text())
         timing.validate_probe_rule(plan.get('probe'))
-        good = timing.run(root, plan, root / 'results')
+        recipe = root / 'prelude.json'
+        options = dict(prelude=json.loads(recipe.read_text())) if recipe.is_file() else {}
+        good = timing.run(root, plan, root / 'results', **options)
         verify(root)
         raise SystemExit(0 if good else 2)

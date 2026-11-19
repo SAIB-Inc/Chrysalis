@@ -32,7 +32,11 @@ AZURE_LOCAL_KEYS = ('azureCli', 'azureLock', 'azureBaseline', 'azureLedger')
 
 
 def digest(path):
-    return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+    hashed = hashlib.sha256()
+    with Path(path).open('rb') as stream:
+        for block in iter(lambda: stream.read(1024 * 1024), b''):
+            hashed.update(block)
+    return hashed.hexdigest()
 
 
 def encoded(value):
@@ -174,8 +178,14 @@ def nuget_packages():
     return os.environ['NUGET_PACKAGES'] if sys.platform == 'darwin' else str(REPO.parent / '.nuget/packages')
 
 
-def stage_side(info, label, output, local, inputs=None, *, allocation_platform='pc'):
-    """Mac measures the side's probes with the target's Program.cs instrumentation."""
+def stage_side(info, label, output, local, inputs=None, *, allocation_platform='pc', prepare_phase=None):
+    """Stage one arm; Azure restores and builds in separate guests."""
+    job_file = output / 'build' / (label + '-staging.job.json')
+    if prepare_phase == 'build':
+        job = json.loads(job_file.read_text())
+        if job['side']['treeId'] != info['treeId'] or job['side']['commit'] != info['commit']:
+            raise ValueError('Restored arm identity changed')
+        return run_stage_job(info, job_file, job, prepare_phase)
     inputs = inputs or measurement_inputs()
     source = export_side(info, output)
     provenance = {}
@@ -208,41 +218,71 @@ def stage_side(info, label, output, local, inputs=None, *, allocation_platform='
     # The nested client must not enter the harness SDK's default Compile glob.
     project = directory / 'Chrysalis.Benchmarks.csproj'
     project.write_text(project.read_text().replace('</Project>', '<ItemGroup><Compile Remove="client/**/*.cs" /></ItemGroup></Project>'))
-    env = session.environment(dict(NUGET_PACKAGES=nuget_packages()))
-    cli = [runner.DOTNET, runner.DOTNET_ROOT / 'sdk' / sdk / 'dotnet.dll']
+    if prepare_phase:
+        sdk_root = Path(os.environ['CHRYSALIS_DOTNET10_ROOT']) if pinned else runner.DOTNET_ROOT
+        cli = [sdk_root / 'dotnet', sdk_root / 'sdk' / sdk / 'dotnet.dll']
+        packages, restore_source = os.environ['NUGET_PACKAGES'], os.environ['CHRYSALIS_NUGET_SOURCE']
+    else:
+        cli = [runner.DOTNET, runner.DOTNET_ROOT / 'sdk' / sdk / 'dotnet.dll']
+        packages = restore_source = nuget_packages()
     isolation = ['-nodeReuse:false', '--disable-build-servers', '-p:UseSharedCompilation=false']
     jobs = '-m:3' if sys.platform == 'darwin' else '-m:8'
+    # Map the shared root of both the exported sources and staged projects.
+    path_map = f'-p:PathMap={output.resolve()}=/_/'
     commands = []
     for name, project in [('harness', directory / 'Chrysalis.Benchmarks.csproj'), ('client', client_dir / 'ReplayClient.csproj')]:
-        commands.append(dict(command=list(map(str, [*cli, 'restore', project, '--source', env['NUGET_PACKAGES'], *isolation])),
+        commands.append(dict(command=list(map(str, [*cli, 'restore', project, '--source', restore_source, *isolation])),
                              label=name + '-restore'))
-        commands.append(dict(command=list(map(str, [*cli, 'build', project, '-c', 'Release', jobs, '-warnaserror', '--no-restore', *isolation,
+        commands.append(dict(command=list(map(str, [*cli, 'build', project, '-c', 'Release', jobs, '-warnaserror', '--no-restore', *isolation, path_map,
                                                     *(['--no-dependencies'] if pinned or name == 'client' else [])])),
                              label=name + '-build',
                              copyClosureTo=str((directory if name == 'harness' else client_dir) / 'bin/Release' / tfm) if pinned else None))
-    job = dict(commands=commands, cwd=str(directory), generated=dict(NUGET_PACKAGES=env['NUGET_PACKAGES']),
-               pinnedBaseline=local['pinnedBaseline'] if pinned else None)
-    job_file = output / 'build' / (label + '-staging.job.json')
+    side = dict(commit=info['commit'], treeId=info['treeId'], sdk=sdk, tfm=tfm,
+                runtime='10.0.9' if pinned else '11.0.0',
+                harness=str(harness), client=str(client_dir / 'bin/Release' / tfm / 'ReplayClient.dll'), **provenance)
+    job = dict(commands=commands, cwd=str(directory), generated=dict(NUGET_PACKAGES=packages),
+               pinnedBaseline=local['pinnedBaseline'] if pinned else None, side=side)
+    if prepare_phase:
+        job['sdkRoot'] = str(sdk_root)
     session.save(job_file, job)
-    execute_logged([sys.executable, Path(__file__).resolve(), '_stage', job_file],
-          output / 'build' / (label + '-staging.log'), cwd=directory, env=env)
+    return run_stage_job(info, job_file, job, prepare_phase)
+
+
+def stage_environment(job):
+    env = session.environment(job['generated'])
+    if 'sdkRoot' in job:
+        env['DOTNET_ROOT'] = job['sdkRoot']
+    return env
+
+
+def run_stage_job(info, job_file, job, phase):
+    log = job_file.parent / (job_file.stem.removesuffix('.job') + (f'-{phase}' if phase else '') + '.log')
+    execute_logged([sys.executable, Path(__file__).resolve(), '_stage', job_file, *([phase] if phase else [])],
+                   log, cwd=Path(job['cwd']), env=stage_environment(job))
     if 'working' in info and runner.working_tree_id(info['working'], env=session.environment({})) != info['treeId']:
         raise ValueError('Working tree changed during build')
-    if pinned:
-        check_pinned(local['pinnedBaseline'])
-    return dict(commit=info['commit'], treeId=info['treeId'], sdk=sdk, tfm=tfm,
-                runtime='10.0.9' if pinned else '11.0.0',
-                harness=str(harness), client=str(client_dir / 'bin/Release' / tfm / 'ReplayClient.dll'),
-                dllSha256s=closure_hashes(client_dir / 'bin/Release' / tfm), **provenance)
+    if job['pinnedBaseline']:
+        check_pinned(job['pinnedBaseline'])
+    if phase != 'restore':
+        directory = Path(job['side']['client']).parent
+        if phase == 'build' and job['pinnedBaseline']:
+            from gate_prepare import restore_pinned_native
+            harness_deps = Path(job['side']['harness']).with_suffix('.deps.json')
+            restore_pinned_native(directory, harness_deps, Path(job['pinnedBaseline']), Path(os.environ['CHRYSALIS_NUGET_SOURCE']))
+        return dict(job['side'], dllSha256s=closure_hashes(directory))
 
 
-def stage_worker(job_file):
-    """Staging children inside the run's held slot, each with a timed record."""
+def stage_worker(job_file, phase=None):
+    """Staging children inside the held slot, each with a timed record."""
+    if phase not in (None, 'restore', 'build'):
+        raise ValueError('Unknown build phase')
     job_file = Path(job_file)
     job = json.loads(job_file.read_text())
-    env = session.environment(job['generated'])
+    env = stage_environment(job)
     closure = check_pinned(job['pinnedBaseline']) if job['pinnedBaseline'] else None
     for item in job['commands']:
+        if phase and not item['label'].endswith('-' + phase):
+            continue
         start = time.monotonic()
         metadata = dict(command=item['command'], startUtc=dt.datetime.now(dt.timezone.utc).isoformat(), startLoad=os.getloadavg()[0])
         with (job_file.parent / (job_file.stem + '-' + item['label'] + '.log')).open('w') as log:
@@ -300,12 +340,14 @@ def catalogue(config, audit):
     return result
 
 
-def corpus_identity(row, local):
-    paths = [REPO / 'benchmarks/Chrysalis.Benchmarks/sha256.json']
+def corpus_identity(row, local, *, fixtures_sha256=None):
+    if fixtures_sha256 is None:
+        fixtures_sha256 = digest(REPO / 'benchmarks/Chrysalis.Benchmarks/sha256.json')
+    paths = []
     if row.get('replay') == 'tcp':
         root = Path(local['corporaRoot'])
         paths += [root / 'range.json', root / 'capture/sha256.json']
-    return hashlib.sha256(encoded([digest(path) for path in paths])).hexdigest()
+    return hashlib.sha256(encoded([fixtures_sha256, *(digest(path) for path in paths)])).hexdigest()
 
 
 def band_window(row):
@@ -317,15 +359,21 @@ def band_key(row, runtime, design):
     return '|'.join((row.get('replay', row['id']), design, band_window(row), runtime, row.get('corpusId', 'audit-preprod')))
 
 
-def load_band(row, runtime, design):
+def band_records(band_sources=None):
+    if band_sources is None:
+        band_sources = ((path.name, path.read_bytes()) for path in sorted((GATE / 'bands').glob('*.json')))
+    for name, body in band_sources:
+        yield name, json.loads(body), body
+
+
+def load_band(row, runtime, design, *, band_sources=None):
     key = band_key(row, runtime, design)
-    matches = [(path, json.loads(path.read_text())) for path in sorted((GATE / 'bands').glob('*.json'))]
-    matches = [(path, band) for path, band in matches if band['key'] == key]
+    matches = [(name, band, body) for name, band, body in band_records(band_sources) if band['key'] == key]
     if len(matches) > 1:
-        raise ValueError('Duplicate band key: ' + ', '.join(path.name for path, _ in matches))
+        raise ValueError('Duplicate band key: ' + ', '.join(name for name, _, _ in matches))
     if not matches:
         return None
-    path, band = matches[0]
+    _, band, body = matches[0]
     expected = '|'.join((band.get('replay') or band['row'], band['design'], band['window'], band['runtime'], band['corpusId']))
     if expected != key:
         raise ValueError('Band provenance does not match its key')
@@ -338,7 +386,7 @@ def load_band(row, runtime, design):
         legacy = 10000 if band['window'] in ('direct/warm10', 'readeveryfield/warm10') else 1000
         if band.get('warmupMilliseconds', legacy) != row.get('warmupMilliseconds', 1000):
             raise ValueError('Band warm-up differs from declared row')
-    return dict(sha256=digest(path), record=band)
+    return dict(sha256=hashlib.sha256(body).hexdigest(), record=band)
 
 
 def new_output():
@@ -593,15 +641,20 @@ def band_sets(args, baseline, output, local):
     return output
 
 
-def select_rows(args, config, audit, *, allocation_platform='pc', plan_entries=None):
+def select_rows(args, config, audit, *, allocation_platform='pc', plan_entries=None, band_sources=None):
     available = catalogue(config, audit)
     defaults = config['defaults'][args.mode]
-    session_per_row = False
+    session_per_row = noise_records = False
+    batch_areas = []
     if args.plan or plan_entries is not None:
         payload = plan_entries if plan_entries is not None else json.loads(Path(args.plan).read_text())
         session_per_row = payload.get('sessionPerRow', False) if isinstance(payload, dict) else False
-        if type(session_per_row) is not bool:
-            raise ValueError('sessionPerRow must be a boolean')
+        noise_records = payload.get('noiseRecords', False) if isinstance(payload, dict) else False
+        batch_areas = payload.get('areas', []) if isinstance(payload, dict) else []
+        if not isinstance(batch_areas, list) or any(not isinstance(name, str) or name not in config['areas'] for name in batch_areas) or len(set(batch_areas)) != len(batch_areas):
+            raise ValueError('Batch areas must be unique names from gated.json')
+        if type(session_per_row) is not bool or type(noise_records) is not bool:
+            raise ValueError('sessionPerRow and noiseRecords must be booleans')
         selected = payload if isinstance(payload, list) else payload.get('entries') if isinstance(payload, dict) else None
         if not isinstance(selected, list):
             raise ValueError('Measurement entries must be an array')
@@ -615,7 +668,7 @@ def select_rows(args, config, audit, *, allocation_platform='pc', plan_entries=N
                 raise ValueError('Invalid measurement entry fields')
             if 'region' in entry:
                 gate_time.require(session_per_row, 'An explicit region requires sessionPerRow')
-                gate_time.region_for(entry)
+                gate_time.region_for(dict(entry, provider=config['time'].get('platform', {}).get('provider', 'fly')))
             if entry.get('rowClass') == 'recorded-only' and (not entry.get('explanation') or not isinstance(entry['explanation'], str)):
                 raise ValueError('Recorded-only row needs an explanation link')
             if entry.get('rowClass') not in (None, 'gated', 'recorded-only'):
@@ -673,10 +726,9 @@ def select_rows(args, config, audit, *, allocation_platform='pc', plan_entries=N
     if session_per_row and (args.mode != 'change' or any(
             row['kind'] != 'time' or row.get('rowClass') != 'recorded-only' for row in rows)):
         raise ValueError('sessionPerRow requires only recorded-only time rows in change mode')
-    config['_sessionPerRow'] = session_per_row
+    config.update(_sessionPerRow=session_per_row, _noiseRecords=noise_records, _batchAreas=sorted(batch_areas))
     # Only the current frozen window determines the declared direct cohort.
-    banded = {(record['row'], record['window']) for path in (GATE / 'bands').glob('*.json')
-              for record in [json.loads(path.read_text())]
+    banded = {(record['row'], record['window']) for _, record, _ in band_records(band_sources)
               if record['design'] == 'direct' and record['absoluteNoiseBandBytes'] > 0}
     for row in rows:
         row.setdefault('pairs', config['defaults'].get('bandedDirectPairs', defaults['directPairs']) if row['kind'] == 'direct' and (row['id'], band_window(row)) in banded else
@@ -729,14 +781,14 @@ def outcome(seal, results, *, mode=None):
     return 'SUBSET' if subset_reasons(seal, mode) else 'RELEASE PASS'
 
 
-def seal_bands(rows, *, allocation_platform='pc'):
+def seal_bands(rows, *, allocation_platform='pc', band_sources=None):
     result = {}
     for row in rows:
         if row['kind'] == 'time' or row.get('rule') in ('D39', 'baseline') or (allocation_platform == 'mac' and row['kind'] == 'replay'):
             continue
         runtime = row['sides']['baseline']['runtime']
         key = band_key(row, runtime, row['design'])
-        band = load_band(row, runtime, row['design'])
+        band = load_band(row, runtime, row['design'], band_sources=band_sources)
         if band:
             band['contentSha256'] = hashlib.sha256(encoded(band['record'])).hexdigest()
         result[key] = band
@@ -912,7 +964,7 @@ def report(output, mode=None):
     lines += time_lines
     time_modes = {applied_mode: timed}
     for number, plan in enumerate(seal.get('timePlans', [])):
-        if plan['design'] != 'micro-band':
+        if plan['design'] not in ('micro-band', 'noise-band'):
             classification, _ = gate_time.session_outcome(output, seal, number, results=time_modes)
             lines.append(f'time session {number} · controls outcome: {classification}')
     lines += ['coverage · area · declared bytes / declared time']
@@ -929,17 +981,19 @@ def report(output, mode=None):
     return result
 
 
-def previous_alpha(candidate):
+def previous_alpha(candidate, *, receipt=False):
     tags = []
-    for tag in git('tag', '--list').splitlines():
+    flags = ('--no-replace-objects',) if receipt else ()
+    for tag in git(*flags, 'tag', '--list', cwd=REPO).splitlines():
         version = re.fullmatch(r'v?2\.(\d+)\.(\d+)-alpha', tag)
         if version:
             tags.append((tuple(map(int, version.groups())), tag))
     for _, tag in sorted(tags, reverse=True):
-        commit = git('rev-parse', tag + '^{commit}')
-        if commit != candidate and subprocess.call(['git', '-C', str(REPO), 'merge-base', '--is-ancestor', commit, candidate],
+        ref = 'refs/tags/' + tag if receipt else tag
+        commit = git(*flags, 'rev-parse', ref + '^{commit}', cwd=REPO)
+        if commit != candidate and subprocess.call(['git', '-C', str(REPO), *flags, 'merge-base', '--is-ancestor', commit, candidate],
                 env=runner.git_environment(base=session.environment({})), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL) == 0:
-            return commit
+            return dict(name=tag, commit=commit) if receipt else commit
     return None
 
 
@@ -989,6 +1043,45 @@ def discover_mac_probes(baseline, output):
     return json.loads((output / 'input' / 'mac-probes.json').read_text())
 
 
+def stage_arms(args, output, rows, local, inputs, *, allocation_platform='pc', prepare_phase=None):
+    infos = {value: resolve_side(value, args.mode) for value in
+             dict.fromkeys([args.baseline, args.candidate, *[row['candidate'] for row in rows if 'candidate' in row]])}
+    if allocation_platform == 'mac' and any(info['commit'] == PIN for info in infos.values()):
+        raise ValueError('The archived .NET 10 DLL closure is not a native Mac merge side')
+    options = dict(allocation_platform='mac') if allocation_platform == 'mac' else {}
+    if prepare_phase:
+        options['prepare_phase'] = prepare_phase
+    staged = {value: stage_side(info, f'side-{number}', output, local, inputs, **options)
+              for number, (value, info) in enumerate(infos.items())}
+    if prepare_phase == 'restore':
+        return
+    bdn = {side['dllSha256s'].get('BenchmarkDotNet.dll') for side in staged.values()}
+    if None in bdn or len(bdn) != 1:
+        raise ValueError('BenchmarkDotNet DLL versions differ; refusing measurements')
+    baseline, candidate = staged[args.baseline], staged[args.candidate]
+    baseline['previousAlpha'] = previous_alpha(candidate['commit']) == baseline['commit']
+    return staged, baseline, candidate
+
+
+def assign_sides(args, rows, staged, baseline):
+    for row in rows:
+        right = staged[row.get('candidate', args.candidate)]
+        left = cold_companion(baseline, right) if row.get('window') == 'cold' else baseline
+        row['sides'] = dict(candidate=public_side(right))
+        if not row.get('firstBaseline'):
+            row['sides'] = dict(baseline=public_side(left), **row['sides'])
+
+
+def stage_rows(args, output, rows, local, *, phase):
+    """Restore or build portable clients without running a measurement probe."""
+    staged_arms = stage_arms(args, output, rows, local, measurement_inputs() if phase == 'restore' else None, prepare_phase=phase)
+    if phase == 'restore':
+        return
+    staged, baseline, candidate = staged_arms
+    assign_sides(args, rows, staged, baseline)
+    return staged, baseline, candidate
+
+
 def run_command(args, output=None, local=None, *, allocation_platform='pc'):
     if allocation_platform == 'mac' and (args.mode != 'change' or session.detect_platform() != 'mac'
                                          or os.environ.get('CHRYSALIS_MBP_MEMORY_CAP') != '1'):
@@ -997,37 +1090,23 @@ def run_command(args, output=None, local=None, *, allocation_platform='pc'):
     config = json.loads((GATE / 'gated.json').read_text())
     audit = json.loads((REPO / 'benchmarks/Chrysalis.Benchmarks/audit-allocations.json').read_text())
     rows = select_rows(args, config, audit, allocation_platform=allocation_platform)
+    if config['_noiseRecords'] or config['_batchAreas']:
+        raise ValueError('Noise records and batch areas require Azure prepare')
     for row in rows:
         if row['kind'] != 'time':
             row['corpusId'] = corpus_identity(row, local)
     output = output or new_output()
     print('Run directory:', output, flush=True)
     scripts = snapshot_scripts(output)
-    infos = {value: resolve_side(value, args.mode) for value in
-             dict.fromkeys([args.baseline, args.candidate, *[row['candidate'] for row in rows if 'candidate' in row]])}
-    if allocation_platform == 'mac' and any(info['commit'] == PIN for info in infos.values()):
-        raise ValueError('The archived .NET 10 DLL closure is not a native Mac merge side')
     inputs = measurement_inputs()
-    staged = {value: stage_side(info, f'side-{number}', output, local, inputs,
-                                **(dict(allocation_platform='mac') if allocation_platform == 'mac' else {}))
-              for number, (value, info) in enumerate(infos.items())}
-    bdn = {side['dllSha256s'].get('BenchmarkDotNet.dll') for side in staged.values()}
-    if None in bdn or len(bdn) != 1:
-        raise ValueError('BenchmarkDotNet DLL versions differ; refusing measurements')
-    baseline, candidate = staged[args.baseline], staged[args.candidate]
-    baseline['previousAlpha'] = previous_alpha(candidate['commit']) == baseline['commit']
+    staged, baseline, candidate = stage_arms(args, output, rows, local, inputs, allocation_platform=allocation_platform)
     target_inventory = None
     if allocation_platform == 'mac':
         known = {row['id'] for row in catalogue(config, audit)}
         if any(row['kind'] == 'direct' and row['id'] not in known for row in rows):
             target_inventory = discover_mac_probes(baseline, output)
         verify_mac_probe_inventory(rows, known, target_inventory)
-    for row in rows:
-        right = staged[row.get('candidate', args.candidate)]
-        left = cold_companion(baseline, right) if row.get('window') == 'cold' else baseline
-        row['sides'] = dict(candidate=public_side(right))
-        if not row.get('firstBaseline'):
-            row['sides'] = dict(baseline=public_side(left), **row['sides'])
+    assign_sides(args, rows, staged, baseline)
     measurement_groups(rows)  # fix every process filter before sealing, including lazy A/A
     fixed_counts = {}
     if allocation_platform == 'mac':
@@ -1106,6 +1185,25 @@ def run_command(args, output=None, local=None, *, allocation_platform='pc'):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest='command', required=True)
+    prepare_parser = commands.add_parser('prepare')
+    handoff = prepare_parser.add_mutually_exclusive_group(required=True)
+    handoff.add_argument('--build-only', action='store_true')
+    handoff.add_argument('--from', dest='from_prepared', type=Path)
+    prepare_parser.add_argument('--mode', choices=('change', 'release'))
+    prepare_parser.add_argument('--baseline')
+    prepare_parser.add_argument('--candidate')
+    prepare_parser.add_argument('--output')
+    prepare_parser.add_argument('--kind', dest='seal_kind')
+    prepare_parser.add_argument('--ordering-proof', action='store_true')
+    prepare_subset = prepare_parser.add_mutually_exclusive_group()
+    prepare_subset.add_argument('--only')
+    prepare_subset.add_argument('--plan', type=Path)
+    diff_parser = commands.add_parser('seal-diff')
+    diff_parser.add_argument('reviewed', type=Path)
+    diff_parser.add_argument('new', type=Path)
+    diff_parser.add_argument('--approved', required=True, nargs=2, type=Path)
+    carry_parser = commands.add_parser('carry')
+    carry_parser.add_argument('leg1', type=Path)
     run_parser = commands.add_parser('run')
     run_parser.add_argument('--mode', required=True, choices=('change', 'release'))
     run_parser.add_argument('--baseline', required=True)
@@ -1131,6 +1229,15 @@ def main():
     try:
         if args.command in ('band', 'run'):
             pc_command(args)
+        elif args.command == 'prepare':
+            import gate_prepare
+            print(gate_prepare.command(args))
+        elif args.command == 'seal-diff':
+            from gate_batch import seal_diff
+            seal_diff(args.reviewed, args.new, args.approved)
+        elif args.command == 'carry':
+            from gate_batch import carry
+            print(json.dumps(carry(args.leg1), indent=2))
         elif args.command == 'retry':
             print(retry_command(args.parent, kind=args.kind))
         elif args.command == 'report':
@@ -1138,7 +1245,7 @@ def main():
         else:
             import gate_bundle
             raise SystemExit(gate_bundle.go_command(args.go, dry=getattr(args, 'dry_run', False), fly=args.command == 'fly'))
-    except (ValueError, OSError, RuntimeError) as error:
+    except (ValueError, OSError, RuntimeError, KeyError, TypeError, tarfile.TarError) as error:
         parser.exit(2, f'gate: {error}\n')
 
 
@@ -1162,7 +1269,7 @@ if __name__ == '__main__':
     elif len(sys.argv) == 3 and sys.argv[1] == '_fly-held':
         import gate_bundle
         raise SystemExit(gate_bundle.fly_held(Path(sys.argv[2])))
-    elif len(sys.argv) == 3 and sys.argv[1] == '_stage':
-        stage_worker(sys.argv[2])
+    elif len(sys.argv) in (3, 4) and sys.argv[1] == '_stage':
+        stage_worker(*sys.argv[2:])
     else:
         main()

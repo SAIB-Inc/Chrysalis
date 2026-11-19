@@ -1,0 +1,61 @@
+{
+  "runtimeTarget": {
+    "name": ".NETCoreApp,Version=v10.0",
+    "signature": ""
+  },
+  "targets": {
+    ".NETCoreApp,Version=v10.0": {
+      "BenchmarkDotNet/0.15.8": {
+        "dependencies": {
+          "BenchmarkDotNet.Annotations": "0.15.8",
+          "CommandLineParser": "2.9.1",
+          "Gee.External.Capstone": "2.3.0",
+          "Iced": "1.21.0",
+          "Microsoft.CodeAnalysis.CSharp": "4.14.0",
+          "Microsoft.Diagnostics.Runtime": "3.1.512801",
+          "Microsoft.Diagnostics.Tracing.TraceEvent": "3.1.21",
+          "Microsoft.DotNet.PlatformAbstractions": "3.1.6",
+          "Perfolizer": "0.6.1",
+          "System.Management": "9.0.5"
+        },
+        "runtime": {
+          "lib/net8.0/BenchmarkDotNet.dll": {
+            "assemblyVersion": "0.15.8.0",
+            "fileVersion": "0.15.8.0"
+          }
+        }
+      },
+      "Gee.External.Capstone/2.3.0": {
+        "runtime": {
+          "lib/net7.0/Gee.External.Capstone.dll": {
+            "assemblyVersion": "2.3.0.0",
+            "fileVersion": "2.3.0.0"
+          }
+        },
+        "runtimeTargets": {
+          "runtimes/linux-x64/native/libcapstone.so": {
+            "rid": "linux-x64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          }
+        }
+      }
+    }
+  },
+  "libraries": {
+    "BenchmarkDotNet/0.15.8": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-paCfrWxSeHqn3rUZc0spYXVFnHCF0nzRhG0nOLnyTjZYs8spsimBaaNmb3vwqvALKIplbYq/TF393vYiYSnh/Q==",
+      "path": "benchmarkdotnet/0.15.8",
+      "hashPath": "benchmarkdotnet.0.15.8.nupkg.sha512"
+    },
+    "Gee.External.Capstone/2.3.0": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-2ap/rYmjtzCOT8hxrnEW/QeiOt+paD8iRrIcdKX0cxVwWLFa1e+JDBNeECakmccXrSFeBQuu5AV8SNkipFMMMw==",
+      "path": "gee.external.capstone/2.3.0",
+      "hashPath": "gee.external.capstone.2.3.0.nupkg.sha512"
+    }
+  }
+}

@@ -211,7 +211,7 @@ is inferred from preparation. A consumed go cannot be used again. Re-report
 with `gate.py report <run-directory>`; that reads only the sealed run directory.
 
 The local JSON also needs `flyPythonRoot`, a relocatable Linux Python3.12 tree,
-for bundle preparation. `flyBudgetLeftUsd` is required and is the remaining
+for local Fly bundle preparation. `flyBudgetLeftUsd` is required and is the remaining
 approved balance, not the total budget; missing, invalid or insufficient values
 fail closed before a launch. The public worker receives both preparation settings. Never put credentials there: `flyTokenFile` names the RAM file only.
 The bundle copies the installed, explicitly selected .NET runtimes, the same
@@ -418,7 +418,7 @@ outside +/-band says no plateau. Both rules keep the original data visible.
 `gate.py go SEAL_ID` dispatches to the sealed provider; `fly --go` remains Fly-only.
 For an Azure seal, inspect `gate.py go SEAL_ID --dry-run` before the go. It prints each full reservation and the number of attempts the current ledger guarantees; it starts nothing. An Azure seal needs the Linux/amd64 `mbp-container build` and PC import path. The seal and payload must carry the same approved container build marker; without the reviewed runner pin, the launcher will not start. The launcher does not prepare or measure clients on the PC.
 
-The PC settings file named by `CHRYSALIS_GATE_LOCAL` binds four canonical paths: `azureCli`, `azureLock`, `azureBaseline`, `azureLedger`, plus the desk’s `azureRemainingProjectionUsd` estimate for the rest of the program. `flyPythonRoot` still names the relocatable Linux bundle Python for either provider. The ledger is mode 0600 and replaces per-phase spending counters. Its opening booking is $4.29 (Fly and Azure combined); before each go and each attempt the strict program ceiling is $40, and controls additionally stay below $6 in their original lineage. An unresolved attempt retains its full reservation; posted charges are a separate comparison, not budget credit. The batch and cap-stop reports distinguish program booked, unsettled, observed posted, computed headroom, and the desk estimate.
+The PC settings file named by `CHRYSALIS_GATE_LOCAL` binds four canonical paths: `azureCli`, `azureLock`, `azureBaseline`, `azureLedger`, plus the desk’s `azureRemainingProjectionUsd` estimate for the rest of the program. For Azure, the PC pins the Python mirror manifest digest as described below; `flyPythonRoot` is only a Mac build-guest setting. The ledger is mode 0600 and replaces per-phase spending counters. Its opening booking is $4.29 (Fly and Azure combined); before each go and each attempt the strict program ceiling is $40, and controls additionally stay below $6 in their original lineage. An unresolved attempt retains its full reservation; posted charges are a separate comparison, not budget credit. The batch and cap-stop reports distinguish program booked, unsettled, observed posted, computed headroom, and the desk estimate.
 
 Each attempt has its own tagged resource group, user-assigned identity with Contributor on its own run group only, private storage, and outbound-only VM. `Standard_F8als_v7` uses `eastus2` with one fresh `eastus` capacity fallback for that same draw. Quota is not capacity. The keeper is a bounded Windows process only. The VM's own group-delete timer and Azure's platform shutdown are independent; the platform schedule is confirmed before guest init, never moved in place, and removed with the group. A launcher never registers a provider.
 
@@ -443,3 +443,54 @@ All six capabilities are separate HTTPS-only blob SAS. Plaintext stays in memory
 On a fresh installation only, the coordinator runs `gate_azure.py initialize-ledger` against the exact baseline. If a ledger is missing after use, restore the known ledger instead; a GO never creates one.
 
 A consumed GO cannot authorize another attempt after its dispatch exits. On resume, before any other work, check the ledger. If an entry is active or cleanup failed, `gate_azure.py recover` refuses a held lock and otherwise recovers the exact owned group before checking the baseline. If cleanup was not proved before the reserve expired, ordinary GOs refuse until explicit coordinator recovery. While group creation is unconfirmed, a qualifying watchdog absence proof is provisional: the full reservation stays booked and the next GO must delete and prove absence again after the reserve boundary. Failed re-proof stops ordinary GOs. Do not replace the baseline fingerprint. `gate_azure.py cost GO_DIR` is read-only against Azure, checks exact inventory, and reads whole-subscription ActualCost at +1 and +3 days. Keep daily checks at most 24 hours apart through three days after the last run. Reports retain only run bookings/posted figures and totals for other rows; a charge outside run groups and the exact baseline, posted exceeding booked, or posted exceeding expected by more than 20% stops the gate. Do not start another go while cleanup or a cost stop is unresolved.
+
+### Azure preparation and batch review
+
+Azure preparation has two steps. From the PC, run
+`mbp-container <tree> build --request <tree-relative JSON>`. The request sets
+`kind` to `prepare` and supplies `mode`, `baseline`, `candidate`, `sealKind`,
+`toolingCommit`, and `toolingTree`. Use full commit and tree IDs. It can select
+rows with `plan` (a tree-relative path and its raw `planSha256`) or `only`, and
+can set `orderingProof`.
+The Mac's disposable Linux/amd64 guests restore from the local package feed,
+then build every arm with `--no-restore`. The Mac host verifies the result and
+publishes `prepared/`, `build-files.json`, and `completion.json` together only
+after the guests and their staging have been cleaned up.
+They do not run the client. The Mac's `data/gate-build.json` names the public
+inputs only. `linuxDotnetRoot` and `flyPythonRoot` each contain a `sha256.json`
+mapping relative paths to SHA-256 digests. `pinnedBaseline` and `corporaRoot`
+retain their existing manifests.
+
+On the PC, pass the fetched folder
+`work/mbp-results/<worktree>/<run-id>/mbp-container-<token>/prepared` to
+`gate.py prepare --from`. It verifies the cleanup receipt and exact fetched
+inventory; do not move the folder out of the wrapper's result directory. The PC settings named by
+`CHRYSALIS_GATE_LOCAL` must independently pin `azureToolingCommit` and
+`azureToolingTree` to the approved signed tooling commit reachable from the
+local `release/2.0.0-alpha` branch and its exact tree. The PC compares the
+receipt to that pair and rederives the requested rows, sides and policy from
+the pinned Git blobs, including band files, benchmark fixtures, and host and
+guest scripts. Files in the launcher's worktree do not supply these inputs. It
+then checks the public inputs. The PC does not store the .NET or Python
+mirrors: the matching Mac `sha256.json` bytes arrive as `input/mirrors/dotnet.json`
+and `input/mirrors/python.json`. Pin their digests independently in the PC
+settings as `linuxDotnetManifestSha256` and `flyPythonManifestSha256`. The PC
+compares the bundled runtime member hashes against those verified inventories.
+It also checks the pinned container build marker and the
+Linux-x64 native selections in each packed executable's `.deps.json`, and the
+bytes of the selected native files at their declared paths. This includes the
+1.7.14 arm: its direct references retain the original Linux Capstone target.
+It then binds the PC settings and checks the live ledger before writing the seal. This
+does not launch a machine. On a later approved go, the first kept VM runs the
+sealed dry work before any counted block. The PC rederives fixed work and the
+common micro count from the returned raw evidence; repeats use the same values.
+Set `orderingProof` in the request for the first seal of a changed worker/client
+recipe. A `sealKind: "noise"` request uses a plan with `"noiseRecords": true`
+and builds baseline-only sessions for missing machine-class records; the merged
+records are `time/noise-records.json`.
+
+Batch plans name `"areas"` from `gated.json`. `gate.py carry LEG1_DIR` lists
+outside rows to include in leg 2, distinguishing movement from unresolved data.
+`gate.py seal-diff REVIEWED NEW --approved ASTRA OPUS` permits one-seat review
+only for a batch-leg seal whose changes meet the batch rules. Each approval is
+JSON with `seat` (`astra` or `opus`), `verdict` (`APPROVED`), and `sealId`.
