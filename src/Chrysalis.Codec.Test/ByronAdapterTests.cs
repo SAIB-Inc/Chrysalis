@@ -41,6 +41,19 @@ public class ByronAdapterTests
         Assert.Equal(vector, ours);
     }
 
+    [Fact]
+    public void RoundtripBase58PreservesEnvelopeAtDecodeBufferBoundary()
+    {
+        // Synthetic payload: [28-byte root, {3: 2627-byte attribute}, 0].
+        byte[] payload = new byte[2664];
+        Convert.FromHexString("83581C").CopyTo(payload, 0);
+        Convert.FromHexString("A103590A43").CopyTo(payload, 31);
+        ByronAddress address = ByronAddress.Create(new(payload), Crc32.HashToUInt32(payload));
+        string encoded = address.ToBase58();
+        Assert.Equal(3653, encoded.Length); // SimpleBase 5.6.0 estimates 2674 bytes, one short.
+        Assert.Equal(CborSerializer.Serialize(address), CborSerializer.Serialize(ByronAddressExtensions.FromBase58(encoded)));
+    }
+
     [Theory]
     [InlineData(0)]
     [InlineData(1)]

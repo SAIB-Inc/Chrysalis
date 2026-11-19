@@ -9,7 +9,7 @@
     <PackageVersion Include="SAIB.Blake2Fast" Version="4.0.0" />
 
     <!-- Encoding -->
-    <PackageVersion Include="SimpleBase" Version="5.6.0" />
+    <PackageVersion Include="SimpleBase" Version="5.6.4" />
 
     <!-- Code Analysis / Source Generation -->
     <PackageVersion Include="Microsoft.CodeAnalysis.Analyzers" Version="5.12.0" />
@@ -44,6 +44,6 @@
     <PackageVersion Include="Microsoft.Extensions.Configuration.Binder" Version="11.0.0" />
 
     <!-- Cryptography -->
-    <PackageVersion Include="BouncyCastle.Cryptography" Version="2.6.1" />
+    <PackageVersion Include="BouncyCastle.Cryptography" Version="2.7.0" />
   </ItemGroup>
 </Project>
