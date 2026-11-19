@@ -9,7 +9,7 @@
     <PackageVersion Include="SAIB.Blake2Fast" Version="4.0.0" />
 
     <!-- Encoding -->
-    <PackageVersion Include="SimpleBase" Version="5.6.0" />
+    <PackageVersion Include="SimpleBase" Version="5.6.4" />
 
     <!-- Code Analysis / Source Generation -->
     <PackageVersion Include="Microsoft.CodeAnalysis.Analyzers" Version="5.12.0" />
