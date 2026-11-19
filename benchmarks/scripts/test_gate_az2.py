@@ -11,6 +11,7 @@ import sys
 import tarfile
 from types import SimpleNamespace
 from unittest.mock import patch
+import xml.etree.ElementTree as ET
 import zipfile
 
 import pytest
@@ -82,6 +83,10 @@ def test_container_cli_requires_canonical_guest_and_forwards_phase(tmp_path, azu
 
 @pytest.mark.parametrize('pinned', [False, True])
 def test_container_stage_reuses_restore_without_network_source(tmp_path, monkeypatch, pinned):
+    (tmp_path / 'NuGet.Config').write_text(
+        '<configuration><packageSources><add key="staging" value="source-packages" /></packageSources>'
+        '<packageSourceMapping><packageSource key="staging"><package pattern="*" /></packageSource>'
+        '</packageSourceMapping></configuration>')
     source = tmp_path / 'source'; source.mkdir()
     (source / 'global.json').write_text('{"sdk":{"version":"11.0.100"}}')
     stage = tmp_path / 'stage'; stage.mkdir()
@@ -91,8 +96,10 @@ def test_container_stage_reuses_restore_without_network_source(tmp_path, monkeyp
     root = tmp_path / sdk
     monkeypatch.setattr(gate.runner, 'DOTNET_ROOT', tmp_path / '11.0.100')
     monkeypatch.setenv('CHRYSALIS_DOTNET10_ROOT', str(tmp_path / '10.0.301'))
-    monkeypatch.setenv('CHRYSALIS_NUGET_SOURCE', str(tmp_path / 'feed'))
+    feed = tmp_path / 'feed & local'
+    monkeypatch.setenv('CHRYSALIS_NUGET_SOURCE', str(feed))
     monkeypatch.setenv('NUGET_PACKAGES', str(tmp_path / 'packages'))
+    config = stage / 'offline.NuGet.Config'
     calls = []
     def execute(argv, *args, **kwargs):
         gate.stage_worker(*argv[3:])
@@ -111,11 +118,25 @@ def test_container_stage_reuses_restore_without_network_source(tmp_path, monkeyp
          patch.object(prepare, 'restore_pinned_native') as repair, \
          patch.object(gate.subprocess, 'call', side_effect=child):
         gate.stage_side(info, 'side', tmp_path, local, inputs, prepare_phase='restore')
-        assert len(calls) == 2 and all(cmd[2] == 'restore' and cmd[cmd.index('--source') + 1] == str(tmp_path / 'feed') for cmd in calls)
+        assert [cmd[2:6] for cmd in calls] == [
+            ['restore', str(project), '--configfile', str(config)]
+            for project in (stage / 'Chrysalis.Benchmarks.csproj', stage / 'client/ReplayClient.csproj')
+        ]
+        assert all('--source' not in cmd and cmd.count('--configfile') == 1 for cmd in calls)
+        settings = ET.parse(config).getroot()
+        assert settings.tag == 'configuration'
+        clear, source_entry = settings.find('packageSources')
+        assert clear.tag == 'clear' and source_entry.tag == 'add'
+        assert set(source_entry.attrib) == {'key', 'value'} and source_entry.get('value') == str(feed)
+        mapping, = settings.find('packageSourceMapping')
+        assert mapping.tag == 'packageSource' and mapping.attrib == {'key': source_entry.get('key')}
+        pattern, = mapping
+        assert pattern.tag == 'package' and pattern.attrib == {'pattern': '*'}
         gate.stage_side(info, 'side', tmp_path, local, prepare_phase='build')
         export.assert_called_once()
         assert repair.call_count == int(pinned)
-    assert len(calls) == 4 and all(cmd[2] == 'build' and '--no-restore' in cmd and '--source' not in cmd for cmd in calls[2:])
+    assert len(calls) == 4 and all(cmd[2] == 'build' and '--no-restore' in cmd
+                                   and not {'--source', '--configfile'}.intersection(cmd) for cmd in calls[2:])
 
 
 def test_legacy_prepare_refuses_lost_runtime_targets_from_real_deps():

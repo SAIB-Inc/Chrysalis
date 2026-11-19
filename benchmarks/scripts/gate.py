@@ -17,6 +17,7 @@ import subprocess
 import sys
 import tarfile
 import time
+import xml.etree.ElementTree as ET
 
 import gate_session as session
 import gate_stats as stats
@@ -178,6 +179,19 @@ def nuget_packages():
     return os.environ['NUGET_PACKAGES'] if sys.platform == 'darwin' else str(REPO.parent / '.nuget/packages')
 
 
+def offline_restore_config(directory, source):
+    """Isolate staged restores from source mappings in the checkout."""
+    path = directory / 'offline.NuGet.Config'
+    config = ET.Element('configuration')
+    sources = ET.SubElement(config, 'packageSources')
+    ET.SubElement(sources, 'clear')
+    ET.SubElement(sources, 'add', key='offline', value=str(Path(source).absolute()))
+    mapping = ET.SubElement(config, 'packageSourceMapping')
+    ET.SubElement(ET.SubElement(mapping, 'packageSource', key='offline'), 'package', pattern='*')
+    ET.ElementTree(config).write(path, encoding='utf-8', xml_declaration=True)
+    return path
+
+
 def stage_side(info, label, output, local, inputs=None, *, allocation_platform='pc', prepare_phase=None):
     """Stage one arm; Azure restores and builds in separate guests."""
     job_file = output / 'build' / (label + '-staging.job.json')
@@ -225,13 +239,14 @@ def stage_side(info, label, output, local, inputs=None, *, allocation_platform='
     else:
         cli = [runner.DOTNET, runner.DOTNET_ROOT / 'sdk' / sdk / 'dotnet.dll']
         packages = restore_source = nuget_packages()
+    config = offline_restore_config(directory, restore_source)
     isolation = ['-nodeReuse:false', '--disable-build-servers', '-p:UseSharedCompilation=false']
     jobs = '-m:3' if sys.platform == 'darwin' else '-m:8'
     # Map the shared root of both the exported sources and staged projects.
     path_map = f'-p:PathMap={output.resolve()}=/_/'
     commands = []
     for name, project in [('harness', directory / 'Chrysalis.Benchmarks.csproj'), ('client', client_dir / 'ReplayClient.csproj')]:
-        commands.append(dict(command=list(map(str, [*cli, 'restore', project, '--source', restore_source, *isolation])),
+        commands.append(dict(command=list(map(str, [*cli, 'restore', project, '--configfile', config, *isolation])),
                              label=name + '-restore'))
         commands.append(dict(command=list(map(str, [*cli, 'build', project, '-c', 'Release', jobs, '-warnaserror', '--no-restore', *isolation, path_map,
                                                     *(['--no-dependencies'] if pinned or name == 'client' else [])])),
