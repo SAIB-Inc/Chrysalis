@@ -105,7 +105,7 @@ public sealed class AvailabilityTests
         byte[] bound = Convert.FromHexString("0101002320014981");
         byte[] unbound = Convert.FromHexString("010100232081808080104981"); // index 2^32 + 1
         _ = Evaluator.EvaluateScript(bound, Args, 3, 11);
-        _ = Assert.Throws<EvaluationException>(() => Evaluator.EvaluateScript(unbound, Args, 3, 11));
+        _ = Assert.Throws<UnboundVariableException>(() => Evaluator.EvaluateScript(unbound, Args, 3, 11));
     }
 
     [Theory]
