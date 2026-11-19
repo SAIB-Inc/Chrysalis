@@ -177,6 +177,11 @@ class GateTests(unittest.TestCase):
                 for call in run.call_args_list:
                     command = call.args[0]
                     self.assertIn('/sdk/' + sdk + '/dotnet.dll', command[1])
+                    if command[2] == 'restore':
+                        config = Path(directory) / 'build/fixture/offline.NuGet.Config'
+                        self.assertEqual(command[4:6], ['--configfile', str(config)])
+                        self.assertNotIn('--source', command)
+                        self.assertTrue(config.is_file())
                     with self.subTest(command=command):
                         for flag in ('-nodeReuse:false', '--disable-build-servers', '-p:UseSharedCompilation=false'):
                             self.assertIn(flag, command)
