@@ -1370,6 +1370,24 @@ public class TxBuilder
         }
     }
 
+    // Reuse the codec's ledger comparer even for newly created redeemer keys.
+    internal static readonly IEqualityComparer<RedeemerKey> RedeemerKeyComparer = RedeemerMap.Create([]).Value.Comparer;
+
+    /// <summary>
+    /// Each distinct key's place among the keys in the given order, by the key's hex in any case:
+    /// the index a redeemer for that key points at (the ledger's indexOf on a body map or set).
+    /// </summary>
+    internal static Dictionary<string, int> RedeemerIndices(IEnumerable<ReadOnlyMemory<byte>> keys, IComparer<ReadOnlyMemory<byte>> order)
+    {
+        Dictionary<string, int> indices = [with(StringComparer.OrdinalIgnoreCase)];
+        foreach (ReadOnlyMemory<byte> key in keys.Order(order))
+        {
+            _ = indices.TryAdd(Convert.ToHexString(key.Span), indices.Count);
+        }
+
+        return indices;
+    }
+
     /// <summary>
     /// Builds a complete redeemer map from ALL directive lists (spend, mint, withdrawal, cert).
     /// This avoids using RedeemerSet which gets bypassed when SetRedeemers is called directly.
@@ -1378,7 +1396,7 @@ public class TxBuilder
         TransactionBuilder builder, List<string> sortedInputKeys)
     {
         ExUnits placeholderExUnits = ExUnits.Create(14_000_000, 10_000_000_000);
-        Dictionary<RedeemerKey, RedeemerValue> redeemerMap = [];
+        Dictionary<RedeemerKey, RedeemerValue> redeemerMap = [with(RedeemerKeyComparer)];
 
         // ── Tag 0: Spend redeemers (sorted by tx_hash + index) ──
         foreach (InputDirective directive in _explicitInputs)
@@ -1398,28 +1416,15 @@ public class TxBuilder
             }
         }
 
-        // ── Tag 1: Mint redeemers (sorted by policy hash) ──
-        if (builder.Mint is not null)
+        // ── Tag 1: Mint redeemers (the policy's place in the mint, in byte order) ──
+        Dictionary<string, int> mintIndices = RedeemerIndices(
+            builder.Mint is { } minted ? minted.Value.Keys : [], ByteMemoryComparer.Instance);
+        foreach (MintDirective mint in _mintDirectives)
         {
-            List<string> sortedMintPolicies = [.. builder.Mint.Value.Value.Keys
-                .Select(k => Convert.ToHexString(k.Span))
-                .Order(StringComparer.OrdinalIgnoreCase)];
-
-            foreach (MintDirective mint in _mintDirectives)
+            if (mint.Redeemer is not null && mintIndices.TryGetValue(mint.PolicyHex, out int mintIndex))
             {
-                if (mint.Redeemer is null)
-                {
-                    continue;
-                }
-
-                string policyUpper = mint.PolicyHex.ToUpperInvariant();
-                int mintIndex = sortedMintPolicies.FindIndex(
-                    p => p.Equals(policyUpper, StringComparison.OrdinalIgnoreCase));
-                if (mintIndex >= 0)
-                {
-                    redeemerMap[RedeemerKey.Create(1, (ulong)mintIndex)] =
-                        RedeemerValue.Create(mint.Redeemer, placeholderExUnits);
-                }
+                redeemerMap[RedeemerKey.Create(1, (ulong)mintIndex)] =
+                    RedeemerValue.Create(mint.Redeemer, placeholderExUnits);
             }
         }
 

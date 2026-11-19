@@ -16,8 +16,6 @@ namespace Chrysalis.Tx.Test.Cli;
 /// <summary>Replays the pinned offline CLI corpus and challenges its inventory.</summary>
 public sealed class CliVectorTests
 {
-    private static string FixtureRoot => Path.Combine(AppContext.BaseDirectory, "TestData", "cli");
-
     /// <summary>Each mutation fails closed without using the CLI or a node.</summary>
     /// <param name="damage">The change injected into a fresh copy of the corpus.</param>
     /// <param name="reason">A diagnostic that identifies the intended failure.</param>
@@ -69,9 +67,9 @@ public sealed class CliVectorTests
     private static DirectoryInfo CopyCorpus()
     {
         DirectoryInfo scratch = Directory.CreateTempSubdirectory("cli-vectors-");
-        foreach (string source in Directory.EnumerateFiles(FixtureRoot, "*", SearchOption.AllDirectories))
+        foreach (string source in Directory.EnumerateFiles(CliVectors.Root, "*", SearchOption.AllDirectories))
         {
-            string dest = Path.Combine(scratch.FullName, Path.GetRelativePath(FixtureRoot, source));
+            string dest = Path.Combine(scratch.FullName, Path.GetRelativePath(CliVectors.Root, source));
             _ = Directory.CreateDirectory(Path.GetDirectoryName(dest)!);
             File.Copy(source, dest);
         }
@@ -82,7 +80,7 @@ public sealed class CliVectorTests
     [Fact]
     public void VerifiedCorpusContainsAllKinds()
     {
-        CliVectors vectors = CliVectors.Load(FixtureRoot);
+        CliVectors vectors = CliVectors.Load(CliVectors.Root);
         string[] kinds = [.. vectors.Cases.SelectMany(item => item.GetProperty("rows").EnumerateArray())
             .Select(row => CliVectors.Text(row, "kind")).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal)];
         Assert.Equal(["balanced", "candidate", "min-utxo", "quote"], kinds);
@@ -92,7 +90,7 @@ public sealed class CliVectorTests
     [Fact]
     public void TransactionsDecodeAndSatisfyTheirRelations()
     {
-        CliVectors vectors = CliVectors.Load(FixtureRoot);
+        CliVectors vectors = CliVectors.Load(CliVectors.Root);
         Dictionary<string, ConwayTransactionBody> decoded = [];
         foreach ((string path, JsonElement file) in vectors.Files)
         {
@@ -181,7 +179,7 @@ public sealed class CliVectorTests
     [Fact]
     public void ParametersUseTheG1WireAndTheDerivedOverlay()
     {
-        CliVectors vectors = CliVectors.Load(FixtureRoot);
+        CliVectors vectors = CliVectors.Load(CliVectors.Root);
         ProtocolParams baseline = vectors.Parameters(CliVectors.G1);
         JsonNode original = JsonNode.Parse(vectors.Bytes(CliVectors.G1))!;
         Assert.Equal(original["txFeePerByte"]!.GetValue<ulong>(), baseline.MinFeeA);

@@ -13,6 +13,7 @@ using Chrysalis.Network.Multiplexer;
 using Chrysalis.Tx.Builders;
 using Chrysalis.Tx.Extensions;
 using Chrysalis.Tx.Models.Cbor;
+using Chrysalis.Tx.Test;
 using SAIB.Cbor.Serialization;
 using Xunit;
 using Env = Chrysalis.IntegrationTests.IntegrationEnvironment;
@@ -159,7 +160,7 @@ internal static class DijkstraProbes
         List<ResolvedInput> inputs = FundedIntegrationTests.ReadAdaInputs(before);
         Assert.NotEmpty(inputs);
         ResolvedInput selected = inputs.OrderByDescending(input => input.Output.Amount().Lovelace()).First();
-        TxBuilder builder = new(new FundedIntegrationTests.CliSnapshotProvider(ProtocolOracles.Parameters(parameters), [selected]));
+        TxBuilder builder = new(new CliSnapshotProvider(ProtocolOracles.Parameters(parameters), [selected]));
         const ulong transfer = 2_000_000;
         _ = builder.AddInput(selected).PayLovelace(address, transfer).SetChangeAddress(address);
         PostMaryTransaction unsigned = await builder.Complete().WaitAsync(ct);

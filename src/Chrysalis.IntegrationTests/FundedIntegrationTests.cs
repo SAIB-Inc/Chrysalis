@@ -1,10 +1,10 @@
 using System.Globalization;
 using System.Security.Cryptography;
 using System.Text.Json;
+
 using Chrysalis.Codec.Extensions.Cardano.Core.Common;
 using Chrysalis.Codec.Extensions.Cardano.Core.Transaction;
 using Chrysalis.Codec.Serialization;
-using Chrysalis.Codec.Types.Cardano.Core;
 using Chrysalis.Codec.Types.Cardano.Core.Common;
 using Chrysalis.Codec.Types.Cardano.Core.Transaction;
 using Chrysalis.Codec.Types.Cardano.Core.Protocol;
@@ -12,8 +12,8 @@ using Chrysalis.Network.Cbor.LocalTxSubmit;
 using Chrysalis.Network.Multiplexer;
 using Chrysalis.Tx.Builders;
 using Chrysalis.Tx.Extensions;
-using Chrysalis.Tx.Models;
 using Chrysalis.Tx.Models.Cbor;
+using Chrysalis.Tx.Test;
 using Chrysalis.Wallet.Models.Enums;
 using Chrysalis.Wallet.Models.Keys;
 using Xunit;
@@ -155,19 +155,5 @@ public sealed class FundedIntegrationTests
             inputs.Add(new ResolvedInput(input, output));
         }
         return inputs;
-    }
-
-    internal sealed class CliSnapshotProvider(ProtocolParams parameters, List<ResolvedInput> inputs) : ICardanoDataProvider
-    {
-        public NetworkType NetworkType => NetworkType.Preprod;
-        public Task<ProtocolParams> GetParametersAsync(CancellationToken cancellationToken = default) => Task.FromResult(parameters);
-        public Task<List<ResolvedInput>> GetUtxosAsync(List<string> address, CancellationToken cancellationToken = default)
-        {
-            ArgumentNullException.ThrowIfNull(address);
-            return Task.FromResult(inputs.Where(input => address.Contains(WalletAddress.FromBytes(input.Output.Address().ToArray()).ToBech32(), StringComparer.Ordinal)).ToList());
-        }
-        public Task<ResolvedInput?> GetUtxoByOutRefAsync(string txHash, ulong index, CancellationToken cancellationToken = default) => Task.FromResult(inputs.FirstOrDefault(input => string.Equals(Convert.ToHexStringLower(input.Outref.TransactionId.Span), txHash, StringComparison.OrdinalIgnoreCase) && input.Outref.Index == index));
-        public Task<string> SubmitTransactionAsync(ITransaction tx, CancellationToken cancellationToken = default) => throw new NotSupportedException("Submission is deliberately through the production mini-protocol, not this CLI snapshot adapter.");
-        public Task<Metadata?> GetTransactionMetadataAsync(string txHash, CancellationToken cancellationToken = default) => Task.FromResult<Metadata?>(null);
     }
 }

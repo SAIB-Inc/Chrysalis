@@ -968,7 +968,9 @@ public sealed class TransactionTemplateBuilder<T>
             withdrawalIndex++;
         }
 
-        int mintIndex = 0;
+        // A mint redeemer points at its policy's place in the mint, in byte order.
+        Dictionary<string, int> mintIndices = TxBuilder.RedeemerIndices(
+            buildContext.TxBuilder.Mint is { } minted ? minted.Value.Keys : [], ByteMemoryComparer.Instance);
         foreach (MintConfig<T> config in _mintConfigs)
         {
             MintOptions<T> mintOptions = new() { Policy = "", Assets = [] };
@@ -982,7 +984,7 @@ public sealed class TransactionTemplateBuilder<T>
                 }
             }
 
-            if (mintOptions.RedeemerBuilder != null)
+            if (mintOptions.RedeemerBuilder != null && mintIndices.TryGetValue(mintOptions.Policy, out int mintIndex))
             {
                 Redeemer<ICborType> redeemer = mintOptions.RedeemerBuilder(mapping, param, buildContext.TxBuilder);
 
@@ -991,13 +993,11 @@ public sealed class TransactionTemplateBuilder<T>
                     ProcessRedeemer(buildContext, redeemer, (ulong)mintIndex);
                 }
             }
-
-            mintIndex++;
         }
 
-        // Process certificates — use RedeemerSet.AddCert so the tag is correct (3 = Cert)
-        // Script is resolved from reference inputs, NOT embedded inline
-        int certIndex = 0;
+        // A certificate redeemer points at the certificate's place in the body's list. It joins the
+        // template's map when there is one; else it stays in RedeemerSet, where a pre-build hook may add more.
+        bool certificatesInMap = buildContext.Redeemers.Count > 0;
         foreach (CertificateConfig<T> config in _certificateConfigs)
         {
             CertificateOptions<T> certOptions = new();
@@ -1006,15 +1006,18 @@ public sealed class TransactionTemplateBuilder<T>
             if (certOptions.Certificate is not null)
             {
                 _ = buildContext.TxBuilder.AddCertificate(certOptions.Certificate);
+                int certIndex = buildContext.TxBuilder.CertificatesList!.Count - 1;
 
-                if (certOptions.RedeemerData is not null)
+                if (certOptions.RedeemerData is not null && certificatesInMap)
+                {
+                    buildContext.Redeemers[RedeemerKey.Create((int)RedeemerTag.Cert, (ulong)certIndex)] =
+                        RedeemerValue.Create(certOptions.RedeemerData, RedeemerBuilder.DefaultExUnits());
+                }
+                else if (certOptions.RedeemerData is not null)
                 {
                     _ = buildContext.TxBuilder.RedeemerSet.AddCert(certIndex, certOptions.RedeemerData);
-                    buildContext.IsSmartContractTx = true;
                 }
             }
-
-            certIndex++;
         }
     }
 
@@ -1411,7 +1414,7 @@ public sealed class TransactionTemplateBuilder<T>
         public List<TransactionInput> SpecifiedInputs { get; set; } = [];
         public List<ResolvedInput> PreResolvedUtxos { get; } = [];
         public List<TransactionInput> UnresolvedOutRefs { get; } = [];
-        public Dictionary<RedeemerKey, RedeemerValue> Redeemers { get; } = [];
+        public Dictionary<RedeemerKey, RedeemerValue> Redeemers { get; } = [with(Builders.TxBuilder.RedeemerKeyComparer)];
         public Dictionary<string, Dictionary<string, long>> Mints { get; } = [];
     }
 }

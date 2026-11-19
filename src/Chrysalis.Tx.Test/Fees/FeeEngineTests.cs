@@ -20,7 +20,7 @@ namespace Chrysalis.Tx.Test.Fees;
 /// <summary>Checks Conway fee and output rules against the pinned CLI bytes and targeted edge cases.</summary>
 public sealed class FeeEngineTests
 {
-    private static readonly Lazy<CliVectors> Corpus = new(() => Load(Path.Combine(AppContext.BaseDirectory, "TestData", "cli")));
+    private static readonly Lazy<CliVectors> Corpus = new(() => Load(CliVectors.Root));
     private static CliVectors Vectors => Corpus.Value;
 
     /// <summary>Enumerates stable test IDs for the requested verified row kind.</summary>
