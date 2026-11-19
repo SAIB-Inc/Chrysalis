@@ -912,36 +912,11 @@ public sealed class TransactionTemplateBuilder<T>
             }
         }
 
-        // Withdrawal redeemer pointers are keyed by the reward account's index in
-        // the ledger's *sorted* withdrawal map (the same order FindScript and the
-        // Plutus script context use), NOT the order withdrawals were added to the
-        // template. With a single withdrawal these coincide; with two or more they
-        // diverge, and an insertion-ordered pointer feeds the wrong redeemer to a
-        // script. Resolve each withdrawal's reward account and rank them.
-        Dictionary<int, ulong> withdrawalSortedIndex = [];
-        {
-            List<(int Insertion, byte[] Account)> accounts = [];
-            int wi = 0;
-            foreach (WithdrawalConfig<T> config in _withdrawalConfigs)
-            {
-                WithdrawalOptions<T> probe = new() { From = "", Amount = 0 };
-                config(probe, param);
-                byte[] account = probe.From.Length != 0 && parties.TryGetValue(probe.From, out string? bech)
-                    ? WalletAddress.FromBech32(bech).ToBytes()
-                    : [];
-                accounts.Add((wi, account));
-                wi++;
-            }
-
-            int rank = 0;
-            foreach ((int insertion, byte[] _) in accounts.OrderBy(a => (ReadOnlyMemory<byte>)a.Account, RewardAccountComparer.Instance))
-            {
-                withdrawalSortedIndex[insertion] = (ulong)rank;
-                rank++;
-            }
-        }
-
-        int withdrawalIndex = 0;
+        // A withdrawal redeemer points at its account's place among the body's withdrawals, in the
+        // ledger's order (script accounts first), as TxBuilder and the script context count it.
+        Dictionary<string, int> withdrawalIndices = TxBuilder.RedeemerIndices(
+            buildContext.TxBuilder.CurrentWithdrawals is { } withdrawals ? withdrawals.Value.Keys.Select(k => k.Value) : [],
+            RewardAccountComparer.Instance);
         foreach (WithdrawalConfig<T> config in _withdrawalConfigs)
         {
             WithdrawalOptions<T> withdrawalOptions = new() { From = "", Amount = 0 };
@@ -955,17 +930,18 @@ public sealed class TransactionTemplateBuilder<T>
                 }
             }
 
-            if (withdrawalOptions.RedeemerBuilder != null)
+            if (withdrawalOptions.RedeemerBuilder != null
+                && withdrawalOptions.From.Length != 0
+                && parties.TryGetValue(withdrawalOptions.From, out string? account)
+                && withdrawalIndices.TryGetValue(Convert.ToHexString(WalletAddress.FromBech32(account).ToBytes()), out int index))
             {
                 Redeemer<ICborType> redeemerObj = withdrawalOptions.RedeemerBuilder(mapping, param, buildContext.TxBuilder);
 
                 if (redeemerObj != null)
                 {
-                    ProcessRedeemer(buildContext, redeemerObj, withdrawalSortedIndex[withdrawalIndex]);
+                    ProcessRedeemer(buildContext, redeemerObj, (ulong)index);
                 }
             }
-
-            withdrawalIndex++;
         }
 
         // A mint redeemer points at its policy's place in the mint, in byte order.
