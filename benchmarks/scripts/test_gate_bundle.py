@@ -221,5 +221,75 @@ class BundleTests(unittest.TestCase):
                 self.assertIs(config.get('_sessionPerRow', False), enabled)
 
 
+    def test_az2f4_importer_reports_guest_refusal_reason_and_decodes_clean_status(self):
+        with tempfile.TemporaryDirectory() as td:
+            note = Path(td)
+            archive = note / 'results.tar.gz'
+            import io
+            diag = {'diagnosticOnly': True, 'reason': 'results-too-large', 'expandedBytes': 68327653, 'maxExpandedBytes': 10000000}
+            status = {'completedAllDeclaredRounds': True, 'exitCode': 0, 'probe': 'kept'}
+            startup = {'available': True, 'members': 64}
+            with tarfile.open(archive, 'w:gz') as stream:
+                for name, obj in (('results/recovery-diagnostic.json', diag),
+                                  ('results/session-status.json', status),
+                                  ('results/session-start.json', startup)):
+                    raw = (json.dumps(obj) + '\n').encode()
+                    info = tarfile.TarInfo(name)
+                    info.size = len(raw)
+                    stream.addfile(info, io.BytesIO(raw))
+            (note / 'results.sha256').write_text(bundle.sha(archive) + '\n')
+            (note / 'machine.json').write_text(json.dumps(dict(provider='azure', platform='azure',
+                machineClass='Standard_F8als_v7', region='eastus2')))
+            (note / 'cleanup-proof.json').write_text(json.dumps(dict(ourAppAbsent=True)))
+            (note / 'duration-cost.json').write_text(json.dumps(dict(totalEstimateWithReserveUsd=0.2,
+                cleanupOutstanding=False, withinSealedGuard=True, cleanupStartedSeconds=100, lifetimeSeconds=120)))
+            (note / 'diagnostic-only.json').write_text(json.dumps(dict(partial=True, reason='results-too-large')))
+            plan = dict(provider='azure', region='eastus2', destroyGuardSeconds=2494, measurementCutoffSeconds=2149,
+                        limitUsd=1.0, limitWithRepeatUsd=1.0, probe=probe_rule())
+            machine = bundle.verified_machine(note, plan, 0)
+            self.assertIn('results-too-large', machine['invalid'])
+            self.assertIn('68327653', machine['invalid'])
+            self.assertNotIn('missing or malformed session-status.json', machine['invalid'])
+            payload = bundle.archive_payload(note, plan, machine=machine)
+            self.assertIn('results-too-large', payload['invalid'])
+            self.assertEqual(payload['startup'], startup)
+
+    def test_az2f4_fix3_fly_diagnostic_matches_base_import(self):
+        import io
+        from test_gate_fly import probe_archive, probe_plan
+        def write_tgz(path, entries):
+            with tarfile.open(path, 'w:gz') as stream:
+                for name, data in entries.items():
+                    info = tarfile.TarInfo(name)
+                    info.size = len(data)
+                    stream.addfile(info, io.BytesIO(data))
+        with tempfile.TemporaryDirectory() as td:
+            note = Path(td) / 'fly'
+            plan = probe_plan(row(pairs=2), 'change')
+            probe_archive(note, plan, 'keep')
+            with tarfile.open(note / 'results.tar.gz') as stream:
+                parts = {m.name: stream.extractfile(m).read() for m in stream}
+            parts['results/recovery-diagnostic.json'] = b'{"diagnosticOnly":true}\n'
+            write_tgz(note / 'results.tar.gz', parts)
+            (note / 'results.sha256').write_text(bundle.sha(note / 'results.tar.gz') + '\n')
+            (note / 'cleanup-proof.json').write_text(json.dumps(dict(ourAppAbsent=True)))
+            (note / 'duration-cost.json').write_text(json.dumps(dict(
+                totalEstimateWithReserveUsd=0.1, cleanupOutstanding=False, withinSealedGuard=True)))
+            (note / 'diagnostic-only.json').write_text('{"diagnosticOnly":true}\n')
+            fly_payload = bundle.archive_payload(note, plan)
+            self.assertEqual(fly_payload['invalid'], 'session invalid: diagnostic-only.json')
+            mc = len(json.loads(parts['results/members.json']))
+            self.assertEqual((len(fly_payload['pairs']), len(fly_payload['context']['members'])), (mc // 2, mc))
+            self.assertEqual(bundle.verified_machine(note, plan, 0)['invalid'], 'session invalid: failed worker or recovery diagnostic')
+            # Overlong (>32 chars) reason and bare Fly marker without session-status.json both fall back to base decode.
+            for marker_bytes in (b'{"diagnosticOnly":true}\n', (json.dumps({'diagnosticOnly': True, 'reason': 'a' * 33}) + '\n').encode()):
+                bare = Path(td) / f'bare-{len(marker_bytes)}'
+                bare.mkdir()
+                write_tgz(bare / 'results.tar.gz', {'results/recovery-diagnostic.json': marker_bytes})
+                (bare / 'cleanup-proof.json').write_text(json.dumps(dict(ourAppAbsent=True)))
+                res = bundle.archive_payload(bare)
+                self.assertEqual(res['invalid'], 'session invalid: missing or malformed completion or pairs')
+                self.assertEqual(res['startup']['reason'], 'Results could not be decoded')
+
 if __name__ == '__main__':
     unittest.main()

@@ -27,6 +27,7 @@ import time
 import uuid
 
 from gate_azure_channel import STATUS_SCRIPT, create_storage, run_channel, upload_inputs
+from gate_azure_guest import FETCH_STAGES, REFUSAL_REASONS
 from gate_azure_guard import (ALERT_TAIL, COPY_END, RESERVE_TAIL, WATCH_MARGIN, WRITE_END, GuardFailure,
                               alert, arm_native, check_context, cleanup_lease, mark, mutation, process_id, retire, stop_paused_driver, wsl_context)
 from gate_azure_proof import GROUP, GUID, Az, AzureError, cost_readback, expected_posted, fingerprint, proof
@@ -165,7 +166,8 @@ class Draw:
         self.guard_end = start + guard_seconds
         self.work_end = start + cutoff
         self.deadline = self.guard_end + RESERVE_TAIL
-        self.worker_done = self.push_started = False
+        self.worker_done = self.worker_failed = self.push_started = False
+        self.guest_error = None
         self.commands = set()
 
     def path(self, namespace, kind, name='gate'):
@@ -224,7 +226,9 @@ class Draw:
                     raise GuardFailure('status is read-only and must precede push')
                 deadline = self.work_end
             elif label.startswith('push-'):
-                if 'kick' not in self.commands or not (self.worker_done or time.time() >= self.work_end) or (label == 'push-2' and 'push-1' not in self.commands):
+                if ('kick' not in self.commands
+                        or not (self.worker_done or self.worker_failed or time.time() >= self.work_end)
+                        or (label == 'push-2' and 'push-1' not in self.commands)):
                     raise GuardFailure('push outside completion or copy window')
                 self.push_started = True
                 deadline = self.work_end + COPY_END
@@ -516,6 +520,48 @@ def check_seal_budget(local, seal, go):
     Ledger(local, read_only=True).reserve(seal, go, amounts[:1])
 
 
+def _diagnostic_summary(archive):
+    import tarfile
+    summary = dict(partial=True)
+    if not archive.is_file():
+        return summary
+    try:
+        with tarfile.open(archive, 'r:gz') as stream:
+            names = set(stream.getnames())
+            summary['partial'] = 'results/recovery-diagnostic.json' in names
+            if summary['partial']:
+                marker = json.load(stream.extractfile('results/recovery-diagnostic.json'))
+                if isinstance(marker, dict):
+                    reason = marker.get('reason')
+                    if isinstance(reason, str) and reason in REFUSAL_REASONS:
+                        summary['reason'] = reason
+                    stage = marker.get('stage')
+                    if isinstance(stage, str) and stage in FETCH_STAGES:
+                        summary['stage'] = stage
+                    unit_result = marker.get('unitResult')
+                    if isinstance(unit_result, str) and re.fullmatch(r'[a-z-]{1,32}', unit_result):
+                        summary['unitResult'] = unit_result
+                    if marker.get('limitsFallback') is True:
+                        summary['limitsFallback'] = True
+                    for key in ('compressedBytes', 'maxCompressedBytes', 'expandedBytes', 'maxExpandedBytes',
+                                'logsIncluded', 'logsTruncated', 'logsSkipped', 'linesRedacted',
+                                'execMainCode', 'execMainStatus'):
+                        if type(marker.get(key)) is int and marker[key] >= 0:
+                            summary[key] = marker[key]
+            if 'results/session-status.json' in names:
+                status = json.load(stream.extractfile('results/session-status.json'))
+                if isinstance(status, dict):
+                    clean = {k: status[k] for k in ('exitCode',) if type(status.get(k)) is int}
+                    clean.update({k: status[k] for k in ('completedAllDeclaredRounds', 'dry') if type(status.get(k)) is bool})
+                    if status.get('probe') in ('kept', 'rejected'):
+                        clean['probe'] = status['probe']
+                    if clean:
+                        summary['sessionStatus'] = clean
+    except (OSError, ValueError, KeyError, tarfile.TarError):
+        pass
+    return summary
+
+
 def probe_result(archive, plan, note):
     import tarfile
     from gate_fly_guard import result_status
@@ -664,9 +710,16 @@ def one_attempt(az, local, ledger, seal, go, directory, plan, group, region, inp
     try:
         arm_native(Path(__file__).resolve(), guard, draw.deadline, *context)
         draw.setup(inputs)
-        partial = run_channel(draw, inputs, note)
+        try:
+            partial = run_channel(draw, inputs, note)
+        except Exception:
+            if (note / 'results.tar.gz').is_file():
+                atomic_json(note / 'diagnostic-only.json', _diagnostic_summary(note / 'results.tar.gz'))
+            if draw.guest_error is not None:
+                atomic_json(note / 'guest-error.json', draw.guest_error)
+            raise
         if partial:
-            atomic_json(note / 'diagnostic-only.json', dict(partial=True))
+            atomic_json(note / 'diagnostic-only.json', _diagnostic_summary(note / 'results.tar.gz'))
         else:
             code = probe_result(note / 'results.tar.gz', plan, note)
     except AzureError as exc:

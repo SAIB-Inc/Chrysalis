@@ -320,6 +320,7 @@ def monitored_process(command, root, env, dest, timeout, server_pid=None, *, obs
         result.update(steal='not observable on Azure', stealFieldMoved=len(set(raw)) > 1)
         for sample in (before, *samples, after):
             sample.pop('cpuStat', None)
+            sample.pop('processes', None)
     if error:
         result['error'] = error
     if ordering_proof:

@@ -340,6 +340,28 @@ def note_json(note, name):
         return None
 
 
+def _recovery_detail(stream, names):
+    if 'results/recovery-diagnostic.json' not in names:
+        return None
+    try:
+        marker = json.load(stream.extractfile('results/recovery-diagnostic.json'))
+    except (AttributeError, KeyError, OSError, TypeError, ValueError, tarfile.TarError):
+        return None
+    reason = marker.get('reason') if isinstance(marker, dict) else None
+    if not (isinstance(reason, str) and re.fullmatch(r'[a-z0-9-]{1,32}', reason)):
+        return None
+    parts = []
+    stage = marker.get('stage')
+    if isinstance(stage, str) and re.fullmatch(r'[a-z0-9-]{1,32}', stage):
+        parts.append(f'stage={stage}')
+    if type(marker.get('expandedBytes')) is int and type(marker.get('maxExpandedBytes')) is int:
+        parts.append(f"expanded {marker['expandedBytes']} > {marker['maxExpandedBytes']}")
+    if (type(marker.get('compressedBytes')) is int and type(marker.get('maxCompressedBytes')) is int
+            and marker['compressedBytes'] > marker['maxCompressedBytes']):
+        parts.append(f"compressed {marker['compressedBytes']} > {marker['maxCompressedBytes']}")
+    return f"{reason} ({', '.join(parts)})" if parts else reason
+
+
 def archive_payload(note, plan=None, *, repeat=False, machine=None):
     invalid = None
     for name in ('session-invalid.json', 'diagnostic-only.json', 'cleanup-failed.json'):
@@ -352,14 +374,21 @@ def archive_payload(note, plan=None, *, repeat=False, machine=None):
     try:
         with tarfile.open(archive) as stream:
             names = stream.getnames()
-            status = json.load(stream.extractfile('results/session-status.json'))
-            host = status.get('host')
-            if status.get('completedAllDeclaredRounds') is not True or status.get('exitCode') != 0:
-                invalid = 'session invalid: incomplete/budget-stopped session'
-            if plan is not None and 'results/members.json' in names:
-                pairs = schedules.restore_pairs(plan, json.load(stream.extractfile('results/members.json')), repeat=repeat)
-            elif status.get('probe') != 'rejected':
-                pairs = json.load(stream.extractfile('results/pairs.json'))
+            recovery = _recovery_detail(stream, names)
+            if recovery is not None:
+                invalid = 'session invalid: recovery diagnostic: ' + recovery
+            status = json.load(stream.extractfile('results/session-status.json')) if 'results/session-status.json' in names else None
+            if isinstance(status, dict):
+                host = status.get('host')
+                if recovery is None and (status.get('completedAllDeclaredRounds') is not True or status.get('exitCode') != 0):
+                    invalid = 'session invalid: incomplete/budget-stopped session'
+            elif recovery is None:
+                raise KeyError('results/session-status.json')
+            if recovery is None:
+                if plan is not None and 'results/members.json' in names:
+                    pairs = schedules.restore_pairs(plan, json.load(stream.extractfile('results/members.json')), repeat=repeat)
+                elif status.get('probe') != 'rejected':
+                    pairs = json.load(stream.extractfile('results/pairs.json'))
             if 'results/session-start.json' in names:
                 startup = json.load(stream.extractfile('results/session-start.json'))
             if host is None and 'results/host.json' in names and stream.getmember('results/host.json').isfile():
@@ -423,6 +452,9 @@ def verified_machine(note, plan, spent, *, repeat=False, selected=None, applied=
                     return json.load(stream.extractfile(path))
                 except ValueError as error:
                     raise ValueError(f'malformed {name}') from error
+            recovery = _recovery_detail(stream, names)
+            if recovery is not None:
+                raise ValueError('failed worker or recovery diagnostic: ' + recovery)
             status = load('session-status.json')
             timing.require(type(status.get('exitCode')) is int and status['exitCode'] == 0 and
                            'results/recovery-diagnostic.json' not in names, 'failed worker or recovery diagnostic')
@@ -811,10 +843,12 @@ def checked_azure_go(directory, go):
                        'Unsealed Azure session')
         timing.validate_limits(plan)
         if not plan.get('bytesOnly'):
+            from gate_azure_guest import results_limits
             rule = timing.validate_probe_rule(plan.get('probe'))
             timing.require(plan['destroyGuardSeconds'] - plan['measurementCutoffSeconds'] == 345 and
                            828 <= plan['destroyGuardSeconds'] <= timing.GUARD and rule['maxDraws'] <= 6,
                            'Invalid Azure session windows')
+            results_limits(plan, strict=True)
     timing.require(set((directory / 'input/azure').iterdir()) == {directory / 'input/azure' / name for name in HOST_FILES['azure']}
                    and all(seal['files'].get(f'input/azure/{name}') == sha(Path(__file__).with_name(name)) for name in HOST_FILES['azure']),
                    'Azure host snapshots missing, stale or unsealed')

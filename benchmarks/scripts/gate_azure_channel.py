@@ -13,7 +13,10 @@ from urllib.parse import parse_qs
 
 from gate_azure_proof import AzureError, storage_account
 from gate_azure_guard import GuardFailure, WRITE_END, COPY_END
-from gate_azure_guest import MAX_BLOB_BYTES, MAX_RESULTS, MAX_DIAGNOSTIC, check_results, download, upload
+from gate_azure_guest import (
+    GUEST_ACTIONS, MAX_BLOB_BYTES, MAX_DIAGNOSTIC,
+    check_results, download, plan_results_limits, results_limits, upload,
+)
 
 STORAGE_API='2023-05-01'
 VM_API='2024-07-01'
@@ -79,6 +82,19 @@ def control_body(region,script,secret=None):
     return dict(location=region,properties=props)
 
 
+def _parse_guest_error(output):
+    try:
+        data = get_summary(output)
+    except GuardFailure:
+        return None
+    step, kind = data.get('step'), data.get('type')
+    if (data.get('error') == 'guest control step failed'
+            and step in (GUEST_ACTIONS | {'unknown'})
+            and isinstance(kind, str) and re.fullmatch(r'[A-Za-z_]{1,40}', kind)):
+        return {'step': step, 'type': kind}
+    return None
+
+
 def get_summary(message):
     if not isinstance(message,str) or len(message)>4096:
         raise GuardFailure('oversize or missing Run Command output')
@@ -112,6 +128,9 @@ def command(draw,label,script,until,*,sealed=None):
         else:
             if result and isinstance(result,dict) and result.get('state') in ('Succeeded','Failed','Canceled','TimedOut'):
                 if result['state']!='Succeeded' or result['code']!=0:
+                    err = _parse_guest_error(result.get('output'))
+                    if err is not None and getattr(draw, 'guest_error', None) is None:
+                        draw.guest_error = {'command': label, **err}
                     raise GuardFailure(f'guest Run Command {label} did not succeed')
                 return get_summary(result['output'])
         time.sleep(min(5,max(0,until-time.time())))
@@ -178,6 +197,7 @@ def upload_inputs(draw, inputs):
 
 def run_channel(draw, inputs, evidence):
     helper = '/usr/local/sbin/chrysalis-run-channel'
+    limits = plan_results_limits(inputs['payload'])
     start_by = draw.start + WORKER_START
     init = command(draw, 'init', boot_script(draw.group, draw.guard_end, helper),
                    min(start_by - 1, time.time() + RUN_COMMAND_SECONDS + 15))
@@ -192,34 +212,43 @@ def run_channel(draw, inputs, evidence):
     base = '#!/bin/bash\nexec 2>/dev/null\nexec /usr/bin/python3 ' + helper + ' '
     # Every interpolation is a fixed flag, hash, validated name or sealed integer deadline.
     fetch = f"fetch {draw.account} {digests['payload']} {digests.get('suite', '-')} {draw.start} {start_by} {draw.work_end} {draw.region}"
-    started = command(draw, 'kick', base + fetch + '\n', start_by, sealed=sealed)
-    stamp = started.get('started')
-    if type(stamp) is not int or not draw.start <= stamp < start_by:
-        raise GuardFailure('guest did not prove a timely worker start')
-    interval = max(300, draw.cutoff / 18)
-    wake = time.time() + interval
-    for number in range(19):
-        time.sleep(max(0, min(wake, draw.work_end) - time.time()))
-        if time.time() >= draw.work_end:
-            break
-        try:
-            result = command(draw, f'status-{number:02}', STATUS_SCRIPT, min(draw.work_end, time.time() + RUN_COMMAND_SECONDS + 15))
-        except GuardFailure:
+    try:
+        started = command(draw, 'kick', base + fetch + '\n', start_by, sealed=sealed)
+        stamp = started.get('started')
+        if type(stamp) is not int or not draw.start <= stamp < start_by:
+            raise GuardFailure('guest did not prove a timely worker start')
+        interval = max(300, draw.cutoff / 18)
+        wake = time.time() + interval
+        for number in range(19):
+            time.sleep(max(0, min(wake, draw.work_end) - time.time()))
             if time.time() >= draw.work_end:
-                break  # At C, transfer does not wait for a status answer.
-            raise
-        if result == {'done': True}:
-            draw.worker_done = True
-            break
-        if result != {'done': False}:
-            raise GuardFailure('unexpected compact status')
-        wake += interval
+                break
+            try:
+                result = command(draw, f'status-{number:02}', STATUS_SCRIPT, min(draw.work_end, time.time() + RUN_COMMAND_SECONDS + 15))
+            except GuardFailure:
+                if time.time() >= draw.work_end:
+                    break  # At C, transfer does not wait for a status answer.
+                raise
+            if result == {'done': True}:
+                draw.worker_done = True
+                break
+            if result != {'done': False}:
+                raise GuardFailure('unexpected compact status')
+            wake += interval
+    except Exception:
+        draw.worker_failed = True
+        try:
+            copy_results(draw, evidence, init['results'], base, limits=limits)
+        except Exception:
+            pass
+        raise
     if not draw.worker_done and time.time() < draw.work_end:
         time.sleep(draw.work_end - time.time())
-    return copy_results(draw, evidence, init['results'], base)
+    return copy_results(draw, evidence, init['results'], base, limits=limits)
 
 
-def copy_results(draw, evidence, public, base):
+def copy_results(draw, evidence, public, base, *, limits=None):
+    max_compressed, max_expanded = results_limits(None) if limits is None else limits
     deadline = draw.work_end + COPY_END
     known = None
     target = evidence / '.results-pending'
@@ -232,21 +261,23 @@ def copy_results(draw, evidence, public, base):
         try:
             summary = command(draw, f'push-{number}', base + f'push {draw.account} {int(until)} {int(number == 2)}\n',
                               until, sealed={'results': envelope})
+            wire_limit = MAX_DIAGNOSTIC if summary.get('partial') is True else max_compressed
             if (set(summary) != {'sha256', 'size', 'partial'} or not re.fullmatch(r'[0-9a-f]{64}', str(summary['sha256']))
                     or type(summary['size']) is not int or type(summary['partial']) is not bool
-                    or not 0 < summary['size'] <= (MAX_DIAGNOSTIC if summary['partial'] else MAX_RESULTS)
+                    or not 0 < summary['size'] <= wire_limit
                     or known not in (None, summary)):
                 raise ValueError('unexpected or changed push digest')
             known = summary
             read_sas = signed_blob(draw.az, draw.account, key, 'results', 'r')
             try:
-                actual = download(draw.account, 'results', read_sas, target, MAX_RESULTS, deadline)
+                actual = download(draw.account, 'results', read_sas, target, wire_limit, deadline)
             except ValueError:
                 # An invalid HTTP status/length or truncated body can follow a good push summary.
                 raise GuardFailure('unusable result download') from None
             finally:
                 del read_sas
-            if actual != summary['sha256'] or target.stat().st_size != summary['size'] or check_results(target) != summary['partial']:
+            if (actual != summary['sha256'] or target.stat().st_size != summary['size']
+                    or check_results(target, limits=(max_compressed, max_expanded)) != summary['partial']):
                 raise ValueError('result digest or allowlist differs')
             (evidence / 'results.sha256').write_text(actual + '\n')
             target.replace(evidence / 'results.tar.gz')

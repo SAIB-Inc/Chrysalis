@@ -414,7 +414,13 @@ def test_guest_sensitive_diagnostic_is_refused_before_upload(tmp_path, monkeypat
     dest = tmp_path / 'results.tar.gz'
     assert guest.archive_results(dest, False) is True
     with tarfile.open(dest) as stream:
-        assert stream.getnames() == ['results/recovery-diagnostic.json']
+        assert sorted(stream.getnames()) == ['results/recovery-diagnostic.json', 'results/session-status.json', 'results/session.log']
+        assert json.load(stream.extractfile('results/recovery-diagnostic.json')) == {
+            'diagnosticOnly': True, 'reason': 'credential-shaped',
+            'logsIncluded': 1, 'logsTruncated': 0, 'logsSkipped': 0, 'linesRedacted': 1,
+        }
+        redacted_log = stream.extractfile('results/session.log').read().decode()
+        assert redacted_log == '[redacted: credential-shaped line]' and 'CANARY' not in redacted_log
     assert guest.check_results(dest) is True
 
 
@@ -1460,3 +1466,810 @@ def test_r2_initialize_ledger_refuses_to_reset_any_history(site, history):
     result = subprocess.run([sys.executable, '-B', '-c', script, str(gate.REPO)], cwd=HERE, capture_output=True, text=True)
     assert result.returncode == 4 and 'restore the original ledger' in result.stderr
     assert (path.read_bytes() if path.exists() else None) == (original if history == 'ledger' else None)
+
+
+def _patch_guest_push(monkeypatch, store, work, *, done=True, upload_fn=None):
+    monkeypatch.setattr(guest, 'TEMP', store)
+    monkeypatch.setattr(guest, 'WORK', work)
+    monkeypatch.setattr(guest, 'RESULTS_KEY', store / 'results.pem')
+    monkeypatch.setattr(guest, 'compact', done if callable(done) else (lambda: {'done': done}))
+    monkeypatch.setattr(guest, 'unwrap', lambda *_: 'synthetic-credential')
+    monkeypatch.setattr(guest, 'upload', upload_fn or (lambda *a, **kw: None))
+
+
+def _make_realistic_obs(warmup, measured, seed=1):
+    rows = [
+        {
+            'pass': i if i <= warmup else i - warmup,
+            'blocks': 1020,
+            'allocated': 7928912,
+            'bytesPerBlock': 7928.9 + (seed + i) * 0.001,
+            'nsPerBlock': 91000.0 + ((seed * 31 + i * 17) % 1000) * 0.13,
+            'wireBytes': 4040750,
+            'startTimestamp': 4203503727759 + i * 95_000_000,
+            'endTimestamp': 4203503822759 + i * 95_000_000,
+            'elapsedSinceSeriesStartNs': i * 95_000_000,
+            'gen0Collections': 0,
+            'gen1Collections': 0,
+            'gen2Collections': 0,
+        }
+        for i in range(1, warmup + measured + 1)
+    ]
+    bounds = [
+        dict(
+            stage=st,
+            passIndex=i,
+            elapsedNs=i * 95_000_000,
+            cumulative=dict(
+                compiledMethods=688, compiledILBytes=45356, compilationTimeTicks=895376,
+                gen0=0, gen1=0, gen2=0,
+            ),
+            delta=dict(
+                compiledMethods=0, compiledILBytes=0, compilationTimeTicks=0,
+                gen0=0, gen1=0, gen2=0,
+            ),
+        )
+        for st, cnt in (('warmup', warmup), ('measured', measured))
+        for i in range(cnt + 1)
+    ]
+    assemblies = [
+        dict(identity=f'System.Mod{i:02d}, Version=11.0.0.0', path=f'/opt/chrysalis/dotnet/System.Mod{i:02d}.dll')
+        for i in range(45)
+    ]
+    return dict(
+        runtime='11.0.0', replay='offline', warmupPasses=warmup, passes=measured,
+        warmupRows=rows[:warmup], rows=rows[warmup:], warmupElapsedNs=warmup * 95_000_000,
+        groupBoundaries=bounds, stopwatchFrequency=1_000_000_000, loadedAssemblies=assemblies,
+        processSettings=dict(gcConfiguration=dict(GCGen0MaxBudget=16777216)),
+    )
+
+
+def _build_noise_s0_tree(work):
+    res = work / 'results'
+    (res / 'probe').mkdir(parents=True)
+    (work / 'prelude/raw').mkdir(parents=True)
+    dlls = {f'Chrysalis.Mod{i:02d}.dll': f'{i:064x}' for i in range(41)}
+    slim_proc = json.dumps(
+        dict(
+            pid=100, exitCode=0,
+            before=dict(monotonic=1.0, unix=1.0, load1=0.1),
+            after=dict(monotonic=14.0, unix=14.0, load1=0.1),
+            seconds=13.0,
+            marks=dict(
+                MEASURED_START=dict(monotonic=2.0, unix=2.0, load1=0.1),
+                MEASURED_END=dict(monotonic=13.5, unix=13.5, load1=0.1),
+            ),
+            samples=[dict(monotonic=2.0 + i * 0.25, unix=2.0 + i * 0.25, load1=0.1) for i in range(48)],
+            foreignCpuSeconds=0.0, timingRejectedReasons=[],
+            steal='not observable on Azure', stealFieldMoved=False,
+        ),
+        indent=2,
+    ) + '\n'
+    obs = _make_realistic_obs(180, 60, seed=1)
+    obs_txt = json.dumps(obs, indent=2) + '\n'
+    env_txt = json.dumps({'DOTNET_NOLOGO': '1', 'CHRYSALIS_CORPORA': '/opt/chrysalis/corpora'}, indent=2) + '\n'
+    rec_base = dict(
+        data=obs,
+        identity=dict(commit='3' * 40, treeId='4' * 40, runtime='11.0.0', dllSha256s=dlls),
+        platform='azure', timingRejectedReasons=[],
+        measurement=dict(kind='time', counts=[180, 60], filter='*'),
+        load=[0.1, 0.1], seconds=13.0, marks=['MEASURED_END', 'MEASURED_START'],
+        wholeProcess=dict(
+            startMonotonic=1.0, endMonotonic=14.0,
+            aggregateSteal='not observable on Azure', stealFieldMoved=False,
+        ),
+    )
+    rec_txt = json.dumps(rec_base, indent=2) + '\n'
+
+    def write_proc(target):
+        (target / 'execution').mkdir(parents=True)
+        (target / 'observations.json').write_text(obs_txt)
+        (target / 'environment.json').write_text(env_txt)
+        (target / 'execution/console.log').write_text('MEASURED_START\nMEASURED_END\n')
+        (target / 'execution/process.json').write_text(slim_proc)
+
+    for i in range(1, 17):
+        write_proc(res / 'probe' / f'probe-{i:02d}')
+        (res / 'probe' / f'probe-{i:02d}.json').write_text(rec_txt)
+    members = []
+    for idx in range(1, 65):
+        mid = f'{idx:016x}'
+        mdir = res / mid
+        write_proc(mdir)
+        if idx > 32:
+            (mdir / 'server.ready.json').write_text('{"port":45678}\n')
+            (mdir / 'server-summary.json').write_text('[{"completedRanges":240}]\n')
+            (mdir / 'server.log').write_text('done\n')
+        members.append(dict(rec_base, id=mid, build='cb39d34dd5e031f2'))
+    (res / 'members.json').write_text(json.dumps(members, indent=2) + '\n')
+    pre_txt = json.dumps(dict(rec_base, data=_make_realistic_obs(1, 1, seed=2)), indent=2) + '\n'
+    for i in range(4):
+        (work / 'prelude/raw' / f'{i:016x}-baseline.json').write_text(pre_txt)
+    ordering = dict(rec_base, data=_make_realistic_obs(180, 5, seed=3))
+    (work / 'prelude/raw/ordering.json').write_text(json.dumps(ordering, indent=2) + '\n')
+    (work / 'prelude/applied.json').write_text('{"applied":true}\n')
+    for name, obj in (
+        ('host.json', {'processorCount': 8, 'vendor_id': 'AuthenticAMD'}),
+        ('probe.json', {'cv': 0.01, 'lag1': 0.01, 'decision': 'kept'}),
+        ('session-start.json', {'available': True}),
+        ('session-status.json', {'completedAllDeclaredRounds': True, 'exitCode': 0, 'probe': 'kept'}),
+    ):
+        dump(res / name, obj)
+    (work / 'session.log').write_text('ok\n')
+    return {'probe': {'processes': 16}, 'members': {f'{i:016x}': {'build': 'b'} for i in range(1, 65)}}
+
+
+def test_az2f4_noise_seal_full_size_results_archive_and_limits(tmp_path, monkeypatch):
+    import gzip
+    work = tmp_path / 'work'
+    s0_plan = _build_noise_s0_tree(work)
+    monkeypatch.setattr(guest, 'WORK', work)
+    red = tmp_path / 'red.tar.gz'
+    green = tmp_path / 'green.tar.gz'
+    ref = tmp_path / 'ref.tar.gz'
+    assert guest.archive_results(red, False) is True
+    assert guest.check_results(red) is True
+    with tarfile.open(red) as stream:
+        red_names = set(stream.getnames())
+        assert {'results/recovery-diagnostic.json', 'results/session-status.json', 'results/session.log'} <= red_names
+        assert any(n.endswith('/server.log') or n.endswith('/execution/console.log') for n in red_names)
+        diag = json.load(stream.extractfile('results/recovery-diagnostic.json'))
+        status = json.load(stream.extractfile('results/session-status.json'))
+    assert diag['diagnosticOnly'] is True and diag['reason'] == 'results-too-large'
+    assert diag['expandedBytes'] > guest.MAX_RESULTS == diag['maxExpandedBytes']
+    assert status['exitCode'] == 0 and status['completedAllDeclaredRounds'] is True
+    assert guest.MAX_RESULTS_COMPRESSED == 10_000_000
+    limits = guest.results_limits(s0_plan, strict=True)
+    assert limits == (10_000_000, 90_000_000)
+    assert guest.archive_results(green, False, limits=limits) is False
+    assert guest.check_results(green, limits=limits) is False
+    assert green.stat().st_size < guest.MAX_RESULTS_COMPRESSED
+    # GREEN archive bytes match ec97c99a's non-partial packing rule byte-for-byte.
+    with tarfile.open(ref, 'w:gz') as stream:
+        for folder in ('results', 'prelude', 'bytes', 'suite'):
+            if (work / folder).exists():
+                for member in sorted((work / folder).rglob('*')):
+                    if not member.is_dir():
+                        stream.add(member, arcname=member.relative_to(work).as_posix(), recursive=False)
+        stream.add(work / 'session.log', arcname='results/session.log', recursive=False)
+    assert gzip.decompress(green.read_bytes()) == gzip.decompress(ref.read_bytes())
+    s1_plan = {'probe': {'processes': 16}, 'members': {f'{i:016x}': {} for i in range(192)}}
+    max_plan = {'probe': {'processes': 16}, 'members': {f'{i:016x}': {} for i in range(209)}}
+    assert guest.results_limits(s1_plan, strict=True) == (10_000_000, 218_000_000)
+    assert guest.results_limits(max_plan, strict=True) == (10_000_000, 235_000_000)
+    for over in (210, 480, 1000):
+        over_plan = {'probe': {'processes': 16}, 'members': {f'{i:016x}': {} for i in range(over)}}
+        with pytest.raises(ValueError, match='hard ceiling'):
+            guest.results_limits(over_plan, strict=True)
+    runaway = {'probe': {'processes': 16}, 'members': {f'{i:016x}': {} for i in range(1000)}}
+    assert guest.results_limits(runaway) == (guest.MAX_RESULTS_COMPRESSED, guest.MAX_RESULTS_EXPANDED)
+
+
+def test_az2f4_refusal_reasons_and_clean_status_preservation(tmp_path, monkeypatch):
+    work = tmp_path / 'work'
+    (work / 'results').mkdir(parents=True)
+    status = work / 'results/session-status.json'
+    dump(status, {'completedAllDeclaredRounds': False, 'exitCode': 2, 'reason': 'budget stop'})
+    monkeypatch.setattr(guest, 'WORK', work)
+    dest = tmp_path / 'out.tar.gz'
+    zero = {'logsIncluded': 0, 'logsTruncated': 0, 'logsSkipped': 0, 'linesRedacted': 0}
+    assert guest.archive_results(dest, True, reason='not-done') is True
+    with tarfile.open(dest) as stream:
+        assert sorted(stream.getnames()) == ['results/recovery-diagnostic.json', 'results/session-status.json']
+        assert json.load(stream.extractfile('results/recovery-diagnostic.json')) == {
+            'diagnosticOnly': True, 'reason': 'not-done', **zero,
+        }
+    summary = azure._diagnostic_summary(dest)
+    assert summary['partial'] is True and summary['reason'] == 'not-done'
+    assert summary['sessionStatus'] == {'completedAllDeclaredRounds': False, 'exitCode': 2}
+    (work / 'results/unexpected.txt').write_text('bad')
+    assert guest.archive_results(dest, False) is True
+    with tarfile.open(dest) as stream:
+        assert sorted(stream.getnames()) == ['results/recovery-diagnostic.json', 'results/session-status.json']
+        assert json.load(stream.extractfile('results/recovery-diagnostic.json'))['reason'] == 'forbidden-member'
+    (work / 'results/unexpected.txt').unlink()
+    dump(status, {'leak': '-----BEGIN PRIVATE KEY-----'})
+    assert guest.archive_results(dest, False) is True
+    with tarfile.open(dest) as stream:
+        assert stream.getnames() == ['results/recovery-diagnostic.json']
+        assert json.load(stream.extractfile('results/recovery-diagnostic.json'))['reason'] == 'credential-shaped'
+    status.write_text('{not json')
+    assert guest.archive_results(dest, True, reason='not-done') is True
+    with tarfile.open(dest) as stream:
+        assert stream.getnames() == ['results/recovery-diagnostic.json']
+    status.unlink()
+    assert guest.archive_results(dest, True, reason='no-status') is True
+    with tarfile.open(dest) as stream:
+        assert stream.getnames() == ['results/recovery-diagnostic.json']
+        assert json.load(stream.extractfile('results/recovery-diagnostic.json')) == {
+            'diagnosticOnly': True, 'reason': 'no-status', **zero,
+        }
+
+
+def test_az2f4_channel_and_guest_plan_limits_agree(tmp_path, monkeypatch):
+    plan = {'probe': {'processes': 16}, 'members': {f'{i:016x}': {'build': 'b'} for i in range(64)}}
+    payload_tar = tmp_path / 'session-0.tar.gz'
+    archive(payload_tar, {'plan.json': plan})
+    expected = guest.results_limits(plan)
+    assert guest.plan_results_limits(payload_tar) == channel.plan_results_limits(payload_tar) == expected
+    assert expected == (10_000_000, 90_000_000)
+    store = tmp_path / 'store'
+    work = tmp_path / 'work'
+    store.mkdir()
+    (work / 'results').mkdir(parents=True)
+    dump(work / 'results/session-status.json', {'completedAllDeclaredRounds': True, 'exitCode': 0})
+    (work / 'results/session.log').write_bytes(b'A' * 12_000_000)
+    guest._save_limits(expected, store / 'results-limits.json')
+    uploaded = []
+    _patch_guest_push(
+        monkeypatch, store, work,
+        upload_fn=lambda _a, _n, _s, path, lim, _u: uploaded.append((path.read_bytes(), lim)),
+    )
+    summary = guest.push('fixture', time.time() + 130, True)
+    assert summary['partial'] is False and uploaded[0][1] == expected[0]
+    built = store / 'results.tar.gz'
+    monkeypatch.setattr(channel.time, 'time', lambda: 100)
+    draw = Mock(work_end=100, account='storage-fixture')
+    for attr, fn in (
+        ('storage_key', lambda _: 'CANARY' * 8),
+        ('signed_blob', lambda *_: 'CANARY' * 8),
+        ('seal', lambda *_: 'ciphertext'),
+        ('command', lambda *a, **kw: summary),
+    ):
+        monkeypatch.setattr(channel, attr, fn)
+
+    def fake_dl(_a, _b, _s, target, lim, _d):
+        assert lim == expected[0]
+        shutil.copyfile(built, target)
+        return summary['sha256']
+
+    monkeypatch.setattr(channel, 'download', fake_dl)
+    ev = tmp_path / 'ev'
+    ev2 = tmp_path / 'ev2'
+    ev.mkdir()
+    ev2.mkdir()
+    assert channel.copy_results(draw, ev, 'unused', '# ', limits=expected) is False
+    with pytest.raises(ValueError, match='results-too-large|exceeds'):
+        channel.copy_results(draw, ev2, 'unused', '# ')
+
+
+def test_az2f4_fix2_results_too_large_includes_bounded_logs_and_unit_status(tmp_path, monkeypatch):
+    work = tmp_path / 'work'
+    for sub in ('results/probe/probe-01/execution', 'prelude/raw/p1', 'bytes/b1/execution'):
+        (work / sub).mkdir(parents=True)
+    dump(work / 'results/session-status.json', {'completedAllDeclaredRounds': False, 'exitCode': 2})
+    (work / 'results/probe/probe-01/observations.json').write_bytes(b'X' * (guest.MAX_RESULTS + 50_000))
+    (work / 'session.log').write_bytes(b'SESSION_HEAD\n' + (b's' * 63 + b'\n') * 4800 + b'SESSION_TAIL\n')
+    base_mtime = 1_700_000_000
+    created = []
+    for i in range(30):
+        if i == 0:
+            p = work / 'prelude/raw/p1/server.log'
+        elif i == 1:
+            p = work / 'bytes/b1/execution/console.log'
+        else:
+            d = work / 'results' / f'{i:016x}'
+            (d / 'execution').mkdir(parents=True, exist_ok=True)
+            p = (d / 'server.log') if i % 2 == 0 else (d / 'execution/console.log')
+        p.write_bytes(f'HEAD-{i:02d}\n'.encode() + (b'l' * 63 + b'\n') * 320 + f'TAIL-{i:02d}\n'.encode())
+        os.utime(p, (base_mtime + i * 10, base_mtime + i * 10))
+        created.append((i, p.relative_to(work).as_posix()))
+    outside = tmp_path / 'outside-secret.txt'
+    outside.write_text('OUTSIDE_SECRET_NEVER_READ\n')
+    bad_dir = work / 'results' / f'{99:016x}' / 'execution'
+    bad_dir.mkdir(parents=True)
+    (bad_dir.parent / 'server.log').symlink_to(outside)
+    sticky = bad_dir / 'console.log'
+    sticky.write_text('STICKY_NEVER_READ\n')
+    sticky.chmod(0o1600)
+    fifo_dir = work / 'results' / f'{98:016x}'
+    fifo_dir.mkdir(parents=True)
+    os.mkfifo(fifo_dir / 'server.log')
+    monkeypatch.setattr(guest, 'WORK', work)
+    unit_ok = b'LoadState=loaded\nResult=timeout\nExecMainCode=2\nExecMainStatus=15\n'
+    monkeypatch.setattr(guest.subprocess, 'check_output', lambda *a, **kw: unit_ok)
+    dest = tmp_path / 'diag.tar.gz'
+    assert guest.archive_results(dest, False) is True
+    assert guest.check_results(dest) is True
+    assert dest.stat().st_size <= guest.MAX_DIAGNOSTIC
+    with tarfile.open(dest) as stream:
+        names = set(stream.getnames())
+        assert sum(m.size for m in stream.getmembers()) <= guest.MAX_DIAGNOSTIC
+        diag = json.load(stream.extractfile('results/recovery-diagnostic.json'))
+        status = json.load(stream.extractfile('results/session-status.json'))
+        slog = stream.extractfile('results/session.log').read()
+        proc_names = sorted(n for n in names if n.endswith('/server.log') or n.endswith('/execution/console.log'))
+        assert proc_names == sorted(arc for i, arc in created if i >= 6)
+        for i, arc in created:
+            if i >= 6:
+                body = stream.extractfile(arc).read()
+                assert 0 < len(body) <= 16 * 1024
+                assert body.endswith(f'TAIL-{i:02d}\n'.encode())
+                assert f'HEAD-{i:02d}'.encode() not in body
+        forbidden = {
+            f'results/{99:016x}/server.log',
+            f'results/{99:016x}/execution/console.log',
+            f'results/{98:016x}/server.log',
+        }
+        assert not (forbidden & names)
+    assert 255 * 1024 < len(slog) <= 256 * 1024
+    assert slog.endswith(b'SESSION_TAIL\n') and b'SESSION_HEAD' not in slog
+    assert status == {'completedAllDeclaredRounds': False, 'exitCode': 2}
+    assert diag['reason'] == 'results-too-large'
+    assert (diag['logsIncluded'], diag['logsTruncated'], diag['logsSkipped'], diag['linesRedacted']) == (25, 25, 9, 0)
+    assert (diag['unitResult'], diag['execMainCode'], diag['execMainStatus']) == ('timeout', 2, 15)
+    summary = azure._diagnostic_summary(dest)
+    assert summary['reason'] == 'results-too-large' and summary['logsIncluded'] == 25
+    assert summary['unitResult'] == 'timeout' and 'SESSION_TAIL' not in json.dumps(summary)
+    unit_bad = b'LoadState=loaded\nResult=INVALID RESULT\nExecMainCode=nan\nExecMainStatus=-1\n'
+    monkeypatch.setattr(guest.subprocess, 'check_output', lambda *a, **kw: unit_bad)
+    dest2 = tmp_path / 'diag2.tar.gz'
+    assert guest.archive_results(dest2, False) is True
+    with tarfile.open(dest2) as stream:
+        diag2 = json.load(stream.extractfile('results/recovery-diagnostic.json'))
+    assert not any(k in diag2 for k in ('unitResult', 'execMainCode', 'execMainStatus'))
+    bad_marker = tmp_path / 'bad-marker.tar.gz'
+    archive(bad_marker, {
+        'results/recovery-diagnostic.json': {
+            'diagnosticOnly': True, 'reason': 'invented-reason', 'stage': 'invented-stage',
+        },
+    })
+    assert not ({'reason', 'stage'} & set(azure._diagnostic_summary(bad_marker)))
+
+
+def test_az2f4_fix2_worker_crash_no_status_returns_traceback_tail(tmp_path, monkeypatch):
+    work = tmp_path / 'work'
+    store = tmp_path / 'store'
+    work.mkdir()
+    store.mkdir()
+    tb = (
+        'starting worker\n'
+        'Traceback (most recent call last):\n'
+        '  File "gate_bundle.py", line 1\n'
+        'RuntimeError: synthetic worker crash\n'
+    )
+    (work / 'session.log').write_text(tb)
+    _patch_guest_push(monkeypatch, store, work)
+    unit_out = b'LoadState=loaded\nResult=exit-code\nExecMainCode=1\nExecMainStatus=1\n'
+    monkeypatch.setattr(guest.subprocess, 'check_output', lambda *a, **kw: unit_out)
+    assert guest.push('fixture', time.time() + 130, True)['partial'] is True
+    assert guest.check_results(store / 'results.tar.gz') is True
+    with tarfile.open(store / 'results.tar.gz') as stream:
+        assert sorted(stream.getnames()) == ['results/recovery-diagnostic.json', 'results/session.log']
+        diag = json.load(stream.extractfile('results/recovery-diagnostic.json'))
+        slog = stream.extractfile('results/session.log').read().decode()
+    assert diag['reason'] == 'no-status' and diag['logsIncluded'] == 1
+    assert (diag['unitResult'], diag['execMainCode'], diag['execMainStatus']) == ('exit-code', 1, 1)
+    assert 'RuntimeError: synthetic worker crash' in slog
+
+
+def test_az2f4_fix2_credential_shaped_log_lines_redacted_and_accepted(tmp_path, monkeypatch):
+    work = tmp_path / 'work'
+    (work / 'results/0000000000000001').mkdir(parents=True)
+    dump(work / 'results/session-status.json', {'completedAllDeclaredRounds': True, 'exitCode': 0})
+    (work / 'session.log').write_text(
+        'line-before\n'
+        'url https://example.invalid/?sig=' + 'CANARY' * 8 + '\n'
+        '-----BEGIN RSA PRIVATE KEY-----\n'
+        '-----END RSA PRIVATE KEY-----\n'
+        'line-after\n'
+    )
+    (work / 'results/0000000000000001/server.log').write_text(
+        'server-ok\nquery sv=2026-11-20&sp=r&sr=b&other=1\nserver-end\n'
+    )
+    monkeypatch.setattr(guest, 'WORK', work)
+    dest = tmp_path / 'redacted.tar.gz'
+    assert guest.archive_results(dest, False) is True
+    assert guest.check_results(dest) is True
+    with tarfile.open(dest) as stream:
+        assert sorted(stream.getnames()) == [
+            'results/0000000000000001/server.log',
+            'results/recovery-diagnostic.json',
+            'results/session-status.json',
+            'results/session.log',
+        ]
+        diag = json.load(stream.extractfile('results/recovery-diagnostic.json'))
+        slog = stream.extractfile('results/session.log').read().decode()
+        srv = stream.extractfile('results/0000000000000001/server.log').read().decode()
+    assert diag['reason'] == 'credential-shaped' and diag['logsIncluded'] == 2 and diag['linesRedacted'] == 4
+    assert slog == 'line-before\n' + '[redacted: credential-shaped line]\n' * 3 + 'line-after\n'
+    assert srv == 'server-ok\n[redacted: credential-shaped line]\nserver-end\n'
+    assert not any(leak in slog or leak in srv for leak in ('CANARY', 'BEGIN RSA PRIVATE KEY', 'sr=b'))
+
+
+def test_az2f4_fix2_fetch_stage_failures_and_main_error_line(tmp_path, monkeypatch):
+    plan = {'probe': {'processes': 16}, 'members': {f'{i:016x}': {'build': 'b'} for i in range(64)}}
+    good_tar = tmp_path / 'good.tar.gz'
+    bad_tar = tmp_path / 'bad.tar.gz'
+    no_plan_tar = tmp_path / 'no-plan.tar.gz'
+    archive(good_tar, {'plan.json': plan})
+    bad_tar.write_bytes(b'not-a-tarball')
+    archive(no_plan_tar, {'other.txt': b'hi'})
+    good_sha = bundle.sha(good_tar)
+    bad_sha = bundle.sha(bad_tar)
+    no_plan_sha = bundle.sha(no_plan_tar)
+    account = 'chry' + '0' * 16
+    now = int(time.time())
+    orig_pl = guest.plan_results_limits
+
+    def setup_fetch(name, *, src=good_tar, stage=None):
+        store = tmp_path / name / 'store'
+        work = tmp_path / name / 'work'
+        store.mkdir(parents=True)
+        _patch_guest_push(monkeypatch, store, work)
+        monkeypatch.setattr(guest, 'PAYLOAD_KEY', store / 'payload.pem')
+        monkeypatch.setattr(guest.time, 'time', lambda: now + 10)
+        if stage == 'extract':
+            monkeypatch.setattr(guest, 'plan_results_limits', lambda _a: (10_000_000, 90_000_000))
+        else:
+            monkeypatch.setattr(guest, 'plan_results_limits', orig_pl)
+        if stage == 'download':
+            def fail_dl(*_a, **_kw):
+                raise OSError('https://secret.blob.invalid/?sig=LEAK')
+            monkeypatch.setattr(guest, 'download', fail_dl)
+        else:
+            def copy_dl(_a, _n, _s, target, _l, _d):
+                shutil.copyfile(src, target)
+                return 'f' * 64 if stage == 'digest' else bundle.sha(src)
+            monkeypatch.setattr(guest, 'download', copy_dl)
+        if stage == 'systemd-run':
+            def fail_run(*_a, **_kw):
+                raise subprocess.CalledProcessError(1, 'systemd-run')
+            monkeypatch.setattr(guest.subprocess, 'run', fail_run)
+        else:
+            monkeypatch.setattr(guest.subprocess, 'run', lambda *a, **kw: subprocess.CompletedProcess(a[0], 0))
+        ts = now + 9999 if stage == 'start-window' else now + 10
+        monkeypatch.setattr(
+            guest.subprocess, 'check_output',
+            lambda cmd, **kw: b'2026-11-20\n' if cmd[0] == 'systemctl' else str(ts).encode(),
+        )
+        return store
+
+    for stage in ('download', 'digest', 'limits', 'extract', 'deadline', 'systemd-run', 'start-window', 'other'):
+        if stage == 'limits':
+            src, exp_sha = no_plan_tar, no_plan_sha
+        elif stage == 'extract':
+            src, exp_sha = bad_tar, bad_sha
+        else:
+            src, exp_sha = good_tar, good_sha
+        store = setup_fetch(stage, src=src, stage=stage)
+        req_acct = 'bad-account' if stage == 'other' else account
+        start_by = (now + 5) if stage == 'deadline' else (now + 300)
+        with pytest.raises((ValueError, KeyError, OSError, subprocess.CalledProcessError, tarfile.TarError)):
+            guest.fetch(req_acct, exp_sha, '-', now, start_by, now + 900, 'eastus2')
+        rec = store / 'fetch-failure.json'
+        assert rec.is_file() and (rec.stat().st_mode & 0o777) == 0o600
+        assert json.loads(rec.read_text()) == {'reason': 'not-started', 'stage': stage}
+        assert 'LEAK' not in rec.read_text() and str(tmp_path) not in rec.read_text()
+        assert guest.push(account, now + 900, True)['partial'] is True
+        with tarfile.open(store / 'results.tar.gz') as stream:
+            diag = json.load(stream.extractfile('results/recovery-diagnostic.json'))
+        assert diag['reason'] == 'not-started' and diag['stage'] == stage
+        assert azure._diagnostic_summary(store / 'results.tar.gz')['stage'] == stage
+
+    ok_store = setup_fetch('ok')
+    assert guest.fetch(account, good_sha, '-', now, now + 300, now + 900, 'eastus2') == {'started': now + 10}
+    assert guest._saved_limits() == guest.results_limits(plan) == (10_000_000, 90_000_000)
+    assert not (ok_store / 'fetch-failure.json').exists()
+    monkeypatch.undo()
+    proc = subprocess.run(
+        [sys.executable, str(HERE / 'gate_azure_guest.py'), 'fetch', 'bad', '0' * 64, '-', '1', '2', '3', 'eastus2'],
+        capture_output=True, text=True,
+    )
+    assert proc.returncode == 75
+    assert channel.get_summary(proc.stdout) == {
+        'error': 'guest control step failed', 'step': 'fetch', 'type': 'ValueError',
+    }
+    assert 'invalid work request' not in proc.stdout
+
+
+def test_az2f4_fix2_host_collects_diagnostics_on_kick_and_status_failure(fake, site, ledger, tmp_path, monkeypatch):
+    local, directory = site
+    plan = {'probe': {'processes': 16}, 'members': {f'{i:016x}': {'build': 'b'} for i in range(64)}}
+    payload_tar = tmp_path / 'session-0.tar.gz'
+    archive(payload_tar, {'plan.json': plan})
+    expected = guest.results_limits(plan)
+    inputs = {'payload': payload_tar}
+    clock = [10_000]
+    for mod in (azure, channel):
+        monkeypatch.setattr(mod.time, 'time', lambda: clock[0])
+    monkeypatch.setattr(channel.time, 'sleep', lambda _s: None)
+    (tmp_path / 'proto').mkdir()
+    d = make_draw(Mock(subscription=SID), tmp_path / 'proto', start=clock[0], lifetime=6436)
+    base_url = d.path('Compute', 'virtualMachines') + '/runCommands/'
+    body = channel.control_body(d.region, '# harmless')
+    d.put(base_url + 'init', channel.VM_API, body, work=True)
+    d.put(base_url + 'kick', channel.VM_API, body, work=True)
+    with pytest.raises(guard.GuardFailure, match='completion'):
+        d.put(base_url + 'push-1', channel.VM_API, body, work=True)
+    d.worker_failed = True
+    d.put(base_url + 'push-1', channel.VM_API, body, work=True)
+    assert d.push_started is True
+    with pytest.raises(guard.GuardFailure, match='read-only'):
+        d.put(base_url + 'status-00', channel.VM_API, channel.control_body(d.region, channel.STATUS_SCRIPT), work=True)
+    for attr, fn in (
+        ('storage_key', lambda _d: 'CANARY' * 8),
+        ('signed_blob', lambda *_a: 'CANARY' * 8),
+        ('seal', lambda *_a: 'ciphertext'),
+    ):
+        monkeypatch.setattr(channel, attr, fn)
+    orig_copy = channel.copy_results
+
+    def run_case(kind, *, copy_raises=False, late=False):
+        case_dir = tmp_path / f'case-{kind}-{copy_raises}-{late}'
+        ev = case_dir / 'ev'
+        (ev / '.guard').mkdir(parents=True)
+        (case_dir / 'draw').mkdir(parents=True)
+        clock[0] = 10_000
+        az_case = Mock(subscription=SID)
+        draw = make_draw(az_case, case_dir / 'draw', start=clock[0], lifetime=1256)
+        draw.account = 'chry' + '0' * 16
+        calls = []
+        if late:
+            monkeypatch.setattr(channel, 'copy_results', orig_copy)
+        else:
+            def fake_copy(dr, evidence, _p, _b, *, limits=None):
+                calls.append((limits, getattr(dr, 'worker_failed', False)))
+                dr.put(dr.path('Compute', 'virtualMachines') + '/runCommands/push-1', channel.VM_API, body, work=True)
+                if copy_raises:
+                    raise RuntimeError('copy-boom')
+                archive(evidence / 'results.tar.gz', {
+                    'results/recovery-diagnostic.json': {
+                        'diagnosticOnly': True, 'reason': 'not-started', 'stage': 'download',
+                        'logsIncluded': 1, 'logsTruncated': 0, 'logsSkipped': 0, 'linesRedacted': 0,
+                    },
+                })
+                return True
+            monkeypatch.setattr(channel, 'copy_results', fake_copy)
+
+        def fake_rest(verb, url, **kw):
+            if verb == 'put':
+                return {}
+            if '/runCommands/init?' in url:
+                return {'state': 'Succeeded', 'code': 0, 'output': 'CHRYSALIS:{"payload":"PUB1","results":"PUB2"}\n'}
+            if '/runCommands/kick?' in url:
+                if kind == 'kick':
+                    if late:
+                        clock[0] = draw.work_end + guard.COPY_END - channel.PUSH_SECONDS + 1
+                    err_line = 'CHRYSALIS:{"error":"guest control step failed","step":"fetch","type":"ValueError"}\n'
+                    return {'state': 'Succeeded', 'code': 75, 'output': err_line}
+                return {'state': 'Succeeded', 'code': 0, 'output': f'CHRYSALIS:{{"started":{clock[0] + 5}}}\n'}
+            if '/runCommands/status-00?' in url:
+                if kind == 'status':
+                    if late:
+                        clock[0] = draw.work_end + guard.COPY_END - channel.PUSH_SECONDS + 1
+                    err_line = 'CHRYSALIS:{"error":"guest control step failed","step":"compact","type":"RuntimeError"}\n'
+                    return {'state': 'Failed', 'code': 75, 'output': err_line}
+                return {'state': 'Succeeded', 'code': 0, 'output': 'CHRYSALIS:{"done":true}\n'}
+            raise AssertionError(f'unexpected rest {verb} {url}')
+
+        az_case.rest.side_effect = fake_rest
+        if kind == 'ok':
+            assert channel.run_channel(draw, inputs, ev) is True
+            return calls, ev, draw
+        label = 'kick' if kind == 'kick' else 'status-00'
+        with pytest.raises(guard.GuardFailure, match=f'Run Command {label} did not succeed'):
+            channel.run_channel(draw, inputs, ev)
+        return calls, ev, draw
+
+    assert run_case('ok')[0] == [(expected, False)]
+    ck, ek, dk = run_case('kick')
+    assert ck == [(expected, True)]
+    assert dk.guest_error == {'command': 'kick', 'step': 'fetch', 'type': 'ValueError'}
+    assert not (ek / 'guest-error.json').exists()
+    cs, es, ds = run_case('status')
+    assert cs == [(expected, True)]
+    assert ds.guest_error == {'command': 'status-00', 'step': 'compact', 'type': 'RuntimeError'}
+    assert not (es / 'guest-error.json').exists()
+    assert run_case('kick', copy_raises=True)[0] == [(expected, True)]
+    assert 'push-1' not in run_case('kick', late=True)[2].commands
+    monkeypatch.setattr(azure.time, 'time', time.time)
+    prepare_attempt(monkeypatch, directory)
+    fake_state(fake, deletesBeforeAbsent=1)
+
+    def failing_channel(draw, _inputs, note):
+        archive(note / 'results.tar.gz', {
+            'results/recovery-diagnostic.json': {
+                'diagnosticOnly': True, 'reason': 'not-started', 'stage': 'digest',
+                'logsIncluded': 1, 'logsTruncated': 0, 'logsSkipped': 0, 'linesRedacted': 0,
+            },
+            'results/session.log': b'DIAG_LOG_BODY_MUST_NOT_LEAK_TO_SUMMARY\n',
+        })
+        draw.guest_error = {'command': 'kick', 'step': 'fetch', 'type': 'ValueError'}
+        raise guard.GuardFailure('guest Run Command kick did not succeed')
+
+    monkeypatch.setattr(azure, 'run_channel', failing_channel)
+    assert attempt(fake, local, ledger, directory, RUN) == 2
+    assert ledger.attempts[RUN]['state'] == 'settled' and ledger.attempts[RUN]['exitCode'] == 2
+    run_note = directory / 'time/runs' / RUN
+    dj = json.loads((run_note / 'diagnostic-only.json').read_text())
+    assert dj['partial'] is True and dj['reason'] == 'not-started'
+    assert dj['stage'] == 'digest' and dj['logsIncluded'] == 1
+    assert 'DIAG_LOG_BODY_MUST_NOT_LEAK_TO_SUMMARY' not in json.dumps(dj)
+    assert json.loads((run_note / 'guest-error.json').read_text()) == {
+        'command': 'kick', 'step': 'fetch', 'type': 'ValueError',
+    }
+
+
+def test_az2f4_fix3_push_always_returns_archive_and_caps_logs(tmp_path, monkeypatch):
+    import zlib
+    store = tmp_path / 'store'
+    work = tmp_path / 'work'
+    store.mkdir()
+    (work / 'results').mkdir(parents=True)
+    dump(work / 'results/session-status.json', {'completedAllDeclaredRounds': False, 'exitCode': 2})
+    (work / 'session.log').write_text('worker-line\n')
+
+    def fail_compact():
+        raise subprocess.CalledProcessError(1, 'systemctl')
+
+    _patch_guest_push(monkeypatch, store, work, done=fail_compact)
+    monkeypatch.setattr(guest.time, 'sleep', lambda _s: None)
+    (store / 'results-limits.json').write_text('{bad-json')
+    for i in range(80):
+        d = work / 'results' / f'{i:016x}'
+        d.mkdir(parents=True)
+        (d / 'server.log').write_bytes(b'')
+    assert guest.push('fixture', time.time() + 130, True)['partial'] is True
+    with tarfile.open(store / 'results.tar.gz') as stream:
+        diag = json.load(stream.extractfile('results/recovery-diagnostic.json'))
+    assert diag['reason'] == 'not-done' and diag['limitsFallback'] is True
+    assert (diag['logsIncluded'], diag['logsSkipped']) == (65, 16)
+    assert azure._diagnostic_summary(store / 'results.tar.gz').get('limitsFallback') is True
+    orig_check = guest.check_results
+
+    def flaky(fail_n, exc=None):
+        count = [0]
+        def _inner(p, *, limits=None):
+            count[0] += 1
+            if count[0] <= fail_n:
+                raise exc or guest.ResultsRefused('results-too-large', 'forced')
+            return orig_check(p, limits=limits)
+        return _inner
+
+    monkeypatch.setattr(guest, 'check_results', flaky(1))
+    assert guest.archive_results(tmp_path / 'nologs.tar.gz', True, reason='not-done') is True
+    with tarfile.open(tmp_path / 'nologs.tar.gz') as stream:
+        assert sorted(stream.getnames()) == ['results/recovery-diagnostic.json', 'results/session-status.json']
+    monkeypatch.setattr(guest, 'check_results', flaky(2))
+    assert guest.archive_results(tmp_path / 'markeronly.tar.gz', True, reason='not-done') is True
+    with tarfile.open(tmp_path / 'markeronly.tar.gz') as stream:
+        assert stream.getnames() == ['results/recovery-diagnostic.json']
+        assert json.load(stream.extractfile('results/recovery-diagnostic.json'))['reason'] == 'archive-error'
+    for err in (EOFError('eof'), zlib.error('corrupt')):
+        monkeypatch.setattr(guest, 'check_results', flaky(1, err))
+        out = tmp_path / f'z-{type(err).__name__}.tar.gz'
+        assert guest.archive_results(out, False) is True
+        with tarfile.open(out) as stream:
+            assert json.load(stream.extractfile('results/recovery-diagnostic.json'))['reason'] == 'archive-error'
+
+
+def test_az2f4_fix3_whole_line_and_pem_block_redaction(tmp_path, monkeypatch):
+    work = tmp_path / 'work'
+    (work / 'results/0000000000000001').mkdir(parents=True)
+    tail = b'ig=SECRET_CANARY_TOKEN_1234\nwhole-tail-line\n'
+    pad = 256 * 1024 - len(tail)
+    filler = (b'0123456789\n' * (pad // 11 + 1))[:pad]
+    (work / 'session.log').write_bytes(b'head\n?s' + tail + filler)
+    (work / 'results/0000000000000001/server.log').write_text(
+        'before\n'
+        '-----BEGIN RSA PRIVATE KEY-----\n'
+        'MIIE_SECRET_BODY_1\n'
+        'MIIE_SECRET_BODY_2\n'
+        '-----END RSA PRIVATE KEY-----\n'
+        'after-ok\n'
+        '-----BEGIN PRIVATE KEY-----\n'
+        'EOF_SECRET_BODY\n'
+    )
+    monkeypatch.setattr(guest, 'WORK', work)
+    dest = tmp_path / 'redacted3.tar.gz'
+    assert guest.archive_results(dest, True, reason='no-status') is True
+    assert guest.check_results(dest) is True
+    with tarfile.open(dest) as stream:
+        diag = json.load(stream.extractfile('results/recovery-diagnostic.json'))
+        slog = stream.extractfile('results/session.log').read().decode()
+        srv = stream.extractfile('results/0000000000000001/server.log').read().decode()
+    assert 'SECRET_CANARY_TOKEN_1234' not in slog and 'whole-tail-line' in slog
+    assert not any(k in srv for k in ('MIIE_SECRET_BODY_1', 'MIIE_SECRET_BODY_2', 'EOF_SECRET_BODY'))
+    expected_srv = (
+        'before\n'
+        + '[redacted: credential-shaped line]\n' * 4
+        + 'after-ok\n'
+        + '[redacted: credential-shaped line]\n' * 2
+    )
+    assert srv == expected_srv and diag['linesRedacted'] == 6
+
+
+def test_az2f4_fix3_unit_loadstate_and_killed_fetch_stage(tmp_path, monkeypatch):
+    store = tmp_path / 'store'
+    work = tmp_path / 'work'
+    store.mkdir()
+    work.mkdir()
+    _patch_guest_push(monkeypatch, store, work)
+    monkeypatch.setattr(guest, 'PAYLOAD_KEY', store / 'payload.pem')
+    not_found = b'LoadState=not-found\nResult=success\nExecMainCode=0\nExecMainStatus=0\n'
+    monkeypatch.setattr(guest.subprocess, 'check_output', lambda *a, **kw: not_found)
+    assert guest._unit_status() == {}
+    shuffled = b'ExecMainStatus=15\nResult=timeout\nLoadState=loaded\nExecMainCode=2\n'
+    monkeypatch.setattr(guest.subprocess, 'check_output', lambda *a, **kw: shuffled)
+    assert guest._unit_status() == {'unitResult': 'timeout', 'execMainCode': 2, 'execMainStatus': 15}
+    monkeypatch.setattr(guest, 'WORK', tmp_path / 'work2')
+
+    def kill_download(*_a, **_kw):
+        raise SystemExit(137)
+
+    monkeypatch.setattr(guest, 'download', kill_download)
+    with pytest.raises(SystemExit):
+        guest.fetch('chry' + '0' * 16, '0' * 64, '-', 1000, 1300, 1900, 'eastus2')
+    assert json.loads((store / 'fetch-failure.json').read_text()) == {'reason': 'not-started', 'stage': 'other'}
+    assert guest.push('chry' + '0' * 16, 1900, True)['partial'] is True
+    with tarfile.open(store / 'results.tar.gz') as stream:
+        diag = json.load(stream.extractfile('results/recovery-diagnostic.json'))
+    assert diag['reason'] == 'not-started' and diag['stage'] == 'other'
+
+
+def test_az2f4_fix3_diagnostic_summary_and_modes(fake, site, ledger, tmp_path, monkeypatch):
+    local, directory = site
+    real_res = tmp_path / 'real-res'
+    real_res.mkdir()
+    dump(real_res / 'session-status.json', {'exitCode': 0})
+    work = tmp_path / 'work'
+    work.mkdir()
+    (work / 'results').symlink_to(real_res)
+    monkeypatch.setattr(guest, 'WORK', work)
+    assert guest._clean_status_bytes() is None
+    _, seal = sealed_site(site)
+    plan = seal['timePlans'][0]
+    prepare_attempt(monkeypatch, directory)
+    fake_state(fake, deletesBeforeAbsent=1)
+    full_src = write_azure_result(tmp_path / 'full-src', plan, 'keep')
+
+    def failing_with_full(draw, _inputs, note):
+        with tarfile.open(full_src) as stream:
+            parts = {m.name: json.load(stream.extractfile(m)) for m in stream}
+        parts['results/session-status.json'].update(reason='RAW_EXCEPTION_/opt/chrysalis/secret', probe='kept')
+        archive(note / 'results.tar.gz', parts)
+        (note / 'results.sha256').write_text(bundle.sha(note / 'results.tar.gz') + '\n')
+        draw.guest_error = {'command': 'status-00', 'step': 'compact', 'type': 'RuntimeError'}
+        raise guard.GuardFailure('guest Run Command status-00 did not succeed')
+
+    monkeypatch.setattr(azure, 'run_channel', failing_with_full)
+    assert attempt(fake, local, ledger, directory, RUN) == 2
+    run_note = directory / 'time/runs' / RUN
+    diag = json.loads((run_note / 'diagnostic-only.json').read_text())
+    assert diag['partial'] is False
+    assert diag['sessionStatus'] == {'completedAllDeclaredRounds': True, 'exitCode': 0, 'probe': 'kept'}
+    assert 'RAW_EXCEPTION' not in json.dumps(diag)
+    assert (run_note / 'guest-error.json').stat().st_mode & 0o777 == 0o600
+    assert bundle.verified_machine(run_note, plan, 0)['invalid'] is not None
+
+
+def test_az2f4_fix4_tail_inside_pem_body_redacted_through_end(tmp_path, monkeypatch):
+    work = tmp_path / 'work'
+    (work / 'results/0000000000000001').mkdir(parents=True)
+    # Build a >16 KiB per-process log whose 16 KiB tail starts inside a PEM key body
+    # (the BEGIN line is before the cut; two body lines and the END line are inside the tail).
+    tail_body = (
+        b'BODY_CUT_PARTIAL_LINE_012345678901234567890123456789\n'
+        b'MIIE_TAIL_KEY_BODY_1\n'
+        b'MIIE_TAIL_KEY_BODY_2\n'
+        b'-----END RSA PRIVATE KEY-----\n'
+        b'normal-after-key\n'
+    )
+    pad = 16 * 1024 - len(tail_body)
+    filler = (b'0123456789\n' * (pad // 11 + 1))[:pad]
+    (work / 'results/0000000000000001/server.log').write_bytes(
+        b'before\n-----BEGIN RSA PRIVATE KEY-----\n' + tail_body + filler
+    )
+    monkeypatch.setattr(guest, 'WORK', work)
+    dest = tmp_path / 'pem-tail.tar.gz'
+    assert guest.archive_results(dest, True, reason='no-status') is True
+    assert guest.check_results(dest) is True
+    with tarfile.open(dest) as stream:
+        diag = json.load(stream.extractfile('results/recovery-diagnostic.json'))
+        srv = stream.extractfile('results/0000000000000001/server.log').read().decode()
+    assert 'MIIE_TAIL_KEY_BODY_1' not in srv
+    assert 'MIIE_TAIL_KEY_BODY_2' not in srv
+    assert 'END RSA PRIVATE KEY' not in srv
+    assert srv.startswith('[redacted: credential-shaped line]\n' * 3 + 'normal-after-key\n')
+    assert diag['linesRedacted'] == 3
