@@ -7,6 +7,6 @@ namespace Chrysalis.Codec.Types.Cardano.Core.Certificates;
 [CborList]
 public readonly partial record struct PoolMetadata : ICborType
 {
-    [CborOrder(0)] public partial string Url { get; }
+    [CborOrder(0), CborLedgerText] public partial string Url { get; }
     [CborOrder(1)] public partial ReadOnlyMemory<byte> MetadataHash { get; }
 }

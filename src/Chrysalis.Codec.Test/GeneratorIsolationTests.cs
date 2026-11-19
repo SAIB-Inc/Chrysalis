@@ -48,6 +48,31 @@ public partial class GeneratorIsolationTests
         Assert.All(actual[1], source => Assert.Equal(expectedRight, source));
     }
 
+    [Fact]
+    public void ConsumerLedgerTextLookalikeDoesNotChangeReader()
+    {
+        const string source = """
+            global using System;
+            global using System.Collections.Generic;
+            global using System.Linq;
+            using Chrysalis.Codec.Serialization;
+            namespace Chrysalis.Codec.Serialization.Attributes;
+            internal sealed class CborLedgerTextAttribute : Attribute;
+            [CborSerializable, CborList]
+            public readonly partial record struct Probe : ICborType
+            {
+                [CborOrder(0), CborLedgerText] public partial string Value { get; }
+            }
+            """;
+        CSharpCompilation compilation = CreateCompilation("ConsumerLedgerText", source);
+        GeneratorDriver driver = CreateDriver().RunGeneratorsAndUpdateCompilation(compilation, out Compilation output, out _);
+        GeneratorDriverRunResult result = driver.GetRunResult();
+        Assert.Empty(result.Diagnostics);
+        Assert.DoesNotContain("LedgerText.Skip", result.Results.Single().GeneratedSources.Single(
+            generated => generated.HintName.EndsWith(".Probe.Serializer.g.cs", StringComparison.Ordinal)).SourceText.ToString(), StringComparison.Ordinal);
+        Assert.DoesNotContain(output.GetDiagnostics(), diagnostic => diagnostic.Severity == DiagnosticSeverity.Error);
+    }
+
     [Theory]
     [InlineData("CborList")]
     [InlineData("CborConstr(0)")]

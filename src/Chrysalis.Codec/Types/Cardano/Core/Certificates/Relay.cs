@@ -25,7 +25,7 @@ public readonly partial record struct SingleHostName : IRelay
 {
     [CborOrder(0)] public partial int Tag { get; }
     [CborOrder(1)] public partial int? Port { get; }
-    [CborOrder(2)] public partial string DnsName { get; }
+    [CborOrder(2), CborLedgerText] public partial string DnsName { get; }
 }
 
 [CborSerializable]
@@ -34,5 +34,5 @@ public readonly partial record struct SingleHostName : IRelay
 public readonly partial record struct MultiHostName : IRelay
 {
     [CborOrder(0)] public partial int Tag { get; }
-    [CborOrder(1)] public partial string DnsName { get; }
+    [CborOrder(1), CborLedgerText] public partial string DnsName { get; }
 }

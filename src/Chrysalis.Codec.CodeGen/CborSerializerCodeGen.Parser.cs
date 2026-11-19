@@ -18,6 +18,7 @@ public sealed partial class CborSerializerCodeGen
         public const string CborConstr = "CborConstr";
         public const string CborTag = "CborTag";
         public const string CborOrder = "CborOrder";
+        public const string CborLedgerText = "Chrysalis.Codec.Serialization.Attributes.CborLedgerTextAttribute";
         public const string CborPropertyAttribute = "CborPropertyAttribute";
         public const string CborProperty = "CborProperty";
         public const string CborSize = "CborSize";
@@ -408,12 +409,18 @@ public sealed partial class CborSerializerCodeGen
     private static IEnumerable<SerializablePropertyMetadata> GetRecordBodyPropertyMetadata(RecordDeclarationSyntax recordDecl, SemanticModel model)
     {
         bool isRecordStruct = recordDecl.ClassOrStructKeyword.IsKind(SyntaxKind.StructKeyword);
+        // Only the assembly defining the codec attributes can use this internal hook.
+        IAssemblySymbol assembly = model.Compilation.Assembly;
+        INamedTypeSymbol? ledgerTextAttribute = assembly.GetTypeByMetadataName(Parser.CborSerializable) is not null
+            ? assembly.GetTypeByMetadataName(Parser.CborLedgerText)
+            : null;
         foreach (PropertyDeclarationSyntax prop in recordDecl.Members.OfType<PropertyDeclarationSyntax>())
         {
+            IPropertySymbol? propertySymbol = model.GetDeclaredSymbol(prop);
             List<AttributeSyntax> propAttributes = [.. prop.AttributeLists.SelectMany(a => a.Attributes)];
             // Structs expose lazy fields as partial properties. Classes opt in body members
             // explicitly so helper properties are not added to the wire format.
-            if (isRecordStruct ? (!prop.Modifiers.Any(SyntaxKind.PartialKeyword) || model.GetDeclaredSymbol(prop) is not IPropertySymbol { IsPartialDefinition: true })
+            if (isRecordStruct ? (!prop.Modifiers.Any(SyntaxKind.PartialKeyword) || propertySymbol is not { IsPartialDefinition: true })
                 : !propAttributes.Any(attribute => attribute.Name.ToString() is Parser.CborOrder or Parser.CborProperty or Parser.CborPropertyAttribute))
             {
                 continue;
@@ -579,10 +586,13 @@ public sealed partial class CborSerializerCodeGen
                 isMapValueTypeUnion,
                 cborMaybeIndefListItemType,
                 IsPairList(typeSymbol as ITypeSymbol, out _)
-            );
+            )
+            {
+                IsLedgerText = ledgerTextAttribute is not null && propertySymbol?.GetAttributes().Any(
+                    attribute => SymbolEqualityComparer.Default.Equals(attribute.AttributeClass, ledgerTextAttribute)) == true
+            };
 
-
-            yield return WithUnionHints(model.GetDeclaredSymbol(prop), propMetadata);
+            yield return WithUnionHints(propertySymbol, propMetadata);
         }
     }
 
