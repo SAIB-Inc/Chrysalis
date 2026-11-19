@@ -97,7 +97,7 @@ public class ConformanceTests
 
         // Step 3: Evaluate
         ExBudget initialBudget = ExBudget.Unlimited;
-        CekMachine machine = new(initialBudget);
+        CekMachine machine = new();
         Term<DeBruijn> result;
         try
         {

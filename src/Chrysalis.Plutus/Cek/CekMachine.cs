@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using System.Diagnostics.CodeAnalysis;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
@@ -6,17 +7,25 @@ using Chrysalis.Plutus.Types;
 
 namespace Chrysalis.Plutus.Cek;
 
+internal enum BudgetStop : byte
+{
+    None,
+    Startup,
+    Steps,
+    Builtin
+}
+
 /// <summary>
 /// CEK (Control-Environment-Kontinuation) abstract machine for evaluating UPLC programs.
 /// Implements spec section 2.4, Figure 2.10.
 /// </summary>
 public sealed class CekMachine
 {
-    private ExBudget _budget;
+    private ulong _pendingKinds;
     private int _unbudgetedSteps;
     private readonly ImmutableArray<BuiltinCostModel> _builtinCosts;
     private readonly MachineCosts _machineCosts;
-    private readonly int[]? _kindCounts;
+    private readonly bool _measuring;
     private readonly Variant _variant;
 
     // Machine state (mutable for zero-allocation hot loop)
@@ -35,7 +44,7 @@ public sealed class CekMachine
     }
 
     public CekMachine(ExBudget? initialBudget = null)
-        : this(initialBudget ?? ExBudget.Unlimited, CostModel.Default)
+        : this(initialBudget, CostModel.Default)
     {
     }
 
@@ -44,17 +53,17 @@ public sealed class CekMachine
     {
     }
 
-    internal CekMachine(ExBudget initialBudget, CostModel model)
+    internal CekMachine(ExBudget? initialBudget, CostModel model)
         : this(initialBudget, model.Builtins, model.Machine, model.Variant)
     {
     }
 
-    private CekMachine(ExBudget initialBudget, ImmutableArray<BuiltinCostModel> builtinCosts, MachineCosts machineCosts, Variant variant)
+    private CekMachine(ExBudget? initialBudget, ImmutableArray<BuiltinCostModel> builtinCosts, MachineCosts machineCosts, Variant variant)
     {
-        _budget = initialBudget - machineCosts.Startup;
+        RemainingBudget = initialBudget ?? ExBudget.Unlimited;
+        _measuring = initialBudget is null;
         _builtinCosts = builtinCosts;
         _machineCosts = machineCosts;
-        _kindCounts = machineCosts.UniformStep.HasValue ? null : new int[MachineCosts.StepKindCount];
         _variant = variant;
     }
 
@@ -68,26 +77,46 @@ public sealed class CekMachine
     /// <summary>Returns (stepCounts[9], builtinCpu[N], builtinMem[N]) if debug enabled.</summary>
     public (int[]? Steps, long[]? BuiltinCpu, long[]? BuiltinMem) DebugCounters => (_debug?.Steps, _debug?.BuiltinCpu, _debug?.BuiltinMem);
 
-    public ExBudget RemainingBudget
-    {
-        get
-        {
-            SpendUnbudgetedSteps();
-            return _budget;
-        }
-    }
+    /// <summary>The budget left, negative in the part that ran out after a budget stop.</summary>
+    public ExBudget RemainingBudget { get; private set; }
 
     /// <summary>
     /// Evaluate a UPLC term and return the resulting term.
     /// </summary>
-    public Term<DeBruijn> Run(Term<DeBruijn> term) => Discharge.DischargeValue(RunValue(term));
+    /// <exception cref="BudgetExceededException">A charge took CPU or memory below zero.</exception>
+    public Term<DeBruijn> Run(Term<DeBruijn> term) => TryRun(term, out Term<DeBruijn>? result) ? result : throw new BudgetExceededException();
 
-    internal CekValue RunValue(Term<DeBruijn> term)
+    internal BudgetStop StoppedAt { get; private set; }
+
+    internal bool TryRun(Term<DeBruijn> term, [NotNullWhen(true)] out Term<DeBruijn>? result)
+    {
+        if (TryRunValue(term, out CekValue? value))
+        {
+            result = Discharge.DischargeValue(value);
+            return true;
+        }
+        result = null;
+        return false;
+    }
+
+    internal CekValue RunValue(Term<DeBruijn> term) => TryRunValue(term, out CekValue? result) ? result : throw new BudgetExceededException();
+
+    internal bool TryRunValue(Term<DeBruijn> term, [NotNullWhen(true)] out CekValue? result)
     {
         _ctxStack.Reset();
         _env = null;
         _computeTerm = term;
         _returnValue = null;
+        _pendingKinds = 0;
+        _unbudgetedSteps = 0;
+        StoppedAt = BudgetStop.None;
+        result = null;
+
+        RemainingBudget -= _machineCosts.Startup;
+        if (!_measuring && RemainingBudget.IsExhausted)
+        {
+            return Halt(BudgetStop.Startup);
+        }
 
         while (true)
         {
@@ -99,8 +128,12 @@ public sealed class CekMachine
             {
                 if (_ctxStack.IsEmpty)
                 {
-                    SpendUnbudgetedSteps();
-                    return _returnValue!;
+                    if (StoppedAt != BudgetStop.None || !SpendUnbudgetedSteps())
+                    {
+                        return false;
+                    }
+                    result = _returnValue!;
+                    return true;
                 }
                 ReturnStep();
             }
@@ -110,48 +143,57 @@ public sealed class CekMachine
     // --- Budget tracking ---
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private void StepAndMaybeSpend(int stepKind)
+    private bool StepAndMaybeSpend(int stepKind)
     {
         if (_debug is not null)
         {
             _debug.Steps[stepKind]++;
         }
-        if (_kindCounts is not null)
+        if (stepKind != MachineCosts.StepCase)
         {
-            _kindCounts[stepKind]++;
+            // Eight packed bytes cannot carry: the total flushes at 200 steps.
+            _pendingKinds += 1UL << (stepKind * 8);
         }
-        if (++_unbudgetedSteps >= MachineCosts.Slippage)
-        {
-            SpendUnbudgetedSteps();
-        }
+        return ++_unbudgetedSteps < MachineCosts.Slippage || SpendUnbudgetedSteps();
     }
 
-    private void SpendUnbudgetedSteps()
+    private bool SpendUnbudgetedSteps()
     {
         if (_unbudgetedSteps == 0)
         {
-            return;
+            return true;
         }
-        if (_machineCosts.UniformStep is ExBudget uniform)
+        int remaining = _unbudgetedSteps;
+        ulong kinds = _pendingKinds;
+        for (int kind = 0; kind < MachineCosts.StepKindCount; kind++)
         {
-            // All costs are equal and nonnegative, so grouping kinds is equivalent.
-            _budget -= new ExBudget(_unbudgetedSteps * uniform.Cpu, _unbudgetedSteps * uniform.Mem);
-        }
-        else
-        {
-            int[] counts = _kindCounts!;
-            for (int kind = 0; kind < counts.Length; kind++)
+            // The ninth kind (Case) is the total minus the other eight.
+            int count = kind == MachineCosts.StepCase ? remaining : (byte)kinds;
+            kinds >>= 8;
+            remaining -= count;
+            if (count != 0)
             {
-                int count = counts[kind];
-                if (count != 0)
+                ExBudget step = _machineCosts.Steps[kind];
+                RemainingBudget -= new ExBudget(SatMath.Mul(count, step.Cpu), SatMath.Mul(count, step.Mem));
+                if (!_measuring && RemainingBudget.IsExhausted)
                 {
-                    ExBudget step = _machineCosts.Steps[kind];
-                    _budget -= new ExBudget(SatMath.Mul(count, step.Cpu), SatMath.Mul(count, step.Mem));
-                    counts[kind] = 0;
+                    return Halt(BudgetStop.Steps);
                 }
             }
         }
+        _pendingKinds = 0;
         _unbudgetedSteps = 0;
+        return true;
+    }
+
+    private bool Halt(BudgetStop site)
+    {
+        StoppedAt = site;
+        _pendingKinds = 0;
+        _unbudgetedSteps = 0;
+        _ctxStack.Reset();
+        _computeTerm = null;
+        return false;
     }
 
     // --- Compute step: evaluate a term in the current environment ---
@@ -166,7 +208,10 @@ public sealed class CekMachine
             case TermTag.Var:
                 {
                     VarTerm<DeBruijn> v = Unsafe.As<VarTerm<DeBruijn>>(term);
-                    StepAndMaybeSpend(MachineCosts.StepVar);
+                    if (!StepAndMaybeSpend(MachineCosts.StepVar))
+                    {
+                        break;
+                    }
                     _returnValue = Environment.Lookup(_env, v.Name.Index)
                         ?? throw new EvaluationException($"Unbound variable: index {v.Name.Index}");
                     break;
@@ -175,7 +220,10 @@ public sealed class CekMachine
             case TermTag.Const:
                 {
                     ConstTerm<DeBruijn> c = Unsafe.As<ConstTerm<DeBruijn>>(term);
-                    StepAndMaybeSpend(MachineCosts.StepConstant);
+                    if (!StepAndMaybeSpend(MachineCosts.StepConstant))
+                    {
+                        break;
+                    }
                     _returnValue = new VConstant(c.Value);
                     break;
                 }
@@ -183,7 +231,10 @@ public sealed class CekMachine
             case TermTag.Lambda:
                 {
                     LambdaTerm<DeBruijn> l = Unsafe.As<LambdaTerm<DeBruijn>>(term);
-                    StepAndMaybeSpend(MachineCosts.StepLambda);
+                    if (!StepAndMaybeSpend(MachineCosts.StepLambda))
+                    {
+                        break;
+                    }
                     _returnValue = new VLambda(l.Parameter, l.Body, _env);
                     break;
                 }
@@ -191,7 +242,10 @@ public sealed class CekMachine
             case TermTag.Delay:
                 {
                     DelayTerm<DeBruijn> d = Unsafe.As<DelayTerm<DeBruijn>>(term);
-                    StepAndMaybeSpend(MachineCosts.StepDelay);
+                    if (!StepAndMaybeSpend(MachineCosts.StepDelay))
+                    {
+                        break;
+                    }
                     _returnValue = new VDelay(d.Body, _env);
                     break;
                 }
@@ -199,19 +253,28 @@ public sealed class CekMachine
             case TermTag.Force:
                 {
                     ForceTerm<DeBruijn> f = Unsafe.As<ForceTerm<DeBruijn>>(term);
-                    StepAndMaybeSpend(MachineCosts.StepForce);
+                    if (!StepAndMaybeSpend(MachineCosts.StepForce))
+                    {
+                        break;
+                    }
                     // Fast path: Force(Delay(body)) — skip VDelay allocation + frame roundtrip
                     if (f.Body.TermTag == TermTag.Delay)
                     {
                         DelayTerm<DeBruijn> d = Unsafe.As<DelayTerm<DeBruijn>>(f.Body);
-                        StepAndMaybeSpend(MachineCosts.StepDelay); // charge for the Delay step
+                        if (!StepAndMaybeSpend(MachineCosts.StepDelay))
+                        {
+                            break;
+                        }
                         _computeTerm = d.Body;
                     }
                     // Fast path: Force(Builtin(f)) — skip unforced VBuiltin + frame roundtrip
                     else if (f.Body.TermTag == TermTag.Builtin)
                     {
                         BuiltinTerm<DeBruijn> b = Unsafe.As<BuiltinTerm<DeBruijn>>(f.Body);
-                        StepAndMaybeSpend(MachineCosts.StepBuiltin); // charge for the Builtin step
+                        if (!StepAndMaybeSpend(MachineCosts.StepBuiltin))
+                        {
+                            break;
+                        }
                         DefaultFunction func = b.Function;
                         int expectedForces = func.ForceCount();
                         if (expectedForces < 1)
@@ -237,12 +300,18 @@ public sealed class CekMachine
             case TermTag.Apply:
                 {
                     ApplyTerm<DeBruijn> a = Unsafe.As<ApplyTerm<DeBruijn>>(term);
-                    StepAndMaybeSpend(MachineCosts.StepApply);
+                    if (!StepAndMaybeSpend(MachineCosts.StepApply))
+                    {
+                        break;
+                    }
                     // Fast path: Apply(Lambda(body), arg) — skip VLambda allocation + 2 frame steps
                     if (a.Function.TermTag == TermTag.Lambda)
                     {
                         LambdaTerm<DeBruijn> l = Unsafe.As<LambdaTerm<DeBruijn>>(a.Function);
-                        StepAndMaybeSpend(MachineCosts.StepLambda); // charge for the Lambda step
+                        if (!StepAndMaybeSpend(MachineCosts.StepLambda))
+                        {
+                            break;
+                        }
                         ref ContextFrame frame = ref _ctxStack.Push();
                         frame.Tag = FrameTag.AwaitArgDirect;
                         frame.Env = _env;
@@ -263,7 +332,10 @@ public sealed class CekMachine
             case TermTag.Builtin:
                 {
                     BuiltinTerm<DeBruijn> b = Unsafe.As<BuiltinTerm<DeBruijn>>(term);
-                    StepAndMaybeSpend(MachineCosts.StepBuiltin);
+                    if (!StepAndMaybeSpend(MachineCosts.StepBuiltin))
+                    {
+                        break;
+                    }
                     _returnValue = new VBuiltin(b.Function, 0, [], 0);
                     break;
                 }
@@ -271,7 +343,10 @@ public sealed class CekMachine
             case TermTag.Constr:
                 {
                     ConstrTerm<DeBruijn> constr = Unsafe.As<ConstrTerm<DeBruijn>>(term);
-                    StepAndMaybeSpend(MachineCosts.StepConstr);
+                    if (!StepAndMaybeSpend(MachineCosts.StepConstr))
+                    {
+                        break;
+                    }
                     if (constr.Fields.IsEmpty)
                     {
                         _returnValue = new VConstr(constr.Tag, [], 0);
@@ -294,7 +369,10 @@ public sealed class CekMachine
             case TermTag.Case:
                 {
                     CaseTerm<DeBruijn> cs = Unsafe.As<CaseTerm<DeBruijn>>(term);
-                    StepAndMaybeSpend(MachineCosts.StepCase);
+                    if (!StepAndMaybeSpend(MachineCosts.StepCase))
+                    {
+                        break;
+                    }
                     ref ContextFrame frame = ref _ctxStack.Push();
                     frame.Tag = FrameTag.Cases;
                     frame.Env = _env;
@@ -524,7 +602,7 @@ public sealed class CekMachine
 
     // --- Builtin invocation with cost tracking ---
 
-    private CekValue CallBuiltin(DefaultFunction func, CekValue[] args)
+    private CekValue? CallBuiltin(DefaultFunction func, CekValue[] args)
     {
         BuiltinCostModel model = _builtinCosts[(int)func];
         ExBudget cost;
@@ -538,7 +616,7 @@ public sealed class CekMachine
             cost = model.Eval(x, y, z);
         }
 
-        _budget -= cost;
+        RemainingBudget -= cost;
 
         if (_debug is not null)
         {
@@ -547,6 +625,11 @@ public sealed class CekMachine
             _debug.BuiltinMem[idx] = SatMath.Add(_debug.BuiltinMem[idx], cost.Mem);
         }
 
+        if (!_measuring && RemainingBudget.IsExhausted)
+        {
+            _ = Halt(BudgetStop.Builtin);
+            return null;
+        }
         return Builtins.BuiltinRuntime.Call(func, args);
     }
 

@@ -19,6 +19,8 @@
    "upstreamPath":"NOTICE.md","blob":"a0a74865bef037095ec1cc4bc16cf1c528aa4d41","bytes":560,"sha256":"9e1fe670abe06d2cbdffa2d724765b5e86aa7f65d8eccd34b391a37fbf7bab89","license":"Apache-2.0"},
   {"path":"plutigo-v0.12.3/node_ground_truth_pv11.json.gz","repository":"blinklabs-io/plutigo","tag":"v0.12.3","commit":"c4a50c15c86e7a3d57348a478d72f410e7ce75a9",
    "upstreamPath":"cek/testdata/node_ground_truth_pv11.json.gz","blob":"19ca007ca0f551ea42506d07dcdca2b8c9866c70","bytes":244538,"sha256":"9dfb5b9e4694c4a460725fc95fd09de5115f523b7876567f893a3fa100e75fae","license":"Apache-2.0"},
+  {"path":"plutigo-v0.12.3/node_budget_failures_pv11.json.gz","repository":"blinklabs-io/plutigo","tag":"v0.12.3","commit":"c4a50c15c86e7a3d57348a478d72f410e7ce75a9",
+   "upstreamPath":"cek/testdata/node_budget_failures_pv11.json.gz","blob":"422d3d8022ee35beb086e7315c8e9e9527dc8b81","bytes":16379,"sha256":"3d5f0a030848022e86bc5e1528758e1e15dace44b1973586fcaee443c8498776","license":"Apache-2.0"},
   {"path":"plutigo-v0.12.3/LICENSE","repository":"blinklabs-io/plutigo","tag":"v0.12.3","commit":"c4a50c15c86e7a3d57348a478d72f410e7ce75a9",
    "upstreamPath":"LICENSE","blob":"0192e0e3d73fb062de8c45da3e7934a118fef446","bytes":11349,"sha256":"a9cbe089c635430b641e62a9b5b8ade4d6abcb4b4477dedd903afb9bf6e8c895","license":"Apache-2.0"},
   {"path":"g1/current-protocol-parameters.json","repository":"G1","tag":null,"commit":null,

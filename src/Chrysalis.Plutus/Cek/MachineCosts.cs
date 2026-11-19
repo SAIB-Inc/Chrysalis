@@ -10,26 +10,12 @@ internal sealed class MachineCosts
 
     internal ImmutableArray<ExBudget> Steps { get; }
 
-    internal ExBudget? UniformStep { get; }
-
     internal static MachineCosts Default => CostModel.Default.Machine;
 
     internal MachineCosts(ExBudget startup, ImmutableArray<ExBudget> steps)
     {
         Startup = startup;
         Steps = steps;
-        ExBudget first = steps[0];
-        if (first.Cpu is >= 0 and <= long.MaxValue / Slippage && first.Mem is >= 0 and <= long.MaxValue / Slippage)
-        {
-            foreach (ExBudget cost in steps)
-            {
-                if (cost != first)
-                {
-                    return;
-                }
-            }
-            UniformStep = first;
-        }
     }
 
     internal const int StepConstant = 0;

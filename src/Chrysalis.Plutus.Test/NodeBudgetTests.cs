@@ -2,8 +2,10 @@ using System.IO.Compression;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using Chrysalis.Plutus.Cek;
 using Chrysalis.Plutus.Flat;
+using Chrysalis.Plutus.Text;
 using Chrysalis.Plutus.Types;
 using Chrysalis.Plutus.VM.EvalTx;
 using Chrysalis.Plutus.VM.Models;
@@ -11,7 +13,7 @@ using Xunit;
 
 namespace Chrysalis.Plutus.Test;
 
-public sealed class NodeBudgetTests
+public sealed partial class NodeBudgetTests
 {
     internal sealed record Script(string Id, int Language, string Purpose, byte[] Flat, ExUnitsResult? Units, ExUnitsResult? Budget);
 
@@ -39,6 +41,10 @@ public sealed class NodeBudgetTests
         return failures;
     }
 
+    private static bool IsKnownFailure(KnownFailure failure, string stage, Exception error) =>
+        stage == failure.Stage && error.GetType().FullName == failure.ExceptionType &&
+        Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(error.Message))) == failure.MessageSha256;
+
     private static NodeData Load()
     {
         using GZipStream stream = new(Golden.Open("plutigo-v0.12.3/node_ground_truth_pv11.json.gz"), CompressionMode.Decompress);
@@ -47,16 +53,18 @@ public sealed class NodeBudgetTests
         long[][] models = ReadModels(doc.RootElement);
         Script[] scripts = [.. doc.RootElement.GetProperty("scripts").EnumerateArray()
             .Where(e => e.GetProperty("outcome").ValueEquals("ok"))
-            .Select(e => new Script(e.GetProperty("id").GetString()!, e.GetProperty("lang").GetString() switch
-            {
-                "V1" => 1,
-                "V2" => 2,
-                "V3" => 3,
-                _ => throw new InvalidDataException("Unexpected fixture language")
-            }, e.GetProperty("purpose").GetString()!, Convert.FromHexString(e.GetProperty("flat").GetString()!),
+            .Select(e => new Script(e.GetProperty("id").GetString()!, ReadLanguage(e), e.GetProperty("purpose").GetString()!, Convert.FromHexString(e.GetProperty("flat").GetString()!),
                 Units(e, "exunits"), Units(e, "budget")))];
         return new(models, scripts);
     }
+
+    private static int ReadLanguage(JsonElement entry) => entry.GetProperty("lang").GetString() switch
+    {
+        "V1" => 1,
+        "V2" => 2,
+        "V3" => 3,
+        _ => throw new InvalidDataException("Unexpected fixture language")
+    };
 
     private static ExUnitsResult? Units(JsonElement script, string key) =>
         script.TryGetProperty(key, out JsonElement units) ? new(units.GetProperty("mem").GetUInt64(), units.GetProperty("steps").GetUInt64()) : null;
@@ -105,7 +113,7 @@ public sealed class NodeBudgetTests
                 stage = "apply";
                 Term<DeBruijn> applied = ApplyLedgerArgs(script, decoded);
                 stage = "evaluate";
-                ExUnitsResult actual = Evaluator.Run(applied, models[script.Language - 1], script.Language, ExBudget.Unlimited).ExUnits;
+                ExUnitsResult actual = Evaluator.Run(applied, models[script.Language - 1], script.Language, null).ExUnits;
                 if (failure is not null)
                 {
                     mismatches[i] = $"{script.Id}: stale {failure.Owner} entry; evaluated with {Show(actual)}";
@@ -118,8 +126,7 @@ public sealed class NodeBudgetTests
             catch (Exception ex)
             {
                 string? type = ex.GetType().FullName;
-                string digest = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(ex.Message)));
-                if (failure is null || stage != failure.Stage || type != failure.ExceptionType || digest != failure.MessageSha256)
+                if (failure is null || !IsKnownFailure(failure, stage, ex))
                 {
                     mismatches[i] = $"{script.Id} V{script.Language}: unexpected {stage} failure: {type}: {ex.Message}";
                 }
@@ -171,10 +178,13 @@ public sealed class NodeBudgetTests
 
     private static string Show(ExUnitsResult units) => FormattableString.Invariant($"{units.Mem} / {units.Steps}");
 
-    private static Term<DeBruijn> ApplyLedgerArgs(Script script, Term<DeBruijn> term)
+    private static Term<DeBruijn> ApplyLedgerArgs(Script script, Term<DeBruijn> term) =>
+        ApplyLedgerArgs(script.Language, script.Purpose, term);
+
+    private static Term<DeBruijn> ApplyLedgerArgs(int language, string purpose, Term<DeBruijn> term)
     {
         // plutigo node_ground_truth_test.go:97–110: recorded scripts ignore their arguments.
-        int nargs = script.Language == 3 ? 1 : script.Purpose == "spend" ? 3 : 2;
+        int nargs = language == 3 ? 1 : purpose == "spend" ? 3 : 2;
         ConstTerm<DeBruijn> arg = new(new DataConstant(new PlutusDataConstr(0, [])));
         for (int i = 0; i < nargs; i++)
         {
@@ -185,7 +195,7 @@ public sealed class NodeBudgetTests
 
     private static (ExUnitsResult Used, long Cpu, long Mem) WithCounters(Term<DeBruijn> term, CostModel model, DefaultFunction function)
     {
-        CekMachine machine = new CekMachine(ExBudget.Unlimited, model).EnableDebugCounters();
+        CekMachine machine = new CekMachine(null, model).EnableDebugCounters();
         _ = machine.RunValue(term);
         (_, long[]? cpu, long[]? mem) = machine.DebugCounters;
         return (Evaluator.UsedUnits(ExBudget.Unlimited, machine.RemainingBudget), cpu![(int)function], mem![(int)function]);
@@ -206,5 +216,293 @@ public sealed class NodeBudgetTests
         Assert.Equal(function, Assert.IsType<BuiltinTerm<DeBruijn>>(program.Term).Function);
         Assert.Equal(bytes, FlatEncoder.EncodeProgram(new(program.Version, new BuiltinTerm<DeBruijn>(function))));
         Assert.Equal(arity, function.Arity());
+    }
+
+    private sealed record BudgetCase(string Id, int Language, string Purpose, byte[] Flat, string Outcome,
+        ExBudget Budget, ExBudget? Remaining, string? EvaluationError)
+    {
+        internal Term<DeBruijn> Apply(Term<DeBruijn> term) => ApplyLedgerArgs(Language, Purpose, term);
+        internal Term<DeBruijn> Decode() => FlatDecoder.DecodeProgram(Flat).Term;
+    }
+
+    private sealed record BudgetData(long[][] Models, BudgetCase[] Cases);
+    private static readonly Lazy<BudgetData> Failures = new(LoadBudgetData);
+
+    private static BudgetData LoadBudgetData()
+    {
+        using GZipStream stream = new(Golden.Open("plutigo-v0.12.3/node_budget_failures_pv11.json.gz"), CompressionMode.Decompress);
+        using JsonDocument doc = JsonDocument.Parse(stream);
+        JsonElement root = doc.RootElement;
+        Assert.Equal(11, root.GetProperty("protocolMajor").GetInt32());
+        BudgetCase[] cases = [.. root.GetProperty("cases").EnumerateArray().Select(e => new BudgetCase(
+            e.GetProperty("id").GetString()!, ReadLanguage(e), e.GetProperty("purpose").GetString()!,
+            Convert.FromHexString(e.GetProperty("flat").GetString()!), e.GetProperty("outcome").GetString()!,
+            ReadBudget(e.GetProperty("budget")), e.TryGetProperty("remaining", out JsonElement remaining) ? ReadBudget(remaining) : null,
+            e.TryGetProperty("evaluationError", out JsonElement error) ? error.GetString() : null))];
+        return new(ReadModels(root), cases);
+    }
+
+    private static ExBudget ReadBudget(JsonElement units) => new(units.GetProperty("steps").GetInt64(), units.GetProperty("mem").GetInt64());
+
+    private static BudgetCase FindBudgetCase(string id) => Failures.Value.Cases.Single(c => c.Id == id);
+
+    // Startup, prior spends and the whole builtin charge, from Plutus 1.70.0.0's size/cost rules and
+    // the node's recorded arrays and sibling stop events (§7 of V2b). Never derived from CEK output.
+    private static readonly (string Family, long Mem, long Cpu)[] Aggregates =
+    [
+        ("B-eqdata-list", 101, 5099214),
+        ("B-eqdata-tree", 101, 4062612),
+        ("B-l2a-250", 357, 6210600),
+        ("B-ser-list40", 508, 44471254),
+        ("B-ser-tree", 528, 46604374),
+        ("B3-eqdata-bigint-vs-list", 101, 1443828),
+        ("B3-eqdata-constr-vs-list", 101, 1416549),
+        ("B3-eqdata-list-vs-constr", 101, 1416549),
+        ("B3-eqdata-map-vs-list", 101, 2807778),
+        ("B3-l2a-100", 207, 2484900),
+        ("B3-l2a-101", 208, 2509738),
+        ("B3-l2a-199", 306, 4943862),
+        ("B3-l2a-200", 307, 4968700),
+        ("B3-l2a-201", 308, 4993538),
+        ("B3-l2a-350", 457, 8694400),
+        ("B3-msmg1-100", 168, 2883624928),
+        ("B3-msmg1-150", 168, 4138008378),
+        ("B3-ser-map", 240, 15887446),
+        ("B3-unvaluedata", 442, 2975984),
+        ("B4-ser-V1", 408, 33805654),
+        ("B4-ser-V2", 408, 33805654),
+        ("B4-writebits-100", 104, 2166045),
+        ("B4-writebits-250", 104, 4993245)
+    ];
+
+    private static ExBudget? PartialBuiltinAggregate(BudgetCase entry)
+    {
+        if (entry.Remaining is not ExBudget nodeRemaining || entry.Budget is not { Cpu: >= 100, Mem: >= 100 })
+        {
+            return null;
+        }
+        foreach ((string family, long mem, long cpu) in Aggregates)
+        {
+            if (entry.Id.StartsWith(family + "-", StringComparison.Ordinal))
+            {
+                ExBudget nodeUsed = entry.Budget - nodeRemaining;
+                ExBudget aggregate = new(cpu, mem);
+                return nodeUsed.Cpu <= cpu && nodeUsed.Mem <= mem && nodeUsed != aggregate ? aggregate : null;
+            }
+        }
+        return null;
+    }
+
+    [GeneratedRegex(@"-e\d+-(startup|step\d+x\d+|builtin)-", RegexOptions.CultureInvariant)]
+    private static partial Regex StopStem();
+
+    [Fact]
+    public void RecordedBudgetFailuresMatchTheNode()
+    {
+        BudgetData fixture = Failures.Value;
+        using Stream parameters = Golden.Open("g1/current-protocol-parameters.json");
+        using JsonDocument g1 = JsonDocument.Parse(parameters);
+        Assert.Equal(ReadModels(g1.RootElement), fixture.Models);
+        Assert.Equal(568, fixture.Cases.Length);
+        Assert.Equal([536, 8, 24], fixture.Cases.GroupBy(c => c.Outcome).OrderBy(g => g.Key, StringComparer.Ordinal).Select(g => g.Count()));
+        ExBudget?[] aggregates = [.. fixture.Cases.Select(PartialBuiltinAggregate)];
+        Assert.Equal(99, aggregates.Count(a => a.HasValue));
+        Dictionary<string, KnownFailure> known = ReadKnownFailures();
+        CostModel[] models = [.. fixture.Models.Select((a, i) => CostModelLoader.FromFlat(a, i + 1))];
+        string?[] mismatches = new string?[fixture.Cases.Length];
+        _ = Parallel.For(0, fixture.Cases.Length, i =>
+        {
+            BudgetCase entry = fixture.Cases[i];
+            Exception? failure = Record.Exception(() => CheckReplay(entry, models[entry.Language - 1], aggregates[i], known.GetValueOrDefault(entry.Id)));
+            if (failure is not null)
+            {
+                mismatches[i] = $"{entry.Id}: {failure.Message}";
+            }
+        });
+        string[] errors = [.. mismatches.OfType<string>()];
+        Assert.True(errors.Length == 0, $"{errors.Length} budget replay mismatches:\n{string.Join('\n', errors)}");
+    }
+
+    private static void CheckReplay(BudgetCase entry, CostModel model, ExBudget? aggregate, KnownFailure? known)
+    {
+        CekMachine machine = new(entry.Budget, model);
+        if (entry.Outcome == "error")
+        {
+            _ = machine.EnableDebugCounters();
+        }
+        bool ok = false;
+        CekValue? result = null;
+        string stage = "decode";
+        Exception? error = Record.Exception(() =>
+        {
+            Term<DeBruijn> decoded = entry.Decode();
+            stage = "apply";
+            Term<DeBruijn> applied = entry.Apply(decoded);
+            stage = "evaluate";
+            ok = machine.TryRunValue(applied, out result);
+        });
+        if (known is not null)
+        {
+            Assert.NotNull(error);
+            Assert.True(IsKnownFailure(known, stage, error), $"Changed {known.Owner} {stage} failure: {error.GetType().FullName}: {error.Message}");
+            return;
+        }
+        if (entry.Outcome == "error" && stage == "evaluate")
+        {
+            Assert.Equal(BudgetStop.None, machine.StoppedAt);
+            EvaluationException evaluation = Assert.IsType<EvaluationException>(error);
+            string cause = entry.EvaluationError!.Split("Caused by: ", StringSplitOptions.None)[^1].Split(' ')[0];
+            if (cause == "error")
+            {
+                Assert.Equal("ExplicitErrorTerm", evaluation.Message);
+            }
+            else
+            {
+                DefaultFunction function = Enum.Parse<DefaultFunction>(cause, ignoreCase: true);
+                Assert.NotEqual("ExplicitErrorTerm", evaluation.Message);
+                Assert.True(machine.DebugCounters.BuiltinCpu![(int)function] > 0);
+            }
+            return;
+        }
+        Assert.True(error is null, $"Unexpected {stage} failure: {error?.GetType().FullName}: {error?.Message}");
+        if (entry.Outcome == "ok")
+        {
+            Assert.True(ok && !machine.RemainingBudget.IsExhausted);
+            if (entry.Language == 3)
+            {
+                _ = Assert.IsType<UnitConstant>(Assert.IsType<VConstant>(result).Value);
+            }
+            return;
+        }
+
+        Assert.Equal("budget", entry.Outcome);
+        Assert.False(ok);
+        Assert.Null(result);
+        Assert.Equal(aggregate is ExBudget total ? entry.Budget - total : entry.Remaining!.Value, machine.RemainingBudget);
+        BudgetStop? expectedSite = (aggregate.HasValue, StopStem().Match(entry.Id).Groups[1].Value) switch
+        {
+            (true, _) or (_, "builtin") => BudgetStop.Builtin,
+            (_, "startup") => BudgetStop.Startup,
+            (_, "") => null,
+            _ => BudgetStop.Steps
+        };
+        if (expectedSite.HasValue)
+        {
+            Assert.Equal(expectedSite.Value, machine.StoppedAt);
+        }
+    }
+
+    [Fact]
+    public void BudgetEqualToTheCostPasses_OneUnitLessFails()
+    {
+        BudgetData fixture = Failures.Value;
+        long[] costs = fixture.Models[2];
+        byte[][] cbor = [[0xD8, 0x79, 0x80]];
+        PlutusData[] arguments = [new PlutusDataConstr(0, [])];
+        BudgetCase[] exact = [.. fixture.Cases.Where(c => c.Language == 3 && c.Outcome == "ok" && c.Id.EndsWith("-exact", StringComparison.Ordinal))];
+        Assert.Equal(20, exact.Length);
+        foreach (BudgetCase entry in exact)
+        {
+            ExUnitsResult expected = new((ulong)entry.Budget.Mem, (ulong)entry.Budget.Cpu);
+            Assert.Equal(expected, Evaluator.EvaluateScript(entry.Flat, cbor, costs, budget: entry.Budget).ExUnits);
+            Assert.Equal(expected, Evaluator.EvaluateScript(entry.Flat, arguments, costs, budget: entry.Budget).ExUnits);
+        }
+        foreach (BudgetCase entry in fixture.Cases.Where(c => c.Language == 3 && c.Outcome == "budget" &&
+            (c.Id.EndsWith("-cpu-1", StringComparison.Ordinal) || c.Id.EndsWith("-mem-1", StringComparison.Ordinal) ||
+             c.Id is "X-i2b-steps-minus1" or "X-i2b-mem-minus1")))
+        {
+            Reject(entry.Flat, entry.Budget);
+        }
+
+        BudgetCase i2b = FindBudgetCase("X-i2b-exact");
+        Assert.Equal(new ExUnitsResult(2424, 1530707), Evaluator.EvaluateScript(i2b.Flat, cbor, costs).ExUnits);
+        Assert.Equal(new ExUnitsResult(2424, 1530707), Evaluator.EvaluateScript(i2b.Flat, arguments, costs).ExUnits);
+        Reject(i2b.Flat, new(long.MaxValue, 2423));
+        Reject(i2b.Flat, new(1530706, long.MaxValue));
+
+        string source = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "conformance", "builtin", "semantics", "dropList", "dropList-15", "dropList-15.uplc"));
+        Term<DeBruijn> drop = UplcParser.NameToDeBruijn(UplcParser.Parse(source)).Term;
+        (Term<DeBruijn> result, ExUnitsResult units) = Evaluator.EvaluateTerm(drop);
+        Assert.Equal("(con (list integer) [])", UplcParser.PrettyPrint(result));
+        Assert.Equal(new ExUnitsResult(704, long.MaxValue), units);
+        _ = Assert.Throws<BudgetExceededException>(() => Evaluator.EvaluateTerm(drop, ExBudget.Unlimited));
+        CekMachine enforcing = new(ExBudget.Unlimited);
+        Assert.False(enforcing.TryRun(drop, out _));
+        Assert.Equal(BudgetStop.Builtin, enforcing.StoppedAt);
+
+        ConstTerm<DeBruijn> unit = new(UnitConstant.Instance);
+        foreach (ExBudget budget in new[] { new ExBudget(long.MinValue, long.MaxValue), new ExBudget(long.MaxValue, long.MinValue) })
+        {
+            CekMachine machine = new(budget);
+            Assert.False(machine.TryRun(unit, out _));
+            Assert.Equal(BudgetStop.Startup, machine.StoppedAt);
+            Assert.Equal(budget - new ExBudget(100, 100), machine.RemainingBudget);
+        }
+        BudgetCase shortCpu = FindBudgetCase("X-i2b-steps-short-in-builtin");
+        CekMachine failing = new(shortCpu.Budget, CostModelLoader.FromFlat(costs, 3));
+        _ = Assert.Throws<BudgetExceededException>(() => failing.Run(shortCpu.Apply(shortCpu.Decode())));
+        Assert.Equal(new ExBudget(-322707, 1300), failing.RemainingBudget);
+
+        void Reject(byte[] flat, ExBudget budget)
+        {
+            _ = Assert.IsType<BudgetExceededException>(Assert.ThrowsAny<EvaluationException>(() => Evaluator.EvaluateScript(flat, cbor, costs, budget: budget)));
+            _ = Assert.IsType<BudgetExceededException>(Assert.ThrowsAny<EvaluationException>(() => Evaluator.EvaluateScript(flat, arguments, costs, budget: budget)));
+        }
+    }
+
+    [Fact]
+    public void RestrictedRunsAllocateNothingExtra()
+    {
+        BudgetCase entry = FindBudgetCase("X-i2b-exact");
+        CostModel model = CostModelLoader.FromFlat(Failures.Value.Models[2], 3);
+        Term<DeBruijn> script = entry.Apply(entry.Decode());
+        ConstTerm<DeBruijn> unit = new(UnitConstant.Instance);
+        _ = new CekMachine(null, model).TryRun(script, out _);
+        _ = new CekMachine(entry.Budget, model).TryRun(script, out _);
+        _ = new CekMachine(new ExBudget(99, 100000)).TryRun(unit, out _);
+
+        CekMachine measure = new(null, model);
+        CekMachine restrict = new(entry.Budget, model);
+        long start = GC.GetAllocatedBytesForCurrentThread();
+        bool measured = measure.TryRun(script, out _);
+        long measureBytes = GC.GetAllocatedBytesForCurrentThread() - start;
+        start = GC.GetAllocatedBytesForCurrentThread();
+        bool restricted = restrict.TryRun(script, out _);
+        long restrictBytes = GC.GetAllocatedBytesForCurrentThread() - start;
+        Assert.True(measured && restricted);
+        Assert.Equal(measureBytes, restrictBytes);
+
+        CekMachine earlyStop = new(new ExBudget(99, 100000));
+        start = GC.GetAllocatedBytesForCurrentThread();
+        bool ran = earlyStop.TryRun(unit, out Term<DeBruijn>? result);
+        long stoppedBytes = GC.GetAllocatedBytesForCurrentThread() - start;
+        Assert.False(ran);
+        Assert.Null(result);
+        Assert.Equal(BudgetStop.Startup, earlyStop.StoppedAt);
+        Assert.Equal(0, stoppedBytes);
+    }
+
+    [Fact]
+    public void ReusedMachineChargesStartupPerRun()
+    {
+        ConstTerm<DeBruijn> unit = new(UnitConstant.Instance);
+        foreach (ExBudget budget in new[] { new ExBudget(32200, 400), new ExBudget(32199, 400), new ExBudget(32200, 399), new ExBudget(32100, 300) })
+        {
+            CekMachine machine = new(budget);
+            Assert.True(machine.TryRun(unit, out _));
+            Assert.Equal(budget - new ExBudget(16100, 200), machine.RemainingBudget);
+            bool exact = budget == new ExBudget(32200, 400);
+            Assert.Equal(exact, machine.TryRun(unit, out _));
+            Assert.Equal(exact ? BudgetStop.None : BudgetStop.Steps, machine.StoppedAt);
+            Assert.Equal(budget - new ExBudget(32200, 400), machine.RemainingBudget);
+        }
+        BudgetCase entry = FindBudgetCase("B2-err-after-overspend");
+        CekMachine afterError = new(entry.Budget, CostModelLoader.FromFlat(Failures.Value.Models[2], 3));
+        _ = Assert.Throws<EvaluationException>(() => afterError.TryRun(entry.Apply(entry.Decode()), out _));
+        Assert.Equal(BudgetStop.None, afterError.StoppedAt);
+        Assert.Equal(new ExBudget(19900, 99900), afterError.RemainingBudget);
+        Assert.Equal(new ExBudget(19900, 99900), afterError.RemainingBudget);
+        Assert.True(afterError.TryRun(unit, out _));
+        Assert.Equal(new ExBudget(3800, 99700), afterError.RemainingBudget);
     }
 }
