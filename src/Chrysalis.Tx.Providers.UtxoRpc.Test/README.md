@@ -39,8 +39,8 @@ written. A failed run requires fresh approval, not an automatic retry.
 
 Dolos 1.6.3's four parameter gaps are named once in `DolosGaps`; recorded tests
 assert those exact values and parity excludes only the affected parts. The
-provider does not correct them. Datum hashes and reference-script bytes are
-checked against Pallas's parsed recording, not Blockfrost's lossy reconstruction.
+provider does not correct them. Parity compares datum hashes against Blockfrost;
+reference-script bytes are also checked against Pallas's parsed recording.
 
 The primary public script address is the search recording and joins parity only
 when explicitly added. The second capture is a `ReadUtxos` sample of eight
@@ -53,7 +53,7 @@ only for offline golden replay, never for live reads, parity or funded tests.
 Reference-script presence is skipped only when Blockfrost omits it: its
 address-UTxO endpoint can omit `reference_script_hash` when its transaction-UTxO
 endpoint reports it for the same immutable output. If Blockfrost reports a
-script, UTxO RPC must report it too, with the same language. A separate manifested
+script, UTxO RPC must report it too, with the same script hash. A separate manifested
 transaction-endpoint hash golden checks the decoded native reference script.
 
 To recapture the immutable Blockfrost hash, set the network, Blockfrost key-file

@@ -20,16 +20,10 @@ public class BlockfrostUtxo
     public string? TxHash { get; set; }
 
     /// <summary>
-    /// Gets or sets the transaction index.
-    /// </summary>
-    [JsonPropertyName("tx_index")]
-    public int? TxIndex { get; set; }
-
-    /// <summary>
     /// Gets or sets the output index.
     /// </summary>
     [JsonPropertyName("output_index")]
-    public int? OutputIndex { get; set; }
+    public ulong? OutputIndex { get; set; }
 
     /// <summary>
     /// Gets or sets the list of amounts (lovelace and native assets).
@@ -61,6 +55,13 @@ public class BlockfrostUtxo
     [JsonPropertyName("reference_script_hash")]
     public string? ReferenceScriptHash { get; set; }
 
+    /// <summary>Gets or sets the hash of the transaction that spent this output, if reported.</summary>
+    [JsonPropertyName("consumed_by_tx")]
+    public string? ConsumedByTx { get; set; }
+
+    /// <summary>Gets or sets whether this entry is listed as collateral.</summary>
+    [JsonPropertyName("collateral")]
+    public bool? Collateral { get; set; }
 }
 
 /// <summary>
@@ -75,8 +76,8 @@ public class Amount
     public string? Unit { get; set; }
 
     /// <summary>
-    /// Gets or sets the quantity as a string.
+    /// Gets or sets the unsigned quantity.
     /// </summary>
     [JsonPropertyName("quantity")]
-    public string? Quantity { get; set; }
+    public ulong? Quantity { get; set; }
 }

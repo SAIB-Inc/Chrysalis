@@ -1,0 +1,1 @@
+{"json":{"type":"atLeast","scripts":[{"type":"sig","keyHash":"6e23d3de62a0f2820f0c6e9c462e366e9a1448c3d6970a1619f5460b"},{"type":"sig","keyHash":"63083bdf144e0976e5ac4dd23cd82f5d0493d7a46365c6c8f1f98999"},{"type":"sig","keyHash":"16c1554c34114687cfe699e548e1799c4a1dc17c76b869a632361863"}],"required":2}}

@@ -1,11 +1,10 @@
-using System.Numerics;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using Chrysalis.Codec.Serialization;
-using Chrysalis.Codec.Types;
 using Chrysalis.Codec.Types.Cardano.Core.Protocol;
 using Chrysalis.Network.Cbor.LocalStateQuery;
+using Chrysalis.Tx.Providers;
 
 namespace Chrysalis.Tx.Test.Cli;
 
@@ -189,24 +188,11 @@ internal sealed class CliVectors(string root, IReadOnlyDictionary<string, JsonEl
             values = field.Name switch
             {
                 "utxoCostPerByte" => values with { AdaPerUTxOByte = field.Value.GetUInt64() },
-                "minFeeRefScriptCostPerByte" => values with { MinFeeRefScriptCostPerByte = Rational(field.Value.GetDecimal()) },
+                "minFeeRefScriptCostPerByte" => values with { MinFeeRefScriptCostPerByte = ProviderValues.ExactRational(field.Value.GetDecimal()) },
                 _ => throw new InvalidDataException($"unknown derived parameter: {field.Name}")
             };
         }
         return values;
-    }
-
-    private static CborRationalNumber Rational(decimal value)
-    {
-        ulong denominator = 1;
-        while (decimal.Truncate(value) != value)
-        {
-            value *= 10;
-            denominator = checked(denominator * 10);
-        }
-        ulong numerator = (ulong)value;
-        ulong divisor = (ulong)BigInteger.GreatestCommonDivisor(numerator, denominator);
-        return new CborRationalNumber(numerator / divisor, denominator / divisor);
     }
 
     internal Dictionary<string, ulong> Lovelace(string utxoPath)

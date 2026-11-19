@@ -6,13 +6,14 @@ using Chrysalis.Codec.Types;
 using Chrysalis.Codec.Types.Cardano.Core.Scripts;
 using Chrysalis.Codec.Types.Cardano.Core.Common;
 using Chrysalis.Codec.Types.Cardano.Core.Transaction;
+using Chrysalis.Tx.Extensions;
 using Chrysalis.Tx.Models.Cbor;
 using Xunit;
 using Xunit.Sdk;
 
 namespace Chrysalis.Tx.Providers.UtxoRpcTests;
 
-/// <summary>Compares only the fields the reference provider actually reads live.</summary>
+/// <summary>Compares live provider fields, accounting for named upstream gaps.</summary>
 [Trait("Category", "Integration")]
 [Collection("Live")]
 public sealed class ParityTests
@@ -22,7 +23,9 @@ public sealed class ParityTests
         "txFeePerByte", "txFeeFixed", "maxBlockBodySize", "maxTxSize", "maxBlockHeaderSize",
         "stakeAddressDeposit", "stakePoolDeposit", "stakePoolTargetNum", "minPoolCost", "utxoCostPerByte",
         "costModels", "executionUnitPrices", "maxTxExecutionUnits", "maxBlockExecutionUnits", "maxValueSize",
-        "collateralPercentage", "maxCollateralInputs", "minFeeRefScriptCostPerByte"
+        "collateralPercentage", "maxCollateralInputs", "minFeeRefScriptCostPerByte", "protocolVersion",
+        "poolPledgeInfluence", "monetaryExpansion", "treasuryCut", "poolVotingThresholds", "dRepVotingThresholds",
+        "committeeMinSize", "committeeMaxTermLength", "govActionLifetime", "govActionDeposit", "dRepDeposit", "dRepActivity"
     ];
 
     /// <summary>The exact live parameter fields agree across a stable three-read window.</summary>
@@ -30,9 +33,6 @@ public sealed class ParityTests
     [LiveFact(LiveSettings.Endpoint, LiveSettings.Network, LiveSettings.BlockfrostKeyFile)]
     public async Task CurrentParametersAgree()
     {
-        // Blockfrost.cs:119-122,137-144 does not read these 12 live/exactly: protocolVersion,
-        // poolPledgeInfluence, monetaryExpansion, treasuryCut, both voting thresholds, committeeMinSize,
-        // committeeMaxTermLength, govActionLifetime, govActionDeposit, dRepDeposit, dRepActivity.
         // poolRetireMaxEpoch is excluded by DolosGaps along with its other named server gaps.
         using UtxoRpc provider = LiveSettings.CreateProvider();
         using Blockfrost reference = await ReferenceAsync();
@@ -106,7 +106,7 @@ public sealed class ParityTests
         }
     }
 
-    private static void EqualValue(object? expected, object? actual, string field)
+    internal static void EqualValue(object? expected, object? actual, string field)
     {
         Assert.NotNull(expected);
         Assert.NotNull(actual);
@@ -118,10 +118,32 @@ public sealed class ParityTests
         else if (expected is CborRationalNumber rational)
         {
             CborRationalNumber value = Assert.IsType<CborRationalNumber>(actual);
-            Assert.True((BigInteger)rational.Numerator * value.Denominator == (BigInteger)value.Numerator * rational.Denominator, field);
+            Assert.NotEqual(0UL, rational.Denominator);
+            Assert.NotEqual(0UL, value.Denominator);
+            if (IsTerminatingDecimal(value))
+            {
+                Assert.True((BigInteger)rational.Numerator * value.Denominator == (BigInteger)value.Numerator * rational.Denominator, field);
+            }
+            else
+            {
+                // Blockfrost publishes db-sync doubles, so non-terminating ledger ratios (such as 2/3)
+                // can match only at double precision.
+                double referenceDouble = (double)((decimal)rational.Numerator / rational.Denominator);
+                double actualDouble = (double)((decimal)value.Numerator / value.Denominator);
+                Assert.True(referenceDouble.Equals(actualDouble),
+                    $"{field}: reference={rational.Numerator}/{rational.Denominator}, UTxO RPC={value.Numerator}/{value.Denominator}.");
+            }
         }
         else if (expected is long[] model) { Assert.Equal(model, Assert.IsType<long[]>(actual)); }
         else { Assert.True(Equals(expected, actual), $"{field}: reference={expected}, UTxO RPC={actual}."); }
+    }
+
+    private static bool IsTerminatingDecimal(CborRationalNumber value)
+    {
+        ulong reduced = value.Denominator / (ulong)BigInteger.GreatestCommonDivisor(value.Numerator, value.Denominator);
+        while (reduced % 2 == 0) { reduced /= 2; }
+        while (reduced % 5 == 0) { reduced /= 5; }
+        return reduced == 1;
     }
 
     internal static void EqualOutputs(List<ResolvedInput> expected, List<ResolvedInput> actual)
@@ -149,8 +171,10 @@ public sealed class ParityTests
             ReadOnlyMemory<byte>? actualInline = output.InlineDatumRaw();
             Assert.Equal(expectedInline.HasValue, actualInline.HasValue);
             if (expectedInline is { } datum) { Assert.True(datum.Span.SequenceEqual(actualInline!.Value.Span), $"Inline datum differs at {key}."); }
-            // Datum hashes are excluded: Blockfrost.cs:244-248 drops them. Never use DatumHash().
-            // Script bytes are excluded: Blockfrost.cs:238-241 reconstructs scripts through another endpoint.
+            ReadOnlyMemory<byte>? expectedHash = item.Output.DatumHash();
+            ReadOnlyMemory<byte>? actualHash = output.DatumHash();
+            Assert.Equal(expectedHash.HasValue, actualHash.HasValue);
+            if (expectedHash is { } hash) { Assert.True(hash.Span.SequenceEqual(actualHash!.Value.Span), $"Datum hash differs at {key}."); }
             ReadOnlyMemory<byte>? expectedScript = item.Output.ScriptRef();
             ReadOnlyMemory<byte>? actualScript = output.ScriptRef();
             // Only Blockfrost's omission is exempt: its address endpoint can lose a script that
@@ -158,7 +182,7 @@ public sealed class ParityTests
             if (expectedScript is not null) { _ = Assert.NotNull(actualScript); }
             if (expectedScript is { } script && actualScript is { } actualBytes)
             {
-                Assert.Equal(CborSerializer.Deserialize<IScript>(script).GetType(), CborSerializer.Deserialize<IScript>(actualBytes).GetType());
+                Assert.Equal(CborSerializer.Deserialize<IScript>(script).HashHex(), CborSerializer.Deserialize<IScript>(actualBytes).HashHex());
             }
         }
     }
