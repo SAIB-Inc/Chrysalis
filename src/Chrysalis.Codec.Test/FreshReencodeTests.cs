@@ -38,7 +38,7 @@ public class FreshReencodeTests
 
     public static IEnumerable<object[]> LocalRows() => ReplayRows(LocalManifest, LocalInventory, 58, 42);
 
-    public static IEnumerable<object[]> PallasRows() => ReplayRows(PallasManifest, PallasInventory, 94, 60);
+    public static IEnumerable<object[]> PallasRows() => ReplayRows(PallasManifest, PallasInventory, 94, 61);
 
     private static string[][] ReplayRows(string name, string inventory, int total, int active)
     {

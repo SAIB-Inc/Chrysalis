@@ -1,3 +1,6 @@
+using System.IO.Compression;
+using System.Security.Cryptography;
+using System.Text.Json;
 using Chrysalis.Codec.Serialization;
 using Chrysalis.Codec.Serialization.Attributes;
 using Chrysalis.Codec.Types;
@@ -166,6 +169,65 @@ public class PlutusConstrTests
         Assert.False(fields.IsIndefinite);
         Assert.False(fields.HasSetTag);
         Assert.Equal(3, fields.Count);
+    }
+}
+
+public class PlutusBigIntTests
+{
+    // cardano-node 11.1.3 PV11 serialiseData output (plutigo v0.12.3, commit c4a50c15),
+    // verified against CostModels/manifest.json before reading.
+    internal static readonly Lazy<Dictionary<string, string>> NodeRows = new(() =>
+    {
+        string root = Path.Combine(AppContext.BaseDirectory, "TestData", "CostModels");
+        const string name = "plutigo-v0.12.3/node_ground_truth_pv11.json.gz";
+        using JsonDocument manifest = JsonDocument.Parse(File.ReadAllText(Path.Combine(root, "manifest.json")));
+        byte[] bytes = File.ReadAllBytes(Path.Combine(root, name));
+        Assert.Equal(manifest.RootElement.EnumerateArray().Single(entry => entry.GetProperty("path").GetString() == name).GetProperty("sha256").GetString(), Convert.ToHexStringLower(SHA256.HashData(bytes)));
+        using MemoryStream compressed = new(bytes);
+        using GZipStream gzip = new(compressed, CompressionMode.Decompress);
+        using JsonDocument document = JsonDocument.Parse(gzip);
+        return document.RootElement.GetProperty("serialise").EnumerateArray().ToDictionary(entry => entry.GetProperty("id").GetString()!, entry => entry.GetProperty("bytes").GetString()!, StringComparer.Ordinal);
+    });
+
+    [Theory]
+    [InlineData("SER-int-18446744073709551616", false, 0x01, 0x00, 9)]
+    [InlineData("SER-int--18446744073709551617", true, 0x01, 0x00, 9)]
+    [InlineData("SER-int-2^512", false, 0xFF, 0xFF, 64)]
+    [InlineData("SER-int-2^513", false, 0x01, 0x00, 65)]
+    [InlineData("SER-int-2^521neg", true, 0xFF, 0xFF, 65)]
+    [InlineData("SER-int-2^521", false, 0x01, 0x00, 66)]
+    [InlineData("SER-int-2^4097", false, 0x01, 0x00, 513)]
+    public void X38BigIntegerWritesTheNodeForm(string row, bool negative, int first, int rest, int length)
+    {
+        byte[] magnitude = [(byte)first, .. Enumerable.Repeat((byte)rest, length - 1)];
+        string expected = NodeRows.Value[row];
+        IPlutusBigInt built = negative ? PlutusBigNint.Create(magnitude) : PlutusBigUint.Create(magnitude);
+        Assert.Equal(expected, Convert.ToHexStringLower(built.Raw.Span));
+        Assert.Equal("d87981" + expected, Convert.ToHexStringLower(PlutusConstr.Create(0, CborList.Create<IPlutusData>([built])).Raw.Span));
+        IPlutusData read = CborSerializer.Deserialize<IPlutusData>(Convert.FromHexString(expected));
+        ReadOnlyMemory<byte> value = negative ? Assert.IsType<PlutusBigNint>(read).Value : Assert.IsType<PlutusBigUint>(read).Value;
+        Assert.Equal(magnitude, value.ToArray());
+        Assert.Equal(expected, Convert.ToHexStringLower(CborSerializer.Serialize(read)));
+    }
+
+    [Fact]
+    public void X38NegativeBigIntegerOf64BytesStaysDefinite()
+    {
+        // PlutusCore/Data.hs:186: encodeBs writes 64 bytes or fewer as one definite byte string.
+        byte[] magnitude = [.. Enumerable.Repeat((byte)0xFF, 64)];
+        PlutusBigNint built = PlutusBigNint.Create(magnitude);
+        Assert.Equal("c35840" + new string('f', 128), Convert.ToHexStringLower(built.Raw.Span));
+        Assert.Equal(magnitude, Assert.IsType<PlutusBigNint>(CborSerializer.Deserialize<IPlutusData>(built.Raw)).Value.ToArray());
+    }
+
+    [Fact]
+    public void X38ReadBigIntegerKeepsItsBytes()
+    {
+        // X32WireForms.json:12 (conway.cddl:346-362): 3-byte magnitude in 1+2 chunks, never emitted by Create.
+        PlutusBigUint read = Assert.IsType<PlutusBigUint>(CborSerializer.Deserialize<IPlutusData>(Convert.FromHexString("c25f4182420102ff")));
+        Assert.Equal("820102", Convert.ToHexStringLower(read.Value.Span));
+        Assert.Equal("c25f4182420102ff", Convert.ToHexStringLower(CborSerializer.Serialize(read)));
+        Assert.Equal("d87981c25f4182420102ff", Convert.ToHexStringLower(PlutusConstr.Create(0, CborList.Create<IPlutusData>([read])).Raw.Span));
     }
 }
 

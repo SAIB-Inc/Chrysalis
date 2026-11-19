@@ -7,7 +7,6 @@
 # owner	CGEN-X8-PLUTUS-CONSTR-TAG
 # owner	CGEN-X8-RELAY-NULL
 # owner	CGEN-X8-WIDTH
-# owner	X38-BYTE-CHUNKS
 # owner	X40
 # owner	outside-dijkstra-prototype
 # Existing TestData blocks/headers/tx, source records in pallas-manifest.tsv and X7PallasGoldens.json.
