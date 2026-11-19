@@ -1,6 +1,6 @@
 namespace Chrysalis.Plutus.Cek;
 
-public sealed class EvaluationException : Exception
+public class EvaluationException : Exception
 {
     public EvaluationException() { }
     public EvaluationException(string message) : base(message) { }
