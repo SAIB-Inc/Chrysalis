@@ -15,6 +15,8 @@ import time
 import unittest
 import uuid
 
+from proxy_test_support import child_pids
+
 
 PROXY = Path(__file__).with_name("node-proxy.py")
 UNTRUSTED = (
@@ -141,11 +143,11 @@ class ProxyLifecycleTests(unittest.TestCase):
                 child.stdin.write(b"public-shell-probe")
                 child.stdin.flush()
                 self.assertEqual(b"public-shell-probe", child.stdout.read(len(b"public-shell-probe")))
-                children = Path(f"/proc/{child.pid}/task/{child.pid}/children").read_text().split()
+                children = child_pids(child.pid)
                 self.assertEqual(2, len(children), "Both directions must have a live cat before shutdown")
                 child.stdin.close()
                 self.assertEqual(0, child.wait(timeout=5))
-                self.assertTrue(all(not process_exists(int(pid)) for pid in children), "Container relay left a cat behind")
+                self.assertTrue(all(not process_exists(pid) for pid in children), "Container relay left a cat behind")
             finally:
                 if child.poll() is None:
                     child.terminate()
