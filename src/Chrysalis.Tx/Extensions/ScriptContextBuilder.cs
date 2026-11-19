@@ -1,5 +1,6 @@
 using System.Collections.Immutable;
 using System.Numerics;
+using System.Runtime.InteropServices;
 using Chrysalis.Codec.Extensions;
 using Chrysalis.Codec.Serialization;
 using Chrysalis.Codec.Types;
@@ -373,18 +374,88 @@ public static class ScriptContextBuilder
     /// <summary>
     /// Converts Codec PlutusData to VM PlutusData.
     /// </summary>
-    public static VmPlutusData CodecPlutusDataToVm(CodecPlutusData codecData) => codecData switch
+    /// <remarks>Walks with a loop, not recursion, so deeply nested data converts on any thread's stack, as the node accepts it.</remarks>
+    public static VmPlutusData CodecPlutusDataToVm(CodecPlutusData codecData)
     {
-        PlutusConstr constr => Constr(
-            CborTagToConstrIndex(constr),
-            constr.Fields.Select(CodecPlutusDataToVm).ToImmutableArray()),
+        if (Items(codecData) is not { } rootItems)
+        {
+            return CodecScalarToVm(codecData);
+        }
 
-        PlutusMap map => Map(
-            map.Value.Select(kv => (CodecPlutusDataToVm(kv.Key), CodecPlutusDataToVm(kv.Value)))),
+        // One entry per open container: the container, a cursor over its items, and where its
+        // converted items start in `done`. Nothing is held for an item not yet reached, so
+        // pending work grows with depth, not width.
+        Stack<(CodecPlutusData Node, IEnumerator<CodecPlutusData> Items, int Start)> open = new();
+        open.Push((codecData, rootItems, 0));
+        List<VmPlutusData> done = [];
+        try
+        {
+            while (true)
+            {
+                (CodecPlutusData node, IEnumerator<CodecPlutusData> items, int start) = open.Peek();
+                if (items.MoveNext())
+                {
+                    CodecPlutusData item = items.Current;
+                    if (Items(item) is { } itemItems)
+                    {
+                        open.Push((item, itemItems, done.Count));
+                    }
+                    else
+                    {
+                        done.Add(CodecScalarToVm(item));
+                    }
 
-        PlutusList list => List(
-            list.Value.Select(CodecPlutusDataToVm)),
+                    continue;
+                }
 
+                _ = open.Pop();
+                items.Dispose();
+                ImmutableArray<VmPlutusData> converted = [.. CollectionsMarshal.AsSpan(done)[start..]];
+                done.RemoveRange(start, converted.Length);
+                VmPlutusData closed = node switch
+                {
+                    PlutusConstr constr => Constr(CborTagToConstrIndex(constr), converted),
+                    PlutusList => List(converted),
+                    _ => Map(Enumerable.Range(0, converted.Length / 2)
+                        .Select(i => (converted[2 * i], converted[(2 * i) + 1]))),
+                };
+                if (open.Count == 0)
+                {
+                    return closed;
+                }
+
+                done.Add(closed);
+            }
+        }
+        finally
+        {
+            while (open.Count > 0)
+            {
+                open.Pop().Items.Dispose();
+            }
+        }
+    }
+
+    // A container's items in conversion order (a map's as key, value, key, ...); null for a leaf.
+    private static IEnumerator<CodecPlutusData>? Items(CodecPlutusData data) => data switch
+    {
+        PlutusConstr constr => ((IEnumerable<CodecPlutusData>)constr.Fields).GetEnumerator(),
+        PlutusList list => ((IEnumerable<CodecPlutusData>)list.Value).GetEnumerator(),
+        PlutusMap map => KeysAndValues(map.Value),
+        _ => null,
+    };
+
+    private static IEnumerator<CodecPlutusData> KeysAndValues(List<KeyValuePair<CodecPlutusData, CodecPlutusData>> pairs)
+    {
+        foreach (KeyValuePair<CodecPlutusData, CodecPlutusData> pair in pairs)
+        {
+            yield return pair.Key;
+            yield return pair.Value;
+        }
+    }
+
+    private static VmPlutusData CodecScalarToVm(CodecPlutusData codecData) => codecData switch
+    {
         PlutusInt i32 => Int(i32.Value),
         PlutusInt64 i64 => Int(i64.Value),
         PlutusUint64 u64 => Int(u64.Value),
@@ -393,7 +464,7 @@ public static class ScriptContextBuilder
 
         PlutusBoundedBytes bb => Bytes(bb.Value),
 
-        _ => throw new InvalidOperationException($"Unsupported Codec PlutusData type: {codecData.GetType().Name}")
+        _ => throw new InvalidOperationException($"Unsupported Codec PlutusData type: {codecData.GetType().Name}"),
     };
 
     /// <summary>
