@@ -1,3 +1,4 @@
+// Contains code adapted from noble-curves (MIT), Copyright (c) 2022 Paul Miller (https://paulmillr.com); changed for Chrysalis. See THIRD-PARTY-NOTICES.md.
 using System.Numerics;
 
 namespace Chrysalis.Crypto.Bls12381;
@@ -10,7 +11,7 @@ internal readonly record struct AffineG1(BigInteger X, BigInteger Y);
 /// <summary>
 /// Projective point on G1 curve: y² = x³ + 4 over Fp.
 /// Uses RCB (Renes-Costello-Batina) complete addition formulas.
-/// Ported from noble-curves weierstrass.ts (MIT License, Paul Miller).
+/// Ported from noble-curves weierstrass.ts.
 /// </summary>
 internal sealed class PointG1
 {

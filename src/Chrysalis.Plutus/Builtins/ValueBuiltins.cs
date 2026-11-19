@@ -1,3 +1,4 @@
+// Contains code adapted from Blaze (Apache-2.0); changed for Chrysalis. See THIRD-PARTY-NOTICES.md.
 using System.Collections.Immutable;
 using System.Numerics;
 using Chrysalis.Plutus.Cek;
@@ -8,7 +9,7 @@ namespace Chrysalis.Plutus.Builtins;
 
 /// <summary>
 /// PlutusV4 value builtins.
-/// Ported from blaze-plutus src/cek/builtins/value.ts (Apache-2.0).
+/// Ported from blaze-plutus src/cek/builtins/value.ts.
 /// </summary>
 internal static class ValueBuiltins
 {

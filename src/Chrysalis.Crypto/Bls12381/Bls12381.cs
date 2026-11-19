@@ -1,3 +1,4 @@
+// Contains code adapted from noble-curves (MIT), Copyright (c) 2022 Paul Miller (https://paulmillr.com); changed for Chrysalis. See THIRD-PARTY-NOTICES.md.
 using System.Numerics;
 
 namespace Chrysalis.Crypto.Bls12381;

@@ -1,3 +1,4 @@
+// Contains code adapted from Chaos.NaCl (public domain); changed for Chrysalis. See THIRD-PARTY-NOTICES.md.
 using System.Runtime.CompilerServices;
 
 namespace Chrysalis.Crypto;

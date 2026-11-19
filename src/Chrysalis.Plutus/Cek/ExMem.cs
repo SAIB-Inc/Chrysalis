@@ -1,3 +1,4 @@
+// Contains code adapted from Blaze (Apache-2.0) and plutuz (MIT), Copyright (c) 2026 UTxO Company; changed for Chrysalis. See THIRD-PARTY-NOTICES.md.
 using System.Numerics;
 using System.Text;
 using Chrysalis.Plutus.Types;

@@ -1,3 +1,4 @@
+// Contains code adapted from noble-curves (MIT), Copyright (c) 2022 Paul Miller (https://paulmillr.com); changed for Chrysalis. See THIRD-PARTY-NOTICES.md.
 using System.Numerics;
 
 namespace Chrysalis.Crypto.Bls12381;
@@ -10,7 +11,7 @@ internal readonly record struct Fp12Element(Fp6Element C0, Fp6Element C1);
 
 /// <summary>
 /// Fp12 field arithmetic for BLS12-381.
-/// Ported from noble-curves tower.ts _Field12 (MIT License, Paul Miller).
+/// Ported from noble-curves tower.ts _Field12.
 /// </summary>
 internal static class Fp12
 {

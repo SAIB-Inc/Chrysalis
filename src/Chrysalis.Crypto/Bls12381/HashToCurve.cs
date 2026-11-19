@@ -1,3 +1,4 @@
+// Contains code adapted from noble-curves (MIT), Copyright (c) 2022 Paul Miller (https://paulmillr.com); changed for Chrysalis. See THIRD-PARTY-NOTICES.md.
 using System.Numerics;
 using System.Security.Cryptography;
 
@@ -6,7 +7,7 @@ namespace Chrysalis.Crypto.Bls12381;
 /// <summary>
 /// Hash-to-curve implementation for BLS12-381 (RFC 9380).
 /// Supports hash_to_field, expand_message_xmd, SWU map, and isogeny maps.
-/// Ported from noble-curves hash-to-curve.ts + bls12-381.ts (MIT License, Paul Miller).
+/// Ported from noble-curves hash-to-curve.ts + bls12-381.ts.
 /// </summary>
 internal static class HashToCurve
 {
@@ -180,7 +181,7 @@ internal static class HashToCurve
 
     /// <summary>
     /// sqrt_ratio for Fp2 using general Tonelli-Shanks (q = p² ≡ 1 mod 4).
-    /// Ported from noble-curves SWUFpSqrtRatio (MIT License, Paul Miller).
+    /// Ported from noble-curves SWUFpSqrtRatio.
     /// </summary>
     private static (bool isValid, Fp2Element value) SqrtRatioFp2(Fp2Element u, Fp2Element v)
     {

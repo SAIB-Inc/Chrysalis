@@ -1,3 +1,4 @@
+// Contains code adapted from CardanoSharp.Wallet (MIT), Copyright (c) 2021 CardanoSharp, and the BIP-39 English word list (MIT); changed for Chrysalis. See THIRD-PARTY-NOTICES.md.
 namespace Chrysalis.Wallet.Words;
 
 /// <summary>

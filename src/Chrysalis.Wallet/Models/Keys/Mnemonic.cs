@@ -1,3 +1,4 @@
+// Contains code adapted from CardanoSharp.Wallet (MIT), Copyright (c) 2021 CardanoSharp; changed for Chrysalis. See THIRD-PARTY-NOTICES.md.
 using System.Security.Cryptography;
 using System.Text;
 

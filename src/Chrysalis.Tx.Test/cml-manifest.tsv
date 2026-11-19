@@ -1,0 +1,2 @@
+file	repository	tag	commit	path at that commit	licence	sha256	derived from
+RedeemerBuilderTests.cs	https://github.com/dcSpark/cardano-multiplatform-lib	6.2.0	a34592e1e0d3c1e958d72f05c72282d788403aa5	chain/rust/src/builders/redeemer_builder.rs	MIT	96ed443a77d7aa2e6636b5d8956c183766aa2b68b9403ee91c59abfd8ce830a3	chain/rust/src/builders/redeemer_builder.rs:392-412; sha256 9febb0468cf462ca7a82e50b8345c60af1e990e202fd06ef4e72ab9bd0c7be6f; adapted test scenario (test_redeemer_set_builder); exact source revision unrecorded
