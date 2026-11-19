@@ -807,14 +807,17 @@ def test_two_session_controls_retry_revalidates_fallback_and_every_archive(site)
     repeat_app = 'chrysalis-gate-20990405t000105-' + '11' * 4
     reject_app = 'chrysalis-gate-20990405t000106-' + '22' * 4
     rejected_primary = 'chrysalis-gate-20990405t000107-' + '33' * 4
-    for app in (repeat_app, reject_app, rejected_primary):
+    repeat_primary = 'chrysalis-gate-20990405t000108-' + '44' * 4
+    prior_app = 'chrysalis-gate-20990405t000104-' + '00' * 4
+    for app in (repeat_app, reject_app, rejected_primary, repeat_primary):
         (note.parent / app).mkdir()
         dump(note.parent / app / 'cleanup-proof.json', dict(ourAppAbsent=True))
     repeat_path = note.parent / repeat_app / 'results.tar.gz'
     shutil.copyfile(bytes_note / 'results.tar.gz', repeat_path)
     bytes_index = parent / 'time/bytes-index.json'
     items = [dict(app=archive_app, session=1, phase='first', archiveSha256=bundle.sha(bytes_note / 'results.tar.gz'),
-                  rejectedApps=[rejected_primary, reject_app]), dict(app=repeat_app, session=2, phase='repeat', archiveSha256=bundle.sha(repeat_path))]
+                  rejectedApps=[rejected_primary, reject_app]), dict(app=repeat_app, session=2, phase='repeat',
+                  archiveSha256=bundle.sha(repeat_path), fallbackOf=repeat_primary)]
     dump(bytes_index, items)
     ids = [entry['id']]
     machine = bundle.verified_machine(note, plan, 0, selected=ids)
@@ -825,6 +828,7 @@ def test_two_session_controls_retry_revalidates_fallback_and_every_archive(site)
     bytes_draws = [dict(session=1, draw=1, phase='first', app=reject_app, decision='rejected', fallbackOf=rejected_primary),
                    *(dict(session=item['session'], draw=2 if item['session'] == 1 else 1, phase='first', app=item['app'],
                           decision='kept', archiveSha256=item['archiveSha256']) for item in items)]
+    bytes_draws[-1]['fallbackOf'] = repeat_primary
     draw_path = parent / 'time/bytes-draws.json'
     dump(draw_path, bytes_draws)
     entries = {}
@@ -834,17 +838,34 @@ def test_two_session_controls_retry_revalidates_fallback_and_every_archive(site)
         entries[draw['app']] = dict(settled, exitCode=0 if draw['decision'] == 'kept' else 5, fallbackOf=fallback)
         if fallback:
             entries[fallback] = dict(settled, exitCode=6, fallbackOf=None)
-    dump(Path(local['azureLedger']), dict(openingBalanceUsd=4.29, attempts=entries))
+    entries[prior_app] = dict(entries[RUN], go='b' * 64, directory='earlier-go', fallbackOf=None)
+    ledger_path = Path(local['azureLedger'])
+    ledger_data = dict(openingBalanceUsd=4.29, attempts=entries)
+    dump(ledger_path, ledger_data)
     dump(parent / 'time/launch-started.json', dict(sealId=go))
     dump(parent / 'time/0-first.json', payload_value)
     dump(parent / 'time/index.json', [dict(session=0, phase='first', ids=ids, path='time/0-first.json', sha256=bundle.sha(parent / 'time/0-first.json'))])
     dump(parent.parent / 'controls-authority.json', dict(originalSealId=go, mode='release', rows=[dict(id=entry['id'], expected=entry['expected'])]))
     with patch.object(timing, 'session_outcome', return_value=('retry-eligible', [])):
         assert bundle.checked_retry_parent(parent, parent.parent, 'first')[2]['originalSealId'] == go
-        (note.parent / ('chrysalis-gate-20990405t000104-' + '00' * 4)).mkdir()
+        # A reservation in this GO may be stranded before its run folder exists.
+        orphan = dict(entries[prior_app], go=go, directory=parent.name, state='active')
+        dump(ledger_path, dict(ledger_data, attempts={**entries, prior_app: orphan}))
+        with pytest.raises(ValueError, match='cover every original Azure attempt'):
+            bundle.checked_retry_parent(parent, parent.parent, 'first')
+        dump(ledger_path, ledger_data)
+        draws = [timing_draw, *bytes_draws]
+        with pytest.raises(ValueError, match='differs from Azure attempt ledger'):
+            bundle.retry_azure_apps(parent, go, entries, [*draws, bytes_draws[0]])
+        mismatched = {**entries, repeat_app: dict(entries[repeat_app], fallbackOf=rejected_primary)}
+        with pytest.raises(ValueError, match='differs from Azure attempt ledger'):
+            bundle.retry_azure_apps(parent, go, mismatched, draws)
+        with pytest.raises(ValueError, match='Invalid original bytes draw order or slot'):
+            bundle.check_azure_retry_bytes(parent, seal['timePlans'], [bytes_draws[0], dict(bytes_draws[1], draw=3), bytes_draws[2]])
+        (note.parent / prior_app).mkdir()
         with pytest.raises(ValueError, match='name every app'):
             bundle.checked_retry_parent(parent, parent.parent, 'first')
-        (note.parent / ('chrysalis-gate-20990405t000104-' + '00' * 4)).rmdir()
+        (note.parent / prior_app).rmdir()
         dump(note.parent / reject_app / 'cleanup-proof.json', dict(ourAppAbsent=False))
         with pytest.raises(ValueError, match='name every app'):
             bundle.checked_retry_parent(parent, parent.parent, 'first')
@@ -1107,8 +1128,10 @@ def test_r1_bad_build_marker_refused_before_provider_operations(fake, site, wron
 
 
 def test_r1_build_marker_requires_the_approved_runner_and_rejects_mutation(monkeypatch):
-    with pytest.raises(ValueError, match='container build marker'):
-        payload.validate_build_marker(BUILD_MARKER)
+    monkeypatch.setattr(payload, 'BUILD_RUNNER_SHA256', None)
+    for marker in (BUILD_MARKER, dict(BUILD_MARKER, runnerSha256=None)):
+        with pytest.raises(ValueError, match='container build marker'):
+            payload.validate_build_marker(marker)
     monkeypatch.setattr(payload, 'BUILD_RUNNER_SHA256', FIXTURE_RUNNER)
     assert payload.validate_build_marker(BUILD_MARKER) == BUILD_MARKER
     for changed in (dict(runnerSha256='d' * 64), dict(imageDigest='sha256:' + 'd' * 64), dict(sdkSha512={})):
