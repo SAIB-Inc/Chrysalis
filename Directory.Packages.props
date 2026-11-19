@@ -44,6 +44,6 @@
     <PackageVersion Include="Microsoft.Extensions.Configuration.Binder" Version="11.0.0" />
 
     <!-- Cryptography -->
-    <PackageVersion Include="BouncyCastle.Cryptography" Version="2.6.1" />
+    <PackageVersion Include="BouncyCastle.Cryptography" Version="2.7.0" />
   </ItemGroup>
 </Project>
