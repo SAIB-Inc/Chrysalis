@@ -114,6 +114,10 @@ public sealed partial class CborSerializerCodeGen
 
             for (int i = 0; i < fieldCount; i++)
             {
+                SerializablePropertyMetadata property = metadata.Properties[i];
+                string skipField = property.IsLedgerText
+                    ? $"global::Chrysalis.Codec.Serialization.LedgerText.Skip(ref reader, data, \"{metadata.FullyQualifiedName}.{property.PropertyName}\");"
+                    : "reader.SkipDataItem();";
                 if (firstNullableIndex >= 0 && i >= firstNullableIndex)
                 {
                     // Guard nullable fields — they may not be present in the array
@@ -122,13 +126,13 @@ public sealed partial class CborSerializerCodeGen
                         _ = sb.AppendLine($"int _s{i} = data.Length - reader.Buffer.Length;");
                         _ = sb.AppendLine($"if ((arraySize == -1 ? (reader.Buffer.Length > 0 && reader.Buffer[0] != 0xFF) : arraySize > {i}))");
                         _ = sb.AppendLine("{");
-                        _ = sb.AppendLine("reader.SkipDataItem();");
+                        _ = sb.AppendLine(skipField);
                         _ = sb.AppendLine("}");
                     }
                     else
                     {
                         _ = sb.AppendLine($"int _s{i} = data.Length - reader.Buffer.Length;");
-                        _ = sb.AppendLine("if (reader.Buffer.Length > 0) reader.SkipDataItem();");
+                        _ = sb.AppendLine($"if (reader.Buffer.Length > 0) {skipField}");
                     }
                 }
                 else
@@ -138,7 +142,7 @@ public sealed partial class CborSerializerCodeGen
                         _ = sb.AppendLine($"if (isIndefiniteArray && (reader.Buffer.Length == 0 || reader.Buffer[0] == 0xFF)) {arityFailure}");
                     }
                     _ = sb.AppendLine($"int _s{i} = data.Length - reader.Buffer.Length;");
-                    _ = sb.AppendLine("reader.SkipDataItem();");
+                    _ = sb.AppendLine(skipField);
                 }
             }
 

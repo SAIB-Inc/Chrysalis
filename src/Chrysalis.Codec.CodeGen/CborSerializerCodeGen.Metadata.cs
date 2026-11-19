@@ -95,6 +95,7 @@ public sealed partial class CborSerializerCodeGen
 
         // Default ties preserve wire-list order for X7 signatures. Split records may differ.
         public int CreateParameterOrder { get; init; }
+        public bool IsLedgerText { get; init; }
         public EquatableArray<KeyValuePair<int, string>> UnionHints { get; init; }
         public string? UnionHintDiscriminantProperty { get; init; }
 

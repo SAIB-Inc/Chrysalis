@@ -253,3 +253,7 @@ public sealed class CborUnionHintAttribute(string discriminantProperty, int disc
     public int DiscriminantValue { get; } = discriminantValue;
     public Type ConcreteType { get; } = concreteType;
 }
+
+// Marks a lazy Cardano array field whose text encoding depends on the ledger version.
+[AttributeUsage(AttributeTargets.Property, Inherited = false)]
+internal sealed class CborLedgerTextAttribute : Attribute;

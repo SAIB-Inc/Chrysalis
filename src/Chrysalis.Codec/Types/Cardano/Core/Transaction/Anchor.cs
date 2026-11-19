@@ -7,6 +7,6 @@ namespace Chrysalis.Codec.Types.Cardano.Core.Transaction;
 [CborList]
 public readonly partial record struct Anchor : ICborType
 {
-    [CborOrder(0)] public partial string Url { get; }
+    [CborOrder(0), CborLedgerText] public partial string Url { get; }
     [CborOrder(1)] public partial ReadOnlyMemory<byte> ContentHash { get; }
 }
