@@ -23,6 +23,7 @@
   "time": {
     "scope": "D51: sync-path replays and every other hot path",
     "required": ["time/preprod-tcp", "time/preprod-offline", "time/micro-hashing", "time/micro-signing", "time/micro-transactions", "time/micro-plutus", "time/micro-encoding", "time/micro-n2c"],
+    "chargeSeconds": {"time/micro-hashing": 9, "time/micro-signing": 8, "time/micro-transactions": 18, "time/micro-plutus": 54, "time/micro-encoding": 23, "time/micro-n2c": 10},
     "platform": {"provider": "fly", "size": "performance-8x", "regions": ["iad", "ewr", "ams", "arn"], "image": "mcr.microsoft.com/dotnet/sdk@sha256:7913685c883a29dd8ba79da96172f5c6b29ed9be706ebe95935e3ef45f19c9c1"},
     "noise": {"performance-8x": {"offline": {"band": 0.0231, "design": "long", "machine": "performance-8x", "source": "P1-run3"}, "tcp": {"band": 0.0307, "design": "long", "machine": "performance-8x", "source": "P1-run3"}}, "Standard_F8als_v7": {}},
     "probe": {

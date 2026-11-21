@@ -78,7 +78,8 @@ array (or an `entries` array) of rows with `id`, `kind` (`direct`, `replay`,
 `time`), `replay` where applicable, and `pairs`; `candidate` can override the
 candidate for an entry. A new direct per-message row is D39. Time entries may declare `aPairs` and `pairs`
 (B) in either mode; optional `chargeSeconds` raises, never lowers, the per-process
-charge. Explicit counts are sealed exactly, even below the validity minimum.
+charge. Micro rows take that charge from `gated.json`'s `time.chargeSeconds` (Azure run 3's
+measured projection × 1.5, never below 6 s). Explicit counts are sealed exactly, even below the validity minimum.
 Default-set sizing alone may increase counts to use remaining capacity. An optional corpus
 `manifest` is repository-relative; measurement awaits P4 MR-B's client support.
 No ad-hoc row can silently obtain a noise band. An object with `entries` can set
@@ -363,7 +364,9 @@ silently replaced by the preprod set. Mainnet manifest measurements join when
 the manifest client and MR4's bands land.
 
 The other hot paths (hashing, signing, transaction building/fees, Plutus,
-encoding and node-to-client) run as the micro session on every RC. They reuse
+encoding and node-to-client) run as the micro session. At the catalogue's micro
+charges a release-mode micro set needs more than one session, and sealing refuses
+it until main decides how to split it. The micro rows reuse
 the direct harness's bindings and ReplayClient's pass counters/observed marks,
 with one common invocation count fixed from a non-counted baseline sizing
 probe (target10 ms/pass), then verified in a final1+1 dry run of both sides.

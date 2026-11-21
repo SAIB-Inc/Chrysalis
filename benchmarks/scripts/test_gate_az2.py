@@ -25,6 +25,7 @@ import gate_prepare as prepare
 import gate_schedule as schedule
 import gate_session as session
 import gate_time as timing
+from test_gate import side
 from test_gate_time import probe_rule, row
 
 
@@ -288,7 +289,7 @@ def timed(root, *, ordering=True, a_pairs=0, b_pairs=2, noise=False):
 
 
 @pytest.mark.parametrize('breaking', [None, 'ordering', 'fixed', 'over-charge', 'over-calibration', 'ordering-work', 'ordering-counters', 'side-work', 'counted-work', 'marks', 'wire-type', 'reject'])
-def test_worker_prelude_runs_only_after_kept_probe(tmp_path, monkeypatch, breaking):
+def test_worker_prelude_runs_only_after_kept_probe(tmp_path, monkeypatch, capsys, breaking):
     plan = timed(tmp_path)
     worker = schedule.worker_plan(plan)
     recipe = prelude.recipe(plan)
@@ -327,8 +328,26 @@ def test_worker_prelude_runs_only_after_kept_probe(tmp_path, monkeypatch, breaki
 
     monkeypatch.setenv('P2_MACHINE_CREATED_UNIX', str(int(timing.time.time())))
     monkeypatch.setattr(timing.session, 'member', fake)
-    monkeypatch.setattr(timing, 'probe_result', lambda records, rule: dict(decision='rejected' if breaking == 'reject' else 'kept'))
+    monkeypatch.setattr(timing, 'probe_result', lambda records, rule: dict(decision='rejected' if breaking == 'reject' else 'kept', cv=.01, lag1=.02))
+    flushes = []
+    monkeypatch.setattr(timing, 'print', lambda *args, **options: (flushes.append(options.get('flush')), print(*args, **options)), raising=False)
     ok = timing.run(tmp_path, worker, tmp_path / 'results', prelude=recipe)
+    out, err = capsys.readouterr()
+    lines = out.splitlines()
+    assert flushes == [True] * len(lines)
+    assert lines[0] == f"gate: start provider fly region iad cutoff {worker['measurementCutoffSeconds']}"
+    assert lines[1].startswith('gate: host processors ')
+    assert lines[2] == f"gate: probe {'rejected' if breaking == 'reject' else 'kept'} cv 0.0100 lag1 0.0200"
+    assert lines[-1].startswith(f'gate: end exitCode {0 if ok else 2} seconds ') and ('Traceback' in err) == (not ok)
+    calibration = f'calibration seconds {7 if breaking == "over-calibration" else 1}.0000 invocations 10 allowance 6'
+    assert (f'gate: prelude {workload} {calibration}' in lines) == (breaking != 'reject')
+    if breaking in (None, 'over-charge'):
+        side = f'candidate seconds {7 if breaking else 1}.0000 projection {9.4 if breaking else 4.4:.4f} allowance 6'
+        assert f'gate: prelude {workload} {side}' in lines
+    assert ('gate: stopped: Prelude process exceeds sealed charge' in lines) == (breaking == 'over-charge')
+    assert any(line.startswith('gate: stopped: ') for line in lines) == (not ok)
+    block = f"gate: block {worker['blocks'][0]['workload']} members "
+    assert any(line.startswith(block) for line in lines) == (breaking in (None, 'counted-work'))
     assert ok == (breaking in (None, 'reject'))
     assert all(role == 'probe' for role, _ in order[:16])
     if breaking == 'reject':
@@ -349,6 +368,61 @@ def test_worker_prelude_runs_only_after_kept_probe(tmp_path, monkeypatch, breaki
             assert len(order) == 20
     with pytest.raises(FileExistsError):
         timing.run(tmp_path, worker, tmp_path / 'results', prelude=recipe)
+
+
+# Run 3, session 2 on Azure (21 Nov 2026), per micro row: the calibration (seconds, measured ns per block, blocks),
+# then each side (seconds, warm-up ns per block, measured ns per block, blocks).
+RUN3_PRELUDE = {
+    'hashing': ((0.1586, 1217.2, 6224), (0.1617, 1760.5, 1209.6, 8558), (0.1652, 1764.8, 1218.4, 8558)),
+    'signing': ((0.1374, 65046.3, 64), (0.1454, 71775.9, 64365.2, 156), (0.1451, 70662.8, 64561.4, 156)),
+    'transactions': ((0.1773, 76704.1, 96), (0.1892, 295248.9, 80400.8, 132), (0.1911, 300685.5, 80326.6, 132)),
+    'plutus': ((1.7171, 471306.1, 1344), (0.3560, 1684311.3, 1204504.0, 84), (0.3553, 1679091.9, 1197978.6, 84)),
+    'encoding': ((1.6670, 69460.8, 6800), (0.6025, 122430.8, 115241.6, 425), (0.6300, 126364.5, 117111.3, 425)),
+    'n2c': ((0.1152, 2509.0, 64), (0.1296, 4252.3, 2308.0, 3988), (0.1290, 4343.3, 2379.1, 3988)),
+}
+
+
+def run3_record(spec, job, seconds, warm, measured, blocks):
+    record = observation(spec, job, (1, 1))
+    for item, ns in zip(record['data']['warmupRows'] + record['data']['rows'], (warm, measured)):
+        item.update(nsPerBlock=ns, blocks=blocks)
+    return dict(record, seconds=seconds)
+
+
+def test_run3_prelude_refused_at_six_seconds_passes_at_catalogue_allowances(tmp_path):
+    plan = timed(tmp_path, ordering=False)
+    worker, recipe = schedule.worker_plan(plan), prelude.recipe(plan)
+    (name, row), = recipe['rows'].items()
+    job, specs = worker['workloads'][name], {role: worker['builds'][build] for role, build in row['builds'].items()}
+    charges = json.loads((gate.GATE / 'gated.json').read_text())['time'].get('chargeSeconds', {})
+    refused, short = set(), set()  # refused at 6 s; refused at, or under 1.5 x the projection with, the catalogue allowance
+    for key, ((seconds, ns, blocks), *sides) in RUN3_PRELUDE.items():
+        calibration = run3_record(specs['baseline'], job, seconds, ns, ns, blocks)
+        sized = dict(job, microInvocations=bundle.calibrate_micro(calibration['data']['rows'][0], bundle.MICRO_PROBE_INVOCATIONS))
+        raw = {f'{name}-{role}.json': run3_record(specs[role], sized, *side) for role, side in zip(('baseline', 'candidate'), sides)}
+        projection = max(bundle.micro_process_seconds(item['seconds'], item['data']['warmupRows'] + item['data']['rows'])
+                         for item in raw.values())
+        raw[name + '-calibration.json'] = calibration
+        allowance = charges.get('time/micro-' + key, 6)
+        for green, charge in enumerate((6, allowance)):
+            try:
+                prelude.derive(dict(recipe, rows={name: dict(row, chargeSeconds=charge)}), worker, raw)
+            except ValueError as error:
+                assert str(error) == 'Prelude process exceeds sealed charge', key
+                (short if green else refused).add(key)
+        if allowance < 1.5 * projection:
+            short.add(key)
+    assert (refused, short) == ({'transactions', 'plutus', 'encoding', 'n2c'}, set())
+    # Both sessions through the tracked noise-records plan: select_rows, then time_plans (time_rows and size_sessions).
+    config = prepare.azure_config(json.loads((gate.GATE / 'gated.json').read_text()))
+    audit = json.loads((gate.REPO / 'benchmarks/Chrysalis.Benchmarks/audit-allocations.json').read_text())
+    entries = json.loads((gate.GATE / 'plans/noise-records.json').read_text())
+    selected = gate.select_rows(SimpleNamespace(mode='release', plan=None, only=None), config, audit, plan_entries=entries)
+    seal = dict(gated=config, mode='release', noiseRecords=True, sessionPerRow=False, orderingProof=False,
+                rows=[dict(item, sides=dict(baseline=side(), candidate=side())) for item in selected])
+    sessions = [[plan[key] for key in ('rawSeconds', 'destroyGuardSeconds', 'measurementCutoffSeconds', 'limitUsd')]
+                for plan in prepare.time_plans(seal)]
+    assert sessions == [[1448, 2494, 2149, .6223], [4592, 6109, 5764, 1.2167]]
 
 
 def test_repeat_builder_and_verifier_rehash_kept_parent_archive(tmp_path, monkeypatch):

@@ -161,6 +161,16 @@ class GateTests(unittest.TestCase):
             self.assertEqual(rows['time/micro-hashing']['pairs'], 16)
             self.assertEqual(rows['time/preprod-tcp']['pairs'], 34 if mode == 'change' else 16)
             self.assertEqual(rows['time/preprod-offline']['pairs'], 40 if mode == 'change' else 16)
+        charges = config['time']['chargeSeconds']
+        self.assertEqual({row['id']: row['chargeSeconds'] for row in gate.catalogue(config, audit) if 'chargeSeconds' in row}, charges)
+        with self.assertRaisesRegex(ValueError, 'unknown time row'):
+            gate.catalogue(dict(config, time=dict(config['time'], chargeSeconds={'time/micro-unknown': 9})), audit)
+        args = SimpleNamespace(mode='release', plan=None, only=None)
+        with self.assertRaisesRegex(ValueError, 'cannot lower'):
+            gate.select_rows(args, config, audit, plan_entries=[dict(id='time/micro-plutus', chargeSeconds=charges['time/micro-plutus'] - 1)])
+        for extra in (0, 1):
+            kept, = gate.select_rows(args, config, audit, plan_entries=[dict(id='time/micro-plutus', chargeSeconds=charges['time/micro-plutus'] + extra)])
+            self.assertEqual(kept['chargeSeconds'], charges['time/micro-plutus'] + extra)
 
     def test_all_staged_dotnet_commands_disable_build_servers(self):
         candidate_sdk = json.loads((gate.REPO / 'global.json').read_text())['sdk']['version']

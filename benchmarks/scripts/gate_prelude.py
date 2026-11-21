@@ -36,10 +36,14 @@ def process_seconds(record):
     return seconds
 
 
-def calibrated(record, charge):
-    require(process_seconds(record) <= charge, 'Micro calibration exceeds sealed charge')
+def calibrated(record, charge, log=None, name=None):
+    seconds = process_seconds(record)
     row, = record['data']['rows']
-    return bundle.calibrate_micro(row, bundle.MICRO_PROBE_INVOCATIONS)
+    invocations = bundle.calibrate_micro(row, bundle.MICRO_PROBE_INVOCATIONS)
+    if log:
+        log(f'prelude {name} calibration seconds {seconds:.4f} invocations {invocations} allowance {charge}')
+    require(seconds <= charge, 'Micro calibration exceeds sealed charge')
+    return invocations
 
 
 def observed(record, spec, job, counts):
@@ -72,7 +76,7 @@ def ordering(record, reference, spec, job):
     require(received + 200_000_000 <= sent <= boundary <= start, 'Measured boundary 0 is not between delayed ACK and pass 1')
 
 
-def derive(prelude, worker, raw):
+def derive(prelude, worker, raw, log=None):
     micros = {name for name in prelude['rows'] if worker['workloads'][name]['replay'] == 'micro'}
     require(set(raw) == record_names(prelude) | {name + '-calibration.json' for name in micros},
             'Missing or extra prelude evidence')
@@ -90,9 +94,10 @@ def derive(prelude, worker, raw):
             record = raw[f'{name}-{role}.json']
             rows = observed(record, spec, job, (1, 1))
             seconds = process_seconds(record)
-            if name in micros:
-                seconds = bundle.micro_process_seconds(seconds, rows)
-            require(seconds <= row['chargeSeconds'], 'Prelude process exceeds sealed charge')
+            projection = bundle.micro_process_seconds(seconds, rows) if name in micros else seconds
+            if log:
+                log(f"prelude {name} {role} seconds {seconds:.4f} projection {projection:.4f} allowance {row['chargeSeconds']}")
+            require(projection <= row['chargeSeconds'], 'Prelude process exceeds sealed charge')
             fixed = {key: rows[0][key] for key in ('blocks', 'wireBytes')}
             require(all(all(entry[key] == value for key, value in fixed.items()) for entry in rows)
                     and values.setdefault('expectedWork', fixed) == fixed, 'Prelude fixed work differs across passes or sides')
@@ -103,7 +108,7 @@ def derive(prelude, worker, raw):
     return applied
 
 
-def execute(prelude, worker, directory, member):
+def execute(prelude, worker, directory, member, log=None):
     raw = {}
     paths = directory / 'raw'
     paths.mkdir(parents=True, exist_ok=False)
@@ -119,13 +124,13 @@ def execute(prelude, worker, directory, member):
         opts = {}
         if worker['workloads'][name]['replay'] == 'micro':
             calibration = record(name + '-calibration', row['builds']['baseline'], name, [1, 1])
-            opts['invocations'] = calibrated(calibration, row['chargeSeconds'])
+            opts['invocations'] = calibrated(calibration, row['chargeSeconds'], log, name)
         for role, build in row['builds'].items():
             record(f'{name}-{role}', build, name, [1, 1], **opts)
     if prelude['orderingProof'] is not None:
         probe = worker['probe']
         record('ordering', probe['build'], probe['workload'], [180, 5], ordering_proof=True)
-    applied = derive(prelude, worker, raw)
+    applied = derive(prelude, worker, raw, log)
     session.save(directory / 'applied.json', applied)
     return applied
 

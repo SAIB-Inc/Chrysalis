@@ -7,6 +7,7 @@ import math
 import os
 import statistics as st
 import time
+import traceback
 from pathlib import Path
 
 import gate_session as session
@@ -289,6 +290,11 @@ def run(root, plan, output, *, dry=False, prelude=None):
     records, error, predecessor, probe = [], None, None, None
     host_fallback = {}
 
+    def say(line):
+        # Stage lines for the guest's session.log: fixed words, numbers, opaque keys, region names, the CPU model
+        # name, and on a stop the exception text that session-status.json already holds.
+        print('gate: ' + line, flush=True)
+
     def member(build, workload, dest, counts, *, invocations=None, ordering_proof=False, **region):
         spec = plan['builds'][build]
         job = dict(plan['workloads'][workload], root=str(root), counts=counts, timeout=max(.01, deadline - time.time()))
@@ -310,8 +316,11 @@ def run(root, plan, output, *, dry=False, prelude=None):
             require(actual in provider_for(plan)['regions'] and (actual == region['region'] or (region['region'], actual) == ('eastus2', 'eastus'))
                     and session.detect_platform(actual) == 'azure', 'Sealed Azure host required')
             region['region'] = actual
+        say(f"start provider {plan.get('provider', 'fly')} region {region.get('region', region_for(plan))} "
+            f"cutoff {plan['measurementCutoffSeconds']}")
         if not dry:
             fingerprint = session.host_fingerprint()
+            say(f"host processors {fingerprint.get('processorCount')} model {fingerprint.get('model name')}")
             try:
                 session.save(output / 'host.json', fingerprint)
             except OSError:
@@ -331,6 +340,7 @@ def run(root, plan, output, *, dry=False, prelude=None):
                 record = member(rule['build'], rule['workload'], directory / identifier, list(PROBE_COUNTS), **region)
                 evidence[identifier] = dict(record, exitCode=0)
             probe = probe_result(evidence, rule)
+            say(f"probe {probe['decision']} cv {probe['cv']:.4f} lag1 {probe['lag1']:.4f}")
             for identifier, record in evidence.items():
                 session.save(directory / f'{identifier}.json', record)
             session.save(output / 'probe.json', probe)
@@ -338,12 +348,13 @@ def run(root, plan, output, *, dry=False, prelude=None):
         if prelude is not None and probe['decision'] == 'kept':
             import gate_prelude
             applied = gate_prelude.execute(prelude, plan, root / 'prelude',
-                                           lambda *args, **options: member(*args, **region, **options))
+                                           lambda *args, **options: member(*args, **region, **options), say)
             plan = gate_prelude.apply(plan, applied)
         for block in (() if probe and probe['decision'] == 'rejected' else plan['blocks']):
             # A full local block is atomic. Odd legacy tails have two members.
             if not dry and time.time() + len(block['members']) * block['chargeSeconds'] * 1.15 > deadline:
                 raise TimeoutError('budget stop: next atomic block cannot finish before cutoff')
+            say(f"block {block['workload']} members {len(block['members'])}")
             for identifier in block['members']:
                 build = plan['members'][identifier]['build']
                 stamp = dt.datetime.now(dt.timezone.utc).isoformat()
@@ -357,6 +368,8 @@ def run(root, plan, output, *, dry=False, prelude=None):
                 session.save(output / 'members.json', records)
     except (ValueError, OSError, RuntimeError, TimeoutError) as exception:
         error = str(exception)
+        say('stopped: ' + error)
+        traceback.print_exc()
     finally:
         session.save(output / 'session-start.json', schedules.startup_information(records))
     status = dict(completedAllDeclaredRounds=error is None and (probe is None or probe['decision'] == 'kept'),
@@ -364,6 +377,7 @@ def run(root, plan, output, *, dry=False, prelude=None):
     if probe is not None:
         status['probe'] = probe['decision']
     session.save(output / 'session-status.json', status)
+    say(f"end exitCode {status['exitCode']} seconds {status['seconds']:.1f}")
     return error is None
 
 
