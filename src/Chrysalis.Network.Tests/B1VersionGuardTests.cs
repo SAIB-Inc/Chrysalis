@@ -64,9 +64,8 @@ public sealed class B1VersionGuardTests
     [Fact]
     public async Task StandaloneStateQueryWithoutContextBehavesAsBefore()
     {
-        // SYNTHETIC reply container accepted by the legacy Result type. This test checks only
-        // guard compatibility; real node Result wire expectations remain the separate Known B2 goldens.
-        using ProtocolReplay replay = new(ProtocolType.LocalStateQuery, Convert.FromHexString("8101"), Convert.FromHexString("8204d8184106"));
+        // The node's captured era answer; this test checks only guard compatibility.
+        using ProtocolReplay replay = new(ProtocolType.LocalStateQuery, Convert.FromHexString("8101"), PreprodFixtureTests.Wire("c1-in-p7-005.cbor"));
         await using LocalStateQuery query = new(replay.Channel);
         await query.AcquireAsync(null, CancellationToken.None);
         _ = replay.ReadSentPayload();

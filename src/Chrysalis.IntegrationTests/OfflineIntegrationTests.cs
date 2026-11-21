@@ -34,7 +34,7 @@ public sealed class OfflineIntegrationTests
         Assert.Contains("[REDACTED]", clean, StringComparison.Ordinal);
     }
 
-    /// <summary>Checks independently recorded inner era/parameter/UTxO models without the broken wrapper.</summary>
+    /// <summary>Checks independently recorded inner era/parameter/UTxO models after the two-byte result header.</summary>
     /// <param name="file">The original public capture name.</param>
     [Theory]
     [Trait("Category", "Integration")]

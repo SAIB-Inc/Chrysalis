@@ -1,4 +1,5 @@
 using System.Reflection;
+using Chrysalis.Codec.Types;
 using Chrysalis.Network.Cbor.Handshake;
 using Chrysalis.Network.Cbor.LocalStateQuery;
 using Chrysalis.Network.Cbor.LocalStateQuery.Messages;
@@ -82,7 +83,7 @@ public sealed class B1CarbonGuardTests
     [Fact]
     public async Task CustomMinimumBelowV16ReachesQuery()
     {
-        using ProtocolReplay replay = new(ProtocolType.LocalStateQuery, Convert.FromHexString("8101"), Convert.FromHexString("8204d8184106"));
+        using ProtocolReplay replay = new(ProtocolType.LocalStateQuery, Convert.FromHexString("8101"), PreprodFixtureTests.Wire("c1-in-p7-005.cbor"));
         await using LocalStateQuery query = new(replay.Channel, new N2CVersion(32780));
         await query.AcquireAsync(null, CancellationToken.None);
         _ = replay.ReadSentPayload();
@@ -137,13 +138,13 @@ public sealed class B1CarbonGuardTests
         replay.AssertNothingSent();
     }
 
-    private static Task InvokeHelper(LocalStateQuery query, string helper, CancellationToken token) => helper switch
+    internal static async Task<CborRecord> InvokeHelper(LocalStateQuery query, string helper, CancellationToken token) => helper switch
     {
-        "tip" => query.GetTipAsync(token),
-        "era" => query.GetCurrentEraAsync(token),
-        "parameters" => query.GetCurrentProtocolParamsAsync(token),
-        "address" => query.GetUtxosByAddressAsync([], token),
-        "input" => query.GetUtxosByTxInAsync([], token),
+        "tip" => await query.GetTipAsync(token),
+        "era" => await query.GetCurrentEraAsync(token),
+        "parameters" => await query.GetCurrentProtocolParamsAsync(token),
+        "address" => await query.GetUtxosByAddressAsync([PreprodFixtureTests.Wire("c1-out-p7-012.cbor").AsMemory(^57..)], token),
+        "input" => await query.GetUtxosByTxInAsync([], token),
         _ => throw new ArgumentOutOfRangeException(nameof(helper))
     };
 

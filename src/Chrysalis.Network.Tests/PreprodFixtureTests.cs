@@ -4,6 +4,7 @@ using Chrysalis.Codec.Extensions.Cardano.Core;
 using Chrysalis.Codec.Extensions.Cardano.Core.Transaction;
 using Chrysalis.Codec.Extensions.Cardano.Core.Common;
 using Chrysalis.Codec.Serialization;
+using Chrysalis.Codec.Types;
 using Chrysalis.Codec.Types.Cardano.Core;
 using Chrysalis.Codec.Types.Cardano.Core.Transaction;
 using Chrysalis.Network.Cbor.Common;
@@ -48,8 +49,8 @@ public class PreprodFixtureTests
         Assert.Equal(bytes, rawReader.ReadDataItem().ToArray());
         Assert.False(rawReader.DataAvailable);
 
-        // The broken envelope/64-bit/era-tagged-id schemas have separate red patches.
-        // These rows validate the captured term, not the broken production decoder.
+        // Rows marked with a defect validate the captured term here; the B2 rows' typed decode is
+        // InlineQueryPayloadHasIndependentlyRecordedValues.
         if (expected.TryGetProperty("defect", out _))
         {
             return;
@@ -146,18 +147,16 @@ public class PreprodFixtureTests
     [InlineData("c1-in-p7-007.cbor")]
     [InlineData("c1-in-p7-009.cbor")]
     [InlineData("c1-in-p7-011.cbor")]
+    [InlineData("c4-in-p7-003.cbor")]
     public void InlineQueryPayloadHasIndependentlyRecordedValues(string file)
     {
-        // Intentionally bypass only the known-broken Result wrapper. B2's red patch
-        // exercises the full envelope and helpers; these tests preserve working inner models.
-        byte[] bytes = PreprodFixtures.Read("wire/" + file);
-        CborReader reader = new(bytes);
-        reader.ReadBeginArray();
-        Assert.Equal(2, reader.ReadSize());
-        Assert.Equal(4, reader.ReadInt32());
-        byte[] payload = reader.ReadDataItem().ToArray();
-        Assert.False(reader.DataAvailable);
+        byte[] bytes = Wire(file);
+        State.Result result = Decode<State.Result>(bytes);
+        Assert.Equal(4, result.Idx);
+        byte[] payload = result.QueryResult.Raw.ToArray();
+        Assert.Equal(bytes[2..], payload);
         AssertQueryPayload(file, payload);
+        Assert.Equal(bytes, CborSerializer.Serialize(new State.Result(4, new CborAny(payload))));
     }
 
     [Fact]
@@ -190,6 +189,8 @@ public class PreprodFixtureTests
         Assert.Equal(expected.GetProperty("sha256").GetString(), Convert.ToHexStringLower(SHA256.HashData(bytes)));
         return bytes;
     }
+
+    internal static byte[] Wire(string file) => AssertIntegrity(PreprodFixtures.Find("wire", "file", "wire/" + file));
 
     private static T Decode<T>(ReadOnlyMemory<byte> bytes) where T : ICborType
     {
@@ -359,6 +360,7 @@ public class PreprodFixtureTests
                 Assert.Equal("6b39cb68f15c262776b550fb8ac375c2b76e13fad1dfe575d428c8e23c8df515", Convert.ToHexStringLower(point.Hash.Span));
                 break;
             case "c1-in-p7-005.cbor":
+            case "c4-in-p7-003.cbor":
                 Assert.Equal(6UL, Decode<CurrentEraQueryResponse>(payload).CurrentEra);
                 break;
             case "c1-in-p7-007.cbor":
