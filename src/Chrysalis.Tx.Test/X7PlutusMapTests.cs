@@ -2,9 +2,17 @@ using System.Numerics;
 using System.Runtime.ExceptionServices;
 using Chrysalis.Codec.Types;
 using Chrysalis.Codec.Types.Cardano.Core.Common;
+using Chrysalis.Codec.Types.Cardano.Core.Scripts;
+using Chrysalis.Codec.Types.Cardano.Core.Transaction;
 using Chrysalis.Plutus.Cbor;
+using Chrysalis.Plutus.Flat;
+using Chrysalis.Plutus.Text;
 using Chrysalis.Plutus.Types;
+using Chrysalis.Plutus.VM.Models;
+using Chrysalis.Tx.Builders;
 using Chrysalis.Tx.Extensions;
+using Chrysalis.Tx.Models;
+using Chrysalis.Tx.Models.Cbor;
 using Xunit;
 
 namespace Chrysalis.Tx.Test;
@@ -56,6 +64,38 @@ public class X7PlutusMapTests
         PlutusData converted = OnDefaultStack(() => ScriptContextBuilder.CodecPlutusDataToVm(IPlutusData.Read(bytes)));
         Assert.True(SameData(Deep(depth, 0), converted), $"Converted deep datum did not match expected shape at depth {depth}.");
         Assert.False(SameData(Deep(depth, 1), converted), $"Deep comparison must reach leaf at depth {depth}.");
+    }
+
+    [Fact]
+    public void DeepDatumEvaluatesThroughEvaluateTx()
+    {
+        const int depth = 16_383;
+        byte[] bytes = DeepBytes(depth);
+        // Node form of DeepBytes(16_383): 5,461 triples of (9F..FF 2 B, D8799F..FF 4 B, A100 2 B) + leaf 00 (1 B).
+        int expectedLength = (depth / 3 * 8) + 1;
+        string source =
+            $"(program 1.1.0 (lam ctx [(lam d (force [(force (builtin ifThenElse)) [(builtin equalsData) d d] " +
+            $"(delay (force [(force (builtin ifThenElse)) [(builtin equalsInteger) [(builtin lengthOfByteString) [(builtin serialiseData) d]] (con integer {expectedLength})] " +
+            "(delay (con unit ())) (delay (error))])) (delay (error))])) " +
+            "[(force (builtin headList)) [(force (force (builtin sndPair))) [(builtin unConstrData) " +
+            "[(force (builtin headList)) [(force (builtin tailList)) [(force (force (builtin sndPair))) [(builtin unConstrData) " +
+            "[(force (builtin headList)) [(force (builtin tailList)) [(force (builtin tailList)) [(force (force (builtin sndPair))) [(builtin unConstrData) ctx]]]]]]]]]]]]]))";
+        byte[] flat = FlatEncoder.EncodeProgram(UplcParser.NameToDeBruijn(UplcParser.Parse(source)));
+        Assert.True(flat.Length < 256);
+        byte[] wrapped = flat.Length < 24 ? [(byte)(0x40 | flat.Length), .. flat] : [0x58, (byte)flat.Length, .. flat];
+        PlutusV3Script script = PlutusV3Script.Create(3, wrapped);
+        byte[] scriptAddress = [0x70, .. Convert.FromHexString(script.HashHex())];
+        TransactionInput outref = TransactionInput.Create(new byte[32], 0);
+        PostAlonzoTransactionOutput utxo = PostAlonzoTransactionOutput.Create(
+            new Address(scriptAddress), Lovelace.Create(5_000_000), InlineDatumOption.Create(1, new CborEncodedValue(bytes)));
+        TransactionBuilder builder = new TransactionBuilder()
+            .AddInput(new InputBuilder(outref, utxo).PlutusScriptInlineDatum(script, PlutusInt.Create(0)))
+            .AddOutput([0x60, .. new byte[28]], Lovelace.Create(4_800_000))
+            .SetFee(200_000);
+        IReadOnlyList<EvaluationResult> results = OnDefaultStack(() =>
+            ScriptContextBuilder.EvaluateTx(builder.BuildBody(), builder.BuildWitnessSet(), [new ResolvedInput(outref, utxo)], SlotNetworkConfig.Preview));
+        EvaluationResult eval = Assert.Single(results);
+        Assert.True(eval.ExUnits.Mem > 0 && eval.ExUnits.Steps > 0);
     }
 
     [Theory]

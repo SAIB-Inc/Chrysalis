@@ -28,9 +28,14 @@ public sealed partial class NodeBudgetTests
     private static readonly int[] NegativeV3Indexes = [52, 117, 133, 144];
     private static readonly int[] MeasuredCounts = [69, 161, 514];
     private static readonly Lazy<NodeData> Data = new(Load);
-    private sealed record KnownFailure(string Owner, string Stage, string ExceptionType, string MessageSha256, string Reason);
+    internal sealed record KnownFailure(string Owner, string Stage, string ExceptionType, string MessageSha256, string Reason)
+    {
+        internal bool Matches(string stage, Exception error) =>
+            stage == Stage && error.GetType().FullName == ExceptionType &&
+            Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(error.Message))) == MessageSha256;
+    }
 
-    private static Dictionary<string, KnownFailure> ReadKnownFailures()
+    internal static Dictionary<string, KnownFailure> ReadKnownFailures()
     {
         string path = Path.Combine(AppContext.BaseDirectory, "TestData", "NodeBudgetKnownFailures.tsv");
         using StreamReader reader = File.OpenText(path);
@@ -44,10 +49,6 @@ public sealed partial class NodeBudgetTests
         }
         return failures;
     }
-
-    private static bool IsKnownFailure(KnownFailure failure, string stage, Exception error) =>
-        stage == failure.Stage && error.GetType().FullName == failure.ExceptionType &&
-        Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(error.Message))) == failure.MessageSha256;
 
     private static NodeData Load()
     {
@@ -129,15 +130,15 @@ public sealed partial class NodeBudgetTests
             {
                 string? type = ex.GetType().FullName;
                 bool matches = failure is not null && (failure.Stage == "decode"
-                    ? Record.Exception(() => FlatDecoder.DecodeProgram(script.Flat)) is { } decode && IsKnownFailure(failure, "decode", decode) && IsKnownFailure(failure, "decode", ex)
-                    : IsKnownFailure(failure, "evaluate", ex));
+                    ? Record.Exception(() => FlatDecoder.DecodeProgram(script.Flat)) is { } decode && failure.Matches("decode", decode) && failure.Matches("decode", ex)
+                    : failure.Matches("evaluate", ex));
                 if (!matches)
                 {
                     mismatches[i] = $"{script.Id} V{script.Language}: unexpected replay failure: {type}: {ex.Message}";
                 }
             }
         });
-        Assert.All(known.Keys, id => Assert.Contains(scripts, s => s.Id == id));
+        Assert.All(known.Keys, id => Assert.True(scripts.Any(s => s.Id == id) || fixture.Serialise.Any(s => s.Id == id), $"Unknown known-failure id: {id}"));
         string[] phase1 = ["AV-multiIndexArray-V1", "AV-multiIndexArray-V2", "AV-multiIndexArray-V3", "F-ver-1.0.0-case-V3"];
         string[] phase2 = ["F-ver-0.1.0-V3", "F-ver-1.0.1-V3", "F-ver-1.1.0-patch-2^70-V3", "F-ver-1.2.0-V3", "F-ver-1.2^32.0-V3",
             "F-ver-2.0.0-V3", "F-ver-2^64.0.0-V3", "F-ver-2^64.0.0-V2",
@@ -158,11 +159,12 @@ public sealed partial class NodeBudgetTests
             "P-C2-type-33-tags", "P-C4-constr-1025-fields", "P-A1-zero-width-list-pair4-x124000", "P-A1-zero-width-list-pair5-x124000",
             "Z-tags33-V1-spend", "Z-tags33-V2-spend", "Z-tags33-V3-spend",
             "P-B34-expMod-noninvertible", "P-B36-expMod-m0", "P-B37-expMod-m-neg", "P-B38-expMod-m-2^8191",
-            "P-B39-expMod-b0-eneg", "P-B40-expMod-base-oob", "P-B48-slice-skip-2^63"
+            "P-B39-expMod-b0-eneg", "P-B40-expMod-base-oob", "P-B48-slice-skip-2^63",
+            "P-B09-replicateByte-byte-256", "P-B15-readBit-2^63", "P-B26-msm-scalar-2^4095", "P-B28-msm-scalar--2^4095-1"
         ];
         (Script Script, string Outcome)[] v4 = [.. fixture.Failures.Where(row =>
             v4Prefixes.Any(prefix => row.Script.Id.StartsWith(prefix, StringComparison.Ordinal)) || v4Ids.Contains(row.Script.Id))];
-        Assert.Equal(413, v4.Length);
+        Assert.Equal(417, v4.Length);
         string[] errors = [.. mismatches.OfType<string>(),
             .. CheckVerdicts([.. phase1, .. v4.Where(row => row.Outcome == "phase1-reject").Select(row => row.Script.Id)], "phase1-reject", typeof(InvalidOperationException)),
             .. CheckVerdicts([.. phase2, .. v4.Where(row => row.Outcome == "phase2-fail" && !row.Script.Id.StartsWith("R-", StringComparison.Ordinal)).Select(row => row.Script.Id)], "phase2-fail", typeof(EvaluationException)),
@@ -437,7 +439,7 @@ public sealed partial class NodeBudgetTests
         if (known is not null)
         {
             Assert.NotNull(error);
-            Assert.True(IsKnownFailure(known, stage, error), $"Changed {known.Owner} {stage} failure: {error.GetType().FullName}: {error.Message}");
+            Assert.True(known.Matches(stage, error), $"Changed {known.Owner} {stage} failure: {error.GetType().FullName}: {error.Message}");
             return;
         }
         if (entry.Outcome == "error" && stage == "evaluate")

@@ -56,6 +56,14 @@ VF-accept-policy-32B	V6	decode	System.InvalidOperationException	9468ef01dc0cf383
 VF-accept-q=-2^127	V6	decode	System.InvalidOperationException	9468ef01dc0cf383c29217a57c7d6669b5e6bf33825bb4f0c09ccb6c819bfece	Flat Value constant tag 13 is not implemented.
 VF-accept-q=2^127-1	V6	decode	System.InvalidOperationException	9468ef01dc0cf383c29217a57c7d6669b5e6bf33825bb4f0c09ccb6c819bfece	Flat Value constant tag 13 is not implemented.
 VF-accept-token-32B	V6	decode	System.InvalidOperationException	9468ef01dc0cf383c29217a57c7d6669b5e6bf33825bb4f0c09ccb6c819bfece	Flat Value constant tag 13 is not implemented.
+VF-ser-canonical	V6	decode	System.InvalidOperationException	9468ef01dc0cf383c29217a57c7d6669b5e6bf33825bb4f0c09ccb6c819bfece	Flat Value constant tag 13 is not implemented.
+VF-ser-empty	V6	decode	System.InvalidOperationException	9468ef01dc0cf383c29217a57c7d6669b5e6bf33825bb4f0c09ccb6c819bfece	Flat Value constant tag 13 is not implemented.
+VF-ser-empty-policy-key	V6	decode	System.InvalidOperationException	9468ef01dc0cf383c29217a57c7d6669b5e6bf33825bb4f0c09ccb6c819bfece	Flat Value constant tag 13 is not implemented.
+VF-ser-empty-token-key	V6	decode	System.InvalidOperationException	9468ef01dc0cf383c29217a57c7d6669b5e6bf33825bb4f0c09ccb6c819bfece	Flat Value constant tag 13 is not implemented.
+VF-ser-policy-32B	V6	decode	System.InvalidOperationException	9468ef01dc0cf383c29217a57c7d6669b5e6bf33825bb4f0c09ccb6c819bfece	Flat Value constant tag 13 is not implemented.
+VF-ser-q=-2^127	V6	decode	System.InvalidOperationException	9468ef01dc0cf383c29217a57c7d6669b5e6bf33825bb4f0c09ccb6c819bfece	Flat Value constant tag 13 is not implemented.
+VF-ser-q=2^127-1	V6	decode	System.InvalidOperationException	9468ef01dc0cf383c29217a57c7d6669b5e6bf33825bb4f0c09ccb6c819bfece	Flat Value constant tag 13 is not implemented.
+VF-ser-token-32B	V6	decode	System.InvalidOperationException	9468ef01dc0cf383c29217a57c7d6669b5e6bf33825bb4f0c09ccb6c819bfece	Flat Value constant tag 13 is not implemented.
 VS-insertCoin-0x0	V6	decode	System.InvalidOperationException	9468ef01dc0cf383c29217a57c7d6669b5e6bf33825bb4f0c09ccb6c819bfece	Flat Value constant tag 13 is not implemented.
 VS-insertCoin-1x1	V6	decode	System.InvalidOperationException	9468ef01dc0cf383c29217a57c7d6669b5e6bf33825bb4f0c09ccb6c819bfece	Flat Value constant tag 13 is not implemented.
 VS-insertCoin-1x20	V6	decode	System.InvalidOperationException	9468ef01dc0cf383c29217a57c7d6669b5e6bf33825bb4f0c09ccb6c819bfece	Flat Value constant tag 13 is not implemented.
