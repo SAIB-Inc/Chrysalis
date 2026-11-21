@@ -219,7 +219,7 @@ using (client)
                     int blockLen = 0;
                     if (noDeser)
                     {
-                        // Clark's June 20 benchmark route: consume the tag-24-stripped
+                        // The no-deserialisation route: consume the tag-24-stripped
                         // wire body without block CBOR decoding, and drain BatchDone.
                         SingleBlockCounter counter = default;
                         await blockFetch!.RequestRangeAsync(headerBatch[i].Point, headerBatch[i].Point, cts.Token).ConfigureAwait(false);

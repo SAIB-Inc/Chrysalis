@@ -1,12 +1,2 @@
 file	repository	tag	commit	path at that commit	licence	sha256	derived from
-allegra1.block	https://github.com/txpipe/pallas	v0.34.0	2ab9eb45440d2ede38cf9e49026092a50c32c4e1	test_data/allegra1.block	Apache-2.0	ad58d2f26fc044ff8d05790449422a1394a885479fad84c027332b3319eb7455	-
-alonzo1.block	https://github.com/txpipe/pallas	v0.34.0	2ab9eb45440d2ede38cf9e49026092a50c32c4e1	test_data/alonzo1.block	Apache-2.0	39d81d148438c1dd56848bbbd644e7224e55c31218e502e215637486e5ef4490	-
-alonzo14.block	https://github.com/txpipe/pallas	v0.34.0	2ab9eb45440d2ede38cf9e49026092a50c32c4e1	test_data/alonzo14.block	Apache-2.0	72374a2ff03c6a7b268bb510a6bbf3d5b5d7bc3df82a8cbc04b09d88e31c10d6	-
-babbage1.block	https://github.com/txpipe/pallas	v0.34.0	2ab9eb45440d2ede38cf9e49026092a50c32c4e1	test_data/babbage1.block	Apache-2.0	415aa9f34214cb04926745a3c18600dfd04fd61a6ce4e7fa988a89235da7f8a1	-
-babbage9.block	https://github.com/txpipe/pallas	v0.34.0	2ab9eb45440d2ede38cf9e49026092a50c32c4e1	test_data/babbage9.block	Apache-2.0	d3f786eaa7ca5e6d94880c9bd80c2112b8d53649de3cccd618761cb882b182fe	-
-byron1.block	https://github.com/txpipe/pallas	v0.34.0	2ab9eb45440d2ede38cf9e49026092a50c32c4e1	test_data/byron1.block	Apache-2.0	77a34d9e007e64ac2cb024a3d47615e7a6474ba1ae114ae2a277dc2a8211a14b	-
-byron7.block	https://github.com/txpipe/pallas	v0.34.0	2ab9eb45440d2ede38cf9e49026092a50c32c4e1	test_data/byron7.block	Apache-2.0	ac161f1440a874d966969875cea393eed8085f0b5a2c1a7acc438636a1bb4601	-
 conway1.block	https://github.com/txpipe/pallas	v0.34.0	2ab9eb45440d2ede38cf9e49026092a50c32c4e1	test_data/conway1.block	Apache-2.0	29405309714608b328071a26f1fe0f1b778eb7d0e3ae568627749ba68e4ca8c8	-
-genesis.block	https://github.com/txpipe/pallas	v0.34.0	2ab9eb45440d2ede38cf9e49026092a50c32c4e1	test_data/genesis.block	Apache-2.0	18976e16f654435df817a4918a3880e33b091a8e312ec4f6fb67fce162c114ce	-
-mary1.block	https://github.com/txpipe/pallas	v0.34.0	2ab9eb45440d2ede38cf9e49026092a50c32c4e1	test_data/mary1.block	Apache-2.0	64ca50616aa1b93d4254c41f5aa9fec89a7b436472c5df2402b7c3eab954a462	-
-shelley1.block	https://github.com/txpipe/pallas	v0.34.0	2ab9eb45440d2ede38cf9e49026092a50c32c4e1	test_data/shelley1.block	Apache-2.0	87bb16b8624f3ae0212b57231de58c6576b7b30f29eb482c540e1da78b0f4f21	-

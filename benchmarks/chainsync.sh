@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-SOCKET="${SOCKET:-/home/rawriclark/CardanoPreviewFixed/CardanoPreview/ipc/node.socket}"
+SOCKET="${SOCKET:?set SOCKET to the node socket path}"
 TCP_HOST="${TCP_HOST:-127.0.0.1}"
 TCP_PORT="${TCP_PORT:-3001}"
 SLOT="${SLOT:-103560749}"

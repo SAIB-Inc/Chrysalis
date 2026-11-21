@@ -48,9 +48,23 @@ MAGIC = (
     ("Mach-O", 0, b"\xca\xfe\xba\xbf"),
     ("Mach-O", 0, b"\xbf\xba\xfe\xca"),
     ("WebAssembly", 0, b"\x00asm"),
+    ("zip", 0, b"PK\x03\x04"),
+    ("zip", 0, b"PK\x05\x06"),
+    ("gzip", 0, b"\x1f\x8b"),
+    ("xz", 0, b"\xfd7zXZ\x00"),
+    ("bzip2", 0, b"BZh"),
+    ("zstd", 0, b"\x28\xb5\x2f\xfd"),
+    ("7z", 0, b"7z\xbc\xaf\x27\x1c"),
+    ("tar", 257, b"ustar"),
 )
 PE_OFFSET = 0x3C
 PREFIX_SIZE = max(PE_OFFSET + 4, *(offset + len(magic) for _, offset, magic in MAGIC))
+COST_MODELS = Path("src/Chrysalis.Plutus.Test/TestData/CostModels")
+# Archives committed by design (D18): each passes only as its kind with the sha256 its manifest pins.
+ARCHIVES = {
+    COST_MODELS / "plutigo-v0.12.3" / name: ("gzip", COST_MODELS / "manifest.json")
+    for name in ("node_ground_truth_pv11.json.gz", "node_budget_failures_pv11.json.gz")
+}
 REMOVED_NAME = bytes.fromhex("77697a617264").decode()
 REMOVED_HASHES = {
     "83305427f2ab1356bd47b12a8886aedb3a8cd7adf844804e7ca6bbcbaa9fe856",
@@ -103,14 +117,27 @@ def binary_kind(path):
     return None
 
 
-def binaries(root):
-    return {path.as_posix(): kind for path in candidate_files(root)
-            if (kind := binary_kind(root / path)) is not None}
+def binaries(root, allowed=ARCHIVES):
+    found = {}
+    for path in candidate_files(root):
+        if (kind := binary_kind(root / path)) is None:
+            continue
+        if path in allowed and allowed[path][0] == kind:
+            entry = manifest_entry(root / allowed[path][1], root / path)
+            if entry and entry.get("sha256") == sha256(root / path):
+                continue
+        found[path.as_posix()] = kind
+    return found
 
 
 def sha256(path):
     with path.open("rb") as stream:
         return hashlib.file_digest(stream, "sha256").hexdigest()
+
+
+def manifest_entry(manifest, path):
+    entries = json.loads(manifest.read_text(encoding="utf-8-sig"))
+    return next((entry for entry in entries if manifest.parent / entry.get("path", "") == path), None)
 
 
 def read_text_or_bytes(path):
@@ -183,9 +210,8 @@ def contains_phrase(words, indices):
 
 def manifest_has_label(path, label):
     try:
-        entries = json.loads(path.with_name("manifest.json").read_text(encoding="utf-8-sig"))
-        return any(entry.get("path") == path.name and label in entry.get("source", "")
-                   for entry in entries)
+        entry = manifest_entry(path.with_name("manifest.json"), path)
+        return entry is not None and label in entry.get("source", "")
     except (OSError, ValueError, AttributeError, TypeError):
         return False
 
@@ -339,6 +365,8 @@ class RepositoryFilesTests(unittest.TestCase):
 
     def test_scan_sees_force_added_ignored_binaries(self):
         pe = b"MZ" + bytes(PE_OFFSET - 2) + (0x80).to_bytes(4, "little") + bytes(0x40)
+        gz = b"\x1f\x8b" + bytes(8)
+        pinned = [("kept.gz", gz, gz), ("changed.gz", gz + b"\0", gz), ("elf.gz", b"\x7fELF", b"\x7fELF")]
         root = self.temp_repo({
             ".gitignore": b"out/\n",
             "out/added": b"\x7fELF",
@@ -347,10 +375,19 @@ class RepositoryFilesTests(unittest.TestCase):
             "windows": pe + b"PE\0\0",
             "wasm": b"\0asm",
             "readme": b"MZ (not a PE header)",
+            "zip": b"PK\x03\x04", "empty.zip": b"PK\x05\x06", "gzip": gz,
+            "xz": b"\xfd7zXZ\x00", "bzip2": b"BZh91AY&SY", "zstd": b"\x28\xb5\x2f\xfd",
+            "7z": b"7z\xbc\xaf\x27\x1c", "tar": bytes(257) + b"ustar\x0000" + bytes(250),
+            **{f"pinned/{name}": data for name, data, _ in pinned},
+            "pinned/manifest.json": json.dumps([{"path": name, "sha256": hashlib.sha256(listed).hexdigest()}
+                                                for name, _, listed in pinned]).encode(),
         })
+        allowed = {Path("pinned", name): ("gzip", Path("pinned/manifest.json")) for name, _, _ in pinned}
         subprocess.run(["git", "add", "-f", "--", "out/added"], cwd=root, check=True)
-        self.assertEqual(binaries(root), {
+        self.assertEqual(binaries(root, allowed), {
             "out/added": "ELF", "mac": "Mach-O", "windows": "PE", "wasm": "WebAssembly",
+            "zip": "zip", "empty.zip": "zip", "gzip": "gzip", "xz": "xz", "bzip2": "bzip2",
+            "zstd": "zstd", "7z": "7z", "tar": "tar", "pinned/changed.gz": "gzip", "pinned/elf.gz": "ELF",
         })
 
     def test_blueprint_fixtures_match_their_manifests(self):
