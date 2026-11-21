@@ -99,11 +99,19 @@ public class LocalStateQuery : IAsyncDisposable
     /// </summary>
     /// <param name="point">The chain point to acquire state at, or null for the volatile tip.</param>
     /// <param name="cancellationToken">Token to cancel the operation.</param>
-    /// <exception cref="InvalidOperationException">Thrown if the node fails to acquire state at the requested point.</exception>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown if the node fails to acquire state (naming <see cref="AcquireFailurePointTooOld"/> or
+    /// <see cref="AcquireFailurePointNotOnChain"/>) or replies with an unexpected message.
+    /// </exception>
     public async Task AcquireAsync(Point? point, CancellationToken cancellationToken)
     {
         await _buffer.SendFullMessageAsync(AcquireTypes.Default(point), cancellationToken).ConfigureAwait(false);
         LocalStateQueryMessage acquireResponse = await _buffer.ReceiveFullMessageAsync<LocalStateQueryMessage>(cancellationToken).ConfigureAwait(false);
+
+        if (acquireResponse is Failure failure)
+        {
+            throw new InvalidOperationException($"Failed to acquire state: {failure.Reason.GetType().Name}.");
+        }
 
         if (acquireResponse is not Acquired)
         {
