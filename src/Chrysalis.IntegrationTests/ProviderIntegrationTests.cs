@@ -11,10 +11,9 @@ namespace Chrysalis.IntegrationTests;
 /// <summary>Provider parameter contracts compared with the configured Preprod node, not baked defaults.</summary>
 public sealed class ProviderIntegrationTests
 {
-    /// <summary>Checks the real Ouroboros provider, preserving the known query-envelope failure.</summary>
+    /// <summary>Checks the real Ouroboros provider's parameters against the same node's CLI.</summary>
     [IntegrationFact(Env.Socket, Env.Magic, Env.Cli, Env.NodeVersion, Env.Output)]
     [Trait("Category", "Integration")]
-    [Trait("Known", "B2")]
     public async Task OuroborosParametersMatchCli()
     {
         using CancellationTokenSource deadline = new(TimeSpan.FromSeconds(40));

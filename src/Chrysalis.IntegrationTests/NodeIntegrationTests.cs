@@ -57,7 +57,7 @@ public sealed class NodeIntegrationTests
         }
     }
 
-    /// <summary>Acquires and releases state without issuing one of the broken result queries.</summary>
+    /// <summary>Acquires and releases state without issuing a query.</summary>
     [IntegrationFact(Env.Socket, Env.Magic, Env.Cli, Env.NodeVersion, Env.Output)]
     [Trait("Category", "Integration")]
     public async Task StateAcquireReleaseCompletesOnOneConnection()
@@ -91,7 +91,6 @@ public sealed class NodeIntegrationTests
     /// <summary>Checks the complete tip helper against a stable CLI snapshot.</summary>
     [IntegrationFact(Env.Socket, Env.Magic, Env.Cli, Env.NodeVersion, Env.Output)]
     [Trait("Category", "Integration")]
-    [Trait("Known", "B2")]
     public async Task LedgerTipHelperMatchesCli()
     {
         using CancellationTokenSource deadline = new(TimeSpan.FromSeconds(30));
@@ -103,7 +102,6 @@ public sealed class NodeIntegrationTests
     /// <summary>Checks the complete current-era helper, not only its inner model.</summary>
     [IntegrationFact(Env.Socket, Env.Magic, Env.Cli, Env.NodeVersion, Env.Output)]
     [Trait("Category", "Integration")]
-    [Trait("Known", "B2")]
     public async Task EraHelperMatchesCli()
     {
         using CancellationTokenSource deadline = new(TimeSpan.FromSeconds(30));
@@ -115,7 +113,6 @@ public sealed class NodeIntegrationTests
     /// <summary>Compares all parameter model fields to the same node's CLI JSON.</summary>
     [IntegrationFact(Env.Socket, Env.Magic, Env.Cli, Env.NodeVersion, Env.Output)]
     [Trait("Category", "Integration")]
-    [Trait("Known", "B2")]
     public async Task ParameterHelperMatchesCli()
     {
         using CancellationTokenSource deadline = new(TimeSpan.FromSeconds(40));
@@ -128,7 +125,6 @@ public sealed class NodeIntegrationTests
     /// <summary>Compares the address query's actual inputs, addresses and assets with CLI UTxOs.</summary>
     [IntegrationFact(Env.Socket, Env.Magic, Env.Cli, Env.NodeVersion, Env.Output, Env.Address)]
     [Trait("Category", "Integration")]
-    [Trait("Known", "B2")]
     public async Task UtxoByAddressHelperMatchesCli()
     {
         Env.RequirePreprod();
@@ -153,7 +149,6 @@ public sealed class NodeIntegrationTests
     /// <summary>Queries the same real nonempty CLI tx-in through both implementations and compares its full output.</summary>
     [IntegrationFact(Env.Socket, Env.Magic, Env.Cli, Env.NodeVersion, Env.Output, Env.Address)]
     [Trait("Category", "Integration")]
-    [Trait("Known", "B2")]
     public async Task InputQueryMatchesSameNonemptyCliInput()
     {
         using CancellationTokenSource deadline = new(TimeSpan.FromSeconds(40));

@@ -64,7 +64,7 @@ internal static class WirePlaceholder
                 {
                     _ = CborSerializer.Deserialize<RejectTx>(bytes).RejectReason.Value.Length;
                 }
-                else { _ = CborSerializer.Deserialize<Result>(bytes).QueryResult.Value.Length; }
+                else { _ = CborSerializer.Deserialize<Result>(bytes).QueryResult.Raw.Length; }
             }
             catch (Exception exception) when (exception is not OutOfMemoryException)
             {
