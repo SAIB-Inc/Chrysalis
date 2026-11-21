@@ -32,5 +32,9 @@
   {"path":"plutus-1.71.0.0/Common/Versions.hs","repository":"IntersectMBO/plutus","tag":"1.71.0.0","commit":"261766ad1d582bce8c86bad1af7a3b0e5355b21c",
    "upstreamPath":"plutus-ledger-api/src/PlutusLedgerApi/Common/Versions.hs","blob":"c27597eac9c8dcf36f4b409773b22344d52184fc","bytes":13284,"sha256":"36a8c4665bc78de33eb8853af6da8031f34e31e9c2a4baa7e6b9c70ec4f0b59b","license":"Apache-2.0"},
   {"path":"plutus-1.71.0.0/Common/ProtocolVersions.hs","repository":"IntersectMBO/plutus","tag":"1.71.0.0","commit":"261766ad1d582bce8c86bad1af7a3b0e5355b21c",
-   "upstreamPath":"plutus-ledger-api/src/PlutusLedgerApi/Common/ProtocolVersions.hs","blob":"1ad9b27a5d68dd2e15c762833654837933569e60","bytes":5476,"sha256":"b8969765d7f4b4c1cf970ea80d411a53c305b65e5b478e66c3b04638b11d0552","license":"Apache-2.0"}
+   "upstreamPath":"plutus-ledger-api/src/PlutusLedgerApi/Common/ProtocolVersions.hs","blob":"1ad9b27a5d68dd2e15c762833654837933569e60","bytes":5476,"sha256":"b8969765d7f4b4c1cf970ea80d411a53c305b65e5b478e66c3b04638b11d0552","license":"Apache-2.0"},
+  {"path":"plutigo-v0.12.3/node_data_limits_pv11.json.gz","repository":"blinklabs-io/plutigo","tag":"v0.12.3","commit":"c4a50c15c86e7a3d57348a478d72f410e7ce75a9",
+   "upstreamPath":"cek/testdata/node_data_limits_pv11.json.gz","blob":"30fe1dfcc39738d60b54f9150c3010ebb0b762d9","bytes":2977,"sha256":"a66ac3da97f4de1f93787e86ea258a89b6b388c9f5087cde5332e610909aab26","license":"Apache-2.0"},
+  {"path":"g1/auction_1-1.flat","repository":"G1","tag":null,"commit":null,
+   "upstreamPath":"benchmarks/data/plutus_use_cases/auction_1-1.flat","blob":null,"bytes":3719,"sha256":"72b9d49a527dba70457645e3f4ab469044707dd0a1f3f82d8646b5f3b03d7713","license":null}
 ]

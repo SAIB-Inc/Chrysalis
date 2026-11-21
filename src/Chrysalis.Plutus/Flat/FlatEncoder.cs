@@ -184,7 +184,8 @@ public static class FlatEncoder
             case UnitConstant:
                 break;
             case DataConstant d:
-                byte[] cborBytes = Cbor.CborWriter.EncodePlutusDataDefinite(d.Value);
+                // PlutusCore/FlatInstances.hs:127, Codec/Extras/FlatViaSerialise.hs:34: Data encodes via serialise (node form).
+                byte[] cborBytes = Cbor.CborWriter.EncodePlutusData(d.Value);
                 EncodeByteString(writer, cborBytes);
                 break;
             case ListConstant list:
@@ -225,7 +226,7 @@ public static class FlatEncoder
 
     private static void EncodeNatural(BitWriter writer, int value) => EncodeNaturalCore(writer, (ulong)value);
 
-    private static void EncodeNaturalCore(BitWriter writer, BigInteger value)
+    internal static void EncodeNaturalCore(BitWriter writer, BigInteger value)
     {
         if (value < 128)
         {
@@ -239,13 +240,13 @@ public static class FlatEncoder
         EncodeNaturalCore(writer, value >> 7);
     }
 
-    private static void EncodeInteger(BitWriter writer, BigInteger value)
+    internal static void EncodeInteger(BitWriter writer, BigInteger value)
     {
         BigInteger natural = value >= 0 ? value * 2 : (-value * 2) - 1;
         EncodeNaturalCore(writer, natural);
     }
 
-    private static void EncodeByteString(BitWriter writer, ReadOnlySpan<byte> bytes)
+    internal static void EncodeByteString(BitWriter writer, ReadOnlySpan<byte> bytes)
     {
         writer.Pad();
 

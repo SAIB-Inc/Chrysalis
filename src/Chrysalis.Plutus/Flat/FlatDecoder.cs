@@ -47,24 +47,166 @@ public static class FlatDecoder
         return term;
     }
 
+    private enum Open : byte { Delay, Lambda, Force, Apply, Constr, Case }
+
+    // An open term; its finished children sit on the term stack from Start.
+    private readonly record struct Pending(Open Kind, int Start, ulong Tag);
+
+    // Iterative and depth first: no term nesting depth can overflow the stack (the node has no depth limit).
     private static Term<DeBruijn> DecodeTerm(BitReader reader, in FlatRules rules)
     {
-        int tag = reader.PopBits(4);
-
-        return tag switch
+        PooledStack<Pending> open = new(16);
+        PooledStack<Term<DeBruijn>> terms = new(16);
+        try
         {
-            0 => DecodeVar(reader),
-            1 => DecodeDelay(reader, in rules),
-            2 => DecodeLambda(reader, in rules),
-            3 => DecodeApply(reader, in rules),
-            4 => DecodeConst(reader, in rules),
-            5 => DecodeForce(reader, in rules),
-            6 => new ErrorTerm<DeBruijn>(),
-            7 => DecodeBuiltin(reader, in rules),
-            8 => DecodeConstr(reader, in rules),
-            9 => DecodeCase(reader, in rules),
-            _ => throw new InvalidOperationException($"Flat: unknown term tag {tag}.")
-        };
+            while (true)
+            {
+                int tag = reader.PopBits(4);
+                Term<DeBruijn>? leaf;
+                switch (tag)
+                {
+                    case 0:
+                        leaf = DecodeVar(reader);
+                        break;
+                    case 1:
+                        open.Push(new(Open.Delay, terms.Count, 0));
+                        continue;
+                    case 2:
+                        open.Push(new(Open.Lambda, terms.Count, 0));
+                        continue;
+                    case 3:
+                        open.Push(new(Open.Apply, terms.Count, 0));
+                        continue;
+                    case 4:
+                        leaf = DecodeConst(reader, in rules);
+                        break;
+                    case 5:
+                        open.Push(new(Open.Force, terms.Count, 0));
+                        continue;
+                    case 6:
+                        leaf = new ErrorTerm<DeBruijn>();
+                        break;
+                    case 7:
+                        leaf = DecodeBuiltin(reader, in rules);
+                        break;
+                    case 8:
+                        leaf = OpenConstr(reader, in rules, ref open, terms.Count);
+                        if (leaf is null)
+                        {
+                            continue;
+                        }
+
+                        break;
+                    case 9:
+                        OpenCase(in rules, ref open, terms.Count);
+                        continue;
+                    default:
+                        throw new InvalidOperationException($"Flat: unknown term tag {tag}.");
+                }
+
+                if (Close(reader, in rules, ref open, ref terms, leaf) is { } finished)
+                {
+                    return finished;
+                }
+            }
+        }
+        finally
+        {
+            terms.Dispose();
+            open.Dispose();
+        }
+    }
+
+    private static Term<DeBruijn>? OpenConstr(BitReader reader, in FlatRules rules, ref PooledStack<Pending> open, int start)
+    {
+        RequireSop(in rules, "constr");
+        ulong tag = DecodeWord64(reader);
+        if (reader.PopBit() == 0)
+        {
+            return new ConstrTerm<DeBruijn>(tag, []);
+        }
+
+        open.Push(new(Open.Constr, start, tag));
+        return null;
+    }
+
+    private static void OpenCase(in FlatRules rules, ref PooledStack<Pending> open, int start)
+    {
+        RequireSop(in rules, "case");
+        open.Push(new(Open.Case, start, 0));
+    }
+
+    private static Term<DeBruijn>? Close(
+        BitReader reader,
+        in FlatRules rules,
+        ref PooledStack<Pending> open,
+        ref PooledStack<Term<DeBruijn>> terms,
+        Term<DeBruijn> term)
+    {
+        while (open.Count > 0)
+        {
+            Pending frame = open.Top;
+            switch (frame.Kind)
+            {
+                case Open.Delay:
+                    _ = open.Pop();
+                    term = new DelayTerm<DeBruijn>(term);
+                    break;
+                case Open.Lambda:
+                    _ = open.Pop();
+                    term = new LambdaTerm<DeBruijn>(new DeBruijn(0), term);
+                    break;
+                case Open.Force:
+                    _ = open.Pop();
+                    term = new ForceTerm<DeBruijn>(term);
+                    break;
+                case Open.Apply:
+                    if (terms.Count == frame.Start)
+                    {
+                        terms.Push(term);
+                        return null;
+                    }
+
+                    _ = open.Pop();
+                    term = new ApplyTerm<DeBruijn>(terms.Pop(), term);
+                    break;
+                case Open.Constr:
+                    terms.Push(term);
+                    if (reader.PopBit() == 1)
+                    {
+                        return null;
+                    }
+
+                    _ = open.Pop();
+                    ImmutableArray<Term<DeBruijn>> fields = ImmutableArray.Create(terms.From(frame.Start));
+                    terms.Truncate(frame.Start);
+                    if (rules.Limits && fields.Length > MaxConstrFields)
+                    {
+                        throw new InvalidOperationException($"Flat: constr has {fields.Length} fields (maximum is {MaxConstrFields}).");
+                    }
+
+                    term = new ConstrTerm<DeBruijn>(frame.Tag, fields);
+                    break;
+                case Open.Case:
+                    terms.Push(term);
+                    if (reader.PopBit() == 1)
+                    {
+                        return null;
+                    }
+
+                    _ = open.Pop();
+                    ReadOnlySpan<Term<DeBruijn>> items = terms.From(frame.Start);
+                    Term<DeBruijn> scrutinee = items[0];
+                    ImmutableArray<Term<DeBruijn>> branches = items.Length == 1 ? [] : ImmutableArray.Create(items[1..]);
+                    terms.Truncate(frame.Start);
+                    term = new CaseTerm<DeBruijn>(scrutinee, branches);
+                    break;
+                default:
+                    throw new InvalidOperationException($"Flat: unknown open frame {frame.Kind}.");
+            }
+        }
+
+        return term;
     }
 
     private static VarTerm<DeBruijn> DecodeVar(BitReader reader)
@@ -73,25 +215,12 @@ public static class FlatDecoder
         return new VarTerm<DeBruijn>(new DeBruijn(index > int.MaxValue ? int.MaxValue : (int)index));
     }
 
-    private static DelayTerm<DeBruijn> DecodeDelay(BitReader reader, in FlatRules rules) => new(DecodeTerm(reader, in rules));
-
-    private static LambdaTerm<DeBruijn> DecodeLambda(BitReader reader, in FlatRules rules) => new(new DeBruijn(0), DecodeTerm(reader, in rules));
-
-    private static ApplyTerm<DeBruijn> DecodeApply(BitReader reader, in FlatRules rules)
-    {
-        Term<DeBruijn> function = DecodeTerm(reader, in rules);
-        Term<DeBruijn> argument = DecodeTerm(reader, in rules);
-        return new ApplyTerm<DeBruijn>(function, argument);
-    }
-
     private static ConstTerm<DeBruijn> DecodeConst(BitReader reader, in FlatRules rules)
     {
         ConstantType type = DecodeConstantType(reader, rules.Limits);
         Constant value = DecodeConstantValue(reader, type);
         return new ConstTerm<DeBruijn>(value);
     }
-
-    private static ForceTerm<DeBruijn> DecodeForce(BitReader reader, in FlatRules rules) => new(DecodeTerm(reader, in rules));
 
     private static BuiltinTerm<DeBruijn> DecodeBuiltin(BitReader reader, in FlatRules rules)
     {
@@ -104,26 +233,6 @@ public static class FlatDecoder
                 : $"Flat: builtin {(DefaultFunction)tag} is not available for this language and protocol version.");
         }
         return new((DefaultFunction)tag);
-    }
-
-    private static ConstrTerm<DeBruijn> DecodeConstr(BitReader reader, in FlatRules rules)
-    {
-        RequireSop(in rules, "constr");
-        ulong tag = DecodeWord64(reader);
-        ImmutableArray<Term<DeBruijn>> fields = DecodeTermList(reader, in rules);
-        if (rules.Limits && fields.Length > MaxConstrFields)
-        {
-            throw new InvalidOperationException($"Flat: constr has {fields.Length} fields (maximum is {MaxConstrFields}).");
-        }
-        return new ConstrTerm<DeBruijn>(tag, fields);
-    }
-
-    private static CaseTerm<DeBruijn> DecodeCase(BitReader reader, in FlatRules rules)
-    {
-        RequireSop(in rules, "case");
-        Term<DeBruijn> scrutinee = DecodeTerm(reader, in rules);
-        ImmutableArray<Term<DeBruijn>> branches = DecodeTermList(reader, in rules);
-        return new CaseTerm<DeBruijn>(scrutinee, branches);
     }
 
     private static void RequireSop(in FlatRules rules, string term)
@@ -142,18 +251,6 @@ public static class FlatDecoder
             mask |= UInt128.One << (int)function;
         }
         return mask;
-    }
-
-    private static ImmutableArray<Term<DeBruijn>> DecodeTermList(BitReader reader, in FlatRules rules)
-    {
-        // Most term lists are small (1-5 items). Use a list and convert.
-        List<Term<DeBruijn>>? list = null;
-        while (reader.PopBit() == 1)
-        {
-            list ??= [];
-            list.Add(DecodeTerm(reader, in rules));
-        }
-        return list is null ? [] : [.. list];
     }
 
     // --- Type decoding (spec C.3.3) ---

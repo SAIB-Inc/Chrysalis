@@ -1,8 +1,8 @@
 using System.Numerics;
 using Chrysalis.Plutus.Cbor;
 using Chrysalis.Plutus.Flat;
-using Chrysalis.Plutus.VM.EvalTx;
 using Chrysalis.Plutus.Types;
+using Chrysalis.Plutus.VM.EvalTx;
 using Xunit;
 
 namespace Chrysalis.Plutus.Test;
@@ -13,6 +13,8 @@ namespace Chrysalis.Plutus.Test;
 /// </summary>
 public class CborWriterTests
 {
+    private static readonly Lazy<Dictionary<string, NodeBudgetTests.KnownFailure>> KnownFailures = new(NodeBudgetTests.ReadKnownFailures);
+
     private static string Hex(byte[] bytes) => Convert.ToHexString(bytes);
 
     // --- Constructor encoding ---
@@ -64,14 +66,26 @@ public class CborWriterTests
         Assert.Equal("D8668218C89F42CAFEFF", Hex(result));
     }
 
-    // --- List encoding (indefinite-length arrays) ---
+    // --- List encoding (defaultEncodeList: empty definite 0x80, non-empty indefinite) ---
 
     [Fact]
-    public void EmptyList_UsesIndefiniteArray()
+    public void EmptyList_UsesDefiniteArray()
     {
         PlutusData data = new PlutusDataList([]);
         byte[] result = CborWriter.EncodePlutusData(data);
-        Assert.Equal("9FFF", Hex(result));
+        Assert.Equal("80", Hex(result));
+    }
+
+    [Theory]
+    [InlineData("820102", "820102")]
+    [InlineData("9f0102ff", "9f0102ff")]
+    [InlineData("9fff", "9fff")]
+    [InlineData("d879820102", "d879820102")]
+    [InlineData("d8799f0102ff", "d879820102")]
+    public void DefiniteFormIsUnchanged(string inputHex, string expectedHex)
+    {
+        PlutusData data = CborReader.DecodePlutusData(Convert.FromHexString(inputHex));
+        Assert.Equal(Convert.FromHexString(expectedHex), CborWriter.EncodePlutusDataDefinite(data));
     }
 
     [Fact]
@@ -211,22 +225,16 @@ public class CborWriterTests
         Assert.Equal("D8799F182AFF", Hex(result));
     }
 
-    public static TheoryData<string, byte[]?, BigInteger?, byte[]> TagAndIntegerCases()
+    public static TheoryData<string, byte[]?, BigInteger?, byte[]> SerialiseCases()
     {
         TheoryData<string, byte[]?, BigInteger?, byte[]> cases = [];
         int fixtureCount = 0;
         foreach (NodeBudgetTests.SerialiseCase entry in NodeBudgetTests.Fixture.Serialise)
         {
-            if (entry.Id.StartsWith("D-ser-constr-102-", StringComparison.Ordinal)
-                || entry.Id == "D-ser-constr-121-nonminimal-tag-head"
-                || entry.Id.StartsWith("SER-constr-tag", StringComparison.Ordinal)
-                || entry.Id.StartsWith("SER-int-", StringComparison.Ordinal))
-            {
-                cases.Add(entry.Id, entry.Flat, null, entry.Bytes);
-                fixtureCount++;
-            }
+            cases.Add(entry.Id, entry.Flat, null, entry.Bytes);
+            fixtureCount++;
         }
-        Assert.Equal(26, fixtureCount);
+        Assert.Equal(89, fixtureCount);
         // Source rows from PlutusCore/Data.hs:149-160 and cborg Write.hs:150-177,678-689.
         cases.Add("source:Constr(-1)[]", null, -BigInteger.One, Convert.FromHexString("d866822080"));
         cases.Add("source:Constr(2^64)[]", null, BigInteger.One << 64, Convert.FromHexString("d86682c24901000000000000000080"));
@@ -235,13 +243,20 @@ public class CborWriterTests
     }
 
     [Theory]
-    [MemberData(nameof(TagAndIntegerCases))]
-    public void ConstrTagsAndIntegersAreWrittenAsTheNodeWritesThem(string id, byte[]? flat, BigInteger? sourceTag, byte[] expected)
+    [MemberData(nameof(SerialiseCases))]
+    public void SerialiseDataWritesTheNodesBytes(string id, byte[]? flat, BigInteger? sourceTag, byte[] expected)
     {
-        _ = id;
         byte[] actual;
         if (flat is not null)
         {
+            if (KnownFailures.Value.TryGetValue(id, out NodeBudgetTests.KnownFailure? failure))
+            {
+                Exception? decode = Record.Exception(() => FlatDecoder.DecodeProgram(flat));
+                Assert.True(decode is not null, $"{id}: stale {failure.Owner} entry; decoded without error");
+                Assert.True(failure.Matches("decode", decode), $"{id}: changed {failure.Owner} failure: {decode.GetType().FullName}: {decode.Message}");
+                return;
+            }
+
             Term<DeBruijn> applied = new ApplyTerm<DeBruijn>(
                 FlatDecoder.DecodeProgram(flat).Term,
                 new ConstTerm<DeBruijn>(new DataConstant(new PlutusDataConstr(0, []))));
@@ -253,5 +268,69 @@ public class CborWriterTests
             actual = CborWriter.EncodePlutusData(new PlutusDataConstr(sourceTag!.Value, []));
         }
         Assert.Equal(expected, actual);
+    }
+
+    private static byte[] PlutusScript()
+    {
+        using MemoryStream stream = (MemoryStream)Golden.Open("g1/auction_1-1.flat");
+        return stream.ToArray();
+    }
+
+    [Fact]
+    public void FlatConstantsUseTheNodesForm()
+    {
+        byte[] plutus = PlutusScript();
+        Assert.Equal(plutus, FlatEncoder.EncodeProgram(FlatDecoder.DecodeProgram(plutus)));
+    }
+
+    [Fact]
+    public void ApplyParameterWritesPlutusBytes()
+    {
+        byte[] plutus = PlutusScript();
+        Program<DeBruijn> decoded = FlatDecoder.DecodeProgram(plutus);
+        ApplyTerm<DeBruijn> outer = Assert.IsType<ApplyTerm<DeBruijn>>(decoded.Term);
+        PlutusData parameter = Assert.IsType<DataConstant>(Assert.IsType<ConstTerm<DeBruijn>>(outer.Argument).Value).Value;
+        ApplyTerm<DeBruijn> scriptApp = Assert.IsType<ApplyTerm<DeBruijn>>(outer.Function);
+        PlutusData owned = Assert.IsType<DataConstant>(Assert.IsType<ConstTerm<DeBruijn>>(scriptApp.Argument).Value).Value;
+
+        byte[] node = FlatBytes(CborWriter.EncodePlutusData(owned));
+        byte[] def = FlatBytes(CborWriter.EncodePlutusDataDefinite(owned));
+        Assert.NotEqual(node, def);
+
+        byte[] encoded = FlatEncoder.EncodeProgram(new(decoded.Version, outer.Function));
+        byte[] input = encoded.AsSpan().IndexOf(def) >= 0 ? encoded : Replace(encoded, node, def);
+        _ = Once(input, def);
+
+        byte[] paramDef = CborWriter.EncodePlutusDataDefinite(parameter);
+        Assert.NotEqual(CborWriter.EncodePlutusData(parameter), paramDef);
+
+        Assert.Equal(plutus, ScriptApplicator.ApplyParameter(input, paramDef));
+    }
+
+    private static byte[] FlatBytes(byte[] cbor)
+    {
+        BitWriter writer = new();
+        FlatEncoder.EncodeByteString(writer, cbor);
+        byte[] padded = writer.ToArray();
+        Assert.Equal(1, padded[0]);
+        return padded[1..];
+    }
+
+    private static byte[] Replace(byte[] source, byte[] oldSpan, byte[] newSpan)
+    {
+        int index = Once(source, oldSpan);
+        byte[] result = new byte[source.Length - oldSpan.Length + newSpan.Length];
+        source.AsSpan(0, index).CopyTo(result);
+        newSpan.CopyTo(result.AsSpan(index));
+        source.AsSpan(index + oldSpan.Length).CopyTo(result.AsSpan(index + newSpan.Length));
+        return result;
+    }
+
+    private static int Once(byte[] source, byte[] span)
+    {
+        int first = source.AsSpan().IndexOf(span);
+        Assert.True(first >= 0, "Expected data constant span not found.");
+        Assert.True(source.AsSpan(first + 1).IndexOf(span) < 0, "Expected data constant span to appear only once.");
+        return first;
     }
 }

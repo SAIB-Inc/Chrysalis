@@ -225,8 +225,59 @@ internal static class DataBuiltins
 
     // --- Deep equality ---
 
+    private record struct PairCursor(PlutusData A, PlutusData B, int Index, int Count);
+
+    // Iterative and depth first: stops at the first difference without queueing siblings.
     private static bool PlutusDataEquals(PlutusData a, PlutusData b)
     {
+        if (!SameNode(a, b, out int count))
+        {
+            return false;
+        }
+
+        if (count == 0)
+        {
+            return true;
+        }
+
+        PooledStack<PairCursor> open = new(16);
+        try
+        {
+            open.Push(new(a, b, 0, count));
+            while (open.Count > 0)
+            {
+                ref PairCursor top = ref open.Top;
+                if (top.Index == top.Count)
+                {
+                    _ = open.Pop();
+                    continue;
+                }
+
+                int index = top.Index++;
+                PlutusData left = DataItems.At(top.A, index);
+                PlutusData right = DataItems.At(top.B, index);
+                if (!SameNode(left, right, out int childCount))
+                {
+                    return false;
+                }
+
+                if (childCount > 0)
+                {
+                    open.Push(new(left, right, 0, childCount));
+                }
+            }
+
+            return true;
+        }
+        finally
+        {
+            open.Dispose();
+        }
+    }
+
+    private static bool SameNode(PlutusData a, PlutusData b, out int count)
+    {
+        count = 0;
         if (a.GetType() != b.GetType())
         {
             return false;
@@ -235,60 +286,12 @@ internal static class DataBuiltins
         switch (a)
         {
             case PlutusDataConstr ac:
-                {
-                    PlutusDataConstr bc = (PlutusDataConstr)b;
-                    if (ac.Tag != bc.Tag || ac.Fields.Length != bc.Fields.Length)
-                    {
-                        return false;
-                    }
-
-                    for (int i = 0; i < ac.Fields.Length; i++)
-                    {
-                        if (!PlutusDataEquals(ac.Fields[i], bc.Fields[i]))
-                        {
-                            return false;
-                        }
-                    }
-
-                    return true;
-                }
-            case PlutusDataMap am:
-                {
-                    PlutusDataMap bm = (PlutusDataMap)b;
-                    if (am.Entries.Length != bm.Entries.Length)
-                    {
-                        return false;
-                    }
-
-                    for (int i = 0; i < am.Entries.Length; i++)
-                    {
-                        if (!PlutusDataEquals(am.Entries[i].Key, bm.Entries[i].Key) ||
-                            !PlutusDataEquals(am.Entries[i].Value, bm.Entries[i].Value))
-                        {
-                            return false;
-                        }
-                    }
-
-                    return true;
-                }
-            case PlutusDataList al:
-                {
-                    PlutusDataList bl = (PlutusDataList)b;
-                    if (al.Values.Length != bl.Values.Length)
-                    {
-                        return false;
-                    }
-
-                    for (int i = 0; i < al.Values.Length; i++)
-                    {
-                        if (!PlutusDataEquals(al.Values[i], bl.Values[i]))
-                        {
-                            return false;
-                        }
-                    }
-
-                    return true;
-                }
+                PlutusDataConstr bc = (PlutusDataConstr)b;
+                count = DataItems.Count(ac);
+                return ac.Tag == bc.Tag && count == DataItems.Count(bc);
+            case PlutusDataMap or PlutusDataList:
+                count = DataItems.Count(a);
+                return count == DataItems.Count(b);
             case PlutusDataInteger ai:
                 return ai.Value == ((PlutusDataInteger)b).Value;
             case PlutusDataByteString abs:

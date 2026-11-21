@@ -139,36 +139,59 @@ public static class Evaluator
 
     // Upstream's scope check (Check/Scope.hs:33-55; Common/Eval.hs:130): a variable must be bound by an
     // enclosing lambda, index 1 to the depth. Constr and case are not looked into, so a variable there
-    // fails only if it is evaluated. Flat decodes every binder as 0 (FlatDecoder.cs:73).
+    // fails only if it is evaluated. Flat decodes every binder as 0 (FlatDecoder.Close).
     internal static bool IsClosed(Term<DeBruijn> term, int depth)
     {
-        while (true)
+        PooledStack<(Term<DeBruijn> Term, int Depth)> pending = default;
+        bool rented = false;
+        try
         {
-            switch (term)
+            while (true)
             {
-                case VarTerm<DeBruijn> variable:
-                    return variable.Name.Index >= 1 && variable.Name.Index <= depth;
-                case LambdaTerm<DeBruijn> lambda:
-                    term = lambda.Body;
-                    depth++;
-                    break;
-                case DelayTerm<DeBruijn> delay:
-                    term = delay.Body;
-                    break;
-                case ForceTerm<DeBruijn> force:
-                    term = force.Body;
-                    break;
-                case ApplyTerm<DeBruijn> apply:
-                    if (!IsClosed(apply.Function, depth))
-                    {
-                        return false;
-                    }
+                switch (term)
+                {
+                    case VarTerm<DeBruijn> variable:
+                        if (variable.Name.Index < 1 || variable.Name.Index > depth)
+                        {
+                            return false;
+                        }
 
-                    term = apply.Argument;
-                    break;
-                default:
+                        break;
+                    case LambdaTerm<DeBruijn> lambda:
+                        term = lambda.Body;
+                        depth++;
+                        continue;
+                    case DelayTerm<DeBruijn> delay:
+                        term = delay.Body;
+                        continue;
+                    case ForceTerm<DeBruijn> force:
+                        term = force.Body;
+                        continue;
+                    case ApplyTerm<DeBruijn> apply:
+                        if (!rented)
+                        {
+                            pending = new(16);
+                            rented = true;
+                        }
+
+                        pending.Push((apply.Argument, depth));
+                        term = apply.Function;
+                        continue;
+                    default:
+                        break;
+                }
+
+                if (pending.Count == 0)
+                {
                     return true;
+                }
+
+                (term, depth) = pending.Pop();
             }
+        }
+        finally
+        {
+            pending.Dispose();
         }
     }
 
