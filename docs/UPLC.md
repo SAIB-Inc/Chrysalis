@@ -2,7 +2,7 @@
 
 A visual guide for C# developers working on the Chrysalis.Plutus implementation.
 
-**Reference**: `docs/plutus-core-spec.pdf` (Formal Specification of the Plutus Core Language, 18 December 2025 DRAFT)
+**Reference**: [Formal Specification of the Plutus Core Language](https://github.com/IntersectMBO/plutus/tree/d6c9dcfd80f5fa12ef73357e8fa3d6274cf7afef/doc/plutus-core-spec) (draft of 18 December 2025; LaTeX source at Plutus 1.59.0.0)
 
 ---
 

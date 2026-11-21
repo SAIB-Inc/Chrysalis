@@ -63,7 +63,7 @@ cd benchmarks/PallasChainSyncBench && cargo build --release
 cd benchmarks/GouroborosChainSyncBench && go build
 
 # Run full suite
-./benchmarks/chainsync.sh
+SOCKET=/path/to/node.socket ./benchmarks/chainsync.sh
 ```
 
-Configure via environment variables: `SOCKET`, `TCP_HOST`, `TCP_PORT`, `SLOT`, `HASH`, `BLOCKS`, `MAGIC`, `PIPELINE`, `N2N_TIMEOUT`.
+Configure via environment variables: `SOCKET` (required), `TCP_HOST`, `TCP_PORT`, `SLOT`, `HASH`, `BLOCKS`, `MAGIC`, `PIPELINE`, `N2N_TIMEOUT`.

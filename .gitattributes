@@ -1,0 +1,15 @@
+# Byte-pinned fixtures and data keep their exact bytes in every checkout.
+*.block -text
+*.header -text
+*.tx -text
+*.json -text
+*LICENSE* -text
+*NOTICE* -text
+*.cbor binary
+*.flat binary
+*.gz binary
+*.payload binary
+*.pb binary
+
+# Shell scripts run on Linux and macOS.
+*.sh text eol=lf

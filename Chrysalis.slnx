@@ -3,14 +3,12 @@
     <Project Path="src/Chrysalis.Codec.CodeGen/Chrysalis.Codec.CodeGen.csproj" />
     <Project Path="src/Chrysalis.Codec.Test/Chrysalis.Codec.Test.csproj" />
     <Project Path="src/Chrysalis.Codec/Chrysalis.Codec.csproj" />
-    <Project Path="src/Chrysalis.Cli/Chrysalis.Cli.csproj" />
     <Project Path="src/Chrysalis.Crypto/Chrysalis.Crypto.csproj" />
     <Project Path="src/Chrysalis.Crypto.Test/Chrysalis.Crypto.Test.csproj" />
     <Project Path="src/Chrysalis.Network.Cli/Chrysalis.Network.Cli.csproj" />
     <Project Path="src/Chrysalis.Network.Tests/Chrysalis.Network.Tests.csproj" />
     <Project Path="src/Chrysalis.IntegrationTests/Chrysalis.IntegrationTests.csproj" />
     <Project Path="src/Chrysalis.Network/Chrysalis.Network.csproj" />
-    <Project Path="src/Chrysalis.Plutus.Cli/Chrysalis.Plutus.Cli.csproj" />
     <Project Path="src/Chrysalis.Plutus/Chrysalis.Plutus.csproj" />
     <Project Path="src/Chrysalis.Plutus.Test/Chrysalis.Plutus.Test.csproj" />
     <Project Path="src/Chrysalis.Tx/Chrysalis.Tx.csproj" />
