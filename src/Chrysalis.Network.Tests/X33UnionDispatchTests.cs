@@ -9,7 +9,7 @@ namespace Chrysalis.Network.Tests;
 
 public sealed class X33UnionDispatchTests
 {
-    private delegate T Read<T>(ReadOnlyMemory<byte> data, out int consumed);
+    internal delegate T Read<T>(ReadOnlyMemory<byte> data, out int consumed);
 
     [Fact]
     public void NodeToClientAcceptDoesNotProbeByThrowing()
@@ -61,11 +61,11 @@ public sealed class X33UnionDispatchTests
     [InlineData("8201F7", typeof(BaseQuery), 3)]
     [InlineData("82018101", typeof(BaseQuery), 4)]
     [InlineData("82018220F6", typeof(BaseQuery), 5)]
-    [InlineData("82018220F5", typeof(GlobalQuery), 2)]
+    [InlineData("82018220F5", typeof(GlobalQuery), 5)]
     [InlineData("820182208220F6", typeof(BaseQuery), 7)]
-    [InlineData("820182208220F5", typeof(GlobalQuery), 2)]
-    [InlineData("82182200", typeof(GlobalQuery), 3)] // Pallas/Consensus: GetLedgerPeerSnapshot(All)
-    [InlineData("82008200820682182200", typeof(BaseQuery), 9)] // Conway block-query envelope
+    [InlineData("820182208220F5", typeof(GlobalQuery), 7)]
+    [InlineData("82182200", typeof(GlobalQuery), 4)] // Pallas/Consensus: GetLedgerPeerSnapshot(All)
+    [InlineData("82008200820682182200", typeof(BaseQuery), 10)] // Conway block-query envelope
     [InlineData("820680", typeof(UtxoByAddressQuery), 3)]
     [InlineData("820F80", typeof(UtxoByAddressQuery), 3)]
     [InlineData("82069FFF", typeof(UtxoByAddressQuery), 4)]
@@ -73,11 +73,22 @@ public sealed class X33UnionDispatchTests
     [InlineData("9F01FF", typeof(GlobalQuery), 3)]
     [InlineData("9F03F6FF", typeof(BaseQuery), 4)]
     [InlineData("9F03F7FF", typeof(BaseQuery), 4)] // Intentional: X9 omitted the break after undefined.
-    [InlineData("8301810100", typeof(BaseQuery), 4)]
+    [InlineData("8301810100", typeof(GlobalQuery), 5)]
     [InlineData("820681420102", typeof(UtxoByAddressQuery), 6)]
     [InlineData("820181420102", typeof(UtxoByAddressQuery), 6)]
     [InlineData("820F81825820000000000000000000000000000000000000000000000000000000000000000000", typeof(UtxoByTxInQuery), 39)]
     [InlineData("820F829F0000FF820001", typeof(UtxoByTxInQuery), 10)] // The next TxIn requires advancing past the first TxIn break.
+    [InlineData("820F8183000102", typeof(GlobalQuery), 7)] // Lazy TxIn lookalike with unread third element.
+    [InlineData("820F82830001810203", typeof(GlobalQuery), 9)] // Misaligned lazy TxIn lookalike.
+    [InlineData("820F818200F817", typeof(UtxoByTxInQuery), 7)] // Legacy raw TxIn with root simple-value F8 17.
+    [InlineData("820F81820081F817", typeof(UtxoByTxInQuery), 8)] // Legacy raw TxIn with nested simple-value F8 17.
+    [InlineData("8206820F818200F817", typeof(BaseQuery), 9)] // Wrapped legacy raw TxIn with F8 17.
+    [InlineData("82009F0082182200FF", typeof(GlobalQuery), 9)] // Synthetic R1: indefinite level inside complete frame does not rescan.
+    [InlineData("9F0082182200FF", typeof(BaseQuery), 7)] // Synthetic R1: definite child below unframed indefinite ancestor makes the one scan.
+    [InlineData("8200820082069F0681420102FF", typeof(BaseQuery), 13)] // Synthetic R2: Conway wrapper around indefinite UtxoByAddressQuery.
+    [InlineData("82209F0681420102FF", typeof(BaseQuery), 9)] // Synthetic R2: negative BaseQuery around indefinite UtxoByAddressQuery.
+    [InlineData("82209F0F81820000FF", typeof(BaseQuery), 9)] // Synthetic R2: negative BaseQuery around indefinite UtxoByTxInQuery.
+    [InlineData("82009F068000FF", typeof(GlobalQuery), 7)] // Synthetic R2 control: extra item inside indefinite inner array stays Global.
     public void LegacyQueryOverlapIsUnchanged(string hex, Type expectedType, int expectedConsumed)
     {
         byte[] bytes = Convert.FromHexString(hex);
@@ -88,30 +99,37 @@ public sealed class X33UnionDispatchTests
         Assert.Equal(bytes[0] == 0x9F, chosen.IsIndefinite);
     }
 
-    [Fact]
-    public void DeepQueryFailsAtAnOffsetWithinTheRoot()
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void DeepQueryFailsAtAnOffsetWithinTheRoot(bool complete)
     {
-        byte[] bytes = new byte[200_002];
-        for (int offset = 0; offset < bytes.Length - 2; offset += 2)
+        byte[] bytes = new byte[complete ? 200_002 : 400_000];
+        for (int offset = 0; offset < bytes.Length - (complete ? 2 : 0); offset += 2)
         {
             bytes[offset] = 0x82;
         }
-        bytes[^2] = 0x81;
-        bytes[^1] = 0x01;
+        if (complete)
+        {
+            bytes[^2] = 0x81;
+            bytes[^1] = 0x01;
+        }
         CborDecodeException error = Assert.Throws<CborDecodeException>(() => IQueryReq.Read(bytes, out _));
-        Assert.InRange(error.Offset, 1, bytes.Length - 3);
+        Assert.InRange(error.Offset, 1, bytes.Length - 2);
         Assert.Equal(0x82, bytes[error.Offset]);
         Assert.Contains("query nesting", error.Expected, StringComparison.Ordinal);
     }
 
     [Fact]
-    public void PeerSnapshotRemainsAPrefixReadUntilQr1()
+    public void PeerSnapshotPreservesArguments()
     {
-        GlobalQuery direct = Assert.IsType<GlobalQuery>(IQueryReq.Read(Convert.FromHexString("82182200")));
+        byte[] directBytes = Convert.FromHexString("82182200");
+        GlobalQuery direct = CheckRead<IQueryReq, GlobalQuery>(IQueryReq.Read, directBytes);
         Assert.Equal(34UL, direct.Query);
-        Assert.Equal(Convert.FromHexString("821822"), CborSerializer.Serialize(direct));
+        Assert.Equal(directBytes, CborSerializer.Serialize(direct));
 
-        BaseQuery block = Assert.IsType<BaseQuery>(IQueryReq.Read(Convert.FromHexString("82008200820682182200")));
+        byte[] blockBytes = Convert.FromHexString("82008200820682182200");
+        BaseQuery block = CheckRead<IQueryReq, BaseQuery>(IQueryReq.Read, blockBytes);
         Assert.Equal(0, block.Query);
         BaseQuery shelley = Assert.IsType<BaseQuery>(block.InnerQuery);
         Assert.Equal(0, shelley.Query);
@@ -119,7 +137,8 @@ public sealed class X33UnionDispatchTests
         Assert.Equal(6, conway.Query);
         GlobalQuery nested = Assert.IsType<GlobalQuery>(conway.InnerQuery);
         Assert.Equal(direct.Query, nested.Query);
-        Assert.Equal(direct.Raw.ToArray(), nested.Raw.ToArray());
+        Assert.Equal(directBytes, nested.Raw.ToArray());
+        Assert.Equal(blockBytes, CborSerializer.Serialize(block));
     }
 
     [Fact]
@@ -246,7 +265,7 @@ public sealed class X33UnionDispatchTests
         Assert.Equal(bytes, chosen.Raw.ToArray());
     }
 
-    private static TCase CheckRead<TUnion, TCase>(Read<TUnion> read, byte[] original)
+    internal static TCase CheckRead<TUnion, TCase>(Read<TUnion> read, byte[] original)
         where TUnion : ICborType
         where TCase : TUnion
     {
@@ -258,7 +277,7 @@ public sealed class X33UnionDispatchTests
         return selected;
     }
 
-    private static T ReadWithoutDecodeThrows<T>(Read<T> read, byte[] data, out int consumed)
+    internal static T ReadWithoutDecodeThrows<T>(Read<T> read, byte[] data, out int consumed)
     {
         _ = read(data, out _);
         int thread = Environment.CurrentManagedThreadId;
