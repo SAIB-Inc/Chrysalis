@@ -1,4 +1,5 @@
-"""Linux build export and PC seal import. Only the build guest queries client metadata; neither measures."""
+"""Linux build export and PC seal import. Only the build guest queries client metadata; noise prepares also run one uncounted micro rehearsal."""
+import copy
 import gzip
 import hashlib
 import json
@@ -6,12 +7,15 @@ import os
 from pathlib import Path, PurePosixPath
 from posixpath import normpath
 import re
+import shlex
 import shutil
 import subprocess
 import sys
 import tarfile
+import time
 from types import SimpleNamespace
 import zipfile
+import zlib
 
 import gate
 import gate_bundle as bundle
@@ -41,6 +45,8 @@ REQUEST_KEYS = {'kind', 'mode', 'baseline', 'candidate', 'sealKind', 'toolingCom
 
 PINNED_DEPS_SHA256 = 'b40ab590a233465de7bd0a81dc0f524b5447a8f6a35227dc467904fe70a41f20'
 PINNED_CAPSTONE_SHA256 = 'e85e1ac723954c77843a89899e31853f7f92b6ce9fbbcb095c198b392eee6abb'
+REHEARSAL_WALL_SECONDS = 45 * 60
+REHEARSAL_FILES = re.compile(r'rehearsal/(?:acceptance\.json|(?:pass|fail)/(?:results\.(?:tar\.gz|sha256)|verdict\.json)|fail/diagnostic-only\.json)')
 
 
 def validate_build_marker(marker):
@@ -206,6 +212,193 @@ def pack(root, output, members, generated, *, expected=None, entrypoints=()):
                     item.mode = 0o755
                 with path.open('rb') as contents:
                     archive.addfile(item, contents)
+
+
+def pack_session(base, dest, members, plan):
+    pack(base, dest, sorted(members), {'plan.json': bundle.gate_encoded(schedules.worker_plan(plan)),
+         'prelude.json': bundle.gate_encoded(prelude.recipe(plan))}, expected=plan['inputSha256'], entrypoints=ENTRYPOINTS)
+
+
+def rehearsal_plans(plan, *, gen0=None):
+    micros = [row['id'] for row in plan['rows'] if row.get('replay') == 'micro']
+    require(bool(micros) and (gen0 is None or type(gen0) is int and gen0 > 0), 'Invalid rehearsal plan or gen0 budget')
+    fail_row = 'time/micro-hashing' if 'time/micro-hashing' in micros else micros[0]
+    variants = {}
+    for case in ('fail', 'pass'):
+        variant = copy.deepcopy(plan)
+        for key in ('provider', 'region'):
+            variant.pop(key, None)
+        variant['probe']['limit'] = 1.0
+        if gen0 is not None:
+            variant['probe']['gen0BudgetBytes'] = gen0
+        for row in variant['rows']:
+            row.update(aPairs=1, bPairs=0, chargeSeconds=3 if case == 'fail' and row['id'] == fail_row else 300)
+        variants[case] = schedules.prepare(variant)
+    return variants
+
+
+def rehearse_case(case, base, members, plan, scratch):
+    import gate_azure as azure, gate_azure_guest as guest
+    scratch.mkdir(parents=True, exist_ok=False)
+    payload, archive = scratch / 'payload.tar.gz', scratch / 'results.tar.gz'
+    work, temp, note = (scratch / name for name in ('work', 'temp', 'note'))
+    for directory in (work, temp, note):
+        directory.mkdir(mode=0o700)
+    pack_session(base, payload, members, plan)
+    old_work, old_temp = guest.WORK, guest.TEMP
+    guest.WORK, guest.TEMP = work, temp
+    try:
+        limits = guest.plan_results_limits(payload)
+        guest._save_limits(limits)
+        with tarfile.open(payload) as stream:
+            stream.extractall(work, filter='data')
+        cd_line = '\ncd /opt/chrysalis\n'
+        require(guest.REMOTE_SESSION.count(cd_line) == 1, 'Unexpected remote session cd line')
+        script = temp / 'remote-session.sh'
+        script.write_text(guest.REMOTE_SESSION.replace(cd_line, f'\ncd {shlex.quote(str(work))}\n', 1))
+        try:
+            proc = subprocess.run(['/bin/bash', str(script)], cwd=work, capture_output=True,
+                                  env={'PATH': '/usr/bin:/bin', 'P2_MACHINE_CREATED_UNIX': str(int(time.time()))},
+                                  timeout=min(plan['measurementCutoffSeconds'], REHEARSAL_WALL_SECONDS))
+        except subprocess.TimeoutExpired as error:
+            raise ValueError(f'rehearsal {case} exceeded its wall limit') from error
+        partial = guest.archive_results(archive, False, limits=limits)
+    finally:
+        guest.WORK, guest.TEMP = old_work, old_temp
+    code, err = None, None
+    try:
+        code = azure.probe_result(archive, plan, note)
+    except (ValueError, RuntimeError, KeyError, tarfile.TarError, OSError, EOFError, zlib.error, AttributeError) as error:
+        err = str(error)
+    diag = note / 'diagnostic-only.json'
+    return dict(archive=archive, exitCode=proc.returncode, partial=partial, archiveSha256=bundle.sha(archive),
+                importerCode=code, importerError=err, diagnosticPath=diag if diag.is_file() else None,
+                probeRejected=(note / 'probe-rejected.json').is_file())
+
+
+def rehearsal_checks(case, archive, plan, outcome):
+    import gate_azure_guest as guest
+    worker, recipe = schedules.worker_plan(plan), prelude.recipe(plan)
+    sha_ok = archive.is_file() and outcome.get('archiveSha256') == bundle.sha(archive)
+    read_err = (ValueError, OSError, tarfile.TarError, EOFError, zlib.error)
+    try:
+        full = sha_ok and outcome.get('partial') is False and guest.check_results(archive, limits=results_limits(worker)) is False
+    except read_err:
+        full = False
+    data, log_text, applied_read, pop_ok, diag = {}, '', None, False, None
+    try:
+        with tarfile.open(archive, 'r:gz') as stream:
+            names = set(stream.getnames())
+            def read_member(member, parse, default=None):
+                try:
+                    handle = stream.extractfile(member) if member in names else None
+                    return default if handle is None else parse(handle.read())
+                except read_err:
+                    return default
+            data = {k: read_member(m, checked_json) for k, m in (
+                ('status', 'results/session-status.json'), ('summary', 'results/guest-summary.json'),
+                ('applied', 'prelude/applied.json'), ('members', 'results/members.json'), ('probe', 'results/probe.json'))}
+            log_text = read_member('results/session.log', lambda b: b.decode('utf-8', errors='replace'), '')
+            if case == 'pass':
+                try:
+                    applied_read = prelude.read(stream, plan)
+                    if isinstance(data.get('members'), list):
+                        prelude.verify_population(plan, data['members'], applied_read)
+                        pop_ok = True
+                except (*read_err, KeyError, TypeError):
+                    pass
+    except read_err:
+        pass
+    try:
+        diag = json_file(Path(outcome['diagnosticPath'])) if outcome.get('diagnosticPath') else None
+    except (ValueError, OSError):
+        diag = None
+    status, summary, applied, members_json = (data.get(k) for k in ('status', 'summary', 'applied', 'members'))
+    is_status, want_rc, lines = isinstance(status, dict), (0 if case == 'pass' else 2), log_text.splitlines()
+    p, s = timing.STAGE_PREFIX, timing.STAGE
+    fail_rows = [n for n, r in recipe['rows'].items() if r['chargeSeconds'] <= 3]
+    log_prelude = (bool(recipe['rows']) and all(any(l.startswith(f"{p}{s['prelude']}{n} {r} ") for l in lines)
+                   for n in recipe['rows'] for r in ('baseline', 'candidate')) if case == 'pass' else
+                   any(l.startswith(f"{p}{s['prelude']}{n} {r} ") for n in fail_rows for r in ('baseline', 'candidate') for l in lines))
+    checks = dict(
+        archive_full=full, status_present=is_status, probe_kept=is_status and status.get('probe') == 'kept',
+        exit_code=is_status and status.get('exitCode') == want_rc and outcome.get('exitCode') == want_rc,
+        log_nonempty=bool(log_text.strip()), log_start=any(l.startswith(p + s['start']) for l in lines),
+        log_probe=any(l.startswith(p + s['probe'] + 'kept cv ') for l in lines), log_prelude=log_prelude,
+        log_end=any(l.startswith(f"{p}{s['end']}{want_rc} seconds ") for l in lines),
+        summary_fields=(isinstance(summary, dict) and all(type(summary.get(k)) is int and summary[k] >= 0 for k in guest.LOG_COUNTS)
+                        and summary.get('logsIncluded', 0) >= 1 and all(type(summary.get(k)) is int and summary[k] > 0
+                        for k in ('expandedBytes', 'maxCompressedBytes', 'maxExpandedBytes'))),
+    )
+    if case == 'fail':
+        checks.update(fail_reason=is_status and status.get('reason') == prelude.CHARGE_EXCEEDED,
+                      log_stopped=(p + s['stopped'] + prelude.CHARGE_EXCEEDED) in lines,
+                      importer_inconclusive=(outcome.get('importerCode') is None and 'INCONCLUSIVE' in (outcome.get('importerError') or '')
+                                             and isinstance(diag, dict) and diag.get('verdict') == 'INCONCLUSIVE'))
+    else:
+        checks.update(completed=is_status and status.get('completedAllDeclaredRounds') is True,
+                      applied_rows=isinstance(applied, dict) and set(applied) == set(recipe['rows']),
+                      members_count=isinstance(members_json, list) and len(members_json) == len(worker['members']),
+                      importer_ok=outcome.get('importerCode') == 0 and outcome.get('importerError') is None,
+                      prelude_read=applied_read is not None, prelude_population=pop_ok)
+    artefacts = [n for n, ok in (('archive', full), ('sha256', sha_ok), ('status', is_status), ('log', bool(log_text.strip())),
+                 ('summary', isinstance(summary, dict)), ('applied', isinstance(applied, dict)),
+                 ('members', isinstance(members_json, list)), ('diagnostic', isinstance(diag, dict))) if ok]
+    return dict(checks=checks, status=status or {}, artefacts=artefacts, probe=data.get('probe') or {})
+
+
+def rehearse(base, members, plan, scratch, dest):
+    gen0_sealed = gen0_used = plan['probe']['gen0BudgetBytes']
+    gen0_overridden, plans = False, rehearsal_plans(plan)
+    def verdict_line(case, ok, reason, artefacts=()):
+        line = (f"rehearsal case={case} verdict={'PASS' if ok else 'FAIL'} reason={reason} "
+                f"artefacts={','.join(artefacts) or 'none'} gen0={gen0_used} overridden={str(gen0_overridden).lower()} counted=false")
+        print(line, flush=True)
+        return line
+    def run_case(case, tag):
+        try:
+            return rehearse_case(case, base, members, plans[case], scratch / tag)
+        except Exception as error:
+            verdict_line(case, False, 'wall-limit' if isinstance(error, ValueError) and 'exceeded its wall limit' in str(error) else f'error-{type(error).__name__}')
+            raise
+    outcome = run_case('fail', 'fail-1')
+    info = rehearsal_checks('fail', outcome['archive'], plans['fail'], outcome)
+    probe = info.get('probe') or {}
+    obs = (probe.get('gen0BudgetBytes') or {}).get('observed')
+    if (probe.get('decision') == 'rejected' and probe.get('reasons') == ['gen0-budget-mismatch']
+            and isinstance(obs, list) and len(obs) == 1 and type(obs[0]) is int and obs[0] > 0):
+        if not (outcome.get('importerCode') == 5 and outcome.get('probeRejected') is True):
+            verdict_line('fail', False, 'probe-importer-mismatch', info['artefacts'])
+            raise ValueError('Rehearsal rejected probe did not pass importer check')
+        gen0_used, gen0_overridden = obs[0], True
+        plans = rehearsal_plans(plan, gen0=gen0_used)
+        outcome = run_case('fail', 'fail-2')
+        info = rehearsal_checks('fail', outcome['archive'], plans['fail'], outcome)
+    meta = dict(counted=False, platform='pc', gen0Sealed=gen0_sealed, gen0Used=gen0_used, gen0Overridden=gen0_overridden)
+    def finalize(case, cur, cur_info):
+        failed = [k for k, ok in cur_info['checks'].items() if not ok]
+        reason = ('failed:' + ','.join(failed)) if failed else ('prelude-charge-exceeded' if case == 'fail' else 'ok')
+        line = verdict_line(case, not failed, reason, cur_info['artefacts'])
+        require(not failed, f'Rehearsal failed ({case}): {", ".join(failed)}')
+        st = {k: cur_info['status'][k] for k in ('completedAllDeclaredRounds', 'exitCode', 'probe', 'dry') if k in cur_info['status']}
+        if cur_info['status'].get('reason') in (None, prelude.CHARGE_EXCEEDED):
+            st['reason'] = cur_info['status']['reason']
+        return cur, dict(case=case, verdict='PASS', reasonCode=reason, exitCode=cur['exitCode'], status=st, archiveSha256=cur['archiveSha256'],
+                         importer=dict(exitCode=cur['importerCode'], inconclusive=bool(cur['importerError'])), artefacts=cur_info['artefacts'],
+                         checks=cur_info['checks'], summaryLine=line, **meta)
+    results = {'fail': finalize('fail', outcome, info)}
+    passed = run_case('pass', 'pass')
+    results['pass'] = finalize('pass', passed, rehearsal_checks('pass', passed['archive'], plans['pass'], passed))
+    for case, (cur, verdict) in results.items():
+        case_dir = dest / case
+        case_dir.mkdir(parents=True, exist_ok=False)
+        shutil.copy2(cur['archive'], case_dir / 'results.tar.gz')
+        (case_dir / 'results.sha256').write_text(cur['archiveSha256'] + '\n')
+        session.save(case_dir / 'verdict.json', verdict)
+        if case == 'fail':
+            shutil.copy2(cur['diagnosticPath'], case_dir / 'diagnostic-only.json')
+    session.save(dest / 'acceptance.json', dict(verdict='PASS', archives={c: results[c][1]['archiveSha256'] for c in ('fail', 'pass')},
+                 lines=[results[c][1]['summaryLine'] for c in ('fail', 'pass')], **meta))
 
 
 def guest_files():
@@ -399,10 +592,9 @@ def build(args, output, local, *, marker, phase):
                    *(name for folder in roots for name in closures[folder])}
         plan['inputSha256'] = {name: bundle.sha(base / name) for name in sorted(members)}
         schedules.prepare(plan)
-        pack(base, output / f'input/session-{number}.tar.gz', sorted(members), {
-            'plan.json': bundle.gate_encoded(schedules.worker_plan(plan)),
-            'prelude.json': bundle.gate_encoded(prelude.recipe(plan)),
-        }, expected=plan['inputSha256'], entrypoints=ENTRYPOINTS)
+        pack_session(base, output / f'input/session-{number}.tar.gz', members, plan)
+        if seal['noiseRecords'] and any(row.get('replay') == 'micro' for row in plan['rows']):
+            rehearse(base, members, plan, root / f'rehearsal-{number}', output / 'rehearsal')
         seal['timePlans'].append(plan)
     session.save(output / 'plan.json', seal)
     session.save(output / 'prepared.json', dict(schemaVersion=1, buildMarker=marker, manifests=manifests,
@@ -744,9 +936,10 @@ def import_prepared(source, *, fetched, settings, local, check_cli, check_budget
     require(set(expected) >= {'plan.json', 'build/sides.json', *(f'{MIRROR_DIR}/{prefix}.json' for prefix in MIRRORS),
                               *(f'input/azure/{name}' for name in host_files())} and
             all(re.fullmatch(r'(plan\.json|build/sides\.json|suite(?:-expected)?\.json|input/(?:azure/[^/]+|mirrors/(?:dotnet|python)\.json|session-[0-9]+\.tar\.gz|suite\.tar\.gz))', name)
-                for name in expected), 'Unrecognized or missing prepared file')
+                or REHEARSAL_FILES.fullmatch(name) for name in expected), 'Unrecognized or missing prepared file')
     actual.pop('prepared.json')
     require(actual == expected, 'Prepared file missing, changed or extra')
+    expected = {name: value for name, value in expected.items() if not name.startswith('rehearsal/')}
     tree = receipt['request']['toolingTree']
     manifests, payload = inputs(local, mirror_in=source, tree=tree)
     require(manifests == prepared['manifests'], 'Prepared input manifests differ from PC inputs')
