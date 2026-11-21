@@ -124,7 +124,7 @@ public static class Evaluator
             : plutusVersion == 3 && protocolVersion == Availability.VanRossem
                 ? CostModel.LatestV3
                 : throw new ArgumentNullException(nameof(costModel), "A cost model is required except for Plutus V3 at protocol version 11.");
-        Term<DeBruijn> term = FlatDecoder.DecodeProgramCore(scriptBytes, Availability.Builtins(plutusVersion, protocolVersion), out Types.Version version);
+        Term<DeBruijn> term = FlatDecoder.DecodeProgramCore(scriptBytes, Availability.Builtins(plutusVersion, protocolVersion), Availability.DecodeLimits(protocolVersion), out Types.Version version);
         if (!Availability.HasProgramVersion(plutusVersion, protocolVersion, version))
         {
             throw new EvaluationException($"Plutus Core {version} is not available for Plutus V{plutusVersion} at protocol version {protocolVersion}.");

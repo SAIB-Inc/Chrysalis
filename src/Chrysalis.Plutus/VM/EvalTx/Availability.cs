@@ -66,4 +66,7 @@ internal static class Availability
         : pv < 9 ? Variant.A : pv < VanRossem ? Variant.B : Variant.D;
 
     internal static bool CaseOnConstants(int pv) => pv >= VanRossem;
+
+    // PlutusLedgerApi/Common/Versions.hs:389-399: maxBoundsByPV applies from vanRossem (PV 11).
+    internal static bool DecodeLimits(int pv) => pv >= VanRossem;
 }

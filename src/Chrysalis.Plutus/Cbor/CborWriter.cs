@@ -82,23 +82,24 @@ public static class CborWriter
         // (IsDefinite=false, the default), use indefinite for non-empty fields (matching Aiken's wrap_with_constr).
         bool writeDefinite = constr.IsDefinite || !useIndefinite;
 
-        long tag = (long)constr.Tag;
+        // PlutusCore/Data.hs:149-160; cborg Write.hs:150-177,678-689
+        BigInteger tag = constr.Tag;
 
-        if (tag is >= 0 and <= 6)
+        if (tag >= 0 && tag <= 6)
         {
-            WriteTag(buffer, (ulong)(121 + tag));
+            WriteTag(buffer, 121UL + (ulong)tag);
             WriteConstrFields(buffer, constr.Fields, writeDefinite, useIndefinite);
         }
-        else if (tag is >= 7 and <= 127)
+        else if (tag >= 7 && tag <= 127)
         {
-            WriteTag(buffer, (ulong)(1280 + tag - 7));
+            WriteTag(buffer, 1280UL + (ulong)tag - 7UL);
             WriteConstrFields(buffer, constr.Fields, writeDefinite, useIndefinite);
         }
         else
         {
             WriteTag(buffer, 102);
             WriteUnsigned(buffer, 2, 4);
-            WriteUnsigned(buffer, (ulong)tag, 0);
+            WriteInteger(buffer, tag, chunked: false);
             WriteConstrFields(buffer, constr.Fields, writeDefinite, useIndefinite);
         }
     }
@@ -136,34 +137,26 @@ public static class CborWriter
         WriteSingleByte(buffer, 0xFF);
     }
 
-    private static void WriteInteger(ArrayBufferWriter<byte> buffer, BigInteger value)
+    // Data integers chunk magnitudes over 64 B; a tag-102 index uses cborg's encodeInteger (one piece).
+    private static void WriteInteger(ArrayBufferWriter<byte> buffer, BigInteger value, bool chunked = true)
     {
-        if (value >= 0)
+        bool negative = value < 0;
+        BigInteger magnitude = negative ? -1 - value : value;
+        if (magnitude <= ulong.MaxValue)
         {
-            if (value <= ulong.MaxValue)
-            {
-                WriteUnsigned(buffer, (ulong)value, 0);
-            }
-            else
-            {
-                WriteTag(buffer, 2);
-                byte[] bytes = value.ToByteArray(isUnsigned: true, isBigEndian: true);
-                WritePlutusByteString(buffer, bytes);
-            }
+            WriteUnsigned(buffer, (ulong)magnitude, negative ? 1 : 0);
+            return;
+        }
+
+        WriteTag(buffer, negative ? 3UL : 2UL);
+        byte[] bytes = magnitude.ToByteArray(isUnsigned: true, isBigEndian: true);
+        if (chunked)
+        {
+            WritePlutusByteString(buffer, bytes);
         }
         else
         {
-            BigInteger encoded = -1 - value;
-            if (encoded <= ulong.MaxValue)
-            {
-                WriteUnsigned(buffer, (ulong)encoded, 1);
-            }
-            else
-            {
-                WriteTag(buffer, 3);
-                byte[] bytes = encoded.ToByteArray(isUnsigned: true, isBigEndian: true);
-                WritePlutusByteString(buffer, bytes);
-            }
+            WriteDefiniteByteString(buffer, bytes);
         }
     }
 

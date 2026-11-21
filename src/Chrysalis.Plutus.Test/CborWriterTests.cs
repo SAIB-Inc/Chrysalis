@@ -1,4 +1,7 @@
+using System.Numerics;
 using Chrysalis.Plutus.Cbor;
+using Chrysalis.Plutus.Flat;
+using Chrysalis.Plutus.VM.EvalTx;
 using Chrysalis.Plutus.Types;
 using Xunit;
 
@@ -206,5 +209,49 @@ public class CborWriterTests
         PlutusData data = new PlutusDataConstr(0, [new PlutusDataInteger(42)]);
         byte[] result = CborWriter.EncodePlutusData(data);
         Assert.Equal("D8799F182AFF", Hex(result));
+    }
+
+    public static TheoryData<string, byte[]?, BigInteger?, byte[]> TagAndIntegerCases()
+    {
+        TheoryData<string, byte[]?, BigInteger?, byte[]> cases = [];
+        int fixtureCount = 0;
+        foreach (NodeBudgetTests.SerialiseCase entry in NodeBudgetTests.Fixture.Serialise)
+        {
+            if (entry.Id.StartsWith("D-ser-constr-102-", StringComparison.Ordinal)
+                || entry.Id == "D-ser-constr-121-nonminimal-tag-head"
+                || entry.Id.StartsWith("SER-constr-tag", StringComparison.Ordinal)
+                || entry.Id.StartsWith("SER-int-", StringComparison.Ordinal))
+            {
+                cases.Add(entry.Id, entry.Flat, null, entry.Bytes);
+                fixtureCount++;
+            }
+        }
+        Assert.Equal(26, fixtureCount);
+        // Source rows from PlutusCore/Data.hs:149-160 and cborg Write.hs:150-177,678-689.
+        cases.Add("source:Constr(-1)[]", null, -BigInteger.One, Convert.FromHexString("d866822080"));
+        cases.Add("source:Constr(2^64)[]", null, BigInteger.One << 64, Convert.FromHexString("d86682c24901000000000000000080"));
+        cases.Add("source:Constr(2^512)[]", null, BigInteger.One << 512, Convert.FromHexString("d86682c2584101" + new string('0', 128) + "80"));
+        return cases;
+    }
+
+    [Theory]
+    [MemberData(nameof(TagAndIntegerCases))]
+    public void ConstrTagsAndIntegersAreWrittenAsTheNodeWritesThem(string id, byte[]? flat, BigInteger? sourceTag, byte[] expected)
+    {
+        _ = id;
+        byte[] actual;
+        if (flat is not null)
+        {
+            Term<DeBruijn> applied = new ApplyTerm<DeBruijn>(
+                FlatDecoder.DecodeProgram(flat).Term,
+                new ConstTerm<DeBruijn>(new DataConstant(new PlutusDataConstr(0, []))));
+            (Term<DeBruijn> result, _) = Evaluator.EvaluateTerm(applied);
+            actual = Assert.IsType<ByteStringConstant>(Assert.IsType<ConstTerm<DeBruijn>>(result).Value).Value.ToArray();
+        }
+        else
+        {
+            actual = CborWriter.EncodePlutusData(new PlutusDataConstr(sourceTag!.Value, []));
+        }
+        Assert.Equal(expected, actual);
     }
 }
