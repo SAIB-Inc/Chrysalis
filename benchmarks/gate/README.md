@@ -463,8 +463,8 @@ The Mac's disposable Linux/amd64 guests restore from the local package feed,
 then build every arm with `--no-restore`. The Mac host verifies the result and
 publishes `prepared/`, `build-files.json`, and `completion.json` together only
 after the guests and their staging have been cleaned up.
-For selected micro rows, the build guest runs ReplayClient only to list the
-benchmark methods for each arm (`micro-probes`); it runs no measurements. The Mac
+For selected micro rows, the build guest lists benchmark methods for each arm
+(`micro-probes`) and takes no counted measurements; noise prepares also run one uncounted micro rehearsal. The Mac
 host and PC importer do not run the client. The Mac's `data/gate-build.json`
 names the public inputs only. `linuxDotnetRoot` and `flyPythonRoot` each contain a `sha256.json`
 mapping relative paths to SHA-256 digests. `pinnedBaseline` and `corporaRoot`
@@ -496,7 +496,10 @@ common micro count from the returned raw evidence; repeats use the same values.
 Set `orderingProof` in the request for the first seal of a changed worker/client
 recipe. A `sealKind: "noise"` request uses a plan with `"noiseRecords": true`
 and builds baseline-only sessions for missing machine-class records; the merged
-records are `time/noise-records.json`.
+records are `time/noise-records.json`. Noise prepares rehearse each micro session
+(pass and 3 s fail cases, `counted: false`, platform `pc`, never imported or
+sealed): `rehearsal/` ships in `prepared/` (no later step compares two prepares)
+and stays out of the seal.
 
 Batch plans name `"areas"` from `gated.json`. `gate.py carry LEG1_DIR` lists
 outside rows to include in leg 2, distinguishing movement from unresolved data.

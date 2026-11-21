@@ -1701,6 +1701,60 @@ def test_az2f4_noise_seal_full_size_results_archive_and_limits(tmp_path, monkeyp
     assert guest.results_limits(runaway) == (guest.MAX_RESULTS_COMPRESSED, guest.MAX_RESULTS_EXPANDED)
 
 
+def test_rehearsal_checks_rejects_run3_and_accepts_mr1_archives(tmp_path):
+    import gate_prelude as prelude, gate_prepare as prepare
+    from test_gate_az2 import rehearsal_fixture
+    base, members, seed_plan = rehearsal_fixture(tmp_path / 'fix')
+    plans = prepare.rehearsal_plans(seed_plan)
+    run3, run3_tar, run3_diag = tmp_path / 'run3', tmp_path / 'run3.tar.gz', tmp_path / 'run3-diag.json'
+    _build_noise_s0_tree(run3)
+    (run3 / 'session.log').write_text('')
+    dump(run3 / 'results/session-status.json', {'completedAllDeclaredRounds': False, 'exitCode': 2, 'reason': prelude.CHARGE_EXCEEDED, 'probe': 'kept'})
+    dump(run3_diag, {'diagnosticOnly': True, 'verdict': 'INCONCLUSIVE'})
+    with tarfile.open(run3_tar, 'w:gz') as stream:
+        for arc, src in (('results/session-status.json', run3 / 'results/session-status.json'), ('results/session.log', run3 / 'session.log')):
+            stream.add(src, arcname=arc, recursive=False)
+    bad = prepare.rehearsal_checks('fail', run3_tar, plans['fail'], dict(exitCode=2, partial=False, archiveSha256=bundle.sha(run3_tar),
+                                   importerCode=None, importerError='DIAGNOSTIC ONLY / INCONCLUSIVE', diagnosticPath=run3_diag))['checks']
+    assert {k for k, v in bad.items() if not v} == {'log_nonempty', 'log_start', 'log_probe', 'log_prelude', 'log_end', 'log_stopped', 'summary_fields'}
+    outcomes = {c: prepare.rehearse_case(c, base, members, plans[c], tmp_path / f'run-{c}') for c in ('fail', 'pass')}
+    for c, out in outcomes.items():
+        checks = prepare.rehearsal_checks(c, out['archive'], plans[c], out)['checks']
+        assert all(checks.values()), (c, {k: v for k, v in checks.items() if not v})
+    def check_mut(idx, case, mut=None, drop=None, **ov):
+        arc = outcomes[case]['archive']
+        if mut or drop:
+            arc = tmp_path / f'mut-{idx}.tar.gz'
+            with tarfile.open(outcomes[case]['archive'], 'r:gz') as zin, tarfile.open(arc, 'w:gz') as zout:
+                for item in (it for it in zin if it.name != drop):
+                    raw = zin.extractfile(item).read()
+                    if mut and item.name == mut[0]:
+                        obj = json.loads(raw)
+                        mut[1](obj)
+                        raw = (json.dumps(obj, separators=(',', ':')) + '\n').encode('ascii')
+                    ti = tarfile.TarInfo(item.name)
+                    ti.size = len(raw)
+                    zout.addfile(ti, io.BytesIO(raw))
+        return prepare.rehearsal_checks(case, arc, plans[case], {**outcomes[case], 'archive': arc, 'archiveSha256': bundle.sha(arc), **ov})['checks']
+    cal_arc = next(n for n in tarfile.open(outcomes['pass']['archive']).getnames() if n.endswith('-calibration.json'))
+    for i, (case, mut, drop, ov, expect) in enumerate((
+        ('fail', None, None, {'partial': True}, 'archive_full'), ('fail', None, None, {'archiveSha256': '0' * 64}, 'archive_full'),
+        ('fail', None, 'results/session-status.json', {}, 'status_present'),
+        ('fail', ('results/session-status.json', lambda d: d.update(probe='rejected')), None, {}, 'probe_kept'),
+        ('fail', ('results/session-status.json', lambda d: d.update(exitCode=1)), None, {}, 'exit_code'),
+        ('fail', None, None, {'exitCode': 1}, 'exit_code'),
+        ('fail', ('results/session-status.json', lambda d: d.update(reason='other')), None, {}, 'fail_reason'),
+        ('fail', None, None, {'diagnosticPath': None}, 'importer_inconclusive'),
+        ('pass', ('results/session-status.json', lambda d: d.update(completedAllDeclaredRounds=False)), None, {}, 'completed'),
+        ('pass', ('prelude/applied.json', lambda d: d.clear()), None, {}, 'applied_rows'),
+        ('pass', ('results/members.json', lambda d: d.pop()), None, {}, 'members_count'),
+        ('pass', None, None, {'importerCode': 5}, 'importer_ok'),
+        ('pass', ('results/members.json', lambda d: d[0]['data'].update(invocationsPerPass=d[0]['data']['invocationsPerPass'] + 1)), None, {}, 'prelude_population'),
+        ('pass', (cal_arc, lambda d: d['data']['rows'][0].update(nsPerBlock=d['data']['rows'][0]['nsPerBlock'] * 10)), None, {}, 'prelude_read'),
+    )):
+        assert not check_mut(i, case, mut, drop, **ov)[expect], (case, expect)
+
+
 def test_az2f4_refusal_reasons_and_clean_status_preservation(tmp_path, monkeypatch):
     work = tmp_path / 'work'
     (work / 'results').mkdir(parents=True)

@@ -329,6 +329,8 @@ def test_worker_prelude_runs_only_after_kept_probe(tmp_path, monkeypatch, capsys
     monkeypatch.setenv('P2_MACHINE_CREATED_UNIX', str(int(timing.time.time())))
     monkeypatch.setattr(timing.session, 'member', fake)
     monkeypatch.setattr(timing, 'probe_result', lambda records, rule: dict(decision='rejected' if breaking == 'reject' else 'kept', cv=.01, lag1=.02))
+    if breaking == 'reject':
+        monkeypatch.setattr(timing.session, 'host_fingerprint', lambda: {'processorCount': 3, 'model name': None})
     flushes = []
     monkeypatch.setattr(timing, 'print', lambda *args, **options: (flushes.append(options.get('flush')), print(*args, **options)), raising=False)
     ok = timing.run(tmp_path, worker, tmp_path / 'results', prelude=recipe)
@@ -336,7 +338,7 @@ def test_worker_prelude_runs_only_after_kept_probe(tmp_path, monkeypatch, capsys
     lines = out.splitlines()
     assert flushes == [True] * len(lines)
     assert lines[0] == f"gate: start provider fly region iad cutoff {worker['measurementCutoffSeconds']}"
-    assert lines[1].startswith('gate: host processors ')
+    assert lines[1] == 'gate: host processors 3 model None' if breaking == 'reject' else lines[1].startswith('gate: host processors ')
     assert lines[2] == f"gate: probe {'rejected' if breaking == 'reject' else 'kept'} cv 0.0100 lag1 0.0200"
     assert lines[-1].startswith(f'gate: end exitCode {0 if ok else 2} seconds ') and ('Traceback' in err) == (not ok)
     calibration = f'calibration seconds {7 if breaking == "over-calibration" else 1}.0000 invocations 10 allowance 6'
@@ -559,6 +561,12 @@ def fake_container(root, monkeypatch, *, mode='release', kind='controls', noise=
 
     monkeypatch.setattr(gate, 'stage_rows', stages)
     monkeypatch.setattr(prepare, 'micro_probes', lambda side, selector: ['DemoBench.Method'])
+    if noise and hasattr(prepare, 'rehearse_case'):
+        monkeypatch.setattr(prepare, 'rehearse_case', stub_rehearsal_case)
+        monkeypatch.setattr(prepare, 'rehearsal_checks', lambda c, a, p, o: dict(
+            checks={'ok': o['exitCode'] == (0 if c == 'pass' else 2)},
+            status={'exitCode': o['exitCode'], 'probe': 'kept', 'completedAllDeclaredRounds': c == 'pass', 'reason': None if c == 'pass' else prelude.CHARGE_EXCEEDED},
+            artefacts=['archive', 'sha256', 'status']))
     if only_bytes:
         replay = dict(id='replay/offline/steady', replay='offline', window='steady')
         corpus = gate.corpus_identity(replay, local)
@@ -844,6 +852,9 @@ def test_pc_handoff_never_measures_and_checks_live_budget(tmp_path, azure, monke
     assert bool(seal['timePlans']) == (not only_bytes)
     assert seal['payloadManifests']['dotnet/dotnet'] == bundle.sha(Path(tmp_path / folders[0].parent.name / 'runtime' / 'dotnet'))
     if noise:
+        assert {'rehearsal/acceptance.json', 'rehearsal/fail/diagnostic-only.json',
+                *(f'rehearsal/{c}/{n}' for c in ('fail', 'pass') for n in ('results.tar.gz', 'results.sha256', 'verdict.json'))} <= set(manifest['files'])
+        assert not any(n.startswith('rehearsal/') for n in seal['files']) and not (output / 'rehearsal').exists()
         for number, plan in enumerate(seal['timePlans']):
             rows = [dict(id=row['id'], band=.01, machine=azure['machine'], design='long', sourceSeal=bundle.sha(output / 'seal.json'),
                          baseline=row['sides']['baseline'], pairs=row['aPairs'], counts=plan['counts'], corpusId=row['corpusId']) for row in plan['rows']]
@@ -1613,3 +1624,165 @@ def test_az2f4_prepare_refuses_oversize_results_plan_at_seal_time(tmp_path, azur
     schedule.prepare(sealed['timePlans'][0])
     with pytest.raises(ValueError, match='results cap exceeds hard ceiling'):
         bundle.checked_azure_go(directory, gate.write_seal(directory, sealed))
+
+
+def rehearsal_fixture(root):
+    seed, base = root / 'seed', root / 'base'
+    seed.mkdir(parents=True)
+    plan = timed(seed, ordering=False, a_pairs=1, b_pairs=0, noise=True)
+    for rel, body in (('python/bin/python3.12', f'#!/bin/bash\nunset PYTHONHOME LD_LIBRARY_PATH\nexec {sys.executable!r} "$@"\n'),
+                      ('dotnet/dotnet', '#!/bin/bash\nexit 0\n')):
+        (base / rel).parent.mkdir(parents=True, exist_ok=True)
+        (base / rel).write_text(body)
+        (base / rel).chmod(0o755)
+    (base / 'scripts').mkdir()
+    (base / 'scripts/gate_bundle.py').write_text(f"""import json, os, sys, time
+from pathlib import Path
+sys.path.insert(0, {str(Path(prepare.__file__).resolve().parent)!r})
+import gate_time as timing
+from test_gate_az2 import observation
+cmd, root = sys.argv[1], Path(sys.argv[2])
+if cmd == 'verify': sys.exit(0)
+if os.environ.get('REHEARSAL_STUB_SLEEP'): time.sleep(5)
+plan, rec = json.loads((root / 'plan.json').read_text()), json.loads((root / 'prelude.json').read_text())
+mode, exp = os.environ.get('REHEARSAL_MODE', ''), plan['probe']['gen0BudgetBytes']
+gen0 = 8388608 if mode in ('gen0', 'bad-cv', 'mismatch') and exp != 8388608 else ((4194304 if exp != 4194304 else 2097152) if mode == 'reject-twice' else exp)
+def fake(spec, job, dest, **kw):
+    r = observation(spec, job, job['counts'])
+    if dest.parent.name == 'probe':
+        r['data']['rows'][0]['nsPerBlock'] += 500_000 if mode == 'bad-cv' else 1
+        r['data']['processSettings'] = {{'gcConfiguration': {{'GCGen0MaxBudget': gen0}}}}
+    return r
+timing.session.member, timing.session.host_fingerprint = fake, lambda: {{'processorCount': 3, 'model name': None}}
+for spec in plan['builds'].values():
+    (root / spec['client']).parent.mkdir(parents=True, exist_ok=True)
+    (root / spec['client']).write_text('fixture bytes')
+ok = timing.run(root, plan, root / 'results', prelude=rec)
+if mode == 'mismatch' or mode == 'tamper-pass' and all(r['chargeSeconds'] == 300 for r in rec['rows'].values()):
+    p = root / 'results/probe.json'
+    p.write_text(json.dumps(dict(json.loads(p.read_text()), cv=0.99)))
+sys.exit(0 if ok else 2)
+""")
+    members = ['python/bin/python3.12', 'dotnet/dotnet', 'scripts/gate_bundle.py']
+    plan['inputSha256'] = {m: bundle.sha(base / m) for m in members}
+    return base, members, schedule.prepare(plan)
+
+
+def stub_rehearsal_case(case, base, members, plan, scratch):
+    scratch.mkdir(parents=True, exist_ok=False)
+    archive, diag = scratch / 'results.tar.gz', scratch / 'diagnostic-only.json'
+    archive.write_bytes(b'stub-' + case.encode())
+    if case == 'fail':
+        session.save(diag, dict(diagnosticOnly=True, verdict='INCONCLUSIVE'))
+    return dict(archive=archive, exitCode=0 if case == 'pass' else 2, partial=False, archiveSha256=bundle.sha(archive),
+                importerCode=0 if case == 'pass' else None, importerError=None if case == 'pass' else 'DIAGNOSTIC ONLY / INCONCLUSIVE',
+                diagnosticPath=diag if case == 'fail' else None, probeRejected=False)
+
+
+def test_rehearsal_plans_strip_azure_relax_probe_and_keep_input_members(tmp_path, azure, monkeypatch):
+    config = prepare.azure_config(json.loads((gate.GATE / 'gated.json').read_text()))
+    audit = json.loads((gate.REPO / 'benchmarks/Chrysalis.Benchmarks/audit-allocations.json').read_text())
+    selected = gate.select_rows(SimpleNamespace(mode='release', plan=None, only=None), config, audit,
+                                plan_entries=json.loads((gate.GATE / 'plans/noise-records.json').read_text()))
+    micro_plan = schedule.prepare(prepare.time_plans(dict(gated=config, mode='release', noiseRecords=True, sessionPerRow=False, orderingProof=False,
+                                  rows=[dict(item, sides=dict(baseline=side(), candidate=side())) for item in selected]))[1])
+    plans6 = prepare.rehearsal_plans(micro_plan, gen0=8_388_608)
+    for variant in plans6.values():
+        w = schedule.worker_plan(variant)
+        assert 'provider' not in w and 'region' not in w and w['probe']['limit'] == 1.0 and w['probe']['gen0BudgetBytes'] == 8_388_608
+        assert w['measurementCutoffSeconds'] == micro_plan['measurementCutoffSeconds'] == 5764 and len(w['members']) == 12
+        assert all(r['aPairs'] == 1 and r['bPairs'] == 0 for r in variant['rows'])
+    assert {r['id']: r['chargeSeconds'] for r in plans6['pass']['rows']} == {r['id']: 300 for r in micro_plan['rows']}
+    assert {r['id']: r['chargeSeconds'] for r in plans6['fail']['rows']}['time/micro-hashing'] == 3
+    _, build = fake_container(tmp_path / 'project', monkeypatch, noise=True, kind='noise')
+    prepared = build(tmp_path / 'prepared')
+    plan = prepare.json_file(prepared / 'plan.json')['timePlans'][1]
+    meta = {'plan.json', 'prelude.json', 'bundle-manifest.json'}
+    base_members = {k: v for k, v in prepare.archive_members(prepared / 'input/session-1.tar.gz').items() if k not in meta}
+    with tarfile.open(prepared / 'input/session-1.tar.gz') as stream:
+        stream.extractall(tmp_path / 'unpack', filter='data')
+    for case, variant in prepare.rehearsal_plans(plan).items():
+        prepare.pack_session(tmp_path / 'unpack', tmp_path / f'{case}.tar.gz', sorted(base_members), variant)
+        assert {k: v for k, v in prepare.archive_members(tmp_path / f'{case}.tar.gz').items() if k not in meta} == base_members
+
+
+def test_import_admits_rehearsal_and_excludes_from_seal(tmp_path, azure, monkeypatch):
+    fetched, folder = tmp_path / 'mbp-results', fetched_prepared(tmp_path / 'mbp-results', 'a')
+    _, build = fake_container(tmp_path / 'proj', monkeypatch, noise=False, kind='controls')
+    build(folder)
+    settings, local = completion_settings(tmp_path, monkeypatch)
+    monkeypatch.setattr(bundle, 'checked_azure_local', lambda *_: None, raising=False)
+    manifest = prepare.json_file(folder / 'prepared.json')
+    for rel, allowed in (('rehearsal/acceptance.json', True), ('rehearsal/extra.json', False), ('rehearsal/pass/diagnostic-only.json', False)):
+        path = folder / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text('{"verdict":"PASS","counted":false}\n')
+        session.save(folder / 'prepared.json', dict(manifest, files=dict(manifest['files'], **{rel: bundle.sha(path)})))
+        completion_receipt(folder, request=build.request)
+        if allowed:
+            out = prepare.import_prepared(folder, fetched=fetched, settings=settings, local=local, check_cli=lambda *_: '2.3.4', check_budget=lambda *_: None)
+            assert rel not in gate.read_seal(out)['files'] and not (out / 'rehearsal').exists()
+        else:
+            with pytest.raises(ValueError, match='Unrecognized or missing prepared file'):
+                prepare.import_prepared(folder, fetched=fetched, settings=settings, local=local, check_cli=lambda *_: '2.3.4', check_budget=lambda *_: None)
+        path.unlink()
+
+
+def test_rehearse_case_glue_gen0_rerun_and_wall_limit(tmp_path, monkeypatch, capsys):
+    import gate_azure_guest as guest
+    base, members, plan = rehearsal_fixture(tmp_path / 'fix')
+    old_work, old_temp, orig_run = guest.WORK, guest.TEMP, prepare.subprocess.run
+    run_env = lambda extra: (lambda cmd, **kw: orig_run(cmd, **({**kw, 'env': {**kw['env'], **extra}} if 'env' in kw else kw)))
+    monkeypatch.setattr(prepare.subprocess, 'run', run_env({'REHEARSAL_MODE': 'gen0'}))
+    dest = tmp_path / 'out/rehearsal'
+    prepare.rehearse(base, members, plan, tmp_path / 'sc-ok', dest)
+    assert (guest.WORK, guest.TEMP) == (old_work, old_temp)
+    acc = prepare.json_file(dest / 'acceptance.json')
+    assert acc['verdict'] == 'PASS' and acc['counted'] is False and acc['platform'] == 'pc'
+    assert (acc['gen0Sealed'], acc['gen0Used'], acc['gen0Overridden']) == (plan['probe']['gen0BudgetBytes'], 8388608, True)
+    for case in ('fail', 'pass'):
+        v = prepare.json_file(dest / case / 'verdict.json')
+        assert v['verdict'] == 'PASS' and v['counted'] is False and v['gen0Used'] == 8388608 and v['gen0Overridden'] is True
+        assert (dest / case / 'results.sha256').read_text().strip() == v['archiveSha256'] == bundle.sha(dest / case / 'results.tar.gz')
+    assert prepare.json_file(dest / 'fail/diagnostic-only.json')['verdict'] == 'INCONCLUSIVE'
+    out_lines = capsys.readouterr().out.splitlines()
+    assert all(any(f'rehearsal case={c} verdict=PASS' in line and 'counted=false' in line for line in out_lines) for c in ('fail', 'pass'))
+    for mode, match, frag in (
+        ('mismatch', 'rejected probe did not pass importer check', 'reason=probe-importer-mismatch artefacts=archive,'),
+        ('bad-cv', 'Rehearsal failed \\(fail\\)', 'rehearsal case=fail verdict=FAIL reason=failed:'),
+        ('reject-twice', 'Rehearsal failed \\(fail\\)', 'rehearsal case=fail verdict=FAIL reason=failed:'),
+        ('tamper-pass', 'Rehearsal failed \\(pass\\).*importer_ok', 'rehearsal case=pass verdict=FAIL reason=failed:importer_ok'),
+    ):
+        monkeypatch.setattr(prepare.subprocess, 'run', run_env({'REHEARSAL_MODE': mode}))
+        sc = tmp_path / f'sc-{mode}'
+        with pytest.raises(ValueError, match=match):
+            prepare.rehearse(base, members, plan, sc, tmp_path / f'out-{mode}/rehearsal')
+        assert any(frag in line and 'counted=false' in line for line in capsys.readouterr().out.splitlines()), mode
+        assert (sc / 'fail-2').exists() == (mode == 'reject-twice'), mode
+    monkeypatch.setattr(prepare, 'REHEARSAL_WALL_SECONDS', 0.2)
+    monkeypatch.setattr(prepare.subprocess, 'run', run_env({'REHEARSAL_STUB_SLEEP': '1'}))
+    for tag, match, frag in (('wall', 'rehearsal fail exceeded its wall limit', 'reason=wall-limit'),
+                             ('err', 'Unexpected remote session cd line', 'reason=error-ValueError')):
+        if tag == 'err':
+            monkeypatch.setattr(guest, 'REMOTE_SESSION', 'no cd line')
+        with pytest.raises(ValueError, match=match):
+            prepare.rehearse(base, members, plan, tmp_path / f'sc-{tag}', tmp_path / f'out-{tag}/rehearsal')
+        assert any(f'rehearsal case=fail verdict=FAIL {frag}' in line and 'counted=false' in line for line in capsys.readouterr().out.splitlines())
+
+
+def test_rehearsal_hard_gate_and_trigger(tmp_path, azure, monkeypatch, capsys):
+    for bad_case in ('fail', 'pass'):
+        _, build = fake_container(tmp_path / f'fail-{bad_case}', monkeypatch, noise=True, kind='noise')
+        monkeypatch.setattr(prepare, 'rehearse_case', lambda c, b, m, p, s, bc=bad_case: dict(
+            stub_rehearsal_case(c, b, m, p, s), exitCode=1 if c == bc else (0 if c == 'pass' else 2)))
+        out = tmp_path / f'prepared-{bad_case}'
+        with pytest.raises(ValueError, match=f'Rehearsal failed \\({bad_case}\\)'):
+            build(out)
+        assert not (out / 'prepared.json').exists() and not (out / 'rehearsal').exists()
+        assert any(f'rehearsal case={bad_case} verdict=FAIL reason=failed:' in line and 'counted=false' in line
+                   for line in capsys.readouterr().out.splitlines())
+    for mode, kind in (('release', 'controls'), ('change', 'batch-leg-1')):
+        _, build_non = fake_container(tmp_path / kind, monkeypatch, mode=mode, kind=kind, noise=False)
+        monkeypatch.setattr(prepare, 'rehearse', lambda *a, **kw: pytest.fail('non-noise prepare must skip rehearsal'))
+        res = build_non(tmp_path / f'{kind}-prepared')
+        assert (res / 'prepared.json').is_file() and not (res / 'rehearsal').exists()

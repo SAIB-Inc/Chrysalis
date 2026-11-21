@@ -11,6 +11,7 @@ import gate_time as timing
 from gate_time import require
 
 IDENTITY = ('commit', 'treeId', 'runtime', 'dllSha256s')
+CHARGE_EXCEEDED = 'Prelude process exceeds sealed charge'
 
 
 def recipe(plan):
@@ -41,7 +42,7 @@ def calibrated(record, charge, log=None, name=None):
     row, = record['data']['rows']
     invocations = bundle.calibrate_micro(row, bundle.MICRO_PROBE_INVOCATIONS)
     if log:
-        log(f'prelude {name} calibration seconds {seconds:.4f} invocations {invocations} allowance {charge}')
+        log(f"{timing.STAGE['prelude']}{name} calibration seconds {seconds:.4f} invocations {invocations} allowance {charge}")
     require(seconds <= charge, 'Micro calibration exceeds sealed charge')
     return invocations
 
@@ -96,8 +97,8 @@ def derive(prelude, worker, raw, log=None):
             seconds = process_seconds(record)
             projection = bundle.micro_process_seconds(seconds, rows) if name in micros else seconds
             if log:
-                log(f"prelude {name} {role} seconds {seconds:.4f} projection {projection:.4f} allowance {row['chargeSeconds']}")
-            require(projection <= row['chargeSeconds'], 'Prelude process exceeds sealed charge')
+                log(f"{timing.STAGE['prelude']}{name} {role} seconds {seconds:.4f} projection {projection:.4f} allowance {row['chargeSeconds']}")
+            require(projection <= row['chargeSeconds'], CHARGE_EXCEEDED)
             fixed = {key: rows[0][key] for key in ('blocks', 'wireBytes')}
             require(all(all(entry[key] == value for key, value in fixed.items()) for entry in rows)
                     and values.setdefault('expectedWork', fixed) == fixed, 'Prelude fixed work differs across passes or sides')
