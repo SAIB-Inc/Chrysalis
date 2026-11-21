@@ -347,12 +347,16 @@ def catalogue(config, audit):
     direct.update({name: declaration['rule'] if isinstance(declaration, dict) else declaration for name, declaration in config['direct'].items()})
     # These six rows were frozen together. A subset must still run that filter.
     ranges = ','.join(name for name, row in audit['rows'].items() if row['kind'] == 'range')
+    charges = config['time'].get('chargeSeconds', {})
+    if set(charges) - set(config['time']['required']):
+        raise ValueError('A catalogue process charge names an unknown time row')
     rows = [dict(id=name, kind='direct', rule=rule,
                  **(dict(processFilter=ranges if name in audit['rows'] else name) if rule == 'range' else {}))
             for name, rule in direct.items()]
     result = (rows + [dict(id=f'replay/{case}/{window}', kind='replay', rule='replay', replay=case, window=window)
                     for case in config['replays'] for window in ('steady', 'cold')] +
-            [dict(id=name, kind='time', rule='time') for name in config['time']['required']])
+            [dict(id=name, kind='time', rule='time', **({'chargeSeconds': charges[name]} if name in charges else {}))
+             for name in config['time']['required']])
     for row in result:
         declaration = config['direct'].get(row['id'])
         if row['kind'] == 'direct' and isinstance(declaration, dict):
@@ -700,6 +704,8 @@ def select_rows(args, config, audit, *, allocation_platform='pc', plan_entries=N
                 raise ValueError('A declared entry cannot change a catalogue row class or replay')
             if original and entry.get('rowClass') == 'recorded-only' and original.get('rowClass') != 'recorded-only':
                 raise ValueError('Catalogue rows cannot be removed from gating by a plan')
+            if original and type(entry.get('chargeSeconds')) is int and entry['chargeSeconds'] < original.get('chargeSeconds', 0):
+                raise ValueError('A plan entry cannot lower a catalogue process charge')
             row = dict(original or {}, **entry)
             if row.get('kind') not in ('direct', 'replay', 'time'):
                 raise ValueError('Unknown row kind')

@@ -37,6 +37,8 @@ DIAG_SESSION_LOG_BYTES = 256 * 1024
 DIAG_PROCESS_LOG_BYTES = 16 * 1024
 DIAG_TOTAL_LOG_BYTES = 640 * 1024
 DIAG_MAX_PROCESS_LOGS = 64
+LOG_COUNTS = ('logsIncluded', 'logsTruncated', 'logsSkipped', 'linesRedacted')
+LOG_FOLDERS = ('results', 'prelude', 'bytes')
 REDACTED_LINE = b'[redacted: credential-shaped line]'
 PEM_BEGIN = re.compile(rb'-----BEGIN [A-Z ]*PRIVATE KEY-----', re.I)
 PEM_END = re.compile(rb'-----END\b', re.I)
@@ -167,7 +169,7 @@ def blob_connection(account,timeout):
 # Only paths emitted by the worker, not any file beneath a results directory.
 SAFE_COMPONENT = r'[A-Za-z0-9][A-Za-z0-9_.-]{0,127}'
 PROCESS = r'(?:observations\.json|direct\.json|environment\.json|server(?:\.ready\.json|-summary\.json|\.log)|execution/(?:console\.log|process\.json))'
-RESULT_MEMBER = re.compile(r'(?:results/(?:host|probe|members|session-start|session-status|recovery-diagnostic)\.json|results/session\.log|'
+RESULT_MEMBER = re.compile(r'(?:results/(?:host|probe|members|session-start|session-status|recovery-diagnostic|guest-summary)\.json|results/session\.log|'
     rf'results/probe/probe-[0-9]{{2}}\.json|results/(?:probe/)?{SAFE_COMPONENT}/{PROCESS}|'
     rf'prelude/(?:applied\.json|raw/(?:ordering|[a-f0-9]{{16}}-(?:calibration|baseline|candidate))\.json|raw/(?:{SAFE_COMPONENT}/){{0,3}}(?:{PROCESS}|job\.json|pairs\.json))|'
     rf'bytes/(?:{SAFE_COMPONENT}/){{0,3}}(?:{PROCESS}|job\.json|pairs\.json)|'
@@ -482,8 +484,13 @@ def _read_redacted_log(path, max_bytes):
     return b''.join(c for c, _ in kept), truncated, redacted
 
 
+def _process_log(arc):
+    # The process logs both archive paths count: */server.log and */execution/console.log under LOG_FOLDERS.
+    return arc.split('/', 1)[0] in LOG_FOLDERS and arc.endswith(('/server.log', '/execution/console.log'))
+
+
 def _collect_diagnostic_logs():
-    included, counts = [], {'logsIncluded': 0, 'logsTruncated': 0, 'logsSkipped': 0, 'linesRedacted': 0}
+    included, counts = [], dict.fromkeys(LOG_COUNTS, 0)
     budget = DIAG_TOTAL_LOG_BYTES
     def add_log(path, arc, per_cap):
         nonlocal budget
@@ -509,20 +516,16 @@ def _collect_diagnostic_logs():
         add_log(root_session, 'results/session.log', DIAG_SESSION_LOG_BYTES)
 
     candidates = []
-    for folder in ('results', 'prelude', 'bytes'):
+    for folder in LOG_FOLDERS:
         base = WORK / folder
         if base.is_symlink() or not base.is_dir():
             continue
         for dirpath, dirs, files in os.walk(base, followlinks=False):
             dirs[:] = [d for d in sorted(dirs) if not (Path(dirpath) / d).is_symlink()]
             for name in sorted(files):
-                if name not in ('server.log', 'console.log'):
-                    continue
                 member = Path(dirpath) / name
                 arc = member.relative_to(WORK).as_posix()
-                if not (arc.endswith('/server.log') or arc.endswith('/execution/console.log')):
-                    continue
-                if not RESULT_MEMBER.fullmatch(arc) or SENSITIVE_PATH.search(arc):
+                if not _process_log(arc) or not RESULT_MEMBER.fullmatch(arc) or SENSITIVE_PATH.search(arc):
                     continue
                 try:
                     st = member.lstat()
@@ -549,14 +552,18 @@ def _write_diagnostic(path, payload, status_bytes=None, logs=()):
     entries.extend(logs)
     with tarfile.open(path, 'w:gz') as stream:
         for arc, data in entries:
-            entry = tarfile.TarInfo(arc)
-            entry.size = len(data)
-            stream.addfile(entry, io.BytesIO(data))
+            _add_member(stream, arc, data)
     check_results(path, limits=(MAX_DIAGNOSTIC, MAX_DIAGNOSTIC))
 
 
+def _add_member(stream, arc, data):
+    entry = tarfile.TarInfo(arc)
+    entry.size = len(data)
+    stream.addfile(entry, io.BytesIO(data))
+
+
 def _write_diagnostic_fallback(path, base_payload, limits_fallback=False):
-    zero = {'logsIncluded': 0, 'logsTruncated': 0, 'logsSkipped': 0, 'linesRedacted': 0}
+    zero = dict.fromkeys(LOG_COUNTS, 0)
     try:
         _write_diagnostic(path, {**base_payload, **zero}, _clean_status_bytes())
         return
@@ -574,6 +581,7 @@ def archive_results(path, partial, *, limits=None, reason=None):
     max_compressed, max_expanded = results_limits(None) if limits is None else limits
     refusal_reason = reason if reason in REFUSAL_REASONS else ('not-done' if partial else 'archive-error')
     details = {}
+    _, limits_fallback = _read_saved_limits()
     try:
         if not partial:
             members, expanded_disk = [], 0
@@ -599,9 +607,16 @@ def archive_results(path, partial, *, limits=None, reason=None):
                 raise ResultsRefused('results-too-large', 'results tree exceeds expanded limit',
                                      expandedBytes=expanded_disk, maxExpandedBytes=max_expanded,
                                      maxCompressedBytes=max_compressed)
+            # Unit fields, log counts and sizes; the full path never truncates, skips or redacts a log.
+            summary = {**_unit_status(), **dict.fromkeys(LOG_COUNTS, 0), 'expandedBytes': expanded_disk,
+                       'maxCompressedBytes': max_compressed, 'maxExpandedBytes': max_expanded}
+            summary['logsIncluded'] = sum(arc == 'results/session.log' or _process_log(arc) for _, arc in members)
+            if limits_fallback:
+                summary['limitsFallback'] = True
             with tarfile.open(path, 'w:gz') as stream:
                 for member, arc in members:
                     stream.add(member, arcname=arc, recursive=False)
+                _add_member(stream, 'results/guest-summary.json', (json.dumps(summary, separators=(',', ':')) + '\n').encode('ascii'))
             if check_results(path, limits=(max_compressed, max_expanded)):
                 raise ResultsRefused('forbidden-member', 'unexpected recovery marker in worker output')
             return False
@@ -611,7 +626,6 @@ def archive_results(path, partial, *, limits=None, reason=None):
     except (ValueError, OSError, tarfile.TarError, EOFError, zlib.error):
         refusal_reason = 'archive-error'
         details = {}
-    _, limits_fallback = _read_saved_limits()
     base_payload = {'diagnosticOnly': True, 'reason': refusal_reason}
     if refusal_reason == 'results-too-large':
         base_payload.update(details)

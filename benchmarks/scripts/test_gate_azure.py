@@ -940,8 +940,9 @@ def test_cost_readback_at_day_one_and_day_three_includes_failed_primary(fake, si
     assert azure.daily_cost(directory, local) == 0
     assert not (directory / 'cost-d1.json').exists()
     monkeypatch.setattr(azure.time, 'time', lambda: now + 86400)
-    waits = []
-    monkeypatch.setattr(time, 'sleep', waits.append)
+    from types import SimpleNamespace
+    waits = []  # only the readback's own waits; subprocess's polling keeps the real time.sleep
+    monkeypatch.setattr(proof, 'time', SimpleNamespace(sleep=waits.append))
     fake_state(fake, costThrottled=3)
     with pytest.raises(azure.Refusal, match='throttled.*no posted cost or cost stop written'):
         azure.daily_cost(directory, local)
@@ -1636,6 +1637,9 @@ def test_az2f4_noise_seal_full_size_results_archive_and_limits(tmp_path, monkeyp
     work = tmp_path / 'work'
     s0_plan = _build_noise_s0_tree(work)
     monkeypatch.setattr(guest, 'WORK', work)
+    monkeypatch.setattr(guest.subprocess, 'check_output', lambda *a, **kw: b'LoadState=loaded\nResult=success\nExecMainCode=1\nExecMainStatus=0\n')
+    (work / 'suite/run/execution').mkdir(parents=True)
+    (work / 'suite/run/execution/console.log').write_text('suite log\n')  # not a process log on either archive path
     red = tmp_path / 'red.tar.gz'
     green = tmp_path / 'green.tar.gz'
     ref = tmp_path / 'ref.tar.gz'
@@ -1656,7 +1660,12 @@ def test_az2f4_noise_seal_full_size_results_archive_and_limits(tmp_path, monkeyp
     assert guest.archive_results(green, False, limits=limits) is False
     assert guest.check_results(green, limits=limits) is False
     assert green.stat().st_size < guest.MAX_RESULTS_COMPRESSED
-    # GREEN archive bytes match ec97c99a's non-partial packing rule byte-for-byte.
+    with tarfile.open(green) as stream:
+        summary = json.load(stream.extractfile('results/guest-summary.json'))
+        expanded = sum(item.size for item in stream.getmembers() if item.name != 'results/guest-summary.json')
+    assert summary == {'unitResult': 'success', 'execMainCode': 1, 'execMainStatus': 0, 'logsIncluded': 113, 'logsTruncated': 0,
+                       'logsSkipped': 0, 'linesRedacted': 0, 'expandedBytes': expanded, 'maxCompressedBytes': limits[0], 'maxExpandedBytes': limits[1]}
+    # GREEN archive bytes match ec97c99a's non-partial packing rule, then the guest summary, byte-for-byte.
     with tarfile.open(ref, 'w:gz') as stream:
         for folder in ('results', 'prelude', 'bytes', 'suite'):
             if (work / folder).exists():
@@ -1664,7 +1673,22 @@ def test_az2f4_noise_seal_full_size_results_archive_and_limits(tmp_path, monkeyp
                     if not member.is_dir():
                         stream.add(member, arcname=member.relative_to(work).as_posix(), recursive=False)
         stream.add(work / 'session.log', arcname='results/session.log', recursive=False)
+        entry = tarfile.TarInfo('results/guest-summary.json')
+        entry.size = len(data := (json.dumps(summary, separators=(',', ':')) + '\n').encode())
+        stream.addfile(entry, io.BytesIO(data))
     assert gzip.decompress(green.read_bytes()) == gzip.decompress(ref.read_bytes())
+    # The caught worker exit (run 3's outcome) packs the same summary and log; a worker-written summary is refused.
+    dump(work / 'results/session-status.json', {'completedAllDeclaredRounds': False, 'exitCode': 2, 'reason': 'Prelude process exceeds sealed charge'})
+    monkeypatch.setattr(guest, '_read_saved_limits', lambda: (limits, True))
+    assert guest.archive_results(green, False, limits=limits) is False
+    with tarfile.open(green) as stream:
+        assert stream.extractfile('results/session.log').read() == b'ok\n'
+        again = json.load(stream.extractfile('results/guest-summary.json'))
+    assert again == dict(summary, expandedBytes=again['expandedBytes'], limitsFallback=True)
+    dump(work / 'results/guest-summary.json', summary)
+    assert guest.archive_results(green, False, limits=limits) is True
+    with tarfile.open(green) as stream:
+        assert json.load(stream.extractfile('results/recovery-diagnostic.json'))['reason'] == 'forbidden-member'
     s1_plan = {'probe': {'processes': 16}, 'members': {f'{i:016x}': {} for i in range(192)}}
     max_plan = {'probe': {'processes': 16}, 'members': {f'{i:016x}': {} for i in range(209)}}
     assert guest.results_limits(s1_plan, strict=True) == (10_000_000, 218_000_000)
@@ -1692,7 +1716,7 @@ def test_az2f4_refusal_reasons_and_clean_status_preservation(tmp_path, monkeypat
             'diagnosticOnly': True, 'reason': 'not-done', **zero,
         }
     summary = azure._diagnostic_summary(dest)
-    assert summary['partial'] is True and summary['reason'] == 'not-done'
+    assert summary['partial'] is True and summary['reason'] == 'not-done' and summary.items() >= zero.items()
     assert summary['sessionStatus'] == {'completedAllDeclaredRounds': False, 'exitCode': 2}
     (work / 'results/unexpected.txt').write_text('bad')
     assert guest.archive_results(dest, False) is True

@@ -27,7 +27,7 @@ import time
 import uuid
 
 from gate_azure_channel import STATUS_SCRIPT, create_storage, run_channel, upload_inputs
-from gate_azure_guest import FETCH_STAGES, REFUSAL_REASONS
+from gate_azure_guest import FETCH_STAGES, LOG_COUNTS, REFUSAL_REASONS
 from gate_azure_guard import (ALERT_TAIL, COPY_END, RESERVE_TAIL, WATCH_MARGIN, WRITE_END, GuardFailure,
                               alert, arm_native, check_context, cleanup_lease, mark, mutation, process_id, retire, stop_paused_driver, wsl_context)
 from gate_azure_proof import GROUP, GUID, ONCE, Az, AzureError, cost_readback, expected_posted, fingerprint, proof
@@ -544,8 +544,7 @@ def _diagnostic_summary(archive):
                     if marker.get('limitsFallback') is True:
                         summary['limitsFallback'] = True
                     for key in ('compressedBytes', 'maxCompressedBytes', 'expandedBytes', 'maxExpandedBytes',
-                                'logsIncluded', 'logsTruncated', 'logsSkipped', 'linesRedacted',
-                                'execMainCode', 'execMainStatus'):
+                                *LOG_COUNTS, 'execMainCode', 'execMainStatus'):
                         if type(marker.get(key)) is int and marker[key] >= 0:
                             summary[key] = marker[key]
             if 'results/session-status.json' in names:
