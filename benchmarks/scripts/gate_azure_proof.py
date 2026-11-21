@@ -8,11 +8,16 @@ import os
 from pathlib import Path
 import re
 import subprocess
+import time
 from urllib.parse import urlsplit
 
 ARM = 'https://management.azure.com'
 GUID = re.compile(r'[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}', re.I)
 GROUP = re.compile(r'chrysalis-gate-[0-9]{8}t[0-9]{6}-[a-f0-9]{8}')
+TRIAL_GROUP = re.compile(r'chrysalis-probe-[0-9a-f]{16}-[1-4]')
+TRIAL_CAP = 0.9725
+TRIAL_LAST_DAY = 20261119
+ONCE = (0,)
 # REST uses the raw azure.cli.core.util.send_raw_request path instead of an Azure
 # Resource Management SDK client, so its provider auto-registration policy is
 # absent. The command allowlist below is the enforcement, not a config guess.
@@ -28,16 +33,30 @@ class AzureError(RuntimeError):
     pass
 
 
+def _call_label(args):
+    if args[:1] != ['rest'] or '--method' not in args or '--url' not in args:
+        return ' '.join(args[:2])
+    method = args[args.index('--method') + 1]
+    path = urlsplit(args[args.index('--url') + 1]).path
+    if match := re.search(r'/runCommands/(init|kick|status-(?:0[0-9]|1[0-8])|push-[12])$', path):
+        return f'{method} runCommands {match[1]}'
+    tail = path.split('/providers/', 1)[1].split('/') if '/providers/' in path else path.strip('/').split('/')[2:]
+    kind = (tail[1] if len(tail) > 1 else 'providers') if '/providers/' in path else (tail[0] if tail else 'arm')
+    return f'{method} {kind if re.fullmatch(r"[A-Za-z]+", kind) else "arm"}'
+
+
 class Az:
     def __init__(self, executable):
         self.executable = executable
         self.subscription = None
+        self.last_call = None
 
     def _call(self, args, *, timeout=15, fence_fd=None, stdin_body=None):
         # account show accesses only the CLI's local selected subscription. ARM
         # commands MUST use raw REST; no fallback or SDK operation is permitted.
         if args not in (['account', 'show', '--query', 'id'], ['version']) and args[:1] != ['rest']:
             raise AzureError('SDK/provider auto-registration command path forbidden')
+        label = self.last_call = _call_label(args)
         command = args + ['--only-show-errors', '-o', 'json']
         if self.subscription and args[:1] == ['rest']:
             command += ['--subscription', self.subscription]
@@ -45,6 +64,7 @@ class Az:
             p = subprocess.run([self.executable, *command], capture_output=True, stdin=subprocess.DEVNULL if stdin_body is None else None, input=stdin_body,
                                env=AZ_ENV, timeout=timeout, check=False, pass_fds=() if fence_fd is None else (fence_fd,))
         except subprocess.TimeoutExpired:
+            print(f'Azure call {label} timed out', flush=True)
             raise AzureError('timeout') from None
         if p.returncode:
             for code in ('MissingSubscriptionRegistration', 'NoRegisteredProviderFound', 'SkuNotAvailable',
@@ -54,6 +74,8 @@ class Az:
                          'TooManyRequests', 'RetryableError', 'InternalServerError', 'ServiceUnavailable'):
                 if re.search(rb'\b' + code.encode() + rb'\b', p.stderr + p.stdout, re.I):
                     raise AzureError(code)
+            if re.search(rb'\btoo many requests\b', p.stderr + p.stdout, re.I):
+                raise AzureError('TooManyRequests')
             # az rest surfaces status as text; Azure can return empty entity bodies.
             for status, key in ((404, 'ResourceNotFound'), (409, 'Conflict'), (429, 'TooManyRequests'), (503, 'ServiceUnavailable')):
                 if str(status).encode() in p.stderr and re.search(rb'(?i)status|reason|client error|server error', p.stderr):
@@ -77,7 +99,7 @@ class Az:
             raise AzureError('Azure CLI version unavailable')
         return version
 
-    def rest(self, method, path, *, body=None, query=None, timeout=15, fence_fd=None, stdin_body=None):
+    def rest(self, method, path, *, body=None, query=None, timeout=15, fence_fd=None, stdin_body=None, waits=()):
         url = urlsplit(ARM + path)
         if url.netloc != 'management.azure.com' or not path.startswith(f'/subscriptions/{self.subscription}/') or \
                 not GUID.fullmatch(self.subscription or '') or '\\' in url.path or '/..' in url.path or '%' in url.path:
@@ -91,6 +113,8 @@ class Az:
         if url.path.rstrip('/').rsplit('/', 1)[-1].lower() in ('register', 'unregister'):
             raise AzureError('Refusing provider registration path')
         if method in ('put', 'delete'):
+            if waits:
+                raise AzureError('Refusing retry on ARM mutation')
             resource = url.path.split('/', 5)
             if len(resource) < 5 or resource[3] != 'resourceGroups' or not GROUP.fullmatch(resource[4]):
                 raise AzureError('ARM mutation outside an owned run group')
@@ -105,7 +129,14 @@ class Az:
             args += ['--body','@'+str(body)]
         if query:
             args += ['--query', query]
-        return self._call(args, timeout=timeout, fence_fd=fence_fd, stdin_body=stdin_body)
+        for wait in (*waits, None):
+            try:
+                return self._call(args, timeout=timeout, fence_fd=fence_fd, stdin_body=stdin_body)
+            except AzureError as exc:
+                if wait is None or str(exc) not in ('timeout', 'TooManyRequests'):
+                    raise
+                if wait:
+                    time.sleep(wait)
 
 
 def fingerprint(*values):
@@ -191,13 +222,13 @@ def cost_readback(az, baseline_group, attempts, first, now):
                      grouping=[dict(type='Dimension', name='ResourceGroup')]))
     response = az.rest('post', f'/subscriptions/{az.subscription}/providers/Microsoft.CostManagement/query?api-version=2025-03-01',
                        stdin_body=json.dumps(payload).encode(),
-                       query='properties.{columns:columns[].name,rows:rows,paginated:nextLink!=`null`}')
+                       query='properties.{columns:columns[].name,rows:rows,paginated:nextLink!=`null`}', waits=(60, 120))
     columns = response.get('columns', []) if isinstance(response, dict) else []
     if (not columns or len(columns) != 4 or set(columns) != {'PreTaxCost', 'UsageDate', 'ResourceGroup', 'Currency'}
             or response.get('paginated') is not False or not isinstance(response.get('rows'), list)):
         raise AzureError('ActualCost response unsupported or incomplete')
     posted = dict.fromkeys(attempts, 0.)
-    other_count, other_total, unexpected = 0, 0., False
+    other_count, other_total, trial_count, trial_total, unexpected = 0, 0., 0, 0., False
     for row in response['rows']:
         if not isinstance(row, list) or len(row) != len(columns):
             raise AzureError('ActualCost row incomplete')
@@ -211,11 +242,14 @@ def cost_readback(az, baseline_group, attempts, first, now):
         group = (group or '').lower()
         if group in posted:
             posted[group] += cost
+        elif TRIAL_GROUP.fullmatch(group) and day <= TRIAL_LAST_DAY:
+            trial_count += 1
+            trial_total += cost
         else:
             other_count += 1
             other_total += cost
             unexpected |= group != baseline_group
-    stops = ['charge outside run groups and exact baseline'] if unexpected else []
+    stops = ['charge outside run groups and exact baseline'] if unexpected or trial_total > TRIAL_CAP else []
     for group, cost in posted.items():
         entry = attempts[group]
         settled = entry['state'] == 'settled'
@@ -223,4 +257,5 @@ def cost_readback(az, baseline_group, attempts, first, now):
             stops.append('posted exceeds booking')
         if settled and cost > entry['expectedPosted'] * 1.20:
             stops.append('posted exceeds expected cost by more than 20%')
-    return dict(posted=posted, otherRows=other_count, otherUsd=other_total, stops=sorted(set(stops)))
+    return dict(posted=posted, otherRows=other_count, otherUsd=other_total,
+                trialRows=trial_count, trialUsd=trial_total, stops=sorted(set(stops)))

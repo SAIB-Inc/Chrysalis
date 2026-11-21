@@ -30,7 +30,7 @@ from gate_azure_channel import STATUS_SCRIPT, create_storage, run_channel, uploa
 from gate_azure_guest import FETCH_STAGES, REFUSAL_REASONS
 from gate_azure_guard import (ALERT_TAIL, COPY_END, RESERVE_TAIL, WATCH_MARGIN, WRITE_END, GuardFailure,
                               alert, arm_native, check_context, cleanup_lease, mark, mutation, process_id, retire, stop_paused_driver, wsl_context)
-from gate_azure_proof import GROUP, GUID, Az, AzureError, cost_readback, expected_posted, fingerprint, proof
+from gate_azure_proof import GROUP, GUID, ONCE, Az, AzureError, cost_readback, expected_posted, fingerprint, proof
 
 from gate_time import PROVIDERS
 
@@ -64,7 +64,7 @@ def matches(permissions, action):
 
 
 def permissions(az, scope):
-    info = az.rest('get', scope + '/providers/Microsoft.Authorization/permissions?api-version=2022-04-01')
+    info = az.rest('get', scope + '/providers/Microsoft.Authorization/permissions?api-version=2022-04-01', waits=ONCE)
     if info.get('nextLink'):
         raise GuardFailure('incomplete Azure permissions response')
     return {action: matches(info['value'], action) for action in ('Microsoft.Authorization/roleAssignments/write',
@@ -177,9 +177,9 @@ class Draw:
     def group_url(self):
         return self.scope+'?api-version=2021-04-01'
 
-    def owner(self, *, timeout=7):
+    def owner(self, *, timeout=7, waits=ONCE):
         try:
-            return self.az.rest('get', self.group_url, query='tags.chrysalisGate', timeout=timeout)
+            return self.az.rest('get', self.group_url, query='tags.chrysalisGate', timeout=timeout, waits=waits)
         except AzureError as exc:
             if str(exc) not in ABSENT:
                 raise
@@ -193,7 +193,7 @@ class Draw:
         backoff = 2
         while time.time() < until:
             try:
-                owner = self.owner(timeout=min(7, max(.1, until - time.time())))
+                owner = self.owner(timeout=min(7, max(.1, until - time.time())), waits=())
                 if owner is False:
                     return
                 if owner != self.group:
@@ -244,7 +244,7 @@ class Draw:
             left = deadline - time.time()
             if left<=1:
                 raise GuardFailure('ARM write deadline expired before dispatch')
-            result = self.az.rest('put',url,stdin_body=json.dumps(payload).encode('utf8'),timeout=min(left,15),fence_fd=lease)
+            result = self.az.rest('put',url,stdin_body=json.dumps(payload).encode('utf8'),timeout=min(left, 15 if work else 75),fence_fd=lease)
             if path == self.scope:
                 if self.owner() != self.group:
                     raise GuardFailure('ARM group PUT not confirmed by an ownership read')
@@ -254,7 +254,7 @@ class Draw:
     def wait(self, path, api):
         def check():
             try:
-                result = self.az.rest('get', path + '?api-version=' + api, query='properties.provisioningState')
+                result = self.az.rest('get', path + '?api-version=' + api, query='properties.provisioningState', waits=ONCE)
             except AzureError as exc:
                 if str(exc) in ABSENT:
                     return False
@@ -262,7 +262,7 @@ class Draw:
             if result in ('Failed', 'Canceled'):
                 if 'virtualMachines/' in path:
                     # Only extract fixed failure codes. Retain no raw diagnostics.
-                    codes = self.az.rest('get', path + '/instanceView?api-version=' + api, query='statuses[?level==`Error`].code')
+                    codes = self.az.rest('get', path + '/instanceView?api-version=' + api, query='statuses[?level==`Error`].code', waits=ONCE)
                     for known in UNAVAILABLE:
                         if any(known.lower() in x.lower() for x in (codes or [])):
                             raise AzureError(known)
@@ -289,7 +289,7 @@ class Draw:
         identity_api = '2023-01-31'
         self.put(identity, identity_api, dict(location=self.region))
         # The identity endpoint need not expose provisioningState. Attest the principal.
-        principal = wait_for(lambda: self.az.rest('get', identity + '?api-version=' + identity_api, query='properties.principalId'),
+        principal = wait_for(lambda: self.az.rest('get', identity + '?api-version=' + identity_api, query='properties.principalId', waits=ONCE),
                              self.start + WRITE_END, label='User-assigned identity')
         if not isinstance(principal, str) or not GUID.fullmatch(principal):
             raise GuardFailure('User-assigned identity principal not confirmed')
@@ -297,14 +297,14 @@ class Draw:
         path, role_api = self.scope + '/providers/Microsoft.Authorization/roleAssignments/' + str(uuid.uuid4()), '2022-04-01'
         grant = dict(principalId=principal, principalType='ServicePrincipal', roleDefinitionId=role)
         self.put(path, role_api, dict(properties=grant))
-        wait_for(lambda: self.az.rest('get', path + '?api-version=' + role_api, query='properties.{principalId:principalId,principalType:principalType,roleDefinitionId:roleDefinitionId}') == grant,
+        wait_for(lambda: self.az.rest('get', path + '?api-version=' + role_api, query='properties.{principalId:principalId,principalType:principalType,roleDefinitionId:roleDefinitionId}', waits=ONCE) == grant,
                  self.start + WRITE_END, label='Scoped Contributor grant')
         create_storage(self)
         # The VNet may auto-enable a region's first watcher. Create and verify
         # its only watcher in our own group before putting any VNet.
         self.resource('Network', 'networkWatchers', {}, name='NetworkWatcher_'+self.region)
         wc = self.az.rest('get', '/subscriptions/'+self.az.subscription+'/providers/Microsoft.Network/networkWatchers?api-version='+API_NET,
-             query=f"{{ids:value[?location=='{self.region}'].id,paginated:nextLink!=`null`}}")
+             query=f"{{ids:value[?location=='{self.region}'].id,paginated:nextLink!=`null`}}", waits=ONCE)
         if (wc['paginated'] or [i.lower() for i in wc['ids']] != [self.path('Network','networkWatchers','NetworkWatcher_'+self.region).lower()]):
             raise GuardFailure('Network Watcher not uniquely scoped to run group')
         def rule(name, priority, source, destination_port, access):
@@ -367,7 +367,7 @@ class Draw:
         self.allocate(self.wait, vm, API_VM)
         if retry:
             self.put(schedule, api, spec)
-        actual = self.az.rest('get', schedule + '?api-version=' + api)
+        actual = self.az.rest('get', schedule + '?api-version=' + api, waits=ONCE)
         if not schedule_matches(actual, spec):
             raise GuardFailure('platform shutdown not confirmed; refusing init')
 
@@ -724,7 +724,7 @@ def one_attempt(az, local, ledger, seal, go, directory, plan, group, region, inp
             code = probe_result(note / 'results.tar.gz', plan, note)
     except AzureError as exc:
         code = 6 if isinstance(exc, CapacityUnavailable) else 2
-        log(f'Azure attempt: {exc}')
+        log(f'Azure attempt: {exc}; last Azure call: {az.last_call or "none"}')
     except (GuardFailure, HTTPException, KeyError, OSError, RuntimeError, TarError, TypeError, ValueError):
         log('Azure attempt invalid; details suppressed')
     finally:
@@ -874,7 +874,12 @@ def daily_cost(directory, local):
     if not phases:
         log('No +1 or +3 day Azure cost readback due')
         return 0
-    result = cost_readback(az, baseline_group, ledger.attempts, min(e['epoch'] for e in ledger.attempts.values()), now)
+    try:
+        result = cost_readback(az, baseline_group, ledger.attempts, min(e['epoch'] for e in ledger.attempts.values()), now)
+    except AzureError as exc:
+        if str(exc) == 'TooManyRequests':
+            raise Refusal('Azure cost readback throttled; no posted cost or cost stop written; recheck later') from None
+        raise
     result.update(bookedUsd=float(ledger.total()), postedUsd=sum(result['posted'].values()))
     if contended:
         if result['stops']:

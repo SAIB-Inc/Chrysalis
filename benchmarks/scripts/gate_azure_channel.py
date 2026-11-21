@@ -11,7 +11,7 @@ from tarfile import TarError
 import time
 from urllib.parse import parse_qs
 
-from gate_azure_proof import AzureError, storage_account
+from gate_azure_proof import ONCE, AzureError, storage_account
 from gate_azure_guard import GuardFailure, WRITE_END, COPY_END
 from gate_azure_guest import (
     GUEST_ACTIONS, MAX_BLOB_BYTES, MAX_DIAGNOSTIC,
@@ -116,7 +116,11 @@ def command(draw,label,script,until,*,sealed=None):
     if until-time.time()<=1:
         raise GuardFailure('no time left to submit guest Run Command')
     path=draw.path('Compute','virtualMachines')+'/runCommands/'+label
-    draw.put(path,VM_API,control_body(draw.region,script,sealed),work=True,until=until)
+    try:
+        draw.put(path,VM_API,control_body(draw.region,script,sealed),work=True,until=until)
+    except AzureError as e:
+        if str(e)!='timeout' or label.startswith('push-'):
+            raise
     url=path+'?api-version='+VM_API+'&$expand=instanceView'
     selector='properties.instanceView.{state:executionState,code:exitCode,output:output}'
     while time.time()<until:
@@ -182,7 +186,7 @@ def create_storage(draw):
 def storage_key(draw):
     if draw.owner() != draw.group or (draw.guard / 'retired').exists():
         raise GuardFailure('storage key read requires current group ownership')
-    key = draw.az.rest('post', draw.store + '/listKeys?api-version=' + STORAGE_API, query="keys[?keyName=='key1'].value | [0]")
+    key = draw.az.rest('post', draw.store + '/listKeys?api-version=' + STORAGE_API, query="keys[?keyName=='key1'].value | [0]", waits=ONCE)
     if not isinstance(key, str) or not 40 <= len(key) <= 128:
         raise GuardFailure('scoped storage account key unavailable')
     return key
