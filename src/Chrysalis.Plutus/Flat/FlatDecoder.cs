@@ -6,7 +6,7 @@ using Chrysalis.Plutus.Types;
 
 namespace Chrysalis.Plutus.Flat;
 
-internal readonly record struct FlatRules(UInt128 Builtins, bool Sop);
+internal readonly record struct FlatRules(UInt128 Builtins, bool Sop, bool Limits);
 
 /// <summary>
 /// Decodes Flat-encoded bytes into a <see cref="Program{TBinder}"/> with DeBruijn indices.
@@ -14,20 +14,24 @@ internal readonly record struct FlatRules(UInt128 Builtins, bool Sop);
 /// </summary>
 public static class FlatDecoder
 {
+    // PlutusLedgerApi/Common/Versions.hs:389-399
+    private const int MaxTypeTags = 32;
+    private const int MaxConstrFields = 1024;
     private static readonly UInt128 KnownBuiltins = BuildKnownBuiltins();
 
     // Keep the wrapper in the caller so the JIT can elide Program when only Term is used.
     /// <summary>
     /// Decode a Flat-encoded byte sequence into a UPLC program.
     /// </summary>
+    /// <remarks>Omits the protocol version's tag and field limits, as upstream's plain decoder does; embedded data is still checked.</remarks>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static Program<DeBruijn> DecodeProgram(ReadOnlyMemory<byte> data)
     {
-        Term<DeBruijn> term = DecodeProgramCore(data, KnownBuiltins, out Types.Version version);
+        Term<DeBruijn> term = DecodeProgramCore(data, KnownBuiltins, limits: false, out Types.Version version);
         return new(version, term);
     }
 
-    internal static Term<DeBruijn> DecodeProgramCore(ReadOnlyMemory<byte> data, UInt128 builtins, out Types.Version version)
+    internal static Term<DeBruijn> DecodeProgramCore(ReadOnlyMemory<byte> data, UInt128 builtins, bool limits, out Types.Version version)
     {
         BitReader reader = new(data);
 
@@ -36,7 +40,7 @@ public static class FlatDecoder
         int patch = DecodeNatural(reader);
 
         version = new(major, minor, patch);
-        FlatRules rules = new(builtins, version.SupportsConstrAndCase);
+        FlatRules rules = new(builtins, version.SupportsConstrAndCase, limits);
         Term<DeBruijn> term = DecodeTerm(reader, in rules);
         reader.SkipPadding();
 
@@ -53,7 +57,7 @@ public static class FlatDecoder
             1 => DecodeDelay(reader, in rules),
             2 => DecodeLambda(reader, in rules),
             3 => DecodeApply(reader, in rules),
-            4 => DecodeConst(reader),
+            4 => DecodeConst(reader, in rules),
             5 => DecodeForce(reader, in rules),
             6 => new ErrorTerm<DeBruijn>(),
             7 => DecodeBuiltin(reader, in rules),
@@ -65,8 +69,8 @@ public static class FlatDecoder
 
     private static VarTerm<DeBruijn> DecodeVar(BitReader reader)
     {
-        int index = DecodeNatural(reader);
-        return new VarTerm<DeBruijn>(new DeBruijn(index));
+        ulong index = DecodeWord64(reader);
+        return new VarTerm<DeBruijn>(new DeBruijn(index > int.MaxValue ? int.MaxValue : (int)index));
     }
 
     private static DelayTerm<DeBruijn> DecodeDelay(BitReader reader, in FlatRules rules) => new(DecodeTerm(reader, in rules));
@@ -80,9 +84,9 @@ public static class FlatDecoder
         return new ApplyTerm<DeBruijn>(function, argument);
     }
 
-    private static ConstTerm<DeBruijn> DecodeConst(BitReader reader)
+    private static ConstTerm<DeBruijn> DecodeConst(BitReader reader, in FlatRules rules)
     {
-        ConstantType type = DecodeConstantType(reader);
+        ConstantType type = DecodeConstantType(reader, rules.Limits);
         Constant value = DecodeConstantValue(reader, type);
         return new ConstTerm<DeBruijn>(value);
     }
@@ -105,8 +109,12 @@ public static class FlatDecoder
     private static ConstrTerm<DeBruijn> DecodeConstr(BitReader reader, in FlatRules rules)
     {
         RequireSop(in rules, "constr");
-        ulong tag = DecodeWord(reader);
+        ulong tag = DecodeWord64(reader);
         ImmutableArray<Term<DeBruijn>> fields = DecodeTermList(reader, in rules);
+        if (rules.Limits && fields.Length > MaxConstrFields)
+        {
+            throw new InvalidOperationException($"Flat: constr has {fields.Length} fields (maximum is {MaxConstrFields}).");
+        }
         return new ConstrTerm<DeBruijn>(tag, fields);
     }
 
@@ -150,7 +158,7 @@ public static class FlatDecoder
 
     // --- Type decoding (spec C.3.3) ---
 
-    private static ConstantType DecodeConstantType(BitReader reader)
+    private static ConstantType DecodeConstantType(BitReader reader, bool limits)
     {
         // Stack-allocate tag buffer for common cases (most types have 1-4 tags)
         Span<int> tagBuf = stackalloc int[8];
@@ -158,6 +166,10 @@ public static class FlatDecoder
 
         while (reader.PopBit() == 1)
         {
+            if (limits && tagCount >= MaxTypeTags)
+            {
+                throw new InvalidOperationException($"Flat: constant type exceeds {MaxTypeTags} tags.");
+            }
             if (tagCount >= tagBuf.Length)
             {
                 // Rare: more than 8 tags, fall back to heap
@@ -169,7 +181,12 @@ public static class FlatDecoder
         }
 
         int index = 0;
-        return ParseType(tagBuf[..tagCount], ref index);
+        ConstantType type = ParseType(tagBuf[..tagCount], ref index);
+        if (index != tagCount)
+        {
+            throw new InvalidOperationException("Flat: trailing tags in constant type.");
+        }
+        return type;
     }
 
     private static ConstantType ParseType(ReadOnlySpan<int> tags, ref int index)
@@ -187,14 +204,11 @@ public static class FlatDecoder
             2 => ConstantType.PlutusText,
             3 => ConstantType.PlutusUnit,
             4 => ConstantType.PlutusBool,
-            5 => new ListType(ParseType(tags, ref index)),
-            6 => new PairType(ParseType(tags, ref index), ParseType(tags, ref index)),
             7 => ParseTypeApplication(tags, ref index),
             8 => ConstantType.PlutusData,
             9 => ConstantType.Bls12381G1Element,
             10 => ConstantType.Bls12381G2Element,
             11 => ConstantType.Bls12381MlResult,
-            12 => new ArrayType(ParseType(tags, ref index)),
             _ => throw new InvalidOperationException($"Flat: unknown type tag {tag}.")
         };
     }
@@ -210,11 +224,22 @@ public static class FlatDecoder
         return operatorTag switch
         {
             5 => new ListType(ParseType(tags, ref index)),
-            6 => new PairType(ParseType(tags, ref index), ParseType(tags, ref index)),
-            7 => ParseTypeApplication(tags, ref index), // curried application (e.g. Pair encoded as Apply(Apply(Pair, A), B))
             12 => new ArrayType(ParseType(tags, ref index)),
+            7 => ParsePairType(tags, ref index),
             _ => throw new InvalidOperationException($"Flat: unsupported type application operator {operatorTag}.")
         };
+    }
+
+    private static PairType ParsePairType(ReadOnlySpan<int> tags, ref int index)
+    {
+        if (index >= tags.Length || tags[index++] != 6)
+        {
+            throw new InvalidOperationException("Flat: unsupported curried type application.");
+        }
+
+        ConstantType first = ParseType(tags, ref index);
+        ConstantType second = ParseType(tags, ref index);
+        return new PairType(first, second);
     }
 
     // --- Constant value decoding (spec C.3.4) ---
@@ -287,7 +312,7 @@ public static class FlatDecoder
         return result;
     }
 
-    private static ulong DecodeWord(BitReader reader)
+    private static ulong DecodeWord64(BitReader reader)
     {
         int byte8 = reader.PopBits(8);
         if ((byte8 >> 7) == 0)
@@ -300,6 +325,10 @@ public static class FlatDecoder
         do
         {
             byte8 = reader.PopBits(8);
+            if (shift == 63 && byte8 > 1)
+            {
+                throw new InvalidOperationException("Flat: unexpected extra byte in unsigned integer.");
+            }
             result |= (ulong)(byte8 & 0x7F) << shift;
             shift += 7;
         } while ((byte8 >> 7) != 0);

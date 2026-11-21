@@ -83,6 +83,7 @@ internal static class BlsBuiltins
     {
         Constant[] scalars = UnwrapList(args[0]);
         Constant[] points = UnwrapList(args[1]);
+        ValidateMsmScalars(scalars);
         int n = Math.Min(scalars.Length, points.Length);
         return n == 0
             ? G1Result(G1ZeroCompressed)
@@ -150,6 +151,7 @@ internal static class BlsBuiltins
     {
         Constant[] scalars = UnwrapList(args[0]);
         Constant[] points = UnwrapList(args[1]);
+        ValidateMsmScalars(scalars);
         int n = Math.Min(scalars.Length, points.Length);
         return n == 0
             ? G2Result(G2ZeroCompressed)
@@ -215,7 +217,7 @@ internal static class BlsBuiltins
         return z;
     }
 
-    private static void ValidateMsmScalar(BigInteger s)
+    internal static void ValidateMsmScalar(BigInteger s)
     {
         if (s > MsmScalarUb || s < MsmScalarLb)
         {
@@ -223,10 +225,22 @@ internal static class BlsBuiltins
         }
     }
 
+    private static void ValidateMsmScalars(Constant[] scalars)
+    {
+        foreach (Constant c in scalars)
+        {
+            if (c is not IntegerConstant ic)
+            {
+                throw new EvaluationException($"multiScalarMul: expected integer in scalar list, got {c.GetType().Name}");
+            }
+
+            ValidateMsmScalar(ic.Value);
+        }
+    }
+
     private static CekValue MultiScalarMulG1(Constant[] scalars, Constant[] points, int n)
     {
         BigInteger s0 = ((IntegerConstant)scalars[0]).Value;
-        ValidateMsmScalar(s0);
         byte[] result = Bls12381.G1ScalarMul(
             ReduceScalar(s0),
             ((Bls12381G1Constant)points[0]).Value.ToArray());
@@ -234,7 +248,6 @@ internal static class BlsBuiltins
         for (int i = 1; i < n; i++)
         {
             BigInteger s = ((IntegerConstant)scalars[i]).Value;
-            ValidateMsmScalar(s);
             byte[] sp = Bls12381.G1ScalarMul(
                 ReduceScalar(s),
                 ((Bls12381G1Constant)points[i]).Value.ToArray());
@@ -247,7 +260,6 @@ internal static class BlsBuiltins
     private static CekValue MultiScalarMulG2(Constant[] scalars, Constant[] points, int n)
     {
         BigInteger s0 = ((IntegerConstant)scalars[0]).Value;
-        ValidateMsmScalar(s0);
         byte[] result = Bls12381.G2ScalarMul(
             ReduceScalar(s0),
             ((Bls12381G2Constant)points[0]).Value.ToArray());
@@ -255,7 +267,6 @@ internal static class BlsBuiltins
         for (int i = 1; i < n; i++)
         {
             BigInteger s = ((IntegerConstant)scalars[i]).Value;
-            ValidateMsmScalar(s);
             byte[] sp = Bls12381.G2ScalarMul(
                 ReduceScalar(s),
                 ((Bls12381G2Constant)points[i]).Value.ToArray());

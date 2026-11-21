@@ -7,6 +7,10 @@ namespace Chrysalis.Plutus.Builtins;
 
 internal static class IntegerBuiltins
 {
+    // PlutusCore/Crypto/ExpMod.hs:17-50
+    private static readonly BigInteger ExpModMax = (BigInteger.One << 8191) - 1;
+    private static readonly BigInteger ExpModMin = -(BigInteger.One << 8191);
+
     internal static CekValue AddInteger(CekValue[] args) => IntegerResult(UnwrapInteger(args[0]) + UnwrapInteger(args[1]));
 
     internal static CekValue SubtractInteger(CekValue[] args) => IntegerResult(UnwrapInteger(args[0]) - UnwrapInteger(args[1]));
@@ -83,14 +87,19 @@ internal static class IntegerBuiltins
         BigInteger exp = UnwrapInteger(args[1]);
         BigInteger mod = UnwrapInteger(args[2]);
 
-        if (mod <= 0)
+        if (mod <= 0 || mod > ExpModMax)
         {
-            throw new EvaluationException("expModInteger: modulus must be positive");
+            throw new EvaluationException("expModInteger: modulus out of bounds");
         }
 
         if (mod == 1)
         {
             return IntegerResult(0);
+        }
+
+        if (@base < ExpModMin || @base > ExpModMax || exp < ExpModMin || exp > ExpModMax)
+        {
+            throw new EvaluationException("expModInteger: out of bounds");
         }
 
         if (exp.IsZero)

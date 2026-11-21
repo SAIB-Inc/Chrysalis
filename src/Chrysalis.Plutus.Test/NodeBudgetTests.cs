@@ -19,7 +19,9 @@ public sealed partial class NodeBudgetTests
 {
     internal sealed record Script(string Id, int Language, string Purpose, byte[] Flat, ExUnitsResult? Units, ExUnitsResult? Budget);
 
-    internal sealed record NodeData(long[][] Models, Script[] Scripts, (Script Script, string Outcome)[] Failures);
+    internal sealed record SerialiseCase(string Id, byte[] Flat, byte[] Bytes);
+
+    internal sealed record NodeData(long[][] Models, Script[] Scripts, (Script Script, string Outcome)[] Failures, SerialiseCase[] Serialise);
 
     internal static NodeData Fixture => Data.Value;
 
@@ -56,8 +58,11 @@ public sealed partial class NodeBudgetTests
         (Script Script, string Outcome)[] rows = [.. doc.RootElement.GetProperty("scripts").EnumerateArray()
             .Select(e => (new Script(e.GetProperty("id").GetString()!, ReadLanguage(e), e.GetProperty("purpose").GetString()!,
                 Convert.FromHexString(e.GetProperty("flat").GetString()!), Units(e, "exunits"), Units(e, "budget")), e.GetProperty("outcome").GetString()!))];
+        SerialiseCase[] serialise = [.. doc.RootElement.GetProperty("serialise").EnumerateArray().Select(e =>
+            new SerialiseCase(e.GetProperty("id").GetString()!, Convert.FromHexString(e.GetProperty("flat").GetString()!),
+                Convert.FromHexString(e.GetProperty("bytes").GetString()!)))];
         return new(models, [.. rows.Where(row => row.Outcome == "ok").Select(row => row.Script)],
-            [.. rows.Where(row => row.Outcome is "phase1-reject" or "phase2-fail")]);
+            [.. rows.Where(row => row.Outcome is "phase1-reject" or "phase2-fail")], serialise);
     }
 
     private static int ReadLanguage(JsonElement entry) => entry.GetProperty("lang").GetString() switch
@@ -135,15 +140,33 @@ public sealed partial class NodeBudgetTests
         Assert.All(known.Keys, id => Assert.Contains(scripts, s => s.Id == id));
         string[] phase1 = ["AV-multiIndexArray-V1", "AV-multiIndexArray-V2", "AV-multiIndexArray-V3", "F-ver-1.0.0-case-V3"];
         string[] phase2 = ["F-ver-0.1.0-V3", "F-ver-1.0.1-V3", "F-ver-1.1.0-patch-2^70-V3", "F-ver-1.2.0-V3", "F-ver-1.2^32.0-V3",
-            "F-ver-2.0.0-V3", "F-ver-2^64.0.0-V3", "F-ver-2^64.0.0-V2", "BI-consByteString-arg0--1-V3", "BI-consByteString-arg0-256-V3",
+            "F-ver-2.0.0-V3", "F-ver-2^64.0.0-V3", "F-ver-2^64.0.0-V2",
             "P-C6-case-bool-true-one-branch", "P-C8-case-list-nil-one-branch"];
         string[] unboundScope = ["O-unforced-delay-outside-case-V1", "O-unforced-delay-outside-case-V2",
             "O-unforced-delay-outside-case-V3", "P-A6-free-var-under-unused-lambda"];
         string[] unboundReached = ["O-taken-branch-V1", "O-taken-branch-V2", "O-taken-branch-V3",
             "P-A5-free-var-taken-case-branch", "O-evaluated-constr-field-V1", "O-evaluated-constr-field-V2",
             "O-evaluated-constr-field-V3"];
-        string[] errors = [.. mismatches.OfType<string>(), .. CheckVerdicts(phase1, "phase1-reject", typeof(InvalidOperationException)),
-            .. CheckVerdicts(phase2, "phase2-fail", typeof(EvaluationException)),
+        string[] v4Prefixes = ["BI-", "BB-", "BLS-", "D-", "SER-", "EXP-", "S-", "W-", "R-"];
+        HashSet<string> v4Ids =
+        [
+            "P-B11-writeBits-4097", "P-B12-shift-2^63", "P-B13-shift-neg-2^64", "P-B14-rotate-2^64+1",
+            "P-B17-addInteger-arg-2^262143", "P-B18-addInteger-arg-2^262143-1", "P-B20-sha2-65537-bytes",
+            "P-B23-constrData-tag-2^64", "P-B24-constrData-tag-neg", "P-B30-scalarMul-2^4095",
+            "F-var-10th-group-2-V3", "F-var-10th-group-cont-V3", "F-var-11groups-V1", "F-var-11groups-V3",
+            "F-constr-tag-10th-group-2-V3", "F-constr-tag-11groups-V3", "F-constr-tag-2^32-evaluated-V3", "F-constr-tag-2^63-evaluated-V3",
+            "P-C2-type-33-tags", "P-C4-constr-1025-fields", "P-A1-zero-width-list-pair4-x124000", "P-A1-zero-width-list-pair5-x124000",
+            "Z-tags33-V1-spend", "Z-tags33-V2-spend", "Z-tags33-V3-spend",
+            "P-B34-expMod-noninvertible", "P-B36-expMod-m0", "P-B37-expMod-m-neg", "P-B38-expMod-m-2^8191",
+            "P-B39-expMod-b0-eneg", "P-B40-expMod-base-oob", "P-B48-slice-skip-2^63"
+        ];
+        (Script Script, string Outcome)[] v4 = [.. fixture.Failures.Where(row =>
+            v4Prefixes.Any(prefix => row.Script.Id.StartsWith(prefix, StringComparison.Ordinal)) || v4Ids.Contains(row.Script.Id))];
+        Assert.Equal(413, v4.Length);
+        string[] errors = [.. mismatches.OfType<string>(),
+            .. CheckVerdicts([.. phase1, .. v4.Where(row => row.Outcome == "phase1-reject").Select(row => row.Script.Id)], "phase1-reject", typeof(InvalidOperationException)),
+            .. CheckVerdicts([.. phase2, .. v4.Where(row => row.Outcome == "phase2-fail" && !row.Script.Id.StartsWith("R-", StringComparison.Ordinal)).Select(row => row.Script.Id)], "phase2-fail", typeof(EvaluationException)),
+            .. CheckVerdicts([.. v4.Where(row => row.Script.Id.StartsWith("R-", StringComparison.Ordinal)).Select(row => row.Script.Id)], "phase2-fail", typeof(InvalidReturnValueException)),
             .. CheckVerdicts(unboundScope, "phase2-fail", typeof(UnboundVariableException)),
             .. CheckVerdicts(unboundReached, "phase2-fail", typeof(EvaluationException))];
         Assert.True(errors.Length == 0, $"{errors.Length} node replay mismatches:\n{string.Join('\n', errors)}");
@@ -208,6 +231,41 @@ public sealed partial class NodeBudgetTests
             Assert.True(raisedMem > mem);
             Assert.Equal(used.Mem + (ulong)(raisedMem - mem), raised.Mem);
             Assert.Equal(used.Steps, raised.Steps);
+        }
+    }
+
+    [Theory]
+    [InlineData("P-B11-writeBits-4097", false)]
+    [InlineData("P-B12-shift-2^63", false)]
+    [InlineData("P-B13-shift-neg-2^64", false)]
+    [InlineData("P-B14-rotate-2^64+1", false)]
+    [InlineData("P-B17-addInteger-arg-2^262143", false)]
+    [InlineData("P-B20-sha2-65537-bytes", false)]
+    [InlineData("P-B23-constrData-tag-2^64", false)]
+    [InlineData("P-B24-constrData-tag-neg", false)]
+    [InlineData("P-B30-scalarMul-2^4095", false)]
+    [InlineData("P-C2-type-33-tags", false)]
+    [InlineData("P-C4-constr-1025-fields", false)]
+    [InlineData("Z-tags33-V3-spend", false)]
+    [InlineData("BI-addInteger-arg0-2^262143-V1", false)]
+    [InlineData("BI-consByteString-arg0-2^262143-V1", false)]
+    [InlineData("BB-sha2_256-arg0-65537-V1", false)]
+    [InlineData("Z-tags33-V1-spend", false)]
+    [InlineData("P-B48-slice-skip-2^63", true)]
+    [InlineData("S-skip2^63-V1", true)]
+    public void BoundsAndLimitsStartAtVanRossem(string id, bool throwsAtPv10)
+    {
+        NodeData fixture = Fixture;
+        Script script = fixture.Failures.Single(row => row.Script.Id == id).Script;
+        PlutusData[] args = [.. Enumerable.Repeat<PlutusData>(new PlutusDataConstr(0, []), ArgumentCount(script.Language, script.Purpose))];
+        long[] model = fixture.Models[script.Language - 1];
+        if (throwsAtPv10)
+        {
+            _ = Assert.Throws<EvaluationException>(() => Evaluator.EvaluateScript(script.Flat, args, script.Language, 10, model));
+        }
+        else
+        {
+            Assert.True(Evaluator.EvaluateScript(script.Flat, args, script.Language, 10, model).ExUnits.Steps > 0);
         }
     }
 

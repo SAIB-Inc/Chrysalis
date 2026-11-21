@@ -614,6 +614,7 @@ public sealed class CekMachine
 
     private CekValue? CallBuiltin(DefaultFunction func, CekValue[] args)
     {
+        Builtins.BuiltinBounds.CheckArguments(func, args, _variant);
         BuiltinCostModel model = _builtinCosts[(int)func];
         ExBudget cost;
         if (model.IsConstant)
@@ -640,6 +641,7 @@ public sealed class CekMachine
             _ = Halt(BudgetStop.Builtin);
             return null;
         }
+        Builtins.BuiltinBounds.CheckCharged(func, args, _variant);
         return func == DefaultFunction.ConsByteString && _variant is Variant.A or Variant.B or Variant.D
             ? Builtins.ByteStringBuiltins.ConsByteStringWrapping(args)
             : Builtins.BuiltinRuntime.Call(func, args);

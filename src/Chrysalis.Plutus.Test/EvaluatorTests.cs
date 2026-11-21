@@ -197,6 +197,7 @@ public class EvaluatorTests
         string message = new UnboundVariableException().Message;
         Assert.Equal(message, Assert.IsType<UnboundVariableException>(Record.Exception(() => Evaluator.EvaluateScript(openV3, cbor1, 3, 11, v3Costs, new ExBudget(0, 0)))).Message);
         Assert.Equal(message, Assert.IsType<UnboundVariableException>(Record.Exception(() => Evaluator.EvaluateScript(openV3, vm1, 3, 11, v3Costs, new ExBudget(0, 0)))).Message);
+        Assert.Equal(message, Assert.IsType<UnboundVariableException>(Record.Exception(() => Evaluator.EvaluateScript(openV3, [[0xFF]], 3, 11, v3Costs))).Message);
 
         byte[] badVersion = Convert.FromHexString("010100223249840241");
         _ = Assert.IsType<EvaluationException>(Record.Exception(() => Evaluator.EvaluateScript(badVersion, cbor2, 1, 10, v1Costs)));

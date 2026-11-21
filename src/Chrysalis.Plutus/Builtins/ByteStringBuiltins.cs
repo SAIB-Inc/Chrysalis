@@ -17,18 +17,8 @@ internal static class ByteStringBuiltins
         return ByteStringResult(result);
     }
 
-    internal static CekValue ConsByteString(CekValue[] args)
-    {
-        BigInteger n = UnwrapInteger(args[0]);
-        ReadOnlyMemory<byte> bs = UnwrapByteString(args[1]);
-        if (n < 0 || n > 255)
-        {
-            throw new EvaluationException(
-                $"consByteString: byte value out of range [0, 255]: {n}");
-        }
-
-        return ConsByte((byte)n, bs);
-    }
+    internal static CekValue ConsByteString(CekValue[] args) =>
+        ConsByte((byte)UnwrapInteger(args[0]), UnwrapByteString(args[1]));
 
     internal static CekValue ConsByteStringWrapping(CekValue[] args) =>
         ConsByte((byte)(UnwrapInteger(args[0]) & 255), UnwrapByteString(args[1]));

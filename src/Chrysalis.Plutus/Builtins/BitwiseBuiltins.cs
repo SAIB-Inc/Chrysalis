@@ -8,6 +8,8 @@ namespace Chrysalis.Plutus.Builtins;
 
 internal static class BitwiseBuiltins
 {
+    // PlutusCore/Bitwise.hs:81-83
+    internal const int MaxInputLength = 4096;
     private const int MaxOutputLength = 8192;
 
     // --- Logical bitwise ops ---
@@ -238,11 +240,6 @@ internal static class BitwiseBuiltins
         if (size > MaxOutputLength)
         {
             throw new EvaluationException("replicateByte: size exceeds 8192");
-        }
-
-        if (byteVal < 0 || byteVal > 255)
-        {
-            throw new EvaluationException("replicateByte: byte value not in [0, 255]");
         }
 
         byte[] result = new byte[(int)size];

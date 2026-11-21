@@ -8,11 +8,13 @@ namespace Chrysalis.Plutus.Cbor;
 
 /// <summary>
 /// Minimal CBOR decoder for PlutusData only.
-/// Implements spec Appendix B (sections B.3–B.7).
+/// Implements spec Appendix B (sections B.3–B.7) and PlutusCore/Data.hs:209-307.
 /// Works over ReadOnlyMemory to avoid copying.
 /// </summary>
 public static class CborReader
 {
+    private const int MaxByteStringChunk = 64;
+
     public static PlutusData DecodePlutusData(ReadOnlyMemory<byte> data)
     {
         int offset = 0;
@@ -21,39 +23,30 @@ public static class CborReader
 
     private static PlutusData ReadData(ReadOnlySpan<byte> span, ref int offset)
     {
-        int majorType = span[offset] >> 5;
-
-        if (majorType == 6)
+        byte initial = At(span, offset);
+        if (initial is 0xC2 or 0xC3)
         {
-            ulong tag = ReadUnsigned(span, ref offset);
-            return DecodeTaggedData(span, ref offset, tag);
+            offset++;
+            ReadOnlyMemory<byte> magnitude = ReadByteString(span, ref offset);
+            BigInteger value = new(magnitude.Span, isUnsigned: true, isBigEndian: true);
+            return new PlutusDataInteger(initial == 0xC2 ? value : -1 - value);
         }
 
+        int majorType = initial >> 5;
         return majorType switch
         {
-            0 => new PlutusDataInteger(new BigInteger(ReadUnsigned(span, ref offset))),
-            1 => new PlutusDataInteger(-1 - new BigInteger(ReadUnsigned(span, ref offset))),
+            0 => new PlutusDataInteger(new BigInteger(ReadHead(span, ref offset, 0))),
+            1 => new PlutusDataInteger(-1 - new BigInteger(ReadHead(span, ref offset, 1))),
             2 => new PlutusDataByteString(ReadByteString(span, ref offset)),
             4 => DecodeList(span, ref offset),
             5 => DecodeMap(span, ref offset),
+            6 => DecodeTaggedData(span, ref offset, ReadHead(span, ref offset, 6)),
             _ => throw new InvalidOperationException($"CBOR: unexpected major type {majorType} for PlutusData.")
         };
     }
 
-    private static PlutusData DecodeTaggedData(ReadOnlySpan<byte> span, ref int offset, ulong tag)
+    private static PlutusDataConstr DecodeTaggedData(ReadOnlySpan<byte> span, ref int offset, ulong tag)
     {
-        if (tag == 2)
-        {
-            ReadOnlyMemory<byte> value = ReadByteString(span, ref offset);
-            return new PlutusDataInteger(new BigInteger(value.Span, isUnsigned: true, isBigEndian: true));
-        }
-
-        if (tag == 3)
-        {
-            ReadOnlyMemory<byte> value = ReadByteString(span, ref offset);
-            return new PlutusDataInteger(-1 - new BigInteger(value.Span, isUnsigned: true, isBigEndian: true));
-        }
-
         if (tag is >= 121 and <= 127)
         {
             (ImmutableArray<PlutusData> fields, bool isDefinite) = ReadDataListWithEncoding(span, ref offset);
@@ -68,13 +61,25 @@ public static class CborReader
 
         if (tag == 102)
         {
-            int count = ReadArrayHeader(span, ref offset);
-            if (count != 2)
+            bool indefiniteOuter = At(span, offset) == 0x9F;
+            if (indefiniteOuter)
             {
-                throw new InvalidOperationException($"CBOR: tag 102 expects 2-element array, got {count}.");
+                offset++;
             }
-            ulong constrIndex = ReadUnsigned(span, ref offset);
+            else if (ReadCount(span, ref offset, 4) != 2)
+            {
+                throw new InvalidOperationException("CBOR: tag 102 expects 2-element array.");
+            }
+            ulong constrIndex = ReadHead(span, ref offset, 0);
             (ImmutableArray<PlutusData> fields, bool isDefinite) = ReadDataListWithEncoding(span, ref offset);
+            if (indefiniteOuter)
+            {
+                if (At(span, offset) != 0xFF)
+                {
+                    throw new InvalidOperationException("CBOR: tag 102 expects 2-element array.");
+                }
+                offset++;
+            }
             return new PlutusDataConstr(new BigInteger(constrIndex), fields, isDefinite);
         }
 
@@ -89,15 +94,13 @@ public static class CborReader
 
     private static PlutusDataMap DecodeMap(ReadOnlySpan<byte> span, ref int offset)
     {
-        int additionalInfo = span[offset] & 0x1F;
-
         ImmutableArray<(PlutusData Key, PlutusData Value)>.Builder entries =
             ImmutableArray.CreateBuilder<(PlutusData, PlutusData)>();
 
-        if (additionalInfo == 31)
+        if (At(span, offset) == 0xBF)
         {
             offset++;
-            while (span[offset] != 0xFF)
+            while (At(span, offset) != 0xFF)
             {
                 PlutusData key = ReadData(span, ref offset);
                 PlutusData value = ReadData(span, ref offset);
@@ -107,7 +110,7 @@ public static class CborReader
         }
         else
         {
-            int count = ReadArrayHeader(span, ref offset);
+            int count = ReadCount(span, ref offset, 5);
             for (int i = 0; i < count; i++)
             {
                 PlutusData key = ReadData(span, ref offset);
@@ -121,14 +124,12 @@ public static class CborReader
 
     private static (ImmutableArray<PlutusData> Items, bool IsDefinite) ReadDataListWithEncoding(ReadOnlySpan<byte> span, ref int offset)
     {
-        int additionalInfo = span[offset] & 0x1F;
-
         ImmutableArray<PlutusData>.Builder items = ImmutableArray.CreateBuilder<PlutusData>();
 
-        if (additionalInfo == 31)
+        if (At(span, offset) == 0x9F)
         {
             offset++;
-            while (span[offset] != 0xFF)
+            while (At(span, offset) != 0xFF)
             {
                 items.Add(ReadData(span, ref offset));
             }
@@ -137,7 +138,7 @@ public static class CborReader
         }
         else
         {
-            int count = ReadArrayHeader(span, ref offset);
+            int count = ReadCount(span, ref offset, 4);
             for (int i = 0; i < count; i++)
             {
                 items.Add(ReadData(span, ref offset));
@@ -148,33 +149,58 @@ public static class CborReader
 
     // --- Low-level CBOR primitives ---
 
-    private static ulong ReadUnsigned(ReadOnlySpan<byte> span, ref int offset)
+    private static byte At(ReadOnlySpan<byte> span, int offset) =>
+        offset < span.Length ? span[offset] : throw Truncated();
+
+    private static InvalidOperationException Truncated() =>
+        new("CBOR: unexpected end of input.");
+
+    private static ReadOnlySpan<byte> Take(ReadOnlySpan<byte> span, ref int offset, int count)
     {
-        byte initial = span[offset++];
+        if (count < 0 || count > span.Length - offset)
+        {
+            throw Truncated();
+        }
+        ReadOnlySpan<byte> slice = span.Slice(offset, count);
+        offset += count;
+        return slice;
+    }
+
+    private static ulong ReadHead(ReadOnlySpan<byte> span, ref int offset, int expectedMajor)
+    {
+        byte initial = At(span, offset);
+        int major = initial >> 5;
+        if (major != expectedMajor)
+        {
+            throw new InvalidOperationException($"CBOR: expected major type {expectedMajor}, got {major}.");
+        }
+        offset++;
         int additionalInfo = initial & 0x1F;
 
         return additionalInfo switch
         {
             < 24 => (ulong)additionalInfo,
-            24 => span[offset++],
-            25 => ReadU16(span, ref offset),
-            26 => ReadU32(span, ref offset),
-            27 => ReadU64(span, ref offset),
+            24 => Take(span, ref offset, 1)[0],
+            25 => BinaryPrimitives.ReadUInt16BigEndian(Take(span, ref offset, 2)),
+            26 => BinaryPrimitives.ReadUInt32BigEndian(Take(span, ref offset, 4)),
+            27 => BinaryPrimitives.ReadUInt64BigEndian(Take(span, ref offset, 8)),
             _ => throw new InvalidOperationException($"CBOR: unsupported additional info {additionalInfo}.")
         };
     }
 
-    private static int ReadArrayHeader(ReadOnlySpan<byte> span, ref int offset) => (int)ReadUnsigned(span, ref offset);
+    private static int ReadCount(ReadOnlySpan<byte> span, ref int offset, int expectedMajor)
+    {
+        ulong count = ReadHead(span, ref offset, expectedMajor);
+        return count > (ulong)(span.Length - offset) ? throw Truncated() : (int)count;
+    }
 
     private static ReadOnlyMemory<byte> ReadByteString(ReadOnlySpan<byte> span, ref int offset)
     {
-        int additionalInfo = span[offset] & 0x1F;
-
-        if (additionalInfo == 31)
+        if (At(span, offset) == 0x5F)
         {
             offset++;
             ImmutableArray<byte>.Builder result = ImmutableArray.CreateBuilder<byte>();
-            while (span[offset] != 0xFF)
+            while (At(span, offset) != 0xFF)
             {
                 ReadOnlyMemory<byte> chunk = ReadDefiniteByteString(span, ref offset);
                 result.AddRange(chunk.Span);
@@ -188,30 +214,11 @@ public static class CborReader
 
     private static ReadOnlyMemory<byte> ReadDefiniteByteString(ReadOnlySpan<byte> span, ref int offset)
     {
-        int length = (int)ReadUnsigned(span, ref offset);
-        byte[] result = span.Slice(offset, length).ToArray();
-        offset += length;
-        return result;
-    }
-
-    private static ushort ReadU16(ReadOnlySpan<byte> span, ref int offset)
-    {
-        ushort value = BinaryPrimitives.ReadUInt16BigEndian(span[offset..]);
-        offset += 2;
-        return value;
-    }
-
-    private static uint ReadU32(ReadOnlySpan<byte> span, ref int offset)
-    {
-        uint value = BinaryPrimitives.ReadUInt32BigEndian(span[offset..]);
-        offset += 4;
-        return value;
-    }
-
-    private static ulong ReadU64(ReadOnlySpan<byte> span, ref int offset)
-    {
-        ulong value = BinaryPrimitives.ReadUInt64BigEndian(span[offset..]);
-        offset += 8;
-        return value;
+        ulong length = ReadHead(span, ref offset, 2);
+        if (length > MaxByteStringChunk)
+        {
+            throw new InvalidOperationException($"CBOR: definite byte string length {length} exceeds {MaxByteStringChunk} bytes.");
+        }
+        return Take(span, ref offset, (int)length).ToArray();
     }
 }
