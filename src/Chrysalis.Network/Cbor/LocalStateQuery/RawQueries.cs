@@ -116,11 +116,3 @@ public partial record UtxoByTxInQuery(
     [CborOrder(0)] ulong Idx,
     [CborOrder(1)] List<TransactionInput> TxIns
 ) : CborRecord, IQueryReq;
-
-/// <summary>
-/// Represents a global (era-independent) query in the LocalStateQuery mini-protocol.
-/// </summary>
-/// <param name="Query">The numeric identifier of the global query type.</param>
-[CborSerializable]
-[CborList]
-public partial record GlobalQuery([CborOrder(0)] ulong Query) : CborRecord, IQueryReq;
