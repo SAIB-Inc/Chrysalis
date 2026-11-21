@@ -130,6 +130,9 @@ def test_no_sdk_or_provider_registration_even_after_409(fake):
             fake.rest(verb, SUB + '/providers/Microsoft.Compute/register?api-version=2021-04-01')
     with pytest.raises(proof.AzureError, match='pinned subscription'):
         fake.rest('get', '/subscriptions/unknown/resourceGroups?api-version=2021-04-01')
+    for verb in ('put', 'delete'):
+        with pytest.raises(proof.AzureError, match='ARM mutation'):
+            fake.rest(verb, SUB + '/resourceGroups/' + RUN + '?api-version=2021-04-01', waits=proof.ONCE)
     assert not events(fake)
 
 
@@ -391,6 +394,23 @@ def test_cost_uses_whole_subscription_and_stops_on_unattributed_rows(fake, site)
         fake_state(fake, cost=dict(response, **defect))
         with pytest.raises(proof.AzureError, match='unsupported|incomplete'):
             proof.cost_readback(fake, 'baseline-group', attempts, first, now)
+    t_first = datetime(2026, 11, 19, tzinfo=timezone.utc).timestamp()
+    t_now = datetime(2026, 11, 21, tzinfo=timezone.utc).timestamp()
+    trial_rows = [[.05, 20261119, RUN, 'USD'], [0., 20261119, 'baseline-group', 'USD'],
+                  [.0052, 20261119, 'chrysalis-probe-0123456789abcdef-3', 'USD'],
+                  [.0033, 20261119, 'chrysalis-probe-0123456789abcdef-4', 'USD']]
+    fake_state(fake, cost=dict(response, rows=trial_rows))
+    clean = proof.cost_readback(fake, 'baseline-group', attempts, t_first, t_now)
+    assert not clean['stops'] and clean['otherRows'] == 1 and clean['trialRows'] == 2
+    assert clean['trialUsd'] == pytest.approx(.0085) and 'chrysalis-probe-' not in json.dumps(clean)
+    fake_state(fake, cost=dict(response, rows=[[.98, 20261119, 'chrysalis-probe-0123456789abcdef-1', 'USD']]))
+    over = proof.cost_readback(fake, 'baseline-group', attempts, t_first, t_now)
+    assert over['stops'] == ['charge outside run groups and exact baseline'] and over['trialRows'] == 1
+    for row_data in ([.01, 20261121, 'chrysalis-probe-0123456789abcdef-1', 'USD'],
+                     [.01, 20261119, 'chrysalis-gate-20990101t000000-cdcdcdcd', 'USD']):
+        fake_state(fake, cost=dict(response, rows=[row_data]))
+        stopped = proof.cost_readback(fake, 'baseline-group', attempts, t_first, t_now)
+        assert stopped['stops'] == ['charge outside run groups and exact baseline'] and stopped['trialRows'] == 0
 
 
 def test_payload_manifest_does_not_allow_unsealed_canary(tmp_path):
@@ -920,7 +940,19 @@ def test_cost_readback_at_day_one_and_day_three_includes_failed_primary(fake, si
     assert azure.daily_cost(directory, local) == 0
     assert not (directory / 'cost-d1.json').exists()
     monkeypatch.setattr(azure.time, 'time', lambda: now + 86400)
+    waits = []
+    monkeypatch.setattr(time, 'sleep', waits.append)
+    fake_state(fake, costThrottled=3)
+    with pytest.raises(azure.Refusal, match='throttled.*no posted cost or cost stop written'):
+        azure.daily_cost(directory, local)
+    throttled = azure.Ledger(local)
+    assert waits == [60, 120] and not (directory / 'cost-d1.json').exists()
+    assert throttled.data['lastDailyCheck'] == now + 86400 and not throttled.data.get('costStops')
+    assert all('posted' not in a for a in throttled.attempts.values())
+    waits.clear()
+    fake_state(fake, costThrottled=1)
     assert azure.daily_cost(directory, local) == 0
+    assert waits == [60]
     assert json.loads((directory / 'cost-d1.json').read_text())['posted'][RUN] == .05
     fake_state(fake, cost=dict(columns=columns, rows=[[.09, ymd, RUN, 'USD']], paginated=False))
     monkeypatch.setattr(azure.time, 'time', lambda: now + 3 * 86400)
@@ -2273,3 +2305,75 @@ def test_az2f4_fix4_tail_inside_pem_body_redacted_through_end(tmp_path, monkeypa
     assert 'END RSA PRIVATE KEY' not in srv
     assert srv.startswith('[redacted: credential-shaped line]\n' * 3 + 'normal-after-key\n')
     assert diag['linesRedacted'] == 3
+
+
+def slow_once(monkeypatch, site, answers_after, landed=False, *, times=1):
+    real = proof.subprocess.run
+    method, needle = site
+    hits = []
+    def wrapped(cmd, *args, **kwargs):
+        if (len(hits) < times and 'rest' in cmd and '--method' in cmd and '--url' in cmd
+                and cmd[cmd.index('--method') + 1] == method and needle in cmd[cmd.index('--url') + 1]):
+            hits.append(kwargs.get('timeout', 15))
+            if kwargs.get('timeout', 15) < answers_after:
+                if landed:
+                    real(cmd, *args, **kwargs)
+                raise subprocess.TimeoutExpired(cmd, kwargs.get('timeout', 15))
+        return real(cmd, *args, **kwargs)
+    monkeypatch.setattr(proof.subprocess, 'run', wrapped)
+    return hits
+
+
+@pytest.mark.parametrize('site', [('get', '/virtualMachines/gate?'), ('put', '/virtualMachines/gate?')])
+def test_setup_survives_one_slow_call(fake, tmp_path, monkeypatch, capsys, site):
+    draw = make_draw(fake, tmp_path)
+    monkeypatch.setattr(azure, 'provision_public_key', lambda: 'test-public-key')
+    monkeypatch.setattr(azure, 'upload_inputs', lambda _draw, _inputs: None)
+    hits = slow_once(monkeypatch, site, 20, landed=site[0] == 'put')
+    draw.setup({})
+    puts = [detail for verb, detail in events(fake) if verb == 'put']
+    assert puts.count(['Microsoft.Compute', 'virtualMachines']) == 1 and len(hits) == 1
+    out = capsys.readouterr().out
+    assert ('Azure call get virtualMachines timed out' in out) == (site[0] == 'get')
+
+
+@pytest.mark.parametrize('landed', [True, False])
+def test_init_submit_timeout_polls_without_resending(fake, tmp_path, monkeypatch, landed):
+    spark = 10000
+    now = [spark]
+    monkeypatch.setattr(time, 'time', lambda: now[0])
+    monkeypatch.setattr(time, 'sleep', lambda n: now.__setitem__(0, now[0] + n))
+    draw = make_draw(fake, tmp_path, start=spark)
+    fake_state(fake, groups={draw.scope: dict(location='eastus2', tags={'chrysalisGate': RUN})},
+               commandResults={'init': {'payload': 'k1', 'results': 'k2'}})
+    hits = slow_once(monkeypatch, ('put', '/runCommands/init?'), 20, landed=landed)
+    until = spark + 30
+    if landed:
+        assert channel.command(draw, 'init', '#!/bin/bash\n', until) == {'payload': 'k1', 'results': 'k2'}
+        assert [e for e in events(fake) if e == ['put', ['RunCommand', 'init']]] == [['put', ['RunCommand', 'init']]]
+    else:
+        with pytest.raises(guard.GuardFailure, match='deadline'):
+            channel.command(draw, 'init', '#!/bin/bash\n', until)
+        assert now[0] >= until and not any(e == ['put', ['RunCommand', 'init']] for e in events(fake))
+        draw.commands.add('kick')
+        draw.worker_done = True
+        now[0] = spark
+        slow_once(monkeypatch, ('put', '/runCommands/push-1?'), 20, landed=False)
+        with pytest.raises(proof.AzureError, match='timeout'):
+            channel.command(draw, 'push-1', '#!/bin/bash\n', spark + 30)
+        assert now[0] == spark and not any(e == ['get', ['RunCommand', 'push-1']] for e in events(fake))
+    assert len(hits) == 1
+
+
+def test_repeated_slow_read_ends_invalid_with_cleanup_and_labels(fake, site, ledger, monkeypatch, capsys):
+    local, directory = site
+    prepare_attempt(monkeypatch, directory)
+    fake_state(fake, deletesBeforeAbsent=1)
+    hits = slow_once(monkeypatch, ('get', '/virtualMachines/gate?'), 20, times=2)
+    assert attempt(fake, local, ledger, directory, RUN) == 2
+    assert len(hits) == 2 and ledger.attempts[RUN]['state'] == 'settled'
+    assert json.loads((directory / 'time/runs' / RUN / 'cleanup-proof.json').read_text())['ourAppAbsent']
+    assert not fake_state(fake)['groups']
+    out = capsys.readouterr().out.splitlines()
+    assert out.count('Azure call get virtualMachines timed out') == 2
+    assert 'Azure attempt: timeout; last Azure call: get virtualMachines' in out

@@ -106,6 +106,10 @@ def main():
         return dict(count=0, items=[], paginated=False)
     if short.endswith('/query') and method == 'post':
         json.load(sys.stdin)
+        if state.get('costThrottled', 0):
+            state['costThrottled'] -= 1
+            STATE.write_text(json.dumps(state))
+            fail('ERROR: Too Many Requests({"error":{"code":"429","message":"Too many requests. Please retry."}})')
         return state.get('cost', dict(columns=['PreTaxCost', 'UsageDate', 'ResourceGroup', 'Currency'], rows=[], paginated=False))
     if path in groups:
         return groups[path].get('tags', {}).get('chrysalisGate')
