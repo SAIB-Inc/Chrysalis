@@ -8,7 +8,7 @@
       "name": "Aiken",
       "version": "v1.1.21+42babe5"
     },
-    "license": "Apache-2.0"
+    "license": "MIT"
   },
   "validators": [
     {

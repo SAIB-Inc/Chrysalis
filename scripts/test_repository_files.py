@@ -63,7 +63,7 @@ COST_MODELS = Path("src/Chrysalis.Plutus.Test/TestData/CostModels")
 # Archives committed by design (D18): each passes only as its kind with the sha256 its manifest pins.
 ARCHIVES = {
     COST_MODELS / "plutigo-v0.12.3" / name: ("gzip", COST_MODELS / "manifest.json")
-    for name in ("node_ground_truth_pv11.json.gz", "node_budget_failures_pv11.json.gz")
+    for name in ("node_ground_truth_pv11.json.gz", "node_budget_failures_pv11.json.gz", "node_data_limits_pv11.json.gz")
 }
 REMOVED_NAME = bytes.fromhex("77697a617264").decode()
 REMOVED_HASHES = {
