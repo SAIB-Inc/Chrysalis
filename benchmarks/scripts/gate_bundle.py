@@ -571,6 +571,60 @@ def retry_file(path):
     return path
 
 
+def _pre_ready_note_ok(note, plan, expected_booked):
+    from gate_azure import FIXED_STEP
+    guard = note / '.guard'
+    if not (note.is_dir() and not note.is_symlink() and guard.is_dir() and not guard.is_symlink()):
+        return False
+    if not all((guard / n).is_file() and not (guard / n).is_symlink() for n in ('group-put-sent', 'group-put-confirmed', 'done')):
+        return False
+    if any(os.path.lexists(guard / n) for n in ('guest-ready', 'failed', 'urgent', 'provisional-reported',
+                                                'escalated', 'alerts.log', 'watchdog-proof.json')):
+        return False
+    if any(os.path.lexists(note / n) for n in ('cleanup-failed.json', 'results.tar.gz', 'results.sha256',
+                                               'diagnostic-only.json', 'guest-error.json', 'session-invalid.json')):
+        return False
+    if not all((note / n).is_file() and not (note / n).is_symlink()
+               for n in ('cleanup-proof.json', 'duration-cost.json', 'pre-ready-failure.json')):
+        return False
+    proof, cost = note_json(note, 'cleanup-proof.json') or {}, note_json(note, 'duration-cost.json') or {}
+    marker = note_json(note, 'pre-ready-failure.json') or {}
+    booked, roles = cost.get('totalEstimateWithReserveUsd'), proof.get('remainingRunRoleAssignments')
+    marker_ok = (set(marker) == {'class', 'step', 'seconds'}
+                 and isinstance(marker.get('class'), str) and bool(re.fullmatch(r'[A-Za-z_]{1,40}', marker['class']))
+                 and isinstance(marker.get('step'), str) and bool(FIXED_STEP.fullmatch(marker['step']))
+                 and type(marker.get('seconds')) in (int, float) and math.isfinite(marker['seconds']) and marker['seconds'] >= 0)
+    return (marker_ok and proof.get('ourAppAbsent') is True and proof.get('restored') is True
+            and type(roles) is int and roles == 0 and cost.get('cleanupOutstanding') is False
+            and cost.get('withinSealedGuard') is True
+            and type(booked) in (int, float) and math.isfinite(booked) and 0 <= booked <= timing.plan_price(plan)
+            and booked == expected_booked)
+
+
+def _pre_ready_settled(directory, local, go, number, phase, draw, app, fallback, plan):
+    from gate_azure import Ledger, Refusal
+    try:
+        ledger = Ledger(local, read_only=True)
+    except (Refusal, OSError, ValueError):
+        return False
+    if ledger.data.get('costStops') or os.path.lexists(ledger.cost_latch) or any(e.get('state') != 'settled' for e in ledger.attempts.values()):
+        return False
+    checks = ((app, 2, fallback),) + (((fallback, 6, None),) if fallback else ())
+    for group, code, primary in checks:
+        entry = ledger.attempts.get(group)
+        if not isinstance(entry, dict):
+            return False
+        wanted = dict(go=go, session=number, phase=phase, draw=draw, directory=directory.name,
+                      state='settled', exitCode=code, fallbackOf=primary)
+        booked, ended = entry.get('booked'), entry.get('ended')
+        if (any(entry.get(k) != v for k, v in wanted.items())
+                or type(booked) not in (int, float) or not math.isfinite(booked) or booked < 0
+                or type(ended) not in (int, float) or not math.isfinite(ended)
+                or not _pre_ready_note_ok(directory / 'time/runs' / group, plan, booked)):
+            return False
+    return True
+
+
 def draw_record(machine, number, phase, draw, app, decision, fallback=None):
     result = dict({key: value for key, value in machine.items() if key not in ('probeRecords', 'applied')},
                 session=number, phase=phase, draw=draw, app=app, decision=decision)
@@ -1039,6 +1093,7 @@ def fly_sessions(directory, seal, go, phases, index, *, dispatch=None, context=N
                 continue
             raise ValueError('Azure bytes sessions require AZ3')
         band_invalid = False
+        pre_ready_redrawn = False
         for phase in phases:
             selected = plan['rows']
             if phase == 'repeat':
@@ -1093,9 +1148,14 @@ def fly_sessions(directory, seal, go, phases, index, *, dispatch=None, context=N
                     machine['invalid'] = 'session invalid: launcher failure; ' + detail
                 elif not machine['invalid'] and rejected != (status == 5):
                     machine['invalid'] = 'session invalid: launcher status contradicts probe'
-                decision = 'invalid' if machine['invalid'] else 'rejected' if rejected else 'kept'
+                redraw = (azure and status == 2 and not pre_ready_redrawn and draw < rule['maxDraws']
+                          and _pre_ready_settled(directory, local, go, number, phase, draw, app, fallback, plan))
+                decision = 'invalid-pre-ready' if redraw else 'invalid' if machine['invalid'] else 'rejected' if rejected else 'kept'
                 draws.append(draw_record(machine, number, phase, draw, app, decision, fallback))
                 session.save(directory / 'time/draws.json', draws)
+                if redraw:
+                    pre_ready_redrawn = True
+                    continue
                 if decision == 'rejected':
                     if not azure:
                         spent += machine['bookedUsd']

@@ -3,6 +3,7 @@ from contextlib import contextmanager
 import base64
 import fcntl
 import hashlib
+import json
 import os
 from pathlib import Path
 import re
@@ -29,8 +30,20 @@ def alert(state, message):
         print(text, flush=True)
 
 
-def mark(state, name):
-    (state/name).touch(mode=0o600, exist_ok=True)
+def mark(state, name, *, since=None):
+    path = state / name
+    if since is None:
+        path.touch(mode=0o600, exist_ok=True)
+        return
+    now = time.time()
+    body = json.dumps(dict(unix=round(now, 3), utc=time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime(now)),
+                           elapsedSeconds=round(max(0.0, now - since), 3)), sort_keys=True) + '\n'
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW, 0o600)
+    try:
+        os.fchmod(fd, 0o600)
+        os.write(fd, body.encode('ascii'))
+    finally:
+        os.close(fd)
 
 
 @contextmanager
@@ -130,7 +143,6 @@ exit 1
 
 if __name__ == '__main__':
     # Smoke runs this file directly: no provider module, settings or Azure CLI.
-    import json
     import sys
     if len(sys.argv) != 3 or sys.argv[1] != '--keeper-smoke':
         raise SystemExit(2)

@@ -12,7 +12,7 @@ import time
 from urllib.parse import parse_qs
 
 from gate_azure_proof import ONCE, AzureError, storage_account
-from gate_azure_guard import GuardFailure, WRITE_END, COPY_END
+from gate_azure_guard import GuardFailure, WRITE_END, COPY_END, mark
 from gate_azure_guest import (
     GUEST_ACTIONS, MAX_BLOB_BYTES, MAX_DIAGNOSTIC,
     check_results, download, plan_results_limits, results_limits, upload,
@@ -113,6 +113,7 @@ def get_summary(message):
 def command(draw,label,script,until,*,sealed=None):
     if not re.fullmatch(r'(init|kick|status-(?:0[0-9]|1[0-8])|push-[12])',label):
         raise GuardFailure('unrecognized guest control action')
+    draw.step = f'run-command {label}'
     if until-time.time()<=1:
         raise GuardFailure('no time left to submit guest Run Command')
     path=draw.path('Compute','virtualMachines')+'/runCommands/'+label
@@ -193,10 +194,12 @@ def storage_key(draw):
 
 
 def upload_inputs(draw, inputs):
+    draw.step = 'upload-inputs'
     key = storage_key(draw)
     for name, path in inputs.items():
         upload(draw.account, name, signed_blob(draw.az, draw.account, key, name, 'cw'), path,
                MAX_BLOB_BYTES, min(draw.start + WORKER_START, time.time() + 100), unique=True)
+    mark(draw.guard, 'upload-done', since=draw.start)
 
 
 def run_channel(draw, inputs, evidence):
@@ -207,8 +210,8 @@ def run_channel(draw, inputs, evidence):
                    min(start_by - 1, time.time() + RUN_COMMAND_SECONDS + 15))
     if set(init) != {'payload', 'results'} or not all(isinstance(v, str) for v in init.values()) or init['payload'] == init['results']:
         raise GuardFailure('guest init did not attest both ephemeral keys')
-    private_guard = evidence / '.guard/guest-ready'
-    private_guard.touch(mode=0o600)
+    mark(evidence / '.guard', 'guest-ready', since=draw.start)
+    draw.step = 'prepare-kick'
     key = storage_key(draw)
     sealed = {name: seal(init['payload'], signed_blob(draw.az, draw.account, key, name, 'r')) for name in inputs}
     del key
@@ -240,11 +243,13 @@ def run_channel(draw, inputs, evidence):
                 raise GuardFailure('unexpected compact status')
             wake += interval
     except Exception:
+        failed_step = getattr(draw, 'step', '')
         draw.worker_failed = True
         try:
             copy_results(draw, evidence, init['results'], base, limits=limits)
         except Exception:
             pass
+        draw.step = failed_step
         raise
     if not draw.worker_done and time.time() < draw.work_end:
         time.sleep(draw.work_end - time.time())
@@ -257,6 +262,7 @@ def copy_results(draw, evidence, public, base, *, limits=None):
     known = None
     target = evidence / '.results-pending'
     for number in (1, 2):
+        draw.step = 'copy-results'
         if time.time() + PUSH_SECONDS > deadline:
             raise GuardFailure('insufficient time to push and verify results')
         key = storage_key(draw)
@@ -272,6 +278,7 @@ def copy_results(draw, evidence, public, base, *, limits=None):
                     or known not in (None, summary)):
                 raise ValueError('unexpected or changed push digest')
             known = summary
+            draw.step = 'download-results'
             read_sas = signed_blob(draw.az, draw.account, key, 'results', 'r')
             try:
                 actual = download(draw.account, 'results', read_sas, target, wire_limit, deadline)

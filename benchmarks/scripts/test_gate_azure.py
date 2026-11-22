@@ -11,6 +11,7 @@ import os
 from pathlib import Path
 import re
 import shutil
+import signal
 import subprocess
 import sys
 import tarfile
@@ -2475,4 +2476,493 @@ def test_repeated_slow_read_ends_invalid_with_cleanup_and_labels(fake, site, led
     assert not fake_state(fake)['groups']
     out = capsys.readouterr().out.splitlines()
     assert out.count('Azure call get virtualMachines timed out') == 2
-    assert 'Azure attempt: timeout; last Azure call: get virtualMachines' in out
+    assert any(line.startswith('Azure attempt: timeout; last Azure call: get virtualMachines; step wait virtualMachines; +') for line in out)
+
+
+def _settle_pre_ready(directory, ledger, go, number, phase, draw, app, *, status=2, fallback=None, region='eastus2',
+                      booked=.25, exit_code=None):
+    note = directory / 'time/runs' / app
+    gdir = note / '.guard'
+    gdir.mkdir(parents=True, exist_ok=True)
+    for name in ('group-put-sent', 'group-put-confirmed', 'done'):
+        guard.mark(gdir, name)
+    dump(note / 'machine.json', dict(provider='azure', platform='azure', machineClass=azure.SIZE, region=region))
+    dump(note / 'cleanup-proof.json', dict(restored=True, ourAppAbsent=True, remainingRunRoleAssignments=0))
+    dump(note / 'duration-cost.json', dict(cleanupOutstanding=False, totalEstimateWithReserveUsd=booked, withinSealedGuard=True,
+                                           lifetimeSeconds=100, guardSeconds=1256, cleanupStartedSeconds=50))
+    dump(note / 'pre-ready-failure.json', {'class': 'CapacityUnavailable' if (exit_code or status) == 6 else 'GuardFailure',
+                                           'step': 'put virtualMachines' if (exit_code or status) == 6 else 'run-command init',
+                                           'seconds': 12.3})
+    ledger.attempts[app] = dict(state='settled', go=go, session=number, draw=draw, phase=phase, region=region,
+                                fallbackOf=fallback, epoch=1000, guard=1256, cutoff=911, reservation=.62,
+                                lineage=None, directory=directory.name, booked=booked, expectedPosted=.15, ended=1100,
+                                exitCode=status if exit_code is None else exit_code)
+    ledger.write()
+    return note
+
+
+def _apply_fault(fault, d, ledger, app, fallback, g):
+    note = d / 'time/runs' / app
+    gdir = note / '.guard'
+    status = 2
+    if fault.startswith('g:'):
+        (gdir / fault[2:]).write_text('x')
+    elif fault == 'g-dangling':
+        (gdir / 'guest-ready').symlink_to(d / 'missing-target')
+    elif fault.startswith('n:'):
+        (note / fault[2:]).write_text('x')
+    elif fault == 'n-dangling':
+        (note / 'cleanup-failed.json').symlink_to(d / 'missing-target')
+    elif fault.startswith('miss:'):
+        (gdir / fault[5:]).unlink()
+    elif fault.startswith('sym:'):
+        name = fault[4:]
+        real = d / f'real-{name}'
+        (note / name).replace(real)
+        (note / name).symlink_to(real)
+    elif fault.startswith('proof:'):
+        data = json.loads((note / 'cleanup-proof.json').read_text())
+        key, val = {'absent': ('ourAppAbsent', False), 'restored': ('restored', False),
+                    'roles-1': ('remainingRunRoleAssignments', 1), 'roles-bool': ('remainingRunRoleAssignments', False)}[fault[6:]]
+        data[key] = val
+        dump(note / 'cleanup-proof.json', data)
+    elif fault.startswith('cost:'):
+        data = json.loads((note / 'duration-cost.json').read_text())
+        sub = fault[5:]
+        if sub == 'outstanding':
+            data['cleanupOutstanding'] = True
+        elif sub == 'over-guard':
+            data['withinSealedGuard'] = False
+        elif sub == 'mismatch':
+            data['totalEstimateWithReserveUsd'] = .26
+        elif sub == 'over-cap':
+            data['totalEstimateWithReserveUsd'] = 9.99
+            ledger.attempts[app]['booked'] = 9.99
+            ledger.write()
+        dump(note / 'duration-cost.json', data)
+    elif fault.startswith('marker:'):
+        sub = fault[7:]
+        mp = note / 'pre-ready-failure.json'
+        if sub == 'missing':
+            mp.unlink()
+        else:
+            data = json.loads(mp.read_text())
+            if sub == 'bad-class':
+                data['class'] = 'bad class!'
+            elif sub == 'bad-step':
+                data['step'] = 'unknown'
+            elif sub == 'bad-seconds':
+                data['seconds'] = -1
+            elif sub == 'extra-key':
+                data['extra'] = 1
+            dump(mp, data)
+    elif fault == 'ledger:cost-stop':
+        ledger.data['costStops'] = ['over']
+        ledger.write()
+    elif fault == 'ledger:cost-latch':
+        ledger.cost_latch.write_text('{}')
+    elif fault == 'ledger:other-active':
+        other = 'chrysalis-gate-20990405t000099-00000099'
+        ledger.attempts[other] = dict(ledger.attempts[app], go='0' * 64, state='active', draw=1)
+        ledger.write()
+    elif fault == 'ledger:self-active':
+        ledger.attempts[app]['state'] = 'active'
+        ledger.write()
+    elif fault.startswith('ledger:'):
+        field = fault[7:]
+        bad = {'go': '0' * 64, 'session': 1, 'phase': 'repeat', 'draw': 2, 'directory': 'gate-other',
+               'fallbackOf': 'chrysalis-gate-20990405t000098-00000098', 'exitCode': 5}[field]
+        ledger.attempts[app][field] = bad
+        ledger.write()
+    elif fault.startswith('status:'):
+        status = int(fault[7:])
+    elif fault.startswith('fb:'):
+        fb_note = d / 'time/runs' / fallback
+        sub = fault[3:]
+        if sub == 'bad-proof':
+            dump(fb_note / 'cleanup-proof.json', dict(restored=True, ourAppAbsent=False, remainingRunRoleAssignments=0))
+        elif sub == 'bad-exit':
+            ledger.attempts[fallback]['exitCode'] = 2
+            ledger.write()
+        elif sub == 'missing-marker':
+            (fb_note / 'pre-ready-failure.json').unlink()
+    return status
+
+
+def _run_fly(monkeypatch, site, ledger, outcomes, *, max_draws=6, seal_patch=None, tag='a'):
+    local, base_dir = site
+    directory = base_dir.parent / f'gate-redraw-{tag}'
+    directory.mkdir(exist_ok=True)
+    go, seal = sealed_site((local, directory))
+    plan = seal['timePlans'][0]
+    plan['probe']['maxDraws'] = max_draws
+    plan['rows'][0]['noise'] = dict(band=.04, machine=azure.SIZE, design='long')
+    if seal_patch:
+        seal_patch(seal, plan)
+    else:
+        schedules.prepare(plan)
+    go = gate.write_seal(directory, seal)
+    monkeypatch.setattr(azure, 'reconcile_and_pre_go', lambda *_: None)
+    calls, it = [], iter(outcomes)
+
+    def fake_launch(host, d, g, number, phase, draw, pl, relative, first, ctx, disp):
+        kind = next(it)
+        app = f'chrysalis-gate-20990405t000{len(calls) + 1:03d}-' + f'{len(calls) + 1:08x}'
+        calls.append((number, phase, draw, app, kind))
+        if first:
+            dump(d / 'time/launch-started.json', dict(sealId=g))
+        if kind in ('kept', 'rejected'):
+            note = d / 'time/runs' / app
+            write_azure_result(note, pl, 'cv-over-limit' if kind == 'rejected' else 'keep')
+            dump(note / 'cleanup-proof.json', dict(restored=True, ourAppAbsent=True, remainingRunRoleAssignments=0))
+            code = 5 if kind == 'rejected' else 0
+            ledger.attempts[app] = dict(state='settled', go=g, session=number, draw=draw, phase=phase, region='eastus2',
+                                        fallbackOf=None, epoch=1000, guard=pl['destroyGuardSeconds'], cutoff=pl['measurementCutoffSeconds'],
+                                        reservation=.62, lineage=None, directory=d.name, booked=.25, expectedPosted=.15, ended=1100, exitCode=code)
+            ledger.write()
+            return code, app, None
+        fallback = None
+        if kind == 'fallback-pre-ready' or kind.startswith('fb:'):
+            fallback = f'chrysalis-gate-20990405t000{len(calls) + 90:03d}-' + f'{len(calls) + 90:08x}'
+            _settle_pre_ready(d, ledger, g, number, phase, draw, fallback, status=6, region='eastus2')
+            _settle_pre_ready(d, ledger, g, number, phase, draw, app, status=2, fallback=fallback, region='eastus')
+        else:
+            _settle_pre_ready(d, ledger, g, number, phase, draw, app, status=2)
+        status = 2 if kind in ('pre-ready', 'fallback-pre-ready') else _apply_fault(kind, d, ledger, app, fallback, g)
+        return status, app, fallback
+
+    monkeypatch.setattr(bundle, 'launch_azure', fake_launch)
+    (directory / 'time').mkdir(exist_ok=True)
+    rc = bundle.fly_sessions(directory, seal, go, ('first', 'repeat'), [], context=('test', 'fixture'))
+    return rc, directory, seal, go, calls, json.loads((directory / 'time/draws.json').read_text())
+
+
+def test_redraw_one_pre_ready_then_kept_settles_before_second_reserve(fake, site, ledger, monkeypatch):
+    local, directory = site
+    prepare_attempt(monkeypatch, directory)
+    go, seal = sealed_site(site)
+    plan = seal['timePlans'][0]
+    plan['rows'][0]['noise'] = dict(band=.04, machine=azure.SIZE, design='long')
+    schedules.prepare(plan)
+    go = gate.write_seal(directory, seal)
+    monkeypatch.setattr(azure, 'reconcile_and_pre_go', lambda *_: None)
+    timeline, real_write, seq = [], ledger.write, [0]
+
+    def tracked_write():
+        for name, entry in ledger.attempts.items():
+            tag = ('reserve' if entry['state'] == 'active' else entry['state'], name)
+            if tag not in timeline:
+                timeline.append(tag)
+        real_write()
+
+    def run_ch(draw, inputs, note):
+        seq[0] += 1
+        if seq[0] == 1:
+            draw.step = 'run-command init'
+            raise guard.GuardFailure('no time left to submit guest Run Command')
+        guard.mark(note / '.guard', 'guest-ready', since=draw.start)
+        staged = directory / 'staged-kept'
+        write_azure_result(staged, plan, 'keep')
+        for f in ('results.tar.gz', 'results.sha256'):
+            shutil.copy2(staged / f, note / f)
+        return False
+
+    def real_one(host, d, g, number, phase, draw_n, pl, relative, first, ctx, disp):
+        app = f'chrysalis-gate-20990405t000{draw_n:03d}-' + f'{draw_n:08x}'
+        if first:
+            monkeypatch.setenv('GATE_FIRST_GO', g)
+        else:
+            monkeypatch.delenv('GATE_FIRST_GO', raising=False)
+        return azure.one_attempt(fake, local, ledger, seal, g, d, pl, app, pl['region'], {}, number, draw_n, phase, None, ctx, 0), app, None
+
+    monkeypatch.setattr(ledger, 'write', tracked_write)
+    monkeypatch.setattr(azure, 'run_channel', run_ch)
+    monkeypatch.setattr(azure, 'probe_result', lambda *_: 0)
+    monkeypatch.setattr(bundle, 'launch_azure', real_one)
+    (directory / 'time').mkdir(exist_ok=True)
+    rc = bundle.fly_sessions(directory, seal, go, ('first',), [], context=('test', 'fixture'))
+    draws = json.loads((directory / 'time/draws.json').read_text())
+    assert rc == 0 and [d['decision'] for d in draws] == ['invalid-pre-ready', 'kept']
+    a1, a2 = draws[0]['app'], draws[1]['app']
+    assert timeline == [('reserve', a1), ('settled', a1), ('reserve', a2), ('settled', a2)]
+    assert ledger.attempts[a1]['exitCode'] == 2 and ledger.attempts[a2]['exitCode'] == 0
+    assert ledger.attempts[a1]['booked'] > 0 and not json.loads((directory / 'time/0-first.json').read_text())['invalid']
+    mf = directory / 'time/runs' / a1 / 'pre-ready-failure.json'
+    assert mf.is_file() and (mf.stat().st_mode & 0o777) == 0o600
+    assert json.loads(mf.read_text())['class'] == 'GuardFailure' and json.loads(mf.read_text())['step'] == 'run-command init'
+    assert not (directory / 'time/runs' / a2 / 'pre-ready-failure.json').exists()
+
+
+def test_sigterm_to_real_one_attempt_gets_no_redraw(fake, site, ledger, monkeypatch):
+    local, directory = site
+    prepare_attempt(monkeypatch, directory)
+    go, seal = sealed_site(site)
+    plan = seal['timePlans'][0]
+    plan['rows'][0]['noise'] = dict(band=.04, machine=azure.SIZE, design='long')
+    schedules.prepare(plan)
+    go = gate.write_seal(directory, seal)
+    monkeypatch.setattr(azure, 'reconcile_and_pre_go', lambda *_: None)
+
+    def sigterm_in_channel(draw, _inputs, _note):
+        os.kill(os.getpid(), signal.SIGTERM)
+
+    monkeypatch.setattr(azure, 'run_channel', sigterm_in_channel)
+    calls = []
+
+    def real_one(host, d, g, number, phase, draw_n, pl, relative, first, ctx, disp):
+        app = f'chrysalis-gate-20990405t000{draw_n:03d}-' + f'{draw_n:08x}'
+        calls.append(app)
+        if first:
+            monkeypatch.setenv('GATE_FIRST_GO', g)
+        else:
+            monkeypatch.delenv('GATE_FIRST_GO', raising=False)
+        prev = signal.signal(signal.SIGTERM, lambda *_: sys.exit(2))
+        try:
+            code = azure.one_attempt(fake, local, ledger, seal, g, d, pl, app, pl['region'], {}, number, draw_n, phase, None, ctx, 0)
+        except SystemExit as exc:
+            code = exc.code
+        finally:
+            signal.signal(signal.SIGTERM, prev)
+        return code, app, None
+
+    monkeypatch.setattr(bundle, 'launch_azure', real_one)
+    (directory / 'time').mkdir(exist_ok=True)
+    rc = bundle.fly_sessions(directory, seal, go, ('first',), [], context=('test', 'fixture'))
+    draws = json.loads((directory / 'time/draws.json').read_text())
+    assert rc == 2 and len(calls) == 1 and [d['decision'] for d in draws] == ['invalid']
+    assert ledger.attempts[calls[0]]['state'] == 'settled' and ledger.attempts[calls[0]]['exitCode'] == 2
+    assert not (directory / 'time/runs' / calls[0] / 'pre-ready-failure.json').exists()
+
+
+def test_redraw_two_pre_ready_failures_stop_same_and_cross_phase(fake, site, ledger, monkeypatch):
+    rc, _, _, _, calls, draws = _run_fly(monkeypatch, site, ledger, ['fallback-pre-ready', 'pre-ready', 'kept'], tag='same')
+    assert rc == 2 and len(calls) == 2 and [d['decision'] for d in draws] == ['invalid-pre-ready', 'invalid']
+
+    def make_release(seal, plan):
+        entry = dict(plan['rows'][0], aPairs=16, bPairs=16, expected=dict(release='FAIL', change='PASS'))
+        rp = probe_plan(entry, 'release')
+        rp.update(inputSha256=plan['inputSha256'], repeatAllowed=True)
+        schedules.prepare(rp)
+        seal.update(mode='release', rows=rp['rows'], timePlans=[rp])
+
+    monkeypatch.setattr(bundle, 'make_repeat', lambda *_: None)
+    monkeypatch.setattr(timing, 'session_outcome', lambda *a, **k: ('repeat', [a[1]['timePlans'][0]['rows'][0]['id']]))
+    ledger.attempts.clear()
+    ledger.write()
+    rc2, _, _, _, calls2, draws2 = _run_fly(monkeypatch, site, ledger, ['pre-ready', 'kept', 'pre-ready', 'kept'],
+                                            seal_patch=make_release, tag='cross')
+    assert rc2 == 2 and len(calls2) == 3 and [d['decision'] for d in draws2] == ['invalid-pre-ready', 'kept', 'invalid']
+
+
+@pytest.mark.parametrize('fault', [
+    'g:guest-ready', 'g:failed', 'g:urgent', 'g:provisional-reported', 'g:escalated', 'g:alerts.log', 'g:watchdog-proof.json', 'g-dangling',
+    'n:cleanup-failed.json', 'n:results.tar.gz', 'n:results.sha256', 'n:diagnostic-only.json', 'n:guest-error.json', 'n:session-invalid.json', 'n-dangling',
+    'miss:group-put-sent', 'miss:group-put-confirmed', 'miss:done',
+    'sym:cleanup-proof.json', 'sym:duration-cost.json', 'sym:pre-ready-failure.json',
+    'proof:absent', 'proof:restored', 'proof:roles-1', 'proof:roles-bool',
+    'cost:outstanding', 'cost:over-guard', 'cost:mismatch', 'cost:over-cap',
+    'marker:missing', 'marker:bad-class', 'marker:bad-step', 'marker:bad-seconds', 'marker:extra-key',
+    'ledger:cost-stop', 'ledger:cost-latch', 'ledger:other-active', 'ledger:self-active',
+    'ledger:go', 'ledger:session', 'ledger:phase', 'ledger:draw', 'ledger:directory', 'ledger:fallbackOf', 'ledger:exitCode',
+    'status:4', 'status:6',
+    'fb:bad-proof', 'fb:bad-exit', 'fb:missing-marker',
+])
+def test_redraw_refused_after_guest_ready_or_any_doubt(fake, site, ledger, monkeypatch, fault):
+    rc, _, _, _, calls, draws = _run_fly(monkeypatch, site, ledger, [fault, 'kept'], tag=re.sub(r'[^a-z0-9]+', '-', fault))
+    assert rc == (4 if fault == 'status:4' else 2)
+    assert len(calls) == 1 and [d['decision'] for d in draws] == ['invalid']
+
+
+def test_redraw_and_probe_rejection_stay_inside_max_draws(fake, site, ledger, monkeypatch):
+    rc, _, _, _, calls, draws = _run_fly(monkeypatch, site, ledger, ['rejected', 'pre-ready', 'kept'], max_draws=3, tag='fit')
+    assert rc == 0 and len(calls) == 3 and [d['decision'] for d in draws] == ['rejected', 'invalid-pre-ready', 'kept']
+    ledger.attempts.clear()
+    ledger.write()
+    rc2, _, _, _, calls2, draws2 = _run_fly(monkeypatch, site, ledger, ['rejected', 'rejected', 'pre-ready', 'kept'], max_draws=3, tag='cap')
+    assert rc2 == 2 and len(calls2) == 3 and [d['decision'] for d in draws2] == ['rejected', 'rejected', 'invalid']
+
+
+def test_failure_lines_carry_fixed_class_step_seconds_and_no_free_text(fake, site, ledger, monkeypatch, capsys):
+    local, directory = site
+    prepare_attempt(monkeypatch, directory)
+    clock = [10_000.0]
+    monkeypatch.setattr(azure.time, 'time', lambda: clock[0])
+
+    def fail_guard(draw, _inputs, _note):
+        draw.step = 'run-command init'
+        clock[0] += 52.5
+        raise guard.GuardFailure('CANARY_SECRET_GUARD 10.1.2.3')
+
+    monkeypatch.setattr(azure, 'run_channel', fail_guard)
+    assert attempt(fake, local, ledger, directory, RUN) == 2
+    out = capsys.readouterr().out
+    assert 'Azure attempt invalid: GuardFailure; step run-command init; +52.5s' in out
+    assert 'details suppressed' not in out and 'CANARY_SECRET_GUARD' not in out
+    assert azure._fixed_step(Mock(step='CANARY_FREE_STEP')) == 'unknown'
+    ev_k = directory / 'kick-step'; ev_k.mkdir()
+    d_kick = make_draw(fake, ev_k, start=10_000)
+    d_kick.account = 'chry' + '0' * 16
+    monkeypatch.setattr(channel, 'plan_results_limits', lambda *_: (1024, 2048))
+    monkeypatch.setattr(channel, 'storage_key', lambda *_: 'K' * 48)
+    monkeypatch.setattr(channel, 'signed_blob', lambda *_: 'tok')
+    monkeypatch.setattr(channel, 'seal', lambda *_: 'sealed')
+    monkeypatch.setattr(channel, 'command', lambda dr, lbl, *a, **k: (setattr(dr, 'step', f'run-command {lbl}'), {'payload': 'P', 'results': 'R'})[1] if lbl == 'init' else (setattr(dr, 'step', f'run-command {lbl}'), (_ for _ in ()).throw(guard.GuardFailure('kick-fail')))[1])
+    monkeypatch.setattr(channel, 'copy_results', lambda dr, *a, **k: setattr(dr, 'step', 'copy-results'))
+    pf = directory / 'k.tar.gz'; pf.write_bytes(b'x')
+    with pytest.raises(guard.GuardFailure, match='kick-fail'):
+        channel.run_channel(d_kick, {'payload': pf}, ev_k)
+    assert d_kick.step == 'run-command kick'
+
+    monkeypatch.delenv('GATE_FIRST_GO')
+    clock[0], real_run = 11_000.0, proof.subprocess.run
+
+    def fail_az_stderr(cmd, *args, **kwargs):
+        if 'rest' in cmd and cmd[cmd.index('--method') + 1] == 'get' and '/virtualMachines/gate?' in cmd[cmd.index('--url') + 1]:
+            clock[0] += 11.2
+            return subprocess.CompletedProcess(cmd, 1, b'', b'CANARY_SECRET_AZ https://10.9.8.7/sub/secret')
+        return real_run(cmd, *args, **kwargs)
+
+    monkeypatch.setattr(proof.subprocess, 'run', fail_az_stderr)
+    assert azure.one_attempt(fake, local, ledger, dict(platform={'azCliVersion': '2.99.1'}, programStopUsd=40),
+                             bundle.sha(directory / 'seal.json'), directory, dict(destroyGuardSeconds=1256, measurementCutoffSeconds=911),
+                             OTHER, 'eastus2', {}, 0, 2, 'first', None, ('test', 'fixture'), 0) == 2
+    out2 = capsys.readouterr().out
+    assert 'last Azure call: get virtualMachines; step wait virtualMachines; +11.2s' in out2 and 'CANARY_SECRET_AZ' not in out2
+    assert json.loads((directory / 'time/runs' / OTHER / 'pre-ready-failure.json').read_text())['class'] == 'AzureError'
+
+    # Failure AFTER guest-ready must NOT write pre-ready-failure.json.
+    post_app = 'chrysalis-gate-20990405t000103-11223344'
+    monkeypatch.setattr(proof.subprocess, 'run', real_run)
+    monkeypatch.setattr(azure, 'run_channel', lambda dr, _i, nt: (guard.mark(nt / '.guard', 'guest-ready', since=dr.start), (_ for _ in ()).throw(guard.GuardFailure('post')))[1])
+    assert azure.one_attempt(fake, local, ledger, dict(platform={'azCliVersion': '2.99.1'}, programStopUsd=40),
+                             bundle.sha(directory / 'seal.json'), directory, dict(destroyGuardSeconds=1256, measurementCutoffSeconds=911),
+                             post_app, 'eastus2', {}, 0, 3, 'first', None, ('test', 'fixture'), 0) == 2
+    assert not (directory / 'time/runs' / post_app / 'pre-ready-failure.json').exists()
+
+    proc = subprocess.run([sys.executable, '-B', str(HERE / 'gate_azure.py'), 'recover'],
+        env=dict(os.environ, CHRYSALIS_GATE_LOCAL='/tmp/CANARY_MAIN_SECRET/missing.json'), capture_output=True, text=True)
+    assert proc.returncode == 2 and proc.stderr.strip() == 'Azure launcher failed: ValueError'
+    assert 'CANARY_MAIN_SECRET' not in proc.stderr and 'details suppressed' not in proc.stderr
+
+
+def test_host_step_markers_written_with_times_and_stop_at_failure_step(fake, site, ledger, monkeypatch, capsys):
+    local, directory = site
+    prepare_attempt(monkeypatch, directory)
+    clock, vm_fail, real_run = [20_000.0], [False], proof.subprocess.run
+    for mod in (azure.time, guard.time, channel.time):
+        monkeypatch.setattr(mod, 'time', lambda: clock[0])
+    monkeypatch.setattr(time, 'sleep', lambda n: clock.__setitem__(0, clock[0] + max(0, n)))
+    monkeypatch.setattr(channel, 'storage_key', lambda _d: 'K' * 48)
+    monkeypatch.setattr(channel, 'signed_blob', lambda *_a: 'se=2099-01-01T00%3A00%3A00Z&sp=cw&spr=https&sv=2022-11-02&sr=b&sig=' + 'a' * 43)
+    monkeypatch.setattr(channel, 'seal', lambda *_a: 'sealed')
+    monkeypatch.setattr(channel, 'plan_results_limits', lambda *_: (1024, 2048))
+    monkeypatch.setattr(channel, 'upload', lambda *_a, **_k: clock.__setitem__(0, clock[0] + 15.0))
+    monkeypatch.setattr(azure, 'upload_inputs', channel.upload_inputs)
+
+    def ticking_run(cmd, *args, **kwargs):
+        if 'rest' in cmd and '--url' in cmd:
+            url, method = cmd[cmd.index('--url') + 1], cmd[cmd.index('--method') + 1]
+            if method == 'put' and '/virtualMachines/gate?' in url:
+                clock[0] += 10.0
+            elif method == 'get' and '/virtualMachines/gate/instanceView?' in url:
+                return subprocess.CompletedProcess(cmd, 0, b'[]', b'')
+            elif method == 'get' and '/virtualMachines/gate?' in url:
+                clock[0] += 65.0
+                if vm_fail[0]:
+                    return subprocess.CompletedProcess(cmd, 0, b'"Failed"', b'')
+            elif method == 'get' and '/schedules/' in url:
+                clock[0] += 2.0
+            elif method == 'put' and '/runCommands/init?' in url:
+                clock[0] += 5.0
+            elif method == 'get' and '/runCommands/init?' in url:
+                clock[0] += 25.0
+            elif method == 'put' and '/runCommands/kick?' in url:
+                clock[0] += 7.0
+        return real_run(cmd, *args, **kwargs)
+
+    monkeypatch.setattr(proof.subprocess, 'run', ticking_run)
+    fake_state(fake, commandResults={'init': {'payload': 'PUB1', 'results': 'PUB2'}, 'kick': {'started': 20_125}, 'status-00': {'done': True}})
+    monkeypatch.setattr(channel, 'copy_results', lambda *_a, **_k: True)
+    monkeypatch.setattr(azure, 'run_channel', channel.run_channel)
+    payload_file = directory / 'p.tar.gz'
+    payload_file.write_bytes(b'payload')
+    seal_stub = dict(platform={'azCliVersion': '2.99.1'}, programStopUsd=40)
+    plan_stub = dict(destroyGuardSeconds=1256, measurementCutoffSeconds=911)
+    assert azure.one_attempt(fake, local, ledger, seal_stub, bundle.sha(directory / 'seal.json'), directory, plan_stub,
+                             RUN, 'eastus2', {'payload': payload_file}, 0, 1, 'first', None, ('test', 'fixture'), 0) == 2
+    gdir = directory / 'time/runs' / RUN / '.guard'
+    times = []
+    for name in ('vm-put-sent', 'upload-done', 'vm-provisioned', 'init-sent', 'guest-ready'):
+        p = gdir / name
+        assert p.is_file() and (p.stat().st_mode & 0o777) == 0o600
+        data = json.loads(p.read_text())
+        assert set(data) == {'unix', 'utc', 'elapsedSeconds'}
+        times.append(data['elapsedSeconds'])
+    assert all(a < b for a, b in zip(times, times[1:]))
+
+    # F4: mark(..., since=...) must refuse symlinks (O_NOFOLLOW).
+    target = directory / 'untouched.txt'
+    target.write_text('untouched')
+    (gdir / 'sym-marker').symlink_to(target)
+    with pytest.raises(OSError):
+        guard.mark(gdir, 'sym-marker', since=20_000.0)
+    assert target.read_text() == 'untouched'
+
+    monkeypatch.delenv('GATE_FIRST_GO')
+    vm_fail[0] = True
+    fake_state(fake, deletesBeforeAbsent=1)
+    assert azure.one_attempt(fake, local, ledger, seal_stub, bundle.sha(directory / 'seal.json'), directory, plan_stub,
+                             OTHER, 'eastus2', {'payload': payload_file}, 0, 2, 'first', None, ('test', 'fixture'), 0) == 2
+    gdir2 = directory / 'time/runs' / OTHER / '.guard'
+    assert (gdir2 / 'vm-put-sent').is_file() and (gdir2 / 'upload-done').is_file()
+    assert not any((gdir2 / n).exists() for n in ('vm-provisioned', 'init-sent', 'guest-ready'))
+    assert 'Azure attempt invalid: GuardFailure; step wait virtualMachines;' in capsys.readouterr().out
+
+
+def test_consumers_accept_pre_ready_then_kept_and_retry_consumers_refuse(fake, site, ledger, monkeypatch):
+    rc, directory, seal, go, _, draws = _run_fly(monkeypatch, site, ledger, ['pre-ready', 'kept'], tag='change')
+    assert rc == 0 and [d['decision'] for d in draws] == ['invalid-pre-ready', 'kept']
+    assert timing.session_outcome(directory, seal, 0)[0] == 'complete'
+    lines = timing.draw_lines(directory, first_only=False)
+    assert any('invalid-pre-ready' in l for l in lines) and any('DRAW WARNING:' in l for l in lines)
+    rep = gate.report(directory)
+    assert rep['outcome'] == 'SUBSET' and 'invalid-pre-ready' in rep['text']
+
+    # R1: retry consumers keep failing closed on 'invalid-pre-ready'.
+    plan, first_item = seal['timePlans'][0], json.loads((directory / 'time/index.json').read_text())[0]
+    with pytest.raises(ValueError, match='Retry draw differs'):
+        bundle.retry_phase(directory, first_item, plan, plan['rows'], 'first', draws)
+    with pytest.raises(ValueError, match='Invalid settled Azure retry outcome'):
+        bundle.retry_azure_apps(directory, go, ledger.attempts, draws)
+    bytes_plans = [dict(provider='azure'), dict(bytesOnly=True)]
+    bytes_draws = [dict(session=1, draw=1, phase='first', app=draws[0]['app'], decision='invalid-pre-ready'),
+                   dict(session=1, draw=2, phase='first', app=draws[1]['app'], decision='kept', archiveSha256=draws[1]['archiveSha256'])]
+    dump(directory / 'time/bytes-index.json', [dict(session=1, phase='first', app=draws[1]['app'], archiveSha256=draws[1]['archiveSha256'])])
+    with pytest.raises(KeyError) as kerr:
+        bundle.check_azure_retry_bytes(directory, bytes_plans, bytes_draws)
+    assert kerr.value.args == ('archiveSha256',)
+    with pytest.raises(ValueError, match='Invalid original bytes draw order or slot'):
+        bundle.check_azure_retry_bytes(directory, bytes_plans, [dict(bytes_draws[0], archiveSha256='0' * 64), bytes_draws[1]])
+
+    # Noise go: finish_noise_records accepts invalid-pre-ready then kept.
+    ledger.attempts.clear()
+    ledger.write()
+    real_vm = bundle.verified_machine
+
+    def vm_with_applied(note, pl, spent, **kw):
+        ev = real_vm(note, pl, spent, **kw)
+        if not ev['invalid']:
+            wl = schedules.opaque(pl['scheduleSeed'], ['workload', pl['rows'][0]['id']])
+            ev['applied'] = {wl: {'expectedWork': pl['rows'][0].get('expectedWork', {})}}
+        return ev
+
+    def make_noise(s, p):
+        p['rows'][0].update(aPairs=16, bPairs=0, corpusId='fixture-corpus', job={})
+        p.update(design='noise-band', repeatAllowed=False)
+        schedules.prepare(p)
+        s.update(noiseRecords=True, rows=p['rows'], timePlans=[p])
+
+    monkeypatch.setattr(bundle, 'verified_machine', vm_with_applied)
+    rc_n, dir_n, seal_n, _, _, draws_n = _run_fly(monkeypatch, site, ledger, ['pre-ready', 'kept'], seal_patch=make_noise, tag='noise')
+    assert rc_n == 0 and [d['decision'] for d in draws_n] == ['invalid-pre-ready', 'kept']
+    assert set(json.loads((dir_n / 'time/noise-records.json').read_text())) == {seal_n['timePlans'][0]['rows'][0]['id']}
