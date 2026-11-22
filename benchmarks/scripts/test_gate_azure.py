@@ -1701,7 +1701,7 @@ def test_az2f4_noise_seal_full_size_results_archive_and_limits(tmp_path, monkeyp
     assert guest.results_limits(runaway) == (guest.MAX_RESULTS_COMPRESSED, guest.MAX_RESULTS_EXPANDED)
 
 
-def test_rehearsal_checks_rejects_run3_and_accepts_mr1_archives(tmp_path):
+def test_rehearsal_checks_rejects_run3_and_accepts_mr1_archives(tmp_path, monkeypatch):
     import gate_prelude as prelude, gate_prepare as prepare
     from test_gate_az2 import rehearsal_fixture
     base, members, seed_plan = rehearsal_fixture(tmp_path / 'fix')
@@ -1714,13 +1714,34 @@ def test_rehearsal_checks_rejects_run3_and_accepts_mr1_archives(tmp_path):
     with tarfile.open(run3_tar, 'w:gz') as stream:
         for arc, src in (('results/session-status.json', run3 / 'results/session-status.json'), ('results/session.log', run3 / 'session.log')):
             stream.add(src, arcname=arc, recursive=False)
-    bad = prepare.rehearsal_checks('fail', run3_tar, plans['fail'], dict(exitCode=2, partial=False, archiveSha256=bundle.sha(run3_tar),
-                                   importerCode=None, importerError='DIAGNOSTIC ONLY / INCONCLUSIVE', diagnosticPath=run3_diag))['checks']
-    assert {k for k, v in bad.items() if not v} == {'log_nonempty', 'log_start', 'log_probe', 'log_prelude', 'log_end', 'log_stopped', 'summary_fields'}
+    bad_info = prepare.rehearsal_checks('fail', run3_tar, plans['fail'], dict(exitCode=2, partial=False, archiveSha256=bundle.sha(run3_tar),
+                                        importerCode=None, importerError='DIAGNOSTIC ONLY / INCONCLUSIVE', diagnosticPath=run3_diag))
+    assert {k for k, v in bad_info['checks'].items() if not v} == {'log_nonempty', 'log_start', 'log_probe', 'log_prelude', 'log_end', 'log_stopped', 'summary_fields'}
     outcomes = {c: prepare.rehearse_case(c, base, members, plans[c], tmp_path / f'run-{c}') for c in ('fail', 'pass')}
     for c, out in outcomes.items():
         checks = prepare.rehearsal_checks(c, out['archive'], plans[c], out)['checks']
         assert all(checks.values()), (c, {k: v for k, v in checks.items() if not v})
+    assert bad_info['worker'] == 'exit:2,stage:none,marker:none,error:none'
+    run4_work, run4_temp, run4_tar = tmp_path / 'run4-work', tmp_path / 'run4-temp', tmp_path / 'run4.tar.gz'
+    for d in (run4_work, run4_temp):
+        d.mkdir()
+    (run4_work / 'session.log').write_text("python3.12: /lib/x86_64-linux-gnu/libc.so.6: version `GLIBC_2.38' not found\n")
+    with monkeypatch.context() as mp:
+        mp.setattr(guest, 'WORK', run4_work)
+        mp.setattr(guest, 'TEMP', run4_temp)
+        assert guest.archive_results(run4_tar, False) is True
+    run4_info = prepare.rehearsal_checks('fail', run4_tar, plans['fail'], dict(exitCode=127, partial=True, archiveSha256=bundle.sha(run4_tar)))
+    assert run4_info['artefacts'] == ['sha256', 'log'] and run4_info['worker'] == 'exit:127,stage:none,marker:no-status,error:none'
+    for idx, (reason, log_line) in enumerate((('custom-unlisted', 'loader failed\n'), ('caf\xe9-reason', 'Caf\xe9Error: secret\n'))):
+        arc = tmp_path / f'bad-worker-{idx}.tar.gz'
+        with tarfile.open(arc, 'w:gz') as stream:
+            for name, raw in (('results/recovery-diagnostic.json', json.dumps({'diagnosticOnly': True, 'reason': reason}).encode('utf-8')),
+                              ('results/session.log', log_line.encode('utf-8'))):
+                ti = tarfile.TarInfo(name)
+                ti.size = len(raw)
+                stream.addfile(ti, io.BytesIO(raw))
+        info = prepare.rehearsal_checks('fail', arc, plans['fail'], dict(exitCode=127, partial=True, archiveSha256=bundle.sha(arc)))
+        assert info['worker'] == 'exit:127,stage:none,marker:none,error:none', (reason, info['worker'])
     def check_mut(idx, case, mut=None, drop=None, **ov):
         arc = outcomes[case]['archive']
         if mut or drop:

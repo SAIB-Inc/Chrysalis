@@ -252,10 +252,16 @@ def rehearse_case(case, base, members, plan, scratch):
         guest._save_limits(limits)
         with tarfile.open(payload) as stream:
             stream.extractall(work, filter='data')
-        cd_line = '\ncd /opt/chrysalis\n'
-        require(guest.REMOTE_SESSION.count(cd_line) == 1, 'Unexpected remote session cd line')
+        # The payload's python3.12 needs glibc 2.38 (Azure's Ubuntu 24.04); this Debian 12 guest has 2.36.
+        text = guest.REMOTE_SESSION
+        require(text.splitlines().count('cd /opt/chrysalis') == 1, 'Unexpected remote session line')
+        for old, new, count in (('\ncd /opt/chrysalis\n', f'\ncd {shlex.quote(str(work))}\n', 1),
+                                ('PYTHONHOME="$PWD/python" ', '', 1), ('export LD_LIBRARY_PATH="$PWD/python/lib"\n', '', 1),
+                                ('"$PWD/python/bin/python3.12"', shlex.quote(sys.executable), 2)):
+            require(text.count(old) == count, 'Unexpected remote session line')
+            text = text.replace(old, new)
         script = temp / 'remote-session.sh'
-        script.write_text(guest.REMOTE_SESSION.replace(cd_line, f'\ncd {shlex.quote(str(work))}\n', 1))
+        script.write_text(text)
         try:
             proc = subprocess.run(['/bin/bash', str(script)], cwd=work, capture_output=True,
                                   env={'PATH': '/usr/bin:/bin', 'P2_MACHINE_CREATED_UNIX': str(int(time.time()))},
@@ -297,7 +303,8 @@ def rehearsal_checks(case, archive, plan, outcome):
                     return default
             data = {k: read_member(m, checked_json) for k, m in (
                 ('status', 'results/session-status.json'), ('summary', 'results/guest-summary.json'),
-                ('applied', 'prelude/applied.json'), ('members', 'results/members.json'), ('probe', 'results/probe.json'))}
+                ('applied', 'prelude/applied.json'), ('members', 'results/members.json'),
+                ('probe', 'results/probe.json'), ('marker', 'results/recovery-diagnostic.json'))}
             log_text = read_member('results/session.log', lambda b: b.decode('utf-8', errors='replace'), '')
             if case == 'pass':
                 try:
@@ -344,15 +351,21 @@ def rehearsal_checks(case, archive, plan, outcome):
     artefacts = [n for n, ok in (('archive', full), ('sha256', sha_ok), ('status', is_status), ('log', bool(log_text.strip())),
                  ('summary', isinstance(summary, dict)), ('applied', isinstance(applied, dict)),
                  ('members', isinstance(members_json, list)), ('diagnostic', isinstance(diag, dict))) if ok]
-    return dict(checks=checks, status=status or {}, artefacts=artefacts, probe=data.get('probe') or {})
+    stages = [k for l in lines if l.startswith(p) for k, v in s.items() if k not in ('stopped', 'end') and l[len(p):].startswith(v)]
+    errors = [n for l in lines if (n := l.split(':', 1)[0].rsplit('.', 1)[-1]).isascii() and n.isidentifier() and n.endswith(('Error', 'Exception'))]
+    marker = data['marker'].get('reason') if isinstance(data.get('marker'), dict) else None
+    worker_diag = (f"exit:{ec if type(ec := outcome.get('exitCode')) is int else 'none'},stage:{stages[-1] if stages else 'none'},"
+                   f"marker:{marker if isinstance(marker, str) and marker in guest.REFUSAL_REASONS else 'none'},error:{errors[-1] if errors else 'none'}")
+    return dict(checks=checks, status=status or {}, artefacts=artefacts, probe=data.get('probe') or {}, worker=worker_diag)
 
 
 def rehearse(base, members, plan, scratch, dest):
     gen0_sealed = gen0_used = plan['probe']['gen0BudgetBytes']
     gen0_overridden, plans = False, rehearsal_plans(plan)
-    def verdict_line(case, ok, reason, artefacts=()):
+    def verdict_line(case, ok, reason, artefacts=(), worker='none'):
         line = (f"rehearsal case={case} verdict={'PASS' if ok else 'FAIL'} reason={reason} "
-                f"artefacts={','.join(artefacts) or 'none'} gen0={gen0_used} overridden={str(gen0_overridden).lower()} counted=false")
+                f"artefacts={','.join(artefacts) or 'none'} worker={worker} "
+                f"gen0={gen0_used} overridden={str(gen0_overridden).lower()} counted=false")
         print(line, flush=True)
         return line
     def run_case(case, tag):
@@ -368,7 +381,7 @@ def rehearse(base, members, plan, scratch, dest):
     if (probe.get('decision') == 'rejected' and probe.get('reasons') == ['gen0-budget-mismatch']
             and isinstance(obs, list) and len(obs) == 1 and type(obs[0]) is int and obs[0] > 0):
         if not (outcome.get('importerCode') == 5 and outcome.get('probeRejected') is True):
-            verdict_line('fail', False, 'probe-importer-mismatch', info['artefacts'])
+            verdict_line('fail', False, 'probe-importer-mismatch', info['artefacts'], info.get('worker', 'none'))
             raise ValueError('Rehearsal rejected probe did not pass importer check')
         gen0_used, gen0_overridden = obs[0], True
         plans = rehearsal_plans(plan, gen0=gen0_used)
@@ -378,7 +391,7 @@ def rehearse(base, members, plan, scratch, dest):
     def finalize(case, cur, cur_info):
         failed = [k for k, ok in cur_info['checks'].items() if not ok]
         reason = ('failed:' + ','.join(failed)) if failed else ('prelude-charge-exceeded' if case == 'fail' else 'ok')
-        line = verdict_line(case, not failed, reason, cur_info['artefacts'])
+        line = verdict_line(case, not failed, reason, cur_info['artefacts'], cur_info.get('worker', 'none'))
         require(not failed, f'Rehearsal failed ({case}): {", ".join(failed)}')
         st = {k: cur_info['status'][k] for k in ('completedAllDeclaredRounds', 'exitCode', 'probe', 'dry') if k in cur_info['status']}
         if cur_info['status'].get('reason') in (None, prelude.CHARGE_EXCEEDED):

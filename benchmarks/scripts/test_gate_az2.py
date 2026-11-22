@@ -1630,7 +1630,7 @@ def rehearsal_fixture(root):
     seed, base = root / 'seed', root / 'base'
     seed.mkdir(parents=True)
     plan = timed(seed, ordering=False, a_pairs=1, b_pairs=0, noise=True)
-    for rel, body in (('python/bin/python3.12', f'#!/bin/bash\nunset PYTHONHOME LD_LIBRARY_PATH\nexec {sys.executable!r} "$@"\n'),
+    for rel, body in (('python/bin/python3.12', '#!/bin/bash\necho "python3.12: /lib/x86_64-linux-gnu/libc.so.6: version \\`GLIBC_2.38\' not found" >&2\nexit 127\n'),
                       ('dotnet/dotnet', '#!/bin/bash\nexit 0\n')):
         (base / rel).parent.mkdir(parents=True, exist_ok=True)
         (base / rel).write_text(body)
@@ -1737,6 +1737,9 @@ def test_rehearse_case_glue_gen0_rerun_and_wall_limit(tmp_path, monkeypatch, cap
     dest = tmp_path / 'out/rehearsal'
     prepare.rehearse(base, members, plan, tmp_path / 'sc-ok', dest)
     assert (guest.WORK, guest.TEMP) == (old_work, old_temp)
+    script_text = (tmp_path / 'sc-ok/pass/temp/remote-session.sh').read_text()
+    assert not any(k in script_text for k in ('PYTHONHOME', 'LD_LIBRARY_PATH', 'python3.12'))
+    assert [l for l in script_text.splitlines() if l.startswith('cd ')] == [f"cd {prepare.shlex.quote(str(tmp_path / 'sc-ok/pass/work'))}"]
     acc = prepare.json_file(dest / 'acceptance.json')
     assert acc['verdict'] == 'PASS' and acc['counted'] is False and acc['platform'] == 'pc'
     assert (acc['gen0Sealed'], acc['gen0Used'], acc['gen0Overridden']) == (plan['probe']['gen0BudgetBytes'], 8388608, True)
@@ -1746,7 +1749,9 @@ def test_rehearse_case_glue_gen0_rerun_and_wall_limit(tmp_path, monkeypatch, cap
         assert (dest / case / 'results.sha256').read_text().strip() == v['archiveSha256'] == bundle.sha(dest / case / 'results.tar.gz')
     assert prepare.json_file(dest / 'fail/diagnostic-only.json')['verdict'] == 'INCONCLUSIVE'
     out_lines = capsys.readouterr().out.splitlines()
-    assert all(any(f'rehearsal case={c} verdict=PASS' in line and 'counted=false' in line for line in out_lines) for c in ('fail', 'pass'))
+    for c, w in (('fail', 'worker=exit:2,stage:prelude,marker:none,error:ValueError'),
+                 ('pass', 'worker=exit:0,stage:block,marker:none,error:none')):
+        assert any(f'rehearsal case={c} verdict=PASS' in line and w in line and 'counted=false' in line for line in out_lines), (c, out_lines)
     for mode, match, frag in (
         ('mismatch', 'rejected probe did not pass importer check', 'reason=probe-importer-mismatch artefacts=archive,'),
         ('bad-cv', 'Rehearsal failed \\(fail\\)', 'rehearsal case=fail verdict=FAIL reason=failed:'),
@@ -1761,13 +1766,20 @@ def test_rehearse_case_glue_gen0_rerun_and_wall_limit(tmp_path, monkeypatch, cap
         assert (sc / 'fail-2').exists() == (mode == 'reject-twice'), mode
     monkeypatch.setattr(prepare, 'REHEARSAL_WALL_SECONDS', 0.2)
     monkeypatch.setattr(prepare.subprocess, 'run', run_env({'REHEARSAL_STUB_SLEEP': '1'}))
-    for tag, match, frag in (('wall', 'rehearsal fail exceeded its wall limit', 'reason=wall-limit'),
-                             ('err', 'Unexpected remote session cd line', 'reason=error-ValueError')):
-        if tag == 'err':
-            monkeypatch.setattr(guest, 'REMOTE_SESSION', 'no cd line')
+    orig = guest.REMOTE_SESSION
+    for tag, match, frag, script in (
+        ('wall', 'rehearsal fail exceeded its wall limit', 'reason=wall-limit', orig),
+        ('err', 'Unexpected remote session line', 'reason=error-ValueError', 'no cd line'),
+        ('cd2', 'Unexpected remote session line', 'reason=error-ValueError', orig.replace('cd /opt/chrysalis\n', 'cd /opt/chrysalis\n' * 2, 1)),
+        ('pyhome2', 'Unexpected remote session line', 'reason=error-ValueError', orig.replace('PYTHONHOME="$PWD/python" ', 'PYTHONHOME="$PWD/python" ' * 2, 1)),
+        ('ld2', 'Unexpected remote session line', 'reason=error-ValueError', orig.replace('export LD_LIBRARY_PATH="$PWD/python/lib"\n', 'export LD_LIBRARY_PATH="$PWD/python/lib"\n' * 2, 1)),
+        ('py1', 'Unexpected remote session line', 'reason=error-ValueError', orig.replace('"$PWD/python/bin/python3.12"', 'python3', 1)),
+        ('py3', 'Unexpected remote session line', 'reason=error-ValueError', orig + '"$PWD/python/bin/python3.12" --version\n'),
+    ):
+        monkeypatch.setattr(guest, 'REMOTE_SESSION', script)
         with pytest.raises(ValueError, match=match):
             prepare.rehearse(base, members, plan, tmp_path / f'sc-{tag}', tmp_path / f'out-{tag}/rehearsal')
-        assert any(f'rehearsal case=fail verdict=FAIL {frag}' in line and 'counted=false' in line for line in capsys.readouterr().out.splitlines())
+        assert any(f'rehearsal case=fail verdict=FAIL {frag}' in line and 'counted=false' in line for line in capsys.readouterr().out.splitlines()), tag
 
 
 def test_rehearsal_hard_gate_and_trigger(tmp_path, azure, monkeypatch, capsys):
