@@ -4,7 +4,7 @@ set -euo pipefail
 root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)
 unset CHRYSALIS_IT_FUNDED CHRYSALIS_DIJKSTRA_PROBES
 if [[ "${1:-}" == --funded && "${2:-}" == --dijkstra ]]; then shift 2; set -- --dijkstra --funded "$@"; fi
-filter='Category=Integration&Known!=B4&Known!=F2'
+filter='Category=Integration&Known!=F2'
 case "${1:-}" in
   --dijkstra)
     export CHRYSALIS_DIJKSTRA_PROBES=1 CHRYSALIS_NETWORK_MAGIC=6 CHRYSALIS_NODE_VERSION=11.2.1 CHRYSALIS_N2N_HOST=127.0.0.1

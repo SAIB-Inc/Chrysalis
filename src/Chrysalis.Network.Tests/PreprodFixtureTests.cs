@@ -49,9 +49,9 @@ public class PreprodFixtureTests
         Assert.Equal(bytes, rawReader.ReadDataItem().ToArray());
         Assert.False(rawReader.DataAvailable);
 
-        // Rows marked with a defect other than B3 validate only the captured term here; the B2 rows' typed decode is
-        // InlineQueryPayloadHasIndependentlyRecordedValues.
-        if (expected.TryGetProperty("defect", out JsonElement defect) && defect.GetString() != "B3")
+        // Rows marked with a defect other than B3 or B4 validate only the captured term here: the B2 rows' typed decode is
+        // InlineQueryPayloadHasIndependentlyRecordedValues, and the B4-legacy-malformed rows are the old string has-tx frames.
+        if (expected.TryGetProperty("defect", out JsonElement defect) && defect.GetString() is not ("B3" or "B4"))
         {
             return;
         }
@@ -337,6 +337,15 @@ public class PreprodFixtureTests
             case 6:
                 Assert.Null(Decode<Monitor.ReplyNextTx>(bytes).EraTx);
                 break;
+            case 7:
+                {
+                    string txId = expected.GetProperty("txId").GetString()!;
+                    Assert.Equal(bytes, CborSerializer.Serialize(Monitor.LocalTxMonitorMessages.HasTx(txId)));
+                    Monitor.EraTxId id = Decode<Monitor.HasTx>(bytes).TxId;
+                    Assert.Equal(expected.GetProperty("era").GetInt32(), id.Era);
+                    Assert.Equal(txId, Convert.ToHexStringLower(id.Hash.Span));
+                    break;
+                }
             case 8:
                 Assert.Equal(expected.GetProperty("hasTx").GetBoolean(), Decode<Monitor.ReplyHasTx>(bytes).HasTx);
                 break;
@@ -349,6 +358,15 @@ public class PreprodFixtureTests
             case 11:
                 Assert.Equal(11, Decode<Monitor.GetMeasures>(bytes).Idx);
                 break;
+            case 12:
+                {
+                    Monitor.ReplyGetMeasures reply = Decode<Monitor.ReplyGetMeasures>(bytes);
+                    Assert.Equal(expected.GetProperty("txCount").GetUInt64(), reply.Slot);
+                    Assert.Equal(
+                        expected.GetProperty("measures").EnumerateObject().ToDictionary(measure => measure.Name, measure => string.Join(',', measure.Value.EnumerateArray())),
+                        reply.Measures.ToDictionary(pair => pair.Key, pair => string.Join(',', pair.Value)));
+                    break;
+                }
             default:
                 Assert.Fail("Unexpected captured local-tx-monitor message.");
                 break;

@@ -1,5 +1,7 @@
+using System.Buffers;
 using Chrysalis.Codec.Serialization.Attributes;
 using Chrysalis.Codec.Types;
+using Chrysalis.Codec.Types.Cardano.Core;
 using Chrysalis.Network.Cbor.LocalTxSubmit;
 
 namespace Chrysalis.Network.Cbor.LocalTxMonitor;
@@ -35,11 +37,34 @@ public static class LocalTxMonitorMessages
     public static NextTx NextTx() => new(5);
 
     /// <summary>
-    /// Creates a HasTx message to check whether a transaction exists in the mempool.
+    /// Creates a HasTx message for a transaction id given as 64 hexadecimal digits, sent with the Conway era.
     /// </summary>
-    /// <param name="txId">The transaction ID to look up.</param>
-    /// <returns>A <see cref="HasTx"/> message.</returns>
-    public static HasTx HasTx(string txId) => new(7, txId);
+    /// <param name="txId">The transaction id as 64 hexadecimal digits.</param>
+    /// <returns>A <see cref="LocalTxMonitor.HasTx"/> message.</returns>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="txId"/> is not 64 hexadecimal digits.</exception>
+    public static HasTx HasTx(string txId) => HasTx(ConwayTxId(txId));
+
+    /// <summary>
+    /// Creates a HasTx message to check whether a transaction is in the acquired mempool snapshot.
+    /// </summary>
+    /// <param name="txId">The era-tagged transaction id.</param>
+    /// <returns>A <see cref="LocalTxMonitor.HasTx"/> message.</returns>
+    /// <exception cref="ArgumentException">Thrown when the id is not 32 bytes.</exception>
+    public static HasTx HasTx(EraTxId txId)
+    {
+        ArgumentNullException.ThrowIfNull(txId);
+        return txId.Hash.Length == 32 ? new(7, txId) : throw new ArgumentException("Expected a 32-byte transaction id.", nameof(txId));
+    }
+
+    // A hexadecimal id is sent with the Conway era: the node finds a transaction by its id whatever the era
+    // (ouroboros-consensus 5.4.0.0, HardFork/Combinator/AcrossEras.hs:449-463, Mempool/Impl/Common.hs:672).
+    internal static EraTxId ConwayTxId(string txId)
+    {
+        byte[] hash = new byte[32];
+        return Convert.FromHexString(txId, hash, out _, out int written) == OperationStatus.Done && written == hash.Length
+            ? new EraTxId((int)Era.Conway, hash)
+            : throw new ArgumentException("Expected a transaction id of 64 hexadecimal digits.", nameof(txId));
+    }
 
     /// <summary>
     /// Gets a default GetSizes message to query the mempool capacity and sizes.
@@ -126,14 +151,26 @@ public partial record ReplyNextTx(
 /// Represents the HasTx message in the LocalTxMonitor mini-protocol, querying whether a specific transaction is in the mempool.
 /// </summary>
 /// <param name="Idx">The CBOR message type index.</param>
-/// <param name="TxId">The transaction ID to check for in the mempool.</param>
+/// <param name="TxId">The era-tagged id of the transaction to look for.</param>
 [CborSerializable]
 [CborList]
 [CborIndex(7)]
 public partial record HasTx(
     [CborOrder(0)] int Idx,
-    [CborOrder(1)] string TxId
+    [CborOrder(1)] EraTxId TxId
 ) : LocalTxMonitorMessage;
+
+/// <summary>
+/// An era-tagged transaction id, <c>[era, id]</c>, as the node reads it in a has-tx query.
+/// </summary>
+/// <param name="Era">The era index of the transaction, such as 6 for Conway.</param>
+/// <param name="Hash">The 32-byte transaction id: the Blake2b-256 hash of the transaction body.</param>
+[CborSerializable]
+[CborList]
+public partial record EraTxId(
+    [CborOrder(0)] int Era,
+    [CborOrder(1)] ReadOnlyMemory<byte> Hash
+) : CborRecord;
 
 /// <summary>
 /// Represents the ReplyHasTx message in the LocalTxMonitor mini-protocol, indicating whether the queried transaction exists in the mempool.
@@ -163,7 +200,7 @@ public partial record GetSizes(
 /// Represents the ReplyGetSizes message in the LocalTxMonitor mini-protocol, containing the mempool size information.
 /// </summary>
 /// <param name="Idx">The CBOR message type index.</param>
-/// <param name="Sizes">A list of mempool size values (transaction count, total size in bytes, and capacity in bytes).</param>
+/// <param name="Sizes">The mempool's capacity in bytes, the total size of its transactions in bytes and the number of transactions, in that order.</param>
 [CborSerializable]
 [CborList]
 [CborIndex(10)]
@@ -187,25 +224,25 @@ public partial record GetMeasures(
 /// Represents the ReplyGetMeasures message in the LocalTxMonitor mini-protocol, containing mempool measurement data.
 /// </summary>
 /// <param name="Idx">The CBOR message type index.</param>
-/// <param name="Slot">The slot number at the time of measurement.</param>
-/// <param name="Measures">A dictionary of named measurement categories, each containing a list of integer values.</param>
+/// <param name="Slot">The number of transactions in the snapshot (the protocol's txCount), not a slot.</param>
+/// <param name="Measures">Each measure by name, such as ex_units_steps, with its size and capacity as 64-bit values.</param>
 [CborSerializable]
 [CborList]
 [CborIndex(12)]
 public partial record ReplyGetMeasures(
     [CborOrder(0)] int Idx,
     [CborOrder(1)] ulong Slot,
-    [CborOrder(2)] Dictionary<string, CborList<int>> Measures
+    [CborOrder(2)] Dictionary<string, CborList<ulong>> Measures
 ) : LocalTxMonitorMessage;
 
 /// <summary>
-/// Represents mempool measurement values including current size and maximum capacity.
+/// Represents one mempool measure: its current size and its capacity.
 /// </summary>
-/// <param name="CurrentSize">The current size of the mempool in bytes.</param>
-/// <param name="MaxCapacity">The maximum capacity of the mempool in bytes.</param>
+/// <param name="CurrentSize">The measure's current size.</param>
+/// <param name="MaxCapacity">The measure's capacity.</param>
 [CborSerializable]
 [CborList]
 public partial record Measures(
-    [CborOrder(0)] int CurrentSize,
-    [CborOrder(1)] int MaxCapacity
+    [CborOrder(0)] ulong CurrentSize,
+    [CborOrder(1)] ulong MaxCapacity
 ) : CborRecord;

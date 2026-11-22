@@ -87,10 +87,12 @@ public partial record RejectTx(
     /// For an era mismatch, the transaction's era and the ledger's; for a ledger rejection, its era index and the
     /// era's errors in CBOR diagnostic notation (RFC 8949 §8; text strings are JSON-escaped via
     /// <see cref="System.Text.Json.JsonEncodedText"/> with
-    /// <see cref="System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping"/>, escaping <c>"</c>,
-    /// <c>\</c>, control characters, and any other code points that encoder forbids); otherwise the whole reason in
-    /// that notation. A reason holding a float, another simple value, a negative below -2^63 or indefinite-length
-    /// text, nested deeper than 64, or not well-formed, is given whole as hex, h'…'.
+    /// <see cref="System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping"/>, which escapes <c>"</c>,
+    /// <c>\</c>, control characters (U+0000 to U+001F and U+007F to U+009F), non-ASCII spaces, U+2028, U+2029, most
+    /// format characters such as U+FEFF, private-use and unassigned code points, and every character above U+FFFF, as
+    /// a surrogate pair); otherwise the whole reason in that notation. A two-item list that is not an era mismatch, or
+    /// a reason holding a float, another simple value, a negative below -2^63 or indefinite-length text, nested deeper
+    /// than 64, or not well-formed, is given whole as hex, h'…'.
     /// </returns>
     public string Describe()
     {

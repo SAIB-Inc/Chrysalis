@@ -48,16 +48,16 @@ public class LocalTxMonitor : IMiniProtocol
     }
 
     /// <summary>
-    /// Releases the currently acquired mempool snapshot, allowing a new snapshot to be acquired.
+    /// Releases the acquired mempool snapshot. The node sends no reply, so this returns once the release is sent;
+    /// a new snapshot can then be acquired on the same connection.
     /// </summary>
     /// <param name="cancellationToken">Token to cancel the operation.</param>
-    /// <returns>The response message from the Cardano node.</returns>
-    public async Task<LocalTxMonitorMessage> ReleaseAsync(CancellationToken cancellationToken)
-    {
-        Release release = LocalTxMonitorMessages.Release();
-        await _channelBuffer.SendFullMessageAsync(release, cancellationToken).ConfigureAwait(false);
-        return await _channelBuffer.ReceiveFullMessageAsync<LocalTxMonitorMessage>(cancellationToken).ConfigureAwait(false);
-    }
+    /// <returns>A task that completes when the release is sent.</returns>
+    /// <exception cref="OperationCanceledException">The token is already cancelled; nothing is sent.</exception>
+    public Task ReleaseAsync(CancellationToken cancellationToken) =>
+        cancellationToken.IsCancellationRequested
+            ? Task.FromCanceled(cancellationToken)
+            : _channelBuffer.SendFullMessageAsync(LocalTxMonitorMessages.Release(), cancellationToken);
 
     /// <summary>
     /// Retrieves the next transaction from the acquired mempool snapshot.
@@ -72,13 +72,23 @@ public class LocalTxMonitor : IMiniProtocol
     }
 
     /// <summary>
-    /// Checks whether a specific transaction exists in the mempool.
+    /// Checks whether a transaction is in the acquired mempool snapshot.
     /// </summary>
-    /// <param name="txId">The transaction ID to check for.</param>
+    /// <param name="txId">The transaction id as 64 hexadecimal digits, sent with the Conway era.</param>
     /// <param name="cancellationToken">Token to cancel the operation.</param>
-    /// <returns>The response message indicating whether the transaction is present.</returns>
-    // @TODO
-    public async Task<LocalTxMonitorMessage> HasTxAsync(string txId, CancellationToken cancellationToken)
+    /// <returns>The node's <see cref="ReplyHasTx"/>.</returns>
+    /// <exception cref="ArgumentException">Thrown before anything is sent when <paramref name="txId"/> is not 64 hexadecimal digits.</exception>
+    public Task<LocalTxMonitorMessage> HasTxAsync(string txId, CancellationToken cancellationToken) =>
+        HasTxAsync(LocalTxMonitorMessages.ConwayTxId(txId), cancellationToken);
+
+    /// <summary>
+    /// Checks whether a transaction is in the acquired mempool snapshot.
+    /// </summary>
+    /// <param name="txId">The era-tagged transaction id.</param>
+    /// <param name="cancellationToken">Token to cancel the operation.</param>
+    /// <returns>The node's <see cref="ReplyHasTx"/>.</returns>
+    /// <exception cref="ArgumentException">Thrown before anything is sent when the id is not 32 bytes.</exception>
+    public async Task<LocalTxMonitorMessage> HasTxAsync(EraTxId txId, CancellationToken cancellationToken)
     {
         await _channelBuffer.SendFullMessageAsync(LocalTxMonitorMessages.HasTx(txId), cancellationToken).ConfigureAwait(false);
         return await _channelBuffer.ReceiveFullMessageAsync<LocalTxMonitorMessage>(cancellationToken).ConfigureAwait(false);
@@ -101,7 +111,6 @@ public class LocalTxMonitor : IMiniProtocol
     /// </summary>
     /// <param name="cancellationToken">Token to cancel the operation.</param>
     /// <returns>The response message containing mempool measures.</returns>
-    // @TODO
     public async Task<LocalTxMonitorMessage> GetMeasuresAsync(CancellationToken cancellationToken)
     {
         _versions?.EnsureMinimum(32788, nameof(GetMeasuresAsync));
