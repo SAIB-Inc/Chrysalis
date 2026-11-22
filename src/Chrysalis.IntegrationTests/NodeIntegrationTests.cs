@@ -181,7 +181,6 @@ public sealed class NodeIntegrationTests
                 Assert.Equal(Sizes(before), sizes.Sizes);
                 return;
             }
-            // A fresh connection avoids relying on the known-broken Release method.
         }
         Assert.Fail("Mempool changed during all three bounded snapshots.");
     }
@@ -189,7 +188,6 @@ public sealed class NodeIntegrationTests
     /// <summary>Requires release to return without waiting and permits reacquisition on the same connection.</summary>
     [IntegrationFact(Env.Socket, Env.Magic, Env.Cli, Env.NodeVersion, Env.Output)]
     [Trait("Category", "Integration")]
-    [Trait("Known", "B4")]
     public async Task MonitorReleaseThenAcquireCompletes()
     {
         using CancellationTokenSource deadline = new(TimeSpan.FromSeconds(8));
@@ -203,7 +201,6 @@ public sealed class NodeIntegrationTests
     /// <summary>Checks a never-submitted id against cardano-cli on the same node.</summary>
     [IntegrationFact(Env.Socket, Env.Magic, Env.Cli, Env.NodeVersion, Env.Output)]
     [Trait("Category", "Integration")]
-    [Trait("Known", "B4")]
     public async Task MonitorHasTxMatchesCliFalse()
     {
         using CancellationTokenSource deadline = new(TimeSpan.FromSeconds(15));
@@ -218,7 +215,6 @@ public sealed class NodeIntegrationTests
     /// <summary>Forces 64-bit measures and compares count/byte measurements with CLI, not a fixed capacity.</summary>
     [IntegrationFact(Env.Socket, Env.Magic, Env.Cli, Env.NodeVersion, Env.Output)]
     [Trait("Category", "Integration")]
-    [Trait("Known", "B4")]
     public async Task MonitorMeasuresMatchCliCountAndBytes()
     {
         using CancellationTokenSource deadline = new(TimeSpan.FromSeconds(40));
@@ -231,13 +227,11 @@ public sealed class NodeIntegrationTests
             {
                 await File.WriteAllTextAsync(Path.Combine(Env.OutputDirectory, "monitor-measures-precondition.json"),
                     JsonSerializer.Serialize(new { source = "harness precondition: two equivalent independent CLI size/count snapshots; next step is Chrysalis Acquire/GetMeasures", oracle_reads_before_subject = oracleReads, reference }), ct);
-                // A fresh connection on every retry does not depend on known-broken Release.
                 using NodeClient node = await NodeConnections.OpenAsync(ct);
                 _ = await node.LocalTxMonitor.AcquireAsync(ct);
                 ReplyGetMeasures response = Assert.IsType<ReplyGetMeasures>(await node.LocalTxMonitor.GetMeasuresAsync(ct));
                 return (Count: response.Slot, Values: response.Measures.ToDictionary(pair => pair.Key, pair => pair.Value.Select(value => checked((long)value)).ToArray(), StringComparer.Ordinal));
             }, deadline.Token);
-        // Current Slot is the protocol's txCount, not a slot. The B4 repair may rename it.
         Assert.Equal(expected.GetProperty("numberOfTxs").GetUInt64(), actual.Count);
         Assert.Equal([expected.GetProperty("sizeInBytes").GetInt64(), expected.GetProperty("capacityInBytes").GetInt64()], actual.Values["transaction_bytes"]);
         Assert.All(actual.Values.Values, pair => { Assert.Equal(2, pair.Length); Assert.True(pair[0] >= 0 && pair[1] >= pair[0]); });

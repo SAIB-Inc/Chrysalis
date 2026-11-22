@@ -45,11 +45,11 @@ public sealed class N2RejectionTests
         Assert.Equal(expected, rejection.Describe());
     }
 
-    // RFC 8949 Appendix A, Table 6, as written there, except the last two rows (SYNTHETIC): text with control
-    // characters, and one item holding a pair whose first item is not a one-byte era index.
+    // RFC 8949 Appendix A, Table 6, as written there, except the last three rows (SYNTHETIC): text with control
+    // characters, one item holding a pair whose first item is not a one-byte era index, and a tag followed by another item.
     [Theory]
     [InlineData("8301820203820405", "[1, [2, 3], [4, 5]]")]
-    [InlineData("a26161016162820203", "{" + "\"a\": 1, \"b\": [2, 3]}")]
+    [InlineData("a26161016162820203", "{" + "\"a\": 1, \"b\": [2, 3]}")] // split, or JSON002 takes the text for JSON in the format gate
     [InlineData("9f018202039f0405ffff", "[_ 1, [2, 3], [_ 4, 5]]")]
     [InlineData("bf6346756ef563416d7421ff", "{_ \"Fun\": true, \"Amt\": -2}")]
     [InlineData("9fff", "[_ ]")]
@@ -65,6 +65,7 @@ public sealed class N2RejectionTests
     [InlineData("a0", "{}")]
     [InlineData("6461090a01", "\"a\\t\\n\\u0001\"")]
     [InlineData("8182181880", "[[24, []]]")]
+    [InlineData("83d818420102f6f5", "[24(h'0102'), null, true]")]
     public void OtherReasonsReadInDiagnosticNotation(string hex, string expected) =>
         Assert.Equal(expected, LocalTxSubmissionMessages.RejectTx(new CborAny(Convert.FromHexString(hex))).Describe());
 
