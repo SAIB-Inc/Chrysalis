@@ -12,7 +12,7 @@ namespace Chrysalis.IntegrationTests;
 public sealed class B1HandshakeIntegrationTests
 {
     /// <summary>A real wrong-magic startup exposes the node's text and never publishes negotiation.</summary>
-    [IntegrationFact(Env.Socket, Env.Magic, Env.Cli, Env.NodeVersion, Env.Output)]
+    [IntegrationFact([Env.Socket, Env.Magic, Env.Cli, Env.NodeVersion, Env.Output])]
     [Trait("Category", "Integration")]
     public async Task WrongMagicStartupThrowsTypedNodeRefusal()
     {
@@ -39,7 +39,7 @@ public sealed class B1HandshakeIntegrationTests
     }
 
     /// <summary>A real query-mode handshake returns the raw reply union instead of a usable connection.</summary>
-    [IntegrationFact(Env.Socket, Env.Magic, Env.Cli, Env.NodeVersion, Env.Output)]
+    [IntegrationFact([Env.Socket, Env.Magic, Env.Cli, Env.NodeVersion, Env.Output])]
     [Trait("Category", "Integration")]
     public async Task QueryModeReturnsNodeToClientQueryReply()
     {

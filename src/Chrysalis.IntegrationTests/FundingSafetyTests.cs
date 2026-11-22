@@ -105,4 +105,15 @@ public sealed class FundingSafetyTests
             Directory.Delete(directory, recursive: true);
         }
     }
+
+    /// <summary>The devnet magic is recognized as devnet and never matches any public network magic.</summary>
+    [Fact]
+    [Trait("Category", "Integration")]
+    public void DevnetIsNoPublicNetwork()
+    {
+        Assert.True(IntegrationEnvironment.IsDevnet(IntegrationEnvironment.DevnetMagic));
+        Assert.False(IntegrationEnvironment.IsDevnet(1));
+        Assert.False(IntegrationEnvironment.IsDevnet(2));
+        Assert.False(IntegrationEnvironment.IsDevnet(764824073));
+    }
 }

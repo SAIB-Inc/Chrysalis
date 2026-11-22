@@ -69,7 +69,7 @@ public sealed class NarrowSafetyTests
         try
         {
             Environment.SetEnvironmentVariable(IntegrationEnvironment.Host, "192.0.2.1");
-            IntegrationFactAttribute fact = new(IntegrationEnvironment.Host);
+            IntegrationFactAttribute fact = new([IntegrationEnvironment.Host]);
             Assert.NotNull(fact.Skip);
             Assert.Contains("loopback", fact.Skip, StringComparison.OrdinalIgnoreCase);
             _ = Assert.Throws<InvalidOperationException>(IntegrationEnvironment.RequireLoopbackHost);
@@ -142,7 +142,7 @@ public sealed class NarrowSafetyTests
         try
         {
             Environment.SetEnvironmentVariable(IntegrationEnvironment.CollateralTxIn, null);
-            IntegrationFactAttribute fact = new(IntegrationEnvironment.CollateralTxIn);
+            IntegrationFactAttribute fact = new([IntegrationEnvironment.CollateralTxIn]);
             Assert.NotNull(fact.Skip);
             Assert.Contains("public collateral txid#index", fact.Skip, StringComparison.Ordinal);
         }

@@ -26,12 +26,14 @@ namespace Chrysalis.IntegrationTests;
 /// <summary>Explicitly opted-in, fee-capped single self-transfer; never creates or exports a key.</summary>
 public sealed class FundedIntegrationTests
 {
+    internal sealed record SelfTransfer(string Address, byte[] AddressBytes, JsonElement ParametersJson, ResolvedInput Selected, PostMaryTransaction Unsigned, ITransaction Signed, byte[] SignedBytes, string TxId, ulong Fee, int Index);
+
     /// <summary>Builds/signs/submits one small self-transfer and checks public CLI hash, fee and inclusion.</summary>
-    [IntegrationFact(Env.Socket, Env.Magic, Env.Cli, Env.NodeVersion, Env.Output, Env.WalletFile, Env.FundedOptIn, Env.CollateralTxIn)]
+    [IntegrationFact([Env.Socket, Env.Magic, Env.Cli, Env.NodeVersion, Env.Output, Env.WalletFile, Env.FundedOptIn, Env.CollateralTxIn])]
     [Trait("Category", "Integration")]
     public async Task FundedSelfTransferMatchesCliAndIsConfirmed()
     {
-        Env.RequirePreprod();
+        Env.RequirePreprodOrDevnet();
         Env.RequireFundedOptIn();
         TransactionInput collateral = FundingSelection.ParseInputReference(Env.Required(Env.CollateralTxIn));
         using CancellationTokenSource deadline = new(TimeSpan.FromMinutes(3));
@@ -74,15 +76,13 @@ public sealed class FundedIntegrationTests
         }
     }
 
-    private static async Task ExecuteSelfTransferAsync(PrivateKey key, TransactionInput collateral, FundedReservation reservation, CancellationToken cancellationToken)
+    internal static async Task<SelfTransfer> BuildSelfTransferAsync(PrivateKey key, TransactionInput collateral, ulong transfer, CancellationToken cancellationToken)
     {
-        const ulong transfer = 2_000_000;
         const ulong maximumFee = 500_000;
         string address = Environment.GetEnvironmentVariable(Env.WalletAddress) ?? WalletAddress.FromPublicKeys(NetworkType.Preprod, AddressType.EnterprisePayment, key.GetPublicKey()).ToBech32();
         byte[] addressBytes = WalletAddress.FromBech32(address).ToBytes();
         Assert.Equal(0, addressBytes[0] & 15);
-        Assert.Equal(key.GetPublicKey().ToBlake2b224(), addressBytes.AsSpan(1, 28).ToArray());
-        string directory = Env.OutputDirectory;
+        Assert.True(addressBytes.AsSpan(1, 28).SequenceEqual(key.GetPublicKey().ToBlake2b224()), "The wallet key does not own the address.");
         JsonElement parametersJson = await OracleCli.QueryJsonAsync("funded-parameters", cancellationToken, "protocol-parameters");
         ProtocolParams parameters = ProtocolOracles.Parameters(parametersJson);
         JsonElement utxos = await OracleCli.QueryJsonAsync("funded-owned-utxos", cancellationToken, "utxo", "--address", address, "--output-json");
@@ -99,33 +99,16 @@ public sealed class FundedIntegrationTests
         Assert.InRange(fee, 1UL, maximumFee);
         byte[] signedBytes = CborSerializer.Serialize(signed);
         string txid = body.Hash();
-        string unsignedFile = Path.Combine(directory, "funded-unsigned.json");
-        string signedFile = Path.Combine(directory, "funded-signed.json");
-        string parameterFile = Path.Combine(directory, "funded-cli-parameters.json");
-        await File.WriteAllTextAsync(unsignedFile, JsonSerializer.Serialize(new { type = "Tx ConwayEra", description = string.Empty, cborHex = Convert.ToHexStringLower(CborSerializer.Serialize(unsigned)) }), cancellationToken);
-        await File.WriteAllTextAsync(signedFile, JsonSerializer.Serialize(new { type = "Tx ConwayEra", description = string.Empty, cborHex = Convert.ToHexStringLower(signedBytes) }), cancellationToken);
-        await File.WriteAllTextAsync(parameterFile, parametersJson.GetRawText(), cancellationToken);
-        string cliId = await OracleCli.ExecuteAsync("funded-cli-txid", ["latest", "transaction", "txid", "--tx-file", signedFile, "--output-text"], cancellationToken);
-        Assert.Equal(Convert.FromHexString(cliId), Convert.FromHexString(txid));
-        string cliFee = await OracleCli.ExecuteAsync("funded-cli-minimum-fee", ["latest", "transaction", "calculate-min-fee", "--tx-body-file", unsignedFile, "--protocol-params-file", parameterFile, "--witness-count", "1", "--output-text"], cancellationToken);
-        ulong minimum = ulong.Parse(cliFee.Split(' ', StringSplitOptions.RemoveEmptyEntries)[0], CultureInfo.InvariantCulture);
-        Assert.True(fee >= minimum, "The signed fee must cover the independent CLI minimum; exact fee arithmetic has a separate correctness gate.");
-        string view = await OracleCli.ExecuteAsync("funded-cli-view", ["debug", "transaction", "view", "--tx-file", signedFile, "--output-json"], cancellationToken);
-        using JsonDocument viewJson = JsonDocument.Parse(view);
-        Assert.Equal(fee.ToString(CultureInfo.InvariantCulture) + " Lovelace", viewJson.RootElement.GetProperty("fee").GetString());
         ITransactionOutput[] outputs = [.. body.Outputs()];
-        Assert.All(outputs, output => Assert.Equal(addressBytes, output.Address().ToArray()));
+        Assert.All(outputs, output => Assert.True(output.Address().ToArray().AsSpan().SequenceEqual(addressBytes), "An output pays another address."));
         int index = Array.FindIndex(outputs, output => output.Amount().Lovelace() == transfer);
         Assert.True(index >= 0);
         FundingSelection.AssertExactlySelected(body.Inputs(), [selected.Outref]);
-        // Update the already-held exclusive public reservation; a timeout never permits a replay.
-        await reservation.RecordAsync(new { txid, transfer_lovelace = transfer, fee_lovelace = fee, status = "reserved-before-submit" }, cancellationToken);
-        string spendLine = $"| {DateTimeOffset.UtcNow:O} | {txid} | {transfer} | {fee} | reserved before submit; self-transfer, net spend is fee |\n";
-        await File.AppendAllTextAsync(Path.Combine(directory, "spend-log.md"), spendLine, cancellationToken);
-        using NodeClient node = await NodeConnections.OpenAsync(cancellationToken);
-        FundingSelection.AssertExactlySelected(body.Inputs(), [selected.Outref]);
-        _ = Assert.IsType<AcceptTx>(await node.LocalTxSubmit.SubmitTxAsync(new SubmitTx(0, new EraTx((int)Era.Conway, new Codec.Types.CborEncodedValue(signedBytes))), cancellationToken));
-        string outref = txid + "#" + index.ToString(CultureInfo.InvariantCulture);
+        return new SelfTransfer(address, addressBytes, parametersJson, selected, unsigned, signed, signedBytes, txid, fee, index);
+    }
+
+    internal static async Task WaitForOutputAsync(string outref, ulong transfer, CancellationToken cancellationToken)
+    {
         for (int attempt = 0; attempt < 60; attempt++)
         {
             JsonElement confirmed = await OracleCli.QueryJsonAsync("funded-confirmation", cancellationToken, "utxo", "--tx-in", outref, "--output-json");
@@ -133,13 +116,43 @@ public sealed class FundedIntegrationTests
             {
                 JsonProperty found = Assert.Single(confirmed.EnumerateObject());
                 Assert.Equal(transfer, found.Value.GetProperty("value").GetProperty("lovelace").GetUInt64());
-                await reservation.RecordAsync(new { txid, transfer_lovelace = transfer, fee_lovelace = fee, minimum_fee_lovelace = minimum, status = "confirmed" }, cancellationToken);
-                await File.AppendAllTextAsync(Path.Combine(directory, "spend-log.md"), $"\nConfirmed {txid}; transfer returned to the wallet; fee-only spend {fee} lovelace.\n", cancellationToken);
                 return;
             }
             await Task.Delay(TimeSpan.FromSeconds(2), cancellationToken);
         }
         Assert.Fail("The accepted self-transfer was not observed in the same node's UTxO within the bounded wait.");
+    }
+
+    private static async Task ExecuteSelfTransferAsync(PrivateKey key, TransactionInput collateral, FundedReservation reservation, CancellationToken cancellationToken)
+    {
+        const ulong transfer = 2_000_000;
+        SelfTransfer built = await BuildSelfTransferAsync(key, collateral, transfer, cancellationToken);
+        string directory = Env.OutputDirectory;
+        string unsignedFile = Path.Combine(directory, "funded-unsigned.json");
+        string signedFile = Path.Combine(directory, "funded-signed.json");
+        string parameterFile = Path.Combine(directory, "funded-cli-parameters.json");
+        await File.WriteAllTextAsync(unsignedFile, JsonSerializer.Serialize(new { type = "Tx ConwayEra", description = string.Empty, cborHex = Convert.ToHexStringLower(CborSerializer.Serialize(built.Unsigned)) }), cancellationToken);
+        await File.WriteAllTextAsync(signedFile, JsonSerializer.Serialize(new { type = "Tx ConwayEra", description = string.Empty, cborHex = Convert.ToHexStringLower(built.SignedBytes) }), cancellationToken);
+        await File.WriteAllTextAsync(parameterFile, built.ParametersJson.GetRawText(), cancellationToken);
+        string cliId = await OracleCli.ExecuteAsync("funded-cli-txid", ["latest", "transaction", "txid", "--tx-file", signedFile, "--output-text"], cancellationToken);
+        Assert.Equal(Convert.FromHexString(cliId), Convert.FromHexString(built.TxId));
+        string cliFee = await OracleCli.ExecuteAsync("funded-cli-minimum-fee", ["latest", "transaction", "calculate-min-fee", "--tx-body-file", unsignedFile, "--protocol-params-file", parameterFile, "--witness-count", "1", "--output-text"], cancellationToken);
+        ulong minimum = ulong.Parse(cliFee.Split(' ', StringSplitOptions.RemoveEmptyEntries)[0], CultureInfo.InvariantCulture);
+        Assert.True(built.Fee >= minimum, "The signed fee must cover the independent CLI minimum; exact fee arithmetic has a separate correctness gate.");
+        string view = await OracleCli.ExecuteAsync("funded-cli-view", ["debug", "transaction", "view", "--tx-file", signedFile, "--output-json"], cancellationToken);
+        using JsonDocument viewJson = JsonDocument.Parse(view);
+        Assert.Equal(built.Fee.ToString(CultureInfo.InvariantCulture) + " Lovelace", viewJson.RootElement.GetProperty("fee").GetString());
+        // Update the already-held exclusive public reservation; a timeout never permits a replay.
+        await reservation.RecordAsync(new { txid = built.TxId, transfer_lovelace = transfer, fee_lovelace = built.Fee, status = "reserved-before-submit" }, cancellationToken);
+        string spendLine = $"| {DateTimeOffset.UtcNow:O} | {built.TxId} | {transfer} | {built.Fee} | reserved before submit; self-transfer, net spend is fee |\n";
+        await File.AppendAllTextAsync(Path.Combine(directory, "spend-log.md"), spendLine, cancellationToken);
+        using NodeClient node = await NodeConnections.OpenAsync(cancellationToken);
+        FundingSelection.AssertExactlySelected(Assert.IsType<PostMaryTransaction>(built.Signed).Body.Inputs(), [built.Selected.Outref]);
+        _ = Assert.IsType<AcceptTx>(await node.LocalTxSubmit.SubmitTxAsync(new SubmitTx(0, new EraTx((int)Era.Conway, new Codec.Types.CborEncodedValue(built.SignedBytes))), cancellationToken));
+        string outref = built.TxId + "#" + built.Index.ToString(CultureInfo.InvariantCulture);
+        await WaitForOutputAsync(outref, transfer, cancellationToken);
+        await reservation.RecordAsync(new { txid = built.TxId, transfer_lovelace = transfer, fee_lovelace = built.Fee, minimum_fee_lovelace = minimum, status = "confirmed" }, cancellationToken);
+        await File.AppendAllTextAsync(Path.Combine(directory, "spend-log.md"), $"\nConfirmed {built.TxId}; transfer returned to the wallet; fee-only spend {built.Fee} lovelace.\n", cancellationToken);
     }
 
     internal static List<ResolvedInput> ReadAdaInputs(JsonElement utxos)
@@ -151,7 +164,7 @@ public sealed class FundedIntegrationTests
             if (value.EnumerateObject().Count() != 1 || !value.TryGetProperty("lovelace", out JsonElement amount)) { continue; }
             string[] reference = property.Name.Split('#');
             TransactionInput input = TransactionInput.Create(Convert.FromHexString(reference[0]), ulong.Parse(reference[1], CultureInfo.InvariantCulture));
-            PostAlonzoTransactionOutput output = PostAlonzoTransactionOutput.Create(new Chrysalis.Codec.Types.Cardano.Core.Common.Address(WalletAddress.FromBech32(property.Value.GetProperty("address").GetString()!).ToBytes()), Lovelace.Create(amount.GetUInt64()));
+            PostAlonzoTransactionOutput output = PostAlonzoTransactionOutput.Create(new Address(WalletAddress.FromBech32(property.Value.GetProperty("address").GetString()!).ToBytes()), Lovelace.Create(amount.GetUInt64()));
             inputs.Add(new ResolvedInput(input, output));
         }
         return inputs;

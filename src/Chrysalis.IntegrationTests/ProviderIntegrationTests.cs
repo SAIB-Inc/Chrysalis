@@ -12,7 +12,7 @@ namespace Chrysalis.IntegrationTests;
 public sealed class ProviderIntegrationTests
 {
     /// <summary>Checks the real Ouroboros provider's parameters against the same node's CLI.</summary>
-    [IntegrationFact(Env.Socket, Env.Magic, Env.Cli, Env.NodeVersion, Env.Output)]
+    [IntegrationFact([Env.Socket, Env.Magic, Env.Cli, Env.NodeVersion, Env.Output])]
     [Trait("Category", "Integration")]
     public async Task OuroborosParametersMatchCli()
     {
@@ -25,7 +25,7 @@ public sealed class ProviderIntegrationTests
     }
 
     /// <summary>Reads a RAM-file key in this test process only and makes one modest parameter request.</summary>
-    [IntegrationFact(Env.Socket, Env.Magic, Env.Cli, Env.NodeVersion, Env.Output, Env.BlockfrostFile)]
+    [IntegrationFact([Env.Socket, Env.Magic, Env.Cli, Env.NodeVersion, Env.Output, Env.BlockfrostFile])]
     [Trait("Category", "Integration")]
     [Trait("Known", "F2")]
     public async Task BlockfrostPreprodParametersMatchCli()

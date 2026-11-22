@@ -9,10 +9,11 @@ import unittest
 
 
 RUNNER = Path(__file__).with_name("run.sh")
+DEVNET = Path(__file__).resolve().parents[2] / "test" / "devnet" / "devnet.sh"
 
 
 class RunnerOptInTests(unittest.TestCase):
-    def invoke(self, arguments, inherited_opt_in, *, with_heavy=True, packages=None, with_wallet=True):
+    def invoke(self, arguments, inherited_opt_in, *, with_heavy=True, packages=None, with_wallet=True, magic=None):
         with tempfile.TemporaryDirectory(prefix="chrysalis-runner-safety-") as directory:
             heavy = Path(directory) / ("heavy" if with_heavy else "dotnet")
             heavy.write_text(
@@ -30,6 +31,8 @@ class RunnerOptInTests(unittest.TestCase):
                 environment.pop("CHRYSALIS_WALLET_KEY_FILE")
             if packages is not None:
                 environment["NUGET_PACKAGES"] = packages
+            if magic is not None:
+                environment["CHRYSALIS_NETWORK_MAGIC"] = str(magic)
             output = subprocess.check_output([str(RUNNER), *arguments], env=environment, text=True)
             return json.loads(output)
 
@@ -88,6 +91,37 @@ class RunnerOptInTests(unittest.TestCase):
         result = self.invoke(["--funded"], "0")
         self.assertEqual("1", result["opt_in"])
         self.assertIn("Category=Integration&FullyQualifiedName~FundedIntegrationTests", result["arguments"])
+
+    def test_devnet_opts_in_and_excludes_what_the_devnet_cannot_serve(self):
+        result = self.invoke(["--devnet", "--no-build"], "0", magic="42")
+        self.assertEqual("1", result["opt_in"])
+        self.assertIsNone(result["dijkstra"])
+        self.assertIn(
+            "Category=Integration&Known!=F2&FullyQualifiedName!~DijkstraIntegrationTests&FullyQualifiedName!~BlockfrostPreprodParametersMatchCli",
+            result["arguments"],
+        )
+        self.assertIn("--no-build", result["arguments"])
+
+    def test_devnet_refuses_another_network(self):
+        for magic in ("1", None):
+            with tempfile.TemporaryDirectory(prefix="chrysalis-runner-safety-") as directory:
+                marker = Path(directory) / "ran"
+                heavy = Path(directory) / "heavy"
+                heavy.write_text(f"#!{sys.executable}\nfrom pathlib import Path\nPath({str(marker)!r}).write_text('ran')\n")
+                heavy.chmod(0o755)
+                env = {"PATH": directory + os.pathsep + os.defpath, "HOME": directory}
+                if magic is not None:
+                    env["CHRYSALIS_NETWORK_MAGIC"] = magic
+                result = subprocess.run([str(RUNNER), "--devnet"], env=env, text=True, capture_output=True)
+                self.assertEqual(2, result.returncode)
+                self.assertIn("run.sh --devnet: CHRYSALIS_NETWORK_MAGIC is not the devnet's", result.stderr)
+                self.assertFalse(marker.exists())
+
+    def test_devnet_sh_keeps_a_failure_status(self):
+        result = subprocess.run(["bash", str(DEVNET)], text=True, capture_output=True)
+        self.assertEqual(2, result.returncode)
+        self.assertIn("Usage:", result.stderr)
+        self.assertNotIn("Devnet: ready", result.stdout + result.stderr)
 
 
 if __name__ == "__main__":

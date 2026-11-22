@@ -28,7 +28,7 @@ namespace Chrysalis.IntegrationTests;
 public sealed class NodeIntegrationTests
 {
     /// <summary>Negotiates a real handshake and verifies the accepted offer and network data.</summary>
-    [IntegrationFact(Env.Socket, Env.Magic, Env.Cli, Env.NodeVersion, Env.Output)]
+    [IntegrationFact([Env.Socket, Env.Magic, Env.Cli, Env.NodeVersion, Env.Output])]
     [Trait("Category", "Integration")]
     public async Task HandshakeAcceptsAnOfferedVersionForTheConfiguredNetwork()
     {
@@ -57,7 +57,7 @@ public sealed class NodeIntegrationTests
     }
 
     /// <summary>Acquires and releases state without issuing a query.</summary>
-    [IntegrationFact(Env.Socket, Env.Magic, Env.Cli, Env.NodeVersion, Env.Output)]
+    [IntegrationFact([Env.Socket, Env.Magic, Env.Cli, Env.NodeVersion, Env.Output])]
     [Trait("Category", "Integration")]
     public async Task StateAcquireReleaseCompletesOnOneConnection()
     {
@@ -73,7 +73,7 @@ public sealed class NodeIntegrationTests
     }
 
     /// <summary>Compares node-to-client chain intersection/rollback with the same node's CLI point.</summary>
-    [IntegrationFact(Env.Socket, Env.Magic, Env.Cli, Env.NodeVersion, Env.Output)]
+    [IntegrationFact([Env.Socket, Env.Magic, Env.Cli, Env.NodeVersion, Env.Output])]
     [Trait("Category", "Integration")]
     public async Task ClientChainIntersectionMatchesCliPoint()
     {
@@ -88,7 +88,7 @@ public sealed class NodeIntegrationTests
     }
 
     /// <summary>Checks the complete tip helper against a stable CLI snapshot.</summary>
-    [IntegrationFact(Env.Socket, Env.Magic, Env.Cli, Env.NodeVersion, Env.Output)]
+    [IntegrationFact([Env.Socket, Env.Magic, Env.Cli, Env.NodeVersion, Env.Output])]
     [Trait("Category", "Integration")]
     public async Task LedgerTipHelperMatchesCli()
     {
@@ -99,7 +99,7 @@ public sealed class NodeIntegrationTests
     }
 
     /// <summary>Checks the complete current-era helper, not only its inner model.</summary>
-    [IntegrationFact(Env.Socket, Env.Magic, Env.Cli, Env.NodeVersion, Env.Output)]
+    [IntegrationFact([Env.Socket, Env.Magic, Env.Cli, Env.NodeVersion, Env.Output])]
     [Trait("Category", "Integration")]
     public async Task EraHelperMatchesCli()
     {
@@ -110,7 +110,7 @@ public sealed class NodeIntegrationTests
     }
 
     /// <summary>Compares all parameter model fields to the same node's CLI JSON.</summary>
-    [IntegrationFact(Env.Socket, Env.Magic, Env.Cli, Env.NodeVersion, Env.Output)]
+    [IntegrationFact([Env.Socket, Env.Magic, Env.Cli, Env.NodeVersion, Env.Output])]
     [Trait("Category", "Integration")]
     public async Task ParameterHelperMatchesCli()
     {
@@ -122,11 +122,11 @@ public sealed class NodeIntegrationTests
     }
 
     /// <summary>Compares the address query's actual inputs, addresses and assets with CLI UTxOs.</summary>
-    [IntegrationFact(Env.Socket, Env.Magic, Env.Cli, Env.NodeVersion, Env.Output, Env.Address)]
+    [IntegrationFact([Env.Socket, Env.Magic, Env.Cli, Env.NodeVersion, Env.Output, Env.Address])]
     [Trait("Category", "Integration")]
     public async Task UtxoByAddressHelperMatchesCli()
     {
-        Env.RequirePreprod();
+        Env.RequirePreprodOrDevnet();
         using CancellationTokenSource deadline = new(TimeSpan.FromSeconds(40));
         await OracleCli.RecordVersionAsync(deadline.Token);
         string address = Env.Required(Env.Address);
@@ -146,7 +146,7 @@ public sealed class NodeIntegrationTests
     }
 
     /// <summary>Queries the same real nonempty CLI tx-in through both implementations and compares its full output.</summary>
-    [IntegrationFact(Env.Socket, Env.Magic, Env.Cli, Env.NodeVersion, Env.Output, Env.Address)]
+    [IntegrationFact([Env.Socket, Env.Magic, Env.Cli, Env.NodeVersion, Env.Output, Env.Address])]
     [Trait("Category", "Integration")]
     public async Task InputQueryMatchesSameNonemptyCliInput()
     {
@@ -163,7 +163,7 @@ public sealed class NodeIntegrationTests
     }
 
     /// <summary>Compares the monitor snapshot's size tuple to a stable CLI mempool reading.</summary>
-    [IntegrationFact(Env.Socket, Env.Magic, Env.Cli, Env.NodeVersion, Env.Output)]
+    [IntegrationFact([Env.Socket, Env.Magic, Env.Cli, Env.NodeVersion, Env.Output])]
     [Trait("Category", "Integration")]
     public async Task MonitorAcquireAndSizesMatchCli()
     {
@@ -186,7 +186,7 @@ public sealed class NodeIntegrationTests
     }
 
     /// <summary>Requires release to return without waiting and permits reacquisition on the same connection.</summary>
-    [IntegrationFact(Env.Socket, Env.Magic, Env.Cli, Env.NodeVersion, Env.Output)]
+    [IntegrationFact([Env.Socket, Env.Magic, Env.Cli, Env.NodeVersion, Env.Output])]
     [Trait("Category", "Integration")]
     public async Task MonitorReleaseThenAcquireCompletes()
     {
@@ -199,7 +199,7 @@ public sealed class NodeIntegrationTests
     }
 
     /// <summary>Checks a never-submitted id against cardano-cli on the same node.</summary>
-    [IntegrationFact(Env.Socket, Env.Magic, Env.Cli, Env.NodeVersion, Env.Output)]
+    [IntegrationFact([Env.Socket, Env.Magic, Env.Cli, Env.NodeVersion, Env.Output])]
     [Trait("Category", "Integration")]
     public async Task MonitorHasTxMatchesCliFalse()
     {
@@ -213,7 +213,7 @@ public sealed class NodeIntegrationTests
     }
 
     /// <summary>Forces 64-bit measures and compares count/byte measurements with CLI, not a fixed capacity.</summary>
-    [IntegrationFact(Env.Socket, Env.Magic, Env.Cli, Env.NodeVersion, Env.Output)]
+    [IntegrationFact([Env.Socket, Env.Magic, Env.Cli, Env.NodeVersion, Env.Output])]
     [Trait("Category", "Integration")]
     public async Task MonitorMeasuresMatchCliCountAndBytes()
     {
@@ -238,7 +238,7 @@ public sealed class NodeIntegrationTests
     }
 
     /// <summary>Requires a legitimate rejection, corroborated by the same node through CLI, not a CBOR error.</summary>
-    [IntegrationFact(Env.Socket, Env.Magic, Env.Cli, Env.NodeVersion, Env.Output)]
+    [IntegrationFact([Env.Socket, Env.Magic, Env.Cli, Env.NodeVersion, Env.Output])]
     [Trait("Category", "Integration")]
     public async Task RejectionIsInspectableAndMatchesCliReason()
     {
@@ -257,7 +257,7 @@ public sealed class NodeIntegrationTests
     }
 
     /// <summary>Exercises N2N handshake, chain-sync, block-fetch and keep-alive against one CLI-pinned point.</summary>
-    [IntegrationFact(Env.Socket, Env.Magic, Env.Cli, Env.NodeVersion, Env.Output, Env.Host, Env.Port)]
+    [IntegrationFact([Env.Socket, Env.Magic, Env.Cli, Env.NodeVersion, Env.Output, Env.Host, Env.Port])]
     [Trait("Category", "Integration")]
     public async Task PeerProtocolsMatchTheSameNodesCliBlockPoint()
     {
@@ -291,6 +291,6 @@ public sealed class NodeIntegrationTests
         await peer.KeepAlive.SendDoneAsync(deadline.Token);
     }
 
-    private static Task<JsonElement> MempoolInfoAsync(string label, CancellationToken cancellationToken) => OracleCli.QueryJsonAsync(label, cancellationToken, "tx-mempool", "info");
-    private static ulong[] Sizes(JsonElement info) => [info.GetProperty("capacityInBytes").GetUInt64(), info.GetProperty("sizeInBytes").GetUInt64(), info.GetProperty("numberOfTxs").GetUInt64()];
+    internal static Task<JsonElement> MempoolInfoAsync(string label, CancellationToken cancellationToken) => OracleCli.QueryJsonAsync(label, cancellationToken, "tx-mempool", "info");
+    internal static ulong[] Sizes(JsonElement info) => [info.GetProperty("capacityInBytes").GetUInt64(), info.GetProperty("sizeInBytes").GetUInt64(), info.GetProperty("numberOfTxs").GetUInt64()];
 }

@@ -148,7 +148,7 @@ internal static class OracleCli
 
     internal static async Task<T> AtStableTipAsync<T>(string label, Func<JsonElement, CancellationToken, Task<T>> operation, CancellationToken cancellationToken)
     {
-        for (int attempt = 0; attempt < 3; attempt++)
+        for (int attempt = 0; attempt < 5; attempt++)
         {
             JsonElement before = await QueryJsonAsync(label + "-before", cancellationToken, "tip");
             T result = await operation(before, cancellationToken);
@@ -158,6 +158,6 @@ internal static class OracleCli
                 return result;
             }
         }
-        throw new InvalidOperationException("The node tip moved during all three bounded oracle snapshots; no stable comparison was obtained.");
+        throw new InvalidOperationException("The node tip moved during all five bounded oracle snapshots; no stable comparison was obtained.");
     }
 }
