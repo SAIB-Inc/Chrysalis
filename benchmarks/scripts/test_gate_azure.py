@@ -102,11 +102,12 @@ def ledger(site, monkeypatch):
         yield azure.Ledger(local)
 
 
-def make_draw(fake, tmp_path, *, group=RUN, region='eastus2', start=None, lifetime=1256):
+def make_draw(fake, tmp_path, *, group=RUN, region='eastus2', start=None, lifetime=1256, raw_seconds=None):
     state = tmp_path / '.guard'
     state.mkdir(exist_ok=True)
     guard.mark(state, 'ready')
-    return azure.Draw(fake, group, region, int(time.time()) if start is None else start, state, lifetime, lifetime - 345)
+    raw = max(0, round((lifetime - 345 - guard.WORKER_START) / 1.15)) if raw_seconds is None else raw_seconds
+    return azure.Draw(fake, group, region, int(time.time()) if start is None else start, state, lifetime, lifetime - 345, raw_seconds=raw)
 
 
 def events(fake):
@@ -202,20 +203,23 @@ def test_retirement_cannot_declare_absence_with_inflight_authorized_write(tmp_pa
 def test_sealed_deadline_order_and_midnight():
     epoch = datetime(2026, 11, 19, 23, 30, tzinfo=timezone.utc)
     e = int(epoch.timestamp())
-    g = 6436
+    g, raw = 6436, 4875
     c = g - 345
-    assert e < e + channel.WORKER_START < e + c < e + c + guard.COPY_END < e + g - guard.WATCH_MARGIN < e + g < e + g + guard.ALERT_TAIL < e + g + guard.RESERVE_TAIL
+    assert e < e + guard.provision_seconds(c, raw) < e + guard.provision_seconds(c, raw) + guard.START_WINDOW <= e + guard.latest_worker_start_seconds(c, raw) < e + c < e + c + guard.COPY_END < e + g - guard.WATCH_MARGIN < e + g < e + g + guard.ALERT_TAIL < e + g + guard.RESERVE_TAIL
+    assert e < e + channel.WORKER_START < e + c
     assert azure.shutdown_time(e + g) == '0118'
     assert azure.shutdown_time(e + g + 44) == '0118'
     for minutes in range(1440):
         start = e + minutes * 60 + 13
-        for lifetime in (828, 1256, 7200):
+        for lifetime, raw_s in ((828, 0), (1256, 372), (2494, 1448), (6109, 4592), (7200, 5540)):
             h, m = azure.shutdown_time(start + lifetime)[:2], azure.shutdown_time(start + lifetime)[2:]
-            created = datetime.fromtimestamp(start + 720, timezone.utc)
-            first = created.replace(hour=int(h), minute=int(m), second=0)
-            if first <= created:
-                first += timedelta(days=1)
-            assert 0 <= first.timestamp() - (start + lifetime) < 60
+            latest_sched = guard.latest_worker_start_seconds(lifetime - 345, raw_s)
+            for offset in (720, latest_sched):
+                created = datetime.fromtimestamp(start + offset, timezone.utc)
+                first = created.replace(hour=int(h), minute=int(m), second=0)
+                if first <= created:
+                    first += timedelta(days=1)
+                assert 0 <= first.timestamp() - (start + lifetime) < 60
 
 
 @pytest.mark.parametrize('settings', [dict(scheduleRefused=2), dict(scheduleReadback={'timeZoneId': 'PST'}),
@@ -285,7 +289,7 @@ def prepare_attempt(monkeypatch, directory, *, real_dispatch=False):
 
 def attempt(fake, local, ledger, directory, group, *, region='eastus2', fallback=None, dispatch=0):
     return azure.one_attempt(fake, local, ledger, dict(platform={'azCliVersion': '2.99.1'}, programStopUsd=40),
-        bundle.sha(directory / 'seal.json'), directory, dict(destroyGuardSeconds=1256, measurementCutoffSeconds=911),
+        bundle.sha(directory / 'seal.json'), directory, dict(destroyGuardSeconds=1256, measurementCutoffSeconds=911, rawSeconds=372),
         group, region, {}, 0, 1, 'first', fallback, ('test', 'fixture'), dispatch)
 
 
@@ -1217,7 +1221,7 @@ def test_r1_sealed_epoch_reaches_guest_keeper_and_long_async_cleanup(fake, site,
     entry = ledger.attempts[RUN]
     g = entry['guard']; c = entry['cutoff']
     assert entry['epoch'] == epoch and entry['ended'] - epoch > 135
-    assert epoch < epoch+channel.WORKER_START < epoch+c < epoch+c+guard.COPY_END < epoch+g-70 < epoch+g < epoch+g+300
+    assert epoch < epoch+guard.provision_seconds(c, 372) < epoch+channel.WORKER_START < epoch+guard.latest_worker_start_seconds(c, 372) < epoch+c < epoch+c+guard.COPY_END < epoch+g-70 < epoch+g < epoch+g+300
     cloud.assert_called_once_with(RUN, epoch+g)
     timer = next(x['content'] for x in json.loads(azure.cloud_init(RUN, epoch+g).split('\n',1)[1])['write_files'] if x['path'].endswith('.timer'))
     assert 'OnCalendar=' + azure.calendar(epoch+g) in timer
@@ -2734,9 +2738,19 @@ def test_sigterm_to_real_one_attempt_gets_no_redraw(fake, site, ledger, monkeypa
     assert not (directory / 'time/runs' / calls[0] / 'pre-ready-failure.json').exists()
 
 
-def test_redraw_two_pre_ready_failures_stop_same_and_cross_phase(fake, site, ledger, monkeypatch):
-    rc, _, _, _, calls, draws = _run_fly(monkeypatch, site, ledger, ['fallback-pre-ready', 'pre-ready', 'kept'], tag='same')
-    assert rc == 2 and len(calls) == 2 and [d['decision'] for d in draws] == ['invalid-pre-ready', 'invalid']
+def test_redraw_three_pre_ready_redraws_allowed_fourth_stops_same_and_cross_phase(fake, site, ledger, monkeypatch):
+    assert bundle.MAX_PRE_READY_REDRAWS == 3
+    rc_ok, _, _, _, calls_ok, draws_ok = _run_fly(
+        monkeypatch, site, ledger, ['fallback-pre-ready', 'pre-ready', 'pre-ready', 'kept'], tag='three-ok')
+    assert rc_ok == 0 and len(calls_ok) == 4
+    assert [d['decision'] for d in draws_ok] == ['invalid-pre-ready', 'invalid-pre-ready', 'invalid-pre-ready', 'kept']
+
+    ledger.attempts.clear()
+    ledger.write()
+    rc, _, _, _, calls, draws = _run_fly(
+        monkeypatch, site, ledger, ['fallback-pre-ready', 'pre-ready', 'pre-ready', 'pre-ready', 'kept'], tag='same')
+    assert rc == 2 and len(calls) == 4
+    assert [d['decision'] for d in draws] == ['invalid-pre-ready', 'invalid-pre-ready', 'invalid-pre-ready', 'invalid']
 
     def make_release(seal, plan):
         entry = dict(plan['rows'][0], aPairs=16, bPairs=16, expected=dict(release='FAIL', change='PASS'))
@@ -2749,9 +2763,11 @@ def test_redraw_two_pre_ready_failures_stop_same_and_cross_phase(fake, site, led
     monkeypatch.setattr(timing, 'session_outcome', lambda *a, **k: ('repeat', [a[1]['timePlans'][0]['rows'][0]['id']]))
     ledger.attempts.clear()
     ledger.write()
-    rc2, _, _, _, calls2, draws2 = _run_fly(monkeypatch, site, ledger, ['pre-ready', 'kept', 'pre-ready', 'kept'],
-                                            seal_patch=make_release, tag='cross')
-    assert rc2 == 2 and len(calls2) == 3 and [d['decision'] for d in draws2] == ['invalid-pre-ready', 'kept', 'invalid']
+    rc2, _, _, _, calls2, draws2 = _run_fly(
+        monkeypatch, site, ledger, ['pre-ready', 'pre-ready', 'kept', 'pre-ready', 'pre-ready', 'kept'],
+        seal_patch=make_release, tag='cross')
+    assert rc2 == 2 and len(calls2) == 5
+    assert [d['decision'] for d in draws2] == ['invalid-pre-ready', 'invalid-pre-ready', 'kept', 'invalid-pre-ready', 'invalid']
 
 
 @pytest.mark.parametrize('fault', [
@@ -2824,7 +2840,7 @@ def test_failure_lines_carry_fixed_class_step_seconds_and_no_free_text(fake, sit
 
     monkeypatch.setattr(proof.subprocess, 'run', fail_az_stderr)
     assert azure.one_attempt(fake, local, ledger, dict(platform={'azCliVersion': '2.99.1'}, programStopUsd=40),
-                             bundle.sha(directory / 'seal.json'), directory, dict(destroyGuardSeconds=1256, measurementCutoffSeconds=911),
+                             bundle.sha(directory / 'seal.json'), directory, dict(destroyGuardSeconds=1256, measurementCutoffSeconds=911, rawSeconds=372),
                              OTHER, 'eastus2', {}, 0, 2, 'first', None, ('test', 'fixture'), 0) == 2
     out2 = capsys.readouterr().out
     assert 'last Azure call: get virtualMachines; step wait virtualMachines; +11.2s' in out2 and 'CANARY_SECRET_AZ' not in out2
@@ -2835,7 +2851,7 @@ def test_failure_lines_carry_fixed_class_step_seconds_and_no_free_text(fake, sit
     monkeypatch.setattr(proof.subprocess, 'run', real_run)
     monkeypatch.setattr(azure, 'run_channel', lambda dr, _i, nt: (guard.mark(nt / '.guard', 'guest-ready', since=dr.start), (_ for _ in ()).throw(guard.GuardFailure('post')))[1])
     assert azure.one_attempt(fake, local, ledger, dict(platform={'azCliVersion': '2.99.1'}, programStopUsd=40),
-                             bundle.sha(directory / 'seal.json'), directory, dict(destroyGuardSeconds=1256, measurementCutoffSeconds=911),
+                             bundle.sha(directory / 'seal.json'), directory, dict(destroyGuardSeconds=1256, measurementCutoffSeconds=911, rawSeconds=372),
                              post_app, 'eastus2', {}, 0, 3, 'first', None, ('test', 'fixture'), 0) == 2
     assert not (directory / 'time/runs' / post_app / 'pre-ready-failure.json').exists()
 
@@ -2887,7 +2903,7 @@ def test_host_step_markers_written_with_times_and_stop_at_failure_step(fake, sit
     payload_file = directory / 'p.tar.gz'
     payload_file.write_bytes(b'payload')
     seal_stub = dict(platform={'azCliVersion': '2.99.1'}, programStopUsd=40)
-    plan_stub = dict(destroyGuardSeconds=1256, measurementCutoffSeconds=911)
+    plan_stub = dict(destroyGuardSeconds=1256, measurementCutoffSeconds=911, rawSeconds=372)
     assert azure.one_attempt(fake, local, ledger, seal_stub, bundle.sha(directory / 'seal.json'), directory, plan_stub,
                              RUN, 'eastus2', {'payload': payload_file}, 0, 1, 'first', None, ('test', 'fixture'), 0) == 2
     gdir = directory / 'time/runs' / RUN / '.guard'
@@ -2968,8 +2984,8 @@ def test_consumers_accept_pre_ready_then_kept_and_retry_consumers_refuse(fake, s
     assert set(json.loads((dir_n / 'time/noise-records.json').read_text())) == {seal_n['timePlans'][0]['rows'][0]['id']}
 
 
-def _run_vm_deadline_attempt(fake, local, ledger, directory, monkeypatch, diag_handler, *, group=RUN, draw_num=1):
-    clock, diag_calls, real_rest = [30_000.0], [], fake.rest
+def _run_vm_deadline_attempt(fake, local, ledger, directory, monkeypatch, diag_handler, *, group=RUN, draw_num=1, plan=None, step=100.0, clock_start=30_000.0):
+    clock, diag_calls, real_rest = [clock_start], [], fake.rest
     for mod in (azure.time, guard.time, channel.time):
         monkeypatch.setattr(mod, 'time', lambda: clock[0])
     monkeypatch.setattr(azure.time, 'sleep', lambda n: clock.__setitem__(0, clock[0] + max(0, n)))
@@ -2980,16 +2996,17 @@ def _run_vm_deadline_attempt(fake, local, ledger, directory, monkeypatch, diag_h
             diag_calls.append((method, url, kwargs))
             return diag_handler(method, url, kwargs)
         if method == 'get' and '/virtualMachines/gate?' in url and kwargs.get('query') == 'properties.provisioningState':
-            clock[0] += 100.0
+            clock[0] += step
             return 'Creating'
         return real_rest(method, url, **kwargs)
 
     monkeypatch.setattr(fake, 'rest', fake_rest)
-    plan = dict(destroyGuardSeconds=1256, measurementCutoffSeconds=911, provider='azure',
-                limitUsd=timing.azure_booking(1256 + guard.RESERVE_TAIL))
+    plan = plan or dict(destroyGuardSeconds=1256, measurementCutoffSeconds=911, rawSeconds=372, provider='azure',
+                        limitUsd=timing.azure_booking(1256 + guard.RESERVE_TAIL))
     rc = azure.one_attempt(fake, local, ledger, dict(platform={'azCliVersion': '2.99.1'}, programStopUsd=40),
                            bundle.sha(directory / 'seal.json'), directory, plan, group, 'eastus2', {},
                            0, draw_num, 'first', None, ('test', 'fixture'), 0)
+    monkeypatch.setattr(fake, 'rest', real_rest)
     return rc, plan, diag_calls
 
 
@@ -3005,7 +3022,7 @@ def test_azdiag_vm_deadline_captures_creating_and_preserves_failure_and_redraw(f
     assert diag_calls[0][2].get('timeout') == 7 and diag_calls[0][2].get('waits') == proof.ONCE
     failure = json.loads((note / 'pre-ready-failure.json').read_text())
     assert set(failure) == {'class', 'step', 'seconds'}
-    assert failure['class'] == 'GuardFailure' and failure['step'] == 'wait virtualMachines' and failure['seconds'] >= 720.0
+    assert failure['class'] == 'GuardFailure' and failure['step'] == 'wait virtualMachines' and failure['seconds'] >= guard.provision_seconds(plan['measurementCutoffSeconds'], plan['rawSeconds'])
     assert f'Azure attempt invalid: GuardFailure; step wait virtualMachines; +{failure["seconds"]:.1f}s' in out
     expected_diag = {'vm': payload_resp}
     diag_file = note / 'pre-ready-diag.json'
@@ -3073,7 +3090,7 @@ def test_azdiag_init_failed_exit75_and_work_deadline_stay_redraw_eligible(fake, 
     monkeypatch.setattr(fake, 'rest', init_fail_rest)
     payload_file = directory / 'p.tar.gz'
     payload_file.write_bytes(b'x')
-    plan = dict(destroyGuardSeconds=1256, measurementCutoffSeconds=911, provider='azure',
+    plan = dict(destroyGuardSeconds=1256, measurementCutoffSeconds=911, rawSeconds=372, provider='azure',
                 limitUsd=timing.azure_booking(1256 + guard.RESERVE_TAIL))
     rc = azure.one_attempt(fake, local, ledger, dict(platform={'azCliVersion': '2.99.1'}, programStopUsd=40),
                            bundle.sha(directory / 'seal.json'), directory, plan, RUN, 'eastus2', {'payload': payload_file},
@@ -3168,7 +3185,7 @@ def test_azdiag_no_extra_call_on_success_or_capacity_failure(fake, site, ledger,
 
     monkeypatch.setattr(fake, 'rest', cap_rest)
     assert azure.one_attempt(fake, local, ledger, dict(platform={'azCliVersion': '2.99.1'}, programStopUsd=40),
-                             bundle.sha(directory / 'seal.json'), directory, dict(destroyGuardSeconds=1256, measurementCutoffSeconds=911),
+                             bundle.sha(directory / 'seal.json'), directory, dict(destroyGuardSeconds=1256, measurementCutoffSeconds=911, rawSeconds=372),
                              OTHER, 'eastus2', {}, 0, 2, 'first', None, ('test', 'fixture'), 0) == 6
     assert vm_expand_calls == []
     assert not (directory / 'time/runs' / OTHER / 'pre-ready-diag.json').exists()
@@ -3188,7 +3205,7 @@ def test_azdiag_no_extra_call_on_success_or_capacity_failure(fake, site, ledger,
 
     monkeypatch.setattr(fake, 'rest', noncap_rest)
     assert azure.one_attempt(fake, local, ledger, dict(platform={'azCliVersion': '2.99.1'}, programStopUsd=40),
-                             bundle.sha(directory / 'seal.json'), directory, dict(destroyGuardSeconds=1256, measurementCutoffSeconds=911),
+                             bundle.sha(directory / 'seal.json'), directory, dict(destroyGuardSeconds=1256, measurementCutoffSeconds=911, rawSeconds=372),
                              noncap_app, 'eastus2', {}, 0, 3, 'first', None, ('test', 'fixture'), 0) == 2
     assert vm_expand_calls == []
     assert not (directory / 'time/runs' / noncap_app / 'pre-ready-diag.json').exists()
@@ -3296,3 +3313,260 @@ esac
     assert ok.stdout == 'CHRYSALIS:{"payload":"P","results":"R"}\n'
     assert 'CHRYSALIS-BOOT:' not in ok.stdout
     assert channel.get_summary(ok.stdout) == {'payload': 'P', 'results': 'R'}
+
+
+def test_azpatience_window_math_and_consistency(fake, site, ledger, monkeypatch):
+    assert guard.WORKER_START == 483 and channel.WORKER_START == 483
+    assert guard.WRITE_END == 720 and guard.START_WINDOW == 300 and guard.SESSION_FRACTION == 0.80
+    assert guard.RUN_COMMAND_SECONDS == 130 and channel.RUN_COMMAND_SECONDS == 130
+    assert guard.INIT_COMMAND_MAX == 360 and guard.BOOT_MARGIN == 35 and guard.POLL_MARGIN == 15
+    assert guard.KICK_RESERVE == 155 and guard.MIN_POST_VERIFY == 290
+    for cutoff, raw, want_work, want_latest, want_prov in (
+        (2149, 1448, 1159, 990, 690),
+        (5764, 4592, 3674, 2090, 720),
+        (6091, 4875, 3900, 2191, 720),
+        (911, 372, 298, 613, 313),
+        (483, 0, 0, 483, 183),
+    ):
+        assert guard.session_work_seconds(raw) == want_work
+        assert guard.latest_worker_start_seconds(cutoff, raw) == want_latest
+        assert guard.provision_seconds(cutoff, raw) == want_prov
+        assert 0 < want_prov <= guard.WRITE_END
+        assert want_prov + guard.START_WINDOW <= want_latest <= cutoff
+    # M4: missing/invalid rawSeconds fails closed (no cutoff inversion fallback) in guard, one_attempt, and checked_azure_go.
+    for bad in (None, -1, '1448', True, float('inf'), float('nan')):
+        with pytest.raises(guard.GuardFailure, match='rawSeconds'):
+            guard.session_work_seconds(bad)
+    local, directory = site
+    go, seal = sealed_site(site)
+    seal['timePlans'][0].pop('rawSeconds', None)
+    schedules.prepare(seal['timePlans'][0])
+    bad_go = gate.write_seal(directory, seal)
+    with pytest.raises(ValueError, match='Invalid Azure session windows'):
+        bundle.checked_azure_go(directory, bad_go)
+    prepare_attempt(monkeypatch, directory)
+    bad_plan = dict(destroyGuardSeconds=2494, measurementCutoffSeconds=2149, provider='azure',
+                    limitUsd=timing.azure_booking(2494 + guard.RESERVE_TAIL))
+    before_ev = len(events(fake))
+    with pytest.raises(guard.GuardFailure, match='rawSeconds'):
+        azure.one_attempt(fake, local, ledger, dict(platform={'azCliVersion': '2.99.1'}, programStopUsd=40),
+                          go, directory, bad_plan, RUN, 'eastus2', {}, 0, 1, 'first', None, ('test', 'fixture'), 0)
+    assert len(events(fake)) == before_ev and RUN not in ledger.attempts and not (directory / 'time/runs' / RUN).exists()
+
+    # One-clock start_plan boundaries (S1, S2, stub 911, min 483, plus all post-provision delay cases).
+    ep = 10_000
+    for c, raw, vm_off, now_off, want in (
+        (2149, 1448, 104, 107, (ep + 637, 360, 325)),
+        (2149, 1448, 517, 520, (ep + 990, 300, 265)),
+        (2149, 1448, 571.6, 573.9, (ep + 990, 246, 211)),
+        (2149, 1448, 690, 693, (ep + 990, 130, 95)),
+        (2149, 1448, 517, 567, (ep + 990, 253, 218)),
+        (2149, 1448, 104, 194, (ep + 724, 360, 325)),
+        (2149, 1448, 104, 481, (ep + 990, 339, 304)),
+        (2149, 1448, 104, 482.5, (ep + 990, 337, 302)),
+        (2149, 1448, 690, 700, (ep + 990, 130, 95)),
+        (5764, 4592, 104, 107, (ep + 637, 360, 325)),
+        (5764, 4592, 517, 520, (ep + 1050, 360, 325)),
+        (5764, 4592, 720, 723, (ep + 1253, 360, 325)),
+        (911, 372, 75, 78, (ep + 608, 360, 325)),
+        (911, 372, 313, 316, (ep + 613, 130, 95)),
+        (483, 0, 104, 107, (ep + 483, 206, 171)),
+        (483, 0, 183, 186, (ep + 483, 130, 95)),
+        (483, 0, 183, 193, (ep + 483, 130, 95)),
+    ):
+        sb, it, bs = guard.start_plan(ep, c, ep + vm_off, ep + now_off, raw)
+        assert (sb, it, bs) == want
+        init_until = min(sb - 1, ep + now_off + it + guard.POLL_MARGIN)
+        assert init_until == ep + now_off + it + guard.POLL_MARGIN
+        assert sb - init_until >= guard.RUN_COMMAND_SECONDS + guard.POLL_MARGIN
+    for c, raw, vm_off, now_off in ((2149, 1448, 690, 980), (2149, 1448, 690, 700.1), (483, 0, 183, 194), (483, 100, 0, 0)):
+        with pytest.raises(guard.GuardFailure, match='cannot fit a full session'):
+            guard.start_plan(ep, c, ep + vm_off, ep + now_off, raw)
+    # W2 stays inside maxDraws=6 (12 booked attempts/session): worst case unchanged at $22.0680.
+    s1_res = timing.azure_booking(2494 + guard.RESERVE_TAIL)
+    s2_res = timing.azure_booking(6109 + guard.RESERVE_TAIL)
+    assert (s1_res, s2_res) == (0.6223, 1.2167) and round(12 * (s1_res + s2_res), 4) == 22.0680
+
+
+def _run_azpatience_attempt(fake, local, ledger, directory, monkeypatch, plan, payload_file, group, draw_num, vm_at, *,
+                            retry_sched=False, init_dur=25.0, vm_put_at=None, upload_at=None, sched_at=None):
+    epoch = 30_000.0 + draw_num * 10_000.0
+    clock, real_rest, orig_command, orig_mark = [epoch], fake.rest, channel.command, azure.mark
+    sched_puts, captured, cmd_timeouts, init_calls = [0], {}, {}, []
+    for mod in (azure.time, guard.time, channel.time):
+        monkeypatch.setattr(mod, 'time', lambda: clock[0])
+    monkeypatch.setattr(azure.time, 'sleep', lambda n: clock.__setitem__(0, clock[0] + max(0, n)))
+    if draw_num > 1:
+        monkeypatch.delenv('GATE_FIRST_GO', raising=False)
+    fake_state(fake, deletesBeforeAbsent=1)
+    monkeypatch.setattr(channel, 'command', lambda dr, lbl, scr, until, *, sealed=None, **kw: (
+        captured.__setitem__(lbl, (scr, until, clock[0])), orig_command(dr, lbl, scr, until, sealed=sealed, **kw))[1])
+    if retry_sched or upload_at is not None:
+        def hook_mark(s, n, **kw):
+            if n == 'upload-done' and upload_at is not None:
+                clock[0] = epoch + upload_at
+            r = orig_mark(s, n, **kw)
+            if retry_sched and n == 'vm-provisioned':
+                clock[0] = epoch + 690.5
+            return r
+        monkeypatch.setattr(azure, 'mark', hook_mark)
+        monkeypatch.setattr(channel, 'mark', hook_mark)
+
+    def fake_rest(method, url, **kwargs):
+        if '/runCommands/init' in url:
+            init_calls.append((method, url))
+        if method == 'put' and '/runCommands/' in url:
+            lbl = url.split('/runCommands/', 1)[1].split('?', 1)[0]
+            cmd_timeouts[lbl] = json.loads(kwargs['stdin_body'].decode())['properties']['timeoutInSeconds']
+        if method == 'put' and '/virtualMachines/gate?' in url and vm_put_at is not None:
+            clock[0] = epoch + vm_put_at
+        if method == 'put' and '/schedules/shutdown-computevm-gate?' in url:
+            sched_puts[0] += 1
+            if retry_sched and sched_puts[0] == 1:
+                raise proof.AzureError('timeout')
+        elif method == 'get' and '/virtualMachines/gate?' in url and kwargs.get('query') == 'properties.provisioningState':
+            clock[0] = epoch + vm_at
+            return 'Succeeded'
+        elif method == 'get' and '/schedules/shutdown-computevm-gate?' in url:
+            clock[0] = (epoch + sched_at) if sched_at is not None else (clock[0] + 3.0)
+        elif method == 'get' and '/runCommands/init?' in url:
+            clock[0] += init_dur
+            return dict(state='Succeeded', code=0, output='CHRYSALIS:{"payload":"PUB1","results":"PUB2"}\n')
+        elif method == 'get' and '/runCommands/kick?' in url:
+            clock[0] += 10.0
+            return dict(state='Succeeded', code=0, output=f'CHRYSALIS:{{"started":{int(clock[0])}}}\n')
+        elif method == 'get' and '/runCommands/status-00?' in url:
+            return dict(state='Succeeded', code=0, output='CHRYSALIS:{"done":true}\n')
+        return real_rest(method, url, **kwargs)
+
+    monkeypatch.setattr(fake, 'rest', fake_rest)
+    seal_stub = dict(platform={'azCliVersion': '2.99.1'}, programStopUsd=40)
+    rc = azure.one_attempt(fake, local, ledger, seal_stub, bundle.sha(directory / 'seal.json'), directory, plan,
+                           group, 'eastus2', {'payload': payload_file}, 0, draw_num, 'first', None, ('test', 'fixture'), 0)
+    monkeypatch.setattr(azure, 'mark', orig_mark)
+    monkeypatch.setattr(channel, 'mark', orig_mark)
+    monkeypatch.setattr(channel, 'command', orig_command)
+    monkeypatch.setattr(fake, 'rest', real_rest)
+    return rc, int(epoch), captured, cmd_timeouts, sched_puts[0], init_calls, directory / 'time/runs' / group
+
+
+def test_azpatience_run4_run6_ontime_and_late_vm_timelines(fake, site, ledger, monkeypatch, tmp_path, capsys):
+    local, directory = site
+    prepare_attempt(monkeypatch, directory)
+    s1_plan = dict(destroyGuardSeconds=2494, measurementCutoffSeconds=2149, rawSeconds=1448,
+                   provider='azure', limitUsd=timing.azure_booking(2494 + guard.RESERVE_TAIL))
+    payload_file = directory / 'payload.tar.gz'
+    archive(payload_file, {'plan.json': {'probe': {'processes': 16}, 'members': {f'{i:016x}': {'build': 'b'} for i in range(64)}}})
+    payload_sha = bundle.sha(payload_file)
+    monkeypatch.setattr(channel, 'storage_key', lambda _d: 'K' * 48)
+    monkeypatch.setattr(channel, 'signed_blob', lambda *_a: 'se=2099-01-01T00%3A00%3A00Z&sp=r&spr=https&sv=2022-11-02&sr=b&sig=' + 'a' * 43)
+    monkeypatch.setattr(channel, 'seal', lambda *_a: 'sealed')
+    monkeypatch.setattr(channel, 'upload', lambda *_a, **_k: None)
+    monkeypatch.setattr(azure, 'upload_inputs', channel.upload_inputs)
+    monkeypatch.setattr(channel, 'copy_results', lambda *_a, **_k: True)
+    monkeypatch.setattr(azure, 'run_channel', channel.run_channel)
+    go = bundle.sha(directory / 'seal.json')
+
+    # (a) Run 4 replay (+517 s): proceeds to init (300 s / boot +265) and kick (start_by +990, 130 s), guest agrees.
+    rc, ep1, cap1, to1, _, _, note1 = _run_azpatience_attempt(fake, local, ledger, directory, monkeypatch, s1_plan, payload_file, RUN, 1, 517.0)
+    assert rc == 2 and (note1 / '.guard/init-sent').is_file() and (note1 / '.guard/guest-ready').is_file()
+    init_script, init_until, init_now = cap1['init']
+    kick_script, kick_until, _ = cap1['kick']
+    assert '+ 265' in init_script and to1['init'] == 300 and to1['kick'] == 130 and to1['status-00'] == 130
+    assert init_until == min(ep1 + 990 - 1, init_now + 300 + 15) and kick_until == ep1 + 990
+    parts = [ln for ln in kick_script.splitlines() if ' fetch ' in ln][0].split()
+    f_acct, f_sha, f_suite, f_epoch, f_start_by, f_cutoff, f_region = parts[parts.index('fetch') + 1:]
+    assert (int(f_epoch), int(f_start_by), int(f_cutoff), f_region) == (ep1, ep1 + 990, ep1 + 2149, 'eastus2')
+    for case, now_off, ok in (('late-ok', 550, True), ('at-bound', 990, False)):
+        store, work = tmp_path / case / 'store', tmp_path / case / 'work'
+        store.mkdir(parents=True)
+        with monkeypatch.context() as mp:
+            _patch_guest_push(mp, store, work)
+            mp.setattr(guest, 'PAYLOAD_KEY', store / 'payload.pem')
+            mp.setattr(guest.time, 'time', lambda off=now_off: ep1 + off)
+            mp.setattr(guest, 'download', lambda _a, _n, _s, dst, _l, _d: (shutil.copyfile(payload_file, dst), payload_sha)[1])
+            mp.setattr(guest.subprocess, 'run', lambda *a, **kw: subprocess.CompletedProcess(a[0], 0))
+            mp.setattr(guest.subprocess, 'check_output', lambda cmd, **kw: b'2026-11-22\n' if cmd[0] == 'systemctl' else str(ep1 + 560).encode())
+            if ok:
+                assert guest.fetch(f_acct, f_sha, f_suite, int(f_epoch), int(f_start_by), int(f_cutoff), f_region) == {'started': ep1 + 560}
+            else:
+                with pytest.raises(ValueError, match='worker start deadline expired'):
+                    guest.fetch(f_acct, f_sha, f_suite, int(f_epoch), int(f_start_by), int(f_cutoff), f_region)
+
+    # (b) Run 6 S1 draw 2 real timeline: vm-put-sent +76.9, upload-done +90.2, vm-provisioned +571.6, verify +573.9 -> init + kick succeed.
+    app_r6 = 'chrysalis-gate-20990405t000102-cdcdcdcd'
+    _, ep_r6, cap_r6, to_r6, _, _, note_r6 = _run_azpatience_attempt(
+        fake, local, ledger, directory, monkeypatch, s1_plan, payload_file, app_r6, 2, 571.6,
+        vm_put_at=76.9, upload_at=90.2, sched_at=573.9)
+    assert (note_r6 / '.guard/init-sent').is_file() and (note_r6 / '.guard/guest-ready').is_file()
+    assert '+ 211' in cap_r6['init'][0] and to_r6['init'] == 246 and to_r6['kick'] == 130 and cap_r6['kick'][1] == ep_r6 + 990
+
+    # (c) On-time VM (+104 s, Run 5 draw 1 replay): 180 s init inside 360 s / 325 s boot succeeds; start_by +637 >= +483.
+    app_r5 = 'chrysalis-gate-20990405t000103-11223344'
+    _, ep2, cap2, to2, _, _, note2 = _run_azpatience_attempt(fake, local, ledger, directory, monkeypatch, s1_plan, payload_file, app_r5, 3, 104.0, init_dur=180.0)
+    assert (note2 / '.guard/guest-ready').is_file() and '+ 325' in cap2['init'][0] and to2['init'] == 360 and cap2['kick'][1] == ep2 + 637 >= ep2 + 483
+
+    # (d) Boundary S1 (+689.5 s) + retried schedule PUT at +690.5 s: keeps baseline 130/95, start_by +990 s.
+    app_b = 'chrysalis-gate-20990405t000104-11223344'
+    _, ep3, cap3, to3, puts3, _, note3 = _run_azpatience_attempt(fake, local, ledger, directory, monkeypatch, s1_plan, payload_file, app_b, 4, 689.5, retry_sched=True)
+    assert puts3 == 2 and (note3 / '.guard/guest-ready').is_file() and '+ 95' in cap3['init'][0] and to3['init'] == 130 and cap3['kick'][1] == ep3 + 990
+
+    # (e) Late VM (+695 s > 690 s) and post-verify stall (+690 s -> +980 s): both refused before init at 'session-window', AZ-REDRAW eligible.
+    capsys.readouterr()
+    for draw_n, app_id, vm_s, sc_s in ((5, 'chrysalis-gate-20990405t000105-11223344', 695.0, None),
+                                       (6, 'chrysalis-gate-20990405t000106-11223344', 690.0, 980.0)):
+        rc_l, _, _, _, _, init_l, note_l = _run_azpatience_attempt(
+            fake, local, ledger, directory, monkeypatch, s1_plan, payload_file, app_id, draw_n, vm_s, sched_at=sc_s)
+        out_l = capsys.readouterr().out
+        fl = json.loads((note_l / 'pre-ready-failure.json').read_text())
+        assert rc_l == 2 and init_l == [] and (note_l / '.guard/vm-provisioned').is_file()
+        assert not (note_l / '.guard/init-sent').exists() and not (note_l / '.guard/guest-ready').exists() and not (note_l / 'pre-ready-diag.json').exists()
+        assert fl['class'] == 'GuardFailure' and fl['step'] == 'session-window' and fl['seconds'] >= (sc_s or vm_s)
+        assert f'Azure attempt invalid: GuardFailure; step session-window; +{fl["seconds"]:.1f}s' in out_l
+        assert json.loads((note_l / 'cleanup-proof.json').read_text())['ourAppAbsent'] is True and ledger.attempts[app_id]['state'] == 'settled'
+        assert bundle._pre_ready_note_ok(note_l, s1_plan, ledger.attempts[app_id]['booked']) is True
+        assert bundle._pre_ready_settled(directory, local, go, 0, 'first', draw_n, app_id, None, s1_plan) is True
+
+
+@pytest.mark.parametrize('guard_s,cutoff_s,raw_s,want_deadline', [(2494, 2149, 1448, 690), (6109, 5764, 4592, 720)])
+def test_azpatience_stuck_vm_and_setup_wait_deadlines(fake, site, ledger, monkeypatch, guard_s, cutoff_s, raw_s, want_deadline):
+    local, directory = site
+    prepare_attempt(monkeypatch, directory)
+    plan = dict(destroyGuardSeconds=guard_s, measurementCutoffSeconds=cutoff_s, rawSeconds=raw_s,
+                provider='azure', limitUsd=timing.azure_booking(guard_s + guard.RESERVE_TAIL))
+    payload_resp = dict(provisioningState='Creating', statuses=['ProvisioningState/creating'], agentStatuses=['ProvisioningState/succeeded'])
+    rc, _, diag_calls = _run_vm_deadline_attempt(fake, local, ledger, directory, monkeypatch, lambda *_: payload_resp,
+                                                 plan=plan, step=30.0, clock_start=40_000.0)
+    note = directory / 'time/runs' / RUN
+    failure = json.loads((note / 'pre-ready-failure.json').read_text())
+    assert rc == 2 and len(diag_calls) == 1
+    assert failure['class'] == 'GuardFailure' and failure['step'] == 'wait virtualMachines'
+    assert want_deadline <= failure['seconds'] < want_deadline + 35
+    assert json.loads((note / 'pre-ready-diag.json').read_text()) == {'vm': payload_resp}
+    assert json.loads((note / 'cleanup-proof.json').read_text())['ourAppAbsent'] is True and ledger.attempts[RUN]['state'] == 'settled'
+    assert bundle._pre_ready_note_ok(note, plan, ledger.attempts[RUN]['booked']) is True
+
+    # M3 + M17 + M18: pin upload_inputs, identity wait (:369), Contributor-grant wait (:378), and one_attempt rawSeconds forwarding.
+    if want_deadline == 690:
+        waits, up_dl = [], []
+        s1_dir, short_dir = directory / 's1-setup', directory / 'short-up'
+        s1_dir.mkdir(); short_dir.mkdir()
+        d_s1 = make_draw(fake, s1_dir, start=10_000, lifetime=2494, raw_seconds=1448)
+        d_s1.account = 'chry' + '0' * 16
+        orig_wf = azure.wait_for
+        pf = directory / 'u.tar.gz'; pf.write_bytes(b'x')
+        with monkeypatch.context() as mp:
+            mp.setattr(azure.time, 'time', lambda: 10_010.0)
+            mp.setattr(azure, 'wait_for', lambda fn, until, **kw: (waits.append((kw.get('label'), until)), orig_wf(fn, until, **kw))[1])
+            mp.setattr(azure, 'upload_inputs', lambda *_a: None)
+            d_s1.setup({'payload': pf})
+        assert ('User-assigned identity', 10_690) in waits and ('Scoped Contributor grant', 10_690) in waits
+        d_short = make_draw(fake, short_dir, start=10_000, lifetime=1256, raw_seconds=372)
+        d_short.account = 'chry' + '0' * 16
+        with monkeypatch.context() as mp:
+            mp.setattr(channel.time, 'time', lambda: 10_280.0)
+            mp.setattr(channel, 'storage_key', lambda _d: 'K' * 48)
+            mp.setattr(channel, 'signed_blob', lambda *_a: 'tok')
+            mp.setattr(channel, 'upload', lambda _a, _n, _s, _p, _m, dl, **_k: up_dl.append(dl))
+            channel.upload_inputs(d_short, {'payload': pf})
+        assert up_dl == [10_313]

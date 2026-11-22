@@ -571,6 +571,9 @@ def retry_file(path):
     return path
 
 
+MAX_PRE_READY_REDRAWS = 3
+
+
 def _pre_ready_note_ok(note, plan, expected_booked):
     from gate_azure import FIXED_STEP
     guard = note / '.guard'
@@ -899,8 +902,10 @@ def checked_azure_go(directory, go):
         if not plan.get('bytesOnly'):
             from gate_azure_guest import results_limits
             rule = timing.validate_probe_rule(plan.get('probe'))
+            raw_s = plan.get('rawSeconds')
             timing.require(plan['destroyGuardSeconds'] - plan['measurementCutoffSeconds'] == 345 and
-                           828 <= plan['destroyGuardSeconds'] <= timing.GUARD and rule['maxDraws'] <= 6,
+                           828 <= plan['destroyGuardSeconds'] <= timing.GUARD and rule['maxDraws'] <= 6 and
+                           type(raw_s) in (int, float) and math.isfinite(raw_s) and raw_s >= 0,
                            'Invalid Azure session windows')
             results_limits(plan, strict=True)
     timing.require(set((directory / 'input/azure').iterdir()) == {directory / 'input/azure' / name for name in HOST_FILES['azure']}
@@ -1093,7 +1098,7 @@ def fly_sessions(directory, seal, go, phases, index, *, dispatch=None, context=N
                 continue
             raise ValueError('Azure bytes sessions require AZ3')
         band_invalid = False
-        pre_ready_redrawn = False
+        pre_ready_redraws = 0
         for phase in phases:
             selected = plan['rows']
             if phase == 'repeat':
@@ -1148,13 +1153,13 @@ def fly_sessions(directory, seal, go, phases, index, *, dispatch=None, context=N
                     machine['invalid'] = 'session invalid: launcher failure; ' + detail
                 elif not machine['invalid'] and rejected != (status == 5):
                     machine['invalid'] = 'session invalid: launcher status contradicts probe'
-                redraw = (azure and status == 2 and not pre_ready_redrawn and draw < rule['maxDraws']
+                redraw = (azure and status == 2 and pre_ready_redraws < MAX_PRE_READY_REDRAWS and draw < rule['maxDraws']
                           and _pre_ready_settled(directory, local, go, number, phase, draw, app, fallback, plan))
                 decision = 'invalid-pre-ready' if redraw else 'invalid' if machine['invalid'] else 'rejected' if rejected else 'kept'
                 draws.append(draw_record(machine, number, phase, draw, app, decision, fallback))
                 session.save(directory / 'time/draws.json', draws)
                 if redraw:
-                    pre_ready_redrawn = True
+                    pre_ready_redraws += 1
                     continue
                 if decision == 'rejected':
                     if not azure:

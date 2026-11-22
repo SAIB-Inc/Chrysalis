@@ -4,6 +4,7 @@ import base64
 import fcntl
 import hashlib
 import json
+import math
 import os
 from pathlib import Path
 import re
@@ -13,10 +14,47 @@ import time
 
 POWERSHELL = Path('/mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe')
 WRITE_END = 720
+WORKER_START = 483
+START_WINDOW = 300
+RUN_COMMAND_SECONDS = 130
+INIT_COMMAND_MAX = 360
+BOOT_MARGIN = 35
+POLL_MARGIN = 15
+KICK_RESERVE = 155
+MIN_POST_VERIFY = 2 * (RUN_COMMAND_SECONDS + POLL_MARGIN)
+SESSION_FRACTION = 0.80
 COPY_END = 200
 WATCH_MARGIN = 70
 ALERT_TAIL = 300
 RESERVE_TAIL = 900
+
+
+def session_work_seconds(raw_seconds):
+    # 0.80*raw margins: S1 1159 vs 1002 s observed (w/ poll+push); S2 3674 vs 3211 s cold bound.
+    if type(raw_seconds) not in (int, float) or not math.isfinite(raw_seconds) or raw_seconds < 0:
+        raise GuardFailure('sealed plan missing valid rawSeconds')
+    return math.ceil(SESSION_FRACTION * raw_seconds)
+
+
+def latest_worker_start_seconds(cutoff, raw_seconds):
+    return max(0, cutoff - session_work_seconds(raw_seconds))
+
+
+def provision_seconds(cutoff, raw_seconds):
+    return min(WRITE_END, max(0, latest_worker_start_seconds(cutoff, raw_seconds) - START_WINDOW))
+
+
+def start_plan(start, cutoff, vm_ready, now, raw_seconds):
+    latest = start + latest_worker_start_seconds(cutoff, raw_seconds)
+    anchor = math.ceil(max(vm_ready, now))
+    min_needed = max(start + WORKER_START, math.ceil(vm_ready) + START_WINDOW)
+    if min_needed > latest or anchor + MIN_POST_VERIFY > latest:
+        raise GuardFailure('late VM cannot fit a full session before cutoff')
+    avail = latest - anchor - KICK_RESERVE - POLL_MARGIN
+    init_timeout = max(RUN_COMMAND_SECONDS, min(INIT_COMMAND_MAX, avail))
+    boot_seconds = init_timeout - BOOT_MARGIN
+    start_by = min(latest, max(min_needed, anchor + init_timeout + POLL_MARGIN + KICK_RESERVE))
+    return start_by, init_timeout, boot_seconds
 
 
 class GuardFailure(RuntimeError):
