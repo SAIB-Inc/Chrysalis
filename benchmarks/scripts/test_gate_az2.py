@@ -1221,7 +1221,7 @@ def test_carry_is_scope_specific_and_excludes_recorded_only():
 
 
 def test_verify_policy_accepts_pinned_runner_call():
-    # mbp-container:1177 (pin 2512c771, gate_azure_payload.py:17) passes seal, builds, receipt, local.
+    # mbp-container:1335 (pin 323f064b, gate_azure_payload.py:17) passes seal, builds, receipt, local.
     inspect.signature(prepare.verify_policy).bind(None, None, None, None)
 
 
