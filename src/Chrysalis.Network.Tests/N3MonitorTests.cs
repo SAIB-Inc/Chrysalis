@@ -9,11 +9,12 @@ using Xunit;
 namespace Chrysalis.Network.Tests;
 
 // D17 provenance (Apache-2.0): ouroboros-consensus release-ouroboros-consensus-5.4.0.0 (808e4005),
-// ouroboros-consensus-cardano/golden/cardano/QueryVersion3/CardanoNodeToClientVersion19/GenTxId_Conway and GenTx_Conway;
+// ouroboros-consensus-cardano/golden/cardano/QueryVersion3/CardanoNodeToClientVersion19/GenTxId_Conway, GenTxId_Babbage and GenTx_Conway;
 // MsgHasTx and MsgReplyNextTx framing from ouroboros-network LocalTxMonitor/Codec.hs:74-75,91-92.
 public sealed class N3MonitorTests
 {
     private const string ConwayTxId = "820658203da9a3b38dce0e87ca4a88f3328caac7a970cf9ac40424cde2b675768d11f11b";
+    private const string BabbageTxId = "8205582036fdff68dfe3660f1ceea60f018a0fd7a83da13def229108794c397a879b0436";
     private const string ConwayTx = "8206d8184e84a300d901028001800200a0f5f6";
 
     [Fact]
@@ -70,6 +71,10 @@ public sealed class N3MonitorTests
         EraTxId decoded = Assert.IsType<HasTx>(CborSerializer.Deserialize<LocalTxMonitorMessage>(message)).TxId;
         Assert.Equal(6, decoded.Era);
         Assert.Equal(golden[4..], decoded.Hash.ToArray());
+        byte[] babbage = Convert.FromHexString(BabbageTxId);
+        Assert.Equal("9b736920211fd5d9b61ec4375358f8bf09fc19de53bb2ff31b4b4df4706038cd", Convert.ToHexStringLower(SHA256.HashData(babbage)));
+        byte[] babbageMessage = [0x82, 0x07, .. babbage];
+        Assert.Equal(babbageMessage, CborSerializer.Serialize(LocalTxMonitorMessages.HasTx(new EraTxId(5, babbage.AsMemory(4)))));
     }
 
     // SYNTHETIC ids, none 64 characters long, so none gives 32 bytes either way; each is refused before anything is sent.

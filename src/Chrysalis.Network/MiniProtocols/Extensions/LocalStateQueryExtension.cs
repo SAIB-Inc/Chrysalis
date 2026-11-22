@@ -1,5 +1,6 @@
 using Chrysalis.Codec.Serialization;
 using Chrysalis.Codec.Types;
+using Chrysalis.Codec.Types.Cardano.Core;
 using Chrysalis.Codec.Types.Cardano.Core.Transaction;
 using Chrysalis.Network.Cbor.Common;
 using Chrysalis.Network.Cbor.LocalStateQuery;
@@ -16,12 +17,12 @@ public static class LocalStateQueryExtension
     private const string DeserializationError = "Failed to deserialize response";
 
     /// <summary>
-    /// Executes a query with automatic acquire/release handling for fresh state.
+    /// Acquires fresh state at the volatile tip, asks its ledger era, and sends the query built for that era, or returns
+    /// the era answer itself when <paramref name="eraQuery"/> is null; then releases.
     /// </summary>
     private static async Task<T> ExecuteWithFreshStateAsync<T>(
         this LocalStateQuery localStateQuery,
-        Func<Task<Result>> queryFunc,
-        bool eraSpecific,
+        Func<Era, IQueryReq>? eraQuery,
         CancellationToken cancellationToken) where T : CborRecord
     {
         // Reject before any lifecycle message, including release of an existing snapshot.
@@ -35,7 +36,10 @@ public static class LocalStateQueryExtension
 
         try
         {
-            return DecodeResult<T>(await queryFunc().ConfigureAwait(false), eraSpecific);
+            Result eraAnswer = await localStateQuery.QueryAsync(RawQueries.GetCurrentEra, cancellationToken).ConfigureAwait(false);
+            return eraQuery is null
+                ? DecodeResult<T>(eraAnswer, eraSpecific: false)
+                : DecodeResult<T>(await localStateQuery.QueryAsync(eraQuery(LedgerEra(eraAnswer)), cancellationToken).ConfigureAwait(false), eraSpecific: true);
         }
         finally
         {
@@ -50,14 +54,12 @@ public static class LocalStateQueryExtension
     /// <param name="localStateQuery">The LocalStateQuery protocol instance.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>A task yielding the ledger tip: its point, with <see cref="Tip.BlockNumber"/> null, because this query reports no block number.</returns>
-    /// <exception cref="InvalidOperationException">Thrown when the node's ledger is in another era than the query, or the result cannot be decoded.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when the node's ledger is in Byron or in an era this version does not know, when the node answers in another era than it reported, or when a result cannot be decoded.</exception>
     /// <exception cref="CborDecodeException">Thrown when the node's reply is not a well-formed result message.</exception>
     public static Task<Tip> GetTipAsync(this LocalStateQuery localStateQuery, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(localStateQuery);
-        return localStateQuery.ExecuteWithFreshStateAsync<Tip>(
-            async () => await localStateQuery.QueryAsync(RawQueries.GetTip, cancellationToken).ConfigureAwait(false),
-            eraSpecific: true, cancellationToken);
+        return localStateQuery.ExecuteWithFreshStateAsync<Tip>(RawQueries.GetTip, cancellationToken);
     }
 
     /// <summary>
@@ -71,9 +73,7 @@ public static class LocalStateQueryExtension
     public static Task<CurrentEraQueryResponse> GetCurrentEraAsync(this LocalStateQuery localStateQuery, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(localStateQuery);
-        return localStateQuery.ExecuteWithFreshStateAsync<CurrentEraQueryResponse>(
-            async () => await localStateQuery.QueryAsync(RawQueries.GetCurrentEra, cancellationToken).ConfigureAwait(false),
-            eraSpecific: false, cancellationToken);
+        return localStateQuery.ExecuteWithFreshStateAsync<CurrentEraQueryResponse>(null, cancellationToken);
     }
 
     /// <summary>
@@ -82,14 +82,12 @@ public static class LocalStateQueryExtension
     /// <param name="localStateQuery">The LocalStateQuery protocol instance.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>A task yielding the current protocol parameters.</returns>
-    /// <exception cref="InvalidOperationException">Thrown when the node's ledger is in another era than the query, or the result cannot be decoded.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when the node's ledger is in Byron or in an era this version does not know, when the node answers in another era than it reported, or when a result cannot be decoded.</exception>
     /// <exception cref="CborDecodeException">Thrown when the node's reply is not a well-formed result message.</exception>
     public static Task<CurrentProtocolParamsResponse> GetCurrentProtocolParamsAsync(this LocalStateQuery localStateQuery, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(localStateQuery);
-        return localStateQuery.ExecuteWithFreshStateAsync<CurrentProtocolParamsResponse>(
-            async () => await localStateQuery.QueryAsync(RawQueries.GetCurrentProtocolParams, cancellationToken).ConfigureAwait(false),
-            eraSpecific: true, cancellationToken);
+        return localStateQuery.ExecuteWithFreshStateAsync<CurrentProtocolParamsResponse>(RawQueries.GetCurrentProtocolParams, cancellationToken);
     }
 
     /// <summary>
@@ -99,7 +97,7 @@ public static class LocalStateQueryExtension
     /// <param name="addresses">List of addresses to query.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>A task yielding the UTxO response.</returns>
-    /// <exception cref="InvalidOperationException">Thrown when the node's ledger is in another era than the query, or the result cannot be decoded.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when the node's ledger is in Byron or in an era this version does not know, when the node answers in another era than it reported, or when a result cannot be decoded.</exception>
     /// <exception cref="CborDecodeException">Thrown when the node's reply is not a well-formed result message.</exception>
     public static Task<UtxoByAddressResponse> GetUtxosByAddressAsync(
         this LocalStateQuery localStateQuery,
@@ -107,9 +105,7 @@ public static class LocalStateQueryExtension
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(localStateQuery);
-        return localStateQuery.ExecuteWithFreshStateAsync<UtxoByAddressResponse>(
-            async () => await localStateQuery.QueryAsync(RawQueries.GetUtxoByAddress(addresses), cancellationToken).ConfigureAwait(false),
-            eraSpecific: true, cancellationToken);
+        return localStateQuery.ExecuteWithFreshStateAsync<UtxoByAddressResponse>(era => RawQueries.GetUtxoByAddress(addresses, era), cancellationToken);
     }
 
     /// <summary>
@@ -119,7 +115,7 @@ public static class LocalStateQueryExtension
     /// <param name="txIns">List of transaction inputs to query.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>A task yielding the UTxO response.</returns>
-    /// <exception cref="InvalidOperationException">Thrown when the node's ledger is in another era than the query, or the result cannot be decoded.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when the node's ledger is in Byron or in an era this version does not know, when the node answers in another era than it reported, or when a result cannot be decoded.</exception>
     /// <exception cref="CborDecodeException">Thrown when the node's reply is not a well-formed result message.</exception>
     public static Task<UtxoByAddressResponse> GetUtxosByTxInAsync(
         this LocalStateQuery localStateQuery,
@@ -127,9 +123,7 @@ public static class LocalStateQueryExtension
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(localStateQuery);
-        return localStateQuery.ExecuteWithFreshStateAsync<UtxoByAddressResponse>(
-            async () => await localStateQuery.QueryAsync(RawQueries.GetUtxoByTxIns(txIns), cancellationToken).ConfigureAwait(false),
-            eraSpecific: true, cancellationToken);
+        return localStateQuery.ExecuteWithFreshStateAsync<UtxoByAddressResponse>(era => RawQueries.GetUtxoByTxIns(txIns, era), cancellationToken);
     }
 
     /// <summary>Decodes a helper's result, or throws for an era mismatch or a result that cannot be decoded.</summary>
@@ -148,6 +142,16 @@ public static class LocalStateQueryExtension
         {
             throw new InvalidOperationException($"{DeserializationError}: {error.Message}", error);
         }
+    }
+
+    // Byron reads a query as a one-byte tag (ouroboros-consensus 5.4.0.0, Byron/Ledger/Ledger.hs:556-565), and an era
+    // this version does not know is refused rather than queried with a known era's types.
+    private static Era LedgerEra(Result result)
+    {
+        ulong index = DecodeResult<CurrentEraQueryResponse>(result, eraSpecific: false).CurrentEra;
+        return index > (ulong)Era.Byron && index <= (ulong)Enum.GetValues<Era>().Max()
+            ? (Era)index
+            : throw new InvalidOperationException($"The node's ledger is in era {index}, which these helpers cannot query.");
     }
 
     private static InvalidOperationException EraMismatch(ReadOnlyMemory<byte> raw)

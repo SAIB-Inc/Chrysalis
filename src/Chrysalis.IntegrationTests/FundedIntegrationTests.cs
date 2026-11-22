@@ -5,6 +5,7 @@ using System.Text.Json;
 using Chrysalis.Codec.Extensions.Cardano.Core.Common;
 using Chrysalis.Codec.Extensions.Cardano.Core.Transaction;
 using Chrysalis.Codec.Serialization;
+using Chrysalis.Codec.Types.Cardano.Core;
 using Chrysalis.Codec.Types.Cardano.Core.Common;
 using Chrysalis.Codec.Types.Cardano.Core.Transaction;
 using Chrysalis.Codec.Types.Cardano.Core.Protocol;
@@ -116,7 +117,6 @@ public sealed class FundedIntegrationTests
         Assert.All(outputs, output => Assert.Equal(addressBytes, output.Address().ToArray()));
         int index = Array.FindIndex(outputs, output => output.Amount().Lovelace() == transfer);
         Assert.True(index >= 0);
-        JsonElement tip = await OracleCli.QueryJsonAsync("funded-era", cancellationToken, "tip");
         FundingSelection.AssertExactlySelected(body.Inputs(), [selected.Outref]);
         // Update the already-held exclusive public reservation; a timeout never permits a replay.
         await reservation.RecordAsync(new { txid, transfer_lovelace = transfer, fee_lovelace = fee, status = "reserved-before-submit" }, cancellationToken);
@@ -124,7 +124,7 @@ public sealed class FundedIntegrationTests
         await File.AppendAllTextAsync(Path.Combine(directory, "spend-log.md"), spendLine, cancellationToken);
         using NodeClient node = await NodeConnections.OpenAsync(cancellationToken);
         FundingSelection.AssertExactlySelected(body.Inputs(), [selected.Outref]);
-        _ = Assert.IsType<AcceptTx>(await node.LocalTxSubmit.SubmitTxAsync(new SubmitTx(0, new EraTx(checked((int)ProtocolOracles.Era(tip)), new Chrysalis.Codec.Types.CborEncodedValue(signedBytes))), cancellationToken));
+        _ = Assert.IsType<AcceptTx>(await node.LocalTxSubmit.SubmitTxAsync(new SubmitTx(0, new EraTx((int)Era.Conway, new Codec.Types.CborEncodedValue(signedBytes))), cancellationToken));
         string outref = txid + "#" + index.ToString(CultureInfo.InvariantCulture);
         for (int attempt = 0; attempt < 60; attempt++)
         {

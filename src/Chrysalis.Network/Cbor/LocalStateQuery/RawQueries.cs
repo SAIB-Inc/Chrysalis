@@ -1,12 +1,13 @@
 using Chrysalis.Codec.Serialization;
 using Chrysalis.Codec.Serialization.Attributes;
 using Chrysalis.Codec.Types;
+using Chrysalis.Codec.Types.Cardano.Core;
 using Chrysalis.Codec.Types.Cardano.Core.Transaction;
 
 namespace Chrysalis.Network.Cbor.LocalStateQuery;
 
 /// <summary>
-/// Enumerates the Cardano eras used for era-specific queries in the LocalStateQuery mini-protocol.
+/// Enumerates the Cardano eras by index; the builders of <see cref="RawQueries"/> take <see cref="Era"/> instead.
 /// </summary>
 public enum QueryEra
 {
@@ -39,33 +40,39 @@ public static class RawQueries
     /// <summary>
     /// Gets a query request to retrieve the current chain tip.
     /// </summary>
-    public static IQueryReq GetTip => CreateBlockQuery(new GlobalQuery(0));
+    /// <param name="era">The ledger era of the acquired state, Shelley or later, as the current-era query answered it.</param>
+    public static IQueryReq GetTip(Era era) => CreateBlockQuery(new GlobalQuery(0), era);
 
     /// <summary>
     /// Gets a query request to retrieve the current protocol parameters.
     /// </summary>
-    public static IQueryReq GetCurrentProtocolParams => CreateBlockQuery(new GlobalQuery(3));
+    /// <param name="era">The ledger era of the acquired state, Shelley or later, as the current-era query answered it.</param>
+    public static IQueryReq GetCurrentProtocolParams(Era era) => CreateBlockQuery(new GlobalQuery(3), era);
 
     /// <summary>
-    /// Wraps a query in the block query envelope targeting the Conway era.
+    /// Wraps a query in the block query envelope for the given ledger era.
     /// </summary>
     /// <param name="query">The inner query to wrap.</param>
-    /// <returns>A <see cref="IQueryReq"/> wrapped for the Conway era block query.</returns>
-    public static IQueryReq CreateBlockQuery(IQueryReq query) => new BaseQuery(0, new BaseQuery(0, new BaseQuery((int)QueryEra.Conway, query)));
+    /// <param name="era">The ledger era of the acquired state, Shelley or later, as the current-era query answered it; not
+    /// the negotiated version and not a transaction's era.</param>
+    /// <returns>A <see cref="IQueryReq"/> wrapped for that era's block query.</returns>
+    public static IQueryReq CreateBlockQuery(IQueryReq query, Era era) => new BaseQuery(0, new BaseQuery(0, new BaseQuery((int)era, query)));
 
     /// <summary>
     /// Creates a query request to retrieve UTxOs at the specified addresses.
     /// </summary>
     /// <param name="addresses">The list of serialized address bytes to query UTxOs for.</param>
+    /// <param name="era">The ledger era of the acquired state, Shelley or later, as the current-era query answered it.</param>
     /// <returns>A <see cref="IQueryReq"/> for retrieving UTxOs by address.</returns>
-    public static IQueryReq GetUtxoByAddress(List<ReadOnlyMemory<byte>> addresses) => CreateBlockQuery(new UtxoByAddressQuery(6, [.. addresses]));
+    public static IQueryReq GetUtxoByAddress(List<ReadOnlyMemory<byte>> addresses, Era era) => CreateBlockQuery(new UtxoByAddressQuery(6, [.. addresses]), era);
 
     /// <summary>
     /// Creates a query request to retrieve UTxOs for the specified transaction inputs.
     /// </summary>
     /// <param name="txIns">The list of transaction inputs to query UTxOs for.</param>
+    /// <param name="era">The ledger era of the acquired state, Shelley or later, as the current-era query answered it.</param>
     /// <returns>A <see cref="IQueryReq"/> for retrieving UTxOs by transaction input.</returns>
-    public static IQueryReq GetUtxoByTxIns(List<TransactionInput> txIns) => CreateBlockQuery(new UtxoByTxInQuery(15, [.. txIns]));
+    public static IQueryReq GetUtxoByTxIns(List<TransactionInput> txIns, Era era) => CreateBlockQuery(new UtxoByTxInQuery(15, [.. txIns]), era);
 }
 
 

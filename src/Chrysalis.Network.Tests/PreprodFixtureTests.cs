@@ -365,6 +365,11 @@ public class PreprodFixtureTests
                     Assert.Equal(
                         expected.GetProperty("measures").EnumerateObject().ToDictionary(measure => measure.Name, measure => string.Join(',', measure.Value.EnumerateArray())),
                         reply.Measures.ToDictionary(pair => pair.Key, pair => string.Join(',', pair.Value)));
+                    foreach (CborList<ulong> values in reply.Measures.Values)
+                    {
+                        Monitor.Measures typed = Decode<Monitor.Measures>(values.Raw);
+                        Assert.Equal(string.Join(',', values), $"{typed.CurrentSize},{typed.MaxCapacity}");
+                    }
                     break;
                 }
             default:
