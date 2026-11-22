@@ -155,6 +155,37 @@ def creation_unconfirmed(guard):
     return (guard/'group-put-sent').exists() and not (guard/'group-put-confirmed').exists()
 
 
+STEP_KINDS = frozenset({'resourceGroups', 'userAssignedIdentities', 'roleAssignments', 'storageAccounts',
+                        'containers', 'networkWatchers', 'networkSecurityGroups', 'virtualNetworks',
+                        'publicIPAddresses', 'networkInterfaces', 'virtualMachines', 'schedules'})
+FIXED_STEP = re.compile(r'^(?:arm-watchdog|group-check|group-permissions|check networkWatchers|vm-prepare|'
+                        r'upload-inputs|verify-schedule|prepare-kick|copy-results|download-results|probe-result|'
+                        r'(?:put|wait) (?:arm|' + '|'.join(sorted(STEP_KINDS)) + r')|'
+                        r'run-command (?:init|kick|status-(?:0[0-9]|1[0-8])|push-[12]))$')
+
+
+def _exc_class(exc):
+    name = type(exc).__name__
+    return name if re.fullmatch(r'[A-Za-z_]{1,40}', name) else 'Error'
+
+
+def _step_kind(path, scope):
+    if path == scope:
+        return 'resourceGroups'
+    if path.endswith('/containers/payload'):
+        return 'containers'
+    if '/providers/' in path:
+        parts = path.split('/providers/', 1)[1].split('/')
+        if len(parts) > 1 and parts[1] in STEP_KINDS:
+            return parts[1]
+    return 'arm'
+
+
+def _fixed_step(draw):
+    step = getattr(draw, 'step', '')
+    return step if isinstance(step, str) and FIXED_STEP.fullmatch(step) else 'unknown'
+
+
 class Draw:
     def __init__(self, az, group, region, start, guard, guard_seconds, cutoff):
         if not GROUP.fullmatch(group) or region not in REGIONS:
@@ -169,6 +200,7 @@ class Draw:
         self.worker_done = self.worker_failed = self.push_started = False
         self.guest_error = None
         self.commands = set()
+        self.step = 'arm-watchdog'
 
     def path(self, namespace, kind, name='gate'):
         return f'{self.scope}/providers/Microsoft.{namespace}/{kind}/{name}'
@@ -234,7 +266,10 @@ class Draw:
                 deadline = self.work_end + COPY_END
             elif label == 'kick' and 'init' not in self.commands:
                 raise GuardFailure('kick before init')
+            self.step = f'run-command {label}'
             self.commands.add(label)
+        else:
+            self.step = 'put ' + _step_kind(path, self.scope)
         deadline = min(deadline, until if until is not None else float('inf'))
         with mutation(self.guard, deadline) as lease:
             if path == self.scope:
@@ -244,6 +279,10 @@ class Draw:
             left = deadline - time.time()
             if left<=1:
                 raise GuardFailure('ARM write deadline expired before dispatch')
+            if path == self.path('Compute', 'virtualMachines'):
+                mark(self.guard, 'vm-put-sent', since=self.start)
+            elif work and label == 'init':
+                mark(self.guard, 'init-sent', since=self.start)
             result = self.az.rest('put',url,stdin_body=json.dumps(payload).encode('utf8'),timeout=min(left, 15 if work else 75),fence_fd=lease)
             if path == self.scope:
                 if self.owner() != self.group:
@@ -252,6 +291,7 @@ class Draw:
             return result
 
     def wait(self, path, api):
+        self.step = 'wait ' + _step_kind(path, self.scope)
         def check():
             try:
                 result = self.az.rest('get', path + '?api-version=' + api, query='properties.provisioningState', waits=ONCE)
@@ -280,15 +320,18 @@ class Draw:
         return path
 
     def setup(self, inputs):
+        self.step = 'group-check'
         if self.owner() is not False:
             raise GuardFailure('refusing existing resource group')
         self.put(self.scope, '2021-04-01', dict(location=self.region, tags={'chrysalisGate': self.group}))
+        self.step = 'group-permissions'
         if not permissions(self.az, self.scope)['Microsoft.Authorization/roleAssignments/write']:
             raise GuardFailure('Group-scope role assignment unavailable')
         identity = self.path('ManagedIdentity', 'userAssignedIdentities')
         identity_api = '2023-01-31'
         self.put(identity, identity_api, dict(location=self.region))
         # The identity endpoint need not expose provisioningState. Attest the principal.
+        self.step = 'wait userAssignedIdentities'
         principal = wait_for(lambda: self.az.rest('get', identity + '?api-version=' + identity_api, query='properties.principalId', waits=ONCE),
                              self.start + WRITE_END, label='User-assigned identity')
         if not isinstance(principal, str) or not GUID.fullmatch(principal):
@@ -297,12 +340,14 @@ class Draw:
         path, role_api = self.scope + '/providers/Microsoft.Authorization/roleAssignments/' + str(uuid.uuid4()), '2022-04-01'
         grant = dict(principalId=principal, principalType='ServicePrincipal', roleDefinitionId=role)
         self.put(path, role_api, dict(properties=grant))
+        self.step = 'wait roleAssignments'
         wait_for(lambda: self.az.rest('get', path + '?api-version=' + role_api, query='properties.{principalId:principalId,principalType:principalType,roleDefinitionId:roleDefinitionId}', waits=ONCE) == grant,
                  self.start + WRITE_END, label='Scoped Contributor grant')
         create_storage(self)
         # The VNet may auto-enable a region's first watcher. Create and verify
         # its only watcher in our own group before putting any VNet.
         self.resource('Network', 'networkWatchers', {}, name='NetworkWatcher_'+self.region)
+        self.step = 'check networkWatchers'
         wc = self.az.rest('get', '/subscriptions/'+self.az.subscription+'/providers/Microsoft.Network/networkWatchers?api-version='+API_NET,
              query=f"{{ids:value[?location=='{self.region}'].id,paginated:nextLink!=`null`}}", waits=ONCE)
         if (wc['paginated'] or [i.lower() for i in wc['ids']] != [self.path('Network','networkWatchers','NetworkWatcher_'+self.region).lower()]):
@@ -337,6 +382,7 @@ class Draw:
             raise
 
     def create_vm(self, nic, identity, inputs):
+        self.step = 'vm-prepare'
         image_parts = IMAGE.split(':')
         vm = self.path('Compute', 'virtualMachines')
         user_data = cloud_init(self.group, self.guard_end)
@@ -365,8 +411,10 @@ class Draw:
             retry = True
         upload_inputs(self, inputs)  # VM provisioning runs while the private blobs upload.
         self.allocate(self.wait, vm, API_VM)
+        mark(self.guard, 'vm-provisioned', since=self.start)
         if retry:
             self.put(schedule, api, spec)
+        self.step = 'verify-schedule'
         actual = self.az.rest('get', schedule + '?api-version=' + api, waits=ONCE)
         if not schedule_matches(actual, spec):
             raise GuardFailure('platform shutdown not confirmed; refusing init')
@@ -720,12 +768,19 @@ def one_attempt(az, local, ledger, seal, go, directory, plan, group, region, inp
         if partial:
             atomic_json(note / 'diagnostic-only.json', _diagnostic_summary(note / 'results.tar.gz'))
         else:
+            draw.step = 'probe-result'
             code = probe_result(note / 'results.tar.gz', plan, note)
     except AzureError as exc:
         code = 6 if isinstance(exc, CapacityUnavailable) else 2
-        log(f'Azure attempt: {exc}; last Azure call: {az.last_call or "none"}')
-    except (GuardFailure, HTTPException, KeyError, OSError, RuntimeError, TarError, TypeError, ValueError):
-        log('Azure attempt invalid; details suppressed')
+        step, seconds = _fixed_step(draw), round(max(0.0, time.time() - draw.start), 1)
+        log(f'Azure attempt: {exc}; last Azure call: {az.last_call or "none"}; step {step}; +{seconds:.1f}s')
+        if not os.path.lexists(guard / 'guest-ready'):
+            atomic_json(note / 'pre-ready-failure.json', {'class': _exc_class(exc), 'step': step, 'seconds': seconds})
+    except (GuardFailure, HTTPException, KeyError, OSError, RuntimeError, TarError, TypeError, ValueError) as exc:
+        cls, step, seconds = _exc_class(exc), _fixed_step(draw), round(max(0.0, time.time() - draw.start), 1)
+        log(f'Azure attempt invalid: {cls}; step {step}; +{seconds:.1f}s')
+        if not os.path.lexists(guard / 'guest-ready'):
+            atomic_json(note / 'pre-ready-failure.json', {'class': cls, 'step': step, 'seconds': seconds})
     finally:
         cleanup_started = time.time()
         try:
@@ -1003,6 +1058,6 @@ if __name__ == '__main__':
     except Refusal as error:
         print(str(error), file=sys.stderr)
         raise SystemExit(4) from None
-    except (GuardFailure, AzureError, HTTPException, KeyError, OSError, RuntimeError, TarError, TypeError, ValueError):
-        print('Azure launcher refused or failed; provider details suppressed', file=sys.stderr)
+    except (GuardFailure, AzureError, HTTPException, KeyError, OSError, RuntimeError, TarError, TypeError, ValueError) as exc:
+        print(f'Azure launcher failed: {_exc_class(exc)}', file=sys.stderr)
         raise SystemExit(2) from None
