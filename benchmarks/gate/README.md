@@ -431,7 +431,9 @@ Each attempt has its own tagged resource group, user-assigned identity with Cont
 
 | Deadline | From the same epoch E |
 |---|---:|
-| Worker started / provisioning writes | 483 s / 720 s |
+| Provisioning writes / wait | min(720 s, C − ⌈0.80 × raw⌉ − 300 s) (S1 690 s, S2 720 s) |
+| `init` timeout / boot check | 130–360 s / 95–325 s (`init − 35 s`) from remaining start-phase slack (`kick`/`status`/`push` stay 130 s) |
+| Worker started (`start_by`) | min(E + C − ⌈0.80 × raw⌉, max(E + 483 s, ⌈max(vm-provisioned, now)⌉ + `init` + 170 s)); refuses at `session-window` if <290 s left |
 | Worker cutoff / verified copy | C / C + 200 s |
 | WSL cleanup / guest timer | G − 70 s / G |
 | Platform shutdown schedule | G rounded up to the next UTC minute |

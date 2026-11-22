@@ -12,7 +12,8 @@ import time
 from urllib.parse import parse_qs
 
 from gate_azure_proof import ONCE, AzureError, storage_account
-from gate_azure_guard import GuardFailure, WRITE_END, COPY_END, mark
+from gate_azure_guard import (BOOT_MARGIN, COPY_END, POLL_MARGIN, RUN_COMMAND_SECONDS, WORKER_START,
+                              GuardFailure, mark)
 from gate_azure_guest import (
     GUEST_ACTIONS, MAX_BLOB_BYTES, MAX_DIAGNOSTIC,
     check_results, download, plan_results_limits, results_limits, upload,
@@ -20,9 +21,7 @@ from gate_azure_guest import (
 
 STORAGE_API='2023-05-01'
 VM_API='2024-07-01'
-RUN_COMMAND_SECONDS = 130
 PUSH_SECONDS = 160
-WORKER_START = 483
 STATUS_SCRIPT = '#!/bin/bash\nexec 2>/dev/null\nexec /usr/bin/python3 /usr/local/sbin/chrysalis-run-channel compact\n'
 EXECUTION_STATES = frozenset({'Unknown', 'Pending', 'Running', 'Failed', 'Succeeded', 'TimedOut', 'Canceled'})
 BOOT_CHECKS = frozenset({'cloud-init', 'timer', 'service', 'next-elapse', 'user', 'ssh', 'qdisc', 'cleanup-check'})
@@ -77,8 +76,8 @@ def seal(public,token):
         raise GuardFailure('guest ephemeral envelope sealing failed') from None
 
 
-def control_body(region,script,secret=None):
-    props=dict(source=dict(script=script),asyncExecution=True,timeoutInSeconds=RUN_COMMAND_SECONDS)
+def control_body(region,script,secret=None,*,timeout=RUN_COMMAND_SECONDS):
+    props=dict(source=dict(script=script),asyncExecution=True,timeoutInSeconds=timeout)
     if secret is not None:
         props['protectedParameters']=[dict(name='CHRYSALIS_SEALED_' + name.upper(), value=value) for name, value in secret.items()]
     return dict(location=region,properties=props)
@@ -127,7 +126,7 @@ def get_summary(message):
     return data
 
 
-def command(draw,label,script,until,*,sealed=None):
+def command(draw,label,script,until,*,sealed=None,timeout=RUN_COMMAND_SECONDS):
     if not re.fullmatch(r'(init|kick|status-(?:0[0-9]|1[0-8])|push-[12])',label):
         raise GuardFailure('unrecognized guest control action')
     draw.step = f'run-command {label}'
@@ -135,7 +134,7 @@ def command(draw,label,script,until,*,sealed=None):
         raise GuardFailure('no time left to submit guest Run Command')
     path=draw.path('Compute','virtualMachines')+'/runCommands/'+label
     try:
-        draw.put(path,VM_API,control_body(draw.region,script,sealed),work=True,until=until)
+        draw.put(path,VM_API,control_body(draw.region,script,sealed,timeout=timeout),work=True,until=until)
     except AzureError as e:
         if str(e)!='timeout' or label.startswith('push-'):
             raise
@@ -168,7 +167,7 @@ def command(draw,label,script,until,*,sealed=None):
     raise GuardFailure(f'guest Run Command {label} exceeded its work deadline')
 
 
-def boot_script(group, shutdown, helper):
+def boot_script(group, shutdown, helper, *, boot_seconds=RUN_COMMAND_SECONDS - BOOT_MARGIN):
     # Protect the same guest guard: measure only after cloud-init and the exact
     # timer plus effective group-delete action are verified. All output but
     # the explicitly framed result goes to /dev/null, not extension logs.
@@ -177,7 +176,7 @@ def boot_script(group, shutdown, helper):
     return f'''#!/bin/bash
 set -euo pipefail
 exec 2>/dev/null
-limit=$(( $(date +%s) + 95 ))
+limit=$(( $(date +%s) + {int(boot_seconds)} ))
 failed=unknown
 while [ "$(date +%s)" -lt "$limit" ]; do
   next=$(systemctl show chrysalis-guest-cleanup.timer -p NextElapseUSecRealtime --value || true)
@@ -234,16 +233,17 @@ def upload_inputs(draw, inputs):
     key = storage_key(draw)
     for name, path in inputs.items():
         upload(draw.account, name, signed_blob(draw.az, draw.account, key, name, 'cw'), path,
-               MAX_BLOB_BYTES, min(draw.start + WORKER_START, time.time() + 100), unique=True)
+               MAX_BLOB_BYTES, min(draw.provision_deadline, time.time() + 100), unique=True)
     mark(draw.guard, 'upload-done', since=draw.start)
 
 
 def run_channel(draw, inputs, evidence):
     helper = '/usr/local/sbin/chrysalis-run-channel'
     limits = plan_results_limits(inputs['payload'])
-    start_by = draw.start + WORKER_START
-    init = command(draw, 'init', boot_script(draw.group, draw.guard_end, helper),
-                   min(start_by - 1, time.time() + RUN_COMMAND_SECONDS + 15))
+    draw.step = 'session-window'
+    start_by, init_timeout, boot_seconds = draw.worker_start_plan(time.time())
+    init = command(draw, 'init', boot_script(draw.group, draw.guard_end, helper, boot_seconds=boot_seconds),
+                   min(start_by - 1, time.time() + init_timeout + POLL_MARGIN), timeout=init_timeout)
     if set(init) != {'payload', 'results'} or not all(isinstance(v, str) for v in init.values()) or init['payload'] == init['results']:
         raise GuardFailure('guest init did not attest both ephemeral keys')
     mark(evidence / '.guard', 'guest-ready', since=draw.start)
