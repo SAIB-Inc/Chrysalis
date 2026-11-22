@@ -210,7 +210,12 @@ internal static class ProtocolOracles
         ReadOnlyMemory<byte>? datumHash = null;
         if (actual is AlonzoTransactionOutput alonzo) { datumHash = alonzo.DatumHash; }
         else if (actual is PostAlonzoTransactionOutput post && post.Datum is DatumHashOption hash) { datumHash = hash.DatumHash; }
-        AssertOptionalHex(expected.GetProperty("datumhash"), datumHash);
+        if (expected.TryGetProperty("datumhash", out JsonElement hashJson)) { AssertOptionalHex(hashJson, datumHash); }
+        else
+        {
+            Assert.True(expected.TryGetProperty("inlineDatumhash", out JsonElement inlineHash) && inlineHash.ValueKind == JsonValueKind.String);
+            Assert.Null(datumHash);
+        }
         JsonElement inline = expected.GetProperty("inlineDatum");
         Assert.Equal(inline.ValueKind != JsonValueKind.Null, actual.InlineDatumRaw().HasValue);
         // Raw CBOR is the complete independent datum, without JSON integer/ordering loss.
@@ -235,7 +240,16 @@ internal static class ProtocolOracles
         Assert.Equal(language, script.GetProperty("scriptLanguage").GetString());
         JsonElement envelope = script.GetProperty("script");
         Assert.Equal(type, envelope.GetProperty("type").GetString());
-        Assert.Equal(Convert.FromHexString(envelope.GetProperty("cborHex").GetString()!), bytes.ToArray());
+        byte[] cli = Convert.FromHexString(envelope.GetProperty("cborHex").GetString()!);
+        Assert.Equal(decoded is MultiSigScript ? cli : PlutusScriptBytes(cli), bytes.ToArray());
+    }
+
+    private static byte[] PlutusScriptBytes(byte[] cborHex)
+    {
+        if (cborHex.Length == 0 || cborHex[0] is < 0x40 or > 0x5f) { return cborHex; }
+        SAIB.Cbor.Serialization.CborReader reader = new(cborHex);
+        byte[] unwrapped = reader.ReadByteStringToArray();
+        return reader.Buffer.IsEmpty && unwrapped.Length > 0 && unwrapped[0] is >= 0x40 and <= 0x5f ? unwrapped : cborHex;
     }
 
     private static void AssertOptionalHex(JsonElement expected, ReadOnlyMemory<byte>? actual)

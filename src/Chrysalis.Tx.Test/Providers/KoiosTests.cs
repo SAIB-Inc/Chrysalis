@@ -29,9 +29,9 @@ public class KoiosTests
 {
     private const string MainAddress = "addr_test1vrapzvl8gvavjfy2d7qa4xvt8a6ytcsrq4ykr6azj27mylg59qvqy";
     private const string ScriptAddress = "addr_test1wqvxuvh64q9zdqgrjt76d42eclk5wgdxtnsun4808cwg0dqxy2mj0";
-    private const string PlutusV3Hash = "186e32faa80a26810392fda6d559c7ed4721a65ce1c9d4ef3e1c87b4";
-    private const string NativeHash = "751ebae7b78b2be4c0b6283f708becce05a802966b38b7f31d8758b2";
-    private static readonly Lazy<CliVectors> Vectors = new(() => CliVectors.Load(CliVectors.Root));
+    internal const string PlutusV3Hash = "186e32faa80a26810392fda6d559c7ed4721a65ce1c9d4ef3e1c87b4";
+    internal const string NativeHash = "751ebae7b78b2be4c0b6283f708becce05a802966b38b7f31d8758b2";
+    internal static readonly Lazy<CliVectors> Vectors = new(() => CliVectors.Load(CliVectors.Root));
     private static readonly Lazy<string> FixtureJson = new(() =>
         File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "TestData", "providers", "koios", "address_utxos.json")));
 

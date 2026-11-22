@@ -169,6 +169,7 @@ public sealed class NarrowSafetyTests
     [InlineData("hash")]
     [InlineData("inline")]
     [InlineData("script")]
+    [InlineData("script-wrapped")]
     public void FullOutputComparesPresentDatumAndReferenceScript(string form)
     {
         using JsonDocument original = ProtocolOracles.GoldenUtxo();
@@ -185,6 +186,8 @@ public sealed class NarrowSafetyTests
                 datum = DatumHashOption.Create(0, new byte[32]);
                 break;
             case "inline":
+                _ = fields.Remove("datumhash");
+                fields["inlineDatumhash"] = new string('0', 64);
                 fields["inlineDatum"] = JsonNode.Parse("{\"int\":1}");
                 fields["inlineDatumRaw"] = "01";
                 datum = InlineDatumOption.Create(1, new CborEncodedValue(Convert.FromHexString("01")));
@@ -192,6 +195,10 @@ public sealed class NarrowSafetyTests
             case "script":
                 fields["referenceScript"] = JsonNode.Parse("{\"scriptLanguage\":\"PlutusScriptLanguage PlutusScriptV2\",\"script\":{\"type\":\"PlutusScriptV2\",\"cborHex\":\"01\"}}");
                 script = new CborEncodedValue(Convert.FromHexString("82024101"));
+                break;
+            case "script-wrapped":
+                fields["referenceScript"] = JsonNode.Parse("{\"scriptLanguage\":\"PlutusScriptLanguage PlutusScriptV2\",\"script\":{\"type\":\"PlutusScriptV2\",\"cborHex\":\"424101\"}}");
+                script = new CborEncodedValue(Convert.FromHexString("8202424101"));
                 break;
             default:
                 throw new InvalidOperationException("Unknown literal fixture form.");
@@ -204,7 +211,7 @@ public sealed class NarrowSafetyTests
         }
         if (form == "hash") { fields["datumhash"] = new string('1', 64); }
         if (form == "inline") { fields["inlineDatumRaw"] = "02"; }
-        if (form == "script") { fields["referenceScript"]!["script"]!["cborHex"] = "02"; }
+        if (form is "script" or "script-wrapped") { fields["referenceScript"]!["script"]!["cborHex"] = "02"; }
         using JsonDocument changed = JsonDocument.Parse(expected.ToJsonString());
         _ = Assert.ThrowsAny<XunitException>(() => ProtocolOracles.AssertUtxos(changed.RootElement, actual));
     }
