@@ -13,8 +13,8 @@ namespace Chrysalis.Network.Tests;
 // Result_EraMismatchByron and Result_EraMismatchShelley; MsgResult framing from ouroboros-network Codec.hs:112-115.
 public sealed class N1QueryResultTests
 {
-    private const string Byron = "828201675368656c6c65798200654279726f6e";
-    private const string Shelley = "828200654279726f6e8201675368656c6c6579";
+    internal const string Byron = "828201675368656c6c65798200654279726f6e";
+    internal const string Shelley = "828200654279726f6e8201675368656c6c6579";
 
     public static IEnumerable<object[]> Mismatches()
     {

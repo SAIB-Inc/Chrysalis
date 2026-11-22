@@ -62,7 +62,7 @@ internal static class WirePlaceholder
                 byte[] bytes = File.ReadAllBytes(file);
                 if (Path.GetFileName(file).Contains("p6", StringComparison.Ordinal))
                 {
-                    _ = CborSerializer.Deserialize<RejectTx>(bytes).RejectReason.Value.Length;
+                    _ = CborSerializer.Deserialize<RejectTx>(bytes).RejectReason.Raw.Length;
                 }
                 else { _ = CborSerializer.Deserialize<Result>(bytes).QueryResult.Raw.Length; }
             }

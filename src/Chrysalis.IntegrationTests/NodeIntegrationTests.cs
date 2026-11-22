@@ -1,5 +1,4 @@
 using System.Globalization;
-using System.Text;
 using System.Text.Json;
 using Chrysalis.Codec.Extensions.Cardano.Core;
 using Chrysalis.Codec.Extensions.Cardano.Core.Transaction;
@@ -247,7 +246,6 @@ public sealed class NodeIntegrationTests
     /// <summary>Requires a legitimate rejection, corroborated by the same node through CLI, not a CBOR error.</summary>
     [IntegrationFact(Env.Socket, Env.Magic, Env.Cli, Env.NodeVersion, Env.Output)]
     [Trait("Category", "Integration")]
-    [Trait("Known", "B3")]
     public async Task RejectionIsInspectableAndMatchesCliReason()
     {
         using CancellationTokenSource deadline = new(TimeSpan.FromSeconds(40));
@@ -259,7 +257,7 @@ public sealed class NodeIntegrationTests
         const string capturedReason = "All inputs are spent. Transaction has probably already been included";
         Assert.Contains(capturedReason, cli, StringComparison.Ordinal);
         RejectTx response = Assert.IsType<RejectTx>(await node.LocalTxSubmit.SubmitTxAsync(new SubmitTx(0, new EraTx(checked((int)ProtocolOracles.Era(await OracleCli.QueryJsonAsync("rejection-era", deadline.Token, "tip"))), new CborEncodedValue(transaction))), deadline.Token));
-        string reason = Encoding.UTF8.GetString(response.RejectReason.Raw.Span);
+        string reason = response.Describe();
         Assert.Contains(capturedReason, reason, StringComparison.Ordinal);
         Assert.Contains(capturedReason, cli, StringComparison.Ordinal);
     }

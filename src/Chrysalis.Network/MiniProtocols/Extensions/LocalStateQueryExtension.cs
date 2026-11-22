@@ -5,7 +5,6 @@ using Chrysalis.Network.Cbor.Common;
 using Chrysalis.Network.Cbor.LocalStateQuery;
 using Chrysalis.Network.Cbor.LocalStateQuery.Messages;
 using SAIB.Cbor;
-using SAIB.Cbor.Serialization;
 
 namespace Chrysalis.Network.MiniProtocols.Extensions;
 
@@ -15,7 +14,6 @@ namespace Chrysalis.Network.MiniProtocols.Extensions;
 public static class LocalStateQueryExtension
 {
     private const string DeserializationError = "Failed to deserialize response";
-    private const string EraShapeError = "Expected an era as [index, name]";
 
     /// <summary>
     /// Executes a query with automatic acquire/release handling for fresh state.
@@ -154,25 +152,13 @@ public static class LocalStateQueryExtension
 
     private static InvalidOperationException EraMismatch(ReadOnlyMemory<byte> raw)
     {
-        CborReader reader = new(raw.Span);
         try
         {
-            reader.ReadBeginArray();
-            _ = reader.ReadSize();
-            string queryEra = ReadEra(ref reader);
-            return new InvalidOperationException($"Era mismatch: the query is for {queryEra}, but the node's ledger is in {ReadEra(ref reader)}.");
+            return new InvalidOperationException(CborText.EraMismatch(raw.Span, "query"));
         }
         catch (CborException error)
         {
             throw CborError.Wrap(error, raw, "Result.QueryResult", "era mismatch [[index, name], [index, name]]");
         }
-    }
-
-    // Each era is [index, name] (AcrossEras.hs:128-138).
-    private static string ReadEra(ref CborReader reader)
-    {
-        reader.ReadBeginArray();
-        ulong index = reader.ReadSize() == 2 ? reader.ReadUInt64() : throw reader.BuildException(EraShapeError);
-        return $"{reader.ReadString() ?? throw reader.BuildException(EraShapeError)} ({index})";
     }
 }
