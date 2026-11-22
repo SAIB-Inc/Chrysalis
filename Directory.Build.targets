@@ -4,6 +4,10 @@
     <!-- X25 removes this staging property with the native-MTP/global.json/CI/commands switch. -->
     <IsTestingPlatformApplication>false</IsTestingPlatformApplication>
   </PropertyGroup>
+  <PropertyGroup Condition="'$(IsTestProject)' == 'true'">
+    <!-- Exact allocation tests: at the end of a background GC's mark the runtime voids each thread's allocation context without crediting its unused bytes, so GC.GetAllocatedBytesForCurrentThread jumps with no allocation (dotnet/runtime v11.0.0: src/coreclr/gc/background.cpp:2272-2274 repair_allocation_contexts -> src/coreclr/gc/allocation.cpp:1149-1159 void_allocation; fix_allocation_context :1123-1131 credits them; src/coreclr/vm/comutilnative.cpp:864-865; dotnet/runtime#134724, fixed on main by PR #134855, not in 11.0). Blocking GCs only; drop this once the test runtime carries the fix. -->
+    <ConcurrentGarbageCollection>false</ConcurrentGarbageCollection>
+  </PropertyGroup>
   <ItemGroup Condition="'@(PackageReference-&gt;WithMetadataValue('Identity', 'xunit.v3'))' != ''">
     <PackageReference Include="Microsoft.Testing.Platform" PrivateAssets="all" />
     <PackageReference Include="Microsoft.Testing.Platform.MSBuild" PrivateAssets="all" />
