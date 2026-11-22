@@ -498,8 +498,9 @@ recipe. A `sealKind: "noise"` request uses a plan with `"noiseRecords": true`
 and builds baseline-only sessions for missing machine-class records; the merged
 records are `time/noise-records.json`. Noise prepares rehearse each micro session
 (pass and 3 s fail cases, `counted: false`, platform `pc`, never imported or
-sealed): `rehearsal/` ships in `prepared/` (no later step compares two prepares)
-and stays out of the seal.
+sealed; worker scripts run on the build guest's Python rather than the payload's
+python3.12): `rehearsal/` ships in `prepared/` (no later step compares two
+prepares) and stays out of the seal.
 
 Batch plans name `"areas"` from `gated.json`. `gate.py carry LEG1_DIR` lists
 outside rows to include in leg 2, distinguishing movement from unresolved data.
