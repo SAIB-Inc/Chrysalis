@@ -6,9 +6,12 @@ using System.Net.Http.Headers;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using Chrysalis.Codec.Extensions.Cardano.Core.Transaction;
 using Chrysalis.Codec.Serialization;
 using Chrysalis.Codec.Types;
 using Chrysalis.Codec.Types.Cardano.Core;
+using Chrysalis.Codec.Types.Cardano.Core.Common;
+using Chrysalis.Codec.Types.Cardano.Core.Scripts;
 using Chrysalis.Codec.Types.Cardano.Core.Transaction;
 using Chrysalis.Network.Cbor.Common;
 using Chrysalis.Network.Cbor.Handshake;
@@ -19,6 +22,9 @@ using Chrysalis.Network.Cbor.LocalTxSubmit;
 using Chrysalis.Network.Core;
 using Chrysalis.Network.MiniProtocols;
 using Chrysalis.Network.Multiplexer;
+using Chrysalis.Tx.Builders;
+using Chrysalis.Tx.Models.Cbor;
+using Chrysalis.Tx.Providers;
 using Xunit;
 using Env = Chrysalis.IntegrationTests.IntegrationEnvironment;
 using LsqAcquired = Chrysalis.Network.Cbor.LocalStateQuery.Messages.Acquired;
@@ -75,32 +81,12 @@ public sealed class DevnetIntegrationTests
         await OracleCli.RecordVersionAsync(deadline.Token);
         string address = Env.Required(Env.Address);
         string paymentKeyHash = Convert.ToHexStringLower(WalletAddress.FromBech32(address).ToBytes().AsSpan(1, 28));
-        using HttpClient http = new() { BaseAddress = new Uri(Env.Required(Env.KupoUrl).TrimEnd('/') + "/") };
-        http.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+        using HttpClient http = KupoClient();
 
         (Dictionary<string, ulong> cliSet, Dictionary<string, ulong> byAddress, Dictionary<string, ulong> byCredential, Dictionary<string, ulong> byOutref, string firstOutref) =
             await OracleCli.AtStableTipAsync("kupo-utxo", async (tip, ct) =>
             {
-                ulong tipSlot = tip.GetProperty("slot").GetUInt64();
-                bool caughtUp = false;
-                for (int attempt = 0; attempt < 40; attempt++)
-                {
-                    using HttpResponseMessage healthResponse = await http.GetAsync(new Uri("health", UriKind.Relative), ct);
-                    _ = healthResponse.EnsureSuccessStatusCode();
-                    using JsonDocument health = JsonDocument.Parse(await healthResponse.Content.ReadAsStringAsync(ct));
-                    if (health.RootElement.TryGetProperty("most_recent_checkpoint", out JsonElement checkpoint)
-                        && checkpoint.ValueKind == JsonValueKind.Number
-                        && checkpoint.GetUInt64() >= tipSlot)
-                    {
-                        caughtUp = true;
-                        break;
-                    }
-                    await Task.Delay(TimeSpan.FromMilliseconds(250), ct);
-                }
-                if (!caughtUp)
-                {
-                    Assert.Fail("Kupo did not reach the CLI tip slot");
-                }
+                await WaitForKupoAsync(http, tip.GetProperty("slot").GetUInt64(), ct);
 
                 JsonElement cliUtxos = await OracleCli.QueryJsonAsync("kupo-utxo-oracle", ct, "utxo", "--address", address, "--output-json");
                 string selected = ProtocolOracles.SelectInputReference(cliUtxos);
@@ -139,7 +125,7 @@ public sealed class DevnetIntegrationTests
         {
             FundedIntegrationTests.SelfTransfer? built = null;
             await FundedIntegrationTests.WithWalletKeyAsync(
-                async (key, ct) => built = await FundedIntegrationTests.BuildSelfTransferAsync(key, collateral, 2_000_000, ct),
+                async (key, ct) => built = await FundedIntegrationTests.BuildSelfTransferAsync(key, collateral, 2_000_000, null, ct),
                 deadline.Token);
             FundedIntegrationTests.SelfTransfer transfer = built ?? throw new InvalidOperationException("Self-transfer was not built.");
 
@@ -297,6 +283,121 @@ public sealed class DevnetIntegrationTests
         InvalidOperationException failure = await Assert.ThrowsAsync<InvalidOperationException>(
             () => node.LocalStateQuery.AcquireAsync(freshMissingPoint, deadline.Token));
         Assert.Contains(nameof(AcquireFailurePointNotOnChain), failure.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>Compares Kupmios UTxO lookups by address, payment credential and output reference with the CLI.</summary>
+    [IntegrationFact([Env.Socket, Env.Magic, Env.Cli, Env.NodeVersion, Env.Output, Env.KupoUrl, Env.OgmiosUrl, Env.Address])]
+    [Trait("Category", "Integration")]
+    public async Task KupmiosOutputsMatchCli()
+    {
+        using CancellationTokenSource deadline = new(TimeSpan.FromMinutes(1));
+        await OracleCli.RecordVersionAsync(deadline.Token);
+        string address = Env.Required(Env.Address);
+        string paymentKeyHash = Convert.ToHexStringLower(WalletAddress.FromBech32(address).ToBytes().AsSpan(1, 28));
+        using HttpClient http = KupoClient();
+        using Kupmios provider = new(Env.Required(Env.KupoUrl), Env.Required(Env.OgmiosUrl));
+
+        (JsonElement cliUtxos, JsonElement cliOutref, List<ResolvedInput> byAddress, List<ResolvedInput> byKey, ResolvedInput? byOutref) =
+            await OracleCli.AtStableTipAsync("kupmios-utxo", async (tip, ct) =>
+            {
+                await WaitForKupoAsync(http, tip.GetProperty("slot").GetUInt64(), ct);
+                JsonElement utxos = await OracleCli.QueryJsonAsync("kupmios-utxo-oracle", ct, "utxo", "--address", address, "--output-json");
+                string selected = ProtocolOracles.SelectInputReference(utxos);
+                JsonElement single = await OracleCli.QueryJsonAsync("kupmios-outref-oracle", ct, "utxo", "--tx-in", selected, "--output-json");
+                List<ResolvedInput> addressResults = await provider.GetUtxosAsync([address], ct);
+                List<ResolvedInput> keyResults = await provider.GetUtxosByPaymentKeyAsync(paymentKeyHash, ct);
+                string[] parts = selected.Split('#');
+                ResolvedInput? outrefResult = await provider.GetUtxoByOutRefAsync(parts[0], ulong.Parse(parts[1], CultureInfo.InvariantCulture), ct);
+                return (utxos, single, addressResults, keyResults, outrefResult);
+            }, deadline.Token);
+
+        ProtocolOracles.AssertUtxos(cliUtxos, AsResponse(byAddress));
+        ProtocolOracles.AssertUtxos(cliUtxos, AsResponse(byKey));
+        Assert.NotNull(byOutref);
+        ProtocolOracles.AssertUtxos(cliOutref, AsResponse([byOutref]));
+    }
+
+    /// <summary>Submits datum-hash, inline-datum and reference-script outputs via Kupmios and compares read-back with the CLI.</summary>
+    [IntegrationFact([Env.Socket, Env.Magic, Env.Cli, Env.NodeVersion, Env.Output, Env.WalletFile, Env.FundedOptIn, Env.CollateralTxIn, Env.KupoUrl, Env.OgmiosUrl])]
+    [Trait("Category", "Integration")]
+    public async Task KupmiosReadsBackDatumsAndScripts()
+    {
+        Env.RequireDevnet();
+        Env.RequireFundedOptIn();
+        TransactionInput collateral = FundingSelection.ParseInputReference(Env.Required(Env.CollateralTxIn));
+        using CancellationTokenSource deadline = new(TimeSpan.FromMinutes(3));
+        await OracleCli.RecordVersionAsync(deadline.Token);
+
+        FundedIntegrationTests.SelfTransfer? built = null;
+        await FundedIntegrationTests.WithWalletKeyAsync(
+            async (key, ct) => built = await FundedIntegrationTests.BuildSelfTransferAsync(key, collateral, 2_000_000, AddReadBackOutputs, ct),
+            deadline.Token);
+        FundedIntegrationTests.SelfTransfer transfer = built ?? throw new InvalidOperationException("Self-transfer was not built.");
+
+        using Kupmios provider = new(Env.Required(Env.KupoUrl), Env.Required(Env.OgmiosUrl));
+        string submitted = await provider.SubmitTransactionAsync(transfer.Signed, deadline.Token);
+        Assert.Equal(transfer.TxId, submitted, StringComparer.OrdinalIgnoreCase);
+
+        string transferOutref = transfer.TxId + "#" + transfer.Index.ToString(CultureInfo.InvariantCulture);
+        await FundedIntegrationTests.WaitForOutputAsync(transferOutref, 2_000_000, deadline.Token);
+
+        int outputCount = Assert.IsType<PostMaryTransaction>(transfer.Signed).Body.Outputs().Count();
+        List<(string TxHash, ulong OutputIndex)> refs = [.. Enumerable.Range(0, outputCount).Select(i => (transfer.TxId, (ulong)i))];
+        string[] cliArgs = ["utxo", .. refs.SelectMany(r => new[] { "--tx-in", r.TxHash + "#" + r.OutputIndex.ToString(CultureInfo.InvariantCulture) }), "--output-json"];
+
+        using HttpClient http = KupoClient();
+        (JsonElement expected, List<ResolvedInput> actual) = await OracleCli.AtStableTipAsync("kupmios-readback", async (tip, ct) =>
+        {
+            await WaitForKupoAsync(http, tip.GetProperty("slot").GetUInt64(), ct);
+            JsonElement cliUtxos = await OracleCli.QueryJsonAsync("kupmios-readback-oracle", ct, cliArgs);
+            List<ResolvedInput> found = await provider.GetUtxosByOutRefsAsync(refs, ct);
+            return (cliUtxos, found);
+        }, deadline.Token);
+
+        ProtocolOracles.AssertUtxos(expected, AsResponse(actual));
+    }
+
+    private static HttpClient KupoClient()
+    {
+        HttpClient http = new() { BaseAddress = new Uri(Env.Required(Env.KupoUrl).TrimEnd('/') + "/") };
+        http.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+        return http;
+    }
+
+    private static async Task WaitForKupoAsync(HttpClient http, ulong tipSlot, CancellationToken cancellationToken)
+    {
+        for (int attempt = 0; attempt < 40; attempt++)
+        {
+            using HttpResponseMessage healthResponse = await http.GetAsync(new Uri("health", UriKind.Relative), cancellationToken);
+            _ = healthResponse.EnsureSuccessStatusCode();
+            using JsonDocument health = JsonDocument.Parse(await healthResponse.Content.ReadAsStringAsync(cancellationToken));
+            if (health.RootElement.TryGetProperty("most_recent_checkpoint", out JsonElement checkpoint)
+                && checkpoint.ValueKind == JsonValueKind.Number
+                && checkpoint.GetUInt64() >= tipSlot)
+            {
+                return;
+            }
+            await Task.Delay(TimeSpan.FromMilliseconds(250), cancellationToken);
+        }
+        Assert.Fail("Kupo did not reach the CLI tip slot");
+    }
+
+    private static UtxoByAddressResponse AsResponse(IEnumerable<ResolvedInput> inputs) =>
+        new(inputs.ToDictionary(input => input.Outref, input => input.Output));
+
+    private static void AddReadBackOutputs(TxBuilder builder, string address)
+    {
+        Address to = new(WalletAddress.FromBech32(address).ToBytes());
+        Lovelace value = Lovelace.Create(3_000_000);
+        byte[] datumHash = [.. Enumerable.Repeat((byte)0x11, 32)];
+        CborEncodedValue inlineDatum = new(Convert.FromHexString("d87980"));
+        CborEncodedValue plutusV3 = new(CborSerializer.Serialize(PlutusV3Script.Create(3, Convert.FromHexString("450101002499"))));
+        CborEncodedValue native = new(CborSerializer.Serialize(MultiSigScript.Create(0, CborSerializer.Deserialize<INativeScript>(Convert.FromHexString("820180")))));
+        _ = builder
+            .AddOutput(PostAlonzoTransactionOutput.Create(to, value, DatumHashOption.Create(0, datumHash), null))
+            .AddOutput(PostAlonzoTransactionOutput.Create(to, value, InlineDatumOption.Create(1, inlineDatum), null))
+            .AddOutput(PostAlonzoTransactionOutput.Create(to, value, null, plutusV3))
+            .AddOutput(PostAlonzoTransactionOutput.Create(to, value, null, native));
     }
 
     private static async Task<(HttpStatusCode Status, JsonElement Body)> PostOgmiosAsync(

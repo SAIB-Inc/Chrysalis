@@ -20,8 +20,10 @@ public class ProviderCallerTests
     {
         string change = $"/matches/{BlockfrostTests.Address}?unspent&resolve_hashes";
         string outref = $"/matches/0@{BlockfrostTests.Hash}?unspent&resolve_hashes";
-        using StubHttpHandler stub = new(request => request.RequestUri!.PathAndQuery == outref && forbidden
-            ? StubHttpHandler.Json("forbidden", HttpStatusCode.Forbidden) : StubHttpHandler.Json("[]"));
+        using StubHttpHandler stub = new(request => request.Method == HttpMethod.Post
+            ? StubHttpHandler.Json(KupmiosTests.OgmiosParameters())
+            : request.RequestUri!.PathAndQuery == outref && forbidden
+                ? StubHttpHandler.Json("forbidden", HttpStatusCode.Forbidden) : StubHttpHandler.Json("[]"));
         using Kupmios kupmios = KupmiosTests.Create(stub);
         ObservedProvider provider = new(kupmios);
         TransactionTemplate<int> template = TransactionTemplateBuilder.Create<int>(provider)
@@ -39,7 +41,7 @@ public class ProviderCallerTests
             InvalidOperationException error = await Assert.ThrowsAsync<InvalidOperationException>(() => template(0));
             Assert.StartsWith("UTxO not found:", error.Message, StringComparison.Ordinal);
         }
-        Assert.Equal([change, outref], stub.Requests.Select(r => r.Uri));
+        Assert.Equal(["/", change, outref], stub.Requests.Select(r => r.Uri));
     }
 
     [Fact]
@@ -67,7 +69,7 @@ public class ProviderCallerTests
     public async Task DefaultBundleForwardsTokenAndClaimsNoSnapshot()
     {
         using CancellationTokenSource timeout = new(TimeSpan.FromSeconds(10));
-        using StubHttpHandler stub = new(_ => StubHttpHandler.Json("[]"));
+        using StubHttpHandler stub = new(request => StubHttpHandler.Json(request.Method == HttpMethod.Post ? KupmiosTests.OgmiosParameters() : "[]"));
         using Kupmios kupmios = new("https://kupo.test/", "https://ogmios.test/", NetworkType.Preprod, stub);
         ObservedProvider observed = new(kupmios);
         List<string> addresses = [BlockfrostTests.Address];
@@ -78,7 +80,7 @@ public class ProviderCallerTests
         Assert.Null(result.ParametersPoint);
         Assert.Null(result.UtxosPoint);
         Assert.Null(result.Era);
-        Assert.Single(stub.Requests);
+        Assert.Equal(2, stub.Requests.Count);
     }
 
     [Theory]

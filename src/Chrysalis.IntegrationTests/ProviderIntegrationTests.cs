@@ -14,13 +14,24 @@ public sealed class ProviderIntegrationTests
     /// <summary>Checks the real Ouroboros provider's parameters against the same node's CLI.</summary>
     [IntegrationFact([Env.Socket, Env.Magic, Env.Cli, Env.NodeVersion, Env.Output])]
     [Trait("Category", "Integration")]
-    public async Task OuroborosParametersMatchCli()
+    public Task OuroborosParametersMatchCli() =>
+        MatchesCliAsync("ouroboros", new Ouroboros(Env.Required(Env.Socket), Env.NetworkMagic).GetParametersAsync);
+
+    /// <summary>Checks the real Kupmios provider's parameters against the same node's CLI.</summary>
+    [IntegrationFact([Env.Socket, Env.Magic, Env.Cli, Env.NodeVersion, Env.Output, Env.KupoUrl, Env.OgmiosUrl])]
+    [Trait("Category", "Integration")]
+    public async Task KupmiosParametersMatchCli()
+    {
+        using Kupmios provider = new(Env.Required(Env.KupoUrl), Env.Required(Env.OgmiosUrl));
+        await MatchesCliAsync("kupmios", provider.GetParametersAsync);
+    }
+
+    private static async Task MatchesCliAsync(string label, Func<CancellationToken, Task<ProtocolParams>> read)
     {
         using CancellationTokenSource deadline = new(TimeSpan.FromSeconds(40));
         await OracleCli.RecordVersionAsync(deadline.Token);
-        Ouroboros provider = new(Env.Required(Env.Socket), Env.NetworkMagic);
-        (ProtocolParams expected, ProtocolParams actual) = await OracleCli.AtStableTipAsync("ouroboros-parameters", async (_, ct) =>
-            (ProtocolOracles.Parameters(await OracleCli.QueryJsonAsync("ouroboros-parameter-oracle", ct, "protocol-parameters")), await provider.GetParametersAsync(ct).WaitAsync(ct)), deadline.Token);
+        (ProtocolParams expected, ProtocolParams actual) = await OracleCli.AtStableTipAsync(label + "-parameters", async (_, ct) =>
+            (ProtocolOracles.Parameters(await OracleCli.QueryJsonAsync(label + "-parameter-oracle", ct, "protocol-parameters")), await read(ct).WaitAsync(ct)), deadline.Token);
         ProtocolOracles.AssertEquivalent(expected, actual);
     }
 

@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json;
 using Chrysalis.Codec.Types.Cardano.Core.Transaction;
@@ -18,7 +19,10 @@ using Chrysalis.Tx.Utils;
 namespace Chrysalis.Tx.Providers;
 
 /// <summary>
-/// Kupo and Ogmios data provider. Protocol parameters are built in for the network.
+/// Kupo and Ogmios data provider. Protocol parameters are Ogmios's answer at the ledger tip; an answer without
+/// the Conway fields (a Babbage-era node) is unusable. The reference-script fee base arrives as a JSON number,
+/// so a non-terminating ratio would arrive rounded. Results carry no chain point. A Kupo output whose reference
+/// script is unresolved or does not match its hash is unusable.
 /// </summary>
 public sealed class Kupmios : ICardanoDataProvider, IDisposable
 {
@@ -194,90 +198,92 @@ public sealed class Kupmios : ICardanoDataProvider, IDisposable
     }
 
     /// <summary>
-    /// Retrieves protocol parameters (uses defaults for each network).
+    /// Reads the ledger tip's protocol parameters from Ogmios.
     /// </summary>
     /// <param name="cancellationToken">Cancels the operation.</param>
     /// <returns>The protocol parameters.</returns>
-    public Task<ProtocolParams> GetParametersAsync(CancellationToken cancellationToken = default)
+    public async Task<ProtocolParams> GetParametersAsync(CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        ProtocolParametersResponse parameters = NetworkType switch
-        {
-            NetworkType.Mainnet => PParamsDefaults.Mainnet(),
-            NetworkType.Preview => PParamsDefaults.Preview(),
-            NetworkType.Preprod => PParamsDefaults.Preview(),
-            NetworkType.Testnet => PParamsDefaults.Preview(),
-            NetworkType.Unknown => throw new NotSupportedException("No built-in parameters exist for this network."),
-            _ => throw new ArgumentException($"Unsupported network type: {NetworkType}")
-        };
-
-        return Task.FromResult(ProviderHttp.Map(parameters, MapParameters, Provider, nameof(GetParametersAsync)));
+        const string operation = nameof(GetParametersAsync);
+        using HttpRequestMessage request = RpcRequest(new { jsonrpc = "2.0", method = "queryLedgerState/protocolParameters", id = Guid.NewGuid().ToString() });
+        using HttpResponseMessage response = await _ogmios.SendJsonRpcAsync(request, operation, cancellationToken).ConfigureAwait(false);
+        using JsonDocument body = await _ogmios.ReadJsonAsync<JsonDocument>(response, operation, cancellationToken).ConfigureAwait(false);
+        return ProviderHttp.Map(body.RootElement, MapParameters, Provider, operation);
     }
 
-    private static ProtocolParams MapParameters(ProtocolParametersResponse parameters)
+    private static ProtocolParams MapParameters(JsonElement root)
     {
-        Dictionary<int, CborList<long>> costMdls = [];
-
-        foreach ((string key, int[] value) in parameters.CostModelsRaw ?? [])
+        JsonElement p = root.GetProperty("result");
+        CborList<long>?[] models = new CborList<long>?[3];
+        foreach (JsonProperty entry in p.GetProperty("plutusCostModels").EnumerateObject())
         {
-            int version = key switch
+            int idx = entry.Name switch
             {
-                "PlutusV1" => 0,
-                "PlutusV2" => 1,
-                "PlutusV3" => 2,
+                "plutus:v1" => 0,
+                "plutus:v2" => 1,
+                "plutus:v3" => 2,
                 _ => throw new InvalidOperationException("Unknown cost model key.")
             };
-
-            costMdls[version] = CborList.Create(value.Select(x => (long)x));
+            models[idx] = CborList.Create(entry.Value.EnumerateArray().Select(item => item.GetInt64()));
         }
-
-        ProtocolParams protocolParams = new(
-            (ulong)parameters.MinFeeA,
-            (ulong)parameters.MinFeeB,
-            (ulong)parameters.MaxBlockSize,
-            (ulong)parameters.MaxTxSize,
-            (ulong)parameters.MaxBlockHeaderSize,
-            ulong.Parse(parameters.KeyDeposit, CultureInfo.InvariantCulture),
-            ulong.Parse(parameters.PoolDeposit, CultureInfo.InvariantCulture),
-            (ulong)parameters.EMax,
-            (ulong)parameters.NOpt,
-            CborRationalNumber.Create((ulong)(parameters.A0 * 100), 100),
-            CborRationalNumber.Create((ulong)(parameters.Rho * 100), 100),
-            CborRationalNumber.Create((ulong)(parameters.Tau * 100), 100),
-            ProtocolVersion.Create(9, 0),
-            ulong.Parse(parameters.MinPoolCost, CultureInfo.InvariantCulture),
-            ulong.Parse(parameters.CoinsPerUtxoSize, CultureInfo.InvariantCulture),
-            new CostMdls(costMdls.GetValueOrDefault(0), costMdls.GetValueOrDefault(1), costMdls.GetValueOrDefault(2)),
-            ExUnitPrices.Create(
-                CborRationalNumber.Create((ulong)(parameters.PriceMem * 1000000), 1000000),
-                CborRationalNumber.Create((ulong)(parameters.PriceStep * 1000000), 1000000)
-            ),
-            ExUnits.Create(ulong.Parse(parameters.MaxTxExMem, CultureInfo.InvariantCulture), ulong.Parse(parameters.MaxTxExSteps, CultureInfo.InvariantCulture)),
-            ExUnits.Create(ulong.Parse(parameters.MaxBlockExMem, CultureInfo.InvariantCulture), ulong.Parse(parameters.MaxBlockExSteps, CultureInfo.InvariantCulture)),
-            ulong.Parse(parameters.MaxValSize, CultureInfo.InvariantCulture),
-            (ulong)parameters.CollateralPercent,
-            (ulong)parameters.MaxCollateralInputs,
+        JsonElement version = p.GetProperty("version");
+        JsonElement prices = p.GetProperty("scriptExecutionPrices");
+        JsonElement txUnits = p.GetProperty("maxExecutionUnitsPerTransaction");
+        JsonElement blockUnits = p.GetProperty("maxExecutionUnitsPerBlock");
+        JsonElement pool = p.GetProperty("stakePoolVotingThresholds");
+        JsonElement poolCc = pool.GetProperty("constitutionalCommittee");
+        JsonElement poolPp = pool.GetProperty("protocolParametersUpdate");
+        JsonElement drep = p.GetProperty("delegateRepresentativeVotingThresholds");
+        JsonElement drepCc = drep.GetProperty("constitutionalCommittee");
+        JsonElement drepPp = drep.GetProperty("protocolParametersUpdate");
+        return new ProtocolParams(
+            U(p, "minFeeCoefficient"), Lovelace(p, "minFeeConstant"), Bytes(p, "maxBlockBodySize"), Bytes(p, "maxTransactionSize"),
+            Bytes(p, "maxBlockHeaderSize"), Lovelace(p, "stakeCredentialDeposit"), Lovelace(p, "stakePoolDeposit"),
+            U(p, "stakePoolRetirementEpochBound"), U(p, "desiredNumberOfStakePools"),
+            Ratio(p, "stakePoolPledgeInfluence"), Ratio(p, "monetaryExpansion"), Ratio(p, "treasuryExpansion"),
+            ProtocolVersion.Create(U(version, "major"), U(version, "minor")),
+            Lovelace(p, "minStakePoolCost"), U(p, "minUtxoDepositCoefficient"),
+            new CostMdls(models[0], models[1], models[2]),
+            ExUnitPrices.Create(Ratio(prices, "memory"), Ratio(prices, "cpu")),
+            ExUnits.Create(U(txUnits, "memory"), U(txUnits, "cpu")),
+            ExUnits.Create(U(blockUnits, "memory"), U(blockUnits, "cpu")),
+            Bytes(p, "maxValueSize"), U(p, "collateralPercentage"), U(p, "maxCollateralInputs"),
             PoolVotingThresholds.Create(
-                CborRationalNumber.Create(1, 1), CborRationalNumber.Create(1, 1), CborRationalNumber.Create(1, 1),
-                CborRationalNumber.Create(1, 1), CborRationalNumber.Create(1, 1)
-            ),
+                Ratio(pool, "noConfidence"), Ratio(poolCc, "default"), Ratio(poolCc, "stateOfNoConfidence"),
+                Ratio(pool, "hardForkInitiation"), Ratio(poolPp, "security")),
             DRepVotingThresholds.Create(
-                CborRationalNumber.Create(1, 1), CborRationalNumber.Create(1, 1), CborRationalNumber.Create(1, 1),
-                CborRationalNumber.Create(1, 1), CborRationalNumber.Create(1, 1), CborRationalNumber.Create(1, 1),
-                CborRationalNumber.Create(1, 1), CborRationalNumber.Create(1, 1), CborRationalNumber.Create(1, 1),
-                CborRationalNumber.Create(1, 1)
-            ),
-            1,
-            1,
-            1,
-            1,
-            1,
-            1,
-            CborRationalNumber.Create((ulong)parameters.MinFeeRefScriptCostPerByte, 1)
-        );
+                Ratio(drep, "noConfidence"), Ratio(drepCc, "default"), Ratio(drepCc, "stateOfNoConfidence"),
+                Ratio(drep, "constitution"), Ratio(drep, "hardForkInitiation"),
+                Ratio(drepPp, "network"), Ratio(drepPp, "economic"), Ratio(drepPp, "technical"), Ratio(drepPp, "governance"),
+                Ratio(drep, "treasuryWithdrawals")),
+            U(p, "constitutionalCommitteeMinSize"), U(p, "constitutionalCommitteeMaxTermLength"), U(p, "governanceActionLifetime"),
+            Lovelace(p, "governanceActionDeposit"), Lovelace(p, "delegateRepresentativeDeposit"), U(p, "delegateRepresentativeMaxIdleTime"),
+            ProviderValues.ExactRational(p.GetProperty("minFeeReferenceScripts").GetProperty("base").GetDecimal()));
 
-        return protocolParams;
+        static ulong U(JsonElement e, string name) => e.GetProperty(name).GetUInt64();
+        static ulong Lovelace(JsonElement e, string name) => U(e.GetProperty(name).GetProperty("ada"), "lovelace");
+        static ulong Bytes(JsonElement e, string name) => U(e.GetProperty(name), "bytes");
+        static CborRationalNumber Ratio(JsonElement e, string name) => ParseRatio(e.GetProperty(name));
     }
+
+    private static CborRationalNumber ParseRatio(JsonElement element)
+    {
+        if (element.ValueKind != JsonValueKind.String) { throw new InvalidOperationException("Invalid rational value."); }
+        // The raw value keeps its quotes; an escape fails the digit parse.
+        ReadOnlySpan<byte> text = JsonMarshal.GetRawUtf8Value(element)[1..^1];
+        int slash = text.IndexOf((byte)'/');
+        ulong numerator = ulong.Parse(text[..slash], NumberStyles.None, CultureInfo.InvariantCulture);
+        ulong denominator = ulong.Parse(text[(slash + 1)..], NumberStyles.None, CultureInfo.InvariantCulture);
+        return denominator == 0
+            ? throw new ArgumentOutOfRangeException(nameof(element), "Zero denominator.")
+            : CborRationalNumber.Create(numerator, denominator);
+    }
+
+    private static HttpRequestMessage RpcRequest(object payload) => new(HttpMethod.Post, (Uri?)null)
+    {
+        Content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json")
+    };
 
     /// <summary>
     /// Submits a signed transaction via Ogmios.
@@ -290,17 +296,13 @@ public sealed class Kupmios : ICardanoDataProvider, IDisposable
         ArgumentNullException.ThrowIfNull(tx);
         cancellationToken.ThrowIfCancellationRequested();
         const string operation = nameof(SubmitTransactionAsync);
-        var payload = new
+        using HttpRequestMessage request = RpcRequest(new
         {
             jsonrpc = "2.0",
             method = "submitTransaction",
             @params = new { transaction = new { cbor = Convert.ToHexString(CborSerializer.Serialize(tx)) } },
             id = Guid.NewGuid().ToString()
-        };
-        using HttpRequestMessage request = new(HttpMethod.Post, (Uri?)null)
-        {
-            Content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json")
-        };
+        });
         (string hash, ProviderException? rejection) = await _ogmios.SubmitAsync(request, operation, async (response, ct) =>
         {
             using JsonDocument body = await _ogmios.ReadJsonAsync<JsonDocument>(response, operation, ct).ConfigureAwait(false);
@@ -356,7 +358,7 @@ public sealed class Kupmios : ICardanoDataProvider, IDisposable
 
     private static ResolvedInput MapMatch(KupoMatch? match, string operation)
     {
-        if (match is not { TransactionId.Length: 64, OutputIndex: >= 0, Value.Coins: >= 0 } || string.IsNullOrEmpty(match.Address))
+        if (match is not { TransactionId.Length: 64, OutputIndex: >= 0, Value: not null } || string.IsNullOrEmpty(match.Address))
         {
             throw ProviderHttp.Unusable(Provider, operation, "missing or invalid output fields");
         }
@@ -365,17 +367,18 @@ public sealed class Kupmios : ICardanoDataProvider, IDisposable
             string[] parts = pair.Key.Split('.', 2);
             byte[] policy = HexStringCache.FromHexString(parts[0]);
             byte[] name = parts.Length == 2 ? HexStringCache.FromHexString(parts[1]) : [];
-            return ((ReadOnlyMemory<byte>)policy, (ReadOnlyMemory<byte>)name, checked((ulong)pair.Value));
+            return ((ReadOnlyMemory<byte>)policy, (ReadOnlyMemory<byte>)name, pair.Value);
         });
         TransactionInput outref = TransactionInput.Create(HexStringCache.FromHexString(match.TransactionId), (ulong)match.OutputIndex);
-        IValue value = ProviderValues.Create((ulong)match.Value.Coins, assets, Provider, operation);
+        IValue value = ProviderValues.Create(match.Value.Coins, assets, Provider, operation);
         IDatumOption? datum = CreateDatumOption(match, operation);
-        CborEncodedValue? script = CreateScriptReference(match.IScript, operation);
+        CborEncodedValue? script = CreateScriptReference(match, operation);
         return new(outref, PostAlonzoTransactionOutput.Create(CreateAddress(match.Address), value, datum, script));
     }
 
     private static IDatumOption? CreateDatumOption(KupoMatch match, string operation)
     {
+        if (match.DatumHash is { Length: not 64 }) { throw ProviderHttp.Unusable(Provider, operation, "invalid datum hash"); }
         if (match.DatumType == "hash" && string.IsNullOrEmpty(match.DatumHash))
         {
             throw ProviderHttp.Unusable(Provider, operation, "missing datum hash");
@@ -388,9 +391,14 @@ public sealed class Kupmios : ICardanoDataProvider, IDisposable
         return string.IsNullOrEmpty(match.DatumHash) ? null : DatumHashOption.Create(0, HexStringCache.FromHexString(match.DatumHash));
     }
 
-    private static CborEncodedValue? CreateScriptReference(KupoScript? script, string operation)
+    private static CborEncodedValue? CreateScriptReference(KupoMatch match, string operation)
     {
-        if (script is null) { return null; }
+        KupoScript? script = match.IScript;
+        if (script is null && match.ScriptHash is null) { return null; }
+        if (script is null || string.IsNullOrEmpty(match.ScriptHash))
+        {
+            throw ProviderHttp.Unusable(Provider, operation, "unresolved reference script");
+        }
         if (string.IsNullOrEmpty(script.IScript) || string.IsNullOrEmpty(script.Language))
         {
             throw ProviderHttp.Unusable(Provider, operation, "missing script language or bytes");
@@ -404,7 +412,7 @@ public sealed class Kupmios : ICardanoDataProvider, IDisposable
             "plutus:v3" => PlutusV3Script.Create(3, bytes),
             _ => throw ProviderHttp.Unusable(Provider, operation, "unknown script language")
         };
-        return new(CborSerializer.Serialize(value));
+        return new(CborSerializer.Serialize(ProviderValues.RequireScriptHash(value, match.ScriptHash, Provider, operation)));
     }
 
     private static Address CreateAddress(string bech32Address) => new(Wallet.Models.Addresses.Address.FromBech32(bech32Address).ToBytes());

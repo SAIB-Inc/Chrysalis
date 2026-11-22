@@ -9,7 +9,7 @@ namespace Chrysalis.Tx.Test.Providers;
 #pragma warning disable JSON002 // Test fixtures include JSON fragments or malformed JSON.
 public class ProviderContractTests
 {
-    // Operations 0 to 7 use HTTP on Blockfrost; 8 to 14 and 17 use it on Kupmios; 15 and 16 are local; 18 to 22 use it on Koios.
+    // Operations 0 to 7 use HTTP on Blockfrost; 8 to 15 and 17 use it on Kupmios; 16 is local; 18 to 22 use it on Koios.
     public static IEnumerable<object[]> Operations => Enumerable.Range(0, 23).Select(i => new object[] { i });
 
     [Theory]
@@ -61,7 +61,6 @@ public class ProviderContractTests
         Assert.Equal(canceled.Token, failure.CancellationToken);
         Assert.Null(failure.InnerException);
         Assert.Empty(stub.Requests);
-        if (operation == 15) { await Call(timeout.Token); Assert.Empty(stub.Requests); return; }
         if (operation == 16)
         {
             await Assert.ThrowsAsync<ArgumentNullException>(() => kupmios.GetTransactionMetadataAsync(null!, canceled.Token));

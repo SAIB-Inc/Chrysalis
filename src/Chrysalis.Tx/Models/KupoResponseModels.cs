@@ -8,8 +8,8 @@ namespace Chrysalis.Tx.Models;
 /// <param name="Coins">The lovelace amount.</param>
 /// <param name="Assets">Optional dictionary of asset identifiers to quantities.</param>
 public record KupoValue(
-    [property: JsonPropertyName("coins"), JsonRequired] long Coins,
-    [property: JsonPropertyName("assets")] Dictionary<string, long>? Assets);
+    [property: JsonPropertyName("coins"), JsonRequired] ulong Coins,
+    [property: JsonPropertyName("assets")] Dictionary<string, ulong>? Assets);
 
 /// <summary>
 /// Represents a script attached to a Kupo UTxO match.
