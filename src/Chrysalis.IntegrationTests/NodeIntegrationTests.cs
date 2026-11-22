@@ -18,6 +18,7 @@ using Chrysalis.Network.Core;
 using Chrysalis.Network.MiniProtocols;
 using Chrysalis.Network.MiniProtocols.Extensions;
 using Chrysalis.Network.Multiplexer;
+using Chrysalis.Tx.Providers;
 using Chrysalis.Wallet.Models.Addresses;
 using Xunit;
 using Env = Chrysalis.IntegrationTests.IntegrationEnvironment;
@@ -254,6 +255,12 @@ public sealed class NodeIntegrationTests
         string reason = response.Describe();
         Assert.Contains(capturedReason, reason, StringComparison.Ordinal);
         Assert.Contains(capturedReason, cli, StringComparison.Ordinal);
+        Ouroboros provider = new(Env.Required(Env.Socket), Env.NetworkMagic);
+        ProviderException failure = await Assert.ThrowsAsync<ProviderException>(() =>
+            provider.SubmitTransactionAsync(ITransaction.Read(transaction, Era.Conway), deadline.Token));
+        Assert.Equal("Ouroboros SubmitTransactionAsync: transaction rejected", failure.Message);
+        Assert.False(failure.IsTransient);
+        Assert.Contains(capturedReason, failure.Detail, StringComparison.Ordinal);
     }
 
     /// <summary>Exercises N2N handshake, chain-sync, block-fetch and keep-alive against one CLI-pinned point.</summary>

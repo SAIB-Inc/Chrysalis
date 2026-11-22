@@ -135,7 +135,7 @@ public sealed class Kupmios : ICardanoDataProvider, IDisposable
     /// <returns>The resolved input, or null if not found.</returns>
     public async Task<ResolvedInput?> GetUtxoByOutRefAsync(string txHash, ulong index, CancellationToken cancellationToken = default)
     {
-        ParseHash(txHash);
+        _ = ProviderValues.TransactionHash(txHash);
         cancellationToken.ThrowIfCancellationRequested();
         const string operation = nameof(GetUtxoByOutRefAsync);
         string pattern = string.Create(CultureInfo.InvariantCulture, $"{index}@{txHash}");
@@ -148,15 +148,6 @@ public sealed class Kupmios : ICardanoDataProvider, IDisposable
             throw ProviderHttp.Unusable(Provider, operation, "wrong output reference");
         }
         return input;
-    }
-
-    private static void ParseHash(string txHash)
-    {
-        ArgumentNullException.ThrowIfNull(txHash);
-        if (txHash.Length != 64 || Convert.FromHexString(txHash, stackalloc byte[32], out _, out _) != System.Buffers.OperationStatus.Done)
-        {
-            throw new ArgumentException("Expected a 32-byte transaction hash in hex.", nameof(txHash));
-        }
     }
 
     /// <summary>
@@ -176,7 +167,7 @@ public sealed class Kupmios : ICardanoDataProvider, IDisposable
     public async Task<List<ResolvedInput>> GetUtxosByOutRefsAsync(List<(string TxHash, ulong OutputIndex)> outRefs, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(outRefs);
-        foreach ((string hash, _) in outRefs) { ParseHash(hash); }
+        foreach ((string hash, _) in outRefs) { _ = ProviderValues.TransactionHash(hash); }
         cancellationToken.ThrowIfCancellationRequested();
         (string TxHash, ulong OutputIndex)[] requests = [.. outRefs.DistinctBy(r => (r.TxHash.ToUpperInvariant(), r.OutputIndex))];
         ResolvedInput?[] results = await ProviderHttp.AwaitBatchAsync(

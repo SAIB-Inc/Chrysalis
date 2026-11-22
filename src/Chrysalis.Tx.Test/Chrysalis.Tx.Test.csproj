@@ -22,6 +22,16 @@
           Link="TestData/cli/inputs/g1/current-protocol-parameters.json" CopyToOutputDirectory="PreserveNewest" />
     <None Include="../Chrysalis.Network.Tests/Fixtures/Preprod/wire/c1-in-p7-007.cbor"
           Link="TestData/cli/inputs/g1/c1-in-p7-007.cbor" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../Chrysalis.Network.Tests/Fixtures/Preprod/manifest.json"
+          Link="TestData/g1/manifest.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../Chrysalis.Network.Tests/Fixtures/Preprod/transactions/transfer-ouroboros.cbor"
+          Link="TestData/g1/transfer-ouroboros.cbor" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../Chrysalis.Network.Tests/Fixtures/Preprod/wire/c12-out-p6-002.cbor"
+          Link="TestData/g1/c12-out-p6-002.cbor" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../Chrysalis.Network.Tests/Fixtures/Preprod/wire/c10-out-p6-002.cbor"
+          Link="TestData/g1/c10-out-p6-002.cbor" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../Chrysalis.Network.Tests/Fixtures/Preprod/wire/c10-in-p6-002.cbor"
+          Link="TestData/g1/c10-in-p6-002.cbor" CopyToOutputDirectory="PreserveNewest" />
     <None Update="TestData/**" CopyToOutputDirectory="PreserveNewest" />
     <Compile Include="../Chrysalis.Tx.Providers.UtxoRpc.Test/LedgerParameters.cs" Link="Providers/LedgerParameters.cs" />
   </ItemGroup>

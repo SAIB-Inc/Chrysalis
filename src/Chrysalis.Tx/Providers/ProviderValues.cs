@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Numerics;
 using System.Text.Json;
 using Chrysalis.Codec.Extensions.Cardano.Core;
@@ -133,5 +134,18 @@ public static class ProviderValues
             throw new InvalidDataException("Unterminated transaction array or trailing bytes.");
         }
         return auxiliary;
+    }
+
+    /// <summary>Reads a transaction hash given as 64 hexadecimal digits.</summary>
+    /// <param name="txHash">The transaction hash.</param>
+    /// <returns>The 32 hash bytes.</returns>
+    /// <exception cref="ArgumentException">The hash is null or not 64 hexadecimal digits.</exception>
+    public static byte[] TransactionHash(string txHash)
+    {
+        ArgumentNullException.ThrowIfNull(txHash);
+        byte[] hash = new byte[32];
+        return txHash.Length == 64 && Convert.FromHexString(txHash, hash, out _, out _) == OperationStatus.Done
+            ? hash
+            : throw new ArgumentException("Expected a 32-byte transaction hash in hex.", nameof(txHash));
     }
 }

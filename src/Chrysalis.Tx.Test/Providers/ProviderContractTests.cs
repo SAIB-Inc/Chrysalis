@@ -1,5 +1,6 @@
 using System.Net;
 using Chrysalis.Codec.Types.Cardano.Core.Transaction;
+using Chrysalis.Network.Cbor.LocalTxMonitor;
 using Chrysalis.Tx.Providers;
 using Chrysalis.Wallet.Models.Enums;
 using Xunit;
@@ -101,6 +102,38 @@ public class ProviderContractTests
         Assert.Empty(await koios.GetUtxosAsync([], timeout.Token));
         Assert.Empty(await kupmios.GetUtxosByPaymentKeysAsync([], timeout.Token));
         Assert.Empty(await kupmios.GetUtxosByOutRefsAsync(new List<TransactionInput>(), timeout.Token));
+        Assert.Empty(stub.Requests);
+    }
+
+    [Theory]
+    [InlineData('0', 64, true)]
+    [InlineData('0', 0, false)]
+    [InlineData(' ', 64, false)]
+    [InlineData('0', 62, false)]
+    [InlineData('0', 63, false)]
+    [InlineData('0', 65, false)]
+    [InlineData('0', 66, false)]
+    [InlineData('z', 64, false)]
+    public async Task TransactionHashesAreCheckedBeforeIo(char digit, int length, bool valid)
+    {
+        using CancellationTokenSource canceled = new(TimeSpan.FromSeconds(10));
+        await canceled.CancelAsync();
+        string hash = new(digit, length);
+        using StubHttpHandler stub = new(_ => throw new InvalidOperationException("Unexpected request."));
+        using Kupmios kupmios = KupmiosTests.Create(stub);
+        Ouroboros ouroboros = new("missing-test-node.sock");
+        if (valid)
+        {
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => ouroboros.GetUtxoByOutRefAsync(hash, 0, canceled.Token));
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => kupmios.GetUtxoByOutRefAsync(hash, 0, canceled.Token));
+            _ = LocalTxMonitorMessages.HasTx(hash);
+        }
+        else
+        {
+            await Assert.ThrowsAsync<ArgumentException>(() => ouroboros.GetUtxoByOutRefAsync(hash, 0, canceled.Token));
+            await Assert.ThrowsAsync<ArgumentException>(() => kupmios.GetUtxoByOutRefAsync(hash, 0, canceled.Token));
+            _ = Assert.Throws<ArgumentException>(() => LocalTxMonitorMessages.HasTx(hash));
+        }
         Assert.Empty(stub.Requests);
     }
 

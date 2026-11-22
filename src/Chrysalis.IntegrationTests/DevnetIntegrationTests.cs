@@ -23,8 +23,10 @@ using Chrysalis.Network.Core;
 using Chrysalis.Network.MiniProtocols;
 using Chrysalis.Network.Multiplexer;
 using Chrysalis.Tx.Builders;
+using Chrysalis.Tx.Models;
 using Chrysalis.Tx.Models.Cbor;
 using Chrysalis.Tx.Providers;
+using Chrysalis.Wallet.Models.Enums;
 using Xunit;
 using Env = Chrysalis.IntegrationTests.IntegrationEnvironment;
 using LsqAcquired = Chrysalis.Network.Cbor.LocalStateQuery.Messages.Acquired;
@@ -324,26 +326,10 @@ public sealed class DevnetIntegrationTests
     {
         Env.RequireDevnet();
         Env.RequireFundedOptIn();
-        TransactionInput collateral = FundingSelection.ParseInputReference(Env.Required(Env.CollateralTxIn));
         using CancellationTokenSource deadline = new(TimeSpan.FromMinutes(3));
-        await OracleCli.RecordVersionAsync(deadline.Token);
-
-        FundedIntegrationTests.SelfTransfer? built = null;
-        await FundedIntegrationTests.WithWalletKeyAsync(
-            async (key, ct) => built = await FundedIntegrationTests.BuildSelfTransferAsync(key, collateral, 2_000_000, AddReadBackOutputs, ct),
-            deadline.Token);
-        FundedIntegrationTests.SelfTransfer transfer = built ?? throw new InvalidOperationException("Self-transfer was not built.");
-
         using Kupmios provider = new(Env.Required(Env.KupoUrl), Env.Required(Env.OgmiosUrl));
-        string submitted = await provider.SubmitTransactionAsync(transfer.Signed, deadline.Token);
-        Assert.Equal(transfer.TxId, submitted, StringComparer.OrdinalIgnoreCase);
-
-        string transferOutref = transfer.TxId + "#" + transfer.Index.ToString(CultureInfo.InvariantCulture);
-        await FundedIntegrationTests.WaitForOutputAsync(transferOutref, 2_000_000, deadline.Token);
-
-        int outputCount = Assert.IsType<PostMaryTransaction>(transfer.Signed).Body.Outputs().Count();
+        (FundedIntegrationTests.SelfTransfer transfer, int outputCount, string[] cliArgs) = await SubmitReadBackTransferAsync(provider, deadline.Token);
         List<(string TxHash, ulong OutputIndex)> refs = [.. Enumerable.Range(0, outputCount).Select(i => (transfer.TxId, (ulong)i))];
-        string[] cliArgs = ["utxo", .. refs.SelectMany(r => new[] { "--tx-in", r.TxHash + "#" + r.OutputIndex.ToString(CultureInfo.InvariantCulture) }), "--output-json"];
 
         using HttpClient http = KupoClient();
         (JsonElement expected, List<ResolvedInput> actual) = await OracleCli.AtStableTipAsync("kupmios-readback", async (tip, ct) =>
@@ -355,6 +341,63 @@ public sealed class DevnetIntegrationTests
         }, deadline.Token);
 
         ProtocolOracles.AssertUtxos(expected, AsResponse(actual));
+    }
+
+    /// <summary>Submits datum-hash, inline-datum and reference-script outputs via Ouroboros and compares read-back with the CLI.</summary>
+    [IntegrationFact([Env.Socket, Env.Magic, Env.Cli, Env.NodeVersion, Env.Output, Env.WalletFile, Env.FundedOptIn, Env.CollateralTxIn])]
+    [Trait("Category", "Integration")]
+    public async Task OuroborosSubmitsAndReadsBackAsTheNodeHoldsIt()
+    {
+        Env.RequireDevnet();
+        Env.RequireFundedOptIn();
+        Ouroboros provider = new(Env.Required(Env.Socket), Env.NetworkMagic);
+        Assert.Equal(NetworkType.Unknown, provider.NetworkType);
+        using CancellationTokenSource deadline = new(TimeSpan.FromMinutes(3));
+        (FundedIntegrationTests.SelfTransfer transfer, int outputCount, string[] cliArgs) = await SubmitReadBackTransferAsync(provider, deadline.Token);
+        byte[] txIdBytes = Convert.FromHexString(transfer.TxId);
+
+        (JsonElement expected, List<ResolvedInput> byOutref, List<ResolvedInput> byAddress) = await OracleCli.AtStableTipAsync("ouroboros-readback", async (_, ct) =>
+        {
+            JsonElement cliUtxos = await OracleCli.QueryJsonAsync("ouroboros-readback-oracle", ct, cliArgs);
+            List<ResolvedInput> found = [];
+            for (ulong i = 0; i < (ulong)outputCount; i++)
+            {
+                ResolvedInput? one = await provider.GetUtxoByOutRefAsync(transfer.TxId, i, ct);
+                Assert.NotNull(one);
+                found.Add(one);
+            }
+            List<ResolvedInput> all = await provider.GetUtxosAsync([transfer.Address], ct);
+            List<ResolvedInput> filtered = [.. all.Where(u => u.Outref.TransactionId.Span.SequenceEqual(txIdBytes)).OrderBy(u => u.Outref.Index)];
+            return (cliUtxos, found, filtered);
+        }, deadline.Token);
+
+        ProtocolOracles.AssertUtxos(expected, AsResponse(byOutref));
+        ProtocolOracles.AssertUtxos(expected, AsResponse(byAddress));
+        Assert.Equal(byOutref.Select(u => CborSerializer.Serialize(u.Output)), byAddress.Select(u => CborSerializer.Serialize(u.Output)));
+        Assert.Contains(byOutref, u => u.Output is AlonzoTransactionOutput && u.Output.DatumHash() is not null);
+    }
+
+    private static async Task<(FundedIntegrationTests.SelfTransfer Transfer, int OutputCount, string[] CliArgs)> SubmitReadBackTransferAsync(
+        ICardanoDataProvider provider, CancellationToken cancellationToken)
+    {
+        TransactionInput collateral = FundingSelection.ParseInputReference(Env.Required(Env.CollateralTxIn));
+        await OracleCli.RecordVersionAsync(cancellationToken);
+
+        FundedIntegrationTests.SelfTransfer? built = null;
+        await FundedIntegrationTests.WithWalletKeyAsync(
+            async (key, ct) => built = await FundedIntegrationTests.BuildSelfTransferAsync(key, collateral, 2_000_000, AddReadBackOutputs, ct),
+            cancellationToken);
+        FundedIntegrationTests.SelfTransfer transfer = built ?? throw new InvalidOperationException("Self-transfer was not built.");
+
+        string submitted = await provider.SubmitTransactionAsync(transfer.Signed, cancellationToken);
+        Assert.Equal(transfer.TxId, submitted, StringComparer.OrdinalIgnoreCase);
+
+        string transferOutref = transfer.TxId + "#" + transfer.Index.ToString(CultureInfo.InvariantCulture);
+        await FundedIntegrationTests.WaitForOutputAsync(transferOutref, 2_000_000, cancellationToken);
+
+        int outputCount = Assert.IsType<PostMaryTransaction>(transfer.Signed).Body.Outputs().Count();
+        string[] cliArgs = ["utxo", .. Enumerable.Range(0, outputCount).SelectMany(i => new[] { "--tx-in", transfer.TxId + "#" + i.ToString(CultureInfo.InvariantCulture) }), "--output-json"];
+        return (transfer, outputCount, cliArgs);
     }
 
     private static HttpClient KupoClient()
