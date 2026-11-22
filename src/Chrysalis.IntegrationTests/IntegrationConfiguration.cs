@@ -1,14 +1,20 @@
 using System.Globalization;
 using System.Net;
+using System.Runtime.CompilerServices;
+using System.Text.Json;
 using Chrysalis.Network.Cbor.Handshake;
 using Xunit;
+using Xunit.Sdk;
+using Xunit.v3;
 
-[assembly: CollectionBehavior(DisableTestParallelization = true)]
+[assembly: Parallelization(Mode = ParallelMode.None)]
 
 namespace Chrysalis.IntegrationTests;
 
 internal static class IntegrationEnvironment
 {
+    private static readonly Lazy<ulong> _devnetMagic = new(ReadDevnetMagic);
+
     internal const string Socket = "CHRYSALIS_NODE_SOCKET";
     internal const string Magic = "CHRYSALIS_NETWORK_MAGIC";
     internal const string NodeVersion = "CHRYSALIS_NODE_VERSION";
@@ -24,6 +30,12 @@ internal static class IntegrationEnvironment
     internal const string ForcedN2CVersion = "CHRYSALIS_N2C_VERSION";
     internal const string CliBinary = "CHRYSALIS_CARDANO_CLI_BINARY";
     internal const string BlockfrostFile = "CHRYSALIS_BLOCKFROST_KEY_FILE";
+    internal const string KupoUrl = "CHRYSALIS_KUPO_URL";
+    internal const string OgmiosUrl = "CHRYSALIS_OGMIOS_URL";
+
+    internal static ulong DevnetMagic => _devnetMagic.Value;
+
+    internal static bool IsDevnet(ulong magic) => magic == DevnetMagic;
 
     internal static string Required(string variable) =>
         string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable(variable))
@@ -108,6 +120,31 @@ internal static class IntegrationEnvironment
             throw new InvalidOperationException("This integration route is authorized for Preprod (magic 1) only.");
         }
     }
+
+    internal static void RequireDevnet()
+    {
+        if (!IsDevnet(NetworkMagic))
+        {
+            throw new InvalidOperationException("This integration route is authorized for the private devnet only.");
+        }
+    }
+
+    internal static void RequirePreprodOrDevnet()
+    {
+        ulong magic = NetworkMagic;
+        if (magic != 1 && !IsDevnet(magic))
+        {
+            throw new InvalidOperationException("This integration route is authorized for Preprod (magic 1) or the private devnet only.");
+        }
+    }
+
+    private static ulong ReadDevnetMagic()
+    {
+        using Stream stream = typeof(IntegrationEnvironment).Assembly.GetManifestResourceStream("Devnet/shelley-spec.json")
+            ?? throw new InvalidOperationException("Missing embedded devnet shelley-spec.json.");
+        using JsonDocument spec = JsonDocument.Parse(stream);
+        return spec.RootElement.GetProperty("networkMagic").GetUInt64();
+    }
 }
 
 /// <summary>Discovers a real skipped fact, with a reason, when required configuration is absent.</summary>
@@ -116,7 +153,13 @@ public sealed class IntegrationFactAttribute : FactAttribute
 {
     /// <summary>Initializes an opt-in fact without reading any credential file.</summary>
     /// <param name="requiredEnvironment">Names of the required environment variables.</param>
-    public IntegrationFactAttribute(params string[] requiredEnvironment)
+    /// <param name="sourceFilePath">Caller source file path supplied by the compiler.</param>
+    /// <param name="sourceLineNumber">Caller source line number supplied by the compiler.</param>
+    public IntegrationFactAttribute(
+        string[] requiredEnvironment,
+        [CallerFilePath] string? sourceFilePath = null,
+        [CallerLineNumber] int sourceLineNumber = -1)
+        : base(sourceFilePath, sourceLineNumber)
     {
         ArgumentNullException.ThrowIfNull(requiredEnvironment);
         RequiredEnvironment = Array.AsReadOnly(requiredEnvironment);

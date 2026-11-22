@@ -182,7 +182,7 @@ internal static class ProtocolOracles
             Assert.NotNull(output);
             byte[] address = input.Value.TryGetProperty("addressHex", out JsonElement addressHex)
                 ? Convert.FromHexString(addressHex.GetString()!) : WalletAddress.FromBech32(input.Value.GetProperty("address").GetString()!).ToBytes();
-            Assert.Equal(address, output.Address().ToArray());
+            Assert.True(output.Address().ToArray().AsSpan().SequenceEqual(address), "CLI UTxO address differs: " + input.Name);
             AssertDatumAndScript(input.Value, output);
             JsonElement value = input.Value.GetProperty("value");
             Assert.Equal(value.GetProperty("lovelace").GetUInt64(), output.Amount().Lovelace());

@@ -15,11 +15,21 @@ case "${1:-}" in
       filter='Category=Integration&FullyQualifiedName~ConwaySelfTransferKeepsTheDijkstraNodesAnswer'
       shift
     fi ;;
+  --devnet)
+    devnet_magic=$(sed -n 's/.*"networkMagic": *\([0-9][0-9]*\).*/\1/p' "$root/test/devnet/shelley-spec.json")
+    if ! { [ -n "$devnet_magic" ] && [ "${CHRYSALIS_NETWORK_MAGIC:-}" = "$devnet_magic" ]; }; then
+      printf '%s\n' "run.sh --devnet: CHRYSALIS_NETWORK_MAGIC is not the devnet's" >&2
+      exit 2
+    fi
+    export CHRYSALIS_IT_FUNDED=1
+    filter="$filter&FullyQualifiedName!~DijkstraIntegrationTests&FullyQualifiedName!~BlockfrostPreprodParametersMatchCli"
+    shift ;;
   --include-known) filter='Category=Integration'; shift ;;
   --funded) export CHRYSALIS_IT_FUNDED=1; filter='Category=Integration&FullyQualifiedName~FundedIntegrationTests'; shift ;;
   --help)
-    printf '%s\n' 'Usage: run.sh [--include-known|--funded|--dijkstra [--funded]] [dotnet test options]' \
+    printf '%s\n' 'Usage: run.sh [--devnet|--include-known|--funded|--dijkstra [--funded]] [dotnet test options]' \
       'Default excludes only known-defect traits. Missing environment produces real skips.' \
+      '--devnet runs only inside the Mac devnet guest (started by the container runner devnet mode).' \
       'See src/Chrysalis.IntegrationTests/README.md before configuring credentials.'
     exit 0 ;;
 esac
