@@ -17,11 +17,12 @@ public static class LocalStateQueryExtension
     private const string DeserializationError = "Failed to deserialize response";
 
     /// <summary>
-    /// Acquires fresh state at the volatile tip, asks its ledger era, and sends the query built for that era, or returns
-    /// the era answer itself when <paramref name="eraQuery"/> is null; then releases.
+    /// Acquires fresh state at the volatile tip and sends <paramref name="query"/>. With <paramref name="eraQuery"/> null it
+    /// returns that answer; otherwise the answer is the ledger era, and it sends the query built for that era. Then releases.
     /// </summary>
     private static async Task<T> ExecuteWithFreshStateAsync<T>(
         this LocalStateQuery localStateQuery,
+        IQueryReq query,
         Func<Era, IQueryReq>? eraQuery,
         CancellationToken cancellationToken) where T : CborRecord
     {
@@ -36,10 +37,10 @@ public static class LocalStateQueryExtension
 
         try
         {
-            Result eraAnswer = await localStateQuery.QueryAsync(RawQueries.GetCurrentEra, cancellationToken).ConfigureAwait(false);
+            Result answer = await localStateQuery.QueryAsync(query, cancellationToken).ConfigureAwait(false);
             return eraQuery is null
-                ? DecodeResult<T>(eraAnswer, eraSpecific: false)
-                : DecodeResult<T>(await localStateQuery.QueryAsync(eraQuery(LedgerEra(eraAnswer)), cancellationToken).ConfigureAwait(false), eraSpecific: true);
+                ? DecodeResult<T>(answer, eraSpecific: false)
+                : DecodeResult<T>(await localStateQuery.QueryAsync(eraQuery(LedgerEra(answer)), cancellationToken).ConfigureAwait(false), eraSpecific: true);
         }
         finally
         {
@@ -59,7 +60,7 @@ public static class LocalStateQueryExtension
     public static Task<Tip> GetTipAsync(this LocalStateQuery localStateQuery, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(localStateQuery);
-        return localStateQuery.ExecuteWithFreshStateAsync<Tip>(RawQueries.GetTip, cancellationToken);
+        return localStateQuery.ExecuteWithFreshStateAsync<Tip>(RawQueries.GetCurrentEra, RawQueries.GetTip, cancellationToken);
     }
 
     /// <summary>
@@ -73,7 +74,35 @@ public static class LocalStateQueryExtension
     public static Task<CurrentEraQueryResponse> GetCurrentEraAsync(this LocalStateQuery localStateQuery, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(localStateQuery);
-        return localStateQuery.ExecuteWithFreshStateAsync<CurrentEraQueryResponse>(null, cancellationToken);
+        return localStateQuery.ExecuteWithFreshStateAsync<CurrentEraQueryResponse>(RawQueries.GetCurrentEra, null, cancellationToken);
+    }
+
+    /// <summary>
+    /// Gets the system start, the UTC time of slot zero, in any era. Always re-acquires state to ensure fresh data.
+    /// </summary>
+    /// <param name="localStateQuery">The LocalStateQuery protocol instance.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>A task yielding the system start.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when the result cannot be decoded.</exception>
+    /// <exception cref="CborDecodeException">Thrown when the node's reply is not a well-formed result message.</exception>
+    public static Task<SystemStartResponse> GetSystemStartAsync(this LocalStateQuery localStateQuery, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(localStateQuery);
+        return localStateQuery.ExecuteWithFreshStateAsync<SystemStartResponse>(RawQueries.GetSystemStart, null, cancellationToken);
+    }
+
+    /// <summary>
+    /// Gets the era history, one summary per era the ledger knows, in any era. Always re-acquires state to ensure fresh data.
+    /// </summary>
+    /// <param name="localStateQuery">The LocalStateQuery protocol instance.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>A task yielding the era history.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when the result cannot be decoded.</exception>
+    /// <exception cref="CborDecodeException">Thrown when the node's reply is not a well-formed result message.</exception>
+    public static Task<EraHistoryResponse> GetEraHistoryAsync(this LocalStateQuery localStateQuery, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(localStateQuery);
+        return localStateQuery.ExecuteWithFreshStateAsync<EraHistoryResponse>(RawQueries.GetEraHistory, null, cancellationToken);
     }
 
     /// <summary>
@@ -87,7 +116,7 @@ public static class LocalStateQueryExtension
     public static Task<CurrentProtocolParamsResponse> GetCurrentProtocolParamsAsync(this LocalStateQuery localStateQuery, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(localStateQuery);
-        return localStateQuery.ExecuteWithFreshStateAsync<CurrentProtocolParamsResponse>(RawQueries.GetCurrentProtocolParams, cancellationToken);
+        return localStateQuery.ExecuteWithFreshStateAsync<CurrentProtocolParamsResponse>(RawQueries.GetCurrentEra, RawQueries.GetCurrentProtocolParams, cancellationToken);
     }
 
     /// <summary>
@@ -105,7 +134,7 @@ public static class LocalStateQueryExtension
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(localStateQuery);
-        return localStateQuery.ExecuteWithFreshStateAsync<UtxoByAddressResponse>(era => RawQueries.GetUtxoByAddress(addresses, era), cancellationToken);
+        return localStateQuery.ExecuteWithFreshStateAsync<UtxoByAddressResponse>(RawQueries.GetCurrentEra, era => RawQueries.GetUtxoByAddress(addresses, era), cancellationToken);
     }
 
     /// <summary>
@@ -123,7 +152,7 @@ public static class LocalStateQueryExtension
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(localStateQuery);
-        return localStateQuery.ExecuteWithFreshStateAsync<UtxoByAddressResponse>(era => RawQueries.GetUtxoByTxIns(txIns, era), cancellationToken);
+        return localStateQuery.ExecuteWithFreshStateAsync<UtxoByAddressResponse>(RawQueries.GetCurrentEra, era => RawQueries.GetUtxoByTxIns(txIns, era), cancellationToken);
     }
 
     /// <summary>Decodes a helper's result, or throws for an era mismatch or a result that cannot be decoded.</summary>

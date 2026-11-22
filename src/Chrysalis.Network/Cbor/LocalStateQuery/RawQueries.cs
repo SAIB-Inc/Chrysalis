@@ -38,6 +38,16 @@ public static class RawQueries
     public static IQueryReq GetCurrentEra => new BaseQuery(0, new BaseQuery(2, new GlobalQuery(1)));
 
     /// <summary>
+    /// Gets a query request to retrieve the system start: the UTC time of slot zero. It is not era-specific.
+    /// </summary>
+    public static IQueryReq GetSystemStart => new GlobalQuery(1);
+
+    /// <summary>
+    /// Gets a query request to retrieve the era history: one summary per era the ledger knows. It is not era-specific.
+    /// </summary>
+    public static IQueryReq GetEraHistory => new BaseQuery(0, new BaseQuery(2, new GlobalQuery(0)));
+
+    /// <summary>
     /// Gets a query request to retrieve the current chain tip.
     /// </summary>
     /// <param name="era">The ledger era of the acquired state, Shelley or later, as the current-era query answered it.</param>

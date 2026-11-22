@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using Chrysalis.Codec.Serialization;
 using Chrysalis.Codec.Types;
 using Chrysalis.Codec.Types.Cardano.Core;
+using Chrysalis.Codec.Types.Cardano.Core.Protocol;
 using Chrysalis.Network.Cbor.Common;
 using Chrysalis.Network.Cbor.LocalStateQuery;
 using Chrysalis.Network.Core;
@@ -12,7 +13,8 @@ namespace Chrysalis.Network.Tests;
 
 // D17 provenance (Apache-2.0): ouroboros-consensus release-ouroboros-consensus-5.4.0.0 (808e4005),
 // ouroboros-consensus-cardano/golden/cardano/QueryVersion3/CardanoNodeToClientVersion19/
-// Result_EraMismatchByron, Result_EraMismatchShelley, and the Babbage and Conway GetLedgerTip and GetCurrentPParams queries;
+// Result_EraMismatchByron, Result_EraMismatchShelley, the Babbage and Conway GetLedgerTip and GetCurrentPParams queries, and
+// Result_Babbage_LedgerTip and Result_Babbage_EmptyPParams;
 // MsgResult framing from ouroboros-network Codec.hs:112-115.
 public sealed class N1QueryResultTests
 {
@@ -83,6 +85,34 @@ public sealed class N1QueryResultTests
         Assert.Equal(expected, CborSerializer.Serialize(request));
     }
 
+    // D17: Result_Babbage_LedgerTip and Result_Babbage_EmptyPParams, read through the helpers.
+    [Theory]
+    [InlineData("tip", "8182095820376ca6b0aff61f1de5bb12326a5c1b9fed98e886274c1bf05144142d5fb7b3a0", "6685ca9dfcafdc837b735408fc678534d671a00715c9d8c22a0eef7a0ccc9be6")]
+    [InlineData("parameters", "8196000000190800000000001864d81e820001d81e820001d81e8200018207000000a082d81e820001d81e82000182000082000000189605", "dd1fb4c34cb5358cd8e51877d34e48f68026d21bbbc738911d0c9f03681f26fe")]
+    public async Task HelperReadsABabbageAnswer(string helper, string hex, string sha256)
+    {
+        byte[] golden = Convert.FromHexString(hex);
+        Assert.Equal(sha256, Convert.ToHexStringLower(SHA256.HashData(golden)));
+        using ProtocolReplay replay = Conversation(helper, 5, [0x82, 0x04, .. golden]);
+        await using LocalStateQuery query = new(replay.Channel);
+        using CancellationTokenSource deadline = new(TimeSpan.FromSeconds(10));
+        CborRecord answer = await B1CarbonGuardTests.InvokeHelper(query, helper, deadline.Token);
+        Assert.Equal(golden, answer.Raw.ToArray());
+        if (answer is Tip tip)
+        {
+            Assert.Equal(9UL, Assert.IsType<SpecificPoint>(tip.Slot).Slot);
+            return;
+        }
+        ProtocolParams parameters = Assert.IsType<CurrentProtocolParamsResponse>(answer).ProtocolParams;
+        Assert.Equal(7UL, parameters.ProtocolVersion?.Major);
+        Assert.Equal(2048UL, parameters.MaxTransactionSize);
+        Assert.Equal(150UL, parameters.CollateralPercentage);
+        Assert.Equal(5UL, parameters.MaxCollateralInputs);
+        Assert.Null(parameters.PoolVotingThresholds);
+        Assert.Null(parameters.DRepDeposit);
+        Assert.Null(parameters.MinFeeRefScriptCostPerByte);
+    }
+
     [Theory]
     [InlineData("tip", false)]
     [InlineData("address", true)]
@@ -118,12 +148,14 @@ public sealed class N1QueryResultTests
     }
 
     // SYNTHETIC typed-error replies (exempt from D17): wrong payload type, era with null name,
-    // era with three items, and the era-mismatch golden sent to the non-era-specific era query.
+    // era with three items, the era-mismatch golden sent to the non-era-specific era query, and an integer sent as a system start and as an era history.
     [Theory]
     [InlineData("input", "82048101")]
     [InlineData("input", "8204828201f68200654279726f6e")]
     [InlineData("input", "8204828301675368656c6c65798200654279726f6e8200654279726f6e")]
     [InlineData("era", "8204" + Byron)]
+    [InlineData("system-start", "820401")]
+    [InlineData("era-history", "820401")]
     public async Task UndecodableResultIsAnInvalidOperation(string helper, string reply)
     {
         using ProtocolReplay replay = Conversation(helper, 6, Convert.FromHexString(reply));
@@ -137,9 +169,9 @@ public sealed class N1QueryResultTests
 
     // The node's Acquired (c1-in-p7-002); for an era-specific helper the era answer [4, era] (SYNTHETIC, exempt from
     // D17; for era 6 it is the capture c1-in-p7-005); then the given results.
-    private static ProtocolReplay Conversation(string helper, int era, params byte[][] results)
+    internal static ProtocolReplay Conversation(string helper, int era, params byte[][] results)
     {
-        byte[][] eraAnswer = helper == "era" ? [] : [[0x82, 0x04, (byte)era]];
+        byte[][] eraAnswer = helper is "era" or "system-start" or "era-history" ? [] : [[0x82, 0x04, (byte)era]];
         return new(ProtocolType.LocalStateQuery, [PreprodFixtureTests.Wire("c1-in-p7-002.cbor"), .. eraAnswer, .. results]);
     }
 }

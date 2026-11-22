@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Numerics;
 using System.Text.Json;
 using Chrysalis.Codec.Extensions.Cardano.Core;
 using Chrysalis.Codec.Extensions.Cardano.Core.Transaction;
@@ -108,6 +109,39 @@ public sealed class NodeIntegrationTests
         using NodeClient node = await NodeConnections.OpenAsync(deadline.Token);
         (ulong expected, CurrentEraQueryResponse actual) = await OracleCli.AtStableTipAsync("lsq-era", async (tip, ct) => (ProtocolOracles.Era(tip), await node.LocalStateQuery.GetCurrentEraAsync(ct)), deadline.Token);
         Assert.Equal(expected, actual.CurrentEra);
+    }
+
+    /// <summary>Compares the era history with the same node's CLI: the bytes, and the tip's epoch computed from it.</summary>
+    [IntegrationFact([Env.Socket, Env.Magic, Env.Cli, Env.NodeVersion, Env.Output])]
+    [Trait("Category", "Integration")]
+    public async Task EraHistoryHelperMatchesCli()
+    {
+        using CancellationTokenSource deadline = new(TimeSpan.FromSeconds(40));
+        using NodeClient node = await NodeConnections.OpenAsync(deadline.Token);
+        (JsonElement tip, string? expected, EraHistoryResponse actual) = await OracleCli.AtStableTipAsync("lsq-era-history", async (before, ct) =>
+            (before, (await OracleCli.QueryJsonAsync("lsq-era-history-oracle", ct, "era-history")).GetProperty("cborHex").GetString(), await node.LocalStateQuery.GetEraHistoryAsync(ct)), deadline.Token);
+        Assert.Equal(expected, Convert.ToHexStringLower(actual.Raw.Span));
+        ulong slot = tip.GetProperty("slot").GetUInt64();
+        EraSummary era = Assert.Single(actual.Summaries, summary => summary.Start.Slot <= slot && (summary.End is null || slot < summary.End.Slot));
+        Assert.Equal(tip.GetProperty("epoch").GetUInt64(), era.Start.Epoch + ((slot - era.Start.Slot) / era.Parameters.EpochSize));
+        Assert.Equal(tip.GetProperty("slotInEpoch").GetUInt64(), (slot - era.Start.Slot) % era.Parameters.EpochSize);
+    }
+
+    /// <summary>Checks the system start through the same node's CLI: the slot one minute after it.</summary>
+    [IntegrationFact([Env.Socket, Env.Magic, Env.Cli, Env.NodeVersion, Env.Output])]
+    [Trait("Category", "Integration")]
+    public async Task SystemStartHelperMatchesCliSlotNumber()
+    {
+        using CancellationTokenSource deadline = new(TimeSpan.FromSeconds(40));
+        using NodeClient node = await NodeConnections.OpenAsync(deadline.Token);
+        SystemStartResponse start = await node.LocalStateQuery.GetSystemStartAsync(deadline.Token);
+        EraHistoryResponse history = await node.LocalStateQuery.GetEraHistoryAsync(deadline.Token);
+        Assert.Equal(0L, start.Utc.Ticks % TimeSpan.TicksPerSecond);
+        BigInteger minute = 60_000_000_000_000;
+        EraSummary era = Assert.Single(history.Summaries, summary => summary.Start.TimePicoseconds <= minute && (summary.End is null || minute < summary.End.TimePicoseconds));
+        ulong expected = era.Start.Slot + (ulong)((minute - era.Start.TimePicoseconds) / (era.Parameters.SlotLengthMilliseconds * 1_000_000_000UL));
+        string actual = await OracleCli.QueryAsync("lsq-system-start-oracle", deadline.Token, "slot-number", start.Utc.AddMinutes(1).ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", CultureInfo.InvariantCulture));
+        Assert.Equal(expected.ToString(CultureInfo.InvariantCulture), actual);
     }
 
     /// <summary>Compares all parameter model fields to the same node's CLI JSON.</summary>

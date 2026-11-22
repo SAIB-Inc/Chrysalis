@@ -14,6 +14,7 @@
     <EmbeddedResource Include="Fixtures/Receive/manifest.json" />
     <EmbeddedResource Include="Receive/Frozen/*.cs" />
     <EmbeddedResource Include="Receive/Frozen/SOURCE.json" />
+    <EmbeddedResource Include="../Chrysalis.Tx.Test/TestData/cli/inputs/cardano-cli/preview-era-history.json" LogicalName="Cli/preview-era-history.json" />
     <EmbeddedResource Include="Fixtures/Handshake/**/*">
       <LogicalName>$([System.String]::Copy('Chrysalis.Network.Tests.%(Identity)').Replace('\', '.').Replace('/', '.'))</LogicalName>
     </EmbeddedResource>
@@ -35,6 +36,7 @@
   <ItemGroup>
     <ProjectReference Include="../Chrysalis.Network/Chrysalis.Network.csproj" />
     <ProjectReference Include="../Chrysalis.Codec/Chrysalis.Codec.csproj" />
+    <ProjectReference Include="../Chrysalis.Network.Cli/Chrysalis.Network.Cli.csproj" />
     <ProjectReference Include="../Chrysalis.Codec.CodeGen/Chrysalis.Codec.CodeGen.csproj" 
               OutputItemType="Analyzer" 
               ReferenceOutputAssembly="false" />
