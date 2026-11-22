@@ -18,9 +18,10 @@ internal static class Program
     private const int DefaultKeepAliveSeconds = 20;
     private const int DefaultBlockCount = 100;
     private const int DefaultPipelineDepth = 50;
+    private const int MaxPipelineDepth = 6_554; // the most ChainSync.SendNextRequestBatchAsync sends in one batch
     private const int BlockFetchBatch = 100; // headers collected then fetched per batch; matches Pallas bench default
 
-    private sealed record Options(
+    internal sealed record Options(
         string Command,
         string? Socket,
         string Host,
@@ -589,7 +590,7 @@ internal static class Program
 
     #region Options parsing
 
-    private static bool TryParseOptions(string[] args, out Options options, out string? error)
+    internal static bool TryParseOptions(string[] args, out Options options, out string? error)
     {
         options = default!;
         error = null;
@@ -661,6 +662,10 @@ internal static class Program
             GetValue(map, "blocks") ?? GetEnv("BLOCKS"),
             DefaultBlockCount, "block count", ref error);
         int pipelineDepth = ParseInt(GetValue(map, "pipeline"), DefaultPipelineDepth, "pipeline depth", ref error);
+        if (pipelineDepth > MaxPipelineDepth)
+        {
+            error = $"Invalid pipeline depth value '{pipelineDepth}'. The maximum is {MaxPipelineDepth}.";
+        }
         bool headersOnly = flags.Contains("headers-only");
         bool singleFetch = flags.Contains("single");
 
@@ -753,7 +758,7 @@ internal static class Program
         Console.WriteLine("  --slot <slot>                Start slot (default: origin)");
         Console.WriteLine("  --hash <hex>                 Start block hash (hex-encoded)");
         Console.WriteLine("  --blocks <count>             Number of blocks to fetch (default 100, blockfetch only)");
-        Console.WriteLine("  --pipeline <depth>           Pipeline depth for N2N chainsync (default 50)");
+        Console.WriteLine("  --pipeline <depth>           Pipeline depth for N2N chainsync (default 50, at most 6554)");
         Console.WriteLine("  --headers-only               Skip BlockFetch, count headers only (N2N chainsync)");
         Console.WriteLine();
         Console.WriteLine("Examples:");

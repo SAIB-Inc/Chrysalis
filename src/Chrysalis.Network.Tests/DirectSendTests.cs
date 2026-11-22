@@ -144,6 +144,9 @@ public sealed class DirectSendTests
     [InlineData(6_555, false)]
     public async Task ChainSyncNextRequestBatchHonorsTheWireSizeBoundary(int count, bool accepted)
     {
+        // The network tool's --pipeline option refuses what this method refuses; its other parsed options are given, not taken from the environment.
+        Assert.Equal(accepted, Program.TryParseOptions(["chainsync", "--tcp-port", "3001", "--magic", "2", "--keepalive", "20", "--blocks", "100", "--pipeline", $"{count}"], out _, out string? error));
+        Assert.Equal(accepted ? null : $"Invalid pipeline depth value '{count}'. The maximum is 6554.", error);
         // Provide room for the rejected case, so only the production limit can reject it.
         using SendBearer bearer = new(new SendWriter(capacity: 65_550));
         using Plexer plexer = new(bearer);

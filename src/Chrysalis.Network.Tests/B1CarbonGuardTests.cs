@@ -28,6 +28,8 @@ public sealed class B1CarbonGuardTests
     [InlineData("parameters", true)]
     [InlineData("address", true)]
     [InlineData("input", true)]
+    [InlineData("system-start", true)]
+    [InlineData("era-history", true)]
     public async Task BuiltInHelpersRejectInsufficientVersionBeforeAnyWrite(string helper, bool acquired)
     {
         using ProtocolReplay replay = acquired
@@ -62,6 +64,8 @@ public sealed class B1CarbonGuardTests
     [InlineData("parameters", true)]
     [InlineData("address", true)]
     [InlineData("input", true)]
+    [InlineData("system-start", true)]
+    [InlineData("era-history", true)]
     public async Task BuiltInHelpersRejectUnstartedContextBeforeAnyWrite(string helper, bool acquired)
     {
         using ProtocolReplay replay = acquired
@@ -145,6 +149,8 @@ public sealed class B1CarbonGuardTests
         "parameters" => await query.GetCurrentProtocolParamsAsync(token),
         "address" => await query.GetUtxosByAddressAsync([PreprodFixtureTests.Wire("c1-out-p7-012.cbor").AsMemory(^57..)], token),
         "input" => await query.GetUtxosByTxInAsync([], token),
+        "system-start" => await query.GetSystemStartAsync(token),
+        "era-history" => await query.GetEraHistoryAsync(token),
         _ => throw new ArgumentOutOfRangeException(nameof(helper))
     };
 

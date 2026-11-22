@@ -2,6 +2,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Chrysalis.Network\Chrysalis.Network.csproj" />
+    <InternalsVisibleTo Include="Chrysalis.Network.Tests" />
   </ItemGroup>
 
   <PropertyGroup>
