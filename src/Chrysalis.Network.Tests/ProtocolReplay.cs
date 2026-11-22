@@ -27,23 +27,31 @@ internal sealed class ProtocolReplay : IDisposable
 
     internal void CompleteIncoming() => Assert.True(_incoming.Writer.TryComplete());
 
-    // Replay callers await the operation that sent the frame before inspecting this pipe.
-    internal byte[] ReadSentPayload()
+    internal byte[] ReadSentPayload() => Assert.Single(ReadSentPayloads());
+
+    // Replay callers await the operations that sent the frames before inspecting this pipe.
+    internal List<byte[]> ReadSentPayloads()
     {
         Assert.True(_outgoing.Reader.TryRead(out ReadResult result), "The operation sent no bearer frame.");
         ReadOnlySequence<byte> bytes = result.Buffer;
         try
         {
             const int headerSize = ProtocolConstants.SegmentHeaderSize;
-            Assert.True(bytes.Length >= headerSize, "The operation sent an incomplete bearer header.");
             Span<byte> header = stackalloc byte[headerSize];
-            bytes.Slice(0, headerSize).CopyTo(header);
-            int size = BinaryPrimitives.ReadUInt16BigEndian(header[6..]);
-            Assert.Equal(headerSize + (long)size, bytes.Length);
-            Assert.Equal((ushort)Channel.ProtocolId, BinaryPrimitives.ReadUInt16BigEndian(header[4..]));
-            return bytes.Slice(headerSize, size).ToArray();
+            List<byte[]> payloads = [];
+            while (!bytes.IsEmpty)
+            {
+                Assert.True(bytes.Length >= headerSize, "The operation sent an incomplete bearer header.");
+                bytes.Slice(0, headerSize).CopyTo(header);
+                int size = BinaryPrimitives.ReadUInt16BigEndian(header[6..]);
+                Assert.True(bytes.Length >= headerSize + (long)size, "The operation sent an incomplete bearer frame.");
+                Assert.Equal((ushort)Channel.ProtocolId, BinaryPrimitives.ReadUInt16BigEndian(header[4..]));
+                payloads.Add(bytes.Slice(headerSize, size).ToArray());
+                bytes = bytes.Slice(headerSize + size);
+            }
+            return payloads;
         }
-        finally { _outgoing.Reader.AdvanceTo(bytes.End); }
+        finally { _outgoing.Reader.AdvanceTo(result.Buffer.End); }
     }
 
     internal void AssertNothingSent()

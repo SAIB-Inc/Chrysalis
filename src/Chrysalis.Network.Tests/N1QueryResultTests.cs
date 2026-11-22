@@ -1,7 +1,9 @@
 using System.Security.Cryptography;
 using Chrysalis.Codec.Serialization;
 using Chrysalis.Codec.Types;
+using Chrysalis.Codec.Types.Cardano.Core;
 using Chrysalis.Network.Cbor.Common;
+using Chrysalis.Network.Cbor.LocalStateQuery;
 using Chrysalis.Network.Core;
 using Chrysalis.Network.MiniProtocols;
 using Xunit;
@@ -10,7 +12,8 @@ namespace Chrysalis.Network.Tests;
 
 // D17 provenance (Apache-2.0): ouroboros-consensus release-ouroboros-consensus-5.4.0.0 (808e4005),
 // ouroboros-consensus-cardano/golden/cardano/QueryVersion3/CardanoNodeToClientVersion19/
-// Result_EraMismatchByron and Result_EraMismatchShelley; MsgResult framing from ouroboros-network Codec.hs:112-115.
+// Result_EraMismatchByron, Result_EraMismatchShelley, and the Babbage and Conway GetLedgerTip and GetCurrentPParams queries;
+// MsgResult framing from ouroboros-network Codec.hs:112-115.
 public sealed class N1QueryResultTests
 {
     internal const string Byron = "828201675368656c6c65798200654279726f6e";
@@ -27,22 +30,77 @@ public sealed class N1QueryResultTests
         return from helper in helpers from mismatch in cases select new object[] { helper, mismatch.Hex, mismatch.Sha256, mismatch.QueryEra, mismatch.LedgerEra };
     }
 
+    // Eras 1 and 5 send that era's request but replay the Conway capture as the result: those rows check the request side only.
     [Theory]
-    [InlineData("tip", 3)]
-    [InlineData("era", 5)]
-    [InlineData("parameters", 7)]
-    [InlineData("address", 9)]
-    [InlineData("input", 11)]
-    public async Task HelperReturnsTheCapturedResultAndReleases(string helper, int sequence)
+    [InlineData("tip", 3, 6, "c1-out-p7-003")]
+    [InlineData("tip", 3, 5, "c1-out-p7-003")]
+    [InlineData("tip", 3, 1, "c1-out-p7-003")]
+    [InlineData("era", 5, 6, null)]
+    [InlineData("parameters", 7, 6, "c1-out-p7-009")]
+    [InlineData("parameters", 7, 5, "c1-out-p7-009")]
+    [InlineData("address", 9, 6, "c1-out-p7-012")]
+    [InlineData("address", 9, 5, "c1-out-p7-012")]
+    [InlineData("input", 11, 6, "c1-out-p7-015")]
+    [InlineData("input", 11, 5, "c1-out-p7-015")]
+    public async Task HelperQueriesInTheLedgerEraAndReturnsTheCapturedResult(string helper, int sequence, int era, string? conwayQuery)
     {
         byte[] reply = PreprodFixtureTests.Wire($"c1-in-p7-{sequence:D3}.cbor");
-        using ProtocolReplay replay = new(ProtocolType.LocalStateQuery, PreprodFixtureTests.Wire($"c1-in-p7-{sequence - 1:D3}.cbor"), reply);
+        using ProtocolReplay replay = Conversation(helper, era, reply);
         await using LocalStateQuery query = new(replay.Channel);
         using CancellationTokenSource deadline = new(TimeSpan.FromSeconds(10));
         CborRecord answer = await B1CarbonGuardTests.InvokeHelper(query, helper, deadline.Token);
         Assert.Equal(reply[2..], answer.Raw.ToArray());
         Assert.Null((answer as Tip)?.BlockNumber);
         Assert.False(query.IsAcquired);
+        // Acquire, the era query as cardano-cli sends it (c4-out-p7-003), the query in the answered era, release.
+        List<byte[]> sent = replay.ReadSentPayloads();
+        Assert.Equal(conwayQuery is null ? 3 : 4, sent.Count);
+        Assert.Equal(PreprodFixtureTests.Wire("c1-out-p7-002.cbor"), sent[0]);
+        Assert.Equal(PreprodFixtureTests.Wire("c4-out-p7-003.cbor"), sent[1]);
+        if (conwayQuery is not null)
+        {
+            // G1's Conway query, which the node answered, with the era byte of [3, [0, [0, [era, query]]]] set.
+            byte[] expected = PreprodFixtureTests.Wire($"{conwayQuery}.cbor");
+            expected[7] = (byte)era;
+            Assert.Equal(expected, sent[2]);
+        }
+        Assert.Equal(PreprodFixtureTests.Wire("c1-out-p7-004.cbor"), sent[^1]);
+    }
+
+    // D17: the block queries [0, [era, query]] of Query_<era>_GetLedgerTip and Query_<era>_GetCurrentPParams,
+    // inside the query envelope [0, block query] (ouroboros-consensus 5.4.0.0 Ledger/Query.hs:420-427).
+    [Theory]
+    [InlineData("tip", 5, "820082058100", "974dfab2a8018adfe9b5eef72f38af9f29148c81cc1cd85f66616eb1bb7085cf")]
+    [InlineData("tip", 6, "820082068100", "fd80b9f6d2f00c3a3ee2e9dd125f00b7e9b8a9a1450659a7f2f236d424615ed9")]
+    [InlineData("parameters", 5, "820082058103", "db3d61b6341764599c44dd2b3fa5a5eeb715a2725355595052eec428d0c7053b")]
+    [InlineData("parameters", 6, "820082068103", "78697eb8345aaeff303bc5ba1af930be40f9f62925b566b87cfea11ab2545409")]
+    public void BlockQueryNamesTheGivenEra(string query, int era, string hex, string sha256)
+    {
+        byte[] golden = Convert.FromHexString(hex);
+        Assert.Equal(sha256, Convert.ToHexStringLower(SHA256.HashData(golden)));
+        IQueryReq request = query == "tip" ? RawQueries.GetTip((Era)era) : RawQueries.GetCurrentProtocolParams((Era)era);
+        byte[] expected = [0x82, 0x00, .. golden];
+        Assert.Equal(expected, CborSerializer.Serialize(request));
+    }
+
+    [Theory]
+    [InlineData("tip", false)]
+    [InlineData("address", true)]
+    public async Task HelperRefusesAnEraItCannotQuery(string helper, bool unknown)
+    {
+        // Conway + 1 stays unknown until C5 adds the era and checks its answers; then this row turns red and C5 moves it.
+        ulong era = unknown ? (ulong)Era.Conway + 1 : (ulong)Era.Byron;
+        using ProtocolReplay replay = Conversation(helper, (int)era);
+        replay.CompleteIncoming();
+        await using LocalStateQuery query = new(replay.Channel);
+        using CancellationTokenSource deadline = new(TimeSpan.FromSeconds(10));
+        InvalidOperationException failure = await Assert.ThrowsAsync<InvalidOperationException>(() => B1CarbonGuardTests.InvokeHelper(query, helper, deadline.Token));
+        Assert.Equal($"The node's ledger is in era {era}, which these helpers cannot query.", failure.Message);
+        Assert.False(query.IsAcquired);
+        List<byte[]> sent = replay.ReadSentPayloads();
+        Assert.Equal(3, sent.Count);
+        Assert.Equal(PreprodFixtureTests.Wire("c4-out-p7-003.cbor"), sent[1]);
+        Assert.Equal(PreprodFixtureTests.Wire("c1-out-p7-004.cbor"), sent[2]);
     }
 
     [Theory]
@@ -51,7 +109,7 @@ public sealed class N1QueryResultTests
     {
         byte[] golden = Convert.FromHexString(hex);
         Assert.Equal(sha256, Convert.ToHexStringLower(SHA256.HashData(golden)));
-        using ProtocolReplay replay = new(ProtocolType.LocalStateQuery, PreprodFixtureTests.Wire("c1-in-p7-002.cbor"), [0x82, 0x04, .. golden]);
+        using ProtocolReplay replay = Conversation(helper, 6, [0x82, 0x04, .. golden]);
         await using LocalStateQuery query = new(replay.Channel);
         using CancellationTokenSource deadline = new(TimeSpan.FromSeconds(10));
         InvalidOperationException failure = await Assert.ThrowsAsync<InvalidOperationException>(() => B1CarbonGuardTests.InvokeHelper(query, helper, deadline.Token));
@@ -68,12 +126,20 @@ public sealed class N1QueryResultTests
     [InlineData("era", "8204" + Byron)]
     public async Task UndecodableResultIsAnInvalidOperation(string helper, string reply)
     {
-        using ProtocolReplay replay = new(ProtocolType.LocalStateQuery, PreprodFixtureTests.Wire("c1-in-p7-002.cbor"), Convert.FromHexString(reply));
+        using ProtocolReplay replay = Conversation(helper, 6, Convert.FromHexString(reply));
         await using LocalStateQuery query = new(replay.Channel);
         using CancellationTokenSource deadline = new(TimeSpan.FromSeconds(10));
         InvalidOperationException failure = await Assert.ThrowsAsync<InvalidOperationException>(() => B1CarbonGuardTests.InvokeHelper(query, helper, deadline.Token));
         Assert.StartsWith("Failed to deserialize response: ", failure.Message, StringComparison.Ordinal);
         _ = Assert.IsAssignableFrom<CborDecodeException>(failure.InnerException);
         Assert.False(query.IsAcquired);
+    }
+
+    // The node's Acquired (c1-in-p7-002); for an era-specific helper the era answer [4, era] (SYNTHETIC, exempt from
+    // D17; for era 6 it is the capture c1-in-p7-005); then the given results.
+    private static ProtocolReplay Conversation(string helper, int era, params byte[][] results)
+    {
+        byte[][] eraAnswer = helper == "era" ? [] : [[0x82, 0x04, (byte)era]];
+        return new(ProtocolType.LocalStateQuery, [PreprodFixtureTests.Wire("c1-in-p7-002.cbor"), .. eraAnswer, .. results]);
     }
 }

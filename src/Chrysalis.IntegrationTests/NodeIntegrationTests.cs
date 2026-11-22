@@ -250,7 +250,7 @@ public sealed class NodeIntegrationTests
         string cli = await OracleCli.ExecuteAsync("rejection-oracle", ["latest", "transaction", "submit", "--tx-file", path, "--socket-path", Env.Required(Env.Socket), "--testnet-magic", Env.NetworkMagic.ToString(CultureInfo.InvariantCulture)], deadline.Token, expectFailure: true);
         const string capturedReason = "All inputs are spent. Transaction has probably already been included";
         Assert.Contains(capturedReason, cli, StringComparison.Ordinal);
-        RejectTx response = Assert.IsType<RejectTx>(await node.LocalTxSubmit.SubmitTxAsync(new SubmitTx(0, new EraTx(checked((int)ProtocolOracles.Era(await OracleCli.QueryJsonAsync("rejection-era", deadline.Token, "tip"))), new CborEncodedValue(transaction))), deadline.Token));
+        RejectTx response = Assert.IsType<RejectTx>(await node.LocalTxSubmit.SubmitTxAsync(new SubmitTx(0, new EraTx((int)Era.Conway, new CborEncodedValue(transaction))), deadline.Token));
         string reason = response.Describe();
         Assert.Contains(capturedReason, reason, StringComparison.Ordinal);
         Assert.Contains(capturedReason, cli, StringComparison.Ordinal);
