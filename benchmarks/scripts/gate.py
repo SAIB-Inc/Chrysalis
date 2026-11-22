@@ -256,6 +256,7 @@ def stage_side(info, label, output, local, inputs=None, *, allocation_platform='
         commands.append(dict(command=list(map(str, [*cli, 'restore', project, '--configfile', config, *isolation])),
                              label=name + '-restore'))
         commands.append(dict(command=list(map(str, [*cli, 'build', project, '-c', 'Release', jobs, '-warnaserror', '--no-restore', *isolation, path_map,
+                                                    *(['-p:ConcurrentGarbageCollection=false'] if allocation_platform == 'mac' and name == 'harness' else []),
                                                     *(['--no-dependencies'] if pinned or name == 'client' else [])])),
                              label=name + '-build',
                              copyClosureTo=str((directory if name == 'harness' else client_dir) / 'bin/Release' / tfm) if pinned else None))

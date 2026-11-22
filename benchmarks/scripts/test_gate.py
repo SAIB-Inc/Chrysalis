@@ -203,6 +203,48 @@ class GateTests(unittest.TestCase):
                         for flag in ('-nodeReuse:false', '--disable-build-servers', '-p:UseSharedCompilation=false'):
                             self.assertIn(flag, command)
 
+    def test_mac_stage_side_disables_concurrent_gc_on_harness_build_only(self):
+        with tempfile.TemporaryDirectory() as directory:
+            def stage(command, *_args, **_kwargs):
+                gate.stage_worker(*command[3:])
+            with patch.object(gate, 'export_side', return_value=gate.REPO), \
+                    patch.dict(os.environ, {'NUGET_PACKAGES': str(Path(directory) / 'nuget')}), \
+                    patch.object(gate, 'execute_logged', side_effect=stage), \
+                    patch.object(gate.subprocess, 'call', return_value=0) as run:
+                gate.stage_side(side(commit='candidate'), 'fixture', Path(directory), dict(pinnedBaseline='fixture'), allocation_platform='mac')
+            job = json.loads((Path(directory) / 'build/fixture-staging.job.json').read_text())
+            by_label = {item['label']: item['command'] for item in job['commands']}
+            self.assertEqual(run.call_count, 4)
+            self.assertIn('-p:ConcurrentGarbageCollection=false', by_label['harness-build'])
+            for label in ('harness-restore', 'client-restore', 'client-build'):
+                self.assertFalse(any('ConcurrentGarbageCollection' in arg for arg in by_label[label]), label)
+
+    def test_non_mac_stage_side_never_disables_concurrent_gc(self):
+        cases = (
+            ('pc-default', 'candidate', {}),
+            ('pc-pinned', gate.PIN, {}),
+            ('pc-explicit', 'candidate', dict(allocation_platform='pc')),
+            ('azure-prepare', 'candidate', dict(prepare_phase='restore')),
+        )
+        for name, commit, kwargs in cases:
+            with self.subTest(case=name), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                def stage(command, *_args, **_kwargs):
+                    gate.stage_worker(*command[3:])
+                env = {'NUGET_PACKAGES': str(root / 'nuget'), 'CHRYSALIS_NUGET_SOURCE': str(root / 'feed')}
+                with patch.object(gate, 'export_side', return_value=gate.REPO), \
+                        patch.object(gate, 'check_pinned', return_value=dict(assemblySha256s={})), \
+                        patch.dict(os.environ, env), \
+                        patch.object(gate, 'execute_logged', side_effect=stage), \
+                        patch.object(gate.subprocess, 'call', return_value=0) as run:
+                    gate.stage_side(side(commit=commit), 'fixture', root, dict(pinnedBaseline='fixture'), **kwargs)
+                    if kwargs.get('prepare_phase') == 'restore':
+                        gate.stage_side(side(commit=commit), 'fixture', root, dict(pinnedBaseline='fixture'), prepare_phase='build')
+                job = json.loads((root / 'build/fixture-staging.job.json').read_text())
+                self.assertEqual(run.call_count, 4)
+                for item in job['commands']:
+                    self.assertFalse(any('ConcurrentGarbageCollection' in arg for arg in item['command']), item['label'])
+
     def test_public_worker_keeps_nonsecret_preparation_settings(self):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
