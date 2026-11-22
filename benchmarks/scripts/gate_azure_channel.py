@@ -24,6 +24,8 @@ RUN_COMMAND_SECONDS = 130
 PUSH_SECONDS = 160
 WORKER_START = 483
 STATUS_SCRIPT = '#!/bin/bash\nexec 2>/dev/null\nexec /usr/bin/python3 /usr/local/sbin/chrysalis-run-channel compact\n'
+EXECUTION_STATES = frozenset({'Unknown', 'Pending', 'Running', 'Failed', 'Succeeded', 'TimedOut', 'Canceled'})
+BOOT_CHECKS = frozenset({'cloud-init', 'timer', 'service', 'next-elapse', 'user', 'ssh', 'qdisc', 'cleanup-check'})
 
 
 def storage_spec(region):
@@ -82,6 +84,21 @@ def control_body(region,script,secret=None):
     return dict(location=region,properties=props)
 
 
+def norm_diag(value, allow):
+    if value is None:
+        return 'unavailable'
+    if isinstance(allow, re.Pattern):
+        return value if isinstance(value, str) and allow.fullmatch(value) else 'other'
+    return value if (type(value) is int if isinstance(allow, range) else isinstance(value, str)) and value in allow else 'other'
+
+
+def _boot_check(output):
+    if not isinstance(output, str) or len(output) > 4096:
+        return 'unavailable'
+    lines = [line.removeprefix('CHRYSALIS-BOOT:') for line in output.splitlines() if line.startswith('CHRYSALIS-BOOT:')]
+    return norm_diag(lines[0], BOOT_CHECKS) if len(lines) == 1 else ('other' if lines else 'unavailable')
+
+
 def _parse_guest_error(output):
     try:
         data = get_summary(output)
@@ -124,6 +141,7 @@ def command(draw,label,script,until,*,sealed=None):
             raise
     url=path+'?api-version='+VM_API+'&$expand=instanceView'
     selector='properties.instanceView.{state:executionState,code:exitCode,output:output}'
+    last_state = None
     while time.time()<until:
         try:
             result=draw.az.rest('get',url,query=selector,timeout=min(10,max(.1,until-time.time())))
@@ -131,14 +149,22 @@ def command(draw,label,script,until,*,sealed=None):
             if str(e) not in ('ResourceNotFound','timeout','TooManyRequests','ServiceUnavailable'):
                 raise
         else:
+            if result and isinstance(result,dict) and result.get('state') is not None:
+                last_state = result['state']
             if result and isinstance(result,dict) and result.get('state') in ('Succeeded','Failed','Canceled','TimedOut'):
                 if result['state']!='Succeeded' or result['code']!=0:
                     err = _parse_guest_error(result.get('output'))
                     if err is not None and getattr(draw, 'guest_error', None) is None:
                         draw.guest_error = {'command': label, **err}
+                    if label == 'init':
+                        draw.diag['init'] = dict(executionState=norm_diag(result.get('state'), EXECUTION_STATES),
+                                                 exitCode=norm_diag(result.get('code'), range(-255, 256)),
+                                                 bootCheck=_boot_check(result.get('output')))
                     raise GuardFailure(f'guest Run Command {label} did not succeed')
                 return get_summary(result['output'])
         time.sleep(min(5,max(0,until-time.time())))
+    if label == 'init':
+        draw.diag['init'] = dict(executionState=norm_diag(last_state, EXECUTION_STATES), exitCode='unavailable', bootCheck='unavailable')
     raise GuardFailure(f'guest Run Command {label} exceeded its work deadline')
 
 
@@ -152,26 +178,36 @@ def boot_script(group, shutdown, helper):
 set -euo pipefail
 exec 2>/dev/null
 limit=$(( $(date +%s) + 95 ))
+failed=unknown
 while [ "$(date +%s)" -lt "$limit" ]; do
   next=$(systemctl show chrysalis-guest-cleanup.timer -p NextElapseUSecRealtime --value || true)
+  failed=cloud-init
   if cloud_status=$(cloud-init status 2>/dev/null) &&
      grep -Fxq 'status: done' <<<"$cloud_status" &&
+     failed=timer &&
      systemctl is-active --quiet chrysalis-guest-cleanup.timer &&
      systemctl is-enabled --quiet chrysalis-guest-cleanup.timer &&
      systemctl cat chrysalis-guest-cleanup.timer | grep -Fxq {shlex.quote(expected)} &&
+     failed=service &&
      systemctl cat chrysalis-guest-cleanup.service | grep -Fxq {shlex.quote('ExecStart=/usr/bin/python3 /usr/local/sbin/chrysalis-guest-cleanup '+group+' delete')} &&
+     failed=next-elapse &&
      test -n "$next" && test "$next" != n/a &&
+     failed=user &&
      test "$(getent passwd {USER} | cut -d: -f7)" = /usr/sbin/nologin &&
      passwd -S {USER} | awk 'END {{exit ($2=="L" ? 0 : 1)}}' &&
+     failed=ssh &&
      test "$(systemctl is-enabled ssh.service 2>/dev/null)" = masked &&
      test "$(systemctl is-enabled ssh.socket 2>/dev/null)" = masked &&
      ! systemctl is-active --quiet ssh.service ssh.socket &&
+     failed=qdisc &&
      tc qdisc show | grep -Eq '^qdisc tbf .*rate 1Mbit' &&
+     failed=cleanup-check &&
      /usr/bin/python3 /usr/local/sbin/chrysalis-guest-cleanup {group} check; then
     exec /usr/bin/python3 {helper} init
   fi
   sleep 5
 done
+printf 'CHRYSALIS-BOOT:%s\\n' "$failed"
 exit 75
 '''
 

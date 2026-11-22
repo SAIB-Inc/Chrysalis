@@ -26,7 +26,7 @@ import tempfile
 import time
 import uuid
 
-from gate_azure_channel import STATUS_SCRIPT, create_storage, run_channel, upload_inputs
+from gate_azure_channel import STATUS_SCRIPT, create_storage, norm_diag, run_channel, upload_inputs
 from gate_azure_guest import FETCH_STAGES, LOG_COUNTS, REFUSAL_REASONS
 from gate_azure_guard import (ALERT_TAIL, COPY_END, RESERVE_TAIL, WATCH_MARGIN, WRITE_END, GuardFailure,
                               alert, arm_native, check_context, cleanup_lease, mark, mutation, process_id, retire, stop_paused_driver, wsl_context)
@@ -47,6 +47,8 @@ UNAVAILABLE = {'SkuNotAvailable', 'AllocationFailed', 'OverconstrainedAllocation
 ABSENT = {'ResourceGroupNotFound', 'ResourceNotFound'}
 API_NET = '2024-05-01'
 API_VM = '2024-07-01'
+VM_PROVISIONING_STATES = frozenset({'Creating', 'Updating', 'Succeeded', 'Failed', 'Canceled', 'Deleting'})
+STATUS_CODE_RE = re.compile(r'^[A-Za-z]{1,32}(?:/[A-Za-z_-]{1,40}){1,2}$')
 
 
 def calendar(epoch):
@@ -199,6 +201,7 @@ class Draw:
         self.deadline = self.guard_end + RESERVE_TAIL
         self.worker_done = self.worker_failed = self.push_started = False
         self.guest_error = None
+        self.diag = {}
         self.commands = set()
         self.step = 'arm-watchdog'
 
@@ -308,7 +311,25 @@ class Draw:
                             raise AzureError(known)
                 raise GuardFailure('resource provisioning failed')
             return result == 'Succeeded'
-        wait_for(check, self.start + WRITE_END, label='Azure provision')
+        try:
+            wait_for(check, self.start + WRITE_END, label='Azure provision')
+        except GuardFailure as exc:
+            if path == self.path('Compute', 'virtualMachines') and str(exc) == 'Azure provision deadline reached':
+                self._diag_vm(path, api)
+            raise
+
+    def _diag_vm(self, path, api):
+        query = ('properties.{provisioningState:provisioningState,statuses:instanceView.statuses[].code,'
+                 'agentStatuses:instanceView.vmAgent.statuses[].code}')
+        try:
+            raw = self.az.rest('get', path + '?api-version=' + api + '&$expand=instanceView', query=query, timeout=7, waits=ONCE)
+        except Exception:
+            raw = None
+        d = raw if isinstance(raw, dict) else {}
+        self.diag['vm'] = dict(
+            provisioningState=norm_diag(d.get('provisioningState'), VM_PROVISIONING_STATES),
+            statuses=[norm_diag(x, STATUS_CODE_RE) for x in d['statuses'][:8]] if isinstance(d.get('statuses'), list) else 'unavailable',
+            agentStatuses=[norm_diag(x, STATUS_CODE_RE) for x in d['agentStatuses'][:4]] if isinstance(d.get('agentStatuses'), list) else 'unavailable')
 
     def resource(self, namespace, kind, props, *, name='gate', api=API_NET, sku=None):
         path = self.path(namespace, kind, name)
@@ -713,6 +734,14 @@ def authorize_dispatch(directory, go, dispatch, first):
         raise Refusal(message) from None
 
 
+def _record_pre_ready(note, guard, cls, step, seconds, diag):
+    if not os.path.lexists(guard / 'guest-ready'):
+        atomic_json(note / 'pre-ready-failure.json', {'class': cls, 'step': step, 'seconds': seconds})
+        if diag:
+            atomic_json(note / 'pre-ready-diag.json', diag)
+            log('Azure attempt diag: ' + json.dumps(diag, sort_keys=True, separators=(',', ':')))
+
+
 def one_attempt(az, local, ledger, seal, go, directory, plan, group, region, inputs, number, draw_number, phase, fallback, context, dispatch):
     from gate_fly_guard import consume_go
     from gate_time import azure_booking
@@ -774,13 +803,11 @@ def one_attempt(az, local, ledger, seal, go, directory, plan, group, region, inp
         code = 6 if isinstance(exc, CapacityUnavailable) else 2
         step, seconds = _fixed_step(draw), round(max(0.0, time.time() - draw.start), 1)
         log(f'Azure attempt: {exc}; last Azure call: {az.last_call or "none"}; step {step}; +{seconds:.1f}s')
-        if not os.path.lexists(guard / 'guest-ready'):
-            atomic_json(note / 'pre-ready-failure.json', {'class': _exc_class(exc), 'step': step, 'seconds': seconds})
+        _record_pre_ready(note, guard, _exc_class(exc), step, seconds, draw.diag)
     except (GuardFailure, HTTPException, KeyError, OSError, RuntimeError, TarError, TypeError, ValueError) as exc:
         cls, step, seconds = _exc_class(exc), _fixed_step(draw), round(max(0.0, time.time() - draw.start), 1)
         log(f'Azure attempt invalid: {cls}; step {step}; +{seconds:.1f}s')
-        if not os.path.lexists(guard / 'guest-ready'):
-            atomic_json(note / 'pre-ready-failure.json', {'class': cls, 'step': step, 'seconds': seconds})
+        _record_pre_ready(note, guard, cls, step, seconds, draw.diag)
     finally:
         cleanup_started = time.time()
         try:

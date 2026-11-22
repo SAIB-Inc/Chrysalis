@@ -2966,3 +2966,333 @@ def test_consumers_accept_pre_ready_then_kept_and_retry_consumers_refuse(fake, s
     rc_n, dir_n, seal_n, _, _, draws_n = _run_fly(monkeypatch, site, ledger, ['pre-ready', 'kept'], seal_patch=make_noise, tag='noise')
     assert rc_n == 0 and [d['decision'] for d in draws_n] == ['invalid-pre-ready', 'kept']
     assert set(json.loads((dir_n / 'time/noise-records.json').read_text())) == {seal_n['timePlans'][0]['rows'][0]['id']}
+
+
+def _run_vm_deadline_attempt(fake, local, ledger, directory, monkeypatch, diag_handler, *, group=RUN, draw_num=1):
+    clock, diag_calls, real_rest = [30_000.0], [], fake.rest
+    for mod in (azure.time, guard.time, channel.time):
+        monkeypatch.setattr(mod, 'time', lambda: clock[0])
+    monkeypatch.setattr(azure.time, 'sleep', lambda n: clock.__setitem__(0, clock[0] + max(0, n)))
+    fake_state(fake, deletesBeforeAbsent=1)
+
+    def fake_rest(method, url, **kwargs):
+        if method == 'get' and '/virtualMachines/gate?' in url and 'expand=instanceView' in url:
+            diag_calls.append((method, url, kwargs))
+            return diag_handler(method, url, kwargs)
+        if method == 'get' and '/virtualMachines/gate?' in url and kwargs.get('query') == 'properties.provisioningState':
+            clock[0] += 100.0
+            return 'Creating'
+        return real_rest(method, url, **kwargs)
+
+    monkeypatch.setattr(fake, 'rest', fake_rest)
+    plan = dict(destroyGuardSeconds=1256, measurementCutoffSeconds=911, provider='azure',
+                limitUsd=timing.azure_booking(1256 + guard.RESERVE_TAIL))
+    rc = azure.one_attempt(fake, local, ledger, dict(platform={'azCliVersion': '2.99.1'}, programStopUsd=40),
+                           bundle.sha(directory / 'seal.json'), directory, plan, group, 'eastus2', {},
+                           0, draw_num, 'first', None, ('test', 'fixture'), 0)
+    return rc, plan, diag_calls
+
+
+def test_azdiag_vm_deadline_captures_creating_and_preserves_failure_and_redraw(fake, site, ledger, monkeypatch, capsys):
+    local, directory = site
+    prepare_attempt(monkeypatch, directory)
+    payload_resp = dict(provisioningState='Creating', statuses=['ProvisioningState/creating', 'PowerState/starting'],
+                        agentStatuses=['ProvisioningState/succeeded'])
+    rc, plan, diag_calls = _run_vm_deadline_attempt(fake, local, ledger, directory, monkeypatch, lambda *_: payload_resp)
+    out = capsys.readouterr().out.splitlines()
+    note = directory / 'time/runs' / RUN
+    assert rc == 2 and len(diag_calls) == 1
+    assert diag_calls[0][2].get('timeout') == 7 and diag_calls[0][2].get('waits') == proof.ONCE
+    failure = json.loads((note / 'pre-ready-failure.json').read_text())
+    assert set(failure) == {'class', 'step', 'seconds'}
+    assert failure['class'] == 'GuardFailure' and failure['step'] == 'wait virtualMachines' and failure['seconds'] >= 720.0
+    assert f'Azure attempt invalid: GuardFailure; step wait virtualMachines; +{failure["seconds"]:.1f}s' in out
+    expected_diag = {'vm': payload_resp}
+    diag_file = note / 'pre-ready-diag.json'
+    assert diag_file.is_file() and not diag_file.is_symlink() and (diag_file.stat().st_mode & 0o777) == 0o600
+    assert json.loads(diag_file.read_text()) == expected_diag
+    assert 'Azure attempt diag: ' + json.dumps(expected_diag, sort_keys=True, separators=(',', ':')) in out
+    assert not (note / 'guest-error.json').exists()
+    assert bundle._pre_ready_note_ok(note, plan, ledger.attempts[RUN]['booked']) is True
+    assert bundle.retry_run_ok(note, RUN, True) is True
+
+    # Direct Draw.wait: VM deadline raises exact GuardFailure; non-VM deadline makes no diag read.
+    (directory / 'nonvm').mkdir()
+    d = make_draw(fake, directory / 'nonvm', start=40_000)
+    monkeypatch.setattr(azure.time, 'time', lambda: 40_000.0 + guard.WRITE_END + 1)
+    extra = []
+    monkeypatch.setattr(fake, 'rest', lambda *a, **k: extra.append((a, k)))
+    with pytest.raises(guard.GuardFailure, match='^Azure provision deadline reached$'):
+        d.wait(d.path('Storage', 'storageAccounts', 'chry0000000000000000'), '2023-05-01')
+    assert extra == [] and d.diag == {}
+
+
+@pytest.mark.parametrize('case,expected', [
+    ('timeout', dict(provisioningState='unavailable', statuses='unavailable', agentStatuses='unavailable')),
+    ('junk', dict(provisioningState='unavailable', statuses='unavailable', agentStatuses='unavailable')),
+    ('unknown', dict(provisioningState='other', statuses=['other'], agentStatuses=['other'])),
+])
+def test_azdiag_vm_diag_read_failure_or_junk_gives_unavailable_and_same_outcome(fake, site, ledger, monkeypatch, capsys, case, expected):
+    local, directory = site
+    prepare_attempt(monkeypatch, directory)
+
+    def handler(*_):
+        if case == 'timeout':
+            raise proof.AzureError('timeout')
+        if case == 'junk':
+            return 'not-a-dict-junk'
+        return dict(provisioningState='BogusState', statuses=['bad status'], agentStatuses=['123'])
+
+    rc, plan, diag_calls = _run_vm_deadline_attempt(fake, local, ledger, directory, monkeypatch, handler)
+    out = capsys.readouterr().out
+    note = directory / 'time/runs' / RUN
+    assert rc == 2 and len(diag_calls) == 1
+    assert json.loads((note / 'pre-ready-diag.json').read_text()) == {'vm': expected}
+    assert json.loads((note / 'pre-ready-failure.json').read_text())['step'] == 'wait virtualMachines'
+    assert 'Azure attempt diag: ' + json.dumps({'vm': expected}, sort_keys=True, separators=(',', ':')) in out
+    assert bundle._pre_ready_note_ok(note, plan, ledger.attempts[RUN]['booked']) is True
+
+
+def test_azdiag_init_failed_exit75_and_work_deadline_stay_redraw_eligible(fake, site, ledger, monkeypatch, capsys):
+    local, directory = site
+    prepare_attempt(monkeypatch, directory)
+    clock, real_rest = [50_000.0], fake.rest
+    for mod in (azure.time, guard.time, channel.time):
+        monkeypatch.setattr(mod, 'time', lambda: clock[0])
+    monkeypatch.setattr(channel.time, 'sleep', lambda n: clock.__setitem__(0, clock[0] + max(0, n)))
+    fake_state(fake, deletesBeforeAbsent=1)
+    monkeypatch.setattr(channel, 'plan_results_limits', lambda *_: (1024, 2048))
+    monkeypatch.setattr(azure, 'run_channel', channel.run_channel)
+
+    def init_fail_rest(method, url, **kwargs):
+        if method == 'get' and '/runCommands/init?' in url:
+            clock[0] += 5.0
+            return dict(state='Failed', code=75, output='CHRYSALIS-BOOT:cleanup-check\n')
+        return real_rest(method, url, **kwargs)
+
+    monkeypatch.setattr(fake, 'rest', init_fail_rest)
+    payload_file = directory / 'p.tar.gz'
+    payload_file.write_bytes(b'x')
+    plan = dict(destroyGuardSeconds=1256, measurementCutoffSeconds=911, provider='azure',
+                limitUsd=timing.azure_booking(1256 + guard.RESERVE_TAIL))
+    rc = azure.one_attempt(fake, local, ledger, dict(platform={'azCliVersion': '2.99.1'}, programStopUsd=40),
+                           bundle.sha(directory / 'seal.json'), directory, plan, RUN, 'eastus2', {'payload': payload_file},
+                           0, 1, 'first', None, ('test', 'fixture'), 0)
+    out = capsys.readouterr().out
+    note = directory / 'time/runs' / RUN
+    expected_diag = {'init': {'executionState': 'Failed', 'exitCode': 75, 'bootCheck': 'cleanup-check'}}
+    assert rc == 2
+    assert json.loads((note / 'pre-ready-diag.json').read_text()) == expected_diag
+    assert set(json.loads((note / 'pre-ready-failure.json').read_text())) == {'class', 'step', 'seconds'}
+    assert not (note / 'guest-error.json').exists()
+    assert channel._parse_guest_error('CHRYSALIS-BOOT:cleanup-check\n') is None
+    assert 'Azure attempt diag: ' + json.dumps(expected_diag, sort_keys=True, separators=(',', ':')) in out
+    assert bundle._pre_ready_note_ok(note, plan, ledger.attempts[RUN]['booked']) is True
+
+    # Work-deadline path: captures last observed state ('Running'), 'unavailable' when polls never answered,
+    # and 'other' when polls return a planted junk state (kills unnormalised last_state mutant).
+    for poll_reply, want_state in ((dict(state='Running', code=None, output=None), 'Running'),
+                                   (proof.AzureError('ResourceNotFound'), 'unavailable'),
+                                   (dict(state='CANARY_STATE_198.51.100.7', code=None, output=None), 'other')):
+        ev = directory / f'wd-{want_state}'; ev.mkdir()
+        d = make_draw(fake, ev, start=60_000)
+        clock[0] = 60_000.0
+        monkeypatch.setattr(d, 'put', lambda *a, **k: None)
+
+        def poll_rest(method, url, **kwargs):
+            if isinstance(poll_reply, Exception):
+                raise poll_reply
+            return poll_reply
+
+        monkeypatch.setattr(fake, 'rest', poll_rest)
+        with pytest.raises(guard.GuardFailure, match='exceeded its work deadline'):
+            channel.command(d, 'init', '#!/bin/bash\n', 60_010.0)
+        assert d.diag == {'init': {'executionState': want_state, 'exitCode': 'unavailable', 'bootCheck': 'unavailable'}}
+
+    # Init terminal non-success with planted non-int / out-of-range exitCode through a real poll gives exitCode='other'.
+    for bad_code in (9999, -999, '75', True):
+        ev_bc = directory / f'badcode-{type(bad_code).__name__}-{bad_code}'; ev_bc.mkdir()
+        dbc = make_draw(fake, ev_bc, start=65_000)
+        clock[0] = 65_000.0
+        monkeypatch.setattr(dbc, 'put', lambda *a, **k: None)
+        monkeypatch.setattr(fake, 'rest', lambda *a, _c=bad_code, **k: dict(state='Failed', code=_c, output='CHRYSALIS-BOOT:timer\n'))
+        with pytest.raises(guard.GuardFailure, match='did not succeed'):
+            channel.command(dbc, 'init', '#!/bin/bash\n', 65_010.0)
+        assert dbc.diag == {'init': {'executionState': 'Failed', 'exitCode': 'other', 'bootCheck': 'timer'}}
+
+    # Non-init command (kick) non-success does NOT populate draw.diag.
+    ev_k = directory / 'kick-nodiag'; ev_k.mkdir()
+    dk = make_draw(fake, ev_k, start=70_000)
+    clock[0] = 70_000.0
+    monkeypatch.setattr(dk, 'put', lambda *a, **k: None)
+    monkeypatch.setattr(fake, 'rest', lambda *a, **k: dict(state='Failed', code=75, output='CHRYSALIS-BOOT:qdisc\n'))
+    with pytest.raises(guard.GuardFailure, match='did not succeed'):
+        channel.command(dk, 'kick', '#!/bin/bash\n', 70_010.0)
+    assert dk.diag == {}
+
+
+def test_azdiag_no_extra_call_on_success_or_capacity_failure(fake, site, ledger, monkeypatch, capsys):
+    local, directory = site
+    prepare_attempt(monkeypatch, directory)
+    vm_expand_calls, real_rest = [], fake.rest
+    fake_state(fake, deletesBeforeAbsent=1, commandResults={'init': {'payload': 'PUB1', 'results': 'PUB2'}})
+
+    def spy_rest(method, url, **kwargs):
+        if method == 'get' and '/virtualMachines/gate?' in url and 'expand=instanceView' in url:
+            vm_expand_calls.append(url)
+        return real_rest(method, url, **kwargs)
+
+    monkeypatch.setattr(fake, 'rest', spy_rest)
+    monkeypatch.setattr(azure, 'run_channel', lambda draw, _i, note: (
+        channel.command(draw, 'init', '#!/bin/bash\n', time.time() + 30),
+        guard.mark(note / '.guard', 'guest-ready', since=draw.start),
+        False)[2])
+    monkeypatch.setattr(azure, 'probe_result', lambda *_: 0)
+    assert attempt(fake, local, ledger, directory, RUN) == 0
+    assert vm_expand_calls == []
+    assert not (directory / 'time/runs' / RUN / 'pre-ready-diag.json').exists()
+    assert not (directory / 'time/runs' / RUN / 'pre-ready-failure.json').exists()
+    assert 'Azure attempt diag:' not in capsys.readouterr().out
+
+    # Capacity-code path on VM Failed: exit 6, zero $expand=instanceView VM diag calls, no pre-ready-diag.json.
+    monkeypatch.delenv('GATE_FIRST_GO')
+
+    def cap_rest(method, url, **kwargs):
+        if method == 'get' and '/virtualMachines/gate?' in url and 'expand=instanceView' in url:
+            vm_expand_calls.append(url)
+        if method == 'get' and '/virtualMachines/gate?' in url and kwargs.get('query') == 'properties.provisioningState':
+            return 'Failed'
+        if method == 'get' and '/virtualMachines/gate/instanceView?' in url:
+            return ['AllocationFailed']
+        return real_rest(method, url, **kwargs)
+
+    monkeypatch.setattr(fake, 'rest', cap_rest)
+    assert azure.one_attempt(fake, local, ledger, dict(platform={'azCliVersion': '2.99.1'}, programStopUsd=40),
+                             bundle.sha(directory / 'seal.json'), directory, dict(destroyGuardSeconds=1256, measurementCutoffSeconds=911),
+                             OTHER, 'eastus2', {}, 0, 2, 'first', None, ('test', 'fixture'), 0) == 6
+    assert vm_expand_calls == []
+    assert not (directory / 'time/runs' / OTHER / 'pre-ready-diag.json').exists()
+    assert json.loads((directory / 'time/runs' / OTHER / 'pre-ready-failure.json').read_text())['class'] == 'CapacityUnavailable'
+
+    # Non-capacity VM Failed in Draw.wait: raises GuardFailure('resource provisioning failed'), ZERO $expand=instanceView diag reads, no 'vm' diag.
+    noncap_app = 'chrysalis-gate-20990405t000109-ef' + '01' * 3
+
+    def noncap_rest(method, url, **kwargs):
+        if method == 'get' and '/virtualMachines/gate?' in url and 'expand=instanceView' in url:
+            vm_expand_calls.append(url)
+        if method == 'get' and '/virtualMachines/gate?' in url and kwargs.get('query') == 'properties.provisioningState':
+            return 'Failed'
+        if method == 'get' and '/virtualMachines/gate/instanceView?' in url:
+            return ['OtherProvisioningFailure']
+        return real_rest(method, url, **kwargs)
+
+    monkeypatch.setattr(fake, 'rest', noncap_rest)
+    assert azure.one_attempt(fake, local, ledger, dict(platform={'azCliVersion': '2.99.1'}, programStopUsd=40),
+                             bundle.sha(directory / 'seal.json'), directory, dict(destroyGuardSeconds=1256, measurementCutoffSeconds=911),
+                             noncap_app, 'eastus2', {}, 0, 3, 'first', None, ('test', 'fixture'), 0) == 2
+    assert vm_expand_calls == []
+    assert not (directory / 'time/runs' / noncap_app / 'pre-ready-diag.json').exists()
+    assert json.loads((directory / 'time/runs' / noncap_app / 'pre-ready-failure.json').read_text())['class'] == 'GuardFailure'
+
+
+def test_azdiag_closed_sets_block_planted_ids_addresses_urls_and_free_text(fake, site, ledger, monkeypatch, capsys):
+    local, directory = site
+    prepare_attempt(monkeypatch, directory)
+    canaries = ('12345678-1234-1234-1234-1234567890ab', '198.51.100.7', 'https://example.invalid/sub/secret',
+                'chrysalis-gate-20990102t030405-deadbeef', 'CANARY_LEAK')
+    planted = dict(provisioningState=canaries[0],
+                   statuses=[canaries[0], canaries[1], canaries[2], canaries[3], 'ProvisioningState/ok 123', 'ProvisioningState/creating'],
+                   agentVersion=canaries[1],
+                   agentStatuses=[canaries[4], canaries[2], canaries[1], 'ProvisioningState/succeeded'])
+    rc, _, _ = _run_vm_deadline_attempt(fake, local, ledger, directory, monkeypatch, lambda *_: planted)
+    out = capsys.readouterr().out
+    raw_file = (directory / 'time/runs' / RUN / 'pre-ready-diag.json').read_text()
+    assert rc == 2
+    assert json.loads(raw_file) == {'vm': dict(
+        provisioningState='other',
+        statuses=['other', 'other', 'other', 'other', 'other', 'ProvisioningState/creating'],
+        agentStatuses=['other', 'other', 'other', 'ProvisioningState/succeeded'])}
+    for token in canaries:
+        assert token not in raw_file and token not in out
+
+    # Init command: planted values in state, code (including bool/out-of-range), and CHRYSALIS-BOOT line.
+    for val in (True, 9999, -999, '75', canaries[4]):
+        assert channel.norm_diag(val, range(-255, 256)) == 'other'
+    assert channel._boot_check('CHRYSALIS-BOOT:' + canaries[0] + '\n') == 'other'
+    assert channel._boot_check('CHRYSALIS-BOOT:' + canaries[3] + '\n') == 'other'
+    assert channel._boot_check('CHRYSALIS-BOOT:timer\nCHRYSALIS-BOOT:ssh\n') == 'other'
+    assert channel._boot_check('CHRYSALIS-BOOT:timer\n' + 'x' * 4100) == 'unavailable'
+    assert channel._boot_check(None) == 'unavailable'
+
+
+def test_azdiag_boot_script_reports_each_failing_check_and_execs_helper_on_pass(tmp_path):
+    import shlex
+    shutdown = 1_800_000_000
+    expected_cal = f'OnCalendar={azure.calendar(shutdown)}'
+    raw_script = channel.boot_script(RUN, shutdown, '/usr/local/sbin/chrysalis-run-channel')
+    assert 'set -euo pipefail' in raw_script and 'exec 2>/dev/null' in raw_script
+    assert '+ 95' in raw_script and 'sleep 5' in raw_script and 'failed=unknown' in raw_script
+    assert f'/usr/bin/python3 /usr/local/sbin/chrysalis-guest-cleanup {RUN} check; then' in raw_script
+    assert 'exec /usr/bin/python3 /usr/local/sbin/chrysalis-run-channel init' in raw_script
+    assert 'printf \'CHRYSALIS-BOOT:%s\\n\' "$failed"' in raw_script
+
+    fbin = tmp_path / 'bin'; fbin.mkdir()
+    def shim(name, body):
+        p = fbin / name
+        p.write_text('#!/bin/sh\n' + body)
+        p.chmod(0o755)
+
+    shim('date', 'n=$(cat "$DATE_COUNT" 2>/dev/null || echo 0); n=$((n+1)); echo "$n" > "$DATE_COUNT"; '
+                 'if [ "$n" -eq 1 ]; then echo 1000; elif [ "$n" -eq 2 ]; then echo 1001; else echo 2000; fi\n')
+    shim('sleep', 'exit 0\n')
+    shim('cloud-init', 'if [ "$FAIL_CHECK" = cloud-init ]; then echo "status: running"; exit 1; fi; echo "status: done"\n')
+    shim('systemctl', f"""case "$1:$2:$3" in
+  show:chrysalis-guest-cleanup.timer:*) [ "$FAIL_CHECK" = next-elapse ] && echo n/a || echo "2099-01-01 UTC" ;;
+  is-active:--quiet:chrysalis-guest-cleanup.timer) [ "$FAIL_CHECK" = timer ] && exit 1 || exit 0 ;;
+  is-enabled:--quiet:chrysalis-guest-cleanup.timer) exit 0 ;;
+  cat:chrysalis-guest-cleanup.timer:*) echo {shlex.quote(expected_cal)} ;;
+  cat:chrysalis-guest-cleanup.service:*) [ "$FAIL_CHECK" = service ] && echo "ExecStart=/bin/false" || echo {shlex.quote('ExecStart=/usr/bin/python3 /usr/local/sbin/chrysalis-guest-cleanup ' + RUN + ' delete')} ;;
+  is-enabled:ssh.service:*) [ "$FAIL_CHECK" = ssh ] && {{ echo disabled; exit 1; }} || {{ echo masked; exit 1; }} ;;
+  is-enabled:ssh.socket:*) echo masked; exit 1 ;;
+  is-active:--quiet:ssh.service) exit 1 ;;
+  *) exit 1 ;;
+esac
+""")
+    shim('getent', 'if [ "$FAIL_CHECK" = user ]; then echo "chrysalis:x:1:1::/:/bin/bash"; else echo "chrysalis:x:1:1::/:/usr/sbin/nologin"; fi\n')
+    shim('passwd', 'echo "chrysalis L 01/01/2026 0 99999 7 -1"\n')
+    shim('tc', 'if [ "$FAIL_CHECK" = qdisc ]; then echo "qdisc fq_codel 0: dev eth0"; else echo "qdisc tbf 8001: dev eth0 root rate 1Mbit burst 32Kb"; fi\n')
+
+    fake_cleanup = tmp_path / 'fake_cleanup.py'
+    fake_cleanup.write_text('import os, sys\nsys.exit(1 if os.environ.get("FAIL_CHECK") == "cleanup-check" else 0)\n')
+    fake_helper = tmp_path / 'fake_helper.py'
+    fake_helper.write_text('import sys\nassert sys.argv[1:] == ["init"]\nprint(\'CHRYSALIS:{"payload":"P","results":"R"}\')\n')
+
+    # Substitute only the hardcoded Linux guest paths in the test copy (asserted verbatim above).
+    test_script = raw_script.replace(
+        f'/usr/bin/python3 /usr/local/sbin/chrysalis-guest-cleanup {RUN} check',
+        f'{shlex.quote(sys.executable)} {shlex.quote(str(fake_cleanup))} {RUN} check'
+    ).replace(
+        '/usr/bin/python3 /usr/local/sbin/chrysalis-run-channel init',
+        f'{shlex.quote(sys.executable)} {shlex.quote(str(fake_helper))} init'
+    )
+    script_file = tmp_path / 'boot.sh'
+    script_file.write_text(test_script)
+
+    def run_boot(fail_check):
+        counter = tmp_path / f'date-{fail_check or "pass"}'
+        counter.unlink(missing_ok=True)
+        env = {'PATH': f'{fbin}:/usr/bin:/bin', 'FAIL_CHECK': fail_check, 'DATE_COUNT': str(counter)}
+        return subprocess.run(['/bin/bash', str(script_file)], env=env, capture_output=True, text=True, timeout=15)
+
+    for word in ('cloud-init', 'timer', 'service', 'next-elapse', 'user', 'ssh', 'qdisc', 'cleanup-check'):
+        res = run_boot(word)
+        assert res.returncode == 75, f'{word}: rc={res.returncode} out={res.stdout!r}'
+        assert res.stdout == f'CHRYSALIS-BOOT:{word}\n'
+        assert channel._parse_guest_error(res.stdout) is None
+        assert channel._boot_check(res.stdout) == word
+
+    ok = run_boot('')
+    assert ok.returncode == 0
+    assert ok.stdout == 'CHRYSALIS:{"payload":"P","results":"R"}\n'
+    assert 'CHRYSALIS-BOOT:' not in ok.stdout
+    assert channel.get_summary(ok.stdout) == {'payload': 'P', 'results': 'R'}
