@@ -174,8 +174,15 @@ public sealed class ProviderHttp(HttpClient client, string provider, IReadOnlyLi
         }
         catch (ProviderException error) when (error is not ProviderStatusException && (receivedSuccess || error.IsTransient))
         {
-            throw new ProviderException($"{error.Message}; the transaction may have been accepted", error.IsTransient, error.Detail);
+            throw MayHaveBeenAccepted(error);
         }
+    }
+
+    /// <summary>Marks a submission failure whose outcome is unknown, keeping its transience and detail.</summary>
+    public static ProviderException MayHaveBeenAccepted(ProviderException error)
+    {
+        ArgumentNullException.ThrowIfNull(error);
+        return new($"{error.Message}; the transaction may have been accepted", error.IsTransient, error.Detail);
     }
 
     private CancellationTokenSource BodyDeadline(CancellationToken cancellationToken)
