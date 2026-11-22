@@ -49,9 +49,9 @@ public class PreprodFixtureTests
         Assert.Equal(bytes, rawReader.ReadDataItem().ToArray());
         Assert.False(rawReader.DataAvailable);
 
-        // Rows marked with a defect validate the captured term here; the B2 rows' typed decode is
+        // Rows marked with a defect other than B3 validate only the captured term here; the B2 rows' typed decode is
         // InlineQueryPayloadHasIndependentlyRecordedValues.
-        if (expected.TryGetProperty("defect", out _))
+        if (expected.TryGetProperty("defect", out JsonElement defect) && defect.GetString() != "B3")
         {
             return;
         }
@@ -277,9 +277,15 @@ public class PreprodFixtureTests
             Assert.Equal(expected.GetProperty("era").GetInt32(), submit.EraTx.Era);
             Assert.Equal(expected.GetProperty("transactionHex").GetString(), Convert.ToHexStringLower(submit.EraTx.Tx.Value.Span));
         }
-        else
+        else if (index == 1)
         {
             Assert.Equal(1, Decode<Submission.AcceptTx>(bytes).Idx);
+        }
+        else
+        {
+            Submission.RejectTx reject = Decode<Submission.RejectTx>(bytes);
+            Assert.Equal(bytes[2..], reject.RejectReason.Raw.ToArray());
+            Assert.Equal(bytes, CborSerializer.Serialize(Submission.LocalTxSubmissionMessages.RejectTx(new CborAny(bytes.AsMemory(2)))));
         }
     }
 
