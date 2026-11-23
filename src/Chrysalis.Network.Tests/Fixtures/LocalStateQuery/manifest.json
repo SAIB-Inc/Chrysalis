@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "notice": "Real Haskell node replies captured on the isolated private devnet (test/devnet) by DevnetIntegrationTests.AcquireFailuresAreTheNodesReplies; these 3-byte replies carry no wallet, key or address data.",
+  "captures": {
+    "acquire-failure-too-old.cbor": {
+      "source_repository": "https://github.com/IntersectMBO/cardano-node",
+      "source_tag": "11.1.3",
+      "source_commit": "938cba990357ae7c4b7f95c8f75dd9d31174bbeb",
+      "producer_path": "cardano-node; Ouroboros node-to-client LocalStateQuery encoder",
+      "node_version": "11.1.3",
+      "network": "isolated private devnet",
+      "node_network_magic": 42,
+      "command": "DevnetIntegrationTests.AcquireFailuresAreTheNodesReplies (requestHex 820080)",
+      "captured_utc": "2026-11-22T09:45:43+00:00",
+      "protocol": 7,
+      "bytes": 3,
+      "sha256": "95397da2338a6e41e75d2a34be802255e05cb6e7d79088fcd6a0d9f99b344681",
+      "license": "Public captured protocol facts; producer Apache-2.0, LICENSE/NOTICE retained under Fixtures/Handshake/upstream/cardano-node-11.1.3/",
+      "expected": {
+        "reply": "Failure",
+        "reason": "AcquireFailurePointTooOld",
+        "code": 0
+      }
+    },
+    "acquire-failure-not-on-chain.cbor": {
+      "source_repository": "https://github.com/IntersectMBO/cardano-node",
+      "source_tag": "11.1.3",
+      "source_commit": "938cba990357ae7c4b7f95c8f75dd9d31174bbeb",
+      "producer_path": "cardano-node; Ouroboros node-to-client LocalStateQuery encoder",
+      "node_version": "11.1.3",
+      "network": "isolated private devnet",
+      "node_network_magic": 42,
+      "command": "DevnetIntegrationTests.AcquireFailuresAreTheNodesReplies (requestHex 82008218ae58200000000000000000000000000000000000000000000000000000000000000000)",
+      "captured_utc": "2026-11-22T09:45:43+00:00",
+      "protocol": 7,
+      "bytes": 3,
+      "sha256": "67a858f98fb948cd6f96601d4b02eaa254efb430f80ed19766c785096297f05e",
+      "license": "Public captured protocol facts; producer Apache-2.0, LICENSE/NOTICE retained under Fixtures/Handshake/upstream/cardano-node-11.1.3/",
+      "expected": {
+        "reply": "Failure",
+        "reason": "AcquireFailurePointNotOnChain",
+        "code": 1
+      }
+    }
+  }
+}

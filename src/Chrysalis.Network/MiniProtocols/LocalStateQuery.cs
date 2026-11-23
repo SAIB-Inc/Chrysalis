@@ -110,11 +110,13 @@ public class LocalStateQuery : IAsyncDisposable
 
         if (acquireResponse is Failure failure)
         {
+            IsAcquired = false;
             throw new InvalidOperationException($"Failed to acquire state: {failure.Reason.GetType().Name}.");
         }
 
         if (acquireResponse is not Acquired)
         {
+            IsAcquired = false;
             throw new InvalidOperationException($"Failed to acquire state: {acquireResponse}");
         }
 

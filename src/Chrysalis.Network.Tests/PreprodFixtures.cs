@@ -4,9 +4,11 @@ namespace Chrysalis.Network.Tests;
 
 internal static class PreprodFixtures
 {
-    internal static byte[] Read(string name)
+    internal static byte[] Read(string name) => Read("Preprod", name);
+
+    internal static byte[] Read(string folder, string name)
     {
-        string resourceName = "Chrysalis.Network.Tests.Fixtures.Preprod." + name.Replace('/', '.');
+        string resourceName = $"Chrysalis.Network.Tests.Fixtures.{folder}.{name.Replace('/', '.')}";
         using Stream stream = typeof(PreprodFixtures).Assembly.GetManifestResourceStream(resourceName)
             ?? throw new InvalidOperationException($"Missing fixture: {name}");
         using MemoryStream buffer = new();

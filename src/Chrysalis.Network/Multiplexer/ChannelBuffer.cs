@@ -35,16 +35,12 @@ public sealed class ChannelBuffer(AgentChannel channel)
     /// </summary>
     public async Task SendFullMessageAsync<T>(T message, CancellationToken cancellationToken) where T : CborRecord
     {
+        cancellationToken.ThrowIfCancellationRequested();
         ReadOnlyMemory<byte> payloadMemory = CborSerializer.SerializeToMemory(message);
         int payloadLength = payloadMemory.Length;
 
         for (int offset = 0; offset < payloadLength; offset += ProtocolConstants.MaxSegmentPayloadLength)
         {
-            if (cancellationToken.IsCancellationRequested)
-            {
-                break;
-            }
-
             int chunkSize = Math.Min(ProtocolConstants.MaxSegmentPayloadLength, payloadLength - offset);
             ReadOnlyMemory<byte> chunkMemory = payloadMemory.Slice(offset, chunkSize);
             ReadOnlySequence<byte> chunkSequence = new(chunkMemory);

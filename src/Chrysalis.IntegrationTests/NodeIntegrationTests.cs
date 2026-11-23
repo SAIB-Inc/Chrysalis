@@ -220,17 +220,25 @@ public sealed class NodeIntegrationTests
         Assert.Fail("Mempool changed during all three bounded snapshots.");
     }
 
-    /// <summary>Requires release to return without waiting and permits reacquisition on the same connection.</summary>
+    /// <summary>Requires release to return without waiting and return the server to idle so reacquisition gets the current snapshot.</summary>
     [IntegrationFact([Env.Socket, Env.Magic, Env.Cli, Env.NodeVersion, Env.Output])]
     [Trait("Category", "Integration")]
     public async Task MonitorReleaseThenAcquireCompletes()
     {
         using CancellationTokenSource deadline = new(TimeSpan.FromSeconds(8));
         using NodeClient node = await NodeConnections.OpenAsync(deadline.Token);
-        _ = await node.LocalTxMonitor.AcquireAsync(deadline.Token);
-        Task release = node.LocalTxMonitor.ReleaseAsync(deadline.Token);
-        await release;
-        _ = Assert.IsType<Acquired>(await node.LocalTxMonitor.AcquireAsync(deadline.Token));
+        Acquired first = Assert.IsType<Acquired>(await node.LocalTxMonitor.AcquireAsync(deadline.Token));
+        for (int attempt = 0; attempt < 3; attempt++)
+        {
+            await node.LocalTxMonitor.ReleaseAsync(deadline.Token);
+            Acquired next = Assert.IsType<Acquired>(await node.LocalTxMonitor.AcquireAsync(deadline.Token));
+            if (next.Slot == first.Slot)
+            {
+                return;
+            }
+            first = next;
+        }
+        Assert.Fail("Reacquisition after release advanced the snapshot slot on every attempt.");
     }
 
     /// <summary>Checks a never-submitted id against cardano-cli on the same node.</summary>
