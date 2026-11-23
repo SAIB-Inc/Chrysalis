@@ -45,6 +45,20 @@ def dump(path, data):
     path.write_text(json.dumps(data))
 
 
+def _patch_clock(monkeypatch, mods, clock, *, sleeps=None):
+    from types import SimpleNamespace
+    def _sleep(n):
+        s = max(0.0, n)
+        if sleeps is not None:
+            sleeps.append(s)
+        clock[0] += s
+    ns = SimpleNamespace(time=lambda: clock[0], sleep=_sleep, monotonic=time.monotonic,
+                         strftime=time.strftime, gmtime=time.gmtime)
+    for mod in mods:
+        monkeypatch.setattr(mod, 'time', ns)
+    return ns
+
+
 def archive(path, files):
     with tarfile.open(path, 'w:gz') as stream:
         for name, value in files.items():
@@ -151,8 +165,7 @@ def test_cleanup_waits_through_accepted_delete_and_transient(fake, tmp_path, mon
     draw.put(draw.scope, '2021-04-01', dict(location='eastus2', tags={'chrysalisGate': RUN}))
     fake_state(fake, deletesBeforeAbsent=12)
     now = [spark]
-    monkeypatch.setattr(azure.time, 'time', lambda: now[0])
-    monkeypatch.setattr(azure.time, 'sleep', lambda n: now.__setitem__(0, now[0] + n))
+    _patch_clock(monkeypatch, (azure, guard, proof), now)
     draw.delete(draw.deadline)
     assert now[0] - spark > 135
     assert draw.owner() is False and draw.deadline > now[0]
@@ -2197,7 +2210,7 @@ def test_az2f4_fix2_host_collects_diagnostics_on_kick_and_status_failure(fake, s
     assert not (ek / 'guest-error.json').exists()
     cs, es, ds = run_case('status')
     assert cs == [(expected, True)]
-    assert ds.guest_error == {'command': 'status-00', 'step': 'compact', 'type': 'RuntimeError'}
+    assert ds.guest_error == {'command': 'status-02', 'step': 'compact', 'type': 'RuntimeError'}
     assert not (es / 'guest-error.json').exists()
     assert run_case('kick', copy_raises=True)[0] == [(expected, True)]
     assert 'push-1' not in run_case('kick', late=True)[2].commands
@@ -2432,6 +2445,7 @@ def slow_once(monkeypatch, site, answers_after, landed=False, *, times=1):
 
 @pytest.mark.parametrize('site', [('get', '/virtualMachines/gate?'), ('put', '/virtualMachines/gate?')])
 def test_setup_survives_one_slow_call(fake, tmp_path, monkeypatch, capsys, site):
+    _patch_clock(monkeypatch, (proof,), [time.time()])
     draw = make_draw(fake, tmp_path)
     monkeypatch.setattr(azure, 'provision_public_key', lambda: 'test-public-key')
     monkeypatch.setattr(azure, 'upload_inputs', lambda _draw, _inputs: None)
@@ -2447,8 +2461,7 @@ def test_setup_survives_one_slow_call(fake, tmp_path, monkeypatch, capsys, site)
 def test_init_submit_timeout_polls_without_resending(fake, tmp_path, monkeypatch, landed):
     spark = 10000
     now = [spark]
-    monkeypatch.setattr(time, 'time', lambda: now[0])
-    monkeypatch.setattr(time, 'sleep', lambda n: now.__setitem__(0, now[0] + n))
+    _patch_clock(monkeypatch, (azure, guard, channel, proof), now)
     draw = make_draw(fake, tmp_path, start=spark)
     fake_state(fake, groups={draw.scope: dict(location='eastus2', tags={'chrysalisGate': RUN})},
                commandResults={'init': {'payload': 'k1', 'results': 'k2'}})
@@ -2474,15 +2487,16 @@ def test_init_submit_timeout_polls_without_resending(fake, tmp_path, monkeypatch
 def test_repeated_slow_read_ends_invalid_with_cleanup_and_labels(fake, site, ledger, monkeypatch, capsys):
     local, directory = site
     prepare_attempt(monkeypatch, directory)
+    _patch_clock(monkeypatch, (proof,), [time.time()])
     fake_state(fake, deletesBeforeAbsent=1)
-    hits = slow_once(monkeypatch, ('get', '/virtualMachines/gate?'), 20, times=2)
+    hits = slow_once(monkeypatch, ('get', '/networkWatchers?'), 20, times=3)
     assert attempt(fake, local, ledger, directory, RUN) == 2
-    assert len(hits) == 2 and ledger.attempts[RUN]['state'] == 'settled'
+    assert len(hits) == 3 and ledger.attempts[RUN]['state'] == 'settled'
     assert json.loads((directory / 'time/runs' / RUN / 'cleanup-proof.json').read_text())['ourAppAbsent']
     assert not fake_state(fake)['groups']
     out = capsys.readouterr().out.splitlines()
-    assert out.count('Azure call get virtualMachines timed out') == 2
-    assert any(line.startswith('Azure attempt: timeout; last Azure call: get virtualMachines; step wait virtualMachines; +') for line in out)
+    assert out.count('Azure call get networkWatchers timed out') == 3
+    assert any(line.startswith('Azure attempt: timeout; last Azure call: get networkWatchers; step check networkWatchers; +') for line in out)
 
 
 def _settle_pre_ready(directory, ledger, go, number, phase, draw, app, *, status=2, fallback=None, region='eastus2',
@@ -2630,6 +2644,14 @@ def _run_fly(monkeypatch, site, ledger, outcomes, *, max_draws=6, seal_patch=Non
             ledger.write()
             return code, app, None
         fallback = None
+        if kind == 'eastus-cap':
+            _settle_pre_ready(d, ledger, g, number, phase, draw, app, status=6, region=reg)
+            return 6, app, None
+        if kind == 'both-cap':
+            fallback = f'chrysalis-gate-20990405t000{len(calls) + 90:03d}-' + f'{len(calls) + 90:08x}'
+            _settle_pre_ready(d, ledger, g, number, phase, draw, fallback, status=6, region='eastus2')
+            _settle_pre_ready(d, ledger, g, number, phase, draw, app, status=6, fallback=fallback, region='eastus')
+            return 6, app, fallback
         if kind == 'fallback-pre-ready' or kind.startswith(('fb:', 'fb-step:')):
             fallback = f'chrysalis-gate-20990405t000{len(calls) + 90:03d}-' + f'{len(calls) + 90:08x}'
             _settle_pre_ready(d, ledger, g, number, phase, draw, fallback, status=6, region='eastus2')
@@ -2679,7 +2701,7 @@ def test_redraw_one_pre_ready_then_kept_settles_before_second_reserve(fake, site
             shutil.copy2(staged / f, note / f)
         return False
 
-    def real_one(host, d, g, number, phase, draw_n, pl, relative, first, ctx, disp):
+    def real_one(host, d, g, number, phase, draw_n, pl, relative, first, ctx, disp, **_kw):
         app = f'chrysalis-gate-20990405t000{draw_n:03d}-' + f'{draw_n:08x}'
         if first:
             monkeypatch.setenv('GATE_FIRST_GO', g)
@@ -2721,7 +2743,7 @@ def test_sigterm_to_real_one_attempt_gets_no_redraw(fake, site, ledger, monkeypa
     monkeypatch.setattr(azure, 'run_channel', sigterm_in_channel)
     calls = []
 
-    def real_one(host, d, g, number, phase, draw_n, pl, relative, first, ctx, disp):
+    def real_one(host, d, g, number, phase, draw_n, pl, relative, first, ctx, disp, **_kw):
         app = f'chrysalis-gate-20990405t000{draw_n:03d}-' + f'{draw_n:08x}'
         calls.append(app)
         if first:
@@ -2810,7 +2832,7 @@ def test_failure_lines_carry_fixed_class_step_seconds_and_no_free_text(fake, sit
     local, directory = site
     prepare_attempt(monkeypatch, directory)
     clock = [10_000.0]
-    monkeypatch.setattr(azure.time, 'time', lambda: clock[0])
+    _patch_clock(monkeypatch, (azure, guard, channel, proof), clock)
 
     def fail_guard(draw, _inputs, _note):
         draw.step = 'run-command init'
@@ -2851,7 +2873,9 @@ def test_failure_lines_carry_fixed_class_step_seconds_and_no_free_text(fake, sit
                              bundle.sha(directory / 'seal.json'), directory, dict(destroyGuardSeconds=1256, measurementCutoffSeconds=911, rawSeconds=372),
                              OTHER, 'eastus2', {}, 0, 2, 'first', None, ('test', 'fixture'), 0) == 2
     out2 = capsys.readouterr().out
-    assert 'last Azure call: get virtualMachines; step wait virtualMachines; +11.2s' in out2 and 'CANARY_SECRET_AZ' not in out2
+    assert 'Azure wait virtualMachines transient read failure (1/3); continuing' in out2
+    assert 'Azure wait virtualMachines transient read failure (2/3); continuing' in out2
+    assert 'last Azure call: get virtualMachines; step wait virtualMachines; +43.6s' in out2 and 'CANARY_SECRET_AZ' not in out2
     assert json.loads((directory / 'time/runs' / OTHER / 'pre-ready-failure.json').read_text())['class'] == 'AzureError'
 
     # Failure AFTER guest-ready must NOT write pre-ready-failure.json.
@@ -2873,9 +2897,7 @@ def test_host_step_markers_written_with_times_and_stop_at_failure_step(fake, sit
     local, directory = site
     prepare_attempt(monkeypatch, directory)
     clock, vm_fail, real_run = [20_000.0], [False], proof.subprocess.run
-    for mod in (azure.time, guard.time, channel.time):
-        monkeypatch.setattr(mod, 'time', lambda: clock[0])
-    monkeypatch.setattr(time, 'sleep', lambda n: clock.__setitem__(0, clock[0] + max(0, n)))
+    _patch_clock(monkeypatch, (azure, guard, channel, proof), clock)
     monkeypatch.setattr(channel, 'storage_key', lambda _d: 'K' * 48)
     monkeypatch.setattr(channel, 'signed_blob', lambda *_a: 'se=2099-01-01T00%3A00%3A00Z&sp=cw&spr=https&sv=2022-11-02&sr=b&sig=' + 'a' * 43)
     monkeypatch.setattr(channel, 'seal', lambda *_a: 'sealed')
@@ -2994,9 +3016,7 @@ def test_consumers_accept_pre_ready_then_kept_and_retry_consumers_refuse(fake, s
 
 def _run_vm_deadline_attempt(fake, local, ledger, directory, monkeypatch, diag_handler, *, group=RUN, draw_num=1, plan=None, step=100.0, clock_start=30_000.0):
     clock, diag_calls, real_rest = [clock_start], [], fake.rest
-    for mod in (azure.time, guard.time, channel.time):
-        monkeypatch.setattr(mod, 'time', lambda: clock[0])
-    monkeypatch.setattr(azure.time, 'sleep', lambda n: clock.__setitem__(0, clock[0] + max(0, n)))
+    _patch_clock(monkeypatch, (azure, guard, channel, proof), clock)
     fake_state(fake, deletesBeforeAbsent=1)
 
     def fake_rest(method, url, **kwargs):
@@ -3082,9 +3102,7 @@ def test_azdiag_init_failed_exit75_and_work_deadline_stay_redraw_eligible(fake, 
     local, directory = site
     prepare_attempt(monkeypatch, directory)
     clock, real_rest = [50_000.0], fake.rest
-    for mod in (azure.time, guard.time, channel.time):
-        monkeypatch.setattr(mod, 'time', lambda: clock[0])
-    monkeypatch.setattr(channel.time, 'sleep', lambda n: clock.__setitem__(0, clock[0] + max(0, n)))
+    _patch_clock(monkeypatch, (azure, guard, channel, proof), clock)
     fake_state(fake, deletesBeforeAbsent=1)
     monkeypatch.setattr(channel, 'plan_results_limits', lambda *_: (1024, 2048))
     monkeypatch.setattr(azure, 'run_channel', channel.run_channel)
@@ -3579,8 +3597,13 @@ def test_azpatience_stuck_vm_and_setup_wait_deadlines(fake, site, ledger, monkey
             d_s1.setup({'payload': pf})
         assert ('User-assigned identity', 10_690) in waits and ('Scoped Contributor grant', 10_690) in waits
         with monkeypatch.context() as mp:
-            for mod in (azure.time, guard.time):
-                mp.setattr(mod, 'time', lambda: 10_700.0)
+            b_clock = [10_688.5]
+            _patch_clock(mp, (azure, guard, proof), b_clock)
+            d_s1.put(d_s1.path('Network', 'virtualNetworks'), azure.API_NET, {'location': 'eastus2'})
+            b_clock[0] = 10_689.0
+            with pytest.raises(guard.GuardFailure, match='ARM write deadline expired before dispatch'):
+                d_s1.put(d_s1.path('Network', 'virtualNetworks'), azure.API_NET, {'location': 'eastus2'})
+            b_clock[0] = 10_690.0
             with pytest.raises(guard.GuardFailure, match='guard expired'):
                 d_s1.put(d_s1.path('Network', 'virtualNetworks'), azure.API_NET, {'location': 'eastus2'})
         d_short = make_draw(fake, short_dir, start=10_000, lifetime=1256, raw_seconds=372)
@@ -3680,7 +3703,7 @@ def test_azpatience2_m1_bounded_read_retries_in_preflight_and_final_proof(fake, 
     assert proof_untils[-1] == 20_000 + 1256 + guard.RESERVE_TAIL
     assert json.loads((directory / 'time/runs' / RUN / 'cleanup-proof.json').read_text())['ourAppAbsent'] is True
 
-    # Watchdog proof() stays unbounded so a straddling last pass preserves an earlier provisional proof.
+    # Watchdog proof() stops at draw.deadline while preserving an earlier provisional proof on a straddling pass.
     wd_state = directory / 'time/runs' / OTHER / '.guard'
     wd_state.mkdir(parents=True); wd_state.chmod(0o700)
     (wd_state / 'local-path').write_text(os.environ['CHRYSALIS_GATE_LOCAL'])
@@ -3717,7 +3740,7 @@ def test_azpatience2_m1_bounded_read_retries_in_preflight_and_final_proof(fake, 
     assert saved['provisional'] is True and saved['summary']['ourAppAbsent'] is True and saved['ended'] < wd_deadline
     alerts = (wd_state / 'alerts.log').read_text()
     assert 'provisional absence, re-proof owed at next GO' in alerts and 'CLEANUP FAILURE' not in alerts
-    assert clock[0] > wd_deadline and wd_untils == [None, None]
+    assert clock[0] <= wd_deadline and wd_untils == [wd_deadline, wd_deadline]
 
 
 def test_azpatience2_m2_status_poll_tolerates_transient_failures_up_to_limit(tmp_path, monkeypatch, capsys):
@@ -3800,7 +3823,7 @@ def test_azpatience2_m2_status_poll_tolerates_transient_failures_up_to_limit(tmp
         go4b()
     assert seen4b == ['status-00']
 
-    # Corrupt/malformed CHRYSALIS: output from real command()/get_summary() aborts immediately on status-00 (MINOR-3).
+    # Corrupt/malformed CHRYSALIS: output from real command()/get_summary() aborts immediately on status-00.
     ev5 = tmp_path / 'bad-json/ev'; (ev5 / '.guard').mkdir(parents=True)
     dr5 = tmp_path / 'bad-json/dr'; dr5.mkdir(parents=True)
     clock5 = [10_000.0]
@@ -3930,14 +3953,14 @@ def test_azpatience2_region_alternation_on_provision_failure_only(fake, site, le
     assert all('regionReason' not in d for d in draws2)
 
     # expected_draw_region authorizes eastus ONLY after a settled provisioning failure and NEVER while an attempt is active.
-    assert bundle.expected_draw_region(d2, ledger, go2, 0, seal2['timePlans'][0]) == 'eastus2'
+    assert bundle.expected_draw_region(d2, ledger, go2, 0, seal2['timePlans'][0], draw=3) is None
     first_app = calls2[0][3]
     entry1 = dict(ledger.attempts[first_app], exitCode=2)
     ledger.attempts.clear()
     ledger.attempts[first_app] = entry1
     ledger.write()
     dump(d2 / 'time/runs' / first_app / 'pre-ready-failure.json', {'class': 'GuardFailure', 'step': 'wait virtualMachines', 'seconds': 691.0})
-    assert bundle.expected_draw_region(d2, ledger, go2, 0, seal2['timePlans'][0]) == 'eastus'
+    assert bundle.expected_draw_region(d2, ledger, go2, 0, seal2['timePlans'][0], draw=2) == 'eastus'
     # Direct gate_azure.launch authorization for alternated eastus draw 2 vs refused dry-run / wrong draw / active ledger.
     import types
     import gate_fly_guard, gate_azure_payload
@@ -3953,7 +3976,7 @@ def test_azpatience2_region_alternation_on_provision_failure_only(fake, site, le
         mk = lambda reg, draw=2, dry=False, fb=None: types.SimpleNamespace(
             seal=d2 / 'seal.json', session=0, draw=draw, phase='first', approved=OTHER, region=reg, fallback_of=fb, context=('test', 'fixture'), dry_run=dry)
         assert azure.launch(mk('eastus', draw=2)) == 0 and seen_launch == ['eastus']
-        # MAJOR-1: launch() must also refuse plan['region'] (eastus2) on draw 2 when ledger expects eastus.
+        # launch() must also refuse plan['region'] (eastus2) on draw 2 when ledger expects eastus.
         with pytest.raises(azure.Refusal, match='Unsealed region'):
             azure.launch(mk('eastus2', draw=2))
         assert azure.launch(mk('eastus2', draw=1, dry=True)) == 0
@@ -3962,13 +3985,13 @@ def test_azpatience2_region_alternation_on_provision_failure_only(fake, site, le
         with pytest.raises(azure.Refusal, match='Unsealed region'):
             azure.launch(mk('eastus', draw=3))
         ledger.attempts[first_app]['state'] = 'active'; ledger.write()
-        assert bundle.expected_draw_region(d2, ledger, go2, 0, seal2['timePlans'][0]) is None
+        assert bundle.expected_draw_region(d2, ledger, go2, 0, seal2['timePlans'][0], draw=2) is None
         with pytest.raises(azure.Refusal, match='Unsealed region'):
             azure.launch(mk('eastus', draw=2))
         with pytest.raises(azure.Refusal, match='Unsealed region'):
             azure.launch(mk('eastus2', draw=2))
 
-        # MAJOR-2 (B1): capacity fallback + probe rejection (eastus2 exit 6 -> eastus exit 5) keeps eastus2 for draw 2.
+        # Capacity fallback + probe rejection (eastus2 exit 6 -> eastus exit 5) keeps eastus2 for draw 2.
         plan2 = seal2['timePlans'][0]
         p_app, fb_app = 'chrysalis-gate-20990405t000201-aaaa0001', 'chrysalis-gate-20990405t000202-aaaa0002'
         ledger.attempts.clear()
@@ -3980,13 +4003,15 @@ def test_azpatience2_region_alternation_on_provision_failure_only(fake, site, le
         with pytest.raises(azure.Refusal, match='Unsealed region'):
             azure.launch(mk('eastus', draw=2))
 
-        # MAJOR-2 (B2): terminal non-advancing exitCode (6), invalid region, unverified fallback primary, >2 entries all refuse (None).
+        # Single-entry eastus capacity refusal (6) alternates back to eastus2; invalid region and unverified fallback refuse (None).
         d1_app, d2_app = 'chrysalis-gate-20990405t000211-bbbb0001', 'chrysalis-gate-20990405t000212-bbbb0002'
         ledger.attempts.clear()
         _settle_pre_ready(d2, ledger, go2, 0, 'first', 1, d1_app, status=2, region='eastus2')
         dump(d2 / 'time/runs' / d1_app / 'pre-ready-failure.json', {'class': 'GuardFailure', 'step': 'wait virtualMachines', 'seconds': 691.0})
         _settle_pre_ready(d2, ledger, go2, 0, 'first', 2, d2_app, status=6, region='eastus')
-        assert bundle.expected_draw_region(d2, ledger, go2, 0, plan2, 'first', draw=3) is None
+        assert bundle.expected_draw_region(d2, ledger, go2, 0, plan2, 'first', draw=3) == 'eastus2'
+        seen_launch.clear()
+        assert azure.launch(mk('eastus2', draw=3)) == 0 and seen_launch == ['eastus2']
         ledger.attempts[d2_app]['exitCode'] = 5; ledger.attempts[d2_app]['region'] = 'westus'; ledger.write()
         assert bundle.expected_draw_region(d2, ledger, go2, 0, plan2, 'first', draw=3) is None
         # Unverified fallbackOf primary on an exitCode=2 fallback draw must be rejected.
@@ -3996,7 +4021,7 @@ def test_azpatience2_region_alternation_on_provision_failure_only(fake, site, le
         (d2 / 'time/runs' / p_app / 'pre-ready-failure.json').unlink()
         assert bundle.expected_draw_region(d2, ledger, go2, 0, plan2, 'first', draw=2) is None
 
-        # MAJOR-2 (B3): cross-phase MAX_PRE_READY_REDRAWS (3 in first blocks 4th in repeat).
+        # Cross-phase MAX_PRE_READY_REDRAWS (3 in first blocks 4th in repeat).
         ledger.attempts.clear()
         for idx, reg in ((1, 'eastus2'), (2, 'eastus'), (3, 'eastus2')):
             gname = f'chrysalis-gate-20990405t00022{idx}-cccc000{idx}'
@@ -4008,7 +4033,7 @@ def test_azpatience2_region_alternation_on_provision_failure_only(fake, site, le
         dump(d2 / 'time/runs' / rep1 / 'pre-ready-failure.json', {'class': 'GuardFailure', 'step': 'wait virtualMachines', 'seconds': 691.0})
         assert bundle.expected_draw_region(d2, ledger, go2, 0, plan2, 'repeat', draw=2) is None
 
-        # Opus MAJOR-1 mutants: cost latch / costStops, kept exitCode=0 draw, dirty note, fallback gate, and fallback entry selection.
+        # Cost latch / costStops, kept exitCode=0 draw, dirty note, fallback gate, and fallback entry selection.
         ledger.attempts.clear()
         _settle_pre_ready(d2, ledger, go2, 0, 'first', 1, first_app, status=2, region='eastus2')
         dump(d2 / 'time/runs' / first_app / 'pre-ready-failure.json', {'class': 'GuardFailure', 'step': 'wait virtualMachines', 'seconds': 691.0})
@@ -4029,32 +4054,32 @@ def test_azpatience2_region_alternation_on_provision_failure_only(fake, site, le
         kept_app = 'chrysalis-gate-20990405t000231-dddd0001'
         _settle_pre_ready(d2, ledger, go2, 0, 'first', 2, kept_app, status=0, region='eastus')
         assert bundle.expected_draw_region(d2, ledger, go2, 0, plan2, 'first', draw=3) is None
-        # fallback_of with non-eastus region refused by launch() (kills ALT-launch-fallback-gate)
+        # fallback_of with non-eastus region refused by launch().
         with pytest.raises(azure.Refusal, match='Unsealed region'):
             azure.launch(mk('eastus2', draw=1, fb=first_app))
-        # Probe P2 ledger check: eastus2(6)->eastus(2, wait virtualMachines) expects eastus2 (kills ALT-fallback-entry-ignored).
+        # Provision failure on eastus capacity-fallback VM (eastus2(6)->eastus(2, wait virtualMachines)) expects eastus2.
         ledger.attempts.clear()
         _settle_pre_ready(d2, ledger, go2, 0, 'first', 1, p_app, status=6, region='eastus2')
         _settle_pre_ready(d2, ledger, go2, 0, 'first', 1, fb_app, status=2, fallback=p_app, region='eastus')
         dump(d2 / 'time/runs' / fb_app / 'pre-ready-failure.json', {'class': 'GuardFailure', 'step': 'wait virtualMachines', 'seconds': 691.0})
         assert bundle.expected_draw_region(d2, ledger, go2, 0, plan2, 'first', draw=2) == 'eastus2'
-        # Probe P1 ledger check (MINOR-1 ruling): eastus2(6)->eastus(2, run-command init) restores primary eastus2.
+        # Boot/init failure on eastus capacity-fallback VM (eastus2(6)->eastus(2, run-command init)) restores primary eastus2.
         dump(d2 / 'time/runs' / fb_app / 'pre-ready-failure.json', {'class': 'GuardFailure', 'step': 'run-command init', 'seconds': 12.3})
         assert bundle.expected_draw_region(d2, ledger, go2, 0, plan2, 'first', draw=2) == 'eastus2'
 
-    # Opus MINOR-1 ruling (Probe P1): boot/init failure on eastus capacity-fallback VM restarts draw 2 in primary eastus2 (no regionReason).
+    # Boot/init failure on eastus capacity-fallback VM restarts draw 2 in primary eastus2 (no regionReason).
     ledger.attempts.clear(); ledger.write()
     rc_p1, _, _, _, calls_p1, draws_p1 = _run_fly(monkeypatch, site, ledger, ['fb-step:run-command init', 'kept'], tag='p1')
     assert rc_p1 == 0 and [(c[2], c[5]) for c in calls_p1] == [(1, 'eastus2'), (2, 'eastus2')]
     assert [d['region'] for d in draws_p1] == ['eastus', 'eastus2'] and all('regionReason' not in d for d in draws_p1)
 
-    # Probe P2 (kills ALT-fly-uses-current-not-machine): provision failure on eastus fallback VM returns to eastus2 with provision-alternation.
+    # Provision failure on eastus fallback VM returns to eastus2 with provision-alternation.
     ledger.attempts.clear(); ledger.write()
     rc_p2, _, _, _, calls_p2, draws_p2 = _run_fly(monkeypatch, site, ledger, ['fb-step:wait virtualMachines', 'kept'], tag='p2')
     assert rc_p2 == 0 and [(c[2], c[5]) for c in calls_p2] == [(1, 'eastus2'), (2, 'eastus2')]
     assert [d['region'] for d in draws_p2] == ['eastus', 'eastus2'] and draws_p2[1]['regionReason'] == 'provision-alternation'
 
-    # Opus MINOR-4: eastus-sealed plan NEVER alternates to eastus2 (guest only accepts eastus2->eastus).
+    # An eastus-sealed plan never alternates to eastus2.
     ledger.attempts.clear(); ledger.write()
     def _seal_eastus(_s, pl):
         pl['region'] = 'eastus'; schedules.prepare(pl)
@@ -4113,6 +4138,7 @@ def test_run8_d3_guest_stdlib_only_and_s2_row_member_limits_agree():
     assert imported <= sys.stdlib_module_names, sorted(imported - sys.stdlib_module_names)
 
     config = prepare.azure_config(json.loads((gate.GATE / 'gated.json').read_text()))
+    config['time']['noise']['Standard_F8als_v7'] = {}
     audit = json.loads((gate.REPO / 'benchmarks/Chrysalis.Benchmarks/audit-allocations.json').read_text())
     entries = json.loads((gate.GATE / 'plans/noise-records.json').read_text())
     selected = gate.select_rows(SimpleNamespace(mode='release', plan=None, only=None), config, audit, plan_entries=entries)
@@ -4153,3 +4179,552 @@ def test_run8_d10_f1_results_limit_12mb_and_no_plan_10mb(tmp_path):
     with pytest.raises(guest.ResultsRefused) as err_over:
         guest.check_results(over_125, limits=limits)
     assert err_over.value.reason == 'results-too-large'
+
+
+def test_c3rc_d2_draw_wait_transient_read_and_cli_tolerance(fake, tmp_path, monkeypatch, capsys):
+    clock, sleeps = [10_000.0], []
+    _patch_clock(monkeypatch, (azure, guard, proof), clock, sleeps=sleeps)
+    draw = make_draw(fake, tmp_path, start=int(clock[0]), lifetime=2574, raw_seconds=1518)
+    vm = draw.path('Compute', 'virtualMachines')
+    # 1. Transient errors twice on poll 1 (within READ_WAITS=(2,5)), then across two consecutive polls, then Succeeded.
+    seq = iter([
+        proof.AzureError('timeout'),
+        proof.AzureError('TooManyRequests'),
+        proof.AzureError('ServiceUnavailable'),
+        proof.AzureError('timeout'),
+        proof.AzureError('TooManyRequests'),
+        proof.AzureError('ServiceUnavailable'),
+        'Succeeded',
+    ])
+    def _step(it):
+        v = next(it)
+        if isinstance(v, BaseException):
+            raise v
+        return v
+    monkeypatch.setattr(fake, '_call', lambda *_a, **_k: _step(seq))
+    draw.wait(vm, azure.API_VM)
+    assert sleeps[:2] == [2, 5] and clock[0] < draw.provision_deadline
+
+    # 2. 2 consecutive unclassified CLI read failures -> fixed log line, counter resets on healthy poll, succeeds.
+    capsys.readouterr()
+    cli_err = proof.AzureError('rest command failed (exit 1; details suppressed)')
+    seq2 = iter([cli_err, cli_err, 'Creating', cli_err, cli_err, 'Succeeded'])
+    monkeypatch.setattr(fake, '_call', lambda *_a, **_k: _step(seq2))
+    draw.wait(vm, azure.API_VM)
+    out2 = capsys.readouterr().out
+    assert out2.count('Azure wait virtualMachines transient read failure (1/3); continuing') == 2
+    assert out2.count('Azure wait virtualMachines transient read failure (2/3); continuing') == 2
+
+    # 3. 3 consecutive unclassified CLI read failures -> raises immediately on 3rd.
+    capsys.readouterr()
+    seq3 = iter([cli_err, cli_err, cli_err, 'Succeeded'])
+    monkeypatch.setattr(fake, '_call', lambda *_a, **_k: _step(seq3))
+    with pytest.raises(proof.AzureError, match='rest command failed'):
+        draw.wait(vm, azure.API_VM)
+    out3 = capsys.readouterr().out
+    assert '(1/3); continuing' in out3 and '(2/3); continuing' in out3 and '(3/3)' not in out3
+
+
+def test_c3rc_d2_draw_wait_non_vm_and_deadline_and_non_transient(fake, tmp_path, monkeypatch):
+    clock, sleeps = [10_000.0], []
+    _patch_clock(monkeypatch, (azure, guard, proof), clock, sleeps=sleeps)
+    draw = make_draw(fake, tmp_path, start=int(clock[0]), lifetime=1256, raw_seconds=372)
+    nic = draw.path('Network', 'networkInterfaces')
+    # Non-VM Draw.wait survives transient error + 1 unclassified CLI failure.
+    seq = iter([
+        proof.AzureError('ServiceUnavailable'),
+        proof.AzureError('rest command failed (exit 1; details suppressed)'),
+        'Succeeded',
+    ])
+    def _step(it):
+        v = next(it)
+        if isinstance(v, BaseException):
+            raise v
+        return v
+    monkeypatch.setattr(fake, '_call', lambda *_a, **_k: _step(seq))
+    draw.wait(nic, azure.API_NET)
+    # Non-VM deadline expiry makes zero _diag_vm calls and wait_for does not overshoot provision_deadline.
+    diag_calls = []
+    monkeypatch.setattr(draw, '_diag_vm', lambda *a: diag_calls.append(a))
+    clock[0] = draw.provision_deadline - 2.0
+    monkeypatch.setattr(fake, '_call', lambda *_a, **_k: 'Creating')
+    with pytest.raises(guard.GuardFailure, match='Azure provision deadline reached'):
+        draw.wait(nic, azure.API_NET)
+    assert diag_calls == [] and clock[0] == draw.provision_deadline
+
+    # VM deadline-cutoff transient error turns into GuardFailure('Azure provision deadline reached') + _diag_vm,
+    # and timeout passed to _call is clamped to remaining time.
+    vm = draw.path('Compute', 'virtualMachines')
+    clock[0] = draw.provision_deadline - 1.5
+    timeouts = []
+    def transient_near_end(_args, **kw):
+        timeouts.append(kw.get('timeout'))
+        clock[0] += 0.5
+        raise proof.AzureError('TooManyRequests')
+    monkeypatch.setattr(fake, '_call', transient_near_end)
+    with pytest.raises(guard.GuardFailure, match='Azure provision deadline reached'):
+        draw.wait(vm, azure.API_VM)
+    assert diag_calls == [(vm, azure.API_VM)]
+    assert timeouts and all(t <= 1.5 for t in timeouts) and clock[0] <= draw.provision_deadline
+
+    # Non-transient AuthorizationFailed raises on try 1 with 0 sleeps.
+    sleeps.clear()
+    clock[0] = 10_010.0
+    calls_auth = []
+    def auth_err(*_a, **_k):
+        calls_auth.append(1)
+        raise proof.AzureError('AuthorizationFailed')
+    monkeypatch.setattr(fake, '_call', auth_err)
+    with pytest.raises(proof.AzureError, match='AuthorizationFailed'):
+        draw.wait(vm, azure.API_VM)
+    assert len(calls_auth) == 1 and sleeps == []
+
+    # Failed + instanceView transient error retried via READ_WAITS -> CapacityUnavailable via allocate().
+    sleeps.clear()
+    iv_seq = iter(['Failed', proof.AzureError('ServiceUnavailable'), ['AllocationFailed']])
+    monkeypatch.setattr(fake, '_call', lambda *_a, **_k: _step(iv_seq))
+    with pytest.raises(azure.CapacityUnavailable, match='AllocationFailed'):
+        draw.allocate(draw.wait, vm, azure.API_VM)
+    assert sleeps == [2]
+
+
+def test_c3rc_d2_q2_adjacent_setup_and_schedule_gets_bounded(fake, tmp_path, monkeypatch):
+    clock, sleeps = [10_000.0], []
+    _patch_clock(monkeypatch, (azure, guard, channel, proof), clock, sleeps=sleeps)
+    draw = make_draw(fake, tmp_path, start=int(clock[0]), lifetime=2574, raw_seconds=1518)
+    monkeypatch.setattr(azure, 'provision_public_key', lambda: 'ssh-ed25519 ' + 'A' * 68)
+    monkeypatch.setattr(azure, 'upload_inputs', lambda *_a: None)
+    orig_rest = fake.rest
+    seen = {}
+    targets = ('/userAssignedIdentities/gate?', '/roleAssignments/', '/networkWatchers?', '/schedules/shutdown-computevm-gate?')
+
+    def check_rest(method, path, **kw):
+        if method == 'get':
+            for tok in targets:
+                if tok in path:
+                    seen.setdefault(tok, []).append((kw.get('waits'), kw.get('until')))
+        return orig_rest(method, path, **kw)
+
+    monkeypatch.setattr(fake, 'rest', check_rest)
+    orig_call = fake._call
+    fail_counts = {}
+
+    def flaky_adjacent(args, **kw):
+        url = args[args.index('--url') + 1] if '--url' in args else ''
+        method = args[args.index('--method') + 1] if '--method' in args else ''
+        if method == 'get':
+            for tok in targets:
+                if tok in url:
+                    fail_counts[tok] = fail_counts.get(tok, 0) + 1
+                    if fail_counts[tok] <= 2:
+                        raise proof.AzureError('ServiceUnavailable')
+        return orig_call(args, **kw)
+
+    monkeypatch.setattr(fake, '_call', flaky_adjacent)
+    draw.setup({})
+    assert set(seen) == set(targets)
+    for tok in targets[:3]:
+        assert seen[tok][0] == (proof.READ_WAITS, draw.provision_deadline)
+    assert seen[targets[3]][0] == (proof.READ_WAITS, draw.latest_worker_start)
+    assert all(fail_counts[t] == 3 for t in targets)
+
+
+def test_c3rc_d3_eastus_capacity_redraws_to_eastus2(fake, site, ledger, monkeypatch):
+    # Draw 1 fails wait virtualMachines in eastus2 -> draw 2 settles exit 6 in eastus -> draw 3 runs in eastus2 & kept.
+    rc, d1, seal1, go1, calls1, draws1 = _run_fly(
+        monkeypatch, site, ledger, ['step:wait virtualMachines', 'eastus-cap', 'kept'], tag='d3cap')
+    assert rc == 0 and [(c[2], c[5]) for c in calls1] == [(1, 'eastus2'), (2, 'eastus'), (3, 'eastus2')]
+    assert [d['region'] for d in draws1] == ['eastus2', 'eastus', 'eastus2']
+    assert [d['decision'] for d in draws1] == ['invalid-pre-ready', 'invalid-pre-ready', 'kept']
+    assert draws1[1]['regionReason'] == 'provision-alternation' and draws1[1]['preReadyStep'] == 'put virtualMachines'
+    assert draws1[2]['regionReason'] == 'capacity-alternation'
+
+    # Direct expected_draw_region + gate_azure.launch authorizes draw 3 in eastus2 and refuses eastus.
+    import types
+    import gate_fly_guard, gate_azure_payload
+    plan1 = seal1['timePlans'][0]
+    ledger.attempts.pop(calls1[2][3])
+    ledger.write()
+    assert bundle.expected_draw_region(d1, ledger, go1, 0, plan1, 'first', draw=3) == 'eastus2'
+    with monkeypatch.context() as mp:
+        mp.setenv('GATE_BUNDLE', 'input/session-0.tar.gz')
+        mp.setattr(azure, 'held_lock', lambda *_: None)
+        mp.setattr(azure, 'authorize_dispatch', lambda *_: None)
+        mp.setattr(gate_fly_guard, 'verified_launch_inputs', lambda *_a, **_k: {'go': go1})
+        mp.setattr(gate_azure_payload, 'verify_inputs', lambda *_a, **_k: {})
+        mp.setattr(azure, 'Az', lambda *_: fake)
+        seen = []
+        mp.setattr(azure, 'one_attempt', lambda _az, _loc, _led, _s, _g, _d, _pl, _app, reg, *_a: (seen.append(reg), 0)[1])
+        mk = lambda reg, draw=3: types.SimpleNamespace(
+            seal=d1 / 'seal.json', session=0, draw=draw, phase='first', approved=OTHER,
+            region=reg, fallback_of=None, context=('test', 'fixture'), dry_run=False)
+        assert azure.launch(mk('eastus2', draw=3)) == 0 and seen == ['eastus2']
+        with pytest.raises(azure.Refusal, match='Unsealed region'):
+            azure.launch(mk('eastus', draw=3))
+
+
+def test_c3rc_d3_eastus_capacity_negative_guards_and_cross_phase_cap(site, ledger, monkeypatch):
+    # (a) 2-entry eastus2(6) -> eastus(6) stops invalid, expected_draw_region is None.
+    rc_both, d_both, seal_both, go_both, calls_both, draws_both = _run_fly(
+        monkeypatch, site, ledger, ['both-cap', 'kept'], tag='d3both')
+    assert rc_both == 2 and len(calls_both) == 1 and draws_both[0]['decision'] == 'invalid'
+    assert bundle.expected_draw_region(d_both, ledger, go_both, 0, seal_both['timePlans'][0], 'first', draw=2) is None
+
+    # (b) single-entry eastus2(6) refused.
+    local, _ = site
+    plan = seal_both['timePlans'][0]
+    ledger.attempts.clear()
+    g1 = 'chrysalis-gate-20990405t000301-eeee0001'
+    _settle_pre_ready(d_both, ledger, go_both, 0, 'first', 1, g1, status=6, region='eastus2')
+    assert bundle.expected_draw_region(d_both, ledger, go_both, 0, plan, 'first', draw=2) is None
+
+    # (c) eastus-sealed plan getting exit 6 stops with no re-draw.
+    ledger.attempts.clear(); ledger.write()
+    def _seal_eu(_s, pl):
+        pl['region'] = 'eastus'; schedules.prepare(pl)
+    rc_eu, d_eu, seal_eu, go_eu, calls_eu, draws_eu = _run_fly(
+        monkeypatch, site, ledger, ['eastus-cap', 'kept'], seal_patch=_seal_eu, tag='d3eu6')
+    assert rc_eu == 2 and len(calls_eu) == 1 and draws_eu[0]['decision'] == 'invalid'
+    assert bundle.expected_draw_region(d_eu, ledger, go_eu, 0, seal_eu['timePlans'][0], 'first', draw=2) is None
+
+    # (d) eastus(6) with wrong class or wrong step in pre-ready-failure.json refused.
+    ledger.attempts.clear()
+    a1, a2 = 'chrysalis-gate-20990405t000311-ffff0001', 'chrysalis-gate-20990405t000312-ffff0002'
+    _settle_pre_ready(d_both, ledger, go_both, 0, 'first', 1, a1, status=2, region='eastus2')
+    dump(d_both / 'time/runs' / a1 / 'pre-ready-failure.json', {'class': 'GuardFailure', 'step': 'wait virtualMachines', 'seconds': 691.0})
+    _settle_pre_ready(d_both, ledger, go_both, 0, 'first', 2, a2, status=6, region='eastus')
+    dump(d_both / 'time/runs' / a2 / 'pre-ready-failure.json', {'class': 'GuardFailure', 'step': 'put virtualMachines', 'seconds': 12.3})
+    assert bundle.expected_draw_region(d_both, ledger, go_both, 0, plan, 'first', draw=3) is None
+    assert bundle._pre_ready_settled(d_both, local, go_both, 0, 'first', 2, a2, None, plan, status=6) is False
+    dump(d_both / 'time/runs' / a2 / 'pre-ready-failure.json', {'class': 'CapacityUnavailable', 'step': 'run-command init', 'seconds': 12.3})
+    assert bundle.expected_draw_region(d_both, ledger, go_both, 0, plan, 'first', draw=3) is None
+    assert bundle._pre_ready_settled(d_both, local, go_both, 0, 'first', 2, a2, None, plan, status=6) is False
+
+    # (e) Cross-phase MAX_PRE_READY_REDRAWS = 3 counts an eastus(6) re-draw in first and blocks a 4th in repeat.
+    ledger.attempts.clear()
+    c1, c2, c3, c4, r1 = [f'chrysalis-gate-20990405t00032{i}-abcd000{i}' for i in range(1, 6)]
+    _settle_pre_ready(d_both, ledger, go_both, 0, 'first', 1, c1, status=2, region='eastus2')
+    dump(d_both / 'time/runs' / c1 / 'pre-ready-failure.json', {'class': 'GuardFailure', 'step': 'wait virtualMachines', 'seconds': 691.0})
+    _settle_pre_ready(d_both, ledger, go_both, 0, 'first', 2, c2, status=6, region='eastus')
+    _settle_pre_ready(d_both, ledger, go_both, 0, 'first', 3, c3, status=2, region='eastus2')
+    dump(d_both / 'time/runs' / c3 / 'pre-ready-failure.json', {'class': 'GuardFailure', 'step': 'run-command init', 'seconds': 120.0})
+    _settle_pre_ready(d_both, ledger, go_both, 0, 'first', 4, c4, status=0, region='eastus2')
+    _settle_pre_ready(d_both, ledger, go_both, 0, 'repeat', 1, r1, status=2, region='eastus2')
+    dump(d_both / 'time/runs' / r1 / 'pre-ready-failure.json', {'class': 'GuardFailure', 'step': 'wait virtualMachines', 'seconds': 691.0})
+    assert bundle.expected_draw_region(d_both, ledger, go_both, 0, plan, 'repeat', draw=2) is None
+
+
+@pytest.mark.parametrize('lead', [1.5, 4.0])
+def test_c3rc_d4_watchdog_transient_near_deadline_bounded_and_preserves_provisional(fake, site, monkeypatch, lead):
+    local, directory = site
+    wd_state = directory / 'time/runs' / OTHER / '.guard'
+    wd_state.mkdir(parents=True); wd_state.chmod(0o700)
+    (wd_state / 'local-path').write_text(os.environ['CHRYSALIS_GATE_LOCAL'])
+    wd_start, wd_guard = 30_000, 1256
+    wd_deadline = wd_start + wd_guard + guard.RESERVE_TAIL
+    dump(wd_state / 'watchdog.json', dict(group=OTHER, region='eastus2', start=wd_start, guard=wd_guard,
+                                          cutoff=wd_guard - 345, distro='test', user='fixture',
+                                          subscriptionFingerprint=proof.fingerprint(SID)))
+    guard.mark(wd_state, 'group-put-sent')
+    clock, wd_untils, pass_n = [wd_deadline - 20.0], [], [0]
+    orig_call, orig_proof = fake._call, azure.proof
+
+    def pass2_transient(args, **kw):
+        url = args[args.index('--url') + 1] if '--url' in args else ''
+        if pass_n[0] >= 2 and '/resourceGroups?' in url:
+            clock[0] = max(clock[0], wd_deadline - lead)
+            raise proof.AzureError('TooManyRequests')
+        return orig_call(args, **kw)
+
+    def tracked_proof(*a, **kw):
+        pass_n[0] += 1
+        wd_untils.append(kw.get('until'))
+        return orig_proof(*a, **kw)
+
+    with monkeypatch.context() as mp:
+        _patch_clock(mp, (azure, guard, proof), clock)
+        mp.setattr(azure, 'HERE', directory / 'input/azure')
+        mp.setattr(azure, 'wsl_context', lambda: ('test', 'fixture'))
+        mp.setattr(bundle, 'checked_azure_local', lambda _: local)
+        mp.setattr(gate, 'read_seal', lambda _: {})
+        mp.setattr(azure, 'Az', lambda *_: fake)
+        mp.setattr(fake, 'pin', lambda: SID)
+        mp.setattr(fake, '_call', pass2_transient)
+        mp.setattr(azure, 'proof', tracked_proof)
+        azure.watchdog(wd_state)
+
+    assert wd_untils == [wd_deadline, wd_deadline]
+    assert clock[0] <= wd_deadline
+    assert (wd_state / 'watchdog-proof.json').is_file() and not (wd_state / 'failed').exists()
+    assert 'CLEANUP FAILURE' not in (wd_state / 'alerts.log').read_text()
+
+
+def test_c3rc_d6_status_failure_log_and_guest_error_clear(tmp_path, monkeypatch, capsys):
+    pf = tmp_path / 'p.tar.gz'
+    archive(pf, {'plan.json': {'probe': {'processes': 16}, 'members': {}}})
+    monkeypatch.setattr(channel, 'storage_key', lambda _d: 'K' * 48)
+    monkeypatch.setattr(channel, 'signed_blob', lambda *_a: 'tok')
+    monkeypatch.setattr(channel, 'seal', lambda *_a: 'sealed')
+
+    # 1. Tolerated status-00 sets guest_error -> cleared on continue so later push/status failure does not inherit it;
+    #    log carries exception class and +Ns AFTER "; continuing".
+    ev1, dr1 = tmp_path / 'tol/ev', tmp_path / 'tol/dr'
+    (ev1 / '.guard').mkdir(parents=True); dr1.mkdir(parents=True)
+    clock1 = [10_000.0]
+    _patch_clock(monkeypatch, (azure, guard, channel), clock1)
+    d1 = make_draw(Mock(subscription=SID), dr1, start=int(clock1[0]), lifetime=2494)
+    d1.account = 'chry' + '0' * 16
+    monkeypatch.setattr(channel, 'copy_results', lambda *_a, **_k: False)
+    seen1 = []
+    def cmd1(draw_arg, label, _script, _until, **_kw):
+        seen1.append(label)
+        if label == 'init':
+            return {'payload': 'P', 'results': 'R'}
+        if label == 'kick':
+            return {'started': int(clock1[0]) + 5}
+        if label == 'status-00':
+            clock1[0] += 12.5
+            draw_arg.guest_error = {'command': 'status-00', 'reason': 'transient-rc'}
+            raise guard.GuardFailure('status-00 boom')
+        if label == 'status-01':
+            assert draw_arg.guest_error is None
+            return {'done': True}
+        raise AssertionError(label)
+    monkeypatch.setattr(channel, 'command', cmd1)
+    assert channel.run_channel(d1, {'payload': pf}, ev1) is False
+    assert d1.guest_error is None and seen1 == ['init', 'kick', 'status-00', 'status-01']
+    out1 = capsys.readouterr().out
+    assert re.search(r'Azure status-00 transient failure \(1/3\); continuing \(GuardFailure; \+[0-9]+\.[0-9]s\)', out1)
+
+    # 2. Failed status-00 at/after work_end (break branch) ALSO clears draw.guest_error for status-00.
+    ev2, dr2 = tmp_path / 'end/ev', tmp_path / 'end/dr'
+    (ev2 / '.guard').mkdir(parents=True); dr2.mkdir(parents=True)
+    clock2 = [10_000.0]
+    _patch_clock(monkeypatch, (azure, guard, channel), clock2)
+    d2 = make_draw(Mock(subscription=SID), dr2, start=int(clock2[0]), lifetime=2494)
+    d2.account = 'chry' + '0' * 16
+    def cmd2(draw_arg, label, _script, _until, **_kw):
+        if label == 'init':
+            return {'payload': 'P', 'results': 'R'}
+        if label == 'kick':
+            return {'started': int(clock2[0]) + 5}
+        if label == 'status-00':
+            clock2[0] = float(draw_arg.work_end)
+            draw_arg.guest_error = {'command': 'status-00', 'reason': 'at-cutoff'}
+            raise guard.GuardFailure('late status')
+        raise AssertionError(label)
+    monkeypatch.setattr(channel, 'command', cmd2)
+    assert channel.run_channel(d2, {'payload': pf}, ev2) is False
+    assert d2.guest_error is None
+
+    # 3. 3rd consecutive aborting status failure KEEPS draw.guest_error for that command.
+    ev3, dr3 = tmp_path / 'abort/ev', tmp_path / 'abort/dr'
+    (ev3 / '.guard').mkdir(parents=True); dr3.mkdir(parents=True)
+    clock3 = [10_000.0]
+    _patch_clock(monkeypatch, (azure, guard, channel), clock3)
+    d3 = make_draw(Mock(subscription=SID), dr3, start=int(clock3[0]), lifetime=2494)
+    d3.account = 'chry' + '0' * 16
+    def cmd3(draw_arg, label, _script, _until, **_kw):
+        if label == 'init':
+            return {'payload': 'P', 'results': 'R'}
+        if label == 'kick':
+            return {'started': int(clock3[0]) + 5}
+        draw_arg.guest_error = {'command': label, 'reason': 'err-' + label}
+        raise guard.GuardFailure('fail-' + label)
+    monkeypatch.setattr(channel, 'command', cmd3)
+    with pytest.raises(guard.GuardFailure, match='fail-status-02'):
+        channel.run_channel(d3, {'payload': pf}, ev3)
+    assert d3.guest_error == {'command': 'status-02', 'reason': 'err-status-02'}
+
+
+def test_c3rc_d6_no_global_time_sleep_patching_in_subprocess_tests():
+    import ast
+    tree = ast.parse(Path(__file__).read_text())
+    target_fns = {
+        'test_cleanup_waits_through_accepted_delete_and_transient',
+        'test_init_submit_timeout_polls_without_resending',
+        'test_host_step_markers_written_with_times_and_stop_at_failure_step',
+        '_run_vm_deadline_attempt',
+        'test_azdiag_init_failed_exit75_and_work_deadline_stay_redraw_eligible',
+    }
+    bad = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.FunctionDef) and node.name in target_fns:
+            for call in ast.walk(node):
+                if isinstance(call, ast.Call) and isinstance(call.func, ast.Attribute) and call.func.attr == 'setattr':
+                    if len(call.args) >= 2 and isinstance(call.args[1], ast.Constant) and call.args[1].value in ('time', 'sleep'):
+                        arg0 = ast.unparse(call.args[0])
+                        if arg0 in ('time', 'azure.time', 'guard.time', 'channel.time', 'proof.time', 'mod'):
+                            bad.append((node.name, arg0, call.args[1].value))
+    assert bad == [], f'Global time module patched in subprocess tests: {bad}'
+
+
+def _run_wd_case(fake, site, monkeypatch, tag, *, start_offset, call_hook=None, delete_hook=None, seed_provisional=False):
+    local, directory = site
+    wd_state = directory / 'time/runs' / f'chrysalis-gate-20990405t0004{tag}-abab0000' / '.guard'
+    wd_state.mkdir(parents=True, exist_ok=True); wd_state.chmod(0o700)
+    (wd_state / 'local-path').write_text(os.environ['CHRYSALIS_GATE_LOCAL'])
+    wd_start, wd_guard = 30_000, 1256
+    wd_deadline = wd_start + wd_guard + guard.RESERVE_TAIL
+    dump(wd_state / 'watchdog.json', dict(group=wd_state.parent.name, region='eastus2', start=wd_start, guard=wd_guard,
+                                          cutoff=wd_guard - 345, distro='test', user='fixture',
+                                          subscriptionFingerprint=proof.fingerprint(SID)))
+    guard.mark(wd_state, 'group-put-sent')
+    if seed_provisional:
+        dump(wd_state / 'watchdog-proof.json', dict(ended=wd_deadline - 30, summary={'ourAppAbsent': True}, provisional=True))
+    clock, passes = [wd_deadline - start_offset], [0]
+    orig_call, orig_proof, orig_del = fake._call, azure.proof, azure.Draw.delete
+
+    def tracked_proof(*a, **kw):
+        passes[0] += 1
+        return orig_proof(*a, **kw)
+
+    with monkeypatch.context() as mp:
+        _patch_clock(mp, (azure, guard, proof), clock)
+        mp.setattr(azure, 'HERE', directory / 'input/azure')
+        mp.setattr(azure, 'wsl_context', lambda: ('test', 'fixture'))
+        mp.setattr(bundle, 'checked_azure_local', lambda _: local)
+        mp.setattr(gate, 'read_seal', lambda _: {})
+        mp.setattr(azure, 'Az', lambda *_: fake)
+        mp.setattr(fake, 'pin', lambda: SID)
+        if call_hook:
+            mp.setattr(fake, '_call', lambda args, **kw: call_hook(args, kw, orig_call, clock, passes, wd_deadline))
+        if delete_hook:
+            mp.setattr(azure.Draw, 'delete', lambda self, until, **kw: delete_hook(self, until, kw, orig_del, clock, passes, wd_deadline))
+        mp.setattr(azure, 'proof', tracked_proof)
+        azure.watchdog(wd_state)
+    return wd_state, clock[0], passes[0], wd_deadline
+
+
+def test_c3rc_d4_watchdog_guards_leftover_early_delete_and_first_pass(fake, site, monkeypatch):
+    # Guard 3: real leftover on pass 2 at >= wd_deadline -> unlinks provisional proof, marks failed, logs CLEANUP FAILURE.
+    def leftover_p2(args, kw, orig, clock, passes, dl):
+        url = args[args.index('--url') + 1] if '--url' in args else ''
+        if passes[0] >= 2 and '/resourceGroups?' in url:
+            res = orig(args, **kw)
+            return dict(res, items=list(res['items']) + [{'id': f'/subscriptions/{SID}/resourceGroups/stray-orphan-group', 'location': 'eastus2'}])
+        if passes[0] >= 2 and '/networkSecurityGroups?' in url:
+            clock[0] = dl
+        return orig(args, **kw)
+    st3, _, p3, _ = _run_wd_case(fake, site, monkeypatch, '01', start_offset=20.0, call_hook=leftover_p2)
+    assert p3 == 2 and not (st3 / 'watchdog-proof.json').exists() and (st3 / 'failed').is_file()
+    assert 'CLEANUP FAILURE' in (st3 / 'alerts.log').read_text()
+
+    # Guard 4: early transient error (wd_deadline - 40s) unlinks stale provisional proof and retries fresh pass.
+    unlinked_seen = []
+    def early_transient(args, kw, orig, clock, passes, dl):
+        url = args[args.index('--url') + 1] if '--url' in args else ''
+        if passes[0] == 2 and '/resourceGroups?' in url:
+            raise proof.AzureError('TooManyRequests')
+        if passes[0] == 3 and '/resourceGroups?' in url:
+            unlinked_seen.append(not (st4_ref[0] / 'watchdog-proof.json').exists())
+            clock[0] = dl - 1.0  # finish cleanly after re-proving
+        return orig(args, **kw)
+    st4_ref = [site[1] / 'time/runs/chrysalis-gate-20990405t000402-abab0000/.guard']
+    st4, _, p4, _ = _run_wd_case(fake, site, monkeypatch, '02', start_offset=50.0, call_hook=early_transient)
+    assert p4 >= 3 and unlinked_seen == [True] and (st4 / 'watchdog-proof.json').is_file()
+
+    # Guard 5: late group failing draw.delete on pass 2 near deadline -> unlinks provisional proof, marks failed.
+    def fail_del_p2(self, until, kw, orig, clock, passes, dl):
+        if passes[0] >= 1:
+            clock[0] = dl
+            raise guard.GuardFailure('group not confirmed absent by cleanup attempt deadline')
+        return orig(self, until, **kw)
+    st5, _, _, _ = _run_wd_case(fake, site, monkeypatch, '03', start_offset=20.0, delete_hook=fail_del_p2)
+    assert not (st5 / 'watchdog-proof.json').exists() and (st5 / 'failed').is_file()
+    assert 'CLEANUP FAILURE' in (st5 / 'alerts.log').read_text()
+
+    # Guard 6: pass 1 only straddling wd_deadline (no earlier provisional proof) -> fails closed.
+    def slow_p1(args, kw, orig, clock, passes, dl):
+        clock[0] += 1.0
+        return orig(args, **kw)
+    st6, clk6, p6, dl6 = _run_wd_case(fake, site, monkeypatch, '04', start_offset=5.0, call_hook=slow_p1)
+    assert p6 == 1 and clk6 <= dl6 and not (st6 / 'watchdog-proof.json').exists() and (st6 / 'failed').is_file()
+    assert 'CLEANUP FAILURE' in (st6 / 'alerts.log').read_text()
+
+
+def test_c3rc_d6_opus_m2_and_fable_m1_defensive_guards(site, ledger, tmp_path, monkeypatch):
+    # 1. expected_draw_region defensive branches (gate_bundle.py:712, 716, 725, 726, 728).
+    local, directory = site
+    go, seal = sealed_site(site)
+    plan = seal['timePlans'][0]
+    g1, g2, g3 = [f'chrysalis-gate-20990405t00050{i}-cafe000{i}' for i in range(1, 4)]
+
+    # Gap in draw numbering (draw 1 + draw 3, missing draw 2) -> None (:712).
+    ledger.attempts.clear()
+    _settle_pre_ready(directory, ledger, go, 0, 'first', 1, g1, status=5, region='eastus2')
+    _settle_pre_ready(directory, ledger, go, 0, 'first', 3, g2, status=5, region='eastus2')
+    assert bundle.expected_draw_region(directory, ledger, go, 0, plan, 'first', draw=4) is None
+
+    # >2 entries for same draw -> None (:716).
+    ledger.attempts.clear()
+    for i, name in enumerate((g1, g2, g3)):
+        _settle_pre_ready(directory, ledger, go, 0, 'first', 1, name, status=6 if i < 2 else 5,
+                          fallback=None if i == 0 else g1, region='eastus2' if i == 0 else 'eastus')
+    assert bundle.expected_draw_region(directory, ledger, go, 0, plan, 'first', draw=2) is None
+
+    # 2-entry pentry checks (:725): bad pentry exitCode / region / fallbackOf / wrong fallback region -> None.
+    for mut in (
+        lambda p, f: p.update(exitCode=2),
+        lambda p, f: p.update(region='eastus'),
+        lambda p, f: p.update(fallbackOf=g3),
+        lambda p, f: f.update(region='eastus2'),
+    ):
+        ledger.attempts.clear()
+        _settle_pre_ready(directory, ledger, go, 0, 'first', 1, g1, status=6, region='eastus2')
+        _settle_pre_ready(directory, ledger, go, 0, 'first', 1, g2, status=5, fallback=g1, region='eastus')
+        mut(ledger.attempts[g1], ledger.attempts[g2])
+        assert bundle.expected_draw_region(directory, ledger, go, 0, plan, 'first', draw=2) is None
+
+    # 2-entry fallback draw when expected primary region is already eastus -> None (:726).
+    ledger.attempts.clear()
+    _settle_pre_ready(directory, ledger, go, 0, 'first', 1, g1, status=2, region='eastus2')
+    dump(directory / 'time/runs' / g1 / 'pre-ready-failure.json', {'class': 'GuardFailure', 'step': 'wait virtualMachines', 'seconds': 691.0})
+    _settle_pre_ready(directory, ledger, go, 0, 'first', 2, g2, status=6, region='eastus2')
+    _settle_pre_ready(directory, ledger, go, 0, 'first', 2, g3, status=5, fallback=g2, region='eastus')
+    assert bundle.expected_draw_region(directory, ledger, go, 0, plan, 'first', draw=3) is None
+
+    # Single-entry draw with fallbackOf != None or wrong region != expected -> None (:728).
+    ledger.attempts.clear()
+    _settle_pre_ready(directory, ledger, go, 0, 'first', 1, g1, status=5, fallback=g2, region='eastus2')
+    assert bundle.expected_draw_region(directory, ledger, go, 0, plan, 'first', draw=2) is None
+    ledger.attempts.clear()
+    _settle_pre_ready(directory, ledger, go, 0, 'first', 1, g1, status=5, region='eastus')
+    assert bundle.expected_draw_region(directory, ledger, go, 0, plan, 'first', draw=2) is None
+
+    # 2. fly_sessions keeps current_region (eastus) and clears region_reason across probe rejection (:1300).
+    ledger.attempts.clear(); ledger.write()
+    rc_pr, _, _, _, calls_pr, draws_pr = _run_fly(
+        monkeypatch, site, ledger, ['step:wait virtualMachines', 'rejected', 'kept'], tag='prkeep')
+    assert rc_pr == 0 and [(c[2], c[5]) for c in calls_pr] == [(1, 'eastus2'), (2, 'eastus'), (3, 'eastus')]
+    assert [d['decision'] for d in draws_pr] == ['invalid-pre-ready', 'rejected', 'kept']
+    assert draws_pr[1]['regionReason'] == 'provision-alternation' and 'regionReason' not in draws_pr[2]
+
+    # 3. run_channel slow failed status poll advances wake >= finish + interval (:291) & work_end break (:283-284).
+    pf = tmp_path / 'p.tar.gz'
+    archive(pf, {'plan.json': {'probe': {'processes': 16}, 'members': {}}})
+    monkeypatch.setattr(channel, 'storage_key', lambda _d: 'K' * 48)
+    monkeypatch.setattr(channel, 'signed_blob', lambda *_a: 'tok')
+    monkeypatch.setattr(channel, 'seal', lambda *_a: 'sealed')
+    monkeypatch.setattr(channel, 'copy_results', lambda *_a, **_k: False)
+    ev, dr = tmp_path / 'slowpoll/ev', tmp_path / 'slowpoll/dr'
+    (ev / '.guard').mkdir(parents=True); dr.mkdir(parents=True)
+    clock = [10_000.0]
+    _patch_clock(monkeypatch, (azure, guard, channel), clock)
+    d = make_draw(Mock(subscription=SID), dr, start=int(clock[0]), lifetime=2494)
+    d.account = 'chry' + '0' * 16
+    poll_starts = []
+    def slow_fail_cmd(draw_arg, label, _script, _until, **_kw):
+        if label == 'init':
+            return {'payload': 'P', 'results': 'R'}
+        if label == 'kick':
+            return {'started': int(clock[0]) + 5}
+        poll_starts.append((label, clock[0]))
+        if label == 'status-00':
+            clock[0] += 120.0  # slow failed poll finishes 120s after wake
+            raise proof.AzureError('timeout')
+        return {'done': True}
+    monkeypatch.setattr(channel, 'command', slow_fail_cmd)
+    assert channel.run_channel(d, {'payload': pf}, ev) is False
+    # status-00 started at t0, ended at t0 + 120; status-01 must wait full interval (300s) after finish (>= t0 + 420).
+    assert len(poll_starts) == 2 and poll_starts[1][1] - poll_starts[0][1] >= 420.0

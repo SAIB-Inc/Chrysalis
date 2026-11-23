@@ -13,7 +13,7 @@ from pathlib import Path
 import gate_session as session
 import gate_schedule as schedules
 import gate_stats as stats
-from summarize import confidence95
+from summarize import confidence95, t95
 
 # Governing D24 ceiling is code, never a configurable input (coordinator ruling).
 MAX_APP_SECONDS = 7200
@@ -683,6 +683,76 @@ def pooled(first, repeat, mode, *, sealed_first_status=None):
     return dict(result, first=first, repeat=repeat, **flag)
 
 
+RULE_C_BAND = .04
+
+
+def _rule_c_ci(values, n):
+    require(type(n) is int and n >= 5 and isinstance(values, list) and len(values) >= 2
+            and all(type(v) in (int, float) and math.isfinite(v) for v in values), 'Invalid Rule C interval input')
+    k = min(len(values), n)
+    mean, margin = st.mean(values), t95(k - 1) * st.stdev(values) / math.sqrt(k)
+    return [mean - margin, mean + margin]
+
+
+def rule_c(first, second, *, first_finding=False, second_finding=False):
+    require(isinstance(first, dict) and isinstance(second, dict) and isinstance(first.get('id'), str)
+            and first['id'] and first['id'] == second.get('id'), 'Rule C requires matching row ids')
+    n = first.get('declaredPairs')
+    require(type(n) is int and n >= 5 and second.get('declaredPairs') == n, 'Rule C requires matching declaredPairs >= 5')
+    num = lambda v: type(v) in (int, float) and math.isfinite(v)
+    rlist = lambda seq: isinstance(seq, list) and all(num(v) for v in seq)
+    flags = [m for ok, m in ((second_finding or (second.get('outlier') or {}).get('finding'), 'finding in re-measure session'),
+                             ((first.get('outlier') or {}).get('replaced') and (second.get('outlier') or {}).get('replaced'), 'replaced in both attempts')) if ok]
+    base = dict(id=first['id'], pairs=n, flagged=bool(flags), flagReason='; '.join(flags) or None)
+    if first.get('status') == 'PASS' or first_finding or (first.get('outlier') or {}).get('finding'):
+        why = 'first attempt passed' if first.get('status') == 'PASS' else 'finding in first session'
+        return dict(base, eligible=False, status='NOT_ELIGIBLE', reason=why, remeasureBand=None,
+                    pooledBand=None, frozenBand=None, pooledCompileShare=None, pooledStabilityOk=None)
+    sec_band = second.get('band') if num(second.get('band')) else None
+    sr, fr = second.get('pairedRatios'), [] if first.get('pairedRatios') is None else first.get('pairedRatios')
+    sr_ok = rlist(sr) and len(sr) >= 5
+    pband = max(abs(v - 1) for v in _rule_c_ci(fr + sr, n)) if sr_ok and rlist(fr) else None
+    def uniq(raw, fn, req):
+        if not isinstance(raw, list) or (req and not raw):
+            return None
+        out = {p[0]: p[1] for x in raw if isinstance(x, dict) and (p := fn(x)) is not None}
+        return out if len(out) == len(raw) else None
+    q_ok = lambda q, pos: (isinstance(q, dict) and num(q.get('summedJitMs')) and num(q.get('summedMeasuredBodyMs'))
+                           and q['summedJitMs'] >= 0 and (q['summedMeasuredBodyMs'] > 0 if pos else q['summedMeasuredBodyMs'] >= 0))
+    c_fn = lambda c: ((c['phase'], c['side']), c) if isinstance(c.get('phase'), str) and isinstance(c.get('side'), str) else None
+    s_fn = lambda req: lambda c: (tuple(c['groups']), c['pairedRatios']) if (
+        isinstance(c.get('groups'), list) and c['groups'] and all(type(x) in (int, str) for x in c['groups'])
+        and rlist(c.get('pairedRatios')) and (not req or len(c['pairedRatios']) >= 5)) else None
+    smap, fmap = uniq(second.get('checks'), c_fn, True), uniq(first.get('checks') or [], c_fn, False)
+    max_share, stab_ok, sec_stab_valid = None, False, True
+    if smap is not None and fmap is not None and set(fmap) <= set(smap):
+        shares, stab_ok = [], True
+        for key, sc in smap.items():
+            sq, fq = sc.get('quiescence'), fmap[key].get('quiescence') if key in fmap else None
+            if not q_ok(sq, True) or (key in fmap and not q_ok(fq, False)):
+                shares = None; break
+            shares.append((sq['summedJitMs'] + (fq['summedJitMs'] if fq else 0)) / (sq['summedMeasuredBodyMs'] + (fq['summedMeasuredBodyMs'] if fq else 0)))
+            sm = uniq(sc.get('stability'), s_fn(True), True)
+            fm = uniq([] if key not in fmap or fmap[key].get('stability') is None else fmap[key]['stability'], s_fn(False), False)
+            if sm is None:
+                sec_stab_valid = stab_ok = False
+            elif fm is None or not set(fm) <= set(sm):
+                stab_ok = False
+            elif stab_ok:
+                stab_ok = all(.95 <= lo and hi <= 1.05 for g, svals in sm.items() for lo, hi in (_rule_c_ci(fm.get(g, []) + svals, n),))
+        max_share = max(shares) if shares is not None else None
+        stab_ok = stab_ok and max_share is not None
+    sec_ok = (second.get('status') == 'PASS' and sec_band is not None and 0 <= sec_band < RULE_C_BAND
+              and not second.get('qualificationFailures') and sr_ok and smap is not None and max_share is not None and sec_stab_valid)
+    reasons = [m for ok, m in ((sec_ok, 're-measure failed or >=4%'), (pband is not None and pband < .05, 'pooled band >=5%'),
+                               (max_share is not None and 0 <= max_share <= .005, 'pooled compile share >0.005'),
+                               (stab_ok, 'pooled stability outside [0.95, 1.05]')) if not ok]
+    return dict(base, eligible=True, status='PASS' if not reasons else 'REFUSED',
+                reason='rule C passed' if not reasons else '; '.join(reasons), remeasureBand=sec_band,
+                pooledBand=pband, frozenBand=max(sec_band, pband) if not reasons else None,
+                pooledCompileShare=max_share, pooledStabilityOk=stab_ok)
+
+
 ELIGIBLE_CHECKS = {'A band', 'A phase quiescence', 'A phase stability', 'B baseline quiescence', 'B baseline stability'}
 
 
@@ -863,7 +933,7 @@ def read_results(output, seal, *, mode=None, first_only=False):
                         workload = schedules.opaque(plan['scheduleSeed'], ['workload', row['id']])
                         effective = applied_row(row, payload['applied'][workload])
                     decision = None if invalid else session_decisions.get(phase, {}).get(row['id'])
-                    keep, aside = judged(effective, chosen, decision) if not invalid else (chosen, [])
+                    keep, aside = judged(effective, chosen, decision)
                     current = baseline_band(effective, keep, jit=aside) if plan['design'] in ('micro-band', 'noise-band') and not invalid else verdict(effective, keep, applied_mode, noise=row.get('noise'), invalid=invalid, jit=aside)
                     current['blockDiagnostic'] = schedules.block_diagnostics(keep)
                     if row['id'] in band_failures:

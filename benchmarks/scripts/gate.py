@@ -886,6 +886,32 @@ def phase_pairs(output, index, row, phase, count):
     return pairs
 
 
+def rule_c_command(first_path, second_path):
+    def load(path):
+        doc = json.loads(Path(path).read_text())
+        by_id = {r['id']: r for r in doc['rows'] if isinstance(r, dict) and isinstance(r.get('id'), str) and r['id']} if isinstance(doc, dict) and isinstance(doc.get('rows'), list) else None
+        if by_id is None or len(by_id) != len(doc['rows']):
+            raise ValueError(f'Invalid or duplicate rows in {path}')
+        return doc, by_id
+    (d1, _), (d2, m2) = load(first_path), load(second_path)
+    refused = [r for r in d1['rows'] if r.get('status') != 'PASS']
+    if not refused:
+        print('rule-c: no refused rows in first file')
+        return 3
+    missing = [r['id'] for r in refused if r['id'] not in m2]
+    if missing:
+        raise ValueError('Rule C missing re-measure row: ' + ', '.join(missing))
+    fmt = lambda v: '-' if v is None else f'{v:.6f}'
+    results = [gate_time.rule_c(r, m2[r['id']], first_finding=bool(d1.get('finding')), second_finding=bool(d2.get('finding'))) for r in refused]
+    for r in results:
+        stab = '-' if r['pooledStabilityOk'] is None else ('ok' if r['pooledStabilityOk'] else 'fail')
+        print(f"{r['id']} {r['status']} remeasure={fmt(r['remeasureBand'])} pooled={fmt(r['pooledBand'])} frozen={fmt(r['frozenBand'])} compile={fmt(r['pooledCompileShare'])} stability={stab} flagged={'yes' if r['flagged'] else 'no'} reason={r['reason']}")
+    other_failed = [r['id'] for r in d2['rows'] if r['id'] not in {x['id'] for x in refused} and r.get('status') != 'PASS']
+    if other_failed:
+        print('second-session refusal: ' + ', '.join(other_failed))
+    return 0 if all(r['status'] == 'PASS' and not r['flagged'] for r in results) and not other_failed else 3
+
+
 def report(output, mode=None):
     """Pure: only sealed rules/bands and content-checked raw files in output."""
     output = Path(output)
@@ -1246,6 +1272,9 @@ def main():
     report_parser = commands.add_parser('report')
     report_parser.add_argument('directory', type=Path)
     report_parser.add_argument('--mode', choices=('change', 'release'))
+    rule_c_parser = commands.add_parser('rule-c')
+    rule_c_parser.add_argument('first', type=Path)
+    rule_c_parser.add_argument('second', type=Path)
     retry_parser = commands.add_parser('retry')
     retry_parser.add_argument('parent', type=Path)
     retry_parser.add_argument('--kind', required=True, choices=('first', 'repeat'))
@@ -1271,6 +1300,8 @@ def main():
             print(retry_command(args.parent, kind=args.kind))
         elif args.command == 'report':
             print(report(args.directory, args.mode)['text'], end='')
+        elif args.command == 'rule-c':
+            raise SystemExit(rule_c_command(args.first, args.second))
         else:
             import gate_bundle
             raise SystemExit(gate_bundle.go_command(args.go, dry=getattr(args, 'dry_run', False), fly=args.command == 'fly'))
