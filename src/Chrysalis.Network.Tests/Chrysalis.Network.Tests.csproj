@@ -12,6 +12,8 @@
     <EmbeddedResource Include="Fixtures/Preprod/**/*" />
     <EmbeddedResource Include="Fixtures/Receive/*.cbor" />
     <EmbeddedResource Include="Fixtures/Receive/manifest.json" />
+    <EmbeddedResource Include="Fixtures/LocalStateQuery/*.cbor" />
+    <EmbeddedResource Include="Fixtures/LocalStateQuery/manifest.json" />
     <EmbeddedResource Include="Receive/Frozen/*.cs" />
     <EmbeddedResource Include="Receive/Frozen/SOURCE.json" />
     <EmbeddedResource Include="../Chrysalis.Tx.Test/TestData/cli/inputs/cardano-cli/preview-era-history.json" LogicalName="Cli/preview-era-history.json" />

@@ -54,14 +54,16 @@ internal sealed class ProtocolReplay : IDisposable
         finally { _outgoing.Reader.AdvanceTo(result.Buffer.End); }
     }
 
-    internal void AssertNothingSent()
+    internal void AssertNothingSent() => AssertNothingSent(_outgoing, "A version-rejected operation wrote an outgoing frame.");
+
+    internal static void AssertNothingSent(Pipe outgoing, string failureMessage)
     {
-        Assert.Equal(0, _outgoing.Writer.UnflushedBytes);
-        if (_outgoing.Reader.TryRead(out ReadResult result))
+        Assert.Equal(0, outgoing.Writer.UnflushedBytes);
+        if (outgoing.Reader.TryRead(out ReadResult result))
         {
             bool empty = result.Buffer.IsEmpty;
-            _outgoing.Reader.AdvanceTo(result.Buffer.End);
-            Assert.True(empty, "A version-rejected operation wrote an outgoing frame.");
+            outgoing.Reader.AdvanceTo(result.Buffer.End);
+            Assert.True(empty, failureMessage);
         }
     }
 
