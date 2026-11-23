@@ -53,37 +53,44 @@ class Shuffle:
             values[index], values[other] = values[other], values[index]
 
 
+def phase_pairs(row, key):
+    count, reserve = row[key], row.get('reservePairs', 0)
+    require(type(count) is int and count >= 0 and type(reserve) is int and reserve in (0, 1), 'Invalid declared pair count')
+    return count + (reserve if count else 0)
+
+
 def make_schedule(plan, seed):
     """Spread row blocks, not individual pairs; an odd tail has its own slot."""
     rng = Shuffle(seed)
     result, ordinal = [], 0
     for phase, key in (('A', 'aPairs'), ('B', 'bPairs')):
-        counts = [(row, (row[key] + 1) // 2) for row in sorted(plan['rows'], key=lambda item: item['id'].encode('utf-8'))]
-        require(all(type(row[key]) is int and row[key] >= 0 for row, _ in counts), 'Invalid declared pair count')
-        largest = max((count for _, count in counts), default=0)
+        counts = [(row, total, (total + 1) // 2)
+                  for row in sorted(plan['rows'], key=lambda item: item['id'].encode('utf-8'))
+                  for total in (phase_pairs(row, key),)]
+        largest = max((count for _, _, count in counts), default=0)
         rounds = [[] for _ in range(largest)]
         orientations = {}
-        for row, count in counts:
-            full = row[key] // 2
+        for row, total, count in counts:
+            full = total // 2
             choices = [False, True] * (full // 2)
             if full % 2:
                 choices.append(bool(rng.below(2)))  #0:ABBA/AB;1:BAAB/BA
             rng.shuffle(choices)
-            if row[key] % 2:
+            if total % 2:
                 choices.append(bool(rng.below(2)))  #0:ABBA/AB;1:BAAB/BA
             orientations[row['id']] = choices
             for block in range(1, count + 1):
                 # 1+floor((j-.5)K/k), with exact integer arithmetic.
                 index = ((2 * block - 1) * largest) // (2 * count)
-                rounds[index].append((row, block))
+                rounds[index].append((row, total, block))
         for round_number, blocks in enumerate(rounds, 1):
             rng.shuffle(blocks)
-            for row, number in blocks:
+            for row, total, number in blocks:
                 reverse = orientations[row['id']][number - 1]
                 members, pairs = [], []
                 for offset in range(2):
                     pair = 2 * number - 1 + offset
-                    if pair > row[key]:
+                    if pair > total:
                         break
                     names = ('candidate', 'baseline') if reverse ^ bool(offset) else ('baseline', 'candidate')
                     mapping = {}

@@ -232,6 +232,7 @@ def rehearsal_plans(plan, *, gen0=None):
         if gen0 is not None:
             variant['probe']['gen0BudgetBytes'] = gen0
         for row in variant['rows']:
+            row.pop('reservePairs', None)
             row.update(aPairs=1, bPairs=0, chargeSeconds=3 if case == 'fail' and row['id'] == fail_row else 300)
         variants[case] = schedules.prepare(variant)
     return variants
@@ -326,7 +327,7 @@ def rehearsal_checks(case, archive, plan, outcome):
     fail_rows = [n for n, r in recipe['rows'].items() if r['chargeSeconds'] <= 3]
     log_prelude = (bool(recipe['rows']) and all(any(l.startswith(f"{p}{s['prelude']}{n} {r} ") for l in lines)
                    for n in recipe['rows'] for r in ('baseline', 'candidate')) if case == 'pass' else
-                   any(l.startswith(f"{p}{s['prelude']}{n} {r} ") for n in fail_rows for r in ('baseline', 'candidate') for l in lines))
+                   any(l.startswith(f"{p}{s['prelude']}{n} {r} ") for n in fail_rows for r in ('sizing', 'baseline', 'candidate') for l in lines))
     checks = dict(
         archive_full=full, status_present=is_status, probe_kept=is_status and status.get('probe') == 'kept',
         exit_code=is_status and status.get('exitCode') == want_rc and outcome.get('exitCode') == want_rc,
@@ -455,7 +456,7 @@ def time_plans(seal):
     groups = [[row] for row in selected] if seal['sessionPerRow'] else [selected]
     plans = [plan for group in groups for plan in timing.size_sessions(
         group, 'change' if seal['noiseRecords'] else mode, option=config['time']['option'],
-        probe=timing.validate_probe_rule(config['time'].get('probe')), prelude=True)]
+        probe=timing.validate_probe_rule(config['time'].get('probe')), prelude=True, reserve=1)]
     proven = set()
     for plan in plans:
         if seal['noiseRecords']:

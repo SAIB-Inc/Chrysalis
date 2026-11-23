@@ -13,6 +13,7 @@ import re
 import secrets
 import signal
 import stat
+import statistics as st
 import shutil
 import subprocess
 import sys
@@ -27,6 +28,7 @@ from gate_fly_guard import clean_run_folder, probe_entries
 IMAGE_INDEX = 'mcr.microsoft.com/dotnet/sdk@sha256:65f3c7c6a25a239ab3e6719f2896147e7b68242ff2d8818dd70498bde6ef8bea'
 IMAGE = 'mcr.microsoft.com/dotnet/sdk@sha256:7913685c883a29dd8ba79da96172f5c6b29ed9be706ebe95935e3ef45f19c9c1'
 MICRO_PROBE_INVOCATIONS = 16
+MICRO_WARM_PASS_SECONDS = .020
 FLY_HOST_FILES = ('gate.py', 'gate_time.py', 'gate_bundle.py', 'gate_fly.sh', 'gate_fly_common.sh',
               'gate_fly_watchdog.sh', 'gate_fly_guard.py', 'gate_schedule.py', 'gate_session.py', 'gate_stats.py',
               'run_benchmarks.py', 'summarize.py', 'provenance.py', 'n2n_replay_server.py')
@@ -115,6 +117,16 @@ def calibrate_micro(observation, invocations):
 
 def micro_process_seconds(seconds, observations):
     return max(2, seconds) + 240 * max(item['nsPerBlock'] * item['blocks'] / 1e9 for item in observations)
+
+
+def calibrate_micro_warm(observations, invocations):
+    warm = st.median(item['nsPerBlock'] * item['blocks'] / 1e9 for item in observations)
+    timing.require(math.isfinite(warm) and warm > 0, 'Invalid micro warm sizing')
+    return warm, max(1, math.ceil(invocations * MICRO_WARM_PASS_SECONDS / warm))
+
+
+def micro_warm_process_seconds(seconds, warm, inv0, invocations):
+    return max(2, seconds) + 240 * warm * invocations / inv0
 
 
 def prepare(output, rows, staged, config, local):
@@ -294,20 +306,58 @@ def merge_noise_records(expected, batches):
     return records
 
 
+class NoiseStatisticsRefusal(ValueError):
+    pass
+
+
 def azure_noise_records(directory, seal, payload, number):
     import gate
     plan = seal['timePlans'][number]
     timing.require(plan['design'] == 'noise-band' and not payload['invalid'], 'Invalid noise-record session')
-    records = []
+    decisions = timing.session_outliers(plan, payload['pairs'])
+    finding_reason = next((d['findingReason'] for d in decisions.values() if d.get('finding')), None)
+    records, rows_report, failed = [], [], []
+    seal_id = gate.digest(directory / 'seal.json')
     for row in plan['rows']:
-        pairs = [pair for pair in payload['pairs'] if pair['id'] == row['id']]
+        raw_pairs = [pair for pair in payload['pairs'] if pair['id'] == row['id']]
         workload = schedules.opaque(plan['scheduleSeed'], ['workload', row['id']])
-        result = timing.baseline_band(timing.applied_row(row, payload['applied'][workload]), pairs)
-        timing.require(result['status'] == 'PASS', 'Noise band did not pass: ' + row['id'])
-        records.append(dict(id=row['id'], band=result['band'], design='long', machine=seal['platform']['size'],
-                            sourceSeal=gate.digest(directory / 'seal.json'), baseline=row['sides']['baseline'],
-                            counts=plan['counts'], corpusId=row['corpusId'], pairs=row['aPairs']))
+        effective = timing.applied_row(row, payload['applied'][workload])
+        decision = decisions.get(row['id'])
+        keep, aside = timing.judged(effective, raw_pairs, decision)
+        result = timing.baseline_band(effective, keep, jit=aside)
+        admitted, paired_ratios = [], []
+        try:
+            admitted = timing.admitted_pairs([pair for pair in keep if isinstance(pair, dict) and pair.get('phase') == 'A'])
+            paired_ratios = timing.pair_times(admitted)['pairedRatios'] if len(admitted) >= 2 else []
+        except (AttributeError, ValueError, KeyError, TypeError, ZeroDivisionError):
+            pass
+        bodies = [sum(item['nsPerBlock'] * item['blocks'] for item in obs) / 1e6
+                  for pair in keep + aside if isinstance(pair, dict) for side in ('baseline', 'candidate')
+                  if isinstance((obs := (pair.get(side) or {}).get('data', {}).get('rows')), list) and obs
+                  and all(isinstance(item, dict) and type(item.get('nsPerBlock')) in (int, float) and math.isfinite(item['nsPerBlock'])
+                          and item['nsPerBlock'] > 0 and type(item.get('blocks')) is int and item['blocks'] > 0 for item in obs)]
+        band = max(abs(value - 1) for value in result['confidence95']) if result.get('qualified') and 'confidence95' in result else None
+        rows_report.append(dict(
+            id=row['id'], status=result['status'], reason=result['reason'],
+            admittedPairs=result.get('admittedPairs', {}).get('B', len(admitted)), declaredPairs=row['aPairs'],
+            band=band, mean=result.get('mean'), confidence95=result.get('confidence95'),
+            qualificationFailures=result.get('qualificationFailures', {}),
+            compileShares={c['side']: c['quiescence'].get('jitFraction') for c in result.get('checks', [])},
+            minMeasuredBodyMs=min(bodies) if bodies else None, outlier=decision,
+            pairedRatios=paired_ratios, checks=result.get('checks', []),
+        ))
+        if result['status'] == 'PASS':
+            records.append(dict(id=row['id'], band=result['band'], design='long', machine=seal['platform']['size'],
+                                sourceSeal=seal_id, baseline=row['sides']['baseline'],
+                                counts=plan['counts'], corpusId=row['corpusId'], pairs=row['aPairs']))
+        else:
+            failed.append(row['id'])
+    session.save(directory / f'time/{number}-noise-rows.json', dict(
+        session=number, finding=finding_reason is not None, findingReason=finding_reason, rows=rows_report))
+    if failed:
+        raise NoiseStatisticsRefusal('Noise band did not pass: ' + ', '.join(failed))
     session.save(directory / f'time/{number}-noise-records.json', records)
+    return finding_reason is not None
 
 
 def finish_noise_records(directory, seal):
@@ -1165,6 +1215,8 @@ def fly_sessions(directory, seal, go, phases, index, *, dispatch=None, context=N
     draws = []
     first_launch = True
     refusal_status = 0
+    noise_stat_refusal = False
+    noise_finding = False
     payload = {}
     for number, plan in enumerate(seal['timePlans']):
         if azure and plan.get('bytesOnly'):
@@ -1265,7 +1317,10 @@ def fly_sessions(directory, seal, go, phases, index, *, dispatch=None, context=N
             if payload['invalid']:
                 break
             if plan['design'] == 'noise-band':
-                azure_noise_records(directory, seal, payload, number)
+                try:
+                    noise_finding |= bool(azure_noise_records(directory, seal, payload, number))
+                except NoiseStatisticsRefusal:
+                    noise_stat_refusal = True
                 break
             if plan['design'] == 'micro-band':
                 records = {}
@@ -1286,13 +1341,23 @@ def fly_sessions(directory, seal, go, phases, index, *, dispatch=None, context=N
         if refusal_status or not payload or payload.get('invalid'):
             print(payload.get('invalid') or 'Missing valid Azure noise results', file=sys.stderr)
             return refusal_status or 2
+        if noise_stat_refusal:
+            print('Azure go ended: noise band not established (local statistics, no provider error); rows in time/<n>-noise-rows.json', file=sys.stderr)
+            return 3
         finish_noise_records(directory, seal)
+        if noise_finding:
+            print('Azure go ended: noise band established as measured; outlier finding open for main, nothing may be frozen; rows in time/<n>-noise-rows.json', file=sys.stderr)
+            return 3
         return 0
     report = gate.report(directory)
     session.save(directory / 'report.json', {key: value for key, value in report.items() if key != 'text'})
     (directory / 'report.txt').write_text(report['text'])
     print(report['text'])
-    return refusal_status or (0 if report['outcome'] in ('RELEASE PASS', 'SUBSET') else 2)
+    if refusal_status:
+        return refusal_status
+    if report['outcome'] in ('RELEASE PASS', 'SUBSET'):
+        return 3 if timing.has_outlier_finding(report['rows']) else 0
+    return 2
 
 
 def repeat_prelude(directory, seal, number):

@@ -32,6 +32,7 @@ PROVIDERS = {
 RAW_CAP = min(CUTOFF / 1.15 - 420, GUARD / 1.15 - 720)
 PROBE_COUNTS = (180, 60)
 PROBE_PROCESS_SECONDS = 13
+OUTLIER_THRESHOLD = .20
 GC_KEYS = ('gen0Collections', 'gen1Collections', 'gen2Collections')
 STAGE_PREFIX = 'gate: '
 STAGE = dict(start='start provider ', host='host processors ', probe='probe ', prelude='prelude ', block='block ', stopped='stopped: ', end='end exitCode ')
@@ -96,7 +97,7 @@ def charges(row, ratios=None, *, prelude=False):
     require(type(declared) is int and declared >= 0, 'Invalid declared process charge')
     if row.get('replay') == 'micro':
         if prelude:
-            return max(declared, 6)
+            return max(declared, 8)
         # Measured 1+1 dry run extrapolated to240 passes; never charge below one sec.
         return max(declared, 1, math.ceil((ratios or {}).get(row['id'], 1)))
     case = row['replay']
@@ -146,8 +147,9 @@ def finalize_plan(plan, raw):
     return plan
 
 
-def size_sessions(rows, mode, *, ratios=None, option=2, budget=None, probe=None, prelude=False):
+def size_sessions(rows, mode, *, ratios=None, option=2, budget=None, probe=None, prelude=False, reserve=0):
     """Price each whole process once. Full first; D51 defaults to two sessions."""
+    require(type(reserve) is int and reserve in (0, 1), 'Invalid reserve pair count')
     rows = [dict(row, chargeSeconds=charges(row, ratios, prelude=prelude)) for row in rows if row['kind'] == 'time']
     if not rows:
         return []
@@ -161,9 +163,10 @@ def size_sessions(rows, mode, *, ratios=None, option=2, budget=None, probe=None,
         row_cap = RAW_CAP - probe_seconds(probe) - (prelude_seconds(members) if prelude else 0)
         entries = [dict(row, aPairs=row.get('aPairs', 0 if mode == 'change' or fail_only and row.get('mainnet') else (floor if row.get('mainnet') else 16)),
                         bPairs=row.get('bPairs', row['pairs'] if mode == 'change' else (6 if fail_only and row.get('mainnet') else floor if row.get('mainnet') else 24 if fail_only else 16)),
-                        rowClass='fail-only' if fail_only and row.get('mainnet') else row.get('rowClass', 'gated')) for row in members]
+                        rowClass='fail-only' if fail_only and row.get('mainnet') else row.get('rowClass', 'gated'),
+                        **({'reservePairs': reserve} if reserve and row.get('expected') != 'smoke' else {})) for row in members]
         def raw():
-            return sum(2 * row['chargeSeconds'] * (row['aPairs'] + row['bPairs']) for row in entries)
+            return sum(2 * row['chargeSeconds'] * (schedules.phase_pairs(row, 'aPairs') + schedules.phase_pairs(row, 'bPairs')) for row in entries)
         if raw() > row_cap:
             return None
         if mode == 'release' and design != 'option1':
@@ -219,10 +222,137 @@ def size_sessions(rows, mode, *, ratios=None, option=2, budget=None, probe=None,
     return plans
 
 
-def baseline_band(row, pairs):
+def _process_outlier_figures(record):
+    require(isinstance(record, dict) and isinstance(record.get('timingRejectedReasons'), list), 'Invalid process record')
+    data = record['data']
+    warm, meas = data['warmupRows'], data['rows']
+    require(isinstance(warm, list) and len(warm) == 180 and isinstance(meas, list) and len(meas) == 60, 'Invalid pass counts')
+    w = [item['nsPerBlock'] for item in warm]
+    m = [item['nsPerBlock'] for item in meas]
+    require(all(type(v) in (int, float) and math.isfinite(v) and v > 0 for v in w + m), 'Invalid nsPerBlock')
+    return [st.mean(m), st.mean(w[120:140]), st.mean(w[140:160]), st.mean(w[160:180]), st.mean(m[0:20]), st.mean(m[20:40]), st.mean(m[40:60])]
+
+
+def _whole_life_departure(departures):
+    if all(value > 0 for value in departures):
+        return min(departures)
+    if all(value < 0 for value in departures):
+        return min(-value for value in departures)
+    return 0.0
+
+
+def session_outliers(plan, pairs, *, selected=None):
+    chosen = None if selected is None else set(selected)
+    rows = [row for row in plan['rows'] if row.get('reservePairs') and (chosen is None or row['id'] in chosen)]
+    if not rows:
+        return {}
+    evals = {}
+    for row in rows:
+        rid = row['id']
+        try:
+            row_pairs = [pair for pair in pairs if isinstance(pair, dict) and pair.get('id') == rid]
+            require(len(row_pairs) == sum(schedules.phase_pairs(row, key) for key in ('aPairs', 'bPairs')), 'Unexpected pair count')
+            spare_ok, triggers, max_mean, max_wl = {}, [], None, None
+            for phase, key in (('A', 'aPairs'), ('B', 'bPairs')):
+                declared = row[key]
+                if not declared:
+                    continue
+                total = schedules.phase_pairs(row, key)
+                plist = [pair for pair in row_pairs if pair.get('phase') == phase]
+                require(len(plist) == total and sorted(pair['pair'] for pair in plist) == list(range(1, total + 1)), 'Missing pairs')
+                figs = {(pair['pair'], side): _process_outlier_figures(pair[side]) for pair in plist for side in ('baseline', 'candidate')}
+                spare_ok[phase] = bool(admitted_pairs([next(pair for pair in plist if pair['pair'] == declared + 1)]))
+                adm = admitted_pairs(plist)
+                groups = ([[(p['pair'], s, figs[(p['pair'], s)]) for p in adm for s in ('baseline', 'candidate')]] if phase == 'A'
+                          else [[(p['pair'], s, figs[(p['pair'], s)]) for p in adm] for s in ('baseline', 'candidate')])
+                for group in groups:
+                    if len(group) < 3:
+                        continue
+                    for idx, (pnum, side, vals) in enumerate(group):
+                        deps = [(vals[k] - med) / med for k in range(7) for med in (st.median(o[2][k] for j, o in enumerate(group) if j != idx),)]
+                        md, wd = abs(deps[0]), _whole_life_departure(deps)
+                        max_mean = md if max_mean is None else max(max_mean, md)
+                        max_wl = wd if max_wl is None else max(max_wl, wd)
+                        if wd > OUTLIER_THRESHOLD:
+                            triggers.append(dict(phase=phase, pair=pnum, side=side, departures=deps))
+            evals[rid] = dict(row=row, evaluated=True, maxMeanDeparture=max_mean, maxWholeLifeDeparture=max_wl,
+                              triggers=triggers, triggerPairs=sorted({(t['phase'], t['pair']) for t in triggers}), spareAdmitted=spare_ok)
+        except (AttributeError, IndexError, KeyError, TypeError, ValueError, ZeroDivisionError):
+            evals[rid] = dict(row=row, evaluated=False, maxMeanDeparture=None, maxWholeLifeDeparture=None,
+                              triggers=[], triggerPairs=[], spareAdmitted={})
+    any_bad = any(not item['evaluated'] for item in evals.values())
+    triggered = [rid for rid, item in evals.items() if item['evaluated'] and item['triggerPairs']]
+    finding_reason = ('multiple triggered rows (' + ', '.join(triggered) + ')' if len(triggered) >= 2 else
+                      'multiple triggering pairs in ' + triggered[0] if len(triggered) == 1 and len(evals[triggered[0]]['triggerPairs']) >= 2 else None)
+    finding = finding_reason is not None
+    decisions = {}
+    for rid, item in evals.items():
+        replaced, replacement, reason = False, None, 'no trigger'
+        unadm = [ph for ph, ok in item['spareAdmitted'].items() if not ok]
+        no_trig = 'no trigger; spare not timing-admitted (' + ', '.join(unadm) + ')' if unadm else 'no trigger'
+        if not item['evaluated']:
+            reason = 'not evaluated'
+        elif any_bad:
+            reason = 'session row not evaluated; no replacement' if item['triggerPairs'] else no_trig
+        elif finding:
+            reason = f'finding: {finding_reason}; no replacement' if item['triggerPairs'] else no_trig
+        elif rid in triggered:
+            t_phase, t_pair = item['triggerPairs'][0]
+            declared = item['row']['aPairs' if t_phase == 'A' else 'bPairs']
+            if t_pair == declared + 1:
+                reason = 'spare triggered; nothing to replace'
+            elif not item['spareAdmitted'].get(t_phase):
+                reason = 'spare not timing-admitted; judged as measured'
+            else:
+                sides = sorted({t['side'] for t in item['triggers'] if (t['phase'], t['pair']) == (t_phase, t_pair)})
+                replaced = True
+                replacement = dict(phase=t_phase, replacedPair=t_pair, sparePair=declared + 1, triggerSides=sides)
+                reason = f'replaced phase {t_phase} pair {t_pair} (side {", ".join(sides)}) with spare pair {declared + 1}'
+        else:
+            reason = no_trig
+        decisions[rid] = dict(threshold=OUTLIER_THRESHOLD, evaluated=item['evaluated'],
+                              maxMeanDeparture=item['maxMeanDeparture'], maxWholeLifeDeparture=item['maxWholeLifeDeparture'],
+                              triggers=item['triggers'], spareAdmitted=item['spareAdmitted'],
+                              replaced=replaced, replacement=replacement, reason=reason, finding=finding, findingReason=finding_reason)
+    return decisions
+
+
+def judged(row, pairs, decision):
+    if not row.get('reservePairs'):
+        return list(pairs), []
+    rep = decision.get('replacement') if isinstance(decision, dict) else None
+    keep, aside = [], []
+    for pair in pairs:
+        phase = pair.get('phase')
+        declared = row['aPairs'] if phase == 'A' else row['bPairs'] if phase == 'B' else 0
+        if not declared:
+            keep.append(pair)
+            continue
+        spare = declared + 1
+        if rep and phase == rep['phase']:
+            if pair.get('pair') == rep['replacedPair']:
+                aside.append(dict(pair, pair=spare))
+                continue
+            if pair.get('pair') == rep['sparePair']:
+                keep.append(dict(pair, pair=rep['replacedPair']))
+                continue
+        (aside if pair.get('pair') == spare else keep).append(pair)
+    return keep, aside
+
+
+def has_outlier_finding(rows):
+    for result in rows.values():
+        if isinstance(result, dict) and (result.get('outlierFinding') or any(
+                isinstance(p, dict) and (p.get('outlier') or {}).get('finding') for p in (result, result.get('first'), result.get('repeat')))):
+            return True
+    return False
+
+
+def baseline_band(row, pairs, *, jit=()):
     transformed = [dict(pair, phase='B') for pair in pairs if pair['phase'] == 'A']
+    aside = [dict(pair, phase='B') for pair in jit if pair['phase'] == 'A']
     spec = dict(row, aPairs=0, bPairs=row['aPairs'])
-    result = verdict(spec, transformed, 'change', noise=dict(band=0, design='long', machine=provider_for(row)['machine']))
+    result = verdict(spec, transformed, 'change', noise=dict(band=0, design='long', machine=provider_for(row)['machine']), jit=aside)
     if result['status'] == 'PASS':
         result['aBand'] = result['band'] = max(abs(value - 1) for value in result['confidence95'])
         if result['band'] >= .05:
@@ -453,7 +583,7 @@ def noise_band(noise, provider='fly'):
     return None
 
 
-def verdict(row, pairs, mode, *, noise=None, invalid=None):
+def verdict(row, pairs, mode, *, noise=None, invalid=None, jit=()):
     """Every declared pair must complete; rejected timing still counts for JIT."""
     result = dict(status='INCONCLUSIVE', reason=invalid or 'Missing timing data', rowClass=row.get('rowClass', 'gated'))
     # Descriptive B estimate survives an invalid A/session check; never a verdict.
@@ -469,23 +599,26 @@ def verdict(row, pairs, mode, *, noise=None, invalid=None):
             result['smokeComplete'] = False
             result['smokeComplete'] = smoke_complete(row, pairs)
         require(row['bPairs'] >= 5 and (mode != 'release' or row.get('rowClass') == 'fail-only' or row['aPairs'] >= 5), 'Missing required phase counts')
-        require(all(pair[side]['platform'] == provider_for(row)['platform'] for pair in pairs for side in ('baseline', 'candidate')), 'PC time never gates')
+        all_pairs = list(pairs) + list(jit)
+        require(all(pair[side]['platform'] == provider_for(row)['platform'] for pair in all_pairs for side in ('baseline', 'candidate')), 'PC time never gates')
         populations = {}
         result['admittedPairs'] = {}
-        for phase, count in (('A', row['aPairs']), ('B', row['bPairs'])):
+        for phase, key in (('A', 'aPairs'), ('B', 'bPairs')):
+            count = row[key]
             if not count:
                 continue
+            full = complete_population(row, all_pairs, phase, schedules.phase_pairs(row, key))
             population = complete_population(row, pairs, phase, count)
             admitted = admitted_pairs(population)
             result['admittedPairs'][phase] = len(admitted)
             require(len(admitted) >= 5, f'{phase} admission: {len(admitted)} admitted pairs <5; ' + '; '.join(side + ': ' + ','.join(pair[side]['timingRejectedReasons']) for pair in population for side in ('baseline', 'candidate') if pair[side]['timingRejectedReasons']))
-            populations[phase] = population, admitted
+            populations[phase] = full, population, admitted
         checks, failures = [], {}
         result['checks'] = checks
-        for phase, (population, admitted) in populations.items():
+        for phase, (full, population, admitted) in populations.items():
             sides = (('phase', ('baseline', 'candidate')),) if phase == 'A' else tuple((side, (side,)) for side in ('baseline', 'candidate'))
             for label, roles in sides:
-                quiet = session.side_quiescence([dict(jit=session.jit_quiet(pair[side]['data'])) for pair in population for side in roles])
+                quiet = session.side_quiescence([dict(jit=session.jit_quiet(pair[side]['data'])) for pair in full for side in roles])
                 stable = stability([pair[side] for pair in admitted for side in roles], members=len(roles))
                 checks.append(dict(phase=phase, side=label, quiescence=quiet, stability=stable))
                 if not quiet['established']:
@@ -540,12 +673,14 @@ def apply_rule(result, ratios, mode):
 def pooled(first, repeat, mode, *, sealed_first_status=None):
     if (first['status'] if sealed_first_status is None else sealed_first_status) != 'FAIL':
         raise ValueError('Only a failing row may repeat')
+    flag = {'outlierFinding': 'replaced in both first and repeat sessions'} if (
+        (first.get('outlier') or {}).get('replaced') and (repeat.get('outlier') or {}).get('replaced')) else {}
     for label, phase in (('First', first), ('Repeat', repeat)):
         if 'ratios' not in phase:
-            return dict(status='INCONCLUSIVE', reason=f'{label} invalid: ' + phase['reason'], first=first, repeat=repeat)
+            return dict(status='INCONCLUSIVE', reason=f'{label} invalid: ' + phase['reason'], first=first, repeat=repeat, **flag)
     result = apply_rule(dict(rowClass=first['rowClass'], band=max(first.get('band', 0), repeat.get('band', 0))),
                         first['ratios'] + repeat['ratios'], mode)
-    return dict(result, first=first, repeat=repeat)
+    return dict(result, first=first, repeat=repeat, **flag)
 
 
 ELIGIBLE_CHECKS = {'A band', 'A phase quiescence', 'A phase stability', 'B baseline quiescence', 'B baseline stability'}
@@ -687,11 +822,12 @@ def read_results(output, seal, *, mode=None, first_only=False):
         require(gate.encoded(first) == gate.encoded([retry['firstIndex']]), 'Timing index differs from sealed retry first entry')
         require(all(item['ids'] == retry['repeatIds'] for item in index if item['phase'] == 'repeat'),
                 'Timing index differs from sealed retry selection')
-    band_failures = set()
+    band_failures, candidate_replacements = set(), []
     for number, plan in enumerate(plans):
         if show_regions:
             region_label = 'planned ' if plan.get('provider') == 'azure' else ''
             lines.append(f'session {number + 1} · {region_label}{region_for(plan)}')
+        session_decisions, session_findings = {}, []
         for row in plan['rows']:
             first = None
             first_evidence = None
@@ -715,27 +851,37 @@ def read_results(output, seal, *, mode=None, first_only=False):
                             lines.append('session-start steal, first five minutes (information only): ' + json.dumps(payload.get('startup', dict(available=False, reason='Not recorded in this legacy fixture')), sort_keys=True))
                         lines.append('host fingerprint (information only): ' + json.dumps(payload.get('host'), sort_keys=True))
                         lines.append('neighbours / duration / cost (context only): ' + json.dumps(payload.get('context', {}), sort_keys=True))
+                    if not invalid and phase not in session_decisions:
+                        session_decisions[phase] = session_outliers(plan, payload['pairs'], selected=item.get('ids'))
+                        for entry in session_decisions[phase].values():
+                            if entry.get('finding'):
+                                session_findings.append(f'{phase}: {entry["findingReason"]}')
+                                break
                     chosen = [pair for pair in payload['pairs'] if pair['id'] == row['id']]
                     effective = row
                     if plan.get('vmPrelude') and not invalid:
                         workload = schedules.opaque(plan['scheduleSeed'], ['workload', row['id']])
                         effective = applied_row(row, payload['applied'][workload])
-                    current = baseline_band(effective, chosen) if plan['design'] in ('micro-band', 'noise-band') and not invalid else verdict(effective, chosen, applied_mode, noise=row.get('noise'), invalid=invalid)
-                    current['blockDiagnostic'] = schedules.block_diagnostics(chosen)
+                    decision = None if invalid else session_decisions.get(phase, {}).get(row['id'])
+                    keep, aside = judged(effective, chosen, decision) if not invalid else (chosen, [])
+                    current = baseline_band(effective, keep, jit=aside) if plan['design'] in ('micro-band', 'noise-band') and not invalid else verdict(effective, keep, applied_mode, noise=row.get('noise'), invalid=invalid, jit=aside)
+                    current['blockDiagnostic'] = schedules.block_diagnostics(keep)
                     if row['id'] in band_failures:
                         current = dict(status='INCONCLUSIVE', reason='One-time micro band invalid')
-                    current['gcPerBuild'] = gc_per_build(chosen)
+                    if decision is not None:
+                        current['outlier'] = decision
+                    current['gcPerBuild'] = gc_per_build(keep)
                 if phase == 'first':
                     first = current
                     if matches and row['id'] not in band_failures:
-                        first_evidence = chosen, invalid, effective
+                        first_evidence = keep, aside, invalid, effective
                 elif matches and row['id'] in item['ids']:
                     require(sealed_mode == 'release' and plan['repeatAllowed'], 'Unsealed repeat')
                     sealed_status = first['status']
                     if applied_mode != sealed_mode and first_evidence is not None:
                         # Alternate reporting never grants or removes a sealed release repeat.
-                        first_pairs, first_invalid, first_row = first_evidence
-                        sealed_status = verdict(first_row, first_pairs, sealed_mode, noise=row.get('noise'), invalid=first_invalid)['status']
+                        first_pairs, first_aside, first_invalid, first_row = first_evidence
+                        sealed_status = verdict(first_row, first_pairs, sealed_mode, noise=row.get('noise'), invalid=first_invalid, jit=first_aside)['status']
                     first = pooled(first, current, applied_mode, sealed_first_status=sealed_status)
             if plan['design'] in ('micro-band', 'noise-band'):
                 if first['status'] != 'PASS':
@@ -753,6 +899,9 @@ def read_results(output, seal, *, mode=None, first_only=False):
             for side, identity in row['sides'].items():
                 lines.append(f'  {side}: {identity["commit"]} tree {identity["treeId"]} runtime {identity["runtime"]}; corpus {row.get("corpusId", "audit-preprod")}')
             lines.append('  rule: ' + row.get('rowClass', 'gated') + ' · ' + first['reason'])
+            if first.get('outlierFinding'):
+                lines.append('  outlier finding: ' + first['outlierFinding'])
+                session_findings.append(f'{row["id"]}: {first["outlierFinding"]}')
             if absolute:
                 lines.append(f'  {units} baseline/candidate {absolute[0]:.3f}/{absolute[1]:.3f}; warm-up ns {first.get("warmupNs", first.get("first", {}).get("warmupNs"))} (reported, not gated)')
             if applied_mode == 'change' and plan['design'] not in ('micro-band', 'noise-band') and (noise := noise_band(row.get('noise'), row.get('provider', 'fly'))) is not None:
@@ -760,6 +909,13 @@ def read_results(output, seal, *, mode=None, first_only=False):
             for label, part in parts:
                 if 'repeat' in first:
                     lines.append(f'  {label}: {part["status"]} ratio {part.get("mean")} {part.get("confidence95")}; joint {first["status"]} · {part["reason"]}')
+                if 'outlier' in part:
+                    entry = part['outlier']
+                    fmt = lambda v: 'n/a' if v is None else f'{v:.4f}'
+                    lines.append(f'  {label} outlier: {entry["reason"]}; maxMean={fmt(entry["maxMeanDeparture"])} maxWholeLife={fmt(entry["maxWholeLifeDeparture"])} threshold={entry["threshold"]:.2f}')
+                    rep = entry.get('replacement')
+                    if rep and rep['phase'] == 'B' and 'candidate' in rep['triggerSides']:
+                        candidate_replacements.append(row['id'])
                 if part.get('blockDiagnostic'):
                     lines.append('  block contrast / orientation ' + label + ' (information only): ' + json.dumps(part['blockDiagnostic'], sort_keys=True))
                 lines.append(f'  {label} admitted pairs: ' + json.dumps(part.get('admittedPairs', {})))
@@ -777,5 +933,9 @@ def read_results(output, seal, *, mode=None, first_only=False):
                     if classifications:
                         lines.append(f'  {label} stability: ' + '; '.join(classifications))
                     lines.append(f'  {label} check: ' + json.dumps(check, sort_keys=True))
+        if session_findings:
+            lines.append(f'time session {number} · outlier finding: ' + '; '.join(dict.fromkeys(session_findings)))
         lines.append(f'time session {number} · {plan["design"]} · limit {plan["destroyGuardSeconds"]}s / {plan["limitUsd"]:.4f} USD · reserved with repeat {plan["limitWithRepeatUsd"]:.4f} USD')
+    if candidate_replacements:
+        lines.append(f'candidate-side replacements: {len(candidate_replacements)} ({", ".join(candidate_replacements)})')
     return values, lines

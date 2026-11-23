@@ -1659,9 +1659,9 @@ def test_az2f4_noise_seal_full_size_results_archive_and_limits(tmp_path, monkeyp
     assert diag['diagnosticOnly'] is True and diag['reason'] == 'results-too-large'
     assert diag['expandedBytes'] > guest.MAX_RESULTS == diag['maxExpandedBytes']
     assert status['exitCode'] == 0 and status['completedAllDeclaredRounds'] is True
-    assert guest.MAX_RESULTS_COMPRESSED == 10_000_000
+    assert guest.MAX_RESULTS_COMPRESSED == 12_000_000
     limits = guest.results_limits(s0_plan, strict=True)
-    assert limits == (10_000_000, 90_000_000)
+    assert limits == (12_000_000, 90_000_000)
     assert guest.archive_results(green, False, limits=limits) is False
     assert guest.check_results(green, limits=limits) is False
     assert green.stat().st_size < guest.MAX_RESULTS_COMPRESSED
@@ -1695,10 +1695,10 @@ def test_az2f4_noise_seal_full_size_results_archive_and_limits(tmp_path, monkeyp
     with tarfile.open(green) as stream:
         assert json.load(stream.extractfile('results/recovery-diagnostic.json'))['reason'] == 'forbidden-member'
     s1_plan = {'probe': {'processes': 16}, 'members': {f'{i:016x}': {} for i in range(192)}}
-    max_plan = {'probe': {'processes': 16}, 'members': {f'{i:016x}': {} for i in range(209)}}
-    assert guest.results_limits(s1_plan, strict=True) == (10_000_000, 218_000_000)
-    assert guest.results_limits(max_plan, strict=True) == (10_000_000, 235_000_000)
-    for over in (210, 480, 1000):
+    max_plan = {'probe': {'processes': 16}, 'members': {f'{i:016x}': {} for i in range(259)}}
+    assert guest.results_limits(s1_plan, strict=True) == (12_000_000, 218_000_000)
+    assert guest.results_limits(max_plan, strict=True) == (12_000_000, 285_000_000)
+    for over in (260, 480, 1000):
         over_plan = {'probe': {'processes': 16}, 'members': {f'{i:016x}': {} for i in range(over)}}
         with pytest.raises(ValueError, match='hard ceiling'):
             guest.results_limits(over_plan, strict=True)
@@ -1828,7 +1828,7 @@ def test_az2f4_channel_and_guest_plan_limits_agree(tmp_path, monkeypatch):
     archive(payload_tar, {'plan.json': plan})
     expected = guest.results_limits(plan)
     assert guest.plan_results_limits(payload_tar) == channel.plan_results_limits(payload_tar) == expected
-    assert expected == (10_000_000, 90_000_000)
+    assert expected == (12_000_000, 90_000_000)
     store = tmp_path / 'store'
     work = tmp_path / 'work'
     store.mkdir()
@@ -1854,8 +1854,9 @@ def test_az2f4_channel_and_guest_plan_limits_agree(tmp_path, monkeypatch):
     ):
         monkeypatch.setattr(channel, attr, fn)
 
+    seen_lims = []
     def fake_dl(_a, _b, _s, target, lim, _d):
-        assert lim == expected[0]
+        seen_lims.append(lim)
         shutil.copyfile(built, target)
         return summary['sha256']
 
@@ -1867,6 +1868,7 @@ def test_az2f4_channel_and_guest_plan_limits_agree(tmp_path, monkeypatch):
     assert channel.copy_results(draw, ev, 'unused', '# ', limits=expected) is False
     with pytest.raises(ValueError, match='results-too-large|exceeds'):
         channel.copy_results(draw, ev2, 'unused', '# ')
+    assert seen_lims == [expected[0], guest.MAX_RESULTS]
 
 
 def test_az2f4_fix2_results_too_large_includes_bounded_logs_and_unit_status(tmp_path, monkeypatch):
@@ -2036,7 +2038,7 @@ def test_az2f4_fix2_fetch_stage_failures_and_main_error_line(tmp_path, monkeypat
         monkeypatch.setattr(guest, 'PAYLOAD_KEY', store / 'payload.pem')
         monkeypatch.setattr(guest.time, 'time', lambda: now + 10)
         if stage == 'extract':
-            monkeypatch.setattr(guest, 'plan_results_limits', lambda _a: (10_000_000, 90_000_000))
+            monkeypatch.setattr(guest, 'plan_results_limits', lambda _a: (12_000_000, 90_000_000))
         else:
             monkeypatch.setattr(guest, 'plan_results_limits', orig_pl)
         if stage == 'download':
@@ -2085,7 +2087,7 @@ def test_az2f4_fix2_fetch_stage_failures_and_main_error_line(tmp_path, monkeypat
 
     ok_store = setup_fetch('ok')
     assert guest.fetch(account, good_sha, '-', now, now + 300, now + 900, 'eastus2') == {'started': now + 10}
-    assert guest._saved_limits() == guest.results_limits(plan) == (10_000_000, 90_000_000)
+    assert guest._saved_limits() == guest.results_limits(plan) == (12_000_000, 90_000_000)
     assert not (ok_store / 'fetch-failure.json').exists()
     monkeypatch.undo()
     proc = subprocess.run(
@@ -3392,10 +3394,10 @@ def test_azpatience_window_math_and_consistency(fake, site, ledger, monkeypatch)
     for c, raw, vm_off, now_off in ((2149, 1448, 690, 980), (2149, 1448, 690, 700.1), (483, 0, 183, 194), (483, 100, 0, 0)):
         with pytest.raises(guard.GuardFailure, match='cannot fit a full session'):
             guard.start_plan(ep, c, ep + vm_off, ep + now_off, raw)
-    # W2 stays inside maxDraws=6 (12 booked attempts/session): worst case unchanged at $22.0680.
-    s1_res = timing.azure_booking(2494 + guard.RESERVE_TAIL)
-    s2_res = timing.azure_booking(6109 + guard.RESERVE_TAIL)
-    assert (s1_res, s2_res) == (0.6223, 1.2167) and round(12 * (s1_res + s2_res), 4) == 22.0680
+    # W2 stays inside maxDraws=6 (12 booked attempts/session): RUN8 worst case $22.9560.
+    s1_res = timing.azure_booking(2574 + guard.RESERVE_TAIL)
+    s2_res = timing.azure_booking(6390 + guard.RESERVE_TAIL)
+    assert (s1_res, s2_res) == (0.6306, 1.2824) and round(12 * (s1_res + s2_res), 4) == 22.9560
 
 
 def _run_azpatience_attempt(fake, local, ledger, directory, monkeypatch, plan, payload_file, group, draw_num, vm_at, *,
@@ -4070,3 +4072,84 @@ def test_azpatience2_region_alternation_on_provision_failure_only(fake, site, le
     monkeypatch.setattr(bundle, 'owned_call', lambda cmd, **_k: (cmds.append(cmd), 6)[1])
     st, _, fb = real_launch_azure(d2, d2, go2, 0, 'first', 2, {'region': 'eastus2'}, 'input/session-0.tar.gz', False, ('test', 'fixture'), None, region='eastus')
     assert st == 6 and fb is None and len(cmds) == 1 and cmds[0][cmds[0].index('--region') + 1] == 'eastus'
+
+
+def test_run8_d1_guest_result_member_allows_sizing_only(tmp_path):
+    row_id = '0123456789abcdef'
+    ok_tar = tmp_path / 'ok.tar.gz'
+    bad_tar = tmp_path / 'bad.tar.gz'
+    archive(ok_tar, {
+        'results/session-status.json': {'completedAllDeclaredRounds': True, 'exitCode': 0},
+        f'prelude/raw/{row_id}-calibration.json': {'ok': True},
+        f'prelude/raw/{row_id}-sizing.json': {'ok': True},
+        f'prelude/raw/{row_id}-baseline.json': {'ok': True},
+        f'prelude/raw/{row_id}-candidate.json': {'ok': True},
+        'prelude/applied.json': {},
+    })
+    assert guest.check_results(ok_tar) is False
+    archive(bad_tar, {
+        'results/session-status.json': {'completedAllDeclaredRounds': True, 'exitCode': 0},
+        f'prelude/raw/{row_id}-spare.json': {'ok': True},
+    })
+    with pytest.raises(guest.ResultsRefused) as err:
+        guest.check_results(bad_tar)
+    assert err.value.reason == 'forbidden-member'
+
+
+def test_run8_d3_guest_stdlib_only_and_s2_row_member_limits_agree():
+    import ast
+    from types import SimpleNamespace
+    import gate_prepare as prepare
+    from test_gate import side
+
+    tree = ast.parse((HERE / 'gate_azure_guest.py').read_text())
+    imported = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            imported.update(alias.name.split('.')[0] for alias in node.names)
+        elif isinstance(node, ast.ImportFrom):
+            assert node.level == 0 and node.module is not None
+            imported.add(node.module.split('.')[0])
+    assert imported <= sys.stdlib_module_names, sorted(imported - sys.stdlib_module_names)
+
+    config = prepare.azure_config(json.loads((gate.GATE / 'gated.json').read_text()))
+    audit = json.loads((gate.REPO / 'benchmarks/Chrysalis.Benchmarks/audit-allocations.json').read_text())
+    entries = json.loads((gate.GATE / 'plans/noise-records.json').read_text())
+    selected = gate.select_rows(SimpleNamespace(mode='release', plan=None, only=None), config, audit, plan_entries=entries)
+    seal = dict(gated=config, mode='release', noiseRecords=True, sessionPerRow=False, orderingProof=False,
+                rows=[dict(item, sides=dict(baseline=side(), candidate=side())) for item in selected])
+    s2 = schedules.prepare(prepare.time_plans(seal)[1])
+    worker = schedules.worker_plan(s2)
+    assert len(worker['members']) == 204
+    assert guest.results_limits(s2, strict=True) == guest.results_limits(worker, strict=True) == (12_000_000, 230_000_000)
+
+
+def test_run8_d10_f1_results_limit_12mb_and_no_plan_10mb(tmp_path):
+    plan220 = {'probe': {'processes': 16}, 'members': {f'{i:016x}': {} for i in range(204)}}
+    limits = guest.results_limits(plan220, strict=True)
+    assert limits == (12_000_000, 230_000_000)
+
+    def make_tar(path, payload_bytes):
+        status = b'{"completedAllDeclaredRounds":true,"exitCode":0}\n'
+        chunk = (b'a' * 99 + b'\n') * (payload_bytes // 100)
+        with tarfile.open(path, 'w:gz', compresslevel=0) as stream:
+            for name, raw in (('results/session-status.json', status), ('results/session.log', chunk)):
+                ti = tarfile.TarInfo(name)
+                ti.size = len(raw)
+                stream.addfile(ti, io.BytesIO(raw))
+
+    ok_105 = tmp_path / 'ok-10.5mb.tar.gz'
+    make_tar(ok_105, 10_500_000)
+    assert 10_000_000 < ok_105.stat().st_size <= 12_000_000
+    assert guest.check_results(ok_105, limits=limits) is False
+    # Without a plan, the default stays 10 MB and refuses 10.5 MB.
+    assert guest.results_limits(None) == (10_000_000, 10_000_000)
+    with pytest.raises(guest.ResultsRefused) as err_default:
+        guest.check_results(ok_105)
+    assert err_default.value.reason == 'results-too-large'
+    over_125 = tmp_path / 'over-12.5mb.tar.gz'
+    make_tar(over_125, 12_500_000)
+    assert over_125.stat().st_size > 12_000_000
+    with pytest.raises(guest.ResultsRefused) as err_over:
+        guest.check_results(over_125, limits=limits)
+    assert err_over.value.reason == 'results-too-large'

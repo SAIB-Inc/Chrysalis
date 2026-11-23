@@ -78,8 +78,8 @@ array (or an `entries` array) of rows with `id`, `kind` (`direct`, `replay`,
 `time`), `replay` where applicable, and `pairs`; `candidate` can override the
 candidate for an entry. A new direct per-message row is D39. Time entries may declare `aPairs` and `pairs`
 (B) in either mode; optional `chargeSeconds` raises, never lowers, the per-process
-charge. Micro rows take that charge from `gated.json`'s `time.chargeSeconds` (Azure run 3's
-measured projection × 1.5, never below 6 s). Explicit counts are sealed exactly, even below the validity minimum.
+charge. Micro rows take that charge from `gated.json`'s `time.chargeSeconds` (never below 8 s on
+Azure VM preludes; cold Fly calibration keeps its 6 s legacy path). Explicit counts are sealed exactly, even below the validity minimum.
 Default-set sizing alone may increase counts to use remaining capacity. An optional corpus
 `manifest` is repository-relative; measurement awaits P4 MR-B's client support.
 No ad-hoc row can silently obtain a noise band. An object with `entries` can set
@@ -431,7 +431,7 @@ Each attempt has its own tagged resource group, user-assigned identity with Cont
 
 | Deadline | From the same epoch E |
 |---|---:|
-| Provisioning writes / wait | min(720 s, C − ⌈0.80 × raw⌉ − 300 s) (S1 690 s, S2 720 s) |
+| Provisioning writes / wait | min(720 s, C − ⌈0.80 × raw⌉ − 300 s) (S1 714 s, S2 720 s) |
 | `init` timeout / boot check | 130–360 s / 95–325 s (`init − 35 s`) from remaining start-phase slack (`kick`/`status`/`push` stay 130 s) |
 | Worker started (`start_by`) | min(E + C − ⌈0.80 × raw⌉, max(E + 483 s, ⌈max(vm-provisioned, now)⌉ + `init` + 170 s)); refuses at `session-window` if <290 s left |
 | Worker cutoff / verified copy | C / C + 200 s |
@@ -511,3 +511,10 @@ outside rows to include in leg 2, distinguishing movement from unresolved data.
 `gate.py seal-diff REVIEWED NEW --approved ASTRA OPUS` permits one-seat review
 only for a batch-leg seal whose changes meet the batch rules. Each approval is
 JSON with `seat` (`astra` or `opus`), `verdict` (`APPROVED`), and `sealId`.
+
+### Azure warm micro sizing, outlier replacement, and re-run rules (RUN8)
+
+- **Warm micro sizing and 8 s floor:** in the Azure VM prelude, each micro row runs its cold `(1, 1)` seed at 16 invocations (`inv0`), then a baseline-only warm sizing run `(180, 60)` at `inv0` (`prelude/raw/<row>-sizing.json`). `microInvocations = max(1, ceil(inv0 * 0.020 / warm))` targets 20 ms per warm pass (~1.2 s measured body after >=3.6 s warm-up); the dry-run estimate is `max(2, dry seconds) + 240 * warm * microInvocations / inv0 <= chargeSeconds`. The prelude micro charge floor is 8 s. Rehearsals drop the spare pair and accept a `CHARGE_EXCEEDED` stop at either sizing or dry run.
+- **Sealed spare pair and whole-life outlier rule:** every non-smoke row of an Azure timing plan declares `reservePairs: 1`, scheduled as pair `count + 1` in each active phase and verified for completeness like every other pair. Over timing-admitted pairs (spare included), each process is compared leave-one-out against its siblings (one group of both sides in phase A; separate baseline and candidate groups in phase B; groups <3 compute nothing) on seven figures: the 60-pass measured mean and six 20-pass windows covering passes 121–240. A process triggers only when all seven departures exceed +0.20 or all seven fall below −0.20 (code constant). When a session has exactly one triggered row, that row has one triggering declared pair, and that phase's spare is timing-admitted, the spare replaces that pair regardless of outcome; the replaced pair's data remain archived and still enter the per-phase compile-share check. An unused spare enters no pair ratio, band, stability check, descriptive estimate, or admission count; it stays in the per-phase compile-share check. Every candidate-side phase-B replacement is named per row (`outlier:`) and in the report's `candidate-side replacements:` summary line. Plans without `reservePairs` are unaffected.
+- **Findings, noise rows file, and exit 3:** two or more triggered rows in a session, two or more triggering pairs in one row (spare included), or the same row replaced in both first and repeat sessions is a **finding**: no replacement is made in that session, every row is judged as measured, the report/rows file carries the finding, and a go that would exit 0 exits **3** (nothing is frozen or used until main rules). Every noise-record session writes `time/<n>-noise-rows.json` (all rows, descriptive figures, `pairedRatios`, `checks`, smallest measured body, outlier entry, and session finding); on any local statistics refusal no session records file is written, later sessions still launch, `time/azure-money.json` is written, and the go exits **3** with a fixed local-statistics line.
+- **What may be run again and results limit:** a noise session that passes stands on its own (`noise-records-replay.json` and `noise-records-micro.json` seal one session each; up to two re-sealed goes per invalid session inside the $40 check). A row refused on statistics may get **one** re-measure under rule C (re-measure alone <4% and both attempts pooled under 5% using t(n-1)/sqrt(n) on declared pair count n, with pooled compile share <=0.005 and pooled stability in [0.95, 1.05]; larger band frozen). The sealed compressed results cap is **12 MB** (up to 275 processes; no-plan default stays 10 MB; expanded limit stays 600 MB).

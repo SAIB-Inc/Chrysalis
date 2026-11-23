@@ -254,7 +254,7 @@ def test_noise_records_do_not_accept_missing_or_duplicate_rows():
 def observation(spec, job, counts, *, ordering=False):
     def passes(count):
         return [dict(blocks=1020 if job['replay'] != 'micro' else 16, wireBytes=9338100,
-                     nsPerBlock=1_000 if job['replay'] != 'micro' else 1_000_000 if job['microInvocations'] == 16 else 625_000,
+                     nsPerBlock=1_000 if job['replay'] != 'micro' else 62_500 * job['microInvocations'],
                      bytesPerBlock=0, startTimestamp=400_000_100, elapsedSinceSeriesStartNs=100, **{'pass': i})
                 for i in range(1, count + 1)]
     def groups(stage, length):
@@ -307,7 +307,7 @@ def test_worker_prelude_runs_only_after_kept_probe(tmp_path, monkeypatch, capsys
             result['data']['rows'][0]['wireBytes'] += 1
         if (breaking == 'over-charge' and role.endswith('-candidate') or
                 breaking == 'over-calibration' and role.endswith('-calibration')):
-            result['seconds'] = 7
+            result['seconds'] = 9
         if breaking == 'ordering-work' and role == 'ordering':
             for row in result['data']['warmupRows'] + result['data']['rows']:
                 row['wireBytes'] += 1
@@ -341,10 +341,10 @@ def test_worker_prelude_runs_only_after_kept_probe(tmp_path, monkeypatch, capsys
     assert lines[1] == 'gate: host processors 3 model None' if breaking == 'reject' else lines[1].startswith('gate: host processors ')
     assert lines[2] == f"gate: probe {'rejected' if breaking == 'reject' else 'kept'} cv 0.0100 lag1 0.0200"
     assert lines[-1].startswith(f'gate: end exitCode {0 if ok else 2} seconds ') and ('Traceback' in err) == (not ok)
-    calibration = f'calibration seconds {7 if breaking == "over-calibration" else 1}.0000 invocations 10 allowance 6'
+    calibration = f'calibration seconds {9 if breaking == "over-calibration" else 1}.0000 invocations 10 allowance 8'
     assert (f'gate: prelude {workload} {calibration}' in lines) == (breaking != 'reject')
     if breaking in (None, 'over-charge'):
-        side = f'candidate seconds {7 if breaking else 1}.0000 projection {9.4 if breaking else 4.4:.4f} allowance 6'
+        side = f'candidate seconds {9 if breaking else 1}.0000 projection {13.8 if breaking else 6.8:.4f} allowance 8'
         assert f'gate: prelude {workload} {side}' in lines
     assert ('gate: stopped: Prelude process exceeds sealed charge' in lines) == (breaking == 'over-charge')
     assert any(line.startswith('gate: stopped: ') for line in lines) == (not ok)
@@ -358,16 +358,16 @@ def test_worker_prelude_runs_only_after_kept_probe(tmp_path, monkeypatch, capsys
         assert order[16:] == [(workload + '-calibration', 16)]
         assert not (tmp_path / 'prelude/applied.json').exists()
     else:
-        assert order[16:20] == [(workload + '-calibration', 16), (workload + '-baseline', 10),
-                                (workload + '-candidate', 10), ('ordering', 16)]
+        assert order[16:21] == [(workload + '-calibration', 16), (workload + '-sizing', 10),
+                                (workload + '-baseline', 20), (workload + '-candidate', 20), ('ordering', 16)]
         if breaking is None:
-            assert all(role == 'phase' and count == 10 for role, count in order[20:])
-            assert len(order) == 24
-            assert json.loads((tmp_path / 'prelude/applied.json').read_text())[workload]['microInvocations'] == 10
+            assert all(role == 'phase' and count == 20 for role, count in order[21:])
+            assert len(order) == 25
+            assert json.loads((tmp_path / 'prelude/applied.json').read_text())[workload]['microInvocations'] == 20
         elif breaking == 'counted-work':
-            assert len(order) == 21
+            assert len(order) == 22
         else:
-            assert len(order) == 20
+            assert len(order) == 21
     with pytest.raises(FileExistsError):
         timing.run(tmp_path, worker, tmp_path / 'results', prelude=recipe)
 
@@ -397,24 +397,34 @@ def test_run3_prelude_refused_at_six_seconds_passes_at_catalogue_allowances(tmp_
     (name, row), = recipe['rows'].items()
     job, specs = worker['workloads'][name], {role: worker['builds'][build] for role, build in row['builds'].items()}
     charges = json.loads((gate.GATE / 'gated.json').read_text())['time'].get('chargeSeconds', {})
-    refused, short = set(), set()  # refused at 6 s; refused at, or under 1.5 x the projection with, the catalogue allowance
+    # Run 7 warm pass seconds at inv0 (RUN8 D1 table): every row refused at 6 s, passes catalogue charge with 1.15 margin.
+    run7_warm = {'hashing': .00949, 'signing': .00431, 'transactions': .00335, 'plutus': .03805, 'encoding': .02255, 'n2c': .00350}
+    refused, short = set(), set()
     for key, ((seconds, ns, blocks), *sides) in RUN3_PRELUDE.items():
         calibration = run3_record(specs['baseline'], job, seconds, ns, ns, blocks)
-        sized = dict(job, microInvocations=bundle.calibrate_micro(calibration['data']['rows'][0], bundle.MICRO_PROBE_INVOCATIONS))
+        inv0 = bundle.calibrate_micro(calibration['data']['rows'][0], bundle.MICRO_PROBE_INVOCATIONS)
+        warm = run7_warm[key]
+        sizing = observation(specs['baseline'], dict(job, microInvocations=inv0), (180, 60))
+        for item in sizing['data']['warmupRows'] + sizing['data']['rows']:
+            item.update(nsPerBlock=warm * 1e9 / blocks, blocks=blocks)
+        sizing['seconds'] = min(1.5, seconds)
+        got_warm, new_inv = bundle.calibrate_micro_warm(sizing['data']['rows'], inv0)
+        sized = dict(job, microInvocations=new_inv)
         raw = {f'{name}-{role}.json': run3_record(specs[role], sized, *side) for role, side in zip(('baseline', 'candidate'), sides)}
-        projection = max(bundle.micro_process_seconds(item['seconds'], item['data']['warmupRows'] + item['data']['rows'])
+        projection = max(bundle.micro_warm_process_seconds(item['seconds'], got_warm, inv0, new_inv)
                          for item in raw.values())
         raw[name + '-calibration.json'] = calibration
-        allowance = charges.get('time/micro-' + key, 6)
+        raw[name + '-sizing.json'] = sizing
+        allowance = charges.get('time/micro-' + key, 8)
         for green, charge in enumerate((6, allowance)):
             try:
                 prelude.derive(dict(recipe, rows={name: dict(row, chargeSeconds=charge)}), worker, raw)
             except ValueError as error:
-                assert str(error) == 'Prelude process exceeds sealed charge', key
+                assert str(error) == prelude.CHARGE_EXCEEDED, key
                 (short if green else refused).add(key)
-        if allowance < 1.5 * projection:
+        if allowance < 1.15 * projection:
             short.add(key)
-    assert (refused, short) == ({'transactions', 'plutus', 'encoding', 'n2c'}, set())
+    assert (refused, short) == (set(RUN3_PRELUDE), set())
     # Both sessions through the tracked noise-records plan: select_rows, then time_plans (time_rows and size_sessions).
     config = prepare.azure_config(json.loads((gate.GATE / 'gated.json').read_text()))
     audit = json.loads((gate.REPO / 'benchmarks/Chrysalis.Benchmarks/audit-allocations.json').read_text())
@@ -424,7 +434,7 @@ def test_run3_prelude_refused_at_six_seconds_passes_at_catalogue_allowances(tmp_
                 rows=[dict(item, sides=dict(baseline=side(), candidate=side())) for item in selected])
     sessions = [[plan[key] for key in ('rawSeconds', 'destroyGuardSeconds', 'measurementCutoffSeconds', 'limitUsd')]
                 for plan in prepare.time_plans(seal)]
-    assert sessions == [[1448, 2494, 2149, .6223], [4592, 6109, 5764, 1.2167]]
+    assert sessions == [[1518, 2574, 2229, .6306], [4836, 6390, 6045, 1.2824]]
 
 
 def test_repeat_builder_and_verifier_rehash_kept_parent_archive(tmp_path, monkeypatch):
@@ -1406,7 +1416,7 @@ def test_verified_machine_prelude_reaches_real_time_report(tmp_path, monkeypatch
         return
     assert evidence['invalid'] is None
     payload = bundle.archive_payload(note, plan, machine=evidence)
-    assert next(iter(payload['applied'].values()))['microInvocations'] == 10
+    assert next(iter(payload['applied'].values()))['microInvocations'] == 20
     assert 'applied' not in bundle.draw_record(evidence, 0, 'first', 1, 'fixture', 'kept')
     path = tmp_path / 'time/0-first.json'
     session.save(path, payload)
@@ -1545,7 +1555,7 @@ def test_prelude_allowance_uses_whole_process_charge_and_limits_row_fit(tmp_path
     plan = timed(tmp_path, a_pairs=5, b_pairs=5)
     row, = plan['rows']
     counted = 2 * row['chargeSeconds'] * (row['aPairs'] + row['bPairs'])
-    assert row['chargeSeconds'] == 6
+    assert row['chargeSeconds'] == 8
     assert plan['rawSeconds'] == counted + timing.probe_seconds(plan['probe']) + 180
     base = timing.size_sessions([row], 'release', budget=10, probe=probe_rule())[0]
     assert plan['rawSeconds'] > base['rawSeconds']
@@ -1620,7 +1630,7 @@ def test_az2f4_prepare_refuses_oversize_results_plan_at_seal_time(tmp_path, azur
     directory = prepare.import_prepared(folder, fetched=fetched, settings=settings, local=local2,
                                         check_cli=lambda *_: '2.3.4', check_budget=lambda *_: None)
     sealed = gate.read_seal(directory)
-    sealed['timePlans'][0]['rows'][0]['aPairs'] = 105
+    sealed['timePlans'][0]['rows'][0]['aPairs'] = 130
     schedule.prepare(sealed['timePlans'][0])
     with pytest.raises(ValueError, match='results cap exceeds hard ceiling'):
         bundle.checked_azure_go(directory, gate.write_seal(directory, sealed))
@@ -1690,7 +1700,7 @@ def test_rehearsal_plans_strip_azure_relax_probe_and_keep_input_members(tmp_path
     for variant in plans6.values():
         w = schedule.worker_plan(variant)
         assert 'provider' not in w and 'region' not in w and w['probe']['limit'] == 1.0 and w['probe']['gen0BudgetBytes'] == 8_388_608
-        assert w['measurementCutoffSeconds'] == micro_plan['measurementCutoffSeconds'] == 5764 and len(w['members']) == 12
+        assert w['measurementCutoffSeconds'] == micro_plan['measurementCutoffSeconds'] == 6045 and len(w['members']) == 12
         assert all(r['aPairs'] == 1 and r['bPairs'] == 0 for r in variant['rows'])
     assert {r['id']: r['chargeSeconds'] for r in plans6['pass']['rows']} == {r['id']: 300 for r in micro_plan['rows']}
     assert {r['id']: r['chargeSeconds'] for r in plans6['fail']['rows']}['time/micro-hashing'] == 3
@@ -1798,3 +1808,391 @@ def test_rehearsal_hard_gate_and_trigger(tmp_path, azure, monkeypatch, capsys):
         monkeypatch.setattr(prepare, 'rehearse', lambda *a, **kw: pytest.fail('non-noise prepare must skip rehearsal'))
         res = build_non(tmp_path / f'{kind}-prepared')
         assert (res / 'prepared.json').is_file() and not (res / 'rehearsal').exists()
+
+
+def _run8_obs(spec, job, counts, *, ns_per_block=None, blocks=None, seconds=1.0):
+    blocks = (1020 if job['replay'] != 'micro' else 16) if blocks is None else blocks
+    def passes(count, ns):
+        return [dict(blocks=blocks, wireBytes=9338100, nsPerBlock=ns, bytesPerBlock=0,
+                     startTimestamp=400_000_100, elapsedSinceSeriesStartNs=100, **{'pass': i})
+                for i in range(1, count + 1)]
+    def groups(stage, length):
+        return [dict(stage=stage, passIndex=i, elapsedNs=0, delta=dict.fromkeys(session.COUNTERS, 0),
+                     cumulative=dict.fromkeys(session.COUNTERS, 0)) for i in range(length + 1)]
+    a, b = counts
+    ns = ns_per_block if ns_per_block is not None else 62_500 * job['microInvocations']
+    data = dict(runtime=spec['runtime'], warmupPasses=a, passes=b, warmupRows=passes(a, ns), rows=passes(b, ns),
+                groupBoundaries=groups('warmup', a) + groups('measured', b), stopwatchFrequency=1_000_000_000,
+                invocationsPerPass=job['microInvocations'], filter=job['filter'])
+    return dict(data=data, identity={k: spec[k] for k in prelude.IDENTITY}, seconds=seconds,
+                marks=['MEASURED_END', 'MEASURED_START'])
+
+
+def test_run8_d1_fast_warming_reaches_one_second_body(tmp_path):
+    r = row(pairs=2)
+    r.update(id='time/micro-transactions', replay='micro', microFilter='stub', aPairs=2, bPairs=0, chargeSeconds=18)
+    d = tmp_path / 'clients'; d.mkdir()
+    (d / 'ReplayClient.dll').write_text('fixture bytes')
+    for spec in r['sides'].values():
+        spec.update(client='clients/ReplayClient.dll', harness='clients/Chrysalis.Benchmarks.dll',
+                    dllSha256s=gate.closure_hashes(d))
+    r['job'] = prepare.replay_job('micro', 'stub')
+    plan, = timing.size_sessions([r], 'release', budget=10, probe=probe_rule(), prelude=True)
+    plan.update(probeJob=prepare.replay_job('offline', '*'), orderingProof=None)
+    plan = schedule.prepare(plan)
+    worker, recipe = schedule.worker_plan(plan), prelude.recipe(plan)
+    name = next(iter(recipe['rows']))
+    # Fast-warming shape (transactions): cold pass is 3x warm pass (warm 3.35 ms at inv0=22).
+    warm_per_inv = 0.00335 / 22.0
+    def fake(build, workload, _dest, counts, **opts):
+        job = dict(worker['workloads'][workload])
+        if 'invocations' in opts:
+            job['microInvocations'] = opts['invocations']
+        inv = job['microInvocations']
+        pass_s = warm_per_inv * inv * (3.0 if tuple(counts) == (1, 1) else 1.0)
+        return _run8_obs(worker['builds'][build], job, counts, ns_per_block=pass_s * 1e9 / 16, blocks=16, seconds=1.0)
+    applied = prelude.execute(recipe, worker, tmp_path / 'prelude', fake)
+    body_s = 60 * warm_per_inv * applied[name]['microInvocations']
+    assert body_s >= 1.0 and applied[name]['microInvocations'] == 132
+
+
+def test_run8_d1_warm_sizing_table_and_run7_estimate_bounds():
+    charges = json.loads((gate.GATE / 'gated.json').read_text())['time']['chargeSeconds']
+    cases = [
+        ('hashing', 23, 0.00949, 49, 2.59),
+        ('signing', 41, 0.00431, 191, 1.64),
+        ('transactions', 22, 0.00335, 132, 1.26),
+        ('plutus', 1, 0.03805, 1, 10.42),
+        ('encoding', 1, 0.02255, 1, 6.54),
+        ('n2c', 1020, 0.00350, 5829, 1.33),
+    ]
+    for key, inv0, warm, want_inv, slowest_real in cases:
+        rows = [dict(nsPerBlock=warm * 1e9 / 16, blocks=16) for _ in range(60)]
+        got_warm, got_inv = bundle.calibrate_micro_warm(rows, inv0)
+        assert abs(got_warm - warm) < 1e-12 and got_inv == want_inv, key
+        est = bundle.micro_warm_process_seconds(1.0, got_warm, inv0, got_inv)
+        allowance = charges['time/micro-' + key]
+        assert allowance >= 1.15 * est, (key, allowance, est)
+        # D1-6: estimate at run 7's own size >= slowest real process in run 7.
+        assert bundle.micro_warm_process_seconds(0.0, got_warm, inv0, inv0) >= slowest_real, key
+
+
+def test_run8_d1_sizing_evidence_checks_and_single_log_line(tmp_path):
+    plan = timed(tmp_path, ordering=False)
+    worker, recipe = schedule.worker_plan(plan), prelude.recipe(plan)
+    name = next(iter(recipe['rows']))
+    def fake(build, workload, _dest, counts, **opts):
+        job = dict(worker['workloads'][workload])
+        if 'invocations' in opts:
+            job['microInvocations'] = opts['invocations']
+        return _run8_obs(worker['builds'][build], job, counts)
+    logs = []
+    directory = tmp_path / 'prelude'
+    applied = prelude.execute(recipe, worker, directory, fake, log=logs.append)
+    sizing_lines = [l for l in logs if f'prelude {name} sizing ' in l]
+    assert len(sizing_lines) == 1 and 'warm ' in sizing_lines[0] and 'invocations 20' in sizing_lines[0]
+    archive = tmp_path / 'res.tar.gz'
+    with tarfile.open(archive, 'w:gz') as tar:
+        tar.add(directory, arcname='prelude')
+    with tarfile.open(archive) as tar:
+        assert prelude.read(tar, plan) == applied
+    raw = {p.name: json.loads(p.read_text()) for p in (directory / 'raw').glob('*.json')}
+    # Missing -sizing record refused.
+    no_sizing = {k: v for k, v in raw.items() if not k.endswith('-sizing.json')}
+    with pytest.raises(ValueError, match='Missing or extra prelude evidence'):
+        prelude.derive(recipe, worker, no_sizing)
+    # Wrong counts on sizing refused.
+    bad_counts = copy.deepcopy(raw)
+    bad_counts[name + '-sizing.json']['data']['rows'] = bad_counts[name + '-sizing.json']['data']['rows'][:1]
+    bad_counts[name + '-sizing.json']['data']['passes'] = 1
+    with pytest.raises(ValueError, match='count mismatch'):
+        prelude.derive(recipe, worker, bad_counts)
+    # Wrong composition on sizing refused.
+    bad_comp = copy.deepcopy(raw)
+    bad_comp[name + '-sizing.json']['data']['invocationsPerPass'] += 1
+    with pytest.raises(ValueError, match='composition changed'):
+        prelude.derive(recipe, worker, bad_comp)
+    # Sizing seconds > chargeSeconds refused with CHARGE_EXCEEDED.
+    over_sizing = copy.deepcopy(raw)
+    over_sizing[name + '-sizing.json']['seconds'] = 9.0
+    with pytest.raises(ValueError, match=prelude.CHARGE_EXCEEDED):
+        prelude.derive(recipe, worker, over_sizing)
+    # Warm pass projecting past chargeSeconds refused with CHARGE_EXCEEDED.
+    over_proj = copy.deepcopy(raw)
+    for item in over_proj[name + '-sizing.json']['data']['rows']:
+        item['nsPerBlock'] *= 10  # 100 ms/pass -> inv=1, projection=2+240*0.01=4.4? Wait: keep inv0=10 -> 0.1s*240/10=2.4; instead make charge=6!
+    small_recipe = copy.deepcopy(recipe)
+    small_recipe['rows'][name]['chargeSeconds'] = 6
+    with pytest.raises(ValueError, match=prelude.CHARGE_EXCEEDED):
+        prelude.derive(small_recipe, worker, raw)
+    # Extra -sizing record on a non-micro row refused.
+    non_micro_worker = copy.deepcopy(worker)
+    non_micro_worker['workloads'][name]['replay'] = 'offline'
+    with pytest.raises(ValueError, match='Missing or extra prelude evidence'):
+        prelude.derive(recipe, non_micro_worker, raw)
+
+
+def test_run8_d1_micro_charge_floor_eight_seconds(tmp_path):
+    r = row(pairs=2)
+    r.update(id='time/micro-floor', replay='micro', microFilter='stub', aPairs=2, bPairs=0)
+    r.pop('chargeSeconds', None)
+    assert timing.charges(r, prelude=True) == 8
+    d = tmp_path / 'clients'; d.mkdir()
+    (d / 'ReplayClient.dll').write_text('fixture bytes')
+    for spec in r['sides'].values():
+        spec.update(client='clients/ReplayClient.dll', harness='clients/Chrysalis.Benchmarks.dll',
+                    dllSha256s=gate.closure_hashes(d))
+    r['job'] = prepare.replay_job('micro', 'stub')
+    plan, = timing.size_sessions([r], 'release', budget=10, probe=probe_rule(), prelude=True)
+    assert plan['rows'][0]['chargeSeconds'] == 8
+    plan.update(probeJob=prepare.replay_job('offline', '*'), orderingProof=None)
+    plan = schedule.prepare(plan)
+    worker, recipe = schedule.worker_plan(plan), prelude.recipe(plan)
+    def fake(build, workload, _dest, counts, **opts):
+        job = dict(worker['workloads'][workload])
+        if 'invocations' in opts:
+            job['microInvocations'] = opts['invocations']
+        return _run8_obs(worker['builds'][build], job, counts)
+    applied = prelude.execute(recipe, worker, tmp_path / 'prelude', fake)
+    assert applied[next(iter(applied))]['microInvocations'] == 20
+    # At 6 s, the same raw prelude cannot pass (estimate >= 6.8 s > 6 s).
+    raw = {p.name: json.loads(p.read_text()) for p in (tmp_path / 'prelude/raw').glob('*.json')}
+    recipe6 = copy.deepcopy(recipe)
+    next(iter(recipe6['rows'].values()))['chargeSeconds'] = 6
+    with pytest.raises(ValueError, match=prelude.CHARGE_EXCEEDED):
+        prelude.derive(recipe6, worker, raw)
+
+
+def test_run8_d1_rehearsal_sizing_stop_and_no_spare(tmp_path):
+    import io
+    config = prepare.azure_config(json.loads((gate.GATE / 'gated.json').read_text()))
+    audit = json.loads((gate.REPO / 'benchmarks/Chrysalis.Benchmarks/audit-allocations.json').read_text())
+    selected = gate.select_rows(SimpleNamespace(mode='release', plan=None, only=None), config, audit,
+                                plan_entries=json.loads((gate.GATE / 'plans/noise-records.json').read_text()))
+    micro_plan = schedule.prepare(prepare.time_plans(dict(gated=config, mode='release', noiseRecords=True, sessionPerRow=False, orderingProof=False,
+                                  rows=[dict(item, sides=dict(baseline=side(), candidate=side())) for item in selected]))[1])
+    assert all(r.get('reservePairs') == 1 for r in micro_plan['rows'])
+    plans = prepare.rehearsal_plans(micro_plan)
+    for variant in plans.values():
+        assert all('reservePairs' not in r for r in variant['rows'])
+        assert len(schedule.worker_plan(variant)['members']) == 12
+    # Fail archive whose stop came at the sizing run (sizing line only, no baseline/candidate line) passes rehearsal_checks.
+    fail_plan = plans['fail']
+    fail_rec = prelude.recipe(fail_plan)
+    fail_wl = next(n for n, r in fail_rec['rows'].items() if r['chargeSeconds'] <= 3)
+    log_text = '\n'.join([
+        f"gate: start provider fly region iad cutoff {fail_plan['measurementCutoffSeconds']}",
+        'gate: host processors 8 model fixture',
+        'gate: probe kept cv 0.0100 lag1 0.0200',
+        f'gate: prelude {fail_wl} calibration seconds 0.5000 invocations 10 allowance 3',
+        f'gate: prelude {fail_wl} sizing seconds 4.1000 warm 0.010000 invocations 20 allowance 3',
+        'gate: stopped: ' + prelude.CHARGE_EXCEEDED,
+        'gate: end exitCode 2 seconds 5.0',
+    ]) + '\n'
+    arc = tmp_path / 'sizing-fail.tar.gz'
+    diag = tmp_path / 'diag.json'
+    session.save(diag, dict(diagnosticOnly=True, verdict='INCONCLUSIVE'))
+    status = {'completedAllDeclaredRounds': False, 'exitCode': 2, 'reason': prelude.CHARGE_EXCEEDED, 'probe': 'kept'}
+    summary = {'logsIncluded': 1, 'logsTruncated': 0, 'logsSkipped': 0, 'linesRedacted': 0,
+               'expandedBytes': 1000, 'maxCompressedBytes': 12_000_000, 'maxExpandedBytes': 38_000_000}
+    with tarfile.open(arc, 'w:gz') as tar:
+        for name, raw_b in (('results/session-status.json', json.dumps(status).encode()),
+                            ('results/guest-summary.json', json.dumps(summary).encode()),
+                            ('results/session.log', log_text.encode())):
+            ti = tarfile.TarInfo(name); ti.size = len(raw_b)
+            tar.addfile(ti, io.BytesIO(raw_b))
+    out = dict(exitCode=2, partial=False, archiveSha256=bundle.sha(arc),
+               importerCode=None, importerError='DIAGNOSTIC ONLY / INCONCLUSIVE', diagnosticPath=diag)
+    checks = prepare.rehearsal_checks('fail', arc, fail_plan, out)['checks']
+    assert all(checks.values()), {k: v for k, v in checks.items() if not v}
+
+
+def test_run8_d3_spare_import_completeness_and_s2_cap(tmp_path, monkeypatch):
+    import gate_azure_guest as guest
+    work = tmp_path / 'vm'; work.mkdir()
+    r = row(pairs=5)
+    r.update(id='time/micro-demo', replay='micro', microFilter='stub', aPairs=5, bPairs=0, provider='azure', region='eastus2', corpusId='fixture')
+    d = work / 'clients'; d.mkdir()
+    (d / 'ReplayClient.dll').write_text('fixture bytes')
+    for spec in r['sides'].values():
+        spec.update(client='clients/ReplayClient.dll', harness='clients/Chrysalis.Benchmarks.dll',
+                    dllSha256s=gate.closure_hashes(d))
+    r['job'] = prepare.replay_job('micro', 'stub')
+    plan, = timing.size_sessions([r], 'change', probe=probe_rule(), prelude=True, reserve=1)
+    plan.update(design='noise-band', repeatAllowed=False, probeJob=prepare.replay_job('offline', '*'), orderingProof=None)
+    plan = schedule.prepare(plan)
+    worker = schedule.worker_plan(plan)
+    assert len(worker['members']) == 12  # (5 + 1 spare) * 2
+    fingerprint = dict(processorCount=8, vendor_id='fixture', model='1', stepping='1', **{'cpu family': '1'})
+    monkeypatch.setattr(session, 'host_fingerprint', lambda: fingerprint)
+    monkeypatch.setenv('P2_MACHINE_CREATED_UNIX', str(int(timing.time.time())))
+    monkeypatch.setenv('P2_AZURE_REGION', plan['region'])
+    monkeypatch.setattr(session, 'detect_platform', lambda region: 'azure')
+    def fake_member(spec, job, dest, **opts):
+        rec = _run8_obs(spec, job, job['counts'])
+        rec['data'].update(replay=job['replay'], processSettings=dict(gcConfiguration=dict(GCGen0MaxBudget=16777216)))
+        if dest.parent.name == 'probe':
+            for i, it in enumerate(rec['data']['rows']):
+                it['nsPerBlock'] += i % 2
+        return dict(rec, platform='azure', timingRejectedReasons=[])
+    monkeypatch.setattr(session, 'member', fake_member)
+    assert timing.run(work, worker, work / 'results', prelude=prelude.recipe(plan))
+    applied = prepare.json_file(work / 'prelude/applied.json')
+    full_members = prepare.json_file(work / 'results/members.json')
+    prelude.verify_population(plan, full_members, applied)
+    # Drop one spare member -> verify_population refuses ('missing declared pairs') AND verified_machine refuses.
+    spare_ids = {m for b in plan['schedule'] for p in b['pairs'] if p['pair'] == 6 for m in p['members'].values()}
+    short_members = [m for m in full_members if m['id'] not in spare_ids]
+    with pytest.raises(ValueError, match='missing declared pairs'):
+        prelude.verify_population(plan, short_members, applied)
+    session.save(work / 'results/members.json', short_members)
+    note = tmp_path / 'note'
+    session.save(note / 'duration-cost.json', dict(totalEstimateWithReserveUsd=.01, cleanupOutstanding=False, withinSealedGuard=True))
+    session.save(note / 'cleanup-proof.json', {'ourAppAbsent': True})
+    session.save(note / 'machine.json', dict(provider='azure', platform='azure', machineClass=timing.PROVIDERS['azure']['machine'], region=plan['region']))
+    arc = note / 'results.tar.gz'
+    with tarfile.open(arc, 'w:gz') as tar:
+        for dn in ('results', 'prelude'):
+            tar.add(work / dn, arcname=dn)
+    (note / 'results.sha256').write_text(bundle.sha(arc) + '\n')
+    ev = bundle.verified_machine(note, plan, 0)
+    assert ev['invalid'] and 'members differ from the full launched schedule' in ev['invalid']
+
+
+def test_run8_d4_noise_reporting_exits_and_rule_c_inputs(tmp_path, monkeypatch, capsys):
+    import gate_azure
+    from test_gate_time import _run8_row, _run8_pairs
+
+    def make_plan(ids, seed=1):
+        rows = [dict(_run8_row(rid, a_pairs=16, b_pairs=0, reserve=1), corpusId='c') for rid in ids]
+        return dict(design='noise-band', provider='azure', region='eastus2', rows=rows, counts=[180, 60],
+                    probe=probe_rule(maxDraws=1), scheduleSeed=seed, vmPrelude=True,
+                    destroyGuardSeconds=2574, limitUsd=0.6306, limitWithRepeatUsd=0.6306, repeatAllowed=False)
+
+    def make_payload(plan, specs_by_id=None, *, invalid=None):
+        specs_by_id = specs_by_id or {}
+        all_ps, applied = [], {}
+        for r in plan['rows']:
+            wl = schedule.opaque(plan['scheduleSeed'], ['workload', r['id']])
+            applied[wl] = {'expectedWork': {'blocks': 1020, 'wireBytes': 0}}
+            ps = _run8_pairs(r, a_specs=specs_by_id.get(r['id']))
+            for p in ps:
+                for s in ('baseline', 'candidate'):
+                    for st_k in ('warmupRows', 'rows'):
+                        for it in p[s]['data'][st_k]:
+                            it['wireBytes'] = 0
+            all_ps.extend(ps)
+        return dict(pairs=all_ps, invalid=invalid, applied=applied, host={'processorCount': 8}, context={})
+
+    def run_go(case_dir, plans, payloads):
+        case_dir.mkdir(parents=True, exist_ok=True)
+        seal = dict(mode='release', provider='azure', noiseRecords=True, programStopUsd=40,
+                    platform={'size': 'Standard_F8als_v7'}, timePlans=plans)
+        gate.write_seal(case_dir, seal)
+        launched = []
+        monkeypatch.setattr(bundle, 'checked_azure_local', lambda *_: {})
+        monkeypatch.setattr(gate_azure, 'reconcile_and_pre_go', lambda *_: None)
+        monkeypatch.setattr(bundle, 'azure_notice', lambda *_: {})
+        monkeypatch.setattr(gate_azure, 'Ledger', lambda _: SimpleNamespace(money=lambda *_: {'goBookedUsd': 0.5, 'goAttempts': len(launched)}))
+        def launch(host, directory, go, number, phase, draw, plan, *rest, **kw):
+            launched.append(number)
+            session.save(case_dir / 'time/launch-started.json', {})
+            return 0, f'app-{number}', None
+        monkeypatch.setattr(bundle, 'launch_azure', launch)
+        idx = {'i': 0}
+        def vm(*a, **kw):
+            p = payloads[idx['i']]
+            return dict(invalid=p['invalid'], probe={'decision': 'kept'})
+        def ap(*a, **kw):
+            p = payloads[idx['i']]
+            idx['i'] += 1
+            return p
+        monkeypatch.setattr(bundle, 'verified_machine', vm)
+        monkeypatch.setattr(bundle, 'archive_payload', ap)
+        rc = bundle.fly_sessions(case_dir, seal, 'go', ('first',), [])
+        return rc, launched, capsys.readouterr()
+
+    # D4-1: three rows, row 2 fails band -> rows file has all 3, money written, no records file, exit 3, stats line (not 'Missing valid').
+    p0 = make_plan(['time/micro-a', 'time/micro-b', 'time/micro-c'])
+    fail_band_specs = {**{(i, 'candidate'): dict(factor=1.12 if i % 2 else 0.88) for i in range(1, 17)}}
+    rc, launched, cap = run_go(tmp_path / 'd4_1', [p0], [make_payload(p0, {'time/micro-b': fail_band_specs})])
+    assert rc == 3 and (tmp_path / 'd4_1/time/azure-money.json').is_file()
+    assert not (tmp_path / 'd4_1/time/0-noise-records.json').exists()
+    assert not (tmp_path / 'd4_1/time/noise-records.json').exists()
+    assert 'noise band not established (local statistics, no provider error)' in cap.err
+    assert 'Missing valid Azure noise results' not in cap.err
+    rows_doc = json.loads((tmp_path / 'd4_1/time/0-noise-rows.json').read_text())
+    assert rows_doc['finding'] is False and [r['id'] for r in rows_doc['rows']] == ['time/micro-a', 'time/micro-b', 'time/micro-c']
+    assert [r['status'] for r in rows_doc['rows']] == ['PASS', 'INCONCLUSIVE', 'PASS']
+    assert all(len(r['pairedRatios']) == 16 and r['minMeasuredBodyMs'] > 0 and r['outlier'] is not None for r in rows_doc['rows'])
+    assert rows_doc['rows'][1]['band'] is not None and rows_doc['rows'][1]['band'] >= 0.05
+
+    # D4-2: every row passes with finding open -> records + rows + merged written, session 2 launched, exit 3 + finding line.
+    p2a = make_plan(['time/micro-a', 'time/micro-b'], seed=1)
+    p2b = make_plan(['time/micro-c'], seed=2)
+    finding_specs = {
+        'time/micro-a': {(2, 'baseline'): dict(factor=1.25), (2, 'candidate'): dict(factor=1.25)},
+        'time/micro-b': {(3, 'baseline'): dict(factor=1.25), (3, 'candidate'): dict(factor=1.25)},
+    }
+    rc, launched, cap = run_go(tmp_path / 'd4_2', [p2a, p2b], [make_payload(p2a, finding_specs), make_payload(p2b)])
+    assert rc == 3 and launched == [0, 1]
+    assert (tmp_path / 'd4_2/time/0-noise-records.json').is_file()
+    assert (tmp_path / 'd4_2/time/1-noise-records.json').is_file()
+    assert (tmp_path / 'd4_2/time/noise-records.json').is_file()
+    assert (tmp_path / 'd4_2/time/azure-money.json').is_file()
+    assert 'outlier finding open for main, nothing may be frozen' in cap.err
+    assert json.loads((tmp_path / 'd4_2/time/0-noise-rows.json').read_text())['finding'] is True
+
+    # D4-3: session 0 refused on stats -> session 1 STILL launched, exit 3, no merged file.
+    rc, launched, cap = run_go(tmp_path / 'd4_3', [p2a, p2b], [make_payload(p2a, {'time/micro-a': fail_band_specs}), make_payload(p2b)])
+    assert rc == 3 and launched == [0, 1]
+    assert not (tmp_path / 'd4_3/time/0-noise-records.json').exists()
+    assert (tmp_path / 'd4_3/time/1-noise-records.json').is_file()
+    assert not (tmp_path / 'd4_3/time/noise-records.json').exists()
+
+    # D4-4: session 0 refused on stats, session 1 invalid -> exit 2, no merged file.
+    rc, launched, cap = run_go(tmp_path / 'd4_4', [p2a, p2b], [make_payload(p2a, {'time/micro-a': fail_band_specs}), make_payload(p2b, invalid='session invalid: fixture')])
+    assert rc == 2 and launched == [0, 1] and not (tmp_path / 'd4_4/time/noise-records.json').exists()
+
+    # D4-5: passing go with no finding -> writes rows + records per session + merged + money, exits 0.
+    rc, launched, cap = run_go(tmp_path / 'd4_5', [p2a, p2b], [make_payload(p2a), make_payload(p2b)])
+    assert rc == 0 and launched == [0, 1]
+    assert all((tmp_path / 'd4_5/time' / f'{n}-noise-{k}.json').is_file() for n in (0, 1) for k in ('rows', 'records'))
+    assert (tmp_path / 'd4_5/time/noise-records.json').is_file() and (tmp_path / 'd4_5/time/azure-money.json').is_file()
+
+    # D4-6: Rule C inputs preserved on compile-share failure, stability failure, and 1-admitted-pair failure.
+    p6 = make_plan(['time/micro-jit', 'time/micro-stab', 'time/micro-one'])
+    jit_specs = {(1, 'baseline'): dict(jit_ticks=1_000_000_000)}
+    stab_specs = {(i, 'baseline'): dict(meas_groups=[1.0, 1.0, 1.15]) for i in range(1, 17)}
+    one_specs = {(i, 'baseline'): dict(rejected=['outside CPU']) for i in range(2, 17)}
+    rc, _, _ = run_go(tmp_path / 'd4_6', [p6], [make_payload(p6, {'time/micro-jit': jit_specs, 'time/micro-stab': stab_specs, 'time/micro-one': one_specs})])
+    assert rc == 3
+    by_id = {entry['id']: entry for entry in json.loads((tmp_path / 'd4_6/time/0-noise-rows.json').read_text())['rows']}
+    for bad_id in ('time/micro-jit', 'time/micro-stab'):
+        entry = by_id[bad_id]
+        assert entry['status'] == 'INCONCLUSIVE' and len(entry['pairedRatios']) == 16 and len(entry['checks']) == 2
+        for chk in entry['checks']:
+            assert 'summedJitMs' in chk['quiescence'] and 'summedMeasuredBodyMs' in chk['quiescence']
+            assert len(chk['stability']) == 3 and all(len(c['pairedRatios']) == 16 for c in chk['stability'])
+    assert by_id['time/micro-one']['pairedRatios'] == []
+
+
+def test_run8_d9_one_session_noise_plans_match_full_plan():
+    config = prepare.azure_config(json.loads((gate.GATE / 'gated.json').read_text()))
+    audit = json.loads((gate.REPO / 'benchmarks/Chrysalis.Benchmarks/audit-allocations.json').read_text())
+    def seal_plans(filename):
+        entries = json.loads((gate.GATE / 'plans' / filename).read_text())
+        selected = gate.select_rows(SimpleNamespace(mode='release', plan=None, only=None), config, audit, plan_entries=entries)
+        seal = dict(gated=config, mode='release', noiseRecords=True, sessionPerRow=False, orderingProof=False,
+                    rows=[dict(item, sides=dict(baseline=side(), candidate=side())) for item in selected])
+        return prepare.time_plans(seal)
+    full_s0, full_s1 = seal_plans('noise-records.json')
+    replay_only, = seal_plans('noise-records-replay.json')
+    micro_only, = seal_plans('noise-records-micro.json')
+    for single, expected, nums in (
+        (replay_only, full_s0, [1518, 2574, 2229, 0.6306]),
+        (micro_only, full_s1, [4836, 6390, 6045, 1.2824]),
+    ):
+        assert [r['id'] for r in single['rows']] == [r['id'] for r in expected['rows']]
+        assert [single[k] for k in ('rawSeconds', 'destroyGuardSeconds', 'measurementCutoffSeconds', 'limitUsd')] == nums
+        assert [expected[k] for k in ('rawSeconds', 'destroyGuardSeconds', 'measurementCutoffSeconds', 'limitUsd')] == nums

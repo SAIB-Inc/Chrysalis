@@ -26,7 +26,7 @@ RESULTS_KEY = TEMP / 'results.pem'
 UNIT = 'chrysalis-gate-worker'
 MAX_BLOB_BYTES = 160_000_000
 MAX_RESULTS = 10_000_000
-MAX_RESULTS_COMPRESSED = MAX_RESULTS
+MAX_RESULTS_COMPRESSED = 12_000_000
 MAX_RESULTS_EXPANDED = 600_000_000
 BASE_RESULTS_COMPRESSED = 1_000_000
 PER_PROCESS_COMPRESSED = 40_000
@@ -70,10 +70,13 @@ def results_limits(plan=None, *, strict=False):
     else:
         for row in plan.get('rows', ()):
             if isinstance(row, dict):
+                reserve = row.get('reservePairs', 0)
+                if type(reserve) is not int or reserve not in (0, 1):
+                    raise ValueError('invalid sealed plan for results limits')
                 for key in ('aPairs', 'bPairs'):
                     count = row.get(key, 0)
                     if type(count) is int and count > 0:
-                        processes += 2 * count
+                        processes += 2 * (count + reserve)
     # derived_compressed is a seal-time check only; runtime wire cap is MAX_RESULTS_COMPRESSED.
     derived_compressed = BASE_RESULTS_COMPRESSED + processes * PER_PROCESS_COMPRESSED
     expanded = MAX_RESULTS + processes * PER_PROCESS_EXPANDED
@@ -171,7 +174,7 @@ SAFE_COMPONENT = r'[A-Za-z0-9][A-Za-z0-9_.-]{0,127}'
 PROCESS = r'(?:observations\.json|direct\.json|environment\.json|server(?:\.ready\.json|-summary\.json|\.log)|execution/(?:console\.log|process\.json))'
 RESULT_MEMBER = re.compile(r'(?:results/(?:host|probe|members|session-start|session-status|recovery-diagnostic|guest-summary)\.json|results/session\.log|'
     rf'results/probe/probe-[0-9]{{2}}\.json|results/(?:probe/)?{SAFE_COMPONENT}/{PROCESS}|'
-    rf'prelude/(?:applied\.json|raw/(?:ordering|[a-f0-9]{{16}}-(?:calibration|baseline|candidate))\.json|raw/(?:{SAFE_COMPONENT}/){{0,3}}(?:{PROCESS}|job\.json|pairs\.json))|'
+    rf'prelude/(?:applied\.json|raw/(?:ordering|[a-f0-9]{{16}}-(?:calibration|sizing|baseline|candidate))\.json|raw/(?:{SAFE_COMPONENT}/){{0,3}}(?:{PROCESS}|job\.json|pairs\.json))|'
     rf'bytes/(?:{SAFE_COMPONENT}/){{0,3}}(?:{PROCESS}|job\.json|pairs\.json)|'
     rf'suite/(?:{SAFE_COMPONENT}/){{0,2}}(?:{SAFE_COMPONENT}\.trx|{SAFE_COMPONENT}\.json|{SAFE_COMPONENT}\.log))')
 SENSITIVE = re.compile(rb'-----BEGIN [A-Z ]*PRIVATE KEY-----|(?:^|[?&\s])(?:sig=[\w%+/=-]{16,}|sv=20\d\d-\d\d-\d\d&[^\r\n]*sr=b)', re.I)
