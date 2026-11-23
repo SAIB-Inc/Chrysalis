@@ -47,6 +47,15 @@ def calibrated(record, charge, log=None, name=None):
     return invocations
 
 
+def sized_micro(record, inv0, charge, log=None, name=None):
+    seconds = process_seconds(record)
+    warm, invocations = bundle.calibrate_micro_warm(record['data']['rows'], inv0)
+    if log:
+        log(f"{timing.STAGE['prelude']}{name} sizing seconds {seconds:.4f} warm {warm:.6f} invocations {invocations} allowance {charge}")
+    require(seconds <= charge, CHARGE_EXCEEDED)
+    return warm, invocations
+
+
 def observed(record, spec, job, counts):
     require(record['identity'] == {key: spec[key] for key in IDENTITY}, 'Prelude build identity changed')
     require(record.get('marks') == ['MEASURED_END', 'MEASURED_START'], 'Invalid prelude measurement marks')
@@ -79,7 +88,7 @@ def ordering(record, reference, spec, job):
 
 def derive(prelude, worker, raw, log=None):
     micros = {name for name in prelude['rows'] if worker['workloads'][name]['replay'] == 'micro'}
-    require(set(raw) == record_names(prelude) | {name + '-calibration.json' for name in micros},
+    require(set(raw) == record_names(prelude) | {f'{name}-{kind}.json' for name in micros for kind in ('calibration', 'sizing')},
             'Missing or extra prelude evidence')
     applied = {}
     for name, row in prelude['rows'].items():
@@ -89,13 +98,16 @@ def derive(prelude, worker, raw, log=None):
         if name in micros:
             calibration = raw[name + '-calibration.json']
             observed(calibration, specs['baseline'], job, (1, 1))
-            values['microInvocations'] = calibrated(calibration, row['chargeSeconds'])
+            inv0 = calibrated(calibration, row['chargeSeconds'])
+            sizing = raw[name + '-sizing.json']
+            observed(sizing, specs['baseline'], dict(job, microInvocations=inv0), timing.PROBE_COUNTS)
+            warm, values['microInvocations'] = sized_micro(sizing, inv0, row['chargeSeconds'])
             job = dict(job, **values)
         for role, spec in specs.items():
             record = raw[f'{name}-{role}.json']
             rows = observed(record, spec, job, (1, 1))
             seconds = process_seconds(record)
-            projection = bundle.micro_process_seconds(seconds, rows) if name in micros else seconds
+            projection = bundle.micro_warm_process_seconds(seconds, warm, inv0, values['microInvocations']) if name in micros else seconds
             if log:
                 log(f"{timing.STAGE['prelude']}{name} {role} seconds {seconds:.4f} projection {projection:.4f} allowance {row['chargeSeconds']}")
             require(projection <= row['chargeSeconds'], CHARGE_EXCEEDED)
@@ -125,7 +137,9 @@ def execute(prelude, worker, directory, member, log=None):
         opts = {}
         if worker['workloads'][name]['replay'] == 'micro':
             calibration = record(name + '-calibration', row['builds']['baseline'], name, [1, 1])
-            opts['invocations'] = calibrated(calibration, row['chargeSeconds'], log, name)
+            inv0 = calibrated(calibration, row['chargeSeconds'], log, name)
+            sizing = record(name + '-sizing', row['builds']['baseline'], name, list(timing.PROBE_COUNTS), invocations=inv0)
+            _, opts['invocations'] = sized_micro(sizing, inv0, row['chargeSeconds'], log, name)
         for role, build in row['builds'].items():
             record(f'{name}-{role}', build, name, [1, 1], **opts)
     if prelude['orderingProof'] is not None:
@@ -172,4 +186,4 @@ def verify_population(plan, records, applied, *, repeat=False, selected=None):
         for phase in ('A', 'B'):
             if repeat and phase == 'A':
                 continue
-            timing.complete_population(row, chosen, phase, row['aPairs' if phase == 'A' else 'bPairs'], applied=applied[key])
+            timing.complete_population(row, chosen, phase, schedules.phase_pairs(row, 'aPairs' if phase == 'A' else 'bPairs'), applied=applied[key])

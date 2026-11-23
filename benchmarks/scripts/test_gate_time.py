@@ -646,3 +646,497 @@ def test_r1_report_prints_observed_fallback_region_and_steal(tmp_path):
         region='eastus', provider='azure', steal='not observable on Azure', fallbackOf='fixture-primary')]))
     text = '\n'.join(timing.draw_lines(tmp_path, first_only=False))
     assert 'eastus' in text and 'eastus2' not in text and 'not observable on Azure' in text
+
+
+def _run8_member(factor=1.0, *, platform='azure', warm_late=None, meas_groups=None, jit_ticks=0, rejected=()):
+    m = member(factor)
+    m['platform'] = platform
+    m['timingRejectedReasons'] = list(rejected)
+    if warm_late is not None:
+        for idx, f in enumerate(warm_late):
+            for item in m['data']['warmupRows'][120 + idx * 20:120 + (idx + 1) * 20]:
+                item['nsPerBlock'] *= f
+    if meas_groups is not None:
+        for idx, f in enumerate(meas_groups):
+            for item in m['data']['rows'][idx * 20:(idx + 1) * 20]:
+                item['nsPerBlock'] *= f
+    if jit_ticks:
+        for b in m['data']['groupBoundaries']:
+            if b['stage'] == 'measured' and b['passIndex'] == 1:
+                b['delta']['compilationTimeTicks'] = jit_ticks
+    return m
+
+
+def _run8_row(rid='time/micro-signing', *, a_pairs=16, b_pairs=0, reserve=1, provider='azure',
+              replay='offline', noise=None, expected=None):
+    r = dict(row(replay if replay != 'micro' else 'offline', pairs=max(b_pairs, 5)),
+             id=rid, replay=replay, aPairs=a_pairs, bPairs=b_pairs, provider=provider, region='eastus2',
+             job={}, noise=noise if noise is not None else dict(band=.0231, machine='Standard_F8als_v7', design='long'))
+    if reserve:
+        r['reservePairs'] = reserve
+    if expected is not None:
+        r['expected'] = expected
+    return r
+
+
+def _run8_pairs(r, *, a_specs=None, b_specs=None, platform='azure'):
+    reserve = r.get('reservePairs', 0)
+    result = []
+    for phase, count, specs in (('A', r['aPairs'], a_specs or {}), ('B', r['bPairs'], b_specs or {})):
+        if not count:
+            continue
+        for num in range(1, count + reserve + 1):
+            pair = dict(pair=num, id=r['id'], phase=phase)
+            for s in ('baseline', 'candidate'):
+                spec = specs.get((num, s), {})
+                m = _run8_member(platform=platform, **spec) if isinstance(spec, dict) else spec
+                ident = r['sides']['baseline' if phase == 'A' else s]
+                m['identity'] = {k: ident[k] for k in ('commit', 'treeId', 'runtime', 'dllSha256s')}
+                m['data']['runtime'] = ident['runtime']
+                pair[s] = m
+            result.append(pair)
+    return result
+
+
+def test_run8_d3_run7_shape_triggers_replaces_and_is_outcome_independent():
+    r = _run8_row(a_pairs=16, b_pairs=0, reserve=1)
+    plan = dict(design='noise-band', provider='azure', region='eastus2', rows=[r], counts=[180, 60])
+    # Run 7 micro-signing shape: pair 6 baseline 1.35x across whole life; clean spare pair 17.
+    ps = _run8_pairs(r, a_specs={(6, 'baseline'): dict(factor=1.35)})
+    # Without replacement (declared 1..16 + spare aside) -> INCONCLUSIVE (band >= 5%).
+    raw_res = timing.baseline_band(r, [p for p in ps if p['pair'] <= 16], jit=[p for p in ps if p['pair'] == 17])
+    assert raw_res['status'] == 'INCONCLUSIVE'
+    decisions = timing.session_outliers(plan, ps)
+    d = decisions[r['id']]
+    assert d['threshold'] == 0.20 and d['replaced'] is True and d['finding'] is False
+    assert d['replacement'] == dict(phase='A', replacedPair=6, sparePair=17, triggerSides=['baseline'])
+    assert len(d['triggers']) == 1 and d['triggers'][0]['pair'] == 6 and d['triggers'][0]['side'] == 'baseline'
+    assert len(d['triggers'][0]['departures']) == 7 and all(x > 0.20 for x in d['triggers'][0]['departures'])
+    assert d['spareAdmitted'] == {'A': True}
+    keep, aside = timing.judged(r, ps, d)
+    assert sorted(p['pair'] for p in keep) == list(range(1, 17))
+    assert [p['pair'] for p in aside] == [17]
+    # Archive pairs must not be mutated in place.
+    assert sorted(p['pair'] for p in ps) == list(range(1, 18))
+    swapped = timing.baseline_band(r, keep, jit=aside)
+    assert swapped['status'] == 'PASS' and swapped['band'] < 0.01
+
+    # D3-5: replacement still happens even when the row would PASS without replacement.
+    ps_pass = _run8_pairs(r, a_specs={(3, 'baseline'): dict(factor=1.25), (3, 'candidate'): dict(factor=1.25)})
+    raw_pass = timing.baseline_band(r, [p for p in ps_pass if p['pair'] <= 16], jit=[p for p in ps_pass if p['pair'] == 17])
+    assert raw_pass['status'] == 'PASS'
+    d_pass = timing.session_outliers(plan, ps_pass)[r['id']]
+    assert d_pass['replaced'] is True and d_pass['replacement']['replacedPair'] == 3
+    assert d_pass['replacement']['triggerSides'] == ['baseline', 'candidate']
+
+
+def test_run8_d3_whole_life_windows_and_threshold_edges():
+    r = _run8_row(a_pairs=16, b_pairs=0, reserve=1)
+    plan = dict(design='noise-band', provider='azure', region='eastus2', rows=[r], counts=[180, 60])
+    # 40% slow in measured passes ONLY (warm-up normal) -> does NOT trigger.
+    ps_burst = _run8_pairs(r, a_specs={(4, 'baseline'): dict(warm_late=[1.0, 1.0, 1.0], meas_groups=[1.40, 1.40, 1.40])})
+    d_burst = timing.session_outliers(plan, ps_burst)[r['id']]
+    assert d_burst['triggers'] == [] and d_burst['replaced'] is False
+    assert d_burst['maxMeanDeparture'] > 0.39 and d_burst['maxWholeLifeDeparture'] == 0.0
+    # Session 1515 worst shape: mean +19.5%, windows 13%, 27%, 14%, 19%, 20%, 19.5% -> does NOT trigger.
+    ps_1515 = _run8_pairs(r, a_specs={(4, 'baseline'): dict(warm_late=[1.13, 1.27, 1.14], meas_groups=[1.19, 1.20, 1.195])})
+    d_1515 = timing.session_outliers(plan, ps_1515)[r['id']]
+    assert d_1515['triggers'] == [] and d_1515['replaced'] is False
+    assert abs(d_1515['maxWholeLifeDeparture'] - 0.13) < 1e-6
+    # Exactly +20% in one window (+25% in others) -> does NOT trigger.
+    ps_edge = _run8_pairs(r, a_specs={(4, 'baseline'): dict(warm_late=[1.20, 1.25, 1.25], meas_groups=[1.25, 1.25, 1.25])})
+    d_edge = timing.session_outliers(plan, ps_edge)[r['id']]
+    assert d_edge['triggers'] == [] and d_edge['replaced'] is False
+    # Just above +20% in all 7 triggers; just below -20% in all 7 triggers.
+    for factor, sign in ((1.205, 1), (0.795, -1)):
+        ps_ok = _run8_pairs(r, a_specs={(4, 'baseline'): dict(factor=factor)})
+        d_ok = timing.session_outliers(plan, ps_ok)[r['id']]
+        assert d_ok['replaced'] is True and len(d_ok['triggers']) == 1
+        assert all(sign * x > 0.20 for x in d_ok['triggers'][0]['departures'])
+
+
+def test_run8_d3_findings_two_rows_and_two_pairs():
+    r1 = _run8_row('time/micro-a', a_pairs=16, b_pairs=0, reserve=1)
+    r2 = _run8_row('time/micro-b', a_pairs=16, b_pairs=0, reserve=1)
+    plan2 = dict(design='noise-band', provider='azure', region='eastus2', rows=[r1, r2], counts=[180, 60])
+    # Rule 6a: two triggered rows -> finding, no replacement anywhere.
+    ps_two_rows = (_run8_pairs(r1, a_specs={(2, 'baseline'): dict(factor=1.35)})
+                   + _run8_pairs(r2, a_specs={(5, 'candidate'): dict(factor=1.35)}))
+    dec = timing.session_outliers(plan2, ps_two_rows)
+    assert all(d['finding'] is True and d['replaced'] is False and d['findingReason'] for d in dec.values())
+    # Rule 6b: two triggering pairs in same phase -> finding, no replacement.
+    plan1 = dict(design='noise-band', provider='azure', region='eastus2', rows=[r1], counts=[180, 60])
+    ps_same = _run8_pairs(r1, a_specs={(2, 'baseline'): dict(factor=1.35), (8, 'candidate'): dict(factor=1.35)})
+    d_same = timing.session_outliers(plan1, ps_same)[r1['id']]
+    assert d_same['finding'] is True and d_same['replaced'] is False
+    # Rule 6b: one triggering pair in A and one in B (including spare counting as triggering pair!).
+    r_ab = _run8_row('time/preprod-offline', a_pairs=8, b_pairs=8, reserve=1)
+    plan_ab = dict(design='full', provider='azure', region='eastus2', rows=[r_ab], counts=[180, 60])
+    for b_pair_num in (3, 9):  # 3 = declared B pair; 9 = B spare pair
+        ps_ab = _run8_pairs(r_ab, a_specs={(2, 'baseline'): dict(factor=1.35)},
+                            b_specs={(b_pair_num, 'candidate'): dict(factor=1.35)})
+        d_ab = timing.session_outliers(plan_ab, ps_ab)[r_ab['id']]
+        assert d_ab['finding'] is True and d_ab['replaced'] is False
+
+
+def test_run8_d3_non_findings_spare_trigger_and_unadmitted_spare():
+    r = _run8_row(a_pairs=16, b_pairs=0, reserve=1)
+    plan = dict(design='noise-band', provider='azure', region='eastus2', rows=[r], counts=[180, 60])
+    # Rule 6c: only the spare triggers -> no finding, no replacement, declared pairs stand.
+    ps_c = _run8_pairs(r, a_specs={(17, 'baseline'): dict(factor=1.35)})
+    dc = timing.session_outliers(plan, ps_c)[r['id']]
+    assert dc['finding'] is False and dc['replaced'] is False and 'spare' in dc['reason'].lower()
+    # Rule 6d: declared pair triggers, spare not admitted -> no finding, no replacement, judged as measured.
+    ps_d = _run8_pairs(r, a_specs={(6, 'baseline'): dict(factor=1.35),
+                                   (17, 'baseline'): dict(rejected=['outside CPU'])})
+    dd = timing.session_outliers(plan, ps_d)[r['id']]
+    assert dd['finding'] is False and dd['replaced'] is False and dd['spareAdmitted'] == {'A': False}
+    assert 'spare' in dd['reason'].lower()
+    # Rule 6e: no trigger, spare not admitted -> no finding, no replacement, reported in entry.
+    ps_e = _run8_pairs(r, a_specs={(17, 'candidate'): dict(rejected=['outside CPU'])})
+    de = timing.session_outliers(plan, ps_e)[r['id']]
+    assert de['finding'] is False and de['replaced'] is False and de['spareAdmitted'] == {'A': False}
+    assert 'spare' in de['reason'].lower()
+
+
+def test_run8_d3_rule9_unused_spare_excluded_and_jit_keeps_all():
+    r = _run8_row(a_pairs=6, b_pairs=0, reserve=1)
+    plan = dict(design='noise-band', provider='azure', region='eastus2', rows=[r], counts=[180, 60])
+    # 4 admitted declared pairs + 1 admitted spare -> still fails < 5 admission floor!
+    ps_floor = _run8_pairs(r, a_specs={(1, 'baseline'): dict(rejected=['outside CPU']),
+                                       (2, 'baseline'): dict(rejected=['outside CPU'])})
+    d_floor = timing.session_outliers(plan, ps_floor)[r['id']]
+    keep, aside = timing.judged(r, ps_floor, d_floor)
+    res_floor = timing.baseline_band(r, keep, jit=aside)
+    assert res_floor['status'] == 'INCONCLUSIVE' and res_floor['admittedPairs']['B'] == 4 and '<5' in res_floor['reason']
+
+    # Unused spare with non-triggering slowness (+15%) changes no ratio, band or descriptive estimate.
+    ps_clean = _run8_pairs(r)
+    ps_noisy_spare = _run8_pairs(r, a_specs={(7, 'candidate'): dict(factor=1.15)})
+    k1, a1 = timing.judged(r, ps_clean, timing.session_outliers(plan, ps_clean)[r['id']])
+    k2, a2 = timing.judged(r, ps_noisy_spare, timing.session_outliers(plan, ps_noisy_spare)[r['id']])
+    r1 = timing.baseline_band(r, k1, jit=a1)
+    r2 = timing.baseline_band(r, k2, jit=a2)
+    assert r1['status'] == r2['status'] == 'PASS'
+    assert r1['mean'] == r2['mean'] and r1['confidence95'] == r2['confidence95'] and r1['band'] == r2['band']
+
+    # Compile share counts BOTH an unused spare AND a replaced pair.
+    big_jit = 1_000_000_000  # 1000 ms >> 0.5% of measured body
+    ps_spare_jit = _run8_pairs(r, a_specs={(7, 'baseline'): dict(jit_ticks=big_jit)})
+    ks, as_ = timing.judged(r, ps_spare_jit, timing.session_outliers(plan, ps_spare_jit)[r['id']])
+    res_sj = timing.baseline_band(r, ks, jit=as_)
+    assert res_sj['status'] == 'INCONCLUSIVE' and 'B baseline quiescence' in res_sj['qualificationFailures']
+
+    ps_rep_jit = _run8_pairs(r, a_specs={(3, 'baseline'): dict(factor=1.35, jit_ticks=big_jit)})
+    d_rj = timing.session_outliers(plan, ps_rep_jit)[r['id']]
+    assert d_rj['replaced'] is True
+    kr, ar = timing.judged(r, ps_rep_jit, d_rj)
+    res_rj = timing.baseline_band(r, kr, jit=ar)
+    assert res_rj['status'] == 'INCONCLUSIVE' and 'B baseline quiescence' in res_rj['qualificationFailures']
+
+
+def test_run8_d3_inert_without_reserve_and_prechange_report_identical(tmp_path):
+    r = _run8_row('time/preprod-offline', a_pairs=6, b_pairs=6, reserve=0)
+    plan = dict(design='full', provider='azure', region='eastus2', rows=[r], counts=[180, 60],
+                destroyGuardSeconds=2494, limitUsd=0.6223, limitWithRepeatUsd=1.2446, repeatAllowed=True)
+    # Run 7 shape without reservePairs: session_outliers returns empty, no outlier line in report.
+    ps = _run8_pairs(r, a_specs={(2, 'baseline'): dict(factor=1.35)})
+    assert timing.session_outliers(plan, ps) == {}
+    payload = dict(pairs=ps, invalid=None, host={'processorCount': 8}, context={'session': 's0'})
+    path = tmp_path / 'time/0-first.json'
+    timing.session.save(path, payload)
+    seal = dict(mode='release', provider='azure', timePlans=[plan])
+    timing.session.save(tmp_path / 'time/index.json', [dict(session=0, phase='first', ids=[r['id']],
+                        path='time/0-first.json', sha256=bundle.sha(path))])
+    vals, lines = timing.read_results(tmp_path, seal)
+    text = '\n'.join(lines)
+    assert 'outlier' not in vals[r['id']] and 'outlier:' not in text and 'candidate-side replacements' not in text
+    # Clean pre-change Azure fixture report text pinned byte-for-byte against 3cc50131.
+    clean_dir = tmp_path / 'clean'
+    clean_ps = _run8_pairs(r)
+    clean_payload = dict(pairs=clean_ps, invalid=None, host={'processorCount': 8}, context={'session': 's0'})
+    clean_path = clean_dir / 'time/0-first.json'
+    timing.session.save(clean_path, clean_payload)
+    timing.session.save(clean_dir / 'time/index.json', [dict(session=0, phase='first', ids=[r['id']],
+                        path='time/0-first.json', sha256=bundle.sha(clean_path))])
+    clean_text = '\n'.join(timing.read_results(clean_dir, seal)[1])
+    assert 'outlier:' not in clean_text and 'candidate-side replacements' not in clean_text
+    # Pin exact SHA-256 captured at unchanged 3cc50131 (verified during red run):
+    import hashlib
+    assert hashlib.sha256(clean_text.encode('utf-8')).hexdigest() == '8f09fa9ea297e2ced73a9a4ccaf2af8b7a58e8bf044bcefdf5ad50d0e55ada28'
+
+
+def test_run8_d3_sibling_groups_and_candidate_side_reporting(tmp_path):
+    # Phase A is ONE group (fails if baseline/candidate are grouped apart: 2 pairs => 4 total vs 2 per side < 3!).
+    r_small = _run8_row('time/micro-tiny', a_pairs=1, b_pairs=0, reserve=1)
+    plan_small = dict(design='noise-band', provider='azure', region='eastus2', rows=[r_small], counts=[180, 60])
+    ps_small = _run8_pairs(r_small, a_specs={(1, 'baseline'): dict(factor=1.35)})
+    d_small = timing.session_outliers(plan_small, ps_small)[r_small['id']]
+    assert d_small['replaced'] is True and d_small['replacement']['replacedPair'] == 1
+
+    # Phase B: baseline trigger fires, candidate trigger fires, uniformly slower candidate does NOT trigger.
+    r_b = _run8_row('time/preprod-offline', a_pairs=0, b_pairs=6, reserve=1)
+    plan_b = dict(design='full', provider='azure', region='eastus2', rows=[r_b], counts=[180, 60],
+                  destroyGuardSeconds=2494, limitUsd=0.6306, limitWithRepeatUsd=0.6306, repeatAllowed=False)
+    ps_uniform = _run8_pairs(r_b, b_specs={(i, 'candidate'): dict(factor=1.35) for i in range(1, 8)})
+    assert timing.session_outliers(plan_b, ps_uniform)[r_b['id']]['triggers'] == []
+
+    for side_name in ('baseline', 'candidate'):
+        d_dir = tmp_path / side_name
+        ps_side = _run8_pairs(r_b, b_specs={(3, side_name): dict(factor=1.35)})
+        p_file = d_dir / 'time/0-first.json'
+        timing.session.save(p_file, dict(pairs=ps_side, invalid=None, host={'processorCount': 8}, context={}))
+        seal = dict(mode='change', provider='azure', timePlans=[plan_b])
+        timing.session.save(d_dir / 'time/index.json', [dict(session=0, phase='first', ids=[r_b['id']],
+                            path='time/0-first.json', sha256=bundle.sha(p_file))])
+        vals, lines = timing.read_results(d_dir, seal)
+        text = '\n'.join(lines)
+        rep = vals[r_b['id']]['outlier']['replacement']
+        assert rep == dict(phase='B', replacedPair=3, sparePair=7, triggerSides=[side_name])
+        assert f'first outlier: replaced phase B pair 3 (side {side_name}) with spare pair 7' in text
+        if side_name == 'candidate':
+            assert f'candidate-side replacements: 1 ({r_b["id"]})' in text
+        else:
+            assert 'candidate-side replacements:' not in text
+
+
+def test_run8_d3_sizing_spares_and_release_growth():
+    from types import SimpleNamespace
+    import gate_prepare as prepare
+    config = prepare.azure_config(json.loads((gate.GATE / 'gated.json').read_text()))
+    audit = json.loads((gate.REPO / 'benchmarks/Chrysalis.Benchmarks/audit-allocations.json').read_text())
+    entries = json.loads((gate.GATE / 'plans/noise-records.json').read_text())
+    selected = gate.select_rows(SimpleNamespace(mode='release', plan=None, only=None), config, audit, plan_entries=entries)
+    seal = dict(gated=config, mode='release', noiseRecords=True, sessionPerRow=False, orderingProof=False,
+                rows=[dict(item, sides=dict(baseline=side(), candidate=side())) for item in selected])
+    s1, s2 = prepare.time_plans(seal)
+    assert (s1['rawSeconds'], s1['limitUsd']) == (1518, 0.6306)
+    assert (s2['rawSeconds'], s2['limitUsd']) == (4836, 1.2824)
+    assert all(r['reservePairs'] == 1 for r in s1['rows'] + s2['rows'])
+    # Leg-2 replay pair grows to 24 B pairs on both rows with reserve=1, prelude=True.
+    leg2_rows = [dict(row('offline'), provider='azure', region='eastus2'),
+                 dict(row('tcp'), provider='azure', region='eastus2')]
+    for lr in leg2_rows:
+        lr.pop('aPairs', None); lr.pop('bPairs', None)
+    leg2_plan, = timing.size_sessions(leg2_rows, 'release', probe=probe_rule(), prelude=True, reserve=1)
+    assert all(r['bPairs'] == 24 and r['reservePairs'] == 1 for r in leg2_plan['rows'])
+    # Smoke row gets NO reservePairs.
+    smoke_r = dict(row('offline'), provider='azure', region='eastus2', aPairs=5, bPairs=2, expected='smoke')
+    smoke_plan, = timing.size_sessions([smoke_r], 'release', probe=probe_rule(), prelude=True, reserve=1)
+    assert 'reservePairs' not in smoke_plan['rows'][0]
+    # size_sessions without reserve keeps today's plans (no reservePairs).
+    plain, = timing.size_sessions([dict(row('offline'), aPairs=16, bPairs=0, provider='azure', region='eastus2')],
+                                  'change', probe=probe_rule(), prelude=True)
+    assert 'reservePairs' not in plain['rows'][0]
+
+
+def test_run8_d3_other_sites_finding_exit3_controls_and_repeat(tmp_path, monkeypatch):
+    # Finding in non-noise report: finding line printed, controls_outcome unchanged, fly_sessions exits 3.
+    r1 = _run8_row('time/preprod-offline', a_pairs=6, b_pairs=6, reserve=1, expected={'release': 'PASS', 'change': 'PASS'})
+    r2 = _run8_row('time/preprod-tcp', a_pairs=6, b_pairs=6, reserve=1, expected={'release': 'PASS', 'change': 'PASS'})
+    plan = dict(design='full', mode='release', provider='azure', region='eastus2', rows=[r1, r2], counts=[180, 60],
+                destroyGuardSeconds=2494, limitUsd=0.6306, limitWithRepeatUsd=1.2612, repeatAllowed=True, probe=probe_rule(maxDraws=1))
+    # Two triggered rows -> finding, but both rows still PASS as measured (1.25x on both sides of pair 2 -> ratio 1.0).
+    ps = (_run8_pairs(r1, a_specs={(2, 'baseline'): dict(factor=1.25), (2, 'candidate'): dict(factor=1.25)})
+          + _run8_pairs(r2, a_specs={(2, 'baseline'): dict(factor=1.25), (2, 'candidate'): dict(factor=1.25)}))
+    d1 = tmp_path / 'controls'
+    p1 = d1 / 'time/0-first.json'
+    timing.session.save(p1, dict(pairs=ps, invalid=None, host={'processorCount': 8}, context={}))
+    seal = dict(mode='release', provider='azure', rows=[r1, r2], timePlans=[plan], programStopUsd=40,
+                canonical=False, releaseSet=[], gated={'areas': {}}, bands={})
+    timing.session.save(d1 / 'time/index.json', [dict(session=0, phase='first', ids=[r1['id'], r2['id']],
+                        path='time/0-first.json', sha256=bundle.sha(p1))])
+    vals, lines = timing.read_results(d1, seal)
+    text = '\n'.join(lines)
+    assert 'outlier finding:' in text
+    assert timing.session_outcome(d1, seal, 0)[0] == 'complete'
+    assert timing.has_outlier_finding(vals) is True
+
+    # Repeat session: row replaced in BOTH first and repeat -> flagged as finding, fly_sessions exits 3.
+    r_rep = _run8_row('time/preprod-offline', a_pairs=6, b_pairs=6, reserve=1)
+    plan_rep = dict(design='full', mode='release', provider='azure', region='eastus2', rows=[r_rep], counts=[180, 60],
+                    destroyGuardSeconds=2494, limitUsd=0.6306, limitWithRepeatUsd=1.2612, repeatAllowed=True, probe=probe_rule(maxDraws=1))
+    d2 = tmp_path / 'rep'
+    # First: FAIL (B candidate 1.07x) + pair 2 A replaced; Repeat: PASS (B 1.0x) + pair 2 A replaced.
+    ps_first = _run8_pairs(r_rep, a_specs={(2, 'baseline'): dict(factor=1.35)},
+                           b_specs={(i, 'candidate'): dict(factor=1.07) for i in range(1, 8)})
+    ps_repeat = _run8_pairs(r_rep, a_specs={(2, 'baseline'): dict(factor=1.35)},
+                            b_specs={(i, 'candidate'): dict(factor=1.0) for i in range(1, 8)})
+    pf, pr = d2 / 'time/0-first.json', d2 / 'time/0-repeat.json'
+    timing.session.save(pf, dict(pairs=ps_first, invalid=None, host={'processorCount': 8}, context={}))
+    timing.session.save(pr, dict(pairs=ps_repeat, invalid=None, host={'processorCount': 8}, context={}))
+    seal_rep = dict(mode='release', provider='azure', rows=[r_rep], timePlans=[plan_rep], programStopUsd=40,
+                    canonical=False, releaseSet=[], gated={'areas': {}}, bands={})
+    timing.session.save(d2 / 'time/index.json', [
+        dict(session=0, phase='first', ids=[r_rep['id']], path='time/0-first.json', sha256=bundle.sha(pf)),
+        dict(session=0, phase='repeat', ids=[r_rep['id']], path='time/0-repeat.json', sha256=bundle.sha(pr)),
+    ])
+    vals_rep, lines_rep = timing.read_results(d2, seal_rep)
+    assert vals_rep[r_rep['id']].get('outlierFinding') and 'outlier finding:' in '\n'.join(lines_rep)
+    assert timing.has_outlier_finding(vals_rep) is True
+
+    # Verify fly_sessions exits 3 (instead of 0) on a non-noise seal with an open finding.
+    import gate_azure
+    from types import SimpleNamespace
+    d3 = tmp_path / 'fly_finding'
+    d3.mkdir()
+    seal_fly = dict(mode='change', provider='azure', ruleVersion=gate.stats.RULE_VERSION, rows=[r1, r2], timePlans=[dict(plan, repeatAllowed=False)],
+                    programStopUsd=40, canonical=False, releaseSet=[], gated={'areas': {}}, bands={})
+    gate.write_seal(d3, seal_fly)
+    monkeypatch.setattr(bundle, 'checked_azure_local', lambda *_: {})
+    monkeypatch.setattr(gate_azure, 'reconcile_and_pre_go', lambda *_: None)
+    monkeypatch.setattr(bundle, 'azure_notice', lambda *_: {})
+    monkeypatch.setattr(gate_azure, 'Ledger', lambda _: SimpleNamespace(money=lambda *_: {'goBookedUsd': 0.5, 'goAttempts': 1,
+                        'programBookedUsd': 1.0, 'unsettledUsd': 0.0, 'observedPostedUsd': 0.0, 'headroomUsd': 39.0, 'deskEstimateUsd': 10.0}))
+    monkeypatch.setattr(gate_azure, 'money_text', lambda *_: 'ok')
+    def launch(*args):
+        timing.session.save(d3 / 'time/launch-started.json', {})
+        return 0, 'fixture', None
+    monkeypatch.setattr(bundle, 'launch_azure', launch)
+    monkeypatch.setattr(bundle, 'verified_machine', lambda *a, **kw: dict(invalid=None, probe={'decision': 'kept'}))
+    monkeypatch.setattr(bundle, 'archive_payload', lambda *a, **kw: dict(pairs=ps, invalid=None, host={'processorCount': 8}, context={}))
+    assert bundle.fly_sessions(d3, seal_fly, 'go', ('first',), []) == 3
+
+
+def test_run8_d3_spare_completeness_every_caller(tmp_path):
+    r = _run8_row('time/micro-signing', a_pairs=6, b_pairs=0, reserve=1)
+    plan = dict(design='noise-band', provider='azure', region='eastus2', rows=[r], counts=[180, 60],
+                destroyGuardSeconds=2494, limitUsd=0.6306, limitWithRepeatUsd=0.6306, repeatAllowed=False,
+                scheduleSeed=1, vmPrelude=True)
+    import gate_schedule as schedules
+    workload = schedules.opaque(1, ['workload', r['id']])
+    applied = {workload: {'expectedWork': {'blocks': 1020, 'wireBytes': 0}}}
+    # Fix wireBytes=0 on observations to match expectedWork.
+    def make_ps():
+        ps = _run8_pairs(r)
+        for p in ps:
+            for s in ('baseline', 'candidate'):
+                for st_key in ('warmupRows', 'rows'):
+                    for it in p[s]['data'][st_key]:
+                        it['wireBytes'] = 0
+        return ps
+
+    for defect, expect in (
+        ('missing', 'missing declared pairs'),
+        ('identity', 'identity mismatch'),
+        ('counts', 'count mismatch'),
+        ('work', 'Fixed work differs'),
+    ):
+        d = tmp_path / defect
+        d.mkdir()
+        ps = make_ps()
+        if defect == 'missing':
+            ps = [p for p in ps if p['pair'] != 7]
+        elif defect == 'identity':
+            ps[-1]['baseline']['identity']['commit'] = 'f' * 40
+        elif defect == 'counts':
+            ps[-1]['baseline']['data']['rows'].pop()
+            ps[-1]['baseline']['data']['passes'] -= 1
+        elif defect == 'work':
+            ps[-1]['baseline']['data']['rows'][0]['wireBytes'] = 99
+        payload = dict(pairs=ps, invalid=None, applied=applied, host={'processorCount': 8}, context={})
+        seal = dict(mode='release', provider='azure', noiseRecords=True, platform={'size': 'Standard_F8als_v7'}, timePlans=[plan])
+        gate.write_seal(d, seal)
+        p_file = d / 'time/0-first.json'
+        timing.session.save(p_file, payload)
+        timing.session.save(d / 'time/index.json', [dict(session=0, phase='first', ids=[r['id']],
+                            path='time/0-first.json', sha256=bundle.sha(p_file))])
+        # azure_noise_records refuses, writes rows file, writes NO records file.
+        try:
+            bundle.azure_noise_records(d, seal, payload, 0)
+        except ValueError as err:
+            assert 'Noise band did not pass' in str(err)
+        else:
+            raise AssertionError('Expected refusal for ' + defect)
+        assert not (d / 'time/0-noise-records.json').exists()
+        assert (d / 'time/0-noise-rows.json').is_file()
+        row_doc = json.loads((d / 'time/0-noise-rows.json').read_text())['rows'][0]
+        assert row_doc['status'] == 'INCONCLUSIVE' and expect in row_doc['reason']
+        # read_results also reports INCONCLUSIVE with the exact reason.
+        _, lines = timing.read_results(d, seal)
+        assert expect in '\n'.join(lines)
+
+    # baseline_band called without aside pairs for a row with reservePairs is refused.
+    clean_ps = make_ps()
+    no_aside = timing.baseline_band(r, [p for p in clean_ps if p['pair'] <= 6])
+    assert no_aside['status'] == 'INCONCLUSIVE' and 'missing declared pairs' in no_aside['reason']
+
+    # Invalid payload passed to read_results gets no outlier entry and does not raise.
+    d_inv = tmp_path / 'inv'
+    d_inv.mkdir()
+    p_inv = d_inv / 'time/0-first.json'
+    timing.session.save(p_inv, dict(pairs=[], invalid='session invalid: fixture', host={'processorCount': 8}, context={}))
+    seal_inv = dict(mode='change', provider='azure', timePlans=[dict(plan, design='full')])
+    timing.session.save(d_inv / 'time/index.json', [dict(session=0, phase='first', ids=[r['id']],
+                        path='time/0-first.json', sha256=bundle.sha(p_inv))])
+    vals_inv, lines_inv = timing.read_results(d_inv, seal_inv)
+    assert 'outlier' not in vals_inv[r['id']] and 'outlier:' not in '\n'.join(lines_inv)
+
+    # Malformed process record in row B blocks replacement in row A (which has a valid trigger).
+    r_a = _run8_row('time/micro-a', a_pairs=6, b_pairs=0, reserve=1)
+    r_b = _run8_row('time/micro-b', a_pairs=6, b_pairs=0, reserve=1)
+    plan_2 = dict(design='noise-band', provider='azure', region='eastus2', rows=[r_a, r_b], counts=[180, 60])
+    ps_a = _run8_pairs(r_a, a_specs={(2, 'baseline'): dict(factor=1.35)})
+    ps_b = _run8_pairs(r_b)
+    ps_b[0]['candidate']['data']['rows'] = []  # malformed
+    dec_2 = timing.session_outliers(plan_2, ps_a + ps_b)
+    assert dec_2[r_b['id']]['evaluated'] is False and dec_2[r_a['id']]['replaced'] is False
+
+
+def test_run8_d3_phases_compile_share_and_re_verdict(tmp_path):
+    r = _run8_row('time/preprod-offline', a_pairs=6, b_pairs=6, reserve=1)
+    big_jit = 1_000_000_000
+    # Phase A spare JIT affects ONLY phase A compile share; phase B spare JIT affects ONLY phase B.
+    ps_a_jit = _run8_pairs(r, a_specs={(7, 'baseline'): dict(jit_ticks=big_jit)})
+    keep_a, aside_a = timing.judged(r, ps_a_jit, None)
+    res_a = timing.verdict(r, keep_a, 'release', jit=aside_a)
+    assert set(res_a['qualificationFailures']) == {'A phase quiescence'}
+
+    ps_b_jit = _run8_pairs(r, b_specs={(7, 'baseline'): dict(jit_ticks=big_jit)})
+    keep_b, aside_b = timing.judged(r, ps_b_jit, None)
+    res_b = timing.verdict(r, keep_b, 'release', jit=aside_b)
+    assert set(res_b['qualificationFailures']) == {'B baseline quiescence'}
+
+    # baseline_band counts phase A aside pair and ignores phase B aside pair.
+    r_noise = _run8_row('time/preprod-offline', a_pairs=6, b_pairs=0, reserve=1)
+    ps_both = _run8_pairs(r, b_specs={(7, 'baseline'): dict(jit_ticks=big_jit)})
+    a_keep = [p for p in ps_both if p['phase'] == 'A' and p['pair'] <= 6]
+    a_and_b_aside = [p for p in ps_both if p['pair'] == 7]
+    assert timing.baseline_band(r_noise, a_keep, jit=a_and_b_aside)['status'] == 'PASS'
+
+    # Alternate-mode re-verdict passes jit=first_aside:
+    # (1) valid release FAIL + repeat re-reported in change mode succeeds (does not fail completeness).
+    plan = dict(design='full', mode='release', provider='azure', region='eastus2', rows=[r], counts=[180, 60],
+                destroyGuardSeconds=2494, limitUsd=0.6306, limitWithRepeatUsd=1.2612, repeatAllowed=True)
+    d_ok = tmp_path / 're_ok'
+    ps_f = _run8_pairs(r, b_specs={(i, 'candidate'): dict(factor=1.07) for i in range(1, 8)})
+    ps_r = _run8_pairs(r, b_specs={(i, 'candidate'): dict(factor=1.0) for i in range(1, 8)})
+    pf, pr = d_ok / 'time/0-first.json', d_ok / 'time/0-repeat.json'
+    timing.session.save(pf, dict(pairs=ps_f, invalid=None, host={'processorCount': 8}, context={}))
+    timing.session.save(pr, dict(pairs=ps_r, invalid=None, host={'processorCount': 8}, context={}))
+    seal = dict(mode='release', provider='azure', timePlans=[plan])
+    timing.session.save(d_ok / 'time/index.json', [
+        dict(session=0, phase='first', ids=[r['id']], path='time/0-first.json', sha256=bundle.sha(pf)),
+        dict(session=0, phase='repeat', ids=[r['id']], path='time/0-repeat.json', sha256=bundle.sha(pr)),
+    ])
+    vals_chg, _ = timing.read_results(d_ok, seal, mode='change')
+    assert 'repeat' in vals_chg[r['id']]
+
+    # (2) when first's aside pair alone puts A compile share > 0.005, sealed status is INCONCLUSIVE,
+    # so alternate-mode re-verdict MUST agree and reject the repeat as 'Only a failing row may repeat'.
+    d_bad = tmp_path / 're_bad'
+    ps_f_jit = _run8_pairs(r, a_specs={(7, 'baseline'): dict(jit_ticks=big_jit)},
+                           b_specs={(i, 'candidate'): dict(factor=1.07) for i in range(1, 8)})
+    pf2, pr2 = d_bad / 'time/0-first.json', d_bad / 'time/0-repeat.json'
+    timing.session.save(pf2, dict(pairs=ps_f_jit, invalid=None, host={'processorCount': 8}, context={}))
+    timing.session.save(pr2, dict(pairs=ps_r, invalid=None, host={'processorCount': 8}, context={}))
+    timing.session.save(d_bad / 'time/index.json', [
+        dict(session=0, phase='first', ids=[r['id']], path='time/0-first.json', sha256=bundle.sha(pf2)),
+        dict(session=0, phase='repeat', ids=[r['id']], path='time/0-repeat.json', sha256=bundle.sha(pr2)),
+    ])
+    try:
+        timing.read_results(d_bad, seal, mode='change')
+    except ValueError as err:
+        assert 'Only a failing row may repeat' in str(err)
+    else:
+        raise AssertionError('Expected re-verdict to see aside-pair compile-share failure')

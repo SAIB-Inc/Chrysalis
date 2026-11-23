@@ -1,0 +1,11 @@
+{
+  "noiseRecords": true,
+  "entries": [
+    {"id": "time/micro-hashing"},
+    {"id": "time/micro-signing"},
+    {"id": "time/micro-transactions"},
+    {"id": "time/micro-plutus"},
+    {"id": "time/micro-encoding"},
+    {"id": "time/micro-n2c"}
+  ]
+}

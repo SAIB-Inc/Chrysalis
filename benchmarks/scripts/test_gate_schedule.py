@@ -384,5 +384,46 @@ class ScheduleTests(unittest.TestCase):
         self.assertNotEqual(math.sqrt(4), 2.5)  # geometric averaging of passes would differ
 
 
+    def test_run8_d3_reserve_pair_schedule_and_legacy_unchanged(self):
+        api = self.api()
+        p = plan()
+        for r in p['rows']:
+            r.update(aPairs=16, bPairs=0, reservePairs=1)
+        self.assertEqual(api.phase_pairs(p['rows'][0], 'aPairs'), 17)
+        self.assertEqual(api.phase_pairs(p['rows'][0], 'bPairs'), 0)
+        prepared = api.prepare(copy.deepcopy(p))
+        api.verify(prepared)
+        for r in p['rows']:
+            blocks = [b for b in prepared['schedule'] if b['phase'] == 'A' and b['row'] == r['id']]
+            self.assertEqual(len(blocks), 9)
+            self.assertEqual([pair['pair'] for b in blocks for pair in b['pairs']], list(range(1, 18)))
+            spare_blocks = [b for b in blocks if any(pair['pair'] == 17 for pair in b['pairs'])]
+            self.assertEqual(len(spare_blocks), 1)
+            self.assertEqual(len(spare_blocks[0]['pairs']), 1)
+            self.assertEqual(len(spare_blocks[0]['members']), 2)
+            self.assertEqual(spare_blocks[0]['round'], 9)
+        # Also test two-phase plan with reservePairs=1 (A=16, B=16 -> 17 pairs each)
+        both = plan()
+        for r in both['rows']:
+            r.update(aPairs=16, bPairs=16, reservePairs=1)
+        prep_both = api.prepare(copy.deepcopy(both))
+        for phase in ('A', 'B'):
+            for r in both['rows']:
+                blocks = [b for b in prep_both['schedule'] if b['phase'] == phase and b['row'] == r['id']]
+                self.assertEqual([pair['pair'] for b in blocks for pair in b['pairs']], list(range(1, 18)))
+                self.assertEqual([b for b in blocks if b['round'] == 9][0]['pairs'][0]['pair'], 17)
+        # Legacy plan without reservePairs matches golden fixture identically
+        golden = json.loads((Path(__file__).parent / 'fixtures/timing-schedule.json').read_text())
+        core = dict(rows=[dict(id='x', aPairs=5, bPairs=2), dict(id='y', aPairs=0, bPairs=6)],
+                    repeatAllowed=True, inputSha256={'fixture': 'a' * 64})
+        legacy = api.prepare(core)
+        self.assertEqual(legacy['scheduleCoreSha256'], golden['coreSha256'])
+        self.assertEqual(legacy['schedule'], golden['schedule'])
+        api.verify(legacy)
+        # Invalid reservePairs refused
+        for bad in (-1, 2, True, '1'):
+            with self.subTest(bad=bad), self.assertRaises(ValueError):
+                api.phase_pairs(dict(id='x', aPairs=16, bPairs=0, reservePairs=bad), 'aPairs')
+
 if __name__ == '__main__':
     unittest.main()
