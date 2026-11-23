@@ -72,10 +72,9 @@ public sealed class B1HandshakeIntegrationTests
             plexer.Dispose();
             try { await running; }
             catch (OperationCanceledException) when (deadline.IsCancellationRequested) { }
-            // Query mode is terminal: the server closes after the decoded reply. Plexer
-            // diagnoses ordinary bearer EOF as an error; only this exact post-reply
-            // lifecycle outcome is expected here. Do not hide a pre-reply failure.
-            catch (InvalidOperationException exception) when (receivedReply && exception.Message == "Demuxer completed unexpectedly without error") { }
+            // Query mode is terminal: the server closes cleanly after the decoded reply.
+            // Accept only that exact post-reply clean close; do not hide a pre-reply failure.
+            catch (ConnectionClosedException exception) when (receivedReply && exception.InnerException is null) { }
         }
     }
 }

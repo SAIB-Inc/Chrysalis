@@ -99,7 +99,7 @@ public sealed class Demuxer : IDisposable
         _runRegistration = cancellationToken.UnsafeRegister(static state =>
         {
             Demuxer demuxer = (Demuxer)state!;
-            demuxer._connection.End(new OperationCanceledException(demuxer._runToken));
+            demuxer._connection.TryEnd(new OperationCanceledException(demuxer._runToken));
         }, this);
         if (start) { QueueCallback(); }
         else { FinishRun(); }

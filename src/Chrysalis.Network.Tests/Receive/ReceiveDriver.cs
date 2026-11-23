@@ -412,9 +412,15 @@ internal sealed class ReceiveCalls : IAsyncDisposable
         _bearer = bearer;
         _mode = mode;
         _probe = probe;
-        _receive = frozen
-            ? new ReceiveOracle.ChannelBuffer(channel).ReceiveFullMessageAsync<BlockFetchMessage>
-            : new ChannelBuffer(channel).ReceiveFullMessageAsync<BlockFetchMessage>;
+        if (frozen)
+        {
+            _receive = new ReceiveOracle.ChannelBuffer(channel).ReceiveFullMessageAsync<BlockFetchMessage>;
+        }
+        else
+        {
+            ChannelBuffer buffer = new(channel);
+            _receive = cancellationToken => buffer.ReceiveFullMessageAsync<BlockFetchMessage>(cancellationToken).AsTask();
+        }
     }
 
     internal bool Quiet => _calls.Count == 0 || _calls[^1].IsCompleted || _probe.Parked > 0;

@@ -121,13 +121,13 @@ public class ChainSync : IMiniProtocol
                 // Fast-path: write pre-encoded segment directly to bearer
                 await _buffer.SendPreEncodedSegmentAsync(_preEncodedNextRequest, cancellationToken).ConfigureAwait(false);
                 State = ChainSyncState.CanAwait;
-                response = await ReceiveNextResponseAsync(cancellationToken).ConfigureAwait(false);
+                response = await _buffer.ReceiveFullMessageAsync<MessageNextResponse>(cancellationToken).ConfigureAwait(false);
                 break;
 
             // CanAwait on entry: an earlier wait was cancelled or failed after the request went out, and its reply is still owed.
             case ChainSyncState.CanAwait:
             case ChainSyncState.MustReply:
-                response = await ReceiveNextResponseAsync(cancellationToken).ConfigureAwait(false);
+                response = await _buffer.ReceiveFullMessageAsync<MessageNextResponse>(cancellationToken).ConfigureAwait(false);
                 break;
             case ChainSyncState.Done:
                 break;
@@ -176,7 +176,7 @@ public class ChainSync : IMiniProtocol
     /// payload shape. Deserialization reports the exact consumed length, keeping the buffer in sync.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public Task<MessageNextResponse> ReceiveNextResponseAsync(CancellationToken cancellationToken) => _buffer.ReceiveFullMessageAsync<MessageNextResponse>(cancellationToken);
+    public Task<MessageNextResponse> ReceiveNextResponseAsync(CancellationToken cancellationToken) => _buffer.ReceiveFullMessageAsync<MessageNextResponse>(cancellationToken).AsTask();
 
     /// <summary>
     /// Terminates the Chain-Sync protocol.

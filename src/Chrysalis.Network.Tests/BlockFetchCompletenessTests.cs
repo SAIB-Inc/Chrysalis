@@ -146,7 +146,7 @@ public class BlockFetchCompletenessTests(ITestOutputHelper output)
         using ProtocolReplay replay = new(ProtocolType.BlockFetch, message);
         ChannelBuffer buffer = new(replay.Channel);
         using CancellationTokenSource deadline = new(TimeSpan.FromSeconds(5));
-        Exception? error = await Record.ExceptionAsync(() => buffer.ReceiveFullMessageAsync<BlockFetchMessage>(deadline.Token));
+        Exception? error = await Record.ExceptionAsync(() => buffer.ReceiveFullMessageAsync<BlockFetchMessage>(deadline.Token).AsTask());
         _ = Assert.IsType<CborException>(error);
     }
 
@@ -164,7 +164,7 @@ public class BlockFetchCompletenessTests(ITestOutputHelper output)
         using ProtocolReplay replay = new(ProtocolType.BlockFetch, Convert.FromHexString(hex));
         ChannelBuffer buffer = new(replay.Channel);
         using CancellationTokenSource deadline = new(TimeSpan.FromSeconds(1));
-        Exception? error = await Record.ExceptionAsync(() => buffer.ReceiveFullMessageAsync<BlockFetchMessage>(deadline.Token));
+        Exception? error = await Record.ExceptionAsync(() => buffer.ReceiveFullMessageAsync<BlockFetchMessage>(deadline.Token).AsTask());
         _ = Assert.IsType<CborException>(error);
     }
 
@@ -177,7 +177,7 @@ public class BlockFetchCompletenessTests(ITestOutputHelper output)
         using ProtocolReplay replay = new(ProtocolType.BlockFetch, Convert.FromHexString(hex));
         ChannelBuffer buffer = new(replay.Channel);
         using CancellationTokenSource deadline = new(TimeSpan.FromSeconds(1));
-        Exception? error = await Record.ExceptionAsync(() => buffer.ReceiveFullMessageAsync<BlockFetchMessage>(deadline.Token));
+        Exception? error = await Record.ExceptionAsync(() => buffer.ReceiveFullMessageAsync<BlockFetchMessage>(deadline.Token).AsTask());
         if (hex == "FF") { _ = Assert.IsType<CborException>(error); }
         else { _ = Assert.IsType<CborDecodeException>(error); }
     }
@@ -192,7 +192,7 @@ public class BlockFetchCompletenessTests(ITestOutputHelper output)
         using ProtocolReplay replay = new(ProtocolType.BlockFetch, bytes);
         ChannelBuffer buffer = new(replay.Channel);
         using CancellationTokenSource deadline = new(TimeSpan.FromSeconds(1));
-        Exception? error = await Record.ExceptionAsync(() => buffer.ReceiveFullMessageAsync<BlockFetchMessage>(deadline.Token));
+        Exception? error = await Record.ExceptionAsync(() => buffer.ReceiveFullMessageAsync<BlockFetchMessage>(deadline.Token).AsTask());
         Assert.NotNull(error);
         Assert.Equal(expected.GetType(), error.GetType());
         Assert.Equal(expected.Message, error.Message);
@@ -208,7 +208,7 @@ public class BlockFetchCompletenessTests(ITestOutputHelper output)
         replay.CompleteIncoming();
         ChannelBuffer buffer = new(replay.Channel);
         using CancellationTokenSource deadline = new(TimeSpan.FromSeconds(1));
-        Exception? error = await Record.ExceptionAsync(() => buffer.ReceiveFullMessageAsync<BlockFetchMessage>(deadline.Token));
+        Exception? error = await Record.ExceptionAsync(() => buffer.ReceiveFullMessageAsync<BlockFetchMessage>(deadline.Token).AsTask());
         _ = Assert.IsType<ChannelClosedException>(error);
     }
 

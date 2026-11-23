@@ -21,6 +21,9 @@ internal sealed class Connection(IBearer? bearer, SemaphoreSlim? writeLock = nul
     private readonly TaskCompletionSource _bearerDisposed = new(TaskCreationOptions.RunContinuationsAsynchronously);
     /// <summary>Completes when <see cref="DisposeBearer"/> has disposed the bearer.</summary>
     internal Task BearerDisposed => _bearerDisposed.Task;
+    private readonly TaskCompletionSource _completion = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    /// <summary>Completes on a local end or faults with <see cref="ConnectionClosedException"/> on a peer close or fault.</summary>
+    internal Task Completion => _completion.Task;
 
     internal static bool IsLocal(Exception? cause) => cause is ObjectDisposedException or OperationCanceledException;
 
@@ -31,6 +34,7 @@ internal sealed class Connection(IBearer? bearer, SemaphoreSlim? writeLock = nul
             if (Ended) { return; }
             Cause = cause;
             Volatile.Write(ref _ended, 1);
+            SetCompletion(cause);
         }
         // No bearer call or continuation under Gate. CancelPendingFlush also cancels the next
         // flush, covering a writer between its connection check and its first flush.
@@ -57,14 +61,33 @@ internal sealed class Connection(IBearer? bearer, SemaphoreSlim? writeLock = nul
         }
     }
 
-    internal ConnectionClosedException FailSend(Exception cause)
+    private void SetCompletion(Exception? cause)
+    {
+        if (IsLocal(cause))
+        {
+            _ = _completion.TrySetResult();
+        }
+        else
+        {
+            _ = _completion.TrySetException(new ConnectionClosedException(cause));
+            // Mark the fault observed so an unawaited Completion never raises UnobservedTaskException.
+            _ = _completion.Task.Exception;
+        }
+    }
+
+    internal void TryEnd(Exception? cause)
     {
         try { End(cause); }
         catch (Exception)
         {
-            // End published the cause before cleanup and still notifies the reader and settles the end.
-            // A secondary cleanup error must not replace the published cause at the send boundary.
+            // End published the cause and Completion before cleanup and still notifies the reader and settles the end.
+            // A secondary cleanup error must not escape a callback or replace the published cause.
         }
+    }
+
+    internal ConnectionClosedException FailSend(Exception cause)
+    {
+        TryEnd(cause);
         return new ConnectionClosedException(Cause);
     }
 

@@ -16,9 +16,18 @@ public sealed class NodeClient : IDisposable, IAsyncDisposable
     private Task? _plexerTask;
     private readonly N2CVersionContext _versions = new();
     private int _started;
+    private int _disposed;
 
     /// <summary>Gets the accepted node-to-client version, or null before successful negotiation.</summary>
     public N2CVersion? NegotiatedVersion => _versions.NegotiatedVersion;
+
+    /// <summary>
+    /// Gets a task that settles once when the connection ends: ran to completion on local
+    /// <see cref="Dispose"/> or <see cref="DisposeAsync"/> (and after a failed <see cref="StartAsync(ulong, CancellationToken)"/>
+    /// with no prior connection fault), or faulted with <see cref="ConnectionClosedException"/> on a peer close or fault.
+    /// </summary>
+    /// <remarks>The first end wins. Awaiting this task observes the connection's end without polling.</remarks>
+    public Task Completion => _plexer.Completion;
 
     internal ReplyLimit Replies { get; }
 
@@ -147,18 +156,23 @@ public sealed class NodeClient : IDisposable, IAsyncDisposable
     /// </summary>
     /// <param name="networkMagic">The network magic number for the handshake.</param>
     /// <param name="cancellationToken">Cancels startup; it does not change the lifetime of an accepted connection.</param>
+    /// <remarks>Pending and later mini-protocol calls on an ended connection throw <see cref="ConnectionClosedException"/>.</remarks>
+    /// <exception cref="ObjectDisposedException">The client has been disposed.</exception>
     /// <exception cref="InvalidOperationException">Thrown if the client is already started.</exception>
     public Task StartAsync(ulong networkMagic = 2, CancellationToken cancellationToken = default) => StartAsync(VersionTables.N2cV10AndAbove(networkMagic), cancellationToken);
 
     /// <summary>Starts this connection with an explicit version offer; one entry forces one version.</summary>
     /// <param name="versions">A nonempty, same-network N2C offer with query=false. Explicit untested versions do not change the default support claim.</param>
     /// <param name="cancellationToken">Cancels startup; it does not change the lifetime of an accepted connection.</param>
+    /// <remarks>Pending and later mini-protocol calls on an ended connection throw <see cref="ConnectionClosedException"/>.</remarks>
     /// <exception cref="ArgumentException">The offer is empty, duplicates a wire version, mixes networks or requests query mode.</exception>
+    /// <exception cref="ObjectDisposedException">The client has been disposed.</exception>
     /// <exception cref="InvalidOperationException">The client was already started or the accept does not match its offer.</exception>
     /// <exception cref="HandshakeRefusedException">The node supplied a typed refusal.</exception>
     public async Task StartAsync(N2CVersionTable versions, CancellationToken cancellationToken = default)
     {
         N2CVersionTable offer = NormalizeOffer(versions);
+        ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
         cancellationToken.ThrowIfCancellationRequested();
         if (Interlocked.Exchange(ref _started, 1) != 0)
         {
@@ -210,31 +224,38 @@ public sealed class NodeClient : IDisposable, IAsyncDisposable
     }
 
     /// <summary>
-    /// Checks if the plexer (multiplexer/demultiplexer) is healthy and running.
+    /// Checks if the plexer is running and its connection has not ended.
     /// </summary>
-    /// <returns>True if the plexer is running normally, false if it has stopped or faulted.</returns>
-    /// <remarks>
-    /// Task.IsCompleted returns true when the task is in RanToCompletion, Faulted, or Canceled state,
-    /// so this single check covers all failure scenarios.
-    /// </remarks>
-    public bool IsPlexerHealthy() => _plexerTask is { IsCompleted: false };
+    /// <returns><see langword="true"/> once started and while <see cref="Completion"/> is pending; otherwise <see langword="false"/>.</returns>
+    public bool IsPlexerHealthy() => _plexer.IsPlexerHealthy();
 
     /// <summary>
-    /// Gets the exception that caused the plexer to fail, if any.
+    /// Gets the exception that ended the connection, if any.
     /// </summary>
-    /// <returns>The base exception from the plexer task, or null if no exception occurred.</returns>
-    public Exception? GetPlexerException() => _plexerTask?.Exception?.GetBaseException();
+    /// <returns>
+    /// The first fault cause, the <see cref="ConnectionClosedException"/> itself on a clean peer close,
+    /// or <see langword="null"/> before an end or after a local disposal.
+    /// </returns>
+    public Exception? GetPlexerException() => _plexer.GetPlexerException();
 
     /// <summary>
     /// Disposes the client and releases all resources.
     /// </summary>
-    public void Dispose() => _plexer.Dispose();
+    public void Dispose()
+    {
+        Volatile.Write(ref _disposed, 1);
+        _plexer.Dispose();
+    }
 
     /// <summary>
     /// Disposes the client and completes once its read loop has stopped and its socket is closed.
     /// It may be called more than once, and after <see cref="Dispose"/>.
     /// </summary>
-    public ValueTask DisposeAsync() => new(StopAsync());
+    public ValueTask DisposeAsync()
+    {
+        Volatile.Write(ref _disposed, 1);
+        return new(StopAsync());
+    }
 
     private async Task StopAsync()
     {
