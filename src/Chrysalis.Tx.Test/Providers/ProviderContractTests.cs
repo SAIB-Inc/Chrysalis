@@ -121,7 +121,7 @@ public class ProviderContractTests
         string hash = new(digit, length);
         using StubHttpHandler stub = new(_ => throw new InvalidOperationException("Unexpected request."));
         using Kupmios kupmios = KupmiosTests.Create(stub);
-        Ouroboros ouroboros = new("missing-test-node.sock");
+        await using Ouroboros ouroboros = new("missing-test-node.sock");
         if (valid)
         {
             await Assert.ThrowsAnyAsync<OperationCanceledException>(() => ouroboros.GetUtxoByOutRefAsync(hash, 0, canceled.Token));

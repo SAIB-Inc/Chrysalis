@@ -350,7 +350,7 @@ public sealed class DevnetIntegrationTests
     {
         Env.RequireDevnet();
         Env.RequireFundedOptIn();
-        Ouroboros provider = new(Env.Required(Env.Socket), Env.NetworkMagic);
+        await using Ouroboros provider = new(Env.Required(Env.Socket), Env.NetworkMagic);
         Assert.Equal(NetworkType.Unknown, provider.NetworkType);
         using CancellationTokenSource deadline = new(TimeSpan.FromMinutes(3));
         (FundedIntegrationTests.SelfTransfer transfer, int outputCount, string[] cliArgs) = await SubmitReadBackTransferAsync(provider, deadline.Token);

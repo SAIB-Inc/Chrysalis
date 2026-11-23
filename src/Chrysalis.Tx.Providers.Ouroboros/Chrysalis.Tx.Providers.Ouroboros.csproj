@@ -13,6 +13,9 @@
     <ProjectReference Include="../Chrysalis.Network/Chrysalis.Network.csproj" />
   </ItemGroup>
   <ItemGroup>
+    <InternalsVisibleTo Include="Chrysalis.Tx.Test" />
+  </ItemGroup>
+  <ItemGroup>
     <None Include="../../LICENSE.md" Pack="true" PackagePath="" />
     <None Include="../../README.md" Pack="true" PackagePath="" />
   </ItemGroup>

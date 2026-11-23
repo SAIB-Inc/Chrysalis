@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Sockets;
 using System.Text;
 using System.Text.Json;
+using System.Threading.Channels;
 using SAIB.Cbor;
 
 namespace Chrysalis.Tx.Providers;
@@ -149,7 +150,6 @@ public sealed class ProviderHttp(HttpClient client, string provider, IReadOnlyLi
         {
             throw TransportFailure(provider, operation, error, cancellationToken);
         }
-        cancellationToken.ThrowIfCancellationRequested();
         return body ?? throw Unusable(provider, operation, "null JSON body");
     }
 
@@ -214,7 +214,8 @@ public sealed class ProviderHttp(HttpClient client, string provider, IReadOnlyLi
         bool transient = false;
         for (Exception? cause = error; cause is not null; cause = cause.InnerException)
         {
-            if (cause is HttpRequestException or IOException or SocketException or OperationCanceledException or TimeoutException)
+            if (cause is HttpRequestException or IOException or SocketException or OperationCanceledException or TimeoutException
+                || (cause is ChannelClosedException && cause.InnerException is null))
             {
                 transient = true;
                 break;

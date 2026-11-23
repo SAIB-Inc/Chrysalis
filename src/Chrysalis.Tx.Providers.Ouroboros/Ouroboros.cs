@@ -19,17 +19,29 @@ using Chrysalis.Wallet.Models.Enums;
 namespace Chrysalis.Tx.Providers;
 
 /// <summary>
-/// Ouroboros mini-protocol provider over a node's local socket. Opens a connection per operation;
-/// metadata lookup is not supported. <see cref="NetworkType"/> is <see cref="NetworkType.Unknown"/>
-/// for a magic other than Mainnet's, Preprod's or Preview's.
+/// Ouroboros mini-protocol provider over a node's local socket. Reuses one idle connection across sequential calls;
+/// overlapping calls open their own. Dispose the provider when finished. Metadata lookup is not supported.
+/// <see cref="NetworkType"/> is <see cref="NetworkType.Unknown"/> for a magic other than Mainnet's, Preprod's or Preview's.
 /// </summary>
 /// <param name="socketPath">The path to the Cardano node Unix socket.</param>
 /// <param name="networkMagic">The network magic number.</param>
-public partial class Ouroboros(string socketPath, ulong networkMagic = 2) : ICardanoDataProvider
+public sealed partial class Ouroboros(string socketPath, ulong networkMagic = 2) : ICardanoDataProvider, IDisposable, IAsyncDisposable
 {
+    private static readonly TimeSpan DefaultReplyTimeLimit = TimeSpan.FromSeconds(180);
+    private static readonly TimeSpan MaxReplyTimeLimit = TimeSpan.FromMilliseconds(uint.MaxValue - 1);
     private readonly string _socketPath = socketPath ?? throw new ArgumentNullException(nameof(socketPath));
     private readonly ulong _networkMagic = networkMagic;
     private const string Provider = nameof(Ouroboros);
+    private readonly Lock _gate = new();
+    private readonly HashSet<NodeClient> _active = [];
+    private NodeClient? _idle;
+    private int _disposed;
+    private long _replyTimeLimitTicks = DefaultReplyTimeLimit.Ticks;
+
+    // Test seam for Chrysalis.Tx.Test to attach a fake clock before StartAsync without editing Chrysalis.Network.
+    internal Action<NodeClient>? OnClientConnected { get; set; }
+
+    private bool IsDisposed => Volatile.Read(ref _disposed) != 0;
 
     private static readonly Dictionary<NetworkType, ulong> Magics = new()
     {
@@ -41,6 +53,33 @@ public partial class Ouroboros(string socketPath, ulong networkMagic = 2) : ICar
     /// <summary>Gets Mainnet, Preprod or Preview from the network magic, else Unknown.</summary>
     public NetworkType NetworkType =>
         Magics.FirstOrDefault(pair => pair.Value == _networkMagic, new(NetworkType.Unknown, 0)).Key;
+
+    /// <summary>
+    /// Gets or sets how long the node may take to send a reply it owes on connections opened or reused by this provider.
+    /// The default is 180 seconds; <see cref="Timeout.InfiniteTimeSpan"/> turns the limit off.
+    /// A new value applies to calls that start after it is set.
+    /// </summary>
+    /// <remarks>
+    /// A large by-address UTxO query on mainnet can run longer than 180 seconds; raise this property or set it to
+    /// <see cref="Timeout.InfiniteTimeSpan"/> before calling <see cref="GetUtxosAsync"/>.
+    /// The handshake reply keeps <see cref="NodeClient"/>'s fixed 10-second limit.
+    /// </remarks>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// The value is zero, negative and not <see cref="Timeout.InfiniteTimeSpan"/>, or longer than a timer accepts.
+    /// </exception>
+    public TimeSpan ReplyTimeLimit
+    {
+        get => new(Volatile.Read(ref _replyTimeLimitTicks));
+        set
+        {
+            if (value != Timeout.InfiniteTimeSpan)
+            {
+                ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(value, TimeSpan.Zero);
+                ArgumentOutOfRangeException.ThrowIfGreaterThan(value, MaxReplyTimeLimit);
+            }
+            Volatile.Write(ref _replyTimeLimitTicks, value.Ticks);
+        }
+    }
 
     /// <summary>Gets the network magic of Mainnet, Preprod or Preview.</summary>
     /// <param name="networkType">The network type.</param>
@@ -83,6 +122,7 @@ public partial class Ouroboros(string socketPath, ulong networkMagic = 2) : ICar
             }
         }
         cancellationToken.ThrowIfCancellationRequested();
+        ObjectDisposedException.ThrowIf(IsDisposed, this);
         if (addresses.Count == 0) { return Task.FromResult<List<ResolvedInput>>([]); }
         return RunAsync(nameof(GetUtxosAsync), async (client, ct) =>
         {
@@ -156,6 +196,7 @@ public partial class Ouroboros(string socketPath, ulong networkMagic = 2) : ICar
             _ => throw new ArgumentException("Expected an Alonzo, Babbage or Conway transaction body.", nameof(tx)),
         };
         cancellationToken.ThrowIfCancellationRequested();
+        ObjectDisposedException.ThrowIf(IsDisposed, this);
         byte[] bytes = CborSerializer.Serialize(tx);
         string id = body.Hash();
         const string operation = nameof(SubmitTransactionAsync);
@@ -168,6 +209,7 @@ public partial class Ouroboros(string socketPath, ulong networkMagic = 2) : ICar
             }
             catch (Exception error) when (error is not OutOfMemoryException)
             {
+                ObjectDisposedException.ThrowIf(IsProviderDisposeError(error, ct), this);
                 Exception translated = ProviderHttp.TransportFailure(Provider, operation, error, ct);
                 throw translated is ProviderException lost ? ProviderHttp.MayHaveBeenAccepted(lost) : translated;
             }
@@ -196,22 +238,154 @@ public partial class Ouroboros(string socketPath, ulong networkMagic = 2) : ICar
     private async Task<T> RunAsync<T>(string operation, Func<NodeClient, CancellationToken, Task<T>> run, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        ObjectDisposedException.ThrowIf(IsDisposed, this);
         try
         {
-            using NodeClient client = await NodeClient.ConnectAsync(_socketPath, cancellationToken).ConfigureAwait(false);
-            await client.StartAsync(VersionTables.N2cV10AndAbove(_networkMagic), cancellationToken).ConfigureAwait(false);
-            T result = await run(client, cancellationToken).ConfigureAwait(false);
-            cancellationToken.ThrowIfCancellationRequested();
-            return result;
+            NodeClient client = await AcquireClientAsync(cancellationToken).ConfigureAwait(false);
+            bool reusable = false;
+            try
+            {
+                T result = await run(client, cancellationToken).ConfigureAwait(false);
+                reusable = true;
+                return result;
+            }
+            finally
+            {
+                await ReleaseClientAsync(client, reusable).ConfigureAwait(false);
+            }
         }
         catch (Exception error) when (error is not (ProviderException or OutOfMemoryException))
         {
+            ObjectDisposedException.ThrowIf(IsProviderDisposeError(error, cancellationToken), this);
             Exception failure = ProviderHttp.TransportFailure(Provider, operation, error, cancellationToken);
-            // The state-query helpers' text says what the node answered (LocalStateQueryExtension.cs:149-166); it goes in Detail.
-            throw error is InvalidOperationException && failure is ProviderException known
+            // The state-query helpers' text says what the node answered (LocalStateQueryExtension.cs:189,196); it goes in Detail.
+            throw error is InvalidOperationException and not ConnectionClosedException && failure is ProviderException known
                 ? new ProviderException(known.Message, known.IsTransient, ProviderHttp.Redact(error.Message, []))
                 : failure;
         }
+    }
+
+    private bool IsProviderDisposeError(Exception error, CancellationToken cancellationToken) =>
+        IsDisposed && !cancellationToken.IsCancellationRequested
+        && (error is ObjectDisposedException || error is ConnectionClosedException { InnerException: ObjectDisposedException });
+
+    private async Task<NodeClient> AcquireClientAsync(CancellationToken cancellationToken)
+    {
+        NodeClient? stale = null;
+        lock (_gate)
+        {
+            ObjectDisposedException.ThrowIf(_disposed != 0, this);
+            if (_idle is NodeClient cached)
+            {
+                _idle = null;
+                if (cached.IsPlexerHealthy())
+                {
+                    cached.ReplyTimeLimit = ReplyTimeLimit;
+                    _ = _active.Add(cached);
+                    return cached;
+                }
+                stale = cached;
+            }
+        }
+        if (stale is not null)
+        {
+            await stale.DisposeAsync().ConfigureAwait(false);
+            ObjectDisposedException.ThrowIf(IsDisposed, this);
+        }
+
+        NodeClient client = await NodeClient.ConnectAsync(_socketPath, cancellationToken).ConfigureAwait(false);
+        bool disposed;
+        lock (_gate)
+        {
+            disposed = _disposed != 0;
+            if (!disposed) { _ = _active.Add(client); }
+        }
+        if (disposed)
+        {
+            await client.DisposeAsync().ConfigureAwait(false);
+            ObjectDisposedException.ThrowIf(true, this);
+        }
+
+        try
+        {
+            OnClientConnected?.Invoke(client);
+            client.ReplyTimeLimit = ReplyTimeLimit;
+            await client.StartAsync(VersionTables.N2cV10AndAbove(_networkMagic), cancellationToken).ConfigureAwait(false);
+            return client;
+        }
+        catch
+        {
+            await ReleaseClientAsync(client, reusable: false).ConfigureAwait(false);
+            throw;
+        }
+    }
+
+    private async ValueTask ReleaseClientAsync(NodeClient client, bool reusable)
+    {
+        NodeClient? toDispose = client;
+        lock (_gate)
+        {
+            _ = _active.Remove(client);
+            // _disposed == 0 is a defensive guard so a client is never parked during the race window after Dispose releases _gate.
+            if (reusable && _disposed == 0 && _idle is null && client.IsPlexerHealthy())
+            {
+                _idle = client;
+                toDispose = null;
+            }
+        }
+        if (toDispose is not null) { await toDispose.DisposeAsync().ConfigureAwait(false); }
+    }
+
+    /// <summary>Disposes the provider and closes its idle and active node connections.</summary>
+    public void Dispose()
+    {
+        NodeClient? idle;
+        NodeClient[]? active;
+        lock (_gate)
+        {
+            Volatile.Write(ref _disposed, 1);
+            idle = _idle;
+            _idle = null;
+            active = DetachActiveLocked();
+        }
+        idle?.Dispose();
+        if (active is not null)
+        {
+            foreach (NodeClient client in active) { client.Dispose(); }
+        }
+    }
+
+    /// <summary>
+    /// Disposes the provider; the first call completes once its idle and active node connections have stopped their read loops
+    /// and closed their sockets. Later calls (including after <see cref="Dispose"/>) are idempotent no-ops.
+    /// </summary>
+    public async ValueTask DisposeAsync()
+    {
+        NodeClient? idle;
+        NodeClient[]? active;
+        lock (_gate)
+        {
+            Volatile.Write(ref _disposed, 1);
+            idle = _idle;
+            _idle = null;
+            active = DetachActiveLocked();
+        }
+        // Start every DisposeAsync synchronously before the first await so active clients close immediately without calling sync Dispose() (CA1849).
+        Task? idleClose = idle?.DisposeAsync().AsTask();
+        Task[]? activeCloses = active is null ? null : Array.ConvertAll(active, static client => client.DisposeAsync().AsTask());
+        if (idleClose is not null) { await idleClose.ConfigureAwait(false); }
+        if (activeCloses is not null)
+        {
+            foreach (Task close in activeCloses) { await close.ConfigureAwait(false); }
+        }
+    }
+
+    private NodeClient[]? DetachActiveLocked()
+    {
+        if (_active.Count == 0) { return null; }
+        NodeClient[] active = [.. _active];
+        _active.Clear();
+        return active;
     }
 
     // A base64 or hex run longer than 128 characters (script bytes, an encoded script context) keeps its first and last 8
