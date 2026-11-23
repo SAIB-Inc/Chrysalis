@@ -25,7 +25,19 @@
     "required": ["time/preprod-tcp", "time/preprod-offline", "time/micro-hashing", "time/micro-signing", "time/micro-transactions", "time/micro-plutus", "time/micro-encoding", "time/micro-n2c"],
     "chargeSeconds": {"time/micro-hashing": 9, "time/micro-signing": 8, "time/micro-transactions": 18, "time/micro-plutus": 54, "time/micro-encoding": 23, "time/micro-n2c": 10},
     "platform": {"provider": "fly", "size": "performance-8x", "regions": ["iad", "ewr", "ams", "arn"], "image": "mcr.microsoft.com/dotnet/sdk@sha256:7913685c883a29dd8ba79da96172f5c6b29ed9be706ebe95935e3ef45f19c9c1"},
-    "noise": {"performance-8x": {"offline": {"band": 0.0231, "design": "long", "machine": "performance-8x", "source": "P1-run3"}, "tcp": {"band": 0.0307, "design": "long", "machine": "performance-8x", "source": "P1-run3"}}, "Standard_F8als_v7": {}},
+    "noise": {
+      "performance-8x": {"offline": {"band": 0.0231, "design": "long", "machine": "performance-8x", "source": "P1-run3"}, "tcp": {"band": 0.0307, "design": "long", "machine": "performance-8x", "source": "P1-run3"}},
+      "Standard_F8als_v7": {
+        "time/preprod-offline": {"band": 0.00837000222541806, "design": "long", "machine": "Standard_F8als_v7", "sourceSeal": "84ee309ecd1dabccdec5b15dc91c173361f6d83308db40c835e78495777e9dce", "counts": [180, 60], "corpusId": "fc82f3d9193a8bd801b7168d75f7e94b49f9416e0550a3db3897177d4ea3ea2b", "pairs": 16},
+        "time/preprod-tcp": {"band": 0.005656440065123114, "design": "long", "machine": "Standard_F8als_v7", "sourceSeal": "84ee309ecd1dabccdec5b15dc91c173361f6d83308db40c835e78495777e9dce", "counts": [180, 60], "corpusId": "04523c8ca1f3def183ed1c0c7e641dd4afbabfd6ed2363646be6d8c493549487", "pairs": 16},
+        "time/micro-hashing": {"band": 0.01281805098284372, "design": "long", "machine": "Standard_F8als_v7", "sourceSeal": "84ee309ecd1dabccdec5b15dc91c173361f6d83308db40c835e78495777e9dce", "counts": [180, 60], "corpusId": "fc82f3d9193a8bd801b7168d75f7e94b49f9416e0550a3db3897177d4ea3ea2b", "pairs": 16},
+        "time/micro-signing": {"band": 0.009769923176165096, "design": "long", "machine": "Standard_F8als_v7", "sourceSeal": "84ee309ecd1dabccdec5b15dc91c173361f6d83308db40c835e78495777e9dce", "counts": [180, 60], "corpusId": "fc82f3d9193a8bd801b7168d75f7e94b49f9416e0550a3db3897177d4ea3ea2b", "pairs": 16},
+        "time/micro-transactions": {"band": 0.00982431471609746, "design": "long", "machine": "Standard_F8als_v7", "sourceSeal": "84ee309ecd1dabccdec5b15dc91c173361f6d83308db40c835e78495777e9dce", "counts": [180, 60], "corpusId": "fc82f3d9193a8bd801b7168d75f7e94b49f9416e0550a3db3897177d4ea3ea2b", "pairs": 16},
+        "time/micro-plutus": {"band": 0.02739845451708045, "design": "long", "machine": "Standard_F8als_v7", "sourceSeal": "84ee309ecd1dabccdec5b15dc91c173361f6d83308db40c835e78495777e9dce", "counts": [180, 60], "corpusId": "fc82f3d9193a8bd801b7168d75f7e94b49f9416e0550a3db3897177d4ea3ea2b", "pairs": 16},
+        "time/micro-encoding": {"band": 0.014433444970305631, "design": "long", "machine": "Standard_F8als_v7", "sourceSeal": "84ee309ecd1dabccdec5b15dc91c173361f6d83308db40c835e78495777e9dce", "counts": [180, 60], "corpusId": "fc82f3d9193a8bd801b7168d75f7e94b49f9416e0550a3db3897177d4ea3ea2b", "pairs": 16},
+        "time/micro-n2c": {"band": 0.030748362287848607, "design": "long", "machine": "Standard_F8als_v7", "sourceSeal": "84ee309ecd1dabccdec5b15dc91c173361f6d83308db40c835e78495777e9dce", "counts": [180, 60], "corpusId": "fc82f3d9193a8bd801b7168d75f7e94b49f9416e0550a3db3897177d4ea3ea2b", "pairs": 16}
+      }
+    },
     "probe": {
       "statistic": "cv", "limit": 0.054, "processes": 16,
       "maxDraws": 6, "gen0BudgetBytes": 16777216

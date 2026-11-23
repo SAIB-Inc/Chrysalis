@@ -427,6 +427,7 @@ def test_run3_prelude_refused_at_six_seconds_passes_at_catalogue_allowances(tmp_
     assert (refused, short) == (set(RUN3_PRELUDE), set())
     # Both sessions through the tracked noise-records plan: select_rows, then time_plans (time_rows and size_sessions).
     config = prepare.azure_config(json.loads((gate.GATE / 'gated.json').read_text()))
+    config['time']['noise']['Standard_F8als_v7'] = {}
     audit = json.loads((gate.REPO / 'benchmarks/Chrysalis.Benchmarks/audit-allocations.json').read_text())
     entries = json.loads((gate.GATE / 'plans/noise-records.json').read_text())
     selected = gate.select_rows(SimpleNamespace(mode='release', plan=None, only=None), config, audit, plan_entries=entries)
@@ -1540,7 +1541,7 @@ def test_noise_refusal_preserves_reason_and_status(tmp_path, azure, monkeypatch,
     monkeypatch.setattr(gate_azure, 'reconcile_and_pre_go', lambda *_: None)
     monkeypatch.setattr(bundle, 'azure_notice', lambda *_: {})
     monkeypatch.setattr(gate_azure, 'Ledger', lambda _: SimpleNamespace(money=lambda *_: {}))
-    def launch(*args):
+    def launch(*args, **_kw):
         session.save(tmp_path / 'time/launch-started.json', {})
         return exit_code, 'fixture', None
     monkeypatch.setattr(bundle, 'launch_azure', launch)
@@ -1691,6 +1692,7 @@ def stub_rehearsal_case(case, base, members, plan, scratch):
 
 def test_rehearsal_plans_strip_azure_relax_probe_and_keep_input_members(tmp_path, azure, monkeypatch):
     config = prepare.azure_config(json.loads((gate.GATE / 'gated.json').read_text()))
+    config['time']['noise']['Standard_F8als_v7'] = {}
     audit = json.loads((gate.REPO / 'benchmarks/Chrysalis.Benchmarks/audit-allocations.json').read_text())
     selected = gate.select_rows(SimpleNamespace(mode='release', plan=None, only=None), config, audit,
                                 plan_entries=json.loads((gate.GATE / 'plans/noise-records.json').read_text()))
@@ -1966,6 +1968,7 @@ def test_run8_d1_micro_charge_floor_eight_seconds(tmp_path):
 def test_run8_d1_rehearsal_sizing_stop_and_no_spare(tmp_path):
     import io
     config = prepare.azure_config(json.loads((gate.GATE / 'gated.json').read_text()))
+    config['time']['noise']['Standard_F8als_v7'] = {}
     audit = json.loads((gate.REPO / 'benchmarks/Chrysalis.Benchmarks/audit-allocations.json').read_text())
     selected = gate.select_rows(SimpleNamespace(mode='release', plan=None, only=None), config, audit,
                                 plan_entries=json.loads((gate.GATE / 'plans/noise-records.json').read_text()))
@@ -2179,6 +2182,7 @@ def test_run8_d4_noise_reporting_exits_and_rule_c_inputs(tmp_path, monkeypatch, 
 
 def test_run8_d9_one_session_noise_plans_match_full_plan():
     config = prepare.azure_config(json.loads((gate.GATE / 'gated.json').read_text()))
+    config['time']['noise']['Standard_F8als_v7'] = {}
     audit = json.loads((gate.REPO / 'benchmarks/Chrysalis.Benchmarks/audit-allocations.json').read_text())
     def seal_plans(filename):
         entries = json.loads((gate.GATE / 'plans' / filename).read_text())

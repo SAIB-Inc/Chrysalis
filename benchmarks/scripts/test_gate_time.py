@@ -904,6 +904,7 @@ def test_run8_d3_sizing_spares_and_release_growth():
     from types import SimpleNamespace
     import gate_prepare as prepare
     config = prepare.azure_config(json.loads((gate.GATE / 'gated.json').read_text()))
+    config['time']['noise']['Standard_F8als_v7'] = {}
     audit = json.loads((gate.REPO / 'benchmarks/Chrysalis.Benchmarks/audit-allocations.json').read_text())
     entries = json.loads((gate.GATE / 'plans/noise-records.json').read_text())
     selected = gate.select_rows(SimpleNamespace(mode='release', plan=None, only=None), config, audit, plan_entries=entries)
@@ -950,6 +951,8 @@ def test_run8_d3_other_sites_finding_exit3_controls_and_repeat(tmp_path, monkeyp
     text = '\n'.join(lines)
     assert 'outlier finding:' in text
     assert timing.session_outcome(d1, seal, 0)[0] == 'complete'
+    vals_chg, _ = timing.read_results(d1, seal, mode='change')
+    assert timing.controls_outcome(plan, {'release': vals, 'change': vals_chg}) == ('complete', [])
     assert timing.has_outlier_finding(vals) is True
 
     # Repeat session: row replaced in BOTH first and repeat -> flagged as finding, fly_sessions exits 3.
@@ -989,7 +992,7 @@ def test_run8_d3_other_sites_finding_exit3_controls_and_repeat(tmp_path, monkeyp
     monkeypatch.setattr(gate_azure, 'Ledger', lambda _: SimpleNamespace(money=lambda *_: {'goBookedUsd': 0.5, 'goAttempts': 1,
                         'programBookedUsd': 1.0, 'unsettledUsd': 0.0, 'observedPostedUsd': 0.0, 'headroomUsd': 39.0, 'deskEstimateUsd': 10.0}))
     monkeypatch.setattr(gate_azure, 'money_text', lambda *_: 'ok')
-    def launch(*args):
+    def launch(*args, **_kw):
         timing.session.save(d3 / 'time/launch-started.json', {})
         return 0, 'fixture', None
     monkeypatch.setattr(bundle, 'launch_azure', launch)
@@ -1140,3 +1143,274 @@ def test_run8_d3_phases_compile_share_and_re_verdict(tmp_path):
         assert 'Only a failing row may repeat' in str(err)
     else:
         raise AssertionError('Expected re-verdict to see aside-pair compile-share failure')
+
+
+def _rule_c_row(rid='time/micro-hashing', *, status='INCONCLUSIVE', declared=16, band=.018,
+                ratios=None, jit_ms=5.0, body_ms=100_000.0, stab_ratios=None,
+                qual_failures=None, outlier=None, checks=None):
+    if ratios is None:
+        ratios = [1.0 + (0.004 if i % 2 == 0 else -0.004) for i in range(declared)]
+    if stab_ratios is None:
+        stab_ratios = [1.0 + (0.003 if i % 2 == 0 else -0.003) for i in range(declared)]
+    if checks is None:
+        checks = [dict(
+            phase='B', side='baseline',
+            quiescence=dict(summedJitMs=jit_ms, summedMeasuredBodyMs=body_ms,
+                            jitFraction=jit_ms / body_ms if body_ms else None, established=body_ms > 0 and jit_ms / body_ms <= .005),
+            stability=[dict(groups=[181, 201], pairedRatios=list(stab_ratios)),
+                       dict(groups=[201, 221], pairedRatios=list(stab_ratios)),
+                       dict(groups=[181, 221], pairedRatios=list(stab_ratios))],
+        )]
+    return dict(
+        id=rid, status=status, reason='fixture', admittedPairs=len(ratios), declaredPairs=declared,
+        band=band, mean=1.0, confidence95=[1.0 - (band or 0), 1.0 + (band or 0)] if band is not None else None,
+        qualificationFailures=dict(qual_failures or {}),
+        compileShares={}, minMeasuredBodyMs=1200.0,
+        outlier=outlier if outlier is not None else dict(finding=False, replaced=False),
+        pairedRatios=list(ratios), checks=checks,
+    )
+
+
+def test_c3rc_d1_rule_c_pass_and_frozen_band():
+    assert timing.RULE_C_BAND == .04
+    first_ratios = [1.20, 1.20] + [1.001 if i % 2 == 0 else 0.999 for i in range(14)]
+    first = _rule_c_row(status='INCONCLUSIVE', band=.062, ratios=first_ratios)
+    second_ratios = [1.005 if i % 2 == 0 else 0.995 for i in range(16)]
+    second = _rule_c_row(status='PASS', band=.007, ratios=second_ratios)
+    res = timing.rule_c(first, second)
+    assert res['eligible'] is True and res['status'] == 'PASS' and res['flagged'] is False
+    assert res['pairs'] == 16 and res['remeasureBand'] == .007
+    assert res['pooledBand'] < .05 and res['frozenBand'] == max(res['remeasureBand'], res['pooledBand'])
+    assert res['pooledStabilityOk'] is True and res['pooledCompileShare'] <= .005
+
+
+def test_c3rc_d1_rule_c_band_boundaries():
+    # Re-measure alone at 4.2% with pooled < 5% -> REFUSED.
+    first = _rule_c_row(status='INCONCLUSIVE', band=.055, ratios=[1.001 if i % 2 == 0 else 0.999 for i in range(16)])
+    second_42 = _rule_c_row(status='PASS', band=.042, ratios=[1.01 if i % 2 == 0 else 0.99 for i in range(16)])
+    r1 = timing.rule_c(first, second_42)
+    assert r1['status'] == 'REFUSED' and r1['frozenBand'] is None and r1['pooledBand'] < .05
+    # Pooled >= 5% with clean re-measure < 4% -> REFUSED.
+    first_wide = _rule_c_row(status='INCONCLUSIVE', band=.15, ratios=[1.16 if i % 2 == 0 else 0.86 for i in range(16)])
+    second_clean = _rule_c_row(status='PASS', band=.008, ratios=[1.002 if i % 2 == 0 else 0.998 for i in range(16)])
+    r2 = timing.rule_c(first_wide, second_clean)
+    assert r2['status'] == 'REFUSED' and r2['frozenBand'] is None and r2['pooledBand'] >= .05
+
+
+def test_c3rc_d1_rule_c_compile_share_and_stability():
+    # Run 7 compile-share pattern (0.049 in first) keeps pooled > 0.005 -> REFUSED.
+    first_jit = _rule_c_row(status='INCONCLUSIVE', band=.02, jit_ms=4900.0, body_ms=100_000.0)
+    second_clean = _rule_c_row(status='PASS', band=.01, jit_ms=10.0, body_ms=100_000.0)
+    r_jit = timing.rule_c(first_jit, second_clean)
+    assert r_jit['status'] == 'REFUSED' and r_jit['frozenBand'] is None and r_jit['pooledCompileShare'] > .005
+    # Pooled stability outside [0.95, 1.05] on one side -> REFUSED.
+    first_stab = _rule_c_row(status='INCONCLUSIVE', band=.02, stab_ratios=[1.12] * 16)
+    r_stab = timing.rule_c(first_stab, second_clean)
+    assert r_stab['status'] == 'REFUSED' and r_stab['frozenBand'] is None and r_stab['pooledStabilityOk'] is False
+
+
+def test_c3rc_d1_rule_c_exact_t_formula_and_k_min():
+    import math
+    import statistics as st
+    from summarize import t95
+    vals32 = [1.0 + (0.015 if i % 2 == 0 else -0.010) for i in range(32)]
+    ci32 = timing._rule_c_ci(vals32, 16)
+    mean32, sd32 = st.mean(vals32), st.stdev(vals32)
+    want32 = [mean32 - t95(15) * sd32 / math.sqrt(16), mean32 + t95(15) * sd32 / math.sqrt(16)]
+    wrong32 = [mean32 - t95(31) * sd32 / math.sqrt(32), mean32 + t95(31) * sd32 / math.sqrt(32)]
+    assert abs(ci32[0] - want32[0]) < 1e-12 and abs(ci32[1] - want32[1]) < 1e-12
+    assert abs(ci32[1] - wrong32[1]) > 1e-3
+    # Q4(a): empty first + 15 admitted second pins k = min(len(values), n) = 15.
+    vals15 = [1.0 + (0.012 if i % 2 == 0 else -0.008) for i in range(15)]
+    ci15 = timing._rule_c_ci(vals15, 16)
+    mean15, sd15 = st.mean(vals15), st.stdev(vals15)
+    want15 = [mean15 - t95(14) * sd15 / math.sqrt(15), mean15 + t95(14) * sd15 / math.sqrt(15)]
+    wrong15 = [mean15 - t95(15) * sd15 / math.sqrt(16), mean15 + t95(15) * sd15 / math.sqrt(16)]
+    assert abs(ci15[0] - want15[0]) < 1e-12 and abs(ci15[1] - want15[1]) < 1e-12
+    assert abs(ci15[1] - wrong15[1]) > 1e-4
+
+
+def test_c3rc_d1_rule_c_eligibility_and_flags():
+    second = _rule_c_row(status='PASS', band=.01)
+    # First passed -> NOT_ELIGIBLE.
+    r_pass = timing.rule_c(_rule_c_row(status='PASS', band=.01), second)
+    assert r_pass['eligible'] is False and r_pass['status'] == 'NOT_ELIGIBLE' and r_pass['frozenBand'] is None
+    # First finding (top-level or row outlier) -> NOT_ELIGIBLE.
+    r_f1 = timing.rule_c(_rule_c_row(status='INCONCLUSIVE'), second, first_finding=True)
+    r_f2 = timing.rule_c(_rule_c_row(status='INCONCLUSIVE', outlier=dict(finding=True, replaced=False)), second)
+    assert r_f1['status'] == 'NOT_ELIGIBLE' and r_f2['status'] == 'NOT_ELIGIBLE'
+    # Both replaced -> flagged=True while still computing Rule 3 figures.
+    r_both = timing.rule_c(_rule_c_row(status='INCONCLUSIVE', outlier=dict(finding=False, replaced=True)),
+                           _rule_c_row(status='PASS', band=.01, outlier=dict(finding=False, replaced=True)))
+    assert r_both['status'] == 'PASS' and r_both['flagged'] is True and 'both' in r_both['flagReason']
+    assert r_both['pooledBand'] is not None and r_both['frozenBand'] is not None
+    # Re-measure session finding -> flagged=True.
+    r_sf = timing.rule_c(_rule_c_row(status='INCONCLUSIVE'), second, second_finding=True)
+    assert r_sf['status'] == 'PASS' and r_sf['flagged'] is True and 'finding' in r_sf['flagReason']
+
+
+def test_c3rc_d1_rule_c_empty_first_and_malformed_second():
+    # Empty first pairedRatios and absent checks adds nothing; re-measure still held < 4%.
+    first_empty = _rule_c_row(status='INCONCLUSIVE', band=None, ratios=[], checks=[])
+    sec_ok = _rule_c_row(status='PASS', band=.012)
+    sec_41 = _rule_c_row(status='PASS', band=.041)
+    assert timing.rule_c(first_empty, sec_ok)['status'] == 'PASS'
+    assert timing.rule_c(first_empty, sec_41)['status'] == 'REFUSED'
+    # Malformed second fails closed.
+    first_ok = _rule_c_row(status='INCONCLUSIVE', band=.06)
+    assert timing.rule_c(first_ok, _rule_c_row(status='PASS', band=.01, ratios=[]))['status'] == 'REFUSED'
+    assert timing.rule_c(first_ok, _rule_c_row(status='PASS', band=.01, ratios=[1.0] * 4))['status'] == 'REFUSED'
+    assert timing.rule_c(first_ok, _rule_c_row(status='PASS', band=.01, checks=[]))['status'] == 'REFUSED'
+    bad_stab = _rule_c_row(status='PASS', band=.01)
+    bad_stab['checks'][0]['stability'] = []
+    assert timing.rule_c(first_ok, bad_stab)['status'] == 'REFUSED'
+    missing_contrast = _rule_c_row(status='PASS', band=.01)
+    missing_contrast['checks'][0]['stability'].pop()
+    assert timing.rule_c(first_ok, missing_contrast)['status'] == 'REFUSED'
+    missing_side = _rule_c_row(status='PASS', band=.01)
+    missing_side['checks'][0]['side'] = 'candidate'
+    assert timing.rule_c(first_ok, missing_side)['status'] == 'REFUSED'
+
+
+def test_c3rc_d1_rule_c_cli(tmp_path):
+    import subprocess
+    import sys
+    script = Path(gate.__file__).resolve()
+    def run_cli(first_doc, second_doc):
+        f1, f2 = tmp_path / 'first.json', tmp_path / 'second.json'
+        f1.write_text(json.dumps(first_doc))
+        f2.write_text(json.dumps(second_doc))
+        return subprocess.run([sys.executable, '-B', str(script), 'rule-c', str(f1), str(f2)], capture_output=True, text=True)
+
+    pass_other = _rule_c_row('time/micro-signing', status='PASS', band=.009)
+    bad_first = _rule_c_row('time/micro-hashing', status='INCONCLUSIVE', band=.06,
+                            ratios=[1.15, 1.15] + [1.0] * 14)
+    good_second = _rule_c_row('time/micro-hashing', status='PASS', band=.008)
+    # Exit 0 when all first-refused rows PASS, none flagged, and other rows in second PASS.
+    p0 = run_cli(dict(session=1, finding=False, rows=[pass_other, bad_first]),
+                 dict(session=1, finding=False, rows=[pass_other, good_second]))
+    assert p0.returncode == 0 and 'time/micro-hashing PASS ' in p0.stdout and 'flagged=no' in p0.stdout
+    assert 'time/micro-signing' not in p0.stdout
+    # Exit 3 when flagged (second finding).
+    p_flag = run_cli(dict(session=1, finding=False, rows=[bad_first]),
+                     dict(session=1, finding=True, rows=[good_second]))
+    assert p_flag.returncode == 3 and 'flagged=yes' in p_flag.stdout
+    # Exit 3 when refused (band >= 4%).
+    p_ref = run_cli(dict(session=1, finding=False, rows=[bad_first]),
+                    dict(session=1, finding=False, rows=[_rule_c_row('time/micro-hashing', status='PASS', band=.042)]))
+    assert p_ref.returncode == 3 and 'time/micro-hashing REFUSED ' in p_ref.stdout
+    # Exit 3 when zero refused rows in first file.
+    p_none = run_cli(dict(session=1, finding=False, rows=[pass_other]),
+                     dict(session=1, finding=False, rows=[pass_other]))
+    assert p_none.returncode == 3 and 'rule-c: no refused rows in first file' in p_none.stdout
+    # Exit 3 when another non-refused row in second failed (whole-session rule).
+    p_other = run_cli(dict(session=1, finding=False, rows=[pass_other, bad_first]),
+                      dict(session=1, finding=False, rows=[_rule_c_row('time/micro-signing', status='INCONCLUSIVE'), good_second]))
+    assert p_other.returncode == 3 and 'second-session refusal: time/micro-signing' in p_other.stdout
+    # Exit 2 when a first-refused row is missing from second file.
+    p_miss = run_cli(dict(session=1, finding=False, rows=[bad_first]),
+                     dict(session=1, finding=False, rows=[pass_other]))
+    assert p_miss.returncode == 2
+
+
+def test_c3rc_d6_invalid_session_descriptive_excludes_unused_spare(tmp_path):
+    r = _run8_row('time/preprod-offline', a_pairs=6, b_pairs=6, reserve=1)
+    plan = dict(design='full', provider='azure', region='eastus2', rows=[r], counts=[180, 60],
+                destroyGuardSeconds=2574, limitUsd=0.6306, limitWithRepeatUsd=1.2612, repeatAllowed=False)
+    ps = _run8_pairs(r, b_specs={(7, 'candidate'): dict(factor=1.50)})
+    p_file = tmp_path / 'time/0-first.json'
+    timing.session.save(p_file, dict(pairs=ps, invalid='session invalid: fixture', host={'processorCount': 8}, context={}))
+    seal = dict(mode='release', provider='azure', timePlans=[plan])
+    timing.session.save(tmp_path / 'time/index.json', [dict(session=0, phase='first', ids=[r['id']],
+                        path='time/0-first.json', sha256=bundle.sha(p_file))])
+    vals, _ = timing.read_results(tmp_path, seal)
+    assert vals[r['id']]['status'] == 'INCONCLUSIVE'
+    # Descriptive B mean must reflect only the 6 declared pairs (~1.0), NOT the 1.50x unused spare pair 7.
+    assert abs(vals[r['id']]['mean'] - 1.0) < 0.01
+
+
+def test_c3rc_q1_frozen_azure_noise_records_valid():
+    import gate_prepare as prepare
+    from types import SimpleNamespace
+    config = prepare.azure_config(json.loads((gate.GATE / 'gated.json').read_text()))
+    frozen = config['time']['noise']['Standard_F8als_v7']
+    expected_ids = set(config['time']['required'])
+    assert set(frozen) == expected_ids and len(frozen) == 8
+    for rid, rec in frozen.items():
+        assert timing.noise_band(rec, 'azure') == rec['band'] and 0 <= rec['band'] < .05
+        assert rec['design'] == 'long' and rec['machine'] == 'Standard_F8als_v7'
+        assert rec['counts'] == [180, 60] and rec['pairs'] == 16
+        assert len(rec['sourceSeal']) == 64 and len(rec['corpusId']) == 64
+    audit = json.loads((gate.REPO / 'benchmarks/Chrysalis.Benchmarks/audit-allocations.json').read_text())
+    entries = json.loads((gate.GATE / 'plans/noise-records.json').read_text())
+    selected = gate.select_rows(SimpleNamespace(mode='release', plan=None, only=None), config, audit, plan_entries=entries)
+    rows = prepare.plan_rows([dict(item, sides=dict(baseline=side(), candidate=side())) for item in selected], config)
+    assert all(r['noise'] is not None and timing.noise_band(r['noise'], 'azure') is not None for r in rows)
+
+
+def test_c3rc_d6_fable_m2_session_outliers_selected_filter():
+    r1 = _run8_row('time/micro-a', a_pairs=6, b_pairs=0, reserve=1)
+    r2 = _run8_row('time/micro-b', a_pairs=6, b_pairs=0, reserve=1)
+    plan = dict(design='noise-band', provider='azure', region='eastus2', rows=[r1, r2], counts=[180, 60])
+    ps = (_run8_pairs(r1, a_specs={(2, 'baseline'): dict(factor=1.35)})
+          + _run8_pairs(r2, a_specs={(4, 'candidate'): dict(factor=1.35)}))
+    # Without selected, both rows trigger -> finding. With selected=[r1['id']], only r1 is evaluated -> clean swap.
+    full = timing.session_outliers(plan, ps)
+    assert full[r1['id']]['finding'] is True and full[r1['id']]['replaced'] is False
+    sub = timing.session_outliers(plan, ps, selected=[r1['id']])
+    assert set(sub) == {r1['id']} and sub[r1['id']]['finding'] is False and sub[r1['id']]['replaced'] is True
+    assert sub[r1['id']]['replacement']['replacedPair'] == 2
+
+
+def test_c3rc_d6_fable_m3_judged_swap_stays_in_trigger_phase():
+    r = _run8_row('time/preprod-offline', a_pairs=6, b_pairs=6, reserve=1)
+    plan = dict(design='full', provider='azure', region='eastus2', rows=[r], counts=[180, 60])
+    # Trigger in phase A pair 2; give phase B pair 2 and phase B spare pair 7 distinct markers.
+    ps = _run8_pairs(r, a_specs={(2, 'baseline'): dict(factor=1.35)},
+                     b_specs={(2, 'candidate'): dict(factor=1.04), (7, 'candidate'): dict(factor=1.18)})
+    dec = timing.session_outliers(plan, ps)[r['id']]
+    assert dec['replaced'] is True and dec['replacement'] == dict(phase='A', replacedPair=2, sparePair=7, triggerSides=['baseline'])
+    keep, aside = timing.judged(r, ps, dec)
+    b_keep = {p['pair']: p for p in keep if p['phase'] == 'B'}
+    b_aside = [p for p in aside if p['phase'] == 'B']
+    # Phase B pair 2 must remain the original 1.04x pair; phase B spare (1.18x) must stay in aside.
+    b2_mean = sum(x['nsPerBlock'] for x in b_keep[2]['candidate']['data']['rows']) / 60
+    b2_base = sum(x['nsPerBlock'] for x in b_keep[2]['baseline']['data']['rows']) / 60
+    assert abs(b2_mean / b2_base - 1.04) < 1e-6
+    assert len(b_aside) == 1
+    ba_mean = sum(x['nsPerBlock'] for x in b_aside[0]['candidate']['data']['rows']) / 60
+    ba_base = sum(x['nsPerBlock'] for x in b_aside[0]['baseline']['data']['rows']) / 60
+    assert abs(ba_mean / ba_base - 1.18) < 1e-6
+
+
+def test_c3rc_d6_run8_opus_m2_and_neon_m2_guards():
+    # opus m2(a): unadmitted (timingRejectedReasons) slow pair is excluded from sibling outlier groups.
+    r = _run8_row('time/micro-a', a_pairs=6, b_pairs=0, reserve=1)
+    plan = dict(design='noise-band', provider='azure', region='eastus2', rows=[r], counts=[180, 60])
+    ps_rej = _run8_pairs(r, a_specs={(2, 'baseline'): dict(factor=1.50, rejected=['outside CPU'])})
+    d_rej = timing.session_outliers(plan, ps_rej)[r['id']]
+    assert d_rej['triggers'] == [] and d_rej['replaced'] is False
+
+    # opus m2(c): phase B group with <3 admitted pairs skips outlier check cleanly.
+    r_b2 = _run8_row('time/preprod-offline', a_pairs=0, b_pairs=5, reserve=1)
+    plan_b2 = dict(design='full', provider='azure', region='eastus2', rows=[r_b2], counts=[180, 60])
+    # Reject pairs 3..6 so only 2 pairs (1, 2) are admitted per side in phase B.
+    specs_b2 = {(p, 'baseline'): dict(rejected=['outside CPU']) for p in range(3, 7)}
+    specs_b2[(2, 'baseline')] = dict(factor=1.50)
+    ps_b2 = _run8_pairs(r_b2, b_specs=specs_b2)
+    d_b2 = timing.session_outliers(plan_b2, ps_b2)[r_b2['id']]
+    assert d_b2['evaluated'] is True and d_b2['triggers'] == [] and d_b2['maxWholeLifeDeparture'] is None
+
+    # opus m2(d): verdict platform check covers pairs + jit (aside spare with platform='pc' refused).
+    r_jit = _run8_row('time/preprod-offline', a_pairs=0, b_pairs=5, reserve=1)
+    ps_jit = _run8_pairs(r_jit)
+    ps_jit[-1]['baseline']['platform'] = 'pc'
+    keep_j, aside_j = timing.judged(r_jit, ps_jit, None)
+    res_j = timing.verdict(r_jit, keep_j, 'change', noise=dict(band=.01, design='long', machine='Standard_F8als_v7'), jit=aside_j)
+    assert res_j['status'] == 'INCONCLUSIVE' and 'PC time never gates' in res_j['reason']
+
+    # neon m2: opposite-sign departures return 0.0 and do not trigger session_outliers.
+    assert timing._whole_life_departure([0.30, -0.30, -0.30, -0.30, 0.30, 0.30, 0.30]) == 0.0
+    ps_opp = _run8_pairs(r, a_specs={(3, 'baseline'): dict(warm_late=[0.70, 0.70, 0.70], meas_groups=[1.35, 1.35, 1.35])})
+    d_opp = timing.session_outliers(plan, ps_opp)[r['id']]
+    assert d_opp['triggers'] == [] and d_opp['replaced'] is False and d_opp['maxWholeLifeDeparture'] == 0.0

@@ -31,7 +31,7 @@ from gate_azure_guest import FETCH_STAGES, LOG_COUNTS, REFUSAL_REASONS
 from gate_azure_guard import (ALERT_TAIL, COPY_END, RESERVE_TAIL, WATCH_MARGIN, GuardFailure,
                               alert, arm_native, check_context, cleanup_lease, latest_worker_start_seconds, mark, mutation,
                               process_id, provision_seconds, retire, session_work_seconds, start_plan, stop_paused_driver, wsl_context)
-from gate_azure_proof import GROUP, GUID, ONCE, READ_WAITS, Az, AzureError, cost_readback, expected_posted, fingerprint, proof
+from gate_azure_proof import GROUP, GUID, ONCE, READ_WAITS, TRANSIENT_READ_ERRORS, Az, AzureError, cost_readback, expected_posted, fingerprint, proof
 
 from gate_time import PROVIDERS
 
@@ -153,7 +153,7 @@ def wait_for(compare, until, interval=5, label='progress'):
         value = compare()
         if value:
             return value
-        time.sleep(interval)
+        time.sleep(min(interval, max(0, until - time.time())))
     raise GuardFailure(f'{label} deadline reached')
 
 
@@ -312,17 +312,28 @@ class Draw:
 
     def wait(self, path, api):
         self.step = 'wait ' + _step_kind(path, self.scope)
+        cli_failures = 0
         def check():
+            nonlocal cli_failures
             try:
-                result = self.az.rest('get', path + '?api-version=' + api, query='properties.provisioningState', waits=ONCE)
+                result = self.az.rest('get', path + '?api-version=' + api, query='properties.provisioningState',
+                                      waits=READ_WAITS, until=self.provision_deadline)
             except AzureError as exc:
-                if str(exc) in ABSENT:
+                msg = str(exc)
+                if msg in ABSENT or msg in TRANSIENT_READ_ERRORS:
                     return False
+                if msg.startswith('rest command failed (exit '):
+                    cli_failures += 1
+                    if cli_failures < 3:
+                        log(f'Azure {self.step} transient read failure ({cli_failures}/3); continuing')
+                        return False
                 raise
+            cli_failures = 0
             if result in ('Failed', 'Canceled'):
                 if 'virtualMachines/' in path:
                     # Only extract fixed failure codes. Retain no raw diagnostics.
-                    codes = self.az.rest('get', path + '/instanceView?api-version=' + api, query='statuses[?level==`Error`].code', waits=ONCE)
+                    codes = self.az.rest('get', path + '/instanceView?api-version=' + api,
+                                         query='statuses[?level==`Error`].code', waits=READ_WAITS, until=self.provision_deadline)
                     for known in UNAVAILABLE:
                         if any(known.lower() in x.lower() for x in (codes or [])):
                             raise AzureError(known)
@@ -374,7 +385,7 @@ class Draw:
         self.put(identity, identity_api, dict(location=self.region))
         # The identity endpoint need not expose provisioningState. Attest the principal.
         self.step = 'wait userAssignedIdentities'
-        principal = wait_for(lambda: self.az.rest('get', identity + '?api-version=' + identity_api, query='properties.principalId', waits=ONCE),
+        principal = wait_for(lambda: self.az.rest('get', identity + '?api-version=' + identity_api, query='properties.principalId', waits=READ_WAITS, until=self.provision_deadline),
                              self.provision_deadline, label='User-assigned identity')
         if not isinstance(principal, str) or not GUID.fullmatch(principal):
             raise GuardFailure('User-assigned identity principal not confirmed')
@@ -383,7 +394,7 @@ class Draw:
         grant = dict(principalId=principal, principalType='ServicePrincipal', roleDefinitionId=role)
         self.put(path, role_api, dict(properties=grant))
         self.step = 'wait roleAssignments'
-        wait_for(lambda: self.az.rest('get', path + '?api-version=' + role_api, query='properties.{principalId:principalId,principalType:principalType,roleDefinitionId:roleDefinitionId}', waits=ONCE) == grant,
+        wait_for(lambda: self.az.rest('get', path + '?api-version=' + role_api, query='properties.{principalId:principalId,principalType:principalType,roleDefinitionId:roleDefinitionId}', waits=READ_WAITS, until=self.provision_deadline) == grant,
                  self.provision_deadline, label='Scoped Contributor grant')
         create_storage(self)
         # The VNet may auto-enable a region's first watcher. Create and verify
@@ -391,7 +402,7 @@ class Draw:
         self.resource('Network', 'networkWatchers', {}, name='NetworkWatcher_'+self.region)
         self.step = 'check networkWatchers'
         wc = self.az.rest('get', '/subscriptions/'+self.az.subscription+'/providers/Microsoft.Network/networkWatchers?api-version='+API_NET,
-             query=f"{{ids:value[?location=='{self.region}'].id,paginated:nextLink!=`null`}}", waits=ONCE)
+             query=f"{{ids:value[?location=='{self.region}'].id,paginated:nextLink!=`null`}}", waits=READ_WAITS, until=self.provision_deadline)
         if (wc['paginated'] or [i.lower() for i in wc['ids']] != [self.path('Network','networkWatchers','NetworkWatcher_'+self.region).lower()]):
             raise GuardFailure('Network Watcher not uniquely scoped to run group')
         def rule(name, priority, source, destination_port, access):
@@ -458,7 +469,7 @@ class Draw:
         if retry:
             self.put(schedule, api, spec)
         self.step = 'verify-schedule'
-        actual = self.az.rest('get', schedule + '?api-version=' + api, waits=ONCE)
+        actual = self.az.rest('get', schedule + '?api-version=' + api, waits=READ_WAITS, until=self.latest_worker_start)
         if not schedule_matches(actual, spec):
             raise GuardFailure('platform shutdown not confirmed; refusing init')
 
@@ -912,7 +923,12 @@ def watchdog(guard):
                 draw.delete(min(draw.deadline, time.time() + 22), log_attempt=lambda _: None)
                 unconfirmed = not fenced or creation_unconfirmed(guard)
                 if not unconfirmed or time.time() >= draw.deadline - WATCH_MARGIN:
-                    summary, _ = proof(az, local['azureBaseline'], [draw.group])
+                    try:
+                        summary, _ = proof(az, local['azureBaseline'], [draw.group], until=draw.deadline)
+                    except AzureError as exc:
+                        if str(exc) in TRANSIENT_READ_ERRORS and time.time() + max(READ_WAITS) >= draw.deadline:
+                            break
+                        raise
                     ended = time.time()
                     if ended < draw.deadline:
                         atomic_json(guard / 'watchdog-proof.json', dict(ended=ended, summary=summary, provisional=unconfirmed))
@@ -925,7 +941,7 @@ def watchdog(guard):
             pass  # Try again within the bounded reserve.
         except (AzureError, GuardFailure, OSError):
             (guard / 'watchdog-proof.json').unlink(missing_ok=True)
-        time.sleep(3)
+        time.sleep(min(3, max(0, stop + RESERVE_TAIL - time.time())))
     if not (guard / 'done').exists() and not (guard / 'watchdog-proof.json').is_file():
         alert(guard, 'CLEANUP FAILURE: reserve exhausted without proof; coordinator recovery required')
         mark(guard, 'failed')

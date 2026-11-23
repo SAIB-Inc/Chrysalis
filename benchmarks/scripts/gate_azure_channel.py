@@ -277,17 +277,22 @@ def run_channel(draw, inputs, evidence):
             time.sleep(max(0, min(wake, draw.work_end) - time.time()))
             if time.time() >= draw.work_end:
                 break
+            status_label = f'status-{number:02}'
             try:
-                result = command(draw, f'status-{number:02}', STATUS_SCRIPT, min(draw.work_end, time.time() + RUN_COMMAND_SECONDS + 15))
+                result = command(draw, status_label, STATUS_SCRIPT, min(draw.work_end, time.time() + RUN_COMMAND_SECONDS + 15))
             except (AzureError, GuardFailure) as exc:
                 if time.time() >= draw.work_end:
+                    if (getattr(draw, 'guest_error', None) or {}).get('command') == status_label:
+                        draw.guest_error = None
                     break  # At C, transfer does not wait for a status answer.
                 if getattr(exc, 'malformed_summary', False):
                     raise
                 status_failures += 1
                 if status_failures >= MAX_STATUS_FAILURES:
                     raise
-                print(f'Azure status-{number:02} transient failure ({status_failures}/{MAX_STATUS_FAILURES}); continuing', flush=True)
+                if (getattr(draw, 'guest_error', None) or {}).get('command') == status_label:
+                    draw.guest_error = None
+                print(f'Azure {status_label} transient failure ({status_failures}/{MAX_STATUS_FAILURES}); continuing ({type(exc).__name__}; +{max(0.0, time.time() - draw.start):.1f}s)', flush=True)
                 wake = max(wake + interval, time.time() + interval)
                 continue
             if result == {'done': True}:

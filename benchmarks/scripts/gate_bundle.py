@@ -626,12 +626,12 @@ PROVISION_FAILURE_STEPS = frozenset({'put virtualMachines', 'wait virtualMachine
 ALTERNATE_REGION = {'eastus2': 'eastus', 'eastus': 'eastus2'}
 
 
-def next_draw_region(region, step, *, primary=None, plan_region='eastus2'):
+def next_draw_region(region, step, *, primary, plan_region):
     if plan_region != 'eastus2':
         return plan_region
     if step in PROVISION_FAILURE_STEPS and region in ALTERNATE_REGION:
         return ALTERNATE_REGION[region]
-    return region if primary is None else primary
+    return primary
 
 
 def _pre_ready_note_ok(note, plan, expected_booked):
@@ -667,31 +667,37 @@ def _pre_ready_note_ok(note, plan, expected_booked):
             and booked == expected_booked)
 
 
-def _pre_ready_settled(directory, local, go, number, phase, draw, app, fallback, plan):
+def _pre_ready_settled(directory, local, go, number, phase, draw, app, fallback, plan, *, status=2):
     from gate_azure import Ledger, Refusal
+    if status not in (2, 6) or (status == 6 and (fallback is not None or plan['region'] != 'eastus2')):
+        return False
     try:
         ledger = Ledger(local, read_only=True)
     except (Refusal, OSError, ValueError):
         return False
     if ledger.data.get('costStops') or os.path.lexists(ledger.cost_latch) or any(e.get('state') != 'settled' for e in ledger.attempts.values()):
         return False
-    checks = ((app, 2, fallback),) + (((fallback, 6, None),) if fallback else ())
+    checks = ((app, status, fallback),) + (((fallback, 6, None),) if fallback else ())
     for group, code, primary in checks:
         entry = ledger.attempts.get(group)
         if not isinstance(entry, dict):
             return False
         wanted = dict(go=go, session=number, phase=phase, draw=draw, directory=directory.name,
-                      state='settled', exitCode=code, fallbackOf=primary)
-        booked, ended = entry.get('booked'), entry.get('ended')
+                      state='settled', exitCode=code, fallbackOf=primary, **({'region': 'eastus'} if status == 6 else {}))
+        booked, ended, note = entry.get('booked'), entry.get('ended'), directory / 'time/runs' / group
         if (any(entry.get(k) != v for k, v in wanted.items())
                 or type(booked) not in (int, float) or not math.isfinite(booked) or booked < 0
                 or type(ended) not in (int, float) or not math.isfinite(ended)
-                or not _pre_ready_note_ok(directory / 'time/runs' / group, plan, booked)):
+                or not _pre_ready_note_ok(note, plan, booked)):
             return False
+        if status == 6:
+            marker = note_json(note, 'pre-ready-failure.json') or {}
+            if marker.get('class') != 'CapacityUnavailable' or marker.get('step') not in PROVISION_FAILURE_STEPS:
+                return False
     return True
 
 
-def expected_draw_region(directory, ledger, go, session, plan, phase='first', *, draw=None):
+def expected_draw_region(directory, ledger, go, session, plan, phase='first', *, draw):
     if ledger.data.get('costStops') or os.path.lexists(ledger.cost_latch) or any(e.get('state') != 'settled' for e in ledger.attempts.values()):
         return None
     by_draw, other_redraws = {}, 0
@@ -699,7 +705,8 @@ def expected_draw_region(directory, ledger, go, session, plan, phase='first', *,
         if (entry.get('go'), entry.get('session'), entry.get('directory')) != (go, session, directory.name):
             continue
         if entry.get('phase') != phase:
-            if entry.get('exitCode') == 2:
+            if (entry.get('exitCode') == 2 or (entry.get('exitCode') == 6 and entry.get('region') == 'eastus'
+                                               and entry.get('fallbackOf') is None and plan['region'] == 'eastus2')):
                 other_redraws += 1
             continue
         dnum = entry.get('draw')
@@ -707,8 +714,7 @@ def expected_draw_region(directory, ledger, go, session, plan, phase='first', *,
             return None
         by_draw.setdefault(dnum, []).append((entry.get('fallbackOf') is not None, group, entry))
     region, redraws, last_draw = plan['region'], other_redraws, 0
-    ordered = sorted(by_draw)
-    for idx, dnum in enumerate(ordered):
+    for dnum in sorted(by_draw):
         if dnum != last_draw + 1:
             return None
         last_draw = dnum
@@ -727,21 +733,23 @@ def expected_draw_region(directory, ledger, go, session, plan, phase='first', *,
                 return None
         elif entry.get('fallbackOf') is not None or used != region:
             return None
-        if code == 2:
+        eastus_cap = len(entries) == 1 and used == 'eastus' and code == 6 and plan['region'] == 'eastus2'
+        if code == 2 or eastus_cap:
             note = directory / 'time/runs' / group
             if redraws >= MAX_PRE_READY_REDRAWS or not _pre_ready_note_ok(note, plan, entry.get('booked')):
                 return None
             if len(entries) == 2 and not _pre_ready_note_ok(directory / 'time/runs' / pgroup, plan, pentry.get('booked')):
                 return None
-            region = next_draw_region(used, (note_json(note, 'pre-ready-failure.json') or {}).get('step'), primary=region, plan_region=plan['region'])
+            marker = note_json(note, 'pre-ready-failure.json') or {}
+            if eastus_cap and (marker.get('class') != 'CapacityUnavailable' or marker.get('step') not in PROVISION_FAILURE_STEPS):
+                return None
+            region = next_draw_region(used, marker.get('step'), primary=region, plan_region=plan['region'])
             redraws += 1
         elif code == 5:
             pass  # Probe rejection keeps current_region (not a capacity fallback's eastus).
-        elif code == 0 and draw is None and idx == len(ordered) - 1:
-            pass
         else:
             return None
-    return None if draw is not None and draw != last_draw + 1 else region
+    return region if draw == last_draw + 1 else None
 
 
 def draw_record(machine, number, phase, draw, app, decision, fallback=None, *,
@@ -1254,9 +1262,8 @@ def fly_sessions(directory, seal, go, phases, index, *, dispatch=None, context=N
             for draw in range(1, rule['maxDraws'] + 1):
                 fallback = None
                 if azure:
-                    extra = {'region': current_region} if current_region != plan.get('region') else {}
                     status, app, fallback = launch_azure(host, directory, go, number, phase, draw, plan, relative,
-                                                          first_launch, context, dispatch, **extra)
+                                                          first_launch, context, dispatch, region=current_region)
                 else:
                     app = 'chrysalis-gate-' + dt.datetime.now(dt.timezone.utc).strftime('%Y%m%dt%H%M%S') + '-' + secrets.token_hex(4)
                     env = session.environment({})
@@ -1282,8 +1289,9 @@ def fly_sessions(directory, seal, go, phases, index, *, dispatch=None, context=N
                     machine['invalid'] = 'session invalid: launcher failure; ' + detail
                 elif not machine['invalid'] and rejected != (status == 5):
                     machine['invalid'] = 'session invalid: launcher status contradicts probe'
-                redraw = (azure and status == 2 and pre_ready_redraws < MAX_PRE_READY_REDRAWS and draw < rule['maxDraws']
-                          and _pre_ready_settled(directory, local, go, number, phase, draw, app, fallback, plan))
+                redraw = (azure and (status == 2 or (status == 6 and fallback is None and current_region == 'eastus' and plan['region'] == 'eastus2'))
+                          and pre_ready_redraws < MAX_PRE_READY_REDRAWS and draw < rule['maxDraws']
+                          and _pre_ready_settled(directory, local, go, number, phase, draw, app, fallback, plan, status=status))
                 pre_step = (note_json(note, 'pre-ready-failure.json') or {}).get('step') if redraw else None
                 actual_region = machine.get('region') or current_region
                 decision = 'invalid-pre-ready' if redraw else 'invalid' if machine['invalid'] else 'rejected' if rejected else 'kept'
@@ -1294,7 +1302,8 @@ def fly_sessions(directory, seal, go, phases, index, *, dispatch=None, context=N
                 if redraw:
                     pre_ready_redraws += 1
                     next_region = next_draw_region(actual_region, pre_step, primary=current_region, plan_region=plan['region'])
-                    region_reason = 'provision-alternation' if pre_step in PROVISION_FAILURE_STEPS and next_region != actual_region else None
+                    region_reason = ('capacity-alternation' if status == 6 else
+                                     'provision-alternation' if pre_step in PROVISION_FAILURE_STEPS and next_region != actual_region else None)
                     current_region = next_region
                     continue
                 region_reason = None
