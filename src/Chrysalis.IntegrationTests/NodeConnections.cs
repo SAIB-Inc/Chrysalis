@@ -25,7 +25,7 @@ internal static class NodeConnections
         }
         catch
         {
-            client.Dispose();
+            await client.DisposeAsync();
             throw;
         }
     }

@@ -1,4 +1,5 @@
 using Chrysalis.Network.Cbor.LocalTxSubmit;
+using Chrysalis.Network.Core;
 using Chrysalis.Network.Multiplexer;
 
 namespace Chrysalis.Network.MiniProtocols;
@@ -9,6 +10,9 @@ namespace Chrysalis.Network.MiniProtocols;
 public class LocalTxSubmit(AgentChannel channel) : IMiniProtocol
 {
     private readonly ChannelBuffer _channelBuffer = new(channel);
+    private readonly ReplyLimit? _replies;
+
+    internal LocalTxSubmit(AgentChannel channel, ReplyLimit? replies) : this(channel) => _replies = replies;
 
     /// <summary>
     /// Gets whether the protocol is done.
@@ -23,6 +27,7 @@ public class LocalTxSubmit(AgentChannel channel) : IMiniProtocol
     /// <returns>The submission response indicating acceptance or rejection with reason.</returns>
     public async Task<LocalTxSubmissionMessage> SubmitTxAsync(SubmitTx submit, CancellationToken cancellationToken)
     {
+        using ReplyLimit.Wait? wait = _replies?.Start(ProtocolType.LocalTxSubmission);
         await _channelBuffer.SendFullMessageAsync(submit, cancellationToken).ConfigureAwait(false);
         return await _channelBuffer.ReceiveFullMessageAsync<LocalTxSubmissionMessage>(cancellationToken).ConfigureAwait(false);
     }

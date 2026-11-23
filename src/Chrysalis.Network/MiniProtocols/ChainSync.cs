@@ -32,6 +32,7 @@ public class ChainSync : IMiniProtocol
 {
     private readonly ChannelBuffer _buffer;
     private readonly ReadOnlyMemory<byte> _preEncodedNextRequest;
+    private readonly ReplyLimit? _replies;
 
     /// <summary>
     /// Gets the protocol type for this ChainSync instance.
@@ -69,6 +70,8 @@ public class ChainSync : IMiniProtocol
         _preEncodedNextRequest = BuildMuxSegment(protocol, cborPayload, channel.IsResponder);
     }
 
+    internal ChainSync(AgentChannel channel, ProtocolType protocol, ReplyLimit? replies) : this(channel, protocol) => _replies = replies;
+
     /// <summary>
     /// Builds a complete mux segment (8-byte header + payload) ready for direct bearer write.
     /// </summary>
@@ -82,6 +85,7 @@ public class ChainSync : IMiniProtocol
 
     /// <summary>
     /// Finds an intersection point between the local and remote chains.
+    /// On a <see cref="NodeClient"/> the reply is under <see cref="NodeClient.ReplyTimeLimit"/>.
     /// </summary>
     public async Task<ChainSyncMessage> FindIntersectionAsync(IEnumerable<Point> points, CancellationToken cancellationToken)
     {
@@ -92,6 +96,7 @@ public class ChainSync : IMiniProtocol
 
         Points message = new([.. points]);
         MessageFindIntersect messageCbor = ChainSyncMessages.FindIntersect(message);
+        using ReplyLimit.Wait? wait = _replies?.Start(Protocol);
         await _buffer.SendFullMessageAsync<ChainSyncMessage>(messageCbor, cancellationToken).ConfigureAwait(false);
 
         State = ChainSyncState.Intersect;
@@ -119,15 +124,14 @@ public class ChainSync : IMiniProtocol
                 response = await ReceiveNextResponseAsync(cancellationToken).ConfigureAwait(false);
                 break;
 
+            // CanAwait on entry: an earlier wait was cancelled or failed after the request went out, and its reply is still owed.
+            case ChainSyncState.CanAwait:
             case ChainSyncState.MustReply:
                 response = await ReceiveNextResponseAsync(cancellationToken).ConfigureAwait(false);
                 break;
-            case ChainSyncState.CanAwait:
-                break;
-            case ChainSyncState.Intersect:
-                break;
             case ChainSyncState.Done:
                 break;
+            case ChainSyncState.Intersect:
             default:
                 throw new InvalidOperationException($"Cannot request next in state {State}");
         }

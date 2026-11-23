@@ -3,6 +3,7 @@ using Chrysalis.Network.Multiplexer;
 using Chrysalis.Network.Cbor.LocalStateQuery;
 using Chrysalis.Network.Cbor.Common;
 using Chrysalis.Network.Cbor.Handshake;
+using Chrysalis.Network.Core;
 
 namespace Chrysalis.Network.MiniProtocols;
 
@@ -14,6 +15,7 @@ public class LocalStateQuery : IAsyncDisposable
 {
     private readonly ChannelBuffer _buffer;
     private readonly N2CVersionContext? _versions;
+    private readonly ReplyLimit? _replies;
 
     /// <summary>Initializes a standalone handler whose handshake/version remains the caller's responsibility.</summary>
     /// <param name="channel">The local-state-query channel.</param>
@@ -25,11 +27,14 @@ public class LocalStateQuery : IAsyncDisposable
     /// <param name="negotiatedVersion">The real negotiated N2C wire version.</param>
     public LocalStateQuery(AgentChannel channel, N2CVersion negotiatedVersion) : this(channel, new N2CVersionContext(negotiatedVersion)) { }
 
-    internal LocalStateQuery(AgentChannel channel, N2CVersionContext? versions)
+    internal LocalStateQuery(AgentChannel channel, N2CVersionContext? versions) : this(channel, versions, null) { }
+
+    internal LocalStateQuery(AgentChannel channel, N2CVersionContext? versions, ReplyLimit? replies)
     {
         ArgumentNullException.ThrowIfNull(channel);
         _buffer = new ChannelBuffer(channel);
         _versions = versions;
+        _replies = replies;
     }
 
     /// <summary>Gets whether a ledger state snapshot has been acquired.</summary>
@@ -51,6 +56,7 @@ public class LocalStateQuery : IAsyncDisposable
             throw new InvalidOperationException("Must acquire state before querying. Call AcquireAsync first.");
         }
 
+        using ReplyLimit.Wait? wait = _replies?.Start(ProtocolType.LocalStateQuery);
         await _buffer.SendFullMessageAsync(QueryRequest.New(query), cancellationToken).ConfigureAwait(false);
         return await _buffer.ReceiveFullMessageAsync<Result>(cancellationToken).ConfigureAwait(false);
     }
@@ -68,6 +74,7 @@ public class LocalStateQuery : IAsyncDisposable
             throw new InvalidOperationException("Must acquire state before querying. Call AcquireAsync first.");
         }
 
+        using ReplyLimit.Wait? wait = _replies?.Start(ProtocolType.LocalStateQuery);
         await _buffer.SendFullMessageAsync(QueryRequest.New(query), cancellationToken).ConfigureAwait(false);
         return await _buffer.ReceiveFullMessageAsync<Result>(cancellationToken).ConfigureAwait(false);
     }
@@ -105,6 +112,7 @@ public class LocalStateQuery : IAsyncDisposable
     /// </exception>
     public async Task AcquireAsync(Point? point, CancellationToken cancellationToken)
     {
+        using ReplyLimit.Wait? wait = _replies?.Start(ProtocolType.LocalStateQuery);
         await _buffer.SendFullMessageAsync(AcquireTypes.Default(point), cancellationToken).ConfigureAwait(false);
         LocalStateQueryMessage acquireResponse = await _buffer.ReceiveFullMessageAsync<LocalStateQueryMessage>(cancellationToken).ConfigureAwait(false);
 

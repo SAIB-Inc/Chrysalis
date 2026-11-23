@@ -277,6 +277,7 @@ internal sealed class SendBearer(SendWriter? writer = null) : IBearer
 {
     private readonly Pipe _input = new();
     public PipeReader Reader => _input.Reader;
+    internal PipeWriter Input => _input.Writer;
     public PipeWriter Writer => Output;
     internal SendWriter Output { get; } = writer ?? new();
     internal bool IsDisposed { get; private set; }

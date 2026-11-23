@@ -150,6 +150,9 @@ public sealed class AgentChannel
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public ValueTask<ReadOnlyMemory<byte>> ReadSegmentAsync(CancellationToken cancellationToken = default) => _demuxReader.ReadAsync(cancellationToken);
 
+    /// <summary>Ends this channel's connection with the given cause. The first end wins.</summary>
+    internal void End(Exception cause) => _connection.End(cause);
+
     /// <summary>
     /// Gets the protocol ID for this channel.
     /// </summary>

@@ -1,4 +1,5 @@
 using System.IO.Pipelines;
+using System.Net;
 using System.Net.Sockets;
 using SocketProtocolType = System.Net.Sockets.ProtocolType;
 
@@ -49,11 +50,25 @@ public sealed class UnixBearer : IBearer
     /// <returns>A connected Unix socket bearer.</returns>
     public static async Task<UnixBearer> CreateAsync(string path, CancellationToken cancellationToken)
     {
-        Socket socket = new(AddressFamily.Unix, SocketType.Stream, SocketProtocolType.Unspecified);
         UnixDomainSocketEndPoint endpoint = new(path);
-        await socket.ConnectAsync(endpoint, cancellationToken).ConfigureAwait(false);
+        Socket socket = new(AddressFamily.Unix, SocketType.Stream, SocketProtocolType.Unspecified);
+        await ConnectOrDisposeAsync(socket, endpoint, cancellationToken).ConfigureAwait(false);
         NetworkStream stream = new(socket, ownsSocket: true);
         return new UnixBearer(socket, stream);
+    }
+
+    // A socket whose connect failed or was cancelled is disposed here: no bearer will own it.
+    internal static async Task ConnectOrDisposeAsync(Socket socket, EndPoint endpoint, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await socket.ConnectAsync(endpoint, cancellationToken).ConfigureAwait(false);
+        }
+        catch
+        {
+            socket.Dispose();
+            throw;
+        }
     }
 
     /// <summary>
