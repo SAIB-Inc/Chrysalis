@@ -32,7 +32,9 @@ public sealed class ChannelBuffer(AgentChannel channel)
 
     /// <summary>
     /// Sends a complete CBOR message, chunked into segments if necessary.
+    /// A cancellation after the first segment of a longer message ends the connection.
     /// </summary>
+    /// <exception cref="OperationCanceledException">The token is cancelled before the send, or before a later segment of a longer message is written.</exception>
     public async Task SendFullMessageAsync<T>(T message, CancellationToken cancellationToken) where T : CborRecord
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -44,7 +46,13 @@ public sealed class ChannelBuffer(AgentChannel channel)
             int chunkSize = Math.Min(ProtocolConstants.MaxSegmentPayloadLength, payloadLength - offset);
             ReadOnlyMemory<byte> chunkMemory = payloadMemory.Slice(offset, chunkSize);
             ReadOnlySequence<byte> chunkSequence = new(chunkMemory);
-            await channel.EnqueueChunkAsync(chunkSequence, cancellationToken).ConfigureAwait(false);
+            try { await channel.EnqueueChunkAsync(chunkSequence, cancellationToken).ConfigureAwait(false); }
+            // Part of the message is on the wire and the rest will not follow: nothing valid can be sent after it.
+            catch (OperationCanceledException error) when (offset > 0)
+            {
+                channel.End(new IOException("A send was cancelled after part of its message was written.", error));
+                throw;
+            }
         }
     }
 

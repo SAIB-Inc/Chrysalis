@@ -59,4 +59,11 @@ public sealed class Plexer : IDisposable
         _demuxer.Dispose();
         _connection.DisposeBearer();
     }
+
+    /// <summary>Disposes the plexer and completes when its bearer has been disposed.</summary>
+    internal Task CloseAsync()
+    {
+        Dispose();
+        return _connection.BearerDisposed;
+    }
 }

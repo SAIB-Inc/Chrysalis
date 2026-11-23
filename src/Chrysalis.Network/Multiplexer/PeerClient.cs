@@ -7,7 +7,7 @@ namespace Chrysalis.Network.Multiplexer;
 /// <summary>
 /// Provides a high-level N2N client for connecting to Cardano nodes over TCP.
 /// </summary>
-public sealed class PeerClient : IDisposable
+public sealed class PeerClient : IDisposable, IAsyncDisposable
 {
     /// <summary>Gets the network magic number used during the handshake (e.g., 764824073 for mainnet).</summary>
     public ulong NetworkMagic { get; private set; } = 2;
@@ -15,7 +15,14 @@ public sealed class PeerClient : IDisposable
     private readonly Plexer _plexer;
     private Task? _plexerTask;
     private Task? _keepAliveTask;
-    private CancellationTokenSource? _keepAliveCts;
+    private readonly CancellationTokenSource _keepAliveCts = new();
+    private int _started;
+    private int _disposed;
+
+    internal ReplyLimit Replies { get; }
+
+    /// <summary>Gets the accepted node-to-node version, or null before successful negotiation.</summary>
+    public N2NVersion? NegotiatedVersion { get; private set; }
 
     /// <summary>
     /// Gets the Handshake protocol handler.
@@ -40,7 +47,9 @@ public sealed class PeerClient : IDisposable
     private PeerClient(Plexer plexer)
     {
         _plexer = plexer ?? throw new ArgumentNullException(nameof(plexer));
-        Handshake = new(_plexer.SubscribeClient(ProtocolType.Handshake));
+        AgentChannel handshake = _plexer.SubscribeClient(ProtocolType.Handshake);
+        Replies = new ReplyLimit(handshake);
+        Handshake = new(handshake);
         ChainSync = new(_plexer.SubscribeClient(ProtocolType.NodeChainSync), ProtocolType.NodeChainSync);
         KeepAlive = new(_plexer.SubscribeClient(ProtocolType.KeepAlive));
         BlockFetch = new(_plexer.SubscribeClient(ProtocolType.BlockFetch));
@@ -91,7 +100,7 @@ public sealed class PeerClient : IDisposable
         }
     }
 
-    private static PeerClient CreateFromBearer(IBearer bearer)
+    internal static PeerClient CreateFromBearer(IBearer bearer)
     {
         Plexer plexer = new(bearer);
         try
@@ -107,22 +116,44 @@ public sealed class PeerClient : IDisposable
     }
 
     /// <summary>
-    /// Starts the client and initializes protocol handlers.
+    /// Starts the client: the handshake, then the keep-alive loop.
     /// </summary>
     /// <param name="networkMagic">Network magic for handshake.</param>
     /// <param name="keepAliveInterval">Interval between keepalive roundtrips.</param>
-    public async Task StartAsync(ulong networkMagic = 2, TimeSpan? keepAliveInterval = null)
+    /// <param name="cancellationToken">Cancels startup; it does not change the lifetime of an accepted connection.</param>
+    /// <remarks>
+    /// The peer has 10 seconds to answer the handshake and 60 seconds to answer each keep-alive; a limit that passes ends the
+    /// connection, and its calls throw <see cref="ConnectionClosedException"/> with a <see cref="ReplyTimeoutException"/> inside.
+    /// A start that fails, or is cancelled after it has begun, disposes the connection.
+    /// </remarks>
+    /// <exception cref="InvalidOperationException">The client was already started.</exception>
+    public async Task StartAsync(ulong networkMagic = 2, TimeSpan? keepAliveInterval = null, CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (Interlocked.Exchange(ref _started, 1) != 0)
+        {
+            throw new InvalidOperationException("The client has already started its handshake.");
+        }
+        CancellationToken keepAlive = _keepAliveCts.Token;
         _plexerTask = _plexer.RunAsync(CancellationToken.None);
 
         NetworkMagic = networkMagic;
 
         ProposeVersions proposeVersion = HandshakeMessages.ProposeVersions(VersionTables.N2nV11AndAbove(networkMagic));
-        _ = await Handshake.SendAsync<N2NAcceptVersion>(proposeVersion, CancellationToken.None).ConfigureAwait(false);
+        try
+        {
+            using ReplyLimit.Wait wait = Replies.Start(ProtocolType.Handshake, ReplyLimit.Handshake);
+            N2NAcceptVersion accepted = await Handshake.SendAsync<N2NAcceptVersion>(proposeVersion, cancellationToken).ConfigureAwait(false);
+            NegotiatedVersion = accepted.Version;
+        }
+        catch
+        {
+            _plexer.Dispose();
+            throw;
+        }
 
         TimeSpan interval = keepAliveInterval ?? TimeSpan.FromSeconds(20);
-        _keepAliveCts = new CancellationTokenSource();
-        _keepAliveTask = RunKeepAliveLoop(interval, _keepAliveCts.Token);
+        _keepAliveTask = RunKeepAliveLoop(interval, keepAlive);
     }
 
     /// <summary>
@@ -147,11 +178,13 @@ public sealed class PeerClient : IDisposable
 
     private async Task RunKeepAliveLoop(TimeSpan interval, CancellationToken cancellationToken)
     {
-        using PeriodicTimer timer = new(interval);
+        using PeriodicTimer timer = new(interval, Replies.Clock);
         try
         {
             while (await timer.WaitForNextTickAsync(cancellationToken).ConfigureAwait(false))
             {
+                // A peer that stops answering keep-alives is silent: when the limit passes, the connection ends for every caller.
+                using ReplyLimit.Wait wait = Replies.Start(ProtocolType.KeepAlive, ReplyLimit.KeepAlive);
                 await KeepAlive.KeepAliveRoundtripAsync(cancellationToken).ConfigureAwait(false);
             }
         }
@@ -166,8 +199,34 @@ public sealed class PeerClient : IDisposable
     /// </summary>
     public void Dispose()
     {
-        _keepAliveCts?.Cancel();
-        _keepAliveCts?.Dispose();
+        if (Interlocked.Exchange(ref _disposed, 1) == 0)
+        {
+            _keepAliveCts.Cancel();
+            _keepAliveCts.Dispose();
+        }
         _plexer.Dispose();
+    }
+
+    /// <summary>
+    /// Disposes the client and completes once its read loop and keep-alive loop have stopped and its socket is closed.
+    /// It may be called more than once, and after <see cref="Dispose"/>.
+    /// </summary>
+    public ValueTask DisposeAsync()
+    {
+        Dispose();
+        return new ValueTask(StopAsync());
+    }
+
+    private async Task StopAsync()
+    {
+        await _plexer.CloseAsync().ConfigureAwait(false);
+        if (_plexerTask is Task run)
+        {
+            await run.ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
+        }
+        if (_keepAliveTask is Task keepAlive)
+        {
+            await keepAlive.ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
+        }
     }
 }

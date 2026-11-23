@@ -18,6 +18,9 @@ internal sealed class Connection(IBearer? bearer, SemaphoreSlim? writeLock = nul
     internal Exception? Cause { get; private set; }
     private int _dispose;
     private readonly TaskCompletionSource _endSettled = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private readonly TaskCompletionSource _bearerDisposed = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    /// <summary>Completes when <see cref="DisposeBearer"/> has disposed the bearer.</summary>
+    internal Task BearerDisposed => _bearerDisposed.Task;
 
     internal static bool IsLocal(Exception? cause) => cause is ObjectDisposedException or OperationCanceledException;
 
@@ -74,12 +77,16 @@ internal sealed class Connection(IBearer? bearer, SemaphoreSlim? writeLock = nul
 
     private async Task DisposeBearerAsync()
     {
-        // A concurrent end may still be canceling a bearer operation after the reader exits.
-        // Its transport calls must finish too before the bearer can be disposed.
-        await _endSettled.Task.ConfigureAwait(false);
-        await ReaderReleased.Task.ConfigureAwait(false);
-        await WriteLock.WaitAsync().ConfigureAwait(false);
-        try { bearer?.Dispose(); }
-        finally { _ = WriteLock.Release(); }
+        try
+        {
+            // A concurrent end may still be canceling a bearer operation after the reader exits.
+            // Its transport calls must finish too before the bearer can be disposed.
+            await _endSettled.Task.ConfigureAwait(false);
+            await ReaderReleased.Task.ConfigureAwait(false);
+            await WriteLock.WaitAsync().ConfigureAwait(false);
+            try { bearer?.Dispose(); }
+            finally { _ = WriteLock.Release(); }
+        }
+        finally { _ = _bearerDisposed.TrySetResult(); }
     }
 }

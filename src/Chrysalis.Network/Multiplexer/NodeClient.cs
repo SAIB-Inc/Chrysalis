@@ -7,7 +7,7 @@ namespace Chrysalis.Network.Multiplexer;
 /// <summary>
 /// Provides a high-level client for connecting to Cardano nodes.
 /// </summary>
-public sealed class NodeClient : IDisposable
+public sealed class NodeClient : IDisposable, IAsyncDisposable
 {
     /// <summary>Gets or sets the network magic number used during the handshake (e.g., 764824073 for mainnet).</summary>
     public ulong NetworkMagic { get; set; } = 2;
@@ -19,6 +19,26 @@ public sealed class NodeClient : IDisposable
 
     /// <summary>Gets the accepted node-to-client version, or null before successful negotiation.</summary>
     public N2CVersion? NegotiatedVersion => _versions.NegotiatedVersion;
+
+    internal ReplyLimit Replies { get; }
+
+    /// <summary>
+    /// Gets or sets how long the node may take to send a reply it owes on the local state query, local tx submission
+    /// and local tx monitor protocols, and to answer chain-sync's find-intersect. The default is 180 seconds;
+    /// <see cref="Timeout.InfiniteTimeSpan"/> turns the limit off. A new value applies to calls that start after it is set.
+    /// </summary>
+    /// <remarks>
+    /// A large local state query on mainnet (for example a whole-UTxO or stake-distribution query) can run longer than
+    /// 180 seconds; raise this property or set it to <see cref="Timeout.InfiniteTimeSpan"/> before calling such a query.
+    /// When the limit passes, the connection ends: the waiting call and every later call throw
+    /// <see cref="ConnectionClosedException"/> whose inner exception is a <see cref="ReplyTimeoutException"/>.
+    /// After a find-intersect that failed or was cancelled, that client's <see cref="ChainSync"/> refuses further calls
+    /// with <see cref="InvalidOperationException"/>; dispose the client and connect again.
+    /// The handshake reply has 10 seconds whatever this value is. Chain-sync's next-request is not limited, and neither is
+    /// <c>LocalTxMonitor.AcquireAsync</c> while a snapshot is held: the node answers those when the chain or the mempool changes.
+    /// </remarks>
+    /// <exception cref="ArgumentOutOfRangeException">The value is zero, negative and not <see cref="Timeout.InfiniteTimeSpan"/>, or longer than a timer accepts.</exception>
+    public TimeSpan ReplyTimeLimit { get => Replies.Value; set => Replies.Value = value; }
 
     /// <summary>
     /// Gets the Handshake protocol handler.
@@ -52,11 +72,13 @@ public sealed class NodeClient : IDisposable
     private NodeClient(Plexer plexer)
     {
         _plexer = plexer ?? throw new ArgumentNullException(nameof(plexer));
-        Handshake = new(_plexer.SubscribeClient(ProtocolType.Handshake));
-        ChainSync = new(_plexer.SubscribeClient(ProtocolType.ClientChainSync));
-        LocalTxSubmit = new(_plexer.SubscribeClient(ProtocolType.LocalTxSubmission));
-        LocalStateQuery = new(_plexer.SubscribeClient(ProtocolType.LocalStateQuery), _versions);
-        LocalTxMonitor = new(_plexer.SubscribeClient(ProtocolType.LocalTxMonitor), _versions);
+        AgentChannel handshake = _plexer.SubscribeClient(ProtocolType.Handshake);
+        Replies = new ReplyLimit(handshake);
+        Handshake = new(handshake);
+        ChainSync = new(_plexer.SubscribeClient(ProtocolType.ClientChainSync), ProtocolType.ClientChainSync, Replies);
+        LocalTxSubmit = new(_plexer.SubscribeClient(ProtocolType.LocalTxSubmission), Replies);
+        LocalStateQuery = new(_plexer.SubscribeClient(ProtocolType.LocalStateQuery), _versions, Replies);
+        LocalTxMonitor = new(_plexer.SubscribeClient(ProtocolType.LocalTxMonitor), _versions, Replies);
     }
 
     /// <summary>
@@ -105,7 +127,7 @@ public sealed class NodeClient : IDisposable
         }
     }
 
-    private static NodeClient CreateFromBearer(IBearer bearer)
+    internal static NodeClient CreateFromBearer(IBearer bearer)
     {
         Plexer plexer = new(bearer);
         try
@@ -124,8 +146,9 @@ public sealed class NodeClient : IDisposable
     /// Starts the client and initializes protocol handlers.
     /// </summary>
     /// <param name="networkMagic">The network magic number for the handshake.</param>
+    /// <param name="cancellationToken">Cancels startup; it does not change the lifetime of an accepted connection.</param>
     /// <exception cref="InvalidOperationException">Thrown if the client is already started.</exception>
-    public Task StartAsync(ulong networkMagic = 2) => StartAsync(VersionTables.N2cV10AndAbove(networkMagic), CancellationToken.None);
+    public Task StartAsync(ulong networkMagic = 2, CancellationToken cancellationToken = default) => StartAsync(VersionTables.N2cV10AndAbove(networkMagic), cancellationToken);
 
     /// <summary>Starts this connection with an explicit version offer; one entry forces one version.</summary>
     /// <param name="versions">A nonempty, same-network N2C offer with query=false. Explicit untested versions do not change the default support claim.</param>
@@ -145,6 +168,7 @@ public sealed class NodeClient : IDisposable
         _plexerTask = _plexer.RunAsync(CancellationToken.None);
         try
         {
+            using ReplyLimit.Wait wait = Replies.Start(ProtocolType.Handshake, ReplyLimit.Handshake);
             N2CAcceptVersion accepted = await Handshake.SendAsync<N2CAcceptVersion>(HandshakeMessages.ProposeVersions(offer), cancellationToken).ConfigureAwait(false);
             if (!offer.Value.Keys.Any(version => version.Value == accepted.Version.Value)
                 || accepted.VersionData.NetworkMagic != NetworkMagic || accepted.VersionData.Query is not false)
@@ -205,4 +229,19 @@ public sealed class NodeClient : IDisposable
     /// Disposes the client and releases all resources.
     /// </summary>
     public void Dispose() => _plexer.Dispose();
+
+    /// <summary>
+    /// Disposes the client and completes once its read loop has stopped and its socket is closed.
+    /// It may be called more than once, and after <see cref="Dispose"/>.
+    /// </summary>
+    public ValueTask DisposeAsync() => new(StopAsync());
+
+    private async Task StopAsync()
+    {
+        await _plexer.CloseAsync().ConfigureAwait(false);
+        if (_plexerTask is Task run)
+        {
+            await run.ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
+        }
+    }
 }

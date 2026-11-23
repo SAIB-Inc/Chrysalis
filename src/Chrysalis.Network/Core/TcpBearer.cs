@@ -64,9 +64,23 @@ public sealed class TcpBearer : IBearer
     public static async Task<TcpBearer> CreateAsync(string host, int port, CancellationToken cancellationToken)
     {
         TcpClient client = new();
-        await client.ConnectAsync(host, port, cancellationToken).ConfigureAwait(false);
+        await ConnectOrDisposeAsync(client, host, port, cancellationToken).ConfigureAwait(false);
         NetworkStream stream = client.GetStream();
         return new TcpBearer(client, stream);
+    }
+
+    // A client whose connect failed or was cancelled is disposed here: no bearer will own it.
+    internal static async Task ConnectOrDisposeAsync(TcpClient client, string host, int port, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await client.ConnectAsync(host, port, cancellationToken).ConfigureAwait(false);
+        }
+        catch
+        {
+            client.Dispose();
+            throw;
+        }
     }
 
     /// <summary>

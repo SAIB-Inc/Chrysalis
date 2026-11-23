@@ -1,5 +1,6 @@
 using Chrysalis.Network.Cbor.LocalTxMonitor;
 using Chrysalis.Network.Cbor.Handshake;
+using Chrysalis.Network.Core;
 using Chrysalis.Network.Multiplexer;
 
 namespace Chrysalis.Network.MiniProtocols;
@@ -12,6 +13,8 @@ public class LocalTxMonitor : IMiniProtocol
 {
     private readonly ChannelBuffer _channelBuffer;
     private readonly N2CVersionContext? _versions;
+    private readonly ReplyLimit? _replies;
+    private bool _acquired;
 
     /// <summary>Initializes a standalone handler whose negotiated version remains the caller's responsibility.</summary>
     /// <param name="channel">The local-tx-monitor channel.</param>
@@ -23,11 +26,12 @@ public class LocalTxMonitor : IMiniProtocol
     /// <param name="negotiatedVersion">The real negotiated N2C wire version.</param>
     public LocalTxMonitor(AgentChannel channel, N2CVersion negotiatedVersion) : this(channel, new N2CVersionContext(negotiatedVersion)) { }
 
-    internal LocalTxMonitor(AgentChannel channel, N2CVersionContext? versions)
+    internal LocalTxMonitor(AgentChannel channel, N2CVersionContext? versions, ReplyLimit? replies = null)
     {
         ArgumentNullException.ThrowIfNull(channel);
         _channelBuffer = new ChannelBuffer(channel);
         _versions = versions;
+        _replies = replies;
     }
 
     /// <summary>
@@ -37,14 +41,19 @@ public class LocalTxMonitor : IMiniProtocol
 
     /// <summary>
     /// Acquires a snapshot of the current mempool state for subsequent queries.
+    /// Called while a snapshot is held, it waits until the mempool changes; that wait has no reply time limit.
     /// </summary>
     /// <param name="cancellationToken">Token to cancel the operation.</param>
     /// <returns>The response message from the Cardano node.</returns>
     public async Task<LocalTxMonitorMessage> AcquireAsync(CancellationToken cancellationToken)
     {
         Acquire acquire = LocalTxMonitorMessages.Acquire();
+        // With a snapshot held this is the node's await-acquire: it answers when the mempool changes, so no limit applies.
+        using ReplyLimit.Wait? wait = _acquired ? null : _replies?.Start(ProtocolType.LocalTxMonitor);
         await _channelBuffer.SendFullMessageAsync(acquire, cancellationToken).ConfigureAwait(false);
-        return await _channelBuffer.ReceiveFullMessageAsync<LocalTxMonitorMessage>(cancellationToken).ConfigureAwait(false);
+        LocalTxMonitorMessage reply = await _channelBuffer.ReceiveFullMessageAsync<LocalTxMonitorMessage>(cancellationToken).ConfigureAwait(false);
+        _acquired = reply is Acquired;
+        return reply;
     }
 
     /// <summary>
@@ -54,10 +63,11 @@ public class LocalTxMonitor : IMiniProtocol
     /// <param name="cancellationToken">Token to cancel the operation.</param>
     /// <returns>A task that completes when the release is sent.</returns>
     /// <exception cref="OperationCanceledException">The token is already cancelled; nothing is sent.</exception>
-    public Task ReleaseAsync(CancellationToken cancellationToken) =>
-        cancellationToken.IsCancellationRequested
-            ? Task.FromCanceled(cancellationToken)
-            : _channelBuffer.SendFullMessageAsync(LocalTxMonitorMessages.Release(), cancellationToken);
+    public async Task ReleaseAsync(CancellationToken cancellationToken)
+    {
+        await _channelBuffer.SendFullMessageAsync(LocalTxMonitorMessages.Release(), cancellationToken).ConfigureAwait(false);
+        _acquired = false;
+    }
 
     /// <summary>
     /// Retrieves the next transaction from the acquired mempool snapshot.
@@ -67,6 +77,7 @@ public class LocalTxMonitor : IMiniProtocol
     public async Task<LocalTxMonitorMessage> NextTxAsync(CancellationToken cancellationToken)
     {
         NextTx nextTx = LocalTxMonitorMessages.NextTx();
+        using ReplyLimit.Wait? wait = _replies?.Start(ProtocolType.LocalTxMonitor);
         await _channelBuffer.SendFullMessageAsync(nextTx, cancellationToken).ConfigureAwait(false);
         return await _channelBuffer.ReceiveFullMessageAsync<LocalTxMonitorMessage>(cancellationToken).ConfigureAwait(false);
     }
@@ -90,7 +101,9 @@ public class LocalTxMonitor : IMiniProtocol
     /// <exception cref="ArgumentException">Thrown before anything is sent when the id is not 32 bytes.</exception>
     public async Task<LocalTxMonitorMessage> HasTxAsync(EraTxId txId, CancellationToken cancellationToken)
     {
-        await _channelBuffer.SendFullMessageAsync(LocalTxMonitorMessages.HasTx(txId), cancellationToken).ConfigureAwait(false);
+        HasTx hasTx = LocalTxMonitorMessages.HasTx(txId);
+        using ReplyLimit.Wait? wait = _replies?.Start(ProtocolType.LocalTxMonitor);
+        await _channelBuffer.SendFullMessageAsync(hasTx, cancellationToken).ConfigureAwait(false);
         return await _channelBuffer.ReceiveFullMessageAsync<LocalTxMonitorMessage>(cancellationToken).ConfigureAwait(false);
     }
 
@@ -102,6 +115,7 @@ public class LocalTxMonitor : IMiniProtocol
     public async Task<LocalTxMonitorMessage> GetSizesAsync(CancellationToken cancellationToken)
     {
         GetSizes getSizes = LocalTxMonitorMessages.DefaultGetSizes;
+        using ReplyLimit.Wait? wait = _replies?.Start(ProtocolType.LocalTxMonitor);
         await _channelBuffer.SendFullMessageAsync(getSizes, cancellationToken).ConfigureAwait(false);
         return await _channelBuffer.ReceiveFullMessageAsync<LocalTxMonitorMessage>(cancellationToken).ConfigureAwait(false);
     }
@@ -115,6 +129,7 @@ public class LocalTxMonitor : IMiniProtocol
     {
         _versions?.EnsureMinimum(32788, nameof(GetMeasuresAsync));
         GetMeasures getMeasures = LocalTxMonitorMessages.DefaultGetMeasures;
+        using ReplyLimit.Wait? wait = _replies?.Start(ProtocolType.LocalTxMonitor);
         await _channelBuffer.SendFullMessageAsync(getMeasures, cancellationToken).ConfigureAwait(false);
         return await _channelBuffer.ReceiveFullMessageAsync<LocalTxMonitorMessage>(cancellationToken).ConfigureAwait(false);
     }
