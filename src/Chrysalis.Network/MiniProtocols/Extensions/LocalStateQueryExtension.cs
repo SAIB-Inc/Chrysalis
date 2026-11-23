@@ -5,6 +5,7 @@ using Chrysalis.Codec.Types.Cardano.Core.Transaction;
 using Chrysalis.Network.Cbor.Common;
 using Chrysalis.Network.Cbor.LocalStateQuery;
 using Chrysalis.Network.Cbor.LocalStateQuery.Messages;
+using Chrysalis.Network.Multiplexer;
 using SAIB.Cbor;
 
 namespace Chrysalis.Network.MiniProtocols.Extensions;
@@ -35,16 +36,21 @@ public static class LocalStateQueryExtension
         }
         await localStateQuery.AcquireAsync(null, cancellationToken).ConfigureAwait(false); // null = volatile tip
 
+        bool succeeded = false;
         try
         {
             Result answer = await localStateQuery.QueryAsync(query, cancellationToken).ConfigureAwait(false);
-            return eraQuery is null
+            T result = eraQuery is null
                 ? DecodeResult<T>(answer, eraSpecific: false)
                 : DecodeResult<T>(await localStateQuery.QueryAsync(eraQuery(LedgerEra(answer)), cancellationToken).ConfigureAwait(false), eraSpecific: true);
+            succeeded = true;
+            return result;
         }
         finally
         {
-            await localStateQuery.ReleaseAsync(cancellationToken).ConfigureAwait(false);
+            try { await localStateQuery.ReleaseAsync(cancellationToken).ConfigureAwait(false); }
+            catch (ConnectionClosedException) when (!succeeded) { }
+            catch (OperationCanceledException) when (!succeeded) { }
         }
     }
 

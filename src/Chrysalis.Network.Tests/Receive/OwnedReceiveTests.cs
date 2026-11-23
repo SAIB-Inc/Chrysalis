@@ -70,7 +70,7 @@ public sealed class OwnedReceiveTests
         Assert.Same(packed, slice.Array);
         _ = await buffer.ReceiveFullMessageAsync<BlockFetchMessage>(CancellationToken.None);
         using CancellationTokenSource cancel = new();
-        Task<BlockFetchMessage> interrupted = buffer.ReceiveFullMessageAsync<BlockFetchMessage>(cancel.Token);
+        Task<BlockFetchMessage> interrupted = buffer.ReceiveFullMessageAsync<BlockFetchMessage>(cancel.Token).AsTask();
         Assert.False(interrupted.IsCompleted);
         await cancel.CancelAsync();
         _ = await Assert.ThrowsAnyAsync<OperationCanceledException>(() => interrupted);
@@ -98,8 +98,8 @@ public sealed class OwnedReceiveTests
         _ = input.Writer.TryWrite(new byte[] { 0xff });
         if (!closeAfterError) { _ = input.Writer.TryWrite(Convert.FromHexString("D8184100")); }
         input.Writer.Complete();
-        _ = await Assert.ThrowsAsync<CborException>(() => buffer.ReceiveFullMessageAsync<BlockFetchMessage>(CancellationToken.None));
-        _ = await Assert.ThrowsAsync<CborException>(() => buffer.ReceiveFullMessageAsync<BlockFetchMessage>(CancellationToken.None));
+        _ = await Assert.ThrowsAsync<CborException>(() => buffer.ReceiveFullMessageAsync<BlockFetchMessage>(CancellationToken.None).AsTask());
+        _ = await Assert.ThrowsAsync<CborException>(() => buffer.ReceiveFullMessageAsync<BlockFetchMessage>(CancellationToken.None).AsTask());
         await unused.Reader.CompleteAsync();
         await unused.Writer.CompleteAsync();
     }
@@ -113,7 +113,7 @@ public sealed class OwnedReceiveTests
         ChannelBuffer buffer = new(new AgentChannel(ProtocolType.BlockFetch, unused.Writer, input.Reader, gate));
         _ = input.Writer.TryWrite(Enumerable.Repeat((byte)0x81, 65).ToArray());
         input.Writer.Complete();
-        _ = await Assert.ThrowsAsync<ChannelClosedException>(() => buffer.ReceiveFullMessageAsync<BlockFetchMessage>(CancellationToken.None));
+        _ = await Assert.ThrowsAsync<ChannelClosedException>(() => buffer.ReceiveFullMessageAsync<BlockFetchMessage>(CancellationToken.None).AsTask());
         object assembler = typeof(ChannelBuffer).GetField("_assembler", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(buffer)!;
         object scanner = typeof(MessageAssembler).GetField("_scanner", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(assembler)!;
         Assert.Null(typeof(CborFrameScanner.State).GetField("_spill", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(scanner));
@@ -132,7 +132,7 @@ public sealed class OwnedReceiveTests
         _ = input.Writer.TryWrite(message.AsMemory(0, 13));
         _ = input.Writer.TryWrite(message.AsMemory(13));
         input.Writer.Complete();
-        _ = await Assert.ThrowsAsync<IOException>(() => buffer.ReceiveFullMessageAsync<BlockFetchMessage>(CancellationToken.None));
+        _ = await Assert.ThrowsAsync<IOException>(() => buffer.ReceiveFullMessageAsync<BlockFetchMessage>(CancellationToken.None).AsTask());
         Assert.Equal(message, (await buffer.ReceiveFullMessageAsync<BlockFetchMessage>(CancellationToken.None)).Raw.ToArray());
         await unused.Reader.CompleteAsync();
         await unused.Writer.CompleteAsync();

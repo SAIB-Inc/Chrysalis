@@ -16,6 +16,7 @@ public sealed class PeerClient : IDisposable, IAsyncDisposable
     private Task? _plexerTask;
     private Task? _keepAliveTask;
     private readonly CancellationTokenSource _keepAliveCts = new();
+    private readonly CancellationToken _keepAliveToken;
     private int _started;
     private int _disposed;
 
@@ -23,6 +24,14 @@ public sealed class PeerClient : IDisposable, IAsyncDisposable
 
     /// <summary>Gets the accepted node-to-node version, or null before successful negotiation.</summary>
     public N2NVersion? NegotiatedVersion { get; private set; }
+
+    /// <summary>
+    /// Gets a task that settles once when the connection ends: ran to completion on local
+    /// <see cref="Dispose"/> or <see cref="DisposeAsync"/> (and after a failed <see cref="StartAsync"/>
+    /// with no prior connection fault), or faulted with <see cref="ConnectionClosedException"/> on a peer close or fault.
+    /// </summary>
+    /// <remarks>The first end wins. Awaiting this task observes the connection's end without polling.</remarks>
+    public Task Completion => _plexer.Completion;
 
     /// <summary>
     /// Gets the Handshake protocol handler.
@@ -47,6 +56,7 @@ public sealed class PeerClient : IDisposable, IAsyncDisposable
     private PeerClient(Plexer plexer)
     {
         _plexer = plexer ?? throw new ArgumentNullException(nameof(plexer));
+        _keepAliveToken = _keepAliveCts.Token;
         AgentChannel handshake = _plexer.SubscribeClient(ProtocolType.Handshake);
         Replies = new ReplyLimit(handshake);
         Handshake = new(handshake);
@@ -124,17 +134,19 @@ public sealed class PeerClient : IDisposable, IAsyncDisposable
     /// <remarks>
     /// The peer has 10 seconds to answer the handshake and 60 seconds to answer each keep-alive; a limit that passes ends the
     /// connection, and its calls throw <see cref="ConnectionClosedException"/> with a <see cref="ReplyTimeoutException"/> inside.
-    /// A start that fails, or is cancelled after it has begun, disposes the connection.
+    /// A keep-alive protocol error also ends the connection. Pending and later mini-protocol calls on an ended connection throw
+    /// <see cref="ConnectionClosedException"/>. A start that fails, or is cancelled after it has begun, disposes the connection.
     /// </remarks>
+    /// <exception cref="ObjectDisposedException">The client has been disposed.</exception>
     /// <exception cref="InvalidOperationException">The client was already started.</exception>
     public async Task StartAsync(ulong networkMagic = 2, TimeSpan? keepAliveInterval = null, CancellationToken cancellationToken = default)
     {
+        ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
         cancellationToken.ThrowIfCancellationRequested();
         if (Interlocked.Exchange(ref _started, 1) != 0)
         {
             throw new InvalidOperationException("The client has already started its handshake.");
         }
-        CancellationToken keepAlive = _keepAliveCts.Token;
         _plexerTask = _plexer.RunAsync(CancellationToken.None);
 
         NetworkMagic = networkMagic;
@@ -153,28 +165,41 @@ public sealed class PeerClient : IDisposable, IAsyncDisposable
         }
 
         TimeSpan interval = keepAliveInterval ?? TimeSpan.FromSeconds(20);
-        _keepAliveTask = RunKeepAliveLoop(interval, keepAlive);
+        _keepAliveTask = RunKeepAliveLoop(interval, _keepAliveToken);
     }
 
     /// <summary>
-    /// Checks if the plexer (multiplexer/demultiplexer) is healthy and running.
+    /// Checks if the plexer is running and its connection has not ended.
     /// </summary>
-    public bool IsPlexerHealthy() => _plexerTask is { IsCompleted: false };
+    /// <returns><see langword="true"/> once started and while <see cref="Completion"/> is pending; otherwise <see langword="false"/>.</returns>
+    public bool IsPlexerHealthy() => _plexer.IsPlexerHealthy();
 
     /// <summary>
-    /// Gets the exception that caused the plexer to fail, if any.
+    /// Gets the exception that ended the connection, if any.
     /// </summary>
-    public Exception? GetPlexerException() => _plexerTask?.Exception?.GetBaseException();
+    /// <returns>
+    /// The first fault cause, the <see cref="ConnectionClosedException"/> itself on a clean peer close,
+    /// or <see langword="null"/> before an end or after a local disposal.
+    /// </returns>
+    public Exception? GetPlexerException() => _plexer.GetPlexerException();
 
     /// <summary>
-    /// Checks if the keepalive loop is healthy and running.
+    /// Checks if the keepalive loop is running on a live connection.
     /// </summary>
-    public bool IsKeepAliveHealthy() => _keepAliveTask is { IsCompleted: false };
+    /// <returns>
+    /// <see langword="true"/> while the keep-alive loop has not completed and <see cref="Completion"/> is still pending;
+    /// otherwise <see langword="false"/> (an idle loop exits quietly at its next tick or on disposal).
+    /// </returns>
+    public bool IsKeepAliveHealthy() => _keepAliveTask is { IsCompleted: false } && !Completion.IsCompleted;
 
     /// <summary>
     /// Gets the exception that caused the keepalive loop to fail, if any.
     /// </summary>
-    public Exception? GetKeepAliveException() => _keepAliveTask?.Exception?.GetBaseException();
+    /// <returns>
+    /// The underlying <see cref="ReplyTimeoutException"/> on a keep-alive reply timeout, the protocol error on a
+    /// keep-alive mismatch or decode failure, or <see langword="null"/> while running or after an external or local close.
+    /// </returns>
+    public Exception? GetKeepAliveException() => Plexer.ExtractException(_keepAliveTask);
 
     private async Task RunKeepAliveLoop(TimeSpan interval, CancellationToken cancellationToken)
     {
@@ -191,6 +216,21 @@ public sealed class PeerClient : IDisposable, IAsyncDisposable
         catch (OperationCanceledException)
         {
             // Expected during shutdown.
+        }
+        catch (ConnectionClosedException error) when (error.InnerException is not ReplyTimeoutException { Protocol: ProtocolType.KeepAlive })
+        {
+            // The connection already ended for another reason; stop the loop quietly.
+        }
+        catch (ConnectionClosedException)
+        {
+            // Keep-alive's own reply limit ended the connection; stay faulted so GetKeepAliveException reports the ReplyTimeoutException.
+            throw;
+        }
+        catch (Exception error)
+        {
+            // A keep-alive protocol error ends the connection (first cause wins) and keeps the loop faulted with that error.
+            _plexer.End(error);
+            throw;
         }
     }
 

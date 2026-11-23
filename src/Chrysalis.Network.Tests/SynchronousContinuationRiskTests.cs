@@ -205,7 +205,7 @@ public class SynchronousContinuationRiskTests(ITestOutputHelper output)
             await Task.WhenAll(continuation, drain).WaitAsync(Deadline);
             if (action == "dispose")
             {
-                _ = await Assert.ThrowsAsync<InvalidOperationException>(() => run.WaitAsync(Deadline));
+                await run.WaitAsync(Deadline);
             }
             else
             {

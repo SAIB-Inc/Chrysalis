@@ -10,7 +10,7 @@ namespace Chrysalis.Network.Tests;
 public sealed class N5LifecycleTests
 {
     /// <summary>A PeerClient over the bearer, started against the accept of B1CarbonVersionEqualityTests.cs:30 (version 14, magic 42).</summary>
-    private static async Task<PeerClient> StartedPeerAsync(SendBearer bearer, ManualClock clock, CancellationToken startup)
+    internal static async Task<PeerClient> StartedPeerAsync(SendBearer bearer, ManualClock clock, CancellationToken startup)
     {
         PeerClient client = PeerClient.CreateFromBearer(bearer);
         try
@@ -57,6 +57,7 @@ public sealed class N5LifecycleTests
         ManualClock clock,
         IAsyncDisposable client,
         Task start,
+        Task completion,
         Func<bool> isHealthy,
         Func<Exception?> getException)
     {
@@ -73,6 +74,8 @@ public sealed class N5LifecycleTests
             Assert.True(bearer.IsDisposed);
             Assert.False(isHealthy());
             Assert.Same(timeout, getException());
+            Assert.True(completion.IsFaulted);
+            Assert.Same(timeout, Assert.IsType<ConnectionClosedException>(completion.Exception!.InnerExceptions[0]).InnerException);
         }
         finally
         {
@@ -93,13 +96,13 @@ public sealed class N5LifecycleTests
             await using NodeClient client = NodeClient.CreateFromBearer(bearer);
             client.Replies.Clock = clock;
             client.ReplyTimeLimit = Timeout.InfiniteTimeSpan;
-            await AssertHandshakeTimeoutAsync(bearer, clock, client, client.StartAsync(2, CancellationToken.None), client.IsPlexerHealthy, client.GetPlexerException);
+            await AssertHandshakeTimeoutAsync(bearer, clock, client, client.StartAsync(2, CancellationToken.None), client.Completion, client.IsPlexerHealthy, client.GetPlexerException);
         }
         else
         {
             await using PeerClient client = PeerClient.CreateFromBearer(bearer);
             client.Replies.Clock = clock;
-            await AssertHandshakeTimeoutAsync(bearer, clock, client, client.StartAsync(42, TimeSpan.FromHours(1), CancellationToken.None), client.IsPlexerHealthy, client.GetPlexerException);
+            await AssertHandshakeTimeoutAsync(bearer, clock, client, client.StartAsync(42, TimeSpan.FromHours(1), CancellationToken.None), client.Completion, client.IsPlexerHealthy, client.GetPlexerException);
         }
     }
 
@@ -145,6 +148,11 @@ public sealed class N5LifecycleTests
             second.Replies.Clock = new ManualClock();
             _ = await Assert.ThrowsAnyAsync<OperationCanceledException>(() => second.StartAsync(2, cancelled));
             Assert.Empty(secondBearer.Output.Bytes);
+            Task start = second.StartAsync(2, CancellationToken.None);
+            await N5Wire.ReplyAsync(secondBearer, ProtocolType.Handshake, Convert.FromHexString("83011980148202f4"));
+            await start.WaitAsync(N5Wire.Deadline, CancellationToken.None);
+            Assert.True(second.IsPlexerHealthy());
+            Assert.NotNull(second.NegotiatedVersion);
         }
         else
         {
@@ -156,6 +164,11 @@ public sealed class N5LifecycleTests
             second.Replies.Clock = new ManualClock();
             _ = await Assert.ThrowsAnyAsync<OperationCanceledException>(() => second.StartAsync(42, TimeSpan.FromHours(1), cancelled));
             Assert.Empty(secondBearer.Output.Bytes);
+            Task start = second.StartAsync(42, TimeSpan.FromHours(1), CancellationToken.None);
+            await N5Wire.ReplyAsync(secondBearer, ProtocolType.Handshake, Convert.FromHexString("83010e84182af500f4"));
+            await start.WaitAsync(N5Wire.Deadline, CancellationToken.None);
+            Assert.True(second.IsPlexerHealthy());
+            Assert.NotNull(second.NegotiatedVersion);
         }
     }
 
@@ -260,9 +273,10 @@ public sealed class N5LifecycleTests
         Assert.Equal(TimeSpan.FromSeconds(60), timeout.Limit);
         await client.DisposeAsync();
         Assert.False(client.IsKeepAliveHealthy());
-        ConnectionClosedException keepAliveClosed = Assert.IsType<ConnectionClosedException>(client.GetKeepAliveException());
-        Assert.Same(timeout, keepAliveClosed.InnerException);
+        Assert.Same(timeout, client.GetKeepAliveException());
         Assert.Same(timeout, client.GetPlexerException());
+        Assert.True(client.Completion.IsFaulted);
+        Assert.Same(timeout, Assert.IsType<ConnectionClosedException>(client.Completion.Exception!.InnerExceptions[0]).InnerException);
     }
 
     [Fact]

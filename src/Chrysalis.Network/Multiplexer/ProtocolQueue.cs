@@ -18,6 +18,7 @@ internal sealed class ProtocolQueue(Demuxer owner, int? limit) : ChannelReader<R
     private ManualResetValueTaskSourceCore<ReadOnlyMemory<byte>> _read;
     private ManualResetValueTaskSourceCore<bool> _wait;
     private CancellationTokenRegistration _registration;
+    private CancellationToken _waitToken;
     private int _head;
     private int _waiting;
     private int _outstanding;
@@ -74,6 +75,7 @@ internal sealed class ProtocolQueue(Demuxer owner, int? limit) : ChannelReader<R
                 _read.Reset();
                 _read.RunContinuationsAsynchronously = true;
                 _waiting = _outstanding = ReadWaiter;
+                _waitToken = cancellationToken;
                 generation = ++_generation;
                 version = _read.Version;
             }
@@ -96,6 +98,7 @@ internal sealed class ProtocolQueue(Demuxer owner, int? limit) : ChannelReader<R
             _wait.Reset();
             _wait.RunContinuationsAsynchronously = true;
             _waiting = _outstanding = NotificationWaiter;
+            _waitToken = cancellationToken;
             generation = ++_generation;
             version = _wait.Version;
         }
@@ -114,17 +117,17 @@ internal sealed class ProtocolQueue(Demuxer owner, int? limit) : ChannelReader<R
     private void Register(int generation, CancellationToken token)
     {
         if (!token.CanBeCanceled) { return; }
-        CancellationTokenRegistration registration = token.UnsafeRegister(static state =>
+        CancellationTokenRegistration registration = token.UnsafeRegister(static (state, cancellation) =>
         {
-            (ProtocolQueue queue, int version, CancellationToken cancellation) = ((ProtocolQueue, int, CancellationToken))state!;
+            ProtocolQueue queue = (ProtocolQueue)state!;
             Delivery delivery;
             lock (queue._owner.Gate)
             {
-                if (queue._waiting == NoWaiter || queue._generation != version) { return; }
+                if (queue._waiting == NoWaiter || queue._waitToken != cancellation) { return; }
                 delivery = queue.TakeWaiter(default, new OperationCanceledException(cancellation));
             }
             delivery.Complete(false);
-        }, (this, generation, token));
+        }, this);
         bool keep;
         lock (_owner.Gate)
         {
@@ -162,6 +165,7 @@ internal sealed class ProtocolQueue(Demuxer owner, int? limit) : ChannelReader<R
         Delivery delivery = new(this, _waiting, item, error, _registration, !_ended || Occupancy != 0);
         _waiting = NoWaiter;
         _registration = default;
+        _waitToken = default;
         return delivery;
     }
 

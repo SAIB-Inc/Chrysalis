@@ -46,7 +46,7 @@ public sealed class DirectSendShutdownTests
             if (kind == "bearer fault")
             {
                 Assert.Same(injected, holder.InnerException);
-                Assert.Same(injected, await Assert.ThrowsAsync<IOException>(() => run!.WaitAsync(Deadline)));
+                Assert.Same(injected, (await Assert.ThrowsAsync<ConnectionClosedException>(() => run!.WaitAsync(Deadline))).InnerException);
             }
             else if (kind == "cancel run")
             {
@@ -99,7 +99,8 @@ public sealed class DirectSendShutdownTests
             Assert.True(cause is ObjectDisposedException or OperationCanceledException);
             foreach (Task pending in extra.Append(waiter)) { Assert.Same(cause, (await Closed(pending)).InnerException); }
             Exception? stopped = await Record.ExceptionAsync(() => run.WaitAsync(Deadline));
-            Assert.True(stopped is InvalidOperationException or OperationCanceledException);
+            if (cause is ObjectDisposedException) { Assert.Null(stopped); }
+            else { _ = Assert.IsAssignableFrom<OperationCanceledException>(stopped); }
             Assert.Equal(2, bearer.Output.Flushes);
         }
         finally
@@ -150,7 +151,7 @@ public sealed class DirectSendShutdownTests
             await bearer.Output.Ready.WaitAsync(TimeSpan.FromSeconds(5));
             await Task.WhenAll(Task.Run(plexer.Dispose), Task.Run(plexer.Dispose)).WaitAsync(TimeSpan.FromSeconds(5));
             await Task.WhenAll(producers).WaitAsync(TimeSpan.FromSeconds(5));
-            _ = await Assert.ThrowsAsync<InvalidOperationException>(() => run.WaitAsync(Deadline));
+            await run.WaitAsync(Deadline);
             Assert.False(senders.IsCancellationRequested);
             plexer.Dispose();
         }

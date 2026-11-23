@@ -133,6 +133,8 @@ public sealed class N5ReplyLimitTests
         await client.DisposeAsync();
         Assert.False(client.IsPlexerHealthy());
         Assert.Same(timeout, client.GetPlexerException());
+        Assert.True(client.Completion.IsFaulted);
+        Assert.Same(timeout, Assert.IsType<ConnectionClosedException>(client.Completion.Exception!.InnerExceptions[0]).InnerException);
     }
 
     [Fact]
