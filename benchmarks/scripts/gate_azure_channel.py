@@ -12,7 +12,7 @@ import time
 from urllib.parse import parse_qs
 
 from gate_azure_proof import ONCE, AzureError, storage_account
-from gate_azure_guard import (BOOT_MARGIN, COPY_END, POLL_MARGIN, RUN_COMMAND_SECONDS, WORKER_START,
+from gate_azure_guard import (BOOT_MARGIN, COPY_END, POLL_MARGIN, RUN_COMMAND_SECONDS,
                               GuardFailure, mark)
 from gate_azure_guest import (
     GUEST_ACTIONS, MAX_BLOB_BYTES, MAX_DIAGNOSTIC,
@@ -22,6 +22,7 @@ from gate_azure_guest import (
 STORAGE_API='2023-05-01'
 VM_API='2024-07-01'
 PUSH_SECONDS = 160
+MAX_STATUS_FAILURES = 3
 STATUS_SCRIPT = '#!/bin/bash\nexec 2>/dev/null\nexec /usr/bin/python3 /usr/local/sbin/chrysalis-run-channel compact\n'
 EXECUTION_STATES = frozenset({'Unknown', 'Pending', 'Running', 'Failed', 'Succeeded', 'TimedOut', 'Canceled'})
 BOOT_CHECKS = frozenset({'cloud-init', 'timer', 'service', 'next-elapse', 'user', 'ssh', 'qdisc', 'cleanup-check'})
@@ -45,8 +46,11 @@ account,key,name,rights,minutes=json.load(sys.stdin)
 print(generate_blob_sas(account,'payload',name,account_key=key,permission=rights,
     expiry=datetime.now(timezone.utc)+timedelta(minutes=minutes),protocol='https'))
 """
-    p = subprocess.run([str(az.executable.resolve().parent / 'python'), '-IBc', code],
-                       input=json.dumps([account, key, name, rights, minutes]), capture_output=True, text=True, timeout=12)
+    try:
+        p = subprocess.run([str(az.executable.resolve().parent / 'python'), '-IBc', code],
+                           input=json.dumps([account, key, name, rights, minutes]), capture_output=True, text=True, timeout=12)
+    except subprocess.TimeoutExpired:
+        raise GuardFailure('blob SAS generation timed out') from None
     token = p.stdout.strip()
     if p.returncode or not re.fullmatch(r'[A-Za-z0-9%=&+_.:/-]{40,318}', token):
         raise GuardFailure('blob SAS generation failed; details suppressed')
@@ -111,18 +115,24 @@ def _parse_guest_error(output):
     return None
 
 
+def _malformed_summary(message):
+    exc = GuardFailure(message)
+    exc.malformed_summary = True
+    return exc
+
+
 def get_summary(message):
     if not isinstance(message,str) or len(message)>4096:
-        raise GuardFailure('oversize or missing Run Command output')
+        raise _malformed_summary('oversize or missing Run Command output')
     lines=[line.removeprefix('CHRYSALIS:') for line in message.splitlines() if line.startswith('CHRYSALIS:')]
     if len(lines)!=1:
-        raise GuardFailure('missing compact Run Command result')
+        raise _malformed_summary('missing compact Run Command result')
     try:
         data = json.loads(lines[0])
         if not isinstance(data, dict):
             raise ValueError
     except ValueError:
-        raise GuardFailure('malformed compact Run Command result') from None
+        raise _malformed_summary('malformed compact Run Command result') from None
     return data
 
 
@@ -262,21 +272,30 @@ def run_channel(draw, inputs, evidence):
             raise GuardFailure('guest did not prove a timely worker start')
         interval = max(300, draw.cutoff / 18)
         wake = time.time() + interval
+        status_failures = 0
         for number in range(19):
             time.sleep(max(0, min(wake, draw.work_end) - time.time()))
             if time.time() >= draw.work_end:
                 break
             try:
                 result = command(draw, f'status-{number:02}', STATUS_SCRIPT, min(draw.work_end, time.time() + RUN_COMMAND_SECONDS + 15))
-            except GuardFailure:
+            except (AzureError, GuardFailure) as exc:
                 if time.time() >= draw.work_end:
                     break  # At C, transfer does not wait for a status answer.
-                raise
+                if getattr(exc, 'malformed_summary', False):
+                    raise
+                status_failures += 1
+                if status_failures >= MAX_STATUS_FAILURES:
+                    raise
+                print(f'Azure status-{number:02} transient failure ({status_failures}/{MAX_STATUS_FAILURES}); continuing', flush=True)
+                wake = max(wake + interval, time.time() + interval)
+                continue
             if result == {'done': True}:
                 draw.worker_done = True
                 break
             if result != {'done': False}:
                 raise GuardFailure('unexpected compact status')
+            status_failures = 0
             wake += interval
     except Exception:
         failed_step = getattr(draw, 'step', '')

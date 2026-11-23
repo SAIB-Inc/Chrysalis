@@ -167,8 +167,11 @@ exit 1
 '''
     encoded = base64.b64encode(body.encode('utf-16le')).decode('ascii')
     launcher = f"Start-Process -FilePath '{POWERSHELL.name}' -WindowStyle Hidden -ArgumentList '-NoProfile -NonInteractive -EncodedCommand {encoded}'"
-    result = subprocess.run([str(POWERSHELL), '-NoProfile', '-NonInteractive', '-Command', launcher], timeout=12,
-                            stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    try:
+        result = subprocess.run([str(POWERSHELL), '-NoProfile', '-NonInteractive', '-Command', launcher], timeout=12,
+                                stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    except subprocess.TimeoutExpired:
+        raise GuardFailure('Windows watchdog launch timed out; no ARM writes') from None
     if result.returncode:
         raise GuardFailure('Windows watchdog launch failed; no ARM writes')
     limit = time.monotonic()+15

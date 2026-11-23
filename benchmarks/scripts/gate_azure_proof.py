@@ -18,6 +18,8 @@ TRIAL_GROUP = re.compile(r'chrysalis-probe-[0-9a-f]{16}-[1-4]')
 TRIAL_CAP = 0.9725
 TRIAL_LAST_DAY = 20261119
 ONCE = (0,)
+READ_WAITS = (2, 5)
+TRANSIENT_READ_ERRORS = ('timeout', 'TooManyRequests', 'ServiceUnavailable', 'InternalServerError', 'RetryableError')
 # REST uses the raw azure.cli.core.util.send_raw_request path instead of an Azure
 # Resource Management SDK client, so its provider auto-registration policy is
 # absent. The command allowlist below is the enforcement, not a config guess.
@@ -99,7 +101,7 @@ class Az:
             raise AzureError('Azure CLI version unavailable')
         return version
 
-    def rest(self, method, path, *, body=None, query=None, timeout=15, fence_fd=None, stdin_body=None, waits=()):
+    def rest(self, method, path, *, body=None, query=None, timeout=15, fence_fd=None, stdin_body=None, waits=(), until=None):
         url = urlsplit(ARM + path)
         if url.netloc != 'management.azure.com' or not path.startswith(f'/subscriptions/{self.subscription}/') or \
                 not GUID.fullmatch(self.subscription or '') or '\\' in url.path or '/..' in url.path or '%' in url.path:
@@ -130,10 +132,13 @@ class Az:
         if query:
             args += ['--query', query]
         for wait in (*waits, None):
+            if until is not None and time.time() >= until:
+                raise AzureError('timeout')
+            call_timeout = timeout if until is None else min(timeout, max(1.0, until - time.time()))
             try:
-                return self._call(args, timeout=timeout, fence_fd=fence_fd, stdin_body=stdin_body)
+                return self._call(args, timeout=call_timeout, fence_fd=fence_fd, stdin_body=stdin_body)
             except AzureError as exc:
-                if wait is None or str(exc) not in ('timeout', 'TooManyRequests'):
+                if wait is None or str(exc) not in TRANSIENT_READ_ERRORS or (until is not None and time.time() + wait >= until):
                     raise
                 if wait:
                     time.sleep(wait)
@@ -149,11 +154,11 @@ COUNTS = {'disks': ('Compute','disks','2024-03-02'), 'snapshots': ('Compute','sn
                                                         'NSGs':'networkSecurityGroups'}.items()}}
 
 
-def inventory(az, *, live=()):
+def inventory(az, *, live=(), until=None):
     scope = '/subscriptions/' + az.subscription
 
     def listing(path, selector):
-        page = az.rest('get', scope + path, query='{items:value[].' + selector + ',paginated:nextLink!=`null`}')
+        page = az.rest('get', scope + path, query='{items:value[].' + selector + ',paginated:nextLink!=`null`}', waits=READ_WAITS, until=until)
         if page.get('paginated') is not False or not isinstance(page.get('items'), list):
             raise AzureError('Inventory response incomplete')
         return page['items']
@@ -171,7 +176,7 @@ def inventory(az, *, live=()):
             # The typed endpoints may expose a soon-to-disappear resource before /resources does.
             counts[resource] = sum(group_name(r) not in live for r in listing(path[len(scope):], '{id:id}'))
         else:
-            page = az.rest('get', path, query='{count:length(value),paginated:nextLink!=`null`}')
+            page = az.rest('get', path, query='{count:length(value),paginated:nextLink!=`null`}', waits=READ_WAITS, until=until)
             if page.get('paginated') is not False or type(page.get('count')) is not int:
                 raise AzureError('Typed inventory response incomplete')
             counts[resource] = page['count']
@@ -184,12 +189,12 @@ def inventory(az, *, live=()):
                 leftovers=counts, identitySha256=fingerprint(az.subscription, groups[0]['id'], items[0]['id'])), group_name(groups[0])
 
 
-def run_role_count(az, groups):
+def run_role_count(az, groups, *, until=None):
     scope = '/subscriptions/' + az.subscription
     if any(not GROUP.fullmatch(group) for group in groups):
         raise AzureError('Invalid run group for role proof')
     page = az.rest('get', scope + '/providers/Microsoft.Authorization/roleAssignments?api-version=2022-04-01',
-                   query='{scopes:value[].properties.scope,expected:length(value),paginated:nextLink!=`null`}')
+                   query='{scopes:value[].properties.scope,expected:length(value),paginated:nextLink!=`null`}', waits=READ_WAITS, until=until)
     scopes = page['scopes']
     if page.get('paginated') is not False or page['expected'] != len(scopes) or any(not isinstance(x, str) for x in scopes):
         raise AzureError('Role inventory incomplete')
@@ -197,11 +202,11 @@ def run_role_count(az, groups):
     return sum(any(s.lower() == root or s.lower().startswith(root + '/') for root in roots) for s in scopes)
 
 
-def proof(az, baseline, groups=(), *, live=()):
-    current, baseline_group = inventory(az, live=live)
+def proof(az, baseline, groups=(), *, live=(), until=None):
+    current, baseline_group = inventory(az, live=live, until=until)
     original = json.loads(Path(baseline).read_text())
     original.get('leftovers', {}).setdefault('storageAccounts', 0)
-    roles = run_role_count(az, [group for group in groups if group not in live])
+    roles = run_role_count(az, [group for group in groups if group not in live], until=until)
     if current != original or roles:
         raise AzureError('Exact baseline identity differs or run roles remain')
     summary = {key: value for key, value in current.items() if key != 'identitySha256'}

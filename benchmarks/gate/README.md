@@ -437,6 +437,8 @@ Each attempt has its own tagged resource group, user-assigned identity with Cont
 | Worker cutoff / verified copy | C / C + 200 s |
 | WSL cleanup / guest timer | G − 70 s / G |
 | Platform shutdown schedule | G rounded up to the next UTC minute |
+| Transient read / status tolerances | Read-only ARM preflight/inventory/proof/permissions GETs retry twice (`2 s`, `5 s`, bounded by cleanup deadline on final proof) and read-only `waits=ONCE`/cost retries use the same transient error set (mutations never retry); status polls tolerate up to 2 consecutive failures with a fixed log line (3 aborts; malformed `CHRYSALIS:` output aborts immediately) |
+| Pre-ready re-draw & region alternation | Up to 3 clean pre-ready re-draws per session (including pre-group-PUT); on `eastus2`-sealed plans, provisioning failures (`put virtualMachines`, `wait virtualMachines`, `session-window`) alternate `eastus2` <-> `eastus` once settled, while boot/init/pre-group failures keep the draw's primary region |
 | Escalation / reserve ends | G + 5 min / G + 15 min |
 
 Before the keeper callback there are no ARM writes. The PC is the only deleter until the guest timer and delete permission are verified at init. A crash before a platform schedule exists (or a schedule that does not deallocate) can leave compute billing until recovery: around $11.82/day fixed, plus disk transactions. Conditional on the schedule firing and deallocating, the maximum compute before it fires is about $0.97, then around $0.20/day fixed until deletion. The earlier no-VM gap can leave the IPv4 charge around $0.12/day. A successful schedule readback is not evidence of deallocation. Keep both cleanup paths and the ledger-first resume check.
