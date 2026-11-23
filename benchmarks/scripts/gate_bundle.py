@@ -572,6 +572,16 @@ def retry_file(path):
 
 
 MAX_PRE_READY_REDRAWS = 3
+PROVISION_FAILURE_STEPS = frozenset({'put virtualMachines', 'wait virtualMachines', 'session-window'})
+ALTERNATE_REGION = {'eastus2': 'eastus', 'eastus': 'eastus2'}
+
+
+def next_draw_region(region, step, *, primary=None, plan_region='eastus2'):
+    if plan_region != 'eastus2':
+        return plan_region
+    if step in PROVISION_FAILURE_STEPS and region in ALTERNATE_REGION:
+        return ALTERNATE_REGION[region]
+    return region if primary is None else primary
 
 
 def _pre_ready_note_ok(note, plan, expected_booked):
@@ -579,7 +589,10 @@ def _pre_ready_note_ok(note, plan, expected_booked):
     guard = note / '.guard'
     if not (note.is_dir() and not note.is_symlink() and guard.is_dir() and not guard.is_symlink()):
         return False
-    if not all((guard / n).is_file() and not (guard / n).is_symlink() for n in ('group-put-sent', 'group-put-confirmed', 'done')):
+    if not ((guard / 'done').is_file() and not (guard / 'done').is_symlink()):
+        return False
+    group_marks = (guard / 'group-put-sent', guard / 'group-put-confirmed')
+    if not (all(p.is_file() and not p.is_symlink() for p in group_marks) or not any(os.path.lexists(p) for p in group_marks)):
         return False
     if any(os.path.lexists(guard / n) for n in ('guest-ready', 'failed', 'urgent', 'provisional-reported',
                                                 'escalated', 'alerts.log', 'watchdog-proof.json')):
@@ -628,11 +641,71 @@ def _pre_ready_settled(directory, local, go, number, phase, draw, app, fallback,
     return True
 
 
-def draw_record(machine, number, phase, draw, app, decision, fallback=None):
+def expected_draw_region(directory, ledger, go, session, plan, phase='first', *, draw=None):
+    if ledger.data.get('costStops') or os.path.lexists(ledger.cost_latch) or any(e.get('state') != 'settled' for e in ledger.attempts.values()):
+        return None
+    by_draw, other_redraws = {}, 0
+    for group, entry in ledger.attempts.items():
+        if (entry.get('go'), entry.get('session'), entry.get('directory')) != (go, session, directory.name):
+            continue
+        if entry.get('phase') != phase:
+            if entry.get('exitCode') == 2:
+                other_redraws += 1
+            continue
+        dnum = entry.get('draw')
+        if type(dnum) is not int or dnum < 1:
+            return None
+        by_draw.setdefault(dnum, []).append((entry.get('fallbackOf') is not None, group, entry))
+    region, redraws, last_draw = plan['region'], other_redraws, 0
+    ordered = sorted(by_draw)
+    for idx, dnum in enumerate(ordered):
+        if dnum != last_draw + 1:
+            return None
+        last_draw = dnum
+        entries = sorted(by_draw[dnum])
+        if len(entries) > 2:
+            return None
+        _, group, entry = entries[-1]
+        used, code = entry.get('region'), entry.get('exitCode')
+        if used not in ALTERNATE_REGION:
+            return None
+        if len(entries) == 2:
+            _, pgroup, pentry = entries[0]
+            if (pentry.get('fallbackOf') is not None or entry.get('fallbackOf') != pgroup
+                    or pentry.get('exitCode') != 6 or pentry.get('region') != 'eastus2' or used != 'eastus'
+                    or region != 'eastus2'):
+                return None
+        elif entry.get('fallbackOf') is not None or used != region:
+            return None
+        if code == 2:
+            note = directory / 'time/runs' / group
+            if redraws >= MAX_PRE_READY_REDRAWS or not _pre_ready_note_ok(note, plan, entry.get('booked')):
+                return None
+            if len(entries) == 2 and not _pre_ready_note_ok(directory / 'time/runs' / pgroup, plan, pentry.get('booked')):
+                return None
+            region = next_draw_region(used, (note_json(note, 'pre-ready-failure.json') or {}).get('step'), primary=region, plan_region=plan['region'])
+            redraws += 1
+        elif code == 5:
+            pass  # Probe rejection keeps current_region (not a capacity fallback's eastus).
+        elif code == 0 and draw is None and idx == len(ordered) - 1:
+            pass
+        else:
+            return None
+    return None if draw is not None and draw != last_draw + 1 else region
+
+
+def draw_record(machine, number, phase, draw, app, decision, fallback=None, *,
+                region=None, pre_ready_step=None, region_reason=None):
     result = dict({key: value for key, value in machine.items() if key not in ('probeRecords', 'applied')},
                 session=number, phase=phase, draw=draw, app=app, decision=decision)
     if fallback is not None:
         result['fallbackOf'] = fallback
+    if region is not None:
+        result.setdefault('region', region)
+    if pre_ready_step is not None:
+        result['preReadyStep'] = pre_ready_step
+    if region_reason is not None:
+        result['regionReason'] = region_reason
     return result
 
 
@@ -905,7 +978,8 @@ def checked_azure_go(directory, go):
             raw_s = plan.get('rawSeconds')
             timing.require(plan['destroyGuardSeconds'] - plan['measurementCutoffSeconds'] == 345 and
                            828 <= plan['destroyGuardSeconds'] <= timing.GUARD and rule['maxDraws'] <= 6 and
-                           type(raw_s) in (int, float) and math.isfinite(raw_s) and raw_s >= 0,
+                           type(raw_s) in (int, float) and math.isfinite(raw_s) and raw_s >= 0 and
+                           plan['measurementCutoffSeconds'] == math.ceil(1.15 * (420 + raw_s)),
                            'Invalid Azure session windows')
             results_limits(plan, strict=True)
     timing.require(set((directory / 'input/azure').iterdir()) == {directory / 'input/azure' / name for name in HOST_FILES['azure']}
@@ -983,7 +1057,7 @@ def held_azure_go(directory, context):
     return directory, seal, go
 
 
-def launch_azure(host, directory, go, number, phase, draw, plan, relative, first, context, dispatch):
+def launch_azure(host, directory, go, number, phase, draw, plan, relative, first, context, dispatch, *, region=None):
     env = session.environment({})
     env.update(CHRYSALIS_GATE_LOCAL=os.environ['CHRYSALIS_GATE_LOCAL'], GATE_BUNDLE=relative)
     if first:
@@ -1005,8 +1079,9 @@ def launch_azure(host, directory, go, number, phase, draw, plan, relative, first
             status = owned_call(cmd, env=env, pass_fds=fds, stdout=log, stderr=subprocess.STDOUT)
         return status, group
 
-    status, group = attempt(plan['region'])
-    if status == 6 and plan['region'] == 'eastus2':
+    primary = plan['region'] if region is None else region
+    status, group = attempt(primary)
+    if status == 6 and primary == 'eastus2':
         env.pop('GATE_FIRST_GO', None)
         status, app = attempt('eastus', group)
         if not (directory / 'time/runs' / app).exists():
@@ -1123,11 +1198,13 @@ def fly_sessions(directory, seal, go, phases, index, *, dispatch=None, context=N
             if azure:
                 notice = azure_notice(local, seal, go, plan, number, phase)
                 session.save(directory / 'time' / f'{number}-{phase}-reservation.json', notice)
+            current_region, region_reason = plan.get('region'), None
             for draw in range(1, rule['maxDraws'] + 1):
                 fallback = None
                 if azure:
+                    extra = {'region': current_region} if current_region != plan.get('region') else {}
                     status, app, fallback = launch_azure(host, directory, go, number, phase, draw, plan, relative,
-                                                          first_launch, context, dispatch)
+                                                          first_launch, context, dispatch, **extra)
                 else:
                     app = 'chrysalis-gate-' + dt.datetime.now(dt.timezone.utc).strftime('%Y%m%dt%H%M%S') + '-' + secrets.token_hex(4)
                     env = session.environment({})
@@ -1155,12 +1232,20 @@ def fly_sessions(directory, seal, go, phases, index, *, dispatch=None, context=N
                     machine['invalid'] = 'session invalid: launcher status contradicts probe'
                 redraw = (azure and status == 2 and pre_ready_redraws < MAX_PRE_READY_REDRAWS and draw < rule['maxDraws']
                           and _pre_ready_settled(directory, local, go, number, phase, draw, app, fallback, plan))
+                pre_step = (note_json(note, 'pre-ready-failure.json') or {}).get('step') if redraw else None
+                actual_region = machine.get('region') or current_region
                 decision = 'invalid-pre-ready' if redraw else 'invalid' if machine['invalid'] else 'rejected' if rejected else 'kept'
-                draws.append(draw_record(machine, number, phase, draw, app, decision, fallback))
+                draws.append(draw_record(machine, number, phase, draw, app, decision, fallback,
+                                         region=actual_region if azure else None, pre_ready_step=pre_step,
+                                         region_reason=region_reason if azure else None))
                 session.save(directory / 'time/draws.json', draws)
                 if redraw:
                     pre_ready_redraws += 1
+                    next_region = next_draw_region(actual_region, pre_step, primary=current_region, plan_region=plan['region'])
+                    region_reason = 'provision-alternation' if pre_step in PROVISION_FAILURE_STEPS and next_region != actual_region else None
+                    current_region = next_region
                     continue
+                region_reason = None
                 if decision == 'rejected':
                     if not azure:
                         spent += machine['bookedUsd']

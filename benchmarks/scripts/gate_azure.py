@@ -31,7 +31,7 @@ from gate_azure_guest import FETCH_STAGES, LOG_COUNTS, REFUSAL_REASONS
 from gate_azure_guard import (ALERT_TAIL, COPY_END, RESERVE_TAIL, WATCH_MARGIN, GuardFailure,
                               alert, arm_native, check_context, cleanup_lease, latest_worker_start_seconds, mark, mutation,
                               process_id, provision_seconds, retire, session_work_seconds, start_plan, stop_paused_driver, wsl_context)
-from gate_azure_proof import GROUP, GUID, ONCE, Az, AzureError, cost_readback, expected_posted, fingerprint, proof
+from gate_azure_proof import GROUP, GUID, ONCE, READ_WAITS, Az, AzureError, cost_readback, expected_posted, fingerprint, proof
 
 from gate_time import PROVIDERS
 
@@ -67,7 +67,7 @@ def matches(permissions, action):
 
 
 def permissions(az, scope):
-    info = az.rest('get', scope + '/providers/Microsoft.Authorization/permissions?api-version=2022-04-01', waits=ONCE)
+    info = az.rest('get', scope + '/providers/Microsoft.Authorization/permissions?api-version=2022-04-01', waits=READ_WAITS)
     if info.get('nextLink'):
         raise GuardFailure('incomplete Azure permissions response')
     return {action: matches(info['value'], action) for action in ('Microsoft.Authorization/roleAssignments/write',
@@ -82,7 +82,7 @@ def preflight(az, baseline, region, *, version=None, groups=()):
         raise GuardFailure('Azure CLI version changed since seal')
     sid = az.subscription
     states = [az.rest('get', f'/subscriptions/{sid}/providers/{name}?api-version=2021-04-01',
-                      query='registrationState') for name in REQUIRED_PROVIDERS]
+                      query='registrationState', waits=READ_WAITS) for name in REQUIRED_PROVIDERS]
     if states != ['Registered'] * len(REQUIRED_PROVIDERS):
         raise GuardFailure('Required provider not already Registered; no ARM writes')
     preview = permissions(az, '/subscriptions/' + sid)
@@ -95,13 +95,13 @@ def preflight(az, baseline, region, *, version=None, groups=()):
 
 def available(az, region):
     skus = az.rest('get', f'/subscriptions/{az.subscription}/providers/Microsoft.Compute/locations/{region}/vmSizes?api-version={API_VM}',
-                   query=f"value[?name=='{SIZE}'].name")
+                   query=f"value[?name=='{SIZE}'].name", waits=READ_WAITS)
     # This reports the size in the region; the VM PUT is the capacity check.
     if skus != [SIZE]:
         return None
     publisher, offer, sku, version = IMAGE.split(':')
     path = f'/subscriptions/{az.subscription}/providers/Microsoft.Compute/locations/{region}/publishers/{publisher}/artifacttypes/vmimage/offers/{offer}/skus/{sku}/versions/{version}'
-    image = az.rest('get', path+'?api-version='+API_VM, query='name')
+    image = az.rest('get', path+'?api-version='+API_VM, query='name', waits=READ_WAITS)
     return image
 
 
@@ -137,8 +137,11 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from cryptography.hazmat.primitives.serialization import Encoding,PublicFormat
 print(Ed25519PrivateKey.generate().public_key().public_bytes(Encoding.OpenSSH,PublicFormat.OpenSSH).decode('ascii'))
 '''
-    result=subprocess.run([sys.executable,'-IBc',source],stdin=subprocess.DEVNULL,stdout=subprocess.PIPE,
-                          stderr=subprocess.DEVNULL,check=False,timeout=10,text=True)
+    try:
+        result=subprocess.run([sys.executable,'-IBc',source],stdin=subprocess.DEVNULL,stdout=subprocess.PIPE,
+                              stderr=subprocess.DEVNULL,check=False,timeout=10,text=True)
+    except subprocess.TimeoutExpired:
+        raise GuardFailure('throwaway provisioning public key generation timed out') from None
     public=result.stdout.strip()
     if result.returncode or not re.fullmatch(r'ssh-ed25519 [A-Za-z0-9+/]{68}',public):
         raise GuardFailure('throwaway provisioning public key generation failed')
@@ -329,6 +332,8 @@ class Draw:
             raise GuardFailure('sealed plan missing valid rawSeconds')
         try:
             wait_for(check, self.provision_deadline, label='Azure provision')
+            if time.time() > self.provision_deadline:
+                raise GuardFailure('Azure provision deadline reached')
         except GuardFailure as exc:
             if path == self.path('Compute', 'virtualMachines') and str(exc) == 'Azure provision deadline reached':
                 self._diag_vm(path, api)
@@ -838,7 +843,7 @@ def one_attempt(az, local, ledger, seal, go, directory, plan, group, region, inp
                 # Do not leave early merely because the service accepted DELETE.
                 if (guard / 'group-put-sent').exists():
                     draw.delete(draw.deadline)
-                independent, _ = proof(az, baseline, ledger.attempts)
+                independent, _ = proof(az, baseline, ledger.attempts, until=draw.deadline)
                 ended = time.time()
                 if ended > draw.deadline:
                     raise Refusal('Cleanup reserve exhausted without timely proof')
@@ -1002,7 +1007,7 @@ def daily_cost(directory, local):
 
 
 def launch(args):
-    from gate_bundle import checked_azure_local
+    from gate_bundle import checked_azure_local, expected_draw_region
     from gate_fly_guard import verified_launch_inputs
     from gate_azure_payload import verify_inputs
     import gate
@@ -1022,14 +1027,21 @@ def launch(args):
     if not args.dry_run:
         authorize_dispatch(directory, info['go'], dispatch, not (directory / 'time/launch-started.json').is_file())
     inputs = verify_inputs(directory, seal, plan, info)
-    if args.region == 'eastus' and plan['region'] != 'eastus':
+    if args.fallback_of is not None:
+        if args.region != 'eastus' or plan['region'] == 'eastus':
+            raise Refusal('Unsealed region or unexpected fallback')
         ledger = Ledger(local)
         previous = ledger.attempts.get(args.fallback_of, {})
         if (previous.get('exitCode'), previous.get('session'), previous.get('draw'), previous.get('go'), previous.get('phase')) != (
                 6, args.session, args.draw, info['go'], args.phase) or previous.get('region') != 'eastus2' or previous.get('fallbackOf') is not None:
             raise Refusal('East US fallback requires the same depleted primary draw')
-    elif args.region != plan['region'] or args.fallback_of is not None:
-        raise Refusal('Unsealed region or unexpected fallback')
+    elif args.dry_run:
+        if args.region != plan['region']:
+            raise Refusal('Unsealed region or unexpected fallback')
+    elif args.region != plan['region'] or args.draw > 1:
+        ledger = Ledger(local, read_only=True)
+        if expected_draw_region(directory, ledger, info['go'], args.session, plan, args.phase, draw=args.draw) != args.region:
+            raise Refusal('Unsealed region or unexpected fallback')
     if args.dry_run:
         log(f"Azure attempt reservation ${seals_reservations(dict(seal, timePlans=[plan]))[0]:.4f}")
         return 0
