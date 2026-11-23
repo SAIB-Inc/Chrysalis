@@ -14,8 +14,11 @@ public sealed class ProviderIntegrationTests
     /// <summary>Checks the real Ouroboros provider's parameters against the same node's CLI.</summary>
     [IntegrationFact([Env.Socket, Env.Magic, Env.Cli, Env.NodeVersion, Env.Output])]
     [Trait("Category", "Integration")]
-    public Task OuroborosParametersMatchCli() =>
-        MatchesCliAsync("ouroboros", new Ouroboros(Env.Required(Env.Socket), Env.NetworkMagic).GetParametersAsync);
+    public async Task OuroborosParametersMatchCli()
+    {
+        await using Ouroboros provider = new(Env.Required(Env.Socket), Env.NetworkMagic);
+        await MatchesCliAsync("ouroboros", provider.GetParametersAsync);
+    }
 
     /// <summary>Checks the real Kupmios provider's parameters against the same node's CLI.</summary>
     [IntegrationFact([Env.Socket, Env.Magic, Env.Cli, Env.NodeVersion, Env.Output, Env.KupoUrl, Env.OgmiosUrl])]

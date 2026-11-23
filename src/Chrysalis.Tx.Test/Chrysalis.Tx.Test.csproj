@@ -18,6 +18,7 @@
 
   <ItemGroup>
     <Compile Include="../Chrysalis.Codec.Test/AllocationAssert.cs" Link="AllocationAssert.cs" />
+    <Compile Include="../Chrysalis.Network.Tests/ManualClock.cs" Link="ManualClock.cs" />
     <None Include="../Chrysalis.Network.Tests/Fixtures/Preprod/current-protocol-parameters.json"
           Link="TestData/cli/inputs/g1/current-protocol-parameters.json" CopyToOutputDirectory="PreserveNewest" />
     <None Include="../Chrysalis.Network.Tests/Fixtures/Preprod/wire/c1-in-p7-007.cbor"

@@ -1,6 +1,7 @@
 using System.Collections;
 using System.Net;
 using System.Text.Json;
+using System.Threading.Channels;
 using Chrysalis.Tx.Providers;
 using SAIB.Cbor;
 using Xunit;
@@ -292,5 +293,47 @@ public class ProviderHttpTests
         Assert.False(error.IsTransient);
         Assert.Contains("unusable response", error.Message, StringComparison.Ordinal);
         Assert.Null(error.InnerException);
+    }
+
+    [Fact]
+    public async Task LateCancellationAfterSubmitJsonBodyReturnsResult()
+    {
+        using CancellationTokenSource caller = new(TimeSpan.FromSeconds(10));
+        byte[] payload = "\"accepted-tx-id\""u8.ToArray();
+        int step = 0;
+        using StubBody body = new(async (buffer, _) =>
+        {
+            if (step++ == 0)
+            {
+                payload.CopyTo(buffer.Span);
+                return payload.Length;
+            }
+            await caller.CancelAsync();
+            return 0;
+        });
+        using StubHttpHandler stub = new(_ => new(HttpStatusCode.OK) { Content = new StreamContent(body) });
+        using HttpClient client = new(stub, disposeHandler: false) { BaseAddress = new("https://stub.test/") };
+        using HttpRequestMessage request = new(HttpMethod.Post, "submit");
+        ProviderHttp http = new(client, "Test", []);
+        string result = await http.SubmitAsync(request, "SubmitTransactionAsync",
+            (response, ct) => http.ReadJsonAsync<string>(response, "SubmitTransactionAsync", ct), jsonRpc: false, caller.Token);
+        Assert.Equal("accepted-tx-id", result);
+        Assert.True(caller.IsCancellationRequested);
+        Assert.True(body.WasDisposed);
+    }
+
+    [Theory]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    public void ChannelClosedWithoutInnerIsTransientAndWithNonTransientInnerIsNot(bool hasInner, bool expectedTransient)
+    {
+        ChannelClosedException error = hasInner
+            ? new ChannelClosedException(new InvalidDataException("x"))
+            : new ChannelClosedException();
+        ProviderException failure = Assert.IsType<ProviderException>(
+            ProviderHttp.TransportFailure("Ouroboros", "GetParametersAsync", error, CancellationToken.None));
+        Assert.Equal(expectedTransient, failure.IsTransient);
+        Assert.Empty(failure.Detail);
+        Assert.Null(failure.InnerException);
     }
 }

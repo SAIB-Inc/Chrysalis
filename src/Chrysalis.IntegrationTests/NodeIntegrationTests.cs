@@ -297,7 +297,7 @@ public sealed class NodeIntegrationTests
         string reason = response.Describe();
         Assert.Contains(capturedReason, reason, StringComparison.Ordinal);
         Assert.Contains(capturedReason, cli, StringComparison.Ordinal);
-        Ouroboros provider = new(Env.Required(Env.Socket), Env.NetworkMagic);
+        await using Ouroboros provider = new(Env.Required(Env.Socket), Env.NetworkMagic);
         ProviderException failure = await Assert.ThrowsAsync<ProviderException>(() =>
             provider.SubmitTransactionAsync(ITransaction.Read(transaction, Era.Conway), deadline.Token));
         Assert.Equal("Ouroboros SubmitTransactionAsync: transaction rejected", failure.Message);

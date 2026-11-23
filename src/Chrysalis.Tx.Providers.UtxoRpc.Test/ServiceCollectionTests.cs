@@ -78,6 +78,31 @@ public sealed class ServiceCollectionTests
         _ = Assert.Throws<ArgumentNullException>(() => new ServiceCollection().AddUtxoRpcProvider(null!));
     }
 
+    /// <summary>AddCardanoProvider registers Ouroboros as a singleton whose ReplyTimeLimit can be changed without opening a socket and disposes it with the container.</summary>
+    /// <returns>A task for disposing the service provider.</returns>
+    [Fact]
+    public async Task AddCardanoProviderOuroborosSingletonSupportsReplyTimeLimitAndDisposal()
+    {
+        IConfiguration configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["Provider"] = "Ouroboros",
+            ["NetworkType"] = "Mainnet",
+            ["OuroborosSocketPath"] = "missing-test-node.sock",
+        }).Build();
+        ServiceCollection services = new();
+        _ = services.AddCardanoProvider(configuration);
+        Ouroboros ouroboros;
+        await using (ServiceProvider serviceProvider = services.BuildServiceProvider())
+        {
+            ouroboros = (Ouroboros)serviceProvider.GetRequiredService<ICardanoDataProvider>();
+            Assert.Same(ouroboros, serviceProvider.GetRequiredService<ICardanoDataProvider>());
+            Assert.Equal(TimeSpan.FromSeconds(180), ouroboros.ReplyTimeLimit);
+            ouroboros.ReplyTimeLimit = Timeout.InfiniteTimeSpan;
+            Assert.Equal(Timeout.InfiniteTimeSpan, ((Ouroboros)serviceProvider.GetRequiredService<ICardanoDataProvider>()).ReplyTimeLimit);
+        }
+        _ = await Assert.ThrowsAsync<ObjectDisposedException>(() => ouroboros.GetParametersAsync());
+    }
+
     private static IConfiguration Configuration(string endpoint) => new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
     {
         ["UtxoRpcEndpoint"] = endpoint,
