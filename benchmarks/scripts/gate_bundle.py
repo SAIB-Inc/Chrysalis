@@ -119,10 +119,10 @@ def micro_process_seconds(seconds, observations):
     return max(2, seconds) + 240 * max(item['nsPerBlock'] * item['blocks'] / 1e9 for item in observations)
 
 
-def calibrate_micro_warm(observations, invocations):
+def calibrate_micro_warm(observations, invocations, target=MICRO_WARM_PASS_SECONDS):
     warm = st.median(item['nsPerBlock'] * item['blocks'] / 1e9 for item in observations)
     timing.require(math.isfinite(warm) and warm > 0, 'Invalid micro warm sizing')
-    return warm, max(1, math.ceil(invocations * MICRO_WARM_PASS_SECONDS / warm))
+    return warm, max(1, math.ceil(invocations * target / warm))
 
 
 def micro_warm_process_seconds(seconds, warm, inv0, invocations):

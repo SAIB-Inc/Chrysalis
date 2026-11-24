@@ -449,10 +449,18 @@ def plan_rows(rows, config):
 def time_plans(seal):
     config, mode = seal['gated'], seal['mode']
     selected = plan_rows(seal['rows'], config)
+    targets = config['time'].get('releaseWarmPass', {})  # main 24 Nov 23:4x: release mode only, the same target on both sides
+    require(isinstance(targets, dict) and all(name in config['time']['required'] and name.startswith('time/micro-') and isinstance(v, dict)
+            and v.keys() == {'seconds', 'chargeSeconds'} and type(v['seconds']) in (int, float) and 0 < v['seconds'] <= 1 and type(v['chargeSeconds']) is int
+            and v['chargeSeconds'] >= config['time'].get('chargeSeconds', {}).get(name, 0) for name, v in targets.items()), 'Invalid release warm-pass target')
     if seal['noiseRecords']:
         selected = [dict(row, aPairs=max(16, row.get('aPairs', 0)), bPairs=0,
                          sides=dict(baseline=row['sides']['baseline'], candidate=row['sides']['baseline']))
                     for row in selected if row['noise'] is None]
+    elif mode == 'release':
+        for row in [item for item in selected if item['id'] in targets]:
+            row.update(chargeSeconds=max(timing.charges(row, prelude=True), targets[row['id']]['chargeSeconds']),  # the plan charge is checked first
+                       job=dict(row['job'], microWarmPassSeconds=targets[row['id']]['seconds']))
     groups = [[row] for row in selected] if seal['sessionPerRow'] else [selected]
     plans = [plan for group in groups for plan in timing.size_sessions(
         group, 'change' if seal['noiseRecords'] else mode, option=config['time']['option'],
