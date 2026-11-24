@@ -14,6 +14,7 @@ public static class SlotUtil
     /// </summary>
     /// <param name="networkType">The Cardano network type.</param>
     /// <returns>The slot network configuration.</returns>
+    /// <exception cref="SlotConversionException">The network has no built-in <see cref="SlotNetworkConfig"/>.</exception>
     public static SlotNetworkConfig GetSlotNetworkConfig(NetworkType networkType) =>
         SlotNetworkConfig.FromNetworkType(networkType);
 
@@ -23,10 +24,12 @@ public static class SlotUtil
     /// <param name="config">The slot network configuration.</param>
     /// <param name="unixTimeSeconds">The Unix timestamp in seconds.</param>
     /// <returns>The corresponding slot number.</returns>
+    /// <exception cref="SlotConversionException">The time is before the system start, or its slot is at or past <see cref="SlotNetworkConfig.EndSlot"/>.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">The seconds are outside the range of <see cref="DateTimeOffset"/>.</exception>
     public static long GetSlotFromUnixTime(SlotNetworkConfig config, long unixTimeSeconds)
     {
         ArgumentNullException.ThrowIfNull(config);
-        return unixTimeSeconds - (config.ZeroTime / 1000) + config.ZeroSlot;
+        return config.ToSlot(DateTimeOffset.FromUnixTimeSeconds(unixTimeSeconds));
     }
 
     /// <summary>
@@ -35,11 +38,11 @@ public static class SlotUtil
     /// <param name="config">The slot network configuration.</param>
     /// <param name="utcTime">The UTC time to convert.</param>
     /// <returns>The corresponding slot number.</returns>
+    /// <exception cref="SlotConversionException">The time is before the system start, or its slot is at or past <see cref="SlotNetworkConfig.EndSlot"/>.</exception>
     public static long GetSlotFromUTCTime(SlotNetworkConfig config, DateTime utcTime)
     {
         ArgumentNullException.ThrowIfNull(config);
-        long unixTimeSeconds = (long)(utcTime - new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc)).TotalSeconds;
-        return GetSlotFromUnixTime(config, unixTimeSeconds);
+        return config.ToSlot(new DateTimeOffset(utcTime.Ticks, TimeSpan.Zero));
     }
 
     /// <summary>
@@ -48,10 +51,13 @@ public static class SlotUtil
     /// <param name="config">The slot network configuration.</param>
     /// <param name="slot">The slot number.</param>
     /// <returns>The corresponding POSIX timestamp in seconds.</returns>
+    /// <exception cref="SlotConversionException">The slot is at or past <see cref="SlotNetworkConfig.EndSlot"/>, or its time is past the range of <see cref="DateTimeOffset"/>.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">The slot is negative.</exception>
     public static long GetPosixTimeSecondsFromSlot(SlotNetworkConfig config, long slot)
     {
         ArgumentNullException.ThrowIfNull(config);
-        return (config.ZeroTime / 1000) + (slot - config.ZeroSlot);
+        ArgumentOutOfRangeException.ThrowIfNegative(slot);
+        return config.ToTime((ulong)slot).ToUnixTimeSeconds();
     }
 
     /// <summary>
@@ -60,10 +66,12 @@ public static class SlotUtil
     /// <param name="config">The slot network configuration.</param>
     /// <param name="slot">The slot number.</param>
     /// <returns>The corresponding UTC DateTime.</returns>
+    /// <exception cref="SlotConversionException">The slot is at or past <see cref="SlotNetworkConfig.EndSlot"/>, or its time is past the range of <see cref="DateTimeOffset"/>.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">The slot is negative.</exception>
     public static DateTime GetUTCTimeFromSlot(SlotNetworkConfig config, long slot)
     {
         ArgumentNullException.ThrowIfNull(config);
-        long posixTimeSecondsFromSlot = GetPosixTimeSecondsFromSlot(config, slot);
-        return new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc).AddSeconds(posixTimeSecondsFromSlot);
+        ArgumentOutOfRangeException.ThrowIfNegative(slot);
+        return config.ToTime((ulong)slot).UtcDateTime;
     }
 }

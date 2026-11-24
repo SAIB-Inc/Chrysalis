@@ -10,9 +10,9 @@ using WalletAddress = Chrysalis.Wallet.Models.Addresses.Address;
 namespace Chrysalis.Tx.Test;
 
 /// <summary>Serves protocol parameters and UTxOs from a CLI snapshot.</summary>
-internal sealed class CliSnapshotProvider(ProtocolParams parameters, List<ResolvedInput> inputs) : ICardanoDataProvider
+internal sealed class CliSnapshotProvider(ProtocolParams parameters, List<ResolvedInput> inputs, NetworkType network = NetworkType.Preprod) : ICardanoDataProvider
 {
-    public NetworkType NetworkType => NetworkType.Preprod;
+    public NetworkType NetworkType => network;
     public Task<ProtocolParams> GetParametersAsync(CancellationToken cancellationToken = default) => Task.FromResult(parameters);
     public Task<List<ResolvedInput>> GetUtxosAsync(List<string> address, CancellationToken cancellationToken = default)
     {

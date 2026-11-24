@@ -490,11 +490,12 @@ public static class ScriptContextBuilder
 
     // ────────────────────── Time Range ──────────────────────
 
-    private static VmConstr TimeRangeToPlutusData(ulong? validityStart, ulong? ttl, SlotNetworkConfig slotConfig)
+    private static VmConstr TimeRangeToPlutusData(ulong? validityStart, ulong? ttl, SlotNetworkConfig? slotConfig)
     {
+        long Time(ulong slot) => (slotConfig ?? throw new SlotConversionException("A validity bound needs the network's SlotNetworkConfig.")).ToPosixMilliseconds(slot);
         VmPlutusData lowerBound = validityStart.HasValue
             ? Constr(0,
-                Constr(1, Int(SlotToPosixTime(validityStart.Value, slotConfig))),
+                Constr(1, Int(Time(validityStart.Value))),
                 BoolData(true))  // Finite lower bound is inclusive
             : Constr(0,
                 EmptyConstr(0),  // NegInf
@@ -502,19 +503,13 @@ public static class ScriptContextBuilder
 
         VmPlutusData upperBound = ttl.HasValue
             ? Constr(0,
-                Constr(1, Int(SlotToPosixTime(ttl.Value, slotConfig))),
+                Constr(1, Int(Time(ttl.Value))),
                 BoolData(false)) // Finite upper bound is exclusive
             : Constr(0,
                 EmptyConstr(2),  // PosInf
                 BoolData(true)); // Infinite bounds are exclusive by convention
 
         return Constr(0, lowerBound, upperBound);
-    }
-
-    private static ulong SlotToPosixTime(ulong slot, SlotNetworkConfig config)
-    {
-        ulong msAfterBegin = (slot - (ulong)config.ZeroSlot) * (ulong)config.SlotLength;
-        return (ulong)config.ZeroTime + msAfterBegin;
     }
 
     // ────────────────────── ICertificate Conversion (V3) ──────────────────────
@@ -998,14 +993,14 @@ public static class ScriptContextBuilder
     /// Builds TxInfoV3 as VM PlutusData from a Conway transaction body.
     /// Port of Aiken TxInfoV3::from_transaction.
     /// </summary>
+    /// <exception cref="SlotConversionException">A validity bound is outside <paramref name="slotConfig"/>, or there is a bound and no <paramref name="slotConfig"/>.</exception>
     public static VmPlutusData BuildTxInfoV3(
         ConwayTransactionBody body,
         PostAlonzoTransactionWitnessSet witnessSet,
         IReadOnlyList<ResolvedInput> utxos,
-        SlotNetworkConfig slotConfig)
+        SlotNetworkConfig? slotConfig)
     {
         ArgumentNullException.ThrowIfNull(utxos);
-        ArgumentNullException.ThrowIfNull(slotConfig);
 
         // Sort and resolve inputs
         List<(TransactionInput Input, ITransactionOutput Output)> sortedInputs =
@@ -1316,16 +1311,16 @@ public static class ScriptContextBuilder
     /// Scripts run at <paramref name="protocolVersion"/>, by default <see cref="Plutus.VM.EvalTx.Evaluator.LatestProtocolVersion"/>.
     /// Evaluating a script at a newer unsupported protocol version fails with a wrapped <see cref="NotSupportedException"/>.
     /// </summary>
+    /// <exception cref="SlotConversionException">A validity bound is outside <paramref name="slotConfig"/>, or there is a bound and no <paramref name="slotConfig"/>.</exception>
     public static IReadOnlyList<Plutus.VM.Models.EvaluationResult> EvaluateTx(
         ConwayTransactionBody body,
         PostAlonzoTransactionWitnessSet witnessSet,
         IReadOnlyList<ResolvedInput> utxos,
-        SlotNetworkConfig slotConfig,
+        SlotNetworkConfig? slotConfig,
         CostMdls? costModels = null,
         int protocolVersion = Plutus.VM.EvalTx.Evaluator.LatestProtocolVersion)
     {
         ArgumentNullException.ThrowIfNull(utxos);
-        ArgumentNullException.ThrowIfNull(slotConfig);
 
         // Per-language flat cost array from the provider's protocol params (null → evaluator default).
         static IReadOnlyList<long>? FlatCosts(CborList<long>? costs)

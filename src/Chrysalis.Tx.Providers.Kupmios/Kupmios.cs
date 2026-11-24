@@ -197,10 +197,31 @@ public sealed class Kupmios : ICardanoDataProvider, IDisposable
     {
         cancellationToken.ThrowIfCancellationRequested();
         const string operation = nameof(GetParametersAsync);
-        using HttpRequestMessage request = RpcRequest(new { jsonrpc = "2.0", method = "queryLedgerState/protocolParameters", id = Guid.NewGuid().ToString() });
-        using HttpResponseMessage response = await _ogmios.SendJsonRpcAsync(request, operation, cancellationToken).ConfigureAwait(false);
-        using JsonDocument body = await _ogmios.ReadJsonAsync<JsonDocument>(response, operation, cancellationToken).ConfigureAwait(false);
+        using JsonDocument body = await QueryOgmiosAsync("queryLedgerState/protocolParameters", operation, cancellationToken).ConfigureAwait(false);
         return ProviderHttp.Map(body.RootElement, MapParameters, Provider, operation);
+    }
+
+    /// <summary>
+    /// Reads the network's system start and era summaries from Ogmios.
+    /// </summary>
+    /// <param name="cancellationToken">Cancels the operation.</param>
+    /// <returns>The network's <see cref="SlotNetworkConfig"/>; it ends where Ogmios's era summaries end.</returns>
+    public async Task<SlotNetworkConfig> GetSlotNetworkConfigAsync(CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        const string operation = nameof(GetSlotNetworkConfigAsync);
+        using JsonDocument start = await QueryOgmiosAsync("queryNetwork/startTime", operation, cancellationToken).ConfigureAwait(false);
+        using JsonDocument eras = await QueryOgmiosAsync("queryLedgerState/eraSummaries", operation, cancellationToken).ConfigureAwait(false);
+        return ProviderHttp.Map((Start: start.RootElement, Eras: eras.RootElement), MapSlots, Provider, operation);
+    }
+
+    private static SlotNetworkConfig MapSlots((JsonElement Start, JsonElement Eras) answer)
+    {
+        JsonElement[] eras = [.. answer.Eras.GetProperty("result").EnumerateArray()];
+        return new(answer.Start.GetProperty("result").GetDateTimeOffset(),
+            [.. eras.Select(era => new SlotEra(era.GetProperty("start").GetProperty("slot").GetUInt64(),
+                era.GetProperty("parameters").GetProperty("slotLength").GetProperty("milliseconds").GetUInt64()))],
+            eras[^1].TryGetProperty("end", out JsonElement end) ? end.GetProperty("slot").GetUInt64() : null);
     }
 
     private static ProtocolParams MapParameters(JsonElement root)
@@ -275,6 +296,13 @@ public sealed class Kupmios : ICardanoDataProvider, IDisposable
     {
         Content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json")
     };
+
+    private async Task<JsonDocument> QueryOgmiosAsync(string method, string operation, CancellationToken cancellationToken)
+    {
+        using HttpRequestMessage request = RpcRequest(new { jsonrpc = "2.0", method, id = Guid.NewGuid().ToString() });
+        using HttpResponseMessage response = await _ogmios.SendJsonRpcAsync(request, operation, cancellationToken).ConfigureAwait(false);
+        return await _ogmios.ReadJsonAsync<JsonDocument>(response, operation, cancellationToken).ConfigureAwait(false);
+    }
 
     /// <summary>
     /// Submits a signed transaction via Ogmios.

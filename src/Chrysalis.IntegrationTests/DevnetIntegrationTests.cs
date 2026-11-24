@@ -13,6 +13,7 @@ using Chrysalis.Codec.Types.Cardano.Core;
 using Chrysalis.Codec.Types.Cardano.Core.Common;
 using Chrysalis.Codec.Types.Cardano.Core.Scripts;
 using Chrysalis.Codec.Types.Cardano.Core.Transaction;
+using Chrysalis.Codec.Types.Cardano.Core.TransactionWitness;
 using Chrysalis.Network.Cbor.Common;
 using Chrysalis.Network.Cbor.Handshake;
 using Chrysalis.Network.Cbor.LocalStateQuery;
@@ -23,9 +24,12 @@ using Chrysalis.Network.Core;
 using Chrysalis.Network.MiniProtocols;
 using Chrysalis.Network.Multiplexer;
 using Chrysalis.Tx.Builders;
+using Chrysalis.Tx.Extensions;
 using Chrysalis.Tx.Models;
 using Chrysalis.Tx.Models.Cbor;
 using Chrysalis.Tx.Providers;
+using Chrysalis.Tx.Test;
+using Chrysalis.Tx.Utils;
 using Chrysalis.Wallet.Models.Enums;
 using Xunit;
 using Env = Chrysalis.IntegrationTests.IntegrationEnvironment;
@@ -127,7 +131,7 @@ public sealed class DevnetIntegrationTests
         {
             FundedIntegrationTests.SelfTransfer? built = null;
             await FundedIntegrationTests.WithWalletKeyAsync(
-                async (key, ct) => built = await FundedIntegrationTests.BuildSelfTransferAsync(key, collateral, 2_000_000, null, ct),
+                async (key, ct) => built = await FundedIntegrationTests.BuildSelfTransferAsync(key, collateral, 2_000_000, null, null, ct),
                 deadline.Token);
             FundedIntegrationTests.SelfTransfer transfer = built ?? throw new InvalidOperationException("Self-transfer was not built.");
 
@@ -377,6 +381,63 @@ public sealed class DevnetIntegrationTests
         Assert.Contains(byOutref, u => u.Output is AlonzoTransactionOutput && u.Output.DatumHash() is not null);
     }
 
+    /// <summary>Mints under a policy that checks the validity range: the builder times it from the node's era history, Ogmios's budget matches and the node accepts it.</summary>
+    [IntegrationFact([Env.Socket, Env.Magic, Env.Cli, Env.NodeVersion, Env.Output, Env.WalletFile, Env.FundedOptIn, Env.CollateralTxIn, Env.KupoUrl, Env.OgmiosUrl])]
+    [Trait("Category", "Integration")]
+    public async Task ValidityRangeScriptRunsWithTheNodesBudgetAndIsAccepted()
+    {
+        Env.RequireDevnet();
+        Env.RequireFundedOptIn();
+        using CancellationTokenSource deadline = new(TimeSpan.FromMinutes(3));
+        await OracleCli.RecordVersionAsync(deadline.Token);
+        await using Ouroboros provider = new(Env.Required(Env.Socket), Env.NetworkMagic);
+        SlotNetworkConfig slots = await provider.GetSlotNetworkConfigAsync(deadline.Token);
+        using Kupmios kupmios = new(Env.Required(Env.KupoUrl), Env.Required(Env.OgmiosUrl));
+        SlotNetworkConfig ogmios = await kupmios.GetSlotNetworkConfigAsync(deadline.Token);
+        Assert.Equal(slots.SystemStart, ogmios.SystemStart);
+        Assert.Equal(slots.Eras, ogmios.Eras);
+        ulong end = slots.EndSlot ?? throw new InvalidOperationException("The node's era history has no end.");
+
+        // From 10 seconds before the tip to 60 seconds after it (0.1-second slots), inside the era history read above.
+        ulong tip = (await OracleCli.QueryJsonAsync("validity-range-tip", deadline.Token, "tip")).GetProperty("slot").GetUInt64();
+        ulong validFrom = tip - Math.Min(tip, 100);
+        ulong validUntil = Math.Min(tip + 600, end - 1);
+        DateTime tipTime = SlotUtil.GetUTCTimeFromSlot(slots, (long)tip);
+        DateTime second = new(tipTime.Ticks - (tipTime.Ticks % TimeSpan.TicksPerSecond), DateTimeKind.Utc);
+        string cliSlot = await OracleCli.QueryAsync("validity-range-slot-number", deadline.Token, "slot-number", second.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", CultureInfo.InvariantCulture));
+        Assert.Equal(SlotUtil.GetSlotFromUTCTime(slots, second).ToString(CultureInfo.InvariantCulture), cliSlot);
+
+        TransactionInput collateralInput = FundingSelection.ParseInputReference(Env.Required(Env.CollateralTxIn));
+        ResolvedInput collateral = await provider.GetUtxoByOutRefAsync(Convert.ToHexStringLower(collateralInput.TransactionId.Span), collateralInput.Index, deadline.Token)
+            ?? throw new InvalidOperationException("The collateral output was not found.");
+        string policy = TestScripts.ValidityRange.HashHex();
+        long Ms(ulong slot) => new DateTimeOffset(SlotUtil.GetUTCTimeFromSlot(slots, (long)slot)).ToUnixTimeMilliseconds();
+        FundedIntegrationTests.SelfTransfer? built = null;
+        await FundedIntegrationTests.WithWalletKeyAsync(async (key, ct) => built = await FundedIntegrationTests.BuildSelfTransferAsync(key, collateralInput, 2_000_000,
+            (builder, address) => _ = builder.AddMint(policy, new() { ["00"] = 1 }, TestScripts.ValidityRange, TestScripts.Range(Ms(validFrom), Ms(validUntil)))
+                .PayAssets(address, LovelaceWithMultiAsset.Create(3_000_000, TestScripts.OneToken(policy)))
+                .SetValidFrom(validFrom).SetValidUntil(validUntil).ProvideCollateral([collateral]), provider, ct), deadline.Token);
+        FundedIntegrationTests.SelfTransfer transfer = built ?? throw new InvalidOperationException("The transaction was not built.");
+        PostMaryTransaction signed = Assert.IsType<PostMaryTransaction>(transfer.Signed);
+        // The token has its own output, so the change stays ADA-only for later funded tests.
+        _ = Assert.Single(signed.Body.Outputs(), output => output.Amount() is LovelaceWithMultiAsset);
+
+        using HttpClient http = new();
+        (HttpStatusCode status, JsonElement body) = await PostOgmiosAsync(http, new Uri(Env.Required(Env.OgmiosUrl)), "evaluateTransaction",
+            new { transaction = new { cbor = Convert.ToHexStringLower(transfer.SignedBytes) } }, 4, deadline.Token);
+        Assert.Equal(HttpStatusCode.OK, status);
+        JsonElement budget = Assert.Single(body.GetProperty("result").EnumerateArray()).GetProperty("budget");
+        RedeemerValue redeemer = Assert.Single(Assert.IsType<RedeemerMap>(Assert.IsType<PostAlonzoTransactionWitnessSet>(signed.Witnesses).Redeemers).Value).Value;
+        Assert.Equal(budget.GetProperty("memory").GetUInt64(), redeemer.ExUnits.Mem);
+        Assert.Equal(budget.GetProperty("cpu").GetUInt64(), redeemer.ExUnits.Steps);
+
+        string submitted;
+        try { submitted = await provider.SubmitTransactionAsync(transfer.Signed, deadline.Token); }
+        catch (ProviderException error) { throw new InvalidOperationException(error.Message + ": " + error.Detail, error); }
+        Assert.Equal(transfer.TxId, submitted, StringComparer.OrdinalIgnoreCase);
+        await FundedIntegrationTests.WaitForOutputAsync(transfer.TxId + "#" + transfer.Index.ToString(CultureInfo.InvariantCulture), 2_000_000, deadline.Token);
+    }
+
     private static async Task<(FundedIntegrationTests.SelfTransfer Transfer, int OutputCount, string[] CliArgs)> SubmitReadBackTransferAsync(
         ICardanoDataProvider provider, CancellationToken cancellationToken)
     {
@@ -385,7 +446,7 @@ public sealed class DevnetIntegrationTests
 
         FundedIntegrationTests.SelfTransfer? built = null;
         await FundedIntegrationTests.WithWalletKeyAsync(
-            async (key, ct) => built = await FundedIntegrationTests.BuildSelfTransferAsync(key, collateral, 2_000_000, AddReadBackOutputs, ct),
+            async (key, ct) => built = await FundedIntegrationTests.BuildSelfTransferAsync(key, collateral, 2_000_000, AddReadBackOutputs, null, ct),
             cancellationToken);
         FundedIntegrationTests.SelfTransfer transfer = built ?? throw new InvalidOperationException("Self-transfer was not built.");
 

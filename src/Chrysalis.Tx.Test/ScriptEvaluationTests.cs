@@ -2,8 +2,7 @@ using Chrysalis.Codec.Types.Cardano.Core.Common;
 using Chrysalis.Codec.Types.Cardano.Core.Scripts;
 using Chrysalis.Codec.Types.Cardano.Core.Transaction;
 using Chrysalis.Codec.Types.Cardano.Core.TransactionWitness;
-using Chrysalis.Plutus.Flat;
-using Chrysalis.Plutus.Text;
+using Chrysalis.Plutus.Types;
 using Chrysalis.Plutus.VM.EvalTx;
 using Chrysalis.Tx.Builders;
 using Chrysalis.Tx.Extensions;
@@ -52,10 +51,23 @@ public sealed class ScriptEvaluationTests
             builder.BuildBody(), builder.BuildWitnessSet(), [Funds], SlotNetworkConfig.Preview, protocolVersion: int.MaxValue)).InnerException);
     }
 
+    [Fact]
+    public void TxInfoTimesAValidityStartBeforeShelleyAsTheLedgerDoes()
+    {
+        TransactionBuilder builder = Mint(3, "(con unit ())").SetValidityIntervalStart(0).SetTtl(86_500);
+        PlutusDataConstr info = Assert.IsType<PlutusDataConstr>(ScriptContextBuilder.BuildTxInfoV3(builder.BuildBody(), builder.BuildWitnessSet(), [Funds], SlotNetworkConfig.Preprod));
+        PlutusDataConstr range = Assert.IsType<PlutusDataConstr>(info.Fields[7]);
+        Assert.Equal(1_654_041_600_000, Bound(range, 0));
+        Assert.Equal(1_655_769_700_000, Bound(range, 1));
+    }
+
+    // The time of a finite bound: side 0 is the lower bound, side 1 the upper; each is Constr 0 [Constr 1 [time], closed].
+    private static long Bound(PlutusDataConstr range, int side) =>
+        (long)Assert.IsType<PlutusDataInteger>(Assert.Single(Assert.IsType<PlutusDataConstr>(Assert.IsType<PlutusDataConstr>(range.Fields[side]).Fields[0]).Fields)).Value;
+
     private static TransactionBuilder Mint(int language, string result)
     {
-        byte[] flat = FlatEncoder.EncodeProgram(UplcParser.NameToDeBruijn(UplcParser.Parse($"(program 1.0.0 (lam redeemer {result}))")));
-        byte[] wrapped = [(byte)(0x40 | flat.Length), .. flat]; // short CBOR bytestring wrapping the Flat program
+        byte[] wrapped = TestScripts.Wrap($"(program 1.0.0 (lam redeemer {result}))");
         IScript script = language switch
         {
             1 => PlutusV1Script.Create(1, wrapped),
@@ -64,13 +76,9 @@ public sealed class ScriptEvaluationTests
         };
         const string asset = "00";
         string policy = script.HashHex();
-        MultiAssetOutput tokens = MultiAssetOutput.Create(new()
-        {
-            [Convert.FromHexString(policy)] = TokenBundleOutput.Create(new() { [Convert.FromHexString(asset)] = 1 })
-        });
         return new TransactionBuilder()
             .AddInput(Funds.Outref)
-            .AddOutput(AddressBytes, LovelaceWithMultiAsset.Create(4_800_000, tokens))
+            .AddOutput(AddressBytes, LovelaceWithMultiAsset.Create(4_800_000, TestScripts.OneToken(policy)))
             .SetFee(200_000)
             .AddMint(policy, asset, 1, script, PlutusInt.Create(0));
     }

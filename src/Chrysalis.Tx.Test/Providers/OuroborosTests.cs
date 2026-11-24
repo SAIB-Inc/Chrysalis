@@ -12,9 +12,11 @@ using Chrysalis.Network.Cbor.LocalStateQuery;
 using Chrysalis.Network.Cbor.LocalStateQuery.Messages;
 using Chrysalis.Network.Multiplexer;
 using Chrysalis.Network.Tests;
+using Chrysalis.Tx.Models;
 using Chrysalis.Tx.Models.Cbor;
 using Chrysalis.Tx.Providers;
 using Chrysalis.Tx.Test.Cli;
+using Chrysalis.Tx.Utils;
 using Chrysalis.Wallet.Models.Enums;
 using Xunit;
 
@@ -345,6 +347,54 @@ public class OuroborosTests
             await provider.SubmitTransactionAsync(BlockfrostTests.Transaction, deadline.Token), StringComparer.OrdinalIgnoreCase);
         Assert.Empty(replies);
         Assert.Equal(1, node.Accepts);
+    }
+
+    // cardano-cli's preview era history: every era start's slot and time is the node's own pair.
+    [Fact]
+    public async Task SlotProfileIsTheNodesSystemStartAndEraHistory()
+    {
+        using CancellationTokenSource deadline = new(TimeSpan.FromSeconds(10));
+        using JsonDocument file = JsonDocument.Parse(await File.ReadAllBytesAsync(Path.Combine(CliVectors.Root, "inputs", "cardano-cli", "preview-era-history.json"), deadline.Token));
+        string history = file.RootElement.GetProperty("cborHex").GetString() ?? "";
+        ConcurrentQueue<string> replies = new(["8101", "8204831907e619012a00", "8101", "8204" + history]);
+        await using FakeNode node = FakeNode.Start((stream, ct) => ServeRepliesAsync(stream, replies, ct));
+        await using Ouroboros provider = new(node.SocketPath);
+        SlotNetworkConfig profile = await provider.GetSlotNetworkConfigAsync(deadline.Token);
+        Assert.Equal(SlotNetworkConfig.Preview.SystemStart, profile.SystemStart);
+        Assert.Equal(74_476_800UL, profile.EndSlot);
+        foreach (EraSummary era in CborSerializer.Deserialize<EraHistoryResponse>(Convert.FromHexString(history)).Summaries)
+        {
+            Assert.Equal(1_666_656_000 + (long)(era.Start.TimePicoseconds / 1_000_000_000_000), SlotUtil.GetPosixTimeSecondsFromSlot(profile, (long)era.Start.Slot));
+        }
+        Assert.Equal(SlotUtil.GetUTCTimeFromSlot(SlotNetworkConfig.Preview, 74_476_799), SlotUtil.GetUTCTimeFromSlot(profile, 74_476_799));
+        Assert.Throws<SlotConversionException>(() => SlotUtil.GetUTCTimeFromSlot(profile, 74_476_800));
+        Assert.Empty(replies);
+        Assert.Equal(1, node.Accepts);
+    }
+
+    [Fact]
+    public async Task AnEmptyEraHistoryIsUnusable()
+    {
+        using CancellationTokenSource deadline = new(TimeSpan.FromSeconds(10));
+        ConcurrentQueue<string> replies = new(["8101", "8204831907e619012a00", "8101", "820480"]);
+        await using FakeNode node = FakeNode.Start((stream, ct) => ServeRepliesAsync(stream, replies, ct));
+        await using Ouroboros provider = new(node.SocketPath);
+        ProviderException error = await Assert.ThrowsAsync<ProviderException>(() => provider.GetSlotNetworkConfigAsync(deadline.Token));
+        Assert.False(error.IsTransient);
+        Assert.Contains("unusable response", error.Message, StringComparison.Ordinal);
+    }
+
+    // T12b MINOR 1: a call cancelled before its handshake closes its socket at once, not when the provider is disposed.
+    [Fact]
+    public async Task CancelBeforeTheHandshakeClosesTheSocketWhileTheProviderLives()
+    {
+        using CancellationTokenSource deadline = new(TimeSpan.FromSeconds(10));
+        using CancellationTokenSource caller = new();
+        await using FakeNode node = FakeNode.Start((_, _) => Task.CompletedTask);
+        await using Ouroboros provider = new(node.SocketPath) { OnClientConnected = _ => CancelSync(caller) };
+        OperationCanceledException error = await Assert.ThrowsAnyAsync<OperationCanceledException>(() => provider.GetParametersAsync(caller.Token));
+        Assert.Equal(caller.Token, error.CancellationToken);
+        await node.ClosedBeforeHandshake.WaitAsync(deadline.Token);
     }
 
     [Theory]
@@ -920,10 +970,12 @@ public class OuroborosTests
         private readonly Lock _gate = new();
         private readonly List<Task> _handlers = [];
         private readonly Task _acceptLoop;
+        private readonly TaskCompletionSource _closedBeforeHandshake = new(TaskCreationOptions.RunContinuationsAsynchronously);
         private int _accepts;
 
         internal string SocketPath { get; }
         internal int Accepts => Volatile.Read(ref _accepts);
+        internal Task ClosedBeforeHandshake => _closedBeforeHandshake.Task;
 
         private FakeNode(Func<int, NetworkStream, CancellationToken, Task> handleConnection, bool acceptHandshake)
         {
@@ -965,7 +1017,7 @@ public class OuroborosTests
                 using (socket)
                 using (NetworkStream stream = new(socket))
                 {
-                    if (await ReadSegmentAsync(stream, _stop.Token) is not { } handshake) { return; }
+                    if (await ReadSegmentAsync(stream, _stop.Token) is not { } handshake) { _closedBeforeHandshake.TrySetResult(); return; }
                     Assert.Equal(0, handshake.Protocol);
                     if (_acceptHandshake) { await stream.WriteAsync(HandshakeAccept, _stop.Token); }
                     await _handleConnection(number, stream, _stop.Token);

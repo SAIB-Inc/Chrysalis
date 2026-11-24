@@ -31,5 +31,6 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="../Chrysalis.Tx.Test/CliSnapshotProvider.cs" Link="CliSnapshotProvider.cs" />
+    <Compile Include="../Chrysalis.Tx.Test/TestScripts.cs" Link="TestScripts.cs" />
   </ItemGroup>
 </Project>

@@ -86,6 +86,16 @@ public interface ICardanoDataProvider
         return new(parameters, utxos, $"{GetType().Name} {NetworkType}", null, null, null);
     }
 
+    /// <summary>Gets how slots map to time on this provider's network.</summary>
+    /// <param name="cancellationToken">Cancels the operation.</param>
+    /// <returns>By default the built-in <see cref="SlotNetworkConfig"/> of <see cref="NetworkType"/>; a provider that can read its network's own returns that.</returns>
+    /// <exception cref="SlotConversionException"><see cref="NetworkType"/> has no built-in <see cref="SlotNetworkConfig"/>.</exception>
+    Task<SlotNetworkConfig> GetSlotNetworkConfigAsync(CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return Task.FromResult(SlotNetworkConfig.FromNetworkType(NetworkType));
+    }
+
     /// <summary>
     /// Gets the network type for this provider.
     /// </summary>

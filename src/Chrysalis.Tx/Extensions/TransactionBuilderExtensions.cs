@@ -249,10 +249,12 @@ public static class TransactionBuilderExtensions
             2 => costMdls.PlutusV3,
             _ => costMdls.PlutusV3
         };
+        // The ledger hashes a V2 or V3 view as a fixed-length list; a decoded list (a node sends indefinite ones) would be written back as it came.
+        CborList<long>? fixedLength = langVersion is 1 or 2 && usedLanguage is { } costs ? CborList.Create(costs) : null;
         CostMdls costModel = new(
             langVersion == 0 ? usedLanguage : null,
-            langVersion == 1 ? usedLanguage : null,
-            langVersion == 2 ? usedLanguage : null);
+            langVersion == 1 ? fixedLength : null,
+            langVersion == 2 ? fixedLength : null);
         byte[] costModelBytes = CborSerializer.Serialize(costModel);
         PostAlonzoTransactionWitnessSet ws = builder.BuildWitnessSet();
         byte[] scriptDataHash = DataHashUtil.CalculateScriptDataHash(builder.Redeemers!, ws.PlutusDataSet, costModelBytes);
