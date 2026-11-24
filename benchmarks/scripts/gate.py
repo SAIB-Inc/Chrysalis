@@ -27,6 +27,7 @@ import run_benchmarks as runner
 REPO = Path(__file__).resolve().parents[2]
 GATE = REPO / 'benchmarks/gate'
 PIN = '7c45d47c87c63520cea84212dbd01ecc8d372ac3'
+X10_FILE = 'src/Chrysalis.Codec/Types/CborList.cs'  # created by X10 c0ef42b (CborList<T>); main, 24 Nov
 DIRECT_BATCH_COUNT = 5
 LOCAL_KEYS = ('corporaRoot', 'pinnedBaseline', 'flyOrg', 'flyTokenFile', 'flyLock')
 AZURE_LOCAL_KEYS = ('azureCli', 'azureLock', 'azureBaseline', 'azureLedger')
@@ -163,9 +164,19 @@ def pinned_references(project, references, *, pinned_harness=False):
         item = xml.SubElement(group, 'Reference', Include=Path(name).stem)
         xml.SubElement(item, 'HintPath').text = str(path)
     if pinned_harness:
-        properties = xml.SubElement(root, 'PropertyGroup')
-        xml.SubElement(properties, 'DefineConstants').text = '$(DefineConstants);CHRYSALIS_PINNED_HARNESS'
+        pinned_harness_define(root)
     project.write_text(xml.tostring(root, encoding='unicode'))
+
+
+def pinned_harness_define(root):
+    properties = ET.SubElement(root, 'PropertyGroup')
+    ET.SubElement(properties, 'DefineConstants').text = '$(DefineConstants);CHRYSALIS_PINNED_HARNESS'
+
+
+def lacks_x10(info):
+    """Only X10_FILE in the side's tree decides; an unreadable tree counts as lacking it and fails closed."""
+    return subprocess.run(['git', '-C', str(info.get('working', REPO)), 'cat-file', '-e', f'{info["treeId"]}:{X10_FILE}'],
+                          env=runner.git_environment(base=session.environment({})), capture_output=True).returncode != 0
 
 
 def measurement_inputs(root=REPO):
@@ -224,6 +235,10 @@ def stage_side(info, label, output, local, inputs=None, *, allocation_platform='
         pinned_references(directory / 'Chrysalis.Benchmarks.csproj',
                           {name: Path(local['pinnedBaseline']) / name for name in closure['assemblySha256s']
                            if name != 'Chrysalis.Benchmarks.dll'}, pinned_harness=True)
+    elif allocation_platform != 'mac' and lacks_x10(info):  # the runner's harness against a pre-X10 library
+        root = ET.fromstring((directory / 'Chrysalis.Benchmarks.csproj').read_text())
+        pinned_harness_define(root)
+        (directory / 'Chrysalis.Benchmarks.csproj').write_text(ET.tostring(root, encoding='unicode'))
     client_dir = directory / 'client'
     client_dir.mkdir()
     for name, content in inputs['client'].items():
@@ -1103,6 +1118,9 @@ def stage_arms(args, output, rows, local, inputs, *, allocation_platform='pc', p
              dict.fromkeys([args.baseline, args.candidate, *[row['candidate'] for row in rows if 'candidate' in row]])}
     if allocation_platform == 'mac' and any(info['commit'] == PIN for info in infos.values()):
         raise ValueError('The archived .NET 10 DLL closure is not a native Mac merge side')
+    if (args.mode == 'change' and allocation_platform != 'mac'
+            and len({lacks_x10(info) for info in infos.values() if info['commit'] != PIN}) > 1):
+        raise ValueError('Refusing a change run whose sides straddle X10 (c0ef42b): their harness defines differ')
     options = dict(allocation_platform='mac') if allocation_platform == 'mac' else {}
     if prepare_phase:
         options['prepare_phase'] = prepare_phase
