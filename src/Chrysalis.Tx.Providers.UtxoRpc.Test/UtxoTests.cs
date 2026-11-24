@@ -211,6 +211,7 @@ public sealed class UtxoTests
     [InlineData("empty")]
     [InlineData("hash")]
     [InlineData("reference")]
+    [InlineData("field")]
     public async Task RejectsUnusableOutputs(string form)
     {
         AnyUtxoData item = TestData.Output();
@@ -218,6 +219,7 @@ public sealed class UtxoTests
         if (form == "empty") { item.NativeBytes = ByteString.Empty; }
         if (form == "hash") { item.TxoRef.Hash = ByteString.CopyFrom(new byte[31]); }
         if (form == "reference") { item.TxoRef = null; }
+        if (form == "field") { item.NativeBytes = ByteString.CopyFrom([0x82, 0x00, 0x01]); }
         await using FakeUtxoRpc fake = await FakeUtxoRpc.StartAsync();
         fake.SearchHandler = (_, _) => Task.FromResult(new SearchUtxosResponse { Items = { item } });
         using UtxoRpc provider = new(fake.Endpoint, NetworkType.Preprod);

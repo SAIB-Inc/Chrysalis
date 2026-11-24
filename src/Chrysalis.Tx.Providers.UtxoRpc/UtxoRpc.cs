@@ -174,7 +174,7 @@ public sealed class UtxoRpc : ICardanoDataProvider, IDisposable
         writer.WriteUInt64(item.TxoRef.Index);
         writer.WriteEndArray(2);
         return new ResolvedInput(TransactionInput.Read(reference.WrittenMemory),
-            CborSerializer.Deserialize<ITransactionOutput>(item.NativeBytes.Memory));
+            ProviderValues.CheckedOutput(CborSerializer.Deserialize<ITransactionOutput>(item.NativeBytes.Memory)));
     }
 
     /// <summary>Reads one output by its transaction hash and index.</summary>
@@ -184,7 +184,7 @@ public sealed class UtxoRpc : ICardanoDataProvider, IDisposable
     /// <returns>The matching output, or null if not found.</returns>
     public async Task<ResolvedInput?> GetUtxoByOutRefAsync(string txHash, ulong index, CancellationToken cancellationToken = default)
     {
-        ByteString hash = ParseHash(txHash);
+        ByteString hash = UnsafeByteOperations.UnsafeWrap(ProviderValues.TransactionHash(txHash));
         ArgumentOutOfRangeException.ThrowIfGreaterThan(index, uint.MaxValue);
         cancellationToken.ThrowIfCancellationRequested();
         LeanUtxosResponse response;
@@ -223,7 +223,7 @@ public sealed class UtxoRpc : ICardanoDataProvider, IDisposable
     /// <returns>The metadata, or null when absent or not found.</returns>
     public async Task<LedgerMetadata?> GetTransactionMetadataAsync(string txHash, CancellationToken cancellationToken = default)
     {
-        ByteString hash = ParseHash(txHash);
+        ByteString hash = UnsafeByteOperations.UnsafeWrap(ProviderValues.TransactionHash(txHash));
         cancellationToken.ThrowIfCancellationRequested();
         LeanReadTxResponse response;
         try
@@ -275,7 +275,7 @@ public sealed class UtxoRpc : ICardanoDataProvider, IDisposable
     /// <returns>A task that completes when the server reports the transaction on chain.</returns>
     public async Task WaitForConfirmationAsync(string txHash, CancellationToken cancellationToken = default)
     {
-        ByteString hash = ParseHash(txHash);
+        ByteString hash = UnsafeByteOperations.UnsafeWrap(ProviderValues.TransactionHash(txHash));
         cancellationToken.ThrowIfCancellationRequested();
         ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
         try
@@ -322,19 +322,6 @@ public sealed class UtxoRpc : ICardanoDataProvider, IDisposable
         }
     }
 
-    private static ByteString ParseHash(string hash)
-    {
-        ArgumentNullException.ThrowIfNull(hash);
-        if (hash.Length != 64) { throw new ArgumentException("Expected a 32-byte hash in hex.", nameof(hash)); }
-        byte[] bytes = new byte[32];
-        if (Convert.FromHexString(hash, bytes, out int consumed, out int written) != OperationStatus.Done || consumed != hash.Length || written != bytes.Length)
-        {
-            throw new ArgumentException("Expected a 32-byte hash in hex.", nameof(hash));
-        }
-
-        return UnsafeByteOperations.UnsafeWrap(bytes);
-    }
-
     private static UtxoRpcException Unusable(IMethod method, Exception cause) => new($"{method.Name}: {UnusableReason(cause)}");
 
     private static string UnusableReason(Exception cause) => cause is InvalidDataException
@@ -351,7 +338,6 @@ public sealed class UtxoRpc : ICardanoDataProvider, IDisposable
             using AsyncUnaryCall<TResponse> call = _invoker.AsyncUnaryCall(method, null,
                 new CallOptions(_headers, DateTime.UtcNow + _timeout, cancellationToken), request);
             TResponse response = await call.ResponseAsync;
-            cancellationToken.ThrowIfCancellationRequested();
             return response;
         }
         catch (RpcException exception)

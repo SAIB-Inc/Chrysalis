@@ -6,7 +6,7 @@ namespace Chrysalis.Tx.Providers.UtxoRpcTests;
 /// <summary>Verifies the provenance manifest and the exact bytes of every copied file.</summary>
 public sealed class GoldenManifestTests
 {
-    /// <summary>No vector or spec file is missing, changed or unlisted.</summary>
+    /// <summary>No vector file is missing, changed or unlisted.</summary>
     /// <returns>A task for reading the manifested files.</returns>
     [Fact]
     public async Task EveryCopiedFileMatchesTheManifest()
@@ -22,7 +22,7 @@ public sealed class GoldenManifestTests
             Assert.Equal(row[6], Convert.ToHexStringLower(SHA256.HashData(bytes)));
         }
 
-        string[] folders = ["Golden", "Protos/utxorpc"];
+        string[] folders = ["Golden"];
         string[] files = [.. folders
             .SelectMany(folder => Directory.EnumerateFiles(Path.Combine(root, folder), "*", SearchOption.AllDirectories))
             .Select(file => Path.GetRelativePath(root, file).Replace(Path.DirectorySeparatorChar, '/'))

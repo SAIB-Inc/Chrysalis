@@ -42,7 +42,6 @@ counts the total bytes were identical. Lean/1000 is 5,356,584 B/call + 3,312 B/i
 
 The benchmark is gated on bytes allocated per call, not timings.
 Its baseline is the first run on the project's MacBook Pro measuring machine at the next alpha after merge.
-Until those measuring runs take it in, changes to the provider rerun this benchmark
-and compare x64 B/op with this reference within a tolerance of 5,400 divided by the
-run's `Memory.TotalOperations` in the full JSON, or compare at a fixed invocation
-count on both machines.
+Until those measuring runs take it in, a change to the provider reruns this benchmark on its
+parent commit and on the change, on the same machine, and compares B/op within a tolerance of
+5,400 divided by the run's `Memory.TotalOperations` in the full JSON.
