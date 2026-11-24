@@ -24,12 +24,8 @@ public record AddressHeader(AddressType Type, NetworkType Network)
     /// </summary>
     /// <param name="headerByte">The header byte to parse.</param>
     /// <returns>An AddressHeader instance.</returns>
-    public static AddressHeader FromByte(byte headerByte)
-    {
-        AddressType type = (AddressType)(headerByte >> 4);
-        NetworkType network = (NetworkType)(headerByte & 0x0F);
-        return new AddressHeader(type, network);
-    }
+    /// <exception cref="ArgumentOutOfRangeException">The type or network nibble is not one of CIP-19's.</exception>
+    public static AddressHeader FromByte(byte headerByte) => Address.GetAddressHeader(headerByte);
 
     /// <summary>
     /// Gets the Bech32 prefix for this address header (e.g., "addr", "addr_test", "stake", "stake_test").

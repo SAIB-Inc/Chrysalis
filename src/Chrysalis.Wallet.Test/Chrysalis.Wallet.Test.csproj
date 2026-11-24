@@ -17,6 +17,7 @@
   <ItemGroup>
     <None Update="TestData/CIPs/**" CopyToOutputDirectory="PreserveNewest" />
     <Compile Include="../Chrysalis.Crypto.Test/Ed25519TestVectors.cs" Link="Ed25519TestVectors.cs" />
+    <Compile Include="../Chrysalis.Codec.Test/AllocationAssert.cs" Link="AllocationAssert.cs" />
   </ItemGroup>
 
   <ItemGroup>

@@ -1,4 +1,5 @@
 using Chrysalis.Codec.Extensions.Cardano.Core.TransactionWitness;
+using Chrysalis.Codec.Test;
 using Chrysalis.Codec.Types.Cardano.Core;
 using Chrysalis.Codec.Types.Cardano.Core.Transaction;
 using Chrysalis.Codec.Types.Cardano.Core.TransactionWitness;
@@ -229,6 +230,15 @@ public class PrivateKeyTests
     }
 
     [Fact]
+    public void GetHashCode_MakesNoCopyOfTheKey()
+    {
+        PrivateKey key = CreateTestRootKey();
+        void Hash() => _ = key.GetHashCode();
+
+        Assert.Equal(0, AllocationAssert.Measure(Hash, Hash));
+    }
+
+    [Fact]
     public void SeedKey_HasTheRfc8032PublicKeyAndSignature()
     {
         foreach (Ed25519TestVector vector in Ed25519TestVectors.TestCases)
@@ -288,8 +298,11 @@ public class PrivateKeyTests
     [InlineData(65)]
     [InlineData(96)]
     [InlineData(128)]
-    public void Constructor_RejectsOtherLengths(int length) =>
-        _ = Assert.Throws<ArgumentException>("key", () => new PrivateKey(new byte[length], new byte[32]));
+    public void Constructor_RejectsOtherLengths(int length)
+    {
+        ArgumentException error = Assert.Throws<ArgumentException>("key", () => new PrivateKey(new byte[length], new byte[32]));
+        Assert.StartsWith($"Must be 32 or 64 bytes, not {length}.", error.Message, StringComparison.Ordinal);
+    }
 
     [Fact]
     public void Constructor_RejectsNullKey() =>
@@ -304,6 +317,38 @@ public class PrivateKeyTests
         InvalidOperationException error = Assert.Throws<InvalidOperationException>(() => key.Derive(0, type));
         Assert.Contains("64-byte Cardano extended key", error.Message, StringComparison.Ordinal);
     }
+
+    // A negative index aliased a hardened one: -1 SOFT was hardened 2^31 - 1, int.MinValue HARD was hardened 0.
+    [Theory]
+    [InlineData(-1, DerivationType.SOFT)]
+    [InlineData(int.MinValue, DerivationType.SOFT)]
+    [InlineData(-1, DerivationType.HARD)]
+    [InlineData(int.MinValue, DerivationType.HARD)]
+    public void Derive_NegativeIndex_Throws(int index, DerivationType type) =>
+        _ = Assert.Throws<ArgumentOutOfRangeException>(nameof(index), () => CreateTestRootKey().Derive(index, type));
+
+    [Fact]
+    public void DeriveHelpers_RejectANegativeIndex()
+    {
+        PrivateKey root = CreateTestRootKey();
+        _ = Assert.Throws<ArgumentOutOfRangeException>("account", () => root.DeriveCardanoAccountKey(-1));
+        _ = Assert.Throws<ArgumentOutOfRangeException>("index", () => root.DerivePaymentKey(-1));
+        _ = Assert.Throws<ArgumentOutOfRangeException>("index", () => root.DeriveStakeKey(-1));
+    }
+
+    [Fact]
+    public void Derive_LargestSoftIndex_StaysSoft()
+    {
+        PrivateKey root = CreateTestRootKey();
+        Assert.NotEqual(root.Derive(int.MaxValue, DerivationType.HARD).Key, root.Derive(int.MaxValue, DerivationType.SOFT).Key);
+    }
+
+    [Theory]
+    [InlineData("m/1852'/1815'/0'/0/0", true)]
+    [InlineData("m/1852'/1815'/-1'", false)]
+    [InlineData("m/1852'/1815'/0'/0/-1", false)]
+    public void IsValidPath_RefusesANegativeIndex(string path, bool valid) =>
+        Assert.Equal(valid, Bip32Util.IsValidPath(path));
 
     [Fact]
     public void PointOfTrunc28Mul8_IsThePublicKeyOfItsScalar()

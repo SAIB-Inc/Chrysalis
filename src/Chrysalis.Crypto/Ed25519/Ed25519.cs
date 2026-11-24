@@ -86,7 +86,7 @@ public static class Ed25519
 
     /// <summary>
     /// Signs a message (RFC 8032) with 64 bytes of seed followed by public key.
-    /// The public key must be the seed's own, as <see cref="SeedAndPublicKeyFromSeed"/> returns; any other value exposes the private key.
+    /// The public key must be the seed's own, as <see cref="SeedAndPublicKeyFromSeed"/> returns: a signature under another public key does not verify, and two signatures of one message under two different public keys reveal the secret scalar.
     /// </summary>
     /// <param name="message">The message to sign.</param>
     /// <param name="seedAndPublicKey">The 64-byte seed followed by public key.</param>
@@ -128,7 +128,7 @@ public static class Ed25519
 
     /// <summary>
     /// Signs a message with 64 bytes of seed followed by public key; the same as <see cref="SignWithSeedAndPublicKey"/>.
-    /// The public key must be the seed's own, as <see cref="ExpandedPrivateKeyFromSeed"/> returns; any other value exposes the private key.
+    /// The public key must be the seed's own, as <see cref="ExpandedPrivateKeyFromSeed"/> returns: a signature under another public key does not verify, and two signatures of one message under two different public keys reveal the secret scalar.
     /// </summary>
     /// <param name="message">The message to sign.</param>
     /// <param name="expandedPrivateKey">The 64-byte seed followed by public key.</param>

@@ -35,9 +35,14 @@ public class Address
     /// Creates an Address from raw address bytes.
     /// </summary>
     /// <param name="addressBytes">The raw byte representation of the address.</param>
+    /// <exception cref="ArgumentException"><paramref name="addressBytes"/> is empty.</exception>
     public Address(byte[] addressBytes)
     {
         ArgumentNullException.ThrowIfNull(addressBytes);
+        if (addressBytes.Length == 0)
+        {
+            throw new ArgumentException("An address has at least its header byte.", nameof(addressBytes));
+        }
 
         _addressBytes = addressBytes;
         AddressHeader addressHeader = GetAddressHeader(addressBytes[0]);
@@ -49,12 +54,23 @@ public class Address
     /// Creates an Address from a Bech32-encoded string.
     /// </summary>
     /// <param name="bech32Address">The Bech32-encoded Cardano address string.</param>
+    /// <exception cref="FormatException">The string holds no address bytes, or its prefix is not the one its header gives.</exception>
     public Address(string bech32Address)
     {
         ArgumentNullException.ThrowIfNull(bech32Address);
 
-        (_, byte[] addressBytes) = Bech32Util.Decode(bech32Address);
+        (string prefix, byte[] addressBytes) = Bech32Util.Decode(bech32Address);
+        if (addressBytes.Length == 0)
+        {
+            throw new FormatException("The Bech32 string holds no address bytes.");
+        }
+
         AddressHeader addressHeader = GetAddressHeader(addressBytes[0]);
+        if (prefix != addressHeader.Prefix)
+        {
+            throw new FormatException($"The prefix {prefix} does not match the address header, which gives {addressHeader.Prefix}.");
+        }
+
         Type = addressHeader.Type;
         Network = addressHeader.Network;
         _addressBytes = addressBytes;
@@ -67,6 +83,7 @@ public class Address
     /// <param name="addressType">The address type.</param>
     /// <param name="payment">The payment credential bytes.</param>
     /// <param name="stake">The optional stake credential bytes.</param>
+    /// <exception cref="NotSupportedException">For a pointer address type: pointer addresses are read, not built.</exception>
     public Address(NetworkType networkType, AddressType addressType, byte[] payment, byte[]? stake)
     {
         ArgumentNullException.ThrowIfNull(payment);
@@ -85,6 +102,7 @@ public class Address
     /// </summary>
     /// <param name="addressBytes">The raw byte representation of the address.</param>
     /// <returns>An <see cref="Address"/> instance.</returns>
+    /// <exception cref="ArgumentException"><paramref name="addressBytes"/> is empty.</exception>
     public static Address FromBytes(byte[] addressBytes) => new(addressBytes);
 
     /// <summary>
@@ -92,6 +110,7 @@ public class Address
     /// </summary>
     /// <param name="bech32String">The Bech32-encoded Cardano address string.</param>
     /// <returns>An <see cref="Address"/> instance.</returns>
+    /// <exception cref="FormatException">The string holds no address bytes, or its prefix is not the one its header gives.</exception>
     public static Address FromBech32(string bech32String) => new(bech32String);
 
     /// <summary>
@@ -102,6 +121,7 @@ public class Address
     /// <param name="paymentBytes">The payment credential bytes (e.g., PaymentKeyHash).</param>
     /// <param name="stakeBytes">Optional stake credential bytes (e.g., StakeKeyHash).</param>
     /// <returns>An <see cref="Address"/> instance.</returns>
+    /// <exception cref="NotSupportedException">For a pointer address type: pointer addresses are read, not built.</exception>
     public static Address FromCredentials(NetworkType networkType, AddressType addressType, ICredential paymentBytes, ICredential? stakeBytes)
     {
         ArgumentNullException.ThrowIfNull(paymentBytes);
@@ -135,6 +155,7 @@ public class Address
     /// <param name="paymentPub">The public key for the payment credential (or stake credential for delegation types).</param>
     /// <param name="stakePub">Optional public key for the stake credential.</param>
     /// <returns>An <see cref="Address"/> instance.</returns>
+    /// <exception cref="NotSupportedException">For a pointer address type: pointer addresses are read, not built.</exception>
     public static Address FromPublicKeys(NetworkType networkType, AddressType addressType, PublicKey paymentPub, PublicKey? stakePub = null)
     {
         ArgumentNullException.ThrowIfNull(paymentPub);
@@ -173,6 +194,7 @@ public class Address
     /// </summary>
     /// <param name="hex">The hex-encoded address bytes.</param>
     /// <returns>An <see cref="Address"/> instance.</returns>
+    /// <exception cref="ArgumentException">The hex string holds no bytes (parameter name: <c>addressBytes</c>).</exception>
     public static Address FromHex(string hex) => new(Convert.FromHexString(hex));
 
     /// <summary>
@@ -275,6 +297,7 @@ public class Address
     /// Maps payment and stake credentials to their Plutus equivalents.
     /// </summary>
     /// <returns>A Plutus Address with the correct credential types.</returns>
+    /// <exception cref="NotSupportedException">For a pointer address.</exception>
     public PlutusAddress ToPlutusAddress()
     {
         ICredential paymentCred = Type switch
@@ -282,37 +305,26 @@ public class Address
             AddressType.Base
             or AddressType.EnterprisePayment
             or AddressType.PaymentWithScriptDelegation
-            or AddressType.PaymentWithPointerDelegation
             or AddressType.Delegation
                 => VerificationKey.Create(GetPaymentKeyHash()!),
             AddressType.ScriptPaymentWithDelegation
             or AddressType.EnterpriseScriptPayment
             or AddressType.ScriptPaymentWithScriptDelegation
-            or AddressType.ScriptPaymentWithPointerDelegation
             or AddressType.ScriptDelegation
                 => Script.Create(GetPaymentKeyHash()!),
+            AddressType.PaymentWithPointerDelegation or AddressType.ScriptPaymentWithPointerDelegation
+                => throw new NotSupportedException("Converting a pointer address to a Plutus address is not supported."),
             _ => throw new InvalidOperationException($"Unsupported address type: {Type}")
         };
 
         byte[]? stakeHash = GetStakeKeyHash();
         if (stakeHash is not null)
         {
-            ICredential stakeCred = Type switch
-            {
-                AddressType.Base
-                or AddressType.ScriptPaymentWithDelegation
-                or AddressType.Delegation
-                or AddressType.EnterprisePayment
-                or AddressType.EnterpriseScriptPayment
-                or AddressType.PaymentWithPointerDelegation
-                or AddressType.ScriptPaymentWithPointerDelegation
-                    => VerificationKey.Create(stakeHash),
-                AddressType.PaymentWithScriptDelegation
+            ICredential stakeCred = Type is AddressType.PaymentWithScriptDelegation
                 or AddressType.ScriptPaymentWithScriptDelegation
                 or AddressType.ScriptDelegation
-                    => Script.Create(stakeHash),
-                _ => throw new InvalidOperationException($"Unsupported address type for stake: {Type}")
-            };
+                ? Script.Create(stakeHash)
+                : VerificationKey.Create(stakeHash);
             return new PlutusAddress(
                 paymentCred,
                 Some<Inline<ICredential>>.Create(Inline<ICredential>.Create(stakeCred)));
@@ -378,17 +390,6 @@ public class Address
                 addressBytes = addressBytes.ConcatFast(payment);
                 return addressBytes.ConcatFast(stake);
 
-            // TODO:
-            // Pointer addresses: header + payment credential + pointer
-            case AddressType.PaymentWithPointerDelegation:
-            case AddressType.ScriptPaymentWithPointerDelegation:
-                // Add payment credential
-                addressBytes = addressBytes.ConcatFast(payment);
-
-                // TODO: Add proper pointer implementation
-                // For now, just return with payment credential
-                return addressBytes;
-
             // Enterprise addresses: header + payment credential
             case AddressType.EnterprisePayment:
             case AddressType.EnterpriseScriptPayment:
@@ -398,6 +399,8 @@ public class Address
             case AddressType.ScriptDelegation:
                 return addressBytes.ConcatFast(stake!);
 
+            case AddressType.PaymentWithPointerDelegation:
+            case AddressType.ScriptPaymentWithPointerDelegation:
             default:
                 throw new NotSupportedException($"Address type {header.Type} is not supported");
         }
