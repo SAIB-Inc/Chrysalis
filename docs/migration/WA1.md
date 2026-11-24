@@ -1,0 +1,8 @@
+# WA1: 32-byte signing keys agree
+
+A 32-byte `PrivateKey` is an Ed25519 seed, and its `GetPublicKey` now returns the standard (RFC 8032) public key of that seed, the key its signatures verify under; before, it returned a different key, so a witness, address or key hash built from a 32-byte key's public key changes. Keys of 64 bytes, which include every key derived from a mnemonic, are unchanged.
+
+- `new PrivateKey(key, chaincode)` throws `ArgumentNullException` for a null key and `ArgumentException` (`ParamName` `key`) for a key that is neither 32 nor 64 bytes. From 96 bytes of extended key followed by chain code, pass bytes 0-63 as the key and 64-95 as the chain code; from cardano-cli's 128-byte extended signing key (extended key, public key, chain code), bytes 0-63 and 96-127.
+- `Derive` and the members built on it (`DeriveCardanoAccountKey`, `DerivePaymentKey`, `DeriveStakeKey`) throw `InvalidOperationException` for a 32-byte key; before, an `ArgumentException` came from an array copy.
+- `Ed25519` names its three private-key formats: `PublicKeyFromSeed` and `SeedAndPublicKeyFromSeed` take a 32-byte seed, `SignWithSeedAndPublicKey` takes 64 bytes of seed followed by public key, and `SignWithExtendedKey` and `PublicKeyFromExtendedKey` take a 64-byte Cardano extended key. `Sign`, `SignCrypto` and `ExpandedPrivateKeyFromSeed` stay and forward to them; `GetPublicKey` keeps its meaning (a scalar, never a seed).
+- `Sign`, `SignCrypto` and `GetPublicKey` throw `ArgumentException` (`ParamName` `expandedPrivateKey`) for a key of another length; before, a longer key was cut and a shorter one failed inside the computation. `ExpandedPrivateKeyFromSeed`'s wrong-length message is now "Must be 32 bytes, not N." (its type and `ParamName` are unchanged).

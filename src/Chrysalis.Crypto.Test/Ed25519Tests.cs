@@ -20,6 +20,7 @@ public sealed class Ed25519Tests
             byte[] sig = Ed25519.Sign(testCase.Message, testCase.PrivateKey);
             Assert.Equal(64, sig.Length);
             Assert.Equal(BitConverter.ToString(testCase.Signature), BitConverter.ToString(sig));
+            Assert.Equal(BitConverter.ToString(testCase.Signature), BitConverter.ToString(Ed25519.SignWithSeedAndPublicKey(testCase.Message, testCase.PrivateKey)));
         }
     }
 
@@ -41,13 +42,15 @@ public sealed class Ed25519Tests
             byte[] expanded = Ed25519.ExpandedPrivateKeyFromSeed(testCase.Seed);
             Assert.Equal(64, expanded.Length);
             Assert.Equal(BitConverter.ToString(testCase.PrivateKey), BitConverter.ToString(expanded));
+            Assert.Equal(BitConverter.ToString(testCase.PrivateKey), BitConverter.ToString(Ed25519.SeedAndPublicKeyFromSeed(testCase.Seed)));
+            Assert.Equal(BitConverter.ToString(testCase.PublicKey), BitConverter.ToString(Ed25519.PublicKeyFromSeed(testCase.Seed)));
         }
     }
 
     /// <summary>
-    /// GetPublicKey is Cardano-specific: it takes an expanded key whose first 32 bytes are
-    /// an already-clamped scalar (from BIP32 derivation). For standard Ed25519 seeds, we must
-    /// first expand via ExpandedPrivateKeyFromSeed, then extract the public key from bytes 32-63.
+    /// GetPublicKey multiplies the base point by its first 32 bytes as they are: the scalar of a
+    /// Cardano extended key, or the 32-byte scalar that Bip32Util.PointOfTrunc28Mul8 passes.
+    /// A seed's public key comes from PublicKeyFromSeed instead.
     /// This test verifies GetPublicKey produces valid keys that can verify signatures.
     /// </summary>
     [Fact]
@@ -61,6 +64,8 @@ public sealed class Ed25519Tests
         byte[] message = [1, 2, 3, 4, 5];
         byte[] sig = Ed25519.SignCrypto(message, clampedScalar);
         Assert.True(Ed25519.Verify(sig, message, pk));
+        Assert.Equal(pk, Ed25519.PublicKeyFromExtendedKey(clampedScalar));
+        Assert.Equal(pk, Ed25519.GetPublicKey(clampedScalar[..32]));
     }
 
     [Fact]
@@ -134,6 +139,7 @@ public sealed class Ed25519Tests
 
         Assert.Equal(64, sig.Length);
         Assert.True(Ed25519.Verify(sig, message, pk));
+        Assert.Equal(sig, Ed25519.SignWithExtendedKey(message, clampedScalar));
     }
 
     [Fact]
@@ -146,6 +152,57 @@ public sealed class Ed25519Tests
 
         Assert.True(Ed25519.Verify(sig, message, pk));
         Assert.False(Ed25519.Verify(sig, [1, 2, 3, 4, 6], pk));
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(32)]
+    [InlineData(63)]
+    [InlineData(65)]
+    [InlineData(96)]
+    public void SixtyFourByteMembers_RejectOtherLengths(int length)
+    {
+        byte[] key = new byte[length];
+        byte[] message = [1, 2, 3];
+        _ = Assert.Throws<ArgumentException>("expandedPrivateKey", () => Ed25519.Sign(message, key));
+        _ = Assert.Throws<ArgumentException>("expandedPrivateKey", () => Ed25519.SignCrypto(message, key));
+        _ = Assert.Throws<ArgumentException>("seedAndPublicKey", () => Ed25519.SignWithSeedAndPublicKey(message, key));
+        _ = Assert.Throws<ArgumentException>("extendedKey", () => Ed25519.SignWithExtendedKey(message, key));
+        _ = Assert.Throws<ArgumentException>("extendedKey", () => Ed25519.PublicKeyFromExtendedKey(key));
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(31)]
+    [InlineData(33)]
+    [InlineData(63)]
+    [InlineData(65)]
+    public void GetPublicKey_RejectsOtherLengths(int length) =>
+        _ = Assert.Throws<ArgumentException>("expandedPrivateKey", () => Ed25519.GetPublicKey(new byte[length]));
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(31)]
+    [InlineData(33)]
+    [InlineData(63)]
+    [InlineData(64)]
+    [InlineData(65)]
+    public void SeedMembers_RejectOtherLengths(int length)
+    {
+        byte[] key = new byte[length];
+        _ = Assert.Throws<ArgumentException>("privateKeySeed", () => Ed25519.ExpandedPrivateKeyFromSeed(key));
+        _ = Assert.Throws<ArgumentException>("seed", () => Ed25519.SeedAndPublicKeyFromSeed(key));
+        _ = Assert.Throws<ArgumentException>("seed", () => Ed25519.PublicKeyFromSeed(key));
+    }
+
+    [Fact]
+    public void ExistingMembers_KeepTheirNullErrors()
+    {
+        byte[] message = [1, 2, 3];
+        _ = Assert.Throws<ArgumentNullException>("expandedPrivateKey", () => Ed25519.Sign(message, null!));
+        _ = Assert.Throws<ArgumentNullException>("expandedPrivateKey", () => Ed25519.SignCrypto(message, null!));
+        _ = Assert.Throws<ArgumentNullException>("privateKeySeed", () => Ed25519.ExpandedPrivateKeyFromSeed(null!));
+        _ = Assert.Throws<ArgumentNullException>("expandedPrivateKey", () => Ed25519.GetPublicKey(null!));
     }
 
     private static byte[] CreateClampedScalar(byte seedByte)
