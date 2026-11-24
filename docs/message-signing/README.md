@@ -67,8 +67,8 @@ dotnet run --project src/Chrysalis.Wallet.Cli sign \
 
 # Output:
 # Address: addr1vyyl69u8el0mwfjzdytxpmcwlstnpkchts5x2k3r768ds5qge6cps
-# CIP-8 Format: cms_hFgjogEnJ1g...
-# CBOR Hex: 845823a20127...
+# CIP-8 Format: cms_<base64url>_<checksum>
+# CBOR Hex: 84582aa20127...
 ```
 
 ## Important Implementation Notes

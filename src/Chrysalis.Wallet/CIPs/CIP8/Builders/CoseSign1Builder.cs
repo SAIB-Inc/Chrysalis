@@ -86,12 +86,12 @@ public class CoseSign1Builder
             CborWriter protectedWriter = new(output);
             protectedWriter.WriteBeginMap(_address != null ? _protectedHeaders.Count + 2 : _protectedHeaders.Count + 1);
 
-            protectedWriter.WriteInt32(1); // algorithm label
-            protectedWriter.WriteInt32(-8); // EdDSA
+            protectedWriter.WriteInt32(HeaderLabels.Algorithm); // algorithm label
+            protectedWriter.WriteInt32(AlgorithmId.EdDSA); // EdDSA
 
             if (_address != null)
             {
-                protectedWriter.WriteInt32(-8); // address label
+                protectedWriter.WriteString(HeaderLabels.Address); // address label
                 protectedWriter.WriteByteString(_address.ToBytes());
             }
 
@@ -110,7 +110,7 @@ public class CoseSign1Builder
             protectedHeaderBytes = [];
         }
 
-        CborMap unprotectedHeaders = CborMap.Create([new(CborString.Create("hashed"), CborBool.Create(_hashPayload))]);
+        CborMap unprotectedHeaders = CborMap.Create([new(CborString.Create(HeaderLabels.Hashed), CborBool.Create(_hashPayload))]);
 
         SigStructure sigStructure = new(
             Context: SigContext.Signature1,

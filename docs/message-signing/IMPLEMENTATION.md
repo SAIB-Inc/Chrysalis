@@ -37,13 +37,13 @@ Protected headers are CBOR-encoded and wrapped as a byte string. The map MUST co
 ```cbor
 {
     1: -8,                    # Algorithm: EdDSA
-    -8: h'...'               # Address bytes (29 bytes for payment addresses)
+    "address": h'...'        # Address bytes (29 bytes for payment addresses)
 }
 ```
 
 Key definitions:
 - `1` (alg): Algorithm identifier, MUST be `-8` (EdDSA)
-- `-8`: Address binding (custom label for Cardano addresses)
+- `"address"`: Address binding (CIP-8 text-string label for Cardano addresses)
 
 ### 2.2 Unprotected Headers
 
@@ -64,7 +64,7 @@ COSE allows map keys to be either integers or strings:
 {
     1: -8,                    # Integer key (algorithm)
     "hashed": false,          # String key (custom header)
-    -8: h'...'               # Negative integer key (address)
+    "address": h'...'        # String key (address)
 }
 ```
 
@@ -125,8 +125,8 @@ The implementation supports Cardano Shelley extended signing keys (128 bytes):
 
 ```
 Bytes 0-63:   Extended Ed25519 private key (64 bytes)
-Bytes 64-95:  Chain code (32 bytes)
-Bytes 96-127: Public key (32 bytes)
+Bytes 64-95:  Public key (32 bytes)
+Bytes 96-127: Chain code (32 bytes)
 ```
 
 ### 4.2 Verification Keys
@@ -143,7 +143,7 @@ Cardano key files use JSON with CBOR hex encoding:
 
 ```json
 {
-    "type": "PaymentSigningKeyShelley_ed25519_bip32",
+    "type": "PaymentExtendedSigningKeyShelley_ed25519_bip32",
     "description": "Payment Signing Key",
     "cborHex": "5880..." // 128 bytes hex encoded
 }
@@ -164,15 +164,16 @@ Cardano key files use JSON with CBOR hex encoding:
 ### 5.2 Code Example
 
 ```csharp
-// Build protected headers
-var protectedWriter = new CborWriter(CborConformanceMode.Strict);
-protectedWriter.WriteStartMap(2);
-protectedWriter.WriteInt32(1);  // algorithm label
-protectedWriter.WriteInt32(-8); // EdDSA
-protectedWriter.WriteInt32(-8); // address label
+// Build protected headers (SAIB.Cbor)
+ArrayBufferWriter<byte> output = new();
+CborWriter protectedWriter = new(output);
+protectedWriter.WriteBeginMap(2);
+protectedWriter.WriteInt32(HeaderLabels.Algorithm);
+protectedWriter.WriteInt32(AlgorithmId.EdDSA);
+protectedWriter.WriteString(HeaderLabels.Address);
 protectedWriter.WriteByteString(address.ToBytes());
-protectedWriter.WriteEndMap();
-var protectedHeaderBytes = protectedWriter.Encode();
+protectedWriter.WriteEndMap(2);
+byte[] protectedHeaderBytes = output.WrittenSpan.ToArray();
 
 // Build Sig_structure (4 elements for Signature1)
 var sigStructure = new SigStructure(
@@ -190,29 +191,13 @@ var signature = privateKey.Sign(sigBytes);
 
 ## 6. CIP-8 Format Encoding
 
-### 6.1 Structure
+Implemented by `CoseMessageExtensions.ToCip8Format` and `CoseMessageExtensions.FromCip8Format`
+(`src/Chrysalis.Wallet/CIPs/CIP8/Extensions/CoseMessageExtensions.cs`).
 
-```
-cms_<base64url(cbor_bytes)><base64url(checksum)>
-```
-
-### 6.2 Checksum Calculation
-
-- Algorithm: FNV-32a (32-bit Fowler-Noll-Vo hash)
-- Input: Raw CBOR bytes of the COSE_Sign1 message
-- Output: 4-byte checksum, base64url-encoded
-
-### 6.3 Implementation
-
-```csharp
-public static string ToCip8Format(byte[] cborBytes)
-{
-    var checksum = ComputeFnv32a(cborBytes);
-    var encoded = Base64UrlEncode(cborBytes);
-    var checksumEncoded = Base64UrlEncode(checksum);
-    return $"cms_{encoded}{checksumEncoded}";
-}
-```
+- Wire framing: `cms_<base64url>_<checksum>` (canonical unpadded ASCII Base64Url).
+- Checksum: 32-bit FNV-1a over the ASCII string `prefix + base64url`, written in native byte order
+  (little-endian on x64/arm64) and Base64Url-encoded (6 characters).
+- `FromCip8Format` validates ASCII and canonical unpadded Base64Url before verifying the checksum.
 
 ## 7. Verification Process
 
@@ -226,22 +211,17 @@ public static string ToCip8Format(byte[] cborBytes)
 
 ### 7.2 Verification Code
 
-```csharp
-public bool VerifyCoseSign1(CoseSign1 message, PublicKey publicKey)
-{
-    // Reconstruct Sig_structure
-    var sigStructure = new SigStructure(
-        Context: "Signature1",
-        BodyProtected: message.ProtectedHeaders.ToBytes(),
-        SignProtected: [], // Not included for Signature1
-        ExternalAad: message.ExternalAad ?? [],
-        Payload: message.Payload ?? []
-    );
-    
-    var sigBytes = sigStructure.ToCbor();
-    return publicKey.Verify(sigBytes, message.Signature);
-}
-```
+Implemented by `CoseMessageExtensions.GetSigStructure` and `EdDsaCoseSigner.VerifyCoseSign1`
+(`src/Chrysalis.Wallet/CIPs/CIP8/Extensions/CoseMessageExtensions.cs`,
+`src/Chrysalis.Wallet/CIPs/CIP8/Signers/EdDsaCoseSigner.cs`).
+
+- Reads `"hashed"` directly from raw CBOR unprotected headers (definite and indefinite maps),
+  skipping unrelated annotations and rejecting non-boolean, duplicated, or malformed entries.
+- Caller-supplied `payload` is raw plaintext (never pre-hashed), hashed with Blake2b-224 when
+  `"hashed": true`, and always checked against any attached payload; missing `"hashed"` defaults
+  to `false`, and `"version"` is neither required nor emitted.
+- Passing `payload: null` authenticates only that `verificationKey` signed the attached bytes and
+  protected headers verbatim (not key-to-address ownership or digest-vs-raw distinction).
 
 ## 8. Compatibility Verification
 
@@ -274,8 +254,8 @@ dotnet run sign --skey payment.skey --vkey payment.vkey --payload message.txt
 
 # Output:
 # Address: addr1vyyl69u8el0mwfjzdytxpmcwlstnpkchts5x2k3r768ds5qge6cps
-# CIP-8 Format: cms_hFgjogEnJ1g...
-# CBOR Hex: 845823a20127...
+# CIP-8 Format: cms_<base64url>_<checksum>
+# CBOR Hex: 84582aa20127...
 ```
 
 ### 9.2 Verifying Signatures

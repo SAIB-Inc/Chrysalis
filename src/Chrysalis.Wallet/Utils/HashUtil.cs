@@ -8,6 +8,8 @@ namespace Chrysalis.Wallet.Utils;
 /// </summary>
 public static class HashUtil
 {
+    internal const int Blake2b224Size = 28;
+
     /// <summary>
     /// Computes a Blake2b-256 hash (256-bit / 32-byte output).
     /// </summary>
@@ -29,7 +31,7 @@ public static class HashUtil
     {
         ArgumentNullException.ThrowIfNull(data);
 
-        return Blake2b.HashData(28, data);
+        return Blake2b.HashData(Blake2b224Size, data);
     }
 
     /// <summary>

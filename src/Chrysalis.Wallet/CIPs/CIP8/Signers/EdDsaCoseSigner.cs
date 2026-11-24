@@ -1,8 +1,8 @@
 using Chrysalis.Wallet.CIPs.CIP8.Builders;
+using Chrysalis.Wallet.CIPs.CIP8.Extensions;
 using Chrysalis.Wallet.CIPs.CIP8.Models;
 using Chrysalis.Wallet.Models.Addresses;
 using Chrysalis.Wallet.Models.Keys;
-using Chrysalis.Wallet.Utils;
 
 namespace Chrysalis.Wallet.CIPs.CIP8.Signers;
 
@@ -58,34 +58,8 @@ public class EdDsaCoseSigner : ICoseSigner
 
         try
         {
-            // Get the payload - either from the message or provided externally
-            byte[] actualPayload = payload ?? coseSign1.Payload ?? throw new ArgumentException("Payload is required for verification. Either include it in the message or provide it as a parameter.");
-
-            // Check if payload was hashed by examining unprotected headers
-            bool isHashed = false;
-
-            // TODO: Check for "hashed" header in unprotected headers
-            // For now, we'll need to handle this when we have proper custom header support
-
-            // Apply hashing if needed
-            if (isHashed)
-            {
-                actualPayload = HashUtil.Blake2b224(actualPayload);
-            }
-
-            // Reconstruct the SigStructure that was signed
-            SigStructure sigStructure = new(
-                Context: SigContext.Signature1,
-                BodyProtected: coseSign1.ProtectedHeaders,
-                SignProtected: [], // Empty for Signature1
-                ExternalAad: externalAad ?? [],
-                Payload: actualPayload
-            );
-
-            // Serialize the SigStructure to get the signed data
+            SigStructure sigStructure = coseSign1.GetSigStructure(externalAad, payload);
             byte[] signedData = sigStructure.ToCbor();
-
-            // Verify the signature
             return verificationKey.Verify(signedData, coseSign1.Signature);
         }
         catch (ArgumentException)

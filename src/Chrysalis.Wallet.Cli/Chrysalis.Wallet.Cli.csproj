@@ -2,6 +2,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Chrysalis.Wallet\Chrysalis.Wallet.csproj" />
+    <InternalsVisibleTo Include="Chrysalis.Wallet.Test" />
   </ItemGroup>
 
   <PropertyGroup>
