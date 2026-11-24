@@ -78,7 +78,7 @@ public sealed partial class CborSerializerCodeGen
             return $"throw CborError.Decode(data, 0, \"{union.FullyQualifiedName}\", \"unambiguous union case among {alternatives}{help}\");";
         }
 
-        private bool TryEmitCandidateShapes(StringBuilder sb, SerializableTypeMetadata metadata)
+        private bool TryEmitCandidateShapes(StringBuilder sb, SerializableTypeMetadata metadata, bool bySize = false)
         {
             List<SerializableTypeMetadata> leaves = FlattenUnionChildren(metadata.ChildTypes);
             if (leaves.Count == 1)
@@ -99,6 +99,23 @@ public sealed partial class CborSerializerCodeGen
             _ = sb.AppendLine("int matched = -1;");
             _ = sb.AppendLine($"(int Remaining, string Path, string Expected) failure = (data.Length, \"{metadata.FullyQualifiedName}\", \"registered union shape\");");
             _ = sb.AppendLine("try {");
+            if (bySize)
+            {
+                // Disjoint ranges leave a full-length tuple one possible case. Every other length,
+                // indefinite included, and every non-array input still takes the walk below.
+                _ = sb.AppendLine("if (!data.IsEmpty && (data.Span[0] >> 5) == 4)");
+                _ = sb.AppendLine("{");
+                _ = sb.AppendLine("var _sizeReader = new CborReader(data.Span);");
+                _ = sb.AppendLine("_sizeReader.ReadBeginArray();");
+                _ = sb.AppendLine("switch (_sizeReader.ReadSize())");
+                _ = sb.AppendLine("{");
+                foreach (SerializableTypeMetadata leaf in leaves)
+                {
+                    _ = sb.AppendLine($"case {ItemCountRange(leaf).Maximum}: return {leaf.FullyQualifiedName}.Read(data, out bytesConsumed);");
+                }
+                _ = sb.AppendLine("}");
+                _ = sb.AppendLine("}");
+            }
             for (int i = 0; i < leaves.Count; i++)
             {
                 _ = sb.AppendLine($"if (_Matches{i}(new CborReader(data.Span), ref failure))");
@@ -170,6 +187,10 @@ public sealed partial class CborSerializerCodeGen
             && typeRegistry.TryGetValue(NormalizeTypeName(prop.PropertyTypeFullName), out SerializableTypeMetadata? nested)
             && IsProbeableTuple(nested) ? nested : null;
 
+        // The item counts a tuple's shape walk accepts: its required fields up to all of them.
+        private static (int Minimum, int Maximum) ItemCountRange(SerializableTypeMetadata tuple) =>
+            (tuple.Properties.Count(p => !p.IsTypeNullable), tuple.Properties.Count);
+
         private static bool IsProbeableTuple(SerializableTypeMetadata metadata) =>
             metadata is { SerializationType: SerializationType.List, CborTag: null } && metadata.Properties.All(p => !p.IsTypeNullable);
 
@@ -180,8 +201,8 @@ public sealed partial class CborSerializerCodeGen
             _ = sb.AppendLine("if (reader.Buffer.IsEmpty || (reader.Buffer[0] >> 5) != 4) return false;");
             _ = sb.AppendLine("reader.ReadBeginArray();");
             _ = sb.AppendLine($"int {count} = reader.ReadSize();");
-            int minimum = tuple.Properties.Count(p => !p.IsTypeNullable);
-            _ = sb.AppendLine($"if ({count} != -1 && ({count} < {minimum} || {count} > {tuple.Properties.Count})) return false;");
+            (int minimum, int maximum) = ItemCountRange(tuple);
+            _ = sb.AppendLine($"if ({count} != -1 && ({count} < {minimum} || {count} > {maximum})) return false;");
             int position = 0;
             foreach (SerializablePropertyMetadata prop in tuple.Properties)
             {
@@ -353,11 +374,14 @@ public sealed partial class CborSerializerCodeGen
 
             if (hasArraySizeChildren && !hasTagChildren && !hasConstrChildren && !hasIdxChildren && !hasStateChildren)
             {
-                // The size switch can select only exact lengths. A trailing nullable field
-                // lets its reader accept a shorter tuple, possibly shared by another case.
+                // The size switch can select only exact lengths, and a nullable field lets its reader
+                // accept a shorter tuple. Such a union keeps the shape walk; a full-length tuple skips
+                // it only when the walk ranges (finite for every list case) are pairwise disjoint.
                 if (children.Any(child => child.Properties.Any(prop => prop.IsTypeNullable)))
                 {
-                    return false;
+                    List<(int Minimum, int Maximum)> ranges = [.. children.Select(ItemCountRange)];
+                    return !ranges.Where((range, i) => ranges.Take(i).Any(other => range.Minimum <= other.Maximum && other.Minimum <= range.Maximum)).Any()
+                        && TryEmitCandidateShapes(sb, metadata, bySize: true);
                 }
                 EmitArraySizeBranch(sb, metadata, probeGroups);
             }
