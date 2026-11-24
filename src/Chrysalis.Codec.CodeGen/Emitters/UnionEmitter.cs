@@ -116,6 +116,7 @@ public sealed partial class CborSerializerCodeGen
                 _ = sb.AppendLine("}");
                 _ = sb.AppendLine("}");
             }
+            _ = sb.AppendLine("try {");
             for (int i = 0; i < leaves.Count; i++)
             {
                 _ = sb.AppendLine($"if (_Matches{i}(new CborReader(data.Span), ref failure))");
@@ -135,6 +136,9 @@ public sealed partial class CborSerializerCodeGen
             }
             _ = sb.AppendLine($"    _ => throw CborError.Decode(data, data.Length - failure.Remaining, failure.Path, failure.Expected)");
             _ = sb.AppendLine("};");
+            _ = sb.AppendLine("} catch (Exception error) when (error is CborDecodeException or global::SAIB.Cbor.CborException) {");
+            _ = sb.AppendLine($"throw CborError.Wrap(error, data, \"{metadata.FullyQualifiedName}\", \"registered union shape\");");
+            _ = sb.AppendLine("}");
 
             for (int i = 0; i < leaves.Count; i++)
             {
@@ -209,7 +213,7 @@ public sealed partial class CborSerializerCodeGen
                 if (prop.IsTypeNullable)
                 {
                     _ = sb.AppendLine($"if ({count} >= 0 && {count} <= {position}) return true;");
-                    _ = sb.AppendLine("if (!reader.Buffer.IsEmpty && reader.Buffer[0] == 0xFF) { reader.SkipDataItem(); return true; }");
+                    _ = sb.AppendLine($"if ({count} == -1 && !reader.Buffer.IsEmpty && reader.Buffer[0] == 0xFF) {{ reader.SkipDataItem(); return true; }}");
                 }
                 bool leadingIndex = position++ == 0 && tuple.CborIndex is >= 0;
                 if (leadingIndex)
@@ -224,24 +228,33 @@ public sealed partial class CborSerializerCodeGen
                     continue;
                 }
                 string shape = TupleFieldShape(prop);
-                string expected = prop.IsIndefinite && prop.IsList ? "indefinite array" : shape switch
-                {
-                    "text" => "text string",
-                    "bytes" => "byte string",
-                    "unknown" => "CBOR item",
-                    _ => shape
-                };
+                bool? requiredIndefinite = !(prop.IsList || prop.IsMap) ? null : prop.IsIndefinite ? true : prop.IsDefinite ? false : null;
+                string expected = requiredIndefinite is bool wantIndefinite
+                    ? $"{(wantIndefinite ? "indefinite" : "definite")} {shape}"
+                    : shape switch
+                    {
+                        "text" => "text string",
+                        "bytes" => "byte string",
+                        "unknown" => "CBOR item",
+                        _ => shape
+                    };
                 _ = sb.AppendLine($"if (reader.Buffer.Length <= failure.Remaining) failure = (reader.Buffer.Length, \"{path}.{prop.PropertyName}\", \"{expected}\");");
                 _ = sb.AppendLine("if (reader.Buffer.IsEmpty || reader.Buffer[0] == 0xFF) return false;");
                 if (shape != "unknown")
                 {
                     string pattern = GetCborReaderStatePattern(shape);
                     string nullable = prop.IsTypeNullable ? "reader.Buffer[0] is not (0xF6 or 0xF7) && " : "";
-                    _ = sb.AppendLine($"if ({nullable}reader.GetCurrentDataItemType() is not ({pattern})) return false;");
-                }
-                if (prop.IsList && prop.IsIndefinite)
-                {
-                    _ = sb.AppendLine("if (reader.Buffer[0] != 0x9F) return false;");
+                    if (requiredIndefinite is bool indefinite)
+                    {
+                        string probe = $"_probe{index++}";
+                        _ = sb.AppendLine($"var {probe} = reader;");
+                        string check = $"{probe}.GetCurrentDataItemType() is not ({pattern}) || {probe}.ReadSize() {(indefinite ? "!=" : "==")} -1";
+                        _ = sb.AppendLine($"if ({(prop.IsTypeNullable ? $"{nullable}({check})" : check)}) return false;");
+                    }
+                    else
+                    {
+                        _ = sb.AppendLine($"if ({nullable}reader.GetCurrentDataItemType() is not ({pattern})) return false;");
+                    }
                 }
                 _ = sb.AppendLine("reader.SkipDataItem();");
             }

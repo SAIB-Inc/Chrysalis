@@ -313,6 +313,70 @@ public class X7Tests
         Assert.Contains("X7Short", error.Expected, StringComparison.Ordinal);
         Assert.Contains("X7Long", error.Expected, StringComparison.Ordinal);
         Assert.Equal(2, Assert.IsType<X7Long>(IX7Range.Read((byte[])[0x82, 1, 2])).Tail);
+        CborDecodeException badBreak = Assert.Throws<CborDecodeException>(() => IX7Range.Read((byte[])[0x82, 1, 0xFF]));
+        Assert.Equal((2, "Chrysalis.Codec.Test.IX7Range.Chrysalis.Codec.Test.X7Long.Tail", "integer"), (badBreak.Offset, badBreak.TypePath, badBreak.Expected));
+    }
+
+    [Fact]
+    public void X7WalkAcceptsFormConstrainedAndChunkedWires()
+    {
+        X7WalkInd one = Assert.IsType<X7WalkInd>(IX7Walk.Read(Convert.FromHexString("82019F01FF"), out int consumed));
+        Assert.Equal((1, 5, null), (one.Head, consumed, one.Tail));
+        Assert.Equal([1], one.Xs);
+        Assert.Empty(Assert.IsType<X7WalkInd>(IX7Walk.Read(Convert.FromHexString("82019FFF"), out consumed)).Xs);
+        Assert.Equal(4, consumed);
+        Assert.Equal([1], Assert.IsType<X7WalkInd>(IX7Walk.Read(Convert.FromHexString("8201C69F01FF"), out consumed)).Xs);
+        Assert.Equal(6, consumed);
+        byte[] wideWire = Convert.FromHexString("85BF0102FF8103A104055F410A410BFF7FFF");
+        X7WalkWide wide = Assert.IsType<X7WalkWide>(IX7Walk.Read(wideWire, out consumed));
+        Assert.Equal((wideWire.Length, 2, 5, ""), (consumed, Assert.Single(wide.IndefMap).Value, Assert.Single(wide.DefMap).Value, wide.Text));
+        Assert.Equal([3], wide.DefList);
+        Assert.Equal([0x0A, 0x0B], wide.Bytes.ToArray());
+        Assert.Null(Assert.IsType<X7WalkWide>(IX7Walk.Read(Convert.FromHexString("86BFFF80A04060F6"), out _)).OptDefList);
+        Assert.Equal([7], Assert.IsType<X7WalkWide>(IX7Walk.Read(Convert.FromHexString("86BFFF80A040608107"), out _)).OptDefList);
+    }
+
+    [Theory]
+    [InlineData("820180", 2, "X7WalkInd.Xs", "indefinite array", false)]
+    [InlineData("8201819FFF", 2, "X7WalkInd.Xs", "indefinite array", false)]
+    [InlineData("8201C680", 2, "X7WalkInd.Xs", "indefinite array", false)]
+    [InlineData("82019F01", 4, "X7WalkInd.Xs", "indefinite array", true)]
+    [InlineData("820198", 3, "X7WalkInd.Xs", "indefinite array", true)]
+    [InlineData("820102", 2, "X7WalkInd.Xs", "indefinite array", false)]
+    [InlineData("8201F6", 2, "X7WalkInd.Xs", "indefinite array", false)]
+    [InlineData("85A080A04060", 1, "X7WalkWide.IndefMap", "indefinite map", false)]
+    [InlineData("85BFFF9FFFA04060", 3, "X7WalkWide.DefList", "definite array", false)]
+    [InlineData("85BFFF80BFFF4060", 4, "X7WalkWide.DefMap", "definite map", false)]
+    [InlineData("85BFFF80A05F6161FF60", -1, "X7WalkWide.Bytes", "byte string", true)]
+    [InlineData("85BFFF80A05F4101", -1, "X7WalkWide.Bytes", "byte string", true)]
+    [InlineData("85BFFF80A0407F4161FF", -1, "X7WalkWide.Text", "text string", true)]
+    [InlineData("85BFFF80A0407F6161", -1, "X7WalkWide.Text", "text string", true)]
+    [InlineData("86BFFF80A0407F61616162FF9FFF", 12, "X7WalkWide.OptDefList", "definite array", false)]
+    public void X7WalkRefusesWrongFormAndMalformedWires(string hex, int offset, string field, string expected, bool saibCause)
+    {
+        CborDecodeException error = Assert.Throws<CborDecodeException>(() => IX7Walk.Read(Convert.FromHexString(hex)));
+        Assert.Equal($"Chrysalis.Codec.Test.IX7Walk.Chrysalis.Codec.Test.{field}", error.TypePath);
+        Assert.Equal(expected, error.Expected);
+        if (offset >= 0)
+        {
+            Assert.Equal(offset, error.Offset);
+        }
+        Assert.Equal(saibCause, error.InnerException is SAIB.Cbor.CborException);
+        Assert.Equal(saibCause, error.InnerException is not null);
+    }
+
+    [Theory]
+    [InlineData(true, "83010103")]
+    [InlineData(false, "821BFFFFFFFFFFFFFFFF6161")]
+    public void X7UnionDecodeFailureKeepsOneUnionPrefixAndDirectCause(bool bySize, string hex)
+    {
+        byte[] data = Convert.FromHexString(hex);
+        CborDecodeException direct = bySize ? Assert.Throws<CborDecodeException>(() => X7WalkInd.Read(data)) : Assert.Throws<CborDecodeException>(() => X6DepthOneB.Read(data));
+        CborDecodeException union = bySize ? Assert.Throws<CborDecodeException>(() => IX7Walk.Read(data)) : Assert.Throws<CborDecodeException>(() => IX6DepthOne.Read(data));
+        string prefix = (bySize ? typeof(IX7Walk) : typeof(IX6DepthOne)).FullName!;
+        Assert.Equal($"{prefix}.{direct.TypePath}", union.TypePath);
+        Assert.Equal((direct.Offset, direct.Expected, direct.Actual), (union.Offset, union.Expected, union.Actual));
+        Assert.Equal(direct.TypePath, Assert.IsType<CborDecodeException>(union.InnerException).TypePath);
     }
 
     private static BlockWithEra BlockFixture(string name) => BlockWithEra.Read(Convert.FromHexString(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "TestData", name)).Trim()));
@@ -357,3 +421,11 @@ public partial record X7KeyedEager([CborProperty(1)] int Value) : CborRecord;
 [CborSerializable, CborUnion] public partial interface IX7Range : ICborType;
 [CborSerializable, CborList] public readonly partial record struct X7Short : IX7Range { [CborOrder(0)] public partial int Value { get; } }
 [CborSerializable, CborList] public readonly partial record struct X7Long : IX7Range { [CborOrder(0)] public partial int Value { get; } [CborOrder(1)] public partial int? Tail { get; } }
+
+[CborSerializable, CborUnion] public partial interface IX7Walk : ICborType;
+[CborSerializable, CborList] public partial record X7WalkInd([CborOrder(0)] int Head, [CborOrder(1), CborIndefinite] List<int> Xs, [CborOrder(2)] int? Tail) : CborRecord, IX7Walk;
+[CborSerializable, CborList]
+public partial record X7WalkWide(
+    [CborOrder(0), CborIndefinite] Dictionary<int, int> IndefMap, [CborOrder(1), CborDefinite] List<int> DefList,
+    [CborOrder(2), CborDefinite] Dictionary<int, int> DefMap, [CborOrder(3)] ReadOnlyMemory<byte> Bytes,
+    [CborOrder(4)] string Text, [CborOrder(5), CborDefinite] List<int>? OptDefList, [CborOrder(6)] int? Tail) : CborRecord, IX7Walk;
