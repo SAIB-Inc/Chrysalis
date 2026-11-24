@@ -22,8 +22,8 @@ using Chrysalis.Tx.Fees;
 using Chrysalis.Tx.Models;
 using Chrysalis.Tx.Models.Cbor;
 using Chrysalis.Tx.Test.Cli;
-using Chrysalis.Tx.Utils;
 using Chrysalis.Wallet.Models.Keys;
+using Chrysalis.Wallet.Utils;
 using Xunit;
 using static Chrysalis.Tx.Test.Cli.CliVectors;
 using WalletAddress = Chrysalis.Wallet.Models.Addresses.Address;
@@ -320,8 +320,26 @@ public sealed class BuilderFeeTests(BuilderFeeFixture fixture) : IClassFixture<B
         RedeemerMap redeemers = Assert.IsType<RedeemerMap>(witnesses.Redeemers);
         RedeemerValue entry = Assert.Single(redeemers.Value).Value;
         Assert.Equal(units.Mem + 100_000, entry.ExUnits.Mem);
-        byte[] languageViews = CborSerializer.Serialize(new CostMdls(null, null, pp.CostModelsForScriptLanguage!.PlutusV3));
-        Assert.Equal(DataHashUtil.CalculateScriptDataHash(redeemers, witnesses.PlutusDataSet, languageViews), tx.Body.ScriptDataHash()!.Value.ToArray());
+        Assert.Equal(LedgerScriptDataHash(tx, 2, pp.CostModelsForScriptLanguage?.PlutusV3), tx.Body.ScriptDataHash()?.ToArray());
+    }
+
+    // The node sends cost models as indefinite-length lists (the G1 wire reply); cardano-cli's F09 hash is the V3 reference, the ledger rule the V2 one.
+    [Fact]
+    public async Task ScriptDataHashUsesTheLedgersFixedLengthCostList()
+    {
+        (ProtocolParams pp, ResolvedInput input, ResolvedInput collateral, PlutusV3Script script, ExUnits units) = ScriptVector();
+        Assert.True(pp.CostModelsForScriptLanguage?.PlutusV3?.IsIndefinite);
+        PostMaryTransaction seed = fixture.Tx(fixture.Row("F09"));
+        PostMaryTransaction tx = await ScriptSpend(pp, input, collateral, script, (_, _) => Result(units.Mem, units.Steps)).Complete();
+        Assert.Equal(((PostAlonzoTransactionWitnessSet)seed.Witnesses).Redeemers?.Raw.ToArray(), ((PostAlonzoTransactionWitnessSet)tx.Witnesses).Redeemers?.Raw.ToArray());
+        Assert.Equal(seed.Body.ScriptDataHash()?.ToArray(), LedgerScriptDataHash(seed, 2, pp.CostModelsForScriptLanguage?.PlutusV3));
+        Assert.Equal(seed.Body.ScriptDataHash()?.ToArray(), tx.Body.ScriptDataHash()?.ToArray());
+        Assert.True(pp.CostModelsForScriptLanguage?.PlutusV2?.IsIndefinite);
+        PlutusV2Script v2 = PlutusV2Script.Create(2, script.ScriptBytes);
+        ResolvedInput locked = new(input.Outref, PostAlonzoTransactionOutput.Create(new Address((byte[])[input.Output.Address().Span[0], .. v2.Hash()]),
+            input.Output.Amount(), DatumOptionExtensions.InlineDatumFrom(PlutusInt.Create(42))));
+        PostMaryTransaction v2Tx = await ScriptSpend(pp, locked, collateral, v2, (_, _) => Result(units.Mem, units.Steps)).Complete();
+        Assert.Equal(LedgerScriptDataHash(v2Tx, 1, pp.CostModelsForScriptLanguage?.PlutusV2), v2Tx.Body.ScriptDataHash()?.ToArray());
     }
 
     [Theory]
@@ -807,7 +825,19 @@ public sealed class BuilderFeeTests(BuilderFeeFixture fixture) : IClassFixture<B
         return (fixture.Pp(row), new ResolvedInput(spend.Outref, output), collateral, PlutusV3Script.Create(3, program), Assert.Single(redeemers.Value).Value.ExUnits);
     }
 
-    private static TxBuilder ScriptSpend(ProtocolParams pp, ResolvedInput input, ResolvedInput collateral, PlutusV3Script script,
+    // The ledger's script integrity hash: redeemers and datums as the transaction carries them, then one V2 or V3 language view,
+    // {language: its costs as a fixed-length list, whose head is 0x99 for 256 to 65,535 costs} (cardano-ledger 95b369053f, Alonzo/PParams.hs:549-552, 566-574).
+    private static byte[] LedgerScriptDataHash(PostMaryTransaction tx, byte language, CborList<long>? costModel)
+    {
+        PostAlonzoTransactionWitnessSet witnesses = Assert.IsType<PostAlonzoTransactionWitnessSet>(tx.Witnesses);
+        long[] costs = [.. costModel ?? throw new InvalidOperationException("No cost model.")];
+        Assert.InRange(costs.Length, 256, ushort.MaxValue);
+        byte[] items = CborSerializer.Serialize(CborList.Create(costs, isIndefinite: true))[1..^1];
+        byte[] datums = witnesses.PlutusDataSet is { Count: > 0 } set ? set.Raw.ToArray() : [];
+        return HashUtil.Blake2b256([.. witnesses.Redeemers?.Raw.ToArray() ?? [], .. datums, 0xa1, language, 0x99, (byte)(costs.Length >> 8), (byte)costs.Length, .. items]);
+    }
+
+    private static TxBuilder ScriptSpend(ProtocolParams pp, ResolvedInput input, ResolvedInput collateral, IScript script,
         Func<PostMaryTransaction, IReadOnlyList<ResolvedInput>, Task<IReadOnlyList<EvaluationResult>>> evaluate) =>
         new TxBuilder(new CliSnapshotProvider(pp, [input, collateral])).AddInput(input, PlutusInt.Create(42)).PayLovelace(Recipient, 2_000_000)
             .SetChangeAddress(Recipient).ProvideScript(script).ProvideCollateral([collateral]).UseEvaluator(evaluate);

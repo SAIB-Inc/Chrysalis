@@ -5,8 +5,6 @@ using Chrysalis.Codec.Types.Cardano.Core.Common;
 using Chrysalis.Codec.Types.Cardano.Core.Scripts;
 using Chrysalis.Codec.Types.Cardano.Core.Transaction;
 using Chrysalis.Plutus.Cbor;
-using Chrysalis.Plutus.Flat;
-using Chrysalis.Plutus.Text;
 using Chrysalis.Plutus.Types;
 using Chrysalis.Plutus.VM.Models;
 using Chrysalis.Tx.Builders;
@@ -80,10 +78,7 @@ public class X7PlutusMapTests
             "[(force (builtin headList)) [(force (force (builtin sndPair))) [(builtin unConstrData) " +
             "[(force (builtin headList)) [(force (builtin tailList)) [(force (force (builtin sndPair))) [(builtin unConstrData) " +
             "[(force (builtin headList)) [(force (builtin tailList)) [(force (builtin tailList)) [(force (force (builtin sndPair))) [(builtin unConstrData) ctx]]]]]]]]]]]]]))";
-        byte[] flat = FlatEncoder.EncodeProgram(UplcParser.NameToDeBruijn(UplcParser.Parse(source)));
-        Assert.True(flat.Length < 256);
-        byte[] wrapped = flat.Length < 24 ? [(byte)(0x40 | flat.Length), .. flat] : [0x58, (byte)flat.Length, .. flat];
-        PlutusV3Script script = PlutusV3Script.Create(3, wrapped);
+        PlutusV3Script script = PlutusV3Script.Create(3, TestScripts.Wrap(source));
         byte[] scriptAddress = [0x70, .. Convert.FromHexString(script.HashHex())];
         TransactionInput outref = TransactionInput.Create(new byte[32], 0);
         PostAlonzoTransactionOutput utxo = PostAlonzoTransactionOutput.Create(

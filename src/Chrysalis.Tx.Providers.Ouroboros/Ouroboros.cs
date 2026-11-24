@@ -103,6 +103,21 @@ public sealed partial class Ouroboros(string socketPath, ulong networkMagic = 2)
         }, cancellationToken);
 
     /// <summary>
+    /// Reads the network's system start and era history from the node.
+    /// </summary>
+    /// <param name="cancellationToken">Cancels the operation.</param>
+    /// <returns>The node's <see cref="SlotNetworkConfig"/>; it ends where the node's era history ends.</returns>
+    public Task<SlotNetworkConfig> GetSlotNetworkConfigAsync(CancellationToken cancellationToken = default) =>
+        RunAsync(nameof(GetSlotNetworkConfigAsync), async (client, ct) =>
+        {
+            SystemStartResponse start = await client.LocalStateQuery.GetSystemStartAsync(ct).ConfigureAwait(false);
+            EraHistoryResponse history = await client.LocalStateQuery.GetEraHistoryAsync(ct).ConfigureAwait(false);
+            return ProviderHttp.Map(history, answer => new SlotNetworkConfig(start.Utc,
+                [.. answer.Summaries.Select(era => new SlotEra(era.Start.Slot, era.Parameters.SlotLengthMilliseconds))],
+                answer.Summaries[^1].End?.Slot), Provider, nameof(GetSlotNetworkConfigAsync));
+        }, cancellationToken);
+
+    /// <summary>
     /// Retrieves UTxOs for the given addresses via local state query.
     /// </summary>
     /// <param name="address">The list of Bech32 addresses.</param>

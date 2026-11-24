@@ -28,6 +28,7 @@ public class TxBuilder
 {
     private readonly ICardanoDataProvider _provider;
     private ProtocolParams? _pparams;
+    private SlotNetworkConfig? _slotConfig;
 
     // ── Explicit inputs (always included) ──
     private readonly List<InputDirective> _explicitInputs = [];
@@ -476,6 +477,7 @@ public class TxBuilder
     /// calculates fees, builds change output, selects collateral, evaluates scripts.
     /// Returns a balanced, ready-to-sign transaction.
     /// </summary>
+    /// <exception cref="SlotConversionException">A script runs on a transaction with a validity bound and the provider has no <see cref="SlotNetworkConfig"/> for its network, or the bound is outside it.</exception>
     public async Task<PostMaryTransaction> Complete()
     {
         if (_changeAddress is null)
@@ -952,9 +954,13 @@ public class TxBuilder
         IReadOnlyList<Plutus.VM.Models.EvaluationResult> evaluated = _evaluator is not null
             ? await _evaluator(transaction, resolvedInputs).ConfigureAwait(false)
             : ScriptContextBuilder.EvaluateTx((ConwayTransactionBody)transaction.Body, (PostAlonzoTransactionWitnessSet)transaction.Witnesses,
-                resolvedInputs, SlotNetworkConfig.FromNetworkType(_provider.NetworkType), builder.Pparams?.CostModelsForScriptLanguage);
+                resolvedInputs, await SlotsFor((ConwayTransactionBody)transaction.Body).ConfigureAwait(false), builder.Pparams?.CostModelsForScriptLanguage);
         return TransactionBuilderExtensions.UpdateRedeemersWithEvalResults(builder, evaluated);
     }
+
+    // The provider's SlotNetworkConfig, read once per builder, when the transaction has a validity bound.
+    private async Task<SlotNetworkConfig?> SlotsFor(ConwayTransactionBody body) =>
+        body.ValidityIntervalStart is null && body.TimeToLive is null ? null : _slotConfig ??= await _provider.GetSlotNetworkConfigAsync().ConfigureAwait(false);
 
     // Reuse the codec's ledger comparer even for newly created redeemer keys.
     internal static readonly IEqualityComparer<RedeemerKey> RedeemerKeyComparer = RedeemerMap.Create([]).Value.Comparer;

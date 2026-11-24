@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Globalization;
 using System.Net;
 using System.Text.Json;
@@ -10,6 +11,7 @@ using Chrysalis.Codec.Types.Cardano.Core.Common;
 using Chrysalis.Codec.Types.Cardano.Core.Protocol;
 using Chrysalis.Codec.Types.Cardano.Core.Scripts;
 using Chrysalis.Codec.Types.Cardano.Core.Transaction;
+using Chrysalis.Tx.Builders;
 using Chrysalis.Tx.Extensions;
 using Chrysalis.Tx.Models;
 using Chrysalis.Tx.Models.Cbor;
@@ -410,6 +412,69 @@ public class KupmiosTests
         Assert.Contains("unusable response", error.Message, StringComparison.Ordinal);
         Assert.Null(error.InnerException);
         Assert.Single(stub.Requests);
+    }
+
+    private const string OgmiosStart = """{"jsonrpc":"2.0","method":"queryNetwork/startTime","result":"2026-01-01T00:00:00Z"}""";
+    private const string OgmiosEnd = ""","end":{"time":{"seconds":1200},"slot":12000,"epoch":2}""";
+    // An empty Byron era, then 0.1-second slots up to slot 12,000.
+    private const string OgmiosEras = """{"jsonrpc":"2.0","method":"queryLedgerState/eraSummaries","result":[{"start":{"time":{"seconds":0},"slot":0,"epoch":0},"end":{"time":{"seconds":0},"slot":0,"epoch":0},"parameters":{"epochLength":4320,"slotLength":{"milliseconds":20000},"safeZone":864}},"""
+        + """{"start":{"time":{"seconds":0},"slot":0,"epoch":0}""" + OgmiosEnd + ""","parameters":{"epochLength":6000,"slotLength":{"milliseconds":100},"safeZone":750}}]}""";
+
+    // Answers Ogmios's start time, the given era summaries or the protocol parameters, and records each JSON-RPC method.
+    private static StubHttpHandler SlotStub(string eras, ConcurrentQueue<string> methods) => new(async (request, ct) =>
+    {
+        using JsonDocument body = JsonDocument.Parse(await (request.Content ?? throw new InvalidOperationException("No request body.")).ReadAsStringAsync(ct));
+        string method = body.RootElement.GetProperty("method").GetString() ?? "";
+        methods.Enqueue(method);
+        return StubHttpHandler.Json(method switch
+        {
+            "queryNetwork/startTime" => OgmiosStart,
+            "queryLedgerState/eraSummaries" => eras,
+            _ => OgmiosParameters()
+        });
+    });
+
+    [Fact]
+    public async Task TxBuilderRunsScriptsWithTheSlotProfileOgmiosReports()
+    {
+        ConcurrentQueue<string> methods = new();
+        using StubHttpHandler stub = SlotStub(OgmiosEras, methods);
+        using Kupmios provider = Create(stub);
+        // The policy compares its redeemer with the context's range: slots 10 and 20 are 1 and 2 seconds after the start.
+        _ = await new TxBuilder(provider).AddUnspentOutputs([SlotNetworkConfigTests.Funds]).ProvideCollateral([SlotNetworkConfigTests.Collateral])
+            .SetChangeAddress(BlockfrostTests.Address).SetValidFrom(10).SetValidUntil(20)
+            .AddMint(TestScripts.ValidityRange.HashHex(), new() { ["00"] = 1 }, TestScripts.ValidityRange, TestScripts.Range(1_767_225_601_000, 1_767_225_602_000))
+            .Complete();
+        Assert.Equal(["queryLedgerState/protocolParameters", "queryNetwork/startTime", "queryLedgerState/eraSummaries"], methods);
+        _ = await new TxBuilder(provider).AddUnspentOutputs([SlotNetworkConfigTests.Funds]).PayLovelace(BlockfrostTests.Address, 2_000_000)
+            .SetChangeAddress(BlockfrostTests.Address).Complete();
+        Assert.Equal(4, methods.Count);
+        Assert.Equal("queryLedgerState/protocolParameters", methods.Last());
+    }
+
+    [Theory]
+    [InlineData("bounded", 12_000UL)]
+    [InlineData("unbounded", null)]
+    [InlineData("no-result", null)]
+    public async Task OgmiosSlotProfileEndsWhereItsEraSummariesEnd(string scenario, ulong? end)
+    {
+        using CancellationTokenSource timeout = new(TimeSpan.FromSeconds(10));
+        string eras = scenario switch
+        {
+            "bounded" => OgmiosEras,
+            "unbounded" => OgmiosEras.Replace(OgmiosEnd, "", StringComparison.Ordinal),
+            _ => "{\"jsonrpc\":\"2.0\",\"method\":\"queryLedgerState/eraSummaries\"}"
+        };
+        using StubHttpHandler stub = SlotStub(eras, new());
+        using Kupmios provider = Create(stub);
+        if (scenario == "no-result")
+        {
+            ProviderException error = await Assert.ThrowsAsync<ProviderException>(() => provider.GetSlotNetworkConfigAsync(timeout.Token));
+            Assert.False(error.IsTransient);
+            Assert.Contains("unusable response", error.Message, StringComparison.Ordinal);
+            return;
+        }
+        Assert.Equal(end, (await provider.GetSlotNetworkConfigAsync(timeout.Token)).EndSlot);
     }
 
     [Theory]

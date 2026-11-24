@@ -13,6 +13,7 @@ using Chrysalis.Network.Cbor.LocalTxSubmit;
 using Chrysalis.Network.Multiplexer;
 using Chrysalis.Tx.Builders;
 using Chrysalis.Tx.Extensions;
+using Chrysalis.Tx.Models;
 using Chrysalis.Tx.Models.Cbor;
 using Chrysalis.Tx.Test;
 using Chrysalis.Wallet.Models.Enums;
@@ -76,7 +77,7 @@ public sealed class FundedIntegrationTests
         }
     }
 
-    internal static async Task<SelfTransfer> BuildSelfTransferAsync(PrivateKey key, TransactionInput collateral, ulong transfer, Action<TxBuilder, string>? addOutputs, CancellationToken cancellationToken)
+    internal static async Task<SelfTransfer> BuildSelfTransferAsync(PrivateKey key, TransactionInput collateral, ulong transfer, Action<TxBuilder, string>? addOutputs, ICardanoDataProvider? provider, CancellationToken cancellationToken)
     {
         const ulong maximumFee = 500_000;
         string address = Environment.GetEnvironmentVariable(Env.WalletAddress) ?? WalletAddress.FromPublicKeys(NetworkType.Preprod, AddressType.EnterprisePayment, key.GetPublicKey()).ToBech32();
@@ -89,7 +90,7 @@ public sealed class FundedIntegrationTests
         List<ResolvedInput> inputs = ReadAdaInputs(utxos);
         FundingPlan plan = FundingSelection.CreatePlan(inputs, collateral, utxos);
         ResolvedInput selected = plan.Selected;
-        TxBuilder builder = new(new CliSnapshotProvider(parameters, plan.ProviderInputs));
+        TxBuilder builder = new(provider ?? new CliSnapshotProvider(parameters, plan.ProviderInputs));
         _ = builder.AddInput(selected).PayLovelace(address, transfer).SetChangeAddress(address);
         addOutputs?.Invoke(builder, address);
         PostMaryTransaction unsigned = await builder.Complete().WaitAsync(cancellationToken);
@@ -127,7 +128,7 @@ public sealed class FundedIntegrationTests
     private static async Task ExecuteSelfTransferAsync(PrivateKey key, TransactionInput collateral, FundedReservation reservation, CancellationToken cancellationToken)
     {
         const ulong transfer = 2_000_000;
-        SelfTransfer built = await BuildSelfTransferAsync(key, collateral, transfer, null, cancellationToken);
+        SelfTransfer built = await BuildSelfTransferAsync(key, collateral, transfer, null, null, cancellationToken);
         string directory = Env.OutputDirectory;
         string unsignedFile = Path.Combine(directory, "funded-unsigned.json");
         string signedFile = Path.Combine(directory, "funded-signed.json");
