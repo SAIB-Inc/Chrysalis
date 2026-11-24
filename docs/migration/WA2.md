@@ -1,0 +1,10 @@
+# WA2: pointer address, magic, bech32 edge, soft-index range
+
+Building a pointer address now throws `NotSupportedException`; before, it returned an address that had lost its pointer, which the ledger cannot read. Pointer addresses are still read, and keep their bytes.
+
+- `new Address(network, type, payment, stake)`, `Address.FromCredentials` and `Address.FromPublicKeys` throw `NotSupportedException` for `PaymentWithPointerDelegation` and `ScriptPaymentWithPointerDelegation`; `ToPlutusAddress` throws it on a pointer address instead of dropping the pointer.
+- `NetworkProtocolMagic` has `Preprod = 1` and `Preview = 2`; `Testnet`, which held 2 (Preview's magic), is gone: use `Preview`, or `Preprod` for the pre-production network.
+- `Address.FromBech32` and `new Address(string)` throw `FormatException` for a string with no address bytes (was `IndexOutOfRangeException`) and for a prefix its header does not give, such as `addr_test` on a mainnet address or `stake` on a payment address. Tx builders propagate `FormatException`; Ouroboros and UtxoRpc report invalid input as `ArgumentException`, and Blockfrost, Koios and Kupmios report a bad response address as `ProviderException` (`unusable response: FormatException`). `FromBytes`, `FromHex` and `new Address(byte[])` throw `ArgumentException` for empty bytes (was `IndexOutOfRangeException`).
+- `AddressHeader.FromByte` reads a header as `Address.GetAddressHeader` does and throws `ArgumentOutOfRangeException` (`ParamName` `headerByte`) for an unknown type or network nibble; before, network nibble 2 read as `Preview`.
+- `PrivateKey.Derive` and `DeriveCardanoAccountKey` reject a negative index with `ArgumentOutOfRangeException` instead of deriving a hardened child. `DerivePaymentKey` and `DeriveStakeKey` do the same on extended keys; seeds still fail at the role step (no child keys). `Bip32Util.IsValidPath` returns false for a path with a negative index.
+- `new PrivateKey` with a key of another length says "Must be 32 or 64 bytes, not N." (its type and `ParamName` are unchanged).

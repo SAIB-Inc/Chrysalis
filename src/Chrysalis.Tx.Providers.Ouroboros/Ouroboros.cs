@@ -25,7 +25,7 @@ namespace Chrysalis.Tx.Providers;
 /// </summary>
 /// <param name="socketPath">The path to the Cardano node Unix socket.</param>
 /// <param name="networkMagic">The network magic number.</param>
-public sealed partial class Ouroboros(string socketPath, ulong networkMagic = 2) : ICardanoDataProvider, IDisposable, IAsyncDisposable
+public sealed partial class Ouroboros(string socketPath, ulong networkMagic = (ulong)NetworkProtocolMagic.Preview) : ICardanoDataProvider, IDisposable, IAsyncDisposable
 {
     private static readonly TimeSpan DefaultReplyTimeLimit = TimeSpan.FromSeconds(180);
     private static readonly TimeSpan MaxReplyTimeLimit = TimeSpan.FromMilliseconds(uint.MaxValue - 1);
@@ -45,9 +45,9 @@ public sealed partial class Ouroboros(string socketPath, ulong networkMagic = 2)
 
     private static readonly Dictionary<NetworkType, ulong> Magics = new()
     {
-        [NetworkType.Mainnet] = 764824073,
-        [NetworkType.Preprod] = 1,
-        [NetworkType.Preview] = 2,
+        [NetworkType.Mainnet] = (ulong)NetworkProtocolMagic.Mainnet,
+        [NetworkType.Preprod] = (ulong)NetworkProtocolMagic.Preprod,
+        [NetworkType.Preview] = (ulong)NetworkProtocolMagic.Preview,
     };
 
     /// <summary>Gets Mainnet, Preprod or Preview from the network magic, else Unknown.</summary>
@@ -131,7 +131,7 @@ public sealed partial class Ouroboros(string socketPath, ulong networkMagic = 2)
         {
             ArgumentException.ThrowIfNullOrWhiteSpace(text, nameof(address));
             try { addresses.Add(Address.FromBech32(text).ToBytes()); }
-            catch (Exception error) when (error is FormatException or IndexOutOfRangeException or ArgumentException)
+            catch (Exception error) when (error is FormatException or ArgumentException)
             {
                 throw new ArgumentException("Invalid Bech32 address.", nameof(address));
             }

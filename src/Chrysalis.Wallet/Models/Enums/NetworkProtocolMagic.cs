@@ -1,7 +1,7 @@
 namespace Chrysalis.Wallet.Models.Enums;
 
 /// <summary>
-/// Represents the protocol magic number used to identify Cardano networks.
+/// The network magic of each public Cardano network.
 /// </summary>
 public enum NetworkProtocolMagic
 {
@@ -11,12 +11,17 @@ public enum NetworkProtocolMagic
     None = 0,
 
     /// <summary>
-    /// The protocol magic for the Cardano testnet.
+    /// The Cardano pre-production test network (preprod).
     /// </summary>
-    Testnet = 2,
+    Preprod = 1,
 
     /// <summary>
-    /// The protocol magic for the Cardano mainnet.
+    /// The Cardano preview test network.
+    /// </summary>
+    Preview = 2,
+
+    /// <summary>
+    /// The Cardano mainnet.
     /// </summary>
     Mainnet = 764824073
 }

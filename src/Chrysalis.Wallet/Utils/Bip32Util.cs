@@ -9,6 +9,8 @@ namespace Chrysalis.Wallet.Utils;
 /// </summary>
 public static class Bip32Util
 {
+    internal const uint FirstHardenedIndex = 0x80000000;
+
     /// <summary>
     /// Performs scalar addition with 28-byte truncation and multiplication by 8,
     /// which is part of Cardano's key derivation scheme.
@@ -115,7 +117,7 @@ public static class Bip32Util
     {
         ArgumentNullException.ThrowIfNull(path);
 
-        return !path.Split('/').Skip(1).Select(a => a.Replace("'", "", StringComparison.Ordinal)).Any(a => !int.TryParse(a, out _));
+        return !path.Split('/').Skip(1).Select(a => a.Replace("'", "", StringComparison.Ordinal)).Any(a => !int.TryParse(a, out int index) || index < 0);
     }
 
     /// <summary>
@@ -123,5 +125,5 @@ public static class Bip32Util
     /// </summary>
     /// <param name="index">The derivation index.</param>
     /// <returns>The derivation type based on whether the index is hardened.</returns>
-    public static DerivationType FromIndex(ulong index) => index >= 0x80000000 ? DerivationType.HARD : DerivationType.SOFT;
+    public static DerivationType FromIndex(ulong index) => index >= FirstHardenedIndex ? DerivationType.HARD : DerivationType.SOFT;
 }

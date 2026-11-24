@@ -24,14 +24,12 @@ public class PrivateKey(byte[] key, byte[] chaincode)
     /// </summary>
     public byte[] Chaincode { get; } = chaincode;
 
-    private const uint MinHardIndex = 0x80000000;
-
     private static byte[] Checked(byte[] key)
     {
         ArgumentNullException.ThrowIfNull(key);
         return key.Length == Ed25519.PrivateKeySeedSizeInBytes || key.Length == Ed25519.ExpandedPrivateKeySizeInBytes
             ? key
-            : throw new ArgumentException("A private key is a 32-byte Ed25519 seed or a 64-byte Cardano extended key.", nameof(key));
+            : throw new ArgumentException($"Must be {Ed25519.PrivateKeySeedSizeInBytes} or {Ed25519.ExpandedPrivateKeySizeInBytes} bytes, not {key.Length}.", nameof(key));
     }
 
     /// <summary>
@@ -45,16 +43,19 @@ public class PrivateKey(byte[] key, byte[] chaincode)
     /// <summary>
     /// Derives a child key at the specified index.
     /// </summary>
-    /// <param name="index">The derivation index.</param>
+    /// <param name="index">The derivation index, 0 to 2^31 - 1; <paramref name="type"/> sets the hardened bit.</param>
     /// <param name="type">The derivation type (hard or soft).</param>
     /// <returns>The derived child private key.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="index"/> is negative.</exception>
     /// <exception cref="InvalidOperationException">This key is a 32-byte seed, which has no child keys.</exception>
     public PrivateKey Derive(int index, DerivationType type = DerivationType.SOFT)
     {
+        ArgumentOutOfRangeException.ThrowIfNegative(index);
+
         uint derivationIndex = (uint)index;
         if (type == DerivationType.HARD)
         {
-            derivationIndex |= MinHardIndex;
+            derivationIndex |= Bip32Util.FirstHardenedIndex;
         }
 
         return GetChildKeyDerivation(derivationIndex);
@@ -92,11 +93,15 @@ public class PrivateKey(byte[] key, byte[] chaincode)
     /// </summary>
     /// <param name="account">The account index (default 0).</param>
     /// <returns>The account-level private key.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="account"/> is negative.</exception>
     /// <exception cref="InvalidOperationException">This key is a 32-byte seed, which has no child keys.</exception>
-    public PrivateKey DeriveCardanoAccountKey(int account = 0) =>
-        Derive(PurposeType.Shelley, DerivationType.HARD)
-        .Derive(CoinType.Ada, DerivationType.HARD)
-        .Derive(account, DerivationType.HARD);
+    public PrivateKey DeriveCardanoAccountKey(int account = 0)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(account);
+        return Derive(PurposeType.Shelley, DerivationType.HARD)
+            .Derive(CoinType.Ada, DerivationType.HARD)
+            .Derive(account, DerivationType.HARD);
+    }
 
     /// <summary>
     /// Derives a payment key at role=ExternalChain for the given index.
@@ -104,6 +109,7 @@ public class PrivateKey(byte[] key, byte[] chaincode)
     /// </summary>
     /// <param name="index">The address index (default 0).</param>
     /// <returns>The payment private key.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">On an extended key, <paramref name="index"/> is negative.</exception>
     /// <exception cref="InvalidOperationException">This key is a 32-byte seed, which has no child keys.</exception>
     public PrivateKey DerivePaymentKey(int index = 0) =>
         Derive(RoleType.ExternalChain).Derive(index);
@@ -114,6 +120,7 @@ public class PrivateKey(byte[] key, byte[] chaincode)
     /// </summary>
     /// <param name="index">The address index (default 0).</param>
     /// <returns>The staking private key.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">On an extended key, <paramref name="index"/> is negative.</exception>
     /// <exception cref="InvalidOperationException">This key is a 32-byte seed, which has no child keys.</exception>
     public PrivateKey DeriveStakeKey(int index = 0) =>
         Derive(RoleType.Staking).Derive(index);
@@ -209,13 +216,20 @@ public class PrivateKey(byte[] key, byte[] chaincode)
     {
         ArgumentNullException.ThrowIfNull(message);
 
-        byte[] skey = Key;
-        if (skey.Length == Ed25519.PrivateKeySeedSizeInBytes)
+        if (Key.Length != Ed25519.PrivateKeySeedSizeInBytes)
         {
-            skey = Ed25519.SeedAndPublicKeyFromSeed(skey);
-            return Ed25519.SignWithSeedAndPublicKey(message, skey);
+            return Ed25519.SignWithExtendedKey(message, Key);
         }
-        return Ed25519.SignWithExtendedKey(message, skey);
+
+        byte[] seedAndPublicKey = Ed25519.SeedAndPublicKeyFromSeed(Key);
+        try
+        {
+            return Ed25519.SignWithSeedAndPublicKey(message, seedAndPublicKey);
+        }
+        finally
+        {
+            CryptographicOperations.ZeroMemory(seedAndPublicKey);
+        }
     }
 
     /// <inheritdoc/>
@@ -231,5 +245,11 @@ public class PrivateKey(byte[] key, byte[] chaincode)
     }
 
     /// <inheritdoc/>
-    public override int GetHashCode() => HashCode.Combine(Convert.ToHexString(Key), Convert.ToHexString(Chaincode));
+    public override int GetHashCode()
+    {
+        HashCode hash = new();
+        hash.AddBytes(Key);
+        hash.AddBytes(Chaincode);
+        return hash.ToHashCode();
+    }
 }
