@@ -526,9 +526,13 @@ def fake_container(root, monkeypatch, *, mode='release', kind='controls', noise=
     local = fake_inputs(root)
     monkeypatch.setattr(gate, 'REPO', root / 'repo')
     monkeypatch.setattr(gate, 'GATE', root / 'repo/benchmarks/gate')
+    az_machine = timing.PROVIDERS['azure']['machine']
+    az_noise = {} if noise else {az_machine: {
+        row_id: dict(band=0.01, design='long', machine=az_machine, sourceSeal='a' * 64)
+        for row_id in ('time/micro-demo', 'time/preprod-offline')}}
     config = dict(defaults={'change': dict(design='long', timePairs={}), 'release': dict(design='long'), 'timePairs': 16},
                   direct={}, replays=['offline'], areas={'fixture': {'time': ['time/micro-*']}},
-                  time=dict(noise={}, probe=probe_rule(), option=2, required=['time/micro-demo', 'time/preprod-offline'],
+                  time=dict(noise=az_noise, probe=probe_rule(), option=2, required=['time/micro-demo', 'time/preprod-offline'],
                             micro={'demo': micro_filter}, platform={'provider': 'fly'}))
     if only_bytes:
         config['defaults'][mode]['replayPairs'] = 16
@@ -1613,10 +1617,8 @@ def test_az2f4_prepare_refuses_oversize_results_plan_at_seal_time(tmp_path, azur
     oversize = copy.deepcopy(seal)
     oversize.update(noiseRecords=False, mode='release')
     oversize['gated']['time']['noise'] = {}
-    oversize['gated']['time']['micro'].update({f'm{i}': 'demo-filter' for i in range(5)})
-    base_micro = next(r for r in oversize['rows'] if r['id'] == 'time/micro-demo')
-    oversize['rows'] = [next(r for r in oversize['rows'] if r['id'] == 'time/preprod-offline'),
-                        *[dict(base_micro, id=f'time/micro-m{i}', aPairs=16, bPairs=16, chargeSeconds=6) for i in range(5)]]
+    base_replay = next(r for r in oversize['rows'] if r['id'] == 'time/preprod-offline')
+    oversize['rows'] = [dict(base_replay, aPairs=130, bPairs=16, chargeSeconds=13)]
     with pytest.raises(ValueError, match='results cap exceeds hard ceiling'):
         prepare.time_plans(oversize)
     # Oversize plan in a sealed directory is refused by checked_azure_go before Azure.
@@ -2200,3 +2202,105 @@ def test_run8_d9_one_session_noise_plans_match_full_plan():
         assert [r['id'] for r in single['rows']] == [r['id'] for r in expected['rows']]
         assert [single[k] for k in ('rawSeconds', 'destroyGuardSeconds', 'measurementCutoffSeconds', 'limitUsd')] == nums
         assert [expected[k] for k in ('rawSeconds', 'destroyGuardSeconds', 'measurementCutoffSeconds', 'limitUsd')] == nums
+
+
+def test_w_prepare_time_plans_refuses_missing_noise_on_change_evaluated_rows():
+    config = prepare.azure_config(json.loads((gate.GATE / 'gated.json').read_text()))
+    audit = json.loads((gate.REPO / 'benchmarks/Chrysalis.Benchmarks/audit-allocations.json').read_text())
+
+    def build_seal(mode, entries, *, noise_records=False, azure_noise=None):
+        cfg = copy.deepcopy(config)
+        if azure_noise is not None:
+            cfg['time']['noise']['Standard_F8als_v7'] = azure_noise
+        selected = gate.select_rows(SimpleNamespace(mode=mode, plan=None, only=None), cfg, audit,
+                                    plan_entries=dict(entries=entries, noiseRecords=noise_records))
+        return dict(gated=cfg, mode=mode, noiseRecords=noise_records, sessionPerRow=False, orderingProof=False,
+                    rows=[dict(item, sides=dict(baseline=side(), candidate=side())) for item in selected])
+
+    # 1. Controls release seal with missing Azure noise refuses at seal time ($0), including C5' alone.
+    c5_only = [{'id': 'time/preprod-c5-prime-offline', 'kind': 'time', 'replay': 'offline',
+                'aPairs': 16, 'pairs': 24, 'chargeSeconds': 13, 'expected': {'release': 'FAIL'}}]
+    with pytest.raises(ValueError, match='Missing frozen Azure noise record'):
+        prepare.time_plans(build_seal('release', c5_only, azure_noise={}))
+
+    # 2. Batch Leg 1 / bisect / change-mode RC seals with missing Azure noise refuse at seal time.
+    change_entries = [{'id': 'time/preprod-offline'}, {'id': 'time/micro-hashing'}]
+    with pytest.raises(ValueError, match='Missing frozen Azure noise record'):
+        prepare.time_plans(build_seal('change', change_entries, azure_noise={}))
+
+    # 3. Partial missing noise (one micro missing in change mode) refuses at seal time.
+    partial_noise = {'time/preprod-offline': config['time']['noise']['Standard_F8als_v7']['time/preprod-offline']}
+    with pytest.raises(ValueError, match='Missing frozen Azure noise record'):
+        prepare.time_plans(build_seal('change', change_entries, azure_noise=partial_noise))
+
+    # 4. recorded-only and smoke rows without noise do not fail when gated rows have noise.
+    rec_entries = [
+        {'id': 'time/preprod-offline'},
+        {'id': 'time/preprod-custom-offline', 'kind': 'time', 'replay': 'offline', 'rowClass': 'recorded-only',
+         'explanation': 'note', 'pairs': 16},
+    ]
+    assert prepare.time_plans(build_seal('change', rec_entries, azure_noise=partial_noise))
+    smoke_entries = [{'id': 'time/preprod-c4-tcp', 'kind': 'time', 'replay': 'tcp', 'aPairs': 5, 'pairs': 2,
+                      'chargeSeconds': 22, 'expected': 'smoke'}]
+    assert prepare.time_plans(build_seal('release', smoke_entries, azure_noise={}))
+
+    # 5. noiseRecords=True with empty Azure noise still succeeds.
+    assert prepare.time_plans(build_seal('release', change_entries, noise_records=True, azure_noise={}))
+
+
+def test_w_controls_timing_plan_seals_a16_with_frozen_noise():
+    import gate_azure_guest as guest
+    config = prepare.azure_config(json.loads((gate.GATE / 'gated.json').read_text()))
+    audit = json.loads((gate.REPO / 'benchmarks/Chrysalis.Benchmarks/audit-allocations.json').read_text())
+    entries = json.loads((gate.GATE / 'plans/controls-timing.json').read_text())
+    selected = gate.select_rows(SimpleNamespace(mode='release', plan=None, only=None), config, audit, plan_entries=entries)
+    seal = dict(gated=config, mode='release', noiseRecords=False, sessionPerRow=False, orderingProof=True,
+                rows=[dict(item, sides=dict(baseline=side(), candidate=side())) for item in selected])
+    plans = prepare.time_plans(seal)
+    assert len(plans) == 1
+    plan = plans[0]
+    assert [plan[k] for k in ('rawSeconds', 'measurementCutoffSeconds', 'destroyGuardSeconds', 'limitUsd')] == [3700, 4738, 5083, 1.0765]
+    guest.results_limits(plan, strict=True)
+    assert [r['id'] for r in plan['rows']] == [
+        'time/preprod-c2-offline', 'time/preprod-c3-offline',
+        'time/preprod-c5-prime-offline', 'time/preprod-c4-tcp',
+    ]
+    for r in plan['rows']:
+        assert r['noise'] is not None and timing.noise_band(r['noise'], 'azure') is not None
+
+
+def test_w_seal_diff_round_trip_two_micro_sessions_leg2(tmp_path, azure, monkeypatch):
+    def make_leg2(name, commit):
+        root = tmp_path / name
+        _, build = fake_container(root, monkeypatch, mode='release', kind='batch-leg-2', commit=commit)
+        az_machine = timing.PROVIDERS['azure']['machine']
+        micros = {'hashing': 9, 'signing': 8, 'encoding': 23, 'n2c': 10}
+        required = ['time/preprod-offline', *(f'time/micro-{k}' for k in micros)]
+        cfg = prepare.json_file(gate.GATE / 'gated.json')
+        cfg['areas']['fixture']['time'] = ['time/preprod-*', 'time/micro-*']
+        cfg['time']['required'] = required
+        cfg['time']['chargeSeconds'] = {f'time/micro-{k}': v for k, v in micros.items()}
+        cfg['time']['micro'] = {k: 'demo-filter' for k in micros}
+        cfg['time']['noise'][az_machine] = {
+            rid: dict(band=0.01, design='long', machine=az_machine, sourceSeal='a' * 64) for rid in required}
+        session.save(gate.GATE / 'gated.json', cfg)
+        session.save(gate.REPO / 'selection.json', dict(entries=[{'id': rid} for rid in required], noiseRecords=False, areas=['fixture']))
+        directory = build(tmp_path / (name + '-prepared'))
+        portable = prepare.json_file(directory / 'prepared.json')
+        seal = prepare.json_file(directory / 'plan.json')
+        assert len(seal['timePlans']) == 3
+        assert [[r['id'] for r in tp['rows']] for tp in seal['timePlans'][1:]] == [
+            ['time/micro-encoding', 'time/micro-signing'], ['time/micro-n2c', 'time/micro-hashing']]
+        _, payload = prepare.inputs(fake_inputs(root))
+        seal.update(files=portable['files'], payloadManifests=payload, platform=azure, programStopUsd=40)
+        session.save(directory / 'input/azure-local.json', dict(azureToolingCommit=TOOLING['toolingCommit'],
+                                                               azureToolingTree=TOOLING['toolingTree']))
+        seal['files']['input/azure-local.json'] = bundle.sha(directory / 'input/azure-local.json')
+        gate.write_seal(directory, seal)
+        return directory, seal
+    old, _ = make_leg2('old', 'a')
+    new, _ = make_leg2('new', 'c')
+    verdicts = [tmp_path / f'{seat}.json' for seat in ('astra', 'opus')]
+    for seat, path in zip(('astra', 'opus'), verdicts):
+        session.save(path, dict(seat=seat, verdict='APPROVED', sealId=gate.digest(old / 'seal.json')))
+    assert batch.seal_diff(old, new, approvals=verdicts)

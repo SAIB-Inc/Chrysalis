@@ -1,4 +1,5 @@
 """Sealed timing designs, validity and reports. No Fly API or credential access."""
+import copy
 import hashlib
 import datetime as dt
 from decimal import Decimal
@@ -147,7 +148,7 @@ def finalize_plan(plan, raw):
     return plan
 
 
-def size_sessions(rows, mode, *, ratios=None, option=2, budget=None, probe=None, prelude=False, reserve=0):
+def size_sessions(rows, mode, *, ratios=None, option=2, budget=None, probe=None, prelude=False, reserve=0, check_micro_limits=None):
     """Price each whole process once. Full first; D51 defaults to two sessions."""
     require(type(reserve) is int and reserve in (0, 1), 'Invalid reserve pair count')
     rows = [dict(row, chargeSeconds=charges(row, ratios, prelude=prelude)) for row in rows if row['kind'] == 'time']
@@ -158,8 +159,7 @@ def size_sessions(rows, mode, *, ratios=None, option=2, budget=None, probe=None,
     provider = providers.pop()
     require(provider == 'azure' or type(budget) in (int, float) and math.isfinite(budget) and budget >= 0, 'Missing or invalid remaining budget')
 
-
-    def sized(members, design, *, floor=16, fail_only=False):
+    def sized(members, design, *, floor=16, fail_only=False, check_limits=None):
         row_cap = RAW_CAP - probe_seconds(probe) - (prelude_seconds(members) if prelude else 0)
         entries = [dict(row, aPairs=row.get('aPairs', 0 if mode == 'change' or fail_only and row.get('mainnet') else (floor if row.get('mainnet') else 16)),
                         bPairs=row.get('bPairs', row['pairs'] if mode == 'change' else (6 if fail_only and row.get('mainnet') else floor if row.get('mainnet') else 24 if fail_only else 16)),
@@ -167,7 +167,15 @@ def size_sessions(rows, mode, *, ratios=None, option=2, budget=None, probe=None,
                         **({'reservePairs': reserve} if reserve and row.get('expected') != 'smoke' else {})) for row in members]
         def raw():
             return sum(2 * row['chargeSeconds'] * (schedules.phase_pairs(row, 'aPairs') + schedules.phase_pairs(row, 'bPairs')) for row in entries)
-        if raw() > row_cap:
+        def within_limits():
+            if check_limits is None:
+                return True
+            try:
+                check_limits(dict(probe=probe, rows=entries))
+                return True
+            except ValueError:
+                return False
+        if raw() > row_cap or not within_limits():
             return None
         if mode == 'release' and design != 'option1':
             while True:
@@ -175,7 +183,10 @@ def size_sessions(rows, mode, *, ratios=None, option=2, budget=None, probe=None,
                 for declared, row in zip(members, entries):
                     if 'bPairs' not in declared and row['bPairs'] < (16 if fail_only and row.get('mainnet') else 24) and raw() + 4 * row['chargeSeconds'] <= row_cap:
                         row['bPairs'] += 2
-                        changed = True
+                        if within_limits():
+                            changed = True
+                        else:
+                            row['bPairs'] -= 2
                 if not changed:
                     break
         regions = {region_for(row) for row in entries}
@@ -216,8 +227,27 @@ def size_sessions(rows, mode, *, ratios=None, option=2, budget=None, probe=None,
             raise ValueError('Unknown design option')
         require(plans and all(plans), 'Declared timing design does not fit; no counts silently cut')
     if micros:
-        plans.append(sized(micros, 'micro'))
-        require(plans[-1] is not None, 'Micro set does not fit one session; main decision required')
+        single = sized(micros, 'micro', check_limits=check_micro_limits)
+        if single is not None:
+            plans.append(single)
+        elif check_micro_limits is not None and len(micros) > 1:
+            ordered = sorted(micros, key=lambda r: (-r['chargeSeconds'], r['id']))
+            packed = None
+            for k in range(2, len(ordered) + 1):
+                bins = [[] for _ in range(k)]
+                for item in ordered:
+                    eligible = [i for i, b in enumerate(bins) if sized(b + [item], 'micro', check_limits=check_micro_limits) is not None]
+                    if not eligible:
+                        break
+                    best = min(eligible, key=lambda i: (len(bins[i]), sum(r['chargeSeconds'] for r in bins[i]), i))
+                    bins[best].append(item)
+                else:
+                    packed = [sized(b, 'micro', check_limits=check_micro_limits) for b in bins]
+                    break
+            require(packed is not None and all(packed), 'Micro set does not fit one session; main decision required')
+            plans.extend(packed)
+        else:
+            raise ValueError('Micro set does not fit one session; main decision required')
     require(provider == 'azure' or sum(plan['limitWithRepeatUsd'] for plan in plans) <= budget, 'Full repeat reservation exceeds budget left')
     return plans
 
@@ -580,6 +610,22 @@ def noise_band(noise, provider='fly'):
         band = noise.get('band')
         if type(band) in (int, float) and 0 <= band < .05:
             return band
+    return None
+
+
+def noise_for(records, row):
+    if not isinstance(records, dict):
+        return None
+    row_id = row.get('id', '')
+    if row_id in records:
+        return copy.deepcopy(records[row_id])
+    replay = row.get('replay')
+    if replay in records:
+        return copy.deepcopy(records[replay])
+    if (row_id.startswith('time/preprod-') and not row.get('mainnet') and not row.get('manifest')
+            and replay in ('offline', 'tcp') and row.get('expected') is not None
+            and row.get('rowClass') != 'recorded-only'):
+        return copy.deepcopy(records.get(f'time/preprod-{replay}'))
     return None
 
 
