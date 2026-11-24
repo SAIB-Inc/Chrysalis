@@ -47,9 +47,10 @@ def calibrated(record, charge, log=None, name=None):
     return invocations
 
 
-def sized_micro(record, inv0, charge, log=None, name=None):
+def sized_micro(record, inv0, charge, job, log=None, name=None):
     seconds = process_seconds(record)
-    warm, invocations = bundle.calibrate_micro_warm(record['data']['rows'], inv0)
+    target = job.get('microWarmPassSeconds', bundle.MICRO_WARM_PASS_SECONDS)
+    warm, invocations = bundle.calibrate_micro_warm(record['data']['rows'], inv0, target)
     if log:
         log(f"{timing.STAGE['prelude']}{name} sizing seconds {seconds:.4f} warm {warm:.6f} invocations {invocations} allowance {charge}")
     require(seconds <= charge, CHARGE_EXCEEDED)
@@ -101,7 +102,7 @@ def derive(prelude, worker, raw, log=None):
             inv0 = calibrated(calibration, row['chargeSeconds'])
             sizing = raw[name + '-sizing.json']
             observed(sizing, specs['baseline'], dict(job, microInvocations=inv0), timing.PROBE_COUNTS)
-            warm, values['microInvocations'] = sized_micro(sizing, inv0, row['chargeSeconds'])
+            warm, values['microInvocations'] = sized_micro(sizing, inv0, row['chargeSeconds'], job)
             job = dict(job, **values)
         for role, spec in specs.items():
             record = raw[f'{name}-{role}.json']
@@ -139,7 +140,7 @@ def execute(prelude, worker, directory, member, log=None):
             calibration = record(name + '-calibration', row['builds']['baseline'], name, [1, 1])
             inv0 = calibrated(calibration, row['chargeSeconds'], log, name)
             sizing = record(name + '-sizing', row['builds']['baseline'], name, list(timing.PROBE_COUNTS), invocations=inv0)
-            _, opts['invocations'] = sized_micro(sizing, inv0, row['chargeSeconds'], log, name)
+            _, opts['invocations'] = sized_micro(sizing, inv0, row['chargeSeconds'], worker['workloads'][name], log, name)
         for role, build in row['builds'].items():
             record(f'{name}-{role}', build, name, [1, 1], **opts)
     if prelude['orderingProof'] is not None:

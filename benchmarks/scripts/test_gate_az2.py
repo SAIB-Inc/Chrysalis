@@ -2275,7 +2275,7 @@ MICROS = [f'time/micro-{name}' for name in ('hashing', 'signing', 'transactions'
 @pytest.mark.parametrize('name, mode, sessions', [
     ('b1-leg1', 'change', [(['time/preprod-tcp', 'time/preprod-offline'], 168, 0.961), (MICROS, 220, 1.2824)]),
     ('head-vs-1714', 'release', [(['time/preprod-tcp', 'time/preprod-offline'], 184, 1.0105),
-                                 (['time/micro-encoding', 'time/micro-signing'], 184, 0.9775),
+                                 (['time/micro-encoding', 'time/micro-signing'], 184, 1.0682),
                                  (['time/micro-n2c', 'time/micro-hashing'], 184, 0.7375)]),
 ])
 def test_batch_live_plan_files_seal_their_sessions(name, mode, sessions):
@@ -2297,6 +2297,138 @@ def test_batch_live_plan_files_seal_their_sessions(name, mode, sessions):
     assert [([r['id'] for r in plan['rows']], (guest.results_limits(plan, strict=True)[1] - guest.MAX_RESULTS)
              // guest.PER_PROCESS_EXPANDED, plan['limitUsd']) for plan in plans] == sessions
     assert all(r['noise'] is not None and timing.noise_band(r['noise'], 'azure') is not None for plan in plans for r in plan['rows'])
+
+
+ENC_SIDES = dict(baseline=side('10.0.9', 'pin'), candidate=side('11.0.0', 'head'))
+
+
+def enc_plans(name, mode, *, keep_target=True, no_noise=False, edit=None, entry=None):
+    """Seal a tracked plan file through select_rows and time_plans, with distinct baseline and candidate builds."""
+    config = prepare.azure_config(json.loads((gate.GATE / 'gated.json').read_text()))
+    if not keep_target:
+        config['time'].pop('releaseWarmPass', None)
+    if no_noise:
+        config['time']['noise']['Standard_F8als_v7'] = {}
+    if edit:
+        edit(config)
+    audit = json.loads((gate.REPO / 'benchmarks/Chrysalis.Benchmarks/audit-allocations.json').read_text())
+    entries = json.loads((gate.GATE / f'plans/{name}.json').read_text())
+    if entry:
+        next(item for item in entries['entries'] if item['id'] == 'time/micro-encoding').update(entry)
+    selected = gate.select_rows(SimpleNamespace(mode=mode, plan=None, only=None), config, audit, plan_entries=entries)
+    seal = dict(gated=config, mode=mode, noiseRecords=config['_noiseRecords'], sessionPerRow=False, orderingProof=False,
+                rows=[dict(item, sides=copy.deepcopy(ENC_SIDES)) for item in selected])
+    return prepare.time_plans(seal)
+
+
+def enc_prelude(tmp_path, plans, warm, *, row_id='time/micro-encoding'):
+    """VM prelude of one micro row on fakes whose passes take `warm` seconds per invocation."""
+    plan, = [plan for plan in plans if row_id in [r['id'] for r in plan['rows']]]
+    schedule.prepare(plan)
+    worker, recipe = schedule.worker_plan(plan), prelude.recipe(plan)
+    name = schedule.opaque(plan['scheduleSeed'], ['workload', row_id])
+    recipe = dict(recipe, rows={name: recipe['rows'][name]})
+    calls = []
+
+    def fake(build, workload, dest, counts, *, invocations=None):
+        job = dict(worker['workloads'][workload])
+        if invocations is not None:
+            job['microInvocations'] = invocations
+        calls.append((dest.name.removeprefix(name + '-'), build, job['microInvocations']))
+        record = observation(worker['builds'][build], job, counts)
+        for item in record['data']['warmupRows'] + record['data']['rows']:
+            item['nsPerBlock'] = warm * job['microInvocations'] * 1e9 / item['blocks']
+        return record
+    directory = tmp_path / f'prelude-{warm}'
+    applied = prelude.execute(recipe, worker, directory, fake)
+    raw = {path.name: json.loads(path.read_text()) for path in (directory / 'raw').glob('*.json')}
+    return plan, worker, recipe, name, calls, applied, raw
+
+
+@pytest.mark.parametrize('warm, invocations', [(.02442, 3), (.02255, 4), (.0349, 3), (.0233, 4)])
+def test_enc_size_release_encoding_sizes_to_row_target_with_one_count_on_both_sides(tmp_path, warm, invocations):
+    # 1.7.14 on Azure: 24.42 ms per pass at inv0 1 (HEAD1), run 7 22.55 ms; the last two sit at the 3 and 4 edges.
+    plan, worker, recipe, name, calls, applied, raw = enc_prelude(tmp_path, enc_plans('head-vs-1714', 'release'), warm)
+    row, = [r for r in plan['rows'] if r['id'] == 'time/micro-encoding']
+    assert (row['chargeSeconds'], row['job'].get('microWarmPassSeconds'), recipe['rows'][name]['chargeSeconds']) == (30, .07, 30)
+    assert all('microWarmPassSeconds' not in r['job'] and r['chargeSeconds'] == 8 for r in plan['rows'] if r is not row)
+    builds = recipe['rows'][name]['builds']
+    assert builds['baseline'] != builds['candidate']
+    # Calibration and sizing run on the baseline build only; both sides then run the one sized count.
+    assert calls == [('calibration', builds['baseline'], 16), ('sizing', builds['baseline'], 1),
+                     ('baseline', builds['baseline'], invocations), ('candidate', builds['candidate'], invocations)]
+    assert applied[name]['microInvocations'] == invocations
+    effective = prelude.apply(dict(worker, blocks=[block for block in worker['blocks'] if block['workload'] == name]), applied)
+    assert effective['workloads'][name]['microInvocations'] == invocations
+    members = {effective['members'][m]['build'] for block in effective['blocks'] for m in block['members']}
+    assert members == {builds['baseline'], builds['candidate']}
+    assert {r['data']['invocationsPerPass'] for key, r in raw.items() if key.endswith(('-baseline.json', '-candidate.json'))} == {invocations}
+    # 30 s holds the projection max(2, dry) + 240 x warm x inv / inv0 at 3 and 4 invocations; 23 s refuses those above it.
+    projection = 2 + 240 * warm * invocations
+    assert projection <= 30
+    if projection > 23:
+        with pytest.raises(ValueError, match=prelude.CHARGE_EXCEEDED):
+            prelude.derive(dict(recipe, rows={name: dict(recipe['rows'][name], chargeSeconds=23)}), worker, raw)
+
+
+def test_enc_size_change_mode_keeps_the_frozen_pass_size(tmp_path):
+    _, worker, recipe, name, calls, applied, _ = enc_prelude(tmp_path, enc_plans('head-vs-1714', 'change'), .02442)
+    assert recipe['rows'][name]['chargeSeconds'] == 23 and 'microWarmPassSeconds' not in worker['workloads'][name]
+    assert applied[name]['microInvocations'] == 1 and [count for *_, count in calls] == [16, 1, 1, 1]
+
+
+@pytest.mark.parametrize('name, mode, no_noise', [
+    ('b1-leg1', 'change', False), ('head-vs-1714', 'change', False), ('controls-timing', 'release', False),
+    ('noise-records', 'release', True), ('noise-records-micro', 'release', True),
+])
+def test_enc_size_change_noise_and_controls_plans_are_byte_identical(name, mode, no_noise):
+    plans = enc_plans(name, mode, no_noise=no_noise)
+    assert plans and gate.encoded(plans) == gate.encoded(enc_plans(name, mode, keep_target=False, no_noise=no_noise))
+    charges = json.loads((gate.GATE / 'gated.json').read_text())['time']['chargeSeconds']
+    for plan in plans:
+        for r in plan['rows']:
+            assert 'microWarmPassSeconds' not in r['job']
+            if r['replay'] == 'micro':
+                assert r['chargeSeconds'] == max(charges[r['id']], 8), r['id']
+
+
+@pytest.mark.parametrize('target', [
+    [], {'time/micro-unknown': dict(seconds=.07, chargeSeconds=30)},
+    {'time/preprod-offline': dict(seconds=.07, chargeSeconds=30)},
+    {'time/micro-encoding': dict(seconds=.07, chargeSeconds=22)},
+    {'time/micro-encoding': dict(seconds=0.0, chargeSeconds=30)},
+    {'time/micro-encoding': dict(seconds=.07)},
+    {'time/micro-encoding': dict(seconds=.07, chargeSeconds=30.0)},
+    {'time/micro-encoding': dict(seconds=.07, chargeSeconds=30, extra=1)},
+    *[{'time/micro-encoding': dict(seconds=bad, chargeSeconds=30)} for bad in (1.01, True, float('nan'), float('inf'))],
+])
+def test_enc_size_invalid_release_target_is_refused(target):
+    def edit(config):
+        config['time']['releaseWarmPass'] = target
+    for mode in ('release', 'change'):
+        with pytest.raises(ValueError, match='Invalid release warm-pass target'):
+            enc_plans('head-vs-1714', mode, edit=edit)
+
+
+@pytest.mark.parametrize('seconds', [1, 1.0])
+def test_enc_size_release_target_of_one_second_is_valid_as_int_or_float(seconds):
+    def edit(config):
+        config['time']['releaseWarmPass']['time/micro-encoding']['seconds'] = seconds
+    rows = [r for plan in enc_plans('head-vs-1714', 'release', edit=edit) for r in plan['rows']]
+    assert [r['job'].get('microWarmPassSeconds') for r in rows if r['id'] == 'time/micro-encoding'] == [seconds]
+
+
+@pytest.mark.parametrize('mode', ['change', 'release'])
+@pytest.mark.parametrize('charge', [22.5, 24.0, False, '31', None])
+def test_enc_size_invalid_plan_entry_charge_is_refused_before_the_release_floor(mode, charge):
+    with pytest.raises(ValueError, match='Invalid declared process charge'):
+        enc_plans('head-vs-1714', mode, entry=dict(chargeSeconds=charge))
+
+
+@pytest.mark.parametrize('mode', ['change', 'release'])
+def test_enc_size_plan_entry_charge_above_the_release_floor_survives(mode):
+    rows = [r for plan in enc_plans('head-vs-1714', mode, entry=dict(chargeSeconds=31)) for r in plan['rows']]
+    assert [r['chargeSeconds'] for r in rows if r['id'] == 'time/micro-encoding'] == [31]
 
 
 def test_w_seal_diff_round_trip_two_micro_sessions_leg2(tmp_path, azure, monkeypatch):
