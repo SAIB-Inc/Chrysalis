@@ -9,7 +9,6 @@ using Chrysalis.Tx.Models.Cbor;
 using Chrysalis.Wallet.Models.Addresses;
 using Chrysalis.Wallet.Models.Keys;
 using Xunit;
-using Xunit.Abstractions;
 using Xunit.Sdk;
 using LedgerMetadata = Chrysalis.Codec.Types.Cardano.Core.Metadata;
 
@@ -23,7 +22,7 @@ public sealed class FundedTransferTests(ITestOutputHelper output)
 {
     /// <summary>Builds, signs, submits once, waits and reads the payment and metadata back.</summary>
     /// <returns>A task bounded by ten minutes for confirmation and one minute for read-back.</returns>
-    [LiveFact(LiveSettings.Endpoint, LiveSettings.Network, LiveSettings.Addresses, LiveSettings.WalletKeyFile)]
+    [LiveFact([LiveSettings.Endpoint, LiveSettings.Network, LiveSettings.Addresses, LiveSettings.WalletKeyFile])]
     public async Task ConfirmsOneSelfTransfer()
     {
         string hash = "not built";
@@ -145,14 +144,14 @@ public sealed class FundedGuardsTests
         {
             _ = await Assert.ThrowsAsync<FalseException>(() => FundedTransferTests.ReserveFeeAsync(null, "5000000", hash, 200000));
             _ = await Assert.ThrowsAsync<TrueException>(() => FundedTransferTests.ReserveFeeAsync(ledger, null, hash, 200000));
-            await File.WriteAllTextAsync(ledger, "unreadable\n");
+            await File.WriteAllTextAsync(ledger, "unreadable\n", TestContext.Current.CancellationToken);
             _ = await Assert.ThrowsAsync<TrueException>(() => FundedTransferTests.ReserveFeeAsync(ledger, "5000000", hash, 200000));
-            Assert.Equal("unreadable\n", await File.ReadAllTextAsync(ledger));
-            await File.WriteAllTextAsync(ledger, "");
+            Assert.Equal("unreadable\n", await File.ReadAllTextAsync(ledger, TestContext.Current.CancellationToken));
+            await File.WriteAllTextAsync(ledger, "", TestContext.Current.CancellationToken);
             await FundedTransferTests.ReserveFeeAsync(ledger, "200000", hash, 200000);
-            string reserved = await File.ReadAllTextAsync(ledger);
+            string reserved = await File.ReadAllTextAsync(ledger, TestContext.Current.CancellationToken);
             _ = await Assert.ThrowsAsync<TrueException>(() => FundedTransferTests.ReserveFeeAsync(ledger, "200000", hash, 1));
-            Assert.Equal(reserved, await File.ReadAllTextAsync(ledger));
+            Assert.Equal(reserved, await File.ReadAllTextAsync(ledger, TestContext.Current.CancellationToken));
         }
         finally { File.Delete(ledger); }
     }

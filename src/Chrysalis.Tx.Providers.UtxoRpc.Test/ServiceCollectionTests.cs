@@ -31,12 +31,12 @@ public sealed class ServiceCollectionTests
             provider = container.GetRequiredService<UtxoRpc>();
             Assert.Same(provider, container.GetRequiredService<ICardanoDataProvider>());
             Assert.Same(provider, container.GetRequiredService<UtxoRpc>());
-            _ = await provider.GetParametersAsync();
+            _ = await provider.GetParametersAsync(TestContext.Current.CancellationToken);
             Assert.Equal("CANARY", seen);
             Assert.Equal(NetworkType.Preprod, provider.NetworkType);
         }
         provider.Dispose();
-        _ = await Assert.ThrowsAsync<ObjectDisposedException>(() => provider.GetParametersAsync());
+        _ = await Assert.ThrowsAsync<ObjectDisposedException>(() => provider.GetParametersAsync(TestContext.Current.CancellationToken));
     }
 
     /// <summary>Missing required keys throw at first resolution rather than at registration.</summary>
@@ -100,7 +100,7 @@ public sealed class ServiceCollectionTests
             ouroboros.ReplyTimeLimit = Timeout.InfiniteTimeSpan;
             Assert.Equal(Timeout.InfiniteTimeSpan, ((Ouroboros)serviceProvider.GetRequiredService<ICardanoDataProvider>()).ReplyTimeLimit);
         }
-        _ = await Assert.ThrowsAsync<ObjectDisposedException>(() => ouroboros.GetParametersAsync());
+        _ = await Assert.ThrowsAsync<ObjectDisposedException>(() => ouroboros.GetParametersAsync(TestContext.Current.CancellationToken));
     }
 
     private static IConfiguration Configuration(string endpoint) => new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>

@@ -1,7 +1,6 @@
 using Chrysalis.Wallet.Models.Enums;
 using Grpc.Core;
 using Xunit;
-using Xunit.Abstractions;
 
 namespace Chrysalis.Tx.Providers.UtxoRpcTests;
 
@@ -97,7 +96,7 @@ public sealed class TransportTests(ITestOutputHelper output)
         using CancellationTokenSource cancellation = new(TimeSpan.FromSeconds(10));
         using UtxoRpc provider = new(fake.Endpoint, NetworkType.Preprod);
         Task call = provider.GetParametersAsync(cancellation.Token);
-        await entered.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        await entered.Task.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
         await cancellation.CancelAsync();
         OperationCanceledException error = await Assert.ThrowsAnyAsync<OperationCanceledException>(() => call);
         Assert.Equal(cancellation.Token, error.CancellationToken);

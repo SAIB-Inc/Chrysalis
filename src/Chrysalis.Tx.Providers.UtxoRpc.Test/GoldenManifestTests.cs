@@ -12,13 +12,13 @@ public sealed class GoldenManifestTests
     public async Task EveryCopiedFileMatchesTheManifest()
     {
         string root = AppContext.BaseDirectory;
-        string[][] rows = [.. (await File.ReadAllLinesAsync(Path.Combine(root, "Golden", "manifest.tsv")))
+        string[][] rows = [.. (await File.ReadAllLinesAsync(Path.Combine(root, "Golden", "manifest.tsv"), TestContext.Current.CancellationToken))
             .Skip(1).Select(line => line.Split('\t'))];
         Assert.NotEmpty(rows);
         foreach (string[] row in rows)
         {
             Assert.Equal(8, row.Length);
-            byte[] bytes = await File.ReadAllBytesAsync(Path.Combine(root, row[0]));
+            byte[] bytes = await File.ReadAllBytesAsync(Path.Combine(root, row[0]), TestContext.Current.CancellationToken);
             Assert.Equal(row[6], Convert.ToHexStringLower(SHA256.HashData(bytes)));
         }
 

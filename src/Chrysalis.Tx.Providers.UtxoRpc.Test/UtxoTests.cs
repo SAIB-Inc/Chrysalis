@@ -244,7 +244,7 @@ public sealed class UtxoTests
             return Task.FromResult(new ReadUtxosResponse { Items = { TestData.Output(found ? 1u : 2u) } });
         };
         using UtxoRpc provider = new(fake.Endpoint, NetworkType.Preprod);
-        ResolvedInput? value = await provider.GetUtxoByOutRefAsync(TestData.Hash, 1);
+        ResolvedInput? value = await provider.GetUtxoByOutRefAsync(TestData.Hash, 1, TestContext.Current.CancellationToken);
         Assert.Equal(found, value is not null);
     }
 
@@ -269,7 +269,7 @@ public sealed class UtxoTests
         await using FakeUtxoRpc fake = await FakeUtxoRpc.StartAsync();
         fake.UtxosHandler = (_, _) => Task.FromResult(new ReadUtxosResponse { Items = { item } });
         using UtxoRpc provider = new(fake.Endpoint, NetworkType.Preprod);
-        ResolvedInput result = Assert.IsType<ResolvedInput>(await provider.GetUtxoByOutRefAsync(Convert.ToHexStringLower(item.TxoRef.Hash.Span), index));
+        ResolvedInput result = Assert.IsType<ResolvedInput>(await provider.GetUtxoByOutRefAsync(Convert.ToHexStringLower(item.TxoRef.Hash.Span), index, TestContext.Current.CancellationToken));
         Assert.True(expected.Raw.Span.SequenceEqual(result.Outref.Raw.Span));
         Assert.True(expected.TransactionId.Span.SequenceEqual(result.Outref.TransactionId.Span));
         Assert.Equal(expected.Index, result.Outref.Index);

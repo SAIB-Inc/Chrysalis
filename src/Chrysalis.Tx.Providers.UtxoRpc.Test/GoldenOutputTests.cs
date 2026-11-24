@@ -3,7 +3,6 @@ using Chrysalis.Tx.Models.Cbor;
 using Chrysalis.Wallet.Models.Enums;
 using Utxorpc.V1Beta.Query;
 using Xunit;
-using Xunit.Abstractions;
 using Spec = Utxorpc.V1Beta.Cardano;
 
 namespace Chrysalis.Tx.Providers.UtxoRpcTests;
@@ -25,7 +24,7 @@ public sealed class GoldenOutputTests(ITestOutputHelper output)
         using UtxoRpc provider = new(fake.Endpoint, NetworkType.Mainnet);
         for (int vector = 0; vector < names.Length; vector++)
         {
-            Spec.Block block = Spec.Block.Parser.ParseFrom(await File.ReadAllBytesAsync(Path.Combine(AppContext.BaseDirectory, "Golden/u5c-factory/v1beta", names[vector] + ".pb")));
+            Spec.Block block = Spec.Block.Parser.ParseFrom(await File.ReadAllBytesAsync(Path.Combine(AppContext.BaseDirectory, "Golden/u5c-factory/v1beta", names[vector] + ".pb"), TestContext.Current.CancellationToken));
             int count = 0;
             foreach (Spec.Tx tx in block.Body.Tx)
             {

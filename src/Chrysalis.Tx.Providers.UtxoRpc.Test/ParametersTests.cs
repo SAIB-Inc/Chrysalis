@@ -17,7 +17,7 @@ public sealed class ParametersTests
     [Fact]
     public async Task MapsEveryGouroborosParameter()
     {
-        using JsonDocument document = JsonDocument.Parse(await File.ReadAllTextAsync(Path.Combine(AppContext.BaseDirectory, "Golden/gouroboros/pparams.json")));
+        using JsonDocument document = JsonDocument.Parse(await File.ReadAllTextAsync(Path.Combine(AppContext.BaseDirectory, "Golden/gouroboros/pparams.json"), TestContext.Current.CancellationToken));
         HashSet<string> keys = [];
         int cases = 0;
         foreach (JsonElement testCase in document.RootElement.EnumerateArray())

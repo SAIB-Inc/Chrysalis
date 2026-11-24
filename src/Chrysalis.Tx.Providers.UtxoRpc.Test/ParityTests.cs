@@ -30,7 +30,7 @@ public sealed class ParityTests
 
     /// <summary>The exact live parameter fields agree across a stable three-read window.</summary>
     /// <returns>A task for a bounded comparison.</returns>
-    [LiveFact(LiveSettings.Endpoint, LiveSettings.Network, LiveSettings.BlockfrostKeyFile)]
+    [LiveFact([LiveSettings.Endpoint, LiveSettings.Network, LiveSettings.BlockfrostKeyFile])]
     public async Task CurrentParametersAgree()
     {
         // poolRetireMaxEpoch is excluded by DolosGaps along with its other named server gaps.
@@ -68,7 +68,7 @@ public sealed class ParityTests
 
     /// <summary>Wallet and public recording address UTxOs agree as sets by reference.</summary>
     /// <returns>A task for the configured addresses.</returns>
-    [LiveFact(LiveSettings.Endpoint, LiveSettings.Network, LiveSettings.Addresses, LiveSettings.BlockfrostKeyFile)]
+    [LiveFact([LiveSettings.Endpoint, LiveSettings.Network, LiveSettings.Addresses, LiveSettings.BlockfrostKeyFile])]
     public async Task CurrentOutputsAgree()
     {
         using UtxoRpc provider = LiveSettings.CreateProvider();

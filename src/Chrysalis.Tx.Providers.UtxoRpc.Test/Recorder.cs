@@ -6,7 +6,6 @@ using Grpc.Net.Client;
 using Utxorpc.V1Beta.Query;
 using Utxorpc.V1Beta.Submit;
 using Xunit;
-using Xunit.Abstractions;
 using Xunit.Sdk;
 using Address = Chrysalis.Wallet.Models.Addresses.Address;
 using GrpcMetadata = Grpc.Core.Metadata;
@@ -23,7 +22,7 @@ public sealed class Recorder(ITestOutputHelper output)
 {
     /// <summary>Captures the four answers and the three harmless status probes.</summary>
     /// <returns>A task for the local capture.</returns>
-    [LiveFact(LiveSettings.Endpoint, LiveSettings.Network, LiveSettings.Addresses, LiveSettings.RecordDirectory, LiveSettings.RecordAddress, LiveSettings.RecordTransaction)]
+    [LiveFact([LiveSettings.Endpoint, LiveSettings.Network, LiveSettings.Addresses, LiveSettings.RecordDirectory, LiveSettings.RecordAddress, LiveSettings.RecordTransaction])]
     public async Task RecordsPublicAnswers()
     {
         _ = LiveSettings.ReadNetwork();
@@ -100,7 +99,7 @@ public sealed class Recorder(ITestOutputHelper output)
 
     /// <summary>Recaptures only the immutable reference-script hash inside this test process.</summary>
     /// <returns>A task for one Blockfrost request, preserving the expected hash.</returns>
-    [LiveFact(LiveSettings.Network, LiveSettings.BlockfrostKeyFile, LiveSettings.RecordDirectory)]
+    [LiveFact([LiveSettings.Network, LiveSettings.BlockfrostKeyFile, LiveSettings.RecordDirectory])]
     public async Task RecordsReferenceScriptHash()
     {
         try
