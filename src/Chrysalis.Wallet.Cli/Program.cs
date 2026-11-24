@@ -1,7 +1,5 @@
-using SAIB.Cbor.Serialization;
 using System.Text;
-using System.Text.Json;
-using Chrysalis.Codec.Serialization;
+using Chrysalis.Wallet.Cli;
 using Chrysalis.Wallet.CIPs.CIP8.Builders;
 using Chrysalis.Wallet.CIPs.CIP8.Extensions;
 using Chrysalis.Wallet.CIPs.CIP8.Models;
@@ -35,7 +33,7 @@ try
             return 1;
     }
 }
-catch (Exception ex) when (ex is InvalidOperationException or CborDecodeException)
+catch (Exception ex) when (ex is InvalidOperationException or FormatException)
 {
     Console.WriteLine($"Error: {ex.Message}");
     return 1;
@@ -196,77 +194,14 @@ static async Task<int> HandleVerify(string[] args)
 
 static async Task SignMessage(string skeyPath, string vkeyPath, string payloadPath, string? externalAad, bool detached, bool hashPayload, string? outputPath)
 {
-    // Read the signing key
     string skeyJson = await File.ReadAllTextAsync(skeyPath).ConfigureAwait(false);
-    string skeyCborHex = ReadCborHexFromKeyFile(skeyJson)
-        ?? throw new InvalidOperationException("Invalid signing key file format");
+    PrivateKey privateKey = KeyFileReader.ReadSigningKey(skeyJson);
 
-    // Read the verification key
     string vkeyJson = await File.ReadAllTextAsync(vkeyPath).ConfigureAwait(false);
-    string vkeyCborHex = ReadCborHexFromKeyFile(vkeyJson)
-        ?? throw new InvalidOperationException("Invalid verification key file format");
+    PublicKey publicKey = KeyFileReader.ReadVerificationKey(vkeyJson);
 
-    // Parse the CBOR hex to get the actual key bytes
-    byte[] skeyCbor = Convert.FromHexString(skeyCborHex);
-    byte[] vkeyCbor = Convert.FromHexString(vkeyCborHex);
-
-    // The CBOR should be a byte string containing the key
-    CborReader skeyReader = new(skeyCbor);
-    byte[] skeyBytes = skeyReader.ReadByteString().ToArray();
-
-    CborReader vkeyReader = new(vkeyCbor);
-    byte[] vkeyBytes = vkeyReader.ReadByteString().ToArray();
-
-    Console.WriteLine($"Signing key length: {skeyBytes.Length} bytes");
-    Console.WriteLine($"Verification key length: {vkeyBytes.Length} bytes");
-
-    // For Cardano extended keys, we need to handle the format properly
-    PrivateKey privateKey;
-    PublicKey publicKey;
-
-    if (skeyBytes.Length == 128)
-    {
-        // Shelley extended signing key (128 bytes):
-        // First 64 bytes: Extended Ed25519 private key
-        // Next 32 bytes: Chain code
-        // Last 32 bytes: Public key
-        byte[] key = new byte[64];
-        byte[] chainCode = new byte[32];
-        Array.Copy(skeyBytes, 0, key, 0, 64);
-        Array.Copy(skeyBytes, 64, chainCode, 0, 32); // Chain code is at offset 64
-        privateKey = new PrivateKey(key, chainCode);
-    }
-    else if (skeyBytes.Length == 64)
-    {
-        // Extended key: first 32 bytes is the key, last 32 is chain code
-        byte[] key = new byte[32];
-        byte[] chainCode = new byte[32];
-        Array.Copy(skeyBytes, 0, key, 0, 32);
-        Array.Copy(skeyBytes, 32, chainCode, 0, 32);
-        privateKey = new PrivateKey(key, chainCode);
-    }
-    else if (skeyBytes.Length == 32)
-    {
-        // Simple key without chain code
-        privateKey = new PrivateKey(skeyBytes, new byte[32]);
-    }
-    else
-    {
-        throw new InvalidOperationException($"Unexpected signing key size: {skeyBytes.Length} bytes");
-    }
-
-    if (vkeyBytes.Length >= 32)
-    {
-        // Take first 32 bytes as the public key
-        byte[] pubKeyBytes = new byte[32];
-        Array.Copy(vkeyBytes, 0, pubKeyBytes, 0, 32);
-        byte[] chainCode = vkeyBytes.Length >= 64 ? [.. vkeyBytes.Skip(32).Take(32)] : new byte[32];
-        publicKey = new PublicKey(pubKeyBytes, chainCode);
-    }
-    else
-    {
-        throw new InvalidOperationException($"Unexpected verification key size: {vkeyBytes.Length} bytes");
-    }
+    Console.WriteLine($"Decoded signing key length: {privateKey.Key.Length} bytes");
+    Console.WriteLine($"Decoded public key length: {publicKey.Key.Length} bytes");
 
     // Read the payload
     byte[] payloadBytes = await File.ReadAllBytesAsync(payloadPath).ConfigureAwait(false);
@@ -308,7 +243,6 @@ static async Task SignMessage(string skeyPath, string vkeyPath, string payloadPa
     // Also output the raw CBOR hex for debugging
     string cborHex = Convert.ToHexStringLower(coseSign1.ToCbor());
     Console.WriteLine($"CBOR Hex: {cborHex}");
-    Console.WriteLine($"Public Key (hex): {Convert.ToHexStringLower(publicKey.Key)}");
 
     if (outputPath != null)
     {
@@ -330,27 +264,8 @@ static async Task SignMessage(string skeyPath, string vkeyPath, string payloadPa
 
 static async Task<int> VerifySignature(string signatureInput, string vkeyPath, string? payloadPath, string? externalAad)
 {
-    // Read the verification key
     string vkeyJson = await File.ReadAllTextAsync(vkeyPath).ConfigureAwait(false);
-    string vkeyCborHex = ReadCborHexFromKeyFile(vkeyJson)
-        ?? throw new InvalidOperationException("Invalid verification key file format");
-
-    byte[] vkeyCbor = Convert.FromHexString(vkeyCborHex);
-    CborReader vkeyReader = new(vkeyCbor);
-    byte[] vkeyBytes = vkeyReader.ReadByteString().ToArray();
-
-    PublicKey publicKey;
-    if (vkeyBytes.Length >= 32)
-    {
-        byte[] pubKeyBytes = new byte[32];
-        Array.Copy(vkeyBytes, 0, pubKeyBytes, 0, 32);
-        byte[] chainCode = vkeyBytes.Length >= 64 ? [.. vkeyBytes.Skip(32).Take(32)] : new byte[32];
-        publicKey = new PublicKey(pubKeyBytes, chainCode);
-    }
-    else
-    {
-        throw new InvalidOperationException($"Unexpected verification key size: {vkeyBytes.Length} bytes");
-    }
+    PublicKey publicKey = KeyFileReader.ReadVerificationKey(vkeyJson);
 
     // Read the signature (could be from file or direct input)
     string cip8Signature = File.Exists(signatureInput)
@@ -389,12 +304,4 @@ static async Task<int> VerifySignature(string signatureInput, string vkeyPath, s
     }
 
     return verified ? 0 : 1;
-}
-
-static string? ReadCborHexFromKeyFile(string json)
-{
-    using JsonDocument doc = JsonDocument.Parse(json);
-    return doc.RootElement.TryGetProperty("cborHex", out JsonElement cborHexElement)
-        ? cborHexElement.GetString()
-        : null;
 }

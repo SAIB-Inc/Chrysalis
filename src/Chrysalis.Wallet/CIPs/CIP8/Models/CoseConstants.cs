@@ -119,45 +119,45 @@ public static class CoseHeaders
     /// <summary>
     /// Algorithm identifier as a CborLabel.
     /// </summary>
-    public static readonly CborLabel Algorithm = 1;
+    public static readonly CborLabel Algorithm = HeaderLabels.Algorithm;
 
     /// <summary>
     /// Critical headers as a CborLabel.
     /// </summary>
-    public static readonly CborLabel Criticality = 2;
+    public static readonly CborLabel Criticality = HeaderLabels.Criticality;
 
     /// <summary>
     /// Content type as a CborLabel.
     /// </summary>
-    public static readonly CborLabel ContentType = 3;
+    public static readonly CborLabel ContentType = HeaderLabels.ContentType;
 
     /// <summary>
     /// Key identifier as a CborLabel.
     /// </summary>
-    public static readonly CborLabel KeyId = 4;
+    public static readonly CborLabel KeyId = HeaderLabels.KeyId;
 
     /// <summary>
     /// Initialization vector as a CborLabel.
     /// </summary>
-    public static readonly CborLabel IV = 5;
+    public static readonly CborLabel IV = HeaderLabels.IV;
 
     /// <summary>
     /// Partial initialization vector as a CborLabel.
     /// </summary>
-    public static readonly CborLabel PartialIV = 6;
+    public static readonly CborLabel PartialIV = HeaderLabels.PartialIV;
 
     /// <summary>
     /// Counter signature as a CborLabel.
     /// </summary>
-    public static readonly CborLabel CounterSignature = 7;
+    public static readonly CborLabel CounterSignature = HeaderLabels.CounterSignature;
 
     /// <summary>
     /// CIP-8 address label as a CborLabel.
     /// </summary>
-    public static readonly CborLabel Address = "address";
+    public static readonly CborLabel Address = HeaderLabels.Address;
 
     /// <summary>
     /// CIP-8 hashed label as a CborLabel.
     /// </summary>
-    public static readonly CborLabel Hashed = "hashed";
+    public static readonly CborLabel Hashed = HeaderLabels.Hashed;
 }
