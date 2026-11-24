@@ -2,13 +2,16 @@ using System.Globalization;
 using System.Text.Json;
 using Chrysalis.Codec.Extensions.Cardano.Core.Common;
 using Chrysalis.Codec.Extensions.Cardano.Core.Transaction;
+using Chrysalis.Codec.Serialization;
 using Chrysalis.Codec.Test;
 using Chrysalis.Codec.Types;
 using Chrysalis.Codec.Types.Cardano.Core;
 using Chrysalis.Codec.Types.Cardano.Core.Common;
 using Chrysalis.Codec.Types.Cardano.Core.Protocol;
+using Chrysalis.Codec.Types.Cardano.Core.Scripts;
 using Chrysalis.Codec.Types.Cardano.Core.Transaction;
 using Chrysalis.Codec.Types.Cardano.Core.TransactionWitness;
+using Chrysalis.Tx.Builders;
 using Chrysalis.Tx.Extensions;
 using Chrysalis.Tx.Fees;
 using Chrysalis.Tx.Models.Cbor;
@@ -83,7 +86,7 @@ public sealed class FeeEngineTests
     {
         JsonElement row = Row(id);
         PostMaryTransaction tx = Tx(row);
-        ResolvedInput[] utxos = CliUtxo.ReadForReferenceScripts(Vectors, Text(row, "utxo"));
+        ResolvedInput[] utxos = CliUtxo.Read(Vectors, Text(row, "utxo"));
         TransactionInput[] inputs = [.. tx.Body.Inputs()];
         TransactionInput[] references = [.. tx.Body.ReferenceInputs() ?? []];
         ulong size = FeeEngine.ReferenceScriptSize(inputs, references, utxos);
@@ -120,13 +123,28 @@ public sealed class FeeEngineTests
         Assert.Equal(Number(row, "q"), Quote(tx, row));
     }
 
-    /// <summary>Preserved list and map outputs reproduce every CLI minimum at their stored width.</summary>
+    /// <summary>Preserved list and map outputs reproduce every CLI minimum at their stored width, and the builder writes each in the same form.</summary>
     [Theory]
     [MemberData(nameof(Rows), "min-utxo")]
     public void MinLovelaceMatchesCli(string id, int index)
     {
         JsonElement row = Row(id, index);
-        Assert.Equal(Number(row, "minimum"), FeeEngine.MinLovelace(Output(row), Pp(row).AdaPerUTxOByte!.Value));
+        ITransactionOutput stored = Output(row);
+        Assert.Equal(Number(row, "minimum"), FeeEngine.MinLovelace(stored, Pp(row).AdaPerUTxOByte!.Value));
+        OutputBuilder rebuilt = new(stored.Address().ToArray(), stored.Amount());
+        if (stored.DatumOption() is { } datum)
+        {
+            rebuilt.SetDatumOption(datum);
+        }
+        else if (stored is AlonzoTransactionOutput { DatumHash: { } hash })
+        {
+            _ = rebuilt.WithDatumHash(hash.ToArray());
+        }
+        if (stored.ScriptRef() is { } script)
+        {
+            _ = rebuilt.WithScriptRef(CborSerializer.Deserialize<IScript>(script));
+        }
+        Assert.Equal(Convert.ToHexStringLower(stored.Raw.Span), Convert.ToHexStringLower(CborSerializer.Serialize(rebuilt.Build())));
     }
 
     /// <summary>Near 2^32 the least valid coin depends on the permitted starting coin.</summary>
@@ -140,10 +158,10 @@ public sealed class FeeEngineTests
         JsonElement row = Row(id);
         ITransactionOutput output = Output(row);
         ulong cost = Pp(row).AdaPerUTxOByte!.Value;
-        Assert.Equal(Number(Row(fromZero), "minimum"), FeeEngine.LeastValidCoin(WithCoin(output, 0), cost));
-        Assert.Equal(Number(row, "minimum"), FeeEngine.LeastValidCoin(WithCoin(output, Number(row, "startCoin")), cost));
+        Assert.Equal(Number(Row(fromZero), "minimum"), FeeEngine.LeastValidCoin(TransactionBuilderExtensions.ChangeCoin(output, 0), cost));
+        Assert.Equal(Number(row, "minimum"), FeeEngine.LeastValidCoin(TransactionBuilderExtensions.ChangeCoin(output, Number(row, "startCoin")), cost));
         ulong funded = Number(row, "minimum") + 1;
-        Assert.Equal(funded, FeeEngine.LeastValidCoin(WithCoin(output, funded), cost));
+        Assert.Equal(funded, FeeEngine.LeastValidCoin(TransactionBuilderExtensions.ChangeCoin(output, funded), cost));
     }
 
     /// <summary>Ordinary vectors and all stored fee/collateral boundaries match their least valid solution.</summary>
@@ -606,18 +624,6 @@ public sealed class FeeEngineTests
     private static ulong Quote(PostMaryTransaction tx, JsonElement row) => FeeEngine.MinFee(tx, Pp(row), checked((int)Number(row, "w")), Number(row, "s"));
     private static RedeemerList Units(params (ulong Mem, ulong Steps)[] units) => RedeemerList.Create([.. units.Select((u, i) =>
         RedeemerEntry.Create(0, (ulong)i, PlutusInt.Create(0), ExUnits.Create(u.Mem, u.Steps)))]);
-
-    private static ITransactionOutput WithCoin(ITransactionOutput output, ulong coin)
-    {
-        IValue amount = output.Amount() is LovelaceWithMultiAsset assets
-            ? LovelaceWithMultiAsset.Create(coin, assets.MultiAsset) : Lovelace.FromAmount(coin);
-        return output switch
-        {
-            PostAlonzoTransactionOutput map => PostAlonzoTransactionOutput.Create(map.Address, amount, map.Datum, map.ScriptRef),
-            AlonzoTransactionOutput list => AlonzoTransactionOutput.Create(list.Address, amount, list.DatumHash),
-            _ => throw new InvalidDataException("Unexpected output form")
-        };
-    }
 
     private static FeeDraft VectorDraft(JsonElement row)
     {

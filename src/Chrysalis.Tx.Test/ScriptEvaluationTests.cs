@@ -28,7 +28,7 @@ public sealed class ScriptEvaluationTests
     [Fact]
     public void EvaluateSetsNonZeroUnitsForAV3UnitMintResult()
     {
-        TransactionBuilder builder = Mint(3, "(con unit ())").Evaluate([Funds], SlotNetworkConfig.Preview);
+        TransactionBuilder builder = Mint(3, "(con unit ())").Evaluate([Funds], null);
         RedeemerMap map = Assert.IsType<RedeemerMap>(builder.BuildWitnessSet().Redeemers);
         RedeemerValue redeemer = Assert.Single(map.Value).Value;
         Assert.True(redeemer.ExUnits.Mem > 0 && redeemer.ExUnits.Steps > 0);
@@ -59,6 +59,7 @@ public sealed class ScriptEvaluationTests
         PlutusDataConstr range = Assert.IsType<PlutusDataConstr>(info.Fields[7]);
         Assert.Equal(1_654_041_600_000, Bound(range, 0));
         Assert.Equal(1_655_769_700_000, Bound(range, 1));
+        _ = Assert.Throws<SlotConversionException>(() => builder.Evaluate([Funds], null));
     }
 
     // The time of a finite bound: side 0 is the lower bound, side 1 the upper; each is Constr 0 [Constr 1 [time], closed].

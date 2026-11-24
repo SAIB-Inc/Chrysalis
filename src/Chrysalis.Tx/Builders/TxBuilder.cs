@@ -1119,20 +1119,7 @@ public class TxBuilder
             _ = ob.WithScriptRef(directive.ScriptRef);
         }
 
-        ITransactionOutput built = ob.Build();
-
-        if (pparams.AdaPerUTxOByte is { } cost)
-        {
-            ulong coin = FeeEngine.LeastValidCoin(built, cost);
-            if (coin != built.Amount().Lovelace())
-            {
-                ob.Amount = ob.Amount is LovelaceWithMultiAsset assets
-                    ? LovelaceWithMultiAsset.Create(coin, assets.MultiAsset) : Lovelace.FromAmount(coin);
-                built = ob.Build();
-            }
-        }
-
-        return built;
+        return ob.Build(pparams.AdaPerUTxOByte);
     }
 
     private static MultiAssetMint BuildMintValue(MintDirective mint)

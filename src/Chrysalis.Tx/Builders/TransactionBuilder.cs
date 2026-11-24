@@ -6,8 +6,6 @@ using Chrysalis.Codec.Types.Cardano.Core.Common;
 using Chrysalis.Codec.Types.Cardano.Core.Scripts;
 using Chrysalis.Codec.Types.Cardano.Core.Governance;
 using Chrysalis.Codec.Types;
-using Chrysalis.Codec.Extensions.Cardano.Core.Common;
-using Chrysalis.Codec.Extensions.Cardano.Core.Transaction;
 using Chrysalis.Codec.Serialization;
 using Chrysalis.Codec.Serialization.Utils;
 using Chrysalis.Codec.Types.Cardano.Core.Protocol;
@@ -231,8 +229,7 @@ public class TransactionBuilder
     public TransactionBuilder AddOutput(OutputBuilder output, bool isChange = false)
     {
         ArgumentNullException.ThrowIfNull(output);
-        EnforceMinAda(output);
-        return AddOutputInternal(output.Build(), isChange || output.IsChange);
+        return AddOutputInternal(output.Build(Pparams?.AdaPerUTxOByte), isChange || output.IsChange);
     }
 
     internal TransactionBuilder AddOutputInternal(ITransactionOutput output, bool isChange)
@@ -245,22 +242,6 @@ public class TransactionBuilder
 
         _outputs.Add(output);
         return this;
-    }
-
-    private void EnforceMinAda(OutputBuilder output)
-    {
-        if (Pparams?.AdaPerUTxOByte is null)
-        {
-            return;
-        }
-
-        ITransactionOutput built = output.Build();
-        ulong coin = FeeEngine.LeastValidCoin(built, Pparams.AdaPerUTxOByte.Value);
-        if (coin != built.Amount().Lovelace())
-        {
-            output.Amount = built.Amount() is LovelaceWithMultiAsset assets
-                ? LovelaceWithMultiAsset.Create(coin, assets.MultiAsset) : Lovelace.FromAmount(coin);
-        }
     }
 
     /// <summary>Replaces all transaction outputs.</summary>
