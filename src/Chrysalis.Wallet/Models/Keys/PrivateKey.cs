@@ -10,14 +10,14 @@ namespace Chrysalis.Wallet.Models.Keys;
 /// <summary>
 /// Represents a Cardano private key with support for BIP-32 hierarchical derivation.
 /// </summary>
-/// <param name="key">The private key bytes (32 or 64 bytes).</param>
+/// <param name="key">A 32-byte Ed25519 seed, or a 64-byte Cardano extended key (scalar followed by prefix).</param>
 /// <param name="chaincode">The 32-byte chain code for key derivation.</param>
 public class PrivateKey(byte[] key, byte[] chaincode)
 {
     /// <summary>
     /// Gets the private key bytes.
     /// </summary>
-    public byte[] Key { get; } = key;
+    public byte[] Key { get; } = Checked(key);
 
     /// <summary>
     /// Gets the chain code bytes used for hierarchical derivation.
@@ -26,17 +26,21 @@ public class PrivateKey(byte[] key, byte[] chaincode)
 
     private const uint MinHardIndex = 0x80000000;
 
+    private static byte[] Checked(byte[] key)
+    {
+        ArgumentNullException.ThrowIfNull(key);
+        return key.Length == Ed25519.PrivateKeySeedSizeInBytes || key.Length == Ed25519.ExpandedPrivateKeySizeInBytes
+            ? key
+            : throw new ArgumentException("A private key is a 32-byte Ed25519 seed or a 64-byte Cardano extended key.", nameof(key));
+    }
+
     /// <summary>
     /// Derives the corresponding public key from this private key.
     /// </summary>
     /// <returns>The derived public key.</returns>
-    public PublicKey GetPublicKey()
-    {
-        byte[] sk = new byte[Key.Length];
-        Buffer.BlockCopy(Key, 0, sk, 0, Key.Length);
-        byte[] pk = Ed25519.GetPublicKey(sk);
-        return new PublicKey(pk, Chaincode);
-    }
+    public PublicKey GetPublicKey() => new(
+        Key.Length == Ed25519.PrivateKeySeedSizeInBytes ? Ed25519.PublicKeyFromSeed(Key) : Ed25519.PublicKeyFromExtendedKey(Key),
+        Chaincode);
 
     /// <summary>
     /// Derives a child key at the specified index.
@@ -44,6 +48,7 @@ public class PrivateKey(byte[] key, byte[] chaincode)
     /// <param name="index">The derivation index.</param>
     /// <param name="type">The derivation type (hard or soft).</param>
     /// <returns>The derived child private key.</returns>
+    /// <exception cref="InvalidOperationException">This key is a 32-byte seed, which has no child keys.</exception>
     public PrivateKey Derive(int index, DerivationType type = DerivationType.SOFT)
     {
         uint derivationIndex = (uint)index;
@@ -61,6 +66,7 @@ public class PrivateKey(byte[] key, byte[] chaincode)
     /// <param name="purpose">The BIP-44 purpose type.</param>
     /// <param name="type">The derivation type (hard or soft).</param>
     /// <returns>The derived child private key.</returns>
+    /// <exception cref="InvalidOperationException">This key is a 32-byte seed, which has no child keys.</exception>
     public PrivateKey Derive(PurposeType purpose, DerivationType type = DerivationType.SOFT) => Derive((int)purpose, type);
 
     /// <summary>
@@ -69,6 +75,7 @@ public class PrivateKey(byte[] key, byte[] chaincode)
     /// <param name="coinType">The BIP-44 coin type.</param>
     /// <param name="type">The derivation type (hard or soft).</param>
     /// <returns>The derived child private key.</returns>
+    /// <exception cref="InvalidOperationException">This key is a 32-byte seed, which has no child keys.</exception>
     public PrivateKey Derive(CoinType coinType, DerivationType type = DerivationType.SOFT) => Derive((int)coinType, type);
 
     /// <summary>
@@ -77,6 +84,7 @@ public class PrivateKey(byte[] key, byte[] chaincode)
     /// <param name="roleType">The CIP-1852 role type.</param>
     /// <param name="type">The derivation type (hard or soft).</param>
     /// <returns>The derived child private key.</returns>
+    /// <exception cref="InvalidOperationException">This key is a 32-byte seed, which has no child keys.</exception>
     public PrivateKey Derive(RoleType roleType, DerivationType type = DerivationType.SOFT) => Derive((int)roleType, type);
 
     /// <summary>
@@ -84,6 +92,7 @@ public class PrivateKey(byte[] key, byte[] chaincode)
     /// </summary>
     /// <param name="account">The account index (default 0).</param>
     /// <returns>The account-level private key.</returns>
+    /// <exception cref="InvalidOperationException">This key is a 32-byte seed, which has no child keys.</exception>
     public PrivateKey DeriveCardanoAccountKey(int account = 0) =>
         Derive(PurposeType.Shelley, DerivationType.HARD)
         .Derive(CoinType.Ada, DerivationType.HARD)
@@ -95,6 +104,7 @@ public class PrivateKey(byte[] key, byte[] chaincode)
     /// </summary>
     /// <param name="index">The address index (default 0).</param>
     /// <returns>The payment private key.</returns>
+    /// <exception cref="InvalidOperationException">This key is a 32-byte seed, which has no child keys.</exception>
     public PrivateKey DerivePaymentKey(int index = 0) =>
         Derive(RoleType.ExternalChain).Derive(index);
 
@@ -104,11 +114,17 @@ public class PrivateKey(byte[] key, byte[] chaincode)
     /// </summary>
     /// <param name="index">The address index (default 0).</param>
     /// <returns>The staking private key.</returns>
+    /// <exception cref="InvalidOperationException">This key is a 32-byte seed, which has no child keys.</exception>
     public PrivateKey DeriveStakeKey(int index = 0) =>
         Derive(RoleType.Staking).Derive(index);
 
     private PrivateKey GetChildKeyDerivation(ulong index)
     {
+        if (Key.Length != Ed25519.ExpandedPrivateKeySizeInBytes)
+        {
+            throw new InvalidOperationException("Only a 64-byte Cardano extended key derives child keys; this key is a 32-byte Ed25519 seed.");
+        }
+
         // Split the 64-byte private key into two 32-byte halves.
         byte[] kl = new byte[32];
         Buffer.BlockCopy(Key, 0, kl, 0, 32);
@@ -194,12 +210,12 @@ public class PrivateKey(byte[] key, byte[] chaincode)
         ArgumentNullException.ThrowIfNull(message);
 
         byte[] skey = Key;
-        if (skey.Length == 32)
+        if (skey.Length == Ed25519.PrivateKeySeedSizeInBytes)
         {
-            skey = Ed25519.ExpandedPrivateKeyFromSeed(skey);
-            return Ed25519.Sign(message, skey);
+            skey = Ed25519.SeedAndPublicKeyFromSeed(skey);
+            return Ed25519.SignWithSeedAndPublicKey(message, skey);
         }
-        return Ed25519.SignCrypto(message, skey);
+        return Ed25519.SignWithExtendedKey(message, skey);
     }
 
     /// <inheritdoc/>

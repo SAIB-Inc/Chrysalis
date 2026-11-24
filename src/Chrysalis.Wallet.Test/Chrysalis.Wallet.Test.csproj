@@ -4,17 +4,19 @@
     <TargetFramework>net11.0</TargetFramework>
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
+    <OutputType>Exe</OutputType>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="coverlet.collector" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
-    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.v3" />
     <PackageReference Include="xunit.runner.visualstudio" />
   </ItemGroup>
 
   <ItemGroup>
     <None Update="TestData/CIPs/**" CopyToOutputDirectory="PreserveNewest" />
+    <Compile Include="../Chrysalis.Crypto.Test/Ed25519TestVectors.cs" Link="Ed25519TestVectors.cs" />
   </ItemGroup>
 
   <ItemGroup>
@@ -24,6 +26,7 @@
   <ItemGroup>
     <ProjectReference Include="..\Chrysalis.Wallet\Chrysalis.Wallet.csproj" />
     <ProjectReference Include="..\Chrysalis.Codec\Chrysalis.Codec.csproj" />
+    <ProjectReference Include="..\Chrysalis.Tx\Chrysalis.Tx.csproj" />
     <ProjectReference Include="..\Chrysalis.Codec.CodeGen\Chrysalis.Codec.CodeGen.csproj" 
               OutputItemType="Analyzer" 
               ReferenceOutputAssembly="false" />
