@@ -2269,6 +2269,36 @@ def test_w_controls_timing_plan_seals_a16_with_frozen_noise():
         assert r['noise'] is not None and timing.noise_band(r['noise'], 'azure') is not None
 
 
+MICROS = [f'time/micro-{name}' for name in ('hashing', 'signing', 'transactions', 'plutus', 'encoding', 'n2c')]
+
+
+@pytest.mark.parametrize('name, mode, sessions', [
+    ('b1-leg1', 'change', [(['time/preprod-tcp', 'time/preprod-offline'], 168, 0.961), (MICROS, 220, 1.2824)]),
+    ('head-vs-1714', 'release', [(['time/preprod-tcp', 'time/preprod-offline'], 184, 1.0105),
+                                 (['time/micro-encoding', 'time/micro-signing'], 184, 0.9775),
+                                 (['time/micro-n2c', 'time/micro-hashing'], 184, 0.7375)]),
+])
+def test_batch_live_plan_files_seal_their_sessions(name, mode, sessions):
+    import fnmatch
+    import gate_azure_guest as guest
+    config = prepare.azure_config(json.loads((gate.GATE / 'gated.json').read_text()))
+    audit = json.loads((gate.REPO / 'benchmarks/Chrysalis.Benchmarks/audit-allocations.json').read_text())
+    entries = json.loads((gate.GATE / f'plans/{name}.json').read_text())
+    selected = gate.select_rows(SimpleNamespace(mode=mode, plan=None, only=None), config, audit, plan_entries=entries)
+    areas = config['_batchAreas']
+    named = [rid for rid in config['time']['required']
+             if any(fnmatch.fnmatchcase(rid, pattern) for area in areas for pattern in config['areas'][area]['time'])]
+    # Leg 1 times every time row whatever its areas name (P2-AZURE.md:296); the areas name exactly HEAD's (B1 leg 2's) rows.
+    assert [r['id'] for r in selected] == (config['time']['required'] if mode == 'change' else named)
+    assert named == [e['id'] for e in json.loads((gate.GATE / 'plans/head-vs-1714.json').read_text())['entries']]
+    seal = dict(gated=config, mode=mode, noiseRecords=False, sessionPerRow=False, orderingProof=False,
+                rows=[dict(item, sides=dict(baseline=side(), candidate=side())) for item in selected])
+    plans = prepare.time_plans(seal)
+    assert [([r['id'] for r in plan['rows']], (guest.results_limits(plan, strict=True)[1] - guest.MAX_RESULTS)
+             // guest.PER_PROCESS_EXPANDED, plan['limitUsd']) for plan in plans] == sessions
+    assert all(r['noise'] is not None and timing.noise_band(r['noise'], 'azure') is not None for plan in plans for r in plan['rows'])
+
+
 def test_w_seal_diff_round_trip_two_micro_sessions_leg2(tmp_path, azure, monkeypatch):
     def make_leg2(name, commit):
         root = tmp_path / name
