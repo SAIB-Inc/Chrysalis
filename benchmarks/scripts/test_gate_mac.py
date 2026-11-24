@@ -35,6 +35,39 @@ class MacGateTests(TestCase):
         with self.assertRaisesRegex(ValueError, 'EncodingBench.RawBlocks resolves on the target'):
             gate.verify_mac_probe_inventory(rows, known, inventory)
 
+    def test_sign_and_verify_admit_by_catalogue_id_and_namespaced_ids_are_refused(self):
+        config = json.loads((gate.GATE / 'gated.json').read_text())
+        audit = json.loads((gate.REPO / gate_mac.HARNESS / 'audit-allocations.json').read_text())
+        known = {row['id'] for row in gate.catalogue(config, audit)}
+        sign, verify = rows = gate_mac.requested_rows(gate, gate_mac.admission(json.dumps(spec('CoreBench.Sign', 'CoreBench.Verify'))))[0]
+        cohort = ('CoreBench.Sign,BlockBench.DecodeBlockReadInputs,TxBench.SimpleBuildSign,TxBench.SimpleBuildFeeSign,'
+                  'TxBench.ScriptBuildFeeSign,VmBench.DecodeAndEvaluate')
+        self.assertEqual({key: sign.get(key) for key in ('rule', 'processFilter', 'window', 'warmupMilliseconds', 'pairs', 'design')},
+                         dict(rule='range', processFilter=cohort, window='direct/warm10', warmupMilliseconds=10000, pairs=3, design='direct'))
+        self.assertEqual({key: verify.get(key) for key in ('rule', 'processFilter', 'warmupMilliseconds', 'pairs', 'design')},
+                         dict(rule='D39', processFilter=None, warmupMilliseconds=None, pairs=3, design='direct'))
+        gate.verify_mac_probe_inventory(rows, known, None)  # catalogued: no target probe inventory is needed
+        # WA1's admissions spelled BenchmarkDotNet's namespaced names; they are refused up front, naming the probe name.
+        for first in (False, True):
+            for short in ('CoreBench.Sign', 'CoreBench.Verify'):
+                want = spec('Chrysalis.Benchmarks.' + short)
+                if first:
+                    want['rows'][0]['firstBaseline'] = True
+                with self.subTest(short=short, first=first), self.assertRaisesRegex(ValueError, 'probe name Type.Method, for example ' + short):
+                    gate_mac.admission(json.dumps(want))
+        for bad in ('Sign', 'CoreBench.', 'a..b'):  # no valid Type.Method tail: the hint is a fixed valid example
+            with self.subTest(bad=bad), self.assertRaisesRegex(ValueError, r'probe name Type\.Method, for example CoreBench\.Sign$'):
+                gate_mac.admission(json.dumps(spec(bad)))
+
+    def test_every_catalogue_and_counted_direct_id_still_admits_unchanged(self):
+        config = json.loads((gate.GATE / 'gated.json').read_text())
+        audit = json.loads((gate.REPO / gate_mac.HARNESS / 'audit-allocations.json').read_text())
+        ids = dict.fromkeys([row['id'] for row in gate.catalogue(config, audit) if row['kind'] == 'direct']
+                            + list(json.loads((gate.GATE / 'mac-direct-counts.json').read_text())))
+        want = spec(*ids)
+        self.assertEqual(gate_mac.admission(json.dumps(want)), want)
+        self.assertEqual([row['id'] for row in gate_mac.requested_rows(gate, want)[0]], list(ids))
+
     def test_catalogue_supplies_count_and_refuses_lower(self):
         want = spec('FieldReadBench.ReadEveryField', 'CoreBench.PrimitiveIntRead')
         rows, _ = gate_mac.requested_rows(gate, want)

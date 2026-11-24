@@ -17,6 +17,7 @@ import tempfile
 from types import SimpleNamespace
 
 HARNESS = Path('benchmarks/Chrysalis.Benchmarks')
+PROBE_NAME = r'[A-Za-z0-9_]+\.[A-Za-z0-9_]+'  # Program.cs ProbeName: Type.Method
 
 
 def admission(raw):
@@ -37,6 +38,9 @@ def admission(raw):
                 or ('maxBytes' in row and (not row.get('firstBaseline') or type(row['maxBytes']) not in (int, float)
                                            or not math.isfinite(row['maxBytes']) or row['maxBytes'] < 0))):
             raise ValueError('Mac admission requires distinct literal row ids, one job kind and valid counts/caps')
+        if row['kind'] == 'direct' and not re.fullmatch(PROBE_NAME, row['id']):
+            hint = '.'.join(row['id'].split('.')[-2:])
+            raise ValueError(f'{row["id"]}: a Mac direct row id is the probe name Type.Method, for example {hint if re.fullmatch(PROBE_NAME, hint) else "CoreBench.Sign"}')
         seen.add(row['id'])
     return value
 
