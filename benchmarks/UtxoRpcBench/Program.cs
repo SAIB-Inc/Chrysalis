@@ -25,7 +25,7 @@ public class UtxoRpcSearchBenchmarks
 {
     private const string Recorded = "Recorded";
     private PayloadContext _input = null!;
-    private readonly LeanUtxo _projection = new();
+    private readonly LeanUtxo _projection = new() { TxoRef = new() };
 
     /// <summary>Gets or sets the recorded page or its repeated item count.</summary>
     [Params(Recorded, "100", "1000")]
@@ -71,7 +71,8 @@ public class UtxoRpcSearchBenchmarks
         {
             // Reuse the projection: full parsing is not charged an extra wrapper per item.
             _projection.NativeBytes = response.Items[i].NativeBytes;
-            _projection.TxoRef = response.Items[i].TxoRef;
+            _projection.TxoRef.Hash = response.Items[i].TxoRef.Hash;
+            _projection.TxoRef.Index = response.Items[i].TxoRef.Index;
             result = UtxoRpc.ToResolvedInput(_projection);
         }
         return result;

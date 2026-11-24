@@ -111,7 +111,7 @@ def checked_file(path, sha):
 
 def dolos_refs():
     golden = Path("src/Chrysalis.Tx.Providers.UtxoRpc.Test/Golden/manifest.tsv")
-    data = checked_file(golden, "935ebd95b2962ed510c680337ca6cea6a0361c618aa33332bf7674f3dc36d65d")
+    data = checked_file(golden, "c2dffb202ed972dbd1dc06f6859fbfbe0af76cf104955425b866d3906551aebb")
     refs = []
     for row in data.decode("utf-8").splitlines():
         fields = row.split("\t")

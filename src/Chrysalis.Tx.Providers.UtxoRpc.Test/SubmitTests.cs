@@ -56,4 +56,35 @@ public sealed class SubmitTests
         Assert.Null(error.StatusCode);
         Assert.Null(error.InnerException);
     }
+
+    /// <summary>A cancel that arrives after the server accepted the transaction returns its reference.</summary>
+    /// <returns>A task for late cancellation.</returns>
+    [Fact]
+    public async Task LateCancellationAfterSubmitAcceptanceReturnsTransactionId()
+    {
+        TaskCompletionSource answer = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        await using FakeUtxoRpc fake = await FakeUtxoRpc.StartAsync();
+        fake.Submit.Handler = async (_, context) =>
+        {
+            await answer.Task.WaitAsync(context.CancellationToken);
+            return new SubmitTxResponse { Ref = ByteString.CopyFrom(Convert.FromHexString(new string('A', 64))) };
+        };
+        using UtxoRpc provider = new(fake.Endpoint, NetworkType.Preprod);
+        using CancellationTokenSource caller = new();
+        ITransaction tx = TestData.Transaction();
+        SynchronizationContext? previous = SynchronizationContext.Current;
+        SynchronizationContext.SetSynchronizationContext(new CancelOnResume(caller));
+        Task<string> submission = provider.SubmitTransactionAsync(tx, caller.Token);
+        SynchronizationContext.SetSynchronizationContext(previous);
+        answer.SetResult();
+        Assert.Equal(new string('a', 64), await submission.WaitAsync(TimeSpan.FromSeconds(10), CancellationToken.None));
+        Assert.True(caller.IsCancellationRequested);
+        Assert.Equal(1, fake.RequestCount);
+    }
+
+    // Cancels the caller just before the provider resumes after the server's answer: the latest cancel possible.
+    private sealed class CancelOnResume(CancellationTokenSource caller) : SynchronizationContext
+    {
+        public override void Post(SendOrPostCallback d, object? state) => base.Post(_ => { caller.Cancel(); d(state); }, null);
+    }
 }

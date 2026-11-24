@@ -2,12 +2,14 @@ using System.Buffers;
 using System.Numerics;
 using System.Text.Json;
 using Chrysalis.Codec.Extensions.Cardano.Core;
+using Chrysalis.Codec.Extensions.Cardano.Core.Transaction;
 using Chrysalis.Codec.Serialization;
 using Chrysalis.Codec.Serialization.Utils;
 using Chrysalis.Codec.Types;
 using Chrysalis.Codec.Types.Cardano.Core;
 using Chrysalis.Codec.Types.Cardano.Core.Common;
 using Chrysalis.Codec.Types.Cardano.Core.Scripts;
+using Chrysalis.Codec.Types.Cardano.Core.Transaction;
 using Chrysalis.Tx.Extensions;
 using SAIB.Cbor.Serialization;
 
@@ -147,5 +149,15 @@ public static class ProviderValues
         return txHash.Length == 64 && Convert.FromHexString(txHash, hash, out _, out _) == OperationStatus.Done
             ? hash
             : throw new ArgumentException("Expected a 32-byte transaction hash in hex.", nameof(txHash));
+    }
+
+    /// <summary>Reads each field of a lazily decoded output once, so a malformed field fails here rather than in the caller.</summary>
+    /// <param name="output">The decoded output.</param>
+    /// <returns>The same output.</returns>
+    public static ITransactionOutput CheckedOutput(ITransactionOutput output)
+    {
+        ArgumentNullException.ThrowIfNull(output);
+        _ = (output.Address(), output.Amount(), output.DatumHash(), output.ScriptRef());
+        return output;
     }
 }

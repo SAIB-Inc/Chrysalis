@@ -149,7 +149,7 @@ public sealed class WaitTests
         await using FakeUtxoRpc fake = await FakeUtxoRpc.StartAsync();
         using UtxoRpc provider = new(fake.Endpoint, NetworkType.Preprod);
         _ = await Assert.ThrowsAsync<ArgumentNullException>(() => provider.WaitForConfirmationAsync(null!, CancellationToken.None));
-        _ = await Assert.ThrowsAsync<ArgumentException>(() => provider.WaitForConfirmationAsync("aa", CancellationToken.None));
+        Assert.Equal("txHash", (await Assert.ThrowsAsync<ArgumentException>(() => provider.WaitForConfirmationAsync("aa", CancellationToken.None))).ParamName);
         _ = await Assert.ThrowsAsync<ArgumentException>(() => provider.WaitForConfirmationAsync(new string('z', 64), CancellationToken.None));
         Assert.Equal(0, fake.RequestCount);
     }

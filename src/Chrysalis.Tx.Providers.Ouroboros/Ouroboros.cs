@@ -155,13 +155,9 @@ public sealed partial class Ouroboros(string socketPath, ulong networkMagic = 2)
         }
         return resolvedInputs.ToList();
 
-        // Outputs decode lazily, so each field is read once here: a malformed one is an unusable response. The output itself
-        // is kept exactly as the node encoded it (list or map form), so datum hashes and scripts survive.
-        static ResolvedInput Checked((TransactionInput Key, ITransactionOutput Value) pair)
-        {
-            _ = (pair.Value.Address(), pair.Value.Amount(), pair.Value.DatumHash(), pair.Value.ScriptRef());
-            return new ResolvedInput(TransactionInput.Create(pair.Key.TransactionId, pair.Key.Index), pair.Value);
-        }
+        // The output is kept exactly as the node encoded it (list or map form), so datum hashes and scripts survive.
+        static ResolvedInput Checked((TransactionInput Key, ITransactionOutput Value) pair) =>
+            new(TransactionInput.Create(pair.Key.TransactionId, pair.Key.Index), ProviderValues.CheckedOutput(pair.Value));
     }
 
     /// <summary>
