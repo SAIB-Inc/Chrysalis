@@ -1,0 +1,53 @@
+{
+  "entries": [
+    {
+      "id": "time/preprod-c2-offline",
+      "kind": "time",
+      "replay": "offline",
+      "candidate": "1e63ff404d48e56d852d781f446d0272baf0079b",
+      "aPairs": 16,
+      "pairs": 16,
+      "chargeSeconds": 16,
+      "expected": {
+        "release": "FAIL",
+        "change": "FAIL"
+      }
+    },
+    {
+      "id": "time/preprod-c3-offline",
+      "kind": "time",
+      "replay": "offline",
+      "candidate": "64d8d210bf7dbbf82654a3cc7145076f8cc3fb93",
+      "aPairs": 16,
+      "pairs": 16,
+      "chargeSeconds": 13,
+      "expected": {
+        "release": "PASS",
+        "change": "PASS"
+      }
+    },
+    {
+      "id": "time/preprod-c5-prime-offline",
+      "explanation": "the seeded spin (constant 1.75 µs per decode); its size is its measured effect in µs/block.",
+      "kind": "time",
+      "replay": "offline",
+      "candidate": "aa46145e754d94ac8eb15103a6de38b64e35651f",
+      "aPairs": 16,
+      "pairs": 24,
+      "chargeSeconds": 13,
+      "expected": {
+        "release": "FAIL"
+      }
+    },
+    {
+      "id": "time/preprod-c4-tcp",
+      "kind": "time",
+      "replay": "tcp",
+      "candidate": "30251eb2a4da1fc1ab4c5828fba37e8cab96c116",
+      "aPairs": 5,
+      "pairs": 2,
+      "chargeSeconds": 22,
+      "expected": "smoke"
+    }
+  ]
+}

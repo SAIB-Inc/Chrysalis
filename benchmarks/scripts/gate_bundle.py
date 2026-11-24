@@ -101,7 +101,7 @@ def time_rows(rows, config):
             row.setdefault('region', config['time']['platform']['regions'][0])
         noise = config['time']['noise']
         records = noise.get(timing.provider_for(row)['machine'], noise)
-        row['noise'] = copy.deepcopy(records.get(row['id'], records.get(row['replay'])))
+        row['noise'] = timing.noise_for(records, row)
         if row['noise'] is not None:
             timing.require(timing.noise_band(row['noise'], provider) is not None, 'Noise record provenance or band mismatch')
         result.append(row)

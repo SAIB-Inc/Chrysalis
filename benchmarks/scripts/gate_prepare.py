@@ -437,7 +437,7 @@ def plan_rows(rows, config):
     selected = bundle.time_rows(rows, dict(config, time=dict(config['time'], noise={})))
     for row in selected:
         row.update(provider='azure', region=row.get('region', next(iter(timing.PROVIDERS['azure']['regions']))))
-        row['noise'] = noise.get(row['id'], noise.get(row['replay']))
+        row['noise'] = timing.noise_for(noise, row)
         require(row['noise'] is None or timing.noise_band(row['noise'], 'azure') is not None, 'Noise record provenance or band mismatch')
         for spec in row['sides'].values():
             path = f'clients/{schedules.build_id(spec)}'
@@ -456,11 +456,16 @@ def time_plans(seal):
     groups = [[row] for row in selected] if seal['sessionPerRow'] else [selected]
     plans = [plan for group in groups for plan in timing.size_sessions(
         group, 'change' if seal['noiseRecords'] else mode, option=config['time']['option'],
-        probe=timing.validate_probe_rule(config['time'].get('probe')), prelude=True, reserve=1)]
+        probe=timing.validate_probe_rule(config['time'].get('probe')), prelude=True, reserve=1,
+        check_micro_limits=lambda plan: results_limits(plan, strict=True))]
     proven = set()
     for plan in plans:
         if seal['noiseRecords']:
             plan.update(design='noise-band', repeatAllowed=False)
+        elif 'change' in timing.control_modes(dict(plan, mode=mode)):
+            for row in plan['rows']:
+                if row.get('rowClass') != 'recorded-only' and row.get('expected') != 'smoke':
+                    require(row.get('noise') is not None, 'Missing frozen Azure noise record for change-evaluated row')
         reference = next((row for row in plan['rows'] if row.get('rowClass', 'gated') == 'gated'), None)
         require(reference is not None, 'Missing gated baseline for probe')
         build = schedules.build_id(reference['sides']['baseline'])

@@ -1414,3 +1414,127 @@ def test_c3rc_d6_run8_opus_m2_and_neon_m2_guards():
     ps_opp = _run8_pairs(r, a_specs={(3, 'baseline'): dict(warm_late=[0.70, 0.70, 0.70], meas_groups=[1.35, 1.35, 1.35])})
     d_opp = timing.session_outliers(plan, ps_opp)[r['id']]
     assert d_opp['triggers'] == [] and d_opp['replaced'] is False and d_opp['maxWholeLifeDeparture'] == 0.0
+
+
+def test_w_noise_for_controls_preprod_and_guards():
+    import gate_azure_guest as guest
+    gated = json.loads((gate.GATE / 'gated.json').read_text())
+    az_records = gated['time']['noise']['Standard_F8als_v7']
+    fly_records = gated['time']['noise']['performance-8x']
+
+    # Exact ID hit returns a deep copy.
+    exact = timing.noise_for(az_records, {'id': 'time/preprod-offline', 'replay': 'offline'})
+    assert exact == az_records['time/preprod-offline']
+    exact['band'] = 0.99
+    assert az_records['time/preprod-offline']['band'] != 0.99
+
+    # Legacy replay key hit (Fly performance-8x).
+    assert timing.noise_for(fly_records, {'id': 'time/preprod-offline', 'replay': 'offline'}) == fly_records['offline']
+    assert timing.noise_for(fly_records, {'id': 'time/preprod-tcp', 'replay': 'tcp'}) == fly_records['tcp']
+
+    # Guarded preprod controls fallback (C2, C3, C5', C4 smoke).
+    for cid, replay, expected in (
+        ('time/preprod-c2-offline', 'offline', {'release': 'FAIL', 'change': 'FAIL'}),
+        ('time/preprod-c3-offline', 'offline', {'release': 'PASS', 'change': 'PASS'}),
+        ('time/preprod-c5-prime-offline', 'offline', {'release': 'FAIL'}),
+        ('time/preprod-c4-tcp', 'tcp', 'smoke'),
+    ):
+        found = timing.noise_for(az_records, {'id': cid, 'replay': replay, 'expected': expected})
+        assert found == az_records[f'time/preprod-{replay}']
+        assert timing.noise_band(found, 'azure') is not None
+        found['band'] = 0.99
+        assert az_records[f'time/preprod-{replay}']['band'] != 0.99
+
+    # Ad-hoc, custom-manifest, recorded-only, mainnet, micro, None-expected, and unfrozen rows never inherit a band.
+    for denied in (
+        {'id': 'time/preprod-adhoc-offline', 'replay': 'offline'},
+        {'id': 'time/preprod-adhoc-offline', 'replay': 'offline', 'expected': None},
+        {'id': 'time/preprod-c2-offline', 'replay': 'offline', 'expected': {'release': 'FAIL'}, 'manifest': 'custom.json'},
+        {'id': 'time/preprod-c2-offline', 'replay': 'offline', 'expected': {'release': 'FAIL'}, 'rowClass': 'recorded-only'},
+        {'id': 'time/preprod-c2-offline', 'replay': 'offline', 'expected': {'release': 'FAIL'}, 'mainnet': True},
+        {'id': 'time/mainnet-c2-offline', 'replay': 'offline', 'expected': {'release': 'FAIL'}},
+        {'id': 'time/micro-custom', 'replay': 'micro', 'expected': {'release': 'FAIL'}},
+    ):
+        assert timing.noise_for(az_records, denied) is None, denied
+    assert timing.noise_for({}, {'id': 'time/preprod-c2-offline', 'replay': 'offline', 'expected': {'release': 'FAIL'}}) is None
+    assert guest.MAX_RESULTS_COMPRESSED == 12_000_000
+
+
+def test_w_azure_micro_lpt_packer_splits_deterministically():
+    import pytest
+    import gate_azure_guest as guest
+
+    check_limits = lambda plan: guest.results_limits(plan, strict=True)
+    charges = {'hashing': 9, 'signing': 8, 'transactions': 18, 'plutus': 54, 'encoding': 23, 'n2c': 10}
+    def micro_row(name, *, pairs_count=16):
+        return dict(id=f'time/micro-{name}', kind='time', replay='micro', pairs=pairs_count,
+                    chargeSeconds=charges[name], provider='azure', region='eastus2', rowClass='gated',
+                    sides=dict(baseline=side(), candidate=side()))
+
+    # 1. B1's 4 release micros pack into 2 balanced sessions [encoding, signing] and [n2c, hashing].
+    b1_names = ['hashing', 'signing', 'encoding', 'n2c']
+    b1_plans = timing.size_sessions([micro_row(n) for n in b1_names], 'release', probe=probe_rule(),
+                                    prelude=True, reserve=1, check_micro_limits=check_limits)
+    assert [[r['id'] for r in p['rows']] for p in b1_plans] == [
+        ['time/micro-encoding', 'time/micro-signing'],
+        ['time/micro-n2c', 'time/micro-hashing'],
+    ]
+    assert [p['limitUsd'] for p in b1_plans] == [0.9775, 0.7375]
+    for p in b1_plans:
+        guest.results_limits(p, strict=True)
+        assert all(r['aPairs'] == 16 and r['bPairs'] == 24 and r['reservePairs'] == 1 for r in p['rows'])
+
+    # Determinism: reversed input order produces the exact same bins and costs.
+    b1_rev = timing.size_sessions([micro_row(n) for n in reversed(b1_names)], 'release', probe=probe_rule(),
+                                  prelude=True, reserve=1, check_micro_limits=check_limits)
+    assert [[r['id'] for r in p['rows']] for p in b1_rev] == [[r['id'] for r in p['rows']] for p in b1_plans]
+    assert [p['limitUsd'] for p in b1_rev] == [p['limitUsd'] for p in b1_plans]
+
+    # 2. All 6 release micros pack into 3 balanced sessions: [plutus(20B), signing], [encoding, hashing], [transactions, n2c].
+    all6 = timing.size_sessions([micro_row(n) for n in charges], 'release', probe=probe_rule(),
+                                prelude=True, reserve=1, check_micro_limits=check_limits)
+    assert [[r['id'] for r in p['rows']] for p in all6] == [
+        ['time/micro-plutus', 'time/micro-signing'],
+        ['time/micro-encoding', 'time/micro-hashing'],
+        ['time/micro-transactions', 'time/micro-n2c'],
+    ]
+    assert all6[0]['rows'][0]['bPairs'] == 20 and all6[0]['rows'][1]['bPairs'] == 24
+    assert round(sum(p['limitUsd'] for p in all6), 4) == 3.2620
+    for p in all6:
+        guest.results_limits(p, strict=True)
+
+    # 3. plutus + encoding exceeds RAW_CAP together -> splits into 2 sessions.
+    pe = timing.size_sessions([micro_row('plutus'), micro_row('encoding')], 'release', probe=probe_rule(),
+                              prelude=True, reserve=1, check_micro_limits=check_limits)
+    assert [[r['id'] for r in p['rows']] for p in pe] == [['time/micro-plutus'], ['time/micro-encoding']]
+    for p in pe:
+        guest.results_limits(p, strict=True)
+
+    # 4. All 6 change-mode Leg-1 micros stay in 1 session (220 procs, $1.2824).
+    leg1 = timing.size_sessions([micro_row(n) for n in charges], 'change', probe=probe_rule(),
+                                prelude=True, reserve=1, check_micro_limits=check_limits)
+    assert len(leg1) == 1 and leg1[0]['limitUsd'] == 1.2824
+    guest.results_limits(leg1[0], strict=True)
+
+    # 5. Single oversize micro still raises 'Micro set does not fit'.
+    huge = dict(micro_row('plutus'), chargeSeconds=120)
+    with pytest.raises(ValueError, match='Micro set does not fit'):
+        timing.size_sessions([huge], 'release', probe=probe_rule(), prelude=True, reserve=1, check_micro_limits=check_limits)
+
+    # 6. Legacy caller (check_micro_limits=None) does NOT multi-session split even on Azure rows.
+    with pytest.raises(ValueError, match='Micro set does not fit'):
+        timing.size_sessions([micro_row('plutus'), micro_row('encoding')], 'release', probe=probe_rule(),
+                             prelude=True, reserve=1)
+
+    # 7. Replays are unaffected by check_micro_limits so gate_prepare.py:469 remains reachable.
+    big_replay = dict(row('offline', pairs=16), aPairs=130, bPairs=16, chargeSeconds=13, provider='azure', region='eastus2')
+    rep_plans = timing.size_sessions([big_replay], 'release', probe=probe_rule(), prelude=True, reserve=1,
+                                     check_micro_limits=check_limits)
+    assert len(rep_plans) == 1 and rep_plans[0]['rows'][0]['aPairs'] == 130
+
+    # 8. Growth-loop limit revert (G1): two micros at aPairs=40 stop at bPairs 22 (272 procs <= 275), not 24 (280).
+    a40 = [dict(micro_row(n), aPairs=40) for n in ('hashing', 'signing')]
+    g1_plans = timing.size_sessions(a40, 'release', probe=probe_rule(), prelude=True, reserve=1, check_micro_limits=check_limits)
+    assert len(g1_plans) == 1 and [r['bPairs'] for r in g1_plans[0]['rows']] == [22, 22]
+    _, expanded = guest.results_limits(g1_plans[0], strict=True)
+    assert (expanded - guest.MAX_RESULTS) // guest.PER_PROCESS_EXPANDED == 272
