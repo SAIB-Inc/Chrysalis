@@ -69,7 +69,7 @@ public sealed class WaitTests
         using UtxoRpc provider = new(fake.Endpoint, NetworkType.Preprod);
         using CancellationTokenSource cancellation = new();
         Task wait = provider.WaitForConfirmationAsync(Hash, cancellation.Token);
-        await entered.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        await entered.Task.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
         await cancellation.CancelAsync();
         OperationCanceledException error = await Assert.ThrowsAnyAsync<OperationCanceledException>(() => wait);
         Assert.Equal(cancellation.Token, error.CancellationToken);

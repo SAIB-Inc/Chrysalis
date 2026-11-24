@@ -25,7 +25,7 @@ public sealed class SubmitTests
             return Task.FromResult(new SubmitTxResponse { Ref = ByteString.CopyFrom(Convert.FromHexString(new string('A', 64))) });
         };
         using UtxoRpc provider = new(fake.Endpoint, NetworkType.Preprod);
-        Assert.Equal(new string('a', 64), await provider.SubmitTransactionAsync(tx));
+        Assert.Equal(new string('a', 64), await provider.SubmitTransactionAsync(tx, TestContext.Current.CancellationToken));
         Assert.Equal(1, fake.RequestCount);
     }
 
@@ -52,7 +52,7 @@ public sealed class SubmitTests
         await using FakeUtxoRpc fake = await FakeUtxoRpc.StartAsync();
         fake.Submit.Handler = (_, _) => Task.FromResult(new SubmitTxResponse { Ref = ByteString.CopyFrom(new byte[31]) });
         using UtxoRpc provider = new(fake.Endpoint, NetworkType.Preprod);
-        UtxoRpcException error = await Assert.ThrowsAsync<UtxoRpcException>(() => provider.SubmitTransactionAsync(TestData.Transaction()));
+        UtxoRpcException error = await Assert.ThrowsAsync<UtxoRpcException>(() => provider.SubmitTransactionAsync(TestData.Transaction(), TestContext.Current.CancellationToken));
         Assert.Null(error.StatusCode);
         Assert.Null(error.InnerException);
     }

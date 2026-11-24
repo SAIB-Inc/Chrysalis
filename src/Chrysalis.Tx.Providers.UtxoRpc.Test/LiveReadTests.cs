@@ -12,7 +12,7 @@ public sealed class LiveReadTests
 {
     /// <summary>The preprod protocol version and all three cost models are present.</summary>
     /// <returns>A task for the parameter read.</returns>
-    [LiveFact(LiveSettings.Endpoint, LiveSettings.Network)]
+    [LiveFact([LiveSettings.Endpoint, LiveSettings.Network])]
     public async Task ReadsCurrentParameters()
     {
         using UtxoRpc provider = LiveSettings.CreateProvider();
@@ -25,7 +25,7 @@ public sealed class LiveReadTests
 
     /// <summary>The first three wallet outputs can be looked up byte for byte.</summary>
     /// <returns>A task for address and reference reads.</returns>
-    [LiveFact(LiveSettings.Endpoint, LiveSettings.Network, LiveSettings.Addresses)]
+    [LiveFact([LiveSettings.Endpoint, LiveSettings.Network, LiveSettings.Addresses])]
     public async Task FindsWalletOutputsAgainByReference()
     {
         using UtxoRpc provider = LiveSettings.CreateProvider();
@@ -55,7 +55,7 @@ public sealed class LiveReadTests
 
     /// <summary>Dolos meets the absence rule: unknown references and transactions return null.</summary>
     /// <returns>A task for two unknown-object probes.</returns>
-    [LiveFact(LiveSettings.Endpoint, LiveSettings.Network)]
+    [LiveFact([LiveSettings.Endpoint, LiveSettings.Network])]
     public async Task UnknownObjectsAreAbsent()
     {
         // Server-dependent: ReadUtxos must return a subset or NOT_FOUND, ReadTx NOT_FOUND (plan 3.5).
@@ -67,7 +67,7 @@ public sealed class LiveReadTests
 
     /// <summary>A cancelled live read retains cancellation rather than becoming a server error.</summary>
     /// <returns>A task for the cancelled call.</returns>
-    [LiveFact(LiveSettings.Endpoint, LiveSettings.Network)]
+    [LiveFact([LiveSettings.Endpoint, LiveSettings.Network])]
     public async Task HonoursCancellation()
     {
         using UtxoRpc provider = LiveSettings.CreateProvider();

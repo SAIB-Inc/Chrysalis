@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using CardanoNetwork = Chrysalis.Wallet.Models.Enums.NetworkType;
 using Xunit;
 
@@ -20,7 +21,8 @@ internal static class LiveSettings
     internal const string RecordHashReferences = "CHRYSALIS_UTXORPC_RECORD_HASH_REFS";
 
     internal static string? Read(string name) => Environment.GetEnvironmentVariable(name);
-    internal static string Require(string name) => !string.IsNullOrWhiteSpace(Read(name)) ? Read(name)! : throw new InvalidOperationException($"Missing {name}.");
+    internal static string? Missing(string name) => string.IsNullOrWhiteSpace(Read(name)) ? $"Missing {name}." : null;
+    internal static string Require(string name) => Missing(name) is { } missing ? throw new InvalidOperationException(missing) : Read(name)!;
     internal static List<string> WalletAddresses() => [.. Require(Addresses).Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)];
     internal static UtxoRpc CreateProvider() => new(new Uri(Require(Endpoint)), ReadNetwork(), HeaderValues());
 
@@ -52,12 +54,18 @@ internal sealed class LiveFactAttribute : FactAttribute
 {
     /// <summary>Names each setting needed to run this test.</summary>
     /// <param name="required">Required configuration names.</param>
-    public LiveFactAttribute(params string[] required)
+    /// <param name="sourceFilePath">Caller source file path supplied by the compiler.</param>
+    /// <param name="sourceLineNumber">Caller source line number supplied by the compiler.</param>
+    public LiveFactAttribute(
+        string[] required,
+        [CallerFilePath] string? sourceFilePath = null,
+        [CallerLineNumber] int sourceLineNumber = -1)
+        : base(sourceFilePath, sourceLineNumber)
     {
         Required = required;
         foreach (string name in required)
         {
-            if (string.IsNullOrWhiteSpace(LiveSettings.Read(name))) { Skip = $"Missing {name}."; break; }
+            if (LiveSettings.Missing(name) is { } missing) { Skip = missing; break; }
         }
     }
 

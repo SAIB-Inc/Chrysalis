@@ -29,7 +29,7 @@ public sealed class RecordedTests
     public async Task ParametersMatchTheNodeExceptForNamedDolosGaps()
     {
         ReadParamsResponse recorded = await LoadAsync("read-params.pb", ReadParamsResponse.Parser);
-        string json = await File.ReadAllTextAsync(Path.Combine(AppContext.BaseDirectory, "Golden/cardano-node-11.1.3-preprod/protocol-parameters.json"));
+        string json = await File.ReadAllTextAsync(Path.Combine(AppContext.BaseDirectory, "Golden/cardano-node-11.1.3-preprod/protocol-parameters.json"), TestContext.Current.CancellationToken);
         JsonObject expected = Assert.IsType<JsonObject>(JsonNode.Parse(json));
         foreach ((string key, string? part, ulong? value) in DolosGaps.Values)
         {
@@ -47,7 +47,7 @@ public sealed class RecordedTests
         await using FakeUtxoRpc fake = await FakeUtxoRpc.StartAsync();
         fake.Handler = (_, _) => Task.FromResult(recorded);
         using UtxoRpc provider = new(fake.Endpoint, NetworkType.Preprod);
-        ProtocolParams actual = await provider.GetParametersAsync();
+        ProtocolParams actual = await provider.GetParametersAsync(TestContext.Current.CancellationToken);
         LedgerParameters.Equal(adjusted.RootElement, actual);
         // pallas-utxorpc v1.4.0 shared.rs:986-1096 omits field 9 (set from v1.5.0-rc.1).
         Assert.Equal(0U, recorded.Values.Cardano.PoolRetirementEpochBound);
@@ -71,7 +71,7 @@ public sealed class RecordedTests
             return Task.FromResult(recorded);
         };
         using UtxoRpc provider = new(fake.Endpoint, NetworkType.Preprod);
-        List<ResolvedInput> actual = await provider.GetUtxosAsync([address]);
+        List<ResolvedInput> actual = await provider.GetUtxosAsync([address], TestContext.Current.CancellationToken);
         Assert.Equal(recorded.Items.Count, actual.Count);
         for (int i = 0; i < actual.Count; i++) { Equal(recorded.Items[i], actual[i]); }
     }
@@ -111,7 +111,7 @@ public sealed class RecordedTests
                 Assert.Equal(item.TxoRef, key);
                 return Task.FromResult(recorded);
             };
-            Equal(item, Assert.IsType<ResolvedInput>(await provider.GetUtxoByOutRefAsync(parts[0], index)));
+            Equal(item, Assert.IsType<ResolvedInput>(await provider.GetUtxoByOutRefAsync(parts[0], index, TestContext.Current.CancellationToken)));
         }
     }
 
@@ -131,7 +131,7 @@ public sealed class RecordedTests
             return Task.FromResult(recorded);
         };
         using UtxoRpc provider = new(fake.Endpoint, NetworkType.Preprod);
-        LedgerMetadata? actual = await provider.GetTransactionMetadataAsync(hash);
+        LedgerMetadata? actual = await provider.GetTransactionMetadataAsync(hash, TestContext.Current.CancellationToken);
         ParsedMetadata.Equal(recorded.Tx.Cardano.Auxiliary.Metadata, actual);
     }
 
@@ -140,7 +140,7 @@ public sealed class RecordedTests
     [Fact]
     public async Task ReferenceScriptHashMatchesTheIndependentEndpoint()
     {
-        string[] lines = await File.ReadAllLinesAsync(Path.Combine(AppContext.BaseDirectory, Folder, "refscript-hash.tsv"));
+        string[] lines = await File.ReadAllLinesAsync(Path.Combine(AppContext.BaseDirectory, Folder, "refscript-hash.tsv"), TestContext.Current.CancellationToken);
         Assert.Equal(2, lines.Length);
         string[] expected = lines[1].Split('\t');
         Assert.Equal(3, expected.Length);
@@ -152,7 +152,7 @@ public sealed class RecordedTests
         await using FakeUtxoRpc fake = await FakeUtxoRpc.StartAsync();
         fake.UtxosHandler = (_, _) => Task.FromResult(recorded);
         using UtxoRpc provider = new(fake.Endpoint, NetworkType.Preprod);
-        ResolvedInput value = Assert.IsType<ResolvedInput>(await provider.GetUtxoByOutRefAsync(hash, index));
+        ResolvedInput value = Assert.IsType<ResolvedInput>(await provider.GetUtxoByOutRefAsync(hash, index, TestContext.Current.CancellationToken));
         ReadOnlyMemory<byte> bytes = Assert.IsType<ReadOnlyMemory<byte>>(value.Output.ScriptRef());
         Assert.Equal(expected[2], Convert.ToHexStringLower(CborSerializer.Deserialize<IScript>(bytes).Hash()));
     }
@@ -171,7 +171,7 @@ public sealed class RecordedTests
             return Task.FromResult(new SubmitTxResponse { Ref = recorded.Tx.Cardano.Hash });
         };
         using UtxoRpc provider = new(fake.Endpoint, NetworkType.Preprod);
-        Assert.Equal(Request("read-tx.pb")["ReadTx ".Length..], await provider.SubmitTransactionAsync(tx));
+        Assert.Equal(Request("read-tx.pb")["ReadTx ".Length..], await provider.SubmitTransactionAsync(tx, TestContext.Current.CancellationToken));
     }
 
     /// <summary>The captured statuses obey the provider's absence and rejection contracts.</summary>
@@ -179,7 +179,7 @@ public sealed class RecordedTests
     [Fact]
     public async Task StatusesPreserveAbsenceAndServerRejection()
     {
-        string[] rows = await File.ReadAllLinesAsync(Path.Combine(AppContext.BaseDirectory, Folder, "statuses.tsv"));
+        string[] rows = await File.ReadAllLinesAsync(Path.Combine(AppContext.BaseDirectory, Folder, "statuses.tsv"), TestContext.Current.CancellationToken);
         Assert.Equal(4, rows.Length);
         await using FakeUtxoRpc fake = await FakeUtxoRpc.StartAsync();
         using UtxoRpc provider = new(fake.Endpoint, NetworkType.Preprod);
@@ -193,18 +193,18 @@ public sealed class RecordedTests
                 case "ReadTx":
                     Assert.Equal(StatusCode.NotFound, code);
                     fake.TxHandler = (_, _) => throw new RpcException(new Status(code, row[3]));
-                    Assert.Null(await provider.GetTransactionMetadataAsync(new string('0', 64)));
+                    Assert.Null(await provider.GetTransactionMetadataAsync(new string('0', 64), TestContext.Current.CancellationToken));
                     break;
                 case "ReadUtxos":
                     Assert.Equal(StatusCode.OK, code);
                     Assert.Equal("OK, no items", row[3]);
                     fake.UtxosHandler = (_, _) => Task.FromResult(new ReadUtxosResponse());
-                    Assert.Null(await provider.GetUtxoByOutRefAsync(new string('0', 64), 0));
+                    Assert.Null(await provider.GetUtxoByOutRefAsync(new string('0', 64), 0, TestContext.Current.CancellationToken));
                     break;
                 case "SubmitTx":
                     Assert.NotEqual(StatusCode.OK, code);
                     fake.Submit.Handler = (_, _) => throw new RpcException(new Status(code, row[3]));
-                    UtxoRpcException error = await Assert.ThrowsAsync<UtxoRpcException>(() => provider.SubmitTransactionAsync(TestData.Transaction()));
+                    UtxoRpcException error = await Assert.ThrowsAsync<UtxoRpcException>(() => provider.SubmitTransactionAsync(TestData.Transaction(), TestContext.Current.CancellationToken));
                     Assert.Equal(code, error.StatusCode);
                     Assert.Equal($"SubmitTx failed: {code}", error.Message);
                     Assert.Equal(row[3], error.Detail);

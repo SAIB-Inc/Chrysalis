@@ -22,7 +22,7 @@ public sealed class GoldenMetadataTests
         using UtxoRpc provider = new(fake.Endpoint, NetworkType.Mainnet);
         foreach (string name in names)
         {
-            Spec.Block block = Spec.Block.Parser.ParseFrom(await File.ReadAllBytesAsync(Path.Combine(AppContext.BaseDirectory, "Golden/u5c-factory/v1beta", name + ".pb")));
+            Spec.Block block = Spec.Block.Parser.ParseFrom(await File.ReadAllBytesAsync(Path.Combine(AppContext.BaseDirectory, "Golden/u5c-factory/v1beta", name + ".pb"), TestContext.Current.CancellationToken));
             List<byte[]> txs = await VectorBlocks.ReadAsync(name);
             Assert.Equal(block.Body.Tx.Count, txs.Count);
             for (int i = 0; i < txs.Count; i++)

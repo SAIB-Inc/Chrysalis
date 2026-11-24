@@ -50,7 +50,7 @@ public sealed class MetadataTests
         await using FakeUtxoRpc fake = await FakeUtxoRpc.StartAsync();
         fake.TxHandler = (_, _) => Task.FromResult(new ReadTxResponse { Tx = new AnyChainTx { NativeBytes = ByteString.CopyFrom(Convert.FromHexString(hex)) } });
         using UtxoRpc provider = new(fake.Endpoint, NetworkType.Preprod);
-        LedgerMetadata? result = await provider.GetTransactionMetadataAsync(TestData.Hash);
+        LedgerMetadata? result = await provider.GetTransactionMetadataAsync(TestData.Hash, TestContext.Current.CancellationToken);
         if (present) { Assert.Equal(42UL, Assert.Single(Assert.IsType<LedgerMetadata>(result).Value).Key); }
         else { Assert.Null(result); }
     }
@@ -66,8 +66,8 @@ public sealed class MetadataTests
         await using FakeUtxoRpc fake = await FakeUtxoRpc.StartAsync();
         fake.TxHandler = (_, _) => throw new RpcException(new Status(status, "transaction status"));
         using UtxoRpc provider = new(fake.Endpoint, NetworkType.Preprod);
-        if (status == StatusCode.NotFound) { Assert.Null(await provider.GetTransactionMetadataAsync(TestData.Hash)); }
-        else { Assert.Equal(status, (await Assert.ThrowsAsync<UtxoRpcException>(() => provider.GetTransactionMetadataAsync(TestData.Hash))).StatusCode); }
+        if (status == StatusCode.NotFound) { Assert.Null(await provider.GetTransactionMetadataAsync(TestData.Hash, TestContext.Current.CancellationToken)); }
+        else { Assert.Equal(status, (await Assert.ThrowsAsync<UtxoRpcException>(() => provider.GetTransactionMetadataAsync(TestData.Hash, TestContext.Current.CancellationToken))).StatusCode); }
         Assert.Equal(1, fake.RequestCount);
     }
 
@@ -91,7 +91,7 @@ public sealed class MetadataTests
         await using FakeUtxoRpc fake = await FakeUtxoRpc.StartAsync();
         fake.TxHandler = (_, _) => Task.FromResult(new ReadTxResponse { Tx = new AnyChainTx { NativeBytes = ByteString.CopyFrom(Convert.FromHexString(hex)) } });
         using UtxoRpc provider = new(fake.Endpoint, NetworkType.Preprod);
-        UtxoRpcException error = await Assert.ThrowsAsync<UtxoRpcException>(() => provider.GetTransactionMetadataAsync(TestData.Hash));
+        UtxoRpcException error = await Assert.ThrowsAsync<UtxoRpcException>(() => provider.GetTransactionMetadataAsync(TestData.Hash, TestContext.Current.CancellationToken));
         Assert.Null(error.StatusCode);
         Assert.Null(error.InnerException);
         Assert.StartsWith("ReadTx: ", error.Message, StringComparison.Ordinal);
