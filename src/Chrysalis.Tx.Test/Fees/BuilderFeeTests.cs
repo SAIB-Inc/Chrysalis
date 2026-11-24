@@ -378,7 +378,9 @@ public sealed class BuilderFeeTests(BuilderFeeFixture fixture) : IClassFixture<B
         ITransactionOutput lowOutput = Low(pp, Utxo(1, 30_000_000), amount).Outputs[0];
         ITransactionOutput templateOutput = new OutputOptions { To = "p", Amount = Lovelace.FromAmount(amount) }
             .BuildOutput(new Dictionary<string, string> { ["p"] = Recipient }, pp.AdaPerUTxOByte!.Value);
-        foreach (ITransactionOutput output in new[] { txOutput, lowOutput, templateOutput })
+        ITransactionOutput[] outputs = [txOutput, lowOutput, templateOutput];
+        Assert.All(outputs, output => _ = Assert.IsType<AlonzoTransactionOutput>(output));
+        foreach (ITransactionOutput output in outputs)
         {
             Assert.Equal(Math.Max(amount, FeeEngine.MinLovelace(output, pp.AdaPerUTxOByte!.Value)), output.Amount().Lovelace());
         }
@@ -585,7 +587,7 @@ public sealed class BuilderFeeTests(BuilderFeeFixture fixture) : IClassFixture<B
     public async Task ScriptTemplateSettlesOnItsSignedQuote()
     {
         (ProtocolParams pp, ResolvedInput input, ResolvedInput collateral, PlutusV3Script script, ExUnits units) = ScriptVector();
-        string payer = WalletAddress.FromBytes(collateral.Output.Address().ToArray()).ToBech32();
+        string payer = CliSnapshotProvider.Bech32(collateral.Output);
         int calls = 0;
         TransactionTemplate<int> template = TransactionTemplateBuilder.Create<int>(new CliSnapshotProvider(pp, [collateral]))
             .SetChangeAddress(payer)
@@ -675,7 +677,7 @@ public sealed class BuilderFeeTests(BuilderFeeFixture fixture) : IClassFixture<B
     public async Task TemplateSerializesFreshCustomCborSerializableRedeemer()
     {
         (ProtocolParams pp, ResolvedInput input, ResolvedInput collateral, PlutusV3Script script, ExUnits units) = ScriptVector();
-        string payer = WalletAddress.FromBytes(collateral.Output.Address().ToArray()).ToBech32();
+        string payer = CliSnapshotProvider.Bech32(collateral.Output);
         TransactionTemplate<int> template = TransactionTemplateBuilder.Create<int>(new CliSnapshotProvider(pp, [collateral]))
             .SetChangeAddress(payer)
             .AddInput((options, ignored) =>
@@ -794,6 +796,66 @@ public sealed class BuilderFeeTests(BuilderFeeFixture fixture) : IClassFixture<B
         Assert.Equal(FeeEngine.MinFee(Sign(tx, 2), pp), tx.Body.Fee());
     }
 
+    // F03 matches because its input's tokens are read in the ledger's order (CliUtxo.ReadValue), and a change keeps its inputs' token order.
+    [Theory]
+    [InlineData("F01")]
+    [InlineData("F03")]
+    [InlineData("B1")]
+    [InlineData("B2")]
+    [InlineData("B5")]
+    public async Task TransfersWriteTheCliBytes(string id)
+    {
+        JsonElement row = fixture.Row(id);
+        ResolvedInput input = Assert.Single(fixture.Inputs(row));
+        ITransactionOutput[] outputs = [.. fixture.Tx(row).Body.Outputs()];
+        PostMaryTransaction built = await new TxBuilder(new CliSnapshotProvider(fixture.Pp(row), [input])).AddInput(input)
+            .PayAssets(CliSnapshotProvider.Bech32(outputs[0]), outputs[0].Amount()).SetChangeAddress(CliSnapshotProvider.Bech32(outputs[^1])).Complete();
+        Assert.Equal(Convert.ToHexStringLower(fixture.Vectors.Bytes(Text(row, "tx"))), Hex(built));
+    }
+
+    [Fact]
+    public async Task TemplateTransferWritesTheCliBytes()
+    {
+        JsonElement row = fixture.Row("F01");
+        ResolvedInput input = Assert.Single(fixture.Inputs(row));
+        TransactionTemplate<int> template = TransactionTemplateBuilder.Create<int>(new CliSnapshotProvider(fixture.Pp(row), [input]))
+            .SetChangeAddress(CliSnapshotProvider.Bech32(input.Output))
+            .AddOutput((options, _, _) => { options.To = "change"; options.Amount = Lovelace.FromAmount(2_000_000); })
+            .Build();
+        Assert.Equal(Convert.ToHexStringLower(fixture.Vectors.Bytes(Text(row, "tx"))), Hex(await template(0)));
+    }
+
+    [Fact]
+    public async Task ScriptSpendWritesTheCliOutputsAndCollateralReturn()
+    {
+        (ProtocolParams pp, ResolvedInput input, ResolvedInput collateral, PlutusV3Script script, ExUnits units) = ScriptVector();
+        PostMaryTransaction stored = fixture.Tx(fixture.Row("F09"));
+        PostMaryTransaction tx = await ScriptSpend(pp, input, collateral, script, (_, _) => Result(units.Mem, units.Steps),
+            CliSnapshotProvider.Bech32(collateral.Output)).Complete();
+        PostMaryTransaction built = (PostMaryTransaction)ITransaction.Read(CborSerializer.Serialize(tx), Era.Conway);
+        Assert.Equal(Parts(stored), Parts(built));
+    }
+
+    [Fact]
+    public async Task HandedInOutputsKeepTheirBytes()
+    {
+        ProtocolParams pp = fixture.Pp(fixture.Row("F01"));
+        PostAlonzoTransactionOutput handed = PostAlonzoTransactionOutput.Create(PayAddress, Lovelace.FromAmount(2_000_000));
+        ResolvedInput input = Utxo(1, 30_000_000);
+        PostMaryTransaction tx = await new TxBuilder(new CliSnapshotProvider(pp, [input])).AddInput(input).SetChangeAddress(Recipient).AddOutput(handed).Complete();
+        Assert.Equal(Hex(handed), Hex(tx.Body.Outputs().First()));
+        _ = Assert.IsType<AlonzoTransactionOutput>(tx.Body.Outputs().Last());
+    }
+
+    [Fact]
+    public void AHashNextToAReferenceScriptKeepsTheMapForm()
+    {
+        (_, _, _, PlutusV3Script script, _) = ScriptVector();
+        ITransactionOutput built = new OutputBuilder(PayAddress.Value.ToArray(), Lovelace.FromAmount(2_000_000)).WithDatumHash(new byte[32])
+            .WithScriptRef(script).Build();
+        _ = Assert.IsType<DatumHashOption>(Assert.IsType<PostAlonzoTransactionOutput>(built).Datum);
+    }
+
     private static readonly Address PayAddress = Address.Create(new byte[29] { 0x60, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 });
     private static readonly string Recipient = WalletAddress.FromBytes(PayAddress.Value.ToArray()).ToBech32();
     private static readonly string OtherRecipient = WalletAddress.FromBytes([0x60, .. Enumerable.Repeat((byte)2, 28)]).ToBech32();
@@ -810,6 +872,9 @@ public sealed class BuilderFeeTests(BuilderFeeFixture fixture) : IClassFixture<B
         .AddInput(input).SetChangeAddress(Recipient).PayLovelace(Recipient, payment);
     private static void AssertConservation(PostMaryTransaction tx, ulong input) => Assert.Equal(input,
         tx.Body.Outputs().Aggregate(tx.Body.Fee(), (sum, output) => sum + output.Amount().Lovelace()));
+    private static string Hex<T>(T value) where T : ICborType => Convert.ToHexStringLower(CborSerializer.Serialize(value));
+    private static (string, string?, ulong, ulong?) Parts(PostMaryTransaction x) => (string.Join('|', x.Body.Outputs().Select(output => Convert.ToHexStringLower(output.Raw.Span))),
+        ((ConwayTransactionBody)x.Body).CollateralReturn is { } r ? Convert.ToHexStringLower(r.Raw.Span) : null, x.Body.Fee(), x.Body.TotalCollateral());
 
     private (ProtocolParams, ResolvedInput, ResolvedInput, PlutusV3Script, ExUnits) ScriptVector()
     {
@@ -838,9 +903,9 @@ public sealed class BuilderFeeTests(BuilderFeeFixture fixture) : IClassFixture<B
     }
 
     private static TxBuilder ScriptSpend(ProtocolParams pp, ResolvedInput input, ResolvedInput collateral, IScript script,
-        Func<PostMaryTransaction, IReadOnlyList<ResolvedInput>, Task<IReadOnlyList<EvaluationResult>>> evaluate) =>
-        new TxBuilder(new CliSnapshotProvider(pp, [input, collateral])).AddInput(input, PlutusInt.Create(42)).PayLovelace(Recipient, 2_000_000)
-            .SetChangeAddress(Recipient).ProvideScript(script).ProvideCollateral([collateral]).UseEvaluator(evaluate);
+        Func<PostMaryTransaction, IReadOnlyList<ResolvedInput>, Task<IReadOnlyList<EvaluationResult>>> evaluate, string? to = null) =>
+        new TxBuilder(new CliSnapshotProvider(pp, [input, collateral])).AddInput(input, PlutusInt.Create(42)).PayLovelace(to ?? Recipient, 2_000_000)
+            .SetChangeAddress(to ?? Recipient).ProvideScript(script).ProvideCollateral([collateral]).UseEvaluator(evaluate);
     private static Task<IReadOnlyList<EvaluationResult>> Result(ulong mem, ulong steps) => Task.FromResult<IReadOnlyList<EvaluationResult>>([new(0, 0, new(mem, steps))]);
 
 }
@@ -851,7 +916,7 @@ public sealed class BuilderFeeFixture
     internal JsonElement Row(string id, int index = 0) => Vectors.Cases.Single(item => Text(item, "id") == id).GetProperty("rows")[index];
     internal PostMaryTransaction Tx(JsonElement row) => (PostMaryTransaction)ITransaction.Read(Vectors.Bytes(Text(row, "tx")), Era.Conway);
     internal ProtocolParams Pp(JsonElement row) => Vectors.Parameters(Text(row, "parameters"));
-    internal ResolvedInput[] Inputs(JsonElement row) => CliUtxo.ReadForReferenceScripts(Vectors, Text(row, "utxo"));
+    internal ResolvedInput[] Inputs(JsonElement row) => CliUtxo.Read(Vectors, Text(row, "utxo"));
 
     public BuilderFeeFixture()
     {

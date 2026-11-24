@@ -203,7 +203,7 @@ public static class TransactionBuilderExtensions
         }
     }
 
-    private static ITransactionOutput ChangeCoin(ITransactionOutput output, ulong coin) => WithAmount(output,
+    internal static ITransactionOutput ChangeCoin(ITransactionOutput output, ulong coin) => WithAmount(output,
         output.Amount() is LovelaceWithMultiAsset assets ? LovelaceWithMultiAsset.Create(coin, assets.MultiAsset) : Lovelace.FromAmount(coin));
 
     private static ulong SumCoins(IEnumerable<ResolvedInput> inputs) => inputs.Aggregate(0UL, (sum, input) => checked(sum + input.Output.Amount().Lovelace()));
@@ -211,11 +211,11 @@ public static class TransactionBuilderExtensions
     /// <summary>
     /// Evaluates Plutus scripts in the transaction and updates execution unit budgets.
     /// </summary>
-    public static TransactionBuilder Evaluate(this TransactionBuilder builder, List<ResolvedInput> utxos, SlotNetworkConfig slotConfig)
+    /// <exception cref="SlotConversionException">A validity bound is outside <paramref name="slotConfig"/>, or there is a bound and no <paramref name="slotConfig"/>.</exception>
+    public static TransactionBuilder Evaluate(this TransactionBuilder builder, List<ResolvedInput> utxos, SlotNetworkConfig? slotConfig)
     {
         ArgumentNullException.ThrowIfNull(builder);
         ArgumentNullException.ThrowIfNull(utxos);
-        ArgumentNullException.ThrowIfNull(slotConfig);
 
         ConwayTransactionBody body = builder.BuildBody();
         PostAlonzoTransactionWitnessSet witnessSet = builder.BuildWitnessSet();
@@ -340,7 +340,7 @@ public static class TransactionBuilderExtensions
                 _ => throw new InvalidOperationException("Invalid transaction output type")
             };
 
-            ITransactionOutput returnOutput = PostAlonzoTransactionOutput.Create(returnAddress, returnValue, null, null);
+            ITransactionOutput returnOutput = new OutputBuilder(returnAddress.Value.ToArray(), returnValue).Build();
             if (returnLovelace < FeeEngine.MinLovelace(returnOutput, cost))
             {
                 continue;

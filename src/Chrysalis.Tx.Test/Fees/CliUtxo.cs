@@ -5,6 +5,7 @@ using Chrysalis.Codec.Types;
 using Chrysalis.Codec.Types.Cardano.Core.Common;
 using Chrysalis.Codec.Types.Cardano.Core.Transaction;
 using Chrysalis.Tx.Models.Cbor;
+using Chrysalis.Tx.Providers;
 using Chrysalis.Tx.Test.Cli;
 using Chrysalis.Wallet.Utils;
 using SAIB.Cbor.Serialization;
@@ -13,8 +14,8 @@ namespace Chrysalis.Tx.Test.Fees;
 
 internal static class CliUtxo
 {
-    // Fee pricing needs outrefs and script bytes, not the resolved output's tokens or datum.
-    internal static ResolvedInput[] ReadForReferenceScripts(CliVectors vectors, string path)
+    // Fee pricing and the builders' byte tests need outrefs, values and script bytes, not the resolved output's datum.
+    internal static ResolvedInput[] Read(CliVectors vectors, string path)
     {
         using JsonDocument document = JsonDocument.Parse(vectors.Bytes(path));
         return [.. document.RootElement.EnumerateObject().Select(entry =>
@@ -22,12 +23,19 @@ internal static class CliUtxo
             string[] outref = entry.Name.Split('#');
             TransactionInput input = TransactionInput.Create(Convert.FromHexString(outref[0]), ulong.Parse(outref[1], CultureInfo.InvariantCulture));
             Address address = new(Bech32Util.Decode(CliVectors.Text(entry.Value, "address")).data);
-            ulong coin = CliVectors.Number(entry.Value.GetProperty("value"), "lovelace");
             CborEncodedValue? script = entry.Value.GetProperty("referenceScript") is { ValueKind: JsonValueKind.Object } reference
                 ? ReadScript(reference.GetProperty("script")) : null;
-            return new ResolvedInput(input, PostAlonzoTransactionOutput.Create(address, Lovelace.FromAmount(coin), scriptRef: script));
+            return new ResolvedInput(input, PostAlonzoTransactionOutput.Create(address, ReadValue(entry.Value.GetProperty("value")), scriptRef: script));
         })];
     }
+
+    // Policies, then asset names, in the ledger's byte order (ordinal on their lowercase hex), which F03's capture does not keep:
+    // cardano-ledger 95b369053f, Mary/Value.hs:108-115 (AssetName derives Ord).
+    private static IValue ReadValue(JsonElement value) => ProviderValues.Create(CliVectors.Number(value, "lovelace"), value.EnumerateObject()
+        .Where(policy => policy.Name != "lovelace").OrderBy(policy => policy.Name, StringComparer.Ordinal)
+        .SelectMany(policy => policy.Value.EnumerateObject().OrderBy(asset => asset.Name, StringComparer.Ordinal)
+            .Select(asset => ((ReadOnlyMemory<byte>)Convert.FromHexString(policy.Name), (ReadOnlyMemory<byte>)Convert.FromHexString(asset.Name), asset.Value.GetUInt64()))),
+        "cardano-cli", "utxo");
 
     private static CborEncodedValue ReadScript(JsonElement script)
     {

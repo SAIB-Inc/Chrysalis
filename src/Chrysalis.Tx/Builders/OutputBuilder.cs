@@ -4,6 +4,8 @@ using Chrysalis.Codec.Types;
 using Chrysalis.Codec.Types.Cardano.Core.Common;
 using Chrysalis.Codec.Types.Cardano.Core.Scripts;
 using Chrysalis.Codec.Types.Cardano.Core.Transaction;
+using Chrysalis.Tx.Extensions;
+using Chrysalis.Tx.Fees;
 using Address = Chrysalis.Codec.Types.Cardano.Core.Common.Address;
 
 namespace Chrysalis.Tx.Builders;
@@ -22,10 +24,10 @@ public sealed class OutputBuilder
     internal bool IsChange { get; set; }
 
     /// <summary>Sets the datum option directly (for pre-serialized datums).</summary>
-    internal void SetDatumOption(IDatumOption datum) => _datum = datum;
+    internal void SetDatumOption(IDatumOption? datum) => _datum = datum;
 
-    /// <summary>Gets or sets the output amount.</summary>
-    internal IValue Amount { get; set; }
+    /// <summary>Gets the output amount.</summary>
+    internal IValue Amount { get; }
 
     /// <summary>Creates an output builder with a bech32 address and value.</summary>
     public OutputBuilder(string bech32Address, IValue amount)
@@ -78,11 +80,21 @@ public sealed class OutputBuilder
         return this;
     }
 
-    /// <summary>Builds the transaction output. Called internally by TransactionBuilder.</summary>
-    internal ITransactionOutput Build()
+    /// <summary>
+    /// Builds the output in the form the ledger writes it (cardano-ledger 95b369053f, Babbage/TxOut.hs:514-519): a list when it has
+    /// neither an inline datum nor a reference script, else a map. With a UTxO byte cost, raises its coin to the least valid one.
+    /// </summary>
+    internal ITransactionOutput Build(ulong? coinsPerUtxoByte = null)
     {
         Address address = new(_addressBytes);
-        return PostAlonzoTransactionOutput.Create(address, Amount, _datum, _scriptRef);
+        ITransactionOutput built = (_datum, _scriptRef) switch
+        {
+            (null, null) => AlonzoTransactionOutput.Create(address, Amount, null),
+            (DatumHashOption hash, null) => AlonzoTransactionOutput.Create(address, Amount, hash.DatumHash),
+            _ => PostAlonzoTransactionOutput.Create(address, Amount, _datum, _scriptRef)
+        };
+        ulong coin = coinsPerUtxoByte is { } cost ? FeeEngine.LeastValidCoin(built, cost) : Amount.Lovelace();
+        return coin == Amount.Lovelace() ? built : TransactionBuilderExtensions.ChangeCoin(built, coin);
     }
 
 }

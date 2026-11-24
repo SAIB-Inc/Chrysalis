@@ -1,7 +1,5 @@
 using Chrysalis.Codec.Extensions.Cardano.Core.Common;
-using Chrysalis.Codec.Extensions.Cardano.Core.Transaction;
 using Chrysalis.Codec.Serialization;
-using Chrysalis.Codec.Types;
 using Chrysalis.Codec.Types.Cardano.Core.Certificates;
 using Chrysalis.Codec.Types.Cardano.Core.Common;
 using Chrysalis.Codec.Types.Cardano.Core.Scripts;
@@ -10,9 +8,7 @@ using Chrysalis.Codec.Types.Cardano.Core.TransactionWitness;
 using Chrysalis.Tx.Builders;
 using Chrysalis.Tx.Models.Cbor;
 using Chrysalis.Codec.Types.Cardano.Core.Protocol;
-using Chrysalis.Tx.Fees;
 using WalletAddress = Chrysalis.Wallet.Models.Addresses.Address;
-using Address = Chrysalis.Codec.Types.Cardano.Core.Common.Address;
 
 
 namespace Chrysalis.Tx.Models;
@@ -149,19 +145,13 @@ public record OutputOptions
     {
         ArgumentNullException.ThrowIfNull(parties);
 
-        Address address = new(WalletAddress.FromBech32(parties[To]).ToBytes());
-        CborEncodedValue? script = Script is not null ? new CborEncodedValue(CborSerializer.Serialize(Script)) : null;
-        ITransactionOutput output = PostAlonzoTransactionOutput.Create(address, Amount ?? Lovelace.Create(1000000), Datum, script);
-
-        ulong coin = FeeEngine.LeastValidCoin(output, adaPerUtxoByte);
-        if (coin != output.Amount().Lovelace())
+        OutputBuilder output = new(WalletAddress.FromBech32(parties[To]).ToBytes(), Amount ?? Lovelace.Create(1000000));
+        output.SetDatumOption(Datum);
+        if (Script is not null)
         {
-            IValue amount = output.Amount() is LovelaceWithMultiAsset assets
-                ? LovelaceWithMultiAsset.Create(coin, assets.MultiAsset) : Lovelace.FromAmount(coin);
-            output = PostAlonzoTransactionOutput.Create(address, amount, Datum, script);
+            _ = output.WithScriptRef(Script);
         }
-
-        return output;
+        return output.Build(adaPerUtxoByte);
     }
 }
 
