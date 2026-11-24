@@ -1,8 +1,10 @@
 """Sides, provenance, sealed pure reports, coverage and release outcomes."""
 import copy
+import hashlib
 import json
 import os
 from pathlib import Path
+import subprocess
 from types import SimpleNamespace
 import tempfile
 import unittest
@@ -14,6 +16,30 @@ import gate
 
 def side(runtime='11.0.0', commit='candidate'):
     return dict(commit=commit, treeId=commit + '-tree', runtime=runtime, sdk='11.0.100', tfm='net11.0', dllSha256s={})
+
+
+X10 = 'src/Chrysalis.Codec/Types/CborList.cs'
+PINNED_PROJECTS_SHA256 = '09ca82756bbb05ea20da9412d8ce982da18f350f57032ce909bf43168d37a864'  # the PIN's staged harness and client projects at ac48aca1, paths normalized
+
+
+def scratch_trees(root, *layouts):
+    """Tree ids in a scratch repository, nothing committed: one tree of empty files per layout."""
+    git = ['git', '-C', str(root)]
+    subprocess.run([*git, 'init', '-q'], check=True)
+    blob = subprocess.run([*git, 'hash-object', '-w', '--stdin'], input='', capture_output=True, text=True, check=True).stdout.strip()
+    trees = []
+    for number, paths in enumerate(layouts):
+        env = dict(os.environ, GIT_INDEX_FILE=str(Path(root) / f'.git/scratch-{number}'))
+        for path in paths:
+            subprocess.run([*git, 'update-index', '--add', '--cacheinfo', f'100644,{blob},{path}'], env=env, check=True)
+        trees.append(subprocess.run([*git, 'write-tree'], env=env, capture_output=True, text=True, check=True).stdout.strip())
+    return trees
+
+
+def staged_today(source):
+    """A non-pinned harness project exactly as stage_side wrote it before the X10 key."""
+    return gate.measurement_inputs(source)['harnessProject'].replace('$(MSBuildThisFileDirectory)../..', str(source)).replace(
+        '</Project>', '<ItemGroup><Compile Remove="client/**/*.cs" /></ItemGroup></Project>')
 
 
 def pair(number, value=10, *, identity=None):
@@ -174,18 +200,25 @@ class GateTests(unittest.TestCase):
 
     def test_all_staged_dotnet_commands_disable_build_servers(self):
         candidate_sdk = json.loads((gate.REPO / 'global.json').read_text())['sdk']['version']
-        for commit, sdk in ((gate.PIN, '10.0.301'), ('candidate', candidate_sdk)):
-            with self.subTest(sdk=sdk), tempfile.TemporaryDirectory() as directory:
+        source, projects, scratch = gate.REPO, {}, tempfile.TemporaryDirectory()
+        self.addCleanup(scratch.cleanup)
+        current, old = scratch_trees(scratch.name, [X10], [])
+        for commit, sdk, tree in ((gate.PIN, '10.0.301', old), ('candidate', candidate_sdk, current), ('old', candidate_sdk, old)):
+            with self.subTest(commit=commit), tempfile.TemporaryDirectory() as directory:
                 def stage(command, *_args, **_kwargs):
                     gate.stage_worker(command[-1])
-                with patch.object(gate, 'export_side', return_value=gate.REPO), \
+                with patch.object(gate, 'export_side', return_value=source), patch.object(gate, 'REPO', Path(scratch.name)), \
                         patch.object(gate, 'check_pinned', return_value=dict(assemblySha256s={})), \
                         patch.object(gate, 'execute_logged', side_effect=stage), \
                         patch.object(gate.subprocess, 'call', return_value=0) as run:
-                    gate.stage_side(side(commit=commit), 'fixture', Path(directory), dict(pinnedBaseline='fixture'))
+                    gate.stage_side(dict(side(commit=commit), treeId=tree), 'fixture', Path(directory), dict(pinnedBaseline='fixture'))
                 harness = Path(directory) / 'build/fixture'
-                constants = '$(DefineConstants);CHRYSALIS_PINNED_HARNESS' if commit == gate.PIN else None
+                projects[commit] = [(harness / name).read_text().replace(str(harness), '{stage}').replace(str(source), '{source}')
+                                    for name in ('Chrysalis.Benchmarks.csproj', 'client/ReplayClient.csproj')]
+                constants = None if commit == 'candidate' else '$(DefineConstants);CHRYSALIS_PINNED_HARNESS'
                 self.assertEqual(ET.parse(harness / 'Chrysalis.Benchmarks.csproj').findtext('PropertyGroup/DefineConstants'), constants)
+                self.assertEqual(['--no-dependencies' in call.args[0] for call in run.call_args_list if call.args[0][2] == 'build'],
+                                 [commit == gate.PIN, True])
                 self.assertIsNone(ET.parse(harness / 'client/ReplayClient.csproj').find('PropertyGroup/DefineConstants'))
                 for name, body in gate.measurement_inputs()['harness'].items():
                     self.assertEqual((harness / name).read_bytes(), body)
@@ -202,16 +235,60 @@ class GateTests(unittest.TestCase):
                     with self.subTest(command=command):
                         for flag in ('-nodeReuse:false', '--disable-build-servers', '-p:UseSharedCompilation=false'):
                             self.assertIn(flag, command)
+        pinned = '\0'.join(projects[gate.PIN])
+        self.assertEqual(hashlib.sha256(pinned.encode()).hexdigest(), PINNED_PROJECTS_SHA256, pinned)
+        self.assertEqual(projects['candidate'][0], staged_today(source).replace(str(source), '{source}'))
+        self.assertEqual(projects['old'][1], projects['candidate'][1])
+        old_harness = ET.fromstring(projects['old'][0])  # the define alone: no references, SDK or TFM change
+        old_harness.remove(old_harness.findall('PropertyGroup')[-1])
+        self.assertEqual(ET.canonicalize(ET.tostring(old_harness, encoding='unicode'), strip_text=True),
+                         ET.canonicalize(projects['candidate'][0], strip_text=True))
+
+    def test_only_x10_cborlist_file_in_the_side_tree_marks_an_old_side(self):
+        with tempfile.TemporaryDirectory() as scratch:
+            trees = scratch_trees(scratch, [X10], [X10, 'src/Chrysalis.Codec/Types/CborMaybeIndefList.cs'], [],
+                                  ['src/Chrysalis.Tx/Fees/FeeEngine.cs', 'src/Chrysalis.Codec/CborList.cs', 'docs/migration/X10.md'])
+            for tree, old in zip([*trees, '0' * 40], (False, False, True, True, True)):  # an unreadable tree fails closed
+                with self.subTest(tree=tree):
+                    self.assertIs(gate.lacks_x10(dict(commit='side', treeId=tree, working=Path(scratch))), old)
+            with patch.object(gate, 'REPO', Path(scratch)):
+                self.assertIs(gate.lacks_x10(dict(commit='side', treeId=trees[0])), False)
+
+    def test_change_run_refuses_sides_straddling_x10_before_any_staging(self):
+        with tempfile.TemporaryDirectory() as scratch:
+            current, old = scratch_trees(scratch, [X10], [])
+            trees = dict(new=current, new2=current, old=old, old2=old, pin=old)
+            cases = [('change', ['old', 'new'], {}, True), ('change', ['new', 'new2', 'old'], {}, True),
+                     ('change', ['old', 'new'], dict(prepare_phase='restore'), True), ('change', ['old', 'old2'], {}, False),
+                     ('change', ['new', 'new2'], {}, False), ('change', ['pin', 'new'], {}, False), ('change', ['pin', 'old'], {}, False),
+                     ('release', ['old', 'new'], {}, False), ('change', ['old', 'new'], dict(allocation_platform='mac'), False)]
+            for mode, sides, options, refused in cases:
+                args = SimpleNamespace(mode=mode, baseline=sides[0], candidate=sides[1])
+                rows = [dict(candidate=value) for value in sides[2:]]
+                with self.subTest(mode=mode, sides=sides, options=options), patch.object(gate, 'REPO', Path(scratch)), \
+                        patch.object(gate, 'resolve_side', side_effect=lambda value, _mode: dict(commit=gate.PIN if value == 'pin' else value, treeId=trees[value])), \
+                        patch.object(gate, 'stage_side', side_effect=lambda info, *_args, **_kwargs: dict(info, dllSha256s={'BenchmarkDotNet.dll': 'b'})) as stage, \
+                        patch.object(gate, 'previous_alpha', return_value=None):
+                    if refused:
+                        with self.assertRaisesRegex(ValueError, 'X10'):
+                            gate.stage_arms(args, Path(scratch), rows, {}, None, **options)
+                        stage.assert_not_called()
+                    else:
+                        gate.stage_arms(args, Path(scratch), rows, {}, None, **options)
+                        self.assertEqual(stage.call_count, len(sides))
 
     def test_mac_stage_side_disables_concurrent_gc_on_harness_build_only(self):
-        with tempfile.TemporaryDirectory() as directory:
+        with tempfile.TemporaryDirectory() as directory, tempfile.TemporaryDirectory() as scratch:
+            source, (old,) = gate.REPO, scratch_trees(scratch, [])
             def stage(command, *_args, **_kwargs):
                 gate.stage_worker(*command[3:])
-            with patch.object(gate, 'export_side', return_value=gate.REPO), \
+            with patch.object(gate, 'export_side', return_value=source), patch.object(gate, 'REPO', Path(scratch)), \
                     patch.dict(os.environ, {'NUGET_PACKAGES': str(Path(directory) / 'nuget')}), \
                     patch.object(gate, 'execute_logged', side_effect=stage), \
                     patch.object(gate.subprocess, 'call', return_value=0) as run:
-                gate.stage_side(side(commit='candidate'), 'fixture', Path(directory), dict(pinnedBaseline='fixture'), allocation_platform='mac')
+                gate.stage_side(dict(side(commit='candidate'), treeId=old), 'fixture', Path(directory), dict(pinnedBaseline='fixture'), allocation_platform='mac')
+            # Mac sides compile their own harness: the X10 key never applies, so the project stays as today.
+            self.assertEqual((Path(directory) / 'build/fixture/Chrysalis.Benchmarks.csproj').read_text(), staged_today(source))
             job = json.loads((Path(directory) / 'build/fixture-staging.job.json').read_text())
             by_label = {item['label']: item['command'] for item in job['commands']}
             self.assertEqual(run.call_count, 4)
