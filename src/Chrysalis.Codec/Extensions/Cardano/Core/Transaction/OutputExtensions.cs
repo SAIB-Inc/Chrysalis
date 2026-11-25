@@ -112,12 +112,14 @@ public static class OutputExtensions
     /// Gets the raw inline datum CBOR bytes from the output, stripping the tag-24 envelope.
     /// Returns null if the output has no inline datum.
     /// </summary>
+    /// <remarks>Definite inline datums borrow the output's backing storage; keep it valid and unmodified while using the result.
+    /// Retaining even a small slice keeps the backing storage alive; call <c>ToArray()</c> to retain the bytes independently. Indefinite byte strings are joined into owned storage.</remarks>
     public static ReadOnlyMemory<byte>? InlineDatumRaw(this ITransactionOutput self)
     {
         ArgumentNullException.ThrowIfNull(self);
         if (self is PostAlonzoTransactionOutput post && post.Datum is InlineDatumOption inline)
         {
-            return inline.Data.GetValue();
+            return inline.Data.Value;
         }
         return null;
     }

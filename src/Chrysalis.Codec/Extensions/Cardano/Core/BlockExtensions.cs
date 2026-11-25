@@ -122,7 +122,12 @@ public static class BlockExtensions
     /// </summary>
     /// <param name="self">The block header instance.</param>
     /// <returns>The hex-encoded hash string.</returns>
-    public static string Hash(this BlockHeader self) => Convert.ToHexStringLower(Blake2Fast.Blake2b.HashData(32, self.Raw.Span));
+    public static string Hash(this BlockHeader self)
+    {
+        Span<byte> hash = stackalloc byte[32];
+        Blake2Fast.Blake2b.HashData(32, self.Raw.Span, hash);
+        return Convert.ToHexStringLower(hash);
+    }
 
     /// <summary>
     /// Computes the Byron block hash by wrapping the header in a CBOR tuple [tag, header_bytes] before hashing.
@@ -133,13 +138,11 @@ public static class BlockExtensions
     /// <returns>The Blake2b-256 hash of the wrapped header.</returns>
     public static byte[] HashByronHeader(byte tag, ReadOnlySpan<byte> headerCbor)
     {
-        // Byron block hash = Blake2b-256(CBOR-encode([tag, header]))
-        // where tag=0 for EBB, tag=1 for main block
-        byte[] wrapped = new byte[2 + headerCbor.Length];
-        wrapped[0] = 0x82; // CBOR array(2)
-        wrapped[1] = tag;  // CBOR uint(0) or uint(1)
-        headerCbor.CopyTo(wrapped.AsSpan(2));
-        return Blake2Fast.Blake2b.HashData(32, wrapped);
+        Blake2Fast.Implementation.Blake2bHashState hasher = Blake2Fast.Blake2b.CreateIncrementalHasher(32);
+        ReadOnlySpan<byte> prefix = [0x82, tag];
+        hasher.Update(prefix);
+        hasher.Update(headerCbor);
+        return hasher.Finish();
     }
 
     /// <summary>The number of slots per epoch in the Byron era (fixed at 21600).</summary>

@@ -376,15 +376,11 @@ public sealed partial class CborSerializerCodeGen
                 case "ReadOnlyMemory<byte>":
                 case "System.ReadOnlyMemory<byte>":
                 case "global::System.ReadOnlyMemory<byte>":
-                    _ = sb.AppendLine("_list.Add((ReadOnlyMemory<byte>)_r.ReadByteStringToArray());");
-                    break;
                 case "CborEncodedValue":
                 case "Chrysalis.Codec.Types.CborEncodedValue":
                 case "global::Chrysalis.Codec.Types.CborEncodedValue":
-                    _ = sb.AppendLine("{");
-                    _ = sb.AppendLine("_r.TryReadSemanticTag(out ulong _);");
-                    _ = sb.AppendLine("_list.Add(new global::Chrysalis.Codec.Types.CborEncodedValue((ReadOnlyMemory<byte>)_r.ReadByteStringToArray()));");
-                    _ = sb.AppendLine("}");
+                    _ = EmitByteMemorySlot(sb, cleanItemType, fieldRef, "_item");
+                    _ = sb.AppendLine("_list.Add(_item);");
                     break;
                 case "CborAny":
                 case "Chrysalis.Codec.Types.CborAny":
@@ -579,14 +575,10 @@ public sealed partial class CborSerializerCodeGen
                 case "ReadOnlyMemory<byte>":
                 case "System.ReadOnlyMemory<byte>":
                 case "global::System.ReadOnlyMemory<byte>":
-                    _ = sb.AppendLine("var _key = (ReadOnlyMemory<byte>)_r.ReadByteStringToArray();");
-                    break;
                 case "CborEncodedValue":
                 case "Chrysalis.Codec.Types.CborEncodedValue":
                 case "global::Chrysalis.Codec.Types.CborEncodedValue":
-                    _ = sb.AppendLine("{");
-                    _ = sb.AppendLine("_r.TryReadSemanticTag(out ulong _);");
-                    _ = sb.AppendLine($"var _key = new {CborEncodeValueFullName}((ReadOnlyMemory<byte>)_r.ReadByteStringToArray());");
+                    _ = EmitByteMemorySlot(sb, cleanKeyType, fieldRef, "_key");
                     break;
                 case "CborAny":
                 case "Chrysalis.Codec.Types.CborAny":
@@ -651,14 +643,10 @@ public sealed partial class CborSerializerCodeGen
                 case "ReadOnlyMemory<byte>":
                 case "System.ReadOnlyMemory<byte>":
                 case "global::System.ReadOnlyMemory<byte>":
-                    _ = sb.AppendLine("var _val = (ReadOnlyMemory<byte>)_r.ReadByteStringToArray();");
-                    break;
                 case "CborEncodedValue":
                 case "Chrysalis.Codec.Types.CborEncodedValue":
                 case "global::Chrysalis.Codec.Types.CborEncodedValue":
-                    _ = sb.AppendLine("{");
-                    _ = sb.AppendLine("_r.TryReadSemanticTag(out ulong _);");
-                    _ = sb.AppendLine($"var _val = new {CborEncodeValueFullName}((ReadOnlyMemory<byte>)_r.ReadByteStringToArray());");
+                    _ = EmitByteMemorySlot(sb, cleanValueType, fieldRef, "_val");
                     break;
                 case "CborAny":
                 case "Chrysalis.Codec.Types.CborAny":
@@ -820,6 +808,13 @@ public sealed partial class CborSerializerCodeGen
                 int finalIndex = index > 6 ? 1280 - 7 : 121;
                 return finalIndex + index.Value;
             }
+        }
+
+        private static StringBuilder EmitByteMemorySlot(StringBuilder sb, string cleanType, string fieldRef, string variable)
+        {
+            bool encoded = !IsReadOnlyMemoryByteType(cleanType);
+            _ = sb.AppendLine($"{(encoded ? CborEncodeValueFullName : "global::System.ReadOnlyMemory<byte>")} {variable};");
+            return EmitByteMemoryRead(sb, "_r", fieldRef, $"{variable} =", encoded);
         }
 
         private static bool IsReadOnlyMemoryByteType(string type) => type.Replace("?", "") is "ReadOnlyMemory<byte>" or "System.ReadOnlyMemory<byte>" or "global::System.ReadOnlyMemory<byte>";
