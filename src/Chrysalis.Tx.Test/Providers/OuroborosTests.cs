@@ -18,6 +18,7 @@ using Chrysalis.Tx.Providers;
 using Chrysalis.Tx.Test.Cli;
 using Chrysalis.Tx.Utils;
 using Chrysalis.Wallet.Models.Enums;
+using Chrysalis.Wallet.Utils;
 using Xunit;
 
 namespace Chrysalis.Tx.Test.Providers;
@@ -300,6 +301,9 @@ public class OuroborosTests
         ArgumentOutOfRangeException indexError = await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() =>
             provider.GetUtxoByOutRefAsync(BlockfrostTests.Hash, 65536, timeout.Token));
         Assert.Equal("index", indexError.ParamName);
+        ArgumentException addressError = await Assert.ThrowsAsync<ArgumentException>(() =>
+            provider.GetUtxosAsync([Bech32Util.Encode([0x60, 0x01, 0x02], "addr_test")], timeout.Token));
+        Assert.Equal("address", addressError.ParamName);
     }
 
     [Fact]

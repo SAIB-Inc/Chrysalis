@@ -292,6 +292,7 @@ public sealed class UtxoTests
     [Theory]
     [InlineData("not-an-address")]
     [InlineData("empty-bech32")]
+    [InlineData("truncated-bech32")]
     public async Task RejectsBadArgumentsBeforeCalling(string badAddress)
     {
         await using FakeUtxoRpc fake = await FakeUtxoRpc.StartAsync();
@@ -299,7 +300,13 @@ public sealed class UtxoTests
         _ = await Assert.ThrowsAnyAsync<ArgumentException>(() => provider.GetUtxoByOutRefAsync("00", 0, CancellationToken.None));
         _ = await Assert.ThrowsAnyAsync<ArgumentException>(() => provider.GetUtxoByOutRefAsync(new string('z', 64), 0, CancellationToken.None));
         _ = await Assert.ThrowsAnyAsync<ArgumentException>(() => provider.GetUtxoByOutRefAsync(TestData.Hash, (ulong)uint.MaxValue + 1, CancellationToken.None));
-        _ = await Assert.ThrowsAnyAsync<ArgumentException>(() => provider.GetUtxosAsync([badAddress == "empty-bech32" ? Bech32Util.Encode([], "addr_test") : badAddress], CancellationToken.None));
+        string address = badAddress switch
+        {
+            "empty-bech32" => Bech32Util.Encode([], "addr_test"),
+            "truncated-bech32" => Bech32Util.Encode([0x60, 0x01, 0x02], "addr_test"),
+            _ => badAddress
+        };
+        _ = await Assert.ThrowsAnyAsync<ArgumentException>(() => provider.GetUtxosAsync([address], CancellationToken.None));
         using CancellationTokenSource timeout = new(TimeSpan.FromSeconds(10));
         Assert.Empty(await provider.GetUtxosAsync([], timeout.Token));
         await timeout.CancelAsync();
