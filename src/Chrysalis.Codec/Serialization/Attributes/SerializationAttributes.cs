@@ -82,6 +82,11 @@ public sealed class CborUnionAttribute : Attribute;
 /// Used for Plutus datum and redeemer types. The constructor index maps to the Plutus
 /// constructor tag: index 0 = tag 121, index 1 = tag 122, etc.
 /// Use index -1 (default constructor) to accept any constructor index during deserialization.
+/// A byte string in its fields, or in a list or map field, is written in 64-byte chunks when it is
+/// longer than 64 bytes, as the ledger requires (see <see cref="CborSizeAttribute"/>). Three kinds stay
+/// in one piece: those inside another generic type, such as <c>Some&lt;byte[]&gt;</c> or
+/// <c>CborList&lt;byte[]&gt;</c> (warning CHCB004); a field whose type is a type parameter; and those
+/// inside a <c>[CborList]</c> or <c>[CborMap]</c> type used in the datum. Use <c>PlutusBoundedBytes</c> there.
 /// <example>
 /// <code>
 /// // Simple datum with constructor 0:
@@ -194,8 +199,10 @@ public sealed class CborPropertyAttribute : Attribute
 }
 
 /// <summary>
-/// Constrains a byte string property to a fixed size.
-/// The serializer will validate that the byte array matches the expected length.
+/// Sets the chunk size of a byte string: one longer than this is written as an indefinite byte
+/// string of chunks of this size, and one that fits as a single string. It applies to a byte string
+/// property and to the byte strings in a list or map property. In a <see cref="CborConstrAttribute"/>
+/// type, byte strings without it use 64, the ledger's limit for Plutus data.
 /// </summary>
 [AttributeUsage(AttributeTargets.Property | AttributeTargets.Parameter, Inherited = false, AllowMultiple = false)]
 public sealed class CborSizeAttribute(int size) : Attribute

@@ -139,29 +139,7 @@ public sealed partial class CborSerializerCodeGen
                     break;
                 case "byte[]?":
                 case "byte[]":
-                    if (size is not null)
-                    {
-                        _ = sb.AppendLine($"if ({propertyName}.Length > {size})");
-                        _ = sb.AppendLine("{");
-                        // Manual indefinite byte string: write 0x5F, chunks, 0xFF
-                        _ = sb.AppendLine($"output.GetSpan(1)[0] = 0x5F; output.Advance(1);");
-                        _ = sb.AppendLine($"var {propertyName.Replace(".", "")}Chunks = {propertyName}.Chunk({size});");
-                        _ = sb.AppendLine($"foreach (var chunk in {propertyName.Replace(".", "")}Chunks)");
-                        _ = sb.AppendLine("{");
-                        _ = sb.AppendLine($"writer.WriteByteString(chunk);");
-                        _ = sb.AppendLine("}");
-                        _ = sb.AppendLine($"output.GetSpan(1)[0] = 0xFF; output.Advance(1);");
-                        _ = sb.AppendLine("}");
-                        _ = sb.AppendLine("else");
-                        _ = sb.AppendLine("{");
-                        _ = sb.AppendLine($"writer.WriteByteString({propertyName});");
-                        _ = sb.AppendLine("}");
-                    }
-                    else
-                    {
-                        _ = sb.AppendLine($"writer.WriteByteString({propertyName});");
-                    }
-
+                    EmitByteStringWriter(sb, propertyName, $"{propertyName}.AsSpan()", $"{propertyName}.Length", size);
                     break;
                 case "ReadOnlyMemory<byte>?":
                 case "ReadOnlyMemory<byte>":
@@ -171,28 +149,7 @@ public sealed partial class CborSerializerCodeGen
                 case "global::System.ReadOnlyMemory<byte>":
                     string spanAccess = isNullable ? $"{propertyName}.Value.Span" : $"{propertyName}.Span";
                     string lengthAccess = isNullable ? $"{propertyName}.Value.Length" : $"{propertyName}.Length";
-                    if (size is not null)
-                    {
-                        _ = sb.AppendLine($"if ({lengthAccess} > {size})");
-                        _ = sb.AppendLine("{");
-                        _ = sb.AppendLine($"output.GetSpan(1)[0] = 0x5F; output.Advance(1);");
-                        _ = sb.AppendLine($"for (int _i = 0; _i < {lengthAccess}; _i += {size})");
-                        _ = sb.AppendLine("{");
-                        _ = sb.AppendLine($"    int _len = Math.Min({size}, {lengthAccess} - _i);");
-                        _ = sb.AppendLine($"    writer.WriteByteString({spanAccess}.Slice(_i, _len));");
-                        _ = sb.AppendLine("}");
-                        _ = sb.AppendLine($"output.GetSpan(1)[0] = 0xFF; output.Advance(1);");
-                        _ = sb.AppendLine("}");
-                        _ = sb.AppendLine("else");
-                        _ = sb.AppendLine("{");
-                        _ = sb.AppendLine($"writer.WriteByteString({spanAccess});");
-                        _ = sb.AppendLine("}");
-                    }
-                    else
-                    {
-                        _ = sb.AppendLine($"writer.WriteByteString({spanAccess});");
-                    }
-
+                    EmitByteStringWriter(sb, spanAccess, spanAccess, lengthAccess, size);
                     break;
                 case "CborEncodedValue":
                 case "Chrysalis.Codec.Types.CborEncodedValue":
@@ -230,6 +187,31 @@ public sealed partial class CborSerializerCodeGen
             return sb;
         }
 
+        // A byte string longer than size is written as an indefinite byte string of size-byte chunks.
+        private static void EmitByteStringWriter(StringBuilder sb, string value, string span, string length, int? size)
+        {
+            if (size is null)
+            {
+                _ = sb.AppendLine($"writer.WriteByteString({value});");
+                return;
+            }
+
+            _ = sb.AppendLine($"if ({length} > {size})");
+            _ = sb.AppendLine("{");
+            _ = sb.AppendLine($"output.GetSpan(1)[0] = 0x5F; output.Advance(1);");
+            _ = sb.AppendLine($"for (int _i = 0; _i < {length}; _i += {size})");
+            _ = sb.AppendLine("{");
+            _ = sb.AppendLine($"    int _len = Math.Min({size}, {length} - _i);");
+            _ = sb.AppendLine($"    writer.WriteByteString({span}.Slice(_i, _len));");
+            _ = sb.AppendLine("}");
+            _ = sb.AppendLine($"output.GetSpan(1)[0] = 0xFF; output.Advance(1);");
+            _ = sb.AppendLine("}");
+            _ = sb.AppendLine("else");
+            _ = sb.AppendLine("{");
+            _ = sb.AppendLine($"writer.WriteByteString({value});");
+            _ = sb.AppendLine("}");
+        }
+
         public static StringBuilder EmitObjectPropertyWriter(StringBuilder sb, SerializablePropertyMetadata metadata, string propertyName)
         {
             if (metadata.IsList)
@@ -259,7 +241,7 @@ public sealed partial class CborSerializerCodeGen
                 _ = metadata.IsListItemTypeOpenGeneric
                     ? EmitGenericWithTypeParamsWriter(sb, metadata.ListItemType, $"item")
                     : IsPrimitiveType(metadata.ListItemTypeFullName)
-                        ? EmitPrimitivePropertyWriter(sb, metadata.ListItemTypeFullName, "item")
+                        ? EmitPrimitivePropertyWriter(sb, metadata.ListItemTypeFullName, "item", metadata.Size)
                         : sb.AppendLine($"{metadata.ListItemTypeFullName}.Write(output, ({metadata.ListItemTypeFullName})item);");
 
 
@@ -297,13 +279,13 @@ public sealed partial class CborSerializerCodeGen
                 _ = metadata.IsMapKeyTypeOpenGeneric
                     ? EmitGenericWithTypeParamsWriter(sb, metadata.MapKeyTypeFullName, $"kvp.Key")
                     : IsPrimitiveType(metadata.MapKeyTypeFullName)
-                        ? EmitPrimitivePropertyWriter(sb, metadata.MapKeyTypeFullName, $"kvp.Key")
+                        ? EmitPrimitivePropertyWriter(sb, metadata.MapKeyTypeFullName, $"kvp.Key", metadata.Size)
                         : sb.AppendLine($"{metadata.MapKeyTypeFullName}.Write(output, ({metadata.MapKeyTypeFullName})kvp.Key);");
 
                 _ = metadata.IsMapValueTypeOpenGeneric
                     ? EmitGenericWithTypeParamsWriter(sb, metadata.MapValueTypeFullName, $"kvp.Value")
                     : IsPrimitiveType(metadata.MapValueTypeFullName)
-                        ? EmitPrimitivePropertyWriter(sb, metadata.MapValueTypeFullName, $"kvp.Value")
+                        ? EmitPrimitivePropertyWriter(sb, metadata.MapValueTypeFullName, $"kvp.Value", metadata.Size)
                         : sb.AppendLine($"{metadata.MapValueTypeFullName}.Write(output, ({metadata.MapValueTypeFullName})kvp.Value);");
 
                 _ = sb.AppendLine("}");

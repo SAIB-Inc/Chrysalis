@@ -256,6 +256,27 @@ public partial class GeneratorIsolationTests
     }
 
     [Theory]
+    [InlineData("Some<byte[]>")]
+    [InlineData("CborList<ReadOnlyMemory<byte>>")]
+    public void X46PlutusDataBytesInAGenericTypeHaveAWarning(string field)
+    {
+        string source = $$"""
+            global using System;
+            using Chrysalis.Codec.Serialization.Attributes;
+            using Chrysalis.Codec.Types;
+            using Chrysalis.Codec.Types.Plutus;
+            namespace BytesProbe;
+            [PlutusData(0)] public partial record Datum([CborOrder(0)] {{field}} Owner) : CborRecord;
+            """;
+        GeneratorDriverRunResult result = CreateDriver()
+            .RunGeneratorsAndUpdateCompilation(CreateCompilation("BytesProbe", source), out _, out _).GetRunResult();
+        Diagnostic diagnostic = Assert.Single(result.Diagnostics, diagnostic => diagnostic.Id == "CHCB004");
+        Assert.Equal(DiagnosticSeverity.Warning, diagnostic.Severity);
+        Assert.True(diagnostic.Location.IsInSource);
+        Assert.Contains("'Owner'", diagnostic.GetMessage(CultureInfo.InvariantCulture), StringComparison.Ordinal);
+    }
+
+    [Theory]
     [InlineData("CborList", "int", false)]
     [InlineData("CborList", "int?", false)]
     [InlineData("CborList, CborIndex(0)", "int", false)]

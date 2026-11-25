@@ -121,6 +121,12 @@ public partial record SundaeSwapPoolDatum(
     public bool IsIndefinite { get; set; }
 }
 
+[PlutusData(0)]
+public partial record X46Collections(
+    [CborOrder(0)] List<byte[]> Items,
+    [CborOrder(1)] Dictionary<ReadOnlyMemory<byte>, ReadOnlyMemory<byte>> Pairs
+) : CborRecord;
+
 public class PlutusConstrTests
 {
     [Fact]
@@ -228,6 +234,42 @@ public class PlutusBigIntTests
         Assert.Equal("820102", Convert.ToHexStringLower(read.Value.Span));
         Assert.Equal("c25f4182420102ff", Convert.ToHexStringLower(CborSerializer.Serialize(read)));
         Assert.Equal("d87981c25f4182420102ff", Convert.ToHexStringLower(PlutusConstr.Create(0, CborList.Create<IPlutusData>([read])).Raw.Span));
+    }
+}
+
+public class PlutusConstrBytesTests
+{
+    [Theory]
+    [InlineData("SER-bytes-63", 63)]
+    [InlineData("SER-bytes-64", 64)]
+    [InlineData("SER-bytes-65", 65)]
+    [InlineData("SER-bytes-129", 129)]
+    [InlineData("SER-bytes-1000", 1000)]
+    public void X46ConstrByteStringsWriteTheNodeForm(string row, int length)
+    {
+        byte[] bytes = [.. Enumerable.Repeat((byte)0xAB, length)];
+        string node = PlutusBigIntTests.NodeRows.Value[row];
+        string signature = $"d8799f{node}ff";
+        Assert.Equal(signature, Convert.ToHexStringLower(CborSerializer.Serialize(new Signature(bytes))));
+        Types.Plutus.Address.VerificationKey key = Types.Plutus.Address.VerificationKey.Create(bytes);
+        Assert.Equal($"d87981{node}", Convert.ToHexStringLower(key.Raw.Span));
+        Assert.Equal(bytes, key.VerificationKeyHash.ToArray());
+        Assert.Equal($"d8798281{node}a1{node}{node}",
+            Convert.ToHexStringLower(CborSerializer.Serialize(new X46Collections([bytes], new() { [bytes] = bytes }))));
+        Signature read = CborSerializer.Deserialize<Signature>(Convert.FromHexString(signature));
+        Assert.Equal(bytes, read.KeyHash);
+        Assert.Equal(signature, Convert.ToHexStringLower(CborSerializer.Serialize(read)));
+    }
+
+    [Fact]
+    public void X46ReadDatumKeepsItsDefiniteBytes()
+    {
+        // The old writer emitted one definite 65-byte string, which the reader still accepts.
+        string input = "d8799f5841" + string.Concat(Enumerable.Repeat("ab", 65)) + "ff";
+        Signature read = CborSerializer.Deserialize<Signature>(Convert.FromHexString(input));
+        Assert.Equal(65, read.KeyHash.Length);
+        Assert.Equal(input, Convert.ToHexStringLower(CborSerializer.Serialize(read)));
+        Assert.Equal($"d87a8181{input}", Convert.ToHexStringLower(CborSerializer.Serialize(new AllOf(CborList.Create<MultisigScript>([read])))));
     }
 }
 

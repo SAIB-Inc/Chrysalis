@@ -87,6 +87,11 @@ public sealed partial class CborSerializerCodeGen
             string? validatorFullyQualifiedName = FindValidatorForType(tds, model, model.Compilation);
 
             IEnumerable<SerializablePropertyMetadata> properties = GetPropertyMetadata(tds, model, parts);
+            // Plutus data: a byte string without [CborSize] gets the ledger's 64-byte chunks.
+            if (serializationType == SerializationType.Constr)
+            {
+                properties = properties.Select(WithPlutusBoundedBytesSize);
+            }
 
             return new SerializableTypeMetadata(
                 baseIdentifier,
@@ -117,6 +122,26 @@ public sealed partial class CborSerializerCodeGen
                 : cborUnionAttribute != null
                     ? SerializationType.Union
                     : cborConstrAttribute != null ? SerializationType.Constr : SerializationType.Container;
+
+    // conway.cddl bounded_bytes: at most 64 bytes in each definite byte string or chunk. Chrysalis.Codec's
+    // PlutusWire.BoundedBytesSize is the same limit; this netstandard2.0 generator can't reference it.
+    private const int PlutusBoundedBytesSize = 64;
+
+    // The four places the writer sees a byte string: the property, a list item, a map key and a map value.
+    private static int CoveredByteStrings(SerializablePropertyMetadata property) =>
+        new[] { property.PropertyType, property.ListItemTypeFullName, property.MapKeyTypeFullName, property.MapValueTypeFullName }.Count(IsByteString);
+
+    private static SerializablePropertyMetadata WithPlutusBoundedBytesSize(SerializablePropertyMetadata property) =>
+        property.Size is null && CoveredByteStrings(property) > 0 ? property with { Size = PlutusBoundedBytesSize } : property;
+
+    private static bool IsByteString(string? type) => type is not null && (type.Replace("?", "") == "byte[]" || Emitter.IsReadOnlyMemoryByteType(type));
+
+    // Byte strings that the size can't reach, as in Some<byte[]> or CborList<byte[]> (CHCB004).
+    private static bool HidesUnchunkedBytes(SerializablePropertyMetadata property) =>
+        ByteStringCount(property.PropertyTypeFullName) > CoveredByteStrings(property);
+
+    private static int ByteStringCount(string type) => ((type.Length - type.Replace("byte[]", "").Length) / "byte[]".Length)
+        + ((type.Length - type.Replace("ReadOnlyMemory<byte>", "").Length) / "ReadOnlyMemory<byte>".Length);
 
     private static string? FindValidatorForType(TypeDeclarationSyntax typeDecl, SemanticModel semanticModel, Compilation compilation)
     {
