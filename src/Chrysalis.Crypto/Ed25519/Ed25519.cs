@@ -1,4 +1,5 @@
 // Contains code adapted from Chaos.NaCl (public domain); changed for Chrysalis. See THIRD-PARTY-NOTICES.md.
+using System.Security.Cryptography;
 using Chrysalis.Crypto.Internal.Ed25519Ref10;
 
 namespace Chrysalis.Crypto;
@@ -42,6 +43,10 @@ public static class Ed25519
     /// <param name="message">The message that was signed.</param>
     /// <param name="publicKey">The 32-byte public key.</param>
     /// <returns><see langword="true"/> if the signature is valid; otherwise <see langword="false"/>.</returns>
+    /// <remarks>
+    /// Matches the Cardano node's cofactorless Ed25519 verifier: RFC 8032 §5.1.7 requires
+    /// 0 &lt;= S &lt; L and canonical A and R encodings; small-order A and R are also rejected.
+    /// </remarks>
     public static bool Verify(byte[] signature, byte[] message, byte[] publicKey)
     {
         ArgumentNullException.ThrowIfNull(signature);
@@ -65,7 +70,7 @@ public static class Ed25519
     {
         byte[] seedAndPublicKey = SeedAndPublicKeyFromSeed(seed);
         byte[] publicKey = seedAndPublicKey[PrivateKeySeedSizeInBytes..];
-        CryptoBytes.Wipe(seedAndPublicKey);
+        CryptographicOperations.ZeroMemory(seedAndPublicKey);
         return publicKey;
     }
 
@@ -80,7 +85,7 @@ public static class Ed25519
         byte[] publicKey = new byte[PublicKeySizeInBytes];
         byte[] seedAndPublicKey = new byte[ExpandedPrivateKeySizeInBytes];
         Ed25519Operations.crypto_sign_keypair(publicKey, 0, seedAndPublicKey, 0, seed, 0);
-        CryptoBytes.Wipe(publicKey);
+        CryptographicOperations.ZeroMemory(publicKey);
         return seedAndPublicKey;
     }
 

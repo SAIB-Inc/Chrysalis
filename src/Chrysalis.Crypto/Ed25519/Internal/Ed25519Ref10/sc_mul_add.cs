@@ -6,7 +6,7 @@ namespace Chrysalis.Crypto.Internal.Ed25519Ref10;
 /// </summary>
 internal static partial class ScalarOperations
 {
-    static Int64 load_3(byte[] input, int offset)
+    internal static Int64 load_3(ReadOnlySpan<byte> input, int offset)
     {
         Int64 result;
         result = (Int64)input[offset + 0];
@@ -15,7 +15,7 @@ internal static partial class ScalarOperations
         return result;
     }
 
-    static Int64 load_4(byte[] input, int offset)
+    internal static Int64 load_4(ReadOnlySpan<byte> input, int offset)
     {
         Int64 result;
         result = (Int64)input[offset + 0];

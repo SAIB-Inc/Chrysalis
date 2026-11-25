@@ -30,7 +30,7 @@ internal static partial class FieldOperations
       Have q+2^(-255)x = 2^(-255)(h + 19 2^(-25) h9 + 2^(-1))
       so floor(2^(-255)(h + 19 2^(-25) h9 + 2^(-1))) = q.
     */
-    internal static void fe_tobytes(byte[] s, int offset, ref FieldElement h)
+    internal static void fe_tobytes(Span<byte> s, ref FieldElement h)
     {
         FieldElement hr;
         fe_reduce(out hr, ref h);
@@ -54,38 +54,38 @@ internal static partial class FieldOperations
         */
         unchecked
         {
-            s[offset + 0] = (byte)(h0 >> 0);
-            s[offset + 1] = (byte)(h0 >> 8);
-            s[offset + 2] = (byte)(h0 >> 16);
-            s[offset + 3] = (byte)((h0 >> 24) | (h1 << 2));
-            s[offset + 4] = (byte)(h1 >> 6);
-            s[offset + 5] = (byte)(h1 >> 14);
-            s[offset + 6] = (byte)((h1 >> 22) | (h2 << 3));
-            s[offset + 7] = (byte)(h2 >> 5);
-            s[offset + 8] = (byte)(h2 >> 13);
-            s[offset + 9] = (byte)((h2 >> 21) | (h3 << 5));
-            s[offset + 10] = (byte)(h3 >> 3);
-            s[offset + 11] = (byte)(h3 >> 11);
-            s[offset + 12] = (byte)((h3 >> 19) | (h4 << 6));
-            s[offset + 13] = (byte)(h4 >> 2);
-            s[offset + 14] = (byte)(h4 >> 10);
-            s[offset + 15] = (byte)(h4 >> 18);
-            s[offset + 16] = (byte)(h5 >> 0);
-            s[offset + 17] = (byte)(h5 >> 8);
-            s[offset + 18] = (byte)(h5 >> 16);
-            s[offset + 19] = (byte)((h5 >> 24) | (h6 << 1));
-            s[offset + 20] = (byte)(h6 >> 7);
-            s[offset + 21] = (byte)(h6 >> 15);
-            s[offset + 22] = (byte)((h6 >> 23) | (h7 << 3));
-            s[offset + 23] = (byte)(h7 >> 5);
-            s[offset + 24] = (byte)(h7 >> 13);
-            s[offset + 25] = (byte)((h7 >> 21) | (h8 << 4));
-            s[offset + 26] = (byte)(h8 >> 4);
-            s[offset + 27] = (byte)(h8 >> 12);
-            s[offset + 28] = (byte)((h8 >> 20) | (h9 << 6));
-            s[offset + 29] = (byte)(h9 >> 2);
-            s[offset + 30] = (byte)(h9 >> 10);
-            s[offset + 31] = (byte)(h9 >> 18);
+            s[0] = (byte)(h0 >> 0);
+            s[1] = (byte)(h0 >> 8);
+            s[2] = (byte)(h0 >> 16);
+            s[3] = (byte)((h0 >> 24) | (h1 << 2));
+            s[4] = (byte)(h1 >> 6);
+            s[5] = (byte)(h1 >> 14);
+            s[6] = (byte)((h1 >> 22) | (h2 << 3));
+            s[7] = (byte)(h2 >> 5);
+            s[8] = (byte)(h2 >> 13);
+            s[9] = (byte)((h2 >> 21) | (h3 << 5));
+            s[10] = (byte)(h3 >> 3);
+            s[11] = (byte)(h3 >> 11);
+            s[12] = (byte)((h3 >> 19) | (h4 << 6));
+            s[13] = (byte)(h4 >> 2);
+            s[14] = (byte)(h4 >> 10);
+            s[15] = (byte)(h4 >> 18);
+            s[16] = (byte)(h5 >> 0);
+            s[17] = (byte)(h5 >> 8);
+            s[18] = (byte)(h5 >> 16);
+            s[19] = (byte)((h5 >> 24) | (h6 << 1));
+            s[20] = (byte)(h6 >> 7);
+            s[21] = (byte)(h6 >> 15);
+            s[22] = (byte)((h6 >> 23) | (h7 << 3));
+            s[23] = (byte)(h7 >> 5);
+            s[24] = (byte)(h7 >> 13);
+            s[25] = (byte)((h7 >> 21) | (h8 << 4));
+            s[26] = (byte)(h8 >> 4);
+            s[27] = (byte)(h8 >> 12);
+            s[28] = (byte)((h8 >> 20) | (h9 << 6));
+            s[29] = (byte)(h9 >> 2);
+            s[30] = (byte)(h9 >> 10);
+            s[31] = (byte)(h9 >> 18);
         }
     }
 

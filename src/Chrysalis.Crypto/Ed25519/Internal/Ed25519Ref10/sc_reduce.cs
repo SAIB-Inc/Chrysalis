@@ -6,6 +6,29 @@ namespace Chrysalis.Crypto.Internal.Ed25519Ref10;
 /// </summary>
 internal static partial class ScalarOperations
 {
+    // L = 2^252 + 27742317777372353535851937790883648493 (little-endian).
+    private static ReadOnlySpan<byte> ScalarOrder =>
+    [
+        0xed, 0xd3, 0xf5, 0x5c, 0x1a, 0x63, 0x12, 0x58,
+        0xd6, 0x9c, 0xf7, 0xa2, 0xde, 0xf9, 0xde, 0x14,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x10,
+    ];
+
+    internal static bool sc_is_canonical(ReadOnlySpan<byte> s)
+    {
+        ReadOnlySpan<byte> order = ScalarOrder;
+        for (int i = 31; i >= 0; i--)
+        {
+            if (s[i] != order[i])
+            {
+                return s[i] < order[i];
+            }
+        }
+
+        return false;
+    }
+
     /*
     Input:
       s[0]+256*s[1]+...+256^63*s[63] = s
@@ -16,7 +39,7 @@ internal static partial class ScalarOperations
       Overwrites s in place.
     */
 
-    public static void sc_reduce(byte[] s)
+    public static void sc_reduce(Span<byte> s)
     {
         Int64 s0 = 2097151 & load_3(s, 0);
         Int64 s1 = 2097151 & (load_4(s, 2) >> 5);

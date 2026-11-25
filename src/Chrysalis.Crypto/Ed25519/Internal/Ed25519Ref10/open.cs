@@ -1,5 +1,5 @@
 // Contains code adapted from Chaos.NaCl (public domain); changed for Chrysalis. See THIRD-PARTY-NOTICES.md.
-using Chrysalis.Crypto;
+using System.Security.Cryptography;
 
 namespace Chrysalis.Crypto.Internal.Ed25519Ref10;
 
@@ -8,35 +8,103 @@ namespace Chrysalis.Crypto.Internal.Ed25519Ref10;
 /// </summary>
 internal static partial class Ed25519Operations
 {
+    private const int StackMessageLimit = 960;
+
     internal static bool crypto_sign_verify(
         byte[] sig, int sigoffset,
         byte[] m, int moffset, int mlen,
         byte[] pk, int pkoffset)
     {
-        byte[] h;
-        byte[] checkr = new byte[32];
-        GroupElementP3 A;
-        GroupElementP2 R;
+        ReadOnlySpan<byte> rBytes = sig.AsSpan(sigoffset, 32);
+        ReadOnlySpan<byte> sBytes = sig.AsSpan(sigoffset + 32, 32);
 
-        if ((sig[sigoffset + 63] & 224) != 0) return false;
-        if (GroupOperations.ge_frombytes_negate_vartime(out A, pk, pkoffset) != 0)
+        if (!ScalarOperations.sc_is_canonical(sBytes))
+        {
             return false;
+        }
 
-        Sha512 hasher = new();
-        hasher.Update(sig, sigoffset, 32);
-        hasher.Update(pk, pkoffset, 32);
-        hasher.Update(m, moffset, mlen);
-        h = hasher.Finish();
+        if (!TryDecodeNegatedCanonicalPoint(pk, pkoffset, out GroupElementP3 A))
+        {
+            return false;
+        }
+
+        if (HasSmallOrder(ref A.X, ref A.Y))
+        {
+            return false;
+        }
+
+        Span<byte> h = stackalloc byte[64];
+        HashParts(rBytes, pk.AsSpan(pkoffset, 32), m.AsSpan(moffset, mlen), h, wipeBuffer: false);
 
         ScalarOperations.sc_reduce(h);
 
-        byte[] sm32 = new byte[32];
-        Array.Copy(sig, sigoffset + 32, sm32, 0, 32);
-        GroupOperations.ge_double_scalarmult_vartime(out R, h, ref A, sm32);
-        GroupOperations.ge_tobytes(checkr, 0, ref R);
-        bool result = CryptoBytes.ConstantTimeEquals(checkr, 0, sig, sigoffset, 32);
-        CryptoBytes.Wipe(h);
-        CryptoBytes.Wipe(checkr);
-        return result;
+        GroupOperations.ge_double_scalarmult_vartime(out GroupElementP2 R, h[..32], ref A, sBytes);
+        if (HasSmallOrder(ref R.X, ref R.Y))
+        {
+            return false;
+        }
+
+        Span<byte> checkr = stackalloc byte[32];
+        GroupOperations.ge_tobytes(checkr, ref R);
+        return CryptographicOperations.FixedTimeEquals(checkr, rBytes);
+    }
+
+    internal static void HashParts(
+        ReadOnlySpan<byte> part1,
+        ReadOnlySpan<byte> part2,
+        ReadOnlySpan<byte> message,
+        Span<byte> destination,
+        bool wipeBuffer)
+    {
+        int prefixLen = part1.Length + part2.Length;
+        if (prefixLen <= 64 && message.Length <= StackMessageLimit)
+        {
+            Span<byte> buffer = stackalloc byte[64 + StackMessageLimit];
+            int total = prefixLen + message.Length;
+            try
+            {
+                part1.CopyTo(buffer);
+                part2.CopyTo(buffer[part1.Length..]);
+                message.CopyTo(buffer[prefixLen..]);
+                _ = SHA512.HashData(buffer[..total], destination);
+            }
+            finally
+            {
+                if (wipeBuffer)
+                {
+                    CryptographicOperations.ZeroMemory(buffer[..total]);
+                }
+            }
+        }
+        else
+        {
+            using IncrementalHash hasher = IncrementalHash.CreateHash(HashAlgorithmName.SHA512);
+            hasher.AppendData(part1);
+            if (!part2.IsEmpty)
+            {
+                hasher.AppendData(part2);
+            }
+
+            hasher.AppendData(message);
+            _ = hasher.GetHashAndReset(destination);
+        }
+    }
+
+    internal static bool HasSmallOrder(ref FieldElement x, ref FieldElement y)
+    {
+        if (FieldOperations.fe_isnonzero(ref x) == 0 || FieldOperations.fe_isnonzero(ref y) == 0)
+        {
+            return true;
+        }
+
+        FieldOperations.fe_mul(out FieldElement ySqrtM1, ref y, ref LookupTables.sqrtm1);
+        FieldOperations.fe_sub(out FieldElement diff, ref ySqrtM1, ref x);
+        if (FieldOperations.fe_isnonzero(ref diff) == 0)
+        {
+            return true;
+        }
+
+        FieldOperations.fe_add(out FieldElement sum, ref ySqrtM1, ref x);
+        return FieldOperations.fe_isnonzero(ref sum) == 0;
     }
 }

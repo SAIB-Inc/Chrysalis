@@ -1,4 +1,6 @@
 ﻿// Contains code adapted from Chaos.NaCl (public domain); changed for Chrysalis. See THIRD-PARTY-NOTICES.md.
+using System.Runtime.CompilerServices;
+
 namespace Chrysalis.Crypto.Internal.Ed25519Ref10;
 
 /// <summary>
@@ -6,7 +8,13 @@ namespace Chrysalis.Crypto.Internal.Ed25519Ref10;
 /// </summary>
 internal static partial class GroupOperations
 {
-    private static void slide(sbyte[] r, byte[] a)
+    [InlineArray(8)]
+    private struct GroupElementCached8
+    {
+        private GroupElementCached _element0;
+    }
+
+    private static void slide(Span<sbyte> r, ReadOnlySpan<byte> a)
     {
         int i;
         int b;
@@ -54,13 +62,12 @@ internal static partial class GroupOperations
     B is the Ed25519 base point (x,4/5) with x positive.
     */
 
-    public static void ge_double_scalarmult_vartime(out GroupElementP2 r, byte[] a, ref GroupElementP3 A, byte[] b)
+    public static void ge_double_scalarmult_vartime(out GroupElementP2 r, ReadOnlySpan<byte> a, ref GroupElementP3 A, ReadOnlySpan<byte> b)
     {
         GroupElementPreComp[] Bi = LookupTables.Base2;
-        // todo: Perhaps remove these allocations?
-        sbyte[] aslide = new sbyte[256];
-        sbyte[] bslide = new sbyte[256];
-        GroupElementCached[] Ai = new GroupElementCached[8]; /* A,3A,5A,7A,9A,11A,13A,15A */
+        Span<sbyte> aslide = stackalloc sbyte[256];
+        Span<sbyte> bslide = stackalloc sbyte[256];
+        GroupElementCached8 Ai = default; /* A,3A,5A,7A,9A,11A,13A,15A */
         GroupElementP1P1 t;
         GroupElementP3 u;
         GroupElementP3 A2;

@@ -1,5 +1,5 @@
 // Contains code adapted from Chaos.NaCl (public domain); changed for Chrysalis. See THIRD-PARTY-NOTICES.md.
-using Chrysalis.Crypto;
+using System.Security.Cryptography;
 
 namespace Chrysalis.Crypto.Internal.Ed25519Ref10;
 
@@ -13,14 +13,20 @@ internal static partial class Ed25519Operations
         GroupElementP3 A;
 
         Array.Copy(seed, seedoffset, sk, skoffset, 32);
-        byte[] h = Sha512.Hash(sk, skoffset, 32);
-        ScalarOperations.sc_clamp(h, 0);
+        byte[] h = SHA512.HashData(sk.AsSpan(skoffset, 32));
+        try
+        {
+            ScalarOperations.sc_clamp(h, 0);
 
-        GroupOperations.ge_scalarmult_base(out A, h, 0);
-        GroupOperations.ge_p3_tobytes(pk, pkoffset, ref A);
+            GroupOperations.ge_scalarmult_base(out A, h, 0);
+            GroupOperations.ge_p3_tobytes(pk, pkoffset, ref A);
 
-        for (int i = 0; i < 32; ++i) sk[skoffset + 32 + i] = pk[pkoffset + i];
-        CryptoBytes.Wipe(h);
+            for (int i = 0; i < 32; ++i) sk[skoffset + 32 + i] = pk[pkoffset + i];
+        }
+        finally
+        {
+            CryptographicOperations.ZeroMemory(h);
+        }
     }
 
     internal static void crypto_get_pubkey(byte[] pk, byte[] sk)
@@ -33,12 +39,12 @@ internal static partial class Ed25519Operations
 
     internal static int crypto_point_plus(byte[] p1, byte[] p2, byte[] s)
     {
-        if (!TryDecodeNegatedCanonicalPoint(p1, out GroupElementP3 A))
+        if (!TryDecodeNegatedCanonicalPoint(p1, 0, out GroupElementP3 A))
         {
             return 1;
         }
 
-        if (!TryDecodeNegatedCanonicalPoint(p2, out GroupElementP3 B))
+        if (!TryDecodeNegatedCanonicalPoint(p2, 0, out GroupElementP3 B))
         {
             return 2;
         }
@@ -51,15 +57,15 @@ internal static partial class Ed25519Operations
         return 0;
     }
 
-    private static bool TryDecodeNegatedCanonicalPoint(byte[] data, out GroupElementP3 h)
+    private static bool TryDecodeNegatedCanonicalPoint(byte[] data, int offset, out GroupElementP3 h)
     {
-        if (!IsCanonicalY(data) || GroupOperations.ge_frombytes_negate_vartime(out h, data, 0) != 0)
+        if (!IsCanonicalY(data.AsSpan(offset, 32)) || GroupOperations.ge_frombytes_negate_vartime(out h, data, offset) != 0)
         {
             h = default;
             return false;
         }
 
-        if ((data[31] >> 7) != 0 && FieldOperations.fe_isnonzero(ref h.X) == 0)
+        if ((data[offset + 31] >> 7) != 0 && FieldOperations.fe_isnonzero(ref h.X) == 0)
         {
             h = default;
             return false;
@@ -68,7 +74,7 @@ internal static partial class Ed25519Operations
         return true;
     }
 
-    private static bool IsCanonicalY(byte[] data)
+    private static bool IsCanonicalY(ReadOnlySpan<byte> data)
     {
         if ((data[31] & 0x7F) != 0x7F)
         {
