@@ -359,7 +359,7 @@ public sealed partial class CborSerializerCodeGen
             return sb;
         }
 
-        public static StringBuilder EmitSerializablePropertyReader(StringBuilder sb, SerializablePropertyMetadata metadata, string propertyName, string typePath, bool isList = false, bool trackFields = false, int fieldIndex = -1, string? parentRemainingVar = null)
+        public static StringBuilder EmitSerializablePropertyReader(StringBuilder sb, SerializablePropertyMetadata metadata, string propertyName, string typePath, bool isList = false, bool trackFields = false, int fieldIndex = -1, string? parentRemainingVar = null, bool useFieldMask = false)
         {
             _ = sb.AppendLine($"{metadata.PropertyTypeFullName} {propertyName} = default{(metadata.PropertyType.Contains("?") ? "" : "!")};");
 
@@ -385,7 +385,7 @@ public sealed partial class CborSerializerCodeGen
 
                 if (trackFields && fieldIndex >= 0)
                 {
-                    _ = sb.AppendLine($"fieldsRead[{fieldIndex}] = true;");
+                    _ = sb.AppendLine(useFieldMask ? $"fieldsRead |= 1UL << {fieldIndex};" : $"fieldsRead[{fieldIndex}] = true;");
                 }
             }
 
@@ -1012,9 +1012,10 @@ public sealed partial class CborSerializerCodeGen
             }
 
             bool shouldTrackFields = isListSerialization && metadata.Properties.Any(p => p.IsRequired);
+            bool useFieldMask = shouldTrackFields && metadata.Properties.Count <= 64;
             if (shouldTrackFields)
             {
-                _ = sb.AppendLine($"bool[] fieldsRead = new bool[{metadata.Properties.Count}];");
+                _ = sb.AppendLine(useFieldMask ? "ulong fieldsRead = 0;" : $"bool[] fieldsRead = new bool[{metadata.Properties.Count}];");
             }
 
             int fieldIndex = 0;
@@ -1022,7 +1023,7 @@ public sealed partial class CborSerializerCodeGen
             {
                 string propName = $"{metadata.BaseIdentifier}{prop.PropertyName}";
                 propMapping.Add(prop.PropertyName, propName);
-                _ = EmitSerializablePropertyReader(sb, prop, propName, metadata.FullyQualifiedName, true, shouldTrackFields, fieldIndex, $"{metadata.BaseIdentifier}ArrayRemaining");
+                _ = EmitSerializablePropertyReader(sb, prop, propName, metadata.FullyQualifiedName, true, shouldTrackFields, fieldIndex, $"{metadata.BaseIdentifier}ArrayRemaining", useFieldMask);
                 fieldIndex++;
             }
 
@@ -1032,7 +1033,7 @@ public sealed partial class CborSerializerCodeGen
                 foreach (SerializablePropertyMetadata requiredProp in requiredProps)
                 {
                     int propIndex = metadata.Properties.ToList().IndexOf(requiredProp);
-                    _ = sb.AppendLine($"if (!fieldsRead[{propIndex}])");
+                    _ = sb.AppendLine(useFieldMask ? $"if ((fieldsRead & (1UL << {propIndex})) == 0)" : $"if (!fieldsRead[{propIndex}])");
                     _ = sb.AppendLine("{");
                     _ = sb.AppendLine($"    throw CborError.Decode(data, data.Length - reader.Buffer.Length, \"{metadata.FullyQualifiedName}.{requiredProp.PropertyName}\", \"required field\", \"missing\");");
                     _ = sb.AppendLine("}");
