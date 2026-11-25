@@ -1,9 +1,15 @@
+using Chrysalis.Codec.Serialization;
+using Chrysalis.Codec.Types;
 using Chrysalis.Wallet.Models.Addresses;
 using Chrysalis.Wallet.Models.Enums;
 using Chrysalis.Wallet.Models.Keys;
 using Chrysalis.Wallet.Utils;
 using Chrysalis.Wallet.Words;
 using CodecAddress = Chrysalis.Codec.Types.Cardano.Core.Common.Address;
+using PlutusAddress = Chrysalis.Codec.Types.Plutus.Address.Address;
+using PlutusInline = Chrysalis.Codec.Types.Plutus.Address.Inline<Chrysalis.Codec.Types.Plutus.Address.ICredential>;
+using PlutusPointerRef = Chrysalis.Codec.Types.Plutus.Address.PointerRef<Chrysalis.Codec.Types.Plutus.Address.ICredential>;
+using PlutusReferenced = Chrysalis.Codec.Types.Plutus.Address.IReferenced<Chrysalis.Codec.Types.Plutus.Address.ICredential>;
 using PlutusScript = Chrysalis.Codec.Types.Plutus.Address.Script;
 using PlutusVerificationKey = Chrysalis.Codec.Types.Plutus.Address.VerificationKey;
 
@@ -313,21 +319,32 @@ public class AddressTests
     }
 
     [Theory]
-    [InlineData(Cip19MainnetKeyPointer, AddressType.PaymentWithPointerDelegation, NetworkType.Mainnet, "key")]
-    [InlineData(Cip19MainnetScriptPointer, AddressType.ScriptPaymentWithPointerDelegation, NetworkType.Mainnet, "script")]
-    [InlineData(Cip19TestnetKeyPointer, AddressType.PaymentWithPointerDelegation, NetworkType.Testnet, "key")]
-    [InlineData(Cip19TestnetScriptPointer, AddressType.ScriptPaymentWithPointerDelegation, NetworkType.Testnet, "script")]
-    public void Cip19PointerVector_ReadsButDoesNotBuild(string vector, AddressType type, NetworkType network, string payment)
+    [InlineData(Cip19MainnetKeyPointer, AddressType.PaymentWithPointerDelegation, NetworkType.Mainnet, "key", false)]
+    [InlineData(Cip19MainnetScriptPointer, AddressType.ScriptPaymentWithPointerDelegation, NetworkType.Mainnet, "script", true)]
+    [InlineData(Cip19TestnetKeyPointer, AddressType.PaymentWithPointerDelegation, NetworkType.Testnet, "key", false)]
+    [InlineData(Cip19TestnetScriptPointer, AddressType.ScriptPaymentWithPointerDelegation, NetworkType.Testnet, "script", true)]
+    public void Cip19PointerVector_BuildsAndDecodesPointer(string vector, AddressType type, NetworkType network, string payment, bool isScript)
     {
         byte[] paymentPart = Cip19Part(payment);
-        byte[] pointer = Cip19Part("pointer");
-        _ = Assert.Throws<NotSupportedException>(() => new Address(network, type, paymentPart, pointer));
+        byte[] pointerBytes = Cip19Part("pointer");
+        AddressPointer expectedPointer = new(2498243UL, 27UL, 3UL);
 
+        Address built = new(network, type, paymentPart, pointerBytes);
+        Address fromPointerArray = Address.FromPointer(network, paymentPart, expectedPointer, isScript);
+        Address fromPointerSpan = Address.FromPointer(network, paymentPart.AsSpan(), expectedPointer, isScript);
         Address parsed = Address.FromBech32(vector);
+
+        Assert.Equal(vector, built.ToBech32());
+        Assert.Equal(built.ToBytes(), fromPointerArray.ToBytes());
+        Assert.Equal(built.ToBytes(), fromPointerSpan.ToBytes());
+        Assert.Equal(built.ToBytes(), parsed.ToBytes());
         Assert.Equal(type, parsed.Type);
         Assert.Equal(network, parsed.Network);
+        Assert.Equal(AddressEra.Shelley, parsed.Era);
+        Assert.Null(parsed.Byron);
         Assert.Equal(paymentPart, parsed.GetPaymentKeyHash());
-        Assert.Equal(pointer, parsed.ToBytes()[29..]);
+        Assert.Equal(expectedPointer, parsed.GetPointer());
+        Assert.Equal(pointerBytes, parsed.ToBytes()[29..]);
         Assert.Null(parsed.GetStakeKeyHash());
         Assert.Equal(vector, parsed.ToBech32());
     }
@@ -337,10 +354,21 @@ public class AddressTests
     [InlineData(Cip19MainnetScriptPointer)]
     [InlineData(Cip19TestnetKeyPointer)]
     [InlineData(Cip19TestnetScriptPointer)]
-    public void Cip19PointerVector_HasNoPlutusAddress(string vector)
+    public void Cip19PointerVector_ToPlutusStakeReferenceReturnsPointerRefAndToPlutusAddressThrows(string vector)
     {
         Address parsed = Address.FromBech32(vector);
-        _ = Assert.Throws<NotSupportedException>(parsed.ToPlutusAddress);
+        ICborOption<PlutusReferenced> stakeRef = parsed.ToPlutusStakeReference();
+        Some<PlutusReferenced> some = Assert.IsType<Some<PlutusReferenced>>(stakeRef);
+        PlutusPointerRef ptrRef = Assert.IsType<PlutusPointerRef>(some.Value);
+        Assert.Equal(2498243UL, ptrRef.SlotNumber);
+        Assert.Equal(27UL, ptrRef.TransactionIndex);
+        Assert.Equal(3UL, ptrRef.CertificateIndex);
+        Assert.Equal("d87a831a00261ec3181b03", Convert.ToHexStringLower(CborSerializer.Serialize(ptrRef)));
+        Assert.Equal("d8799fd87a831a00261ec3181b03ff", Convert.ToHexStringLower(CborSerializer.Serialize(stakeRef)));
+
+        NotSupportedException error = Assert.Throws<NotSupportedException>(parsed.ToPlutusAddress);
+        Assert.Contains("ToPlutusStakeReference", error.Message, StringComparison.Ordinal);
+        Assert.Contains("GetPointer", error.Message, StringComparison.Ordinal);
     }
 
     // Issue #223: a payment-only script address (enterprise, type 7) is built from its script hash alone, with no stake part.
@@ -703,13 +731,8 @@ public class AddressTests
         Address delegation = Address.FromCredentials(NetworkType.Mainnet, AddressType.Delegation, paymentCred, stakeCred);
         Assert.Equal(ExpectedMainnetStake, delegation.ToBech32());
 
-        byte[] expectedEmptyStakeBase = [0x01, .. paymentHash];
-        Address emptyStakeBase = new(NetworkType.Mainnet, AddressType.Base, paymentHash, []);
-        Assert.Equal(expectedEmptyStakeBase, emptyStakeBase.ToBytes());
-
-        byte[] expectedEmptyStakeDelegation = [0xE1];
-        Address emptyStakeDelegation = new(NetworkType.Mainnet, AddressType.Delegation, [], []);
-        Assert.Equal(expectedEmptyStakeDelegation, emptyStakeDelegation.ToBytes());
+        _ = Assert.Throws<ArgumentException>("stake", () => new Address(NetworkType.Mainnet, AddressType.Base, paymentHash, []));
+        _ = Assert.Throws<ArgumentException>("stake", () => new Address(NetworkType.Mainnet, AddressType.Delegation, [], []));
 
         _ = Assert.Throws<ArgumentNullException>("stake", () => Address.FromCredentials(NetworkType.Mainnet, AddressType.Base, paymentCred, null));
         _ = Assert.Throws<ArgumentNullException>("stake", () => new Address(NetworkType.Mainnet, AddressType.Delegation, [], null));
@@ -744,4 +767,289 @@ public class AddressTests
         _ = Assert.Throws<ArgumentNullException>("data", () => HashUtil.Blake2b224(null!));
         _ = Assert.Throws<ArgumentNullException>("data", () => HashUtil.Blake2b160(null!));
     }
+
+    #region Pointer, Plutus Conversion, and PE2 CIP-0019 Validation
+
+    private const string Zero27Hex = "000000000000000000000000000000000000000000000000000000";
+    private const string Zero28Hex = "00000000000000000000000000000000000000000000000000000000";
+    private const string Zero29Hex = "0000000000000000000000000000000000000000000000000000000000";
+    private const string Zero55Hex = Zero27Hex + Zero28Hex;
+    private const string Zero57Hex = Zero28Hex + Zero29Hex;
+
+    // Test-only: Cardano Ledger 95b369053fd32422695a81fb7d5289d6dd35eee2 (Apache-2.0; licence and notice in
+    // src/Chrysalis.Codec.Test/TestData/X7Attribution/{LICENSE,NOTICE-cardano-ledger}),
+    // eras/shelley/test-suite/test/Test/Cardano/Ledger/Shelley/Serialisation/Golden/Address.hs:81-84, :124-126, :142-146, :157-161
+    // (sha256 24db7eeb7a6e4beebf613a50d59ee25287ce2589b6fbd349d5bd745e15a88830).
+    [Theory]
+    [InlineData("addrPtrS_Testnet", NetworkType.Testnet, "05060708b5b6b7b8d5d6d7d8d9e0e1e2e3e4e5e6e7e8e9f0f1f2f3f4", true, "5005060708b5b6b7b8d5d6d7d8d9e0e1e2e3e4e5e6e7e8e9f0f1f2f3f481000203")]
+    [InlineData("addrPtrK_Testnet", NetworkType.Testnet, "8a4d111f71a79169c50bcbc27e1e20b6e13e87ff8f33edc3cab419d4", false, "408a4d111f71a79169c50bcbc27e1e20b6e13e87ff8f33edc3cab419d481000203")]
+    [InlineData("addrPtrK_Mainnet", NetworkType.Mainnet, "8a4d111f71a79169c50bcbc27e1e20b6e13e87ff8f33edc3cab419d4", false, "418a4d111f71a79169c50bcbc27e1e20b6e13e87ff8f33edc3cab419d481000203")]
+    public void LedgerPointerGolden_BuildsAndDecodes(string name, NetworkType network, string paymentHashHex, bool isScript, string expectedHex)
+    {
+        _ = name;
+        byte[] paymentHash = Convert.FromHexString(paymentHashHex);
+        AddressPointer pointer = new(128UL, 2UL, 3UL);
+
+        Address builtArray = Address.FromPointer(network, paymentHash, pointer, isScript);
+        Address builtSpan = Address.FromPointer(network, paymentHash.AsSpan(), pointer, isScript);
+        Address decoded = Address.FromHex(expectedHex);
+
+        Assert.Equal(expectedHex, builtArray.ToHex());
+        Assert.Equal(expectedHex, builtSpan.ToHex());
+        Assert.Equal(isScript ? AddressType.ScriptPaymentWithPointerDelegation : AddressType.PaymentWithPointerDelegation, decoded.Type);
+        Assert.Equal(network, decoded.Network);
+        Assert.Equal(AddressEra.Shelley, decoded.Era);
+        Assert.Equal(paymentHash, decoded.GetPaymentKeyHash());
+        Assert.Equal(pointer, decoded.GetPointer());
+        Assert.Null(decoded.GetStakeKeyHash());
+    }
+
+    [Theory]
+    [InlineData(NetworkType.Preview)]
+    [InlineData(NetworkType.Preprod)]
+    public void FromPointer_NamedTestnetNetworks_PreservesNetworkAndMatchesConstructor(NetworkType network)
+    {
+        byte[] paymentHash = Convert.FromHexString(ExpectedPaymentHash);
+        AddressPointer pointer = new(2498243UL, 27UL, 3UL);
+        byte[] pointerBytes = pointer.ToBytes();
+
+        Address fromCtor = new(network, AddressType.PaymentWithPointerDelegation, paymentHash, pointerBytes);
+        Address fromPointerArray = Address.FromPointer(network, paymentHash, pointer);
+        Address fromPointerSpan = Address.FromPointer(network, paymentHash.AsSpan(), pointer);
+
+        Assert.Equal(fromCtor.ToBytes(), fromPointerArray.ToBytes());
+        Assert.Equal(fromCtor.ToBytes(), fromPointerSpan.ToBytes());
+        Assert.Equal(network, fromCtor.Network);
+        Assert.Equal(network, fromPointerArray.Network);
+        Assert.Equal(network, fromPointerSpan.Network);
+        Assert.Equal(fromCtor.ToBech32(), fromPointerArray.ToBech32());
+        Assert.Equal(fromCtor.ToBech32(), fromPointerSpan.ToBech32());
+        Assert.Equal(NetworkType.Testnet, Address.FromBytes(fromPointerArray.ToBytes()).Network);
+
+        Address scriptFromCtor = new(network, AddressType.ScriptPaymentWithPointerDelegation, paymentHash, pointerBytes);
+        Address scriptFromPointerArray = Address.FromPointer(network, paymentHash, pointer, isScriptPayment: true);
+        Address scriptFromPointerSpan = Address.FromPointer(network, paymentHash.AsSpan(), pointer, isScriptPayment: true);
+
+        Assert.Equal(scriptFromCtor.ToBytes(), scriptFromPointerArray.ToBytes());
+        Assert.Equal(scriptFromCtor.ToBytes(), scriptFromPointerSpan.ToBytes());
+        Assert.Equal(network, scriptFromCtor.Network);
+        Assert.Equal(network, scriptFromPointerArray.Network);
+        Assert.Equal(network, scriptFromPointerSpan.Network);
+        Assert.Equal(NetworkType.Testnet, Address.FromBytes(scriptFromPointerArray.ToBytes()).Network);
+    }
+
+    [Fact]
+    public void PointerAndByron_FromCredentialsAndFromPublicKeys_ThrowNotSupportedException()
+    {
+        (PublicKey paymentPub, PublicKey stakePub) = CreateTestKeyPair();
+        byte[] paymentHash = Convert.FromHexString(ExpectedPaymentHash);
+        byte[] stakeHash = Convert.FromHexString(ExpectedStakeHash);
+        PlutusVerificationKey payCred = PlutusVerificationKey.Create(paymentHash);
+        PlutusVerificationKey stakeCred = PlutusVerificationKey.Create(stakeHash);
+
+        AddressType[] unsupported =
+        [
+            AddressType.PaymentWithPointerDelegation,
+            AddressType.ScriptPaymentWithPointerDelegation,
+            AddressType.Byron
+        ];
+        foreach (AddressType type in unsupported)
+        {
+            _ = Assert.Throws<NotSupportedException>(() => Address.FromCredentials(NetworkType.Mainnet, type, payCred, stakeCred));
+            _ = Assert.Throws<NotSupportedException>(() => Address.FromPublicKeys(NetworkType.Mainnet, type, paymentPub, stakePub));
+        }
+
+        _ = Assert.Throws<NotSupportedException>(() => new Address(NetworkType.Mainnet, AddressType.Byron, paymentHash, null));
+    }
+
+    [Theory]
+    [InlineData("addr1qx2fxv2umyhttkxyxp8x0dlpdt3k6cwng5pxj3jhsydzer3n0d3vllmyqwsx5wktcd8cc3sq835lu7drv2xwl2wywfgse35a3x", false, "key", false, "stake")]
+    [InlineData("addr1z8phkx6acpnf78fuvxn0mkew3l0fd058hzquvz7w36x4gten0d3vllmyqwsx5wktcd8cc3sq835lu7drv2xwl2wywfgs9yc0hh", true, "script", false, "stake")]
+    [InlineData("addr1yx2fxv2umyhttkxyxp8x0dlpdt3k6cwng5pxj3jhsydzerkr0vd4msrxnuwnccdxlhdjar77j6lg0wypcc9uar5d2shs2z78ve", false, "key", true, "script")]
+    [InlineData("addr1x8phkx6acpnf78fuvxn0mkew3l0fd058hzquvz7w36x4gt7r0vd4msrxnuwnccdxlhdjar77j6lg0wypcc9uar5d2shskhj42g", true, "script", true, "script")]
+    [InlineData("addr1vx2fxv2umyhttkxyxp8x0dlpdt3k6cwng5pxj3jhsydzers66hrl8", false, "key", false, null)]
+    [InlineData(Cip19MainnetEnterpriseScript, true, "script", false, null)]
+    public void ToPlutusAddress_AllNonPointerShelleyTypes_MatchesExpectedCredentialsAndCbor(
+        string vector, bool paymentIsScript, string paymentPart, bool stakeIsScript, string? stakePart)
+    {
+        Address address = Address.FromBech32(vector);
+        byte[] expectedPay = Cip19Part(paymentPart);
+        byte[]? expectedStake = stakePart is null ? null : Cip19Part(stakePart);
+
+        PlutusAddress plutus = address.ToPlutusAddress();
+
+        if (paymentIsScript)
+        {
+            PlutusScript pay = Assert.IsType<PlutusScript>(plutus.PaymentCredential);
+            Assert.Equal(expectedPay, pay.ScriptHash.ToArray());
+        }
+        else
+        {
+            PlutusVerificationKey pay = Assert.IsType<PlutusVerificationKey>(plutus.PaymentCredential);
+            Assert.Equal(expectedPay, pay.VerificationKeyHash.ToArray());
+        }
+
+        string payCbor = (paymentIsScript ? "d87a81581c" : "d87981581c") + Convert.ToHexStringLower(expectedPay);
+        string stakeCbor;
+        if (expectedStake is null)
+        {
+            _ = Assert.IsType<None<PlutusInline>>(plutus.StakeCredential);
+            stakeCbor = "d87a80";
+        }
+        else
+        {
+            Some<PlutusInline> some = Assert.IsType<Some<PlutusInline>>(plutus.StakeCredential);
+            if (stakeIsScript)
+            {
+                PlutusScript stake = Assert.IsType<PlutusScript>(some.Value.Value);
+                Assert.Equal(expectedStake, stake.ScriptHash.ToArray());
+                stakeCbor = "d8799fd87981d87a81581c" + Convert.ToHexStringLower(expectedStake) + "ff";
+            }
+            else
+            {
+                PlutusVerificationKey stake = Assert.IsType<PlutusVerificationKey>(some.Value.Value);
+                Assert.Equal(expectedStake, stake.VerificationKeyHash.ToArray());
+                stakeCbor = "d8799fd87981d87981581c" + Convert.ToHexStringLower(expectedStake) + "ff";
+            }
+        }
+
+        Assert.Equal("d87982" + payCbor + stakeCbor, Convert.ToHexStringLower(CborSerializer.Serialize(plutus)));
+    }
+
+    [Theory]
+    [InlineData("addr1qx2fxv2umyhttkxyxp8x0dlpdt3k6cwng5pxj3jhsydzer3n0d3vllmyqwsx5wktcd8cc3sq835lu7drv2xwl2wywfgse35a3x", false, "stake")]
+    [InlineData("addr1z8phkx6acpnf78fuvxn0mkew3l0fd058hzquvz7w36x4gten0d3vllmyqwsx5wktcd8cc3sq835lu7drv2xwl2wywfgs9yc0hh", false, "stake")]
+    [InlineData("addr1yx2fxv2umyhttkxyxp8x0dlpdt3k6cwng5pxj3jhsydzerkr0vd4msrxnuwnccdxlhdjar77j6lg0wypcc9uar5d2shs2z78ve", true, "script")]
+    [InlineData("addr1x8phkx6acpnf78fuvxn0mkew3l0fd058hzquvz7w36x4gt7r0vd4msrxnuwnccdxlhdjar77j6lg0wypcc9uar5d2shskhj42g", true, "script")]
+    [InlineData("addr1vx2fxv2umyhttkxyxp8x0dlpdt3k6cwng5pxj3jhsydzers66hrl8", false, null)]
+    [InlineData(Cip19MainnetEnterpriseScript, false, null)]
+    [InlineData("stake1uyehkck0lajq8gr28t9uxnuvgcqrc6070x3k9r8048z8y5gh6ffgw", false, "stake")]
+    [InlineData("stake178phkx6acpnf78fuvxn0mkew3l0fd058hzquvz7w36x4gtcccycj5", true, "script")]
+    public void ToPlutusStakeReference_AllShelleyAndStakeTypes_MatchesExpected(string vector, bool stakeIsScript, string? stakePart)
+    {
+        Address address = Address.FromBech32(vector);
+        ICborOption<PlutusReferenced> stakeRef = address.ToPlutusStakeReference();
+
+        if (stakePart is null)
+        {
+            _ = Assert.IsType<None<PlutusReferenced>>(stakeRef);
+            Assert.Equal("d87a80", Convert.ToHexStringLower(CborSerializer.Serialize(stakeRef)));
+            return;
+        }
+
+        byte[] expectedStake = Cip19Part(stakePart);
+        Some<PlutusReferenced> some = Assert.IsType<Some<PlutusReferenced>>(stakeRef);
+        PlutusInline inline = Assert.IsType<PlutusInline>(some.Value);
+        if (stakeIsScript)
+        {
+            PlutusScript script = Assert.IsType<PlutusScript>(inline.Value);
+            Assert.Equal(expectedStake, script.ScriptHash.ToArray());
+            Assert.Equal("d8799fd87981d87a81581c" + Convert.ToHexStringLower(expectedStake) + "ff", Convert.ToHexStringLower(CborSerializer.Serialize(stakeRef)));
+        }
+        else
+        {
+            PlutusVerificationKey vkey = Assert.IsType<PlutusVerificationKey>(inline.Value);
+            Assert.Equal(expectedStake, vkey.VerificationKeyHash.ToArray());
+            Assert.Equal("d8799fd87981d87981581c" + Convert.ToHexStringLower(expectedStake) + "ff", Convert.ToHexStringLower(CborSerializer.Serialize(stakeRef)));
+        }
+    }
+
+    // Test-only Byron literal: Cardano Ledger 95b369053fd32422695a81fb7d5289d6dd35eee2 Golden/Address.hs:168-185 bootstrapAddr.
+    [Theory]
+    [InlineData("Delegation", "stake1uyehkck0lajq8gr28t9uxnuvgcqrc6070x3k9r8048z8y5gh6ffgw", false)]
+    [InlineData("ScriptDelegation", "stake178phkx6acpnf78fuvxn0mkew3l0fd058hzquvz7w36x4gtcccycj5", false)]
+    [InlineData("Byron", "Ae2tdPwUPEZ4PKL7S8HvYU94o9SA3ZcnTQV9ubMCcU7EhkZUvkUqDEouUyA", true)]
+    public void ToPlutusAddress_UnsupportedAddressTypes_ThrowsNotSupportedException(string kind, string encoded, bool isByron)
+    {
+        _ = kind;
+        Address address = isByron ? Address.FromBase58(encoded) : Address.FromBech32(encoded);
+        _ = Assert.Throws<NotSupportedException>(address.ToPlutusAddress);
+    }
+
+    // Test-only upstream extra-bytes literals:
+    // - Base_68B_Ledger: Cardano Ledger 95b369053fd32422695a81fb7d5289d6dd35eee2 (Apache-2.0),
+    //   libs/cardano-ledger-core/test/Test/Cardano/Ledger/AddressSpec.hs:98-99, :287-295 (sha256 81b5d0bd47e81bd6481ec7a219c35b0cae1f929f0be508b264f811bceeaa2091),
+    //   rejected by Ledger's strict decodeAddr.
+    // - Base_78B_PallasStrictPolicy: Pallas v1.5.0-rc.2 daecef59a1979d89515524d9583cc28655af182c (Apache-2.0; licence in
+    //   src/Chrysalis.Codec.Test/TestData/LICENSE-pallas), pallas-addresses/src/lib.rs:1096-1101 test_minted_extra_bytes_base_address
+    //   (sha256 0f94f662a7f58d3ce57900bb4d4a3cf6b65e46eef6c1898113dd94234a4f33f5). Upstream Pallas ACCEPTS this historically minted
+    //   mainnet address; WA7 intentionally rejects it under strict CIP-0019 policy (Decision 4(a)).
+    [Theory]
+    [InlineData("Base_56B", "01" + Zero55Hex, "addr")]
+    [InlineData("Base_58B", "01" + Zero57Hex, "addr")]
+    [InlineData("Base_68B_Ledger", "01AA5C8B35A934ED83436ABB56CDB44878DAC627529D2DA0B59CDA794405931B935946E9391CABDFFDED07EB727F94E9E0F23739FF85978905BD460158907C589B9F1A62", "addr")]
+    [InlineData("Base_78B_PallasStrictPolicy", "015bad085057ac10ecc7060f7ac41edd6f63068d8963ef7d86ca58669e5ecf2d283418a60be5a848a2380eb721000da1e0bbf39733134beca4cb57afb0b35fc89c63061c9914e055001a518c7516", "addr")]
+    [InlineData("Enterprise_28B", "61" + Zero27Hex, "addr")]
+    [InlineData("Enterprise_30B", "61" + Zero29Hex, "addr")]
+    [InlineData("Delegation_28B", "e1" + Zero27Hex, "stake")]
+    [InlineData("Delegation_30B", "e1" + Zero29Hex, "stake")]
+    [InlineData("Pointer_31B", "41" + Zero28Hex + "0000", "addr")]
+    [InlineData("Pointer_33B", "41" + Zero28Hex + "00000000", "addr")]
+    public void Pe2_InvalidAddressLength_RejectedOnBytesAndBech32(string name, string hex, string prefix)
+    {
+        _ = name;
+        byte[] raw = Convert.FromHexString(hex);
+        _ = Assert.Throws<ArgumentException>("addressBytes", () => Address.FromBytes(raw));
+        _ = Assert.Throws<ArgumentException>("addressBytes", () => new Address(raw));
+        _ = Assert.Throws<ArgumentException>("addressBytes", () => Address.FromBytes(raw.AsSpan()));
+        _ = Assert.Throws<ArgumentException>("addressBytes", () => new Address(raw.AsSpan()));
+        _ = Assert.Throws<ArgumentException>("addressBytes", () => Address.FromHex(hex));
+
+        string bech32 = Bech32Util.Encode(raw, prefix);
+        _ = Assert.Throws<FormatException>(() => Address.FromBech32(bech32));
+        _ = Assert.Throws<FormatException>(() => new Address(bech32));
+    }
+
+    [Fact]
+    public void Pe2_InvalidCredentialLength_RejectedOnConstruction()
+    {
+        byte[] validPay = Convert.FromHexString(ExpectedPaymentHash);
+        byte[] validStake = Convert.FromHexString(ExpectedStakeHash);
+        byte[] short27 = new byte[27];
+        byte[] long29 = new byte[29];
+        AddressPointer validPtr = new(1UL, 2UL, 3UL);
+        byte[] validPtrBytes = [0x00, 0x00, 0x00];
+        byte[] shortPtrBytes = [0x00, 0x00];
+        byte[] nonCanonPtrBytes = [0x80, 0x00, 0x00, 0x00];
+        byte[] trailingPtrBytes = [0x00, 0x00, 0x00, 0x00];
+
+        _ = Assert.Throws<ArgumentException>("payment", () => new Address(NetworkType.Mainnet, AddressType.Base, short27, validStake));
+        _ = Assert.Throws<ArgumentException>("payment", () => new Address(NetworkType.Mainnet, AddressType.Base, long29, validStake));
+        _ = Assert.Throws<ArgumentException>("stake", () => new Address(NetworkType.Mainnet, AddressType.Base, validPay, short27));
+        _ = Assert.Throws<ArgumentException>("stake", () => new Address(NetworkType.Mainnet, AddressType.Base, validPay, long29));
+
+        _ = Assert.Throws<ArgumentException>("payment", () => new Address(NetworkType.Mainnet, AddressType.EnterprisePayment, short27, null));
+        _ = Assert.Throws<ArgumentException>("payment", () => new Address(NetworkType.Mainnet, AddressType.EnterpriseScriptPayment, long29, null));
+        _ = Assert.Throws<ArgumentException>("payment", () => Address.FromScriptHash(NetworkType.Mainnet, short27));
+        _ = Assert.Throws<ArgumentException>("payment", () => Address.FromScriptHash(NetworkType.Mainnet, short27.AsSpan()));
+        _ = Assert.Throws<ArgumentException>("stake", () => Address.FromScriptHashWithStake(NetworkType.Mainnet, validPay, long29));
+
+        _ = Assert.Throws<ArgumentException>("stake", () => new Address(NetworkType.Mainnet, AddressType.Delegation, [], short27));
+        _ = Assert.Throws<ArgumentException>("stake", () => new Address(NetworkType.Mainnet, AddressType.ScriptDelegation, [], long29));
+
+        _ = Assert.Throws<ArgumentException>("payment", () => new Address(NetworkType.Mainnet, AddressType.PaymentWithPointerDelegation, short27, validPtrBytes));
+        _ = Assert.Throws<ArgumentNullException>("stake", () => new Address(NetworkType.Mainnet, AddressType.PaymentWithPointerDelegation, validPay, null));
+        _ = Assert.Throws<ArgumentException>("stake", () => new Address(NetworkType.Mainnet, AddressType.PaymentWithPointerDelegation, validPay, []));
+        _ = Assert.Throws<ArgumentException>("stake", () => new Address(NetworkType.Mainnet, AddressType.PaymentWithPointerDelegation, validPay, shortPtrBytes));
+        _ = Assert.Throws<ArgumentException>("stake", () => new Address(NetworkType.Mainnet, AddressType.PaymentWithPointerDelegation, validPay, nonCanonPtrBytes));
+        _ = Assert.Throws<ArgumentException>("stake", () => new Address(NetworkType.Mainnet, AddressType.ScriptPaymentWithPointerDelegation, validPay, trailingPtrBytes));
+
+        _ = Assert.Throws<ArgumentNullException>("paymentHash", () => Address.FromPointer(NetworkType.Mainnet, null!, validPtr));
+        _ = Assert.Throws<ArgumentException>("paymentHash", () => Address.FromPointer(NetworkType.Mainnet, short27, validPtr));
+        _ = Assert.Throws<ArgumentException>("paymentHash", () => Address.FromPointer(NetworkType.Mainnet, long29.AsSpan(), validPtr, isScriptPayment: true));
+    }
+
+    [Fact]
+    public void AddressHeader_Byron_ThrowsNotSupportedException()
+    {
+        AddressHeader mainnet = new(AddressType.Byron, NetworkType.Mainnet);
+        AddressHeader testnet = new(AddressType.Byron, NetworkType.Testnet);
+
+        _ = Assert.Throws<NotSupportedException>(() => mainnet.ToByte());
+        _ = Assert.Throws<NotSupportedException>(() => mainnet.Prefix);
+        _ = Assert.Throws<NotSupportedException>(() => testnet.ToByte());
+        _ = Assert.Throws<NotSupportedException>(() => testnet.Prefix);
+    }
+
+    #endregion
 }
