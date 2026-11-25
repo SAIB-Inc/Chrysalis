@@ -1,3 +1,4 @@
+using System.Buffers;
 using Chrysalis.Codec.Extensions.Cardano.Core;
 using Chrysalis.Codec.Extensions.Cardano.Core.Header;
 using Chrysalis.Codec.Serialization;
@@ -98,20 +99,20 @@ public record ChainSyncHeader(
 
     /// <summary>
     /// Decodes a <see cref="ChainSyncHeader"/> from the raw CBOR payload of a RollForward message.
+    /// Definite-length headers borrow a slice of <paramref name="payload"/>, so callers must keep
+    /// <paramref name="payload"/> valid and unmodified while using the returned header.
     /// </summary>
     /// <param name="payload">The raw CBOR bytes from the ChainSync protocol.</param>
     /// <returns>A decoded <see cref="ChainSyncHeader"/>.</returns>
     public static ChainSyncHeader Decode(ReadOnlyMemory<byte> payload)
     {
-        CborReader reader = new(payload.Span);
+        CborReader reader = new(new ReadOnlySequence<byte>(payload));
         reader.ReadBeginArray();
         _ = reader.ReadSize();
 
         byte variant = checked((byte)reader.ReadUInt64());
 
         byte? byronSubTag = null;
-        ReadOnlyMemory<byte> headerCbor;
-
         if (variant == 0)
         {
             // Byron: [[prefix_a, prefix_b], tag24(header_bytes)]
@@ -122,18 +123,10 @@ public record ChainSyncHeader(
             _ = reader.ReadSize();
             byronSubTag = checked((byte)reader.ReadUInt64());
             _ = reader.ReadUInt64(); // second prefix value (unused)
-
-            _ = reader.TryReadSemanticTag(out _);
-            headerCbor = reader.ReadByteString().ToArray();
-        }
-        else
-        {
-            // Shelley+: tag24(header_bytes)
-            _ = reader.TryReadSemanticTag(out _);
-            headerCbor = reader.ReadByteString().ToArray();
         }
 
-        return new ChainSyncHeader(variant, byronSubTag, headerCbor);
+        _ = reader.TryReadSemanticTag(out _);
+        return new ChainSyncHeader(variant, byronSubTag, reader.ReadByteStringSequence().First);
     }
 }
 

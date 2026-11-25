@@ -20,11 +20,11 @@ reader.ReadBeginArray();
 int arraySize = reader.ReadSize();
 bool isIndefiniteArray = arraySize == -1;
 int CountArrayRemaining = arraySize;
-bool[] fieldsRead = new bool[2];
+ulong fieldsRead = 0;
 int CountKind = default!;
 if (CountArrayRemaining != 0)
 {
-fieldsRead[0] = true;
+fieldsRead |= 1UL << 0;
 int _errorStartCountKind = data.Length - reader.Buffer.Length;
 bool _errorSliceCountKind = false;
 try
@@ -41,7 +41,7 @@ if (CountArrayRemaining > 0) CountArrayRemaining--;
 int CountValue = default!;
 if (CountArrayRemaining != 0)
 {
-fieldsRead[1] = true;
+fieldsRead |= 1UL << 1;
 int _errorStartCountValue = data.Length - reader.Buffer.Length;
 bool _errorSliceCountValue = false;
 try
@@ -55,11 +55,11 @@ throw CborError.Reader(error, data, reader.Buffer.Length, _errorStartCountValue,
 if (CountArrayRemaining > 0) CountArrayRemaining--;
 }
 
-if (!fieldsRead[0])
+if ((fieldsRead & (1UL << 0)) == 0)
 {
     throw CborError.Decode(data, data.Length - reader.Buffer.Length, "Snapshot.Count.Kind", "required field", "missing");
 }
-if (!fieldsRead[1])
+if ((fieldsRead & (1UL << 1)) == 0)
 {
     throw CborError.Decode(data, data.Length - reader.Buffer.Length, "Snapshot.Count.Value", "required field", "missing");
 }

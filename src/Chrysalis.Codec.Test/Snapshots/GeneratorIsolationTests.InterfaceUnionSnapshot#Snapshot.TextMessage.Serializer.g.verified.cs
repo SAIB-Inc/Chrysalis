@@ -20,11 +20,11 @@ reader.ReadBeginArray();
 int arraySize = reader.ReadSize();
 bool isIndefiniteArray = arraySize == -1;
 int TextMessageArrayRemaining = arraySize;
-bool[] fieldsRead = new bool[2];
+ulong fieldsRead = 0;
 int TextMessageKind = default!;
 if (TextMessageArrayRemaining != 0)
 {
-fieldsRead[0] = true;
+fieldsRead |= 1UL << 0;
 int _errorStartTextMessageKind = data.Length - reader.Buffer.Length;
 bool _errorSliceTextMessageKind = false;
 try
@@ -41,7 +41,7 @@ if (TextMessageArrayRemaining > 0) TextMessageArrayRemaining--;
 string TextMessageValue = default!;
 if (TextMessageArrayRemaining != 0)
 {
-fieldsRead[1] = true;
+fieldsRead |= 1UL << 1;
 int _errorStartTextMessageValue = data.Length - reader.Buffer.Length;
 bool _errorSliceTextMessageValue = false;
 try
@@ -55,11 +55,11 @@ throw CborError.Reader(error, data, reader.Buffer.Length, _errorStartTextMessage
 if (TextMessageArrayRemaining > 0) TextMessageArrayRemaining--;
 }
 
-if (!fieldsRead[0])
+if ((fieldsRead & (1UL << 0)) == 0)
 {
     throw CborError.Decode(data, data.Length - reader.Buffer.Length, "Snapshot.TextMessage.Kind", "required field", "missing");
 }
-if (!fieldsRead[1])
+if ((fieldsRead & (1UL << 1)) == 0)
 {
     throw CborError.Decode(data, data.Length - reader.Buffer.Length, "Snapshot.TextMessage.Value", "required field", "missing");
 }

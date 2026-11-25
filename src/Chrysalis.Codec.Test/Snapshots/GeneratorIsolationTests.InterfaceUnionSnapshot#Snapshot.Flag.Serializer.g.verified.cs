@@ -20,11 +20,11 @@ reader.ReadBeginArray();
 int arraySize = reader.ReadSize();
 bool isIndefiniteArray = arraySize == -1;
 int FlagArrayRemaining = arraySize;
-bool[] fieldsRead = new bool[2];
+ulong fieldsRead = 0;
 int FlagKind = default!;
 if (FlagArrayRemaining != 0)
 {
-fieldsRead[0] = true;
+fieldsRead |= 1UL << 0;
 int _errorStartFlagKind = data.Length - reader.Buffer.Length;
 bool _errorSliceFlagKind = false;
 try
@@ -41,7 +41,7 @@ if (FlagArrayRemaining > 0) FlagArrayRemaining--;
 bool FlagValue = default!;
 if (FlagArrayRemaining != 0)
 {
-fieldsRead[1] = true;
+fieldsRead |= 1UL << 1;
 int _errorStartFlagValue = data.Length - reader.Buffer.Length;
 bool _errorSliceFlagValue = false;
 try
@@ -55,11 +55,11 @@ throw CborError.Reader(error, data, reader.Buffer.Length, _errorStartFlagValue, 
 if (FlagArrayRemaining > 0) FlagArrayRemaining--;
 }
 
-if (!fieldsRead[0])
+if ((fieldsRead & (1UL << 0)) == 0)
 {
     throw CborError.Decode(data, data.Length - reader.Buffer.Length, "Snapshot.Flag.Kind", "required field", "missing");
 }
-if (!fieldsRead[1])
+if ((fieldsRead & (1UL << 1)) == 0)
 {
     throw CborError.Decode(data, data.Length - reader.Buffer.Length, "Snapshot.Flag.Value", "required field", "missing");
 }
