@@ -439,7 +439,7 @@ class GateTests(unittest.TestCase):
         audit = json.loads((gate.REPO / 'benchmarks/Chrysalis.Benchmarks/audit-allocations.json').read_text())
         rows = gate.catalogue(config, audit)
         direct = {row['id']: row['rule'] for row in rows if row['kind'] == 'direct'}
-        self.assertEqual(len(direct), 57)
+        self.assertEqual(len(direct), 58)
         self.assertEqual(sum(rule == 'range' for rule in direct.values()), 7)
         self.assertEqual(direct['FieldReadBench.ReadEveryField'], 'range')
         headings = {line[3:] for line in (gate.REPO / 'benchmarks/HOT-PATHS.md').read_text().splitlines() if line.startswith('## ')}

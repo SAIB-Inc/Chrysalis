@@ -17,7 +17,8 @@
     "TxBench.FeeTransfer": {"rule": "D39"},
     "TxBench.FeeScriptSpend": {"rule": "D39"},
     "TxBench.FeeReferenceScript": {"rule": "D39"},
-    "TxBench.FeeSolve": {"rule": "D39"}
+    "TxBench.FeeSolve": {"rule": "D39"},
+    "CoreBench.DerivePublic": {"rule": "D39"}
   },
   "replays": ["tcp", "offline", "offline-n2c"],
   "time": {
@@ -52,7 +53,7 @@
     "CBOR decode": {"bytes": ["*Decode*", "CoreBench.*Read", "FieldReadBench.ReadEveryField"], "time": ["time/preprod-*"]},
     "CBOR encode and re-serialisation": {"bytes": ["*Reencode*", "*Serialize*"], "time": ["time/micro-encoding"]},
     "Hashing": {"bytes": ["CoreBench.Blake256"], "time": ["time/micro-hashing"]},
-    "Signing and addresses": {"bytes": ["CoreBench.Sign", "CoreBench.Verify", "CoreBench.Address*"], "time": ["time/micro-signing"]},
+    "Signing and addresses": {"bytes": ["CoreBench.Sign", "CoreBench.Verify", "CoreBench.DerivePublic", "CoreBench.Address*"], "time": ["time/micro-signing"]},
     "Transaction building and fees": {"bytes": ["TxBench.*"], "time": ["time/micro-transactions"]},
     "Plutus": {"bytes": ["VmBench.*", "CorpusVmBench.*"], "time": ["time/micro-plutus"]},
     "UTxO RPC": {"bytes": [], "time": [], "manual": "D20: attach the first measurement for alpha 1; no invented baseline"}

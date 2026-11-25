@@ -27,6 +27,7 @@ using Chrysalis.Tx.Utils;
 #else
 using Chrysalis.Tx.Fees;
 using Chrysalis.Tx.Models.Cbor;
+using Chrysalis.Wallet.Models.Keys;
 #endif
 using Chrysalis.Wallet.Utils;
 using Chrysalis.Crypto;
@@ -48,6 +49,10 @@ public class CoreBench
     internal string addrText = null!;
     internal TransactionInput input; internal MuxSegment small = null!, large = null!;
     internal ArrayBufferWriter<byte> writer = new(2048);
+#if !CHRYSALIS_PINNED_HARNESS
+    internal PublicKey derivePublicKey = new([], []);
+    internal Func<PublicKey, int, PublicKey>? derivePublicFn;
+#endif
     /// <summary>Runs the named benchmark operation or its untimed setup/cleanup.</summary>
     [GlobalSetup]
     public void Setup()
@@ -62,6 +67,10 @@ public class CoreBench
             throw new InvalidOperationException("Generated-key signature failed verification");
         }
 
+#if !CHRYSALIS_PINNED_HARNESS
+        derivePublicKey = new PublicKey(Ed25519.ExpandedPrivateKeyFromSeed(msg)[32..], payload.AsSpan(32, 32).ToArray());
+        derivePublicFn = typeof(PublicKey).GetMethod("Derive", [typeof(int)])?.CreateDelegate<Func<PublicKey, int, PublicKey>>();
+#endif
         small = new(new(0, ProtocolType.NodeChainSync, 32, false), new ReadOnlySequence<byte>(payload.AsMemory(0, 32)));
         large = new(new(0, ProtocolType.NodeChainSync, 1024, false), new ReadOnlySequence<byte>(payload));
     }
@@ -111,6 +120,10 @@ public class CoreBench
     [Benchmark] public byte[] Sign() => Ed25519.Sign(msg, key);
     /// <summary>Runs the named benchmark operation or its untimed setup/cleanup.</summary>
     [Benchmark] public bool Verify() => Ed25519.Verify(sig, msg, pub);
+#if !CHRYSALIS_PINNED_HARNESS
+    /// <summary>Derives a soft child public key from a fixed public key and chain code.</summary>
+    [Benchmark] public PublicKey DerivePublic() => (derivePublicFn ?? throw new InvalidOperationException("PublicKey.Derive(int) is unavailable on this commit."))(derivePublicKey, 0);
+#endif
 }
 
 /// <summary>Measures BlockBench operations using fixed public fixtures.</summary>

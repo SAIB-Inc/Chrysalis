@@ -184,6 +184,30 @@ public static class Ed25519
         return pk;
     }
 
+    /// <summary>
+    /// Adds two canonical Ed25519 curve points in RFC 8032 compressed 32-byte form.
+    /// </summary>
+    /// <param name="firstPoint">The first 32-byte canonical Ed25519 curve point.</param>
+    /// <param name="secondPoint">The second 32-byte canonical Ed25519 curve point.</param>
+    /// <returns>The 32-byte canonical encoding of the point sum.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="firstPoint"/> or <paramref name="secondPoint"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException">An input is not 32 bytes, is off-curve, or is not canonically encoded per RFC 8032.</exception>
+    public static byte[] PointAdd(byte[] firstPoint, byte[] secondPoint)
+    {
+        RequireLength(firstPoint, PublicKeySizeInBytes, nameof(firstPoint));
+        RequireLength(secondPoint, PublicKeySizeInBytes, nameof(secondPoint));
+
+        byte[] sum = new byte[PublicKeySizeInBytes];
+        int status = Ed25519Operations.crypto_point_plus(firstPoint, secondPoint, sum);
+        if (status != 0)
+        {
+            string paramName = status == 1 ? nameof(firstPoint) : nameof(secondPoint);
+            throw new ArgumentException("Must be a valid canonical Ed25519 curve point.", paramName);
+        }
+
+        return sum;
+    }
+
     private static void RequireLength(byte[] key, int length, string keyName)
     {
         ArgumentNullException.ThrowIfNull(key, keyName);

@@ -14,6 +14,7 @@
   "CoreBench.AddressDecode": 32768,
   "CoreBench.AddressEncode": 65536,
   "CoreBench.Blake256": 65536,
+  "CoreBench.DerivePublic": 1024,
   "CoreBench.GeneratedConcreteRead": 524288,
   "CoreBench.GeneratedInputAccess": 524288,
   "CoreBench.GeneratedInputCreate": 524288,
