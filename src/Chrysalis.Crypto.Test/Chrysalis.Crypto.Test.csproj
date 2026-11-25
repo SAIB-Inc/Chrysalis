@@ -22,4 +22,8 @@
     <ProjectReference Include="..\Chrysalis.Crypto\Chrysalis.Crypto.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Update="TestData/Wycheproof/**" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>

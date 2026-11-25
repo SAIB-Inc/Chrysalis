@@ -1,4 +1,7 @@
 ﻿// Contains code adapted from Chaos.NaCl (public domain); changed for Chrysalis. See THIRD-PARTY-NOTICES.md.
+using System.Runtime.InteropServices;
+using System.Security.Cryptography;
+
 namespace Chrysalis.Crypto.Internal.Ed25519Ref10;
 
 /// <summary>
@@ -65,49 +68,55 @@ internal static partial class GroupOperations
 
     public static void ge_scalarmult_base(out GroupElementP3 h, byte[] a, int offset)
     {
-        // todo: Perhaps remove this allocation
-        sbyte[] e = new sbyte[64];
+        Span<sbyte> e = stackalloc sbyte[64];
         sbyte carry;
         GroupElementP1P1 r;
         GroupElementP2 s;
         GroupElementPreComp t;
         int i;
 
-        for (i = 0; i < 32; ++i)
+        try
         {
-            e[2 * i + 0] = (sbyte)((a[offset + i] >> 0) & 15);
-            e[2 * i + 1] = (sbyte)((a[offset + i] >> 4) & 15);
+            for (i = 0; i < 32; ++i)
+            {
+                e[2 * i + 0] = (sbyte)((a[offset + i] >> 0) & 15);
+                e[2 * i + 1] = (sbyte)((a[offset + i] >> 4) & 15);
+            }
+            /* each e[i] is between 0 and 15 */
+            /* e[63] is between 0 and 7 */
+
+            carry = 0;
+            for (i = 0; i < 63; ++i)
+            {
+                e[i] += carry;
+                carry = (sbyte)(e[i] + 8);
+                carry >>= 4;
+                e[i] -= (sbyte)(carry << 4);
+            }
+            e[63] += carry;
+            /* each e[i] is between -8 and 8 */
+
+            ge_p3_0(out h);
+            for (i = 1; i < 64; i += 2)
+            {
+                select(out t, i / 2, e[i]);
+                ge_madd(out r, ref h, ref t); ge_p1p1_to_p3(out h, ref r);
+            }
+
+            ge_p3_dbl(out r, ref h); ge_p1p1_to_p2(out s, ref r);
+            ge_p2_dbl(out r, ref s); ge_p1p1_to_p2(out s, ref r);
+            ge_p2_dbl(out r, ref s); ge_p1p1_to_p2(out s, ref r);
+            ge_p2_dbl(out r, ref s); ge_p1p1_to_p3(out h, ref r);
+
+            for (i = 0; i < 64; i += 2)
+            {
+                select(out t, i / 2, e[i]);
+                ge_madd(out r, ref h, ref t); ge_p1p1_to_p3(out h, ref r);
+            }
         }
-        /* each e[i] is between 0 and 15 */
-        /* e[63] is between 0 and 7 */
-
-        carry = 0;
-        for (i = 0; i < 63; ++i)
+        finally
         {
-            e[i] += carry;
-            carry = (sbyte)(e[i] + 8);
-            carry >>= 4;
-            e[i] -= (sbyte)(carry << 4);
-        }
-        e[63] += carry;
-        /* each e[i] is between -8 and 8 */
-
-        ge_p3_0(out h);
-        for (i = 1; i < 64; i += 2)
-        {
-            select(out t, i / 2, e[i]);
-            ge_madd(out r, ref h, ref t); ge_p1p1_to_p3(out h, ref r);
-        }
-
-        ge_p3_dbl(out r, ref h); ge_p1p1_to_p2(out s, ref r);
-        ge_p2_dbl(out r, ref s); ge_p1p1_to_p2(out s, ref r);
-        ge_p2_dbl(out r, ref s); ge_p1p1_to_p2(out s, ref r);
-        ge_p2_dbl(out r, ref s); ge_p1p1_to_p3(out h, ref r);
-
-        for (i = 0; i < 64; i += 2)
-        {
-            select(out t, i / 2, e[i]);
-            ge_madd(out r, ref h, ref t); ge_p1p1_to_p3(out h, ref r);
+            CryptographicOperations.ZeroMemory(MemoryMarshal.AsBytes(e));
         }
     }
 
