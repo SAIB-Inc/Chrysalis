@@ -16,4 +16,9 @@ public sealed partial class CborSerializerCodeGen
         "CHCB003", "Invalid declared union reader",
         "Union '{0}' must declare public static Read(ReadOnlyMemory<byte>, out int) returning a non-null union value, and leave Read(ReadOnlyMemory<byte>) to the generator",
         "Chrysalis.Codec", DiagnosticSeverity.Error, isEnabledByDefault: true);
+
+    private static readonly DiagnosticDescriptor UnchunkedPlutusBytes = new(
+        "CHCB004", "Plutus data bytes written in one piece",
+        "Field '{0}' has byte strings inside a generic type, which are written in one piece and refused by the ledger over 64 bytes; use PlutusBoundedBytes there",
+        "Chrysalis.Codec", DiagnosticSeverity.Warning, isEnabledByDefault: true);
 }

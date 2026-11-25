@@ -39,6 +39,15 @@ public sealed partial class CborSerializerCodeGen : IIncrementalGenerator
         context.RegisterSourceOutput(sources.Where(static source => source.Diagnostic is not null).Combine(locations),
             static (output, input) => input.Left.ReportDiagnostic(output,
                 input.Right.FirstOrDefault(location => location.FullyQualifiedName == input.Left.TypeName).UnionLocation));
+
+        // A Plutus data field whose byte strings sit inside a generic type is written without chunks.
+        context.RegisterSourceOutput(candidates.Where(static candidate => candidate.UnchunkedBytes.Count > 0), static (output, candidate) =>
+        {
+            foreach ((Location location, string field) in candidate.UnchunkedBytes)
+            {
+                output.ReportDiagnostic(Diagnostic.Create(UnchunkedPlutusBytes, location, field));
+            }
+        });
     }
 
     /// <summary>
@@ -91,7 +100,9 @@ public sealed partial class CborSerializerCodeGen : IIncrementalGenerator
             new(ContainerKeys(symbol)), new(AncestorDefinitions(symbol)
                 .Where(ancestor => SymbolEqualityComparer.Default.Equals(ancestor.ContainingAssembly, symbol.ContainingAssembly))
                 .Select(SymbolKey)));
-        return new(parsed, isUnion ? declaration.Identifier.GetLocation() : null);
+        IEnumerable<SerializablePropertyMetadata> unchunked = metadata.SerializationType == SerializationType.Constr ? metadata.Properties.Where(HidesUnchunkedBytes) : [];
+        return new(parsed, isUnion ? declaration.Identifier.GetLocation() : null, new(unchunked.Select(property =>
+            (symbol.GetMembers(property.PropertyName).FirstOrDefault()?.Locations.FirstOrDefault() ?? declaration.Identifier.GetLocation(), property.PropertyName))));
     }
 
     private static UnionReaderKind GetUnionReaderKind(INamedTypeSymbol symbol, Compilation compilation)
@@ -236,7 +247,7 @@ public sealed partial class CborSerializerCodeGen : IIncrementalGenerator
             ? UnionEmitter.GetShapeDependencies(model, registry) : default))];
     }
 
-    private sealed record Candidate(ParsedType Type, Location? UnionLocation);
+    private sealed record Candidate(ParsedType Type, Location? UnionLocation, EquatableArray<(Location Location, string Field)> UnchunkedBytes);
     private sealed record ParsedType(SerializableTypeMetadata Metadata, string SymbolName, string Path, int Start,
         EquatableArray<string> Containers, EquatableArray<string> Ancestors);
     private sealed record EmissionInput(SerializableTypeMetadata Metadata, EquatableArray<SerializableTypeMetadata> ShapeDependencies);

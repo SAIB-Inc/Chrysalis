@@ -819,7 +819,7 @@ public sealed partial class CborSerializerCodeGen
             return EmitByteMemoryRead(sb, "_r", fieldRef, $"{variable} =", encoded);
         }
 
-        private static bool IsReadOnlyMemoryByteType(string type) => type.Replace("?", "") is "ReadOnlyMemory<byte>" or "System.ReadOnlyMemory<byte>" or "global::System.ReadOnlyMemory<byte>";
+        internal static bool IsReadOnlyMemoryByteType(string type) => type.Replace("?", "") is "ReadOnlyMemory<byte>" or "System.ReadOnlyMemory<byte>" or "global::System.ReadOnlyMemory<byte>";
 
         private static bool IsPrimitiveType(string type) => type.Replace("?", "") switch
         {
