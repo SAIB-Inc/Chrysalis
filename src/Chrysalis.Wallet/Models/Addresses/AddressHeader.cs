@@ -30,13 +30,10 @@ public record AddressHeader(AddressType Type, NetworkType Network)
     /// <summary>
     /// Gets the Bech32 prefix for this address header (e.g., "addr", "addr_test", "stake", "stake_test").
     /// </summary>
-    public string Prefix
-    {
-        get
-        {
-            string prefixCore = Type is AddressType.Delegation or AddressType.ScriptDelegation ? "stake" : "addr";
-            string networkSuffix = Network == NetworkType.Mainnet ? string.Empty : "_test";
-            return prefixCore + networkSuffix;
-        }
-    }
+    public string Prefix => GetPrefix(Type, Network);
+
+    internal static string GetPrefix(AddressType type, NetworkType network) =>
+        type is AddressType.Delegation or AddressType.ScriptDelegation
+            ? network == NetworkType.Mainnet ? "stake" : "stake_test"
+            : network == NetworkType.Mainnet ? "addr" : "addr_test";
 }

@@ -6,7 +6,7 @@ namespace Chrysalis.Crypto.Internal.Ed25519Ref10;
 /// </summary>
 internal static partial class GroupOperations
 {
-    public static int ge_frombytes_negate_vartime(out GroupElementP3 h, byte[] data, int offset)
+    public static int ge_frombytes_negate_vartime(out GroupElementP3 h, ReadOnlySpan<byte> data, int offset)
     {
         FieldElement u;
         FieldElement v;
