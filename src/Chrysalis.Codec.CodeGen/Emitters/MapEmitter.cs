@@ -20,10 +20,10 @@ public sealed partial class CborSerializerCodeGen
                 _ = Emitter.EmitTagReader(sb, metadata.CborTag, "tagIndex", metadata.FullyQualifiedName);
                 bool isIntKey = metadata.Properties[0].PropertyKeyInt is not null;
 
-                _ = sb.AppendLine($"Dictionary<{(isIntKey ? "int" : "string")}, object> resultMap = [];");
-
                 _ = sb.AppendLine("reader.ReadBeginMap();");
                 _ = sb.AppendLine("int mapSize = reader.ReadSize();");
+                _ = sb.AppendLine($"Dictionary<{(isIntKey ? "int" : "string")}, object> resultMap = new({Emitter.ClampedCapacity("mapSize")});");
+
                 _ = sb.AppendLine("bool isIndefiniteMap = mapSize == -1;");
                 _ = sb.AppendLine("int mapRemaining = mapSize;");
 

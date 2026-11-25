@@ -39,15 +39,17 @@ public sealed class OwnedReceiveTests
         Assert.True(assembler.Append(ReadOnlyMemory<byte>.Empty).IsEmpty);
         Assert.True(assembler.Append(a.AsMemory(0, 800)).IsEmpty);
         FieldInfo field = typeof(MessageAssembler).GetField("_staging", BindingFlags.Instance | BindingFlags.NonPublic)!;
-        object staging = field.GetValue(assembler)!;
+        Assert.NotNull(field.GetValue(assembler));
         byte[] last = [.. a.AsSpan(800), .. b];
         ReadOnlyMemory<byte> first = assembler.Append(last);
+        Assert.Null(field.GetValue(assembler));
         Assert.Equal(a.Concat(b), first.ToArray());
         for (int i = 0; i < 3; i++)
         {
             Assert.True(assembler.Append(a.AsMemory(0, 800)).IsEmpty);
+            Assert.NotNull(field.GetValue(assembler));
             Assert.Equal(a, assembler.Append(a.AsMemory(800)).ToArray());
-            Assert.Same(staging, field.GetValue(assembler));
+            Assert.Null(field.GetValue(assembler));
         }
         Assert.Equal(a.Concat(b), first.ToArray());
     }
@@ -115,6 +117,7 @@ public sealed class OwnedReceiveTests
         input.Writer.Complete();
         _ = await Assert.ThrowsAsync<ChannelClosedException>(() => buffer.ReceiveFullMessageAsync<BlockFetchMessage>(CancellationToken.None).AsTask());
         object assembler = typeof(ChannelBuffer).GetField("_assembler", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(buffer)!;
+        Assert.Null(typeof(MessageAssembler).GetField("_staging", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(assembler));
         object scanner = typeof(MessageAssembler).GetField("_scanner", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(assembler)!;
         Assert.Null(typeof(CborFrameScanner.State).GetField("_spill", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(scanner));
         await unused.Reader.CompleteAsync();

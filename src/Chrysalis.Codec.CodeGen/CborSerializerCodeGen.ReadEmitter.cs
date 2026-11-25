@@ -587,7 +587,6 @@ public sealed partial class CborSerializerCodeGen
                 }
 
                 _ = sb.AppendLine($"{metadata.ListItemTypeFullName} {propertyName}TempItem = default;");
-                _ = sb.AppendLine($"List<{metadata.ListItemTypeFullName}> {propertyName}TempList = new();");
                 _ = sb.AppendLine($"reader.ReadBeginArray();");
                 _ = sb.AppendLine($"int {propertyName}ArraySize = reader.ReadSize();");
                 _ = sb.AppendLine($"bool {propertyName}IsIndefinite = {propertyName}ArraySize == -1;");
@@ -602,6 +601,7 @@ public sealed partial class CborSerializerCodeGen
                     _ = sb.AppendLine($"if ({propertyName}IsIndefinite)");
                     _ = sb.AppendLine($"    throw CborError.Decode(data, {errorStart}, \"{typePath}\", \"definite array\", \"indefinite array\");");
                 }
+                _ = sb.AppendLine($"List<{metadata.ListItemTypeFullName}> {propertyName}TempList = new({ClampedCapacity($"{propertyName}ArraySize")});");
                 _ = sb.AppendLine($"int {propertyName}ArrayRemaining = {propertyName}ArraySize;");
                 _ = sb.AppendLine($"while ({propertyName}IsIndefinite ? (reader.Buffer.Length > 0 && reader.Buffer[0] != 0xFF) : {propertyName}ArrayRemaining > 0)");
                 _ = sb.AppendLine("{");
@@ -662,7 +662,6 @@ public sealed partial class CborSerializerCodeGen
                     throw new InvalidOperationException($"Map key or value type is null for property {metadata.PropertyName}");
                 }
 
-                _ = sb.AppendLine($"var {propertyName}TempMap = {MapInitializer(metadata, typePath)};");
                 _ = sb.AppendLine($"{metadata.MapKeyTypeFullName} {propertyName}TempKeyItem = default;");
                 _ = sb.AppendLine($"{metadata.MapValueTypeFullName} {propertyName}TempValueItem = default;");
                 _ = sb.AppendLine($"reader.ReadBeginMap();");
@@ -679,6 +678,7 @@ public sealed partial class CborSerializerCodeGen
                     _ = sb.AppendLine($"if ({propertyName}MapIsIndefinite)");
                     _ = sb.AppendLine($"    throw CborError.Decode(data, {errorStart}, \"{typePath}\", \"definite map\", \"indefinite map\");");
                 }
+                _ = sb.AppendLine($"var {propertyName}TempMap = {MapInitializer(metadata, typePath, ClampedCapacity($"{propertyName}MapSize"))};");
                 _ = sb.AppendLine($"int {propertyName}MapRemaining = {propertyName}MapSize;");
                 _ = sb.AppendLine($"while ({propertyName}MapIsIndefinite ? (reader.Buffer.Length > 0 && reader.Buffer[0] != 0xFF) : {propertyName}MapRemaining > 0)");
                 _ = sb.AppendLine("{");

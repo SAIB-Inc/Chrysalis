@@ -31,7 +31,7 @@ try
 var _r = new CborReader(_field0.Span);
 _r.ReadBeginArray();
 int _size = _r.ReadSize();
-var _list = new global::System.Collections.Generic.List<T>();
+var _list = new global::System.Collections.Generic.List<T>(global::System.Math.Clamp(_size, 0, 256));
 int _remaining = _size;
 while (_size == -1 ? (_r.Buffer.Length > 0 && _r.Buffer[0] != 0xFF) : _remaining > 0)
 {
