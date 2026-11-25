@@ -6,20 +6,18 @@ public static class IndefiniteStateTracker
 {
     private static readonly ConditionalWeakTable<object, IndefiniteState> _states = [];
 
-    internal sealed class IndefiniteState
-    {
-        public bool IsIndefinite { get; set; }
-    }
+    private sealed class IndefiniteState;
+    private static readonly IndefiniteState _indefinite = new();
 
     public static void SetIndefinite(object collection)
     {
-        if (collection == null)
+        if (collection is null)
         {
             return;
         }
 
-        _states.AddOrUpdate(collection, new IndefiniteState { IsIndefinite = true });
+        _ = _states.TryAdd(collection, _indefinite);
     }
 
-    public static bool IsIndefinite(object collection) => collection != null && _states.TryGetValue(collection, out IndefiniteState? state) && state.IsIndefinite;
+    public static bool IsIndefinite(object collection) => collection is not null && _states.TryGetValue(collection, out _);
 }

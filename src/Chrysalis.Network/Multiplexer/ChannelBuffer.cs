@@ -115,7 +115,7 @@ public sealed class ChannelBuffer(AgentChannel channel)
             if (_failed) { _channel.ThrowIfEnded(); }
             _assembler?.ThrowIfFailed();
             ValueTask<ReadOnlyMemory<byte>> read;
-            try { read = _channel.ReadSegmentAsync(cancellationToken); }
+            try { read = _assembler is null ? _channel.ReadMessageAsync(cancellationToken) : _channel.ReadSegmentAsync(cancellationToken); }
             catch (ChannelClosedException error) { _ = _assembler?.Fail(error); throw; }
             ConfiguredValueTaskAwaitable<ReadOnlyMemory<byte>>.ConfiguredValueTaskAwaiter awaiter = read.ConfigureAwait(false).GetAwaiter();
             if (!awaiter.IsCompleted)

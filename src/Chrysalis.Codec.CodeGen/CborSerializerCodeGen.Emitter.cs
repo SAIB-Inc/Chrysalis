@@ -18,6 +18,8 @@ public sealed partial class CborSerializerCodeGen
         public const string GenericSerializationUtilFullname = "global::Chrysalis.Codec.Serialization.GenericSerializationUtil";
         public const string CborEncodeValueFullName = "global::Chrysalis.Codec.Types.CborEncodedValue";
 
+        internal static string ClampedCapacity(string sizeVar) => $"global::System.Math.Clamp({sizeVar}, 0, 256)";
+
         public static void EmitSerializerAndMetadata(SourceProductionContext context, SerializableTypeMetadata metadata)
         {
             GeneratedType source = Generate(metadata, null);
@@ -297,7 +299,7 @@ public sealed partial class CborSerializerCodeGen
             _ = sb.AppendLine($"var _r = new CborReader({fieldRef}.Span);");
             _ = sb.AppendLine("_r.ReadBeginArray();");
             _ = sb.AppendLine("int _size = _r.ReadSize();");
-            _ = sb.AppendLine($"var _list = new global::System.Collections.Generic.List<{itemType}>();");
+            _ = sb.AppendLine($"var _list = new global::System.Collections.Generic.List<{itemType}>({ClampedCapacity("_size")});");
             _ = sb.AppendLine("int _remaining = _size;");
             _ = sb.AppendLine("while (_size == -1 ? (_r.Buffer.Length > 0 && _r.Buffer[0] != 0xFF) : _remaining > 0)");
             _ = sb.AppendLine("{");
@@ -425,7 +427,7 @@ public sealed partial class CborSerializerCodeGen
             _ = sb.AppendLine("_r.ReadBeginMap();");
             _ = sb.AppendLine("int _size = _r.ReadSize();");
 
-            _ = sb.AppendLine($"var _map = {MapInitializer(prop, typePath)};");
+            _ = sb.AppendLine($"var _map = {MapInitializer(prop, typePath, ClampedCapacity("_size"))};");
             _ = sb.AppendLine("int _remaining = _size;");
             _ = sb.AppendLine("while (_size == -1 ? (_r.Buffer.Length > 0 && _r.Buffer[0] != 0xFF) : _remaining > 0)");
             _ = sb.AppendLine("{");
@@ -511,13 +513,13 @@ public sealed partial class CborSerializerCodeGen
         private static bool IsLedgerMap(string typePath) =>
             NormalizeTypeName(typePath).StartsWith("Chrysalis.Codec.Types.Cardano.Core.", StringComparison.Ordinal);
 
-        private static string MapInitializer(SerializablePropertyMetadata prop, string typePath)
+        private static string MapInitializer(SerializablePropertyMetadata prop, string typePath, string capacityExpr)
         {
             string key = prop.MapKeyTypeFullName!;
             string value = prop.MapValueTypeFullName!;
             if (prop.IsPairList)
             {
-                return $"new global::System.Collections.Generic.List<global::System.Collections.Generic.KeyValuePair<{key}, {value}>>()";
+                return $"new global::System.Collections.Generic.List<global::System.Collections.Generic.KeyValuePair<{key}, {value}>>({capacityExpr})";
             }
 
             const string utils = "global::Chrysalis.Codec.Serialization.Utils";
@@ -535,7 +537,7 @@ public sealed partial class CborSerializerCodeGen
                 };
             }
 
-            return $"new global::System.Collections.Generic.Dictionary<{key}, {value}>({comparer})";
+            return $"new global::System.Collections.Generic.Dictionary<{key}, {value}>({(comparer is null ? capacityExpr : $"{capacityExpr}, {comparer}")})";
         }
 
         private static StringBuilder EmitPrimitiveMapKeyRead(StringBuilder sb, string cleanKeyType, string fieldRef)

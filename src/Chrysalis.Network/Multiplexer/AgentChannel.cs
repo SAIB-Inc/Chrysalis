@@ -149,6 +149,8 @@ public sealed class AgentChannel
     /// Caller-provided readers define their own items and completion exceptions; this method forwards them unchanged.</remarks>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public ValueTask<ReadOnlyMemory<byte>> ReadSegmentAsync(CancellationToken cancellationToken = default) => _demuxReader.ReadAsync(cancellationToken);
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal ValueTask<ReadOnlyMemory<byte>> ReadMessageAsync(CancellationToken cancellationToken = default) => _demuxReader is ProtocolQueue queue ? queue.ReadNonEmptyAsync(cancellationToken) : _demuxReader.ReadAsync(cancellationToken);
 
     /// <summary>Ends this channel's connection with the given cause without throwing secondary cleanup errors. The first end wins.</summary>
     internal void End(Exception cause) => _connection.TryEnd(cause);

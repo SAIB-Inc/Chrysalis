@@ -8,7 +8,7 @@ namespace Chrysalis.Network.Multiplexer;
 internal sealed class MessageAssembler(int? limit = null) : IDisposable
 {
     private CborFrameScanner.State _scanner;
-    private byte[] _staging = [];
+    private byte[]? _staging;
     private int _staged;
     private Exception? _failure;
 
@@ -48,20 +48,24 @@ internal sealed class MessageAssembler(int? limit = null) : IDisposable
             else
             {
                 byte[] output = GC.AllocateUninitializedArray<byte>(checked(_staged + completed));
-                _staging.AsSpan(0, _staged).CopyTo(output);
+                if (_staged != 0) { _staging.AsSpan(0, _staged).CopyTo(output); }
                 input.Slice(0, completed).CopyTo(output.AsSpan(_staged));
                 item = output;
+                ReleaseStaging();
             }
-            _staged = 0;
         }
         int tail = checked((int)input.Length - completed);
         if (tail != 0)
         {
             int required = checked(_staged + tail);
-            if (_staging.Length < required)
+            if (_staging is null || _staging.Length < required)
             {
-                int capacity = (int)Math.Min(Array.MaxLength, Math.Max(required, Math.Max(256L, _staging.Length * 2L)));
-                Array.Resize(ref _staging, capacity);
+                int capacity = _staging is null ? required : (int)Math.Min(Array.MaxLength, Math.Max(required, _staging.Length * 2L));
+                byte[] grown = ArrayPool<byte>.Shared.Rent(capacity);
+                if (_staged != 0) { _staging.AsSpan(0, _staged).CopyTo(grown); }
+                byte[]? old = _staging;
+                _staging = grown;
+                if (old is not null) { ArrayPool<byte>.Shared.Return(old); }
             }
             input.Slice(completed).CopyTo(_staging.AsSpan(_staged));
             _staged = required;
@@ -78,8 +82,17 @@ internal sealed class MessageAssembler(int? limit = null) : IDisposable
     {
         _failure ??= error;
         _scanner.Dispose();
+        ReleaseStaging();
         return _failure;
     }
 
-    public void Dispose() => _scanner.Dispose();
+    public void Dispose() { _scanner.Dispose(); ReleaseStaging(); }
+
+    private void ReleaseStaging()
+    {
+        byte[]? buf = _staging;
+        _staging = null;
+        _staged = 0;
+        if (buf is not null) { ArrayPool<byte>.Shared.Return(buf); }
+    }
 }

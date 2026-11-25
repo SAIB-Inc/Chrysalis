@@ -26,9 +26,9 @@ static Dictionary<string, int> KeyMapping = new()
 public static new Snapshot.ClassValue Read(ReadOnlyMemory<byte> data, out int bytesConsumed)
 {
 var reader = new CborReader(data.Span);
-Dictionary<int, object> resultMap = [];
 reader.ReadBeginMap();
 int mapSize = reader.ReadSize();
+Dictionary<int, object> resultMap = new(global::System.Math.Clamp(mapSize, 0, 256));
 bool isIndefiniteMap = mapSize == -1;
 int mapRemaining = mapSize;
 while (isIndefiniteMap ? (reader.Buffer.Length > 0 && reader.Buffer[0] != 0xFF) : mapRemaining > 0)
