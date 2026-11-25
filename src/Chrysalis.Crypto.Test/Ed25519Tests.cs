@@ -545,6 +545,81 @@ public sealed class Ed25519Tests
         Assert.Equal(expected, Ed25519Operations.HasSmallOrder(ref point.X, ref point.Y));
     }
 
+    [Fact]
+    public void SpanOverloads_MatchArrayOverloadsAcrossAllCanonicalOperations()
+    {
+        byte[] seed = Convert.FromHexString(Rfc8032ShaAbcSeedHex);
+        byte[] expectedPk = Convert.FromHexString(Rfc8032ShaAbcPublicKeyHex);
+        byte[] message = Convert.FromHexString(Rfc8032ShaAbcMessageHex);
+        byte[] expectedSig = Convert.FromHexString(Rfc8032ShaAbcSignatureHex);
+        byte[] seedAndPk = Ed25519.SeedAndPublicKeyFromSeed(seed);
+        byte[] extendedKey = CreateClampedScalar(seed);
+        byte[] extendedPk = Ed25519.GetPublicKey(extendedKey);
+        byte[] expectedExtSig = Ed25519.SignWithExtendedKey(message, extendedKey);
+        byte[] basePoint = Convert.FromHexString(BasePointHex);
+        byte[] expectedTwoBase = Convert.FromHexString(TwoBasePointHex);
+
+        byte[] paddedSeed = [0xEE, .. seed, 0xFF];
+        byte[] paddedMessage = [0xEE, .. message, 0xFF];
+        byte[] paddedSeedAndPk = [0xEE, .. seedAndPk, 0xFF];
+        byte[] paddedExtendedKey = [0xEE, .. extendedKey, 0xFF];
+        byte[] paddedSig = [0xEE, .. expectedSig, 0xFF];
+        byte[] paddedPk = [0xEE, .. expectedPk, 0xFF];
+        byte[] paddedBase = [0xEE, .. basePoint, 0xFF];
+
+        ReadOnlySpan<byte> seedSpan = paddedSeed.AsSpan(1, seed.Length);
+        ReadOnlySpan<byte> msgSpan = paddedMessage.AsSpan(1, message.Length);
+        ReadOnlySpan<byte> seedAndPkSpan = paddedSeedAndPk.AsSpan(1, seedAndPk.Length);
+        ReadOnlySpan<byte> extKeySpan = paddedExtendedKey.AsSpan(1, extendedKey.Length);
+        ReadOnlySpan<byte> sigSpan = paddedSig.AsSpan(1, expectedSig.Length);
+        ReadOnlySpan<byte> pkSpan = paddedPk.AsSpan(1, expectedPk.Length);
+        ReadOnlySpan<byte> baseSpan = paddedBase.AsSpan(1, basePoint.Length);
+
+        Assert.Equal(expectedPk, Ed25519.PublicKeyFromSeed(seedSpan));
+        Assert.Equal(seedAndPk, Ed25519.SeedAndPublicKeyFromSeed(seedSpan));
+        byte[] spanSig = Ed25519.SignWithSeedAndPublicKey(msgSpan, seedAndPkSpan);
+        Assert.Equal(expectedSig, spanSig);
+        Assert.True(Ed25519.Verify(sigSpan, msgSpan, pkSpan));
+        Assert.False(Ed25519.Verify(sigSpan, [1, 2, 3], pkSpan));
+
+        Assert.Equal(extendedPk, Ed25519.GetPublicKey(extKeySpan));
+        Assert.Equal(extendedPk, Ed25519.GetPublicKey(extKeySpan[..32]));
+        Assert.Equal(extendedPk, Ed25519.PublicKeyFromExtendedKey(extKeySpan));
+        byte[] spanExtSig = Ed25519.SignWithExtendedKey(msgSpan, extKeySpan);
+        Assert.Equal(expectedExtSig, spanExtSig);
+        Assert.True(Ed25519.Verify(spanExtSig.AsSpan(), msgSpan, extendedPk.AsSpan()));
+        Assert.Equal(expectedTwoBase, Ed25519.PointAdd(baseSpan, baseSpan));
+
+        Assert.False(Ed25519.Verify(expectedSig, [1, 2, 3], expectedPk));
+        Assert.True(Ed25519.Verify(sigSpan, message, expectedPk));
+        Assert.Equal(64, Ed25519.SignWithSeedAndPublicKey([1, 2, 3], seedAndPk).Length);
+        Assert.Equal(64, Ed25519.SignWithExtendedKey([1, 2, 3], extendedKey).Length);
+        Assert.Equal(64, Ed25519.SignWithSeedAndPublicKey(msgSpan, seedAndPk).Length);
+        Assert.Equal(expectedTwoBase, Ed25519.PointAdd(baseSpan, basePoint));
+
+        _ = Assert.Throws<ArgumentException>("firstPoint", () => Ed25519.PointAdd(new byte[1], null!));
+        _ = Assert.Throws<ArgumentException>("signature", () => Ed25519.Verify(new byte[63].AsSpan(), message.AsSpan(), expectedPk.AsSpan()));
+        _ = Assert.Throws<ArgumentException>("publicKey", () => Ed25519.Verify(expectedSig.AsSpan(), message.AsSpan(), new byte[31].AsSpan()));
+        _ = Assert.Throws<ArgumentException>("seed", () => Ed25519.PublicKeyFromSeed(new byte[31].AsSpan()));
+        _ = Assert.Throws<ArgumentException>("seed", () => Ed25519.SeedAndPublicKeyFromSeed(new byte[31].AsSpan()));
+        _ = Assert.Throws<ArgumentException>("seedAndPublicKey", () => Ed25519.SignWithSeedAndPublicKey(message.AsSpan(), new byte[63].AsSpan()));
+        _ = Assert.Throws<ArgumentException>("extendedKey", () => Ed25519.SignWithExtendedKey(message.AsSpan(), new byte[63].AsSpan()));
+        _ = Assert.Throws<ArgumentException>("extendedKey", () => Ed25519.PublicKeyFromExtendedKey(new byte[63].AsSpan()));
+        _ = Assert.Throws<ArgumentException>("expandedPrivateKey", () => Ed25519.GetPublicKey(new byte[31].AsSpan()));
+        _ = Assert.Throws<ArgumentException>("firstPoint", () => Ed25519.PointAdd(new byte[31].AsSpan(), basePoint.AsSpan()));
+        _ = Assert.Throws<ArgumentException>("secondPoint", () => Ed25519.PointAdd(basePoint.AsSpan(), new byte[31].AsSpan()));
+
+        _ = Assert.Throws<ArgumentNullException>("seed", () => Ed25519.PublicKeyFromSeed(null!));
+        _ = Assert.Throws<ArgumentNullException>("seed", () => Ed25519.SeedAndPublicKeyFromSeed(null!));
+        _ = Assert.Throws<ArgumentNullException>("message", () => Ed25519.SignWithSeedAndPublicKey(null!, seedAndPk));
+        _ = Assert.Throws<ArgumentNullException>("seedAndPublicKey", () => Ed25519.SignWithSeedAndPublicKey(message, null!));
+        _ = Assert.Throws<ArgumentNullException>("message", () => Ed25519.SignWithExtendedKey(null!, extendedKey));
+        _ = Assert.Throws<ArgumentNullException>("extendedKey", () => Ed25519.SignWithExtendedKey(message, null!));
+        _ = Assert.Throws<ArgumentNullException>("extendedKey", () => Ed25519.PublicKeyFromExtendedKey(null!));
+        _ = Assert.Throws<ArgumentNullException>("firstPoint", () => Ed25519.PointAdd(null!, basePoint));
+        _ = Assert.Throws<ArgumentNullException>("secondPoint", () => Ed25519.PointAdd(basePoint, null!));
+    }
+
     private static byte[] CreateBoundaryMessage(int length)
     {
         byte[] message = new byte[length];

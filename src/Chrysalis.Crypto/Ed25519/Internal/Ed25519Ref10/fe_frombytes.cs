@@ -7,7 +7,7 @@ namespace Chrysalis.Crypto.Internal.Ed25519Ref10;
 internal static partial class FieldOperations
 {
     //	Ignores top bit of h.
-    internal static void fe_frombytes(out FieldElement h, byte[] data, int offset)
+    internal static void fe_frombytes(out FieldElement h, ReadOnlySpan<byte> data, int offset)
     {
         Int64 h0 = ScalarOperations.load_4(data, offset);
         Int64 h1 = ScalarOperations.load_3(data, offset + 4) << 6;

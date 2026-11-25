@@ -11,19 +11,19 @@ internal static partial class Ed25519Operations
     private const int StackMessageLimit = 960;
 
     internal static bool crypto_sign_verify(
-        byte[] sig, int sigoffset,
-        byte[] m, int moffset, int mlen,
-        byte[] pk, int pkoffset)
+        ReadOnlySpan<byte> sig,
+        ReadOnlySpan<byte> m,
+        ReadOnlySpan<byte> pk)
     {
-        ReadOnlySpan<byte> rBytes = sig.AsSpan(sigoffset, 32);
-        ReadOnlySpan<byte> sBytes = sig.AsSpan(sigoffset + 32, 32);
+        ReadOnlySpan<byte> rBytes = sig[..32];
+        ReadOnlySpan<byte> sBytes = sig.Slice(32, 32);
 
         if (!ScalarOperations.sc_is_canonical(sBytes))
         {
             return false;
         }
 
-        if (!TryDecodeNegatedCanonicalPoint(pk, pkoffset, out GroupElementP3 A))
+        if (!TryDecodeNegatedCanonicalPoint(pk, out GroupElementP3 A))
         {
             return false;
         }
@@ -34,7 +34,7 @@ internal static partial class Ed25519Operations
         }
 
         Span<byte> h = stackalloc byte[64];
-        HashParts(rBytes, pk.AsSpan(pkoffset, 32), m.AsSpan(moffset, mlen), h, wipeBuffer: false);
+        HashParts(rBytes, pk[..32], m, h, wipeBuffer: false);
 
         ScalarOperations.sc_reduce(h);
 

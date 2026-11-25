@@ -3,6 +3,9 @@ using Chrysalis.Wallet.Models.Enums;
 using Chrysalis.Wallet.Models.Keys;
 using Chrysalis.Wallet.Utils;
 using Chrysalis.Wallet.Words;
+using CodecAddress = Chrysalis.Codec.Types.Cardano.Core.Common.Address;
+using PlutusScript = Chrysalis.Codec.Types.Plutus.Address.Script;
+using PlutusVerificationKey = Chrysalis.Codec.Types.Plutus.Address.VerificationKey;
 
 namespace Chrysalis.Wallet.Test.Addresses;
 
@@ -616,4 +619,129 @@ public class AddressTests
     }
 
     #endregion
+
+    [Theory]
+    [InlineData("addr_test1vqqqqqqqqk7zlz0")]
+    [InlineData("addr_test1vqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqpsnlafe")]
+    [InlineData("addr1vyqrn2jng")]
+    public void FromBech32_InvalidPadding_ThrowsFormatException(string invalid) =>
+        _ = Assert.Throws<FormatException>(() => Address.FromBech32(invalid));
+
+    [Fact]
+    public void SpanOverloads_MatchArrayOverloadsOwnershipAndCodecAddressSlice()
+    {
+        _ = Assert.Throws<ArgumentException>("addressBytes", () => new Address([]));
+        _ = Assert.Throws<ArgumentException>("addressBytes", () => Address.FromBytes([]));
+        _ = Assert.Throws<ArgumentNullException>("addressBytes", () => new Address((byte[])null!));
+        _ = Assert.Throws<ArgumentNullException>("addressBytes", () => Address.FromBytes(null!));
+        _ = Assert.Throws<ArgumentNullException>("bech32Address", () => new Address((string)null!));
+        _ = Assert.Throws<ArgumentNullException>("bech32Address", () => Address.FromBech32(null!));
+
+        byte[] paymentHash = Convert.FromHexString(ExpectedPaymentHash);
+        byte[] stakeHash = Convert.FromHexString(ExpectedStakeHash);
+        _ = Assert.Throws<ArgumentNullException>("payment", () => Address.FromScriptHash(NetworkType.Mainnet, (byte[])null!));
+        _ = Assert.Throws<ArgumentNullException>("payment", () => Address.FromScriptHashWithStake(NetworkType.Mainnet, null!, stakeHash));
+        _ = Assert.Throws<ArgumentNullException>("stake", () => Address.FromScriptHashWithStake(NetworkType.Mainnet, paymentHash, null!));
+        _ = Assert.Throws<ArgumentOutOfRangeException>("headerByte", () => Address.FromBytes([0x81]));
+
+        byte[] rawBytes = Address.FromBech32(ExpectedMainnetBase).ToBytes();
+        Span<byte> stackRaw = stackalloc byte[rawBytes.Length];
+        rawBytes.CopyTo(stackRaw);
+        Address fromStackCtor = new(stackRaw);
+        Address fromStackFactory = Address.FromBytes(stackRaw);
+        Assert.Equal(ExpectedMainnetBase, fromStackCtor.ToBech32());
+        Assert.Equal(ExpectedMainnetBase, fromStackFactory.ToBech32());
+        Assert.Equal(AddressType.Base, fromStackFactory.Type);
+        Assert.Equal(NetworkType.Mainnet, fromStackFactory.Network);
+
+        byte[] legacyBuf = (byte[])rawBytes.Clone();
+        Assert.Same(legacyBuf, new Address(legacyBuf).ToBytes());
+        Assert.Same(legacyBuf, Address.FromBytes(legacyBuf).ToBytes());
+
+        byte[] spanBuf = (byte[])rawBytes.Clone();
+        Address fromSpan = Address.FromBytes(spanBuf.AsSpan());
+        Address ctorSpan = new(spanBuf.AsSpan());
+        spanBuf[1] ^= 0xFF;
+        Assert.Equal(rawBytes, fromSpan.ToBytes());
+        Assert.Equal(rawBytes, ctorSpan.ToBytes());
+
+        byte[] paddedPayment = [0xAA, .. paymentHash, 0x55];
+        byte[] paddedStake = [0xBB, .. stakeHash, 0x66];
+        ReadOnlySpan<byte> paySpan = paddedPayment.AsSpan(1, paymentHash.Length);
+        ReadOnlySpan<byte> stakeSpan = paddedStake.AsSpan(1, stakeHash.Length);
+        Assert.Equal(
+            Address.FromScriptHash(NetworkType.Mainnet, paymentHash).ToBytes(),
+            Address.FromScriptHash(NetworkType.Mainnet, paySpan).ToBytes());
+        Assert.Equal(
+            Address.FromScriptHashWithStake(NetworkType.Mainnet, paymentHash, stakeHash).ToBytes(),
+            Address.FromScriptHashWithStake(NetworkType.Mainnet, paySpan, stakeSpan).ToBytes());
+        Assert.Equal(
+            Address.FromScriptHashWithStake(NetworkType.Mainnet, paymentHash, stakeHash).ToBytes(),
+            Address.FromScriptHashWithStake(NetworkType.Mainnet, paymentHash, stakeSpan).ToBytes());
+
+        CodecAddress codecAddress = CodecAddress.Create(rawBytes);
+        Assert.Equal(ExpectedMainnetBase, Address.FromBytes(codecAddress.Value.Span).ToBech32());
+        Assert.Equal(ExpectedMainnetBase, Bech32Util.Encode(codecAddress.Value.Span, "addr"));
+    }
+
+    [Fact]
+    public void FromCredentials_BuildsBaseEnterpriseAndDelegationAndRejectsNullStake()
+    {
+        byte[] paymentHash = Convert.FromHexString(ExpectedPaymentHash);
+        byte[] stakeHash = Convert.FromHexString(ExpectedStakeHash);
+        PlutusVerificationKey paymentCred = PlutusVerificationKey.Create(paymentHash);
+        PlutusScript scriptCred = PlutusScript.Create(paymentHash);
+        PlutusVerificationKey stakeCred = PlutusVerificationKey.Create(stakeHash);
+
+        Address baseAddr = Address.FromCredentials(NetworkType.Mainnet, AddressType.Base, paymentCred, stakeCred);
+        Assert.Equal(ExpectedMainnetBase, baseAddr.ToBech32());
+        Assert.Equal(new Address(NetworkType.Mainnet, AddressType.Base, paymentHash, stakeHash).ToBytes(), baseAddr.ToBytes());
+
+        Address enterpriseScript = Address.FromCredentials(NetworkType.Mainnet, AddressType.EnterpriseScriptPayment, scriptCred, null);
+        Assert.Equal(new Address(NetworkType.Mainnet, AddressType.EnterpriseScriptPayment, paymentHash, null).ToBytes(), enterpriseScript.ToBytes());
+
+        Address delegation = Address.FromCredentials(NetworkType.Mainnet, AddressType.Delegation, paymentCred, stakeCred);
+        Assert.Equal(ExpectedMainnetStake, delegation.ToBech32());
+
+        byte[] expectedEmptyStakeBase = [0x01, .. paymentHash];
+        Address emptyStakeBase = new(NetworkType.Mainnet, AddressType.Base, paymentHash, []);
+        Assert.Equal(expectedEmptyStakeBase, emptyStakeBase.ToBytes());
+
+        byte[] expectedEmptyStakeDelegation = [0xE1];
+        Address emptyStakeDelegation = new(NetworkType.Mainnet, AddressType.Delegation, [], []);
+        Assert.Equal(expectedEmptyStakeDelegation, emptyStakeDelegation.ToBytes());
+
+        _ = Assert.Throws<ArgumentNullException>("stake", () => Address.FromCredentials(NetworkType.Mainnet, AddressType.Base, paymentCred, null));
+        _ = Assert.Throws<ArgumentNullException>("stake", () => new Address(NetworkType.Mainnet, AddressType.Delegation, [], null));
+        _ = Assert.Throws<ArgumentNullException>("stake", () => Address.FromCredentials(NetworkType.Mainnet, AddressType.Delegation, paymentCred, null));
+    }
+
+    [Fact]
+    public void HashUtil_SpanOverloads_MatchArrayOverloadsAndRejectNull()
+    {
+        (PublicKey paymentPub, _) = CreateTestKeyPair();
+        byte[] padded = [0xAA, .. paymentPub.Key, 0x55];
+        ReadOnlySpan<byte> slice = padded.AsSpan(1, paymentPub.Key.Length);
+
+        byte[] h256 = HashUtil.Blake2b256(slice);
+        byte[] h224 = HashUtil.Blake2b224(slice);
+        byte[] h160 = HashUtil.Blake2b160(slice);
+
+        Assert.Equal(32, h256.Length);
+        Assert.Equal(HashUtil.Blake2b256(paymentPub.Key), h256);
+        Assert.Equal(28, h224.Length);
+        Assert.Equal(ExpectedPaymentHash, Convert.ToHexStringLower(h224));
+        Assert.Equal(HashUtil.Blake2b224(paymentPub.Key), h224);
+        Assert.Equal(20, h160.Length);
+        Assert.Equal(HashUtil.Blake2b160(paymentPub.Key), h160);
+
+        byte[] empty = [];
+        Assert.Equal(HashUtil.Blake2b256(empty), HashUtil.Blake2b256([]));
+        Assert.Equal(HashUtil.Blake2b224(empty), HashUtil.Blake2b224([]));
+        Assert.Equal(HashUtil.Blake2b160(empty), HashUtil.Blake2b160([]));
+
+        _ = Assert.Throws<ArgumentNullException>("data", () => HashUtil.Blake2b256(null!));
+        _ = Assert.Throws<ArgumentNullException>("data", () => HashUtil.Blake2b224(null!));
+        _ = Assert.Throws<ArgumentNullException>("data", () => HashUtil.Blake2b160(null!));
+    }
 }
