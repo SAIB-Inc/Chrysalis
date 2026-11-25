@@ -57,6 +57,8 @@ public class HeaderBodyUnionTests
 
     [Theory]
     [InlineData("80")]
+    [InlineData("8A")]
+    [InlineData("8F")]
     [InlineData("A0")]
     [InlineData("")]
     public void NonHeaderBodyInputFailsAtDecode(string hex) => AssertRefused(Convert.FromHexString(hex));

@@ -1,4 +1,6 @@
 using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
 
 namespace Chrysalis.Codec.Test;
 
@@ -12,12 +14,17 @@ public partial class GeneratorIsolationTests
         Assert.Contains("namespace HeaderBodyProbe;", declarations, StringComparison.Ordinal);
         GeneratorDriver driver = GenerateWithoutErrors("HeaderBodyProbe", "global using System;\nusing Chrysalis.Codec.Types.Cardano.Core.Header;\n" + declarations);
         Assert.Empty(driver.GetRunResult().Diagnostics);
-        string reader = GeneratedText(driver, "HeaderBodyProbe.IBlockHeaderBody");
-        int start = reader.IndexOf("try {", StringComparison.Ordinal);
-        int size = reader.IndexOf("switch (_sizeReader.ReadSize())", StringComparison.Ordinal);
-        Assert.True(start >= 0 && start < size && size < reader.IndexOf("_Matches0(new CborReader", StringComparison.Ordinal), reader);
-        Assert.Contains("case 15: return HeaderBodyProbe.AlonzoHeaderBody.Read(data, out bytesConsumed);", reader, StringComparison.Ordinal);
-        Assert.Contains("case 10: return HeaderBodyProbe.BabbageHeaderBody.Read(data, out bytesConsumed);", reader, StringComparison.Ordinal);
+        StatementSyntax[] body = UnwrappedReadBody(GeneratedText(driver, "HeaderBodyProbe.IBlockHeaderBody"));
+        IfStatementSyntax guard = Assert.IsType<IfStatementSyntax>(body[0]);
+        Assert.Contains(guard.Condition.DescendantNodes().OfType<BinaryExpressionSyntax>(),
+            binary => binary.IsKind(SyntaxKind.EqualsExpression) && binary.Right is LiteralExpressionSyntax { Token.Value: 4 });
+        SwitchStatementSyntax sizeSwitch = Assert.Single(guard.Statement.DescendantNodes().OfType<SwitchStatementSyntax>());
+        Assert.Equal("ReadSize", Assert.IsType<MemberAccessExpressionSyntax>(
+            Assert.IsType<InvocationExpressionSyntax>(sizeSwitch.Expression).Expression).Name.Identifier.Text);
+        AssertCaseReturn(sizeSwitch, 15, "HeaderBodyProbe.AlonzoHeaderBody.Read(data, out bytesConsumed)");
+        AssertCaseReturn(sizeSwitch, 10, "HeaderBodyProbe.BabbageHeaderBody.Read(data, out bytesConsumed)");
+        Assert.DoesNotContain(guard.DescendantNodes().OfType<InvocationExpressionSyntax>(), IsMatches0);
+        Assert.Contains(body.Skip(1).SelectMany(statement => statement.DescendantNodes().OfType<InvocationExpressionSyntax>()), IsMatches0);
     }
 
     [Theory]
@@ -40,9 +47,31 @@ public partial class GeneratorIsolationTests
             """;
         GeneratorDriver driver = GenerateWithoutErrors("RangeProbe", source);
         _ = Assert.Single(driver.GetRunResult().Diagnostics, diagnostic => diagnostic.Id == "CHCB002");
-        string reader = GeneratedText(driver, "RangeProbe.IRange");
-        Assert.Contains("_Matches0(new CborReader", reader, StringComparison.Ordinal);
-        Assert.DoesNotContain("_sizeReader", reader, StringComparison.Ordinal);
+        StatementSyntax[] body = UnwrappedReadBody(GeneratedText(driver, "RangeProbe.IRange"));
+        Assert.True(Assert.IsType<IfStatementSyntax>(body[0]).Condition is InvocationExpressionSyntax call && IsMatches0(call));
+    }
+
+    private static StatementSyntax[] UnwrappedReadBody(string source)
+    {
+        SyntaxList<StatementSyntax> statements = CSharpSyntaxTree.ParseText(source, ParseOptions).GetRoot()
+            .DescendantNodes().OfType<MethodDeclarationSyntax>()
+            .Single(method => method.Identifier.Text == "Read" && method.ParameterList.Parameters.Count == 2).Body!.Statements;
+        int start = statements.TakeWhile(statement => statement is LocalDeclarationStatementSyntax).Count();
+        while (start < statements.Count && statements[start] is TryStatementSyntax outer)
+        {
+            statements = outer.Block.Statements;
+            start = 0;
+        }
+        return [.. statements.Skip(start)];
+    }
+
+    private static bool IsMatches0(InvocationExpressionSyntax call) => call.Expression is IdentifierNameSyntax { Identifier.Text: "_Matches0" };
+
+    private static void AssertCaseReturn(SwitchStatementSyntax sizeSwitch, int size, string invocation)
+    {
+        SwitchSectionSyntax section = Assert.Single(sizeSwitch.Sections, s => s.Labels.OfType<CaseSwitchLabelSyntax>()
+            .Any(label => label.Value is LiteralExpressionSyntax { Token.Value: int value } && value == size));
+        Assert.Equal(invocation, Assert.IsType<ReturnStatementSyntax>(Assert.Single(section.Statements)).Expression?.NormalizeWhitespace().ToFullString());
     }
 
     private static GeneratorDriver GenerateWithoutErrors(string name, string source)
