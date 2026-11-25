@@ -13,14 +13,13 @@ public class WalletCliKeyFileTests
     //   signing_key       989f64345503d8d770f558df221be0632443a3e5bb918e67b663836e02438cc0
     //   verification_key  db1c2c620cb1fd121b577389251f0e755ffa4de56fadf514671efcaf4b972e97
     // Standard 32-byte payment keys are reused from PrivateKeyTests.CliSeed and PrivateKeyTests.CliVerificationKey.
-    private const string ExtendedPrivateKeyHex =
+    internal const string ExtendedPrivateKeyHex =
         "c0eb138a32cde8de380312a08bae4383939520c84f8242f0262b54fa7f12724d"
         + "aa13fcf3663749f3b0fb231f02a63b46703d2a0904fb2f2ff383c1cce52af5af";
-    private const string ExtendedPublicKeyHex = "1f9591d2f4bef7008a549512ea2c51d78fe5954977045715303579bfdebfe1c3";
-    private const string ExtendedChainCodeHex = "4b3c13ea151f2652db80ea369878f2dd042aa78a1d17b9a78b941c856ea9ff21";
+    internal const string ExtendedPublicKeyHex = "1f9591d2f4bef7008a549512ea2c51d78fe5954977045715303579bfdebfe1c3";
+    internal const string ExtendedChainCodeHex = "4b3c13ea151f2652db80ea369878f2dd042aa78a1d17b9a78b941c856ea9ff21";
     private const string ExtendedSigningKeyCborHex = "5880" + ExtendedPrivateKeyHex + ExtendedPublicKeyHex + ExtendedChainCodeHex;
     private const string ExtendedVerificationKeyCborHex = "5840" + ExtendedPublicKeyHex + ExtendedChainCodeHex;
-    private static readonly byte[] ZeroChainCode = new byte[32];
 
     [Theory]
     [InlineData("shelley-extended", "PaymentExtendedSigningKeyShelley_ed25519_bip32")]
@@ -65,7 +64,8 @@ public class WalletCliKeyFileTests
         PrivateKey privateKey = KeyFileReader.ReadSigningKey(json);
 
         Assert.Equal(Convert.FromHexString(PrivateKeyTests.CliSeed), privateKey.Key);
-        Assert.Equal(ZeroChainCode, privateKey.Chaincode);
+        Assert.Empty(privateKey.Chaincode);
+        Assert.Empty(privateKey.GetPublicKey().Chaincode);
         Assert.Equal(Convert.FromHexString(PrivateKeyTests.CliVerificationKey), privateKey.GetPublicKey().Key);
     }
 
@@ -115,9 +115,22 @@ public class WalletCliKeyFileTests
         PublicKey publicKey = KeyFileReader.ReadVerificationKey(json);
 
         byte[] expectedKey = Convert.FromHexString(isExtended ? ExtendedPublicKeyHex : PrivateKeyTests.CliVerificationKey);
-        byte[] expectedChainCode = isExtended ? Convert.FromHexString(ExtendedChainCodeHex) : ZeroChainCode;
+        byte[] expectedChainCode = isExtended ? Convert.FromHexString(ExtendedChainCodeHex) : [];
         Assert.Equal(expectedKey, publicKey.Key);
         Assert.Equal(expectedChainCode, publicKey.Chaincode);
+    }
+
+    [Fact]
+    public void ReadVerificationKey_32BytePlainEnvelope_RefusesPublicDerivation()
+    {
+        string json = MakeEnvelope("PaymentVerificationKeyShelley_ed25519", "5820" + PrivateKeyTests.CliVerificationKey);
+
+        PublicKey publicKey = KeyFileReader.ReadVerificationKey(json);
+
+        Assert.Empty(publicKey.Chaincode);
+        _ = Assert.Throws<InvalidOperationException>(() => publicKey.Derive(0));
+        _ = Assert.Throws<InvalidOperationException>(() => publicKey.DerivePaymentKey());
+        _ = Assert.Throws<InvalidOperationException>(() => publicKey.DeriveStakeKey());
     }
 
     [Theory]

@@ -7,7 +7,6 @@ namespace Chrysalis.Wallet.Cli;
 
 internal static class KeyFileReader
 {
-    private const int ChainCodeSize = 32;
     private const int ExtendedVerificationKeySize = 64;
     private const int ShelleyExtendedSigningKeySize = 128;
     private const int ShelleyExtendedChainCodeOffset = 96;
@@ -27,7 +26,7 @@ internal static class KeyFileReader
         ValidateKeyType(type, isSigningKey: true);
         return keyBytes.Length == ShelleyExtendedSigningKeySize
             ? new PrivateKey(keyBytes[..Ed25519.ExpandedPrivateKeySizeInBytes], keyBytes[ShelleyExtendedChainCodeOffset..])
-            : new PrivateKey(keyBytes, new byte[ChainCodeSize]);
+            : new PrivateKey(keyBytes, []);
     }
 
     internal static PublicKey ReadVerificationKey(string json)
@@ -40,7 +39,7 @@ internal static class KeyFileReader
         ValidateKeyType(type, isSigningKey: false);
         return keyBytes.Length == ExtendedVerificationKeySize
             ? new PublicKey(keyBytes[..Ed25519.PublicKeySizeInBytes], keyBytes[Ed25519.PublicKeySizeInBytes..])
-            : new PublicKey(keyBytes, new byte[ChainCodeSize]);
+            : new PublicKey(keyBytes, []);
     }
 
     private static (string? Type, byte[] KeyBytes) ReadEnvelope(string json, string missingCborMessage)

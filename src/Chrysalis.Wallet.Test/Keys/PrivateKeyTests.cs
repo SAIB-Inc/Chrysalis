@@ -347,8 +347,73 @@ public class PrivateKeyTests
     [InlineData("m/1852'/1815'/0'/0/0", true)]
     [InlineData("m/1852'/1815'/-1'", false)]
     [InlineData("m/1852'/1815'/0'/0/-1", false)]
-    public void IsValidPath_RefusesANegativeIndex(string path, bool valid) =>
+    [InlineData("", false)]
+    [InlineData("m", false)]
+    [InlineData("x/1", false)]
+    [InlineData("M/0", false)]
+    [InlineData("/0", false)]
+    [InlineData("m/ 1", false)]
+    [InlineData("m/1 ", false)]
+    [InlineData("m/+1", false)]
+    [InlineData("m/1852''", false)]
+    [InlineData("m/'0", false)]
+    [InlineData("m/1'2", false)]
+    [InlineData("m/00", false)]
+    [InlineData("m/01'", false)]
+    [InlineData("m/1\0/2", false)]
+    [InlineData("m/0", true)]
+    [InlineData("m/0'", true)]
+    [InlineData("m/2147483647'", true)]
+    [InlineData("m/2147483647", true)]
+    [InlineData("m/", false)]
+    [InlineData("m/0/", false)]
+    [InlineData("m//0", false)]
+    [InlineData("m/'", false)]
+    [InlineData("m/2147483648", false)]
+    [InlineData("m/1852H/1815H/0H", false)]
+    [InlineData("m/\u0661", false)]
+    public void IsValidPath_ValidatesCanonicalBip32Paths(string path, bool valid) =>
         Assert.Equal(valid, Bip32Util.IsValidPath(path));
+
+    [Fact]
+    public void IsValidPath_Null_ThrowsArgumentNullException() =>
+        _ = Assert.Throws<ArgumentNullException>("path", () => Bip32Util.IsValidPath(null!));
+
+    [Theory]
+    [InlineData(0, PublicKeyTests.AccXPrv0)]
+    [InlineData(1, PublicKeyTests.AccXPrv1)]
+    public void DeriveCardanoAccountKey_MatchesCardanoAddresses410Accounts(int account, string expectedAccBech32)
+    {
+        byte[] rootRaw = PublicKeyTests.DecodeBech32Key(PublicKeyTests.RootXPrv);
+        byte[] expectedRaw = PublicKeyTests.DecodeBech32Key(expectedAccBech32);
+        PrivateKey root = new(rootRaw[..64], rootRaw[64..]);
+
+        PrivateKey derived = root.DeriveCardanoAccountKey(account);
+
+        Assert.Equal(expectedRaw[..64], derived.Key);
+        Assert.Equal(expectedRaw[64..], derived.Chaincode);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData(0)]
+    [InlineData(31)]
+    [InlineData(33)]
+    public void Derive_InvalidChaincode_ThrowsInvalidOperationException(int? chaincodeLength)
+    {
+        byte[] extendedKey = CreateTestRootKey().Key;
+        byte[] chaincode = chaincodeLength is int length ? new byte[length] : null!;
+        PrivateKey key = new(extendedKey, chaincode);
+
+        _ = Assert.Throws<InvalidOperationException>(() => key.Derive(0, DerivationType.HARD));
+        _ = Assert.Throws<InvalidOperationException>(() => key.Derive(0, DerivationType.SOFT));
+    }
+
+    [Theory]
+    [InlineData(31)]
+    [InlineData(33)]
+    public void PointOfTrunc28Mul8_WrongLength_ThrowsArgumentException(int length) =>
+        _ = Assert.Throws<ArgumentException>("sk", () => Bip32Util.PointOfTrunc28Mul8(new byte[length]));
 
     [Fact]
     public void PointOfTrunc28Mul8_IsThePublicKeyOfItsScalar()

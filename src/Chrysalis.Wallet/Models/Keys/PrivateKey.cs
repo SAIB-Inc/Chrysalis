@@ -1,5 +1,4 @@
 // Contains code adapted from CardanoSharp.Wallet (MIT), Copyright (c) 2021 CardanoSharp; changed for Chrysalis. See THIRD-PARTY-NOTICES.md.
-using System.Buffers.Binary;
 using System.Security.Cryptography;
 using Chrysalis.Crypto;
 using Chrysalis.Wallet.Models.Enums;
@@ -34,11 +33,12 @@ public class PrivateKey(byte[] key, byte[] chaincode)
 
     /// <summary>
     /// Derives the corresponding public key from this private key.
+    /// Returns an empty chain code for a 32-byte Ed25519 seed (which has no child keys), and this key's chain code for a 64-byte Cardano extended key.
     /// </summary>
     /// <returns>The derived public key.</returns>
-    public PublicKey GetPublicKey() => new(
-        Key.Length == Ed25519.PrivateKeySeedSizeInBytes ? Ed25519.PublicKeyFromSeed(Key) : Ed25519.PublicKeyFromExtendedKey(Key),
-        Chaincode);
+    public PublicKey GetPublicKey() => Key.Length == Ed25519.PrivateKeySeedSizeInBytes
+        ? new(Ed25519.PublicKeyFromSeed(Key), [])
+        : new(Ed25519.PublicKeyFromExtendedKey(Key), Chaincode);
 
     /// <summary>
     /// Derives a child key at the specified index.
@@ -47,7 +47,7 @@ public class PrivateKey(byte[] key, byte[] chaincode)
     /// <param name="type">The derivation type (hard or soft).</param>
     /// <returns>The derived child private key.</returns>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="index"/> is negative.</exception>
-    /// <exception cref="InvalidOperationException">This key is a 32-byte seed, which has no child keys.</exception>
+    /// <exception cref="InvalidOperationException">This key is a 32-byte seed, or its chain code is <see langword="null"/> or not 32 bytes.</exception>
     public PrivateKey Derive(int index, DerivationType type = DerivationType.SOFT)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(index);
@@ -67,7 +67,7 @@ public class PrivateKey(byte[] key, byte[] chaincode)
     /// <param name="purpose">The BIP-44 purpose type.</param>
     /// <param name="type">The derivation type (hard or soft).</param>
     /// <returns>The derived child private key.</returns>
-    /// <exception cref="InvalidOperationException">This key is a 32-byte seed, which has no child keys.</exception>
+    /// <exception cref="InvalidOperationException">This key is a 32-byte seed, or its chain code is <see langword="null"/> or not 32 bytes.</exception>
     public PrivateKey Derive(PurposeType purpose, DerivationType type = DerivationType.SOFT) => Derive((int)purpose, type);
 
     /// <summary>
@@ -76,7 +76,7 @@ public class PrivateKey(byte[] key, byte[] chaincode)
     /// <param name="coinType">The BIP-44 coin type.</param>
     /// <param name="type">The derivation type (hard or soft).</param>
     /// <returns>The derived child private key.</returns>
-    /// <exception cref="InvalidOperationException">This key is a 32-byte seed, which has no child keys.</exception>
+    /// <exception cref="InvalidOperationException">This key is a 32-byte seed, or its chain code is <see langword="null"/> or not 32 bytes.</exception>
     public PrivateKey Derive(CoinType coinType, DerivationType type = DerivationType.SOFT) => Derive((int)coinType, type);
 
     /// <summary>
@@ -85,7 +85,7 @@ public class PrivateKey(byte[] key, byte[] chaincode)
     /// <param name="roleType">The CIP-1852 role type.</param>
     /// <param name="type">The derivation type (hard or soft).</param>
     /// <returns>The derived child private key.</returns>
-    /// <exception cref="InvalidOperationException">This key is a 32-byte seed, which has no child keys.</exception>
+    /// <exception cref="InvalidOperationException">This key is a 32-byte seed, or its chain code is <see langword="null"/> or not 32 bytes.</exception>
     public PrivateKey Derive(RoleType roleType, DerivationType type = DerivationType.SOFT) => Derive((int)roleType, type);
 
     /// <summary>
@@ -94,7 +94,7 @@ public class PrivateKey(byte[] key, byte[] chaincode)
     /// <param name="account">The account index (default 0).</param>
     /// <returns>The account-level private key.</returns>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="account"/> is negative.</exception>
-    /// <exception cref="InvalidOperationException">This key is a 32-byte seed, which has no child keys.</exception>
+    /// <exception cref="InvalidOperationException">This key is a 32-byte seed, or its chain code is <see langword="null"/> or not 32 bytes.</exception>
     public PrivateKey DeriveCardanoAccountKey(int account = 0)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(account);
@@ -110,7 +110,7 @@ public class PrivateKey(byte[] key, byte[] chaincode)
     /// <param name="index">The address index (default 0).</param>
     /// <returns>The payment private key.</returns>
     /// <exception cref="ArgumentOutOfRangeException">On an extended key, <paramref name="index"/> is negative.</exception>
-    /// <exception cref="InvalidOperationException">This key is a 32-byte seed, which has no child keys.</exception>
+    /// <exception cref="InvalidOperationException">This key is a 32-byte seed, or its chain code is <see langword="null"/> or not 32 bytes.</exception>
     public PrivateKey DerivePaymentKey(int index = 0) =>
         Derive(RoleType.ExternalChain).Derive(index);
 
@@ -121,90 +121,37 @@ public class PrivateKey(byte[] key, byte[] chaincode)
     /// <param name="index">The address index (default 0).</param>
     /// <returns>The staking private key.</returns>
     /// <exception cref="ArgumentOutOfRangeException">On an extended key, <paramref name="index"/> is negative.</exception>
-    /// <exception cref="InvalidOperationException">This key is a 32-byte seed, which has no child keys.</exception>
+    /// <exception cref="InvalidOperationException">This key is a 32-byte seed, or its chain code is <see langword="null"/> or not 32 bytes.</exception>
     public PrivateKey DeriveStakeKey(int index = 0) =>
         Derive(RoleType.Staking).Derive(index);
 
-    private PrivateKey GetChildKeyDerivation(ulong index)
+    private PrivateKey GetChildKeyDerivation(uint index)
     {
         if (Key.Length != Ed25519.ExpandedPrivateKeySizeInBytes)
         {
             throw new InvalidOperationException("Only a 64-byte Cardano extended key derives child keys; this key is a 32-byte Ed25519 seed.");
         }
 
-        // Split the 64-byte private key into two 32-byte halves.
-        byte[] kl = new byte[32];
-        Buffer.BlockCopy(Key, 0, kl, 0, 32);
-        byte[] kr = new byte[32];
-        Buffer.BlockCopy(Key, 32, kr, 0, 32);
-
-        byte[] z;   // HMAC result for z (64 bytes)
-        byte[] zl;  // first half of z
-        byte[] zr;  // second half of z
-        byte[] i;   // HMAC result for i (64 bytes)
-        byte[] seri = Bip32Util.Le32(index);
-
-        byte[] zBufferArr;
-        byte[] iBufferArr;
-        Span<byte> temp = stackalloc byte[2];
-
-        if (Bip32Util.FromIndex(index) == DerivationType.HARD)
+        if (Chaincode is null || Chaincode.Length != Bip32Util.ChainCodeSize)
         {
-            int totalLen = 1 + Key.Length + seri.Length;
-            zBufferArr = new byte[totalLen];
-            iBufferArr = new byte[totalLen];
-
-            BinaryPrimitives.WriteUInt16BigEndian(temp, 0x0000);
-            zBufferArr[0] = temp[1];
-
-            BinaryPrimitives.WriteUInt16BigEndian(temp, 0x0001);
-            iBufferArr[0] = temp[1];
-
-            Buffer.BlockCopy(Key, 0, zBufferArr, 1, Key.Length);
-            Buffer.BlockCopy(Key, 0, iBufferArr, 1, Key.Length);
-            Buffer.BlockCopy(seri, 0, zBufferArr, 1 + Key.Length, seri.Length);
-            Buffer.BlockCopy(seri, 0, iBufferArr, 1 + Key.Length, seri.Length);
-        }
-        else
-        {
-            PublicKey pk = GetPublicKey();
-            int totalLen = 1 + pk.Key.Length + seri.Length;
-            zBufferArr = new byte[totalLen];
-            iBufferArr = new byte[totalLen];
-
-            BinaryPrimitives.WriteUInt16BigEndian(temp, 0x0002);
-            zBufferArr[0] = temp[1];
-
-            BinaryPrimitives.WriteUInt16BigEndian(temp, 0x0003);
-            iBufferArr[0] = temp[1];
-
-            Buffer.BlockCopy(pk.Key, 0, zBufferArr, 1, pk.Key.Length);
-            Buffer.BlockCopy(pk.Key, 0, iBufferArr, 1, pk.Key.Length);
-            Buffer.BlockCopy(seri, 0, zBufferArr, 1 + pk.Key.Length, seri.Length);
-            Buffer.BlockCopy(seri, 0, iBufferArr, 1 + pk.Key.Length, seri.Length);
+            throw new InvalidOperationException($"A chain code must be {Bip32Util.ChainCodeSize} bytes to derive child keys, not {Chaincode?.Length ?? 0}.");
         }
 
-        using (HMACSHA512 hmacSha512 = new(Chaincode))
+        Span<byte> z = stackalloc byte[64];
+        byte[] derivedKey = new byte[Ed25519.ExpandedPrivateKeySizeInBytes];
+        byte[] cc = new byte[Bip32Util.ChainCodeSize];
+        try
         {
-            z = hmacSha512.ComputeHash(zBufferArr);
-            zl = z[..32];
-            zr = z[32..];
+            ReadOnlySpan<byte> material = Bip32Util.FromIndex(index) == DerivationType.HARD ? Key : GetPublicKey().Key;
+            Bip32Util.DeriveChildHmac(material, Chaincode, index, z, cc);
+            Bip32Util.Add28Mul8(Key.AsSpan(0, 32), z[..32], derivedKey.AsSpan(0, 32));
+            Bip32Util.Add256Bits(Key.AsSpan(32, 32), z[32..], derivedKey.AsSpan(32, 32));
+            return new PrivateKey(derivedKey, cc);
         }
-
-        byte[] left = Bip32Util.Add28Mul8(kl, zl);
-        byte[] right = Bip32Util.Add256Bits(kr, zr);
-
-        byte[] derivedKey = new byte[left.Length + right.Length];
-        Buffer.BlockCopy(left, 0, derivedKey, 0, left.Length);
-        Buffer.BlockCopy(right, 0, derivedKey, left.Length, right.Length);
-
-        using (HMACSHA512 hmacSha512 = new(Chaincode))
+        finally
         {
-            i = hmacSha512.ComputeHash(iBufferArr);
+            CryptographicOperations.ZeroMemory(z);
         }
-        byte[] cc = i[32..];
-
-        return new PrivateKey(derivedKey, cc);
     }
 
     /// <summary>
