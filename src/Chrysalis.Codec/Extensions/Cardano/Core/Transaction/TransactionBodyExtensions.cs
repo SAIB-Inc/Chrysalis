@@ -48,9 +48,9 @@ public static class TransactionBodyExtensions
         return self switch
         {
             ByronTransactionBodyAdapter byron => byron.TxPayload.Transaction.Outputs.Select(o => (ITransactionOutput)new ByronTransactionOutputAdapter(o)),
-            AlonzoTransactionBody alonzoTxBody => alonzoTxBody.Outputs.Cast<ITransactionOutput>(),
-            BabbageTransactionBody babbageTxBody => babbageTxBody.Outputs.Cast<ITransactionOutput>(),
-            ConwayTransactionBody conwayTxBody => conwayTxBody.Outputs.Cast<ITransactionOutput>(),
+            AlonzoTransactionBody alonzoTxBody => alonzoTxBody.Outputs,
+            BabbageTransactionBody babbageTxBody => babbageTxBody.Outputs,
+            ConwayTransactionBody conwayTxBody => conwayTxBody.Outputs,
             _ => []
         };
     }
@@ -361,7 +361,9 @@ public static class TransactionBodyExtensions
     public static string Hash(this ITransactionBody self)
     {
         ArgumentNullException.ThrowIfNull(self);
-        byte[] raw = self.Raw.Length > 0 ? self.Raw.ToArray() : CborSerializer.Serialize(self);
-        return Convert.ToHexString(Blake2b.HashData(32, raw)).ToUpperInvariant();
+        ReadOnlySpan<byte> source = self.Raw.Length > 0 ? self.Raw.Span : CborSerializer.Serialize(self);
+        Span<byte> hash = stackalloc byte[32];
+        Blake2b.HashData(32, source, hash);
+        return Convert.ToHexString(hash);
     }
 }

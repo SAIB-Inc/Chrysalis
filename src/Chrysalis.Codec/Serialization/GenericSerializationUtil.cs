@@ -11,6 +11,9 @@ public delegate T ReadHandler<T>(ReadOnlyMemory<byte> data);
 public delegate T ReadWithConsumedHandler<T>(ReadOnlyMemory<byte> data, out int bytesConsumed);
 public delegate void WriteHandler<T>(IBufferWriter<byte> output, T value);
 
+/// <summary>Dispatches CBOR primitive and generated type serialization.</summary>
+/// <remarks>Definite byte strings borrow the input. Keep its backing storage valid and unmodified while using the result, including as a map key.
+/// Retaining even a small slice keeps the backing storage alive; call <c>ToArray()</c> to retain the bytes independently. Indefinite byte strings are joined into owned storage.</remarks>
 public static class GenericSerializationUtil
 {
     private static readonly ConcurrentDictionary<Type, Delegate> ReadMethodCache = [];
@@ -72,7 +75,7 @@ public static class GenericSerializationUtil
                 _ when type == typeof(decimal) => (T)(object)reader.ReadDecimal(),
                 _ when type == typeof(string) => (T)(object)reader.ReadString()!,
                 _ when type == typeof(byte[]) => (T)(object)ReadByteArray(ref reader),
-                _ when type == typeof(ReadOnlyMemory<byte>) => (T)(object)(ReadOnlyMemory<byte>)ReadByteArray(ref reader),
+                _ when type == typeof(ReadOnlyMemory<byte>) => (T)(object)ReadByteMemory(ref reader, data),
                 _ when type == typeof(CborEncodedValue) => ReadCborEncodedValueAsT<T>(ref reader, data),
                 _ when type == typeof(CborLabel) => (T)(object)ReadCborLabel(ref reader),
                 _ => throw new NotSupportedException($"Type {type} is not supported as a primitive type.")
@@ -159,7 +162,7 @@ public static class GenericSerializationUtil
                 _ when type == typeof(decimal) => (T)(object)reader.ReadDecimal(),
                 _ when type == typeof(string) => (T)(object)reader.ReadString()!,
                 _ when type == typeof(byte[]) => (T)(object)ReadByteArray(ref reader),
-                _ when type == typeof(ReadOnlyMemory<byte>) => (T)(object)(ReadOnlyMemory<byte>)ReadByteArray(ref reader),
+                _ when type == typeof(ReadOnlyMemory<byte>) => (T)(object)ReadByteMemory(ref reader, data),
                 _ when type == typeof(CborEncodedValue) => (T)(object)CborEncodedValue.Read(data),
                 _ when type == typeof(CborLabel) => (T)(object)ReadCborLabel(ref reader),
                 _ => throw new NotSupportedException($"Type {type} is not supported as a primitive type.")
@@ -197,7 +200,7 @@ public static class GenericSerializationUtil
                 _ when type == typeof(decimal) => reader.ReadDecimal(),
                 _ when type == typeof(string) => reader.ReadString()!,
                 _ when type == typeof(byte[]) => ReadByteArray(ref reader),
-                _ when type == typeof(ReadOnlyMemory<byte>) => (ReadOnlyMemory<byte>)ReadByteArray(ref reader),
+                _ when type == typeof(ReadOnlyMemory<byte>) => ReadByteMemory(ref reader, data),
                 _ when type == typeof(CborEncodedValue) => CborEncodedValue.Read(data),
                 _ when type == typeof(CborLabel) => ReadCborLabel(ref reader),
                 _ => throw new NotSupportedException($"Type {type} is not supported as a primitive type.")
@@ -241,7 +244,7 @@ public static class GenericSerializationUtil
                 _ when type == typeof(decimal) => reader.ReadDecimal(),
                 _ when type == typeof(string) => reader.ReadString()!,
                 _ when type == typeof(byte[]) => ReadByteArray(ref reader),
-                _ when type == typeof(ReadOnlyMemory<byte>) => (ReadOnlyMemory<byte>)ReadByteArray(ref reader),
+                _ when type == typeof(ReadOnlyMemory<byte>) => ReadByteMemory(ref reader, data),
                 _ when type == typeof(CborLabel) => ReadCborLabel(ref reader),
                 _ => throw new NotSupportedException($"Type {type} is not supported as a primitive type.")
             };
@@ -305,6 +308,26 @@ public static class GenericSerializationUtil
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static byte[] ReadByteArray(ref CborReader reader) => reader.ReadByteStringToArray();
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static ReadOnlyMemory<byte> ReadByteMemory(ref CborReader reader, ReadOnlyMemory<byte> data)
+    {
+        ReadOnlySpan<byte> content = reader.Buffer;
+        if (!content.IsEmpty && (content[0] >> 5) == 6)
+        {
+            CborReader probe = reader;
+            _ = probe.TryReadSemanticTag(out _);
+            content = probe.Buffer;
+        }
+        if (!content.IsEmpty && content[0] == 0x5F)
+        {
+            return reader.ReadByteStringToArray();
+        }
+        CborReader sequenceReader = new(new ReadOnlySequence<byte>(data));
+        ReadOnlyMemory<byte> result = sequenceReader.ReadByteStringSequence().First;
+        reader = new(data.Span[sequenceReader.GetBookmark().currentPos..]);
+        return result;
+    }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static T ReadNonPrimitive<T>(ReadOnlyMemory<byte> data)

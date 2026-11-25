@@ -10,6 +10,9 @@ namespace Chrysalis.Codec.Serialization;
 /// <see cref="CborValidationException"/>. A generated Read method called directly can
 /// still throw <see cref="SAIB.Cbor.CborException"/>, whose Offset is available since SAIB.Cbor 3.1.0.
 /// Cancellation and resource exhaustion are not converted into codec errors.
+/// Definite byte strings borrow the input. Keep its backing storage valid and unmodified while using the result, including as a map key.
+/// Retaining even a small slice keeps the backing storage alive; call <c>ToArray()</c> to retain the bytes independently.
+/// Indefinite byte strings are joined into owned storage.
 /// </remarks>
 public static class CborSerializer
 {
