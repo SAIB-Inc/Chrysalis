@@ -1,23 +1,45 @@
+using System.Buffers;
 using Chrysalis.Codec.Serialization;
-using Chrysalis.Codec.Serialization.Attributes;
 
 namespace Chrysalis.Codec.Types;
 
-/// <summary>
-/// Represents CBOR-in-CBOR encoded data: #6.24(bytes .cbor T) per Cardano CDDL.
-/// The codegen emits tag 24 + bytestring on write and reads past tag 24 on read.
-/// <see cref="Value"/> contains the inner CBOR bytes (without the tag/bytestring wrapper).
-/// Used for inline datums and script references.
-/// </summary>
-[CborSerializable]
-public partial record CborEncodedValue(ReadOnlyMemory<byte> Value) : ICborType
+/// <summary>Embedded CBOR stored as a tag 24 byte string on fresh writes.</summary>
+public readonly partial record struct CborEncodedValue : ICborType
 {
-    /// <inheritdoc />
-    public ReadOnlyMemory<byte> Raw { get; set; }
+    /// <summary>The inner CBOR bytes, without the tag and byte string headers.</summary>
+    public ReadOnlyMemory<byte> Value { get; }
 
     /// <inheritdoc />
-    public int ConstrIndex { get; set; }
+    public ReadOnlyMemory<byte> Raw { get; }
 
     /// <inheritdoc />
-    public bool IsIndefinite { get; set; }
+    public int ConstrIndex => 0;
+
+    /// <inheritdoc />
+    public bool IsIndefinite => false;
+
+    /// <summary>Wraps the supplied memory without copying or encoding it.</summary>
+    public CborEncodedValue(ReadOnlyMemory<byte> value) : this(value, default) { }
+
+    private CborEncodedValue(ReadOnlyMemory<byte> value, ReadOnlyMemory<byte> raw)
+    {
+        Value = value;
+        Raw = raw;
+    }
+
+    /// <summary>Reads the first item, borrowing a definite byte string or joining indefinite chunks.</summary>
+    public static CborEncodedValue Read(ReadOnlyMemory<byte> data) => Read(data, out _);
+
+    /// <summary>Reads the first item and reports its encoded length.</summary>
+    public static CborEncodedValue Read(ReadOnlyMemory<byte> data, out int bytesConsumed)
+    {
+        ByteStringWire.Read(data, "Chrysalis.Codec.Types.CborEncodedValue.Value", out ReadOnlyMemory<byte> value, out bytesConsumed);
+        return new(value, data[..bytesConsumed]);
+    }
+
+    /// <summary>Writes the original wire bytes when available, otherwise encodes the value.</summary>
+    public static void Write(IBufferWriter<byte> output, CborEncodedValue data) => ByteStringWire.Write(output, data.Raw, data.Value, tag24: true);
+
+    /// <summary>Encodes the value into newly owned storage.</summary>
+    public static CborEncodedValue Create(ReadOnlyMemory<byte> value) => Read(ByteStringWire.Encode(value, tag24: true));
 }

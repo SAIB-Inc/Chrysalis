@@ -474,11 +474,7 @@ public static class GenericSerializationUtil
             case Type t when t == typeof(string): writer.WriteString((string)value); break;
             case Type t when t == typeof(byte[]): writer.WriteByteString((byte[])value); break;
             case Type t when t == typeof(ReadOnlyMemory<byte>): writer.WriteByteString(((ReadOnlyMemory<byte>)value).Span); break;
-            case Type t when t == typeof(CborEncodedValue):
-                CborEncodedValue encoded = (CborEncodedValue)value;
-                if (encoded.Raw.Length > 0) { writer.BufferWriter.Write(encoded.Raw.Span); }
-                else { writer.WriteSemanticTag(24); writer.WriteByteString(encoded.Value.Span); }
-                break;
+            case Type t when t == typeof(CborEncodedValue): CborEncodedValue.Write(output, (CborEncodedValue)value); break;
             case Type t when t == typeof(CborAny): WriteCborAny(output, (CborAny)value); break;
             case Type t when t == typeof(CborLabel):
                 CborLabel label = (CborLabel)value;

@@ -930,6 +930,16 @@ public sealed partial class CborSerializerCodeGen
         public static StringBuilder EmitMapValueReader(StringBuilder sb, SerializablePropertyMetadata prop, string typePath)
         {
             string cleanType = prop.PropertyType.Replace("?", "");
+            if (prop.IsTypeNullable)
+            {
+                _ = sb.AppendLine("if (reader.Buffer.Length > 0 && (reader.Buffer[0] == 0xF6 || reader.Buffer[0] == 0xF7))");
+                _ = sb.AppendLine("{");
+                _ = sb.AppendLine("reader.SkipDataItem();");
+                _ = sb.AppendLine("value = null;");
+                _ = sb.AppendLine("}");
+                _ = sb.AppendLine("else");
+                _ = sb.AppendLine("{");
+            }
 
             if (prop.IsOpenGeneric)
             {
@@ -962,6 +972,11 @@ public sealed partial class CborSerializerCodeGen
                 _ = sb.AppendLine($"int _pos = data.Length - reader.Buffer.Length;");
                 _ = sb.AppendLine($"value = {nonNullType}.Read(data.Slice(_pos), out int _consumed);");
                 _ = sb.AppendLine($"reader = new CborReader(data.Span.Slice(_pos + _consumed));");
+                _ = sb.AppendLine("}");
+            }
+
+            if (prop.IsTypeNullable)
+            {
                 _ = sb.AppendLine("}");
             }
 

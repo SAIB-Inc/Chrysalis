@@ -917,9 +917,9 @@ public class TxBuilder
         // 1. Check reference inputs for matching script (preferred — avoids witness bloat)
         foreach (ResolvedInput refInput in _referenceInputs)
         {
-            if (refInput.Output is PostAlonzoTransactionOutput refOutput && refOutput.ScriptRef is not null)
+            if (refInput.Output is PostAlonzoTransactionOutput { ScriptRef: { } scriptRef })
             {
-                IScript refScript = refOutput.ScriptRef.Deserialize<IScript>();
+                IScript refScript = scriptRef.Deserialize<IScript>();
                 if (refScript.HashHex().Equals(hashHex, StringComparison.OrdinalIgnoreCase))
                 {
                     return (refScript, true);
@@ -928,9 +928,9 @@ public class TxBuilder
         }
 
         // 2. Check UTxO output for inline script reference
-        if (utxo.Output is PostAlonzoTransactionOutput postAlonzo && postAlonzo.ScriptRef is not null)
+        if (utxo.Output is PostAlonzoTransactionOutput { ScriptRef: { } inlineRef })
         {
-            return (postAlonzo.ScriptRef.Deserialize<IScript>(), false);
+            return (inlineRef.Deserialize<IScript>(), false);
         }
 
         // 3. Check provided scripts
@@ -1071,9 +1071,9 @@ public class TxBuilder
     {
         foreach (ResolvedInput refInput in _referenceInputs)
         {
-            if (refInput.Output is PostAlonzoTransactionOutput refOutput && refOutput.ScriptRef is not null)
+            if (refInput.Output is PostAlonzoTransactionOutput { ScriptRef: { } scriptRef })
             {
-                IScript refScript = CborSerializer.Deserialize<IScript>(refOutput.ScriptRef.GetValue());
+                IScript refScript = CborSerializer.Deserialize<IScript>(scriptRef.GetValue());
                 if (refScript.HashHex().Equals(scriptHashHex, StringComparison.OrdinalIgnoreCase))
                 {
                     return refScript;

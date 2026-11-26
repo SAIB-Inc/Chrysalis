@@ -9,23 +9,12 @@ namespace Chrysalis.Codec.Extensions;
 public static class CborEncodedValueExtensions
 {
     /// <summary>
-    /// Returns the inner CBOR bytes from a CborEncodedValue.
-    /// Since <see cref="CborEncodedValue.Value"/> now stores the inner bytes
-    /// directly (tag 24 + bytestring wrapping is handled by the codegen),
-    /// this simply returns <see cref="CborEncodedValue.Value"/> as a byte[].
+    /// Returns an independent copy of the inner CBOR bytes, without the tag or byte string headers.
     /// </summary>
-    public static byte[] GetValue(this CborEncodedValue self)
-    {
-        ArgumentNullException.ThrowIfNull(self);
-        return self.Value.ToArray();
-    }
+    public static byte[] GetValue(this CborEncodedValue self) => self.Value.ToArray();
 
     /// <summary>
     /// Deserializes the inner CBOR bytes as <typeparamref name="T"/>.
     /// </summary>
-    public static T Deserialize<T>(this CborEncodedValue self) where T : ICborType
-    {
-        ArgumentNullException.ThrowIfNull(self);
-        return CborSerializer.Deserialize<T>(self.Value);
-    }
+    public static T Deserialize<T>(this CborEncodedValue self) where T : ICborType => CborSerializer.Deserialize<T>(self.Value);
 }
