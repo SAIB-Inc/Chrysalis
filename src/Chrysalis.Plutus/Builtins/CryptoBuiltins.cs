@@ -1,9 +1,9 @@
 // Contains code adapted from Blaze (Apache-2.0); changed for Chrysalis. See THIRD-PARTY-NOTICES.md.
+using Chrysalis.Crypto;
 using Chrysalis.Plutus.Cek;
 using Org.BouncyCastle.Crypto.Digests;
 using Org.BouncyCastle.Crypto.Parameters;
 using Org.BouncyCastle.Crypto.Signers;
-using Org.BouncyCastle.Math.EC.Rfc8032;
 using static Chrysalis.Plutus.Builtins.BuiltinHelpers;
 
 namespace Chrysalis.Plutus.Builtins;
@@ -32,30 +32,19 @@ internal static class CryptoBuiltins
         ReadOnlyMemory<byte> msg = UnwrapByteString(args[1]);
         ReadOnlyMemory<byte> sig = UnwrapByteString(args[2]);
 
-        if (pk.Length != Ed25519.PublicKeySize)
+        if (pk.Length != Ed25519.PublicKeySizeInBytes)
         {
             throw new EvaluationException(
                 "verifyEd25519Signature: public key must be 32 bytes");
         }
 
-        if (sig.Length != Ed25519.SignatureSize)
+        if (sig.Length != Ed25519.SignatureSizeInBytes)
         {
             throw new EvaluationException(
                 "verifyEd25519Signature: signature must be 64 bytes");
         }
 
-        try
-        {
-            Ed25519PublicKeyParameters pubKey = new(pk.Span);
-            Ed25519Signer signer = new();
-            signer.Init(false, pubKey);
-            signer.BlockUpdate(msg.Span);
-            return BoolResult(signer.VerifySignature(sig.Span.ToArray()));
-        }
-        catch
-        {
-            return BoolResult(false);
-        }
+        return BoolResult(Ed25519.Verify(sig.Span, msg.Span, pk.Span));
     }
 
     internal static CekValue VerifyEcdsaSecp256k1Signature(CekValue[] args)
