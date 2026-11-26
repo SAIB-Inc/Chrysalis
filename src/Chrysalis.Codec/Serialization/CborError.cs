@@ -231,7 +231,7 @@ public static class CborError
         {
             Type definition = type.GetGenericTypeDefinition();
             if (definition == typeof(List<>) || definition == typeof(CborList<>)) { return "array"; }
-            if (definition == typeof(Dictionary<,>)) { return "map"; }
+            if (definition == typeof(Dictionary<,>) || definition == typeof(CborMap<,>)) { return "map"; }
         }
         string Name() => type.IsGenericType ? type.ToString() : type.FullName ?? type.Name;
         return Type.GetTypeCode(Nullable.GetUnderlyingType(type) ?? type) switch

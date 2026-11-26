@@ -2,6 +2,7 @@ using System.Numerics;
 using Google.Protobuf.Collections;
 using Chrysalis.Codec.Extensions.Cardano.Core.Common;
 using Chrysalis.Codec.Extensions.Cardano.Core.Transaction;
+using Chrysalis.Codec.Types;
 using Chrysalis.Codec.Serialization;
 using Chrysalis.Codec.Types.Cardano.Core.Common;
 using Chrysalis.Codec.Types.Cardano.Core.Scripts;
@@ -22,7 +23,7 @@ internal static class ParsedOutputs
         Assert.Equal(expected.Assets.Count, policies.Count);
         foreach (Spec.Multiasset group in expected.Assets)
         {
-            Dictionary<ReadOnlyMemory<byte>, ulong> tokens = policies[Convert.ToHexString(group.PolicyId.Span)].Value;
+            CborMap<ReadOnlyMemory<byte>, ulong> tokens = policies[Convert.ToHexString(group.PolicyId.Span)].Value;
             Assert.Equal(group.Assets.Count, tokens.Count);
             foreach (Spec.Asset asset in group.Assets)
             {

@@ -62,6 +62,9 @@ public sealed partial class CborSerializerCodeGen
     }
 
     internal sealed record CborListPropertyMetadata(string Type, string ItemType, bool IsNullable, bool HasDirectItemReader);
+    internal sealed record CborMapPropertyMetadata(
+        string Type, string TypeofType, string KeyType, string ValueType,
+        bool IsNullable, bool HasDirectKeyReader, bool HasDirectValueReader);
 
     internal sealed record SerializablePropertyMetadata(
         string PropertyName,
@@ -95,11 +98,12 @@ public sealed partial class CborSerializerCodeGen
         bool IsMapKeyTypeUnion = false,
         bool IsMapValueTypeUnion = false,
         CborListPropertyMetadata? CborList = null,
-        bool IsPairList = false
+        bool IsPairList = false,
+        CborMapPropertyMetadata? CborMap = null
     )
     {
-        public bool IsTypeNullable => CborList?.IsNullable ?? PropertyType.Contains("?");
-        public string NonNullableTypeFullName => CborList?.Type ?? PropertyTypeFullName.Replace("?", "");
+        public bool IsTypeNullable => CborList?.IsNullable ?? CborMap?.IsNullable ?? PropertyType.Contains("?");
+        public string NonNullableTypeFullName => CborList?.Type ?? CborMap?.Type ?? PropertyTypeFullName.Replace("?", "");
         public bool IsRequired => !IsTypeNullable && !IsNullable;
 
 

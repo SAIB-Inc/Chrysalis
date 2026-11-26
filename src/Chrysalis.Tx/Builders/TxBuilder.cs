@@ -1,3 +1,4 @@
+using Chrysalis.Codec.Types;
 using Chrysalis.Codec.Extensions;
 using Chrysalis.Codec.Extensions.Cardano.Core.Common;
 using Chrysalis.Codec.Extensions.Cardano.Core.Transaction;
@@ -963,7 +964,7 @@ public class TxBuilder
         body.ValidityIntervalStart is null && body.TimeToLive is null ? null : _slotConfig ??= await _provider.GetSlotNetworkConfigAsync().ConfigureAwait(false);
 
     // Reuse the codec's ledger comparer even for newly created redeemer keys.
-    internal static readonly IEqualityComparer<RedeemerKey> RedeemerKeyComparer = RedeemerMap.Create([]).Value.Comparer;
+    internal static readonly IEqualityComparer<RedeemerKey> RedeemerKeyComparer = CborMap<RedeemerKey, RedeemerValue>.KeyComparer;
 
     /// <summary>
     /// Each distinct key's place among the keys in the given order, by the key's hex in any case:
@@ -1010,7 +1011,7 @@ public class TxBuilder
 
         // ── Tag 1: Mint redeemers (the policy's place in the mint, in byte order) ──
         Dictionary<string, int> mintIndices = RedeemerIndices(
-            builder.Mint is { } minted ? minted.Value.Keys : [], ByteMemoryComparer.Instance);
+            builder.Mint is { } minted ? minted.Value.Select(kv => kv.Key) : [], ByteMemoryComparer.Instance);
         foreach (MintDirective mint in _mintDirectives)
         {
             if (mint.Redeemer is not null && mintIndices.TryGetValue(mint.PolicyHex, out int mintIndex))
@@ -1047,7 +1048,7 @@ public class TxBuilder
 
         if (redeemerMap.Count > 0)
         {
-            _ = builder.SetRedeemers(RedeemerMap.Create(redeemerMap));
+            _ = builder.SetRedeemers(RedeemerMap.Create(CborMap<RedeemerKey, RedeemerValue>.Create(redeemerMap)));
         }
 
         ExUnits KeepUnits(int tag, int index)

@@ -1,3 +1,4 @@
+using Chrysalis.Codec.Types;
 using Chrysalis.Codec.Extensions.Cardano.Core.TransactionWitness;
 using Chrysalis.Codec.Serialization;
 using Chrysalis.Codec.Types.Cardano.Core.Certificates;
@@ -165,7 +166,7 @@ public sealed class RedeemerPointerTests
         }
 
         RedeemerMap map = Assert.IsType<RedeemerMap>(redeemers);
-        Dictionary<RedeemerKey, RedeemerValue> entries = map.Value;
+        CborMap<RedeemerKey, RedeemerValue> entries = map.Value;
         // Decoding collapses duplicate keys, so check the original wire count before comparing pointers.
         Assert.Equal(0xA0 + entries.Count, CborSerializer.Serialize(map)[0]);
         return entries.ToDictionary(entry => (entry.Key.Tag, entry.Key.Index), entry => Convert.ToHexString(CborSerializer.Serialize(entry.Value.Data)));

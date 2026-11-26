@@ -200,7 +200,7 @@ public static class ScriptContextBuilder
         }
 
         // Multi-asset entries
-        if (value is LovelaceWithMultiAsset multiAsset && multiAsset.MultiAsset.Value is not null)
+        if (value is LovelaceWithMultiAsset multiAsset && !multiAsset.MultiAsset.Value.IsEmpty)
         {
             foreach ((ReadOnlyMemory<byte> policyId, TokenBundleOutput bundle) in
                 multiAsset.MultiAsset.Value.OrderBy(kv => kv.Key, ByteMemoryComparer.Instance))
@@ -223,7 +223,7 @@ public static class ScriptContextBuilder
     /// </summary>
     private static VmMap MintToPlutusData(MultiAssetMint? mint)
     {
-        if (mint?.Value is null || mint.Value.Value.Count == 0)
+        if (mint is not { } m || m.Value.IsEmpty)
         {
             return EmptyMap();
         }
@@ -231,7 +231,7 @@ public static class ScriptContextBuilder
         List<(VmPlutusData Key, VmPlutusData Value)> entries = [];
 
         foreach ((ReadOnlyMemory<byte> policyId, TokenBundleMint bundle) in
-            mint.Value.Value.OrderBy(kv => kv.Key, ByteMemoryComparer.Instance))
+            m.Value.OrderBy(kv => kv.Key, ByteMemoryComparer.Instance))
         {
             List<(VmPlutusData Key, VmPlutusData Value)> assetEntries = [];
             foreach ((ReadOnlyMemory<byte> assetName, long amount) in
@@ -643,7 +643,7 @@ public static class ScriptContextBuilder
 
     private static VmMap WithdrawalsToPlutusData(Withdrawals? withdrawals)
     {
-        if (withdrawals?.Value is null || withdrawals.Value.Count == 0)
+        if (withdrawals is not { } w || w.Value.IsEmpty)
         {
             return EmptyMap();
         }
@@ -653,13 +653,19 @@ public static class ScriptContextBuilder
         // Sort by parsed address components — port of Aiken sort_reward_accounts:
         // network first, then credential type (script < key), then hash
         foreach ((RewardAccount account, ulong coin) in
-            withdrawals.Value.OrderBy(kv => kv.Key.Value, RewardAccountComparer.Instance))
+            w.Value.OrderBy(kv => kv.Key.Value, RewardAccountComparer.Instance))
         {
             entries.Add((CredentialFromRewardAccount(account), Int(coin)));
         }
 
         return Map(entries);
     }
+
+    private static List<(ReadOnlyMemory<byte> PolicyId, TokenBundleMint Bundle)>? SortMint(MultiAssetMint? mint) =>
+        mint is { } m ? [.. m.Value.OrderBy(kv => kv.Key, ByteMemoryComparer.Instance).Select(kv => (kv.Key, kv.Value))] : null;
+
+    private static List<(RewardAccount Account, ulong Coin)> SortWithdrawals(Withdrawals? withdrawals) =>
+        withdrawals is { } w ? [.. w.Value.OrderBy(kv => kv.Key.Value, RewardAccountComparer.Instance).Select(kv => (kv.Key, kv.Value))] : [];
 
     private static VmConstr CredentialFromRewardAccount(RewardAccount account)
     {
@@ -1013,21 +1019,13 @@ public static class ScriptContextBuilder
                 : [];
 
         // Sorted mint
-        List<(ReadOnlyMemory<byte> PolicyId, TokenBundleMint Bundle)>? sortedMint =
-            body.Mint?.Value?
-                .OrderBy(kv => kv.Key, ByteMemoryComparer.Instance)
-                .Select(kv => (kv.Key, kv.Value))
-                .ToList();
+        List<(ReadOnlyMemory<byte> PolicyId, TokenBundleMint Bundle)>? sortedMint = SortMint(body.Mint);
 
         // Certificates
         List<ICertificate> certificates = body.Certificates?.ToList() ?? [];
 
         // Withdrawals — sorted by parsed address (network, credential type, hash) like Aiken
-        List<(RewardAccount Account, ulong Coin)> sortedWithdrawals =
-            body.Withdrawals?.Value?
-                .OrderBy(kv => kv.Key.Value, RewardAccountComparer.Instance)
-                .Select(kv => (kv.Key, kv.Value))
-                .ToList() ?? [];
+        List<(RewardAccount Account, ulong Coin)> sortedWithdrawals = SortWithdrawals(body.Withdrawals);
 
         // Proposals
         List<ProposalProcedure> proposals = body.ProposalProcedures?.ToList() ?? [];
@@ -1143,11 +1141,7 @@ public static class ScriptContextBuilder
         List<(TransactionInput Input, ITransactionOutput Output)> sortedInputs =
             SortAndResolveInputs(body.Inputs, utxos);
 
-        List<(ReadOnlyMemory<byte> PolicyId, TokenBundleMint Bundle)>? sortedMint =
-            body.Mint?.Value?
-                .OrderBy(kv => kv.Key, ByteMemoryComparer.Instance)
-                .Select(kv => (kv.Key, kv.Value))
-                .ToList();
+        List<(ReadOnlyMemory<byte> PolicyId, TokenBundleMint Bundle)>? sortedMint = SortMint(body.Mint);
 
         switch (redeemer.Tag)
         {
@@ -1159,7 +1153,7 @@ public static class ScriptContextBuilder
                         throw new InvalidOperationException("Spend redeemer index out of range");
                     }
 
-                    (TransactionInput input, ITransactionOutput output) = sortedInputs[idx];
+                    (_, ITransactionOutput output) = sortedInputs[idx];
                     ReadOnlyMemory<byte> addressBytes = output switch
                     {
                         PostAlonzoTransactionOutput p => p.Address.Value,
@@ -1205,11 +1199,7 @@ public static class ScriptContextBuilder
 
             case 3: // Reward
                 {
-                    List<(RewardAccount Account, ulong Coin)> sortedWithdrawals =
-                        body.Withdrawals?.Value?
-                            .OrderBy(kv => kv.Key.Value, RewardAccountComparer.Instance)
-                            .Select(kv => (kv.Key, kv.Value))
-                            .ToList() ?? [];
+                    List<(RewardAccount Account, ulong Coin)> sortedWithdrawals = SortWithdrawals(body.Withdrawals);
 
                     int idx = (int)redeemer.Index;
                     if (idx >= sortedWithdrawals.Count)
@@ -1350,19 +1340,11 @@ public static class ScriptContextBuilder
         List<(TransactionInput Input, ITransactionOutput Output)> sortedInputs =
             SortAndResolveInputs(body.Inputs, utxos);
 
-        List<(ReadOnlyMemory<byte> PolicyId, TokenBundleMint Bundle)>? sortedMint =
-            body.Mint?.Value?
-                .OrderBy(kv => kv.Key, ByteMemoryComparer.Instance)
-                .Select(kv => (kv.Key, kv.Value))
-                .ToList();
+        List<(ReadOnlyMemory<byte> PolicyId, TokenBundleMint Bundle)>? sortedMint = SortMint(body.Mint);
 
         List<ICertificate> certificates = body.Certificates?.ToList() ?? [];
 
-        List<(RewardAccount Account, ulong Coin)> sortedWithdrawals =
-            body.Withdrawals?.Value?
-                .OrderBy(kv => kv.Key.Value, RewardAccountComparer.Instance)
-                .Select(kv => (kv.Key, kv.Value))
-                .ToList() ?? [];
+        List<(RewardAccount Account, ulong Coin)> sortedWithdrawals = SortWithdrawals(body.Withdrawals);
 
         List<ProposalProcedure> proposals = body.ProposalProcedures?.ToList() ?? [];
         List<Voter> sortedVoters = body.VotingProcedures?.Value?.Keys

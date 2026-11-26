@@ -407,7 +407,7 @@ public sealed partial class CborSerializerCodeGen
             string errorStart = $"_errorStart{propertyName}";
             string errorSlice = $"_errorSlice{propertyName}";
             string fieldPath = $"{typePath}.{metadata.PropertyName}";
-            string fieldType = $"typeof({metadata.NonNullableTypeFullName})";
+            string fieldType = $"typeof({metadata.CborMap?.TypeofType ?? metadata.NonNullableTypeFullName})";
             string? errorSlot = null;
             string expectedType = fieldType;
             if (metadata.IsList && !metadata.IsListItemTypeOpenGeneric)
@@ -850,6 +850,7 @@ public sealed partial class CborSerializerCodeGen
                 "float" => ($"{buffer}[0] != 0xFA", "floating point"),
                 "double" => ($"{buffer}[0] != 0xFB", "floating point"),
                 "byte[]" => ($"({buffer}[0] >> 5) != 2", "byte string"),
+                _ when prop.CborMap is not null => ($"({buffer}[0] >> 5) != 5", "map"),
                 _ when prop.IsPairList => ($"({buffer}[0] >> 5) != 5", "map"),
                 _ when cleanType.Contains("Dictionary<") => ($"({buffer}[0] >> 5) != 5", KnownCollectionKind(fullType, "Dictionary", "map")),
                 _ when cleanType.Contains("List<") =>

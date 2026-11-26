@@ -1,3 +1,4 @@
+using Chrysalis.Codec.Types;
 using Chrysalis.Codec.Types.Cardano.Core.Common;
 using Chrysalis.Codec.Types.Cardano.Core.Protocol;
 using Chrysalis.Codec.Types.Cardano.Core.TransactionWitness;
@@ -132,7 +133,7 @@ public sealed class RedeemerBuilder
         {
             map[RedeemerKey.Create(entry.Tag, entry.Index)] = RedeemerValue.Create(entry.Data, entry.ExUnits);
         }
-        return RedeemerMap.Create(map);
+        return RedeemerMap.Create(CborMap<RedeemerKey, RedeemerValue>.Create(map));
     }
 
     internal static ExUnits DefaultExUnits() => ExUnits.Create(0, 0);

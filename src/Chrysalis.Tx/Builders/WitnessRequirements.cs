@@ -63,7 +63,7 @@ public sealed class WitnessRequirements
         }
         if (builder.CurrentWithdrawals is { } withdrawals)
         {
-            foreach (RewardAccount account in withdrawals.Value.Keys)
+            foreach ((RewardAccount account, _) in withdrawals.Value)
             {
                 AddCredential((account.Value.Span[0] & 0x10) != 0, account.Value.Span.Slice(1, 28));
             }
@@ -97,7 +97,7 @@ public sealed class WitnessRequirements
         }
         if (builder.Mint is { } mint)
         {
-            foreach (ReadOnlyMemory<byte> policy in mint.Value.Keys)
+            foreach ((ReadOnlyMemory<byte> policy, _) in mint.Value)
             {
                 AddCredential(true, policy.Span);
             }

@@ -2,6 +2,7 @@ using System.Buffers;
 using System.Collections.Concurrent;
 using System.Reflection;
 using System.Runtime.CompilerServices;
+using System.Runtime.ExceptionServices;
 using Chrysalis.Codec.Types;
 using SAIB.Cbor.Serialization;
 
@@ -31,6 +32,11 @@ public static class GenericSerializationUtil
             if (IsPrimitiveType(typeof(T)))
             {
                 return ReadPrimitiveWithConsumed<T>(data, out bytesConsumed);
+            }
+
+            if (default(T) is null && typeof(T).IsValueType)
+            {
+                return (T?)ReadNonPrimitiveWithConsumed(typeof(T), data, out bytesConsumed);
             }
 
             if (!ReadWithConsumedMethodCache.TryGetValue(typeof(T), out Delegate? readDelegate))
@@ -77,6 +83,7 @@ public static class GenericSerializationUtil
                 _ when type == typeof(byte[]) => (T)(object)ReadByteArray(ref reader),
                 _ when type == typeof(ReadOnlyMemory<byte>) => (T)(object)ReadByteMemory(ref reader, data),
                 _ when type == typeof(CborEncodedValue) => ReadCborEncodedValueAsT<T>(ref reader, data),
+                _ when type == typeof(CborAny) => (T)(object)ReadCborAny(ref reader, data),
                 _ when type == typeof(CborLabel) => (T)(object)ReadCborLabel(ref reader),
                 _ => throw new NotSupportedException($"Type {type} is not supported as a primitive type.")
             };
@@ -134,7 +141,7 @@ public static class GenericSerializationUtil
                type == typeof(long) || type == typeof(ulong) || type == typeof(float) ||
                type == typeof(double) || type == typeof(decimal) || type == typeof(string) ||
                type == typeof(byte[]) || type == typeof(ReadOnlyMemory<byte>) ||
-               type == typeof(CborEncodedValue) || type == typeof(CborLabel);
+               type == typeof(CborEncodedValue) || type == typeof(CborAny) || type == typeof(CborLabel);
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -164,6 +171,7 @@ public static class GenericSerializationUtil
                 _ when type == typeof(byte[]) => (T)(object)ReadByteArray(ref reader),
                 _ when type == typeof(ReadOnlyMemory<byte>) => (T)(object)ReadByteMemory(ref reader, data),
                 _ when type == typeof(CborEncodedValue) => (T)(object)CborEncodedValue.Read(data),
+                _ when type == typeof(CborAny) => (T)(object)ReadCborAny(ref reader, data),
                 _ when type == typeof(CborLabel) => (T)(object)ReadCborLabel(ref reader),
                 _ => throw new NotSupportedException($"Type {type} is not supported as a primitive type.")
             };
@@ -202,6 +210,7 @@ public static class GenericSerializationUtil
                 _ when type == typeof(byte[]) => ReadByteArray(ref reader),
                 _ when type == typeof(ReadOnlyMemory<byte>) => ReadByteMemory(ref reader, data),
                 _ when type == typeof(CborEncodedValue) => CborEncodedValue.Read(data),
+                _ when type == typeof(CborAny) => ReadCborAny(ref reader, data),
                 _ when type == typeof(CborLabel) => ReadCborLabel(ref reader),
                 _ => throw new NotSupportedException($"Type {type} is not supported as a primitive type.")
             };
@@ -245,6 +254,7 @@ public static class GenericSerializationUtil
                 _ when type == typeof(string) => reader.ReadString()!,
                 _ when type == typeof(byte[]) => ReadByteArray(ref reader),
                 _ when type == typeof(ReadOnlyMemory<byte>) => ReadByteMemory(ref reader, data),
+                _ when type == typeof(CborAny) => ReadCborAny(ref reader, data),
                 _ when type == typeof(CborLabel) => ReadCborLabel(ref reader),
                 _ => throw new NotSupportedException($"Type {type} is not supported as a primitive type.")
             };
@@ -298,6 +308,15 @@ public static class GenericSerializationUtil
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static CborAny ReadCborAny(ref CborReader reader, ReadOnlyMemory<byte> data)
+    {
+        int pos = data.Length - reader.Buffer.Length;
+        if (!reader.Buffer.IsEmpty && reader.Buffer[0] == 0xFF) { throw CborError.Decode(data, pos, typeof(CborAny).FullName!, "valid CBOR data item", "unexpected break"); }
+        _ = reader.ReadDataItem();
+        return new CborAny(data[pos..(data.Length - reader.Buffer.Length)]);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static T ReadCborEncodedValueAsT<T>(ref CborReader reader, ReadOnlyMemory<byte> data)
     {
         int pos = data.Length - reader.Buffer.Length;
@@ -329,11 +348,31 @@ public static class GenericSerializationUtil
         return result;
     }
 
+    internal static ReadOnlyMemory<byte> ReadByteMemoryWithConsumed(ReadOnlyMemory<byte> data, out int bytesConsumed)
+    {
+        try
+        {
+            CborReader reader = new(data.Span);
+            ReadOnlyMemory<byte> value = ReadByteMemory(ref reader, data);
+            bytesConsumed = data.Length - reader.Buffer.Length;
+            return value;
+        }
+        catch (Exception error) when (CborError.IsDecodeFailure(error))
+        {
+            throw CborError.Wrap(error, data, typeof(ReadOnlyMemory<byte>).FullName!, "byte string");
+        }
+    }
+
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static T ReadNonPrimitive<T>(ReadOnlyMemory<byte> data)
     {
         try
         {
+            if (default(T) is null && typeof(T).IsValueType)
+            {
+                return (T)ReadNonPrimitive(typeof(T), data)!;
+            }
+
             if (!ReadMethodCache.TryGetValue(typeof(T), out Delegate? readDelegate))
             {
                 MethodInfo readMethod = typeof(T).GetMethod("Read", BindingFlags.Public | BindingFlags.Static | BindingFlags.FlattenHierarchy, null, [typeof(ReadOnlyMemory<byte>)], null)
@@ -435,7 +474,12 @@ public static class GenericSerializationUtil
             case Type t when t == typeof(string): writer.WriteString((string)value); break;
             case Type t when t == typeof(byte[]): writer.WriteByteString((byte[])value); break;
             case Type t when t == typeof(ReadOnlyMemory<byte>): writer.WriteByteString(((ReadOnlyMemory<byte>)value).Span); break;
-            case Type t when t == typeof(CborEncodedValue): writer.BufferWriter.Write(((CborEncodedValue)value).Value.Span); break;
+            case Type t when t == typeof(CborEncodedValue):
+                CborEncodedValue encoded = (CborEncodedValue)value;
+                if (encoded.Raw.Length > 0) { writer.BufferWriter.Write(encoded.Raw.Span); }
+                else { writer.WriteSemanticTag(24); writer.WriteByteString(encoded.Value.Span); }
+                break;
+            case Type t when t == typeof(CborAny): WriteCborAny(output, (CborAny)value); break;
             case Type t when t == typeof(CborLabel):
                 CborLabel label = (CborLabel)value;
                 switch (label.Value)
@@ -457,25 +501,59 @@ public static class GenericSerializationUtil
 
         try
         {
+            if (default(T) is null && typeof(T).IsValueType && value is not null)
+            {
+                WritePresentNullable(output, Nullable.GetUnderlyingType(typeof(T))!, value);
+                return;
+            }
+
             if (!WriteMethodCache.TryGetValue(typeof(T), out Delegate? writeDelegate))
             {
-                MethodInfo writeMethod = typeof(T).GetMethod("Write", BindingFlags.Public | BindingFlags.Static | BindingFlags.FlattenHierarchy, null, [typeof(IBufferWriter<byte>), typeof(T)], null)
-                    ?? throw new NotSupportedException($"Type {typeof(T).FullName} does not have a valid static Write method.");
-
-                writeDelegate = (WriteHandler<T>)Delegate.CreateDelegate(typeof(WriteHandler<T>), writeMethod);
-                WriteMethodCache[typeof(T)] = writeDelegate;
+                writeDelegate = CacheWriteHandler(typeof(T), typeof(WriteHandler<T>));
             }
 
             ((WriteHandler<T>)writeDelegate)(output, value);
         }
         catch (Exception ex) when (CborError.IsDecodeFailure(ex))
         {
-            if (ex is CborValidationException)
-            {
-                throw;
-            }
+            if (ex is CborValidationException) { throw; }
             throw new CborValidationException(-1, typeof(T).FullName!, "serializable value", ex.Message, ex);
         }
+    }
+
+    private static void WriteCborAny(IBufferWriter<byte> output, CborAny value)
+    {
+        ReadOnlySpan<byte> raw = value.Raw.Span;
+        if (raw.IsEmpty) { throw CborError.Validation(-1, typeof(CborAny).FullName!, "valid CBOR data item", "empty"); }
+        if (raw[0] == 0xFF) { throw CborError.Validation(-1, typeof(CborAny).FullName!, "valid CBOR data item", "unexpected break"); }
+        try
+        {
+            CborReader r = new(raw);
+            _ = r.ReadDataItem();
+            if (!r.Buffer.IsEmpty) { throw CborError.Validation(-1, typeof(CborAny).FullName!, "single CBOR data item", "trailing bytes"); }
+        }
+        catch (Exception ex) when (ex is not CborValidationException && CborError.IsDecodeFailure(ex)) { throw CborError.Validation(-1, typeof(CborAny).FullName!, "valid CBOR data item", ex.Message, ex); }
+        output.Write(raw);
+    }
+
+    private static void WritePresentNullable(IBufferWriter<byte> output, Type underlying, object value)
+    {
+        // A present nullable boxes as its underlying value. The cache stores the exact writer type.
+        if (!WriteMethodCache.TryGetValue(underlying, out Delegate? writeDelegate))
+        {
+            writeDelegate = CacheWriteHandler(underlying, typeof(WriteHandler<>).MakeGenericType(underlying));
+        }
+        try { _ = writeDelegate.DynamicInvoke(output, value); }
+        catch (TargetInvocationException ex) when (ex.InnerException is not null) { ExceptionDispatchInfo.Throw(ex.InnerException); }
+    }
+
+    private static Delegate CacheWriteHandler(Type type, Type delegateType)
+    {
+        MethodInfo write = type.GetMethod("Write", BindingFlags.Public | BindingFlags.Static | BindingFlags.FlattenHierarchy, null, [typeof(IBufferWriter<byte>), type], null)
+            ?? throw new NotSupportedException($"Type {type.FullName} does not have a valid static Write method.");
+        Delegate handler = write.CreateDelegate(delegateType);
+        WriteMethodCache[type] = handler;
+        return handler;
     }
 
     #endregion

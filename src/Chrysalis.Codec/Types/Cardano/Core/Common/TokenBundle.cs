@@ -10,11 +10,11 @@ public partial interface ITokenBundle : ICborType;
 [CborSerializable]
 public readonly partial record struct TokenBundleOutput : ITokenBundle
 {
-    public partial Dictionary<ReadOnlyMemory<byte>, ulong> Value { get; }
+    public partial CborMap<ReadOnlyMemory<byte>, ulong> Value { get; }
 }
 
 [CborSerializable]
 public readonly partial record struct TokenBundleMint : ITokenBundle
 {
-    public partial Dictionary<ReadOnlyMemory<byte>, long> Value { get; }
+    public partial CborMap<ReadOnlyMemory<byte>, long> Value { get; }
 }

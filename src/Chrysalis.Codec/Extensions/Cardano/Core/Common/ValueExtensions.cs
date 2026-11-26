@@ -1,5 +1,6 @@
 using Chrysalis.Codec.Extensions.Cardano.Core.Transaction;
 using Chrysalis.Codec.Serialization.Utils;
+using Chrysalis.Codec.Types;
 using Chrysalis.Codec.Types.Cardano.Core.Common;
 
 namespace Chrysalis.Codec.Extensions.Cardano.Core.Common;
@@ -48,11 +49,7 @@ public static class ValueExtensions
         ArgumentNullException.ThrowIfNull(self);
         return self switch
         {
-            LovelaceWithMultiAsset lovelaceWithMultiAsset => lovelaceWithMultiAsset.MultiAsset.Value
-                .ToDictionary(
-                    kvp => Convert.ToHexString(kvp.Key.Span).ToUpperInvariant(),
-                    kvp => kvp.Value
-                ),
+            LovelaceWithMultiAsset lovelaceWithMultiAsset => lovelaceWithMultiAsset.MultiAsset.ToDict(),
             _ => []
         };
     }
@@ -67,26 +64,11 @@ public static class ValueExtensions
     public static ulong? QuantityOf(this IValue self, ReadOnlyMemory<byte> policyId, ReadOnlyMemory<byte> assetName)
     {
         ArgumentNullException.ThrowIfNull(self);
-
-        if (self is LovelaceWithMultiAsset multiAsset)
-        {
-            foreach (KeyValuePair<ReadOnlyMemory<byte>, TokenBundleOutput> policyEntry in multiAsset.MultiAsset.Value)
-            {
-                if (policyEntry.Key.Span.SequenceEqual(policyId.Span))
-                {
-                    foreach (KeyValuePair<ReadOnlyMemory<byte>, ulong> token in policyEntry.Value.Value)
-                    {
-                        if (token.Key.Span.SequenceEqual(assetName.Span))
-                        {
-                            return token.Value;
-                        }
-                    }
-                    return null;
-                }
-            }
-        }
-
-        return null;
+        return self is LovelaceWithMultiAsset multiAsset
+            && multiAsset.MultiAsset.Value.TryGetValue(policyId, out TokenBundleOutput bundle)
+            && bundle.Value.TryGetValue(assetName, out ulong quantity)
+            ? quantity
+            : null;
     }
 
     /// <summary>
@@ -227,10 +209,12 @@ public static class ValueExtensions
             yield break;
         }
 
-        foreach (KeyValuePair<ReadOnlyMemory<byte>, TokenBundleOutput> policyEntry in multiAsset.MultiAsset.Value)
+        foreach (KeyValuePair<ReadOnlyMemory<byte>, TokenBundleOutput> policyEntry in
+            (IEnumerable<KeyValuePair<ReadOnlyMemory<byte>, TokenBundleOutput>>)multiAsset.MultiAsset.Value)
         {
             string policyHex = Convert.ToHexStringLower(policyEntry.Key.Span);
-            foreach (KeyValuePair<ReadOnlyMemory<byte>, ulong> token in policyEntry.Value.Value)
+            foreach (KeyValuePair<ReadOnlyMemory<byte>, ulong> token in
+                (IEnumerable<KeyValuePair<ReadOnlyMemory<byte>, ulong>>)policyEntry.Value.Value)
             {
                 yield return (policyHex, Convert.ToHexStringLower(token.Key.Span), token.Value);
             }
@@ -379,8 +363,8 @@ public static class ValueExtensions
         Dictionary<ReadOnlyMemory<byte>, TokenBundleOutput> multiAsset = [with(ReadOnlyMemoryComparer.Instance)];
         foreach (KeyValuePair<ReadOnlyMemory<byte>, Dictionary<ReadOnlyMemory<byte>, ulong>> entry in byPolicy)
         {
-            multiAsset[entry.Key] = TokenBundleOutput.Create(entry.Value);
+            multiAsset[entry.Key] = TokenBundleOutput.Create(CborMap<ReadOnlyMemory<byte>, ulong>.Create(entry.Value));
         }
-        return MultiAssetOutput.Create(multiAsset);
+        return MultiAssetOutput.Create(CborMap<ReadOnlyMemory<byte>, TokenBundleOutput>.Create(multiAsset));
     }
 }

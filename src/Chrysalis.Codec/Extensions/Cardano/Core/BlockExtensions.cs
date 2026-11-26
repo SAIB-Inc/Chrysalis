@@ -208,9 +208,9 @@ public static class BlockExtensions
         ArgumentNullException.ThrowIfNull(self);
         return self switch
         {
-            AlonzoCompatibleBlock alonzoCompatibleBlock => alonzoCompatibleBlock.AuxiliaryDataSet.Value,
-            BabbageBlock babbageBlock => babbageBlock.AuxiliaryDataSet.Value,
-            ConwayBlock conwayBlock => conwayBlock.AuxiliaryDataSet.Value,
+            AlonzoCompatibleBlock alonzoCompatibleBlock => alonzoCompatibleBlock.AuxiliaryDataSet.Value.ToDictionary(),
+            BabbageBlock babbageBlock => babbageBlock.AuxiliaryDataSet.Value.ToDictionary(),
+            ConwayBlock conwayBlock => conwayBlock.AuxiliaryDataSet.Value.ToDictionary(),
             _ => []
         };
     }

@@ -1,3 +1,4 @@
+using Chrysalis.Codec.Types;
 using Chrysalis.Codec.Types.Cardano.Core.Common;
 
 namespace Chrysalis.Codec.Extensions.Cardano.Core.Common;
@@ -12,8 +13,5 @@ public static class TokenBundleMintExtensions
     /// </summary>
     /// <param name="self">The token bundle mint instance.</param>
     /// <returns>The mint dictionary.</returns>
-    public static Dictionary<string, long> Value(this TokenBundleMint self) => self.Value.ToDictionary(
-            kvp => Convert.ToHexString(kvp.Key.Span).ToUpperInvariant(),
-            kvp => kvp.Value
-        );
+    public static Dictionary<string, long> Value(this TokenBundleMint self) => self.Value.ToHexKeyDictionary();
 }

@@ -595,6 +595,10 @@ public sealed partial class CborSerializerCodeGen
             {
                 return "bytes";
             }
+            if (prop.CborMap is not null)
+            {
+                return "map";
+            }
             if (prop.IsList)
             {
                 return "array";
@@ -752,7 +756,7 @@ public sealed partial class CborSerializerCodeGen
                 {
                     return "boolean";
                 }
-                if (child.Properties[0].IsMap)
+                if (child.Properties[0].IsMap || child.Properties[0].CborMap is not null)
                 {
                     return "map";
                 }

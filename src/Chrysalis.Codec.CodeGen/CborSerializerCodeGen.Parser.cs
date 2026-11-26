@@ -389,10 +389,16 @@ public sealed partial class CborSerializerCodeGen
             bool isMapKeyTypeUnion = isMap && typeSymbol is ITypeSymbol mks && IsMapType(mks, out ITypeSymbol? mkSymbol, out _) && mkSymbol is not null && HasCborUnionAttribute(mkSymbol);
             bool isMapValueTypeUnion = isMap && typeSymbol is ITypeSymbol mvs && IsMapType(mvs, out _, out ITypeSymbol? mvSymbol) && mvSymbol is not null && HasCborUnionAttribute(mvSymbol);
 
-            CborListPropertyMetadata? cborList = GetCborListProperty(model.GetTypeInfo(param.Type).Type);
+            ITypeSymbol? resolvedParamType = model.GetTypeInfo(param.Type).Type;
+            CborListPropertyMetadata? cborList = GetCborListProperty(resolvedParamType);
+            CborMapPropertyMetadata? cborMap = cborList is null ? GetCborMapProperty(resolvedParamType) : null;
             if (cborList is not null)
             {
                 propertyTypeFullName = cborList.Type + (cborList.IsNullable ? "?" : "");
+            }
+            else if (cborMap is not null)
+            {
+                propertyTypeFullName = cborMap.Type + (cborMap.IsNullable ? "?" : "");
             }
 
             SerializablePropertyMetadata propMetadata = new(
@@ -427,7 +433,8 @@ public sealed partial class CborSerializerCodeGen
                 isMapKeyTypeUnion,
                 isMapValueTypeUnion,
                 cborList,
-                IsPairList(typeSymbol as ITypeSymbol, out _)
+                IsPairList(typeSymbol as ITypeSymbol, out _),
+                cborMap
             );
 
 
@@ -580,10 +587,16 @@ public sealed partial class CborSerializerCodeGen
             bool isMapKeyTypeUnion = isMap && typeSymbol is ITypeSymbol mks && IsMapType(mks, out ITypeSymbol? mkSymbol, out _) && mkSymbol is not null && HasCborUnionAttribute(mkSymbol);
             bool isMapValueTypeUnion = isMap && typeSymbol is ITypeSymbol mvs && IsMapType(mvs, out _, out ITypeSymbol? mvSymbol) && mvSymbol is not null && HasCborUnionAttribute(mvSymbol);
 
-            CborListPropertyMetadata? cborList = GetCborListProperty(model.GetTypeInfo(prop.Type).Type);
+            ITypeSymbol? resolvedPropType = model.GetTypeInfo(prop.Type).Type;
+            CborListPropertyMetadata? cborList = GetCborListProperty(resolvedPropType);
+            CborMapPropertyMetadata? cborMap = cborList is null ? GetCborMapProperty(resolvedPropType) : null;
             if (cborList is not null)
             {
                 propertyTypeFullName = cborList.Type + (cborList.IsNullable ? "?" : "");
+            }
+            else if (cborMap is not null)
+            {
+                propertyTypeFullName = cborMap.Type + (cborMap.IsNullable ? "?" : "");
             }
 
             SerializablePropertyMetadata propMetadata = new(
@@ -618,7 +631,8 @@ public sealed partial class CborSerializerCodeGen
                 isMapKeyTypeUnion,
                 isMapValueTypeUnion,
                 cborList,
-                IsPairList(typeSymbol as ITypeSymbol, out _)
+                IsPairList(typeSymbol as ITypeSymbol, out _),
+                cborMap
             )
             {
                 IsLedgerText = ledgerTextAttribute is not null && propertySymbol?.GetAttributes().Any(
@@ -660,12 +674,34 @@ public sealed partial class CborSerializerCodeGen
 
         ITypeSymbol item = list.TypeArguments[0];
         SymbolDisplayFormat format = SymbolDisplayFormat.FullyQualifiedFormat.AddMiscellaneousOptions(SymbolDisplayMiscellaneousOptions.IncludeNullableReferenceTypeModifier);
-        bool direct = item is INamedTypeSymbol named && item.NullableAnnotation != NullableAnnotation.Annotated && HasDirectListItemReader(named);
+        bool direct = item is INamedTypeSymbol named && item.NullableAnnotation != NullableAnnotation.Annotated && HasDirectItemReader(named);
         return new(list.ToDisplayString(format), item.ToDisplayString(format), nullable, direct);
     }
 
-    private static bool HasDirectListItemReader(INamedTypeSymbol item) =>
-        IsCborList(item) || item.GetMembers("Read").OfType<IMethodSymbol>().Any(method => IsConsumedListItemReader(method, item)) ||
+    private static CborMapPropertyMetadata? GetCborMapProperty(ITypeSymbol? type)
+    {
+        bool nullable = false;
+        if (type is INamedTypeSymbol { OriginalDefinition.SpecialType: SpecialType.System_Nullable_T } wrapper)
+        {
+            type = wrapper.TypeArguments[0];
+            nullable = true;
+        }
+        if (type is not INamedTypeSymbol map || !IsCborMap(map))
+        {
+            return null;
+        }
+
+        ITypeSymbol key = map.TypeArguments[0];
+        ITypeSymbol val = map.TypeArguments[1];
+        SymbolDisplayFormat format = SymbolDisplayFormat.FullyQualifiedFormat.AddMiscellaneousOptions(SymbolDisplayMiscellaneousOptions.IncludeNullableReferenceTypeModifier);
+        bool directKey = key is INamedTypeSymbol namedKey && key.NullableAnnotation != NullableAnnotation.Annotated && HasDirectItemReader(namedKey);
+        bool directVal = val is INamedTypeSymbol namedVal && val.NullableAnnotation != NullableAnnotation.Annotated && HasDirectItemReader(namedVal);
+        return new(map.ToDisplayString(format), map.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
+            key.ToDisplayString(format), val.ToDisplayString(format), nullable, directKey, directVal);
+    }
+
+    private static bool HasDirectItemReader(INamedTypeSymbol item) =>
+        IsCborList(item) || IsCborMap(item) || item.GetMembers("Read").OfType<IMethodSymbol>().Any(method => IsConsumedListItemReader(method, item)) ||
         // In this compilation Roslyn has not seen the methods this generator will emit yet.
         (item.DeclaringSyntaxReferences.Length > 0 && item.GetAttributes().Any(attribute =>
             attribute.AttributeClass?.ToDisplayString() is Parser.CborSerializable or Parser.PlutusData));
@@ -685,6 +721,9 @@ public sealed partial class CborSerializerCodeGen
     }
 
     private static bool IsCborList(INamedTypeSymbol type) => type is { Name: "CborList", Arity: 1 } &&
+        type.ContainingNamespace.ToDisplayString() == "Chrysalis.Codec.Types";
+
+    private static bool IsCborMap(INamedTypeSymbol type) => type is { Name: "CborMap", Arity: 2 } &&
         type.ContainingNamespace.ToDisplayString() == "Chrysalis.Codec.Types";
 
     private static void GetCborPropertyKey(SyntaxNode node, SemanticModel semanticModel, out string? stringKey, out int? intKey)
@@ -753,7 +792,7 @@ public sealed partial class CborSerializerCodeGen
             return true;
         }
 
-        if (typeSymbol is INamedTypeSymbol namedType && namedType.SpecialType != SpecialType.System_String && !IsCborList(namedType))
+        if (typeSymbol is INamedTypeSymbol namedType && namedType.SpecialType != SpecialType.System_String && !IsCborList(namedType) && !IsCborMap(namedType))
         {
             foreach (INamedTypeSymbol iface in namedType.AllInterfaces)
             {
@@ -794,7 +833,7 @@ public sealed partial class CborSerializerCodeGen
             return true;
         }
 
-        if (typeSymbol is INamedTypeSymbol namedType)
+        if (typeSymbol is INamedTypeSymbol namedType && !IsCborMap(namedType))
         {
             foreach (INamedTypeSymbol iface in namedType.AllInterfaces)
             {

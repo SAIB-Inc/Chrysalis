@@ -1,4 +1,5 @@
 using Chrysalis.Codec.Serialization.Utils;
+using Chrysalis.Codec.Types;
 using Chrysalis.Codec.Types.Cardano.Core.Common;
 
 namespace Chrysalis.Tx.Builders;
@@ -62,9 +63,9 @@ public class MintBuilder
         Dictionary<ReadOnlyMemory<byte>, TokenBundleMint> multiAsset = [with(ReadOnlyMemoryComparer.Instance)];
         foreach (KeyValuePair<ReadOnlyMemory<byte>, Dictionary<ReadOnlyMemory<byte>, long>> entry in _byPolicy)
         {
-            multiAsset[entry.Key] = TokenBundleMint.Create(entry.Value);
+            multiAsset[entry.Key] = TokenBundleMint.Create(CborMap<ReadOnlyMemory<byte>, long>.Create(entry.Value));
         }
 
-        return MultiAssetMint.Create(multiAsset);
+        return MultiAssetMint.Create(CborMap<ReadOnlyMemory<byte>, TokenBundleMint>.Create(multiAsset));
     }
 }

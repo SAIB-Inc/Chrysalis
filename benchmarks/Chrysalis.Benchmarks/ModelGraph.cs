@@ -73,6 +73,22 @@ internal static class ModelGraph
     }
 #endif
 
+#if !CHRYSALIS_PINNED_HARNESS && !CHRYSALIS_NO_CBORMAP
+    private static long ReadCborMap<TKey, TValue>(CborMap<TKey, TValue> values) where TKey : notnull
+    {
+        long sum = 0;
+        foreach ((TKey key, TValue value) in values) { sum = unchecked(sum + Read(key) + Read(value)); }
+        return sum;
+    }
+
+    private static CborMap<TKey, TValue> FreshCborMap<TKey, TValue>(CborMap<TKey, TValue> values) where TKey : notnull
+    {
+        List<KeyValuePair<TKey, TValue>> result = [];
+        foreach ((TKey key, TValue value) in values) { result.Add(new(Fresh(key), Fresh(value))); }
+        return CborMap<TKey, TValue>.Create(result, values.IsIndefinite);
+    }
+#endif
+
     private static List<T> FreshList<T>(IEnumerable<T> values)
     {
         List<T> result = [];
@@ -130,6 +146,12 @@ internal static class ModelGraph
                 body = Expression.Call(Method(nameof(ReadCborList)).MakeGenericMethod(type.GenericTypeArguments), item);
             }
 #endif
+#if !CHRYSALIS_PINNED_HARNESS && !CHRYSALIS_NO_CBORMAP
+            else if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(CborMap<,>))
+            {
+                body = Expression.Call(Method(nameof(ReadCborMap)).MakeGenericMethod(type.GenericTypeArguments), item);
+            }
+#endif
             else if (sequence is not null)
             {
                 body = Expression.Call(Method(nameof(ReadItems)).MakeGenericMethod(sequence.GenericTypeArguments), item);
@@ -175,6 +197,12 @@ internal static class ModelGraph
             else if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(CborList<>))
             {
                 body = Expression.Call(Method(nameof(FreshCborList)).MakeGenericMethod(type.GenericTypeArguments), item);
+            }
+#endif
+#if !CHRYSALIS_PINNED_HARNESS && !CHRYSALIS_NO_CBORMAP
+            else if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(CborMap<,>))
+            {
+                body = Expression.Call(Method(nameof(FreshCborMap)).MakeGenericMethod(type.GenericTypeArguments), item);
             }
 #endif
             else if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(List<>))
