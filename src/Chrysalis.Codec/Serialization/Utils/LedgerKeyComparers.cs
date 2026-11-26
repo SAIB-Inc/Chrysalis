@@ -28,5 +28,34 @@ internal static class LedgerKeyComparers
     internal static readonly EqualityComparer<RedeemerKey> RedeemerKey = EqualityComparer<RedeemerKey>.Create(
         static (a, b) => a.Tag == b.Tag && a.Index == b.Index, static key => HashCode.Combine(key.Tag, key.Index));
 
+    internal static IEqualityComparer<TKey> For<TKey>() where TKey : notnull => Cache<TKey>.Instance;
+
     private static int Hash(ReadOnlyMemory<byte> value) => ReadOnlyMemoryComparer.Instance.GetHashCode(value);
+
+    private sealed class ByteArrayComparer : IEqualityComparer<byte[]>
+    {
+        internal static readonly ByteArrayComparer Instance = new();
+
+        public bool Equals(byte[]? x, byte[]? y) =>
+            ReferenceEquals(x, y) || (x is not null && y is not null && ReadOnlyMemoryComparer.Instance.Equals(x, y));
+
+        public int GetHashCode(byte[] obj) => obj is null ? 0 : Hash(obj);
+    }
+
+    private static class Cache<TKey> where TKey : notnull
+    {
+        internal static readonly IEqualityComparer<TKey> Instance = Resolve();
+
+        private static IEqualityComparer<TKey> Resolve() => typeof(TKey) switch
+        {
+            Type t when t == typeof(ReadOnlyMemory<byte>) => (IEqualityComparer<TKey>)(object)ReadOnlyMemoryComparer.Instance,
+            Type t when t == typeof(byte[]) => (IEqualityComparer<TKey>)(object)ByteArrayComparer.Instance,
+            Type t when t == typeof(RewardAccount) => (IEqualityComparer<TKey>)(object)RewardAccount,
+            Type t when t == typeof(Credential) => (IEqualityComparer<TKey>)(object)Credential,
+            Type t when t == typeof(Voter) => (IEqualityComparer<TKey>)(object)Voter,
+            Type t when t == typeof(GovActionId) => (IEqualityComparer<TKey>)(object)GovActionId,
+            Type t when t == typeof(RedeemerKey) => (IEqualityComparer<TKey>)(object)RedeemerKey,
+            _ => EqualityComparer<TKey>.Default
+        };
+    }
 }

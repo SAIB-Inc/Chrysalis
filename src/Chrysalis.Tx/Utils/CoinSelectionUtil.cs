@@ -1,3 +1,4 @@
+using Chrysalis.Codec.Types;
 using Chrysalis.Codec.Extensions.Cardano.Core.Common;
 using Chrysalis.Codec.Extensions.Cardano.Core.Transaction;
 using Chrysalis.Codec.Serialization.Utils;
@@ -349,7 +350,7 @@ public static class CoinSelectionUtil
         MultiAssetOutput multiAsset,
         Dictionary<string, ulong> assetDict)
     {
-        if (multiAsset.Value == null)
+        if (multiAsset.Value.IsEmpty)
         {
             return;
         }
@@ -384,7 +385,7 @@ public static class CoinSelectionUtil
             if (utxo.Output.Amount() is LovelaceWithMultiAsset lovelaceWithMultiAsset)
             {
                 MultiAssetOutput multiAsset = lovelaceWithMultiAsset.MultiAsset;
-                if (multiAsset.Value == null)
+                if (multiAsset.Value.IsEmpty)
                 {
                     continue;
                 }
@@ -412,7 +413,7 @@ public static class CoinSelectionUtil
             if (value is LovelaceWithMultiAsset lovelaceWithMultiAsset)
             {
                 MultiAssetOutput multiAsset = lovelaceWithMultiAsset.MultiAsset;
-                if (multiAsset.Value == null)
+                if (multiAsset.Value.IsEmpty)
                 {
                     continue;
                 }
@@ -462,7 +463,7 @@ public static class CoinSelectionUtil
 
             if (hasChange)
             {
-                assetsChange[policyId] = TokenBundleOutput.Create(assetChanges);
+                assetsChange[policyId] = TokenBundleOutput.Create(CborMap<ReadOnlyMemory<byte>, ulong>.Create(assetChanges));
             }
         }
 

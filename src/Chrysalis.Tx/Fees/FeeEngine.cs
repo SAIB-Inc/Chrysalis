@@ -44,7 +44,7 @@ public static class FeeEngine
                 }
                 break;
             case RedeemerMap map:
-                foreach (RedeemerValue value in map.Value.Values)
+                foreach ((_, RedeemerValue value) in map.Value)
                 {
                     mem += value.ExUnits.Mem;
                     steps += value.ExUnits.Steps;

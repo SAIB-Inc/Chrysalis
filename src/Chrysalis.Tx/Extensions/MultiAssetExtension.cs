@@ -1,4 +1,6 @@
+using Chrysalis.Codec.Extensions.Cardano.Core.Common;
 using Chrysalis.Codec.Serialization;
+using Chrysalis.Codec.Types;
 using Chrysalis.Codec.Types.Cardano.Core.Common;
 
 namespace Chrysalis.Tx.Extensions;
@@ -17,16 +19,13 @@ public static class MultiAssetExtension
     {
         ArgumentNullException.ThrowIfNull(self);
 
-        IEnumerable<string> policies = self switch
+        return self switch
         {
-            MultiAssetOutput multiAssetOutput => multiAssetOutput.Value.Keys.Select(k => Convert.ToHexString(k.Span)),
-            MultiAssetMint multiAssetMint => multiAssetMint.Value.Keys.Select(k => Convert.ToHexString(k.Span)),
+            MultiAssetOutput multiAssetOutput => multiAssetOutput.Value.Select(kv => Convert.ToHexString(kv.Key.Span)),
+            MultiAssetMint multiAssetMint => multiAssetMint.Value.Select(kv => Convert.ToHexString(kv.Key.Span)),
             _ => throw new InvalidOperationException("Unknown multi asset type")
         };
-
-        return policies;
     }
-
 
     /// <summary>
     /// Gets the token bundle for a specific policy ID as a dictionary of asset name hex to quantity.
@@ -41,27 +40,17 @@ public static class MultiAssetExtension
 
         try
         {
-            byte[] policyIdBytes = Convert.FromHexString(policyId);
-            ReadOnlyMemory<byte> policyIdMemory = policyIdBytes;
-
+            ReadOnlyMemory<byte> policyIdMemory = Convert.FromHexString(policyId);
             return self switch
             {
-                MultiAssetOutput multiAssetOutput => FindTokenBundle(
-                    multiAssetOutput.Value,
-                    policyIdMemory,
-                    bundle => bundle.Value.ToDictionary(
-                        x => Convert.ToHexString(x.Key.Span),
-                        x => x.Value)
-                ),
-
-                MultiAssetMint multiAssetMint => FindTokenBundle(
-                    multiAssetMint.Value,
-                    policyIdMemory,
-                    bundle => bundle.Value.ToDictionary(
-                        x => Convert.ToHexString(x.Key.Span),
-                        x => (ulong)x.Value)
-                ),
-
+                MultiAssetOutput multiAssetOutput => FindTokenBundle(multiAssetOutput.Value, policyIdMemory, static bundle => bundle.ToDict()),
+                MultiAssetMint multiAssetMint => FindTokenBundle(multiAssetMint.Value, policyIdMemory, static bundle =>
+                {
+                    CborMap<ReadOnlyMemory<byte>, long> entries = bundle.Value;
+                    Dictionary<string, ulong> result = [with(Math.Clamp(entries.Count, 0, 256))];
+                    foreach ((ReadOnlyMemory<byte> asset, long qty) in entries) { result[Convert.ToHexString(asset.Span)] = (ulong)qty; }
+                    return result;
+                }),
                 _ => null
             };
         }
@@ -72,18 +61,8 @@ public static class MultiAssetExtension
     }
 
     private static Dictionary<string, ulong>? FindTokenBundle<TBundle>(
-        Dictionary<ReadOnlyMemory<byte>, TBundle> bundles,
+        CborMap<ReadOnlyMemory<byte>, TBundle> bundles,
         ReadOnlyMemory<byte> policyId,
-        Func<TBundle, Dictionary<string, ulong>> converter)
-    {
-        foreach (KeyValuePair<ReadOnlyMemory<byte>, TBundle> kvp in bundles)
-        {
-            if (kvp.Key.Span.SequenceEqual(policyId.Span))
-            {
-                return converter(kvp.Value);
-            }
-        }
-
-        return null;
-    }
+        Func<TBundle, Dictionary<string, ulong>> converter) =>
+        bundles.TryGetValue(policyId, out TBundle? bundle) ? converter(bundle) : null;
 }

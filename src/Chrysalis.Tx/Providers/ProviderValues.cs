@@ -38,9 +38,9 @@ public static class ProviderValues
         Dictionary<ReadOnlyMemory<byte>, TokenBundleOutput> output = [with(ReadOnlyMemoryComparer.Instance)];
         foreach ((ReadOnlyMemory<byte> policy, Dictionary<ReadOnlyMemory<byte>, ulong> bundle) in byPolicy)
         {
-            output.Add(policy, TokenBundleOutput.Create(bundle));
+            output.Add(policy, TokenBundleOutput.Create(CborMap<ReadOnlyMemory<byte>, ulong>.Create(bundle)));
         }
-        return LovelaceWithMultiAsset.Create(lovelace, MultiAssetOutput.Create(output));
+        return LovelaceWithMultiAsset.Create(lovelace, MultiAssetOutput.Create(CborMap<ReadOnlyMemory<byte>, TokenBundleOutput>.Create(output)));
     }
 
     /// <summary>Converts a published decimal to an exact, reduced unsigned ledger ratio.</summary>

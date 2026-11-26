@@ -32,7 +32,7 @@ public static class RedeemerExtensions
         ArgumentNullException.ThrowIfNull(self);
         return self switch
         {
-            RedeemerMap map => map.Value,
+            RedeemerMap map => map.Value.ToDictionary(),
             _ => []
         };
     }

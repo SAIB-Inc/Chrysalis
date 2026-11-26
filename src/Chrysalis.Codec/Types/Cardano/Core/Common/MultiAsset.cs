@@ -10,11 +10,11 @@ public partial interface IMultiAsset : ICborType;
 [CborSerializable]
 public readonly partial record struct MultiAssetOutput : IMultiAsset
 {
-    public partial Dictionary<ReadOnlyMemory<byte>, TokenBundleOutput> Value { get; }
+    public partial CborMap<ReadOnlyMemory<byte>, TokenBundleOutput> Value { get; }
 }
 
 [CborSerializable]
 public readonly partial record struct MultiAssetMint : IMultiAsset
 {
-    public partial Dictionary<ReadOnlyMemory<byte>, TokenBundleMint> Value { get; }
+    public partial CborMap<ReadOnlyMemory<byte>, TokenBundleMint> Value { get; }
 }

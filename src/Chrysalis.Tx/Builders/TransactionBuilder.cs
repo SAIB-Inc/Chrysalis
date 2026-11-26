@@ -305,7 +305,7 @@ public class TransactionBuilder
     /// <summary>Adds a withdrawal from a reward address.</summary>
     public TransactionBuilder AddWithdrawal(string rewardAddressHex, ulong amount)
     {
-        (_withdrawalEntries ??= [])[new RewardAccount(Convert.FromHexString(rewardAddressHex))] = amount;
+        (_withdrawalEntries ??= [with(CborMap<RewardAccount, ulong>.KeyComparer)])[new RewardAccount(Convert.FromHexString(rewardAddressHex))] = amount;
         return this;
     }
 
@@ -313,7 +313,7 @@ public class TransactionBuilder
     public TransactionBuilder AddWithdrawal(string rewardAddressHex, ulong amount, IScript script, IPlutusData redeemer, params string[] requiredSigners)
     {
         ArgumentNullException.ThrowIfNull(requiredSigners);
-        (_withdrawalEntries ??= [])[new RewardAccount(Convert.FromHexString(rewardAddressHex))] = amount;
+        (_withdrawalEntries ??= [with(CborMap<RewardAccount, ulong>.KeyComparer)])[new RewardAccount(Convert.FromHexString(rewardAddressHex))] = amount;
         _ = AddPlutusScript(script);
         _ = RedeemerSet.AddReward(rewardAddressHex, redeemer);
         AddSignersInternal(requiredSigners);
@@ -775,20 +775,20 @@ public class TransactionBuilder
 
     internal void IntegrateWithdrawals()
     {
-        if (_withdrawalEntries is { Count: > 0 })
+        if (_withdrawalEntries is not { Count: > 0 })
         {
-            if (CurrentWithdrawals is not null)
-            {
-                foreach (KeyValuePair<RewardAccount, ulong> kvp in _withdrawalEntries)
-                {
-                    CurrentWithdrawals.Value[kvp.Key] = kvp.Value;
-                }
-            }
-            else
-            {
-                CurrentWithdrawals = new Withdrawals(_withdrawalEntries);
-            }
+            return;
         }
+
+        Dictionary<RewardAccount, ulong> merged = CurrentWithdrawals is { } existing
+            ? existing.Value.ToDictionary()
+            : [with(CborMap<RewardAccount, ulong>.KeyComparer)];
+        foreach (KeyValuePair<RewardAccount, ulong> kvp in _withdrawalEntries)
+        {
+            merged[kvp.Key] = kvp.Value;
+        }
+
+        CurrentWithdrawals = Withdrawals.Create(CborMap<RewardAccount, ulong>.Create(merged));
     }
 
     private void IntegrateMetadata()
@@ -862,7 +862,7 @@ public class TransactionBuilder
                     merged[t.Key] = merged.TryGetValue(t.Key, out long amt) ? amt + t.Value : t.Value;
                 }
 
-                result[entry.Key] = TokenBundleMint.Create(merged);
+                result[entry.Key] = TokenBundleMint.Create(CborMap<ReadOnlyMemory<byte>, long>.Create(merged));
             }
             else
             {
@@ -870,6 +870,6 @@ public class TransactionBuilder
             }
         }
 
-        return MultiAssetMint.Create(result);
+        return MultiAssetMint.Create(CborMap<ReadOnlyMemory<byte>, TokenBundleMint>.Create(result));
     }
 }

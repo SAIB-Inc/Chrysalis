@@ -160,10 +160,10 @@ public sealed class BuilderFeeTests(BuilderFeeFixture fixture) : IClassFixture<B
         ProtocolParams pp = fixture.Pp(fixture.Row("F09"));
         PlutusV3Script script = PlutusV3Script.Create(24, new byte[1000]);
         TransactionBuilder builder = Low(pp, Utxo(1, 5_000_000), 2_000_000)
-            .AddPlutusScript(script).SetRedeemers(RedeemerMap.Create(new Dictionary<RedeemerKey, RedeemerValue>
+            .AddPlutusScript(script).SetRedeemers(RedeemerMap.Create(CborMap<RedeemerKey, RedeemerValue>.Create(new Dictionary<RedeemerKey, RedeemerValue>
             {
                 [RedeemerKey.Create(0, 0)] = RedeemerValue.Create(PlutusInt.Create(0), ExUnits.Create(0, 0))
-            }));
+            })));
         _ = builder.CalculateFee([script]);
         PostMaryTransaction tx = builder.Build();
         Assert.Equal(FeeEngine.MinFee(Sign(tx), pp), tx.Body.Fee());
@@ -618,10 +618,10 @@ public sealed class BuilderFeeTests(BuilderFeeFixture fixture) : IClassFixture<B
         ResolvedInput tooSmall = Utxo(0xc1, minReturn - 1);
         TransactionBuilder b = Low(pp, spend, 2_000_000)
             .AddPlutusScript(script)
-            .SetRedeemers(RedeemerMap.Create(new Dictionary<RedeemerKey, RedeemerValue>
+            .SetRedeemers(RedeemerMap.Create(CborMap<RedeemerKey, RedeemerValue>.Create(new Dictionary<RedeemerKey, RedeemerValue>
             {
                 [RedeemerKey.Create(0, 0)] = RedeemerValue.Create(PlutusInt.Create(42), ExUnits.Create(0, 0))
-            }));
+            })));
         InvalidOperationException error = Assert.Throws<InvalidOperationException>(() =>
             b.CalculateFee([script], resolvedInputs: [spend], availableInputs: [tooSmall]));
         Assert.Equal("Insufficient collateral funds.", error.Message);

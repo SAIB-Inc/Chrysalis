@@ -330,7 +330,7 @@ public static class TransactionBuilderExtensions
             Dictionary<ReadOnlyMemory<byte>, TokenBundleOutput> aggregatedAssets = AggregateAssets(selected);
 
             IValue returnValue = aggregatedAssets.Count > 0
-                ? LovelaceWithMultiAsset.Create(returnLovelace, MultiAssetOutput.Create(aggregatedAssets))
+                ? LovelaceWithMultiAsset.Create(returnLovelace, MultiAssetOutput.Create(CborMap<ReadOnlyMemory<byte>, TokenBundleOutput>.Create(aggregatedAssets)))
                 : Lovelace.Create(returnLovelace);
 
             Address returnAddress = selected[0].Output switch
@@ -406,9 +406,9 @@ public static class TransactionBuilderExtensions
         }
 
         ulong totalWithdrawals = 0;
-        if (builder.CurrentWithdrawals is not null)
+        if (builder.CurrentWithdrawals is { } withdrawals)
         {
-            foreach (KeyValuePair<RewardAccount, ulong> kvp in builder.CurrentWithdrawals.Value)
+            foreach (KeyValuePair<RewardAccount, ulong> kvp in withdrawals.Value)
             {
                 totalWithdrawals += kvp.Value;
             }
@@ -452,9 +452,9 @@ public static class TransactionBuilderExtensions
                 Dictionary<ReadOnlyMemory<byte>, TokenBundleOutput> posMulti = [with(ReadOnlyMemoryComparer.Instance)];
                 foreach (KeyValuePair<ReadOnlyMemory<byte>, Dictionary<ReadOnlyMemory<byte>, ulong>> kv in positiveAssets)
                 {
-                    posMulti[kv.Key] = TokenBundleOutput.Create(kv.Value);
+                    posMulti[kv.Key] = TokenBundleOutput.Create(CborMap<ReadOnlyMemory<byte>, ulong>.Create(kv.Value));
                 }
-                mintValue = mintValue.Merge(LovelaceWithMultiAsset.Create(0, MultiAssetOutput.Create(posMulti)));
+                mintValue = mintValue.Merge(LovelaceWithMultiAsset.Create(0, MultiAssetOutput.Create(CborMap<ReadOnlyMemory<byte>, TokenBundleOutput>.Create(posMulti))));
             }
 
             if (negativeAssets.Count > 0)
@@ -462,9 +462,9 @@ public static class TransactionBuilderExtensions
                 Dictionary<ReadOnlyMemory<byte>, TokenBundleOutput> negMulti = [with(ReadOnlyMemoryComparer.Instance)];
                 foreach (KeyValuePair<ReadOnlyMemory<byte>, Dictionary<ReadOnlyMemory<byte>, ulong>> kv in negativeAssets)
                 {
-                    negMulti[kv.Key] = TokenBundleOutput.Create(kv.Value);
+                    negMulti[kv.Key] = TokenBundleOutput.Create(CborMap<ReadOnlyMemory<byte>, ulong>.Create(kv.Value));
                 }
-                totalOut = totalOut.Merge(LovelaceWithMultiAsset.Create(0, MultiAssetOutput.Create(negMulti)));
+                totalOut = totalOut.Merge(LovelaceWithMultiAsset.Create(0, MultiAssetOutput.Create(CborMap<ReadOnlyMemory<byte>, TokenBundleOutput>.Create(negMulti))));
             }
         }
 
@@ -504,8 +504,8 @@ public static class TransactionBuilderExtensions
         {
             RedeemerList list => RedeemerList.Create([.. list.Value.Select(entry => RedeemerEntry.Create(entry.Tag, entry.Index, entry.Data,
                 Take(entry.Tag, entry.Index, entry.ExUnits)))]),
-            RedeemerMap map => RedeemerMap.Create(map.Value.ToDictionary(entry => entry.Key, entry => RedeemerValue.Create(entry.Value.Data,
-                Take(entry.Key.Tag, entry.Key.Index, entry.Value.ExUnits)))),
+            RedeemerMap map => RedeemerMap.Create(CborMap<RedeemerKey, RedeemerValue>.Create(map.Value.Select(entry => KeyValuePair.Create(
+                entry.Key, RedeemerValue.Create(entry.Value.Data, Take(entry.Key.Tag, entry.Key.Index, entry.Value.ExUnits)))))),
             _ => null
         };
         if (evaluated.Count != 0)
@@ -562,7 +562,7 @@ public static class TransactionBuilderExtensions
                     merged[name] = merged.TryGetValue(name, out ulong existing) ? existing + amount : amount;
                 }
 
-                result[policyId] = TokenBundleOutput.Create(merged);
+                result[policyId] = TokenBundleOutput.Create(CborMap<ReadOnlyMemory<byte>, ulong>.Create(merged));
             }
         }
 

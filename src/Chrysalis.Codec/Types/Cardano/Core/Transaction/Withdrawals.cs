@@ -5,9 +5,7 @@ using Chrysalis.Codec.Types.Cardano.Core.Certificates;
 namespace Chrysalis.Codec.Types.Cardano.Core.Transaction;
 
 [CborSerializable]
-public partial record Withdrawals(Dictionary<RewardAccount, ulong> Value) : ICborType
+public readonly partial record struct Withdrawals : ICborType
 {
-    public ReadOnlyMemory<byte> Raw { get; set; }
-    public int ConstrIndex { get; set; }
-    public bool IsIndefinite { get; set; }
+    public partial CborMap<RewardAccount, ulong> Value { get; }
 }

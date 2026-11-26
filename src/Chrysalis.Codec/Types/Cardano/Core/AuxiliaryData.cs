@@ -36,9 +36,7 @@ public readonly partial record struct ShellyMaAuxiliaryData : IAuxiliaryData
 }
 
 [CborSerializable]
-public partial record AuxiliaryDataSet(Dictionary<int, IAuxiliaryData> Value) : ICborType
+public readonly partial record struct AuxiliaryDataSet : ICborType
 {
-    public ReadOnlyMemory<byte> Raw { get; set; }
-    public int ConstrIndex { get; set; }
-    public bool IsIndefinite { get; set; }
+    public partial CborMap<int, IAuxiliaryData> Value { get; }
 }

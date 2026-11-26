@@ -1,3 +1,4 @@
+using Chrysalis.Codec.Types;
 using Chrysalis.Codec.Extensions.Cardano.Core.Certificates;
 using Chrysalis.Codec.Extensions.Cardano.Core.Common;
 using Chrysalis.Codec.Extensions.Cardano.Core.Transaction;
@@ -471,7 +472,7 @@ public sealed class TransactionTemplateBuilder<T>
 
             if (context.Redeemers.Count > 0)
             {
-                RedeemerMap redeemerMap = RedeemerMap.Create(context.Redeemers);
+                RedeemerMap redeemerMap = RedeemerMap.Create(CborMap<RedeemerKey, RedeemerValue>.Create(context.Redeemers));
 
                 _ = context.TxBuilder.SetRedeemers(redeemerMap);
             }
@@ -644,12 +645,12 @@ public sealed class TransactionTemplateBuilder<T>
 
     private static void ExtractAssets(MultiAssetOutput? multiAsset, Dictionary<string, ulong> assetDict)
     {
-        if (multiAsset?.Value == null)
+        if (multiAsset is not { } ma || ma.Value.IsEmpty)
         {
             return;
         }
 
-        foreach ((ReadOnlyMemory<byte> policyId, TokenBundleOutput tokenBundle) in multiAsset.Value.Value)
+        foreach ((ReadOnlyMemory<byte> policyId, TokenBundleOutput tokenBundle) in ma.Value)
         {
             string policyHex = HexStringCache.ToHexString(policyId);
 
@@ -743,10 +744,10 @@ public sealed class TransactionTemplateBuilder<T>
                     tokenBundle[assetNameBytes] = asset.Value;
                 }
 
-                multiAssetDict[policyId] = TokenBundleOutput.Create(tokenBundle);
+                multiAssetDict[policyId] = TokenBundleOutput.Create(CborMap<ReadOnlyMemory<byte>, ulong>.Create(tokenBundle));
             }
 
-            MultiAssetOutput multiAssetOutput = MultiAssetOutput.Create(multiAssetDict);
+            MultiAssetOutput multiAssetOutput = MultiAssetOutput.Create(CborMap<ReadOnlyMemory<byte>, TokenBundleOutput>.Create(multiAssetDict));
             LovelaceWithMultiAsset lovelaceWithAssets = LovelaceWithMultiAsset.Create(lovelace.Amount, multiAssetOutput);
             requiredAmounts.Add(lovelaceWithAssets);
         }
@@ -876,13 +877,7 @@ public sealed class TransactionTemplateBuilder<T>
             InputOptions<T> inputOptions = new();
             config(inputOptions, param);
 
-            if (inputOptions.Redeemer != null)
-            {
-                foreach (RedeemerKey key in inputOptions.Redeemer.Value.Value.Keys)
-                {
-                    buildContext.Redeemers[key] = inputOptions.Redeemer.Value.Value[key];
-                }
-            }
+            CopyRedeemers(inputOptions.Redeemer, buildContext.Redeemers);
 
             if (inputOptions.RedeemerBuilder != null)
             {
@@ -902,20 +897,14 @@ public sealed class TransactionTemplateBuilder<T>
         // A withdrawal redeemer points at its account's place among the body's withdrawals, in the
         // ledger's order (script accounts first), as TxBuilder and the script context count it.
         Dictionary<string, int> withdrawalIndices = TxBuilder.RedeemerIndices(
-            buildContext.TxBuilder.CurrentWithdrawals is { } withdrawals ? withdrawals.Value.Keys.Select(k => k.Value) : [],
+            buildContext.TxBuilder.CurrentWithdrawals is { } withdrawals ? withdrawals.Value.Select(kv => kv.Key.Value) : [],
             RewardAccountComparer.Instance);
         foreach (WithdrawalConfig<T> config in _withdrawalConfigs)
         {
             WithdrawalOptions<T> withdrawalOptions = new() { From = "", Amount = 0 };
             config(withdrawalOptions, param);
 
-            if (withdrawalOptions.Redeemer != null)
-            {
-                foreach (RedeemerKey key in withdrawalOptions.Redeemer.Value.Value.Keys)
-                {
-                    buildContext.Redeemers[key] = withdrawalOptions.Redeemer.Value.Value[key];
-                }
-            }
+            CopyRedeemers(withdrawalOptions.Redeemer, buildContext.Redeemers);
 
             if (withdrawalOptions.RedeemerBuilder != null
                 && withdrawalOptions.From.Length != 0
@@ -933,19 +922,13 @@ public sealed class TransactionTemplateBuilder<T>
 
         // A mint redeemer points at its policy's place in the mint, in byte order.
         Dictionary<string, int> mintIndices = TxBuilder.RedeemerIndices(
-            buildContext.TxBuilder.Mint is { } minted ? minted.Value.Keys : [], ByteMemoryComparer.Instance);
+            buildContext.TxBuilder.Mint is { } minted ? minted.Value.Select(kv => kv.Key) : [], ByteMemoryComparer.Instance);
         foreach (MintConfig<T> config in _mintConfigs)
         {
             MintOptions<T> mintOptions = new() { Policy = "", Assets = [] };
             config(mintOptions, param);
 
-            if (mintOptions.Redeemer != null)
-            {
-                foreach (RedeemerKey key in mintOptions.Redeemer.Value.Value.Keys)
-                {
-                    buildContext.Redeemers[key] = mintOptions.Redeemer.Value.Value[key];
-                }
-            }
+            CopyRedeemers(mintOptions.Redeemer, buildContext.Redeemers);
 
             if (mintOptions.RedeemerBuilder != null && mintIndices.TryGetValue(mintOptions.Policy, out int mintIndex))
             {
@@ -1115,11 +1098,9 @@ public sealed class TransactionTemplateBuilder<T>
             foreach ((string assetName, long amount) in mintOptions.Assets)
             {
                 value[assetName] = amount;
-                _ = context.TxBuilder.AddMint(MultiAssetMint.Create(new Dictionary<ReadOnlyMemory<byte>, TokenBundleMint>(ReadOnlyMemoryComparer.Instance)
-                {
-                    { HexStringCache.FromHexString(mintOptions.Policy), TokenBundleMint.Create(new Dictionary<ReadOnlyMemory<byte>, long>(ReadOnlyMemoryComparer.Instance)
-                    { { HexStringCache.FromHexString(assetName), amount } }) }
-                }));
+                _ = context.TxBuilder.AddMint(MultiAssetMint.Create(CborMap<ReadOnlyMemory<byte>, TokenBundleMint>.Create([new(
+                    HexStringCache.FromHexString(mintOptions.Policy),
+                    TokenBundleMint.Create(CborMap<ReadOnlyMemory<byte>, long>.Create([new(HexStringCache.FromHexString(assetName), amount)])))])));
             }
         }
     }
@@ -1152,7 +1133,7 @@ public sealed class TransactionTemplateBuilder<T>
 
     private void ProcessWithdrawals(T param, BuildContext context, Dictionary<string, string> parties)
     {
-        Dictionary<RewardAccount, ulong> rewards = [];
+        Dictionary<RewardAccount, ulong> rewards = [with(CborMap<RewardAccount, ulong>.KeyComparer)];
         foreach (WithdrawalConfig<T> config in _withdrawalConfigs)
         {
             WithdrawalOptions<T> withdrawalOptions = new() { From = "", Amount = 0 };
@@ -1175,8 +1156,14 @@ public sealed class TransactionTemplateBuilder<T>
 
         if (rewards.Count > 0)
         {
-            _ = context.TxBuilder.SetWithdrawals(new Withdrawals(rewards));
+            _ = context.TxBuilder.SetWithdrawals(Withdrawals.Create(CborMap<RewardAccount, ulong>.Create(rewards)));
         }
+    }
+
+    private static void CopyRedeemers(RedeemerMap? source, Dictionary<RedeemerKey, RedeemerValue> target)
+    {
+        if (source is not { } map) { return; }
+        foreach ((RedeemerKey key, RedeemerValue value) in map.Value) { target[key] = value; }
     }
 
     private static List<ResolvedInput> GetSpecifiedInputsUtxos(List<TransactionInput> specifiedInputs, List<ResolvedInput> allUtxos)
@@ -1274,8 +1261,8 @@ public sealed class TransactionTemplateBuilder<T>
         if (assetsChange.TryGetValue(policyId, out TokenBundleOutput existingPolicy))
         {
             // TokenBundleOutput is a readonly record struct with lazy-decoded Value.
-            // Each .Value access returns a NEW dictionary, so we must copy, modify, and replace.
-            Dictionary<ReadOnlyMemory<byte>, ulong> tokenBundle = new(existingPolicy.Value, ReadOnlyMemoryComparer.Instance);
+            // .Value is immutable; copy via ToDictionary(), modify, and rebuild.
+            Dictionary<ReadOnlyMemory<byte>, ulong> tokenBundle = existingPolicy.Value.ToDictionary();
 
             if (tokenBundle.TryGetValue(assetName, out ulong existingAmount))
             {
@@ -1294,7 +1281,7 @@ public sealed class TransactionTemplateBuilder<T>
                 tokenBundle[assetName] = amount;
             }
 
-            assetsChange[policyId] = TokenBundleOutput.Create(tokenBundle);
+            assetsChange[policyId] = TokenBundleOutput.Create(CborMap<ReadOnlyMemory<byte>, ulong>.Create(tokenBundle));
         }
         else if (amount > 0)
         {
@@ -1302,7 +1289,7 @@ public sealed class TransactionTemplateBuilder<T>
             {
                 [assetName] = amount
             };
-            assetsChange[policyId] = TokenBundleOutput.Create(tokenBundle);
+            assetsChange[policyId] = TokenBundleOutput.Create(CborMap<ReadOnlyMemory<byte>, ulong>.Create(tokenBundle));
         }
     }
 

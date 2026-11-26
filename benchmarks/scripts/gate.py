@@ -28,6 +28,7 @@ REPO = Path(__file__).resolve().parents[2]
 GATE = REPO / 'benchmarks/gate'
 PIN = '7c45d47c87c63520cea84212dbd01ecc8d372ac3'
 X10_FILE = 'src/Chrysalis.Codec/Types/CborList.cs'  # created by X10 c0ef42b (CborList<T>); main, 24 Nov
+CBORMAP_FILE = 'src/Chrysalis.Codec/Types/CborMap.cs'  # created by Tier 2a-1a (CborMap<TKey, TValue>)
 DIRECT_BATCH_COUNT = 5
 LOCAL_KEYS = ('corporaRoot', 'pinnedBaseline', 'flyOrg', 'flyTokenFile', 'flyLock')
 AZURE_LOCAL_KEYS = ('azureCli', 'azureLock', 'azureBaseline', 'azureLedger')
@@ -168,15 +169,38 @@ def pinned_references(project, references, *, pinned_harness=False):
     project.write_text(xml.tostring(root, encoding='unicode'))
 
 
-def pinned_harness_define(root):
+def harness_define(root, symbol):
     properties = ET.SubElement(root, 'PropertyGroup')
-    ET.SubElement(properties, 'DefineConstants').text = '$(DefineConstants);CHRYSALIS_PINNED_HARNESS'
+    ET.SubElement(properties, 'DefineConstants').text = f'$(DefineConstants);{symbol}'
+
+
+def pinned_harness_define(root):
+    harness_define(root, 'CHRYSALIS_PINNED_HARNESS')
+
+
+def lacks_file(info, path):
+    """Only `path` in the side's tree decides; an unreadable tree counts as lacking it and fails closed."""
+    return subprocess.run(['git', '-C', str(info.get('working', REPO)), 'cat-file', '-e', f'{info["treeId"]}:{path}'],
+                          env=runner.git_environment(base=session.environment({})), capture_output=True).returncode != 0
 
 
 def lacks_x10(info):
     """Only X10_FILE in the side's tree decides; an unreadable tree counts as lacking it and fails closed."""
-    return subprocess.run(['git', '-C', str(info.get('working', REPO)), 'cat-file', '-e', f'{info["treeId"]}:{X10_FILE}'],
-                          env=runner.git_environment(base=session.environment({})), capture_output=True).returncode != 0
+    return lacks_file(info, X10_FILE)
+
+
+def lacks_cbor_map(info):
+    """Only CBORMAP_FILE in the side's tree decides; an unreadable tree counts as lacking it and fails closed."""
+    return lacks_file(info, CBORMAP_FILE)
+
+
+def harness_defines_key(info):
+    """Define tuple applied to a non-PIN, non-Mac arm so change-mode straddles fail before staging."""
+    if lacks_x10(info):
+        return ('CHRYSALIS_PINNED_HARNESS',)
+    if lacks_cbor_map(info):
+        return ('CHRYSALIS_NO_CBORMAP',)
+    return ()
 
 
 def measurement_inputs(root=REPO):
@@ -235,10 +259,13 @@ def stage_side(info, label, output, local, inputs=None, *, allocation_platform='
         pinned_references(directory / 'Chrysalis.Benchmarks.csproj',
                           {name: Path(local['pinnedBaseline']) / name for name in closure['assemblySha256s']
                            if name != 'Chrysalis.Benchmarks.dll'}, pinned_harness=True)
-    elif allocation_platform != 'mac' and lacks_x10(info):  # the runner's harness against a pre-X10 library
-        root = ET.fromstring((directory / 'Chrysalis.Benchmarks.csproj').read_text())
-        pinned_harness_define(root)
-        (directory / 'Chrysalis.Benchmarks.csproj').write_text(ET.tostring(root, encoding='unicode'))
+    elif allocation_platform != 'mac':
+        defines = harness_defines_key(info)
+        if defines:  # the runner's harness against a pre-X10 or pre-CborMap library
+            root = ET.fromstring((directory / 'Chrysalis.Benchmarks.csproj').read_text())
+            for symbol in defines:
+                harness_define(root, symbol)
+            (directory / 'Chrysalis.Benchmarks.csproj').write_text(ET.tostring(root, encoding='unicode'))
     client_dir = directory / 'client'
     client_dir.mkdir()
     for name, content in inputs['client'].items():
@@ -1119,8 +1146,8 @@ def stage_arms(args, output, rows, local, inputs, *, allocation_platform='pc', p
     if allocation_platform == 'mac' and any(info['commit'] == PIN for info in infos.values()):
         raise ValueError('The archived .NET 10 DLL closure is not a native Mac merge side')
     if (args.mode == 'change' and allocation_platform != 'mac'
-            and len({lacks_x10(info) for info in infos.values() if info['commit'] != PIN}) > 1):
-        raise ValueError('Refusing a change run whose sides straddle X10 (c0ef42b): their harness defines differ')
+            and len({harness_defines_key(info) for info in infos.values() if info['commit'] != PIN}) > 1):
+        raise ValueError('Refusing a change run whose sides straddle X10 (c0ef42b) or Tier 2a-1a (CborMap): their harness defines differ')
     options = dict(allocation_platform='mac') if allocation_platform == 'mac' else {}
     if prepare_phase:
         options['prepare_phase'] = prepare_phase

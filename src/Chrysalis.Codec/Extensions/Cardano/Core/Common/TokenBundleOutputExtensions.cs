@@ -1,3 +1,4 @@
+using Chrysalis.Codec.Types;
 using Chrysalis.Codec.Types.Cardano.Core.Common;
 
 namespace Chrysalis.Codec.Extensions.Cardano.Core.Common;
@@ -12,8 +13,5 @@ public static class TokenBundleOutputExtensions
     /// </summary>
     /// <param name="self">The token bundle output instance.</param>
     /// <returns>The dictionary mapping hex-encoded asset names to quantities.</returns>
-    public static Dictionary<string, ulong> ToDict(this TokenBundleOutput self) => self.Value.ToDictionary(
-            kvp => Convert.ToHexString(kvp.Key.Span).ToUpperInvariant(),
-            kvp => kvp.Value
-        );
+    public static Dictionary<string, ulong> ToDict(this TokenBundleOutput self) => self.Value.ToHexKeyDictionary();
 }

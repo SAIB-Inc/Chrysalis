@@ -9,16 +9,8 @@ public sealed class ReadOnlyMemoryComparer : IEqualityComparer<ReadOnlyMemory<by
 
     public int GetHashCode(ReadOnlyMemory<byte> obj)
     {
-        ReadOnlySpan<byte> span = obj.Span;
-        if (span.Length >= 32)
-        {
-            HashCode hc = new();
-            hc.AddBytes(span[..32]);
-            return hc.ToHashCode();
-        }
-
-        HashCode hc2 = new();
-        hc2.AddBytes(span);
-        return hc2.ToHashCode();
+        HashCode hc = new();
+        hc.AddBytes(obj.Span);
+        return hc.ToHashCode();
     }
 }

@@ -456,6 +456,13 @@ public class FreshReencodeTests
             HasSetTag = (bool)list.GetType().GetProperty(nameof(CborList<>.HasSetTag))!.GetValue(list)!,
             items = ((IEnumerable)list).Cast<object?>().Select(Value).ToArray()
         },
+        ICborType map when IsCborMap(map.GetType()) => ((IEnumerable)map).Cast<object>()
+            .Select(entry => new
+            {
+                key = Value(entry.GetType().GetProperty("Key")!.GetValue(entry)),
+                value = Value(entry.GetType().GetProperty("Value")!.GetValue(entry))
+            })
+            .OrderBy(entry => JsonSerializer.Serialize(entry.key, ProjectionOptions), StringComparer.Ordinal).ToArray(),
         ICborType cbor => new { cbor = cbor.GetType().FullName, fields = Factory(cbor.GetType()).GetParameters().ToDictionary(parameter => parameter.Name!, parameter => Value(Field(cbor, parameter)), StringComparer.Ordinal) },
         ReadOnlyMemory<byte> memory => Convert.ToHexString(memory.Span),
         byte[] bytes => Convert.ToHexString(bytes),
@@ -477,6 +484,19 @@ public class FreshReencodeTests
             items[index++] = (T)Rebuild(item)!;
         }
         return CborList.Create(items, list.IsIndefinite, list.HasSetTag);
+    }
+
+    private static bool IsCborMap(Type type) => type.IsGenericType && type.GetGenericTypeDefinition() == typeof(CborMap<,>);
+
+    private static CborMap<TKey, TValue> RebuildCborMap<TKey, TValue>(CborMap<TKey, TValue> map) where TKey : notnull
+    {
+        KeyValuePair<TKey, TValue>[] entries = new KeyValuePair<TKey, TValue>[map.Count];
+        int index = 0;
+        foreach ((TKey key, TValue val) in map)
+        {
+            entries[index++] = new((TKey)Rebuild(key)!, (TValue)Rebuild(val)!);
+        }
+        return CborMap<TKey, TValue>.Create(entries, isIndefinite: false);
     }
 
     private static bool IsPair(Type type) => type.IsGenericType && type.GetGenericTypeDefinition() == typeof(KeyValuePair<,>);
@@ -511,6 +531,11 @@ public class FreshReencodeTests
                 {
                     return typeof(FreshReencodeTests).GetMethod(nameof(RebuildCborList), BindingFlags.Static | BindingFlags.NonPublic)!
                         .MakeGenericMethod(type.GetGenericArguments()[0]).Invoke(null, [value]);
+                }
+                if (IsCborMap(type))
+                {
+                    return typeof(FreshReencodeTests).GetMethod(nameof(RebuildCborMap), BindingFlags.Static | BindingFlags.NonPublic)!
+                        .MakeGenericMethod(type.GetGenericArguments()).Invoke(null, [value]);
                 }
                 MethodInfo create = Factory(type);
                 object?[] arguments = [.. create.GetParameters().Select(parameter => Rebuild(Field(cbor, parameter)))];

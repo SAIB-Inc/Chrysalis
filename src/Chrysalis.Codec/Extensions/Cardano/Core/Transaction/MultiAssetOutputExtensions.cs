@@ -1,3 +1,4 @@
+using Chrysalis.Codec.Types;
 using Chrysalis.Codec.Types.Cardano.Core.Common;
 
 namespace Chrysalis.Codec.Extensions.Cardano.Core.Transaction;
@@ -12,8 +13,5 @@ public static class MultiAssetOutputExtensions
     /// </summary>
     /// <param name="self">The multi-asset output instance.</param>
     /// <returns>The dictionary mapping hex-encoded policy IDs to token bundles.</returns>
-    public static Dictionary<string, TokenBundleOutput> ToDict(this MultiAssetOutput self) => self.Value.ToDictionary(
-            kvp => Convert.ToHexString(kvp.Key.Span).ToUpperInvariant(),
-            kvp => kvp.Value
-        );
+    public static Dictionary<string, TokenBundleOutput> ToDict(this MultiAssetOutput self) => self.Value.ToHexKeyDictionary();
 }

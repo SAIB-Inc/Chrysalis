@@ -140,7 +140,7 @@ public sealed class CliVectorTests
 
         Dictionary<string, ulong> available = vectors.Lovelace(CliVectors.Text(row, "utxo"));
         ulong InputCoin(TransactionInput input) => available[$"{Convert.ToHexStringLower(input.TransactionId.Span)}#{input.Index}"];
-        ulong withdrawals = body.Withdrawals is { } reward ? Sum(reward.Value.Values) : 0;
+        ulong withdrawals = body.Withdrawals is { } reward ? Sum(reward.Value.Select(kv => kv.Value)) : 0;
         ulong deposits = Sum(row.GetProperty("deposits").EnumerateObject().Select(item => item.Value.GetUInt64()));
         ulong outgoing = Sum(body.Outputs.Select(output => output.Amount().Lovelace()));
         Assert.Equal(Sum(body.Inputs.Select(InputCoin)) + withdrawals,

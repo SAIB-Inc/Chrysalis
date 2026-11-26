@@ -1,3 +1,4 @@
+using Chrysalis.Codec.Types;
 using Chrysalis.Codec.Types.Cardano.Core.Certificates;
 using Chrysalis.Codec.Types.Cardano.Core.Common;
 using CProposalProcedure = Chrysalis.Codec.Types.Cardano.Core.Governance.ProposalProcedure;
@@ -133,9 +134,9 @@ public static class TransactionBodyExtensions
         ArgumentNullException.ThrowIfNull(self);
         return self switch
         {
-            AlonzoTransactionBody alonzoTxBody => alonzoTxBody.Withdrawals?.Value,
-            BabbageTransactionBody babbageTxBody => babbageTxBody.Withdrawals?.Value,
-            ConwayTransactionBody conwayTxBody => conwayTxBody.Withdrawals?.Value,
+            AlonzoTransactionBody alonzoTxBody => alonzoTxBody.Withdrawals?.Value.ToDictionary(),
+            BabbageTransactionBody babbageTxBody => babbageTxBody.Withdrawals?.Value.ToDictionary(),
+            ConwayTransactionBody conwayTxBody => conwayTxBody.Withdrawals?.Value.ToDictionary(),
             _ => null
         };
     }
@@ -165,17 +166,15 @@ public static class TransactionBodyExtensions
     public static Dictionary<string, TokenBundleMint>? Mint(this ITransactionBody self)
     {
         ArgumentNullException.ThrowIfNull(self);
-        Dictionary<ReadOnlyMemory<byte>, TokenBundleMint>? raw = self switch
+        MultiAssetMint? raw = self switch
         {
-            AlonzoTransactionBody alonzoTxBody => alonzoTxBody.Mint?.Value,
-            BabbageTransactionBody babbageTxBody => babbageTxBody.Mint?.Value,
-            ConwayTransactionBody conwayTxBody => conwayTxBody.Mint?.Value,
+            AlonzoTransactionBody alonzoTxBody => alonzoTxBody.Mint,
+            BabbageTransactionBody babbageTxBody => babbageTxBody.Mint,
+            ConwayTransactionBody conwayTxBody => conwayTxBody.Mint,
             _ => null
         };
-        return raw?.ToDictionary(
-            kvp => Convert.ToHexString(kvp.Key.Span).ToUpperInvariant(),
-            kvp => kvp.Value
-        );
+        if (raw is not { } mint) { return null; }
+        return mint.Value.ToHexKeyDictionary();
     }
 
     /// <summary>

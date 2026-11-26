@@ -49,7 +49,7 @@ internal static class X7ConwayProjection
         if (body.Withdrawals is { } withdrawals)
         {
             Assert.Equal(cli.GetProperty("withdrawals").EnumerateArray().Select(row => row.GetProperty("amount").GetString()).Order(),
-                withdrawals.Value.Values.Select(amount => $"{amount} Lovelace").Order());
+                withdrawals.Value.Select(kv => kv.Value).Select(amount => $"{amount} Lovelace").Order());
         }
         Assert.Equal(Count("required signers (payment key hashes needed for scripts)"), body.RequiredSigners?.ToArray().Length ?? 0);
         Assert.Equal(Count("governance actions"), body.ProposalProcedures?.ToArray().Length ?? 0);
@@ -81,7 +81,7 @@ internal static class X7ConwayProjection
         RedeemerMap redeemers = Assert.IsType<RedeemerMap>(witnesses.Redeemers);
         Assert.Equal(cli.GetProperty("redeemers").EnumerateArray().Select(row => row.GetProperty("redeemer").GetProperty("execution units"))
             .Select(units => (units.GetProperty("memory").GetUInt64(), units.GetProperty("steps").GetUInt64())).Order(),
-            redeemers.Value.Values.Select(row => (row.ExUnits.Mem, row.ExUnits.Steps)).Order());
+            redeemers.Value.Select(kv => kv.Value).Select(row => (row.ExUnits.Mem, row.ExUnits.Steps)).Order());
         Assert.Equal(Count("witnesses"), (witnesses.VKeyWitnesses?.ToArray().Length ?? 0) + (witnesses.BootstrapWitnesses?.ToArray().Length ?? 0));
         Assert.Equal(Count("scripts"), (witnesses.NativeScripts?.ToArray().Length ?? 0) + (witnesses.PlutusV1Scripts?.ToArray().Length ?? 0)
             + (witnesses.PlutusV2Scripts?.ToArray().Length ?? 0) + (witnesses.PlutusV3Scripts?.ToArray().Length ?? 0));

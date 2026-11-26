@@ -18,7 +18,7 @@ public readonly partial record struct RedeemerList : IRedeemers
 [CborSerializable]
 public readonly partial record struct RedeemerMap : IRedeemers
 {
-    public partial Dictionary<RedeemerKey, RedeemerValue> Value { get; }
+    public partial CborMap<RedeemerKey, RedeemerValue> Value { get; }
 }
 
 [CborSerializable]

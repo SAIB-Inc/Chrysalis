@@ -38,11 +38,10 @@ internal static class TestScripts
         return flat.Length < 24 ? [(byte)(0x40 | flat.Length), .. flat] : [0x58, checked((byte)flat.Length), .. flat];
     }
 
-    // One unit of asset 00 under the policy.
-    internal static MultiAssetOutput OneToken(string policy) => MultiAssetOutput.Create(new()
-    {
-        [Convert.FromHexString(policy)] = TokenBundleOutput.Create(new() { [Convert.FromHexString("00")] = 1 })
-    });
+    internal static MultiAssetOutput OneToken(string policy) => MultiAssetOutput.Create(
+        CborMap<ReadOnlyMemory<byte>, TokenBundleOutput>.Create([new(
+            Convert.FromHexString(policy),
+            TokenBundleOutput.Create(CborMap<ReadOnlyMemory<byte>, ulong>.Create([new(Convert.FromHexString("00"), 1UL)])))]));
 
     // The ledger's validity range from fromMs (closed) to untilMs (open), in POSIX milliseconds.
     internal static IPlutusData Range(long fromMs, long untilMs)
