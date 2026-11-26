@@ -102,7 +102,11 @@ public sealed partial class CborSerializerCodeGen
         CborMapPropertyMetadata? CborMap = null
     )
     {
-        public bool IsTypeNullable => CborList?.IsNullable ?? CborMap?.IsNullable ?? PropertyType.Contains("?");
+        public bool IsTypeNullable =>
+            CborList?.IsNullable ?? CborMap?.IsNullable
+            ?? (PropertyType.TrimEnd().EndsWith("?", StringComparison.Ordinal)
+                || PropertyTypeFullName.TrimEnd().EndsWith("?", StringComparison.Ordinal)
+                || PropertyTypeFullName.StartsWith("global::System.Nullable<", StringComparison.Ordinal));
         public string NonNullableTypeFullName => CborList?.Type ?? CborMap?.Type ?? PropertyTypeFullName.Replace("?", "");
         public bool IsRequired => !IsTypeNullable && !IsNullable;
 

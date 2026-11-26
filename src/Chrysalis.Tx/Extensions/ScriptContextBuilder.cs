@@ -288,12 +288,12 @@ public static class ScriptContextBuilder
     /// </summary>
     private static VmConstr ScriptRefToPlutusData(CborEncodedValue? scriptRef)
     {
-        if (scriptRef is null)
+        if (scriptRef is not { } encoded)
         {
             return OptionNone();
         }
 
-        byte[] rawInner = scriptRef.GetValue();
+        byte[] rawInner = encoded.GetValue();
         if (rawInner.Length < 2 || rawInner[0] != 0x82) // expect definite array of 2
         {
             return OptionNone();
@@ -1498,11 +1498,11 @@ public sealed class DataLookupTable
         // UTxO script refs — unwrap tag 24 → parse [language, script_bytes]
         foreach (ResolvedInput utxo in utxos)
         {
-            if (utxo.Output is PostAlonzoTransactionOutput postAlonzo && postAlonzo.ScriptRef is not null)
+            if (utxo.Output is PostAlonzoTransactionOutput { ScriptRef: { } scriptRef })
             {
                 // ScriptRef = #6.24(bytes .cbor [language, script_bytes])
                 // Unwrap tag 24 + bytestring header to get inner CBOR: array [lang, script]
-                byte[] rawInner = postAlonzo.ScriptRef.GetValue();
+                byte[] rawInner = scriptRef.GetValue();
                 if (rawInner.Length > 2 && rawInner[0] == 0x82) // definite array of 2
                 {
                     int language = rawInner[1]; // single-byte CBOR unsigned int 0-23

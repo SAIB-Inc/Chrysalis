@@ -154,9 +154,12 @@ public sealed partial class CborSerializerCodeGen
                 case "CborEncodedValue":
                 case "Chrysalis.Codec.Types.CborEncodedValue":
                 case "global::Chrysalis.Codec.Types.CborEncodedValue":
-                    _ = sb.AppendLine($"writer.WriteSemanticTag(24);");
-                    _ = sb.AppendLine($"writer.WriteByteString({propertyName}.Value.Span);");
-                    break;
+                    {
+                        string encodedSpan = isNullable ? $"{propertyName}.Value.Value.Span" : $"{propertyName}.Value.Span";
+                        _ = sb.AppendLine("writer.WriteSemanticTag(24);");
+                        _ = sb.AppendLine($"writer.WriteByteString({encodedSpan});");
+                        break;
+                    }
                 case "CborAny":
                 case "Chrysalis.Codec.Types.CborAny":
                 case "global::Chrysalis.Codec.Types.CborAny":
