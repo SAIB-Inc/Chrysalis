@@ -18,7 +18,11 @@
     "TxBench.FeeScriptSpend": {"rule": "D39"},
     "TxBench.FeeReferenceScript": {"rule": "D39"},
     "TxBench.FeeSolve": {"rule": "D39"},
-    "CoreBench.DerivePublic": {"rule": "D39"}
+    "CoreBench.DerivePublic": {"rule": "D39"},
+    "UnionBench.ReadFirstFamily": {"rule": "D39"},
+    "UnionBench.SwitchFirstFamily": {"rule": "D39"},
+    "UnionBench.ConstructFirstFamily": {"rule": "D39"},
+    "UnionBench.NestedFirstFamily": {"rule": "D39"}
   },
   "replays": ["tcp", "offline", "offline-n2c"],
   "time": {
@@ -45,12 +49,12 @@
       "maxDraws": 6, "gen0BudgetBytes": 16777216
     },
     "option": 2,
-    "micro": {"hashing": "CoreBench.Blake256,FixtureHashBench.*", "signing": "CoreBench.Sign,CoreBench.Verify,CoreBench.Address*", "transactions": "TxBench.SimpleBuildSign,TxBench.SimpleBuildFeeSign,TxBench.ScriptBuildFeeSign,TxBench.ScriptFee,TxBench.ScriptFeeLoop,TxBench.LinearFee", "plutus": "VmBench.*,CorpusVmBench.*", "encoding": "CoreBench.Serialize*,BlockBench.Reencode*,EncodingBench.*,FieldReadBench.ReadEveryField", "n2c": "NetworkHeaderBench.*"}
+    "micro": {"hashing": "CoreBench.Blake256,FixtureHashBench.*", "signing": "CoreBench.Sign,CoreBench.Verify,CoreBench.Address*", "transactions": "TxBench.SimpleBuildSign,TxBench.SimpleBuildFeeSign,TxBench.ScriptBuildFeeSign,TxBench.ScriptFee,TxBench.ScriptFeeLoop,TxBench.LinearFee", "plutus": "VmBench.*,CorpusVmBench.*", "encoding": "CoreBench.Serialize*,BlockBench.Reencode*,EncodingBench.*,FieldReadBench.ReadEveryField", "n2c": "NetworkHeaderBench.*", "unions-read": "UnionBench.ReadFirstFamily", "unions-switch": "UnionBench.SwitchFirstFamily", "unions-construct": "UnionBench.ConstructFirstFamily", "unions-nested": "UnionBench.NestedFirstFamily", "field-read": "FieldReadBench.ReadEveryField"}
   },
   "areas": {
     "Network receive": {"bytes": ["replay/*", "CoreBench.MuxDecodeHeader", "NetworkHeaderBench.*"], "time": ["time/preprod-*", "time/micro-n2c"]},
     "Network send": {"bytes": ["CoreBench.MuxEncode*", "replay/tcp/*"], "time": ["time/preprod-tcp"]},
-    "CBOR decode": {"bytes": ["*Decode*", "CoreBench.*Read", "FieldReadBench.ReadEveryField"], "time": ["time/preprod-*"]},
+    "CBOR decode": {"bytes": ["*Decode*", "CoreBench.*Read", "FieldReadBench.ReadEveryField", "UnionBench.*"], "time": ["time/preprod-*", "time/micro-unions-*", "time/micro-field-read"]},
     "CBOR encode and re-serialisation": {"bytes": ["*Reencode*", "*Serialize*"], "time": ["time/micro-encoding"]},
     "Hashing": {"bytes": ["CoreBench.Blake256"], "time": ["time/micro-hashing"]},
     "Signing and addresses": {"bytes": ["CoreBench.Sign", "CoreBench.Verify", "CoreBench.DerivePublic", "CoreBench.Address*"], "time": ["time/micro-signing"]},

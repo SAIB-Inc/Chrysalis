@@ -744,7 +744,7 @@ public sealed class BuilderFeeTests(BuilderFeeFixture fixture) : IClassFixture<B
         static byte[] Key(byte b) => [.. Enumerable.Repeat(b, 28)];
         ScriptPubKey policyScript = ScriptPubKey.Create(0, Key(0x77));
         PoolRegistration poolReg = PoolRegistration.Create(3, Key(0x22), new byte[32], 0, 0, new CborRationalNumber(0, 1),
-            new RewardAccount((byte[])[0xe0, .. new byte[28]]), CborList.Create<ReadOnlyMemory<byte>>([Key(0x33)]), CborList.Create<IRelay>([]), null);
+            new RewardAccount((byte[])[0xe0, .. new byte[28]]), CborList.Create<ReadOnlyMemory<byte>>([Key(0x33)]), CborList.Create<Relay>([]), null);
         VotingProcedures votes = new(new Dictionary<Voter, GovActionIdVotingProcedure>
         {
             [Voter.Create(2, Key(0x55))] = new(new Dictionary<GovActionId, VotingProcedure>

@@ -1,6 +1,7 @@
 using System.Buffers;
 using System.Collections;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using System.Runtime.ExceptionServices;
 using System.Security.Cryptography;
 using System.Text.Json;
@@ -463,6 +464,7 @@ public class FreshReencodeTests
                 value = Value(entry.GetType().GetProperty("Value")!.GetValue(entry))
             })
             .OrderBy(entry => JsonSerializer.Serialize(entry.key, ProjectionOptions), StringComparer.Ordinal).ToArray(),
+        IUnion union => Value(union.Value),
         ICborType cbor => new { cbor = cbor.GetType().FullName, fields = Factory(cbor.GetType()).GetParameters().ToDictionary(parameter => parameter.Name!, parameter => Value(Field(cbor, parameter)), StringComparer.Ordinal) },
         ReadOnlyMemory<byte> memory => Convert.ToHexString(memory.Span),
         byte[] bytes => Convert.ToHexString(bytes),
@@ -537,7 +539,19 @@ public class FreshReencodeTests
                     return typeof(FreshReencodeTests).GetMethod(nameof(RebuildCborMap), BindingFlags.Static | BindingFlags.NonPublic)!
                         .MakeGenericMethod(type.GetGenericArguments()).Invoke(null, [value]);
                 }
+                if (value is IUnion union)
+                {
+                    if (union.Value is null)
+                    {
+                        return Activator.CreateInstance(type)!;
+                    }
+                    object inner = Rebuild(union.Value)!;
+                    ConstructorInfo ctor = type.GetConstructor([inner.GetType()])
+                        ?? throw new InvalidOperationException($"Missing union constructor on {type.FullName}({inner.GetType().FullName}).");
+                    return ctor.Invoke([inner]);
+                }
                 MethodInfo create = Factory(type);
+
                 object?[] arguments = [.. create.GetParameters().Select(parameter => Rebuild(Field(cbor, parameter)))];
                 return create.Invoke(null, arguments);
             }

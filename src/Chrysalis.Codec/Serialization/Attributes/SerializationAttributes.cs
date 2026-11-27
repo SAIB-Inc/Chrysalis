@@ -56,10 +56,16 @@ public sealed class CborNullableAttribute : Attribute;
 public sealed class CborListAttribute : Attribute;
 
 /// <summary>
-/// Marks an interface or base type as a CBOR union (sum type). Concrete subtypes are
-/// distinguished by their CBOR structure during deserialization. Use on the interface,
-/// and mark each concrete type with its own encoding attribute.
+/// Marks a CBOR union (sum type) for source generation.
+/// For official C# 15 <c>[Union]</c> structs, pass the ordered case types to
+/// <see cref="CborUnionAttribute(Type[])"/> alongside <c>[CborSerializable]</c> and <c>[Union]</c>:
 /// <example>
+/// <code>
+/// [CborSerializable, CborUnion(typeof(CaseA), typeof(CaseB)), Union]
+/// public readonly partial struct MyUnion : ICborType;
+/// </code>
+/// Legacy form: on an interface or abstract record hierarchy, use parameterless <c>[CborUnion]</c>
+/// and mark each concrete subtype with its own encoding attribute:
 /// <code>
 /// [CborSerializable]
 /// [CborUnion]
@@ -75,7 +81,17 @@ public sealed class CborListAttribute : Attribute;
 /// </example>
 /// </summary>
 [AttributeUsage(AttributeTargets.Class | AttributeTargets.Struct | AttributeTargets.Interface, Inherited = false, AllowMultiple = false)]
-public sealed class CborUnionAttribute : Attribute;
+public sealed class CborUnionAttribute : Attribute
+{
+    /// <summary>Marks a legacy union interface or abstract record hierarchy.</summary>
+    public CborUnionAttribute() => Cases = [];
+
+    /// <summary>Marks an official C# 15 <c>[Union]</c> struct with its ordered case types.</summary>
+    public CborUnionAttribute(params Type[] cases) => Cases = cases ?? [];
+
+    /// <summary>Gets the declared union case types in wire/discriminant order.</summary>
+    public Type[] Cases { get; }
+}
 
 /// <summary>
 /// Encodes the type as a Plutus-style constructor (CBOR tag 121+ wrapping an array of fields).

@@ -163,7 +163,7 @@ public static class CertificateExtensions
     /// </summary>
     /// <param name="self">The certificate instance.</param>
     /// <returns>The DRep, or null.</returns>
-    public static IDRep? DRep(this CCertificate self)
+    public static DRep? DRep(this CCertificate self)
     {
         ArgumentNullException.ThrowIfNull(self);
         return self switch

@@ -1,16 +1,18 @@
+using System.Runtime.CompilerServices;
 using Chrysalis.Codec.Serialization;
 using Chrysalis.Codec.Serialization.Attributes;
 
 namespace Chrysalis.Codec.Types.Cardano.Core.Certificates;
 
 [CborSerializable]
-[CborUnion]
-public partial interface IRelay : ICborType;
+[CborUnion(typeof(SingleHostAddr), typeof(SingleHostName), typeof(MultiHostName))]
+[Union]
+public readonly partial struct Relay : ICborType;
 
 [CborSerializable]
 [CborList]
 [CborIndex(0)]
-public readonly partial record struct SingleHostAddr : IRelay
+public readonly partial record struct SingleHostAddr : ICborType
 {
     [CborOrder(0)] public partial int Tag { get; }
     [CborOrder(1)] public partial int? Port { get; }
@@ -21,7 +23,7 @@ public readonly partial record struct SingleHostAddr : IRelay
 [CborSerializable]
 [CborList]
 [CborIndex(1)]
-public readonly partial record struct SingleHostName : IRelay
+public readonly partial record struct SingleHostName : ICborType
 {
     [CborOrder(0)] public partial int Tag { get; }
     [CborOrder(1)] public partial int? Port { get; }
@@ -31,7 +33,7 @@ public readonly partial record struct SingleHostName : IRelay
 [CborSerializable]
 [CborList]
 [CborIndex(2)]
-public readonly partial record struct MultiHostName : IRelay
+public readonly partial record struct MultiHostName : ICborType
 {
     [CborOrder(0)] public partial int Tag { get; }
     [CborOrder(1), CborLedgerText] public partial string DnsName { get; }

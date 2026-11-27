@@ -13,10 +13,11 @@ public sealed partial class CborSerializerCodeGen
 
         public DiagnosticDescriptor? ReadDiagnostic { get; private set; }
 
+        public StringBuilder? StructHelpers { get; private set; }
         public static EquatableArray<SerializableTypeMetadata> GetShapeDependencies(SerializableTypeMetadata union,
             ImmutableDictionary<string, SerializableTypeMetadata> registry)
         {
-            List<SerializableTypeMetadata> leaves = FlattenUnionChildren(union.ChildTypes);
+            List<SerializableTypeMetadata> leaves = GetUnionLeaves(union);
             if (leaves.Count < 2)
             {
                 return default;
@@ -25,7 +26,7 @@ public sealed partial class CborSerializerCodeGen
             // The structural probe looks up leaf fields. The fallback tuple probe can do the
             // same inside untagged nested lists. Walk breadth-first so each tuple is expanded
             // once, at the shallowest depth at which the reader could consult its fields.
-            bool probeNested = leaves.All(leaf => leaf.SerializationType == SerializationType.List);
+            bool probeNested = leaves.All(leaf => leaf.SerializationType == SerializationType.List && leaf.CborTag is null);
             Queue<(SerializableTypeMetadata Model, int Depth)> pending = new(leaves.Select(leaf => (leaf, 0)));
             Dictionary<string, SerializableTypeMetadata> dependencies = [];
             while (pending.Count != 0)
@@ -62,7 +63,7 @@ public sealed partial class CborSerializerCodeGen
             }
 
             ReadDiagnostic = UnknownUnionShape;
-            return sb.AppendLine(AmbiguityError(metadata, FlattenUnionChildren(metadata.ChildTypes)));
+            return sb.AppendLine(AmbiguityError(metadata, GetUnionLeaves(metadata)));
         }
 
         private static string AmbiguityError(SerializableTypeMetadata union, List<SerializableTypeMetadata> leaves)
@@ -80,13 +81,13 @@ public sealed partial class CborSerializerCodeGen
 
         private bool TryEmitCandidateShapes(StringBuilder sb, SerializableTypeMetadata metadata, bool bySize = false)
         {
-            List<SerializableTypeMetadata> leaves = FlattenUnionChildren(metadata.ChildTypes);
+            List<SerializableTypeMetadata> leaves = GetUnionLeaves(metadata);
             if (leaves.Count == 1)
             {
-                _ = sb.AppendLine($"return {leaves[0].FullyQualifiedName}.Read(data, out bytesConsumed);");
+                _ = sb.AppendLine($"return {EmitCaseReadExpr(metadata, leaves[0], "data", "bytesConsumed", cast: false)};");
                 return true;
             }
-            if (leaves.Count == 0 || leaves.Any(leaf => leaf.SerializationType != SerializationType.List))
+            if (leaves.Count == 0 || leaves.Any(leaf => leaf.SerializationType != SerializationType.List || leaf.CborTag is not null))
             {
                 return false;
             }
@@ -111,15 +112,16 @@ public sealed partial class CborSerializerCodeGen
                 _ = sb.AppendLine("{");
                 foreach (SerializableTypeMetadata leaf in leaves)
                 {
-                    _ = sb.AppendLine($"case {ItemCountRange(leaf).Maximum}: return {leaf.FullyQualifiedName}.Read(data, out bytesConsumed);");
+                    _ = sb.AppendLine($"case {ItemCountRange(leaf).Maximum}: return {EmitCaseReadExpr(metadata, leaf, "data", "bytesConsumed", cast: false)};");
                 }
                 _ = sb.AppendLine("}");
                 _ = sb.AppendLine("}");
             }
+            string matchName = metadata.IsStructUnion ? "__Matches" : "_Matches";
             _ = sb.AppendLine("try {");
             for (int i = 0; i < leaves.Count; i++)
             {
-                _ = sb.AppendLine($"if (_Matches{i}(new CborReader(data.Span), ref failure))");
+                _ = sb.AppendLine($"if ({matchName}{i}(new CborReader(data.Span), ref failure))");
                 _ = sb.AppendLine("{");
                 _ = sb.AppendLine($"    if (matched >= 0) {AmbiguityError(metadata, leaves)}");
                 _ = sb.AppendLine($"    matched = {i};");
@@ -132,7 +134,7 @@ public sealed partial class CborSerializerCodeGen
             _ = sb.AppendLine("{");
             for (int i = 0; i < leaves.Count; i++)
             {
-                _ = sb.AppendLine($"    {i} => {leaves[i].FullyQualifiedName}.Read(data, out bytesConsumed),");
+                _ = sb.AppendLine($"    {i} => {EmitCaseReadExpr(metadata, leaves[i], "data", "bytesConsumed", cast: false)},");
             }
             _ = sb.AppendLine($"    _ => throw CborError.Decode(data, data.Length - failure.Remaining, failure.Path, failure.Expected)");
             _ = sb.AppendLine("};");
@@ -140,14 +142,16 @@ public sealed partial class CborSerializerCodeGen
             _ = sb.AppendLine($"throw CborError.Wrap(error, data, \"{metadata.FullyQualifiedName}\", \"registered union shape\");");
             _ = sb.AppendLine("}");
 
+            StringBuilder target = metadata.IsStructUnion ? (StructHelpers ??= new()) : sb;
+            string modifiers = metadata.IsStructUnion ? "private static " : "static ";
             for (int i = 0; i < leaves.Count; i++)
             {
-                _ = sb.AppendLine($"static bool _Matches{i}(CborReader reader, ref (int Remaining, string Path, string Expected) failure)");
-                _ = sb.AppendLine("{");
+                _ = target.AppendLine($"{modifiers}bool {matchName}{i}(CborReader reader, ref (int Remaining, string Path, string Expected) failure)");
+                _ = target.AppendLine("{");
                 int index = 0;
-                EmitTupleShape(sb, metadata.FullyQualifiedName, leaves[i], ref index, 0);
-                _ = sb.AppendLine("return true;");
-                _ = sb.AppendLine("}");
+                EmitTupleShape(target, metadata.FullyQualifiedName, leaves[i], ref index, 0);
+                _ = target.AppendLine("return true;");
+                _ = target.AppendLine("}");
             }
             return true;
         }
@@ -158,7 +162,7 @@ public sealed partial class CborSerializerCodeGen
             {
                 return false;
             }
-            int common = Math.Max(first.Properties.Count(p => !p.IsTypeNullable), second.Properties.Count(p => !p.IsTypeNullable));
+            int common = Math.Max(ItemCountRange(first).Minimum, ItemCountRange(second).Minimum);
             if (common > Math.Min(first.Properties.Count, second.Properties.Count))
             {
                 return false;
@@ -192,8 +196,11 @@ public sealed partial class CborSerializerCodeGen
             && IsProbeableTuple(nested) ? nested : null;
 
         // The item counts a tuple's shape walk accepts: its required fields up to all of them.
-        private static (int Minimum, int Maximum) ItemCountRange(SerializableTypeMetadata tuple) =>
-            (tuple.Properties.Count(p => !p.IsTypeNullable), tuple.Properties.Count);
+        private static (int Minimum, int Maximum) ItemCountRange(SerializableTypeMetadata tuple)
+        {
+            Emitter.TryGetListArityBounds(tuple, out int min, out int max);
+            return (min, max);
+        }
 
         private static bool IsProbeableTuple(SerializableTypeMetadata metadata) =>
             metadata is { SerializationType: SerializationType.List, CborTag: null } && metadata.Properties.All(p => !p.IsTypeNullable);
@@ -201,7 +208,7 @@ public sealed partial class CborSerializerCodeGen
         private void EmitTupleShape(StringBuilder sb, string union, SerializableTypeMetadata tuple, ref int index, int depth)
         {
             string count = $"_size{index++}";
-            string path = $"{union}.{tuple.FullyQualifiedName}";
+            string path = $"{union}.{NormalizeTypeName(tuple.FullyQualifiedName)}";
             _ = sb.AppendLine("if (reader.Buffer.IsEmpty || (reader.Buffer[0] >> 5) != 4) return false;");
             _ = sb.AppendLine("reader.ReadBeginArray();");
             _ = sb.AppendLine($"int {count} = reader.ReadSize();");
@@ -210,7 +217,7 @@ public sealed partial class CborSerializerCodeGen
             int position = 0;
             foreach (SerializablePropertyMetadata prop in tuple.Properties)
             {
-                if (prop.IsTypeNullable)
+                if (prop.IsTypeNullable && position >= minimum)
                 {
                     _ = sb.AppendLine($"if ({count} >= 0 && {count} <= {position}) return true;");
                     _ = sb.AppendLine($"if ({count} == -1 && !reader.Buffer.IsEmpty && reader.Buffer[0] == 0xFF) {{ reader.SkipDataItem(); return true; }}");
@@ -265,19 +272,38 @@ public sealed partial class CborSerializerCodeGen
             _ = sb.AppendLine("}");
         }
 
+        private static string? GetBuiltInReaderMethod(SerializableTypeMetadata metadata) => NormalizeTypeName(metadata.FullyQualifiedName) switch
+        {
+            "Chrysalis.Codec.Types.Cardano.Core.Common.IPlutusData" => "PlutusWire.ReadData",
+            "Chrysalis.Codec.Types.Cardano.Core.Common.IPlutusBigInt" => "PlutusWire.ReadInteger",
+            "Chrysalis.Codec.Types.Cardano.Core.Transaction.ITransactionBody" => "TransactionEraReader.ReadBody",
+            "Chrysalis.Codec.Types.Cardano.Core.TransactionWitness.ITransactionWitnessSet" => "global::Chrysalis.Codec.Types.Cardano.Core.Transaction.TransactionEraReader.ReadWitnesses",
+            "Chrysalis.Codec.Types.Cardano.Core.Protocol.ProtocolParamUpdate" => "ProtocolUpdateWire.Read",
+            "Chrysalis.Codec.Types.ICborPrimitive" => "PrimitiveWire.Read",
+            _ => null
+        };
+
+        internal static bool HasBuiltInReader(SerializableTypeMetadata metadata) =>
+            GetBuiltInReaderMethod(metadata) is not null
+            || NormalizeTypeName(metadata.FullyQualifiedName) == "Chrysalis.Codec.Types.Cardano.Core.Transaction.ITransaction";
+
+        internal static string? TryEmitBuiltInCaseValidationCall(
+            SerializableTypeMetadata union, SerializableTypeMetadata caseMeta, string rawExpr, string unionPath)
+        {
+            if (NormalizeTypeName(union.FullyQualifiedName) != "Chrysalis.Codec.Types.Cardano.Core.Protocol.ProtocolParamUpdate")
+            {
+                return null;
+            }
+
+            string isBabbage = NormalizeTypeName(caseMeta.FullyQualifiedName) == "Chrysalis.Codec.Types.Cardano.Core.Protocol.BabbageProtocolParamUpdate"
+                ? "true"
+                : "false";
+            return $"global::Chrysalis.Codec.Types.Cardano.Core.Protocol.ProtocolUpdateWire.ValidateConstructorBytes({rawExpr}, {isBabbage}, \"{unionPath}\");";
+        }
+
         private static bool EmitBuiltInReader(StringBuilder sb, SerializableTypeMetadata metadata)
         {
-            string? method = NormalizeTypeName(metadata.FullyQualifiedName) switch
-            {
-                "Chrysalis.Codec.Types.Cardano.Core.Common.IPlutusData" => "PlutusWire.ReadData",
-                "Chrysalis.Codec.Types.Cardano.Core.Common.IPlutusBigInt" => "PlutusWire.ReadInteger",
-                "Chrysalis.Codec.Types.Cardano.Core.Transaction.ITransactionBody" => "TransactionEraReader.ReadBody",
-                "Chrysalis.Codec.Types.Cardano.Core.TransactionWitness.ITransactionWitnessSet" => "global::Chrysalis.Codec.Types.Cardano.Core.Transaction.TransactionEraReader.ReadWitnesses",
-                "Chrysalis.Codec.Types.Cardano.Core.Protocol.IProtocolParamUpdate" => "ProtocolUpdateWire.Read",
-                "Chrysalis.Codec.Types.ICborPrimitive" => "PrimitiveWire.Read",
-                _ => null
-            };
-            if (method is not null)
+            if (GetBuiltInReaderMethod(metadata) is { } method)
             {
                 _ = sb.AppendLine("try");
                 _ = sb.AppendLine("{");
@@ -324,14 +350,10 @@ public sealed partial class CborSerializerCodeGen
 
         private bool TryEmitStructuralProbeReader(StringBuilder sb, SerializableTypeMetadata metadata)
         {
-            List<SerializableTypeMetadata> children = FlattenUnionChildren(metadata.ChildTypes);
-            if (children.Count < 2)
-            {
-                return false;
-            }
+            List<SerializableTypeMetadata> children = GetUnionLeaves(metadata);
+            if (children.Count < 2) { return false; }
 
             Dictionary<string, List<SerializableTypeMetadata>> probeGroups = [];
-
             foreach (SerializableTypeMetadata child in children)
             {
                 string probeKey = GetProbeKey(child);
@@ -343,35 +365,12 @@ public sealed partial class CborSerializerCodeGen
                 group.Add(child);
             }
 
-            if (probeGroups.ContainsKey("unknown"))
+            if (metadata.IsStructUnion && probeGroups.TryGetValue("signed", out List<SerializableTypeMetadata>? signedGroup) && !probeGroups.ContainsKey("unsigned"))
             {
-                return false;
+                _ = probeGroups.Remove("signed");
+                probeGroups["integer"] = signedGroup;
             }
-
-            // Same-index collisions: members that share a leading index but differ in a deeper
-            // field. Rather than dropping the whole union to fragile try/catch, resolve the
-            // colliding members with a secondary structural probe on the first field whose CBOR
-            // shape distinguishes them. Only the index-discriminated case is handled here; a
-            // collision under any other top-level discriminator still falls back.
-            if (probeGroups.Values.Any(g => g.Count > 1))
-            {
-                bool allIdx = probeGroups.Keys.All(k => k.StartsWith("idx:", StringComparison.Ordinal));
-                if (!allIdx)
-                {
-                    return false;
-                }
-
-                foreach (List<SerializableTypeMetadata> colliding in probeGroups.Values.Where(g => g.Count > 1))
-                {
-                    if (FindSeparatingDepth(colliding) < 0)
-                    {
-                        return false;
-                    }
-                }
-
-                EmitIdxBranchWithNesting(sb, metadata, probeGroups);
-                return true;
-            }
+            if (probeGroups.ContainsKey("unknown")) { return false; }
 
             bool hasTagChildren = probeGroups.Keys.Any(k => k.StartsWith("tag:", StringComparison.Ordinal));
             bool hasConstrChildren = probeGroups.ContainsKey("constr");
@@ -379,111 +378,125 @@ public sealed partial class CborSerializerCodeGen
             bool hasArraySizeChildren = probeGroups.Keys.Any(k => k.StartsWith("array:", StringComparison.Ordinal));
             bool hasStateChildren = probeGroups.Keys.Any(k => !k.StartsWith("tag:", StringComparison.Ordinal) && !k.StartsWith("idx:", StringComparison.Ordinal) && !k.StartsWith("array:", StringComparison.Ordinal) && k != "constr");
 
-            // Index patterns cannot be emitted by a data-item-state switch.
-            if (hasIdxChildren && (hasTagChildren || hasConstrChildren || hasArraySizeChildren || hasStateChildren))
+            if ((hasArraySizeChildren && probeGroups.ContainsKey("array")) || (hasIdxChildren && (hasArraySizeChildren || probeGroups.ContainsKey("array"))))
             {
                 return false;
             }
-
-            if (hasArraySizeChildren && !hasTagChildren && !hasConstrChildren && !hasIdxChildren && !hasStateChildren)
+            if (probeGroups.Values.Any(g => g.Count > 1) && probeGroups.Where(g => g.Value.Count > 1)
+                .Any(g => !g.Key.StartsWith("idx:", StringComparison.Ordinal) || FindSeparatingDepth(g.Value) < 0))
             {
-                // The size switch can select only exact lengths, and a nullable field lets its reader
-                // accept a shorter tuple. Such a union keeps the shape walk; a full-length tuple skips
-                // it only when the walk ranges (finite for every list case) are pairwise disjoint.
-                if (children.Any(child => child.Properties.Any(prop => prop.IsTypeNullable)))
+                return false;
+            }
+            if (!metadata.IsStructUnion && hasArraySizeChildren && !hasTagChildren && !hasConstrChildren && !hasIdxChildren && !hasStateChildren
+                && children.Any(child => child.Properties.Any(prop => prop.IsTypeNullable)))
+            {
+                List<(int Minimum, int Maximum)> ranges = [.. children.Select(ItemCountRange)];
+                return !ranges.Where((range, i) => ranges.Take(i).Any(other => range.Minimum <= other.Maximum && other.Minimum <= range.Maximum)).Any()
+                    && TryEmitCandidateShapes(sb, metadata, bySize: true);
+            }
+
+            List<SerializableTypeMetadata> arraySizeChildren = [.. children.Where(c => GetProbeKey(c).StartsWith("array:", StringComparison.Ordinal))];
+            int arraySizeGroupCount = probeGroups.Keys.Count(k => k.StartsWith("array:", StringComparison.Ordinal));
+            bool handleArraySize = hasArraySizeChildren && (metadata.IsStructUnion || arraySizeGroupCount > 1);
+            if (handleArraySize)
+            {
+                List<(int Min, int Max)> bounds = [with(arraySizeChildren.Count)];
+                foreach (SerializableTypeMetadata child in arraySizeChildren)
                 {
-                    List<(int Minimum, int Maximum)> ranges = [.. children.Select(ItemCountRange)];
-                    return !ranges.Where((range, i) => ranges.Take(i).Any(other => range.Minimum <= other.Maximum && other.Minimum <= range.Maximum)).Any()
-                        && TryEmitCandidateShapes(sb, metadata, bySize: true);
+                    Emitter.TryGetListArityBounds(child, out int min, out int max);
+                    if (bounds.Any(b => min <= b.Max && b.Min <= max)) { return false; }
+                    bounds.Add((min, max));
                 }
-                EmitArraySizeBranch(sb, metadata, probeGroups);
+            }
+
+            if (hasTagChildren || hasConstrChildren) { EmitTagBranchWithConstr(sb, metadata, probeGroups, hasConstrChildren); }
+            else if (metadata.IsStructUnion)
+            {
+                _ = sb.AppendLine($"if (data.Length > 0 && (data.Span[0] >> 5) == 6) throw CborError.Decode(data, 0, \"{metadata.FullyQualifiedName}\", \"untagged union case\", CborError.Actual(data, 0));");
+            }
+
+            if (handleArraySize && !hasTagChildren && !hasConstrChildren && !hasIdxChildren && !hasStateChildren)
+            {
+                EmitArraySizeBranch(sb, metadata, arraySizeChildren);
             }
             else if (hasIdxChildren && !hasTagChildren && !hasConstrChildren && !hasStateChildren && !hasArraySizeChildren)
             {
-                EmitIdxOnlyBranch(sb, metadata, probeGroups);
+                EmitIdxBranchWithNesting(sb, metadata, probeGroups);
             }
-            else if ((hasTagChildren || hasConstrChildren) && (hasStateChildren || hasIdxChildren || hasArraySizeChildren))
+            else if (hasIdxChildren || handleArraySize)
             {
-                EmitTagBranchWithConstr(sb, metadata, probeGroups, hasConstrChildren);
-                _ = sb.AppendLine($"var reader = new CborReader(data.Span);");
-                _ = sb.AppendLine($"var state = reader.GetCurrentDataItemType();");
-                EmitStateBranch(sb, metadata, probeGroups);
+                _ = sb.AppendLine("var reader = new CborReader(data.Span);");
+                _ = sb.AppendLine("var state = reader.GetCurrentDataItemType();");
+                _ = sb.AppendLine("if (state == CborDataItemType.Array)");
+                _ = sb.AppendLine("{");
+                if (hasIdxChildren)
+                {
+                    EmitIdxBranchWithNesting(sb, metadata, probeGroups.Where(g => g.Key.StartsWith("idx:", StringComparison.Ordinal))
+                        .ToDictionary(g => g.Key, g => g.Value, StringComparer.Ordinal));
+                }
+                else { EmitArraySizeBranch(sb, metadata, arraySizeChildren); }
+                _ = sb.AppendLine("}");
+                if (hasStateChildren) { EmitStateBranch(sb, metadata, probeGroups, excludeArraySize: handleArraySize); }
+                else { _ = sb.AppendLine($"throw CborError.Decode(data, 0, \"{metadata.FullyQualifiedName}\", \"semantic tag or array\");"); }
             }
-            else if (hasTagChildren || hasConstrChildren)
+            else if ((hasTagChildren || hasConstrChildren) && !hasStateChildren && !hasArraySizeChildren)
             {
-                EmitTagBranchWithConstr(sb, metadata, probeGroups, hasConstrChildren);
                 _ = sb.AppendLine($"throw CborError.Decode(data, 0, \"{metadata.FullyQualifiedName}\", \"semantic tag\");");
             }
             else
             {
-                _ = sb.AppendLine($"var reader = new CborReader(data.Span);");
-                _ = sb.AppendLine($"var state = reader.GetCurrentDataItemType();");
-                EmitStateOnlyBranch(sb, metadata, probeGroups);
+                _ = sb.AppendLine("var reader = new CborReader(data.Span);");
+                _ = sb.AppendLine("var state = reader.GetCurrentDataItemType();");
+                EmitStateBranch(sb, metadata, probeGroups, excludeArraySize: false);
             }
-
             return true;
         }
-
         private static void EmitTagBranchWithConstr(StringBuilder sb, SerializableTypeMetadata metadata, Dictionary<string, List<SerializableTypeMetadata>> probeGroups, bool hasConstr)
         {
+            bool structUnion = metadata.IsStructUnion;
             _ = sb.AppendLine($"if (data.Length > 0 && (data.Span[0] >> 5) == 6)");
             _ = sb.AppendLine("{");
             _ = sb.AppendLine($"    var _tagReader = new CborReader(data.Span);");
             _ = sb.AppendLine($"    _tagReader.TryReadSemanticTag(out ulong _tagVal);");
-            _ = sb.AppendLine($"    var tag = (int)_tagVal;");
+            if (!structUnion) { _ = sb.AppendLine($"    var tag = (int)_tagVal;"); }
 
-            _ = sb.AppendLine($"    {metadata.FullyQualifiedName} _tagResult = tag switch");
+            _ = sb.AppendLine($"    {metadata.FullyQualifiedName} _tagResult = {(structUnion ? "_tagVal" : "tag")} switch");
             _ = sb.AppendLine("    {");
             foreach (KeyValuePair<string, List<SerializableTypeMetadata>> group in probeGroups.Where(g => g.Key.StartsWith("tag:", StringComparison.Ordinal)))
             {
                 int tagValue = int.Parse(group.Key.Substring(4), CultureInfo.InvariantCulture);
-                _ = sb.AppendLine($"        {tagValue} => ({metadata.FullyQualifiedName}){group.Value[0].FullyQualifiedName}.Read(data, out bytesConsumed),");
+                _ = sb.AppendLine($"        {(structUnion ? $"{tagValue}UL" : tagValue.ToString(CultureInfo.InvariantCulture))} => {EmitCaseReadExpr(metadata, group.Value[0], "data", "bytesConsumed", cast: true)},");
             }
             if (hasConstr && probeGroups.TryGetValue("constr", out List<SerializableTypeMetadata> constrGroup))
             {
-                _ = sb.AppendLine($"        _ => ({metadata.FullyQualifiedName}){constrGroup[0].FullyQualifiedName}.Read(data, out bytesConsumed),");
+                _ = sb.AppendLine($"        _ => {EmitCaseReadExpr(metadata, constrGroup[0], "data", "bytesConsumed", cast: true)},");
             }
             else
             {
-                _ = sb.AppendLine($"        _ => throw CborError.Decode(data, 0, \"{metadata.FullyQualifiedName}\", \"registered union tag\", tag)");
+                _ = sb.AppendLine(structUnion
+                    ? $"        _ => throw CborError.DecodeTag(\"{metadata.FullyQualifiedName}\", \"registered union tag\", _tagVal)"
+                    : $"        _ => throw CborError.Decode(data, 0, \"{metadata.FullyQualifiedName}\", \"registered union tag\", tag)");
             }
             _ = sb.AppendLine("    };");
             _ = sb.AppendLine($"    return _tagResult;");
             _ = sb.AppendLine("}");
         }
 
-        private static void EmitStateBranch(StringBuilder sb, SerializableTypeMetadata metadata, Dictionary<string, List<SerializableTypeMetadata>> probeGroups)
+        private static void EmitStateBranch(StringBuilder sb, SerializableTypeMetadata metadata, Dictionary<string, List<SerializableTypeMetadata>> probeGroups, bool excludeArraySize)
         {
             _ = sb.AppendLine($"{metadata.FullyQualifiedName} _stateResult = state switch");
             _ = sb.AppendLine("{");
-            foreach (KeyValuePair<string, List<SerializableTypeMetadata>> group in probeGroups.Where(g => !g.Key.StartsWith("tag:", StringComparison.Ordinal) && g.Key != "constr"))
+            foreach (KeyValuePair<string, List<SerializableTypeMetadata>> group in probeGroups.Where(g =>
+                !g.Key.StartsWith("tag:", StringComparison.Ordinal) && !g.Key.StartsWith("idx:", StringComparison.Ordinal)
+                && (!excludeArraySize || !g.Key.StartsWith("array:", StringComparison.Ordinal)) && g.Key != "constr"))
             {
                 string statePattern = GetCborReaderStatePattern(group.Key);
-                _ = sb.AppendLine($"    {statePattern} => ({metadata.FullyQualifiedName}){group.Value[0].FullyQualifiedName}.Read(data, out bytesConsumed),");
+                _ = sb.AppendLine($"    {statePattern} => {EmitCaseReadExpr(metadata, group.Value[0], "data", "bytesConsumed", cast: true)},");
             }
             _ = sb.AppendLine($"    _ => throw CborError.Decode(data, 0, \"{metadata.FullyQualifiedName}\", \"registered union kind\", state)");
             _ = sb.AppendLine("};");
-            _ = sb.AppendLine($"return _stateResult;");
+            _ = sb.AppendLine("return _stateResult;");
         }
-
-        private static void EmitIdxOnlyBranch(StringBuilder sb, SerializableTypeMetadata metadata, Dictionary<string, List<SerializableTypeMetadata>> probeGroups)
-        {
-            _ = sb.AppendLine($"var _idxReader = new CborReader(data.Span);");
-            _ = sb.AppendLine($"_idxReader.ReadBeginArray();");
-            _ = sb.AppendLine($"_idxReader.ReadSize();");
-            _ = sb.AppendLine($"int _idx = _idxReader.ReadInt32();");
-            _ = sb.AppendLine($"{metadata.FullyQualifiedName} _idxResult = _idx switch");
-            _ = sb.AppendLine("{");
-            foreach (KeyValuePair<string, List<SerializableTypeMetadata>> group in probeGroups)
-            {
-                int idxValue = int.Parse(group.Key.Substring(4), CultureInfo.InvariantCulture);
-                _ = sb.AppendLine($"    {idxValue} => ({metadata.FullyQualifiedName}){group.Value[0].FullyQualifiedName}.Read(data, out bytesConsumed),");
-            }
-            _ = sb.AppendLine($"    _ => throw CborError.Decode(data, 0, \"{metadata.FullyQualifiedName}\", \"registered union index\", _idx)");
-            _ = sb.AppendLine("};");
-            _ = sb.AppendLine($"return _idxResult;");
-        }
-
         /// <summary>
         /// Emits an index switch where each colliding index group (more than one member sharing a
         /// leading index) is routed to a generated local function that resolves the variant by a
@@ -511,7 +524,7 @@ public sealed partial class CborSerializerCodeGen
             {
                 int idxValue = int.Parse(group.Key.Substring(4), CultureInfo.InvariantCulture);
                 _ = group.Value.Count == 1
-                    ? sb.AppendLine($"    {idxValue} => ({metadata.FullyQualifiedName}){group.Value[0].FullyQualifiedName}.Read(data, out bytesConsumed),")
+                    ? sb.AppendLine($"    {idxValue} => {EmitCaseReadExpr(metadata, group.Value[0], "data", "bytesConsumed", cast: true)},")
                     : sb.AppendLine($"    {idxValue} => {resolvers[group.Key]}(data, out bytesConsumed),");
             }
             _ = sb.AppendLine($"    _ => throw CborError.Decode(data, 0, \"{metadata.FullyQualifiedName}\", \"registered union index\", _idx)");
@@ -543,7 +556,7 @@ public sealed partial class CborSerializerCodeGen
             foreach (SerializableTypeMetadata member in members)
             {
                 string statePattern = GetCborReaderStatePattern(ClassifyProbeAtDepth(member, depth));
-                _ = sb.AppendLine($"    {statePattern} => ({metadata.FullyQualifiedName}){member.FullyQualifiedName}.Read(_d, out _bc),");
+                _ = sb.AppendLine($"    {statePattern} => {EmitCaseReadExpr(metadata, member, "_d", "_bc", cast: true)},");
             }
             _ = sb.AppendLine($"    _ => throw CborError.Decode(data, 0, \"{metadata.FullyQualifiedName}\", \"unambiguous union case\")");
             _ = sb.AppendLine("};");
@@ -557,20 +570,19 @@ public sealed partial class CborSerializerCodeGen
         /// </summary>
         private int FindSeparatingDepth(List<SerializableTypeMetadata> members)
         {
+            int fallback = -1;
             int maxDepth = members.Min(m => m.Properties.Count);
             for (int depth = 1; depth < maxDepth; depth++)
             {
                 List<string> keys = [.. members.Select(m => ClassifyProbeAtDepth(m, depth))];
-                if (keys.Any(k => k == "unknown"))
+                if (keys.Any(k => k == "unknown") || keys.Distinct().Count() != keys.Count)
                 {
                     continue;
                 }
-                if (keys.Distinct().Count() == keys.Count)
-                {
-                    return depth;
-                }
+                if (members.All(m => !m.Properties[depth].IsTypeNullable)) { return depth; }
+                if (fallback < 0) { fallback = depth; }
             }
-            return -1;
+            return fallback;
         }
 
         /// <summary>
@@ -647,35 +659,73 @@ public sealed partial class CborSerializerCodeGen
             _ => "unknown"
         };
 
-        private static void EmitArraySizeBranch(StringBuilder sb, SerializableTypeMetadata metadata, Dictionary<string, List<SerializableTypeMetadata>> probeGroups)
+        internal static bool TryGetSecondaryProbe(
+            SerializableTypeMetadata union, SerializableTypeMetadata caseMeta,
+            ImmutableDictionary<string, SerializableTypeMetadata>? registry, out int depth, out string shapeKey)
         {
-            _ = sb.AppendLine($"var _sizeReader = new CborReader(data.Span);");
-            _ = sb.AppendLine($"_sizeReader.ReadBeginArray();");
-            _ = sb.AppendLine($"int _size = _sizeReader.ReadSize();");
+            depth = -1;
+            shapeKey = "";
+            string key = GetProbeKey(caseMeta);
+            if (!key.StartsWith("idx:", StringComparison.Ordinal)) { return false; }
+            List<SerializableTypeMetadata> group = [.. GetUnionLeaves(union).Where(c => GetProbeKey(c) == key)];
+            if (group.Count < 2) { return false; }
+            UnionEmitter emitter = new(registry);
+            int found = emitter.FindSeparatingDepth(group);
+            if (found < 1) { return false; }
+            string classified = emitter.ClassifyProbeAtDepth(caseMeta, found);
+            if (classified == "unknown") { return false; }
+            depth = found;
+            shapeKey = classified;
+            return true;
+        }
+
+        private static void EmitArraySizeBranch(StringBuilder sb, SerializableTypeMetadata metadata, List<SerializableTypeMetadata> arraySizeChildren)
+        {
+            int maxSize = arraySizeChildren.Max(c => c.Properties.Count);
+            _ = sb.AppendLine($"int _size = global::Chrysalis.Codec.Serialization.CborUnionWire.ReadArrayLength(data.Span, {maxSize});");
             _ = sb.AppendLine($"{metadata.FullyQualifiedName} _sizeResult = _size switch");
             _ = sb.AppendLine("{");
-            foreach (KeyValuePair<string, List<SerializableTypeMetadata>> group in probeGroups)
+            foreach (SerializableTypeMetadata child in arraySizeChildren)
             {
-                int sizeValue = int.Parse(group.Key.Substring(6), CultureInfo.InvariantCulture);
-                _ = sb.AppendLine($"    {sizeValue} => ({metadata.FullyQualifiedName}){group.Value[0].FullyQualifiedName}.Read(data, out bytesConsumed),");
+                Emitter.TryGetListArityBounds(child, out int min, out int max);
+                string arm = min == max ? $"{min}" : $">= {min} and <= {max}";
+                _ = sb.AppendLine($"    {arm} => {EmitCaseReadExpr(metadata, child, "data", "bytesConsumed", cast: true)},");
             }
             _ = sb.AppendLine($"    _ => throw CborError.Decode(data, 0, \"{metadata.FullyQualifiedName}\", \"registered array size\", _size)");
             _ = sb.AppendLine("};");
-            _ = sb.AppendLine($"return _sizeResult;");
+            _ = sb.AppendLine("return _sizeResult;");
         }
 
-        private static void EmitStateOnlyBranch(StringBuilder sb, SerializableTypeMetadata metadata, Dictionary<string, List<SerializableTypeMetadata>> probeGroups)
+        private static List<SerializableTypeMetadata> GetUnionLeaves(SerializableTypeMetadata union) =>
+            union.IsStructUnion ? [.. union.ChildTypes] : FlattenUnionChildren(union.ChildTypes);
+
+        private static string EmitCaseReadExpr(
+            SerializableTypeMetadata union,
+            SerializableTypeMetadata leaf,
+            string dataExpr,
+            string consumedExpr,
+            bool cast)
         {
-            _ = sb.AppendLine($"{metadata.FullyQualifiedName} _stateResult = state switch");
-            _ = sb.AppendLine("{");
-            foreach (KeyValuePair<string, List<SerializableTypeMetadata>> group in probeGroups)
+            if (union.IsStructUnion)
             {
-                string statePattern = GetCborReaderStatePattern(group.Key);
-                _ = sb.AppendLine($"    {statePattern} => ({metadata.FullyQualifiedName}){group.Value[0].FullyQualifiedName}.Read(data, out bytesConsumed),");
+                int caseIndex = FindStructCaseIndex(union, leaf);
+                return $"__Read{caseIndex}({dataExpr}, out {consumedExpr})";
             }
-            _ = sb.AppendLine($"    _ => throw CborError.Decode(data, 0, \"{metadata.FullyQualifiedName}\", \"registered union kind\", state)");
-            _ = sb.AppendLine("};");
-            _ = sb.AppendLine($"return _stateResult;");
+
+            string call = $"{leaf.FullyQualifiedName}.Read({dataExpr}, out {consumedExpr})";
+            return cast ? $"({union.FullyQualifiedName}){call}" : call;
+        }
+
+        private static int FindStructCaseIndex(SerializableTypeMetadata union, SerializableTypeMetadata leaf)
+        {
+            for (int i = 0; i < union.ChildTypes.Count; i++)
+            {
+                if (union.ChildTypes[i].FullyQualifiedName == leaf.FullyQualifiedName)
+                {
+                    return i + 1;
+                }
+            }
+            throw new InvalidOperationException($"Case '{leaf.FullyQualifiedName}' not found on union '{union.FullyQualifiedName}'.");
         }
 
         private static List<SerializableTypeMetadata> FlattenUnionChildren(EquatableArray<SerializableTypeMetadata> children)
@@ -700,25 +750,28 @@ public sealed partial class CborSerializerCodeGen
             }
         }
 
-        private static string GetProbeKey(SerializableTypeMetadata child)
+        internal static string GetProbeKey(SerializableTypeMetadata child)
         {
+            if (child.CborTag is not null)
+            {
+                return $"tag:{child.CborTag}";
+            }
+
             if (child.SerializationType == SerializationType.Constr && child.CborIndex is not null && child.CborIndex >= 0)
             {
                 int tag = Emitter.ResolveTag(child.CborIndex);
                 return $"tag:{tag}";
             }
 
-            return child.CborTag is not null
-                ? $"tag:{child.CborTag}"
-                : child.SerializationType switch
-                {
-                    SerializationType.List => GetListProbeKey(child),
-                    SerializationType.Map => "map",
-                    SerializationType.Constr => "constr",
-                    SerializationType.Container => GetContainerProbeKey(child),
-                    SerializationType.Union => "unknown",
-                    _ => "unknown"
-                };
+            return child.SerializationType switch
+            {
+                SerializationType.List => GetListProbeKey(child),
+                SerializationType.Map => "map",
+                SerializationType.Constr => "constr",
+                SerializationType.Container => GetContainerProbeKey(child),
+                SerializationType.Union => "unknown",
+                _ => "unknown"
+            };
         }
 
         private static string GetListProbeKey(SerializableTypeMetadata child)
@@ -731,7 +784,7 @@ public sealed partial class CborSerializerCodeGen
             return $"array:{child.Properties.Count}";
         }
 
-        private static string GetContainerProbeKey(SerializableTypeMetadata child)
+        internal static string GetContainerProbeKey(SerializableTypeMetadata child)
         {
             if (child.Properties.Count == 1)
             {

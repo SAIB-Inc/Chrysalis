@@ -19,6 +19,7 @@ public sealed partial class CborSerializerCodeGen
         public const string CborEncodeValueFullName = "global::Chrysalis.Codec.Types.CborEncodedValue";
 
         internal static string ClampedCapacity(string sizeVar) => $"global::System.Math.Clamp({sizeVar}, 0, 256)";
+        internal static string ToCreateParameterName(string name) => ToCamelCase(name).TrimStart('@');
 
         public static void EmitSerializerAndMetadata(SourceProductionContext context, SerializableTypeMetadata metadata)
         {
@@ -27,26 +28,39 @@ public sealed partial class CborSerializerCodeGen
             source.ReportDiagnostic(context, null);
         }
 
-        internal sealed record GeneratedType(string TypeName, string Metadata, string Serializer, DiagnosticDescriptor? Diagnostic)
+        internal sealed record GeneratedType(string TypeName, string Metadata, string Serializer, DiagnosticDescriptor? Diagnostic, string? Detail = null)
         {
             public void AddSources(SourceProductionContext context)
             {
                 string hintName = TypeName.Replace("global::", "").Replace("<", "`").Replace(">", "`");
-                context.AddSource($"{hintName}.Metadata.g.cs", Metadata);
-                context.AddSource($"{hintName}.Serializer.g.cs", Serializer);
+                if (!string.IsNullOrEmpty(Metadata))
+                {
+                    context.AddSource($"{hintName}.Metadata.g.cs", Metadata);
+                }
+                if (!string.IsNullOrEmpty(Serializer))
+                {
+                    context.AddSource($"{hintName}.Serializer.g.cs", Serializer);
+                }
             }
 
             public void ReportDiagnostic(SourceProductionContext context, Location? location)
             {
                 if (Diagnostic is { } descriptor)
                 {
-                    context.ReportDiagnostic(Microsoft.CodeAnalysis.Diagnostic.Create(descriptor, location, TypeName));
+                    context.ReportDiagnostic(Detail is not null
+                        ? Microsoft.CodeAnalysis.Diagnostic.Create(descriptor, location, TypeName, Detail)
+                        : Microsoft.CodeAnalysis.Diagnostic.Create(descriptor, location, TypeName));
                 }
             }
         }
 
         public static GeneratedType Generate(SerializableTypeMetadata metadata, ImmutableDictionary<string, SerializableTypeMetadata>? typeRegistry)
         {
+            if (metadata.UnionError is not null)
+            {
+                return new(metadata.FullyQualifiedName, "", "", metadata.UnionError, metadata.UnionErrorDetail);
+            }
+
             // The list owns its wire implementation. Generate only the standard dispatch entrypoints.
             if (metadata.FullyQualifiedName == "Chrysalis.Codec.Types.CborList<T>")
             {
@@ -78,6 +92,11 @@ public sealed partial class CborSerializerCodeGen
                     }
                     """;
                 return new(metadata.FullyQualifiedName, metadata.ToString(), forwards, null);
+            }
+
+            if (metadata.IsStructUnion)
+            {
+                return EmitStructUnion(metadata, typeRegistry);
             }
 
             StringBuilder sb = new();
@@ -119,7 +138,7 @@ public sealed partial class CborSerializerCodeGen
                     SerializablePropertyMetadata prop = properties[i];
                     string? keyValue = isIntKey ? prop.PropertyKeyInt?.ToString(CultureInfo.InvariantCulture) : prop.PropertyKeyString;
                     // Strip nullable annotation for typeof() — typeof(T?) is invalid for reference types
-                    string typeForTypeof = prop.CborMap?.TypeofType ?? prop.PropertyTypeFullName.TrimEnd('?');
+                    string typeForTypeof = prop.TypeofType;
 
                     _ = i == properties.Count - 1
                         ? sb.AppendLine($"  {{{keyValue}, typeof({typeForTypeof})}}")
@@ -299,7 +318,7 @@ public sealed partial class CborSerializerCodeGen
             _ = sb.AppendLine("}");
             _ = sb.AppendLine("catch (Exception error) when (CborError.IsDecodeFailure(error))");
             _ = sb.AppendLine("{");
-            _ = sb.AppendLine($"throw CborError.Field(error, _raw, {fieldRef}, \"{typePath}.{prop.PropertyName}\", CborError.Expected(typeof({prop.CborMap?.TypeofType ?? prop.NonNullableTypeFullName})));");
+            _ = sb.AppendLine($"throw CborError.Field(error, _raw, {fieldRef}, \"{typePath}.{prop.PropertyName}\", CborError.Expected(typeof({prop.TypeofType})));");
             _ = sb.AppendLine("}");
             _ = sb.AppendLine("}");
             _ = sb.AppendLine("}");
@@ -351,7 +370,7 @@ public sealed partial class CborSerializerCodeGen
             _ = sb.AppendLine("catch (Exception error) when (CborError.IsDecodeFailure(error))");
             _ = sb.AppendLine("{");
             string slicedItem = prop.IsListItemTypeOpenGeneric || !IsPrimitiveType(cleanItemType) ? "true" : "false";
-            string expected = prop.IsListItemTypeOpenGeneric ? "\"list item\"" : $"CborError.Expected(typeof({cleanItemType}))";
+            string expected = prop.IsListItemTypeOpenGeneric ? "\"list item\"" : $"CborError.Expected(typeof({cleanItemType.Replace("?", "")}))";
             _ = sb.AppendLine($"throw CborError.Reader(error, {fieldRef}, _r.Buffer.Length, _errorStart, {slicedItem}, \"item\", {expected});");
             _ = sb.AppendLine("}");
             _ = sb.AppendLine("if (_size > 0) _remaining--;");
@@ -512,8 +531,8 @@ public sealed partial class CborSerializerCodeGen
             _ = sb.AppendLine("catch (Exception error) when (CborError.IsDecodeFailure(error))");
             _ = sb.AppendLine("{");
             const string mapEntry = "\"map entry\"";
-            string keyExpected = prop.IsMapKeyTypeOpenGeneric ? mapEntry : $"CborError.Expected(typeof({cleanKeyType}))";
-            string valueExpected = prop.IsMapValueTypeOpenGeneric ? mapEntry : $"CborError.Expected(typeof({cleanValueType}))";
+            string keyExpected = prop.IsMapKeyTypeOpenGeneric ? mapEntry : $"CborError.Expected(typeof({cleanKeyType.Replace("?", "")}))";
+            string valueExpected = prop.IsMapValueTypeOpenGeneric ? mapEntry : $"CborError.Expected(typeof({cleanValueType.Replace("?", "")}))";
             string expected = closedSlot ? $"_readingValue ? {valueExpected} : {keyExpected}" : mapEntry;
             _ = sb.AppendLine($"throw CborError.Reader(error, {fieldRef}, _r.Buffer.Length, _errorStart, _errorSlice, \"entry\", {expected});");
             _ = sb.AppendLine("}");
@@ -849,7 +868,287 @@ public sealed partial class CborSerializerCodeGen
             return EmitByteMemoryRead(sb, "_r", fieldRef, $"{variable} =", encoded);
         }
 
-        private static string StripOuterNullability(string type) => type.EndsWith("?", StringComparison.Ordinal) ? type.Substring(0, type.Length - 1) : type;
+        private static GeneratedType EmitStructUnion(SerializableTypeMetadata metadata, ImmutableDictionary<string, SerializableTypeMetadata>? typeRegistry)
+        {
+            string unionPath = NormalizeTypeName(metadata.FullyQualifiedName);
+            string selfDoc = EscapeXml(metadata.Indentifier);
+            StringBuilder readSb = new();
+            StringBuilder structHelpers = new();
+            DiagnosticDescriptor? diagnostic = EmitSerializableTypeReader(readSb, metadata, typeRegistry, structHelpers);
+            bool hasCandidateMatchers = structHelpers.Length > 0;
+            bool emitCaseHelpers = metadata.UnionReader == UnionReaderKind.Generated && !UnionEmitter.HasBuiltInReader(metadata);
+            StringBuilder sb = new();
+            _ = sb.AppendLine("// <auto-generated/>");
+            _ = sb.AppendLine("#nullable enable");
+            _ = sb.AppendLine("using System;");
+            _ = sb.AppendLine("using SAIB.Cbor.Serialization;");
+            _ = sb.AppendLine("using Chrysalis.Codec.Serialization;");
+            _ = sb.AppendLine();
+            if (metadata.Namespace is not null)
+            {
+                _ = sb.AppendLine($"namespace {metadata.Namespace};");
+            }
+
+            _ = sb.AppendLine("/// <remarks>");
+            _ = sb.AppendLine("/// Wire-backed union instances borrow the input <c>ReadOnlyMemory&lt;byte&gt;</c> backing buffer.");
+            _ = sb.AppendLine("/// Keep that backing storage valid and unmodified while the union is in use; copy the input before decoding if independent lifetime is required.");
+            _ = sb.AppendLine("/// </remarks>");
+            _ = sb.AppendLine($"public readonly partial struct {metadata.Indentifier} : global::System.Runtime.CompilerServices.IUnion, global::System.IEquatable<{metadata.Indentifier}>");
+            _ = sb.AppendLine("{");
+            _ = sb.AppendLine("private readonly global::System.ReadOnlyMemory<byte> _raw;");
+            _ = sb.AppendLine("private readonly byte _kind;");
+            _ = sb.AppendLine();
+            string wireCtorAccess = UnionEmitter.HasBuiltInReader(metadata) ? "internal" : "private";
+            _ = sb.AppendLine($"{wireCtorAccess} {metadata.BaseIdentifier}(byte kind, global::System.ReadOnlyMemory<byte> raw)");
+            _ = sb.AppendLine("{");
+            _ = sb.AppendLine("_kind = kind;");
+            _ = sb.AppendLine("_raw = raw;");
+            _ = sb.AppendLine("}");
+            _ = sb.AppendLine();
+
+            for (int i = 0; i < metadata.ChildTypes.Count; i++)
+            {
+                byte kind = (byte)(i + 1);
+                SerializableTypeMetadata caseMeta = metadata.ChildTypes[i];
+                string caseType = caseMeta.FullyQualifiedName;
+                string caseDoc = EscapeXml(caseMeta.Indentifier);
+                _ = sb.AppendLine($"/// <summary>Creates a <c>{selfDoc}</c> from a <c>{caseDoc}</c> case.</summary>");
+                _ = sb.AppendLine($"public {metadata.BaseIdentifier}({caseType} value)");
+                _ = sb.AppendLine("{");
+                if (!caseMeta.IsValueType)
+                {
+                    _ = sb.AppendLine("if (value is null)");
+                    _ = sb.AppendLine("{");
+                    _ = sb.AppendLine("_kind = 0;");
+                    _ = sb.AppendLine("_raw = default;");
+                    _ = sb.AppendLine("return;");
+                    _ = sb.AppendLine("}");
+                }
+                _ = sb.AppendLine("global::System.ReadOnlyMemory<byte> raw = global::Chrysalis.Codec.Serialization.CborUnionWire.GetOrEncodeRaw(");
+                _ = sb.AppendLine($"    value, static (o, v) => {caseType}.Write(o, v), \"{unionPath}\");");
+                EmitCaseValidationCall(sb, metadata, caseMeta, unionPath, typeRegistry, isRead: false, kind, i, hasCandidateMatchers);
+                _ = sb.AppendLine($"global::Chrysalis.Codec.Serialization.CborUnionWire.ValidateCaseRead(raw, static (global::System.ReadOnlyMemory<byte> d, out int c) => {caseType}.Read(d, out c), \"{unionPath}\");");
+                _ = sb.AppendLine($"_kind = {kind};");
+                _ = sb.AppendLine("_raw = raw;");
+                _ = sb.AppendLine("}");
+                _ = sb.AppendLine();
+            }
+
+            _ = sb.AppendLine("/// <summary>Gets a value indicating whether this union holds a case value.</summary>");
+            _ = sb.AppendLine("public bool HasValue => _kind != 0;");
+            _ = sb.AppendLine();
+            _ = sb.AppendLine("/// <summary>Gets the decoded case value as an <c>object</c>, or <c>null</c> for the default value.</summary>");
+            _ = sb.AppendLine("public object? Value => _kind switch");
+            _ = sb.AppendLine("{");
+            for (int i = 0; i < metadata.ChildTypes.Count; i++)
+            {
+                _ = sb.AppendLine($"    {i + 1} => (object){metadata.ChildTypes[i].FullyQualifiedName}.Read(_raw, out _),");
+            }
+            _ = sb.AppendLine("    _ => null");
+            _ = sb.AppendLine("};");
+            _ = sb.AppendLine();
+            _ = sb.AppendLine("/// <inheritdoc/>");
+            _ = sb.AppendLine("public global::System.ReadOnlyMemory<byte> Raw => _raw;");
+            _ = sb.AppendLine("/// <inheritdoc/>");
+            _ = sb.AppendLine("int global::Chrysalis.Codec.Serialization.ICborType.ConstrIndex => -1;");
+            _ = sb.AppendLine("/// <inheritdoc/>");
+            _ = sb.AppendLine("bool global::Chrysalis.Codec.Serialization.ICborType.IsIndefinite => false;");
+            _ = sb.AppendLine();
+
+            for (int i = 0; i < metadata.ChildTypes.Count; i++)
+            {
+                byte kind = (byte)(i + 1);
+                SerializableTypeMetadata caseMeta = metadata.ChildTypes[i];
+                string caseType = caseMeta.FullyQualifiedName;
+                string caseDoc = EscapeXml(caseMeta.Indentifier);
+                _ = sb.AppendLine($"/// <summary>Attempts to extract the <c>{caseDoc}</c> case without boxing.</summary>");
+                string outParam = caseMeta.IsValueType
+                    ? $"out {caseType} value"
+                    : $"[global::System.Diagnostics.CodeAnalysis.MaybeNullWhen(false)] out {caseType} value";
+                _ = sb.AppendLine($"public bool TryGetValue({outParam})");
+                _ = sb.AppendLine("{");
+                _ = sb.AppendLine($"if (_kind == {kind})");
+                _ = sb.AppendLine("{");
+                _ = sb.AppendLine($"value = {caseType}.Read(_raw, out _);");
+                _ = sb.AppendLine("return true;");
+                _ = sb.AppendLine("}");
+                _ = sb.AppendLine(caseMeta.IsValueType ? "value = default;" : "value = default!;");
+                _ = sb.AppendLine("return false;");
+                _ = sb.AppendLine("}");
+                _ = sb.AppendLine();
+            }
+
+            _ = sb.AppendLine("/// <inheritdoc/>");
+            _ = sb.AppendLine($"public bool Equals({metadata.Indentifier} other) => _kind == other._kind && _raw.Equals(other._raw);");
+            _ = sb.AppendLine("/// <inheritdoc/>");
+            _ = sb.AppendLine($"public override bool Equals(object? obj) => obj is {metadata.Indentifier} other && Equals(other);");
+            _ = sb.AppendLine("/// <inheritdoc/>");
+            _ = sb.AppendLine("public override int GetHashCode() => global::System.HashCode.Combine(_kind, _raw);");
+            _ = sb.AppendLine($"/// <summary>Determines whether two <c>{selfDoc}</c> values hold the same kind and backing wire slice.</summary>");
+            _ = sb.AppendLine($"public static bool operator ==({metadata.Indentifier} left, {metadata.Indentifier} right) => left.Equals(right);");
+            _ = sb.AppendLine($"/// <summary>Determines whether two <c>{selfDoc}</c> values differ.</summary>");
+            _ = sb.AppendLine($"public static bool operator !=({metadata.Indentifier} left, {metadata.Indentifier} right) => !left.Equals(right);");
+            _ = sb.AppendLine("/// <inheritdoc/>");
+            _ = sb.AppendLine("public override string ToString() => _kind switch");
+            _ = sb.AppendLine("{");
+            for (int i = 0; i < metadata.ChildTypes.Count; i++)
+            {
+                string caseLabel = EscapeStringLiteral(metadata.ChildTypes[i].Indentifier);
+                _ = sb.AppendLine($"    {i + 1} => \"{EscapeStringLiteral(metadata.BaseIdentifier)}({caseLabel})\",");
+            }
+            _ = sb.AppendLine($"    _ => \"{EscapeStringLiteral(metadata.BaseIdentifier)}(default)\"");
+            _ = sb.AppendLine("};");
+            _ = sb.AppendLine();
+
+            if (emitCaseHelpers)
+            {
+                for (int i = 0; i < metadata.ChildTypes.Count; i++)
+                {
+                    byte kind = (byte)(i + 1);
+                    SerializableTypeMetadata caseMeta = metadata.ChildTypes[i];
+                    _ = sb.AppendLine("[global::System.Runtime.CompilerServices.MethodImpl(global::System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]");
+                    _ = sb.AppendLine($"private static {metadata.Indentifier} __Read{kind}(global::System.ReadOnlyMemory<byte> data, out int bytesConsumed)");
+                    _ = sb.AppendLine("{");
+                    _ = sb.AppendLine($"_ = {caseMeta.FullyQualifiedName}.Read(data, out bytesConsumed);");
+                    EmitCaseValidationCall(sb, metadata, caseMeta, unionPath, typeRegistry, isRead: true, kind, i, hasCandidateMatchers: false);
+                    _ = sb.AppendLine("}");
+                    _ = sb.AppendLine();
+                }
+            }
+
+            if (hasCandidateMatchers) { _ = sb.Append(structHelpers); _ = sb.AppendLine(); }
+            _ = sb.Append(readSb);
+            _ = sb.AppendLine();
+            _ = sb.AppendLine($"/// <summary>Serializes a <c>{selfDoc}</c> instance into CBOR-encoded bytes.</summary>");
+            _ = sb.AppendLine($"public static void Write(global::System.Buffers.IBufferWriter<byte> output, {metadata.Indentifier} data) =>");
+            _ = sb.AppendLine($"    global::Chrysalis.Codec.Serialization.CborUnionWire.WriteRaw(output, data._kind, data._raw, \"{unionPath}\");");
+            _ = sb.AppendLine("}");
+
+            return new(metadata.FullyQualifiedName, metadata.ToString(), sb.ToString(), diagnostic);
+        }
+
+        internal static void TryGetListArityBounds(SerializableTypeMetadata caseMeta, out int minItems, out int maxItems)
+        {
+            maxItems = caseMeta.Properties.Count;
+            int lastRequired = -1;
+            for (int i = 0; i < caseMeta.Properties.Count; i++)
+            {
+                if (!caseMeta.Properties[i].IsTypeNullable)
+                {
+                    lastRequired = i;
+                }
+            }
+            minItems = lastRequired + 1;
+        }
+
+        private static void EmitCaseValidationCall(
+            StringBuilder sb, SerializableTypeMetadata union, SerializableTypeMetadata caseMeta, string unionPath,
+            ImmutableDictionary<string, SerializableTypeMetadata>? typeRegistry, bool isRead, byte kind, int caseIndex, bool hasCandidateMatchers)
+        {
+            if (!isRead && UnionEmitter.TryEmitBuiltInCaseValidationCall(union, caseMeta, "raw", unionPath) is { } builtIn)
+            {
+                _ = sb.AppendLine(builtIn);
+                return;
+            }
+
+            const string wire = "global::Chrysalis.Codec.Serialization.CborUnionWire";
+            string call;
+            if (caseMeta.SerializationType == SerializationType.Constr)
+            {
+                int resolvedTag = ResolveTag(caseMeta.CborIndex);
+                string outerArg = caseMeta.CborTag is int outer ? $", outerTag: {outer.ToString(CultureInfo.InvariantCulture)}" : "";
+                if (resolvedTag >= 0)
+                {
+                    TryGetListArityBounds(caseMeta, out int minItems, out int maxItems);
+                    call = isRead
+                        ? $"{wire}.ValidateReadListSlice(data, bytesConsumed, null, {minItems}, {maxItems}, {resolvedTag}, \"{unionPath}\"{outerArg})"
+                        : $"{wire}.ValidateArrayCase(raw, {minItems}, {maxItems}, {resolvedTag}, \"{unionPath}\"{outerArg})";
+                }
+                else
+                {
+                    call = isRead ? $"{wire}.ValidateReadTagSlice(data, bytesConsumed, {resolvedTag}, true, \"{unionPath}\"{outerArg})" : $"{wire}.ValidateTagCase(raw, {resolvedTag}, true, \"{unionPath}\"{outerArg})";
+                }
+            }
+            else if (caseMeta.SerializationType == SerializationType.List)
+            {
+                TryGetListArityBounds(caseMeta, out int minItems, out int maxItems);
+                string tagArg = caseMeta.CborTag is int tag ? tag.ToString(CultureInfo.InvariantCulture) : "null";
+                string secArgs = caseMeta.CborIndex is >= 0
+                    && UnionEmitter.TryGetSecondaryProbe(union, caseMeta, typeRegistry, out int secDepth, out string secKey)
+                    && ProbeKeyToMask(secKey, hasUnsignedSibling: false, wire) is { } secMask
+                    ? $", {secDepth}, {secMask}" : "";
+                if (isRead)
+                {
+                    string idxArg = caseMeta.CborIndex is >= 0 ? caseMeta.CborIndex.Value.ToString(CultureInfo.InvariantCulture) : "null";
+                    call = $"{wire}.ValidateReadListSlice(data, bytesConsumed, {idxArg}, {minItems}, {maxItems}, {tagArg}, \"{unionPath}\"{secArgs})";
+                }
+                else if (caseMeta.CborIndex is >= 0)
+                {
+                    call = $"{wire}.ValidateIndexedArrayCase(raw, {caseMeta.CborIndex.Value}, {minItems}, {maxItems}, {tagArg}, \"{unionPath}\"{secArgs})";
+                }
+                else { call = $"{wire}.ValidateArrayCase(raw, {minItems}, {maxItems}, {tagArg}, \"{unionPath}\")"; }
+            }
+            else if (caseMeta.CborTag is int nonListTag)
+            {
+                call = isRead ? $"{wire}.ValidateReadTagSlice(data, bytesConsumed, {nonListTag}, false, \"{unionPath}\")" : $"{wire}.ValidateTagCase(raw, {nonListTag}, false, \"{unionPath}\")";
+            }
+            else if (caseMeta.SerializationType == SerializationType.Map)
+            {
+                call = isRead ? $"{wire}.ValidateReadMajorTypeSlice(data, bytesConsumed, 1 << 5, \"{unionPath}\")" : $"{wire}.ValidateMajorTypeCase(raw, 1 << 5, \"{unionPath}\")";
+            }
+            else if (caseMeta.SerializationType == SerializationType.Container && caseMeta.Properties.Count == 1 && !caseMeta.Properties[0].IsOpenGeneric
+                && ProbeKeyToMask(UnionEmitter.GetContainerProbeKey(caseMeta), union.ChildTypes.Any(s => UnionEmitter.GetProbeKey(s) == "unsigned"), wire) is { } mask)
+            {
+                call = isRead ? $"{wire}.ValidateReadMajorTypeSlice(data, bytesConsumed, {mask}, \"{unionPath}\")" : $"{wire}.ValidateMajorTypeCase(raw, {mask}, \"{unionPath}\")";
+            }
+            else { call = isRead ? $"{wire}.ValidateReadSlice(data, bytesConsumed, \"{unionPath}\")" : $"{wire}.ValidateCompleteCaseBytes(raw, \"{unionPath}\")"; }
+
+            _ = sb.AppendLine(isRead ? $"return new({kind}, {call});" : $"{call};");
+            if (!isRead && caseMeta.SerializationType == SerializationType.Constr && UnionEmitter.GetProbeKey(caseMeta) == "constr")
+            {
+                List<int> siblingTags = [.. union.ChildTypes
+                    .Where(c => c.FullyQualifiedName != caseMeta.FullyQualifiedName)
+                    .Select(UnionEmitter.GetProbeKey)
+                    .Where(k => k.StartsWith("tag:", StringComparison.Ordinal))
+                    .Select(k => int.Parse(k.Substring(4), CultureInfo.InvariantCulture))
+                    .Where(t => t >= 0)
+                    .Distinct()
+                    .OrderBy(t => t)];
+                if (siblingTags.Count > 0)
+                {
+                    string tagPattern = string.Join(" or ", siblingTags.Select(t => $"{t}UL"));
+                    _ = sb.AppendLine($"{{ var _tr = new global::SAIB.Cbor.Serialization.CborReader(raw.Span); if (_tr.TryReadSemanticTag(out ulong _dt) && _dt is {tagPattern}) throw global::Chrysalis.Codec.Serialization.CborError.Validation(0, \"{unionPath}\", \"unclaimed constructor tag\", $\"tag {{_dt}}\"); }}");
+                }
+            }
+            if (!isRead && hasCandidateMatchers)
+            {
+                _ = sb.AppendLine($"(int Remaining, string Path, string Expected) _mf = (raw.Length, \"{unionPath}\", \"registered union shape\");");
+                string siblings = string.Join(" || ", Enumerable.Range(0, union.ChildTypes.Count).Where(j => j != caseIndex).Select(j => $"__Matches{j}(new CborReader(raw.Span), ref _mf)"));
+                _ = sb.AppendLine($"bool _ok = __Matches{caseIndex}(new CborReader(raw.Span), ref _mf);");
+                _ = sb.AppendLine($"if (!_ok{(siblings.Length > 0 ? " || " + siblings : "")})");
+                _ = sb.AppendLine($"    throw global::Chrysalis.Codec.Serialization.CborError.Validation(_ok ? 0 : raw.Length - _mf.Remaining, _ok ? \"{unionPath}\" : _mf.Path, _ok ? \"unambiguous union case\" : _mf.Expected, global::Chrysalis.Codec.Serialization.CborError.Actual(raw, 0));");
+            }
+        }
+
+        private static string? ProbeKeyToMask(string probeKey, bool hasUnsignedSibling, string wire) => probeKey switch
+        {
+            "unsigned" => "1 << 0",
+            "signed" => hasUnsignedSibling ? "1 << 1" : "(1 << 0) | (1 << 1)",
+            "integer" => "(1 << 0) | (1 << 1)",
+            "bytes" => "1 << 2",
+            "text" => "1 << 3",
+            "array" => "1 << 4",
+            "map" => "1 << 5",
+            "boolean" => $"{wire}.BooleanMask",
+            _ => null
+        };
+
+        private static string EscapeXml(string value) =>
+            value.Replace("&", "&amp;").Replace("<", "&lt;").Replace(">", "&gt;");
+
+        private static string EscapeStringLiteral(string value) =>
+            value.Replace("\\", "\\\\").Replace("\"", "\\\"");
+
         internal static bool IsReadOnlyMemoryByteType(string type) => StripOuterNullability(type) is "ReadOnlyMemory<byte>" or "System.ReadOnlyMemory<byte>" or "global::System.ReadOnlyMemory<byte>";
 
         private static bool IsPrimitiveType(string type) => StripOuterNullability(type) switch

@@ -53,8 +53,8 @@ public partial class GeneratorIsolationTests
         string versionParameter = $"[CborOrder({versionOrder})] int Version";
         string parameters = !positional ? "" : !split ? $"({tagParameter}, {versionParameter})" : $"({(intFirst ? tagParameter : versionParameter)})";
         string constructor = isStruct ? "" : !positional ? "public Split(string tag, int version) => (Tag, Version) = (tag, version);"
-            : intFirst ? "public Split(int version, string tag) : this(tag) => Version = version;"
-            : "public Split(string tag, int version) : this(version) => Tag = tag;";
+            : intFirst ? "public Split(string tag, int version) : this(tag) => Version = version;"
+            : "public Split(int version, string tag) : this(version) => Tag = tag;";
         string[] declarations = new string[count];
         string positionalBody = intFirst ? $"{tag} public string Initial {{ get; }} = Tag;"
             : $"{(split ? "" : tag)} {version} public int Initial {{ get; }} = Version;";

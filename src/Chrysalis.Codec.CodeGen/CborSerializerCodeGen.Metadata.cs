@@ -1,3 +1,5 @@
+using Microsoft.CodeAnalysis;
+
 namespace Chrysalis.Codec.CodeGen;
 
 public sealed partial class CborSerializerCodeGen
@@ -18,6 +20,14 @@ public sealed partial class CborSerializerCodeGen
         Invalid
     }
 
+    internal sealed record StructUnionCaseRef(
+        string SymbolKey,
+        string BoundTypeFullName,
+        string BoundIdentifier,
+        string BaseIdentifier,
+        bool IsValueType,
+        SerializableTypeMetadata? BoundMetadata);
+
     internal sealed record SerializableTypeMetadata(
         string BaseIdentifier,
         string Indentifier,
@@ -35,10 +45,16 @@ public sealed partial class CborSerializerCodeGen
         bool ShouldPreserveRaw
     )
     {
-        public bool IsRecordStruct => Keyword.Contains("struct");
+        public bool IsRecordStruct => Keyword.Contains("record struct");
+        public bool IsStructUnion => SerializationType == SerializationType.Union && Keyword == "readonly struct";
         public bool IsTypeNullable => Indentifier.Contains("?");
 
         public UnionReaderKind UnionReader { get; init; }
+        public DiagnosticDescriptor? UnionError { get; init; }
+        public string? UnionErrorDetail { get; init; }
+        public bool HasAmbiguousExternalWireOrder { get; init; }
+        public bool IsValueType { get; init; }
+        public EquatableArray<StructUnionCaseRef> StructUnionCases { get; init; }
         public EquatableArray<SerializableTypeMetadata> ChildTypes { get; init; }
         public EquatableArray<SerializablePropertyMetadata> Properties { get; init; }
 
@@ -63,7 +79,7 @@ public sealed partial class CborSerializerCodeGen
 
     internal sealed record CborListPropertyMetadata(string Type, string ItemType, bool IsNullable, bool HasDirectItemReader);
     internal sealed record CborMapPropertyMetadata(
-        string Type, string TypeofType, string KeyType, string ValueType,
+        string Type, string KeyType, string ValueType,
         bool IsNullable, bool HasDirectKeyReader, bool HasDirectValueReader);
 
     internal sealed record SerializablePropertyMetadata(
@@ -107,7 +123,9 @@ public sealed partial class CborSerializerCodeGen
             ?? (PropertyType.TrimEnd().EndsWith("?", StringComparison.Ordinal)
                 || PropertyTypeFullName.TrimEnd().EndsWith("?", StringComparison.Ordinal)
                 || PropertyTypeFullName.StartsWith("global::System.Nullable<", StringComparison.Ordinal));
-        public string NonNullableTypeFullName => CborList?.Type ?? CborMap?.Type ?? PropertyTypeFullName.Replace("?", "");
+        public string? TypeofTypeFullName { get; init; }
+        public string TypeofType => TypeofTypeFullName ?? StripOuterNullability(NonNullableTypeFullName);
+        public string NonNullableTypeFullName => CborList?.Type ?? CborMap?.Type ?? StripOuterNullability(PropertyTypeFullName);
         public bool IsRequired => !IsTypeNullable && !IsNullable;
 
 
@@ -144,5 +162,24 @@ public sealed partial class CborSerializerCodeGen
                 // IsOpenGeneric: {{IsOpenGeneric}}
                 // IsTypeNullable: {{IsTypeNullable}}
             """;
+    }
+
+    internal static string StripOuterNullability(string type)
+    {
+        string trimmed = type.Trim();
+        if (trimmed.EndsWith("?", StringComparison.Ordinal))
+        {
+            return trimmed.Substring(0, trimmed.Length - 1).TrimEnd();
+        }
+
+        return UnwrapNullable(trimmed, "global::System.Nullable<")
+            ?? UnwrapNullable(trimmed, "System.Nullable<")
+            ?? UnwrapNullable(trimmed, "Nullable<")
+            ?? trimmed;
+
+        static string? UnwrapNullable(string value, string prefix) =>
+            value.StartsWith(prefix, StringComparison.Ordinal) && value.EndsWith(">", StringComparison.Ordinal)
+                ? value.Substring(prefix.Length, value.Length - prefix.Length - 1).Trim()
+                : null;
     }
 }

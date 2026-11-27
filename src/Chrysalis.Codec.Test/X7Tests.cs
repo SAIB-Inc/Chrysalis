@@ -252,11 +252,11 @@ public class X7Tests
     [InlineData("A10E00")]
     [InlineData("A10F00")]
     public void X7ProtocolUpdateReadsOldKey(string hex) =>
-        _ = Assert.IsType<BabbageProtocolParamUpdate>(IProtocolParamUpdate.Read(Convert.FromHexString(hex)));
+        Assert.True(ProtocolParamUpdate.Read(Convert.FromHexString(hex)) is BabbageProtocolParamUpdate);
 
     [Fact]
     public void X7ProtocolUpdateRefusesMixedKeys() => Assert.Equal("one era's update fields",
-        Assert.Throws<CborDecodeException>(() => IProtocolParamUpdate.Read(Convert.FromHexString("A20E820800181901"))).Expected);
+        Assert.Throws<CborDecodeException>(() => ProtocolParamUpdate.Read(Convert.FromHexString("A20E820800181901"))).Expected);
 
     [Fact]
     public void X7FreshPairListsKeepIndefiniteFraming()

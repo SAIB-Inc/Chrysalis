@@ -25,7 +25,7 @@ internal static class Program
     [
         typeof(CoreBench), typeof(BlockBench), typeof(TxBench), typeof(VmBench),
         typeof(NetworkHeaderBench), typeof(CorpusVmBench), typeof(FieldReadBench),
-        typeof(EncodingBench), typeof(FixtureHashBench)
+        typeof(EncodingBench), typeof(FixtureHashBench), typeof(UnionBench)
     ];
 
     private static readonly Type[] BenchmarkTypes = [.. DirectTypes, typeof(MuxBench), typeof(ScriptBench)];
