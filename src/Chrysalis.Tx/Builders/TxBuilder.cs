@@ -331,14 +331,14 @@ public class TxBuilder
     }
 
     /// <summary>Delegate voting power to a DRep.</summary>
-    public TxBuilder AddVoteDelegation(Credential delegator, IDRep drep)
+    public TxBuilder AddVoteDelegation(Credential delegator, DRep drep)
     {
         _certificateDirectives.Add(new CertificateDirective(VoteDelegCert.Create(9, delegator, drep)));
         return this;
     }
 
     /// <summary>Delegate voting power to a DRep with script witness.</summary>
-    public TxBuilder AddVoteDelegation(Credential delegator, IDRep drep, IScript script, ICborType redeemer)
+    public TxBuilder AddVoteDelegation(Credential delegator, DRep drep, IScript script, ICborType redeemer)
     {
         ArgumentNullException.ThrowIfNull(redeemer);
         _certificateDirectives.Add(new CertificateDirective(VoteDelegCert.Create(9, delegator, drep), script, ToPlutusData(redeemer)));

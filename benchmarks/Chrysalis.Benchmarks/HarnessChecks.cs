@@ -6,6 +6,9 @@ using Chrysalis.Codec.Extensions.Cardano.Core;
 using Chrysalis.Codec.Serialization;
 using Chrysalis.Codec.Types;
 using Chrysalis.Codec.Types.Cardano.Core;
+using Chrysalis.Codec.Types.Cardano.Core.Common;
+using Chrysalis.Codec.Types.Cardano.Core.Transaction;
+using SAIB.Cbor.Serialization;
 using Chrysalis.Network.Cbor.BlockFetch;
 using Chrysalis.Network.Cbor.ChainSync;
 using Chrysalis.Network.Cbor.KeepAlive;
@@ -28,6 +31,7 @@ internal static class HarnessChecks
         Check(nameof(OneBodyIsCounted), OneBodyIsCounted, failures);
         Check(nameof(OpaqueDefiniteBytesDoNotAllocate), OpaqueDefiniteBytesDoNotAllocate, failures);
         Check(nameof(OpaqueBytesRoundTrip), OpaqueBytesRoundTrip, failures);
+        Check(nameof(UnionBenchLegacyInterfaceBuildersWork), UnionBenchLegacyInterfaceBuildersWork, failures);
         Check(nameof(CorpusTipKeepsThePoint), CorpusTipKeepsThePoint, failures);
         Check(nameof(CorpusTipRejectsIncompleteTips), CorpusTipRejectsIncompleteTips, failures);
         await CheckAsync(nameof(CaptureDrainsAFullQueue), CaptureDrainsAFullQueue, failures).ConfigureAwait(false);
@@ -334,6 +338,79 @@ internal static class HarnessChecks
             || !RawCbor.EncodeEveryToken(indefinite).Span.SequenceEqual(definite))
         {
             throw new InvalidDataException("Opaque byte-string traversal or re-encoding changed contents.");
+        }
+    }
+
+    private interface ILegacyValueList : ICborType;
+
+    private sealed class LegacyValueList(byte[] bytes) : ILegacyValueList
+    {
+        public ReadOnlyMemory<byte> Raw { get; } = bytes;
+        public int ConstrIndex => 0;
+        public bool IsIndefinite => false;
+    }
+
+    private sealed class EmptyLegacyValueList : ILegacyValueList
+    {
+        public ReadOnlyMemory<byte> Raw => default;
+        public int ConstrIndex => 0;
+        public bool IsIndefinite => false;
+    }
+
+    private sealed class LegacyValueOutput
+    {
+        public required ILegacyValueList Amounts { get; init; }
+
+        public static LegacyValueOutput Read(ReadOnlyMemory<byte> data, out int bytesConsumed)
+        {
+            _ = Lovelace.Read(data, out bytesConsumed);
+            if (bytesConsumed == 0) { return new() { Amounts = new EmptyLegacyValueList() }; }
+            byte[] listBytes = new byte[bytesConsumed + 1];
+            listBytes[0] = 0x81;
+            data.Span[..bytesConsumed].CopyTo(listBytes.AsSpan(1));
+            return new() { Amounts = new LegacyValueList(listBytes) };
+        }
+    }
+
+    private static void UnionBenchLegacyInterfaceBuildersWork()
+    {
+        if (ModelGraph.IsOfficialUnion(typeof(IValue)))
+        {
+            throw new InvalidDataException("IValue must not be detected as an official struct union.");
+        }
+
+        ArrayBufferWriter<byte> lovelaceBuf = new();
+        CborWriter lovelaceWriter = new(lovelaceBuf);
+        lovelaceWriter.WriteUInt64(5_000_000);
+        byte[] lovelaceBytes = lovelaceBuf.WrittenSpan.ToArray();
+
+        ArrayBufferWriter<byte> outputBuf = new();
+        CborWriter outputWriter = new(outputBuf);
+        outputWriter.WriteBeginArray(3);
+        outputWriter.WriteByteString(new byte[57]);
+        outputWriter.WriteUInt64(5_000_000);
+        outputWriter.WriteNull();
+        byte[] alonzoOutputBytes = outputBuf.WrittenSpan.ToArray();
+
+        if (LegacyValueOutput.Read(lovelaceBytes, out int _).Amounts.Raw.Length != lovelaceBytes.Length + 1)
+        {
+            throw new InvalidDataException("LegacyValueOutput.Read did not produce a 1-element list wrapper.");
+        }
+        int readSum = UnionBench.BuildReadAll([(typeof(IValue), [lovelaceBytes])])();
+        int switchSum = UnionBench.BuildSwitchAll([(typeof(IValue), [lovelaceBytes])])();
+        int constructSum = UnionBench.BuildConstructAll([(typeof(IValue), [(typeof(Lovelace), lovelaceBytes)])])();
+        int nestedSum = UnionBench.BuildNestedAll(
+        [
+            new(typeof(AlonzoTransactionOutput), nameof(AlonzoTransactionOutput.Amount), null, [alonzoOutputBytes]),
+            new(typeof(LegacyValueOutput), nameof(LegacyValueOutput.Amounts), typeof(IValue), [lovelaceBytes])
+        ])();
+
+        if (readSum != lovelaceBytes.Length * 2
+            || switchSum != lovelaceBytes.Length
+            || constructSum != lovelaceBytes.Length
+            || nestedSum != lovelaceBytes.Length * 2)
+        {
+            throw new InvalidDataException($"Unexpected legacy-interface UnionBench sums: {readSum}, {switchSum}, {constructSum}, {nestedSum}.");
         }
     }
 }

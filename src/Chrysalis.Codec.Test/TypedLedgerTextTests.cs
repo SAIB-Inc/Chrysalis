@@ -166,7 +166,13 @@ public class TypedLedgerTextTests
     private static ICborType ReadCertificateLeaf(ICertificate certificate, Field field) => field switch
     {
         Field.AnchorUrl => ((ResignCommitteeColdCert)certificate).Anchor!.Value,
-        Field.SingleHostDns or Field.MultiHostDns => ((PoolRegistration)certificate).Relays.Single(),
+        Field.SingleHostDns or Field.MultiHostDns => ((PoolRegistration)certificate).Relays.Single() switch
+        {
+            SingleHostAddr addr => addr,
+            SingleHostName single => single,
+            MultiHostName multi => multi,
+            null => throw new InvalidOperationException()
+        },
         Field.PoolMetadataUrl => ((PoolRegistration)certificate).PoolMetadata!.Value,
         _ => throw new ArgumentOutOfRangeException(nameof(field))
     };

@@ -50,7 +50,7 @@ public readonly partial record struct PoolRegistration : ICertificate
     [CborOrder(5)] public partial CborRationalNumber Margin { get; }
     [CborOrder(6)] public partial RewardAccount RewardAccount { get; }
     [CborOrder(7)] public partial CborList<ReadOnlyMemory<byte>> PoolOwners { get; }
-    [CborOrder(8)] public partial CborList<IRelay> Relays { get; }
+    [CborOrder(8)] public partial CborList<Relay> Relays { get; }
     [CborOrder(9)] public partial PoolMetadata? PoolMetadata { get; }
 }
 
@@ -111,7 +111,7 @@ public readonly partial record struct VoteDelegCert : ICertificate
 {
     [CborOrder(0)] public partial int Tag { get; }
     [CborOrder(1)] public partial Credential StakeCredential { get; }
-    [CborOrder(2)] public partial IDRep DRep { get; }
+    [CborOrder(2)] public partial DRep DRep { get; }
 }
 
 [CborSerializable]
@@ -122,7 +122,7 @@ public readonly partial record struct StakeVoteDelegCert : ICertificate
     [CborOrder(0)] public partial int Tag { get; }
     [CborOrder(1)] public partial Credential StakeCredential { get; }
     [CborOrder(2)] public partial ReadOnlyMemory<byte> PoolKeyHash { get; }
-    [CborOrder(3)] public partial IDRep DRep { get; }
+    [CborOrder(3)] public partial DRep DRep { get; }
 }
 
 [CborSerializable]
@@ -143,7 +143,7 @@ public readonly partial record struct VoteRegDelegCert : ICertificate
 {
     [CborOrder(0)] public partial int Tag { get; }
     [CborOrder(1)] public partial Credential StakeCredential { get; }
-    [CborOrder(2)] public partial IDRep DRep { get; }
+    [CborOrder(2)] public partial DRep DRep { get; }
     [CborOrder(3)] public partial ulong Coin { get; }
 }
 
@@ -155,7 +155,7 @@ public readonly partial record struct StakeVoteRegDelegCert : ICertificate
     [CborOrder(0)] public partial int Tag { get; }
     [CborOrder(1)] public partial Credential StakeCredential { get; }
     [CborOrder(2)] public partial ReadOnlyMemory<byte> PoolKeyHash { get; }
-    [CborOrder(3)] public partial IDRep DRep { get; }
+    [CborOrder(3)] public partial DRep DRep { get; }
     [CborOrder(4)] public partial ulong Coin { get; }
 }
 

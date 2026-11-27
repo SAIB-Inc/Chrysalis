@@ -593,27 +593,27 @@ public static class ScriptContextBuilder
         _ => throw new InvalidOperationException($"Unsupported certificate type: {cert.GetType().Name}")
     };
 
-    private static VmConstr DRepToPlutusData(IDRep drep) => drep switch
+    private static VmConstr DRepToPlutusData(DRep drep) => drep switch
     {
         DRepAddrKeyHash key => Constr(0, Constr(0, Bytes(key.KeyHash))),
         DRepScriptHash script => Constr(0, Constr(1, Bytes(script.ScriptHash))),
         Abstain => EmptyConstr(1),
         DRepNoConfidence => EmptyConstr(2),
-        _ => throw new InvalidOperationException($"Unknown IDRep type: {drep.GetType().Name}")
+        null => throw new InvalidOperationException("Uninitialized DRep union value.")
     };
 
     // ────────────────────── Voter/Vote Conversion ──────────────────────
 
     private static VmConstr VoterToPlutusData(Voter voter) =>
-        // Voter tag: 0=ConstitutionalCommittee, 1=IDRep, 2=StakePool
+        // Voter tag: 0=ConstitutionalCommittee, 1=DRep, 2=StakePool
         // But credential type is encoded in the hash lookup:
         // CC key → Constr 0 [Constr 0 [hash]]  (key credential)
         // CC script → Constr 0 [Constr 1 [hash]]  (script credential)
-        // IDRep key → Constr 1 [Constr 0 [hash]]
-        // IDRep script → Constr 1 [Constr 1 [hash]]
+        // DRep key → Constr 1 [Constr 0 [hash]]
+        // DRep script → Constr 1 [Constr 1 [hash]]
         // StakePool → Constr 2 [hash]
 
-        // The Codec Voter stores Tag (0-4 in Aiken) but Chrysalis uses (0=CC, 1=IDRep, 2=StakePool)
+        // The Codec Voter stores Tag (0-4 in Aiken) but Chrysalis uses (0=CC, 1=DRep, 2=StakePool)
         // with a separate credential type. Need to check the actual encoding.
         // Looking at the Voter record: Tag and Hash. The full Aiken voters are:
         // ConstitutionalCommitteeScript(hash), ConstitutionalCommitteeKey(hash),
@@ -622,13 +622,13 @@ public static class ScriptContextBuilder
 
         // Tag 0 = ConstitutionalCommitteeKey, 1 = ConstitutionalCommitteeScript (reversed from Aiken?)
         // Actually looking at the CDDL: voter = [0, addr_keyhash | 1, script_hash | 2, addr_keyhash | 3, script_hash | 4, addr_keyhash]
-        // So: 0=CC hot key, 1=CC hot script, 2=IDRep key, 3=IDRep script, 4=SPO key
+        // So: 0=CC hot key, 1=CC hot script, 2=DRep key, 3=DRep script, 4=SPO key
         voter.Tag switch
         {
             0 => Constr(0, Constr(0, Bytes(voter.Hash))), // CC key
             1 => Constr(0, Constr(1, Bytes(voter.Hash))), // CC script
-            2 => Constr(1, Constr(0, Bytes(voter.Hash))), // IDRep key
-            3 => Constr(1, Constr(1, Bytes(voter.Hash))), // IDRep script
+            2 => Constr(1, Constr(0, Bytes(voter.Hash))), // DRep key
+            3 => Constr(1, Constr(1, Bytes(voter.Hash))), // DRep script
             4 => Constr(2, Bytes(voter.Hash)),             // SPO key
             _ => throw new InvalidOperationException($"Unknown voter tag: {voter.Tag}")
         };

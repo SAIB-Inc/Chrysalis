@@ -41,6 +41,9 @@
     <ProjectReference Include="../Chrysalis.Tx/Chrysalis.Tx.csproj" />
     <ProjectReference Include="../Chrysalis/Chrysalis.csproj" />
     <ProjectReference Include="../Chrysalis.Tx.Providers.Koios/Chrysalis.Tx.Providers.Koios.csproj" />
+    <ProjectReference Include="../Chrysalis.Tx.Providers.UtxoRpc/Chrysalis.Tx.Providers.UtxoRpc.csproj" ReferenceOutputAssembly="false" Private="false" PrivateAssets="all" />
+    <ProjectReference Include="../Chrysalis.Network.Cli/Chrysalis.Network.Cli.csproj" ReferenceOutputAssembly="false" Private="false" PrivateAssets="all" />
+    <ProjectReference Include="../Chrysalis.Wallet.Cli/Chrysalis.Wallet.Cli.csproj" ReferenceOutputAssembly="false" Private="false" PrivateAssets="all" />
     <ProjectReference Include="../Chrysalis.Codec.CodeGen/Chrysalis.Codec.CodeGen.csproj"
                       OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
   </ItemGroup>

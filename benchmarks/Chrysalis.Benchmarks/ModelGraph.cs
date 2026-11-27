@@ -7,7 +7,7 @@ using Chrysalis.Codec.Types;
 namespace Chrysalis.Benchmarks;
 
 // Reflection/expression compilation happens in untimed setup. Measured property calls are
-// typed, including nullable values and concrete structs; only the SDK's unions dispatch
+// typed, including nullable values and concrete structs; only legacy interface unions dispatch
 // through an object. No PropertyInfo.GetValue, MethodInfo.Invoke or DynamicInvoke is timed.
 internal static class ModelGraph
 {
@@ -18,6 +18,17 @@ internal static class ModelGraph
     internal static long Read<T>(T value) => Reader<T>.Read(value);
     internal static T Fresh<T>(T value) => Rebuilder<T>.Rebuild(value);
     internal static string[] CoveredProperties => [.. Coverage.Keys.Order(StringComparer.Ordinal)];
+
+    internal static bool IsOfficialUnion(Type type) =>
+        type.IsValueType
+        && type.GetCustomAttributesData().Any(static attr =>
+            attr.AttributeType.FullName == "System.Runtime.CompilerServices.UnionAttribute");
+
+    internal static MethodInfo[] OfficialUnionTryGetters(Type unionType) =>
+        [.. unionType.GetMethods(BindingFlags.Public | BindingFlags.Instance)
+            .Where(static m => m.Name == "TryGetValue" && m.ReturnType == typeof(bool)
+                && m.GetParameters() is [ParameterInfo p] && p.IsOut)
+            .OrderBy(static m => m.GetParameters()[0].ParameterType.GetElementType()!.FullName, StringComparer.Ordinal)];
 
     private static PropertyInfo[] Properties(Type type) => [.. type.GetProperties(BindingFlags.Instance | BindingFlags.Public)
         .Where(property => property.GetIndexParameters().Length == 0 && property.GetMethod is not null
@@ -132,6 +143,23 @@ internal static class ModelGraph
                 body = Expression.Call(Method(nameof(ReadUnion)), Expression.Convert(item, typeof(object)));
             }
             else if (nullable is not null) { body = Expression.Call(Method(nameof(ReadNullable)).MakeGenericMethod(nullable), item); }
+            else if (IsOfficialUnion(type))
+            {
+                MethodInfo[] getters = OfficialUnionTryGetters(type);
+                if (getters.Length == 0) { throw new NotSupportedException("Unwalked union: " + type.FullName); }
+                List<ParameterExpression> locals = [];
+                Expression chain = Expression.Constant(0L);
+                for (int i = getters.Length - 1; i >= 0; i--)
+                {
+                    MethodInfo getter = getters[i];
+                    Type caseType = getter.GetParameters()[0].ParameterType.GetElementType()!;
+                    ParameterExpression local = Expression.Variable(caseType, "case" + i);
+                    locals.Add(local);
+                    Expression readCase = Expression.Call(typeof(ModelGraph), nameof(Read), [caseType], local);
+                    chain = Expression.Condition(Expression.Call(item, getter, local), readCase, chain);
+                }
+                body = Expression.Block(locals, chain);
+            }
             else if (type == typeof(ReadOnlyMemory<byte>)) { body = Expression.Call(Method(nameof(ReadMemory)), item); }
             else if (type == typeof(CborAny)) { body = Expression.Call(Method(nameof(ReadOpaque)), item); }
             else if (type == typeof(CborEncodedValue)) { body = Expression.Call(Method(nameof(ReadEmbedded)), item); }
@@ -191,6 +219,25 @@ internal static class ModelGraph
                 body = Expression.Convert(Expression.Call(Method(nameof(FreshUnion)), Expression.Convert(item, typeof(object))), type);
             }
             else if (nullable is not null) { body = Expression.Call(Method(nameof(FreshNullable)).MakeGenericMethod(nullable), item); }
+            else if (IsOfficialUnion(type))
+            {
+                MethodInfo[] getters = OfficialUnionTryGetters(type);
+                if (getters.Length == 0) { throw new NotSupportedException("Unwalked union: " + type.FullName); }
+                List<ParameterExpression> locals = [];
+                Expression chain = Expression.Default(type);
+                for (int i = getters.Length - 1; i >= 0; i--)
+                {
+                    MethodInfo getter = getters[i];
+                    Type caseType = getter.GetParameters()[0].ParameterType.GetElementType()!;
+                    ConstructorInfo ctor = type.GetConstructor([caseType])
+                        ?? throw new NotSupportedException("Missing union constructor: " + type.FullName + "(" + caseType.FullName + ")");
+                    ParameterExpression local = Expression.Variable(caseType, "case" + i);
+                    locals.Add(local);
+                    Expression rebuilt = Expression.Call(typeof(ModelGraph), nameof(Fresh), [caseType], local);
+                    chain = Expression.Condition(Expression.Call(item, getter, local), Expression.New(ctor, rebuilt), chain);
+                }
+                body = Expression.Block(locals, chain);
+            }
             else if (type == typeof(CborAny)) { body = Expression.Call(Method(nameof(FreshOpaque)), item); }
             else if (type == typeof(CborEncodedValue)) { body = Expression.Call(Method(nameof(FreshEmbedded)), item); }
 #if !CHRYSALIS_PINNED_HARNESS

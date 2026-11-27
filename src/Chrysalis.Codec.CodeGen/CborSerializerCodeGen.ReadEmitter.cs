@@ -8,7 +8,7 @@ public sealed partial class CborSerializerCodeGen
 {
     internal static partial class Emitter
     {
-        public static DiagnosticDescriptor? EmitSerializableTypeReader(StringBuilder sb, SerializableTypeMetadata metadata, ImmutableDictionary<string, SerializableTypeMetadata>? typeRegistry)
+        public static DiagnosticDescriptor? EmitSerializableTypeReader(StringBuilder sb, SerializableTypeMetadata metadata, ImmutableDictionary<string, SerializableTypeMetadata>? typeRegistry, StringBuilder? structHelpers = null)
         {
             if (metadata.UnionReader == UnionReaderKind.Invalid)
             {
@@ -17,13 +17,15 @@ public sealed partial class CborSerializerCodeGen
 
             DiagnosticDescriptor? diagnostic = null;
             string xmlSafeId = metadata.Indentifier.Replace("<", "{").Replace(">", "}");
+            string newMod = metadata.IsStructUnion ? "" : "new ";
+            string docTarget = metadata.IsStructUnion ? $"<c>{EscapeXml(metadata.Indentifier)}</c>" : $"<see cref=\"{xmlSafeId}\"/>";
 
             if (metadata.UnionReader == UnionReaderKind.Generated)
             {
                 _ = sb.AppendLine($"/// <summary>");
-                _ = sb.AppendLine($"/// Deserializes a <see cref=\"{xmlSafeId}\"/> instance from CBOR-encoded bytes and reports bytes consumed.");
+                _ = sb.AppendLine($"/// Deserializes a {docTarget} instance from CBOR-encoded bytes and reports bytes consumed.");
                 _ = sb.AppendLine($"/// </summary>");
-                _ = sb.AppendLine($"public static new {metadata.FullyQualifiedName} Read(ReadOnlyMemory<byte> data, out int bytesConsumed)");
+                _ = sb.AppendLine($"public static {newMod}{metadata.FullyQualifiedName} Read(ReadOnlyMemory<byte> data, out int bytesConsumed)");
                 _ = sb.AppendLine("{");
                 if (NormalizeTypeName(metadata.FullyQualifiedName) == "Chrysalis.Codec.Types.Cardano.Core.Common.PlutusConstr")
                 {
@@ -32,9 +34,24 @@ public sealed partial class CborSerializerCodeGen
                 }
                 else
                 {
+                    bool wrapStructUnion = metadata.IsStructUnion && !UnionEmitter.HasBuiltInReader(metadata);
+                    if (wrapStructUnion)
+                    {
+                        _ = sb.AppendLine("try");
+                        _ = sb.AppendLine("{");
+                    }
                     ICborSerializerEmitter emitter = GetEmitter(metadata, typeRegistry);
                     _ = emitter.EmitReader(sb, metadata);
                     diagnostic = (emitter as UnionEmitter)?.ReadDiagnostic;
+                    if (structHelpers is not null && emitter is UnionEmitter { StructHelpers: { } helpers }) { _ = structHelpers.Append(helpers); }
+                    if (wrapStructUnion)
+                    {
+                        _ = sb.AppendLine("}");
+                        _ = sb.AppendLine("catch (global::SAIB.Cbor.CborException error)");
+                        _ = sb.AppendLine("{");
+                        _ = sb.AppendLine($"throw global::Chrysalis.Codec.Serialization.CborError.Wrap(error, data, \"{NormalizeTypeName(metadata.FullyQualifiedName)}\", \"registered union shape\");");
+                        _ = sb.AppendLine("}");
+                    }
                 }
                 _ = sb.AppendLine("}");
 
@@ -42,9 +59,9 @@ public sealed partial class CborSerializerCodeGen
             }
 
             _ = sb.AppendLine($"/// <summary>");
-            _ = sb.AppendLine($"/// Deserializes a <see cref=\"{xmlSafeId}\"/> instance from CBOR-encoded bytes.");
+            _ = sb.AppendLine($"/// Deserializes a {docTarget} instance from CBOR-encoded bytes.");
             _ = sb.AppendLine($"/// </summary>");
-            _ = sb.AppendLine($"public static new {metadata.FullyQualifiedName} Read(ReadOnlyMemory<byte> data)");
+            _ = sb.AppendLine($"public static {newMod}{metadata.FullyQualifiedName} Read(ReadOnlyMemory<byte> data)");
             _ = sb.AppendLine("{");
             _ = sb.AppendLine($"return Read(data, out _);");
             _ = sb.AppendLine("}");
@@ -397,7 +414,7 @@ public sealed partial class CborSerializerCodeGen
                 string nullAssignment = (isValueTypeMemory || isGenericTypeParam) ? "default" : "null";
                 _ = sb.AppendLine($"if (reader.Buffer.Length > 0 && (reader.Buffer[0] == 0xF6 || reader.Buffer[0] == 0xF7))");
                 _ = sb.AppendLine("{");
-                _ = sb.AppendLine($"reader.ReadNull();");
+                _ = sb.AppendLine($"reader.SkipDataItem();");
                 _ = sb.AppendLine($"{propertyName} = {nullAssignment};");
                 _ = sb.AppendLine("}");
                 _ = sb.AppendLine($"else");
@@ -407,19 +424,19 @@ public sealed partial class CborSerializerCodeGen
             string errorStart = $"_errorStart{propertyName}";
             string errorSlice = $"_errorSlice{propertyName}";
             string fieldPath = $"{typePath}.{metadata.PropertyName}";
-            string fieldType = $"typeof({metadata.CborMap?.TypeofType ?? metadata.NonNullableTypeFullName})";
+            string fieldType = $"typeof({metadata.TypeofType})";
             string? errorSlot = null;
             string expectedType = fieldType;
             if (metadata.IsList && !metadata.IsListItemTypeOpenGeneric)
             {
                 errorSlot = $"_errorSlot{propertyName}";
-                expectedType = $"({errorSlot} == 1 ? typeof({metadata.ListItemTypeFullName!.Replace("?", "")}) : {fieldType})";
+                expectedType = $"({errorSlot} == 1 ? typeof({StripOuterNullability(metadata.ListItemTypeFullName!).Replace("?", "")}) : {fieldType})";
             }
             else if (metadata.IsMap && (!metadata.IsMapKeyTypeOpenGeneric || !metadata.IsMapValueTypeOpenGeneric))
             {
                 errorSlot = $"_errorSlot{propertyName}";
-                string keyType = metadata.IsMapKeyTypeOpenGeneric ? fieldType : $"typeof({metadata.MapKeyTypeFullName!.Replace("?", "")})";
-                string valueType = metadata.IsMapValueTypeOpenGeneric ? fieldType : $"typeof({metadata.MapValueTypeFullName!.Replace("?", "")})";
+                string keyType = metadata.IsMapKeyTypeOpenGeneric ? fieldType : $"typeof({StripOuterNullability(metadata.MapKeyTypeFullName!).Replace("?", "")})";
+                string valueType = metadata.IsMapValueTypeOpenGeneric ? fieldType : $"typeof({StripOuterNullability(metadata.MapValueTypeFullName!).Replace("?", "")})";
                 expectedType = $"({errorSlot} switch {{ 1 => {keyType}, 2 => {valueType}, _ => {fieldType} }})";
             }
             _ = sb.AppendLine($"int {errorStart} = data.Length - reader.Buffer.Length;");
@@ -623,14 +640,6 @@ public sealed partial class CborSerializerCodeGen
                     {
                         _ = EmitPrimitivePropertyReader(sb, metadata.ListItemTypeFullName, $"{propertyName}TempItem", typePath);
                     }
-                    else if (metadata.IsListItemTypeUnion)
-                    {
-                        _ = sb.AppendLine("{");
-                        _ = sb.AppendLine($"int _pos = data.Length - reader.Buffer.Length;");
-                        _ = sb.AppendLine($"{propertyName}TempItem = ({metadata.ListItemTypeFullName}){metadata.ListItemTypeFullName}.Read(data.Slice(_pos), out int _consumed);");
-                        _ = sb.AppendLine($"reader = new CborReader(data.Span.Slice(_pos + _consumed));");
-                        _ = sb.AppendLine("}");
-                    }
                     else
                     {
                         _ = sb.AppendLine("{");
@@ -700,14 +709,6 @@ public sealed partial class CborSerializerCodeGen
                     {
                         _ = EmitPrimitivePropertyReader(sb, metadata.MapKeyTypeFullName, $"{propertyName}TempKeyItem", typePath);
                     }
-                    else if (metadata.IsMapKeyTypeUnion)
-                    {
-                        _ = sb.AppendLine("{");
-                        _ = sb.AppendLine($"int _pos = data.Length - reader.Buffer.Length;");
-                        _ = sb.AppendLine($"{propertyName}TempKeyItem = ({metadata.MapKeyTypeFullName}){metadata.MapKeyTypeFullName}.Read(data.Slice(_pos), out int _consumed);");
-                        _ = sb.AppendLine($"reader = new CborReader(data.Span.Slice(_pos + _consumed));");
-                        _ = sb.AppendLine("}");
-                    }
                     else
                     {
                         _ = sb.AppendLine("{");
@@ -734,14 +735,6 @@ public sealed partial class CborSerializerCodeGen
                     if (IsPrimitiveType(metadata.MapValueTypeFullName))
                     {
                         _ = EmitPrimitivePropertyReader(sb, metadata.MapValueTypeFullName, $"{propertyName}TempValueItem", typePath);
-                    }
-                    else if (metadata.IsMapValueTypeUnion)
-                    {
-                        _ = sb.AppendLine("{");
-                        _ = sb.AppendLine($"int _pos = data.Length - reader.Buffer.Length;");
-                        _ = sb.AppendLine($"{propertyName}TempValueItem = ({metadata.MapValueTypeFullName}){metadata.MapValueTypeFullName}.Read(data.Slice(_pos), out int _consumed);");
-                        _ = sb.AppendLine($"reader = new CborReader(data.Span.Slice(_pos + _consumed));");
-                        _ = sb.AppendLine("}");
                     }
                     else
                     {
@@ -786,15 +779,6 @@ public sealed partial class CborSerializerCodeGen
             else if (metadata.UnionHints.Count > 0 && metadata.UnionHintDiscriminantProperty is not null)
             {
                 _ = EmitUnionHintReader(sb, metadata, propertyName);
-            }
-            else if (metadata.IsPropertyTypeUnion)
-            {
-                string callType = metadata.NonNullableTypeFullName;
-                _ = sb.AppendLine("{");
-                _ = sb.AppendLine($"int _pos = data.Length - reader.Buffer.Length;");
-                _ = sb.AppendLine($"{propertyName} = ({metadata.PropertyTypeFullName}){callType}.Read(data.Slice(_pos), out int _consumed);");
-                _ = sb.AppendLine($"reader = new CborReader(data.Span.Slice(_pos + _consumed));");
-                _ = sb.AppendLine("}");
             }
             else
             {
@@ -857,7 +841,7 @@ public sealed partial class CborSerializerCodeGen
                     ($"({buffer}[0] >> 5) is not (4 or 6)", fullType.Contains("Chrysalis.Codec.Types.CborList<") ? "array" : KnownCollectionKind(fullType, "List", "array")),
                 _ => (null, null)
             };
-            string expected = kind is null ? $"typeof({fullType})" : $"\"{kind}\"";
+            string expected = kind is null ? $"typeof({prop.TypeofType})" : $"\"{kind}\"";
             return condition is null
                 ? null
                 : $"if ({buffer}.IsEmpty || {condition}) throw CborError.Decode(data, data.Length - reader.Buffer.Length, \"{owningType}.{prop.PropertyName}\", {expected});";
@@ -955,15 +939,6 @@ public sealed partial class CborSerializerCodeGen
                 _ = sb.AppendLine($"{cleanType} {tempVar};");
                 _ = EmitPrimitivePropertyReader(sb, prop.PropertyType, tempVar, $"{typePath}.{prop.PropertyName}");
                 _ = sb.AppendLine($"value = {tempVar};");
-            }
-            else if (prop.IsPropertyTypeUnion)
-            {
-                string nonNullType = prop.NonNullableTypeFullName;
-                _ = sb.AppendLine("{");
-                _ = sb.AppendLine($"int _pos = data.Length - reader.Buffer.Length;");
-                _ = sb.AppendLine($"value = {nonNullType}.Read(data.Slice(_pos), out int _consumed);");
-                _ = sb.AppendLine($"reader = new CborReader(data.Span.Slice(_pos + _consumed));");
-                _ = sb.AppendLine("}");
             }
             else
             {
@@ -1074,7 +1049,7 @@ public sealed partial class CborSerializerCodeGen
             else
             {
                 _ = sb.AppendLine($"result = new {metadata.FullyQualifiedName}(");
-                IOrderedEnumerable<SerializablePropertyMetadata> properties = metadata.Properties.OrderBy(p => p.Order);
+                IOrderedEnumerable<SerializablePropertyMetadata> properties = metadata.Properties.OrderBy(p => p.CreateParameterOrder);
                 IEnumerable<string> propStrings = properties.Select(prop => propMapping[prop.PropertyName]);
                 _ = sb.AppendLine(string.Join(",\n", propStrings));
                 _ = sb.AppendLine(");");

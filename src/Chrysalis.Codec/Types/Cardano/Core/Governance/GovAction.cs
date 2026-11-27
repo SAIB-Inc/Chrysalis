@@ -18,7 +18,7 @@ public readonly partial record struct ParameterChangeAction : IGovAction
 {
     [CborOrder(0)] public partial int Tag { get; }
     [CborOrder(1)] public partial GovActionId? ActionId { get; }
-    [CborOrder(2)] public partial IProtocolParamUpdate ProtocolParamUpdate { get; }
+    [CborOrder(2)] public partial ProtocolParamUpdate ProtocolParamUpdate { get; }
     [CborOrder(3)] public partial ReadOnlyMemory<byte>? PolicyHash { get; }
 }
 

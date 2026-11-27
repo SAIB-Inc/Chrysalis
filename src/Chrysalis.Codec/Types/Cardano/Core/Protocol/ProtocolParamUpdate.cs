@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using Chrysalis.Codec.Serialization;
 using Chrysalis.Codec.Serialization.Attributes;
 using Chrysalis.Codec.Types.Cardano.Core.Governance;
@@ -5,12 +6,13 @@ using Chrysalis.Codec.Types.Cardano.Core.Governance;
 namespace Chrysalis.Codec.Types.Cardano.Core.Protocol;
 
 [CborSerializable]
-[CborUnion]
-public partial interface IProtocolParamUpdate : ICborType;
+[CborUnion(typeof(ConwayProtocolParamUpdate), typeof(BabbageProtocolParamUpdate))]
+[Union]
+public readonly partial struct ProtocolParamUpdate : ICborType;
 
 [CborSerializable]
 [CborMap]
-public readonly partial record struct ConwayProtocolParamUpdate : IProtocolParamUpdate
+public readonly partial record struct ConwayProtocolParamUpdate : ICborType
 {
     [CborProperty(0)] public partial ulong? MinFeeA { get; }
     [CborProperty(1)] public partial ulong? MinFeeB { get; }
@@ -46,7 +48,7 @@ public readonly partial record struct ConwayProtocolParamUpdate : IProtocolParam
 
 [CborSerializable]
 [CborMap]
-public readonly partial record struct BabbageProtocolParamUpdate : IProtocolParamUpdate
+public readonly partial record struct BabbageProtocolParamUpdate : ICborType
 {
     [CborProperty(0)] public partial ulong? MinFeeA { get; }
     [CborProperty(1)] public partial ulong? MinFeeB { get; }
@@ -74,7 +76,7 @@ public readonly partial record struct BabbageProtocolParamUpdate : IProtocolPara
 }
 
 [CborSerializable]
-public partial record ProposedProtocolParameterUpdates(Dictionary<ReadOnlyMemory<byte>, IProtocolParamUpdate> Value) : ICborType
+public partial record ProposedProtocolParameterUpdates(Dictionary<ReadOnlyMemory<byte>, ProtocolParamUpdate> Value) : ICborType
 {
     public ReadOnlyMemory<byte> Raw { get; set; }
     public int ConstrIndex { get; set; }
