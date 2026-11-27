@@ -22,6 +22,12 @@ public partial record LengthEnvelope(
 
 public class EncodedLengthTests
 {
+    static EncodedLengthTests()
+    {
+        CborCodecCache.RegisterWriter<CallbackValue>(CallbackValue.Write);
+        CborCodecCache.RegisterWriter<NestedLengthValue>(NestedLengthValue.Write);
+    }
+
     [Fact]
     public void PreservedBytes_UseTheirLengthWithoutReencoding()
     {

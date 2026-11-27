@@ -90,6 +90,7 @@ public sealed partial class CborSerializerCodeGen
             )
             {
                 IsValueType = typeSymbol?.IsValueType ?? (tds.IsKind(SyntaxKind.StructDeclaration) || tds.IsKind(SyntaxKind.RecordStructDeclaration)),
+                IsAbstract = typeSymbol?.IsAbstract ?? false,
                 Properties = new(properties)
             };
         }
@@ -580,11 +581,7 @@ public sealed partial class CborSerializerCodeGen
                 type = wrapper.TypeArguments[0];
                 nullable = true;
             }
-            if (type is not INamedTypeSymbol list || !IsCborList(list)) { return null; }
-
-            ITypeSymbol item = list.TypeArguments[0];
-            bool direct = item is INamedTypeSymbol named && item.NullableAnnotation != NullableAnnotation.Annotated && HasDirectItemReader(named);
-            return new(list.ToDisplayString(NullableDisplayFormat), item.ToDisplayString(NullableDisplayFormat), nullable, direct);
+            return type is INamedTypeSymbol list && IsCborList(list) ? new(list.ToDisplayString(NullableDisplayFormat), nullable) : null;
         }
 
         private static CborMapPropertyMetadata? GetCborMapProperty(ITypeSymbol? type)
@@ -595,32 +592,7 @@ public sealed partial class CborSerializerCodeGen
                 type = wrapper.TypeArguments[0];
                 nullable = true;
             }
-            if (type is not INamedTypeSymbol map || !IsCborMap(map)) { return null; }
-
-            ITypeSymbol key = map.TypeArguments[0];
-            ITypeSymbol val = map.TypeArguments[1];
-            bool directKey = key is INamedTypeSymbol namedKey && key.NullableAnnotation != NullableAnnotation.Annotated && HasDirectItemReader(namedKey);
-            bool directVal = val is INamedTypeSymbol namedVal && val.NullableAnnotation != NullableAnnotation.Annotated && HasDirectItemReader(namedVal);
-            return new(map.ToDisplayString(NullableDisplayFormat), key.ToDisplayString(NullableDisplayFormat), val.ToDisplayString(NullableDisplayFormat), nullable, directKey, directVal);
-        }
-
-        private static bool HasDirectItemReader(INamedTypeSymbol item) =>
-            IsCborList(item) || IsCborMap(item) || item.GetMembers("Read").OfType<IMethodSymbol>().Any(method => IsConsumedListItemReader(method, item))
-            || (item.DeclaringSyntaxReferences.Length > 0 && item.GetAttributes().Any(attribute =>
-                attribute.AttributeClass?.ToDisplayString() is CborSerializable or PlutusData));
-
-        private static bool IsConsumedListItemReader(IMethodSymbol method, INamedTypeSymbol item)
-        {
-            if (!method.IsStatic || method.IsAbstract || method.IsVirtual || method.DeclaredAccessibility != Accessibility.Public
-                || method.Arity != 0 || method.Parameters.Length != 2 || !SymbolEqualityComparer.Default.Equals(method.ReturnType, item))
-            {
-                return false;
-            }
-            IParameterSymbol input = method.Parameters[0];
-            IParameterSymbol count = method.Parameters[1];
-            return input.RefKind == RefKind.None && input.Type is INamedTypeSymbol { Name: "ReadOnlyMemory", Arity: 1 } memory
-                && memory.ContainingNamespace.ToDisplayString() == "System" && memory.TypeArguments[0].SpecialType == SpecialType.System_Byte
-                && count.RefKind == RefKind.Out && count.Type.SpecialType == SpecialType.System_Int32;
+            return type is INamedTypeSymbol map && IsCborMap(map) ? new(map.ToDisplayString(NullableDisplayFormat), nullable) : null;
         }
 
         private static bool IsCborList(INamedTypeSymbol type) => type is { Name: "CborList", Arity: 1 } &&

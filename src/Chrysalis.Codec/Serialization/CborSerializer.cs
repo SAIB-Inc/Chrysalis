@@ -26,8 +26,8 @@ public static class CborSerializer
     /// querying the length and then serializing runs those callbacks twice. Use this path for
     /// callback-bearing values only when that is acceptable. Non-nested queries add no
     /// allocation beyond the value's own writer once this thread's sink and dispatch are warm.
-    /// An open-generic long field, for example, boxes 24 B per query through
-    /// GenericSerializationUtil. Built values used by the fee path preserve their bytes and
+    /// An open-generic long field uses typed <see cref="CborCodecCache"/> dispatch without
+    /// boxing. Built values used by the fee path preserve their bytes and
     /// bypass that writer path. A thread's first query, a larger scratch span, or a nested
     /// query may allocate; simultaneously active queries always use separate sinks.
     /// </remarks>

@@ -41,6 +41,14 @@ public class BlueprintGenerationTests
         Assert.Equal(limits, ticket.Limits);
         Assert.Equal(weights, ticket.Weights);
         Assert.Equal(assets, ticket.Assets);
+        byte[] fallbackBytes = CborSerializer.Serialize<ICborOption<Shape.FixturesAddressAsset>>(fallback);
+        ICborOption<Shape.FixturesAddressAsset> roundFallback = CborSerializer.Deserialize<ICborOption<Shape.FixturesAddressAsset>>(fallbackBytes);
+        _ = Assert.IsType<Some<Shape.FixturesAddressAsset>>(roundFallback);
+        Assert.Equal(fallbackBytes, CborSerializer.Serialize(roundFallback));
+        byte[] limitsBytes = CborSerializer.Serialize(limits);
+        CborList<ICborOption<IPlutusBigInt>>? roundLimits = CborSerializer.Deserialize<CborList<ICborOption<IPlutusBigInt>>?>(limitsBytes);
+        Assert.NotNull(roundLimits);
+        Assert.Equal(limitsBytes, CborSerializer.Serialize(roundLimits.Value));
     }
 
     /// <summary>
@@ -133,6 +141,11 @@ public class ShapesBlueprintTests
 
         Assert.Equal(reserves, state.Reserves);
         Assert.IsType<Some<Shape.IFixturesPolicyPolicy>>(state.Admin);
+        Assert.NotNull(state.Admin);
+        byte[] adminBytes = CborSerializer.Serialize(state.Admin!);
+        ICborOption<Shape.IFixturesPolicyPolicy> roundAdmin = CborSerializer.Deserialize<ICborOption<Shape.IFixturesPolicyPolicy>>(adminBytes);
+        _ = Assert.IsType<Some<Shape.IFixturesPolicyPolicy>>(roundAdmin);
+        Assert.Equal(adminBytes, CborSerializer.Serialize(roundAdmin));
     }
 
     [Fact]
@@ -373,6 +386,12 @@ public class CborSerializationTests
         Assert.Equal(
             "D8799FD8799F581CAABBCCDDAABBCCDDAABBCCDDAABBCCDDAABBCCDDAABBCCDDAABBCCDDFFD8799FD87A9F581C11223344112233441122334411223344112233441122334411223344FFFFFF",
             Hex(CborSerializer.Serialize(val)));
+        Assert.NotNull(val.StakeCredential);
+        byte[] stakeBytes = CborSerializer.Serialize(val.StakeCredential!);
+        ICborOption<CborVectors.CborVectors.Blueprint.ICredential> roundStake =
+            CborSerializer.Deserialize<ICborOption<CborVectors.CborVectors.Blueprint.ICredential>>(stakeBytes);
+        _ = Assert.IsType<Some<CborVectors.CborVectors.Blueprint.ICredential>>(roundStake);
+        Assert.Equal(stakeBytes, CborSerializer.Serialize(roundStake));
     }
 
     /// <summary>

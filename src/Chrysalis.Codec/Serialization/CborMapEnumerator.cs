@@ -28,11 +28,6 @@ internal struct CborMapCursor(ReadOnlyMemory<byte> data, int offset)
         return new(data, data.Length - reader.Buffer.Length);
     }
 
-    private static T? DecodeRaw<T>(ReadOnlyMemory<byte> slice, out int consumed) =>
-        CborListReaderCache<T>.Reader is { } cached
-            ? cached(slice, out consumed)
-            : GenericSerializationUtil.ReadAnyWithConsumed<T>(slice, out consumed);
-
     internal T ReadItem<T>(out int start)
     {
         start = Offset;
@@ -77,7 +72,7 @@ internal struct CborMapCursor(ReadOnlyMemory<byte> data, int offset)
             throw CborError.Decode(data, start, "CborMap.entry", CborError.Expected(typeof(T)), "null");
         }
         T? result;
-        try { result = DecodeRaw<T>(data[start..], out consumed); }
+        try { result = CborCodecCache<T>.GetReaderOrThrow(data[start..])(data[start..], out consumed); }
         catch (Exception error) when (CborError.IsDecodeFailure(error))
         {
             throw CborError.Wrap(error, data[start..], "CborMap.entry", CborError.Expected(typeof(T)), start);

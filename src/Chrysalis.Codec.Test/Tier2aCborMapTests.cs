@@ -18,6 +18,13 @@ namespace Chrysalis.Codec.Test;
 
 public class Tier2aCborMapTests
 {
+    static Tier2aCborMapTests()
+    {
+        CborCodecCache.RegisterStructReader(CollidingKey.Read);
+        CborCodecCache.RegisterStructReader(NullAcceptingStruct.Read);
+        CborCodecCache.RegisterReader(NullAcceptingClass.Read);
+    }
+
     private delegate CborMap<TKey, TValue> ReadCoreDelegate<TKey, TValue>(
         ReadOnlyMemory<byte> data, out int bytesConsumed, out int probeSteps, out int keyComparisons)
         where TKey : notnull;
@@ -641,9 +648,14 @@ public class Tier2aCborMapTests
             (writeErr.Offset, writeErr.TypePath, writeErr.Expected, writeErr.Actual));
         _ = Assert.Throws<ArgumentNullException>(() => CborMap<int, int>.Create(null!));
 
-        // Cold standalone non-primitive fallback (unregistered in CborListReaderCache).
-        Assert.Null(CborListReaderCache<ColdStandaloneEntry>.Reader);
+        // Cold standalone non-primitive registration.
+        Assert.Null(CborCodecCache.GetReader<ColdStandaloneEntry>());
         byte[] coldWire = Convert.FromHexString("A105097F");
+        CborDecodeException unregistered = Assert.Throws<CborDecodeException>(() =>
+            _ = CborMap<ColdStandaloneEntry, ColdStandaloneEntry>.Read(coldWire, out _));
+        Assert.Equal("unregistered type", unregistered.Actual);
+        CborCodecCache.RegisterStructReader(ColdStandaloneEntry.Read);
+        Assert.NotNull(CborCodecCache.GetReader<ColdStandaloneEntry>());
         CborMap<ColdStandaloneEntry, ColdStandaloneEntry> coldMap =
             CborMap<ColdStandaloneEntry, ColdStandaloneEntry>.Read(coldWire, out int coldConsumed);
         Assert.Equal(3, coldConsumed);

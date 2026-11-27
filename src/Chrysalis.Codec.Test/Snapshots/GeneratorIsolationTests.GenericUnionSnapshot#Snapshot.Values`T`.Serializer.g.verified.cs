@@ -8,7 +8,7 @@ using Chrysalis.Codec.Types;
 using Chrysalis.Codec.Serialization;
 
 namespace Snapshot;
-public readonly partial record struct Values<T>
+public readonly partial record struct Values<T> : global::Chrysalis.Codec.Serialization.ICborCodecRegistrar
 {
 internal ReadOnlyMemory<byte> _raw { get; init; }
 internal ReadOnlyMemory<byte> _field0 { get; init; }
@@ -146,6 +146,8 @@ writer.WriteEndArray(ValueArraySize);
 
 return Read((ReadOnlyMemory<byte>)_createBuffer.WrittenMemory.ToArray());
 }
+
+void global::Chrysalis.Codec.Serialization.ICborCodecRegistrar.RegisterCodec() => global::Chrysalis.Codec.Serialization.CborCodecCache.RegisterStruct<Values<T>>(Read, Write);
 }
 
 #pragma warning restore CS0109, CS8669

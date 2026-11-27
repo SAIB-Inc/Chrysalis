@@ -177,9 +177,10 @@ public static class CborError
         return new CborDecodeException(failure.Offset, path, Expected(failure.Expected!), failure.Actual!, error);
     }
 
-    /// <summary>Identifies input and codec failures, not resource exhaustion or cancellation.</summary>
+    /// <summary>Identifies input and codec failures, not resource exhaustion, cancellation, or type initialization failures.</summary>
     public static bool IsDecodeFailure(Exception error) => error is not (OutOfMemoryException or OperationCanceledException
-        or TimeoutException or StackOverflowException or AccessViolationException or ThreadInterruptedException or IOException);
+        or TimeoutException or StackOverflowException or AccessViolationException or ThreadInterruptedException
+        or IOException or TypeInitializationException);
 
     // SAIB 3.1 reports its cursor. Expect has already consumed the failing header;
     // an unsuccessful payload read, by contrast, has no observed byte even if some payload remains.

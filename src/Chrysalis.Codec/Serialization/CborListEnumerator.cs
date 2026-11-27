@@ -6,7 +6,7 @@ namespace Chrysalis.Codec.Serialization;
 /// <summary>
 /// Zero-allocation ref struct enumerator that iterates CBOR list items directly from raw bytes.
 /// Handles definite/indefinite arrays and optional tag-258 prefix.
-/// Uses CborListReaderCache{T} for source-generated fast-path deserialization.
+/// Uses <see cref="CborCodecCache"/> for fast-path deserialization.
 /// </summary>
 public ref struct CborListEnumerator<T>
 {
@@ -19,17 +19,8 @@ public ref struct CborListEnumerator<T>
     public CborListEnumerator(ReadOnlyMemory<byte> data)
     {
         _data = data;
-        CborReader reader = new(data.Span);
-
-        // Skip optional tag 258
-        if (reader.Buffer.Length > 0)
-        {
-            _ = reader.TryReadSemanticTag(out _);
-        }
-
-        reader.ReadBeginArray();
-        _ = reader.ReadSize();
-        _remaining = reader.Buffer;
+        int headerLength = CborListWire.SkipHeader(data.Span);
+        _remaining = data.Span[headerLength..];
         Current = default!;
     }
 
@@ -54,19 +45,7 @@ public ref struct CborListEnumerator<T>
         }
 
         int offset = _data.Length - _remaining.Length;
-        ReadOnlyMemory<byte> itemData = _data[offset..];
-        int consumed;
-
-        ReadWithConsumedHandler<T>? cachedReader = CborListReaderCache<T>.Reader;
-        if (cachedReader != null)
-        {
-            Current = cachedReader(itemData, out consumed);
-        }
-        else
-        {
-            Current = GenericSerializationUtil.ReadAnyWithConsumed<T>(itemData, out consumed)!;
-        }
-
+        Current = CborListWire.ReadItem<T>(_data[offset..], out int consumed);
         _remaining = _remaining[consumed..];
         return true;
     }
@@ -105,14 +84,7 @@ public readonly record struct CborListEnumerable<T>(ReadOnlyMemory<byte> Data) :
         {
             if (!_initialized)
             {
-                CborReader reader = new(_data.Span);
-                if (reader.Buffer.Length > 0)
-                {
-                    _ = reader.TryReadSemanticTag(out _);
-                }
-                reader.ReadBeginArray();
-                _ = reader.ReadSize();
-                _offset = _data.Length - reader.Buffer.Length;
+                _offset = CborListWire.SkipHeader(_data.Span);
                 _initialized = true;
             }
 
@@ -121,24 +93,39 @@ public readonly record struct CborListEnumerable<T>(ReadOnlyMemory<byte> Data) :
                 return false;
             }
 
-            ReadOnlyMemory<byte> itemData = _data[_offset..];
-            int consumed;
-
-            ReadWithConsumedHandler<T>? cachedReader = CborListReaderCache<T>.Reader;
-            if (cachedReader != null)
-            {
-                Current = cachedReader(itemData, out consumed);
-            }
-            else
-            {
-                Current = GenericSerializationUtil.ReadAnyWithConsumed<T>(itemData, out consumed)!;
-            }
-
+            Current = CborListWire.ReadItem<T>(_data[_offset..], out int consumed);
             _offset += consumed;
             return true;
         }
 
         public void Reset() => _initialized = false;
         public void Dispose() { }
+    }
+}
+
+file static class CborListWire
+{
+    internal static int SkipHeader(ReadOnlySpan<byte> span)
+    {
+        CborReader reader = new(span);
+        if (reader.Buffer.Length > 0)
+        {
+            _ = reader.TryReadSemanticTag(out _);
+        }
+        reader.ReadBeginArray();
+        _ = reader.ReadSize();
+        return span.Length - reader.Buffer.Length;
+    }
+
+    internal static T ReadItem<T>(ReadOnlyMemory<byte> itemData, out int consumed)
+    {
+        try
+        {
+            return CborCodecCache<T>.GetReaderOrThrow(itemData)(itemData, out consumed);
+        }
+        catch (Exception error) when (CborError.IsDecodeFailure(error))
+        {
+            throw CborError.Wrap(error, itemData, typeof(T).FullName!, CborError.Expected(typeof(T)));
+        }
     }
 }

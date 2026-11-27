@@ -218,6 +218,8 @@ public readonly partial record struct X32LazyIntBoolMap : ICborType, IX30WireVal
 
 public class CborTests(ITestOutputHelper output)
 {
+    static CborTests() => CborCodecCache.RegisterReader(RuntimeReadFailure.Read);
+
     [Theory]
     [InlineData("", 0)]
     [InlineData("18", 1)]
@@ -368,8 +370,16 @@ public class CborTests(ITestOutputHelper output)
     }
 
     [Fact]
-    public void TypedRuntimeDispatchPropagatesNonDecodeFailures() =>
+    public void TypedRuntimeDispatchPropagatesNonDecodeFailures()
+    {
         AssertRuntimePropagates(typeof(RuntimeReadFailure), RuntimeReadFailure.Causes);
+        for (byte i = 0; i < RuntimeReadFailure.Causes.Length; i++)
+        {
+            byte[] data = [i];
+            Assert.Same(RuntimeReadFailure.Causes[i], Record.Exception(() => GenericSerializationUtil.Read<RuntimeReadFailure>(data)));
+            Assert.Same(RuntimeReadFailure.Causes[i], Record.Exception(() => GenericSerializationUtil.ReadAnyWithConsumed<RuntimeReadFailure>(data, out _)));
+        }
+    }
 
     private static void AssertRuntimePropagates(Type type, Exception[] causes)
     {
