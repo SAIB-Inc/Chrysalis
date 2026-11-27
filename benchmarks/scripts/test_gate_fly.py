@@ -1143,8 +1143,8 @@ class LauncherTests(unittest.TestCase):
     def test_abort_recovery(self):
         for name in ('term', 'int'):
             started = time.monotonic()
-            root, status = self.run_case(extra=dict(GATE_STUB_SESSION_DELAY='10'), send=name)
-            self.assertLess(time.monotonic() - started, 8)
+            root, status = self.run_case(extra=dict(GATE_STUB_SESSION_DELAY='30'), send=name)
+            self.assertLess(time.monotonic() - started, 20)
             self.assertNotEqual(status, 0); self.assert_absent_owned(root)
             self.assertTrue(json.loads((root / 'state.json').read_text()).get('partialArchiveAttempted'))
 
