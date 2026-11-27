@@ -816,22 +816,23 @@ class ReviewGateTests(unittest.TestCase):
 
     def test_x11_five_micro_rows_resolve_independently_and_seal_one_noise_session(self):
         import fnmatch
+        import gate_azure_guest as guest
         import gate_bundle
         import gate_prepare
         config = gate_prepare.azure_config(json.loads((gate.GATE / 'gated.json').read_text()))
         audit = json.loads((gate.REPO / 'benchmarks/Chrysalis.Benchmarks/audit-allocations.json').read_text())
-        entries = [
-            dict(id='time/micro-unions-read', kind='time', aPairs=16, chargeSeconds=8),
-            dict(id='time/micro-unions-switch', kind='time', aPairs=16, chargeSeconds=8),
-            dict(id='time/micro-unions-construct', kind='time', aPairs=16, chargeSeconds=8),
-            dict(id='time/micro-unions-nested', kind='time', aPairs=16, chargeSeconds=8),
-            dict(id='time/micro-field-read', kind='time', aPairs=16, chargeSeconds=20),
-        ]
+        payload = json.loads((gate.GATE / 'plans/noise-records-x11.json').read_text())
+        self.assertEqual(set(payload), {'noiseRecords', 'entries'})
+        self.assertIs(payload['noiseRecords'], True)
+        self.assertEqual([(e['id'], e['kind'], e['aPairs'], e['chargeSeconds']) for e in payload['entries']], [
+            ('time/micro-unions-read', 'time', 16, 8), ('time/micro-unions-switch', 'time', 16, 8),
+            ('time/micro-unions-construct', 'time', 16, 8), ('time/micro-unions-nested', 'time', 16, 8),
+            ('time/micro-field-read', 'time', 16, 20),
+        ])
         area_patterns = config['areas']['CBOR decode']['time']
-        for entry in entries:
+        for entry in payload['entries']:
             self.assertTrue(any(fnmatch.fnmatchcase(entry['id'], pattern) for pattern in area_patterns), entry['id'])
-        selected = gate.select_rows(SimpleNamespace(mode='release', plan=None, only=None), config, audit,
-                                    plan_entries=dict(entries=entries, noiseRecords=True))
+        selected = gate.select_rows(SimpleNamespace(mode='release', plan=None, only=None), config, audit, plan_entries=payload)
         bundled = gate_bundle.time_rows(selected, config)
         self.assertEqual(
             {row['id']: row['microFilter'] for row in bundled},
@@ -843,15 +844,18 @@ class ReviewGateTests(unittest.TestCase):
                 'time/micro-field-read': 'FieldReadBench.ReadEveryField',
             },
         )
-        noise_seal = dict(gated=config, mode='release', noiseRecords=True, sessionPerRow=False, orderingProof=False,
+        noise_seal = dict(gated=config, mode='release', noiseRecords=True, sessionPerRow=False, orderingProof=True,
                           rows=[dict(item, sides=dict(baseline=side(), candidate=side())) for item in selected])
         plans = gate_prepare.time_plans(noise_seal)
         self.assertEqual(len(plans), 1)
         plan = plans[0]
-        self.assertEqual((plan['rawSeconds'], plan['measurementCutoffSeconds'], plan['destroyGuardSeconds'], plan['limitUsd']),
-                         (2396, 3239, 3584, 0.7952))
+        _, expanded = guest.results_limits(plan, strict=True)
+        processes = (expanded - guest.MAX_RESULTS) // guest.PER_PROCESS_EXPANDED
+        self.assertEqual((plan['rawSeconds'], plan['measurementCutoffSeconds'], plan['destroyGuardSeconds'], plan['limitUsd'], processes),
+                         (2396, 3239, 3584, 0.7952, 186))
         self.assertEqual(plan['design'], 'noise-band')
         self.assertFalse(plan['repeatAllowed'])
+        self.assertEqual(plan['orderingProof'], gate_prepare.ORDERING_WORK)
         change_seal = dict(gated=config, mode='change', noiseRecords=False, sessionPerRow=False, orderingProof=False,
                            rows=[dict(item, sides=dict(baseline=side(), candidate=side())) for item in selected])
         with self.assertRaisesRegex(ValueError, 'Missing frozen Azure noise record'):
