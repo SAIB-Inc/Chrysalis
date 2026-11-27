@@ -1,0 +1,10 @@
+{
+  "noiseRecords": true,
+  "entries": [
+    {"id": "time/micro-unions-read", "kind": "time", "aPairs": 16, "chargeSeconds": 8},
+    {"id": "time/micro-unions-switch", "kind": "time", "aPairs": 16, "chargeSeconds": 8},
+    {"id": "time/micro-unions-construct", "kind": "time", "aPairs": 16, "chargeSeconds": 8},
+    {"id": "time/micro-unions-nested", "kind": "time", "aPairs": 16, "chargeSeconds": 8},
+    {"id": "time/micro-field-read", "kind": "time", "aPairs": 16, "chargeSeconds": 20}
+  ]
+}
