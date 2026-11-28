@@ -46,6 +46,24 @@ internal sealed class Parser
         Advance();
     }
 
+    // plutus's `inBrackets (p `sepBy` symbol ",")` (Parser/Builtin.hs:102-109): an item follows every comma, so `[1,]` is refused.
+    private ImmutableArray<T> ParseList<T>(Func<T> parseItem)
+    {
+        Expect(TokenType.LBracket);
+        ImmutableArray<T>.Builder items = ImmutableArray.CreateBuilder<T>();
+        if (!Is(TokenType.RBracket))
+        {
+            items.Add(parseItem());
+            while (Is(TokenType.Comma))
+            {
+                Advance();
+                items.Add(parseItem());
+            }
+        }
+        Expect(TokenType.RBracket);
+        return items.ToImmutable();
+    }
+
     private Name InternName(string text)
     {
         if (_interned.TryGetValue(text, out int existing))
@@ -457,36 +475,10 @@ internal sealed class Parser
                 }
 
             case ListType listType:
-                {
-                    Expect(TokenType.LBracket);
-                    ImmutableArray<Constant>.Builder values = ImmutableArray.CreateBuilder<Constant>();
-                    while (!Is(TokenType.RBracket))
-                    {
-                        values.Add(ParseConstantValue(listType.Element));
-                        if (!Is(TokenType.RBracket))
-                        {
-                            Expect(TokenType.Comma);
-                        }
-                    }
-                    Expect(TokenType.RBracket);
-                    return new ListConstant(listType.Element, values.ToImmutable());
-                }
+                return new ListConstant(listType.Element, ParseList(() => ParseConstantValue(listType.Element)));
 
             case ArrayType arrayType:
-                {
-                    Expect(TokenType.LBracket);
-                    ImmutableArray<Constant>.Builder values = ImmutableArray.CreateBuilder<Constant>();
-                    while (!Is(TokenType.RBracket))
-                    {
-                        values.Add(ParseConstantValue(arrayType.Element));
-                        if (!Is(TokenType.RBracket))
-                        {
-                            Expect(TokenType.Comma);
-                        }
-                    }
-                    Expect(TokenType.RBracket);
-                    return new ArrayConstant(arrayType.Element, values.ToImmutable());
-                }
+                return new ArrayConstant(arrayType.Element, ParseList(() => ParseConstantValue(arrayType.Element)));
 
             case PairType pairType:
                 {
@@ -582,163 +574,52 @@ internal sealed class Parser
         }
     }
 
-    private static readonly BigInteger ValueMax = (BigInteger.One << 127) - 1;
-    private static readonly BigInteger ValueMin = -(BigInteger.One << 127);
-
     /// <summary>
     /// Parses a value constant: [(#hex, [(#hex, qty), ...]), ...]
-    /// with canonicalization (merge duplicates, sort, remove zeros).
+    /// and refuses a non-canonical one, as plutus does (Parser/Builtin.hs:172-221).
     /// Ported from blaze-plutus parse.ts parseValueConstant.
     /// </summary>
     private ValueConstant ParseValueConstant()
     {
-        Expect(TokenType.LBracket);
-
-        // Parse raw entries
-        List<(byte[] Currency, List<(byte[] Name, BigInteger Qty)> Tokens)> rawEntries = [];
-
-        while (!Is(TokenType.RBracket))
+        LedgerValue value = new(ParseList(() =>
         {
             Expect(TokenType.LParen);
-
-            if (!Is(TokenType.ByteString))
-            {
-                throw new ParseException(
-                    $"expected bytestring key for value, got {_current.Type} at position {_current.Position}");
-            }
-            byte[] currency = HexToBytes(_current.Value);
-            if (currency.Length > 32)
-            {
-                throw new ParseException(
-                    $"policy key too long ({currency.Length} bytes) at position {_current.Position}");
-            }
-            Advance();
+            byte[] currency = ParseValueKey();
             Expect(TokenType.Comma);
-
-            Expect(TokenType.LBracket);
-            List<(byte[] Name, BigInteger Qty)> tokens = [];
-
-            while (!Is(TokenType.RBracket))
+            ImmutableArray<TokenEntry> tokens = ParseList(() =>
             {
                 Expect(TokenType.LParen);
-
-                if (!Is(TokenType.ByteString))
-                {
-                    throw new ParseException(
-                        $"expected bytestring in inner pair, got {_current.Type} at position {_current.Position}");
-                }
-                byte[] tokenName = HexToBytes(_current.Value);
-                if (tokenName.Length > 32)
-                {
-                    throw new ParseException(
-                        $"token key too long ({tokenName.Length} bytes) at position {_current.Position}");
-                }
-                Advance();
+                byte[] name = ParseValueKey();
                 Expect(TokenType.Comma);
-
                 if (!Is(TokenType.Number))
                 {
                     throw new ParseException(
                         $"expected integer in inner pair, got {_current.Type} at position {_current.Position}");
                 }
-                BigInteger qty = BigInteger.Parse(_current.Value, CultureInfo.InvariantCulture);
-                if (qty > ValueMax || qty < ValueMin)
-                {
-                    throw new ParseException(
-                        $"integer in value token out of range {_current.Value} at position {_current.Position}");
-                }
+                BigInteger quantity = BigInteger.Parse(_current.Value, CultureInfo.InvariantCulture);
                 Advance();
                 Expect(TokenType.RParen);
-
-                tokens.Add((tokenName, qty));
-
-                if (!Is(TokenType.RBracket))
-                {
-                    Expect(TokenType.Comma);
-                }
-            }
-            Expect(TokenType.RBracket);
+                return new TokenEntry(name, quantity);
+            });
             Expect(TokenType.RParen);
+            return new CurrencyEntry(currency, tokens);
+        }));
+        string? violation = value.Violation();
+        return violation is null
+            ? new ValueConstant(value)
+            : throw new ParseException($"invalid value literal: {violation}");
+    }
 
-            rawEntries.Add((currency, tokens));
-
-            if (!Is(TokenType.RBracket))
-            {
-                Expect(TokenType.Comma);
-            }
-        }
-        Expect(TokenType.RBracket);
-
-        // Canonicalize: merge duplicates, sum quantities, sort, remove zeros
-        Dictionary<string, Dictionary<string, (byte[] Key, BigInteger Sum)>> merged = [];
-
-        foreach ((byte[] currency, List<(byte[] Name, BigInteger Qty)> tokens) in rawEntries)
+    private byte[] ParseValueKey()
+    {
+        if (!Is(TokenType.ByteString))
         {
-            string polKey = Convert.ToHexString(currency);
-            if (!merged.TryGetValue(polKey, out Dictionary<string, (byte[], BigInteger)>? tokenMap))
-            {
-                tokenMap = [];
-                merged[polKey] = tokenMap;
-            }
-            foreach ((byte[] name, BigInteger qty) in tokens)
-            {
-                string tokKey = Convert.ToHexString(name);
-                if (tokenMap.TryGetValue(tokKey, out (byte[] Key, BigInteger Sum) existing))
-                {
-                    tokenMap[tokKey] = (existing.Key, existing.Sum + qty);
-                }
-                else
-                {
-                    tokenMap[tokKey] = (name, qty);
-                }
-            }
+            throw new ParseException(
+                $"expected bytestring key for value, got {_current.Type} at position {_current.Position}");
         }
-
-        // Validate summed amounts
-        foreach (KeyValuePair<string, Dictionary<string, (byte[], BigInteger)>> polEntry in merged)
-        {
-            foreach (KeyValuePair<string, (byte[] Key, BigInteger Sum)> tokEntry in polEntry.Value)
-            {
-                if (tokEntry.Value.Sum > ValueMax || tokEntry.Value.Sum < ValueMin)
-                {
-                    throw new ParseException(
-                        $"summed token amount out of range {tokEntry.Value.Sum}");
-                }
-            }
-        }
-
-        // Sort and build result, removing zero-quantity entries
-        List<string> sortedPolicies = [.. merged.Keys];
-        sortedPolicies.Sort(StringComparer.Ordinal);
-
-        ImmutableArray<CurrencyEntry>.Builder entries =
-            ImmutableArray.CreateBuilder<CurrencyEntry>();
-
-        foreach (string polKey in sortedPolicies)
-        {
-            Dictionary<string, (byte[] Key, BigInteger Sum)> tokenMap = merged[polKey];
-            List<string> sortedTokenKeys = [.. tokenMap.Keys];
-            sortedTokenKeys.Sort(StringComparer.Ordinal);
-
-            ImmutableArray<TokenEntry>.Builder nonZeroTokens =
-                ImmutableArray.CreateBuilder<TokenEntry>();
-            foreach (string tokKey in sortedTokenKeys)
-            {
-                (byte[] key, BigInteger sum) = tokenMap[tokKey];
-                if (sum != 0)
-                {
-                    nonZeroTokens.Add(new TokenEntry(key, sum));
-                }
-            }
-            if (nonZeroTokens.Count > 0)
-            {
-                entries.Add(new CurrencyEntry(
-                    HexToBytes(polKey),
-                    nonZeroTokens.ToImmutable()));
-            }
-        }
-
-        return new ValueConstant(new LedgerValue(entries.ToImmutable()));
+        byte[] key = HexToBytes(_current.Value);
+        Advance();
+        return key;
     }
 
     private PlutusData ParsePlutusData()
@@ -772,41 +653,21 @@ internal sealed class Parser
         if (Is(TokenType.DataList))
         {
             Advance();
-            Expect(TokenType.LBracket);
-            ImmutableArray<PlutusData>.Builder items = ImmutableArray.CreateBuilder<PlutusData>();
-            while (!Is(TokenType.RBracket))
-            {
-                items.Add(ParsePlutusData());
-                if (!Is(TokenType.RBracket))
-                {
-                    Expect(TokenType.Comma);
-                }
-            }
-            Expect(TokenType.RBracket);
-            return new PlutusDataList(items.ToImmutable());
+            return new PlutusDataList(ParseList(ParsePlutusData));
         }
 
         if (Is(TokenType.DataMap))
         {
             Advance();
-            Expect(TokenType.LBracket);
-            ImmutableArray<(PlutusData Key, PlutusData Value)>.Builder entries =
-                ImmutableArray.CreateBuilder<(PlutusData, PlutusData)>();
-            while (!Is(TokenType.RBracket))
+            return new PlutusDataMap(ParseList(() =>
             {
                 Expect(TokenType.LParen);
                 PlutusData key = ParsePlutusData();
                 Expect(TokenType.Comma);
                 PlutusData value = ParsePlutusData();
                 Expect(TokenType.RParen);
-                entries.Add((key, value));
-                if (!Is(TokenType.RBracket))
-                {
-                    Expect(TokenType.Comma);
-                }
-            }
-            Expect(TokenType.RBracket);
-            return new PlutusDataMap(entries.ToImmutable());
+                return (key, value);
+            }));
         }
 
         if (Is(TokenType.DataConstr))
@@ -824,18 +685,7 @@ internal sealed class Parser
                     $"invalid Constr tag {_current.Value} at position {_current.Position}");
             }
             Advance();
-            Expect(TokenType.LBracket);
-            ImmutableArray<PlutusData>.Builder fields = ImmutableArray.CreateBuilder<PlutusData>();
-            while (!Is(TokenType.RBracket))
-            {
-                fields.Add(ParsePlutusData());
-                if (!Is(TokenType.RBracket))
-                {
-                    Expect(TokenType.Comma);
-                }
-            }
-            Expect(TokenType.RBracket);
-            return new PlutusDataConstr(tag, fields.ToImmutable());
+            return new PlutusDataConstr(tag, ParseList(ParsePlutusData));
         }
 
         throw new ParseException(

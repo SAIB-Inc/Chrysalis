@@ -158,6 +158,9 @@ public static class FlatEncoder
                 writer.PushBit(1); writer.PushBits(12, 4);
                 EncodeTypeTagList(writer, arr.Element);
                 break;
+            case PlutusValueType:
+                writer.PushBit(1); writer.PushBits(13, 4);
+                break;
             default:
                 throw new InvalidOperationException($"Flat: cannot encode type {type.GetType().Name}.");
         }
@@ -208,16 +211,28 @@ public static class FlatEncoder
                 }
                 writer.PushBit(0);
                 break;
-            case Bls12381G1Constant g1:
-                EncodeByteString(writer, g1.Value.Span);
-                break;
-            case Bls12381G2Constant g2:
-                EncodeByteString(writer, g2.Value.Span);
-                break;
-            case Bls12381MlResultConstant ml:
-                EncodeByteString(writer, ml.Value.Span);
+            case ValueConstant v:
+                string? violation = v.Value.Violation();
+                if (violation is not null)
+                {
+                    throw new InvalidOperationException($"Flat: cannot encode value constant: {violation}.");
+                }
+                foreach (CurrencyEntry currency in v.Value.Entries)
+                {
+                    writer.PushBit(1);
+                    EncodeByteString(writer, currency.Currency.Span);
+                    foreach (TokenEntry token in currency.Tokens)
+                    {
+                        writer.PushBit(1);
+                        EncodeByteString(writer, token.Name.Span);
+                        EncodeInteger(writer, token.Quantity);
+                    }
+                    writer.PushBit(0);
+                }
+                writer.PushBit(0);
                 break;
             default:
+                // plutus encodes G1, G2 and Miller-loop values with `error` (G1.hs:94, G2.hs:80, Pairing.hs:62).
                 throw new InvalidOperationException($"Flat: cannot encode constant {value.GetType().Name}.");
         }
     }

@@ -13,8 +13,6 @@ namespace Chrysalis.Plutus.Test;
 /// </summary>
 public class CborWriterTests
 {
-    private static readonly Lazy<Dictionary<string, NodeBudgetTests.KnownFailure>> KnownFailures = new(NodeBudgetTests.ReadKnownFailures);
-
     private static string Hex(byte[] bytes) => Convert.ToHexString(bytes);
 
     // --- Constructor encoding ---
@@ -246,17 +244,10 @@ public class CborWriterTests
     [MemberData(nameof(SerialiseCases))]
     public void SerialiseDataWritesTheNodesBytes(string id, byte[]? flat, BigInteger? sourceTag, byte[] expected)
     {
+        _ = id;
         byte[] actual;
         if (flat is not null)
         {
-            if (KnownFailures.Value.TryGetValue(id, out NodeBudgetTests.KnownFailure? failure))
-            {
-                Exception? decode = Record.Exception(() => FlatDecoder.DecodeProgram(flat));
-                Assert.True(decode is not null, $"{id}: stale {failure.Owner} entry; decoded without error");
-                Assert.True(failure.Matches("decode", decode), $"{id}: changed {failure.Owner} failure: {decode.GetType().FullName}: {decode.Message}");
-                return;
-            }
-
             Term<DeBruijn> applied = new ApplyTerm<DeBruijn>(
                 FlatDecoder.DecodeProgram(flat).Term,
                 new ConstTerm<DeBruijn>(new DataConstant(new PlutusDataConstr(0, []))));

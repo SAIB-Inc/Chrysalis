@@ -171,10 +171,9 @@ internal static class CryptoBuiltins
         Org.BouncyCastle.Crypto.IDigest digest,
         ReadOnlySpan<byte> input)
     {
-        byte[] inputArray = input.ToArray();
-        digest.BlockUpdate(inputArray, 0, inputArray.Length);
+        digest.BlockUpdate(input);
         byte[] output = new byte[digest.GetDigestSize()];
-        _ = digest.DoFinal(output, 0);
+        _ = digest.DoFinal(output);
         return ByteStringResult(output);
     }
 }

@@ -13,58 +13,39 @@ namespace Chrysalis.Plutus.Builtins;
 /// </summary>
 internal static class ValueBuiltins
 {
-    private static readonly BigInteger QuantityMax = (BigInteger.One << 127) - 1;
-    private static readonly BigInteger QuantityMin = -(BigInteger.One << 127);
-    private const int MaxKeyLen = 32;
-
     private static void CheckQuantityRange(BigInteger q)
     {
-        if (q < QuantityMin || q > QuantityMax)
+        if (q < LedgerValue.QuantityMin || q > LedgerValue.QuantityMax)
         {
             throw new EvaluationException($"quantity out of 128-bit signed range");
         }
     }
 
-    private static int CompareBytes(ReadOnlySpan<byte> a, ReadOnlySpan<byte> b)
+    // ByteString Ord (unsigned, shorter prefix first), as plutus's Map K searches by.
+    private readonly struct ByteKey<T>(ReadOnlyMemory<byte> key, Func<T, ReadOnlyMemory<byte>> keyOf) : IComparable<T>
     {
-        int len = Math.Min(a.Length, b.Length);
-        for (int i = 0; i < len; i++)
-        {
-            if (a[i] < b[i])
-            {
-                return -1;
-            }
-
-            if (a[i] > b[i])
-            {
-                return 1;
-            }
-        }
-        return a.Length - b.Length;
+        public int CompareTo(T? other) => key.Span.SequenceCompareTo(keyOf(other!).Span);
     }
 
-    private static bool BytesEqual(ReadOnlySpan<byte> a, ReadOnlySpan<byte> b) => a.SequenceEqual(b);
+    private static int FindCurrency(ImmutableArray<CurrencyEntry> entries, ReadOnlyMemory<byte> ccy) =>
+        entries.AsSpan().BinarySearch(new ByteKey<CurrencyEntry>(ccy, static entry => entry.Currency));
+
+    private static int FindToken(ImmutableArray<TokenEntry> tokens, ReadOnlyMemory<byte> name) =>
+        tokens.AsSpan().BinarySearch(new ByteKey<TokenEntry>(name, static token => token.Name));
 
     // --- lookupCoin ---
 
     private static BigInteger LookupCoinImpl(
         ReadOnlyMemory<byte> ccy, ReadOnlyMemory<byte> token, LedgerValue v)
     {
-        foreach (CurrencyEntry entry in v.Entries)
+        int ci = FindCurrency(v.Entries, ccy);
+        if (ci < 0)
         {
-            if (BytesEqual(entry.Currency.Span, ccy.Span))
-            {
-                foreach (TokenEntry tok in entry.Tokens)
-                {
-                    if (BytesEqual(tok.Name.Span, token.Span))
-                    {
-                        return tok.Quantity;
-                    }
-                }
-                return BigInteger.Zero;
-            }
+            return BigInteger.Zero;
         }
-        return BigInteger.Zero;
+        ImmutableArray<TokenEntry> tokens = v.Entries[ci].Tokens;
+        int ti = FindToken(tokens, token);
+        return ti < 0 ? BigInteger.Zero : tokens[ti].Quantity;
     }
 
     internal static CekValue LookupCoin(CekValue[] args)
@@ -80,102 +61,41 @@ internal static class ValueBuiltins
     private static LedgerValue DeleteToken(
         LedgerValue v, ReadOnlyMemory<byte> ccy, ReadOnlyMemory<byte> token)
     {
-        ImmutableArray<CurrencyEntry>.Builder newEntries =
-            ImmutableArray.CreateBuilder<CurrencyEntry>();
-        foreach (CurrencyEntry entry in v.Entries)
+        int ci = FindCurrency(v.Entries, ccy);
+        if (ci < 0)
         {
-            if (BytesEqual(entry.Currency.Span, ccy.Span))
-            {
-                ImmutableArray<TokenEntry>.Builder newTokens =
-                    ImmutableArray.CreateBuilder<TokenEntry>();
-                foreach (TokenEntry tok in entry.Tokens)
-                {
-                    if (!BytesEqual(tok.Name.Span, token.Span))
-                    {
-                        newTokens.Add(tok);
-                    }
-                }
-                if (newTokens.Count > 0)
-                {
-                    newEntries.Add(new CurrencyEntry(entry.Currency, newTokens.ToImmutable()));
-                }
-            }
-            else
-            {
-                newEntries.Add(entry);
-            }
+            return v;
         }
-        return new LedgerValue(newEntries.ToImmutable());
+        ImmutableArray<TokenEntry> tokens = v.Entries[ci].Tokens;
+        int ti = FindToken(tokens, token);
+        if (ti < 0)
+        {
+            return v;
+        }
+        long negatives = v.Negatives - (tokens[ti].Quantity.Sign < 0 ? 1 : 0);
+        return tokens.Length == 1
+            ? v.Changed(v.Entries.RemoveAt(ci), 1, 0, negatives)
+            : v.Changed(v.Entries.SetItem(ci, new CurrencyEntry(v.Entries[ci].Currency, tokens.RemoveAt(ti))), tokens.Length, tokens.Length - 1, negatives);
     }
 
     private static LedgerValue InsertToken(
         LedgerValue v, ReadOnlyMemory<byte> ccy, ReadOnlyMemory<byte> token, BigInteger qty)
     {
-        ImmutableArray<CurrencyEntry>.Builder newEntries =
-            ImmutableArray.CreateBuilder<CurrencyEntry>();
-        bool inserted = false;
-
-        foreach (CurrencyEntry entry in v.Entries)
+        long negatives = v.Negatives + (qty.Sign < 0 ? 1 : 0);
+        TokenEntry added = new(token, qty);
+        int ci = FindCurrency(v.Entries, ccy);
+        if (ci < 0)
         {
-            int cmp = CompareBytes(entry.Currency.Span, ccy.Span);
-            if (cmp < 0)
-            {
-                newEntries.Add(entry);
-            }
-            else if (cmp == 0)
-            {
-                // Found the currency — insert/replace token in sorted position
-                ImmutableArray<TokenEntry>.Builder newTokens =
-                    ImmutableArray.CreateBuilder<TokenEntry>();
-                bool tokenInserted = false;
-                foreach (TokenEntry tok in entry.Tokens)
-                {
-                    int tcmp = CompareBytes(tok.Name.Span, token.Span);
-                    if (tcmp < 0)
-                    {
-                        newTokens.Add(tok);
-                    }
-                    else if (tcmp == 0)
-                    {
-                        newTokens.Add(new TokenEntry(token, qty));
-                        tokenInserted = true;
-                    }
-                    else
-                    {
-                        if (!tokenInserted)
-                        {
-                            newTokens.Add(new TokenEntry(token, qty));
-                            tokenInserted = true;
-                        }
-                        newTokens.Add(tok);
-                    }
-                }
-                if (!tokenInserted)
-                {
-                    newTokens.Add(new TokenEntry(token, qty));
-                }
-                newEntries.Add(new CurrencyEntry(entry.Currency, newTokens.ToImmutable()));
-                inserted = true;
-            }
-            else
-            {
-                if (!inserted)
-                {
-                    newEntries.Add(new CurrencyEntry(ccy,
-                        [new TokenEntry(token, qty)]));
-                    inserted = true;
-                }
-                newEntries.Add(entry);
-            }
+            return v.Changed(v.Entries.Insert(~ci, new CurrencyEntry(ccy, [added])), 0, 1, negatives);
         }
-
-        if (!inserted)
+        CurrencyEntry entry = v.Entries[ci];
+        int ti = FindToken(entry.Tokens, token);
+        if (ti < 0)
         {
-            newEntries.Add(new CurrencyEntry(ccy,
-                [new TokenEntry(token, qty)]));
+            return v.Changed(v.Entries.SetItem(ci, new CurrencyEntry(entry.Currency, entry.Tokens.Insert(~ti, added))), entry.Tokens.Length, entry.Tokens.Length + 1, negatives);
         }
-
-        return new LedgerValue(newEntries.ToImmutable());
+        negatives -= entry.Tokens[ti].Quantity.Sign < 0 ? 1 : 0;
+        return v.Changed(v.Entries.SetItem(ci, new CurrencyEntry(entry.Currency, entry.Tokens.SetItem(ti, added))), entry.Tokens.Length, entry.Tokens.Length, negatives);
     }
 
     internal static CekValue InsertCoin(CekValue[] args)
@@ -187,17 +107,17 @@ internal static class ValueBuiltins
 
         if (qty == 0)
         {
-            return ccy.Length > MaxKeyLen || token.Length > MaxKeyLen
+            return ccy.Length > LedgerValue.MaxKeyLength || token.Length > LedgerValue.MaxKeyLength
                 ? ValueResult(v)
                 : ValueResult(DeleteToken(v, ccy, token));
         }
 
-        if (ccy.Length > MaxKeyLen)
+        if (ccy.Length > LedgerValue.MaxKeyLength)
         {
             throw new EvaluationException(
                 $"insertCoin: currency key too long ({ccy.Length} bytes)");
         }
-        if (token.Length > MaxKeyLen)
+        if (token.Length > LedgerValue.MaxKeyLength)
         {
             throw new EvaluationException(
                 $"insertCoin: token key too long ({token.Length} bytes)");
@@ -218,7 +138,7 @@ internal static class ValueBuiltins
 
         while (i < a.Length && j < b.Length)
         {
-            int cmp = CompareBytes(a[i].Name.Span, b[j].Name.Span);
+            int cmp = a[i].Name.Span.SequenceCompareTo(b[j].Name.Span);
             if (cmp < 0)
             {
                 result.Add(a[i]);
@@ -267,7 +187,7 @@ internal static class ValueBuiltins
 
         while (i < v1.Entries.Length && j < v2.Entries.Length)
         {
-            int cmp = CompareBytes(v1.Entries[i].Currency.Span, v2.Entries[j].Currency.Span);
+            int cmp = v1.Entries[i].Currency.Span.SequenceCompareTo(v2.Entries[j].Currency.Span);
             if (cmp < 0)
             {
                 result.Add(v1.Entries[i]);
@@ -307,32 +227,24 @@ internal static class ValueBuiltins
 
     // --- valueContains ---
 
+    // Value.hs:532-543: a negative count fails, in the first value and then in the second; a first value with fewer tokens than the second
+    // is False at once, since the second then holds a token the first lacks and no quantity is zero or negative.
     internal static CekValue ValueContains(CekValue[] args)
     {
         LedgerValue v1 = UnwrapValue(args[0]);
         LedgerValue v2 = UnwrapValue(args[1]);
 
-        foreach (CurrencyEntry entry in v1.Entries)
+        if (v1.Negatives > 0)
         {
-            foreach (TokenEntry tok in entry.Tokens)
-            {
-                if (tok.Quantity < 0)
-                {
-                    throw new EvaluationException(
-                        "valueContains: negative quantity in first value");
-                }
-            }
+            throw new EvaluationException("valueContains: negative quantity in first value");
         }
-        foreach (CurrencyEntry entry in v2.Entries)
+        if (v2.Negatives > 0)
         {
-            foreach (TokenEntry tok in entry.Tokens)
-            {
-                if (tok.Quantity < 0)
-                {
-                    throw new EvaluationException(
-                        "valueContains: negative quantity in second value");
-                }
-            }
+            throw new EvaluationException("valueContains: negative quantity in second value");
+        }
+        if (v1.Size < v2.Size)
+        {
+            return BoolResult(false);
         }
 
         foreach (CurrencyEntry entry in v2.Entries)
@@ -388,9 +300,16 @@ internal static class ValueBuiltins
 
     // --- valueData ---
 
+    // Value.hs:585-598: valueData fails when the value holds more tokens than this.
+    private const int ValueDataMaxSize = 40_000;
+
     internal static CekValue ValueData(CekValue[] args)
     {
         LedgerValue v = UnwrapValue(args[0]);
+        if (ExMem.ValueSizeExMem(v) > ValueDataMaxSize)
+        {
+            throw new EvaluationException($"valueData: maximum input size ({ValueDataMaxSize}) exceeded");
+        }
 
         ImmutableArray<(PlutusData Key, PlutusData Value)>.Builder outerEntries =
             ImmutableArray.CreateBuilder<(PlutusData, PlutusData)>();
@@ -426,86 +345,31 @@ internal static class ValueBuiltins
         }
 
         ImmutableArray<CurrencyEntry>.Builder entries =
-            ImmutableArray.CreateBuilder<CurrencyEntry>();
-        ReadOnlyMemory<byte> prevCurrency = default;
-        bool hasPrev = false;
-
+            ImmutableArray.CreateBuilder<CurrencyEntry>(outerMap.Entries.Length);
         foreach ((PlutusData key, PlutusData val) in outerMap.Entries)
         {
-            if (key is not PlutusDataByteString ccyBs)
+            if (key is not PlutusDataByteString currency || val is not PlutusDataMap innerMap)
             {
-                throw new EvaluationException(
-                    $"unValueData: expected bytestring currency key, got {key.GetType().Name}");
-            }
-            if (ccyBs.Value.Length > MaxKeyLen)
-            {
-                throw new EvaluationException(
-                    $"unValueData: currency key too long ({ccyBs.Value.Length} bytes)");
-            }
-
-            if (hasPrev && CompareBytes(prevCurrency.Span, ccyBs.Value.Span) >= 0)
-            {
-                throw new EvaluationException(
-                    "unValueData: currency keys not in strictly ascending order");
-            }
-            prevCurrency = ccyBs.Value;
-            hasPrev = true;
-
-            if (val is not PlutusDataMap innerMap)
-            {
-                throw new EvaluationException(
-                    $"unValueData: expected map for token entries, got {val.GetType().Name}");
-            }
-
-            if (innerMap.Entries.Length == 0)
-            {
-                throw new EvaluationException("unValueData: empty token map");
+                throw new EvaluationException("unValueData: expected a (bytestring, map) entry");
             }
 
             ImmutableArray<TokenEntry>.Builder tokens =
-                ImmutableArray.CreateBuilder<TokenEntry>();
-            ReadOnlyMemory<byte> prevToken = default;
-            bool hasTokenPrev = false;
-
+                ImmutableArray.CreateBuilder<TokenEntry>(innerMap.Entries.Length);
             foreach ((PlutusData tKey, PlutusData tVal) in innerMap.Entries)
             {
-                if (tKey is not PlutusDataByteString tokenBs)
+                if (tKey is not PlutusDataByteString name || tVal is not PlutusDataInteger quantity)
                 {
-                    throw new EvaluationException(
-                        $"unValueData: expected bytestring token key, got {tKey.GetType().Name}");
+                    throw new EvaluationException("unValueData: expected a (bytestring, integer) entry");
                 }
-                if (tokenBs.Value.Length > MaxKeyLen)
-                {
-                    throw new EvaluationException(
-                        $"unValueData: token key too long ({tokenBs.Value.Length} bytes)");
-                }
-
-                if (hasTokenPrev && CompareBytes(prevToken.Span, tokenBs.Value.Span) >= 0)
-                {
-                    throw new EvaluationException(
-                        "unValueData: token keys not in strictly ascending order");
-                }
-                prevToken = tokenBs.Value;
-                hasTokenPrev = true;
-
-                if (tVal is not PlutusDataInteger qtyData)
-                {
-                    throw new EvaluationException(
-                        $"unValueData: expected integer quantity, got {tVal.GetType().Name}");
-                }
-
-                if (qtyData.Value == 0)
-                {
-                    throw new EvaluationException("unValueData: zero quantity");
-                }
-
-                CheckQuantityRange(qtyData.Value);
-                tokens.Add(new TokenEntry(tokenBs.Value, qtyData.Value));
+                tokens.Add(new TokenEntry(name.Value, quantity.Value));
             }
-
-            entries.Add(new CurrencyEntry(ccyBs.Value, tokens.ToImmutable()));
+            entries.Add(new CurrencyEntry(currency.Value, tokens.MoveToImmutable()));
         }
 
-        return ValueResult(new LedgerValue(entries.ToImmutable()));
+        LedgerValue value = new(entries.MoveToImmutable());
+        string? violation = value.Violation();
+        return violation is null
+            ? ValueResult(value)
+            : throw new EvaluationException($"unValueData: {violation}");
     }
 }

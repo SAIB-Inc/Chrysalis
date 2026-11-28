@@ -39,7 +39,7 @@ internal static class ByteStringBuiltins
 
         int skip = ClampToNonNegative(skipBig, bs.Length);
         int take = ClampToNonNegative(takeBig, bs.Length - skip);
-        return ByteStringResult(bs.Slice(skip, take).ToArray());
+        return ByteStringResult(bs.Slice(skip, take));
     }
 
     internal static CekValue LengthOfByteString(CekValue[] args) => IntegerResult(UnwrapByteString(args[0]).Length);

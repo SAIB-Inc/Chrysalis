@@ -131,27 +131,12 @@ internal static class ExMem
         return abs > long.MaxValue ? long.MaxValue : (long)abs;
     }
 
-    internal static int ValueSizeExMem(LedgerValue v)
-    {
-        int size = 0;
-        foreach (CurrencyEntry entry in v.Entries)
-        {
-            size += entry.Tokens.Length;
-        }
-        return size;
-    }
+    internal static long ValueSizeExMem(LedgerValue v) => v.Size;
 
     internal static int ValueMaxDepth(LedgerValue v)
     {
         int outerSize = v.Entries.Length;
-        int maxInner = 0;
-        foreach (CurrencyEntry entry in v.Entries)
-        {
-            if (entry.Tokens.Length > maxInner)
-            {
-                maxInner = entry.Tokens.Length;
-            }
-        }
+        int maxInner = v.MaxTokens;
         int logOuter = outerSize > 0 ? (int)Math.Floor(Math.Log2(outerSize)) + 1 : 0;
         int logInner = maxInner > 0 ? (int)Math.Floor(Math.Log2(maxInner)) + 1 : 0;
         return logOuter + logInner;
