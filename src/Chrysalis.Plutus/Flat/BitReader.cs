@@ -107,18 +107,11 @@ internal sealed class BitReader
 
     internal byte PopByte()
     {
-        // If byte-aligned, read directly
-        if (_bitsLeft == 0)
+        // Prim.hs:443: getChunksInfo fails when the filler ends inside a byte.
+        if (_bitsLeft != 0)
         {
-            if (_byteIndex >= _length)
-            {
-                ThrowPastEnd();
-            }
-            return _bytes[_byteIndex++];
+            throw new InvalidOperationException("Flat: byte string not byte-aligned.");
         }
-
-        // If not aligned, discard remaining bits and read next byte
-        _bitsLeft = 0;
         if (_byteIndex >= _length)
         {
             ThrowPastEnd();

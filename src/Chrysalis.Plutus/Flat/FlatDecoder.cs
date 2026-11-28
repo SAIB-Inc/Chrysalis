@@ -306,6 +306,7 @@ public static class FlatDecoder
             9 => ConstantType.Bls12381G1Element,
             10 => ConstantType.Bls12381G2Element,
             11 => ConstantType.Bls12381MlResult,
+            13 => ConstantType.PlutusValue,
             _ => throw new InvalidOperationException($"Flat: unknown type tag {tag}.")
         };
     }
@@ -352,11 +353,35 @@ public static class FlatDecoder
         ListType list => DecodeList(reader, list.Element),
         PairType pair => DecodePair(reader, pair),
         ArrayType arr => DecodeArray(reader, arr.Element),
-        Bls12381G1Type => new Bls12381G1Constant(DecodeByteString(reader)),
-        Bls12381G2Type => new Bls12381G2Constant(DecodeByteString(reader)),
-        Bls12381MlResultType => new Bls12381MlResultConstant(DecodeByteString(reader)),
+        PlutusValueType => DecodeValue(reader),
+        // plutus decodes G1, G2 and Miller-loop values with `fail` (Crypto/BLS12_381/G1.hs:86-97, G2.hs:72-83, Pairing.hs:56-63).
+        Bls12381G1Type or Bls12381G2Type or Bls12381MlResultType =>
+            throw new InvalidOperationException($"Flat: {type.GetType().Name} constants cannot be decoded."),
         _ => throw new InvalidOperationException($"Flat: unknown constant type {type}.")
     };
+
+    // Value.hs:229-240: a list of (currency, list of (token, quantity)) with plutus-flat list bits, checked as plutus's buildValueWith checks it.
+    private static ValueConstant DecodeValue(BitReader reader)
+    {
+        ImmutableArray<CurrencyEntry>.Builder entries = ImmutableArray.CreateBuilder<CurrencyEntry>();
+        while (reader.PopBit() == 1)
+        {
+            ReadOnlyMemory<byte> currency = DecodeByteString(reader);
+            ImmutableArray<TokenEntry>.Builder tokens = ImmutableArray.CreateBuilder<TokenEntry>();
+            while (reader.PopBit() == 1)
+            {
+                ReadOnlyMemory<byte> name = DecodeByteString(reader);
+                tokens.Add(new TokenEntry(name, DecodeInteger(reader)));
+            }
+            entries.Add(new CurrencyEntry(currency, tokens.ToImmutable()));
+        }
+
+        LedgerValue value = new(entries.ToImmutable());
+        string? violation = value.Violation();
+        return violation is null
+            ? new ValueConstant(value)
+            : throw new InvalidOperationException($"Flat: invalid value constant: {violation}.");
+    }
 
     private static ListConstant DecodeList(BitReader reader, ConstantType elementType)
     {
@@ -493,7 +518,7 @@ public static class FlatDecoder
         {
             if (pos + nextLen > buffer.Length)
             {
-                Array.Resize(ref buffer, buffer.Length * 2);
+                Array.Resize(ref buffer, Math.Max(buffer.Length * 2, pos + nextLen));
             }
             reader.TakeBytes(nextLen).Span.CopyTo(buffer.AsSpan(pos));
             pos += nextLen;
@@ -506,7 +531,10 @@ public static class FlatDecoder
     private static string DecodeString(BitReader reader)
     {
         ReadOnlyMemory<byte> bytes = DecodeByteString(reader);
-        return System.Text.Encoding.UTF8.GetString(bytes.Span);
+        // dUTF8 fails on invalid UTF-8 (flat Decoder/Strict.hs:293-299).
+        return System.Text.Unicode.Utf8.IsValid(bytes.Span)
+            ? System.Text.Encoding.UTF8.GetString(bytes.Span)
+            : throw new InvalidOperationException("Flat: string constant is not valid UTF-8.");
     }
 
     private static PlutusData DecodeData(BitReader reader)

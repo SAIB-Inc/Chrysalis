@@ -1,8 +1,6 @@
 using System.IO.Compression;
 using System.Reflection;
 using System.Runtime.CompilerServices;
-using System.Security.Cryptography;
-using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Chrysalis.Plutus.Cek;
@@ -28,27 +26,6 @@ public sealed partial class NodeBudgetTests
     private static readonly int[] NegativeV3Indexes = [52, 117, 133, 144];
     private static readonly int[] MeasuredCounts = [69, 161, 514];
     private static readonly Lazy<NodeData> Data = new(Load);
-    internal sealed record KnownFailure(string Owner, string Stage, string ExceptionType, string MessageSha256, string Reason)
-    {
-        internal bool Matches(string stage, Exception error) =>
-            stage == Stage && error.GetType().FullName == ExceptionType &&
-            Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(error.Message))) == MessageSha256;
-    }
-
-    internal static Dictionary<string, KnownFailure> ReadKnownFailures()
-    {
-        string path = Path.Combine(AppContext.BaseDirectory, "TestData", "NodeBudgetKnownFailures.tsv");
-        using StreamReader reader = File.OpenText(path);
-        Assert.Equal("id\towner\tstage\texception\tmessageSha256\treason", reader.ReadLine());
-        Dictionary<string, KnownFailure> failures = [];
-        while (reader.ReadLine() is { } line)
-        {
-            string[] columns = line.Split('\t');
-            Assert.True(columns is [_, "V3" or "V4" or "V6", "decode" or "evaluate", _, _, _], $"Malformed known failure: {line}");
-            failures.Add(columns[0], new(columns[1], columns[2], columns[3], columns[4], columns[5]));
-        }
-        return failures;
-    }
 
     private static NodeData Load()
     {
@@ -106,39 +83,25 @@ public sealed partial class NodeBudgetTests
         Assert.Equal(new ExUnitsResult(2424, 1530707), twin.Units);
         Assert.Equal(twin.Units, exact.Budget);
 
-        Dictionary<string, KnownFailure> known = ReadKnownFailures();
         CostModel[] models = [.. fixture.Models.Select((a, i) => CostModelLoader.FromFlat(a, i + 1, i == 2 ? Variant.E : Variant.D))];
         string?[] mismatches = new string?[scripts.Length];
         _ = Parallel.For(0, scripts.Length, i =>
         {
             Script script = scripts[i];
             ExUnitsResult expected = (script.Units ?? script.Budget)!;
-            _ = known.TryGetValue(script.Id, out KnownFailure? failure);
             try
             {
                 ExUnitsResult actual = EvaluateRecordedScript(script).ExUnits;
-                if (failure is not null)
-                {
-                    mismatches[i] = $"{script.Id}: stale {failure.Owner} entry; evaluated with {Show(actual)}";
-                }
-                else if (actual != expected)
+                if (actual != expected)
                 {
                     mismatches[i] = $"{script.Id} V{script.Language}: expected {Show(expected)}; got {Show(actual)}";
                 }
             }
             catch (Exception ex)
             {
-                string? type = ex.GetType().FullName;
-                bool matches = failure is not null && (failure.Stage == "decode"
-                    ? Record.Exception(() => FlatDecoder.DecodeProgram(script.Flat)) is { } decode && failure.Matches("decode", decode) && failure.Matches("decode", ex)
-                    : failure.Matches("evaluate", ex));
-                if (!matches)
-                {
-                    mismatches[i] = $"{script.Id} V{script.Language}: unexpected replay failure: {type}: {ex.Message}";
-                }
+                mismatches[i] = $"{script.Id} V{script.Language}: unexpected replay failure: {ex.GetType().FullName}: {ex.Message}";
             }
         });
-        Assert.All(known.Keys, id => Assert.True(scripts.Any(s => s.Id == id) || fixture.Serialise.Any(s => s.Id == id), $"Unknown known-failure id: {id}"));
         string[] phase1 = ["AV-multiIndexArray-V1", "AV-multiIndexArray-V2", "AV-multiIndexArray-V3", "F-ver-1.0.0-case-V3"];
         string[] phase2 = ["F-ver-0.1.0-V3", "F-ver-1.0.1-V3", "F-ver-1.1.0-patch-2^70-V3", "F-ver-1.2.0-V3", "F-ver-1.2^32.0-V3",
             "F-ver-2.0.0-V3", "F-ver-2^64.0.0-V3", "F-ver-2^64.0.0-V2",
@@ -165,35 +128,28 @@ public sealed partial class NodeBudgetTests
         (Script Script, string Outcome)[] v4 = [.. fixture.Failures.Where(row =>
             v4Prefixes.Any(prefix => row.Script.Id.StartsWith(prefix, StringComparison.Ordinal)) || v4Ids.Contains(row.Script.Id))];
         Assert.Equal(417, v4.Length);
+        (Script Script, string Outcome)[] values = [.. fixture.Failures.Where(row =>
+            row.Script.Id.StartsWith("VF-", StringComparison.Ordinal) || row.Script.Id.StartsWith("VAL-", StringComparison.Ordinal))];
+        Assert.Equal([30, 27], values.GroupBy(row => row.Outcome).OrderBy(g => g.Key, StringComparer.Ordinal).Select(g => g.Count()));
         string[] errors = [.. mismatches.OfType<string>(),
             .. CheckVerdicts([.. phase1, .. v4.Where(row => row.Outcome == "phase1-reject").Select(row => row.Script.Id)], "phase1-reject", typeof(InvalidOperationException)),
             .. CheckVerdicts([.. phase2, .. v4.Where(row => row.Outcome == "phase2-fail" && !row.Script.Id.StartsWith("R-", StringComparison.Ordinal)).Select(row => row.Script.Id)], "phase2-fail", typeof(EvaluationException)),
             .. CheckVerdicts([.. v4.Where(row => row.Script.Id.StartsWith("R-", StringComparison.Ordinal)).Select(row => row.Script.Id)], "phase2-fail", typeof(InvalidReturnValueException)),
             .. CheckVerdicts(unboundScope, "phase2-fail", typeof(UnboundVariableException)),
-            .. CheckVerdicts(unboundReached, "phase2-fail", typeof(EvaluationException))];
+            .. CheckVerdicts(unboundReached, "phase2-fail", typeof(EvaluationException)),
+            .. CheckVerdicts([.. values.Where(row => row.Outcome == "phase1-reject").Select(row => row.Script.Id)], "phase1-reject", typeof(InvalidOperationException), "Flat: invalid value constant"),
+            .. CheckVerdicts([.. values.Where(row => row.Outcome == "phase2-fail").Select(row => row.Script.Id)], "phase2-fail", typeof(EvaluationException))];
         Assert.True(errors.Length == 0, $"{errors.Length} node replay mismatches:\n{string.Join('\n', errors)}");
 
-        string[] openAccepted = [.. scripts.Where(s => s.Id.StartsWith("O-", StringComparison.Ordinal)
-            || s.Id is "P-A3-free-var-untaken-case-branch" or "P-A4-free-var-unevaluated-constr-field"
-                or "F-var-2^63+1-V3" or "F-var-2^63-10groups-V3" or "F-var-2^64-1-V2" or "F-var-2^64-1-V3").Select(s => s.Id)];
-        Assert.Equal(30, openAccepted.Length);
-        Assert.All(openAccepted, id => Assert.DoesNotContain(id, known.Keys));
-
-        string[] stringCases = [.. scripts.Where(s => s.Id.StartsWith("W-builtin_semantics_", StringComparison.Ordinal))
-            .Where(s => s.Id.Contains("appendString", StringComparison.Ordinal) || s.Id.Contains("encodeUtf8", StringComparison.Ordinal)
-                || s.Id.Contains("equalsString", StringComparison.Ordinal)).Select(s => s.Id)];
-        Assert.Equal(4, stringCases.Length);
-        Assert.All(stringCases, id => Assert.DoesNotContain(id, known.Keys));
-
-        CheckWitness("EXP-e0-V1", new(1701, 1148094), "VS-valueData-1x1-V1", DefaultFunction.ValueData);
-        CheckWitness("BI-expMod-mod-hugeexp-control-V2", new(1701, 1148094), "VAL-insertCoin-positive-empty-V2", DefaultFunction.InsertCoin);
-        CheckWitness("EXP-e0-V3", new(1401, 1100094), "L-dropList-head-2000", DefaultFunction.DropList);
+        CheckWitness("EXP-e0-V1", new(1701, 1148094));
+        CheckWitness("BI-expMod-mod-hugeexp-control-V2", new(1701, 1148094));
+        CheckWitness("EXP-e0-V3", new(1401, 1100094));
 
         EvaluationResult EvaluateRecordedScript(Script script) => Evaluator.EvaluateScript(script.Flat,
             Enumerable.Repeat<PlutusData>(new PlutusDataConstr(0, []), ArgumentCount(script.Language, script.Purpose)).ToArray(),
             script.Language, 11, fixture.Models[script.Language - 1]);
 
-        IEnumerable<string> CheckVerdicts(string[] ids, string outcome, Type expected)
+        IEnumerable<string> CheckVerdicts(string[] ids, string outcome, Type expected, string? prefix = null)
         {
             string? expectedMessage = expected == typeof(UnboundVariableException) ? new UnboundVariableException().Message : null;
             foreach (string id in ids)
@@ -201,35 +157,26 @@ public sealed partial class NodeBudgetTests
                 (Script script, string recorded) = fixture.Failures.Single(row => row.Script.Id == id);
                 Exception? observed = Record.Exception(() => EvaluateRecordedScript(script));
                 if (recorded != outcome || observed?.GetType() != expected
-                    || (expectedMessage is not null && observed.Message != expectedMessage))
+                    || (expectedMessage is not null && observed.Message != expectedMessage)
+                    || (prefix is not null && !observed.Message.StartsWith(prefix, StringComparison.Ordinal)))
                 {
                     yield return $"{id}: expected {outcome}/{expected.Name}; fixture {recorded}, got {observed?.GetType().Name ?? "success"}: {observed?.Message}";
                 }
             }
         }
 
-        void CheckWitness(string primary, ExUnitsResult budget, string alternate, DefaultFunction alternateFunction)
+        void CheckWitness(string id, ExUnitsResult budget)
         {
-            Script witness = scripts.Single(s => s.Id == primary);
+            Script witness = scripts.Single(s => s.Id == id);
             Assert.Equal(budget, witness.Units);
-            DefaultFunction function = DefaultFunction.ExpModInteger;
-            if (known.ContainsKey(primary))
-            {
-                witness = scripts.Single(s => s.Id == alternate);
-                function = alternateFunction;
-            }
-            Assert.DoesNotContain(witness.Id, known.Keys);
             Term<DeBruijn> term = ApplyLedgerArgs(witness, FlatDecoder.DecodeProgram(witness.Flat).Term);
             CostModel model = models[witness.Language - 1];
-            (ExUnitsResult used, long cpu, long mem) = WithCounters(term, model, function);
+            (ExUnitsResult used, long cpu, long mem, _) = WithCounters(term, model, DefaultFunction.ExpModInteger);
             Assert.Equal(witness.Units, used);
             Assert.True(cpu > 0);
             long[] changed = (long[])fixture.Models[witness.Language - 1].Clone();
-            string name = function.ToString();
-            string parameter = char.ToLowerInvariant(name[0]) + name[1..] + "-memory-arguments" +
-                (function == DefaultFunction.DropList ? "" : "-intercept");
-            changed[Array.IndexOf(CostModelTests.DeployedNames(witness.Language), parameter)]++;
-            (ExUnitsResult raised, _, long raisedMem) = WithCounters(term, CostModelLoader.FromFlat(changed, witness.Language, witness.Language == 3 ? Variant.E : Variant.D), function);
+            changed[Array.IndexOf(CostModelTests.DeployedNames(witness.Language), "expModInteger-memory-arguments-intercept")]++;
+            (ExUnitsResult raised, _, long raisedMem, _) = WithCounters(term, CostModelLoader.FromFlat(changed, witness.Language, witness.Language == 3 ? Variant.E : Variant.D), DefaultFunction.ExpModInteger);
             Assert.True(raisedMem > mem);
             Assert.Equal(used.Mem + (ulong)(raisedMem - mem), raised.Mem);
             Assert.Equal(used.Steps, raised.Steps);
@@ -292,12 +239,12 @@ public sealed partial class NodeBudgetTests
         return term;
     }
 
-    private static (ExUnitsResult Used, long Cpu, long Mem) WithCounters(Term<DeBruijn> term, CostModel model, DefaultFunction function)
+    internal static (ExUnitsResult Used, long Cpu, long Mem, CekValue Value) WithCounters(Term<DeBruijn> term, CostModel model, DefaultFunction function)
     {
         CekMachine machine = new CekMachine(null, model).EnableDebugCounters();
-        _ = machine.RunValue(term);
+        CekValue value = machine.RunValue(term);
         (_, long[]? cpu, long[]? mem) = machine.DebugCounters;
-        return (Evaluator.UsedUnits(ExBudget.Unlimited, machine.RemainingBudget), cpu![(int)function], mem![(int)function]);
+        return (Evaluator.UsedUnits(ExBudget.Unlimited, machine.RemainingBudget), cpu![(int)function], mem![(int)function], value);
     }
 
     // Plutus 1.70.0.0, Builtins.hs's Flat DefaultFun instance (also checked with aiken uplc decode).
@@ -406,13 +353,12 @@ public sealed partial class NodeBudgetTests
         Assert.Equal([536, 8, 24], fixture.Cases.GroupBy(c => c.Outcome).OrderBy(g => g.Key, StringComparer.Ordinal).Select(g => g.Count()));
         ExBudget?[] aggregates = [.. fixture.Cases.Select(PartialBuiltinAggregate)];
         Assert.Equal(99, aggregates.Count(a => a.HasValue));
-        Dictionary<string, KnownFailure> known = ReadKnownFailures();
         CostModel[] models = [.. fixture.Models.Select((a, i) => CostModelLoader.FromFlat(a, i + 1, i == 2 ? Variant.E : Variant.D))];
         string?[] mismatches = new string?[fixture.Cases.Length];
         _ = Parallel.For(0, fixture.Cases.Length, i =>
         {
             BudgetCase entry = fixture.Cases[i];
-            Exception? failure = Record.Exception(() => CheckReplay(entry, models[entry.Language - 1], aggregates[i], known.GetValueOrDefault(entry.Id)));
+            Exception? failure = Record.Exception(() => CheckReplay(entry, models[entry.Language - 1], aggregates[i]));
             if (failure is not null)
             {
                 mismatches[i] = $"{entry.Id}: {failure.Message}";
@@ -422,7 +368,7 @@ public sealed partial class NodeBudgetTests
         Assert.True(errors.Length == 0, $"{errors.Length} budget replay mismatches:\n{string.Join('\n', errors)}");
     }
 
-    private static void CheckReplay(BudgetCase entry, CostModel model, ExBudget? aggregate, KnownFailure? known)
+    private static void CheckReplay(BudgetCase entry, CostModel model, ExBudget? aggregate)
     {
         CekMachine machine = new CekMachine(entry.Budget, model).EnableDebugCounters();
         bool ok = false;
@@ -436,12 +382,6 @@ public sealed partial class NodeBudgetTests
             stage = "evaluate";
             ok = machine.TryRunValue(applied, out result);
         });
-        if (known is not null)
-        {
-            Assert.NotNull(error);
-            Assert.True(known.Matches(stage, error), $"Changed {known.Owner} {stage} failure: {error.GetType().FullName}: {error.Message}");
-            return;
-        }
         if (entry.Outcome == "error" && stage == "evaluate")
         {
             Assert.Equal(BudgetStop.None, machine.StoppedAt);
