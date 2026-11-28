@@ -13,7 +13,8 @@ namespace Chrysalis.Plutus.VM.EvalTx;
 public static class Evaluator
 {
     /// <summary>The protocol version of the current networks and the default of <c>ScriptContextBuilder.EvaluateTx</c>: 11.
-    /// <c>EvaluateScript</c> also accepts 12 (Dijkstra) with the rules of plutus 1.71.0.0 (node 11.2.1), experimental until the Dijkstra hard-fork node.</summary>
+    /// <c>EvaluateScript</c> also accepts 12 (Dijkstra) with the rules of plutus 1.71.0.0 (node 11.2.1), experimental until the Dijkstra hard-fork node.
+    /// Protocol version 12 and Plutus V4 are experimental and follow the node's pinned Plutus; batch 7 builtins are present but not yet enabled by any network.</summary>
     public const int LatestProtocolVersion = Availability.VanRossem;
 
     /// <summary>
@@ -22,16 +23,16 @@ public static class Evaluator
     /// </summary>
     /// <param name="scriptBytes">Flat-encoded script bytes (inner script, not the CBOR-wrapped outer layer).</param>
     /// <param name="argumentsCbor">CBOR-encoded PlutusData arguments (e.g. datum, redeemer, script context).</param>
-    /// <param name="plutusVersion">Plutus language version of the script.</param>
+    /// <param name="plutusVersion">Plutus language version of the script: 1 to 4. Plutus V4 is experimental and only at protocol version 12; it follows the node's pinned Plutus.</param>
     /// <param name="protocolVersion">Major protocol version to evaluate at.</param>
     /// <param name="costModel">Flat cost-model array for the script's language. May be omitted only for Plutus V3 at protocol version 11 (<see cref="LatestProtocolVersion"/>).</param>
     /// <param name="budget">Enforced: the script fails with BudgetExceededException when either part falls below zero. Leave it out to measure.</param>
     /// <exception cref="BudgetExceededException">A charge took CPU or memory below zero.</exception>
     /// <returns>The evaluation result with consumed execution units.</returns>
     /// <exception cref="InvalidReturnValueException">
-    /// A Plutus V3 script returned a value other than built-in unit.
+    /// A Plutus V3 or V4 script returned a value other than built-in unit.
     /// </exception>
-    /// <exception cref="ArgumentOutOfRangeException">The Plutus language is not 1–3, or the protocol version is negative.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">The Plutus language is not 1–4, or the protocol version is negative.</exception>
     /// <exception cref="NotSupportedException">The protocol version is above 12.</exception>
     /// <exception cref="ArgumentNullException">An argument is null, or the language and protocol version require a cost model.</exception>
     /// <exception cref="InvalidOperationException">The language or a decoded term is unavailable.</exception>
@@ -68,16 +69,16 @@ public static class Evaluator
     /// </summary>
     /// <param name="scriptBytes">Flat-encoded script bytes.</param>
     /// <param name="arguments">VM PlutusData arguments (datum, redeemer, script context).</param>
-    /// <param name="plutusVersion">Plutus language version of the script.</param>
+    /// <param name="plutusVersion">Plutus language version of the script: 1 to 4. Plutus V4 is experimental and only at protocol version 12; it follows the node's pinned Plutus.</param>
     /// <param name="protocolVersion">Major protocol version to evaluate at.</param>
     /// <param name="costModel">Flat cost-model array for the script's language. May be omitted only for Plutus V3 at protocol version 11 (<see cref="LatestProtocolVersion"/>).</param>
     /// <param name="budget">Enforced: the script fails with BudgetExceededException when either part falls below zero. Leave it out to measure.</param>
     /// <exception cref="BudgetExceededException">A charge took CPU or memory below zero.</exception>
     /// <returns>The evaluation result with consumed execution units.</returns>
     /// <exception cref="InvalidReturnValueException">
-    /// A Plutus V3 script returned a value other than built-in unit.
+    /// A Plutus V3 or V4 script returned a value other than built-in unit.
     /// </exception>
-    /// <exception cref="ArgumentOutOfRangeException">The Plutus language is not 1–3, or the protocol version is negative.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">The Plutus language is not 1–4, or the protocol version is negative.</exception>
     /// <exception cref="NotSupportedException">The protocol version is above 12.</exception>
     /// <exception cref="ArgumentNullException">An argument is null, or the language and protocol version require a cost model.</exception>
     /// <exception cref="InvalidOperationException">The language or a decoded term is unavailable.</exception>

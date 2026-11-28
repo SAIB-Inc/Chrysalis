@@ -31,7 +31,7 @@ internal static class CostModelLoader
             return i < length ? costs[i] : long.MaxValue;
         }
 
-        BuiltinCostModel[] c = new BuiltinCostModel[(int)DefaultFunction.ScaleValue + 1];
+        BuiltinCostModel[] c = new BuiltinCostModel[DefaultFunctionExtensions.Count];
 
         // ===== Integer operations =====
         c[(int)DefaultFunction.AddInteger] = new(
@@ -363,6 +363,21 @@ internal static class CostModelLoader
         c[(int)DefaultFunction.ScaleValue] = new(
             LinearCost.InY(G("scaleValue-cpu-arguments-intercept"), G("scaleValue-cpu-arguments-slope")),
             LinearCost.InY(G("scaleValue-memory-arguments-intercept"), G("scaleValue-memory-arguments-slope")));
+
+        // Batch 7: refused on every ledger path, so only the raw machine charges these.
+        c[(int)DefaultFunction.MultiIndexArray] = new(
+            QuadraticCost.InY(G("multiIndexArray-cpu-arguments-c0"), G("multiIndexArray-cpu-arguments-c1"), G("multiIndexArray-cpu-arguments-c2")),
+            LinearCost.InY(G("multiIndexArray-memory-arguments-intercept"), G("multiIndexArray-memory-arguments-slope")));
+        c[(int)DefaultFunction.Policies] = new(
+            LinearCost.InX(G("policies-cpu-arguments-intercept"), G("policies-cpu-arguments-slope")),
+            LinearCost.InX(G("policies-memory-arguments-intercept"), G("policies-memory-arguments-slope")));
+        c[(int)DefaultFunction.AssetCount] = Constants("assetCount");
+        c[(int)DefaultFunction.KeepPolicies] = new(
+            new MultipliedSizesCost(G("keepPolicies-cpu-arguments-intercept"), G("keepPolicies-cpu-arguments-slope")),
+            new MultipliedSizesCost(G("keepPolicies-memory-arguments-intercept"), G("keepPolicies-memory-arguments-slope")));
+        c[(int)DefaultFunction.DropPolicies] = new(
+            new MultipliedSizesCost(G("dropPolicies-cpu-arguments-intercept"), G("dropPolicies-cpu-arguments-slope")),
+            new MultipliedSizesCost(G("dropPolicies-memory-arguments-intercept"), G("dropPolicies-memory-arguments-slope")));
 
         // CEK machine kinds in counter/flush order, independently of their flat array order.
         MachineCosts machine = new(Cek("cekStartupCost"),

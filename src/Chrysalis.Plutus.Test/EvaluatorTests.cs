@@ -30,10 +30,9 @@ public class EvaluatorTests
             ("V3 non-constant, VM", Record.Exception(() => Evaluator.EvaluateScript(delayScript, vmArguments, 3, 11))),
             ("V3 data constructor, CBOR", Record.Exception(() => Evaluator.EvaluateScript(dataScript, cborArguments, 3, 11))),
             ("V3 data constructor, VM", Record.Exception(() => Evaluator.EvaluateScript(dataScript, vmArguments, 3, 11))),
-            ("Later language, CBOR", Record.Exception(() => Evaluator.EvaluateScript(integerScript, cborArguments, plutusVersion: 4, protocolVersion: 11))),
-            ("Later language, VM", Record.Exception(() => Evaluator.EvaluateScript(integerScript, vmArguments, plutusVersion: 4, protocolVersion: 11)))
-        }, result => Assert.IsType(result.Case.StartsWith("Later language", StringComparison.Ordinal)
-            ? typeof(ArgumentOutOfRangeException) : typeof(InvalidReturnValueException), result.Error));
+            ("V4 integer, CBOR", Record.Exception(() => Evaluator.EvaluateScript(integerScript, cborArguments, 4, 12, NodeBudgetTests.Fixture.Models[2]))),
+            ("V4 integer, VM", Record.Exception(() => Evaluator.EvaluateScript(integerScript, vmArguments, 4, 12, NodeBudgetTests.Fixture.Models[2])))
+        }, result => Assert.IsType<InvalidReturnValueException>(result.Error));
     }
 
     [Theory]
@@ -56,6 +55,7 @@ public class EvaluatorTests
     [InlineData(3, 9)]
     [InlineData(3, 10)]
     [InlineData(3, 12)]
+    [InlineData(4, 12)]
     public void EvaluateScript_RequiresAnArrayExceptForLatestV3(int language, int pv)
     {
         byte[] script = Encode(new ConstTerm<DeBruijn>(UnitConstant.Instance));
@@ -66,7 +66,9 @@ public class EvaluatorTests
     [Theory]
     [InlineData(0, 11, typeof(ArgumentOutOfRangeException))]
     [InlineData(-1, 11, typeof(ArgumentOutOfRangeException))]
-    [InlineData(4, 11, typeof(ArgumentOutOfRangeException))]
+    [InlineData(4, 11, typeof(InvalidOperationException))]
+    [InlineData(4, 13, typeof(NotSupportedException))]
+    [InlineData(5, 12, typeof(ArgumentOutOfRangeException))]
     [InlineData(int.MaxValue, 11, typeof(ArgumentOutOfRangeException))]
     [InlineData(3, -1, typeof(ArgumentOutOfRangeException))]
     [InlineData(3, 13, typeof(NotSupportedException))]
@@ -104,7 +106,22 @@ public class EvaluatorTests
         {
             Assert.Equal(expected, Evaluator.EvaluateScript(script, cborArguments, 3, 11, costs).ExUnits);
             Assert.Equal(expected, Evaluator.EvaluateScript(script, vmArguments, 3, 11, costs).ExUnits);
+            Assert.Equal(expected, Evaluator.EvaluateScript(script, cborArguments, 4, 12, costs).ExUnits);
+            Assert.Equal(expected, Evaluator.EvaluateScript(script, vmArguments, 4, 12, costs).ExUnits);
         }
+    }
+
+    // The raw machine reads a list from its offset, so the lists a tailList makes are read from the right element, and repeated ids, more than the Value has, are skipped.
+    [Theory]
+    [InlineData("[(force (builtin multiIndexArray)) (con (array integer) [10, 20]) [(force (builtin tailList)) (con (list integer) [5, 1])]]", "(con (list integer) [20])")]
+    [InlineData("[(builtin keepPolicies) [(force (builtin tailList)) (con (list bytestring) [#aa, #bb])] (con value [(#aa, [(#, 1)]), (#bb, [(#, 2)])])]", "(con value [(#bb, [(#, 2)])])")]
+    [InlineData("[(builtin dropPolicies) [(force (builtin tailList)) (con (list bytestring) [#aa, #bb])] (con value [(#aa, [(#, 1)]), (#bb, [(#, 2)])])]", "(con value [(#aa, [(#, 1)])])")]
+    [InlineData("[(builtin keepPolicies) (con (list bytestring) [#aa, #aa]) (con value [(#aa, [(#, 1)])])]", "(con value [(#aa, [(#, 1)])])")]
+    [InlineData("[(builtin dropPolicies) (con (list bytestring) [#aa, #aa, #aa]) (con value [(#aa, [(#, 1)])])]", "(con value [])")]
+    public void Batch7ReadsSlicedLists(string source, string expected)
+    {
+        static Program<DeBruijn> Parse(string term) => UplcParser.NameToDeBruijn(UplcParser.Parse($"(program 1.0.0 {term})"));
+        Assert.Equal(UplcParser.PrettyPrint(Parse(expected)), UplcParser.PrettyPrint(Parse(source) with { Term = Evaluator.EvaluateTerm(Parse(source).Term).Result }));
     }
 
     [Fact]

@@ -45,7 +45,7 @@ internal static class DefaultCosts
         22, 1000, 95933, 1, 1, 11, 1000, 277577, 12, 21,
     ];
 
-    // Plutus 1.70.0.0 builtinCostModelC and cekMachineCostsC in V3 ParamName order.
+    // Plutus 1.70.0.0 builtinCostModelC and cekMachineCostsC, and the 19 batch-7 values of builtinCostModelC at commit 52fc5c0a (conformance-batch7.json), in V3 ParamName order.
     internal static readonly ImmutableArray<long> VariantC =
     [
         100788, 420, 1, 1, 1000, 173, 0, 1, 1000, 59957,
@@ -83,6 +83,8 @@ internal static class DefaultCosts
         18413, 45, 21, 219951, 9444, 1, 1000, 172116, 183150, 6,
         24, 21, 213283, 618401, 1998, 28258, 1, 1000, 38159, 2,
         22, 1000, 95933, 1, 1, 11, 1000, 277577, 12, 21,
+        326163, 12304, 2, 4, 3, 129043, 10, 930912, 13220, 4,
+        3, 335279, 57077, 32, 32, 345402, 57932, 32, 36,
     ];
 
     // VmBench reflects on this method and expects a fresh caller-owned array.

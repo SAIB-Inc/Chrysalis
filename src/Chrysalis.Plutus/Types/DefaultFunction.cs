@@ -5,7 +5,9 @@ namespace Chrysalis.Plutus.Types;
 /// All built-in functions available in Plutus Core, ordered by their 7-bit Flat encoding tag.
 /// Ledger language and protocol availability is separate (see VM/EvalTx/Availability.cs).
 /// </summary>
-/// <remarks>Values are Flat tags defined by the Plutus Builtins.hs instance Flat DefaultFun.</remarks>
+/// <remarks>Values are Flat tags defined by the Plutus Builtins.hs instance Flat DefaultFun.
+/// Experimental: batch 7 (tags 101 to 105) follows the node's pinned Plutus. It is present but not yet enabled by any network,
+/// so the ledger paths refuse it; only the raw evaluator runs it.</remarks>
 public enum DefaultFunction
 {
     // Batch 1 — the original builtin set
@@ -122,10 +124,19 @@ public enum DefaultFunction
     ValueData = 98,
     UnValueData = 99,
     ScaleValue = 100,
+
+    // Batch 7 — arrays and Value policies (enabled by no language or protocol version)
+    MultiIndexArray = 101,
+    Policies = 102,
+    AssetCount = 103,
+    KeepPolicies = 104,
+    DropPolicies = 105,
 }
 
 public static class DefaultFunctionExtensions
 {
+    internal static readonly int Count = Enum.GetValues<DefaultFunction>().Length;
+
     private static readonly byte[] Arities =
     [
         2, 2, 2, 2, 2, 2, 2, 2, 2, 2, // 0-9: integer ops
@@ -149,6 +160,7 @@ public static class DefaultFunctionExtensions
         1,                              // 86: ripemd_160
         3, 2, 1, 1, 2, 2, 2,          // 87-93: expMod, dropList, array ops, multiScalarMul
         4, 3, 2, 2, 1, 1, 2,          // 94-100: insertCoin, lookupCoin, unionValue, valueContains, valueData, unValueData, scaleValue
+        2, 1, 1, 2, 2,                 // 101-105: multiIndexArray, policies, assetCount, keepPolicies, dropPolicies
     ];
 
     private static readonly byte[] ForceCounts =
@@ -174,6 +186,7 @@ public static class DefaultFunctionExtensions
         0,                              // 86: ripemd_160
         0, 1, 1, 1, 1, 0, 0,          // 87-93: expMod, dropList, array ops, multiScalarMul
         0, 0, 0, 0, 0, 0, 0,          // 94-100: value ops (no forces)
+        1, 0, 0, 0, 0,                 // 101-105: multiIndexArray (one force), then Value policy ops
     ];
 
     public static int Arity(this DefaultFunction func) => Arities[(int)func];

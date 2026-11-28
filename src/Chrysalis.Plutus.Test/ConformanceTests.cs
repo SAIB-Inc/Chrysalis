@@ -18,10 +18,8 @@ public sealed class ConformanceTests
     private const string DecodeMarker = "parse/decode error";
     private const string EvalMarker = "evaluation failure";
 
-    private static readonly string PinPath = Path.Combine(AppContext.BaseDirectory, "conformance.json");
-    private static readonly Lazy<CorpusPin> PinState = new(LoadPin);
-    private static readonly Lazy<(string Digest, int FileCount)> CorpusState = new(ComputeCorpusDigest);
-    private static readonly Lazy<CostModel> Profile = new(LoadProfile);
+    private static readonly Pin NodePin = new("conformance.json");
+    private static readonly Pin Batch7Pin = new("conformance-batch7.json");
 
     private enum OutcomeKind : byte { DecodeError, EvalFailure, Program }
 
@@ -29,11 +27,30 @@ public sealed class ConformanceTests
 
     private sealed record CorpusPin(string TreeId, string TreePath, string[] BlobPaths, string Sha256, int Files, int Uplc, int Flat);
 
-    private static string CorpusRoot => Path.Combine(AppContext.BaseDirectory, "plutus-conformance", PinState.Value.TreeId);
+    // One pin file: its data, the digest of its fetched folder and its cost profile, each read at first use.
+    private sealed class Pin
+    {
+        internal Pin(string file)
+        {
+            State = new(() => LoadPin(file));
+            Corpus = new(() => ComputeCorpusDigest(this));
+            Profile = new(() => LoadProfile(this));
+        }
 
-    private static string SuiteRoot => Path.Combine(CorpusRoot, PinState.Value.TreePath.Replace('/', Path.DirectorySeparatorChar));
+        internal Lazy<CorpusPin> State { get; }
 
-    internal static string Input(string testCase, string form)
+        internal Lazy<(string Digest, int FileCount)> Corpus { get; }
+
+        internal Lazy<CostModel> Profile { get; }
+    }
+
+    private static string CorpusRoot(Pin pin) => Path.Combine(AppContext.BaseDirectory, "plutus-conformance", pin.State.Value.TreeId);
+
+    private static string SuiteRoot(Pin pin) => Path.Combine(CorpusRoot(pin), pin.State.Value.TreePath.Replace('/', Path.DirectorySeparatorChar));
+
+    internal static string Input(string testCase, string form) => Input(NodePin, testCase, form);
+
+    private static string Input(Pin pin, string testCase, string form)
     {
         ArgumentException.ThrowIfNullOrEmpty(testCase);
         ArgumentNullException.ThrowIfNull(form);
@@ -42,15 +59,19 @@ public sealed class ConformanceTests
             throw new ArgumentOutOfRangeException(nameof(form), form, "Expected 'uplc' or 'flat'.");
         }
 
-        EnsureVerified();
-        string caseDir = Path.Combine(SuiteRoot, testCase.Replace('/', Path.DirectorySeparatorChar));
+        EnsureVerified(pin);
+        string caseDir = Path.Combine(SuiteRoot(pin), testCase.Replace('/', Path.DirectorySeparatorChar));
         return Path.Combine(caseDir, $"{Path.GetFileName(caseDir)}.{form}");
     }
 
-    public static TheoryData<string, string> DiscoverTests()
+    public static TheoryData<string, string> DiscoverTests() => Rows(NodePin);
+
+    public static TheoryData<string, string> Batch7Cases() => Rows(Batch7Pin);
+
+    private static TheoryData<string, string> Rows(Pin pin)
     {
         TheoryData<string, string> data = [];
-        foreach ((string testCase, string form) in DiscoverRows())
+        foreach ((string testCase, string form) in DiscoverRows(pin))
         {
             data.Add(testCase, form);
         }
@@ -59,24 +80,39 @@ public sealed class ConformanceTests
     }
 
     [Fact]
-    public void TheCorpusIsTheNodePinnedSuite()
-    {
-        EnsureVerified();
-        CorpusPin pin = PinState.Value;
+    public void TheCorpusIsTheNodePinnedSuite() => CheckCorpus(NodePin);
 
-        List<(string Case, string Form)> rows = DiscoverRows();
-        Assert.Equal(pin.Uplc, rows.Count(static r => r.Form == "uplc"));
-        Assert.Equal(pin.Flat, rows.Count(static r => r.Form == "flat"));
+    [Fact]
+    public void TheBatch7CasesAreTheNamedSelection()
+    {
+        CheckCorpus(Batch7Pin);
+        Assert.Equal(2, Directory.GetFiles(AppContext.BaseDirectory, "conformance*.json").Length);
+    }
+
+    private static void CheckCorpus(Pin pin)
+    {
+        EnsureVerified(pin);
+        CorpusPin data = pin.State.Value;
+
+        List<(string Case, string Form)> rows = DiscoverRows(pin);
+        Assert.Equal(data.Uplc, rows.Count(static r => r.Form == "uplc"));
+        Assert.Equal(data.Flat, rows.Count(static r => r.Form == "flat"));
     }
 
     [Theory]
     [MemberData(nameof(DiscoverTests))]
-    public void Conformance(string testCase, string form)
+    public void Conformance(string testCase, string form) => Check(NodePin, testCase, form);
+
+    [Theory]
+    [MemberData(nameof(Batch7Cases))]
+    public void Batch7Conformance(string testCase, string form) => Check(Batch7Pin, testCase, form);
+
+    private static void Check(Pin pin, string testCase, string form)
     {
         ArgumentNullException.ThrowIfNull(testCase);
         ArgumentNullException.ThrowIfNull(form);
 
-        string inputPath = Input(testCase, form);
+        string inputPath = Input(pin, testCase, form);
         string dir = Path.GetDirectoryName(inputPath)!;
         string leaf = Path.GetFileName(testCase);
         string expectedPath = $"{inputPath}.expected";
@@ -90,7 +126,7 @@ public sealed class ConformanceTests
         OutcomeKind expectedKind = ClassifyExpected(isFlat ? Encoding.UTF8.GetString(expectedBytes!) : expectedText!);
 
         (OutcomeKind actualKind, Program<DeBruijn>? actualInput, Term<DeBruijn>? actualResultTerm, string? actualBudget) =
-            isFlat ? RunFlat(inputPath) : RunText(inputPath);
+            isFlat ? RunFlat(inputPath, pin) : RunText(inputPath, pin);
 
         List<string> failures = [];
         if (actualKind != expectedKind)
@@ -125,7 +161,7 @@ public sealed class ConformanceTests
         Assert.True(failures.Count == 0, $"{testCase} ({form}): fails with {string.Join('+', failures)}");
     }
 
-    private static (OutcomeKind Kind, Program<DeBruijn>? Input, Term<DeBruijn>? Result, string? Budget) RunText(string path)
+    private static (OutcomeKind Kind, Program<DeBruijn>? Input, Term<DeBruijn>? Result, string? Budget) RunText(string path, Pin pin)
     {
         string source = File.ReadAllText(path);
         Program<DeBruijn> input;
@@ -142,10 +178,10 @@ public sealed class ConformanceTests
             return (OutcomeKind.DecodeError, null, null, null);
         }
 
-        return EvaluateInput(input);
+        return EvaluateInput(input, pin);
     }
 
-    private static (OutcomeKind Kind, Program<DeBruijn>? Input, Term<DeBruijn>? Result, string? Budget) RunFlat(string path)
+    private static (OutcomeKind Kind, Program<DeBruijn>? Input, Term<DeBruijn>? Result, string? Budget) RunFlat(string path, Pin pin)
     {
         byte[] bytes = File.ReadAllBytes(path);
         Program<DeBruijn> input;
@@ -159,15 +195,15 @@ public sealed class ConformanceTests
         }
 
         return Evaluator.IsClosed(input.Term, 0)
-            ? EvaluateInput(input)
+            ? EvaluateInput(input, pin)
             : (OutcomeKind.DecodeError, null, null, null);
     }
 
-    private static (OutcomeKind Kind, Program<DeBruijn>? Input, Term<DeBruijn>? Result, string? Budget) EvaluateInput(Program<DeBruijn> input)
+    private static (OutcomeKind Kind, Program<DeBruijn>? Input, Term<DeBruijn>? Result, string? Budget) EvaluateInput(Program<DeBruijn> input, Pin pin)
     {
         try
         {
-            CekMachine machine = new(null, Profile.Value, Availability.CaserFor(Availability.Dijkstra, input.Version));
+            CekMachine machine = new(null, pin.Profile.Value, Availability.CaserFor(Availability.Dijkstra, input.Version));
             Term<DeBruijn> result = machine.Run(input.Term);
             ExUnitsResult units = Evaluator.UsedUnits(ExBudget.Unlimited, machine.RemainingBudget);
             string budget = string.Create(CultureInfo.InvariantCulture, $"({{cpu: {units.Steps}\n| mem: {units.Mem}}})");
@@ -209,9 +245,9 @@ public sealed class ConformanceTests
         }
     }
 
-    private static List<(string Case, string Form)> DiscoverRows()
+    private static List<(string Case, string Form)> DiscoverRows(Pin pin)
     {
-        if (WalkTree(["plutus-conformance", PinState.Value.TreeId, .. PinState.Value.TreePath.Split('/')], out List<(string RelativePath, string FullPath)> entries, out _) != WalkStatus.Ok)
+        if (WalkTree(["plutus-conformance", pin.State.Value.TreeId, .. pin.State.Value.TreePath.Split('/')], out List<(string RelativePath, string FullPath)> entries, out _) != WalkStatus.Ok)
         {
             return [];
         }
@@ -245,19 +281,19 @@ public sealed class ConformanceTests
         return cmp != 0 ? cmp : string.CompareOrdinal(a.Form, b.Form);
     }
 
-    private static void EnsureVerified()
+    private static void EnsureVerified(Pin pin)
     {
-        (string digest, int fileCount) = CorpusState.Value;
-        Assert.Equal(PinState.Value.Sha256, digest);
-        Assert.Equal(PinState.Value.Files, fileCount);
+        (string digest, int fileCount) = pin.Corpus.Value;
+        Assert.Equal(pin.State.Value.Sha256, digest);
+        Assert.Equal(pin.State.Value.Files, fileCount);
     }
 
-    private static (string Digest, int FileCount) ComputeCorpusDigest()
+    private static (string Digest, int FileCount) ComputeCorpusDigest(Pin pin)
     {
-        WalkStatus status = WalkTree(["plutus-conformance", PinState.Value.TreeId], out List<(string RelativePath, string FullPath)> entries, out string? refusedLink);
+        WalkStatus status = WalkTree(["plutus-conformance", pin.State.Value.TreeId], out List<(string RelativePath, string FullPath)> entries, out string? refusedLink);
         if (status == WalkStatus.Missing)
         {
-            Assert.Fail($"Missing Plutus conformance corpus at '{CorpusRoot}'; run src/Chrysalis.Plutus.Test/fetch_conformance.py");
+            Assert.Fail($"Missing Plutus conformance corpus at '{CorpusRoot(pin)}'; run src/Chrysalis.Plutus.Test/fetch_conformance.py");
         }
 
         if (status == WalkStatus.Symlink)
@@ -352,9 +388,9 @@ public sealed class ConformanceTests
         }
     }
 
-    private static CorpusPin LoadPin()
+    private static CorpusPin LoadPin(string file)
     {
-        using FileStream stream = File.OpenRead(PinPath);
+        using FileStream stream = File.OpenRead(Path.Combine(AppContext.BaseDirectory, file));
         using JsonDocument doc = JsonDocument.Parse(stream);
         JsonElement root = doc.RootElement;
         JsonElement tree = root.GetProperty("tree");
@@ -369,13 +405,13 @@ public sealed class ConformanceTests
             root.GetProperty("flat").GetInt32());
     }
 
-    private static CostModel LoadProfile()
+    private static CostModel LoadProfile(Pin pin)
     {
-        EnsureVerified();
+        EnsureVerified(pin);
         Dictionary<string, long> costs = [];
-        foreach (string blobPath in PinState.Value.BlobPaths)
+        foreach (string blobPath in pin.State.Value.BlobPaths)
         {
-            string fullPath = Path.Combine(CorpusRoot, blobPath.Replace('/', Path.DirectorySeparatorChar));
+            string fullPath = Path.Combine(CorpusRoot(pin), blobPath.Replace('/', Path.DirectorySeparatorChar));
             using FileStream stream = File.OpenRead(fullPath);
             using JsonDocument doc = JsonDocument.Parse(stream);
             Flatten(doc.RootElement, null, costs);

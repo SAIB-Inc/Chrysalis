@@ -26,13 +26,31 @@ internal static class ArrayBuiltins
 
     internal static CekValue LengthOfArray(CekValue[] args) => IntegerResult(UnwrapArrayConstant(args[0]).Values.Length);
 
-    internal static CekValue IndexArray(CekValue[] args)
+    internal static CekValue IndexArray(CekValue[] args) => new VConstant(At(UnwrapArrayConstant(args[0]), UnwrapInteger(args[1]), "indexArray"));
+
+    // Arrays.hs:48-80: the first count above the limit fails, as does an index outside the array. A message names no index, which may have 262,144 bits.
+    private const int MaximumIndexCount = 1024;
+
+    internal static CekValue MultiIndexArray(CekValue[] args)
     {
         ArrayConstant arr = UnwrapArrayConstant(args[0]);
-        BigInteger idx = UnwrapInteger(args[1]);
-        return idx < 0 || idx >= arr.Values.Length
-            ? throw new EvaluationException(
-                $"indexArray: index {idx} out of bounds for array of length {arr.Values.Length}")
-            : new VConstant(arr.Values[(int)idx]);
+        ListConstant indices = UnwrapListConstant(args[1]);
+        if (indices.Count > MaximumIndexCount)
+        {
+            throw new EvaluationException($"multiIndexArray: too many indices (maximum is {MaximumIndexCount})");
+        }
+        ImmutableArray<Constant>.Builder items = ImmutableArray.CreateBuilder<Constant>(indices.Count);
+        for (int i = 0; i < indices.Count; i++)
+        {
+            items.Add(indices.ElementAt(i) is IntegerConstant index
+                ? At(arr, index.Value, "multiIndexArray")
+                : throw new EvaluationException("multiIndexArray: expected an integer index"));
+        }
+        return new VConstant(new ListConstant(arr.ItemType, items.MoveToImmutable()));
     }
+
+    private static Constant At(ArrayConstant arr, BigInteger index, string name) =>
+        index < 0 || index >= arr.Values.Length
+            ? throw new EvaluationException($"{name}: index out of bounds for array of length {arr.Values.Length}")
+            : arr.Values[(int)index];
 }

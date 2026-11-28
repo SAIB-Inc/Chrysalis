@@ -1,6 +1,6 @@
 {-# LANGUAGE DerivingVia #-}
 
-module PlutusLedgerApi.V1.ParamName
+module PlutusLedgerApi.V4.ParamName
   ( ParamName (..)
   , tagWithParamNames
   ) where
@@ -9,11 +9,6 @@ import Data.Ix
 import GHC.Generics
 import PlutusLedgerApi.Common.ParamName
 
-{-| The enumeration of all possible cost model parameter names for this language version.
-
-IMPORTANT: The order of appearance of the data constructors here matters. DO NOT REORDER.
-See Note [Quotation marks in cost model parameter constructors]
-See Note [Cost model parameters from the ledger's point of view] -}
 data ParamName
   = AddInteger'cpu'arguments'intercept
   | AddInteger'cpu'arguments'slope
@@ -65,8 +60,13 @@ data ParamName
   | DecodeUtf8'memory'arguments'intercept
   | DecodeUtf8'memory'arguments'slope
   | DivideInteger'cpu'arguments'constant
-  | DivideInteger'cpu'arguments'model'arguments'intercept
-  | DivideInteger'cpu'arguments'model'arguments'slope
+  | DivideInteger'cpu'arguments'model'arguments'c00
+  | DivideInteger'cpu'arguments'model'arguments'c01
+  | DivideInteger'cpu'arguments'model'arguments'c02
+  | DivideInteger'cpu'arguments'model'arguments'c10
+  | DivideInteger'cpu'arguments'model'arguments'c11
+  | DivideInteger'cpu'arguments'model'arguments'c20
+  | DivideInteger'cpu'arguments'model'arguments'minimum
   | DivideInteger'memory'arguments'intercept
   | DivideInteger'memory'arguments'minimum
   | DivideInteger'memory'arguments'slope
@@ -125,10 +125,14 @@ data ParamName
   | MkPairData'cpu'arguments
   | MkPairData'memory'arguments
   | ModInteger'cpu'arguments'constant
-  | ModInteger'cpu'arguments'model'arguments'intercept
-  | ModInteger'cpu'arguments'model'arguments'slope
+  | ModInteger'cpu'arguments'model'arguments'c00
+  | ModInteger'cpu'arguments'model'arguments'c01
+  | ModInteger'cpu'arguments'model'arguments'c02
+  | ModInteger'cpu'arguments'model'arguments'c10
+  | ModInteger'cpu'arguments'model'arguments'c11
+  | ModInteger'cpu'arguments'model'arguments'c20
+  | ModInteger'cpu'arguments'model'arguments'minimum
   | ModInteger'memory'arguments'intercept
-  | ModInteger'memory'arguments'minimum
   | ModInteger'memory'arguments'slope
   | MultiplyInteger'cpu'arguments'intercept
   | MultiplyInteger'cpu'arguments'slope
@@ -137,17 +141,30 @@ data ParamName
   | NullList'cpu'arguments
   | NullList'memory'arguments
   | QuotientInteger'cpu'arguments'constant
-  | QuotientInteger'cpu'arguments'model'arguments'intercept
-  | QuotientInteger'cpu'arguments'model'arguments'slope
+  | QuotientInteger'cpu'arguments'model'arguments'c00
+  | QuotientInteger'cpu'arguments'model'arguments'c01
+  | QuotientInteger'cpu'arguments'model'arguments'c02
+  | QuotientInteger'cpu'arguments'model'arguments'c10
+  | QuotientInteger'cpu'arguments'model'arguments'c11
+  | QuotientInteger'cpu'arguments'model'arguments'c20
+  | QuotientInteger'cpu'arguments'model'arguments'minimum
   | QuotientInteger'memory'arguments'intercept
   | QuotientInteger'memory'arguments'minimum
   | QuotientInteger'memory'arguments'slope
   | RemainderInteger'cpu'arguments'constant
-  | RemainderInteger'cpu'arguments'model'arguments'intercept
-  | RemainderInteger'cpu'arguments'model'arguments'slope
+  | RemainderInteger'cpu'arguments'model'arguments'c00
+  | RemainderInteger'cpu'arguments'model'arguments'c01
+  | RemainderInteger'cpu'arguments'model'arguments'c02
+  | RemainderInteger'cpu'arguments'model'arguments'c10
+  | RemainderInteger'cpu'arguments'model'arguments'c11
+  | RemainderInteger'cpu'arguments'model'arguments'c20
+  | RemainderInteger'cpu'arguments'model'arguments'minimum
   | RemainderInteger'memory'arguments'intercept
-  | RemainderInteger'memory'arguments'minimum
   | RemainderInteger'memory'arguments'slope
+  | SerialiseData'cpu'arguments'intercept
+  | SerialiseData'cpu'arguments'slope
+  | SerialiseData'memory'arguments'intercept
+  | SerialiseData'memory'arguments'slope
   | Sha2_256'cpu'arguments'intercept
   | Sha2_256'cpu'arguments'slope
   | Sha2_256'memory'arguments
@@ -178,17 +195,11 @@ data ParamName
   | UnListData'memory'arguments
   | UnMapData'cpu'arguments
   | UnMapData'memory'arguments
+  | VerifyEcdsaSecp256k1Signature'cpu'arguments
+  | VerifyEcdsaSecp256k1Signature'memory'arguments
   | VerifyEd25519Signature'cpu'arguments'intercept
   | VerifyEd25519Signature'cpu'arguments'slope
   | VerifyEd25519Signature'memory'arguments
-  | -- End of original cost model parameters
-    -- Remaining parameters to be deployed in PV11
-    SerialiseData'cpu'arguments'intercept
-  | SerialiseData'cpu'arguments'slope
-  | SerialiseData'memory'arguments'intercept
-  | SerialiseData'memory'arguments'slope
-  | VerifyEcdsaSecp256k1Signature'cpu'arguments
-  | VerifyEcdsaSecp256k1Signature'memory'arguments
   | VerifySchnorrSecp256k1Signature'cpu'arguments'intercept
   | VerifySchnorrSecp256k1Signature'cpu'arguments'slope
   | VerifySchnorrSecp256k1Signature'memory'arguments
@@ -250,7 +261,8 @@ data ParamName
   | ByteStringToInteger'cpu'arguments'c2
   | ByteStringToInteger'memory'arguments'intercept
   | ByteStringToInteger'memory'arguments'slope
-  | AndByteString'cpu'arguments'intercept
+  | -- Batch 5
+    AndByteString'cpu'arguments'intercept
   | AndByteString'cpu'arguments'slope1
   | AndByteString'cpu'arguments'slope2
   | AndByteString'memory'arguments'intercept
@@ -296,7 +308,8 @@ data ParamName
   | Ripemd_160'cpu'arguments'intercept
   | Ripemd_160'cpu'arguments'slope
   | Ripemd_160'memory'arguments
-  | ExpModInteger'cpu'arguments'coefficient00
+  | -- Batch 6
+    ExpModInteger'cpu'arguments'coefficient00
   | ExpModInteger'cpu'arguments'coefficient11
   | ExpModInteger'cpu'arguments'coefficient12
   | ExpModInteger'memory'arguments'intercept
@@ -349,7 +362,7 @@ data ParamName
   | ScaleValue'cpu'arguments'slope
   | ScaleValue'memory'arguments'intercept
   | ScaleValue'memory'arguments'slope
-  | -- Batch 7, not yet deployed
+  | -- Batch 7
     MultiIndexArray'cpu'arguments'c0
   | MultiIndexArray'cpu'arguments'c1
   | MultiIndexArray'cpu'arguments'c2
@@ -361,5 +374,13 @@ data ParamName
   | Policies'cpu'arguments'slope
   | Policies'memory'arguments'intercept
   | Policies'memory'arguments'slope
+  | KeepPolicies'cpu'arguments'intercept
+  | KeepPolicies'cpu'arguments'slope
+  | KeepPolicies'memory'arguments'intercept
+  | KeepPolicies'memory'arguments'slope
+  | DropPolicies'cpu'arguments'intercept
+  | DropPolicies'cpu'arguments'slope
+  | DropPolicies'memory'arguments'intercept
+  | DropPolicies'memory'arguments'slope
   deriving stock (Eq, Ord, Enum, Ix, Bounded, Generic)
   deriving (IsParamName) via (GenericParamName ParamName)

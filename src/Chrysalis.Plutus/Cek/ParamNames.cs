@@ -3,7 +3,7 @@ using System.Collections.Immutable;
 
 namespace Chrysalis.Plutus.Cek;
 
-// The PV11 prefixes of the upstream ParamName enums (see the CostModels golden manifest).
+// The upstream ParamName enums of plutus 1.71.0.0, whole (see the CostModels golden manifest); Plutus V4 takes V3.
 internal static class ParamNames
 {
     internal static readonly ImmutableArray<string> V1 =
@@ -118,7 +118,13 @@ internal static class ParamNames
         "valueData-memory-arguments-intercept", "valueData-memory-arguments-slope", "unValueData-cpu-arguments-c0",
         "unValueData-cpu-arguments-c1", "unValueData-cpu-arguments-c2", "unValueData-memory-arguments-intercept",
         "unValueData-memory-arguments-slope", "scaleValue-cpu-arguments-intercept", "scaleValue-cpu-arguments-slope",
-        "scaleValue-memory-arguments-intercept", "scaleValue-memory-arguments-slope",
+        "scaleValue-memory-arguments-intercept", "scaleValue-memory-arguments-slope", "multiIndexArray-cpu-arguments-c0",
+        "multiIndexArray-cpu-arguments-c1", "multiIndexArray-cpu-arguments-c2", "multiIndexArray-memory-arguments-intercept",
+        "multiIndexArray-memory-arguments-slope", "assetCount-cpu-arguments", "assetCount-memory-arguments",
+        "policies-cpu-arguments-intercept", "policies-cpu-arguments-slope", "policies-memory-arguments-intercept",
+        "policies-memory-arguments-slope", "keepPolicies-cpu-arguments-intercept", "keepPolicies-cpu-arguments-slope",
+        "keepPolicies-memory-arguments-intercept", "keepPolicies-memory-arguments-slope", "dropPolicies-cpu-arguments-intercept",
+        "dropPolicies-cpu-arguments-slope", "dropPolicies-memory-arguments-intercept", "dropPolicies-memory-arguments-slope",
     ];
     internal static readonly ImmutableArray<string> V2 =
     [
@@ -232,7 +238,13 @@ internal static class ParamNames
         "valueData-memory-arguments-intercept", "valueData-memory-arguments-slope", "unValueData-cpu-arguments-c0",
         "unValueData-cpu-arguments-c1", "unValueData-cpu-arguments-c2", "unValueData-memory-arguments-intercept",
         "unValueData-memory-arguments-slope", "scaleValue-cpu-arguments-intercept", "scaleValue-cpu-arguments-slope",
-        "scaleValue-memory-arguments-intercept", "scaleValue-memory-arguments-slope",
+        "scaleValue-memory-arguments-intercept", "scaleValue-memory-arguments-slope", "multiIndexArray-cpu-arguments-c0",
+        "multiIndexArray-cpu-arguments-c1", "multiIndexArray-cpu-arguments-c2", "multiIndexArray-memory-arguments-intercept",
+        "multiIndexArray-memory-arguments-slope", "assetCount-cpu-arguments", "assetCount-memory-arguments",
+        "policies-cpu-arguments-intercept", "policies-cpu-arguments-slope", "policies-memory-arguments-intercept",
+        "policies-memory-arguments-slope", "keepPolicies-cpu-arguments-intercept", "keepPolicies-cpu-arguments-slope",
+        "keepPolicies-memory-arguments-intercept", "keepPolicies-memory-arguments-slope", "dropPolicies-cpu-arguments-intercept",
+        "dropPolicies-cpu-arguments-slope", "dropPolicies-memory-arguments-intercept", "dropPolicies-memory-arguments-slope",
     ];
     internal static readonly ImmutableArray<string> V3 =
     [
@@ -352,6 +364,12 @@ internal static class ParamNames
         "valueData-memory-arguments-intercept", "valueData-memory-arguments-slope", "unValueData-cpu-arguments-c0",
         "unValueData-cpu-arguments-c1", "unValueData-cpu-arguments-c2", "unValueData-memory-arguments-intercept",
         "unValueData-memory-arguments-slope", "scaleValue-cpu-arguments-intercept", "scaleValue-cpu-arguments-slope",
-        "scaleValue-memory-arguments-intercept", "scaleValue-memory-arguments-slope",
+        "scaleValue-memory-arguments-intercept", "scaleValue-memory-arguments-slope", "multiIndexArray-cpu-arguments-c0",
+        "multiIndexArray-cpu-arguments-c1", "multiIndexArray-cpu-arguments-c2", "multiIndexArray-memory-arguments-intercept",
+        "multiIndexArray-memory-arguments-slope", "assetCount-cpu-arguments", "assetCount-memory-arguments",
+        "policies-cpu-arguments-intercept", "policies-cpu-arguments-slope", "policies-memory-arguments-intercept",
+        "policies-memory-arguments-slope", "keepPolicies-cpu-arguments-intercept", "keepPolicies-cpu-arguments-slope",
+        "keepPolicies-memory-arguments-intercept", "keepPolicies-memory-arguments-slope", "dropPolicies-cpu-arguments-intercept",
+        "dropPolicies-cpu-arguments-slope", "dropPolicies-memory-arguments-intercept", "dropPolicies-memory-arguments-slope",
     ];
 }

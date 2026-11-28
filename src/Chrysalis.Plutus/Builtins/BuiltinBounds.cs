@@ -22,6 +22,7 @@ internal static class BuiltinBounds
     private const int ListOfInteger = 8;
     private const int ListOfG1 = 9;
     private const int ListOfG2 = 10;
+    private const int ListOfBytes = 11;
 
     // Indexed by (kind - ListOfData). PairType is shared to avoid per-call allocation.
     private static readonly ConstantType[] ListItemTypes =
@@ -30,7 +31,8 @@ internal static class BuiltinBounds
         new PairType(ConstantType.PlutusData, ConstantType.PlutusData),
         ConstantType.PlutusInteger,
         ConstantType.Bls12381G1Element,
-        ConstantType.Bls12381G2Element
+        ConstantType.Bls12381G2Element,
+        ConstantType.PlutusByteString
     ];
 
     internal static void CheckArguments(DefaultFunction func, CekValue[] args, Variant variant)
@@ -101,6 +103,8 @@ internal static class BuiltinBounds
             (int)MapData => Pack(ListOfPairData),
             (int)ListData => Pack(ListOfData),
             (int)WriteBits => Pack(None, ListOfInteger),
+            (int)MultiIndexArray => Pack(None, ListOfInteger),
+            (int)KeepPolicies or (int)DropPolicies => Pack(ListOfBytes),
             (int)Bls12_381_G1_MultiScalarMul => Pack(ListOfInteger, ListOfG1),
             (int)Bls12_381_G2_MultiScalarMul => Pack(ListOfInteger, ListOfG2),
             _ => None

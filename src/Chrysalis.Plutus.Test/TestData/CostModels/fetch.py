@@ -9,6 +9,7 @@ import subprocess
 
 ROOT = Path(__file__).resolve().parent
 PLUTUS = "1.70.0.0"
+NAMED = "52fc5c0a111f9ae70fae22728bfc46458f63c5ca"
 
 
 def git(repo, *args):
@@ -43,8 +44,8 @@ def emit(plutus, rows):
         print("    ];")
 
     for lang in ("V1", "V2", "V3"):
-        path = next(row["upstreamPath"] for row in rows if row["path"] == f"plutus-{PLUTUS}/{lang}/ParamName.hs")
-        source = git(plutus, "show", f"{PLUTUS}:{path}").decode().split("data ParamName", 1)[1].split("Batch 7", 1)[0]
+        row = next(row for row in rows if row["path"] == f"plutus-1.71.0.0/{lang}/ParamName.hs")
+        source = git(plutus, "show", f"{row['tag']}:{row['upstreamPath']}").decode().split("data ParamName", 1)[1].split("deriving", 1)[0]
         names = [s[0].lower() + s[1:].replace("'", "-") for s in re.findall(r"(?m)^[ \t]*[=|]?[ \t]*([A-Z][\w']*)", source)]
         table(lang, "string", [json.dumps(name) for name in names], 3)
 
@@ -56,8 +57,9 @@ def emit(plutus, rows):
                 yield prefix + key, value
 
     params = {}
-    for file in ("builtinCostModelC.json", "cekMachineCostsC.json"):
-        params.update(leaves(json.loads(git(plutus, "show", f"{PLUTUS}:plutus-core/cost-model/data/{file}"))))
+    for rev in (NAMED, PLUTUS):
+        for file in ("builtinCostModelC.json", "cekMachineCostsC.json"):
+            params.update(leaves(json.loads(git(plutus, "show", f"{rev}:plutus-core/cost-model/data/{file}"))))
     table("VariantC", "long", [str(params[name]) for name in names], 10)
 
 

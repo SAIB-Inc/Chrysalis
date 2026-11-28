@@ -17,7 +17,7 @@ internal static class BuiltinRuntime
 
     private static Func<CekValue[], CekValue>[] BuildDispatchers()
     {
-        Func<CekValue[], CekValue>[] d = new Func<CekValue[], CekValue>[101];
+        Func<CekValue[], CekValue>[] d = new Func<CekValue[], CekValue>[DefaultFunctionExtensions.Count];
 
         // Integer arithmetic
         d[(int)DefaultFunction.AddInteger] = IntegerBuiltins.AddInteger;
@@ -142,6 +142,7 @@ internal static class BuiltinRuntime
         d[(int)DefaultFunction.ListToArray] = ArrayBuiltins.ListToArray;
         d[(int)DefaultFunction.LengthOfArray] = ArrayBuiltins.LengthOfArray;
         d[(int)DefaultFunction.IndexArray] = ArrayBuiltins.IndexArray;
+        d[(int)DefaultFunction.MultiIndexArray] = ArrayBuiltins.MultiIndexArray;
 
         // Value operations
         d[(int)DefaultFunction.InsertCoin] = ValueBuiltins.InsertCoin;
@@ -151,6 +152,10 @@ internal static class BuiltinRuntime
         d[(int)DefaultFunction.ValueData] = ValueBuiltins.ValueData;
         d[(int)DefaultFunction.UnValueData] = ValueBuiltins.UnValueData;
         d[(int)DefaultFunction.ScaleValue] = ValueBuiltins.ScaleValue;
+        d[(int)DefaultFunction.Policies] = ValueBuiltins.Policies;
+        d[(int)DefaultFunction.AssetCount] = ValueBuiltins.AssetCount;
+        d[(int)DefaultFunction.KeepPolicies] = ValueBuiltins.KeepPolicies;
+        d[(int)DefaultFunction.DropPolicies] = ValueBuiltins.DropPolicies;
 
         return d;
     }

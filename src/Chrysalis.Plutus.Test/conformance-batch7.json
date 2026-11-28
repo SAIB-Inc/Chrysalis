@@ -1,0 +1,16 @@
+{
+  "source": "https://github.com/IntersectMBO/plutus",
+  "commit": "52fc5c0a111f9ae70fae22728bfc46458f63c5ca",
+  "pinnedBy": "V8: plutus master's batch-7 cases, run against the builtins directly; no released plutus tag has them",
+  "licence": "Apache-2.0",
+  "tree": { "path": "plutus-conformance/test-cases/uplc/evaluation/builtin/semantics", "id": "1a2858fd1c0f0c3a98548d29321866632bcc7554" },
+  "select": ["assetCount", "dropPolicies", "keepPolicies", "multiIndexArray", "policies"],
+  "blobs": {
+    "plutus-core/cost-model/data/builtinCostModelE.json": "f2bffae2029fb110dd8da382565913cee33859a8",
+    "plutus-core/cost-model/data/cekMachineCostsE.json": "428b872b202e26f4d2b04456b04834112c813293"
+  },
+  "sha256": "fdfe5e3e5da8190110190037fece9a07b793e0658e7d0e8ea386d8a8ac5a3ce8",
+  "files": 553,
+  "uplc": 91,
+  "flat": 91
+}
