@@ -826,7 +826,7 @@ class ReviewGateTests(unittest.TestCase):
         self.assertIs(payload['noiseRecords'], True)
         self.assertEqual([(e['id'], e['kind'], e['aPairs'], e['chargeSeconds']) for e in payload['entries']], [
             ('time/micro-unions-read', 'time', 16, 8), ('time/micro-unions-switch', 'time', 16, 8),
-            ('time/micro-unions-construct', 'time', 16, 8), ('time/micro-unions-nested', 'time', 16, 8),
+            ('time/micro-unions-construct', 'time', 32, 8), ('time/micro-unions-nested', 'time', 16, 8),
             ('time/micro-field-read', 'time', 16, 20),
         ])
         area_patterns = config['areas']['CBOR decode']['time']
@@ -852,7 +852,7 @@ class ReviewGateTests(unittest.TestCase):
         _, expanded = guest.results_limits(plan, strict=True)
         processes = (expanded - guest.MAX_RESULTS) // guest.PER_PROCESS_EXPANDED
         self.assertEqual((plan['rawSeconds'], plan['measurementCutoffSeconds'], plan['destroyGuardSeconds'], plan['limitUsd'], processes),
-                         (2396, 3239, 3584, 0.7952, 186))
+                         (2652, 3533, 3878, 0.9115, 218))
         self.assertEqual(plan['design'], 'noise-band')
         self.assertFalse(plan['repeatAllowed'])
         self.assertEqual(plan['orderingProof'], gate_prepare.ORDERING_WORK)
