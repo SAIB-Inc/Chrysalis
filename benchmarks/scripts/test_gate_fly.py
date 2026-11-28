@@ -1045,8 +1045,11 @@ class LauncherTests(unittest.TestCase):
     def test_public_dispatcher_forwards_interrupt_and_waits_for_cleanup(self):
         for sig in (signal.SIGINT,signal.SIGTERM):
             with self.subTest(signal=sig), tempfile.TemporaryDirectory() as td:
-                root=Path(td)/'benchmarks/out/gate-interrupt';_,_,env=fixture(root,watchdog_delay=20)
+                root=Path(td)/'benchmarks/out/gate-interrupt';host,seal,env=fixture(root,watchdog_delay=20)
                 stub=root/'stubbin/fly';stub.write_text(stub.read_text().replace("get('GATE_STUB_SESSION_DELAY', '0')","get('GATE_STUB_SESSION_DELAY', '10')"))
+                # Hold cleanup's start open so the second interrupt arrives before it ignores signals.
+                launcher=host/'gate_fly.sh';source=launcher.read_text();self.assertEqual(source.count('  trap - EXIT\n'),1);launcher.write_text(source.replace('  trap - EXIT\n','  sleep 1 || :\n  trap - EXIT\n'))
+                seal['files']['input/fly/gate_fly.sh']=gate.digest(launcher);gate.write_seal(root,seal)
                 command=[sys.executable,'-c',"import sys;from pathlib import Path;sys.path.insert(0,sys.argv[1]);import gate,gate_bundle;gate.REPO=Path(sys.argv[2]).parents[2];raise SystemExit(gate_bundle.fly_command(Path(sys.argv[2],'seal.id').read_text().strip()))",str(HERE),str(root)]
                 with (root/'public.log').open('w') as stream:
                     process=subprocess.Popen(command,env=env,stdout=stream,stderr=subprocess.STDOUT,start_new_session=True)
@@ -1054,7 +1057,8 @@ class LauncherTests(unittest.TestCase):
                         deadline=time.monotonic()+8
                         while not (root/'state.json').exists() or not json.loads((root/'state.json').read_text()).get('sessionStarted'):
                             self.assertIsNone(process.poll());self.assertLess(time.monotonic(),deadline);time.sleep(.02)
-                        os.killpg(process.pid,sig)
+                        os.killpg(process.pid,sig);time.sleep(.5)
+                        with contextlib.suppress(ProcessLookupError):os.killpg(process.pid,sig)
                         self.assertNotEqual(process.wait(timeout=12),0)
                         note=next((root/'time/runs').iterdir())
                         self.assertTrue((note/'cleanup-proof.json').exists(),(root/'public.log').read_text())
