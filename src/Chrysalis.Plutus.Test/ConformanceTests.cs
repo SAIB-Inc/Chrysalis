@@ -19,21 +19,15 @@ public sealed class ConformanceTests
     private const string EvalMarker = "evaluation failure";
 
     private static readonly string PinPath = Path.Combine(AppContext.BaseDirectory, "conformance.json");
-    private static readonly string KnownFailuresPath = Path.Combine(AppContext.BaseDirectory, "conformance-known-failures.tsv");
     private static readonly Lazy<CorpusPin> PinState = new(LoadPin);
     private static readonly Lazy<(string Digest, int FileCount)> CorpusState = new(ComputeCorpusDigest);
     private static readonly Lazy<CostModel> Profile = new(LoadProfile);
-    private static readonly Lazy<KnownFailureList> KnownFailures = new(LoadKnownFailures);
 
     private enum OutcomeKind : byte { DecodeError, EvalFailure, Program }
 
     private enum WalkStatus : byte { Ok, Missing, Symlink }
 
     private sealed record CorpusPin(string TreeId, string TreePath, string[] BlobPaths, string Sha256, int Files, int Uplc, int Flat);
-
-    private sealed record KnownFailure(string Owner, string Failure, string Reason);
-
-    private sealed record KnownFailureList(Dictionary<(string Case, string Form), KnownFailure> Entries, List<string> Errors);
 
     private static string CorpusRoot => Path.Combine(AppContext.BaseDirectory, "plutus-conformance", PinState.Value.TreeId);
 
@@ -73,12 +67,6 @@ public sealed class ConformanceTests
         List<(string Case, string Form)> rows = DiscoverRows();
         Assert.Equal(pin.Uplc, rows.Count(static r => r.Form == "uplc"));
         Assert.Equal(pin.Flat, rows.Count(static r => r.Form == "flat"));
-
-        KnownFailureList list = KnownFailures.Value;
-        Assert.True(list.Errors.Count == 0, string.Join('\n', list.Errors));
-
-        HashSet<(string Case, string Form)> discovered = [.. rows];
-        Assert.All(list.Entries.Keys, key => Assert.True(discovered.Contains(key), $"Unknown conformance row: {key.Case} ({key.Form})"));
     }
 
     [Theory]
@@ -134,23 +122,7 @@ public sealed class ConformanceTests
             }
         }
 
-        string actualFailure = string.Join('+', failures);
-        if (KnownFailures.Value.Entries.TryGetValue((testCase, form), out KnownFailure? listed))
-        {
-            if (actualFailure.Length == 0)
-            {
-                Assert.Fail($"{testCase} ({form}): now passes: remove its line (was {listed.Owner} {listed.Failure})");
-            }
-
-            if (!string.Equals(actualFailure, listed.Failure, StringComparison.Ordinal))
-            {
-                Assert.Fail($"{testCase} ({form}): listed {listed.Failure}, found {actualFailure}");
-            }
-        }
-        else if (actualFailure.Length > 0)
-        {
-            Assert.Fail($"{testCase} ({form}): fails with {actualFailure} but is not listed");
-        }
+        Assert.True(failures.Count == 0, $"{testCase} ({form}): fails with {string.Join('+', failures)}");
     }
 
     private static (OutcomeKind Kind, Program<DeBruijn>? Input, Term<DeBruijn>? Result, string? Budget) RunText(string path)
@@ -195,7 +167,7 @@ public sealed class ConformanceTests
     {
         try
         {
-            CekMachine machine = new(null, Profile.Value);
+            CekMachine machine = new(null, Profile.Value, Availability.CaserFor(Availability.Dijkstra, input.Version));
             Term<DeBruijn> result = machine.Run(input.Term);
             ExUnitsResult units = Evaluator.UsedUnits(ExBudget.Unlimited, machine.RemainingBudget);
             string budget = string.Create(CultureInfo.InvariantCulture, $"({{cpu: {units.Steps}\n| mem: {units.Mem}}})");
@@ -410,7 +382,8 @@ public sealed class ConformanceTests
         }
 
         long[] values = [.. ParamNames.V3.Select(name => costs[name])];
-        return CostModelLoader.FromFlat(values, 3, Variant.E);
+        // plutus-conformance/CekEvaluator.hs:48-54: variant G, cost parameters E, and the caser of the newest protocol version per program (EvaluateInput).
+        return CostModelLoader.FromFlat(values, 3, Variant.G);
 
         static void Flatten(JsonElement element, string? prefix, Dictionary<string, long> target)
         {
@@ -426,56 +399,5 @@ public sealed class ConformanceTests
                 target.Add(prefix!, element.GetInt64());
             }
         }
-    }
-
-    private static KnownFailureList LoadKnownFailures()
-    {
-        Dictionary<(string Case, string Form), KnownFailure> entries = [];
-        List<string> errors = [];
-        if (!File.Exists(KnownFailuresPath))
-        {
-            errors.Add($"Missing known-failures file: {KnownFailuresPath}");
-            return new(entries, errors);
-        }
-
-        string[] lines = File.ReadAllLines(KnownFailuresPath);
-        if (lines.Length == 0 || lines[0] != "case\tform\towner\tfailure\treason")
-        {
-            errors.Add("Invalid header in conformance-known-failures.tsv");
-            return new(entries, errors);
-        }
-
-        (string Case, string Form)? prev = null;
-        for (int i = 1; i < lines.Length; i++)
-        {
-            string[] cols = lines[i].Split('\t');
-            if (cols.Length != 5 || cols.Any(static c => string.IsNullOrWhiteSpace(c) || c.Trim() != c))
-            {
-                errors.Add($"Line {i + 1}: malformed columns");
-                continue;
-            }
-
-            (string testCase, string form, string owner, string failure, string reason) = (cols[0], cols[1], cols[2], cols[3], cols[4]);
-            if (form is not ("uplc" or "flat"))
-            {
-                errors.Add($"Line {i + 1}: invalid form '{form}'");
-            }
-
-            if (owner is not ("V6" or "V7" or "V8"))
-            {
-                errors.Add($"Line {i + 1}: invalid owner '{owner}'");
-            }
-
-            (string Case, string Form) key = (testCase, form);
-            if (prev is { } last && CompareRow(key, last) <= 0)
-            {
-                errors.Add($"Line {i + 1}: out-of-order or duplicate key ({testCase}, {form})");
-            }
-
-            prev = key;
-            _ = entries.TryAdd(key, new(owner, failure, reason));
-        }
-
-        return new(entries, errors);
     }
 }

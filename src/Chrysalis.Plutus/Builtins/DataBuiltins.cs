@@ -87,6 +87,16 @@ internal static class DataBuiltins
                 $"unConstrData: expected constr data, got {d.GetType().Name}");
         }
 
+        return new VConstant(new PairConstant(
+            ConstantType.PlutusInteger,
+            new ListType(ConstantType.PlutusData),
+            new IntegerConstant(constr.Tag),
+            ConstrFields(constr)));
+    }
+
+    /// <summary>The fields of a constructor as the <c>list data</c> that <c>unConstrData</c> returns and a case on a Data constructor passes.</summary>
+    internal static ListConstant ConstrFields(PlutusDataConstr constr)
+    {
         ImmutableArray<Constant>.Builder fieldConstants =
             ImmutableArray.CreateBuilder<Constant>(constr.Fields.Length);
         foreach (PlutusData f in constr.Fields)
@@ -94,11 +104,7 @@ internal static class DataBuiltins
             fieldConstants.Add(new DataConstant(f));
         }
 
-        return new VConstant(new PairConstant(
-            ConstantType.PlutusInteger,
-            new ListType(ConstantType.PlutusData),
-            new IntegerConstant(constr.Tag),
-            new ListConstant(ConstantType.PlutusData, fieldConstants.MoveToImmutable())));
+        return new ListConstant(ConstantType.PlutusData, fieldConstants.MoveToImmutable());
     }
 
     internal static CekValue UnMapData(CekValue[] args)

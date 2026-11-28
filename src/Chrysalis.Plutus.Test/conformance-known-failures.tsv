@@ -1,5 +1,0 @@
-case	form	owner	failure	reason
-term/constant-case/data/data-01	flat	V7	outcome	the machine refuses case on a Data constant (program 1.2.0)
-term/constant-case/data/data-01	uplc	V7	outcome	the machine refuses case on a Data constant (program 1.2.0)
-term/constant-case/data/data-02	flat	V7	outcome	the machine refuses case on a Data constant (program 1.2.0)
-term/constant-case/data/data-02	uplc	V7	outcome	the machine refuses case on a Data constant (program 1.2.0)

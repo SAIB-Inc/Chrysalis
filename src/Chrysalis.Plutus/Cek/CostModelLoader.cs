@@ -379,7 +379,8 @@ internal static class CostModelLoader
         {
             string key = builtin + "-cpu-arguments-";
             string inner = key + "model-arguments-";
-            CostFunction model = variant is Variant.A or Variant.B or Variant.D
+            // F takes D's costs and G takes E's (ExBudgetingDefaults.hs:158-159,257-258).
+            CostFunction model = variant is Variant.A or Variant.B or Variant.D or Variant.F
                 ? new MultipliedSizesCost(G(inner + "intercept"), G(inner + "slope"))
                 : new QuadraticInXAndYCost(G(inner + "minimum"), G(inner + "c00"), G(inner + "c10"), G(inner + "c01"),
                     G(inner + "c20"), G(inner + "c11"), G(inner + "c02"));
@@ -393,4 +394,4 @@ internal static class CostModelLoader
     }
 }
 
-internal enum Variant : byte { A, B, C, D, E }
+internal enum Variant : byte { A, B, C, D, E, F, G }

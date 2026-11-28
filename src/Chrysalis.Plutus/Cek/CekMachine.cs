@@ -28,7 +28,7 @@ public sealed class CekMachine
     private readonly MachineCosts _machineCosts;
     private readonly bool _measuring;
     private readonly Variant _variant;
-    private readonly bool _caseOnConstants;
+    private readonly Caser _caser;
 
     // Machine state (mutable for zero-allocation hot loop)
     private readonly ContextStack _ctxStack = new();
@@ -46,28 +46,28 @@ public sealed class CekMachine
     }
 
     public CekMachine(ExBudget? initialBudget = null)
-        : this(initialBudget, CostModel.Default, caseOnConstants: true)
+        : this(initialBudget, CostModel.Default, Caser.Full)
     {
     }
 
     internal CekMachine(ExBudget initialBudget, BuiltinCostModel[] builtinCosts)
-        : this(initialBudget, ImmutableCollectionsMarshal.AsImmutableArray(builtinCosts), MachineCosts.Default, Variant.C, true)
+        : this(initialBudget, ImmutableCollectionsMarshal.AsImmutableArray(builtinCosts), MachineCosts.Default, Variant.C, Caser.Full)
     {
     }
 
-    internal CekMachine(ExBudget? initialBudget, CostModel model, bool caseOnConstants = true)
-        : this(initialBudget, model.Builtins, model.Machine, model.Variant, caseOnConstants)
+    internal CekMachine(ExBudget? initialBudget, CostModel model, Caser caser = Caser.Full)
+        : this(initialBudget, model.Builtins, model.Machine, model.Variant, caser)
     {
     }
 
-    private CekMachine(ExBudget? initialBudget, ImmutableArray<BuiltinCostModel> builtinCosts, MachineCosts machineCosts, Variant variant, bool caseOnConstants)
+    private CekMachine(ExBudget? initialBudget, ImmutableArray<BuiltinCostModel> builtinCosts, MachineCosts machineCosts, Variant variant, Caser caser)
     {
         RemainingBudget = initialBudget ?? ExBudget.Unlimited;
         _measuring = initialBudget is null;
         _builtinCosts = builtinCosts;
         _machineCosts = machineCosts;
         _variant = variant;
-        _caseOnConstants = caseOnConstants;
+        _caser = caser;
     }
 
     /// <summary>Enables per-step-kind and per-builtin cost tracking for debugging.</summary>
@@ -496,11 +496,11 @@ public sealed class CekMachine
                     }
                     else if (value is VConstant vc)
                     {
-                        if (!_caseOnConstants)
+                        if (_caser == Caser.Unavailable)
                         {
                             throw new EvaluationException("case on a builtin constant is not available before protocol version 11");
                         }
-                        (tag, fields, fieldCount) = ConstantToConstr(vc.Value, branchCount);
+                        (tag, fields, fieldCount) = ConstantToConstr(vc.Value, branchCount, _caser == Caser.Full);
                     }
                     else
                     {
@@ -642,7 +642,7 @@ public sealed class CekMachine
             return null;
         }
         Builtins.BuiltinBounds.CheckCharged(func, args, _variant);
-        return func == DefaultFunction.ConsByteString && _variant is Variant.A or Variant.B or Variant.D
+        return func == DefaultFunction.ConsByteString && _variant is Variant.A or Variant.B or Variant.D or Variant.F
             ? Builtins.ByteStringBuiltins.ConsByteStringWrapping(args)
             : Builtins.BuiltinRuntime.Call(func, args);
     }
@@ -650,19 +650,20 @@ public sealed class CekMachine
     // --- Constant case decomposition (UPLC 1.1.0) ---
 
     private static (ulong Tag, CekValue[]? Fields, int FieldCount) ConstantToConstr(
-        Constant c, int numBranches)
+        Constant c, int numBranches, bool allowData)
     {
         switch (c)
         {
             case IntegerConstant i:
-                {
-                    BigInteger n = i.Value;
-                    return n < 0
-                        ? throw new EvaluationException("case: negative integer tag")
-                        : n > ulong.MaxValue
-                            ? throw new EvaluationException("case: integer tag too large")
-                            : ((ulong)n, null, 0);
-                }
+                return (TagOf(i.Value, numBranches), null, 0);
+
+            case DataConstant { Value: PlutusDataConstr constr } when allowData:
+                return (TagOf(constr.Tag, numBranches), [new VConstant(Builtins.DataBuiltins.ConstrFields(constr))], 1);
+
+            case DataConstant:
+                throw new EvaluationException(allowData
+                    ? "case: casing on data only supports Data.Constr values"
+                    : "case: casing on data is not supported");
 
             case BoolConstant b:
                 if (numBranches > 2)
@@ -714,4 +715,10 @@ public sealed class CekMachine
                     $"case: cannot case on constant of type {c.GetType().Name}");
         }
     }
+
+    private static ulong TagOf(BigInteger n, int numBranches) =>
+        n < 0 || n >= numBranches ? throw new EvaluationException("case: tag out of range") : (ulong)n;
 }
+
+/// <summary>What <c>case</c> accepts on a constant: nothing before protocol version 11, any constant but Data from 11, all of them for 1.2.0 programs at 12 and on the raw paths.</summary>
+internal enum Caser : byte { Unavailable, NoData, Full }

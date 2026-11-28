@@ -12,7 +12,8 @@ namespace Chrysalis.Plutus.VM.EvalTx;
 /// </summary>
 public static class Evaluator
 {
-    /// <summary>The latest major protocol version supported by this evaluator.</summary>
+    /// <summary>The protocol version of the current networks and the default of <c>ScriptContextBuilder.EvaluateTx</c>: 11.
+    /// <c>EvaluateScript</c> also accepts 12 (Dijkstra) with the rules of plutus 1.71.0.0 (node 11.2.1), experimental until the Dijkstra hard-fork node.</summary>
     public const int LatestProtocolVersion = Availability.VanRossem;
 
     /// <summary>
@@ -23,7 +24,7 @@ public static class Evaluator
     /// <param name="argumentsCbor">CBOR-encoded PlutusData arguments (e.g. datum, redeemer, script context).</param>
     /// <param name="plutusVersion">Plutus language version of the script.</param>
     /// <param name="protocolVersion">Major protocol version to evaluate at.</param>
-    /// <param name="costModel">Flat cost-model array for the script's language. May be omitted only for Plutus V3 at the latest supported protocol version.</param>
+    /// <param name="costModel">Flat cost-model array for the script's language. May be omitted only for Plutus V3 at protocol version 11 (<see cref="LatestProtocolVersion"/>).</param>
     /// <param name="budget">Enforced: the script fails with BudgetExceededException when either part falls below zero. Leave it out to measure.</param>
     /// <exception cref="BudgetExceededException">A charge took CPU or memory below zero.</exception>
     /// <returns>The evaluation result with consumed execution units.</returns>
@@ -31,7 +32,7 @@ public static class Evaluator
     /// A Plutus V3 script returned a value other than built-in unit.
     /// </exception>
     /// <exception cref="ArgumentOutOfRangeException">The Plutus language is not 1–3, or the protocol version is negative.</exception>
-    /// <exception cref="NotSupportedException">The protocol version is newer than <see cref="LatestProtocolVersion"/>.</exception>
+    /// <exception cref="NotSupportedException">The protocol version is above 12.</exception>
     /// <exception cref="ArgumentNullException">An argument is null, or the language and protocol version require a cost model.</exception>
     /// <exception cref="InvalidOperationException">The language or a decoded term is unavailable.</exception>
     /// <exception cref="UnboundVariableException">
@@ -49,7 +50,7 @@ public static class Evaluator
         ArgumentNullException.ThrowIfNull(scriptBytes);
         ArgumentNullException.ThrowIfNull(argumentsCbor);
 
-        (Term<DeBruijn> term, CostModel model) = Load(scriptBytes, plutusVersion, protocolVersion, costModel);
+        (Term<DeBruijn> term, CostModel model, Caser caser) = Load(scriptBytes, plutusVersion, protocolVersion, costModel);
 
         // Apply each CBOR-encoded argument as (con data ...)
         foreach (byte[] argCbor in argumentsCbor)
@@ -58,7 +59,7 @@ public static class Evaluator
             term = new ApplyTerm<DeBruijn>(term, new ConstTerm<DeBruijn>(new DataConstant(data)));
         }
 
-        return Run(term, model, plutusVersion, budget, caseOnConstants: Availability.CaseOnConstants(protocolVersion));
+        return Run(term, model, plutusVersion, budget, caser);
     }
 
     /// <summary>
@@ -69,7 +70,7 @@ public static class Evaluator
     /// <param name="arguments">VM PlutusData arguments (datum, redeemer, script context).</param>
     /// <param name="plutusVersion">Plutus language version of the script.</param>
     /// <param name="protocolVersion">Major protocol version to evaluate at.</param>
-    /// <param name="costModel">Flat cost-model array for the script's language. May be omitted only for Plutus V3 at the latest supported protocol version.</param>
+    /// <param name="costModel">Flat cost-model array for the script's language. May be omitted only for Plutus V3 at protocol version 11 (<see cref="LatestProtocolVersion"/>).</param>
     /// <param name="budget">Enforced: the script fails with BudgetExceededException when either part falls below zero. Leave it out to measure.</param>
     /// <exception cref="BudgetExceededException">A charge took CPU or memory below zero.</exception>
     /// <returns>The evaluation result with consumed execution units.</returns>
@@ -77,7 +78,7 @@ public static class Evaluator
     /// A Plutus V3 script returned a value other than built-in unit.
     /// </exception>
     /// <exception cref="ArgumentOutOfRangeException">The Plutus language is not 1–3, or the protocol version is negative.</exception>
-    /// <exception cref="NotSupportedException">The protocol version is newer than <see cref="LatestProtocolVersion"/>.</exception>
+    /// <exception cref="NotSupportedException">The protocol version is above 12.</exception>
     /// <exception cref="ArgumentNullException">An argument is null, or the language and protocol version require a cost model.</exception>
     /// <exception cref="InvalidOperationException">The language or a decoded term is unavailable.</exception>
     /// <exception cref="UnboundVariableException">
@@ -95,19 +96,19 @@ public static class Evaluator
         ArgumentNullException.ThrowIfNull(scriptBytes);
         ArgumentNullException.ThrowIfNull(arguments);
 
-        (Term<DeBruijn> term, CostModel model) = Load(scriptBytes, plutusVersion, protocolVersion, costModel);
+        (Term<DeBruijn> term, CostModel model, Caser caser) = Load(scriptBytes, plutusVersion, protocolVersion, costModel);
 
         foreach (PlutusData arg in arguments)
         {
             term = new ApplyTerm<DeBruijn>(term, new ConstTerm<DeBruijn>(new DataConstant(arg)));
         }
 
-        return Run(term, model, plutusVersion, budget, caseOnConstants: Availability.CaseOnConstants(protocolVersion));
+        return Run(term, model, plutusVersion, budget, caser);
     }
 
-    internal static EvaluationResult Run(Term<DeBruijn> applied, CostModel model, int plutusVersion, ExBudget? budget, bool caseOnConstants = true)
+    internal static EvaluationResult Run(Term<DeBruijn> applied, CostModel model, int plutusVersion, ExBudget? budget, Caser caser = Caser.Full)
     {
-        CekMachine machine = new(budget, model, caseOnConstants);
+        CekMachine machine = new(budget, model, caser);
         ValidateReturnValue(machine.RunValue(applied), plutusVersion);
         return new EvaluationResult(RedeemerTag: 0, Index: 0, ExUnits: UsedUnits(budget ?? ExBudget.Unlimited, machine.RemainingBudget));
     }
@@ -116,7 +117,7 @@ public static class Evaluator
         Mem: (ulong)Math.Max(0, SatMath.Sub(initial.Mem, remaining.Mem)),
         Steps: (ulong)Math.Max(0, SatMath.Sub(initial.Cpu, remaining.Cpu)));
 
-    private static (Term<DeBruijn>, CostModel) Load(byte[] scriptBytes, int plutusVersion, int protocolVersion, IReadOnlyList<long>? costModel)
+    private static (Term<DeBruijn>, CostModel, Caser) Load(byte[] scriptBytes, int plutusVersion, int protocolVersion, IReadOnlyList<long>? costModel)
     {
         Availability.Check(plutusVersion, protocolVersion);
         CostModel model = costModel is not null
@@ -134,7 +135,7 @@ public static class Evaluator
         {
             throw new UnboundVariableException();
         }
-        return (term, model);
+        return (term, model, Availability.CaserFor(protocolVersion, version));
     }
 
     // Upstream's scope check (Check/Scope.hs:33-55; Common/Eval.hs:130): a variable must be bound by an
@@ -207,6 +208,7 @@ public static class Evaluator
     /// Evaluates a raw UPLC term directly (already parsed/decoded).
     /// Lowest-level API — no Flat decoding or argument application.
     /// Does not check scope; an unbound variable fails with <see cref="EvaluationException"/> when evaluated.
+    /// Case on <c>Data.Constr</c> is available, as on plutus's default machine.
     /// </summary>
     /// <param name="term">The UPLC term to evaluate.</param>
     /// <param name="budget">Enforced: the script fails with BudgetExceededException when either part falls below zero. Leave it out to measure.</param>

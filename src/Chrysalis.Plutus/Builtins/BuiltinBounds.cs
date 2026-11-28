@@ -71,30 +71,33 @@ internal static class BuiltinBounds
 
     private static int Kinds(DefaultFunction func, Variant v)
     {
-        bool de = v >= Variant.D;
+        // Default/Builtins.hs:2806-2820: ensurableInteger is D and E, ensurableByteString is D to G.
+        bool ints = v is Variant.D or Variant.E;
+        bool bytes = v >= Variant.D;
         return (int)func switch
         {
             (int)AddInteger or (int)SubtractInteger or (int)MultiplyInteger or (int)DivideInteger or (int)QuotientInteger
-                or (int)RemainderInteger or (int)ModInteger or (int)LessThanInteger or (int)LessThanEqualsInteger => de ? Pack(CInteger, CInteger) : None,
-            (int)AppendByteString or (int)EqualsByteString or (int)LessThanByteString or (int)LessThanEqualsByteString => de ? Pack(CByteString, CByteString) : None,
-            (int)AndByteString or (int)OrByteString or (int)XorByteString => de ? Pack(None, CByteString, CByteString) : None,
+                or (int)RemainderInteger or (int)ModInteger or (int)LessThanInteger or (int)LessThanEqualsInteger => ints ? Pack(CInteger, CInteger) : None,
+            (int)AppendByteString or (int)EqualsByteString or (int)LessThanByteString or (int)LessThanEqualsByteString => bytes ? Pack(CByteString, CByteString) : None,
+            (int)AndByteString or (int)OrByteString or (int)XorByteString => bytes ? Pack(None, CByteString, CByteString) : None,
             (int)Sha2_256 or (int)Sha3_256 or (int)Blake2b_256 or (int)Keccak_256 or (int)Blake2b_224 or (int)Ripemd_160
                 or (int)DecodeUtf8 or (int)ComplementByteString or (int)CountSetBits or (int)FindFirstSetBit
-                or (int)Bls12_381_G1_HashToGroup or (int)Bls12_381_G2_HashToGroup => de ? Pack(CByteString) : None,
-            (int)IndexByteString or (int)ReadBit => Pack(de ? CByteString : None, Int64),
-            (int)ByteStringToInteger or (int)VerifyEd25519Signature or (int)VerifySchnorrSecp256k1Signature => de ? Pack(None, CByteString) : None,
+                or (int)Bls12_381_G1_HashToGroup or (int)Bls12_381_G2_HashToGroup => bytes ? Pack(CByteString) : None,
+            (int)IndexByteString or (int)ReadBit => Pack(bytes ? CByteString : None, Int64),
+            (int)ByteStringToInteger or (int)VerifyEd25519Signature or (int)VerifySchnorrSecp256k1Signature => bytes ? Pack(None, CByteString) : None,
             (int)ConsByteString => v switch
             {
                 Variant.C => Pack(Word8),
                 Variant.D => Pack(CInteger, CByteString),
-                Variant.E => Pack(Word8, CByteString),
+                Variant.E or Variant.G => Pack(Word8, CByteString),
+                Variant.F => Pack(None, CByteString),
                 Variant.A or Variant.B or _ => None
             },
-            (int)SliceByteString => Pack(Int64, Int64, de ? CByteString : None),
+            (int)SliceByteString => Pack(Int64, Int64, bytes ? CByteString : None),
             (int)ReplicateByte => Pack(None, Word8),
             (int)IndexArray => Pack(None, Int64),
-            (int)ShiftByteString or (int)RotateByteString => de ? Pack(None, Int64) : None,
-            (int)ConstrData => Pack(de ? Word64 : None, ListOfData),
+            (int)ShiftByteString or (int)RotateByteString => bytes ? Pack(None, Int64) : None,
+            (int)ConstrData => Pack(bytes ? Word64 : None, ListOfData),
             (int)MapData => Pack(ListOfPairData),
             (int)ListData => Pack(ListOfData),
             (int)WriteBits => Pack(None, ListOfInteger),
