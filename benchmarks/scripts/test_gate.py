@@ -819,6 +819,7 @@ class ReviewGateTests(unittest.TestCase):
         import gate_azure_guest as guest
         import gate_bundle
         import gate_prepare
+        import gate_time
         config = gate_prepare.azure_config(json.loads((gate.GATE / 'gated.json').read_text()))
         audit = json.loads((gate.REPO / 'benchmarks/Chrysalis.Benchmarks/audit-allocations.json').read_text())
         payload = json.loads((gate.GATE / 'plans/noise-records-x11.json').read_text())
@@ -844,7 +845,10 @@ class ReviewGateTests(unittest.TestCase):
                 'time/micro-field-read': 'FieldReadBench.ReadEveryField',
             },
         )
-        noise_seal = dict(gated=config, mode='release', noiseRecords=True, sessionPerRow=False, orderingProof=True,
+        unfrozen = copy.deepcopy(config)
+        for entry in payload['entries']:
+            unfrozen['time']['noise']['Standard_F8als_v7'].pop(entry['id'], None)
+        noise_seal = dict(gated=unfrozen, mode='release', noiseRecords=True, sessionPerRow=False, orderingProof=True,
                           rows=[dict(item, sides=dict(baseline=side(), candidate=side())) for item in selected])
         plans = gate_prepare.time_plans(noise_seal)
         self.assertEqual(len(plans), 1)
@@ -856,10 +860,14 @@ class ReviewGateTests(unittest.TestCase):
         self.assertEqual(plan['design'], 'noise-band')
         self.assertFalse(plan['repeatAllowed'])
         self.assertEqual(plan['orderingProof'], gate_prepare.ORDERING_WORK)
-        change_seal = dict(gated=config, mode='change', noiseRecords=False, sessionPerRow=False, orderingProof=False,
+        change_seal = dict(gated=unfrozen, mode='change', noiseRecords=False, sessionPerRow=False, orderingProof=False,
                            rows=[dict(item, sides=dict(baseline=side(), candidate=side())) for item in selected])
         with self.assertRaisesRegex(ValueError, 'Missing frozen Azure noise record'):
             gate_prepare.time_plans(change_seal)
+        frozen = gate_prepare.time_plans(dict(change_seal, gated=config))
+        self.assertEqual(sorted(row['id'] for plan in frozen for row in plan['rows']), sorted(entry['id'] for entry in payload['entries']))
+        self.assertTrue(all(gate_time.noise_band(row['noise'], 'azure') is not None for plan in frozen for row in plan['rows']))
+        self.assertEqual(gate_prepare.time_plans(dict(noise_seal, gated=config)), [])
 
     def test_x11_benchmark_sources_stay_net10_pin_safe(self):
         import re
