@@ -55,6 +55,7 @@ public class EvaluatorTests
     [InlineData(2, 11)]
     [InlineData(3, 9)]
     [InlineData(3, 10)]
+    [InlineData(3, 12)]
     public void EvaluateScript_RequiresAnArrayExceptForLatestV3(int language, int pv)
     {
         byte[] script = Encode(new ConstTerm<DeBruijn>(UnitConstant.Instance));
@@ -68,7 +69,7 @@ public class EvaluatorTests
     [InlineData(4, 11, typeof(ArgumentOutOfRangeException))]
     [InlineData(int.MaxValue, 11, typeof(ArgumentOutOfRangeException))]
     [InlineData(3, -1, typeof(ArgumentOutOfRangeException))]
-    [InlineData(3, 12, typeof(NotSupportedException))]
+    [InlineData(3, 13, typeof(NotSupportedException))]
     [InlineData(3, int.MaxValue, typeof(NotSupportedException))]
     public void EvaluateScript_ValidatesLanguageAndProtocolVersion(int language, int pv, Type error)
     {

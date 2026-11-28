@@ -8,6 +8,7 @@ namespace Chrysalis.Plutus.VM.EvalTx;
 internal static class Availability
 {
     internal const int VanRossem = 11;
+    internal const int Dijkstra = 12;
 
     // PlutusLedgerApi/Common/Versions.hs. AvailabilityTests compares every tag with both pinned releases.
     private static readonly (int Language, int ProtocolVersion, DefaultFunction First, DefaultFunction Last)[] Introductions =
@@ -31,9 +32,9 @@ internal static class Availability
             throw new ArgumentOutOfRangeException(nameof(plutusVersion), plutusVersion, "Supported Plutus languages are V1, V2 and V3.");
         }
         ArgumentOutOfRangeException.ThrowIfNegative(protocolVersion);
-        if (protocolVersion > Evaluator.LatestProtocolVersion)
+        if (protocolVersion > Dijkstra)
         {
-            throw new NotSupportedException($"Protocol version {protocolVersion} is not supported; the evaluator supports up to {Evaluator.LatestProtocolVersion}.");
+            throw new NotSupportedException($"Protocol version {protocolVersion} is not supported; the evaluator supports up to {Dijkstra}.");
         }
         int introduced = plutusVersion switch { 1 => 5, 2 => 7, _ => 9 };
         if (protocolVersion < introduced)
@@ -59,13 +60,16 @@ internal static class Availability
     }
 
     internal static bool HasProgramVersion(int language, int pv, Version version) =>
-        version == new Version(1, 0, 0) || ((language == 3 || pv >= VanRossem) && version == new Version(1, 1, 0));
+        version == new Version(1, 0, 0) || ((language == 3 || pv >= VanRossem) && version == new Version(1, 1, 0))
+        || (pv >= Dijkstra && version == new Version(1, 2, 0));
 
     internal static Variant VariantFor(int language, int pv) => language == 3
-        ? (pv < VanRossem ? Variant.C : Variant.E)
-        : pv < 9 ? Variant.A : pv < VanRossem ? Variant.B : Variant.D;
+        ? (pv < VanRossem ? Variant.C : pv < Dijkstra ? Variant.E : Variant.G)
+        : pv < 9 ? Variant.A : pv < VanRossem ? Variant.B : pv < Dijkstra ? Variant.D : Variant.F;
 
-    internal static bool CaseOnConstants(int pv) => pv >= VanRossem;
+    // PlutusLedgerApi/Common/Eval.hs:144-148 (defaultCaserBuiltinFor).
+    internal static Caser CaserFor(int pv, Version version) => pv < VanRossem ? Caser.Unavailable
+        : pv < Dijkstra || version.Major < 1 || (version.Major == 1 && version.Minor < 2) ? Caser.NoData : Caser.Full;
 
     // PlutusLedgerApi/Common/Versions.hs:389-399: maxBoundsByPV applies from vanRossem (PV 11).
     internal static bool DecodeLimits(int pv) => pv >= VanRossem;

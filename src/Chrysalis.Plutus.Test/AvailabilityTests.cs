@@ -33,10 +33,10 @@ public sealed class AvailabilityTests
                 new LambdaTerm<DeBruijn>(new(0), new ConstTerm<DeBruijn>(UnitConstant.Instance)),
                 new DelayTerm<DeBruijn>(new BuiltinTerm<DeBruijn>((DefaultFunction)tag))));
             byte[] flat = FlatEncoder.EncodeProgram(new(new(1, 0, 0), body));
-            for (int pv = 0; pv <= 11; pv++)
+            for (int pv = 0; pv <= Availability.Dijkstra; pv++)
             {
                 Exception? observed = Record.Exception(() => Evaluator.EvaluateScript(flat, Args, language, pv, costs));
-                foreach ((string pin, Lazy<Oracle> source) in Oracles)
+                foreach ((string pin, Lazy<Oracle> source) in Oracles.Where(o => pv <= Last(o.Pin)))
                 {
                     Oracle oracle = source.Value;
                     Type? expected = pv >= oracle.Introduced[language] && pv >= oracle.Builtins[language].GetValueOrDefault(tag, int.MaxValue)
@@ -57,20 +57,23 @@ public sealed class AvailabilityTests
         long[] costs = NodeBudgetTests.Fixture.Models[language - 1];
         byte[] v100 = Encode("1.0.0", "(con unit ())");
         byte[] v110 = Encode("1.1.0", "(case (constr 0) (con unit ()))");
+        byte[] v120 = Encode("1.2.0", "(case (constr 0) (con unit ()))");
+        string unitCase = "(case (con unit ()) (con unit ()))";
+        string dataCase = "(case (con data (Constr 0 [])) (lam fields (con unit ())))";
         Program<DeBruijn> modern = Parse("1.1.0", "(case (constr 0) (con unit ()))");
         byte[] badCase = FlatEncoder.EncodeProgram(modern with { Version = new(1, 0, 0) });
         byte[] badConstr = FlatEncoder.EncodeProgram(Parse("1.1.0", "(constr 0)") with { Version = new(1, 0, 0) });
         List<string> mismatches = [];
-        for (int pv = 0; pv <= 11; pv++)
+        for (int pv = 0; pv <= Availability.Dijkstra; pv++)
         {
-            foreach ((int version, byte[] flat) in new[] { (100, v100), (110, v110) })
+            foreach ((int version, byte[] flat) in new[] { (100, v100), (110, v110), (120, v120) })
             {
                 Exception? observed = Record.Exception(() => Evaluator.EvaluateScript(flat, Args, language, pv, costs));
-                foreach ((string pin, Lazy<Oracle> source) in Oracles)
+                foreach ((string pin, Lazy<Oracle> source) in Oracles.Where(o => pv <= Last(o.Pin)))
                 {
                     Oracle oracle = source.Value;
                     Type? expected = pv < oracle.Introduced[language] ? typeof(InvalidOperationException)
-                        : pv < oracle.ProgramVersions[language][version] ? typeof(EvaluationException) : null;
+                        : pv < oracle.ProgramVersions[language].GetValueOrDefault(version, int.MaxValue) ? typeof(EvaluationException) : null;
                     Compare(mismatches, $"{pin}/V{language}/PLC {version}/PV{pv}", expected, observed);
                 }
             }
@@ -82,21 +85,25 @@ public sealed class AvailabilityTests
         if (language == 1)
         {
             Check("unit case", null, Encode("1.1.0", "(case (con unit ()) (con integer 42))"), 11);
-            Check("Data case", typeof(EvaluationException), Encode("1.1.0", "(case (con data (Constr 0 [])) (con unit ()))"), 11);
+            Check("Data case", typeof(EvaluationException), Encode("1.1.0", dataCase), 11);
         }
+        Check("unit case at PV12", null, Encode("1.1.0", unitCase), 12);
+        Check("Data case, PLC 1.1.0, at PV12", typeof(EvaluationException), Encode("1.1.0", dataCase), 12);
+        Check("Data case, PLC 1.2.0, at PV12", null, Encode("1.2.0", dataCase), 12);
         if (language == 3)
         {
             byte[] boolCase = Encode("1.1.0", "(case (con bool True) (error) (con unit ()))");
             Check("boolean case before PV11", typeof(EvaluationException), boolCase, 10);
             Check("boolean case at PV11", null, boolCase, 11);
-            Compare(mismatches, "raw boolean case", null, Record.Exception(() =>
-                Evaluator.EvaluateTerm(new ApplyTerm<DeBruijn>(FlatDecoder.DecodeProgram(boolCase).Term,
-                    new ConstTerm<DeBruijn>(new DataConstant(Args[0]))))));
+            Raw("raw boolean case", boolCase);
+            Raw("raw Data case", Encode("1.1.0", dataCase));
         }
         Assert.True(mismatches.Count == 0, $"{mismatches.Count} mismatches:\n{string.Join('\n', mismatches)}");
 
         void Check(string scenario, Type? expected, byte[] flat, int pv) => Compare(mismatches, $"V{language}/{scenario}", expected,
             Record.Exception(() => Evaluator.EvaluateScript(flat, Args, language, pv, costs)));
+        void Raw(string scenario, byte[] flat) => Compare(mismatches, scenario, null, Record.Exception(() =>
+            Evaluator.EvaluateTerm(new ApplyTerm<DeBruijn>(FlatDecoder.DecodeProgram(flat).Term, new ConstTerm<DeBruijn>(new DataConstant(Args[0]))))));
     }
 
     [Fact]
@@ -184,6 +191,9 @@ public sealed class AvailabilityTests
             }
         }
     }
+
+    // The pins differ at PV 12: 1.70.0.0 has no Dijkstra, and Chrysalis follows node 11.2.1 (1.71.0.0) there.
+    private static int Last(string pin) => pin == "1.70.0.0" ? 11 : Availability.Dijkstra;
 
     private static void Compare(List<string> mismatches, string scenario, Type? expected, Exception? observed)
     {

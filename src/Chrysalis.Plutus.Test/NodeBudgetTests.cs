@@ -84,24 +84,6 @@ public sealed partial class NodeBudgetTests
         Assert.Equal(twin.Units, exact.Budget);
 
         CostModel[] models = [.. fixture.Models.Select((a, i) => CostModelLoader.FromFlat(a, i + 1, i == 2 ? Variant.E : Variant.D))];
-        string?[] mismatches = new string?[scripts.Length];
-        _ = Parallel.For(0, scripts.Length, i =>
-        {
-            Script script = scripts[i];
-            ExUnitsResult expected = (script.Units ?? script.Budget)!;
-            try
-            {
-                ExUnitsResult actual = EvaluateRecordedScript(script).ExUnits;
-                if (actual != expected)
-                {
-                    mismatches[i] = $"{script.Id} V{script.Language}: expected {Show(expected)}; got {Show(actual)}";
-                }
-            }
-            catch (Exception ex)
-            {
-                mismatches[i] = $"{script.Id} V{script.Language}: unexpected replay failure: {ex.GetType().FullName}: {ex.Message}";
-            }
-        });
         string[] phase1 = ["AV-multiIndexArray-V1", "AV-multiIndexArray-V2", "AV-multiIndexArray-V3", "F-ver-1.0.0-case-V3"];
         string[] phase2 = ["F-ver-0.1.0-V3", "F-ver-1.0.1-V3", "F-ver-1.1.0-patch-2^70-V3", "F-ver-1.2.0-V3", "F-ver-1.2^32.0-V3",
             "F-ver-2.0.0-V3", "F-ver-2^64.0.0-V3", "F-ver-2^64.0.0-V2",
@@ -131,36 +113,65 @@ public sealed partial class NodeBudgetTests
         (Script Script, string Outcome)[] values = [.. fixture.Failures.Where(row =>
             row.Script.Id.StartsWith("VF-", StringComparison.Ordinal) || row.Script.Id.StartsWith("VAL-", StringComparison.Ordinal))];
         Assert.Equal([30, 27], values.GroupBy(row => row.Outcome).OrderBy(g => g.Key, StringComparer.Ordinal).Select(g => g.Count()));
-        string[] errors = [.. mismatches.OfType<string>(),
-            .. CheckVerdicts([.. phase1, .. v4.Where(row => row.Outcome == "phase1-reject").Select(row => row.Script.Id)], "phase1-reject", typeof(InvalidOperationException)),
-            .. CheckVerdicts([.. phase2, .. v4.Where(row => row.Outcome == "phase2-fail" && !row.Script.Id.StartsWith("R-", StringComparison.Ordinal)).Select(row => row.Script.Id)], "phase2-fail", typeof(EvaluationException)),
-            .. CheckVerdicts([.. v4.Where(row => row.Script.Id.StartsWith("R-", StringComparison.Ordinal)).Select(row => row.Script.Id)], "phase2-fail", typeof(InvalidReturnValueException)),
-            .. CheckVerdicts(unboundScope, "phase2-fail", typeof(UnboundVariableException)),
-            .. CheckVerdicts(unboundReached, "phase2-fail", typeof(EvaluationException)),
-            .. CheckVerdicts([.. values.Where(row => row.Outcome == "phase1-reject").Select(row => row.Script.Id)], "phase1-reject", typeof(InvalidOperationException), "Flat: invalid value constant"),
-            .. CheckVerdicts([.. values.Where(row => row.Outcome == "phase2-fail").Select(row => row.Script.Id)], "phase2-fail", typeof(EvaluationException))];
-        Assert.True(errors.Length == 0, $"{errors.Length} node replay mismatches:\n{string.Join('\n', errors)}");
+        // At PV 12 the integer bound goes (variants F and G: Builtins.hs ensurableInteger is D and E only) and PLC 1.2.0 is accepted (Versions.hs), so these recorded failures return.
+        HashSet<string> flips = [.. fixture.Failures.Select(row => row.Script.Id).Where(id => id is "F-ver-1.2.0-V3" or "P-B17-addInteger-arg-2^262143" or "P-B18-addInteger-arg-2^262143-1"
+            || (id.StartsWith("BI-", StringComparison.Ordinal) && !id.StartsWith("BI-integerToByteString-", StringComparison.Ordinal)
+                && !(id.StartsWith("BI-consByteString-", StringComparison.Ordinal) && id.EndsWith("-V3", StringComparison.Ordinal))))];
+        Assert.Equal(87, flips.Count);
+        HashSet<string> checkedIds = [.. phase1, .. phase2, .. unboundScope, .. unboundReached, .. v4.Select(row => row.Script.Id), .. values.Select(row => row.Script.Id)];
+        Assert.True(flips.IsSubsetOf(checkedIds), "every PV 12 flip is among the ids the verdict sets check");
+        foreach (int pv in (int[])[Availability.VanRossem, Availability.Dijkstra])
+        {
+            string?[] mismatches = new string?[scripts.Length];
+            _ = Parallel.For(0, scripts.Length, i =>
+            {
+                Script script = scripts[i];
+                ExUnitsResult expected = (script.Units ?? script.Budget)!;
+                try
+                {
+                    ExUnitsResult actual = EvaluateRecordedScript(script, pv).ExUnits;
+                    if (actual != expected)
+                    {
+                        mismatches[i] = $"PV{pv} {script.Id} V{script.Language}: expected {Show(expected)}; got {Show(actual)}";
+                    }
+                }
+                catch (Exception ex)
+                {
+                    mismatches[i] = $"PV{pv} {script.Id} V{script.Language}: unexpected replay failure: {ex.GetType().FullName}: {ex.Message}";
+                }
+            });
+            string[] errors = [.. mismatches.OfType<string>(),
+                .. CheckVerdicts(pv, [.. phase1, .. v4.Where(row => row.Outcome == "phase1-reject").Select(row => row.Script.Id)], "phase1-reject", typeof(InvalidOperationException)),
+                .. CheckVerdicts(pv, [.. phase2, .. v4.Where(row => row.Outcome == "phase2-fail" && !row.Script.Id.StartsWith("R-", StringComparison.Ordinal)).Select(row => row.Script.Id)], "phase2-fail", typeof(EvaluationException)),
+                .. CheckVerdicts(pv, [.. v4.Where(row => row.Script.Id.StartsWith("R-", StringComparison.Ordinal)).Select(row => row.Script.Id)], "phase2-fail", typeof(InvalidReturnValueException)),
+                .. CheckVerdicts(pv, unboundScope, "phase2-fail", typeof(UnboundVariableException)),
+                .. CheckVerdicts(pv, unboundReached, "phase2-fail", typeof(EvaluationException)),
+                .. CheckVerdicts(pv, [.. values.Where(row => row.Outcome == "phase1-reject").Select(row => row.Script.Id)], "phase1-reject", typeof(InvalidOperationException), "Flat: invalid value constant"),
+                .. CheckVerdicts(pv, [.. values.Where(row => row.Outcome == "phase2-fail").Select(row => row.Script.Id)], "phase2-fail", typeof(EvaluationException))];
+            Assert.True(errors.Length == 0, $"{errors.Length} node replay mismatches:\n{string.Join('\n', errors)}");
+        }
 
         CheckWitness("EXP-e0-V1", new(1701, 1148094));
         CheckWitness("BI-expMod-mod-hugeexp-control-V2", new(1701, 1148094));
         CheckWitness("EXP-e0-V3", new(1401, 1100094));
 
-        EvaluationResult EvaluateRecordedScript(Script script) => Evaluator.EvaluateScript(script.Flat,
+        EvaluationResult EvaluateRecordedScript(Script script, int pv) => Evaluator.EvaluateScript(script.Flat,
             Enumerable.Repeat<PlutusData>(new PlutusDataConstr(0, []), ArgumentCount(script.Language, script.Purpose)).ToArray(),
-            script.Language, 11, fixture.Models[script.Language - 1]);
+            script.Language, pv, fixture.Models[script.Language - 1]);
 
-        IEnumerable<string> CheckVerdicts(string[] ids, string outcome, Type expected, string? prefix = null)
+        IEnumerable<string> CheckVerdicts(int pv, string[] ids, string outcome, Type expected, string? prefix = null)
         {
             string? expectedMessage = expected == typeof(UnboundVariableException) ? new UnboundVariableException().Message : null;
             foreach (string id in ids)
             {
                 (Script script, string recorded) = fixture.Failures.Single(row => row.Script.Id == id);
-                Exception? observed = Record.Exception(() => EvaluateRecordedScript(script));
-                if (recorded != outcome || observed?.GetType() != expected
-                    || (expectedMessage is not null && observed.Message != expectedMessage)
-                    || (prefix is not null && !observed.Message.StartsWith(prefix, StringComparison.Ordinal)))
+                Exception? observed = Record.Exception(() => EvaluateRecordedScript(script, pv));
+                Type? want = pv == Availability.Dijkstra && flips.Contains(id) ? null : expected;
+                if (recorded != outcome || observed?.GetType() != want
+                    || (expectedMessage is not null && observed?.Message != expectedMessage)
+                    || (prefix is not null && observed?.Message.StartsWith(prefix, StringComparison.Ordinal) != true))
                 {
-                    yield return $"{id}: expected {outcome}/{expected.Name}; fixture {recorded}, got {observed?.GetType().Name ?? "success"}: {observed?.Message}";
+                    yield return $"PV{pv} {id}: expected {outcome}/{want?.Name ?? "success"}; fixture {recorded}, got {observed?.GetType().Name ?? "success"}: {observed?.Message}";
                 }
             }
         }
