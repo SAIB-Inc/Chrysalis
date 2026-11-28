@@ -815,6 +815,11 @@ internal static class BuiltinNames
         ["valueData"] = DefaultFunction.ValueData,
         ["unValueData"] = DefaultFunction.UnValueData,
         ["scaleValue"] = DefaultFunction.ScaleValue,
+        ["multiIndexArray"] = DefaultFunction.MultiIndexArray,
+        ["policies"] = DefaultFunction.Policies,
+        ["assetCount"] = DefaultFunction.AssetCount,
+        ["keepPolicies"] = DefaultFunction.KeepPolicies,
+        ["dropPolicies"] = DefaultFunction.DropPolicies,
     };
 
     private static readonly Dictionary<DefaultFunction, string> FunctionToName = BuildReverse();

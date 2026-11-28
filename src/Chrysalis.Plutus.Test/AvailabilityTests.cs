@@ -22,9 +22,10 @@ public sealed class AvailabilityTests
     [InlineData(1)]
     [InlineData(2)]
     [InlineData(3)]
+    [InlineData(4)]
     public void BuiltinsFollowThePinnedVersions(int language)
     {
-        long[] costs = NodeBudgetTests.Fixture.Models[language - 1];
+        long[] costs = NodeBudgetTests.Fixture.Models[Math.Min(language, 3) - 1];
         List<string> mismatches = [];
         for (int tag = 0; tag < 128; tag++)
         {
@@ -52,9 +53,10 @@ public sealed class AvailabilityTests
     [InlineData(1)]
     [InlineData(2)]
     [InlineData(3)]
+    [InlineData(4)]
     public void ProgramVersionsAndCaseFollowThePinnedVersions(int language)
     {
-        long[] costs = NodeBudgetTests.Fixture.Models[language - 1];
+        long[] costs = NodeBudgetTests.Fixture.Models[Math.Min(language, 3) - 1];
         byte[] v100 = Encode("1.0.0", "(con unit ())");
         byte[] v110 = Encode("1.1.0", "(case (constr 0) (con unit ()))");
         byte[] v120 = Encode("1.2.0", "(case (constr 0) (con unit ()))");
@@ -87,6 +89,7 @@ public sealed class AvailabilityTests
             Check("unit case", null, Encode("1.1.0", "(case (con unit ()) (con integer 42))"), 11);
             Check("Data case", typeof(EvaluationException), Encode("1.1.0", dataCase), 11);
         }
+        // The rows below transcribe dataCaseRequiresCore120 (TestData/CostModels/plutus-1.71.0.0/test/Spec/Eval.hs:69-107), for every language; V4 skips its PV 11 rows.
         Check("unit case at PV12", null, Encode("1.1.0", unitCase), 12);
         Check("Data case, PLC 1.1.0, at PV12", typeof(EvaluationException), Encode("1.1.0", dataCase), 12);
         Check("Data case, PLC 1.2.0, at PV12", null, Encode("1.2.0", dataCase), 12);
@@ -228,15 +231,8 @@ public sealed class AvailabilityTests
         Dictionary<int, int> introduced = Regex.Matches(Block("ledgerLanguageIntroducedIn"), @"PlutusV(\d)\s*->\s*(\w+PV)")
             .ToDictionary(m => m.Groups[1].Value[0] - '0', m => pvs[m.Groups[2].Value]);
         Dictionary<string, int> tags = Enum.GetValues<DefaultFunction>().ToDictionary(f => f.ToString().Replace("_", "", StringComparison.Ordinal), f => (int)f, StringComparer.OrdinalIgnoreCase);
-        Assert.Equal(5, batches["batch7"].Length);
         Dictionary<int, int>[] builtins = Maps("builtinsIntroducedIn", @"\(\s*(\w+PV)\s*,\s*Set\.fromList\s*(\(.*?\)|\w+)\s*\)",
-            (pv, body) => Names(body, @"batch\w+").SelectMany(b => batches[b]).Select(name =>
-            {
-                if (tags.TryGetValue(name.Replace("_", "", StringComparison.Ordinal), out int tag)) { return tag; }
-                Assert.Equal(int.MaxValue, pv);
-                Assert.Contains(name, batches["batch7"]);
-                return -1;
-            }).Where(tag => tag >= 0));
+            (_, body) => Names(body, @"batch\w+").SelectMany(b => batches[b]).Select(name => tags[name.Replace("_", "", StringComparison.Ordinal)]));
         Dictionary<int, int>[] plc = Maps("plcVersionsIntroducedIn", @"\(\s*(\w+PV)\s*,\s*Set\.fromList\s*\[(.*?)\]\s*\)",
             (_, body) => Names(body, @"(?<=plcVersion)\d+").Select(v => int.Parse(v, System.Globalization.CultureInfo.InvariantCulture)));
         return new(introduced, builtins, plc);

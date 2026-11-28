@@ -29,7 +29,7 @@
     <None Include="../../benchmarks/data/plutus_use_cases/auction_1-1.flat"
           Link="TestData/CostModels/g1/auction_1-1.flat" CopyToOutputDirectory="PreserveNewest" />
     <None Include="plutus-conformance\**" CopyToOutputDirectory="PreserveNewest" />
-    <None Update="conformance.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="conformance*.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>

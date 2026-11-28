@@ -11,6 +11,7 @@ internal static class Availability
     internal const int Dijkstra = 12;
 
     // PlutusLedgerApi/Common/Versions.hs. AvailabilityTests compares every tag with both pinned releases.
+    // Batch 7 (tags 101 to 105) is at futurePV in every language at 1.71.0.0, so no row has it.
     private static readonly (int Language, int ProtocolVersion, DefaultFunction First, DefaultFunction Last)[] Introductions =
     [
         (1, 5, AddInteger, MkNilPairData),
@@ -22,21 +23,22 @@ internal static class Availability
         (2, VanRossem, AndByteString, ScaleValue),
         (3, 9, AddInteger, ByteStringToInteger),
         (3, 10, AndByteString, Ripemd_160),
-        (3, VanRossem, ExpModInteger, ScaleValue)
+        (3, VanRossem, ExpModInteger, ScaleValue),
+        (4, Dijkstra, AddInteger, ScaleValue)
     ];
 
     internal static void Check(int plutusVersion, int protocolVersion)
     {
-        if (plutusVersion is < 1 or > 3)
+        if (plutusVersion is < 1 or > 4)
         {
-            throw new ArgumentOutOfRangeException(nameof(plutusVersion), plutusVersion, "Supported Plutus languages are V1, V2 and V3.");
+            throw new ArgumentOutOfRangeException(nameof(plutusVersion), plutusVersion, "Supported Plutus languages are V1, V2, V3 and V4.");
         }
         ArgumentOutOfRangeException.ThrowIfNegative(protocolVersion);
         if (protocolVersion > Dijkstra)
         {
             throw new NotSupportedException($"Protocol version {protocolVersion} is not supported; the evaluator supports up to {Dijkstra}.");
         }
-        int introduced = plutusVersion switch { 1 => 5, 2 => 7, _ => 9 };
+        int introduced = plutusVersion switch { 1 => 5, 2 => 7, 3 => 9, _ => Dijkstra };
         if (protocolVersion < introduced)
         {
             throw new InvalidOperationException($"Plutus V{plutusVersion} is not available before protocol version {introduced}.");
@@ -63,7 +65,7 @@ internal static class Availability
         version == new Version(1, 0, 0) || ((language == 3 || pv >= VanRossem) && version == new Version(1, 1, 0))
         || (pv >= Dijkstra && version == new Version(1, 2, 0));
 
-    internal static Variant VariantFor(int language, int pv) => language == 3
+    internal static Variant VariantFor(int language, int pv) => language >= 3
         ? (pv < VanRossem ? Variant.C : pv < Dijkstra ? Variant.E : Variant.G)
         : pv < 9 ? Variant.A : pv < VanRossem ? Variant.B : pv < Dijkstra ? Variant.D : Variant.F;
 

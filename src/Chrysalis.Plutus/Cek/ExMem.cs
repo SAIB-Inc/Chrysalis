@@ -133,13 +133,14 @@ internal static class ExMem
 
     internal static long ValueSizeExMem(LedgerValue v) => v.Size;
 
+    // floor(log2 n) + 1, and 0 for 0 (ExMemoryUsage.hs).
+    private static int LogSize(int n) => n > 0 ? (int)Math.Floor(Math.Log2(n)) + 1 : 0;
+
     internal static int ValueMaxDepth(LedgerValue v)
     {
         int outerSize = v.Entries.Length;
         int maxInner = v.MaxTokens;
-        int logOuter = outerSize > 0 ? (int)Math.Floor(Math.Log2(outerSize)) + 1 : 0;
-        int logInner = maxInner > 0 ? (int)Math.Floor(Math.Log2(maxInner)) + 1 : 0;
-        return logOuter + logInner;
+        return LogSize(outerSize) + LogSize(maxInner);
     }
 
     // BLS constants
@@ -180,6 +181,10 @@ internal static class ExMem
     private static long ValueSizeFromArg(CekValue val) => val is VConstant { Value: ValueConstant v } ? ValueSizeExMem(v.Value) : 0;
 
     private static long ValueMaxDepthFromArg(CekValue val) => val is VConstant { Value: ValueConstant v } ? ValueMaxDepth(v.Value) : 0;
+
+    private static long ValueOuterSizeFromArg(CekValue val) => val is VConstant { Value: ValueConstant v } ? v.Value.Entries.Length : 0;
+
+    private static long ValueOuterDepthFromArg(CekValue val) => val is VConstant { Value: ValueConstant v } ? Math.Max(1, LogSize(v.Value.Entries.Length)) : 0;
 
     private static long DataNodeCountFromArg(CekValue val) => val is VConstant { Value: DataConstant d } ? DataNodeCount(d.Value) : 0;
 
@@ -301,7 +306,8 @@ internal static class ExMem
             DefaultFunction.Bls12_381_MulMlResult or
             DefaultFunction.Bls12_381_FinalVerify or
             DefaultFunction.LengthOfArray or
-            DefaultFunction.IndexArray =>
+            DefaultFunction.IndexArray or
+            DefaultFunction.AssetCount =>
                 (0, 0, 0),
 
             // (data, data) - equalsData
@@ -369,6 +375,14 @@ internal static class ExMem
                 (DataNodeCountFromArg(args[0]), 0, 0),
             DefaultFunction.ScaleValue =>
                 (IntSize(args[0]), ValueSizeFromArg(args[1]), 0),
+
+            // Batch 7: multiIndexArray by its index list; policies by the outer size; the filters by their id list and the outer depth
+            DefaultFunction.MultiIndexArray =>
+                (0, ListSizeFromArg(args[1]), 0),
+            DefaultFunction.Policies =>
+                (ValueOuterSizeFromArg(args[0]), 0, 0),
+            DefaultFunction.KeepPolicies or DefaultFunction.DropPolicies =>
+                (ListSizeFromArg(args[0]), ValueOuterDepthFromArg(args[1]), 0),
 
             _ => (0, 0, 0)
         };

@@ -1,0 +1,190 @@
+-- editorconfig-checker-disable-file
+-- TODO: merge this module to Versions.hs ?
+{-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE TypeFamilies #-}
+
+module Spec.Eval (tests) where
+
+import PlutusCore.Default
+import PlutusCore.Evaluation.Machine.ExBudget
+import PlutusCore.Evaluation.Machine.ExBudgetingDefaults
+import PlutusCore.MkPlc
+import PlutusCore.Pretty
+import PlutusCore.StdLib.Data.Unit
+import PlutusCore.Version as PLC
+import PlutusLedgerApi.Common
+import PlutusLedgerApi.Common.Versions
+import PlutusLedgerApi.Test.V1.EvaluationContext qualified as V1
+import PlutusLedgerApi.V1 qualified as V1
+import PlutusLedgerApi.V2 qualified as V2
+import PlutusLedgerApi.V3 qualified as V3
+import PlutusLedgerApi.V4 qualified as V4
+import PlutusPrelude
+import UntypedPlutusCore as UPLC
+import UntypedPlutusCore.Test.DeBruijn.Bad
+import UntypedPlutusCore.Test.DeBruijn.Good
+
+import Control.Exception (evaluate)
+import Control.Monad.Extra (when, whenJust)
+import Control.Monad.Writer
+import Data.Int (Int64)
+import Data.Map qualified as Map
+import Data.Maybe (fromJust)
+import NoThunks.Class
+import PlutusCore.Data qualified as Data
+import Test.Tasty
+import Test.Tasty.Extras (ignoreTestWhenHpcEnabled)
+import Test.Tasty.HUnit
+
+{- Note [Direct UPLC code]
+For this test-suite we write the programs directly in the UPLC AST,
+bypassing the GHC typechecker & compiler, the PIR typechecker & compiler and the PLC typechecker.
+The reason is that users can submit such hand-crafted code, and we want to test how it behaves.
+Because this is part of our API, we have to be careful not to change the behaviour of even weird untypeable programs.
+In particular, we test the online part (API module).
+-}
+
+type T = Term DeBruijn DefaultUni DefaultFun ()
+
+{-| Evaluates scripts as they will be evaluated on-chain, by using the evaluation function we provide for the ledger.
+Notably, this goes via serialising and deserialising the program, so we can see any errors that might arise from that. -}
+testAPI :: TestTree
+testAPI = "v1-api" `testWith` evalAPI vasilPV
+
+evalAPI :: MajorProtocolVersion -> T -> Bool
+evalAPI = evalAPIWithVersion PLC.plcVersion100
+
+evalAPIWithVersion :: PLC.Version -> MajorProtocolVersion -> T -> Bool
+evalAPIWithVersion version pv t =
+  -- handcraft a serialised script
+  let ss :: V1.SerialisedScript = V1.serialiseUPLC $ Program () version t
+      s :: V1.ScriptForEvaluation = either (Prelude.error . show) id $ deserialiseScript PlutusV1 pv ss
+      ec :: V1.EvaluationContext =
+        fst $ unsafeFromRight $ runWriterT $ V1.mkEvaluationContext $ fmap snd V1.costModelParamsForTesting
+   in isRight $
+        snd $
+          V1.evaluateScriptRestricting pv V1.Quiet ec (unExRestrictingBudget enormousBudget) s []
+
+dataCaseTerm :: T
+dataCaseTerm =
+  Case
+    ()
+    (mkConstant @Data.Data () $ Data.Constr 0 [])
+    (pure $ LamAbs () (DeBruijn 0) $ mkConstant @() () ())
+
+unitCaseTerm :: T
+unitCaseTerm = Case () (mkConstant @() () ()) (pure $ mkConstant @() () ())
+
+dataCaseRequiresCore120 :: TestTree
+dataCaseRequiresCore120 =
+  testGroup "case on Data.Constr requires PV12 and Core 1.2.0" $
+    enumerate <&> \ll -> testCase (show ll) $ do
+      evalCtx <- mkEvaluationContextV ll
+      let evalCase plcVersion pv term =
+            let script = serialiseUPLC $ Program () plcVersion term
+             in case deserialiseScript ll pv script of
+                  Left _ -> (False, False)
+                  Right decoded ->
+                    ( isRight $ snd $ evaluateScriptCounting ll pv Quiet evalCtx decoded []
+                    , isRight $
+                        snd $
+                          evaluateScriptRestricting
+                            ll
+                            pv
+                            Quiet
+                            evalCtx
+                            (unExRestrictingBudget enormousBudget)
+                            decoded
+                            []
+                    )
+      evalCase PLC.plcVersion110 dijkstraPV unitCaseTerm @?= (True, True)
+      evalCase PLC.plcVersion110 dijkstraPV dataCaseTerm @?= (False, False)
+      evalCase PLC.plcVersion120 dijkstraPV dataCaseTerm @?= (True, True)
+      when (ll /= PlutusV4) $ do
+        evalCase PLC.plcVersion110 vanRossemPV unitCaseTerm @?= (True, True)
+        evalCase PLC.plcVersion110 vanRossemPV dataCaseTerm @?= (False, False)
+        evalCase PLC.plcVersion120 vanRossemPV dataCaseTerm @?= (False, False)
+
+{-| Test a given eval function against the expected results.
+These tests are modified from untyped-plutus-core-test:Evaluation.FreeVars
+to accommodate the fact that the eval functions in the API
+will do prior conformance checking (i.e. deserialization and scope checking). -}
+testWith :: String -> (T -> Bool) -> TestTree
+testWith str evalFn =
+  testGroup str $
+    fmap
+      (uncurry testCase)
+      [ ("delay0", evalFn (Delay () $ Var () $ DeBruijn 0) @?= False) -- fails at scopechecking
+      , ("fun0var0", evalFn fun0var0 @?= False) -- fails at scopechecking
+      , ("const0var0", evalFn (const0 @@ [unitval, fun0var0]) @?= False) -- fails at scopechecking
+      , ("iteLazy0", evalFn iteLazy0 @?= False) -- fails at scopechecking
+      , ("iteStrict0", evalFn iteStrict0 @?= False) -- fails at scopechecking
+      --    ,("illITELazy", evalFn illITELazy @?= True) -- a type error that the machine cannot catch
+      --    ,("illITEStrict", evalFn illITEStrict @?= True) -- a type error that the machine cannot catch
+      --    ,("illAdd", evalFn illAdd @?= False) -- type error is caught by the machine
+      --    ,("illOverAppBuiltin", evalFn illOverAppBuiltin @?= False) -- type error is caught by the machine
+      --    ,("illOverAppFun", evalFn illOverAppFun @?= False) -- type error is caught by the machine
+      ]
+
+{-** FIXME(https://github.com/IntersectMBO/plutus-private/issues/1611):
+
+This is broken with the new cost model setup.
+
+testUnlifting :: TestTree
+testUnlifting = testCase "check unlifting behaviour changes in Vasil" $ do
+    -- Before Vasil the behavior of this would return `False`, but since the behavior was never
+    -- exercised on chain, it was safe to be switched to the new behavior (jedi mind trick).
+    evalAPI alonzoPV illPartialBuiltin @?= True
+    evalAPI vasilPV illPartialBuiltin @?= True -}
+
+costParams :: [Int64]
+costParams = Map.elems (fromJust defaultCostModelParamsForTesting)
+
+lengthParamNamesV :: PlutusLedgerLanguage -> Int
+lengthParamNamesV PlutusV1 = length $ enumerate @V1.ParamName
+lengthParamNamesV PlutusV2 = length $ enumerate @V2.ParamName
+lengthParamNamesV PlutusV3 = length $ enumerate @V3.ParamName
+lengthParamNamesV PlutusV4 = length $ enumerate @V4.ParamName
+
+mkEvaluationContextV :: PlutusLedgerLanguage -> IO EvaluationContext
+mkEvaluationContextV ll =
+  either (assertFailure . display) (pure . fst) . runWriterT $
+    take (lengthParamNamesV ll) costParams & case ll of
+      PlutusV1 -> V1.mkEvaluationContext
+      PlutusV2 -> V2.mkEvaluationContext
+      PlutusV3 -> V3.mkEvaluationContext
+      PlutusV4 -> V4.mkEvaluationContext
+
+-- | Ensure that 'toMachineParameters' never throws for all language and protocol versions.
+evaluationContextCacheIsComplete :: TestTree
+evaluationContextCacheIsComplete =
+  testGroup "EvaluationContext has machine parameters for all protocol versions" $
+    enumerate <&> \ll -> testCase (show ll) $ do
+      evalCtx <- mkEvaluationContextV ll
+      for_ (futurePV : knownPVs) $ \pv ->
+        evaluate $ toMachineParameters pv PLC.latestVersion evalCtx
+
+failIfThunk :: Show a => Maybe a -> IO ()
+failIfThunk mbThunkInfo =
+  whenJust mbThunkInfo $ \thunk ->
+    assertFailure $ "Unexpected thunk: " <> show thunk
+
+-- | Ensure that no 'EvaluationContext' has thunks in it for all language versions.
+evaluationContextNoThunks :: TestTree
+evaluationContextNoThunks =
+  testGroup "NoThunks in EvaluationContext" $
+    enumerate <&> \ll -> testCase (show ll) $ do
+      !evalCtx <- mkEvaluationContextV ll
+      failIfThunk =<< noThunks [] evalCtx
+
+tests :: TestTree
+tests =
+  testGroup
+    "eval"
+    [ testAPI
+    , dataCaseRequiresCore120
+    , --    , testUnlifting
+      evaluationContextCacheIsComplete
+    , ignoreTestWhenHpcEnabled evaluationContextNoThunks
+    ]

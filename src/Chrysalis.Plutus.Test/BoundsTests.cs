@@ -37,9 +37,14 @@ public sealed class BoundsTests
         { "listData non-empty wrong list (E)", true, App(ListData, List(ConstantType.PlutusInteger, Int(1))), true },
         { "G1_multiScalarMul arg0 wrong list (E)", true, App(Bls12_381_G1_MultiScalarMul, List(ConstantType.PlutusBool), List(ConstantType.Bls12381G1Element)), true },
         { "G2_multiScalarMul arg1 wrong list (C)", false, App(Bls12_381_G2_MultiScalarMul, List(ConstantType.PlutusInteger), List(ConstantType.Bls12381G1Element)), true },
+        { "multiIndexArray indices of bool (C)", false, App(MultiIndexArray, new ArrayConstant(ConstantType.PlutusInteger, [Int(10)]), List(ConstantType.PlutusBool)), true },
+        { "keepPolicies integer ids (C)", false, App(KeepPolicies, List(ConstantType.PlutusInteger), new ValueConstant(new LedgerValue([]))), true },
+        { "dropPolicies non-empty integer ids (C)", false, App(DropPolicies, List(ConstantType.PlutusInteger, Int(1)), new ValueConstant(new LedgerValue([]))), true },
         { "writeBits 4097 B (E)", true, App(WriteBits, Bytes(4097), List(ConstantType.PlutusInteger), BoolConstant.False), false },
         { "sha2_256 65537 B (C)", false, App(Sha2_256, Bytes(65_537)), false },
-        { "indexByteString 5 (C)", false, App(IndexByteString, Bytes(1), Int(5)), false }
+        { "indexByteString 5 (C)", false, App(IndexByteString, Bytes(1), Int(5)), false },
+        { "multiIndexArray index out of range (C)", false, App(MultiIndexArray, new ArrayConstant(ConstantType.PlutusInteger, [Int(10)]), List(ConstantType.PlutusInteger, Int(1))), false },
+        { "multiIndexArray not an array (C)", false, App(MultiIndexArray, Int(0), List(ConstantType.PlutusInteger)), false }
     };
 
     [Theory]
@@ -232,6 +237,9 @@ public sealed class BoundsTests
         LedgerValue n = new([new CurrencyEntry(Sought(0).Value, [new TokenEntry(Sought(0).Value, -1)])]);
         LedgerValue u = new([.. Enumerable.Range(0, 1_024).Select(i => new CurrencyEntry(Key(i), single))]);
         LedgerValue uPlus = new([.. u.Entries, new CurrencyEntry(Key(1_024), single)]);
+        LedgerValue small = new([.. v.Entries.Take(16)]);
+        ListConstant present = List(ConstantType.PlutusByteString, Sought(0));
+        CekValue[] absent = [Val(List(ConstantType.PlutusByteString, Sought(16_384))), Val(new ValueConstant(v))];
         long lookup = 219_951 + (9_444 * 30);
         long insert = 356_924 + (18_413 * 30);
         long contains = 618_401 + (1_998 * 32_767) + 28_258;
@@ -276,6 +284,14 @@ public sealed class BoundsTests
             Assert.InRange(reads, 0, maxReads);
         }
 
+        // keepPolicies and dropPolicies of one id, searched once in the outer map.
+        LedgerValue Filtered(DefaultFunction function, int currency)
+        {
+            (_, int reads, CekValue result) = Run(App(function, List(ConstantType.PlutusByteString, Sought(currency)), new ValueConstant(v)), function);
+            Assert.InRange(reads, 0, 15);
+            return Assert.IsType<ValueConstant>(Assert.IsType<VConstant>(result).Value).Value;
+        }
+
         void Fails(Term<DeBruijn> term, string position) =>
             Assert.Equal($"valueContains: negative quantity in {position} value", Assert.Throws<EvaluationException>(() => Run(term, ValueContains)).Message);
 
@@ -298,8 +314,8 @@ public sealed class BoundsTests
             ("15 and made positive again", () => Verdict(Containing(Inserting(2, Inserting(-2, Plain(v))), w), true, int.MaxValue, contains)),
             ("16 the early False", () => Verdict(Containing(Plain(u), uPlus), false, 0, 213_283)),
             ("17 the negative check comes first", () => Fails(Containing(Plain(n), u), "first")),
-            ("18 insertCoin copies each level once", () => Assert.InRange(Allocated(InsertCoin, Sought(16_383), Sought(16_384), Int(1)), 0, (8 * (16_384 + 16_384)) + 1024)),
-            ("19 lookupCoin allocates nothing", () => Assert.Equal(0, Allocated(LookupCoin, Sought(16_383), Sought(16_383)))),
+            ("18 insertCoin copies each level once", () => Assert.InRange(Allocated(v, InsertCoin, Sought(16_383), Sought(16_384), Int(1)), 0, (8 * (16_384 + 16_384)) + 1024)),
+            ("19 lookupCoin allocates nothing", () => Assert.Equal(0, Allocated(v, LookupCoin, Sought(16_383), Sought(16_383)))),
             ("20 a with copy starts with no counts", () =>
             {
                 LedgerValue copy = v with { };
@@ -312,6 +328,20 @@ public sealed class BoundsTests
                 LedgerValue copy = n with { };
                 Assert.Equal((-1, -1L, -1L), copy.Kept);
                 Fails(Containing(Plain(copy), u), "first");
+            }),
+            ("22 keepPolicies allocates the same on 16 and 16,384 currencies", () =>
+            {
+                long bytes = Allocated(v, KeepPolicies, present);
+                Assert.Equal(Allocated(small, KeepPolicies, present), bytes);
+                Assert.InRange(bytes, 1, 1024);
+            }),
+            ("23 keepPolicies keeps the one hit", () => Assert.Equal(Sought(5).Value.ToArray(), Assert.Single(Filtered(KeepPolicies, 5).Entries).Currency.ToArray())),
+            ("24 dropPolicies removes the one hit", () => Assert.Equal(16_383, Filtered(DropPolicies, 5).Entries.Length)),
+            ("25 dropPolicies of an absent id returns its Value", () => Assert.Same(absent[1], BuiltinRuntime.Call(DropPolicies, absent))),
+            ("26 assetCount reads no key", () =>
+            {
+                (_, int reads, CekValue result) = Run(App(AssetCount, new ValueConstant(v)), AssetCount);
+                Assert.Equal((0, (BigInteger)32_767), (reads, Quantity(result)));
             })
         ];
         Assert.All(rows, row =>
@@ -320,9 +350,9 @@ public sealed class BoundsTests
             Assert.True(failure is null, $"row {row.Name}: {failure?.Message}");
         });
 
-        long Allocated(DefaultFunction function, params Constant[] args)
+        long Allocated(LedgerValue value, DefaultFunction function, params Constant[] args)
         {
-            CekValue[] values = [.. args.Select(Val), Val(new ValueConstant(v))];
+            CekValue[] values = [.. args.Select(Val), Val(new ValueConstant(value))];
             return AllocationAssert.Measure(() => _ = BuiltinRuntime.Call(function, values), () => _ = BuiltinRuntime.Call(function, values));
         }
     }

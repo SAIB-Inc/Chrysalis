@@ -17,36 +17,27 @@ public sealed class CostModelTests
     private static readonly string[] MachineKinds = ["Const", "Var", "Lam", "Apply", "Delay", "Force", "Builtin", "Constr", "Case", "Startup"];
 
     [Theory]
-    [InlineData(1, 332, 343, 351)]
-    [InlineData(2, 332, 343, 351)]
-    [InlineData(3, 350, 361, 369)]
-    public void NameTablesMatchThePinnedParameterNames(int language, int prefix, int total170, int total171)
+    [InlineData(1, 351)]
+    [InlineData(2, 351)]
+    [InlineData(3, 369)]
+    [InlineData(4, 369)]
+    public void NameTablesMatchThePinnedParameterNames(int language, int total)
     {
-        ImmutableArray<string> actual = language switch { 1 => ParamNames.V1, 2 => ParamNames.V2, _ => ParamNames.V3 };
-        foreach ((string tag, int total) in new[] { ("1.70.0.0", total170), ("1.71.0.0", total171) })
-        {
-            string[] names = ReadNames(language, out int deployed, tag);
-            Assert.Equal(total, names.Length);
-            Assert.Equal(prefix, deployed);
-            Assert.Equal(names[..deployed], actual);
-        }
+        string[] names = ReadNames(language);
+        Assert.Equal(total, names.Length);
+        Assert.Equal(names, language switch { 1 => ParamNames.V1, 2 => ParamNames.V2, _ => ParamNames.V3 });
     }
 
-    internal static string[] DeployedNames(int language) => ReadNames(language, out int deployed)[..deployed];
+    internal static string[] DeployedNames(int language) => ReadNames(language);
 
-    private static string[] ReadNames(int language, out int deployed, string tag = "1.70.0.0")
+    // Plutus 1.71.0.0's whole table: the 19 batch-7 names closing it are parameters of the raw paths only.
+    private static string[] ReadNames(int language)
     {
-        using StreamReader reader = new(Golden.Open($"plutus-{tag}/V{language}/ParamName.hs"));
+        using StreamReader reader = new(Golden.Open($"plutus-1.71.0.0/V{language}/ParamName.hs"));
         while (reader.ReadLine() is { } header && header != "data ParamName") { }
         List<string> names = [];
-        deployed = -1;
         while (reader.ReadLine() is { } line && !line.TrimStart().StartsWith("deriving", StringComparison.Ordinal))
         {
-            if (line.Contains("-- Batch 7", StringComparison.Ordinal))
-            {
-                deployed = names.Count;
-            }
-
             int comment = line.IndexOf("--", StringComparison.Ordinal);
             string name = (comment < 0 ? line : line[..comment]).Trim(' ', '|', '=');
             if (name.Length > 0)
@@ -258,8 +249,8 @@ public sealed class CostModelTests
 
         long[] oversized = [.. Enumerable.Range(1, 400).Select(i => (long)i)];
         CostModel copied = CostModelLoader.FromFlat(oversized, 3, Variant.E);
-        oversized[350] = long.MinValue;
-        Assert.Equal(Project(copied), Project(CostModelLoader.FromFlat(oversized[..350], 3, Variant.E)));
+        oversized[369] = long.MinValue;
+        Assert.Equal(Project(copied), Project(CostModelLoader.FromFlat(oversized[..369], 3, Variant.E)));
         oversized[0] = long.MaxValue;
         Assert.Equal(1, Project(copied)[Leaf(DeployedNames(3)[0])]);
 
@@ -299,6 +290,10 @@ public sealed class CostModelTests
         CostModel v4 = CostModelLoader.FromFlat(DefaultCosts.LatestV3, 4, Variant.E);
         Assert.Equal(Variant.E, v4.Variant);
         Assert.Equal(Project(v3), Project(v4));
+        Assert.Equal(Variant.G, Availability.VariantFor(4, Availability.Dijkstra));
+        // G refuses the byte that F would wrap (V4/EvaluationContext.hs:46).
+        _ = Assert.Throws<EvaluationException>(() => Evaluator.EvaluateScript(NodeBudgetTests.Fixture.Failures.Single(row => row.Script.Id == "BI-consByteString-arg0-256-V3").Script.Flat,
+            [new PlutusDataConstr(0, [])], 4, Availability.Dijkstra, NodeBudgetTests.Fixture.Models[2]));
     }
 
     [Fact]

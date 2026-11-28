@@ -298,6 +298,84 @@ internal static class ValueBuiltins
         return ValueResult(new LedgerValue(newEntries.ToImmutable()));
     }
 
+    // --- batch 7: policies, assetCount, keepPolicies, dropPolicies ---
+
+    // Value.hs:462-469: the currency symbols in ascending order.
+    internal static CekValue Policies(CekValue[] args)
+    {
+        LedgerValue v = UnwrapValue(args[0]);
+        ImmutableArray<Constant>.Builder ids = ImmutableArray.CreateBuilder<Constant>(v.Entries.Length);
+        foreach (CurrencyEntry entry in v.Entries)
+        {
+            ids.Add(new ByteStringConstant(entry.Currency));
+        }
+        return new VConstant(new ListConstant(ConstantType.PlutusByteString, ids.MoveToImmutable()));
+    }
+
+    internal static CekValue AssetCount(CekValue[] args) => IntegerResult(ExMem.ValueSizeExMem(UnwrapValue(args[0])));
+
+    // Value.hs:466-512: both filters fail on a list of more than this many ids, repeats and over-long ids counted.
+    private const int PolicyFilterMaxIds = 256;
+
+    internal static CekValue KeepPolicies(CekValue[] args) => FilterPolicies(args, true, "keepPolicies");
+
+    internal static CekValue DropPolicies(CekValue[] args) => FilterPolicies(args, false, "dropPolicies");
+
+    // Each id is found by search in O(log m); a keep adds only the hit entries, a drop copies the runs between them.
+    private static CekValue FilterPolicies(CekValue[] args, bool keep, string name)
+    {
+        ListConstant ids = UnwrapListConstant(args[0]);
+        LedgerValue v = UnwrapValue(args[1]);
+        if (ids.Count > PolicyFilterMaxIds)
+        {
+            throw new EvaluationException($"{name}: maximum number of policy ids ({PolicyFilterMaxIds}) exceeded");
+        }
+
+        Span<int> hits = stackalloc int[ids.Count];
+        int found = 0;
+        for (int i = 0; i < ids.Count; i++)
+        {
+            int at = ids.ElementAt(i) is ByteStringConstant id
+                ? FindCurrency(v.Entries, id.Value)
+                : throw new EvaluationException($"{name}: expected a bytestring policy id");
+            if (at >= 0)
+            {
+                hits[found++] = at;
+            }
+        }
+        if (!keep && found == 0)
+        {
+            return args[1];
+        }
+
+        hits = hits[..found];
+        hits.Sort();
+        ImmutableArray<CurrencyEntry>.Builder result =
+            ImmutableArray.CreateBuilder<CurrencyEntry>(keep ? found : Math.Max(0, v.Entries.Length - found));
+        int start = 0;
+        foreach (int hit in hits)
+        {
+            if (hit < start)
+            {
+                continue;
+            }
+            if (keep)
+            {
+                result.Add(v.Entries[hit]);
+            }
+            else
+            {
+                result.AddRange(v.Entries.AsSpan(start..hit));
+            }
+            start = hit + 1;
+        }
+        if (!keep)
+        {
+            result.AddRange(v.Entries.AsSpan(start..));
+        }
+        return ValueResult(new LedgerValue(result.DrainToImmutable()));
+    }
+
     // --- valueData ---
 
     // Value.hs:585-598: valueData fails when the value holds more tokens than this.

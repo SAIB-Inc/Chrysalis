@@ -13,7 +13,6 @@ import tempfile
 
 HEX40_RE = re.compile(r"^[0-9a-f]{40}$")
 HEX64_RE = re.compile(r"^[0-9a-f]{64}$")
-PIN_NAME = "conformance.json"
 TIMEOUT = 300
 
 
@@ -77,7 +76,11 @@ def validate_pin(pin_path):
         fail("pin", report_id)
     if not isinstance(files, int) or isinstance(files, bool) or files < 1:
         fail("pin", report_id)
-    return source, commit, tree["path"], report_id, dict(blobs), sha256, files
+    select = data.get("select")
+    if select is not None and (not isinstance(select, list) or not select or not all(valid_rel_path(entry) for entry in select)):
+        fail("pin", report_id)
+    folders = [f"{tree['path']}/{entry}" for entry in select] if select else [tree["path"]]
+    return source, commit, tree["path"], report_id, dict(blobs), sha256, files, folders
 
 
 def check_no_links(root, target, tree_id):
@@ -249,7 +252,7 @@ def run_git(cwd, env, *args):
     )
 
 
-def fetch_tree(temp_dir, source, commit, tree_path, tree_id, blobs):
+def fetch_tree(temp_dir, source, commit, tree_path, tree_id, blobs, folders):
     env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
     env["GIT_TERMINAL_PROMPT"] = "0"
     env["GIT_CONFIG_GLOBAL"] = "/dev/null"
@@ -275,7 +278,7 @@ def fetch_tree(temp_dir, source, commit, tree_path, tree_id, blobs):
     except (OSError, subprocess.SubprocessError):
         fail("verify", tree_id)
     try:
-        run_git(temp_dir, env, "sparse-checkout", "set", "--no-cone", "--", f"/{tree_path}/", *(f"/{bp}" for bp in blobs))
+        run_git(temp_dir, env, "sparse-checkout", "set", "--no-cone", "--", *(f"/{folder}/" for folder in folders), *(f"/{bp}" for bp in blobs))
         run_git(temp_dir, env, "checkout", "--detach", "FETCH_HEAD")
     except (OSError, subprocess.SubprocessError):
         fail("fetch", tree_id)
@@ -349,13 +352,13 @@ def cleanup_temp_dirs(cleanup_dirs):
 
 
 def fetch_verified_temp(parent, err_code, pin, cleanup_dirs):
-    source, commit, tree_path, tree_id, blobs, expected_sha256, expected_files = pin
+    source, commit, tree_path, tree_id, blobs, expected_sha256, expected_files, folders = pin
     try:
         tmp_dir = Path(tempfile.mkdtemp(prefix=f".fetch-{tree_id}-", dir=str(parent)))
     except OSError:
         fail(err_code, tree_id)
     cleanup_dirs.append(tmp_dir)
-    fetch_tree(tmp_dir, source, commit, tree_path, tree_id, blobs)
+    fetch_tree(tmp_dir, source, commit, tree_path, tree_id, blobs, folders)
     verified = verify_dir(tmp_dir, expected_sha256, expected_files)
     if verified is None:
         fail("verify", tree_id)
@@ -363,7 +366,7 @@ def fetch_verified_temp(parent, err_code, pin, cleanup_dirs):
 
 
 def prepare_from_cache(corpora_env, dest, dest_parent, pin, cleanup_dirs):
-    _, _, _, tree_id, _, expected_sha256, expected_files = pin
+    _, _, _, tree_id, _, expected_sha256, expected_files, _ = pin
     try:
         import fcntl
     except ImportError:
@@ -449,10 +452,10 @@ def prepare_from_cache(corpora_env, dest, dest_parent, pin, cleanup_dirs):
                 pass
 
 
-def run():
+def run(pin_path):
     script_path = Path(__file__)
-    pin = validate_pin(script_path.parent / PIN_NAME)
-    _, _, _, tree_id, _, expected_sha256, expected_files = pin
+    pin = validate_pin(pin_path)
+    _, _, _, tree_id, _, expected_sha256, expected_files, _ = pin
     try:
         if stat.S_ISLNK(script_path.lstat().st_mode):
             fail("link", tree_id)
@@ -493,7 +496,9 @@ def run():
 
 def main():
     try:
-        return run()
+        for pin_path in sorted(Path(__file__).parent.glob("conformance*.json")) or fail("pin"):
+            run(pin_path)
+        return 0
     except ConformanceError as exc:
         suffix = f" {exc.tree_id}" if exc.tree_id else ""
         print(f"conformance: fail {exc.code}{suffix}", flush=True)
