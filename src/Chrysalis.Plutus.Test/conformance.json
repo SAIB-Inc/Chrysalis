@@ -1,0 +1,16 @@
+{
+  "source": "https://github.com/IntersectMBO/plutus",
+  "tag": "1.71.0.0",
+  "commit": "261766ad1d582bce8c86bad1af7a3b0e5355b21c",
+  "pinnedBy": "cardano-node 11.2.1 (90bc1cd9380a78a63091ff673f8c5693152c8f60): plutus-core and plutus-ledger-api 1.71.0.0",
+  "licence": "Apache-2.0",
+  "tree": { "path": "plutus-conformance/test-cases/uplc/evaluation", "id": "4afec37f8a460d3e06be9f66c765fa1be728db5f" },
+  "blobs": {
+    "plutus-core/cost-model/data/builtinCostModelE.json": "5424bae96b99ce5353e3a7adb7c8616ab65ed9d1",
+    "plutus-core/cost-model/data/cekMachineCostsE.json": "428b872b202e26f4d2b04456b04834112c813293"
+  },
+  "sha256": "a1331b28d369c188197578c2338ff444d97ab1d1b148294d4c5483597c1b174d",
+  "files": 4849,
+  "uplc": 1009,
+  "flat": 906
+}

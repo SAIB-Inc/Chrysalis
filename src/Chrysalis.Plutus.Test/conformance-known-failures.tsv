@@ -1,0 +1,68 @@
+case	form	owner	failure	reason
+builtin/parser/value/currencyIDs-unordered	uplc	V6	accept	value constant text must be strictly ordered without duplicates; the parser merges and sorts
+builtin/parser/value/duplicate-currencyIDs	uplc	V6	accept	value constant text must be strictly ordered without duplicates; the parser merges and sorts
+builtin/parser/value/duplicate-tokenIDs	uplc	V6	accept	value constant text must be strictly ordered without duplicates; the parser merges and sorts
+builtin/parser/value/empty-tokens	uplc	V6	accept	value constant text must hold no zero quantity and no empty token map; the parser drops them
+builtin/parser/value/tokenIDs-unordered	uplc	V6	accept	value constant text must be strictly ordered without duplicates; the parser merges and sorts
+builtin/parser/value/zero-asset	uplc	V6	accept	value constant text must hold no zero quantity and no empty token map; the parser drops them
+builtin/semantics/insertCoin/key-too-long-1	flat	V6	decode	the flat input holds a value constant (type tag 13), which the decoder cannot read
+builtin/semantics/insertCoin/key-too-long-2	flat	V6	decode	the flat input holds a value constant (type tag 13), which the decoder cannot read
+builtin/semantics/insertCoin/long-key-zero-1	flat	V6	decode	the flat input holds a value constant (type tag 13), which the decoder cannot read
+builtin/semantics/insertCoin/long-key-zero-2	flat	V6	decode	the flat input holds a value constant (type tag 13), which the decoder cannot read
+builtin/semantics/insertCoin/multi-ccy-empty	flat	V6	decode	the flat input holds a value constant (type tag 13), which the decoder cannot read
+builtin/semantics/insertCoin/multi-ccy-nonempty	flat	V6	decode	the flat input holds a value constant (type tag 13), which the decoder cannot read
+builtin/semantics/insertCoin/multi-token	flat	V6	decode	the flat input holds a value constant (type tag 13), which the decoder cannot read
+builtin/semantics/insertCoin/negative-empty	flat	V6	decode	the flat input holds a value constant (type tag 13), which the decoder cannot read
+builtin/semantics/insertCoin/no-overflow	flat	V6	decode	the flat input holds a value constant (type tag 13), which the decoder cannot read
+builtin/semantics/insertCoin/no-underflow	flat	V6	decode	the flat input holds a value constant (type tag 13), which the decoder cannot read
+builtin/semantics/insertCoin/overflow	flat	V6	decode	the flat input holds a value constant (type tag 13), which the decoder cannot read
+builtin/semantics/insertCoin/positive-empty	flat	V6	decode	the flat input holds a value constant (type tag 13), which the decoder cannot read
+builtin/semantics/insertCoin/positive-nonempty	flat	V6	decode	the flat input holds a value constant (type tag 13), which the decoder cannot read
+builtin/semantics/insertCoin/underflow	flat	V6	decode	the flat input holds a value constant (type tag 13), which the decoder cannot read
+builtin/semantics/insertCoin/zero-positive	flat	V6	decode	the flat input holds a value constant (type tag 13), which the decoder cannot read
+builtin/semantics/lookupCoin/absent	flat	V6	decode	the flat input holds a value constant (type tag 13), which the decoder cannot read
+builtin/semantics/lookupCoin/present	flat	V6	decode	the flat input holds a value constant (type tag 13), which the decoder cannot read
+builtin/semantics/scaleValue/by-neg	flat	V6	decode	the flat input holds a value constant (type tag 13), which the decoder cannot read
+builtin/semantics/scaleValue/by-pos	flat	V6	decode	the flat input holds a value constant (type tag 13), which the decoder cannot read
+builtin/semantics/scaleValue/by-zero	flat	V6	decode	the flat input holds a value constant (type tag 13), which the decoder cannot read
+builtin/semantics/scaleValue/no-overflow	flat	V6	decode	the flat input holds a value constant (type tag 13), which the decoder cannot read
+builtin/semantics/scaleValue/no-underflow	flat	V6	decode	the flat input holds a value constant (type tag 13), which the decoder cannot read
+builtin/semantics/scaleValue/overflow	flat	V6	decode	the flat input holds a value constant (type tag 13), which the decoder cannot read
+builtin/semantics/scaleValue/underflow	flat	V6	decode	the flat input holds a value constant (type tag 13), which the decoder cannot read
+builtin/semantics/unValueData/empty	flat	V6	oracle	the expected flat result is a value constant (type tag 13), which the decoder cannot read
+builtin/semantics/unValueData/max-key-len	flat	V6	oracle	the expected flat result is a value constant (type tag 13), which the decoder cannot read
+builtin/semantics/unValueData/multi-currency	flat	V6	oracle	the expected flat result is a value constant (type tag 13), which the decoder cannot read
+builtin/semantics/unValueData/multi-token	flat	V6	oracle	the expected flat result is a value constant (type tag 13), which the decoder cannot read
+builtin/semantics/unValueData/negative-quantity	flat	V6	oracle	the expected flat result is a value constant (type tag 13), which the decoder cannot read
+builtin/semantics/unValueData/single-entry	flat	V6	oracle	the expected flat result is a value constant (type tag 13), which the decoder cannot read
+builtin/semantics/unionValue/cancel-01	flat	V6	decode	the flat input holds a value constant (type tag 13), which the decoder cannot read
+builtin/semantics/unionValue/cancel-02	flat	V6	decode	the flat input holds a value constant (type tag 13), which the decoder cannot read
+builtin/semantics/unionValue/combine	flat	V6	decode	the flat input holds a value constant (type tag 13), which the decoder cannot read
+builtin/semantics/unionValue/no-overflow	flat	V6	decode	the flat input holds a value constant (type tag 13), which the decoder cannot read
+builtin/semantics/unionValue/no-underflow	flat	V6	decode	the flat input holds a value constant (type tag 13), which the decoder cannot read
+builtin/semantics/unionValue/overflow	flat	V6	decode	the flat input holds a value constant (type tag 13), which the decoder cannot read
+builtin/semantics/unionValue/underflow	flat	V6	decode	the flat input holds a value constant (type tag 13), which the decoder cannot read
+builtin/semantics/unionValue/unitl	flat	V6	decode	the flat input holds a value constant (type tag 13), which the decoder cannot read
+builtin/semantics/unionValue/unitr	flat	V6	decode	the flat input holds a value constant (type tag 13), which the decoder cannot read
+builtin/semantics/valueContains/ccy-missing	flat	V6	decode	the flat input holds a value constant (type tag 13), which the decoder cannot read
+builtin/semantics/valueContains/multi-insufficient	flat	V6	decode	the flat input holds a value constant (type tag 13), which the decoder cannot read
+builtin/semantics/valueContains/multi-sufficient	flat	V6	decode	the flat input holds a value constant (type tag 13), which the decoder cannot read
+builtin/semantics/valueContains/neg-empty	flat	V6	decode	the flat input holds a value constant (type tag 13), which the decoder cannot read
+builtin/semantics/valueContains/neg-neg-eq	flat	V6	decode	the flat input holds a value constant (type tag 13), which the decoder cannot read
+builtin/semantics/valueContains/neg-neg-gt	flat	V6	decode	the flat input holds a value constant (type tag 13), which the decoder cannot read
+builtin/semantics/valueContains/neg-neg-lt	flat	V6	decode	the flat input holds a value constant (type tag 13), which the decoder cannot read
+builtin/semantics/valueContains/neg-pos	flat	V6	decode	the flat input holds a value constant (type tag 13), which the decoder cannot read
+builtin/semantics/valueContains/pos-empty	flat	V6	decode	the flat input holds a value constant (type tag 13), which the decoder cannot read
+builtin/semantics/valueContains/pos-neg	flat	V6	decode	the flat input holds a value constant (type tag 13), which the decoder cannot read
+builtin/semantics/valueContains/reflexive	flat	V6	decode	the flat input holds a value constant (type tag 13), which the decoder cannot read
+builtin/semantics/valueContains/token-missing	flat	V6	decode	the flat input holds a value constant (type tag 13), which the decoder cannot read
+builtin/semantics/valueData/empty	flat	V6	decode	the flat input holds a value constant (type tag 13), which the decoder cannot read
+builtin/semantics/valueData/multi-currency	flat	V6	decode	the flat input holds a value constant (type tag 13), which the decoder cannot read
+builtin/semantics/valueData/multi-token	flat	V6	decode	the flat input holds a value constant (type tag 13), which the decoder cannot read
+builtin/semantics/valueData/negative-quantity	flat	V6	decode	the flat input holds a value constant (type tag 13), which the decoder cannot read
+builtin/semantics/valueData/roundtrip-from-value	flat	V6	decode	the flat input holds a value constant (type tag 13), which the decoder cannot read
+builtin/semantics/valueData/single-entry	flat	V6	decode	the flat input holds a value constant (type tag 13), which the decoder cannot read
+term/constant-case/data/data-01	flat	V7	outcome	the machine refuses case on a Data constant (program 1.2.0)
+term/constant-case/data/data-01	uplc	V7	outcome	the machine refuses case on a Data constant (program 1.2.0)
+term/constant-case/data/data-02	flat	V7	outcome	the machine refuses case on a Data constant (program 1.2.0)
+term/constant-case/data/data-02	uplc	V7	outcome	the machine refuses case on a Data constant (program 1.2.0)

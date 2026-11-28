@@ -568,7 +568,7 @@ public sealed partial class NodeBudgetTests
         Reject(i2b.Flat, new(long.MaxValue, 2423));
         Reject(i2b.Flat, new(1530706, long.MaxValue));
 
-        string source = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "conformance", "builtin", "semantics", "dropList", "dropList-15", "dropList-15.uplc"));
+        string source = File.ReadAllText(ConformanceTests.Input("builtin/semantics/dropList/dropList-15", "uplc"));
         Term<DeBruijn> drop = UplcParser.NameToDeBruijn(UplcParser.Parse(source)).Term;
         (Term<DeBruijn> result, ExUnitsResult units) = Evaluator.EvaluateTerm(drop);
         Assert.Equal("(con (list integer) [])", UplcParser.PrettyPrint(result));
