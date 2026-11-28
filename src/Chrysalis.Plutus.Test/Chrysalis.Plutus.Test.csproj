@@ -5,6 +5,7 @@
     <OutputType>Exe</OutputType>
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
+    <DefaultItemExcludes>$(DefaultItemExcludes);plutus-conformance\**</DefaultItemExcludes>
   </PropertyGroup>
 
   <ItemGroup>
@@ -28,9 +29,8 @@
           Link="TestData/CostModels/g1/current-protocol-parameters.json" CopyToOutputDirectory="PreserveNewest" />
     <None Include="../../benchmarks/data/plutus_use_cases/auction_1-1.flat"
           Link="TestData/CostModels/g1/auction_1-1.flat" CopyToOutputDirectory="PreserveNewest" />
-    <None Update="conformance\**\*.*">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
+    <None Include="plutus-conformance\**" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="conformance.json;conformance-known-failures.tsv" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>

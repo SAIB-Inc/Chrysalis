@@ -30,6 +30,22 @@ jobs:
       - name: Restore
         run: dotnet restore
 
+      - id: plc
+        run: |
+          mkdir -p "$RUNNER_TEMP/corpora"
+          tree=$(jq -er .tree.id src/Chrysalis.Plutus.Test/conformance.json)
+          [[ "$tree" =~ ^[0-9a-f]{40}$ ]]
+          echo "tree=$tree" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/corpora/plutus-conformance/${{ steps.plc.outputs.tree }}
+          key: plutus-conformance-${{ steps.plc.outputs.tree }}
+
+      - env:
+          CHRYSALIS_CORPORA: ${{ runner.temp }}/corpora
+        run: python3 src/Chrysalis.Plutus.Test/fetch_conformance.py
+
       - name: Build
         run: dotnet build -c Release --no-restore
 
