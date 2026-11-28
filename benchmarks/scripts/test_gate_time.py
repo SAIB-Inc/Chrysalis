@@ -1335,12 +1335,15 @@ def test_c3rc_q1_frozen_azure_noise_records_valid():
     config = prepare.azure_config(json.loads((gate.GATE / 'gated.json').read_text()))
     frozen = config['time']['noise']['Standard_F8als_v7']
     expected_ids = set(config['time']['required'])
-    assert set(frozen) == expected_ids and len(frozen) == 8
+    x11 = {entry['id']: entry['aPairs'] for entry in json.loads((gate.GATE / 'plans/noise-records-x11.json').read_text())['entries']}
+    assert set(frozen) == expected_ids | set(x11) and (len(expected_ids), len(x11), len(frozen)) == (8, 5, 13)
     for rid, rec in frozen.items():
         assert timing.noise_band(rec, 'azure') == rec['band'] and 0 <= rec['band'] < .05
         assert rec['design'] == 'long' and rec['machine'] == 'Standard_F8als_v7'
-        assert rec['counts'] == [180, 60] and rec['pairs'] == 16
+        assert rec['counts'] == [180, 60] and rec['pairs'] == x11.get(rid, 16)
         assert len(rec['sourceSeal']) == 64 and len(rec['corpusId']) == 64
+    seals = {frozen[rid]['sourceSeal'] for rid in x11}
+    assert len(seals) == 1 and all(len(seal) == 64 and set(seal) <= set('0123456789abcdef') for seal in seals)
     audit = json.loads((gate.REPO / 'benchmarks/Chrysalis.Benchmarks/audit-allocations.json').read_text())
     entries = json.loads((gate.GATE / 'plans/noise-records.json').read_text())
     selected = gate.select_rows(SimpleNamespace(mode='release', plan=None, only=None), config, audit, plan_entries=entries)
