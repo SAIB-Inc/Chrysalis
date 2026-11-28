@@ -309,7 +309,7 @@ public class OfficialUnionFirstFamilyTests
 
         byte[] poolBytes = EncodePoolWithRelays(relayWire);
         PoolRegistration pool = PoolRegistration.Read(poolBytes);
-        _ = pool.Relays; // Prime CborListReaderCache<Relay>.Reader outside measured block.
+        _ = pool.Relays; // Warm CborCodecCache.GetReader<Relay>() outside measured block.
 
         int sink = 0;
 

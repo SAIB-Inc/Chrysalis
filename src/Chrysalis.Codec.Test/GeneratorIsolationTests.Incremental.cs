@@ -182,7 +182,7 @@ public partial class GeneratorIsolationTests
         GeneratorDriver driver = CreateDriver().RunGeneratorsAndUpdateCompilation(input, out Compilation output, out _);
 
         Assert.Empty(driver.GetRunResult().Diagnostics);
-        Assert.Equal(4, driver.GetRunResult().Results.Single().GeneratedSources.Length);
+        Assert.Equal(5, driver.GetRunResult().Results.Single().GeneratedSources.Length);
         Assert.DoesNotContain(output.GetDiagnostics(), diagnostic => diagnostic.Severity == DiagnosticSeverity.Error);
         string split = GeneratedText(driver, "Snapshot.Split");
         Assert.Contains("WriteSemanticTag((ulong)122)", split, StringComparison.Ordinal);
@@ -331,8 +331,8 @@ public partial class GeneratorIsolationTests
         // The duplicate marker is a compiler error, but must not stop the generator for the whole project.
         Assert.Empty(driver.GetRunResult().Diagnostics);
         Assert.Empty(reversed.GetRunResult().Diagnostics);
-        Assert.Equal(6, driver.GetRunResult().Results.Single().GeneratedSources.Length);
-        Assert.Equal(6, reversed.GetRunResult().Results.Single().GeneratedSources.Length);
+        Assert.Equal(7, driver.GetRunResult().Results.Single().GeneratedSources.Length);
+        Assert.Equal(7, reversed.GetRunResult().Results.Single().GeneratedSources.Length);
         Assert.Equal(GeneratedText(driver, "Snapshot.SameName"), GeneratedText(reversed, "Snapshot.SameName"));
         Assert.Contains("public partial record Independent", GeneratedText(driver, "Snapshot.Independent"), StringComparison.Ordinal);
     }
@@ -393,6 +393,147 @@ public partial class GeneratorIsolationTests
         Assert.Equal(IncrementalStepRunReason.Cached, SourceReason(removed, "Snapshot.Case"));
     }
 
+    [Fact]
+    public void UnrelatedEditCachesCborRegistrationStep()
+    {
+        SyntaxTree original = ParseIncremental("Model.cs", """
+            namespace Snapshot;
+            [CborSerializable, CborList] public partial record Value([CborOrder(0)] int Item) : CborRecord;
+            """);
+        CSharpCompilation input = IncrementalCompilation("RegistrationCacheProbe", original);
+        GeneratorDriver before = TrackingDriver().RunGenerators(input);
+        SyntaxTree edited = original.WithChangedText(original.GetText().Replace(0, 0, "// unrelated\n"));
+        GeneratorDriver after = before.RunGenerators(input.ReplaceSyntaxTree(original, edited));
+
+        Assert.True(after.GetRunResult().Results.Single().TrackedSteps.TryGetValue("CborRegistration", out ImmutableArray<IncrementalGeneratorRunStep> steps));
+        Assert.Equal(IncrementalStepRunReason.Cached, Assert.Single(steps.SelectMany(static s => s.Outputs)).Reason);
+        Assert.Equal(RegistrationText(before), RegistrationText(after));
+    }
+
+    [Fact]
+    public void AutoRegistrationBoundariesHandleExclusionsConstraintsAndShadowing()
+    {
+        CSharpCompilation foreign = CreateCompilation("ForeignGenericLib", IncrementalImports + """
+            namespace Snapshot;
+            [CborSerializable, CborList] public partial record ForeignBox<T>([CborOrder(0)] T Value) : CborRecord;
+            """);
+        using MemoryStream foreignPe = new();
+        Microsoft.CodeAnalysis.Emit.EmitResult foreignEmit = foreign.Emit(foreignPe);
+        Assert.True(foreignEmit.Success, string.Join(Environment.NewLine, foreignEmit.Diagnostics));
+        MetadataReference aliasedRef = MetadataReference.CreateFromImage(foreignPe.ToArray(),
+            MetadataReferenceProperties.Assembly.WithAliases(["old"]));
+
+        const string source = """
+            #nullable disable
+            extern alias old;
+            global using System;
+            using Chrysalis.Codec.Serialization;
+            using Chrysalis.Codec.Serialization.Attributes;
+            using Chrysalis.Codec.Types;
+
+            namespace Snapshot
+            {
+                [Obsolete("old")] [CborSerializable, CborList] public partial record OldModel([CborOrder(0)] int Item) : CborRecord;
+                [CborSerializable, CborUnion] public abstract partial record AbstractUnion<T> : CborRecord;
+                [CborSerializable, CborList] public partial record AbstractCase<T>([CborOrder(0)] T Value) : AbstractUnion<T>;
+
+                public static class Consumers
+                {
+                    private sealed class PrivateArg;
+
+                    [Obsolete("test")]
+                    public static void Touch(
+                        Some<byte[]> a,
+                        CborList<byte[]> b,
+                        CborMap<int?, int> c,
+                        CborList<OldModel> d,
+                        AbstractUnion<int> e,
+                        old::Snapshot.ForeignBox<int> f)
+                    {
+                        _ = typeof(CborList<PrivateArg>);
+                    }
+                }
+            }
+
+            namespace Codec
+            {
+                [CborSerializable, CborList] public partial record Shadowed([CborOrder(0)] int Item) : CborRecord;
+            }
+            """;
+
+        CSharpCompilation compilation = CreateCompilation("BoundaryProbe", source).AddReferences(aliasedRef);
+        GeneratorDriver driver = CreateDriver().RunGeneratorsAndUpdateCompilation(compilation, out Compilation output, out _);
+        string reg = RegistrationText(driver);
+
+        Assert.DoesNotContain("PrivateArg", reg, StringComparison.Ordinal);
+        Assert.DoesNotContain("ForeignBox", reg, StringComparison.Ordinal);
+        Assert.DoesNotContain("OldModel", reg, StringComparison.Ordinal);
+        Assert.DoesNotContain("CborMap<int?", reg, StringComparison.Ordinal);
+        Assert.Contains("RegisterStruct<global::Chrysalis.Codec.Types.Some<byte[]>>", reg, StringComparison.Ordinal);
+        Assert.Contains("RegisterStruct<global::Chrysalis.Codec.Types.CborList<byte[]>>", reg, StringComparison.Ordinal);
+        Assert.Contains("Register<global::Snapshot.AbstractUnion<int>>", reg, StringComparison.Ordinal);
+        Assert.Contains("Register<global::Codec.Shadowed>", reg, StringComparison.Ordinal);
+        Assert.DoesNotContain("ICborCodecRegistrar", GeneratedText(driver, "Snapshot.AbstractUnion`T`"), StringComparison.Ordinal);
+        Assert.DoesNotContain(output.GetDiagnostics(), static d => d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning);
+
+        const string inaccessibleSource = """
+            namespace Snapshot;
+            [CborSerializable, CborList] file partial record FileOnly([CborOrder(0)] int Item) : CborRecord;
+            public partial class Outer
+            {
+                [CborSerializable, CborList] private partial record PrivateNested([CborOrder(0)] int Item) : CborRecord;
+            }
+            [CborSerializable, CborList] public partial record PublicSibling([CborOrder(0)] int Item) : CborRecord;
+            """;
+        GeneratorDriver inaccessibleDriver = CreateDriver().RunGenerators(CreateCompilation("InaccessibleProbe", IncrementalImports + inaccessibleSource));
+        string inaccessibleReg = RegistrationText(inaccessibleDriver);
+        Assert.DoesNotContain("FileOnly", inaccessibleReg, StringComparison.Ordinal);
+        Assert.DoesNotContain("PrivateNested", inaccessibleReg, StringComparison.Ordinal);
+        Assert.Contains("Register<global::Snapshot.PublicSibling>", inaccessibleReg, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void InvalidUnionsAreExcludedFromAutoRegistrationWithoutCascadingErrors()
+    {
+        const string badOfficialSource = """
+            #nullable enable
+            global using System;
+            using System.Runtime.CompilerServices;
+            using Chrysalis.Codec.Serialization;
+            using Chrysalis.Codec.Serialization.Attributes;
+            using Chrysalis.Codec.Types;
+            namespace Snapshot;
+            [CborSerializable] public readonly partial record struct BadContainer : ICborType;
+            [CborSerializable, CborUnion(typeof(BadContainer)), Union] public readonly partial struct BadUnion : ICborType;
+            [CborSerializable, CborList] public partial record GoodModel([CborOrder(0)] int Item) : CborRecord;
+            """;
+        GeneratorDriver badOfficialDriver = CreateDriver().RunGeneratorsAndUpdateCompilation(
+            CreateCompilation("InvalidOfficialProbe", badOfficialSource), out Compilation badOfficialOutput, out _);
+        _ = Assert.Single(badOfficialDriver.GetRunResult().Diagnostics, static d => d.Id == "CHCB007");
+        string officialReg = RegistrationText(badOfficialDriver);
+        Assert.DoesNotContain("BadUnion", officialReg, StringComparison.Ordinal);
+        Assert.Contains("Register<global::Snapshot.GoodModel>", officialReg, StringComparison.Ordinal);
+        Assert.DoesNotContain(badOfficialOutput.GetDiagnostics(), static d => d.Id == "CS0117");
+
+        const string badOpenGenericSource = """
+            #nullable enable
+            global using System;
+            using Chrysalis.Codec.Serialization;
+            using Chrysalis.Codec.Serialization.Attributes;
+            namespace Snapshot;
+            [CborSerializable, CborUnion] public partial interface IBadGeneric<T> : ICborType
+            {
+                public static IBadGeneric<T> Read(ReadOnlyMemory<byte> data) => throw new NotImplementedException();
+            }
+            public static class Caller { public static Type Ref() => typeof(IBadGeneric<int>); }
+            """;
+        GeneratorDriver badGenericDriver = CreateDriver().RunGeneratorsAndUpdateCompilation(
+            CreateCompilation("InvalidGenericProbe", badOpenGenericSource), out Compilation badGenericOutput, out _);
+        _ = Assert.Single(badGenericDriver.GetRunResult().Diagnostics, static d => d.Id == "CHCB003");
+        Assert.DoesNotContain(badGenericDriver.GetRunResult().Results.Single().GeneratedSources,
+            static s => s.HintName == "ChrysalisCborTypeRegistration.g.cs");
+        Assert.DoesNotContain(badGenericOutput.GetDiagnostics(), static d => d.Id is "CS0123" or "CS0117");
+    }
     private static CSharpGeneratorDriver TrackingDriver() => CSharpGeneratorDriver.Create(
         generators: [new CodeGen.CborSerializerCodeGen().AsSourceGenerator()],
         parseOptions: ParseOptions, driverOptions: new GeneratorDriverOptions(IncrementalGeneratorOutputKind.None, trackIncrementalGeneratorSteps: true));
@@ -412,6 +553,9 @@ public partial class GeneratorIsolationTests
 
     private static string GeneratedText(GeneratorDriver driver, string type) => driver.GetRunResult().Results.Single()
         .GeneratedSources.Single(source => source.HintName == type + ".Serializer.g.cs").SourceText.ToString();
+    private static string RegistrationText(GeneratorDriver driver) => driver.GetRunResult().Results.Single()
+        .GeneratedSources.Single(source => source.HintName == "ChrysalisCborTypeRegistration.g.cs").SourceText.ToString();
+
 
     private static SyntaxTree ParseIncremental(string path, string source, bool includeGlobals = true) =>
         CSharpSyntaxTree.ParseText((includeGlobals ? IncrementalImports : IncrementalImports[(IncrementalImports.IndexOf('\n', StringComparison.Ordinal) + 1)..]) + source, ParseOptions, path);

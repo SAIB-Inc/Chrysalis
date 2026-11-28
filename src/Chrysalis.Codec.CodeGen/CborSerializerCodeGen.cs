@@ -23,15 +23,22 @@ public sealed partial class CborSerializerCodeGen : IIncrementalGenerator
         IncrementalValuesProvider<Candidate> candidates = serializable.Collect().Combine(plutus.Collect())
             .SelectMany(static (inputs, _) => inputs.Left.AddRange(inputs.Right));
 
-        IncrementalValuesProvider<Emitter.GeneratedType> sources = candidates
-            .Select(static (candidate, _) => candidate.Type)
-            .Collect()
-            .Select(static (types, _) => JoinCases(types))
+        IncrementalValueProvider<EquatableArray<SerializableTypeMetadata>> joined = candidates
+            .Select(static (candidate, _) => candidate.Type).Collect().Select(static (types, _) => JoinCases(types));
+
+        IncrementalValuesProvider<Emitter.GeneratedType> sources = joined
             .SelectMany(static (types, _) => CreateEmissionInputs(types))
             .Select(static (input, _) => Emitter.Generate(input.Metadata, input.ShapeDependencies.Count == 0 ? null
                 : input.ShapeDependencies.ToImmutableDictionary(model => NormalizeTypeName(model.FullyQualifiedName), StringComparer.Ordinal)))
             .WithTrackingName("CborSources");
         context.RegisterSourceOutput(sources, static (output, source) => source.AddSources(output));
+
+        IncrementalValueProvider<EquatableArray<ClosedGenericCandidate>> closedGenerics = FindClosedGenericRegistrations(context)
+            .Collect().Select(static (items, _) => new EquatableArray<ClosedGenericCandidate>(items));
+        IncrementalValueProvider<EquatableArray<RegistrationEntry>> registrations = closedGenerics.Combine(joined)
+            .Select(static (input, _) => BuildRegistrations(input.Right, input.Left)).WithTrackingName("CborRegistration");
+        context.RegisterSourceOutput(registrations, static (output, entries) =>
+            Emitter.EmitRegistrationSource(output, "ChrysalisCborTypeRegistration.g.cs", "ChrysalisCborTypeRegistration", entries));
 
         // A diagnostic must use the current compilation's tree, even when its source text output is cached.
         IncrementalValueProvider<ImmutableArray<(string FullyQualifiedName, Location? UnionLocation)>> locations = candidates.Where(static candidate => candidate.UnionLocation is not null)
@@ -136,6 +143,15 @@ public sealed partial class CborSerializerCodeGen : IIncrementalGenerator
             metadata = metadata with { UnionReader = GetUnionReaderKind(symbol, compilation) };
         }
 
+        bool skipSerialization = metadata.SerializationType == SerializationType.Container && metadata.Properties.Count == 0;
+        metadata = metadata with
+        {
+            HasSerializableReadWrite = !skipSerialization || HasPublicStaticReadWrite(symbol, compilation) || Emitter.IsBuiltInCollectionGeneric(metadata.FullyQualifiedName),
+            IsAccessibleConcrete = !symbol.IsGenericType && IsAccessibleFromModuleInitializer(symbol, compilation),
+            GlobalFullyQualifiedName = symbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
+            OriginalDefinitionKey = SymbolKey(symbol)
+        };
+
         ParsedType parsed = new(metadata, SymbolKey(symbol), declaration.SyntaxTree.FilePath, declaration.SpanStart,
             new(ContainerKeys(symbol)), new(AncestorDefinitions(symbol)
                 .Where(ancestor => SymbolEqualityComparer.Default.Equals(ancestor.ContainingAssembly, symbol.ContainingAssembly))
@@ -146,6 +162,74 @@ public sealed partial class CborSerializerCodeGen : IIncrementalGenerator
         Location? unionLocation = (isUnion || metadata.UnionError is not null) ? declaration.Identifier.GetLocation() : null;
         return new(parsed, unionLocation, new(unchunked.Select(property =>
             (symbol.GetMembers(property.PropertyName).FirstOrDefault()?.Locations.FirstOrDefault() ?? declaration.Identifier.GetLocation(), property.PropertyName))));
+    }
+
+    private static IncrementalValuesProvider<ClosedGenericCandidate> FindClosedGenericRegistrations(IncrementalGeneratorInitializationContext context) =>
+        context.SyntaxProvider.CreateSyntaxProvider(static (node, _) => node is GenericNameSyntax, ParseClosedGeneric)
+            .Where(static c => c is not null).Select(static (c, _) => c!);
+
+    private static ClosedGenericCandidate? ParseClosedGeneric(GeneratorSyntaxContext context, CancellationToken token)
+    {
+        GenericNameSyntax genericName = (GenericNameSyntax)context.Node;
+        SemanticModel model = context.SemanticModel;
+        SymbolInfo info = model.GetSymbolInfo(genericName, token);
+        INamedTypeSymbol? named = info.Symbol as INamedTypeSymbol ?? (info.Symbol is IMethodSymbol ? null : model.GetTypeInfo(genericName, token).Type as INamedTypeSymbol);
+        if (named is null || !named.IsGenericType || named.IsUnboundGenericType) { return null; }
+
+        INamedTypeSymbol orig = named.OriginalDefinition;
+        if (!orig.GetAttributes().Any(static a => a.AttributeClass?.ToDisplayString() is Parser.CborSerializable or Parser.PlutusData)) { return null; }
+        Compilation compilation = model.Compilation;
+        if (!IsAccessibleFromModuleInitializer(named, compilation)) { return null; }
+
+        bool isLocal = SymbolEqualityComparer.Default.Equals(orig.ContainingAssembly, compilation.Assembly);
+        if (!isLocal && !HasPublicStaticReadWrite(named, compilation)) { return null; }
+
+        return new ClosedGenericCandidate(new RegistrationEntry(named.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat), named.IsValueType), isLocal ? SymbolKey(orig) : null);
+    }
+
+    private static bool IsAssemblyGloballyAccessible(IAssemblySymbol assembly, Compilation compilation) =>
+        SymbolEqualityComparer.Default.Equals(assembly, compilation.Assembly) || compilation.GetMetadataReference(assembly) is not { } mr
+        || mr.Properties.Aliases.IsDefaultOrEmpty || mr.Properties.Aliases.Contains(MetadataReferenceProperties.GlobalAlias);
+
+    private static bool IsAccessibleFromModuleInitializer(ITypeSymbol type, Compilation compilation)
+    {
+        if (type is IArrayTypeSymbol array) { return IsAccessibleFromModuleInitializer(array.ElementType, compilation); }
+        if (type is not INamedTypeSymbol named || named.TypeKind == TypeKind.Error || named.IsAnonymousType || named.IsUnboundGenericType
+            || named.IsFileLocal || named.IsRefLikeType || !IsAssemblyGloballyAccessible(named.ContainingAssembly, compilation)
+            || named.GetAttributes().Any(static a => a.AttributeClass is { Name: "ObsoleteAttribute", ContainingNamespace: { Name: "System", ContainingNamespace.IsGlobalNamespace: true } }))
+        { return false; }
+
+        if (named.DeclaredAccessibility != Accessibility.Public && !(named.DeclaredAccessibility is Accessibility.Internal or Accessibility.ProtectedOrInternal
+            && (SymbolEqualityComparer.Default.Equals(named.ContainingAssembly, compilation.Assembly) || named.ContainingAssembly.GivesAccessTo(compilation.Assembly))))
+        { return false; }
+
+        if (named.ContainingType is { } containing && !IsAccessibleFromModuleInitializer(containing, compilation)) { return false; }
+        for (int i = 0; i < named.TypeArguments.Length; i++)
+        {
+            ITypeSymbol arg = named.TypeArguments[i];
+            if (!IsAccessibleFromModuleInitializer(arg, compilation)) { return false; }
+            if (i < named.TypeParameters.Length && named.TypeParameters[i].HasNotNullConstraint
+                && (arg is INamedTypeSymbol { OriginalDefinition.SpecialType: SpecialType.System_Nullable_T } || arg.NullableAnnotation == NullableAnnotation.Annotated))
+            { return false; }
+        }
+        return true;
+    }
+
+    private static EquatableArray<RegistrationEntry> BuildRegistrations(EquatableArray<SerializableTypeMetadata> models, EquatableArray<ClosedGenericCandidate> closedGenerics)
+    {
+        HashSet<string> validLocalGenerics = [with(StringComparer.Ordinal)];
+        Dictionary<string, RegistrationEntry> entries = [with(StringComparer.Ordinal)];
+        foreach (SerializableTypeMetadata m in models)
+        {
+            if (m.UnionError is not null || m.UnionReader == UnionReaderKind.Invalid || !m.HasSerializableReadWrite) { continue; }
+            if (m.IsOpenGenericType) { if (m.OriginalDefinitionKey is not null) { _ = validLocalGenerics.Add(m.OriginalDefinitionKey); } }
+            else if (m.IsAccessibleConcrete && m.GlobalFullyQualifiedName is not null) { entries[m.GlobalFullyQualifiedName] = new RegistrationEntry(m.GlobalFullyQualifiedName, m.IsValueType); }
+        }
+        foreach (ClosedGenericCandidate c in closedGenerics)
+        {
+            if (c.LocalDefinitionKey is null || validLocalGenerics.Contains(c.LocalDefinitionKey)) { entries[c.Entry.FullyQualifiedName] = c.Entry; }
+        }
+        return entries.Count == 0 ? default : new(entries.Values.OrderBy(static e => e.FullyQualifiedName, StringComparer.Ordinal));
     }
 
     private static bool TryParseStructUnionCases(
@@ -448,5 +532,6 @@ public sealed partial class CborSerializerCodeGen : IIncrementalGenerator
     private sealed record Candidate(ParsedType Type, Location? UnionLocation, EquatableArray<(Location Location, string Field)> UnchunkedBytes);
     private sealed record ParsedType(SerializableTypeMetadata Metadata, string SymbolName, string Path, int Start,
         EquatableArray<string> Containers, EquatableArray<string> Ancestors);
+    private sealed record ClosedGenericCandidate(RegistrationEntry Entry, string? LocalDefinitionKey);
     private sealed record EmissionInput(SerializableTypeMetadata Metadata, EquatableArray<SerializableTypeMetadata> ShapeDependencies);
 }

@@ -277,7 +277,7 @@ public sealed class BlueprintSourceGenerator : IIncrementalGenerator
         // Emit CBOR serializers for the generated types
         try
         {
-            MetadataConverter.EmitSerializers(context, ns, resolvedTypes);
+            MetadataConverter.EmitSerializers(context, ns, safeTitle, resolvedTypes);
         }
         catch (Exception serEx)
         {

@@ -12,25 +12,18 @@ internal static class MetadataConverter
     /// <summary>
     /// Emits CBOR serializers for all resolved blueprint types.
     /// </summary>
-    public static void EmitSerializers(
-        SourceProductionContext context,
-        string ns,
-        Dictionary<string, ResolvedType> resolvedTypes)
+    public static void EmitSerializers(SourceProductionContext context, string ns, string safeTitle, Dictionary<string, ResolvedType> resolvedTypes)
     {
+        HashSet<string> emittedLocalTypes = [with(StringComparer.Ordinal)];
+        Dictionary<string, RegistrationEntry> registrations = [with(StringComparer.Ordinal)];
         foreach (KeyValuePair<string, ResolvedType> kv in resolvedTypes)
         {
             ResolvedType type = kv.Value;
             switch (type.Category)
             {
-                case TypeCategory.SingleConstructor:
-                    EmitSingleConstructor(context, ns, type);
-                    break;
-                case TypeCategory.Union:
-                    EmitUnion(context, ns, type);
-                    break;
-                case TypeCategory.Tuple:
-                    EmitTuple(context, ns, type);
-                    break;
+                case TypeCategory.SingleConstructor: EmitSingleConstructor(context, ns, type, emittedLocalTypes, registrations); break;
+                case TypeCategory.Union: EmitUnion(context, ns, type, emittedLocalTypes, registrations); break;
+                case TypeCategory.Tuple: EmitTuple(context, ns, type, emittedLocalTypes, registrations); break;
                 case TypeCategory.PrimitiveBytes:
                 case TypeCategory.PrimitiveInteger:
                 case TypeCategory.PrimitiveBool:
@@ -38,94 +31,59 @@ internal static class MetadataConverter
                 case TypeCategory.Option:
                 case TypeCategory.List:
                 case TypeCategory.Ref:
-                default:
-                    break;
+                default: break;
             }
+        }
+        foreach (KeyValuePair<string, ResolvedType> kv in resolvedTypes)
+        {
+            ResolvedType type = kv.Value;
+            if (type.Category is TypeCategory.Option or TypeCategory.List && TryResolveGlobalRegistrationName(SchemaResolver.GetCSharpTypeName(type), ns, emittedLocalTypes, out string globalFqn))
+            {
+                registrations[globalFqn] = new RegistrationEntry(globalFqn, type.Category == TypeCategory.List);
+            }
+        }
+        if (registrations.Count > 0)
+        {
+            Emitter.EmitRegistrationSource(context, $"{safeTitle}.BlueprintRegistration.g.cs", "ChrysalisBlueprintRegistration", new(registrations.Values.OrderBy(static e => e.FullyQualifiedName, StringComparer.Ordinal)));
         }
     }
 
-    private static void EmitSingleConstructor(SourceProductionContext context, string ns, ResolvedType type)
+    private static void EmitSingleConstructor(SourceProductionContext context, string ns, ResolvedType type, HashSet<string> emittedLocalTypes, Dictionary<string, RegistrationEntry> registrations)
     {
-        if (type.Constructors == null || type.Constructors.Count == 0)
-        {
-            return;
-        }
-
+        if (type.Constructors == null || type.Constructors.Count == 0) { return; }
         ResolvedConstructor ctor = type.Constructors[0];
         SerializableTypeMetadata metadata = CreateConstrMetadata(ns, type.TypeName, ctor.Index, ctor.Fields);
         Emitter.EmitSerializerAndMetadata(context, metadata);
+        _ = emittedLocalTypes.Add(type.TypeName);
+        registrations[metadata.FullyQualifiedName] = new RegistrationEntry(metadata.FullyQualifiedName, IsValueType: false);
     }
 
-    private static void EmitUnion(SourceProductionContext context, string ns, ResolvedType type)
+    private static void EmitUnion(SourceProductionContext context, string ns, ResolvedType type, HashSet<string> emittedLocalTypes, Dictionary<string, RegistrationEntry> registrations)
     {
-        if (type.Constructors == null)
-        {
-            return;
-        }
-
+        if (type.Constructors == null) { return; }
         string interfaceName = "I" + type.TypeName;
-
-        // Emit serializer for each variant
         List<SerializableTypeMetadata> childMetadatas = [];
         foreach (ResolvedConstructor ctor in type.Constructors)
         {
             SerializableTypeMetadata childMeta = CreateConstrMetadata(ns, ctor.Name, ctor.Index, ctor.Fields);
             childMetadatas.Add(childMeta);
             Emitter.EmitSerializerAndMetadata(context, childMeta);
+            _ = emittedLocalTypes.Add(ctor.Name);
+            registrations[childMeta.FullyQualifiedName] = new RegistrationEntry(childMeta.FullyQualifiedName, IsValueType: false);
         }
-
-        // Emit union interface serializer
-        SerializableTypeMetadata unionMeta = new(
-            BaseIdentifier: interfaceName,
-            Indentifier: interfaceName,
-            Namespace: ns,
-            TypeParams: null,
-            FullyQualifiedName: $"global::{ns}.{interfaceName}",
-            Keyword: "interface",
-            CborTag: null,
-            CborIndex: null,
-            IsIndefinite: false,
-            IsDefinite: false,
-            DefiniteSize: null,
-            SerializationType: SerializationType.Union,
-            Validator: null,
-            ShouldPreserveRaw: true
-        )
-        {
-            ChildTypes = new(childMetadatas)
-        };
-
+        SerializableTypeMetadata unionMeta = new(interfaceName, interfaceName, ns, null, $"global::{ns}.{interfaceName}", "interface", null, null, false, false, null, SerializationType.Union, null, true) { ChildTypes = new(childMetadatas) };
         Emitter.EmitSerializerAndMetadata(context, unionMeta);
+        _ = emittedLocalTypes.Add(interfaceName);
+        registrations[unionMeta.FullyQualifiedName] = new RegistrationEntry(unionMeta.FullyQualifiedName, IsValueType: false);
     }
 
-    private static void EmitTuple(SourceProductionContext context, string ns, ResolvedType type)
+    private static void EmitTuple(SourceProductionContext context, string ns, ResolvedType type, HashSet<string> emittedLocalTypes, Dictionary<string, RegistrationEntry> registrations)
     {
-        if (type.TupleFields == null || type.TupleFields.Count == 0)
-        {
-            return;
-        }
-
-        SerializableTypeMetadata metadata = new(
-            BaseIdentifier: type.TypeName,
-            Indentifier: type.TypeName,
-            Namespace: ns,
-            TypeParams: null,
-            FullyQualifiedName: $"global::{ns}.{type.TypeName}",
-            Keyword: "record",
-            CborTag: null,
-            CborIndex: null,
-            IsIndefinite: type.TupleFields.Count > 0,
-            IsDefinite: false,
-            DefiniteSize: null,
-            SerializationType: SerializationType.List,
-            Validator: null,
-            ShouldPreserveRaw: true
-        )
-        {
-            Properties = new(type.TupleFields.Select(ConvertField))
-        };
-
+        if (type.TupleFields == null || type.TupleFields.Count == 0) { return; }
+        SerializableTypeMetadata metadata = new(type.TypeName, type.TypeName, ns, null, $"global::{ns}.{type.TypeName}", "record", null, null, type.TupleFields.Count > 0, false, null, SerializationType.List, null, true) { Properties = new(type.TupleFields.Select(ConvertField)) };
         Emitter.EmitSerializerAndMetadata(context, metadata);
+        _ = emittedLocalTypes.Add(type.TypeName);
+        registrations[metadata.FullyQualifiedName] = new RegistrationEntry(metadata.FullyQualifiedName, IsValueType: false);
     }
 
     private static SerializableTypeMetadata CreateConstrMetadata(
@@ -199,6 +157,29 @@ internal static class MetadataConverter
         typeName.Length > 1 &&
         char.IsUpper(typeName[1]) &&
         !typeName.StartsWith("ICborOption<", StringComparison.Ordinal);
+
+    private static bool TryResolveGlobalRegistrationName(string csharpType, string ns, HashSet<string> emittedLocalTypes, out string globalFqn)
+    {
+        string baseType = csharpType.TrimEnd('?');
+        int genericStart = baseType.IndexOf('<');
+        if (genericStart > 0 && baseType.EndsWith(">", StringComparison.Ordinal))
+        {
+            string resolvedOuter = ResolveSimpleType(baseType.Substring(0, genericStart));
+            if (resolvedOuter.StartsWith("global::", StringComparison.Ordinal)
+                && TryResolveGlobalRegistrationName(baseType.Substring(genericStart + 1, baseType.Length - genericStart - 2), ns, emittedLocalTypes, out string resolvedInner))
+            {
+                globalFqn = $"{resolvedOuter}<{resolvedInner}>";
+                return true;
+            }
+            globalFqn = string.Empty;
+            return false;
+        }
+        string resolved = ResolveSimpleType(baseType);
+        if (resolved.StartsWith("global::", StringComparison.Ordinal)) { globalFqn = resolved; return true; }
+        if (emittedLocalTypes.Contains(resolved)) { globalFqn = $"global::{ns}.{resolved}"; return true; }
+        globalFqn = string.Empty;
+        return false;
+    }
 
     private static string ResolveFullyQualifiedName(string csharpType)
     {

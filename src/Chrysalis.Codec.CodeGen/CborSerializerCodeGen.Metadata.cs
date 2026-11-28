@@ -4,6 +4,8 @@ namespace Chrysalis.Codec.CodeGen;
 
 public sealed partial class CborSerializerCodeGen
 {
+    internal readonly record struct RegistrationEntry(string FullyQualifiedName, bool IsValueType);
+
     internal enum SerializationType
     {
         Container,
@@ -54,6 +56,13 @@ public sealed partial class CborSerializerCodeGen
         public string? UnionErrorDetail { get; init; }
         public bool HasAmbiguousExternalWireOrder { get; init; }
         public bool IsValueType { get; init; }
+        public bool IsAbstract { get; init; }
+        public bool HasSerializableReadWrite { get; init; }
+        public bool IsAccessibleConcrete { get; init; }
+        public string? GlobalFullyQualifiedName { get; init; }
+        public string? OriginalDefinitionKey { get; init; }
+        public bool IsOpenGenericType => !string.IsNullOrEmpty(TypeParams);
+        public bool CanImplementCodecRegistrar => IsOpenGenericType && Keyword != "interface" && !IsAbstract && UnionReader != UnionReaderKind.Invalid;
         public EquatableArray<StructUnionCaseRef> StructUnionCases { get; init; }
         public EquatableArray<SerializableTypeMetadata> ChildTypes { get; init; }
         public EquatableArray<SerializablePropertyMetadata> Properties { get; init; }
@@ -77,10 +86,8 @@ public sealed partial class CborSerializerCodeGen
             """;
     }
 
-    internal sealed record CborListPropertyMetadata(string Type, string ItemType, bool IsNullable, bool HasDirectItemReader);
-    internal sealed record CborMapPropertyMetadata(
-        string Type, string KeyType, string ValueType,
-        bool IsNullable, bool HasDirectKeyReader, bool HasDirectValueReader);
+    internal sealed record CborListPropertyMetadata(string Type, bool IsNullable);
+    internal sealed record CborMapPropertyMetadata(string Type, bool IsNullable);
 
     internal sealed record SerializablePropertyMetadata(
         string PropertyName,

@@ -12,8 +12,8 @@ namespace Chrysalis.Codec.Test;
 public partial class GeneratorIsolationTests
 {
     private const int Iterations = 64;
-    private static readonly CSharpParseOptions ParseOptions = new(LanguageVersion.Latest);
-    private static readonly MetadataReference[] References = CreateReferences();
+    internal static readonly CSharpParseOptions ParseOptions = new(LanguageVersion.Latest);
+    internal static readonly MetadataReference[] References = CreateReferences();
 
     [Theory]
     [InlineData(0)]
@@ -365,12 +365,12 @@ public partial class GeneratorIsolationTests
         return CreateCompilation(name, source);
     }
 
-    private static CSharpCompilation CreateCompilation(string name, string source) =>
+    internal static CSharpCompilation CreateCompilation(string name, string source) =>
         CSharpCompilation.Create(name,
             [CSharpSyntaxTree.ParseText(source, ParseOptions)], References,
             new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
 
-    private static CSharpGeneratorDriver CreateDriver() => CSharpGeneratorDriver.Create(
+    internal static CSharpGeneratorDriver CreateDriver() => CSharpGeneratorDriver.Create(
         [new CborSerializerCodeGen().AsSourceGenerator()], parseOptions: ParseOptions);
 
     private static MetadataReference[] CreateReferences()
