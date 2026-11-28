@@ -70,7 +70,7 @@ recover_partial() {
   return 1
 }
 cleanup() {
-  local result=$? cleaned=1
+  local result=${1:-$?} cleaned=1
   trap - EXIT
   trap '' INT TERM HUP
   set +e
@@ -99,11 +99,10 @@ json.dump(dict(appGuardStartUnix=start,endedUnix=end if cleaned else None,cleanu
 PY
   exit "$result"
 }
-abort() { kill_active_fly; exit "$1"; }
 trap cleanup EXIT
-trap 'abort 130' INT
-trap 'abort 143' TERM
-trap 'abort 129' HUP
+trap 'cleanup 130' INT
+trap 'cleanup 143' TERM
+trap 'cleanup 129' HUP
 python3 - "$BUNDLE" "$NOTE" "$BASE" <<'PYPLAN'
 import json,sys,tarfile
 from pathlib import Path
